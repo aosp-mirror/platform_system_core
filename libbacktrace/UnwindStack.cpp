@@ -66,8 +66,8 @@ static std::string GetFunctionName(BacktraceMap* back_map, uintptr_t pc, uintptr
   return name;
 }
 
-static bool Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
-                   std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames) {
+bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
+                       std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames) {
   static std::set<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
   UnwindStackMap* stack_map = reinterpret_cast<UnwindStackMap*>(back_map);
   auto process_memory = stack_map->process_memory();
@@ -127,7 +127,7 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
-  return ::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
 }
 
 UnwindStackPtrace::UnwindStackPtrace(pid_t pid, pid_t tid, BacktraceMap* map)
@@ -147,7 +147,7 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
-  return ::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
 }
 
 Backtrace* Backtrace::CreateNew(pid_t pid, pid_t tid, BacktraceMap* map) {
