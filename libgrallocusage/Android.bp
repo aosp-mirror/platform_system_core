@@ -14,6 +14,7 @@
 
 cc_library_static {
     name: "libgrallocusage",
+    vendor_available: true,
     cppflags: [
         "-Weverything",
         "-Werror",
@@ -26,4 +27,5 @@ cc_library_static {
     srcs: ["GrallocUsageConversion.cpp"],
     export_include_dirs: ["include"],
     shared_libs: ["android.hardware.graphics.allocator@2.0"],
+    header_libs: ["libhardware_headers"],
 }
