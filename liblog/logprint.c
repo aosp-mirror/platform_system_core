@@ -250,6 +250,7 @@ LIBLOG_ABI_PUBLIC void android_log_format_free(AndroidLogFormat* p_format) {
   while (!list_empty(&convertHead)) {
     struct listnode* node = list_head(&convertHead);
     list_remove(node);
+    LOG_ALWAYS_FATAL_IF(node == list_head(&convertHead), "corrupted list");
     free(node);
   }
 }
