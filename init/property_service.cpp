@@ -45,6 +45,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <bootimg.h>
 #include <fs_mgr.h>
@@ -56,6 +57,7 @@
 #include "persistent_properties.h"
 #include "util.h"
 
+using android::base::StringPrintf;
 using android::base::Timer;
 
 #define RECOVERY_MOUNT_POINT "/recovery"
@@ -418,6 +420,20 @@ static void handle_property_set(SocketConnection& socket,
     }
   } else {
     if (check_mac_perms(name, source_ctx, &cr)) {
+      // sys.powerctl is a special property that is used to make the device reboot.  We want to log
+      // any process that sets this property to be able to accurately blame the cause of a shutdown.
+      if (name == "sys.powerctl") {
+        std::string cmdline_path = StringPrintf("proc/%d/cmdline", cr.pid);
+        std::string process_cmdline;
+        std::string process_log_string;
+        if (android::base::ReadFileToString(cmdline_path, &process_cmdline)) {
+          // Since cmdline is null deliminated, .c_str() conveniently gives us just the process path.
+          process_log_string = StringPrintf(" (%s)", process_cmdline.c_str());
+        }
+        LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
+                  << process_log_string;
+      }
+
       uint32_t result = property_set(name, value);
       if (!legacy_protocol) {
         socket.SendUint32(result);
