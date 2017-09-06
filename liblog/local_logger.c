@@ -222,6 +222,7 @@ static int LogBufferLog(struct LogBuffer* log,
       log->last[logId] = node->prev;
     }
     list_remove(node);
+    LOG_ALWAYS_FATAL_IF(node == log->last[logId], "corrupted list");
     free(e);
   }
   /* add entry to list */
