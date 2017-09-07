@@ -16,7 +16,6 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <gtest/gtest.h>
 
 #include <trusty/lib/storage.h>
