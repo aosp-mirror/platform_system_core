@@ -61,6 +61,13 @@ cc_library {
         "Symbols.cpp",
     ],
 
+    target: {
+        // Always disable optimizations for host to make it easier to debug.
+        linux: {
+            cflags: ["-O0", "-g"],
+        },
+    },
+
     arch: {
         x86: {
             srcs: ["AsmGetRegsX86.S"],
@@ -101,7 +108,6 @@ cc_test {
         "tests/ElfTest.cpp",
         "tests/ElfTestUtils.cpp",
         "tests/LogFake.cpp",
-        "tests/MapInfoCreateMemoryTest.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapsTest.cpp",
         "tests/MemoryBufferTest.cpp",

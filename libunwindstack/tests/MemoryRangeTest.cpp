@@ -31,10 +31,11 @@ namespace unwindstack {
 TEST(MemoryRangeTest, read) {
   std::vector<uint8_t> src(1024);
   memset(src.data(), 0x4c, 1024);
-  MemoryFake* memory = new MemoryFake;
-  memory->SetMemory(9001, src);
+  MemoryFake* memory_fake = new MemoryFake;
+  std::shared_ptr<Memory> process_memory(memory_fake);
+  memory_fake->SetMemory(9001, src);
 
-  MemoryRange range(memory, 9001, 9001 + src.size());
+  MemoryRange range(process_memory, 9001, 9001 + src.size());
 
   std::vector<uint8_t> dst(1024);
   ASSERT_TRUE(range.Read(0, dst.data(), src.size()));
@@ -46,10 +47,11 @@ TEST(MemoryRangeTest, read) {
 TEST(MemoryRangeTest, read_near_limit) {
   std::vector<uint8_t> src(4096);
   memset(src.data(), 0x4c, 4096);
-  MemoryFake* memory = new MemoryFake;
-  memory->SetMemory(1000, src);
+  MemoryFake* memory_fake = new MemoryFake;
+  std::shared_ptr<Memory> process_memory(memory_fake);
+  memory_fake->SetMemory(1000, src);
 
-  MemoryRange range(memory, 1000, 2024);
+  MemoryRange range(process_memory, 1000, 2024);
 
   std::vector<uint8_t> dst(1024);
   ASSERT_TRUE(range.Read(1020, dst.data(), 4));
@@ -69,7 +71,8 @@ TEST(MemoryRangeTest, read_near_limit) {
 TEST(MemoryRangeTest, read_overflow) {
   std::vector<uint8_t> buffer(100);
 
-  std::unique_ptr<MemoryRange> overflow(new MemoryRange(new MemoryFakeAlwaysReadZero, 100, 200));
+  std::shared_ptr<Memory> process_memory(new MemoryFakeAlwaysReadZero);
+  std::unique_ptr<MemoryRange> overflow(new MemoryRange(process_memory, 100, 200));
   ASSERT_FALSE(overflow->Read(UINT64_MAX - 10, buffer.data(), 100));
 }
 
