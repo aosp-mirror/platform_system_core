@@ -52,6 +52,13 @@ bool Memory::ReadString(uint64_t addr, std::string* string, uint64_t max_read) {
   return false;
 }
 
+std::shared_ptr<Memory> Memory::CreateProcessMemory(pid_t pid) {
+  if (pid == getpid()) {
+    return std::shared_ptr<Memory>(new MemoryLocal());
+  }
+  return std::shared_ptr<Memory>(new MemoryRemote(pid));
+}
+
 bool MemoryBuffer::Read(uint64_t addr, void* dst, size_t size) {
   uint64_t last_read_byte;
   if (__builtin_add_overflow(size, addr, &last_read_byte)) {
@@ -249,7 +256,7 @@ bool MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
   return true;
 }
 
-MemoryRange::MemoryRange(Memory* memory, uint64_t begin, uint64_t end)
+MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t end)
     : memory_(memory), begin_(begin), length_(end - begin) {
   CHECK(end > begin);
 }

@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,8 @@ class Memory {
  public:
   Memory() = default;
   virtual ~Memory() = default;
+
+  static std::shared_ptr<Memory> CreateProcessMemory(pid_t pid);
 
   virtual bool ReadString(uint64_t addr, std::string* string, uint64_t max_read = UINT64_MAX);
 
@@ -125,13 +128,13 @@ class MemoryLocal : public Memory {
 
 class MemoryRange : public Memory {
  public:
-  MemoryRange(Memory* memory, uint64_t begin, uint64_t end);
-  virtual ~MemoryRange() { delete memory_; }
+  MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t end);
+  virtual ~MemoryRange() = default;
 
   bool Read(uint64_t addr, void* dst, size_t size) override;
 
  private:
-  Memory* memory_;
+  std::shared_ptr<Memory> memory_;
   uint64_t begin_;
   uint64_t length_;
 };
