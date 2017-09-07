@@ -101,6 +101,14 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
         return false;
     }
 
+    if (header->id == LOG_ID_STATS) {
+        // Only accept logging from *ManagerService in system server
+        // Will add more later as we see fit.
+        if (cred->uid != AID_SYSTEM && cred->gid != AID_SYSTEM) {
+            return false;
+        }
+    }
+
     // Check credential validity, acquire corrected details if not supplied.
     if (cred->pid == 0) {
         cred->pid = logbuf ? logbuf->tidToPid(header->tid)
