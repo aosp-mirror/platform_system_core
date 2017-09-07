@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/mount.h>
+#include <sys/signalfd.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -51,7 +52,7 @@
 #include "reboot.h"
 #include "security.h"
 #include "selinux.h"
-#include "signal_handler.h"
+#include "sigchld_handler.h"
 #include "ueventd.h"
 #include "util.h"
 #include "watchdogd.h"
@@ -72,6 +73,7 @@ static char qemu[32];
 std::string default_console = "/dev/console";
 
 static int epoll_fd = -1;
+static int sigterm_signal_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
 static std::string wait_prop_name;
@@ -392,6 +394,41 @@ static void InstallRebootSignalHandlers() {
     sigaction(SIGTRAP, &action, nullptr);
 }
 
+static void HandleSigtermSignal() {
+    signalfd_siginfo siginfo;
+    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(sigterm_signal_fd, &siginfo, sizeof(siginfo)));
+    if (bytes_read != sizeof(siginfo)) {
+        PLOG(ERROR) << "Failed to read siginfo from sigterm_signal_fd";
+        return;
+    }
+
+    if (siginfo.ssi_pid != 0) {
+        // Drop any userspace SIGTERM requests.
+        LOG(DEBUG) << "Ignoring SIGTERM from pid " << siginfo.ssi_pid;
+        return;
+    }
+
+    LOG(INFO) << "Handling SIGTERM, shutting system down";
+    HandlePowerctlMessage("shutdown");
+}
+
+static void InstallSigtermHandler() {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGTERM);
+
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
+        PLOG(FATAL) << "failed to block SIGTERM";
+    }
+
+    sigterm_signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
+    if (sigterm_signal_fd == -1) {
+        PLOG(FATAL) << "failed to create signalfd for SIGTERM";
+    }
+
+    register_epoll_handler(sigterm_signal_fd, HandleSigtermSignal);
+}
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -527,7 +564,13 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    signal_handler_init();
+    sigchld_handler_init();
+
+    if (!IsRebootCapable()) {
+        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
+        // In that case, receiving SIGTERM will cause the system to shut down.
+        InstallSigtermHandler();
+    }
 
     property_load_boot_defaults();
     export_oem_lock_status();
