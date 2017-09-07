@@ -75,6 +75,27 @@ void UnwindStackMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
   map->load_bias = elf->GetLoadBias();
 }
 
+std::string UnwindStackMap::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
+  *offset = 0;
+  unwindstack::Maps* maps = stack_maps();
+
+  // Get the map for this
+  unwindstack::MapInfo* map_info = maps->Find(pc);
+  if (map_info == nullptr || map_info->flags & PROT_DEVICE_MAP) {
+    return "";
+  }
+
+  unwindstack::Elf* elf = map_info->GetElf(process_memory(), true);
+
+  std::string name;
+  uint64_t func_offset;
+  if (!elf->GetFunctionName(elf->GetRelPc(pc, map_info), &name, &func_offset)) {
+    return "";
+  }
+  *offset = func_offset;
+  return name;
+}
+
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
 //-------------------------------------------------------------------------

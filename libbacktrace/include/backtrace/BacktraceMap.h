@@ -62,6 +62,9 @@ public:
   // Fill in the map data structure for the given address.
   virtual void FillIn(uintptr_t addr, backtrace_map_t* map);
 
+  // Only supported with the new unwinder.
+  virtual std::string GetFunctionName(uintptr_t /*pc*/, uintptr_t* /*offset*/) { return ""; }
+
   // The flags returned are the same flags as used by the mmap call.
   // The values are PROT_*.
   int GetFlags(uintptr_t pc) {

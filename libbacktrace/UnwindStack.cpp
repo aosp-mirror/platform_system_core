@@ -44,28 +44,6 @@
 #include "UnwindStack.h"
 #include "UnwindStackMap.h"
 
-static std::string GetFunctionName(BacktraceMap* back_map, uintptr_t pc, uintptr_t* offset) {
-  *offset = 0;
-  unwindstack::Maps* maps = reinterpret_cast<UnwindStackMap*>(back_map)->stack_maps();
-
-  // Get the map for this
-  unwindstack::MapInfo* map_info = maps->Find(pc);
-  if (map_info == nullptr || map_info->flags & PROT_DEVICE_MAP) {
-    return "";
-  }
-
-  UnwindStackMap* stack_map = reinterpret_cast<UnwindStackMap*>(back_map);
-  unwindstack::Elf* elf = map_info->GetElf(stack_map->process_memory(), true);
-
-  std::string name;
-  uint64_t func_offset;
-  if (!elf->GetFunctionName(elf->GetRelPc(pc, map_info), &name, &func_offset)) {
-    return "";
-  }
-  *offset = func_offset;
-  return name;
-}
-
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                        std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames) {
   static std::set<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
@@ -111,7 +89,7 @@ UnwindStackCurrent::UnwindStackCurrent(pid_t pid, pid_t tid, BacktraceMap* map)
     : BacktraceCurrent(pid, tid, map) {}
 
 std::string UnwindStackCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
-  return ::GetFunctionName(GetMap(), pc, offset);
+  return GetMap()->GetFunctionName(pc, offset);
 }
 
 bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) {
@@ -134,7 +112,7 @@ UnwindStackPtrace::UnwindStackPtrace(pid_t pid, pid_t tid, BacktraceMap* map)
     : BacktracePtrace(pid, tid, map) {}
 
 std::string UnwindStackPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
-  return ::GetFunctionName(GetMap(), pc, offset);
+  return GetMap()->GetFunctionName(pc, offset);
 }
 
 bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {

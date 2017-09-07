@@ -34,6 +34,8 @@ class UnwindStackMap : public BacktraceMap {
 
   void FillIn(uintptr_t addr, backtrace_map_t* map) override;
 
+  virtual std::string GetFunctionName(uintptr_t pc, uintptr_t* offset) override;
+
   unwindstack::Maps* stack_maps() { return stack_maps_.get(); }
 
   const std::shared_ptr<unwindstack::Memory>& process_memory() { return process_memory_; }
