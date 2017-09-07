@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -76,40 +77,39 @@ Memory* MapInfo::GetFileMemory() {
   return memory.release();
 }
 
-Memory* MapInfo::CreateMemory(pid_t pid) {
+Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   if (end <= start) {
     return nullptr;
   }
 
   elf_offset = 0;
 
+  // Fail on device maps.
+  if (flags & MAPS_FLAGS_DEVICE_MAP) {
+    return nullptr;
+  }
+
   // First try and use the file associated with the info.
   if (!name.empty()) {
-    // Fail on device maps.
-    if (flags & MAPS_FLAGS_DEVICE_MAP) {
-      return nullptr;
-    }
     Memory* memory = GetFileMemory();
     if (memory != nullptr) {
       return memory;
     }
   }
 
-  Memory* memory;
-  if (pid == getpid()) {
-    memory = new MemoryLocal();
-  } else {
-    memory = new MemoryRemote(pid);
+  // If the map isn't readable, don't bother trying to read from process memory.
+  if (!(flags & PROT_READ)) {
+    return nullptr;
   }
-  return new MemoryRange(memory, start, end);
+  return new MemoryRange(process_memory, start, end);
 }
 
-Elf* MapInfo::GetElf(pid_t pid, bool init_gnu_debugdata) {
+Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {
   if (elf) {
     return elf;
   }
 
-  elf = new Elf(CreateMemory(pid));
+  elf = new Elf(CreateMemory(process_memory));
   if (elf->Init() && init_gnu_debugdata) {
     elf->InitGnuDebugdata();
   }

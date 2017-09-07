@@ -40,10 +40,13 @@ struct MapInfo {
   // instead of a portion of the file.
   uint64_t elf_offset;
 
-  Memory* GetFileMemory();
-  Memory* CreateMemory(pid_t pid);
   // This function guarantees it will never return nullptr.
-  Elf* GetElf(pid_t pid, bool init_gnu_debugdata = false);
+  Elf* GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata = false);
+
+ private:
+  Memory* GetFileMemory();
+
+  Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
 };
 
 }  // namespace unwindstack
