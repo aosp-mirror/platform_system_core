@@ -54,7 +54,7 @@
 #include "init.h"
 #include "property_service.h"
 #include "service.h"
-#include "signal_handler.h"
+#include "sigchld_handler.h"
 
 using android::base::StringPrintf;
 using android::base::Timer;
@@ -169,9 +169,7 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
                  << stat;
 }
 
-// Determines whether the system is capable of rebooting. This is conservative,
-// so if any of the attempts to determine this fail, it will still return true.
-static bool IsRebootCapable() {
+bool IsRebootCapable() {
     if (!CAP_IS_SUPPORTED(CAP_SYS_BOOT)) {
         PLOG(WARNING) << "CAP_SYS_BOOT is not supported";
         return true;
