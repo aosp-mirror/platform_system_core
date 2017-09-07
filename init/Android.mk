@@ -48,7 +48,7 @@ LOCAL_SRC_FILES:= \
     init_first_stage.cpp \
     keychords.cpp \
     reboot.cpp \
-    signal_handler.cpp \
+    sigchld_handler.cpp \
     ueventd.cpp \
     watchdogd.cpp \
 

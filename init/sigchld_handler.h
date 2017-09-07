@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SIGNAL_HANDLER_H_
-#define _INIT_SIGNAL_HANDLER_H_
+#ifndef _INIT_SIGCHLD_HANDLER_H_
+#define _INIT_SIGCHLD_HANDLER_H_
 
 namespace android {
 namespace init {
 
 void ReapAnyOutstandingChildren();
 
-void signal_handler_init(void);
+void sigchld_handler_init(void);
 
 }  // namespace init
 }  // namespace android
