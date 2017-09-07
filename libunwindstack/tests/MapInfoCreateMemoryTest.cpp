@@ -34,6 +34,8 @@
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 
+#include "MemoryFake.h"
+
 namespace unwindstack {
 
 class MapInfoCreateMemoryTest : public ::testing::Test {
@@ -71,6 +73,14 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
     InitElf<Elf64_Ehdr, Elf64_Shdr>(elf64_at_map_.fd, 0x2000, 0x3000, ELFCLASS64);
   }
 
+  void SetUp() override {
+    memory_ = new MemoryFake;
+    process_memory_.reset(memory_);
+  }
+
+  MemoryFake* memory_;
+  std::shared_ptr<Memory> process_memory_;
+
   static TemporaryFile elf_;
 
   static TemporaryFile elf_at_100_;
@@ -86,17 +96,16 @@ TemporaryFile MapInfoCreateMemoryTest::elf64_at_map_;
 TEST_F(MapInfoCreateMemoryTest, end_le_start) {
   MapInfo info{.start = 0x100, .end = 0x100, .offset = 0, .name = elf_.path};
 
-  std::unique_ptr<Memory> memory;
-  memory.reset(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() == nullptr);
 
   info.end = 0xff;
-  memory.reset(info.CreateMemory(getpid()));
+  memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() == nullptr);
 
   // Make sure this test is valid.
   info.end = 0x101;
-  memory.reset(info.CreateMemory(getpid()));
+  memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
 }
 
@@ -105,7 +114,7 @@ TEST_F(MapInfoCreateMemoryTest, end_le_start) {
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
   MapInfo info{.start = 0x100, .end = 0x200, .offset = 0x100, .name = elf_.path};
 
-  std::unique_ptr<Memory> memory(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0x100U, info.elf_offset);
 
@@ -126,7 +135,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
   MapInfo info{.start = 0x100, .end = 0x200, .offset = 0x100, .name = elf_at_100_.path};
 
-  std::unique_ptr<Memory> memory(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0U, info.elf_offset);
 
@@ -149,7 +158,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_elf32) {
   MapInfo info{.start = 0x5000, .end = 0x6000, .offset = 0x1000, .name = elf32_at_map_.path};
 
-  std::unique_ptr<Memory> memory(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0U, info.elf_offset);
 
@@ -165,7 +174,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_elf64) {
   MapInfo info{.start = 0x7000, .end = 0x8000, .offset = 0x2000, .name = elf64_at_map_.path};
 
-  std::unique_ptr<Memory> memory(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0U, info.elf_offset);
 
@@ -187,81 +196,38 @@ TEST_F(MapInfoCreateMemoryTest, check_device_maps) {
   info.start = reinterpret_cast<uint64_t>(buffer.data());
   info.end = info.start + buffer.size();
   info.offset = 0;
-  std::unique_ptr<Memory> memory;
 
   info.flags = 0x8000;
   info.name = "/dev/something";
-  memory.reset(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() == nullptr);
 }
 
-TEST_F(MapInfoCreateMemoryTest, local_memory) {
-  // Set up some memory for a valid local memory object.
+TEST_F(MapInfoCreateMemoryTest, process_memory) {
+  MapInfo info;
+  info.start = 0x2000;
+  info.end = 0x3000;
+  info.offset = 0;
+
+  // Verify that the the process_memory object is used, so seed it
+  // with memory.
   std::vector<uint8_t> buffer(1024);
   for (size_t i = 0; i < buffer.size(); i++) {
     buffer[i] = i % 256;
   }
+  memory_->SetMemory(info.start, buffer.data(), buffer.size());
 
-  MapInfo info;
-  info.start = reinterpret_cast<uint64_t>(buffer.data());
-  info.end = info.start + buffer.size();
-  info.offset = 0;
-
-  std::unique_ptr<Memory> memory;
-  memory.reset(info.CreateMemory(getpid()));
+  std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
 
-  std::vector<uint8_t> read_buffer(1024);
-  ASSERT_TRUE(memory->Read(0, read_buffer.data(), read_buffer.size()));
-  for (size_t i = 0; i < read_buffer.size(); i++) {
-    ASSERT_EQ(i % 256, read_buffer[i]) << "Failed at byte " << i;
+  memset(buffer.data(), 0, buffer.size());
+  ASSERT_TRUE(memory->Read(0, buffer.data(), buffer.size()));
+  for (size_t i = 0; i < buffer.size(); i++) {
+    ASSERT_EQ(i % 256, buffer[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_FALSE(memory->Read(read_buffer.size(), read_buffer.data(), 1));
-}
-
-TEST_F(MapInfoCreateMemoryTest, remote_memory) {
-  std::vector<uint8_t> buffer(1024);
-  memset(buffer.data(), 0xa, buffer.size());
-
-  pid_t pid;
-  if ((pid = fork()) == 0) {
-    while (true)
-      ;
-    exit(1);
-  }
-  ASSERT_LT(0, pid);
-
-  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) != -1);
-  uint64_t iterations = 0;
-  siginfo_t si;
-  while (TEMP_FAILURE_RETRY(ptrace(PTRACE_GETSIGINFO, pid, 0, &si)) < 0 && errno == ESRCH) {
-    usleep(30);
-    iterations++;
-    ASSERT_LT(iterations, 500000000ULL);
-  }
-
-  MapInfo info;
-  info.start = reinterpret_cast<uint64_t>(buffer.data());
-  info.end = info.start + buffer.size();
-  info.offset = 0;
-
-  std::unique_ptr<Memory> memory;
-  memory.reset(info.CreateMemory(pid));
-  ASSERT_TRUE(memory.get() != nullptr);
-  // Set the local memory to a different value to guarantee we are reading
-  // from the remote process.
-  memset(buffer.data(), 0x1, buffer.size());
-  std::vector<uint8_t> read_buffer(1024);
-  ASSERT_TRUE(memory->Read(0, read_buffer.data(), read_buffer.size()));
-  for (size_t i = 0; i < read_buffer.size(); i++) {
-    ASSERT_EQ(0xaU, read_buffer[i]) << "Failed at byte " << i;
-  }
-
-  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(pid, wait(nullptr));
+  // Try to read outside of the map size.
+  ASSERT_FALSE(memory->Read(buffer.size(), buffer.data(), 1));
 }
 
 }  // namespace unwindstack

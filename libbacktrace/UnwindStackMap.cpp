@@ -36,6 +36,9 @@ bool UnwindStackMap::Build() {
     stack_maps_.reset(new unwindstack::RemoteMaps(pid_));
   }
 
+  // Create the process memory object.
+  process_memory_ = unwindstack::Memory::CreateProcessMemory(pid_);
+
   if (!stack_maps_->Parse()) {
     return false;
   }
@@ -68,7 +71,7 @@ void UnwindStackMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
   if (map_info == nullptr) {
     return;
   }
-  unwindstack::Elf* elf = map_info->GetElf(pid_, true);
+  unwindstack::Elf* elf = map_info->GetElf(process_memory_, true);
   map->load_bias = elf->GetLoadBias();
 }
 
