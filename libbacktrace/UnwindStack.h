@@ -35,9 +35,6 @@ class UnwindStackCurrent : public BacktraceCurrent {
   std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) override;
 
   bool UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) override;
-
- private:
-  std::unique_ptr<unwindstack::Memory> memory_;
 };
 
 class UnwindStackPtrace : public BacktracePtrace {
@@ -48,9 +45,6 @@ class UnwindStackPtrace : public BacktracePtrace {
   bool Unwind(size_t num_ignore_frames, ucontext_t* context) override;
 
   std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
-
- private:
-  std::unique_ptr<unwindstack::Memory> memory_;
 };
 
 #endif  // _LIBBACKTRACE_UNWIND_STACK_H
