@@ -22,7 +22,6 @@
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <vector>
@@ -34,32 +33,18 @@
 #include <unwindstack/Memory.h>
 
 #include "MemoryFake.h"
+#include "TestUtils.h"
 
 namespace unwindstack {
 
 class MemoryRemoteTest : public ::testing::Test {
  protected:
-  static uint64_t NanoTime() {
-    struct timespec t = { 0, 0 };
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return static_cast<uint64_t>(t.tv_sec * NS_PER_SEC + t.tv_nsec);
-  }
-
   static bool Attach(pid_t pid) {
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
       return false;
     }
 
-    uint64_t start = NanoTime();
-    siginfo_t si;
-    while (TEMP_FAILURE_RETRY(ptrace(PTRACE_GETSIGINFO, pid, 0, &si)) < 0 && errno == ESRCH) {
-      if ((NanoTime() - start) > 10 * NS_PER_SEC) {
-        printf("%d: Failed to stop after 10 seconds.\n", pid);
-        return false;
-      }
-      usleep(30);
-    }
-    return true;
+    return TestQuiescePid(pid);
   }
 
   static bool Detach(pid_t pid) {
@@ -79,6 +64,7 @@ TEST_F(MemoryRemoteTest, read) {
     exit(1);
   }
   ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
 
   ASSERT_TRUE(Attach(pid));
 
@@ -91,9 +77,6 @@ TEST_F(MemoryRemoteTest, read) {
   }
 
   ASSERT_TRUE(Detach(pid));
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(pid, wait(nullptr));
 }
 
 TEST_F(MemoryRemoteTest, read_fail) {
@@ -111,6 +94,7 @@ TEST_F(MemoryRemoteTest, read_fail) {
     exit(1);
   }
   ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
 
   ASSERT_TRUE(Attach(pid));
 
@@ -132,9 +116,6 @@ TEST_F(MemoryRemoteTest, read_fail) {
   ASSERT_EQ(0, munmap(src, pagesize));
 
   ASSERT_TRUE(Detach(pid));
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(pid, wait(nullptr));
 }
 
 TEST_F(MemoryRemoteTest, read_overflow) {
@@ -152,6 +133,7 @@ TEST_F(MemoryRemoteTest, read_illegal) {
     exit(1);
   }
   ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
 
   ASSERT_TRUE(Attach(pid));
 
@@ -162,9 +144,6 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   ASSERT_FALSE(remote.Read(0, dst.data(), 100));
 
   ASSERT_TRUE(Detach(pid));
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(pid, wait(nullptr));
 }
 
 }  // namespace unwindstack
