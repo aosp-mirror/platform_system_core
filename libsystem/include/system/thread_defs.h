@@ -55,6 +55,9 @@ enum {
     /* ui service treads might want to run at a urgent display (uncommon) */
     ANDROID_PRIORITY_URGENT_DISPLAY =  HAL_PRIORITY_URGENT_DISPLAY,
 
+    /* all normal video threads */
+    ANDROID_PRIORITY_VIDEO          = -10,
+
     /* all normal audio threads */
     ANDROID_PRIORITY_AUDIO          = -16,
 
