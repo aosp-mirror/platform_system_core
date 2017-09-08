@@ -15,10 +15,9 @@
  */
 
 #include <errno.h>
-#include <string.h>
-
 #include <signal.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/ptrace.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -39,13 +38,23 @@
 #include <unwindstack/Regs.h>
 #include <unwindstack/RegsGetLocal.h>
 
+#include "TestUtils.h"
+
 namespace unwindstack {
 
-static std::atomic_bool g_ready(false);
-static volatile bool g_ready_for_remote = false;
-static volatile bool g_signal_ready_for_remote = false;
-static std::atomic_bool g_finish(false);
+static std::atomic_bool g_ready;
+static volatile bool g_ready_for_remote;
+static volatile bool g_signal_ready_for_remote;
+static std::atomic_bool g_finish;
 static std::atomic_uintptr_t g_ucontext;
+
+static void ResetGlobals() {
+  g_ready = false;
+  g_ready_for_remote = false;
+  g_signal_ready_for_remote = false;
+  g_finish = false;
+  g_ucontext = 0;
+}
 
 static std::vector<const char*> kFunctionOrder{"InnerFunction", "MiddleFunction", "OuterFunction"};
 
@@ -156,48 +165,52 @@ extern "C" void OuterFunction(bool local) {
   MiddleFunction(local);
 }
 
-TEST(UnwindTest, local) {
+class UnwindTest : public ::testing::Test {
+ public:
+  void SetUp() override { ResetGlobals(); }
+};
+
+TEST_F(UnwindTest, local) {
   OuterFunction(true);
 }
 
 void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* completed) {
   *completed = false;
   // Need to sleep before attempting first ptrace. Without this, on the
-  // host it becomes impossible to attach and ptrace set errno to EPERM.
+  // host it becomes impossible to attach and ptrace sets errno to EPERM.
   usleep(1000);
-  for (size_t i = 0; i < 100; i++) {
-    ASSERT_EQ(0, ptrace(PTRACE_ATTACH, pid, 0, 0));
-    for (size_t j = 0; j < 100; j++) {
-      siginfo_t si;
-      if (ptrace(PTRACE_GETSIGINFO, pid, 0, &si) == 0) {
-        MemoryRemote memory(pid);
-        // Read the remote value to see if we are ready.
-        bool value;
-        if (memory.Read(addr, &value, sizeof(value)) && value) {
-          *completed = true;
-          break;
-        }
+  for (size_t i = 0; i < 1000; i++) {
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == 0) {
+      ASSERT_TRUE(TestQuiescePid(pid))
+          << "Waiting for process to quiesce failed: " << strerror(errno);
+
+      MemoryRemote memory(pid);
+      // Read the remote value to see if we are ready.
+      bool value;
+      if (memory.Read(addr, &value, sizeof(value)) && value) {
+        *completed = true;
       }
-      usleep(1000);
+      if (!*completed || !leave_attached) {
+        ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0));
+      }
+      if (*completed) {
+        break;
+      }
+    } else {
+      ASSERT_EQ(ESRCH, errno) << "ptrace attach failed with unexpected error: " << strerror(errno);
     }
-    if (leave_attached && *completed) {
-      break;
-    }
-    ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0));
-    if (*completed) {
-      break;
-    }
-    usleep(1000);
+    usleep(5000);
   }
 }
 
-TEST(UnwindTest, remote) {
+TEST_F(UnwindTest, remote) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     OuterFunction(false);
     exit(0);
   }
   ASSERT_NE(-1, pid);
+  TestScopedPidReaper reap(pid);
 
   bool completed;
   WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_ready_for_remote), true, &completed);
@@ -210,13 +223,11 @@ TEST(UnwindTest, remote) {
 
   VerifyUnwind(pid, &maps, regs.get(), kFunctionOrder);
 
-  ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0));
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(pid, wait(nullptr));
+  ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0))
+      << "ptrace detach failed with unexpected error: " << strerror(errno);
 }
 
-TEST(UnwindTest, from_context) {
+TEST_F(UnwindTest, from_context) {
   std::atomic_int tid(0);
   std::thread thread([&]() {
     tid = syscall(__NR_gettid);
@@ -263,10 +274,6 @@ TEST(UnwindTest, from_context) {
 }
 
 static void RemoteThroughSignal(unsigned int sa_flags) {
-  g_ready = false;
-  g_signal_ready_for_remote = false;
-  g_finish = false;
-
   pid_t pid;
   if ((pid = fork()) == 0) {
     struct sigaction act, oldact;
@@ -279,6 +286,7 @@ static void RemoteThroughSignal(unsigned int sa_flags) {
     exit(0);
   }
   ASSERT_NE(-1, pid);
+  TestScopedPidReaper reap(pid);
 
   bool completed;
   WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_ready_for_remote), false, &completed);
@@ -294,17 +302,15 @@ static void RemoteThroughSignal(unsigned int sa_flags) {
 
   VerifyUnwind(pid, &maps, regs.get(), kFunctionSignalOrder);
 
-  ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0));
-
-  kill(pid, SIGKILL);
-  ASSERT_EQ(pid, wait(nullptr));
+  ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0))
+      << "ptrace detach failed with unexpected error: " << strerror(errno);
 }
 
-TEST(UnwindTest, remote_through_signal) {
+TEST_F(UnwindTest, remote_through_signal) {
   RemoteThroughSignal(0);
 }
 
-TEST(UnwindTest, remote_through_signal_sa_siginfo) {
+TEST_F(UnwindTest, remote_through_signal_sa_siginfo) {
   RemoteThroughSignal(SA_SIGINFO);
 }
 
