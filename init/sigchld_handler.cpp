@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "signal_handler.h"
+#include "sigchld_handler.h"
 
 #include <signal.h>
 #include <string.h>
@@ -115,7 +115,7 @@ void ReapAnyOutstandingChildren() {
     }
 }
 
-void signal_handler_init() {
+void sigchld_handler_init() {
     // Create a signalling mechanism for SIGCHLD.
     int s[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {

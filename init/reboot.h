@@ -38,6 +38,10 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 // Parses and handles a setprop sys.powerctl message.
 bool HandlePowerctlMessage(const std::string& command);
 
+// Determines whether the system is capable of rebooting. This is conservative,
+// so if any of the attempts to determine this fail, it will still return true.
+bool IsRebootCapable();
+
 }  // namespace init
 }  // namespace android
 

@@ -66,7 +66,6 @@
 #include "reboot.h"
 #include "rlimit_parser.h"
 #include "service.h"
-#include "signal_handler.h"
 #include "util.h"
 
 using namespace std::literals::string_literals;
