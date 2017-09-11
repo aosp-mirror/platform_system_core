@@ -202,6 +202,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
   {"reboot,ota", 63},
   {"reboot,factory_reset", 64},
   {"reboot,", 65},
+  {"reboot,shell", 66},
+  {"reboot,adb", 67},
 };
 
 // Converts a string value representing the reason the system booted to an

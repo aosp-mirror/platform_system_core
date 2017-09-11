@@ -427,8 +427,8 @@ test_factory_reset() {
   adb reboot >&2
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,
-  report_bootstat_logs reboot,factory_reset reboot, \
+  EXPECT_PROPERTY persist.sys.boot.reason "reboot,.*"
+  report_bootstat_logs reboot,factory_reset reboot, reboot,adb \
     "-bootstat: Failed to read /data/misc/bootstat/build_date: No such file or directory" \
     "-bootstat: Failed to parse boot time record: /data/misc/bootstat/build_date"
 }
@@ -599,6 +599,38 @@ test_userrequested_shutdown() {
   report_bootstat_logs shutdown,userrequested
 }
 
+[ "USAGE: test_shell_reboot
+
+shell reboot test:
+- adb shell reboot
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report reboot,shell" ]
+test_shell_reboot() {
+  echo "INFO: expected duration of ${TEST} test roughly 45 seconds" >&2
+  adb shell reboot
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason reboot,shell
+  EXPECT_PROPERTY persist.sys.boot.reason reboot,shell
+  report_bootstat_logs reboot,shell
+}
+
+[ "USAGE: test_adb_reboot
+
+adb reboot test:
+- adb reboot
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report reboot,adb" ]
+test_adb_reboot() {
+  echo "INFO: expected duration of ${TEST} test roughly 45 seconds" >&2
+  adb reboot
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason reboot,adb
+  EXPECT_PROPERTY persist.sys.boot.reason reboot,adb
+  report_bootstat_logs reboot,adb
+}
+
 [ "USAGE: ${0##*/} [-s SERIAL] [tests]
 
 Mainline executive to run the above tests" ]
@@ -650,7 +682,7 @@ if [ -z "$*" ]; then
   if [ -z "${2}" ]; then
     # Hard coded should shell fail to find them above (search/permission issues)
     eval set ota cold factory_reset hard battery unknown kernel_panic warm \
-             thermal_shutdown userrequested_shutdown
+             thermal_shutdown userrequested_shutdown shell_reboot adb_reboot
   fi
   if [ X"nothing" = X"${1}" ]; then
     shift 1
