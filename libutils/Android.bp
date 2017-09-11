@@ -18,10 +18,12 @@ cc_library_headers {
     host_supported: true,
 
     header_libs: [
+        "liblog_headers",
         "libsystem_headers",
         "libcutils_headers"
     ],
     export_header_lib_headers: [
+        "liblog_headers",
         "libsystem_headers",
         "libcutils_headers"
     ],
