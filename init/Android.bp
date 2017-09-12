@@ -78,6 +78,8 @@ cc_library_static {
         "security.cpp",
         "selinux.cpp",
         "service.cpp",
+        "subcontext.cpp",
+        "subcontext.proto",
         "rlimit_parser.cpp",
         "tokenizer.cpp",
         "uevent_listener.cpp",
@@ -173,8 +175,27 @@ cc_test {
         "result_test.cpp",
         "rlimit_parser_test.cpp",
         "service_test.cpp",
+        "subcontext_test.cpp",
         "ueventd_test.cpp",
         "util_test.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcutils",
+    ],
+    static_libs: [
+        "libinit",
+        "libselinux",
+        "libcrypto",
+        "libprotobuf-cpp-lite",
+    ],
+}
+
+cc_benchmark {
+    name: "init_benchmarks",
+    defaults: ["init_defaults"],
+    srcs: [
+        "subcontext_benchmark.cpp",
     ],
     shared_libs: [
         "libbase",
