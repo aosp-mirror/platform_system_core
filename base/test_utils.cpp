@@ -85,8 +85,16 @@ TemporaryFile::TemporaryFile() {
 }
 
 TemporaryFile::~TemporaryFile() {
-  close(fd);
+  if (fd != -1) {
+    close(fd);
+  }
   unlink(path);
+}
+
+int TemporaryFile::release() {
+  int result = fd;
+  fd = -1;
+  return result;
 }
 
 void TemporaryFile::init(const std::string& tmp_dir) {
