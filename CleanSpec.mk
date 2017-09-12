@@ -70,3 +70,4 @@ $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/secure-storage-unit-test
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/storageproxyd)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/tipc-test)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/trusty_keymaster_tipc)
+$(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/root)
