@@ -56,6 +56,7 @@ int main(int argc, char *argv[])
 
     if (argc > optind)
         optarg = argv[optind];
+    if (!optarg || !optarg[0]) optarg = "shell";
 
     prop_len = snprintf(property_val, sizeof(property_val), "%s,%s", cmd, optarg);
     if (prop_len >= sizeof(property_val)) {

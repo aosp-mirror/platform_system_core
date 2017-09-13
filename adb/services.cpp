@@ -150,6 +150,7 @@ static bool reboot_service_impl(int fd, const char* arg) {
 
     sync();
 
+    if (!reboot_arg || !reboot_arg[0]) reboot_arg = "adb";
     std::string reboot_string = android::base::StringPrintf("reboot,%s", reboot_arg);
     if (!android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_string)) {
         WriteFdFmt(fd, "reboot (%s) failed\n", reboot_string.c_str());
