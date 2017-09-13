@@ -1237,7 +1237,7 @@ class DeviceOfflineTest(DeviceTest):
                 return m.group(2)
         return None
 
-    def test_killed_when_pushing_a_large_file(self):
+    def disabled_test_killed_when_pushing_a_large_file(self):
         """
            While running adb push with a large file, kill adb server.
            Occasionally the device becomes offline. Because the device is still
@@ -1268,7 +1268,7 @@ class DeviceOfflineTest(DeviceTest):
         # 4. The device should be online
         self.assertEqual(self._get_device_state(serialno), 'device')
 
-    def test_killed_when_pulling_a_large_file(self):
+    def disabled_test_killed_when_pulling_a_large_file(self):
         """
            While running adb pull with a large file, kill adb server.
            Occasionally the device can't be connected. Because the device is trying to
