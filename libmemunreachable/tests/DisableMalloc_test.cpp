@@ -73,15 +73,18 @@ TEST_F(DisableMallocTest, deadlock_allocate) {
 TEST_F(DisableMallocTest, deadlock_new) {
   ASSERT_DEATH(
       {
-        char* ptr = new (char);
+        // C++ allows `new Foo` to be replaced with a stack allocation or merged
+        // with future `new Foo` expressions, provided certain conditions are
+        // met [expr.new/10]. None of this applies to `operator new(size_t)`.
+        void* ptr = ::operator new(1);
         ASSERT_NE(ptr, nullptr);
-        delete (ptr);
+        ::operator delete(ptr);
         {
           alarm(100ms);
           ScopedDisableMalloc disable_malloc;
-          char* ptr = new (std::nothrow)(char);
+          void* ptr = ::operator new(1);
           ASSERT_NE(ptr, nullptr);
-          delete (ptr);
+          ::operator delete(ptr);
         }
       },
       "");
@@ -90,14 +93,12 @@ TEST_F(DisableMallocTest, deadlock_new) {
 TEST_F(DisableMallocTest, deadlock_delete) {
   ASSERT_DEATH(
       {
-        char* ptr = new (char);
+        void* ptr = ::operator new(1);
         ASSERT_NE(ptr, nullptr);
         {
           alarm(250ms);
           ScopedDisableMalloc disable_malloc;
-          delete (ptr);
-          // Force ptr usage or this code gets optimized away by the arm64 compiler.
-          ASSERT_NE(ptr, nullptr);
+          ::operator delete(ptr);
         }
       },
       "");
