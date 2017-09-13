@@ -96,7 +96,7 @@ void install_local_socket(asocket* s) {
 }
 
 void remove_socket(asocket* s) {
-    // socket_list_lock should already be held
+    std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
     if (s->prev && s->next) {
         s->prev->next = s->next;
         s->next->prev = s->prev;
