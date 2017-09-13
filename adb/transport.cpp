@@ -615,15 +615,15 @@ static void remove_transport(atransport* transport) {
 static void transport_unref(atransport* t) {
     CHECK(t != nullptr);
 
-    size_t old_refcount = t->ref_count--;
-    CHECK_GT(old_refcount, 0u);
-
-    if (old_refcount == 1u) {
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
+    CHECK_GT(t->ref_count, 0u);
+    t->ref_count--;
+    if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
         t->close(t);
         remove_transport(t);
     } else {
-        D("transport: %s unref (count=%zu)", t->serial, old_refcount - 1);
+        D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
     }
 }
 

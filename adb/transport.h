@@ -64,7 +64,7 @@ class atransport {
     // it's better to do this piece by piece.
 
     atransport(ConnectionState state = kCsOffline)
-        : id(NextTransportId()), ref_count(0), connection_state_(state) {
+        : id(NextTransportId()), connection_state_(state) {
         transport_fde = {};
         protocol_version = A_VERSION;
         max_payload = MAX_PAYLOAD;
@@ -88,7 +88,7 @@ class atransport {
     int fd = -1;
     int transport_socket = -1;
     fdevent transport_fde;
-    std::atomic<size_t> ref_count;
+    size_t ref_count = 0;
     uint32_t sync_token = 0;
     bool online = false;
     TransportType type = kTransportAny;
