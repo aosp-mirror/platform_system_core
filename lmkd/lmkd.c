@@ -70,6 +70,7 @@ enum lmk_cmd {
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
+static bool has_inkernel_module;
 
 /* memory pressure level medium event */
 static int mpevfd[2];
@@ -81,6 +82,7 @@ static int critical_oomadj;
 static bool debug_process_killing;
 static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
+static bool is_go_device;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -332,7 +334,7 @@ static void cmd_target(int ntargets, int *params) {
 
     lowmem_targets_size = ntargets;
 
-    if (use_inkernel_interface) {
+    if (has_inkernel_module) {
         char minfreestr[128];
         char killpriostr[128];
 
@@ -347,9 +349,9 @@ static void cmd_target(int ntargets, int *params) {
                 strlcat(killpriostr, ",", sizeof(killpriostr));
             }
 
-            snprintf(val, sizeof(val), "%d", lowmem_minfree[i]);
+            snprintf(val, sizeof(val), "%d", use_inkernel_interface ? lowmem_minfree[i] : 0);
             strlcat(minfreestr, val, sizeof(minfreestr));
-            snprintf(val, sizeof(val), "%d", lowmem_adj[i]);
+            snprintf(val, sizeof(val), "%d", use_inkernel_interface ? lowmem_adj[i] : 0);
             strlcat(killpriostr, val, sizeof(killpriostr));
         }
 
@@ -821,7 +823,8 @@ static int init(void) {
     }
     maxevents++;
 
-    use_inkernel_interface = !access(INKERNEL_MINFREE_PATH, W_OK);
+    has_inkernel_module = !access(INKERNEL_MINFREE_PATH, W_OK);
+    use_inkernel_interface = has_inkernel_module && !is_go_device;
 
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
@@ -875,6 +878,7 @@ int main(int argc __unused, char **argv __unused) {
     debug_process_killing = property_get_bool("ro.lmk.debug", false);
     enable_pressure_upgrade = property_get_bool("ro.lmk.critical_upgrade", false);
     upgrade_pressure = (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 50);
+    is_go_device = property_get_bool("ro.config.low_ram", false);
 
     mlockall(MCL_FUTURE);
     sched_setscheduler(0, SCHED_FIFO, &param);

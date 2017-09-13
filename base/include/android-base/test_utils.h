@@ -26,6 +26,10 @@ class TemporaryFile {
   TemporaryFile();
   ~TemporaryFile();
 
+  // Release the ownership of fd, caller is reponsible for closing the
+  // fd or stream properly.
+  int release();
+
   int fd;
   char path[1024];
 

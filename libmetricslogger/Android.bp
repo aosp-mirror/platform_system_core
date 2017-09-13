@@ -19,10 +19,13 @@ cc_defaults {
         "-Wextra",
         "-Werror",
 
-        // 524291 corresponds to sysui_histogram, from
-        // frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
-        "-DHISTOGRAM_LOG_TAG=524292",
+        // The following defines map logtag IDs as represented by:
+        //   frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
+        //
+        // E.g., 524290 corresponds to sysui_count.
         "-DCOUNT_LOG_TAG=524290",
+        "-DHISTOGRAM_LOG_TAG=524292",
+        "-DMULTI_ACTION_LOG_TAG=524292",
     ],
 }
 
