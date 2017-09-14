@@ -594,6 +594,29 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
   return result;
 }
 
+// Attempts to read |len| bytes into |buf| at offset |off|.
+//
+// This method uses pread64 on platforms that support it and
+// lseek64 + read on platforms that don't. This implies that
+// callers should not rely on the |fd| offset being incremented
+// as a side effect of this call.
+static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
+                                   off64_t off) {
+#ifdef HAVE_PREAD
+  return TEMP_FAILURE_RETRY(pread64(fd, buf, len, off));
+#else
+  // The only supported platform that doesn't support pread at the moment
+  // is Windows. Only recent versions of windows support unix like forks,
+  // and even there the semantics are quite different.
+  if (lseek64(fd, off, SEEK_SET) != off) {
+    ALOGW("Zip: failed seek to offset %" PRId64, off);
+    return kIoError;
+  }
+
+  return TEMP_FAILURE_RETRY(read(fd, buf, len));
+#endif  // HAVE_PREAD
+}
+
 /*
  * Parses the Zip archive's Central Directory.  Allocates and populates the
  * hash table.
@@ -672,8 +695,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   }
 
   uint32_t lfh_start_bytes;
-  if (!archive->mapped_zip.ReadAtOffset(reinterpret_cast<uint8_t*>(&lfh_start_bytes),
-                                        sizeof(uint32_t), 0)) {
+  if (ReadAtOffset(archive->fd, reinterpret_cast<uint8_t*>(&lfh_start_bytes),
+                    sizeof(uint32_t), 0) != sizeof(uint32_t)) {
     ALOGW("Zip: Unable to read header for entry at offset == 0.");
     return -1;
   }
@@ -753,29 +776,6 @@ static int32_t UpdateEntryFromDataDescriptor(int fd,
   entry->uncompressed_length = descriptor->uncompressed_size;
 
   return 0;
-}
-
-// Attempts to read |len| bytes into |buf| at offset |off|.
-//
-// This method uses pread64 on platforms that support it and
-// lseek64 + read on platforms that don't. This implies that
-// callers should not rely on the |fd| offset being incremented
-// as a side effect of this call.
-static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
-                                   off64_t off) {
-#ifdef HAVE_PREAD
-  return TEMP_FAILURE_RETRY(pread64(fd, buf, len, off));
-#else
-  // The only supported platform that doesn't support pread at the moment
-  // is Windows. Only recent versions of windows support unix like forks,
-  // and even there the semantics are quite different.
-  if (lseek64(fd, off, SEEK_SET) != off) {
-    ALOGW("Zip: failed seek to offset %" PRId64, off);
-    return kIoError;
-  }
-
-  return TEMP_FAILURE_RETRY(read(fd, buf, len));
-#endif  // HAVE_PREAD
 }
 
 static int32_t FindEntry(const ZipArchive* archive, const int ent,
