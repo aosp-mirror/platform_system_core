@@ -258,3 +258,45 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_PREBUILT)
 endif
+
+#######################################
+# llndk.libraries.txt
+include $(CLEAR_VARS)
+LOCAL_MODULE := llndk.libraries.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_SYSTEM)/base_rules.mk
+llndk_md5 = $(word 1, $(shell echo $(LLNDK_LIBRARIES) | $(MD5SUM)))
+llndk_dep = $(intermediates)/$(llndk_md5).dep
+$(llndk_dep):
+	$(hide) mkdir -p $(dir $@) && rm -rf $(dir $@)*.dep && touch $@
+
+$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(LLNDK_LIBRARIES)
+$(LOCAL_BUILT_MODULE): $(llndk_dep)
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo -n > $@
+	$(hide) $(foreach lib,$(PRIVATE_LLNDK_LIBRARIES), \
+		echo $(lib).so >> $@;)
+
+#######################################
+# vndksp.libraries.txt
+include $(CLEAR_VARS)
+LOCAL_MODULE := vndksp.libraries.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_SYSTEM)/base_rules.mk
+vndksp_md5 = $(word 1, $(shell echo $(LLNDK_LIBRARIES) | $(MD5SUM)))
+vndksp_dep = $(intermediates)/$(vndksp_md5).dep
+$(vndksp_dep):
+	$(hide) mkdir -p $(dir $@) && rm -rf $(dir $@)*.dep && touch $@
+
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(VNDK_SAMEPROCESS_LIBRARIES)
+$(LOCAL_BUILT_MODULE): $(vndksp_dep)
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo -n > $@
+	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
+		echo $(lib).so >> $@;)
