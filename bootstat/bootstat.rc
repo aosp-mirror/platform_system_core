@@ -1,5 +1,9 @@
 # This file is the LOCAL_INIT_RC file for the bootstat command.
 
+# mirror bootloader boot reason to system boot reason
+on property:ro.boot.bootreason=*
+    setprop sys.boot.reason ${ro.boot.bootreason}
+
 on post-fs-data
     mkdir /data/misc/bootstat 0700 system log
     # To deal with ota transition resulting from a change in DAC from
