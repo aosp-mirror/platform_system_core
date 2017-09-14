@@ -462,14 +462,14 @@ int main(int argc, char** argv) {
   if (wait_for_gdb) {
     // Use ALOGI to line up with output from engrave_tombstone.
     ALOGI(
-      "***********************************************************\n"
-      "* Process %d has been suspended while crashing.\n"
-      "* To attach gdbserver and start gdb, run this on the host:\n"
-      "*\n"
-      "*     gdbclient.py -p %d\n"
-      "*\n"
-      "***********************************************************",
-      target, main_tid);
+        "***********************************************************\n"
+        "* Process %d has been suspended while crashing.\n"
+        "* To attach gdbserver and start gdb, run this on the host:\n"
+        "*\n"
+        "*     gdbclient.py -p %d\n"
+        "*\n"
+        "***********************************************************",
+        target, target);
   }
 
   if (fatal_signal) {
