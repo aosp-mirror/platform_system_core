@@ -134,17 +134,21 @@ static void SetUpPidNamespace(const std::string& service_name) {
     }
 }
 
-static void ExpandArgs(const std::vector<std::string>& args, std::vector<char*>* strs) {
+static bool ExpandArgsAndExecve(const std::vector<std::string>& args) {
     std::vector<std::string> expanded_args;
+    std::vector<char*> c_strings;
+
     expanded_args.resize(args.size());
-    strs->push_back(const_cast<char*>(args[0].c_str()));
+    c_strings.push_back(const_cast<char*>(args[0].data()));
     for (std::size_t i = 1; i < args.size(); ++i) {
         if (!expand_props(args[i], &expanded_args[i])) {
             LOG(FATAL) << args[0] << ": cannot expand '" << args[i] << "'";
         }
-        strs->push_back(const_cast<char*>(expanded_args[i].c_str()));
+        c_strings.push_back(expanded_args[i].data());
     }
-    strs->push_back(nullptr);
+    c_strings.push_back(nullptr);
+
+    return execve(c_strings[0], c_strings.data(), (char**)ENV) == 0;
 }
 
 ServiceEnvironmentInfo::ServiceEnvironmentInfo() {
@@ -799,10 +803,8 @@ bool Service::Start() {
         // priority. Aborts on failure.
         SetProcessAttributes();
 
-        std::vector<char*> strs;
-        ExpandArgs(args_, &strs);
-        if (execve(strs[0], (char**) &strs[0], (char**) ENV) < 0) {
-            PLOG(ERROR) << "cannot execve('" << strs[0] << "')";
+        if (!ExpandArgsAndExecve(args_)) {
+            PLOG(ERROR) << "cannot execve('" << args_[0] << "')";
         }
 
         _exit(127);
