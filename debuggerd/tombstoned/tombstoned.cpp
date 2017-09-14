@@ -389,8 +389,9 @@ int main(int, char* []) {
 
   intercept_manager = new InterceptManager(base, intercept_socket);
 
-  evconnlistener* tombstone_listener = evconnlistener_new(
-      base, crash_accept_cb, CrashQueue::for_tombstones(), -1, LEV_OPT_CLOSE_ON_FREE, crash_socket);
+  evconnlistener* tombstone_listener =
+      evconnlistener_new(base, crash_accept_cb, CrashQueue::for_tombstones(), LEV_OPT_CLOSE_ON_FREE,
+                         -1 /* backlog */, crash_socket);
   if (!tombstone_listener) {
     LOG(FATAL) << "failed to create evconnlistener for tombstones.";
   }
@@ -402,8 +403,9 @@ int main(int, char* []) {
     }
 
     evutil_make_socket_nonblocking(java_trace_socket);
-    evconnlistener* java_trace_listener = evconnlistener_new(
-        base, crash_accept_cb, CrashQueue::for_anrs(), -1, LEV_OPT_CLOSE_ON_FREE, java_trace_socket);
+    evconnlistener* java_trace_listener =
+        evconnlistener_new(base, crash_accept_cb, CrashQueue::for_anrs(), LEV_OPT_CLOSE_ON_FREE,
+                           -1 /* backlog */, java_trace_socket);
     if (!java_trace_listener) {
       LOG(FATAL) << "failed to create evconnlistener for java traces.";
     }
