@@ -82,6 +82,7 @@ static int critical_oomadj;
 static bool debug_process_killing;
 static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
+static int64_t downgrade_pressure;
 static bool is_go_device;
 
 /* control socket listen and data */
@@ -678,26 +679,45 @@ static void mp_event_common(bool is_critical) {
     int min_adj_score = is_critical ? critical_oomadj : medium_oomadj;
     int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
     int64_t mem_usage, memsw_usage;
+    int64_t mem_pressure;
 
     ret = read(mpevfd[index], &evcount, sizeof(evcount));
     if (ret < 0)
         ALOGE("Error reading memory pressure event fd; errno=%d",
               errno);
 
-    if (enable_pressure_upgrade && !is_critical) {
-        mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
-        memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
-        if (memsw_usage < 0 || mem_usage < 0) {
-            find_and_kill_process(min_adj_score, is_critical);
-            return;
-        }
+    mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
+    memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
+    if (memsw_usage < 0 || mem_usage < 0) {
+        find_and_kill_process(min_adj_score, is_critical);
+        return;
+    }
 
-        // We are swapping too much, calculate percent for swappinness.
-        if (((mem_usage * 100) / memsw_usage) < upgrade_pressure) {
+    // Calculate percent for swappinness.
+    mem_pressure = (mem_usage * 100) / memsw_usage;
+
+    if (enable_pressure_upgrade && !is_critical) {
+        // We are swapping too much.
+        if (mem_pressure < upgrade_pressure) {
             ALOGI("Event upgraded to critical.");
             min_adj_score = critical_oomadj;
             is_critical = true;
         }
+    }
+
+    // If the pressure is larger than downgrade_pressure lmk will not
+    // kill any process, since enough memory is available.
+    if (mem_pressure > downgrade_pressure) {
+        if (debug_process_killing) {
+            ALOGI("Ignore %s memory pressure", is_critical ? "critical" : "medium");
+        }
+        return;
+    } else if (is_critical && mem_pressure > upgrade_pressure) {
+        if (debug_process_killing) {
+            ALOGI("Downgrade critical memory pressure");
+        }
+        // Downgrade event to medium, since enough memory available.
+        is_critical = false;
     }
 
     if (find_and_kill_process(min_adj_score, is_critical) == 0) {
@@ -878,6 +898,7 @@ int main(int argc __unused, char **argv __unused) {
     debug_process_killing = property_get_bool("ro.lmk.debug", false);
     enable_pressure_upgrade = property_get_bool("ro.lmk.critical_upgrade", false);
     upgrade_pressure = (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 50);
+    downgrade_pressure = (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 60);
     is_go_device = property_get_bool("ro.config.low_ram", false);
 
     mlockall(MCL_FUTURE);
