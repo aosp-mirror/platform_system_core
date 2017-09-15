@@ -153,8 +153,14 @@ inline Error ErrnoError() {
 template <typename T>
 class Result {
   public:
-    template <typename... U>
-    Result(U&&... result) : contents_(std::in_place_index_t<0>(), std::forward<U>(result)...) {}
+    Result() {}
+
+    template <typename U, typename... V,
+              typename = std::enable_if_t<!(std::is_same_v<std::decay_t<U>, Result<T>> &&
+                                            sizeof...(V) == 0)>>
+    Result(U&& result, V&&... results)
+        : contents_(std::in_place_index_t<0>(), std::forward<U>(result),
+                    std::forward<V>(results)...) {}
 
     Result(Error&& error) : contents_(std::in_place_index_t<1>(), error.str(), error.get_errno()) {}
     Result(const ResultError& result_error)
