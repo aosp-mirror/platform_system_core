@@ -73,6 +73,7 @@ cc_library_static {
         "log.cpp",
         "parser.cpp",
         "persistent_properties.cpp",
+        "persistent_properties.proto",
         "property_service.cpp",
         "security.cpp",
         "selinux.cpp",
@@ -90,11 +91,15 @@ cc_library_static {
         "liblog",
         "libprocessgroup",
         "libfs_mgr",
+        "libprotobuf-cpp-lite",
     ],
     include_dirs: [
         "system/core/mkbootimg",
     ],
-
+    proto: {
+        type: "lite",
+        export_proto_headers: true,
+    },
 }
 
 /*
@@ -179,6 +184,7 @@ cc_test {
         "libinit",
         "libselinux",
         "libcrypto",
+        "libprotobuf-cpp-lite",
     ],
 }
 
