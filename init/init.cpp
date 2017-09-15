@@ -79,6 +79,8 @@ static std::unique_ptr<Timer> waiting_for_prop(nullptr);
 static std::string wait_prop_name;
 static std::string wait_prop_value;
 static bool shutting_down;
+static std::string shutdown_command;
+static bool do_shutdown = false;
 
 std::vector<std::string> late_import_paths;
 
@@ -157,9 +159,16 @@ void property_changed(const std::string& name, const std::string& value) {
     // In non-thermal-shutdown case, 'shutdown' trigger will be fired to let device specific
     // commands to be executed.
     if (name == "sys.powerctl") {
-        if (HandlePowerctlMessage(value)) {
-            shutting_down = true;
-        }
+        // Despite the above comment, we can't call HandlePowerctlMessage() in this function,
+        // because it modifies the contents of the action queue, which can cause the action queue
+        // to get into a bad state if this function is called from a command being executed by the
+        // action queue.  Instead we set this flag and ensure that shutdown happens before the next
+        // command is run in the main init loop.
+        // TODO: once property service is removed from init, this will never happen from a builtin,
+        // but rather from a callback from the property service socket, in which case this hack can
+        // go away.
+        shutdown_command = value;
+        do_shutdown = true;
     }
 
     if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
@@ -621,6 +630,13 @@ int main(int argc, char** argv) {
     while (true) {
         // By default, sleep until something happens.
         int epoll_timeout_ms = -1;
+
+        if (do_shutdown && !shutting_down) {
+            do_shutdown = false;
+            if (HandlePowerctlMessage(shutdown_command)) {
+                shutting_down = true;
+            }
+        }
 
         if (!(waiting_for_prop || Service::is_exec_service_running())) {
             am.ExecuteOneCommand();
