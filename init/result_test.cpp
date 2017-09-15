@@ -276,6 +276,49 @@ TEST(result, no_copy_on_return) {
     EXPECT_EQ(0U, ConstructorTracker::move_assignment_called);
 }
 
+// Below two tests require that we do not hide the move constructor with our forwarding reference
+// constructor.  This is done with by disabling the forwarding reference constructor if its first
+// and only type is Result<T>.
+TEST(result, result_result_with_success) {
+    auto return_result_result_with_success = []() -> Result<Result<Success>> {
+        return Result<Success>();
+    };
+    auto result = return_result_result_with_success();
+    ASSERT_TRUE(result);
+    ASSERT_TRUE(*result);
+
+    auto inner_result = result.value();
+    ASSERT_TRUE(inner_result);
+}
+
+TEST(result, result_result_with_failure) {
+    auto return_result_result_with_error = []() -> Result<Result<Success>> {
+        return Result<Success>(ResultError("failure string", 6));
+    };
+    auto result = return_result_result_with_error();
+    ASSERT_TRUE(result);
+    ASSERT_FALSE(*result);
+    EXPECT_EQ("failure string", result->error_string());
+    EXPECT_EQ(6, result->error_errno());
+}
+
+// This test requires that we disable the forwarding reference constructor if Result<T> is the
+// *only* type that we are forwarding.  In otherwords, if we are forwarding Result<T>, int to
+// construct a Result<T>, then we still need the constructor.
+TEST(result, result_two_parameter_constructor_same_type) {
+    struct TestStruct {
+        TestStruct(int value) : value_(value) {}
+        TestStruct(Result<TestStruct> result, int value) : value_(result->value_ * value) {}
+        int value_;
+    };
+
+    auto return_test_struct = []() -> Result<TestStruct> { return {Result<TestStruct>(6), 6}; };
+
+    auto result = return_test_struct();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(36, result->value_);
+}
+
 TEST(result, die_on_access_failed_result) {
     Result<std::string> result = Error();
     ASSERT_DEATH(*result, "");
