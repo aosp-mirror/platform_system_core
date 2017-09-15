@@ -37,5 +37,12 @@ void LogCounter(const std::string& name, int32_t val) {
         << val << LOG_ID_EVENTS;
 }
 
+// Mirror com.android.internal.logging.MetricsLogger#action().
+void LogMultiAction(int32_t category, int32_t field, const std::string& value) {
+    android_log_event_list log(MULTI_ACTION_LOG_TAG);
+    log << LOGBUILDER_CATEGORY << category << LOGBUILDER_TYPE << TYPE_ACTION
+        << field << value << LOG_ID_EVENTS;
+}
+
 }  // namespace metricslogger
 }  // namespace android
