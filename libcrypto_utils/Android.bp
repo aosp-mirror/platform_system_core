@@ -17,6 +17,9 @@
 cc_library {
     name: "libcrypto_utils",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     host_supported: true,
     srcs: [
         "android_pubkey.c",

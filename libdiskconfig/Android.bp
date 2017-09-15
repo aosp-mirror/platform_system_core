@@ -1,6 +1,9 @@
 cc_library {
     name: "libdiskconfig",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     srcs: [
         "diskconfig.c",
         "diskutils.c",

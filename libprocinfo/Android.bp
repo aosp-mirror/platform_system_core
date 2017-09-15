@@ -23,6 +23,9 @@ libprocinfo_cppflags = [
 cc_library {
     name: "libprocinfo",
     vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     host_supported: true,
     srcs: [
         "process.cpp",
