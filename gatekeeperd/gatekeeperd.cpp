@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <memory>
 
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -400,7 +401,7 @@ public:
 
 private:
     sp<IGatekeeper> hw_device;
-    UniquePtr<SoftGateKeeperDevice> soft_device;
+    std::unique_ptr<SoftGateKeeperDevice> soft_device;
 
     bool clear_state_if_needed_done;
 };
