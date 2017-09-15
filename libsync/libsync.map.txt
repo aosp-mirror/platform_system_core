@@ -17,16 +17,12 @@
 LIBSYNC {
   global:
     sync_merge; # introduced=26
-    sync_get_fence_info; # introduced=26
-    sync_free_fence_info; # introduced=26
+    sync_file_info; # introduced=26
+    sync_file_info_free; # introduced=26
+    sync_wait; # vndk
+    sync_fence_info; # vndk
+    sync_pt_info; # vndk
+    sync_fence_info_free; # vndk
   local:
     *;
 };
-
-LIBSYNC_PLATFORM {
-  global:
-    sync_wait;
-    sync_fence_info;
-    sync_pt_info;
-    sync_fence_info_free;
-} LIBSYNC_PLATFORM;
