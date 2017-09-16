@@ -127,7 +127,7 @@ public:
   // Create a string representing the formatted line of backtrace information
   // for a single frame.
   virtual std::string FormatFrameData(size_t frame_num);
-  virtual std::string FormatFrameData(const backtrace_frame_data_t* frame);
+  static std::string FormatFrameData(const backtrace_frame_data_t* frame);
 
   pid_t Pid() const { return pid_; }
   pid_t Tid() const { return tid_; }
