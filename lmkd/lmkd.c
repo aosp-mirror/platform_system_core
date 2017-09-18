@@ -626,9 +626,10 @@ static int kill_one_process(struct proc* procp, int min_score_adj, bool is_criti
  * Find a process to kill based on the current (possibly estimated) free memory
  * and cached memory sizes.  Returns the size of the killed processes.
  */
-static int find_and_kill_process(int min_score_adj, bool is_critical) {
+static int find_and_kill_process(bool is_critical) {
     int i;
     int killed_size = 0;
+    int min_score_adj = is_critical ? critical_oomadj : medium_oomadj;
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
@@ -676,7 +677,6 @@ static int64_t get_memory_usage(const char* path) {
 static void mp_event_common(bool is_critical) {
     int ret;
     unsigned long long evcount;
-    int min_adj_score = is_critical ? critical_oomadj : medium_oomadj;
     int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
     int64_t mem_usage, memsw_usage;
     int64_t mem_pressure;
@@ -689,7 +689,7 @@ static void mp_event_common(bool is_critical) {
     mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
     memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
     if (memsw_usage < 0 || mem_usage < 0) {
-        find_and_kill_process(min_adj_score, is_critical);
+        find_and_kill_process(is_critical);
         return;
     }
 
@@ -700,7 +700,6 @@ static void mp_event_common(bool is_critical) {
         // We are swapping too much.
         if (mem_pressure < upgrade_pressure) {
             ALOGI("Event upgraded to critical.");
-            min_adj_score = critical_oomadj;
             is_critical = true;
         }
     }
@@ -720,7 +719,7 @@ static void mp_event_common(bool is_critical) {
         is_critical = false;
     }
 
-    if (find_and_kill_process(min_adj_score, is_critical) == 0) {
+    if (find_and_kill_process(is_critical) == 0) {
         if (debug_process_killing) {
             ALOGI("Nothing to kill");
         }
