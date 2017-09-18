@@ -28,14 +28,26 @@ void LogHistogram(const std::string& event, int32_t data);
 // log buffer.
 void LogCounter(const std::string& name, int32_t val);
 
+// Logs a Tron multi_action with category|category| containing the string
+// |value| in the field |field|.
+void LogMultiAction(int32_t category, int32_t field, const std::string& value);
+
 // TODO: replace these with the metric_logger.proto definitions
 enum {
     LOGBUILDER_CATEGORY = 757,
+    LOGBUILDER_TYPE = 758,
     LOGBUILDER_NAME = 799,
     LOGBUILDER_BUCKET = 801,
     LOGBUILDER_VALUE = 802,
     LOGBUILDER_COUNTER = 803,
     LOGBUILDER_HISTOGRAM = 804,
+
+    ACTION_BOOT = 1092,
+    FIELD_PLATFORM_REASON = 1093,
+};
+
+enum {
+    TYPE_ACTION = 4,
 };
 
 }  // namespace metricslogger
