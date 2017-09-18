@@ -714,6 +714,9 @@ void RecordBootComplete() {
 // property.
 void RecordBootReason() {
   const std::string reason(GetProperty(bootloader_reboot_reason_property));
+  android::metricslogger::LogMultiAction(android::metricslogger::ACTION_BOOT,
+                                         android::metricslogger::FIELD_PLATFORM_REASON,
+                                         reason);
 
   // Log the raw bootloader_boot_reason property value.
   int32_t boot_reason = BootReasonStrToEnum(reason);
