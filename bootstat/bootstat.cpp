@@ -19,8 +19,8 @@
 // uploaded to Android log storage via Tron.
 
 #include <getopt.h>
-#include <unistd.h>
 #include <sys/klog.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <cmath>
@@ -61,8 +61,7 @@ void LogBootEvents() {
 // Records the named boot |event| to the record store. If |value| is non-empty
 // and is a proper string representation of an integer value, the converted
 // integer value is associated with the boot event.
-void RecordBootEventFromCommandLine(
-    const std::string& event, const std::string& value_str) {
+void RecordBootEventFromCommandLine(const std::string& event, const std::string& value_str) {
   BootEventRecordStore boot_event_store;
   if (!value_str.empty()) {
     int32_t value = 0;
@@ -85,7 +84,7 @@ void PrintBootEvents() {
   }
 }
 
-void ShowHelp(const char *cmd) {
+void ShowHelp(const char* cmd) {
   fprintf(stderr, "Usage: %s [options]\n", cmd);
   fprintf(stderr,
           "options include:\n"
@@ -101,7 +100,7 @@ void ShowHelp(const char *cmd) {
 
 // Constructs a readable, printable string from the givencommand line
 // arguments.
-std::string GetCommandLine(int argc, char **argv) {
+std::string GetCommandLine(int argc, char** argv) {
   std::string cmd;
   for (int i = 0; i < argc; ++i) {
     cmd += argv[i];
@@ -137,73 +136,73 @@ constexpr int32_t kUnknownBootReason = 1;
 // the boot_reason metric may refer to this mapping to discern the histogram
 // values.
 const std::map<std::string, int32_t> kBootReasonMap = {
-  {"unknown", kUnknownBootReason},
-  {"normal", 2},
-  {"recovery", 3},
-  {"reboot", 4},
-  {"PowerKey", 5},
-  {"hard_reset", 6},
-  {"kernel_panic", 7},
-  {"rpm_err", 8},
-  {"hw_reset", 9},
-  {"tz_err", 10},
-  {"adsp_err", 11},
-  {"modem_err", 12},
-  {"mba_err", 13},
-  {"Watchdog", 14},
-  {"Panic", 15},
-  {"power_key", 16},
-  {"power_on", 17},
-  {"Reboot", 18},
-  {"rtc", 19},
-  {"edl", 20},
-  {"oem_pon1", 21},
-  {"oem_powerkey", 22},
-  {"oem_unknown_reset", 23},
-  {"srto: HWWDT reset SC", 24},
-  {"srto: HWWDT reset platform", 25},
-  {"srto: bootloader", 26},
-  {"srto: kernel panic", 27},
-  {"srto: kernel watchdog reset", 28},
-  {"srto: normal", 29},
-  {"srto: reboot", 30},
-  {"srto: reboot-bootloader", 31},
-  {"srto: security watchdog reset", 32},
-  {"srto: wakesrc", 33},
-  {"srto: watchdog", 34},
-  {"srto:1-1", 35},
-  {"srto:omap_hsmm", 36},
-  {"srto:phy0", 37},
-  {"srto:rtc0", 38},
-  {"srto:touchpad", 39},
-  {"watchdog", 40},
-  {"watchdogr", 41},
-  {"wdog_bark", 42},
-  {"wdog_bite", 43},
-  {"wdog_reset", 44},
-  {"shutdown,", 45},  // Trailing comma is intentional.
-  {"shutdown,userrequested", 46},
-  {"reboot,bootloader", 47},
-  {"reboot,cold", 48},
-  {"reboot,recovery", 49},
-  {"thermal_shutdown", 50},
-  {"s3_wakeup", 51},
-  {"kernel_panic,sysrq", 52},
-  {"kernel_panic,NULL", 53},
-  {"kernel_panic,BUG", 54},
-  {"bootloader", 55},
-  {"cold", 56},
-  {"hard", 57},
-  {"warm", 58},
-  {"recovery", 59},
-  {"thermal-shutdown", 60},
-  {"shutdown,thermal", 61},
-  {"shutdown,battery", 62},
-  {"reboot,ota", 63},
-  {"reboot,factory_reset", 64},
-  {"reboot,", 65},
-  {"reboot,shell", 66},
-  {"reboot,adb", 67},
+    {"unknown", kUnknownBootReason},
+    {"normal", 2},
+    {"recovery", 3},
+    {"reboot", 4},
+    {"PowerKey", 5},
+    {"hard_reset", 6},
+    {"kernel_panic", 7},
+    {"rpm_err", 8},
+    {"hw_reset", 9},
+    {"tz_err", 10},
+    {"adsp_err", 11},
+    {"modem_err", 12},
+    {"mba_err", 13},
+    {"Watchdog", 14},
+    {"Panic", 15},
+    {"power_key", 16},
+    {"power_on", 17},
+    {"Reboot", 18},
+    {"rtc", 19},
+    {"edl", 20},
+    {"oem_pon1", 21},
+    {"oem_powerkey", 22},
+    {"oem_unknown_reset", 23},
+    {"srto: HWWDT reset SC", 24},
+    {"srto: HWWDT reset platform", 25},
+    {"srto: bootloader", 26},
+    {"srto: kernel panic", 27},
+    {"srto: kernel watchdog reset", 28},
+    {"srto: normal", 29},
+    {"srto: reboot", 30},
+    {"srto: reboot-bootloader", 31},
+    {"srto: security watchdog reset", 32},
+    {"srto: wakesrc", 33},
+    {"srto: watchdog", 34},
+    {"srto:1-1", 35},
+    {"srto:omap_hsmm", 36},
+    {"srto:phy0", 37},
+    {"srto:rtc0", 38},
+    {"srto:touchpad", 39},
+    {"watchdog", 40},
+    {"watchdogr", 41},
+    {"wdog_bark", 42},
+    {"wdog_bite", 43},
+    {"wdog_reset", 44},
+    {"shutdown,", 45},  // Trailing comma is intentional.
+    {"shutdown,userrequested", 46},
+    {"reboot,bootloader", 47},
+    {"reboot,cold", 48},
+    {"reboot,recovery", 49},
+    {"thermal_shutdown", 50},
+    {"s3_wakeup", 51},
+    {"kernel_panic,sysrq", 52},
+    {"kernel_panic,NULL", 53},
+    {"kernel_panic,BUG", 54},
+    {"bootloader", 55},
+    {"cold", 56},
+    {"hard", 57},
+    {"warm", 58},
+    {"recovery", 59},
+    {"thermal-shutdown", 60},
+    {"shutdown,thermal", 61},
+    {"shutdown,battery", 62},
+    {"reboot,ota", 63},
+    {"reboot,factory_reset", 64},
+    {"reboot,", 65},
+    {"reboot,shell", 66},
+    {"reboot,adb", 67},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -221,23 +220,25 @@ int32_t BootReasonStrToEnum(const std::string& boot_reason) {
 
 // Canonical list of supported primary reboot reasons.
 const std::vector<const std::string> knownReasons = {
-  // kernel
-  "watchdog",
-  "kernel_panic",
-  // strong
-  "recovery",      // Should not happen from ro.boot.bootreason
-  "bootloader",    // Should not happen from ro.boot.bootreason
-  // blunt
-  "cold",
-  "hard",
-  "warm",
-  "shutdown",      // Can not happen from ro.boot.bootreason
-  "reboot",        // Default catch-all for anything unknown
+    // clang-format off
+    // kernel
+    "watchdog",
+    "kernel_panic",
+    // strong
+    "recovery",    // Should not happen from ro.boot.bootreason
+    "bootloader",  // Should not happen from ro.boot.bootreason
+    // blunt
+    "cold",
+    "hard",
+    "warm",
+    "shutdown",    // Can not happen from ro.boot.bootreason
+    "reboot",      // Default catch-all for anything unknown
+    // clang-format on
 };
 
 // Returns true if the supplied reason prefix is considered detailed enough.
 bool isStrongRebootReason(const std::string& r) {
-  for (auto &s : knownReasons) {
+  for (auto& s : knownReasons) {
     if (s == "cold") break;
     // Prefix defined as terminated by a nul or comma (,).
     if (android::base::StartsWith(r, s.c_str()) &&
@@ -250,7 +251,7 @@ bool isStrongRebootReason(const std::string& r) {
 
 // Returns true if the supplied reason prefix is associated with the kernel.
 bool isKernelRebootReason(const std::string& r) {
-  for (auto &s : knownReasons) {
+  for (auto& s : knownReasons) {
     if (s == "recovery") break;
     // Prefix defined as terminated by a nul or comma (,).
     if (android::base::StartsWith(r, s.c_str()) &&
@@ -263,7 +264,7 @@ bool isKernelRebootReason(const std::string& r) {
 
 // Returns true if the supplied reason prefix is considered known.
 bool isKnownRebootReason(const std::string& r) {
-  for (auto &s : knownReasons) {
+  for (auto& s : knownReasons) {
     // Prefix defined as terminated by a nul or comma (,).
     if (android::base::StartsWith(r, s.c_str()) &&
         ((r.length() == s.length()) || (r[s.length()] == ','))) {
@@ -277,7 +278,7 @@ bool isKnownRebootReason(const std::string& r) {
 bool isBluntRebootReason(const std::string& r) {
   if (isStrongRebootReason(r)) return false;
 
-  if (!isKnownRebootReason(r)) return true; // Can not support unknown as detail
+  if (!isKnownRebootReason(r)) return true;  // Can not support unknown as detail
 
   size_t pos = 0;
   while ((pos = r.find(',', pos)) != std::string::npos) {
@@ -285,8 +286,8 @@ bool isBluntRebootReason(const std::string& r) {
     std::string next(r.substr(pos));
     if (next.length() == 0) break;
     if (next[0] == ',') continue;
-    if (!isKnownRebootReason(next)) return false; // Unknown subreason is good.
-    if (isStrongRebootReason(next)) return false; // eg: reboot,reboot
+    if (!isKnownRebootReason(next)) return false;  // Unknown subreason is good.
+    if (isStrongRebootReason(next)) return false;  // eg: reboot,reboot
   }
   return true;
 }
@@ -320,8 +321,12 @@ bool addKernelPanicSubReason(const std::string& console, std::string& ret) {
 // std::transform Helper callback functions:
 // Converts a string value representing the reason the system booted to a
 // string complying with Android system standard reason.
-char tounderline(char c) { return ::isblank(c) ? '_' : c; }
-char toprintable(char c) { return ::isprint(c) ? c : '?'; }
+char tounderline(char c) {
+  return ::isblank(c) ? '_' : c;
+}
+char toprintable(char c) {
+  return ::isprint(c) ? c : '?';
+}
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
@@ -345,9 +350,9 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
   if (ret == "") {
     // Is the bootloader boot reason ro.boot.bootreason known?
     std::vector<std::string> words(android::base::Split(reason, ",_-"));
-    for (auto &s : knownReasons) {
+    for (auto& s : knownReasons) {
       std::string blunt;
-      for (auto &r : words) {
+      for (auto& r : words) {
         if (r == s) {
           if (isBluntRebootReason(s)) {
             blunt = s;
@@ -368,17 +373,17 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // sense.  In an ideal world, we would require those bootloaders
     // to behave and follow our standards.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
-      {"watchdog", "wdog"},
-      {"cold,powerkey", "powerkey"},
-      {"kernel_panic", "panic"},
-      {"shutdown,thermal", "thermal"},
-      {"warm,s3_wakeup", "s3_wakeup"},
-      {"hard,hw_reset", "hw_reset"},
-      {"bootloader", ""},
+        {"watchdog", "wdog"},
+        {"cold,powerkey", "powerkey"},
+        {"kernel_panic", "panic"},
+        {"shutdown,thermal", "thermal"},
+        {"warm,s3_wakeup", "s3_wakeup"},
+        {"hard,hw_reset", "hw_reset"},
+        {"bootloader", ""},
     };
 
     // Either the primary or alias is found _somewhere_ in the reason string.
-    for (auto &s : aliasReasons) {
+    for (auto& s : aliasReasons) {
       if (reason.find(s.first) != std::string::npos) {
         ret = s.first;
         break;
@@ -453,7 +458,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     if (isBluntRebootReason(ret)) {
       // Heuristic to determine if shutdown possibly because of a dead battery?
       // Really a hail-mary pass to find it in last klog content ...
-      static const int battery_dead_threshold = 2; // percent
+      static const int battery_dead_threshold = 2;  // percent
       static const char battery[] = "healthd: battery l=";
       size_t pos = content.rfind(battery);  // last one
       if (pos != std::string::npos) {
@@ -462,14 +467,14 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         if (level <= battery_dead_threshold) {
           ret = "shutdown,battery";
         }
-      } else { // Most likely
+      } else {  // Most likely
         // Content buffer no longer will have console data. Beware if more
         // checks added below, that depend on parsing console content.
         content = "";
 
         LOG(DEBUG) << "Can not find last low battery in last console messages";
         android_logcat_context ctx = create_android_logcat();
-        FILE *fp = android_logcat_popen(&ctx, "logcat -b kernel -v brief -d");
+        FILE* fp = android_logcat_popen(&ctx, "logcat -b kernel -v brief -d");
         if (fp != nullptr) {
           android::base::ReadFdToString(fileno(fp), &content);
         }
@@ -482,7 +487,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
           // Service logd.klog not running, go to smaller buffer in the kernel.
           int rc = klogctl(KLOG_SIZE_BUFFER, nullptr, 0);
           if (rc > 0) {
-            ssize_t len = rc + 1024; // 1K Margin should it grow between calls.
+            ssize_t len = rc + 1024;  // 1K Margin should it grow between calls.
             std::unique_ptr<char[]> buf(new char[len]);
             rc = klogctl(KLOG_READ_ALL, buf.get(), len);
             if (rc < len) {
@@ -494,7 +499,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
           match = battery;
         }
 
-        pos = content.find(match); // The first one it finds.
+        pos = content.find(match);  // The first one it finds.
         if (pos != std::string::npos) {
           pos += strlen(match);
           int level = atoi(content.substr(pos).c_str());
@@ -580,7 +585,7 @@ std::string CalculateBootCompletePrefix() {
   if (!boot_event_store.GetBootEvent(kBuildDateKey, &record)) {
     boot_complete_prefix = "factory_reset_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
-    LOG(INFO) << "Canonical boot reason: " << "reboot,factory_reset";
+    LOG(INFO) << "Canonical boot reason: reboot,factory_reset";
     SetProperty(system_reboot_reason_property, "reboot,factory_reset");
     if (GetProperty(bootloader_reboot_reason_property) == "") {
       SetProperty(bootloader_reboot_reason_property, "reboot,factory_reset");
@@ -588,7 +593,7 @@ std::string CalculateBootCompletePrefix() {
   } else if (build_date != record.second) {
     boot_complete_prefix = "ota_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
-    LOG(INFO) << "Canonical boot reason: " << "reboot,ota";
+    LOG(INFO) << "Canonical boot reason: reboot,ota";
     SetProperty(system_reboot_reason_property, "reboot,ota");
     if (GetProperty(bootloader_reboot_reason_property) == "") {
       SetProperty(bootloader_reboot_reason_property, "reboot,ota");
@@ -599,8 +604,7 @@ std::string CalculateBootCompletePrefix() {
 }
 
 // Records the value of a given ro.boottime.init property in milliseconds.
-void RecordInitBootTimeProp(
-    BootEventRecordStore* boot_event_store, const char* property) {
+void RecordInitBootTimeProp(BootEventRecordStore* boot_event_store, const char* property) {
   std::string value = GetProperty(property);
 
   int32_t time_in_ms;
@@ -685,10 +689,8 @@ void RecordBootComplete() {
 
   if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
     time_t last_boot_time_utc = record.second;
-    time_t time_since_last_boot = difftime(current_time_utc,
-                                           last_boot_time_utc);
-    boot_event_store.AddBootEventWithValue("time_since_last_boot",
-                                           time_since_last_boot);
+    time_t time_since_last_boot = difftime(current_time_utc, last_boot_time_utc);
+    boot_event_store.AddBootEventWithValue("time_since_last_boot", time_since_last_boot);
   }
 
   boot_event_store.AddBootEventWithValue("last_boot_time_utc", current_time_utc);
@@ -714,8 +716,7 @@ void RecordBootComplete() {
     boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
                                            boot_complete.count());
   } else {
-      boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
-                                             uptime.count());
+    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption", uptime.count());
   }
 
   // Record the total time from device startup to boot complete, regardless of
@@ -738,8 +739,7 @@ void RecordBootComplete() {
 void RecordBootReason() {
   const std::string reason(GetProperty(bootloader_reboot_reason_property));
   android::metricslogger::LogMultiAction(android::metricslogger::ACTION_BOOT,
-                                         android::metricslogger::FIELD_PLATFORM_REASON,
-                                         reason);
+                                         android::metricslogger::FIELD_PLATFORM_REASON, reason);
 
   // Log the raw bootloader_boot_reason property value.
   int32_t boot_reason = BootReasonStrToEnum(reason);
@@ -769,21 +769,20 @@ void RecordFactoryReset() {
 
   if (current_time_utc < 0) {
     // UMA does not display negative values in buckets, so convert to positive.
-    android::metricslogger::LogHistogram(
-        "factory_reset_current_time_failure", std::abs(current_time_utc));
+    android::metricslogger::LogHistogram("factory_reset_current_time_failure",
+                                         std::abs(current_time_utc));
 
     // Logging via BootEventRecordStore to see if using android::metricslogger::LogHistogram
     // is losing records somehow.
-    boot_event_store.AddBootEventWithValue(
-        "factory_reset_current_time_failure", std::abs(current_time_utc));
+    boot_event_store.AddBootEventWithValue("factory_reset_current_time_failure",
+                                           std::abs(current_time_utc));
     return;
   } else {
     android::metricslogger::LogHistogram("factory_reset_current_time", current_time_utc);
 
     // Logging via BootEventRecordStore to see if using android::metricslogger::LogHistogram
     // is losing records somehow.
-    boot_event_store.AddBootEventWithValue(
-        "factory_reset_current_time", current_time_utc);
+    boot_event_store.AddBootEventWithValue("factory_reset_current_time", current_time_utc);
   }
 
   // The factory_reset boot event does not exist after the device is reset, so
@@ -803,18 +802,15 @@ void RecordFactoryReset() {
 
   // Logging via BootEventRecordStore to see if using android::metricslogger::LogHistogram
   // is losing records somehow.
-  boot_event_store.AddBootEventWithValue(
-      "factory_reset_record_value", factory_reset_utc);
+  boot_event_store.AddBootEventWithValue("factory_reset_record_value", factory_reset_utc);
 
-  time_t time_since_factory_reset = difftime(current_time_utc,
-                                             factory_reset_utc);
-  boot_event_store.AddBootEventWithValue("time_since_factory_reset",
-                                         time_since_factory_reset);
+  time_t time_since_factory_reset = difftime(current_time_utc, factory_reset_utc);
+  boot_event_store.AddBootEventWithValue("time_since_factory_reset", time_since_factory_reset);
 }
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   android::base::InitLogging(argv);
 
   const std::string cmd_line = GetCommandLine(argc, argv);
@@ -826,15 +822,17 @@ int main(int argc, char **argv) {
   static const char boot_reason_str[] = "record_boot_reason";
   static const char factory_reset_str[] = "record_time_since_factory_reset";
   static const struct option long_options[] = {
-    { "help",            no_argument,       NULL,   'h' },
-    { "log",             no_argument,       NULL,   'l' },
-    { "print",           no_argument,       NULL,   'p' },
-    { "record",          required_argument, NULL,   'r' },
-    { value_str,         required_argument, NULL,   0 },
-    { boot_complete_str, no_argument,       NULL,   0 },
-    { boot_reason_str,   no_argument,       NULL,   0 },
-    { factory_reset_str, no_argument,       NULL,   0 },
-    { NULL,              0,                 NULL,   0 }
+      // clang-format off
+      { "help",            no_argument,       NULL,   'h' },
+      { "log",             no_argument,       NULL,   'l' },
+      { "print",           no_argument,       NULL,   'p' },
+      { "record",          required_argument, NULL,   'r' },
+      { value_str,         required_argument, NULL,   0 },
+      { boot_complete_str, no_argument,       NULL,   0 },
+      { boot_reason_str,   no_argument,       NULL,   0 },
+      { factory_reset_str, no_argument,       NULL,   0 },
+      { NULL,              0,                 NULL,   0 }
+      // clang-format on
   };
 
   std::string boot_event;
