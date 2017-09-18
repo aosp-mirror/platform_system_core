@@ -148,6 +148,19 @@ static Result<Success> do_exec(const std::vector<std::string>& args) {
     return Success();
 }
 
+static Result<Success> do_exec_background(const std::vector<std::string>& args) {
+    auto service = Service::MakeTemporaryOneshotService(args);
+    if (!service) {
+        return Error() << "Could not create exec background service";
+    }
+    if (auto result = service->Start(); !result) {
+        return Error() << "Could not start exec background service: " << result.error();
+    }
+
+    ServiceList::GetInstance().AddService(std::move(service));
+    return Success();
+}
+
 static Result<Success> do_exec_start(const std::vector<std::string>& args) {
     Service* service = ServiceList::GetInstance().FindService(args[1]);
     if (!service) {
@@ -978,6 +991,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"domainname",              {1,     1,    do_domainname}},
         {"enable",                  {1,     1,    do_enable}},
         {"exec",                    {1,     kMax, do_exec}},
+        {"exec_background",         {1,     kMax, do_exec_background}},
         {"exec_start",              {1,     1,    do_exec_start}},
         {"export",                  {2,     2,    do_export}},
         {"hostname",                {1,     1,    do_hostname}},
