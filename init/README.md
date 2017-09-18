@@ -381,6 +381,11 @@ Commands
   within _argument_.
   Init halts executing commands until the forked process exits.
 
+`exec_background [ <seclabel> [ <user> [ <group>\* ] ] ] -- <command> [ <argument>\* ]`
+> Fork and execute command with the given arguments. This is handled similarly
+  to the `exec` command. The difference is that init does not halt executing
+  commands until the process exits for `exec_background`.
+
 `exec_start <service>`
 > Start a given service and halt the processing of additional init commands
   until it returns.  The command functions similarly to the `exec` command,
