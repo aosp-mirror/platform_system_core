@@ -82,6 +82,7 @@ LOCAL_STATIC_LIBRARIES := \
     libprocessgroup \
     libavb \
     libkeyutils \
+    libprotobuf-cpp-lite \
 
 LOCAL_REQUIRED_MODULES := \
     e2fsdroid \
