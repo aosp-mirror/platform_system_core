@@ -46,14 +46,21 @@ namespace {
 constexpr const uint32_t kMagic = 0x8495E0B4;
 constexpr const char kLegacyPersistentPropertyDir[] = "/data/property";
 
-Result<std::vector<std::pair<std::string, std::string>>> LoadLegacyPersistentProperties() {
+void AddPersistentProperty(const std::string& name, const std::string& value,
+                           PersistentProperties* persistent_properties) {
+    auto persistent_property_record = persistent_properties->add_properties();
+    persistent_property_record->set_name(name);
+    persistent_property_record->set_value(value);
+}
+
+Result<PersistentProperties> LoadLegacyPersistentProperties() {
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(kLegacyPersistentPropertyDir), closedir);
     if (!dir) {
         return ErrnoError() << "Unable to open persistent property directory \""
                             << kLegacyPersistentPropertyDir << "\"";
     }
 
-    std::vector<std::pair<std::string, std::string>> persistent_properties;
+    PersistentProperties persistent_properties;
     dirent* entry;
     while ((entry = readdir(dir.get())) != nullptr) {
         if (!StartsWith(entry->d_name, "persist.")) {
@@ -87,7 +94,7 @@ Result<std::vector<std::pair<std::string, std::string>>> LoadLegacyPersistentPro
 
         std::string value;
         if (ReadFdToString(fd, &value)) {
-            persistent_properties.emplace_back(entry->d_name, value);
+            AddPersistentProperty(entry->d_name, value, &persistent_properties);
         } else {
             PLOG(ERROR) << "Unable to read persistent property file " << entry->d_name;
         }
@@ -115,30 +122,28 @@ void RemoveLegacyPersistentPropertyFiles() {
     }
 }
 
-std::vector<std::pair<std::string, std::string>> LoadPersistentPropertiesFromMemory() {
-    std::vector<std::pair<std::string, std::string>> properties;
+PersistentProperties LoadPersistentPropertiesFromMemory() {
+    PersistentProperties persistent_properties;
     __system_property_foreach(
         [](const prop_info* pi, void* cookie) {
             __system_property_read_callback(
                 pi,
                 [](void* cookie, const char* name, const char* value, unsigned serial) {
                     if (StartsWith(name, "persist.")) {
-                        auto properties =
-                            reinterpret_cast<std::vector<std::pair<std::string, std::string>>*>(
-                                cookie);
-                        properties->emplace_back(name, value);
+                        auto properties = reinterpret_cast<PersistentProperties*>(cookie);
+                        AddPersistentProperty(name, value, properties);
                     }
                 },
                 cookie);
         },
-        &properties);
-    return properties;
+        &persistent_properties);
+    return persistent_properties;
 }
 
 class PersistentPropertyFileParser {
   public:
     PersistentPropertyFileParser(const std::string& contents) : contents_(contents), position_(0) {}
-    Result<std::vector<std::pair<std::string, std::string>>> Parse();
+    Result<PersistentProperties> Parse();
 
   private:
     Result<std::string> ReadString();
@@ -148,9 +153,7 @@ class PersistentPropertyFileParser {
     size_t position_;
 };
 
-Result<std::vector<std::pair<std::string, std::string>>> PersistentPropertyFileParser::Parse() {
-    std::vector<std::pair<std::string, std::string>> result;
-
+Result<PersistentProperties> PersistentPropertyFileParser::Parse() {
     if (auto magic = ReadUint32(); magic) {
         if (*magic != kMagic) {
             return Error() << "Magic value '0x" << std::hex << *magic
@@ -174,24 +177,20 @@ Result<std::vector<std::pair<std::string, std::string>>> PersistentPropertyFileP
         return Error() << "Could not read num_properties: " << num_properties.error();
     }
 
+    PersistentProperties result;
     while (position_ < contents_.size()) {
-        auto key = ReadString();
-        if (!key) {
-            return Error() << "Could not read key: " << key.error();
+        auto name = ReadString();
+        if (!name) {
+            return Error() << "Could not read name: " << name.error();
         }
-        if (!StartsWith(*key, "persist.")) {
-            return Error() << "Property '" << *key << "' does not starts with 'persist.'";
+        if (!StartsWith(*name, "persist.")) {
+            return Error() << "Property '" << *name << "' does not starts with 'persist.'";
         }
         auto value = ReadString();
         if (!value) {
             return Error() << "Could not read value: " << value.error();
         }
-        result.emplace_back(*key, *value);
-    }
-
-    if (result.size() != *num_properties) {
-        return Error() << "Mismatch of number of persistent properties read, " << result.size()
-                       << " and number of persistent properties expected, " << *num_properties;
+        AddPersistentProperty(*name, *value, &result);
     }
 
     return result;
@@ -220,9 +219,7 @@ Result<uint32_t> PersistentPropertyFileParser::ReadUint32() {
     return result;
 }
 
-}  // namespace
-
-Result<std::vector<std::pair<std::string, std::string>>> LoadPersistentPropertyFile() {
+Result<std::string> ReadPersistentPropertyFile() {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     if (access(temp_filename.c_str(), F_OK) == 0) {
         LOG(INFO)
@@ -234,51 +231,47 @@ Result<std::vector<std::pair<std::string, std::string>>> LoadPersistentPropertyF
     if (!file_contents) {
         return Error() << "Unable to read persistent property file: " << file_contents.error();
     }
+    return *file_contents;
+}
+
+}  // namespace
+
+Result<PersistentProperties> LoadPersistentPropertyFile() {
+    auto file_contents = ReadPersistentPropertyFile();
+    if (!file_contents) return file_contents.error();
+
+    // Check the intermediate "I should have used protobufs from the start" format.
+    // TODO: Remove this.
     auto parsed_contents = PersistentPropertyFileParser(*file_contents).Parse();
-    if (!parsed_contents) {
-        // If the file cannot be parsed, then we don't have any recovery mechanisms, so we delete
-        // it to allow for future writes to take place successfully.
-        unlink(persistent_property_filename.c_str());
-        return Error() << "Unable to parse persistent property file: " << parsed_contents.error();
+    if (parsed_contents) {
+        LOG(INFO) << "Intermediate format persistent property file found, converting to protobuf";
+
+        // Update to the protobuf format
+        WritePersistentPropertyFile(*parsed_contents);
+        return parsed_contents;
     }
-    return parsed_contents;
+
+    PersistentProperties persistent_properties;
+    if (persistent_properties.ParseFromString(*file_contents)) return persistent_properties;
+
+    // If the file cannot be parsed in either format, then we don't have any recovery
+    // mechanisms, so we delete it to allow for future writes to take place successfully.
+    unlink(persistent_property_filename.c_str());
+    return Error() << "Unable to parse persistent property file: " << parsed_contents.error();
 }
 
-std::string GenerateFileContents(
-    const std::vector<std::pair<std::string, std::string>>& persistent_properties) {
-    std::string result;
-
-    uint32_t magic = kMagic;
-    result.append(reinterpret_cast<char*>(&magic), sizeof(uint32_t));
-
-    uint32_t version = 1;
-    result.append(reinterpret_cast<char*>(&version), sizeof(uint32_t));
-
-    uint32_t num_properties = persistent_properties.size();
-    result.append(reinterpret_cast<char*>(&num_properties), sizeof(uint32_t));
-
-    for (const auto& [key, value] : persistent_properties) {
-        uint32_t key_length = key.length();
-        result.append(reinterpret_cast<char*>(&key_length), sizeof(uint32_t));
-        result.append(key);
-        uint32_t value_length = value.length();
-        result.append(reinterpret_cast<char*>(&value_length), sizeof(uint32_t));
-        result.append(value);
-    }
-    return result;
-}
-
-Result<Success> WritePersistentPropertyFile(
-    const std::vector<std::pair<std::string, std::string>>& persistent_properties) {
-    auto file_contents = GenerateFileContents(persistent_properties);
-
+Result<Success> WritePersistentPropertyFile(const PersistentProperties& persistent_properties) {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     unique_fd fd(TEMP_FAILURE_RETRY(
         open(temp_filename.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
         return ErrnoError() << "Could not open temporary properties file";
     }
-    if (!WriteStringToFd(file_contents, fd)) {
+    std::string serialized_string;
+    if (!persistent_properties.SerializeToString(&serialized_string)) {
+        return Error() << "Unable to serialize properties";
+    }
+    if (!WriteStringToFd(serialized_string, fd)) {
         return ErrnoError() << "Unable to write file contents";
     }
     fsync(fd);
@@ -295,26 +288,30 @@ Result<Success> WritePersistentPropertyFile(
 // Persistent properties are not written often, so we rather not keep any data in memory and read
 // then rewrite the persistent property file for each update.
 void WritePersistentProperty(const std::string& name, const std::string& value) {
-    auto persistent_properties = LoadPersistentPropertyFile();
-    if (!persistent_properties) {
+    auto file_contents = ReadPersistentPropertyFile();
+    PersistentProperties persistent_properties;
+
+    if (!file_contents || !persistent_properties.ParseFromString(*file_contents)) {
         LOG(ERROR) << "Recovering persistent properties from memory: "
-                   << persistent_properties.error();
+                   << (!file_contents ? file_contents.error_string() : "Could not parse protobuf");
         persistent_properties = LoadPersistentPropertiesFromMemory();
     }
-    auto it = std::find_if(persistent_properties->begin(), persistent_properties->end(),
-                           [&name](const auto& entry) { return entry.first == name; });
-    if (it != persistent_properties->end()) {
-        *it = {name, value};
+    auto it = std::find_if(persistent_properties.mutable_properties()->begin(),
+                           persistent_properties.mutable_properties()->end(),
+                           [&name](const auto& record) { return record.name() == name; });
+    if (it != persistent_properties.mutable_properties()->end()) {
+        it->set_name(name);
+        it->set_value(value);
     } else {
-        persistent_properties->emplace_back(name, value);
+        AddPersistentProperty(name, value, &persistent_properties);
     }
 
-    if (auto result = WritePersistentPropertyFile(*persistent_properties); !result) {
+    if (auto result = WritePersistentPropertyFile(persistent_properties); !result) {
         LOG(ERROR) << "Could not store persistent property: " << result.error();
     }
 }
 
-std::vector<std::pair<std::string, std::string>> LoadPersistentProperties() {
+PersistentProperties LoadPersistentProperties() {
     auto persistent_properties = LoadPersistentPropertyFile();
 
     if (!persistent_properties) {
