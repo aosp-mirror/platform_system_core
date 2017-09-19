@@ -162,7 +162,7 @@ bootstat: Canonical boot reason: ${i}"
     fi
   done
   adb logcat -b all -d |
-  grep bootstat |
+  grep bootstat[^e] |
   grep -v -F "bootstat: Service started: /system/bin/bootstat --record_boot_complete${match}
 bootstat: Failed to read /data/misc/bootstat/post_decrypt_time_elapsed: No such file or directory
 bootstat: Failed to parse boot time record: /data/misc/bootstat/post_decrypt_time_elapsed
