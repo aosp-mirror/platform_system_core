@@ -19,12 +19,10 @@ cc_defaults {
         "-Wextra",
         "-Werror",
 
-        // The following defines map logtag IDs as represented by:
+        // The following define maps the sysui_multi_action logtag ID as represented by:
         //   frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
         //
-        // E.g., 524290 corresponds to sysui_count.
-        "-DCOUNT_LOG_TAG=524290",
-        "-DHISTOGRAM_LOG_TAG=524292",
+        // TODO(jhawkins): Query this value at runtime.
         "-DMULTI_ACTION_LOG_TAG=524292",
     ],
 }
