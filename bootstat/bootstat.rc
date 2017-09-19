@@ -12,16 +12,16 @@ on post-fs-data
     chown system log /data/misc/bootstat/boot_complete
     chown system log /data/misc/bootstat/boot_complete_no_encryption
     chown system log /data/misc/bootstat/boot_reason
-    chown system log /data/misc/bootstat/bootime.bootloader.1BLE
-    chown system log /data/misc/bootstat/bootime.bootloader.1BLL
-    chown system log /data/misc/bootstat/bootime.bootloader.2BLE
-    chown system log /data/misc/bootstat/bootime.bootloader.2BLL
-    chown system log /data/misc/bootstat/bootime.bootloader.AVB
-    chown system log /data/misc/bootstat/bootime.bootloader.KD
-    chown system log /data/misc/bootstat/bootime.bootloader.KL
-    chown system log /data/misc/bootstat/bootime.bootloader.ODT
-    chown system log /data/misc/bootstat/bootime.bootloader.SW
-    chown system log /data/misc/bootstat/bootime.bootloader.total
+    chown system log /data/misc/bootstat/boottime.bootloader.1BLE
+    chown system log /data/misc/bootstat/boottime.bootloader.1BLL
+    chown system log /data/misc/bootstat/boottime.bootloader.2BLE
+    chown system log /data/misc/bootstat/boottime.bootloader.2BLL
+    chown system log /data/misc/bootstat/boottime.bootloader.AVB
+    chown system log /data/misc/bootstat/boottime.bootloader.KD
+    chown system log /data/misc/bootstat/boottime.bootloader.KL
+    chown system log /data/misc/bootstat/boottime.bootloader.ODT
+    chown system log /data/misc/bootstat/boottime.bootloader.SW
+    chown system log /data/misc/bootstat/boottime.bootloader.total
     chown system log /data/misc/bootstat/build_date
     chown system log /data/misc/bootstat/factory_reset
     chown system log /data/misc/bootstat/factory_reset_boot_complete
