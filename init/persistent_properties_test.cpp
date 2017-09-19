@@ -18,6 +18,8 @@
 
 #include <errno.h>
 
+#include <vector>
+
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
@@ -28,34 +30,40 @@ using namespace std::string_literals;
 namespace android {
 namespace init {
 
-TEST(persistent_properties, GeneratedContents) {
-    const std::vector<std::pair<std::string, std::string>> persistent_properties = {
-        {"persist.abc", ""},
-        {"persist.def", "test_success"},
+PersistentProperties VectorToPersistentProperties(
+    const std::vector<std::pair<std::string, std::string>>& input_properties) {
+    PersistentProperties persistent_properties;
+
+    for (const auto& [name, value] : input_properties) {
+        auto persistent_property_record = persistent_properties.add_properties();
+        persistent_property_record->set_name(name);
+        persistent_property_record->set_value(value);
+    }
+
+    return persistent_properties;
+}
+
+void CheckPropertiesEqual(std::vector<std::pair<std::string, std::string>> expected,
+                          const PersistentProperties& persistent_properties) {
+    for (const auto& persistent_property_record : persistent_properties.properties()) {
+        auto it = std::find_if(expected.begin(), expected.end(),
+                               [persistent_property_record](const auto& entry) {
+                                   return entry.first == persistent_property_record.name() &&
+                                          entry.second == persistent_property_record.value();
+                               });
+        ASSERT_TRUE(it != expected.end())
+            << "Found unexpected proprety (" << persistent_property_record.name() << ", "
+            << persistent_property_record.value() << ")";
+        expected.erase(it);
+    }
+    auto joiner = [](const std::vector<std::pair<std::string, std::string>>& vector) {
+        std::string result;
+        for (const auto& [name, value] : vector) {
+            result += " (" + name + ", " + value + ")";
+        }
+        return result;
     };
-    auto generated_contents = GenerateFileContents(persistent_properties);
-
-    // Manually serialized contents below:
-    std::string file_contents;
-    // All values below are written and read as little endian.
-    // Add magic value: 0x8495E0B4
-    file_contents += "\xB4\xE0\x95\x84"s;
-    // Add version: 1
-    file_contents += "\x01\x00\x00\x00"s;
-    // Add number of properties: 2
-    file_contents += "\x02\x00\x00\x00"s;
-
-    // Add first key: persist.abc
-    file_contents += "\x0B\x00\x00\x00persist.abc"s;
-    // Add first value: (empty string)
-    file_contents += "\x00\x00\x00\x00"s;
-
-    // Add second key: persist.def
-    file_contents += "\x0B\x00\x00\x00persist.def"s;
-    // Add second value: test_success
-    file_contents += "\x0C\x00\x00\x00test_success"s;
-
-    EXPECT_EQ(file_contents, generated_contents);
+    EXPECT_TRUE(expected.empty()) << "Did not find expected properties:" << joiner(expected);
 }
 
 TEST(persistent_properties, EndToEnd) {
@@ -70,41 +78,15 @@ TEST(persistent_properties, EndToEnd) {
         {"persist.test.new.line", "abc\n\n\nabc"},
         {"persist.test.numbers", "1234567890"},
         {"persist.test.non.ascii", "\x00\x01\x02\xFF\xFE\xFD\x7F\x8F\x9F"},
-        // We don't currently allow for non-ascii keys for system properties, but this is a policy
+        // We don't currently allow for non-ascii names for system properties, but this is a policy
         // decision, not a technical limitation.
-        {"persist.\x00\x01\x02\xFF\xFE\xFD\x7F\x8F\x9F", "non-ascii-key"},
+        {"persist.\x00\x01\x02\xFF\xFE\xFD\x7F\x8F\x9F", "non-ascii-name"},
     };
 
-    ASSERT_TRUE(WritePersistentPropertyFile(persistent_properties));
+    ASSERT_TRUE(WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
 
     auto read_back_properties = LoadPersistentProperties();
-    EXPECT_EQ(persistent_properties, read_back_properties);
-}
-
-TEST(persistent_properties, BadMagic) {
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    persistent_property_filename = tf.path;
-
-    ASSERT_TRUE(WriteFile(tf.path, "ab"));
-
-    auto read_back_properties = LoadPersistentPropertyFile();
-
-    ASSERT_FALSE(read_back_properties);
-    EXPECT_EQ(
-        "Unable to parse persistent property file: Could not read magic value: Input buffer not "
-        "large enough to read uint32_t",
-        read_back_properties.error_string());
-
-    ASSERT_TRUE(WriteFile(tf.path, "\xFF\xFF\xFF\xFF"));
-
-    read_back_properties = LoadPersistentPropertyFile();
-
-    ASSERT_FALSE(read_back_properties);
-    EXPECT_EQ(
-        "Unable to parse persistent property file: Magic value '0xffffffff' does not match "
-        "expected value '0x8495e0b4'",
-        read_back_properties.error_string());
+    CheckPropertiesEqual(persistent_properties, read_back_properties);
 }
 
 TEST(persistent_properties, AddProperty) {
@@ -115,7 +97,7 @@ TEST(persistent_properties, AddProperty) {
     std::vector<std::pair<std::string, std::string>> persistent_properties = {
         {"persist.sys.timezone", "America/Los_Angeles"},
     };
-    ASSERT_TRUE(WritePersistentPropertyFile(persistent_properties));
+    ASSERT_TRUE(WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
 
     WritePersistentProperty("persist.sys.locale", "pt-BR");
 
@@ -125,7 +107,7 @@ TEST(persistent_properties, AddProperty) {
     };
 
     auto read_back_properties = LoadPersistentProperties();
-    EXPECT_EQ(persistent_properties_expected, read_back_properties);
+    CheckPropertiesEqual(persistent_properties_expected, read_back_properties);
 }
 
 TEST(persistent_properties, UpdateProperty) {
@@ -137,7 +119,7 @@ TEST(persistent_properties, UpdateProperty) {
         {"persist.sys.locale", "en-US"},
         {"persist.sys.timezone", "America/Los_Angeles"},
     };
-    ASSERT_TRUE(WritePersistentPropertyFile(persistent_properties));
+    ASSERT_TRUE(WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
 
     WritePersistentProperty("persist.sys.locale", "pt-BR");
 
@@ -147,7 +129,7 @@ TEST(persistent_properties, UpdateProperty) {
     };
 
     auto read_back_properties = LoadPersistentProperties();
-    EXPECT_EQ(persistent_properties_expected, read_back_properties);
+    CheckPropertiesEqual(persistent_properties_expected, read_back_properties);
 }
 
 TEST(persistent_properties, UpdatePropertyBadParse) {
@@ -160,13 +142,14 @@ TEST(persistent_properties, UpdatePropertyBadParse) {
     WritePersistentProperty("persist.sys.locale", "pt-BR");
 
     auto read_back_properties = LoadPersistentProperties();
-    EXPECT_GT(read_back_properties.size(), 0U);
+    EXPECT_GT(read_back_properties.properties().size(), 0);
 
-    auto it = std::find_if(
-        read_back_properties.begin(), read_back_properties.end(), [](const auto& entry) {
-            return entry.first == "persist.sys.locale" && entry.second == "pt-BR";
-        });
-    EXPECT_FALSE(it == read_back_properties.end());
+    auto it =
+        std::find_if(read_back_properties.properties().begin(),
+                     read_back_properties.properties().end(), [](const auto& entry) {
+                         return entry.name() == "persist.sys.locale" && entry.value() == "pt-BR";
+                     });
+    EXPECT_FALSE(it == read_back_properties.properties().end());
 }
 
 }  // namespace init
