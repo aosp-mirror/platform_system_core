@@ -46,7 +46,7 @@ on post-fs-data
 # property:init.svc.bootanim=running: The boot animation is running
 # property:ro.crypto.type=block: FDE device
 on post-fs-data && property:init.svc.bootanim=running && property:ro.crypto.type=block
-    exec - system log -- /system/bin/bootstat -r post_decrypt_time_elapsed
+    exec_background - system log -- /system/bin/bootstat -r post_decrypt_time_elapsed
 
 # sys.logbootcomplete is a signal to enable the bootstat logging mechanism.
 # This signaling is necessary to prevent logging boot metrics after a runtime
@@ -69,13 +69,7 @@ on property:init.svc.zygote=stopping
 # Record boot complete metrics.
 on property:sys.boot_completed=1 && property:sys.logbootcomplete=1
     # Record boot_complete and related stats (decryption, etc).
-    exec - system log -- /system/bin/bootstat --record_boot_complete
-
     # Record the boot reason.
-    exec - system log -- /system/bin/bootstat --record_boot_reason
-
     # Record time since factory reset.
-    exec - system log -- /system/bin/bootstat --record_time_since_factory_reset
-
     # Log all boot events.
-    exec - system log -- /system/bin/bootstat -l
+    exec_background - system log -- /system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l
