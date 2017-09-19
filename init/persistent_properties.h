@@ -18,22 +18,19 @@
 #define _INIT_PERSISTENT_PROPERTIES_H
 
 #include <string>
-#include <vector>
 
 #include "result.h"
+#include "system/core/init/persistent_properties.pb.h"
 
 namespace android {
 namespace init {
 
-std::vector<std::pair<std::string, std::string>> LoadPersistentProperties();
+PersistentProperties LoadPersistentProperties();
 void WritePersistentProperty(const std::string& name, const std::string& value);
 
 // Exposed only for testing
-Result<std::vector<std::pair<std::string, std::string>>> LoadPersistentPropertyFile();
-std::string GenerateFileContents(
-    const std::vector<std::pair<std::string, std::string>>& persistent_properties);
-Result<Success> WritePersistentPropertyFile(
-    const std::vector<std::pair<std::string, std::string>>& persistent_properties);
+Result<PersistentProperties> LoadPersistentPropertyFile();
+Result<Success> WritePersistentPropertyFile(const PersistentProperties& persistent_properties);
 extern std::string persistent_property_filename;
 
 }  // namespace init
