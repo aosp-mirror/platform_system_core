@@ -508,10 +508,16 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       size_t pos = content.rfind(battery);  // last one
       std::string digits;
       if (pos != std::string::npos) {
-        digits = content.substr(pos + strlen(battery));
+        digits = content.substr(pos + strlen(battery), strlen("100 "));
       }
-      char* endptr = NULL;
-      unsigned long long level = strtoull(digits.c_str(), &endptr, 10);
+      const char* endptr = digits.c_str();
+      unsigned level = 0;
+      while (::isdigit(*endptr)) {
+        level *= 10;
+        level += *endptr++ - '0';
+        // make sure no leading zeros, except zero itself, and range check.
+        if ((level == 0) || (level > 100)) break;
+      }
       if ((level <= 100) && (endptr != digits.c_str()) && (*endptr == ' ')) {
         LOG(INFO) << "Battery level at shutdown " << level << "%";
         if (level <= battery_dead_threshold) {
@@ -552,10 +558,16 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
 
         pos = content.find(match);  // The first one it finds.
         if (pos != std::string::npos) {
-          digits = content.substr(pos + strlen(match));
+          digits = content.substr(pos + strlen(match), strlen("100 "));
         }
-        endptr = NULL;
-        level = strtoull(digits.c_str(), &endptr, 10);
+        endptr = digits.c_str();
+        level = 0;
+        while (::isdigit(*endptr)) {
+          level *= 10;
+          level += *endptr++ - '0';
+          // make sure no leading zeros, except zero itself, and range check.
+          if ((level == 0) || (level > 100)) break;
+        }
         if ((level <= 100) && (endptr != digits.c_str()) && (*endptr == ' ')) {
           LOG(INFO) << "Battery level at startup " << level << "%";
           if (level <= battery_dead_threshold) {
