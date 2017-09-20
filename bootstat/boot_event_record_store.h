@@ -17,12 +17,12 @@
 #ifndef BOOT_EVENT_RECORD_STORE_H_
 #define BOOT_EVENT_RECORD_STORE_H_
 
+#include <android-base/macros.h>
+#include <gtest/gtest_prod.h>
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
-#include <android-base/macros.h>
-#include <gtest/gtest_prod.h>
 
 // BootEventRecordStore manages the persistence of boot events to the record
 // store and the retrieval of all boot event records from the store.
