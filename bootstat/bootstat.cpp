@@ -494,7 +494,8 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
 
       // String is either "reboot,<reason>" or "shutdown,<reason>".
       // We will set if default reasons, only override with detail if thermal.
-      if (!isBluntRebootReason(content)) {
+      if ((android::base::StartsWith(content, ret.c_str()) && (content[ret.length()] == ',')) ||
+          !isBluntRebootReason(content)) {
         // Ok, we want it, let's squash it if secondReason is known.
         pos = content.find(',');
         if (pos != std::string::npos) {

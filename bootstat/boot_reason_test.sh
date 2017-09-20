@@ -162,7 +162,7 @@ bootstat: Canonical boot reason: ${i}"
     fi
   done
   adb logcat -b all -d |
-  grep bootstat |
+  grep bootstat[^e] |
   grep -v -F "bootstat: Service started: /system/bin/bootstat --record_boot_complete${match}
 bootstat: Failed to read /data/misc/bootstat/post_decrypt_time_elapsed: No such file or directory
 bootstat: Failed to parse boot time record: /data/misc/bootstat/post_decrypt_time_elapsed
@@ -176,6 +176,8 @@ init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
 init    : processing action (boot) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=*) from (/system/etc/init/bootstat.rc
 init    : processing action (sys.boot_completed=1 && sys.logbootcomplete=1) from (/system/etc/init/bootstat.rc
+ (/system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
+ (/system/bin/bootstat -r post_decrypt_time_elapsed)'
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_complete' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_reason' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_time_since_factory_reset' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
@@ -477,7 +479,7 @@ test_hard() {
 [ "USAGE: test_battery
 
 battery test (trick):
-- echo healthd: battery l=2 | adb shell su root tee /dev/kmsg ; adb reboot warm
+- echo healthd: battery l=2 | adb shell su root tee /dev/kmsg ; adb reboot cold
 - (wait until screen is up, boot has completed)
 - adb shell getprop sys.boot.reason
 - NB: should report reboot,battery, unless healthd managed to log
@@ -498,8 +500,12 @@ battery test (trick):
 - (replace set logd.kernel true to the above, and retry test)" ]
 test_battery() {
   echo "INFO: expected duration of ${TEST} test roughly two minutes" >&2
-  echo healthd: battery l=2 | adb shell su root tee /dev/kmsg >/dev/null
-  adb reboot warm >&2
+  # Send it _many_ times to combat devices with flakey pstore
+  for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
+    echo healthd: battery l=2 | adb shell su root tee /dev/kmsg >/dev/null
+  done
+  adb reboot cold >&2
+  adb wait-for-device
   wait_for_screen
   adb shell su root \
     cat /proc/fs/pstore/console-ramoops \
@@ -509,14 +515,17 @@ test_battery() {
     grep 'healthd: battery l=2' >/dev/null || (
       if ! EXPECT_PROPERTY sys.boot.reason reboot,battery >/dev/null 2>/dev/null; then
         # retry
-        echo healthd: battery l=2 | adb shell su root tee /dev/kmsg >/dev/null
-        adb reboot warm >&2
+        for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
+          echo healthd: battery l=2 | adb shell su root tee /dev/kmsg >/dev/null
+        done
+        adb reboot cold >&2
+        adb wait-for-device
         wait_for_screen
       fi
     )
 
   EXPECT_PROPERTY sys.boot.reason shutdown,battery
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,warm
+  EXPECT_PROPERTY persist.sys.boot.reason reboot,cold
   report_bootstat_logs shutdown,battery "-bootstat: Battery level at shutdown 2%"
 }
 
