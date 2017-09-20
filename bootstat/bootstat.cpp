@@ -328,7 +328,105 @@ bool readPstoreConsole(std::string& console) {
   return android::base::ReadFileToString("/sys/fs/pstore/console-ramoops", &console);
 }
 
-bool addKernelPanicSubReason(const std::string& console, std::string& ret) {
+// Implement a variant of std::string::rfind that is resilient to errors in
+// the data stream being inspected.
+class pstoreConsole {
+ private:
+  const size_t kBitErrorRate = 8;  // number of bits per error
+  const std::string& console;
+
+  // Number of bits that differ between the two arguments l and r.
+  // Returns zero if the values for l and r are identical.
+  size_t numError(uint8_t l, uint8_t r) const { return std::bitset<8>(l ^ r).count(); }
+
+  // A string comparison function, reports the number of errors discovered
+  // in the match to a maximum of the bitLength / kBitErrorRate, at that
+  // point returning npos to indicate match is too poor.
+  //
+  // Since called in rfind which works backwards, expect cache locality will
+  // help if we check in reverse here as well for performance.
+  //
+  // Assumption: l (from console.c_str() + pos) is long enough to house
+  //             _r.length(), checked in rfind caller below.
+  //
+  size_t numError(size_t pos, const std::string& _r) const {
+    const char* l = console.c_str() + pos;
+    const char* r = _r.c_str();
+    size_t n = _r.length();
+    const uint8_t* le = reinterpret_cast<const uint8_t*>(l) + n;
+    const uint8_t* re = reinterpret_cast<const uint8_t*>(r) + n;
+    size_t count = 0;
+    n = 0;
+    do {
+      // individual character bit error rate > threshold + slop
+      size_t num = numError(*--le, *--re);
+      if (num > ((8 + kBitErrorRate) / kBitErrorRate)) return std::string::npos;
+      // total bit error rate > threshold + slop
+      count += num;
+      ++n;
+      if (count > ((n * 8 + kBitErrorRate - (n > 2)) / kBitErrorRate)) {
+        return std::string::npos;
+      }
+    } while (le != reinterpret_cast<const uint8_t*>(l));
+    return count;
+  }
+
+ public:
+  explicit pstoreConsole(const std::string& console) : console(console) {}
+  // scope of argument must be equal to or greater than scope of pstoreConsole
+  explicit pstoreConsole(const std::string&& console) = delete;
+  explicit pstoreConsole(std::string&& console) = delete;
+
+  // Our implementation of rfind, use exact match first, then resort to fuzzy.
+  size_t rfind(const std::string& needle) const {
+    size_t pos = console.rfind(needle);  // exact match?
+    if (pos != std::string::npos) return pos;
+
+    // Check to make sure needle fits in console string.
+    pos = console.length();
+    if (needle.length() > pos) return std::string::npos;
+    pos -= needle.length();
+    // fuzzy match to maximum kBitErrorRate
+    do {
+      if (numError(pos, needle) != std::string::npos) return pos;
+    } while (pos-- != 0);
+    return std::string::npos;
+  }
+
+  // Our implementation of find, use only fuzzy match.
+  size_t find(const std::string& needle, size_t start = 0) const {
+    // Check to make sure needle fits in console string.
+    if (needle.length() > console.length()) return std::string::npos;
+    const size_t last_pos = console.length() - needle.length();
+    // fuzzy match to maximum kBitErrorRate
+    for (size_t pos = start; pos <= last_pos; ++pos) {
+      if (numError(pos, needle) != std::string::npos) return pos;
+    }
+    return std::string::npos;
+  }
+};
+
+// If bit error match to needle, correct it.
+// Return true if any corrections were discovered and applied.
+bool correctForBer(std::string& reason, const std::string& needle) {
+  bool corrected = false;
+  if (reason.length() < needle.length()) return corrected;
+  const pstoreConsole console(reason);
+  const size_t last_pos = reason.length() - needle.length();
+  for (size_t pos = 0; pos <= last_pos; pos += needle.length()) {
+    pos = console.find(needle, pos);
+    if (pos == std::string::npos) break;
+
+    // exact match has no malice
+    if (needle == reason.substr(pos, needle.length())) continue;
+
+    corrected = true;
+    reason = reason.substr(0, pos) + needle + reason.substr(pos + needle.length());
+  }
+  return corrected;
+}
+
+bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
   // Check for kernel panic types to refine information
   if (console.rfind("SysRq : Trigger a crash") != std::string::npos) {
     // Can not happen, except on userdebug, during testing/debugging.
@@ -345,6 +443,10 @@ bool addKernelPanicSubReason(const std::string& console, std::string& ret) {
     return true;
   }
   return false;
+}
+
+bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
+  return addKernelPanicSubReason(pstoreConsole(content), ret);
 }
 
 // std::transform Helper callback functions:
@@ -451,9 +553,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // Check to see if last klog has some refinement hints.
     std::string content;
     if (readPstoreConsole(content)) {
+      const pstoreConsole console(content);
       // The toybox reboot command used directly (unlikely)? But also
       // catches init's response to Android's more controlled reboot command.
-      if (content.rfind("reboot: Power down") != std::string::npos) {
+      if (console.rfind("reboot: Power down") != std::string::npos) {
         ret = "shutdown";  // Still too blunt, but more accurate.
         // ToDo: init should record the shutdown reason to kernel messages ala:
         //           init: shutdown system with command 'last_reboot_reason'
@@ -462,13 +565,25 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       }
 
       static const char cmd[] = "reboot: Restarting system with command '";
-      size_t pos = content.rfind(cmd);
+      size_t pos = console.rfind(cmd);
       if (pos != std::string::npos) {
         pos += strlen(cmd);
         std::string subReason(content.substr(pos, max_reason_length));
+        // Correct against any known strings that Bit Error Match
+        for (const auto& s : knownReasons) {
+          correctForBer(subReason, s);
+        }
+        for (const auto& m : kBootReasonMap) {
+          if (m.first.length() <= strlen("cold")) continue;  // too short?
+          if (correctForBer(subReason, m.first + "'")) continue;
+          if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
+          if (!android::base::StartsWith(m.first, "reboot,")) continue;
+          correctForBer(subReason, m.first.substr(strlen("reboot,")) + "'");
+        }
         for (pos = 0; pos < subReason.length(); ++pos) {
           char c = subReason[pos];
-          if (!::isprint(c) || (c == '\'')) {
+          // #, &, %, / are common single bit error for ' that we can block
+          if (!::isprint(c) || (c == '\'') || (c == '#') || (c == '&') || (c == '%') || (c == '/')) {
             subReason.erase(pos);
             break;
           }
@@ -486,10 +601,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       }
 
       // Check for kernel panics, allowed to override reboot command.
-      if (!addKernelPanicSubReason(content, ret) &&
+      if (!addKernelPanicSubReason(console, ret) &&
           // check for long-press power down
-          ((content.rfind("Power held for ") != std::string::npos) ||
-           (content.rfind("charger: [") != std::string::npos))) {
+          ((console.rfind("Power held for ") != std::string::npos) ||
+           (console.rfind("charger: [") != std::string::npos))) {
         ret = "cold";
       }
     }
@@ -505,10 +620,15 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       // Really a hail-mary pass to find it in last klog content ...
       static const int battery_dead_threshold = 2;  // percent
       static const char battery[] = "healthd: battery l=";
-      size_t pos = content.rfind(battery);  // last one
+      const pstoreConsole console(content);
+      size_t pos = console.rfind(battery);  // last one
       std::string digits;
       if (pos != std::string::npos) {
         digits = content.substr(pos + strlen(battery), strlen("100 "));
+        // correct common errors
+        correctForBer(digits, "100 ");
+        if (digits[0] == '!') digits[0] = '1';
+        if (digits[1] == '!') digits[1] = '1';
       }
       const char* endptr = digits.c_str();
       unsigned level = 0;
@@ -518,7 +638,15 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         // make sure no leading zeros, except zero itself, and range check.
         if ((level == 0) || (level > 100)) break;
       }
-      if ((level <= 100) && (endptr != digits.c_str()) && (*endptr == ' ')) {
+      // example bit error rate issues for 10%
+      //   'l=10 ' no bits in error
+      //   'l=00 ' single bit error (fails above)
+      //   'l=1  ' single bit error
+      //   'l=0  ' double bit error
+      // There are others, not typically critical because of 2%
+      // battery_dead_threshold. KISS check, make sure second
+      // character after digit sequence is not a space.
+      if ((level <= 100) && (endptr != digits.c_str()) && (endptr[0] == ' ') && (endptr[1] != ' ')) {
         LOG(INFO) << "Battery level at shutdown " << level << "%";
         if (level <= battery_dead_threshold) {
           ret = "shutdown,battery";
