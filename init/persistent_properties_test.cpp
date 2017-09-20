@@ -52,7 +52,7 @@ void CheckPropertiesEqual(std::vector<std::pair<std::string, std::string>> expec
                                           entry.second == persistent_property_record.value();
                                });
         ASSERT_TRUE(it != expected.end())
-            << "Found unexpected proprety (" << persistent_property_record.name() << ", "
+            << "Found unexpected property (" << persistent_property_record.name() << ", "
             << persistent_property_record.value() << ")";
         expected.erase(it);
     }
