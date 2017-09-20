@@ -47,7 +47,7 @@ const DwarfFde* DwarfSection::GetFdeFromPc(uint64_t pc) {
   return nullptr;
 }
 
-bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
+bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   last_error_ = DWARF_ERROR_NONE;
   const DwarfFde* fde = GetFdeFromPc(pc);
   if (fde == nullptr || fde->cie == nullptr) {
@@ -62,7 +62,7 @@ bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
   }
 
   // Now eval the actual registers.
-  return Eval(fde->cie, process_memory, loc_regs, regs);
+  return Eval(fde->cie, process_memory, loc_regs, regs, finished);
 }
 
 template <typename AddressType>
@@ -92,7 +92,8 @@ bool DwarfSectionImpl<AddressType>::EvalExpression(const DwarfLocation& loc, uin
 
 template <typename AddressType>
 bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_memory,
-                                         const dwarf_loc_regs_t& loc_regs, Regs* regs) {
+                                         const dwarf_loc_regs_t& loc_regs, Regs* regs,
+                                         bool* finished) {
   RegsImpl<AddressType>* cur_regs = reinterpret_cast<RegsImpl<AddressType>*>(regs);
   if (cie->return_address_register >= cur_regs->total_regs()) {
     last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
@@ -224,12 +225,14 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
   // Find the return address location.
   if (return_address_undefined) {
     cur_regs->set_pc(0);
+    *finished = true;
   } else {
     cur_regs->set_pc((*cur_regs)[cie->return_address_register]);
+    *finished = false;
   }
   cur_regs->set_sp(cfa);
-  // Stop if the cfa and pc are the same.
-  return prev_cfa != cfa || prev_pc != cur_regs->pc();
+  // Return false if the unwind is not finished or the cfa and pc didn't change.
+  return *finished || prev_cfa != cfa || prev_pc != cur_regs->pc();
 }
 
 template <typename AddressType>
