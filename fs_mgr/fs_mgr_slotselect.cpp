@@ -21,19 +21,12 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
-// Returns "_a" or "_b" based on two possible values in kernel cmdline:
-//   - androidboot.slot = a or b OR
-//   - androidboot.slot_suffix = _a or _b
-// TODO: remove slot_suffix once it's deprecated.
+// Returns "_a" or "_b" based on androidboot.slot_suffix in kernel cmdline, or an empty string
+// if that parameter does not exist.
 std::string fs_mgr_get_slot_suffix() {
-    std::string slot;
     std::string ab_suffix;
 
-    if (fs_mgr_get_boot_config("slot", &slot)) {
-        ab_suffix = "_" + slot;
-    } else if (!fs_mgr_get_boot_config("slot_suffix", &ab_suffix)) {
-        ab_suffix = "";
-    }
+    fs_mgr_get_boot_config("slot_suffix", &ab_suffix);
     return ab_suffix;
 }
 
