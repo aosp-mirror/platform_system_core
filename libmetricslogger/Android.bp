@@ -18,12 +18,6 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
-
-        // The following define maps the sysui_multi_action logtag ID as represented by:
-        //   frameworks/base/core/java/com/android/internal/logging/EventLogTags.logtags
-        //
-        // TODO(jhawkins): Query this value at runtime.
-        "-DMULTI_ACTION_LOG_TAG=524292",
     ],
 }
 
