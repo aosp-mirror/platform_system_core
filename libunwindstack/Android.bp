@@ -29,6 +29,9 @@ cc_defaults {
         darwin: {
             enabled: false,
         },
+        linux_bionic: {
+            enabled: true,
+        },
     },
 }
 
