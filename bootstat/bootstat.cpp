@@ -477,8 +477,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         if (subReason != "") {  // Will not land "reboot" as that is too blunt.
           if (isKernelRebootReason(subReason)) {
             ret = "reboot," + subReason;  // User space can't talk kernel reasons.
-          } else {
+          } else if (isKnownRebootReason(subReason)) {
             ret = subReason;
+          } else {
+            ret = "reboot," + subReason;  // legitimize unknown reasons
           }
         }
       }
