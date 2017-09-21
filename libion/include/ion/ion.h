@@ -41,6 +41,15 @@ int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
 int ion_share(int fd, ion_user_handle_t handle, int *share_fd);
 int ion_import(int fd, int share_fd, ion_user_handle_t *handle);
 
+/**
+  * Add 4.12+ kernel ION interfaces here for forward compatibility
+  * This should be needed till the pre-4.12+ ION interfaces are backported.
+  */
+int ion_query_heap_cnt(int fd, int* cnt);
+int ion_query_get_heaps(int fd, int cnt, void* buffers);
+
+int ion_is_legacy(int fd);
+
 __END_DECLS
 
 #endif /* __SYS_CORE_ION_H */
