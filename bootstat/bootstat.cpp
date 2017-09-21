@@ -291,6 +291,32 @@ bool isBluntRebootReason(const std::string& r) {
   return true;
 }
 
+bool readPstoreConsole(std::string& console) {
+  if (android::base::ReadFileToString("/sys/fs/pstore/console-ramoops-0", &console)) {
+    return true;
+  }
+  return android::base::ReadFileToString("/sys/fs/pstore/console-ramoops", &console);
+}
+
+bool addKernelPanicSubReason(const std::string& console, std::string& ret) {
+  // Check for kernel panic types to refine information
+  if (console.rfind("SysRq : Trigger a crash") != std::string::npos) {
+    // Can not happen, except on userdebug, during testing/debugging.
+    ret = "kernel_panic,sysrq";
+    return true;
+  }
+  if (console.rfind("Unable to handle kernel NULL pointer dereference at virtual address") !=
+      std::string::npos) {
+    ret = "kernel_panic,NULL";
+    return true;
+  }
+  if (console.rfind("Kernel BUG at ") != std::string::npos) {
+    ret = "kernel_panic,BUG";
+    return true;
+  }
+  return false;
+}
+
 // std::transform Helper callback functions:
 // Converts a string value representing the reason the system booted to a
 // string complying with Android system standard reason.
@@ -371,55 +397,51 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     }
   }
 
-  // Check the other reason resources if the reason is still blunt.
-  if (isBluntRebootReason(ret)) {
+  if (ret == "kernel_panic") {
     // Check to see if last klog has some refinement hints.
     std::string content;
-    if (!android::base::ReadFileToString("/sys/fs/pstore/console-ramoops-0",
-                                         &content)) {
-        android::base::ReadFileToString("/sys/fs/pstore/console-ramoops",
-                                         &content);
+    if (readPstoreConsole(content)) {
+      addKernelPanicSubReason(content, ret);
     }
+  } else if (isBluntRebootReason(ret)) {
+    // Check the other available reason resources if the reason is still blunt.
 
-    // The toybox reboot command used directly (unlikely)? But also
-    // catches init's response to the Android's more controlled reboot command.
-    if (content.rfind("reboot: Power down") != std::string::npos) {
-      ret = "shutdown"; // Still too blunt, but more accurate.
-      // ToDo: init should record the shutdown reason to kernel messages ala:
-      //           init: shutdown system with command 'last_reboot_reason'
-      //       so that if pstore has persistence we can get some details
-      //       that could be missing in last_reboot_reason_property.
-    }
+    // Check to see if last klog has some refinement hints.
+    std::string content;
+    if (readPstoreConsole(content)) {
+      // The toybox reboot command used directly (unlikely)? But also
+      // catches init's response to Android's more controlled reboot command.
+      if (content.rfind("reboot: Power down") != std::string::npos) {
+        ret = "shutdown";  // Still too blunt, but more accurate.
+        // ToDo: init should record the shutdown reason to kernel messages ala:
+        //           init: shutdown system with command 'last_reboot_reason'
+        //       so that if pstore has persistence we can get some details
+        //       that could be missing in last_reboot_reason_property.
+      }
 
-    static const char cmd[] = "reboot: Restarting system with command '";
-    size_t pos = content.rfind(cmd);
-    if (pos != std::string::npos) {
-      pos += strlen(cmd);
-      std::string subReason(content.substr(pos));
-      pos = subReason.find('\'');
-      if (pos != std::string::npos) subReason.erase(pos);
-      if (subReason != "") { // Will not land "reboot" as that is too blunt.
-        if (isKernelRebootReason(subReason)) {
-          ret = "reboot," + subReason; // User space can't talk kernel reasons.
-        } else {
-          ret = subReason;
+      static const char cmd[] = "reboot: Restarting system with command '";
+      size_t pos = content.rfind(cmd);
+      if (pos != std::string::npos) {
+        pos += strlen(cmd);
+        std::string subReason(content.substr(pos));
+        pos = subReason.find('\'');
+        if (pos != std::string::npos) subReason.erase(pos);
+        if (subReason != "") {  // Will not land "reboot" as that is too blunt.
+          if (isKernelRebootReason(subReason)) {
+            ret = "reboot," + subReason;  // User space can't talk kernel reasons.
+          } else {
+            ret = subReason;
+          }
         }
       }
-    }
 
-    // Check for kernel panics, but allowed to override reboot command.
-    if (content.rfind("sysrq: SysRq : Trigger a crash") != std::string::npos) {
-      // Can not happen, except on userdebug, during testing/debugging.
-      ret = "kernel_panic,sysrq";
-    } else if (content.rfind(
-        "Unable to handle kernel NULL pointer dereference at virtual address")
-               != std::string::npos) {
-      ret = "kernel_panic,NULL";
-    } else if (content.rfind("Kernel BUG at ") != std::string::npos) {
-      ret = "kernel_panic,BUG";
-    } else if ((content.rfind("Power held for ") != std::string::npos) ||
-        (content.rfind("charger: [") != std::string::npos)) {
-      ret = "cold";
+      // Check for kernel panics, allowed to override reboot command.
+      if (!addKernelPanicSubReason(content, ret) &&
+          // check for long-press power down
+          ((content.rfind("Power held for ") != std::string::npos) ||
+           (content.rfind("charger: [") != std::string::npos))) {
+        ret = "cold";
+      }
     }
 
     // The following battery test should migrate to a default system health HAL
@@ -433,7 +455,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       // Really a hail-mary pass to find it in last klog content ...
       static const int battery_dead_threshold = 2; // percent
       static const char battery[] = "healthd: battery l=";
-      pos = content.rfind(battery); // last one
+      size_t pos = content.rfind(battery);  // last one
       if (pos != std::string::npos) {
         int level = atoi(content.substr(pos + strlen(battery)).c_str());
         LOG(INFO) << "Battery level at shutdown " << level << "%";
@@ -497,7 +519,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       if ((android::base::StartsWith(content, ret.c_str()) && (content[ret.length()] == ',')) ||
           !isBluntRebootReason(content)) {
         // Ok, we want it, let's squash it if secondReason is known.
-        pos = content.find(',');
+        size_t pos = content.find(',');
         if (pos != std::string::npos) {
           ++pos;
           std::string secondReason(content.substr(pos));
