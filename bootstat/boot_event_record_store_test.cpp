@@ -94,20 +94,16 @@ void DeleteDirectory(const std::string& path) {
 
 // Returns the time in seconds since boot.
 time_t GetUptimeSeconds() {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-               android::base::boot_clock::now().time_since_epoch())
-        .count();
+  return std::chrono::duration_cast<std::chrono::seconds>(
+             android::base::boot_clock::now().time_since_epoch())
+      .count();
 }
 
 class BootEventRecordStoreTest : public ::testing::Test {
  public:
-  BootEventRecordStoreTest() {
-    store_path_ = std::string(store_dir_.path) + "/";
-  }
+  BootEventRecordStoreTest() { store_path_ = std::string(store_dir_.path) + "/"; }
 
-  const std::string& GetStorePathForTesting() const {
-    return store_path_;
-  }
+  const std::string& GetStorePathForTesting() const { return store_path_; }
 
  private:
   void TearDown() {
@@ -159,9 +155,7 @@ TEST_F(BootEventRecordStoreTest, AddMultipleBootEvents) {
   store.AddBootEvent("triassic");
 
   const std::string EXPECTED_NAMES[] = {
-    "cretaceous",
-    "jurassic",
-    "triassic",
+      "cretaceous", "jurassic", "triassic",
   };
 
   auto events = store.GetAllBootEvents();

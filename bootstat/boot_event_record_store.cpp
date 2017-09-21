@@ -58,16 +58,15 @@ BootEventRecordStore::BootEventRecordStore() {
 }
 
 void BootEventRecordStore::AddBootEvent(const std::string& event) {
-    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
-        android::base::boot_clock::now().time_since_epoch());
-    AddBootEventWithValue(event, uptime.count());
+  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+      android::base::boot_clock::now().time_since_epoch());
+  AddBootEventWithValue(event, uptime.count());
 }
 
 // The implementation of AddBootEventValue makes use of the mtime file
 // attribute to store the value associated with a boot event in order to
 // optimize on-disk size requirements and small-file thrashing.
-void BootEventRecordStore::AddBootEventWithValue(
-    const std::string& event, int32_t value) {
+void BootEventRecordStore::AddBootEventWithValue(const std::string& event, int32_t value) {
   std::string record_path = GetBootEventPath(event);
   int record_fd = creat(record_path.c_str(), S_IRUSR | S_IWUSR);
   if (record_fd == -1) {
@@ -96,8 +95,7 @@ void BootEventRecordStore::AddBootEventWithValue(
   close(record_fd);
 }
 
-bool BootEventRecordStore::GetBootEvent(
-    const std::string& event, BootEventRecord* record) const {
+bool BootEventRecordStore::GetBootEvent(const std::string& event, BootEventRecord* record) const {
   CHECK_NE(static_cast<BootEventRecord*>(nullptr), record);
   CHECK(!event.empty());
 
@@ -112,8 +110,7 @@ bool BootEventRecordStore::GetBootEvent(
   return true;
 }
 
-std::vector<BootEventRecordStore::BootEventRecord> BootEventRecordStore::
-    GetAllBootEvents() const {
+std::vector<BootEventRecordStore::BootEventRecord> BootEventRecordStore::GetAllBootEvents() const {
   std::vector<BootEventRecord> events;
 
   std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(store_path_.c_str()), closedir);
@@ -147,8 +144,7 @@ void BootEventRecordStore::SetStorePath(const std::string& path) {
   store_path_ = path;
 }
 
-std::string BootEventRecordStore::GetBootEventPath(
-    const std::string& event) const {
+std::string BootEventRecordStore::GetBootEventPath(const std::string& event) const {
   DCHECK_EQ('/', store_path_.back());
   return store_path_ + event;
 }

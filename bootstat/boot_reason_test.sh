@@ -370,6 +370,7 @@ test_ota() {
 fast and fake (touch build_date on device to make it different)" ]
 test_optional_ota() {
   echo "INFO: expected duration of ${TEST} test about 45 seconds" >&2
+  echo "WARNING: ${TEST} requires userdebug build" >&2
   adb shell su root touch /data/misc/bootstat/build_date >&2
   adb reboot ota
   wait_for_screen
@@ -425,6 +426,7 @@ Decision to rummage through bootstat data files was made as
 a _real_ factory_reset is too destructive to the device." ]
 test_factory_reset() {
   echo "INFO: expected duration of ${TEST} test roughly 45 seconds" >&2
+  echo "WARNING: ${TEST} requires userdebug build" >&2
   adb shell su root rm /data/misc/bootstat/build_date >&2
   adb reboot >&2
   wait_for_screen
@@ -479,7 +481,8 @@ test_hard() {
 [ "USAGE: test_battery
 
 battery test (trick):
-- echo healthd: battery l=2 | adb shell su root tee /dev/kmsg ; adb reboot cold
+- echo healthd: battery l=2<space> | adb shell su root tee /dev/kmsg
+- adb reboot cold
 - (wait until screen is up, boot has completed)
 - adb shell getprop sys.boot.reason
 - NB: should report reboot,battery, unless healthd managed to log
@@ -491,7 +494,7 @@ battery test (trick):
     +    setprop logd.kernel false
     +    rm /sys/fs/pstore/console-ramoops
     +    rm /sys/fs/pstore/console-ramoops-0
-    +    write /dev/kmsg \"healthd: battery l=2
+    +    write /dev/kmsg \"healthd: battery l=2${SPACE}
     +\"
 - adb reboot fs
 - (wait until screen is up, boot has completed)
@@ -500,9 +503,10 @@ battery test (trick):
 - (replace set logd.kernel true to the above, and retry test)" ]
 test_battery() {
   echo "INFO: expected duration of ${TEST} test roughly two minutes" >&2
+  echo "WARNING: ${TEST} requires userdebug build" >&2
   # Send it _many_ times to combat devices with flakey pstore
   for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
-    echo healthd: battery l=2 | adb shell su root tee /dev/kmsg >/dev/null
+    echo 'healthd: battery l=2 ' | adb shell su root tee /dev/kmsg >/dev/null
   done
   adb reboot cold >&2
   adb wait-for-device
@@ -512,11 +516,11 @@ test_battery() {
         /proc/fs/pstore/console-ramoops-0 2>/dev/null |
     grep 'healthd: battery l=' |
     tail -1 |
-    grep 'healthd: battery l=2' >/dev/null || (
+    grep 'healthd: battery l=2 ' >/dev/null || (
       if ! EXPECT_PROPERTY sys.boot.reason reboot,battery >/dev/null 2>/dev/null; then
         # retry
         for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
-          echo healthd: battery l=2 | adb shell su root tee /dev/kmsg >/dev/null
+          echo 'healthd: battery l=2 ' | adb shell su root tee /dev/kmsg >/dev/null
         done
         adb reboot cold >&2
         adb wait-for-device
@@ -550,6 +554,7 @@ kernel_panic test:
 - NB: should report kernel_panic,sysrq" ]
 test_kernel_panic() {
   echo "INFO: expected duration of ${TEST} test > 2 minutes" >&2
+  echo "WARNING: ${TEST} requires userdebug build" >&2
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason kernel_panic,sysrq
@@ -638,6 +643,26 @@ test_adb_reboot() {
   EXPECT_PROPERTY sys.boot.reason reboot,adb
   EXPECT_PROPERTY persist.sys.boot.reason reboot,adb
   report_bootstat_logs reboot,adb
+}
+
+[ "USAGE: test_Its_Just_So_Hard_reboot
+
+Its Just So Hard reboot test:
+- adb shell reboot 'Its Just So Hard'
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report reboot,its_just_so_hard
+- NB: expect log \"... I bootstat: Unknown boot reason: reboot,its_just_so_hard\"" ]
+test_Its_Just_So_Hard_reboot() {
+  echo "INFO: expected duration of ${TEST} test roughly 45 seconds" >&2
+  echo "INFO: ${TEST} cleanup requires userdebug build" >&2
+  adb shell 'reboot "Its Just So Hard"'
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
+  EXPECT_PROPERTY persist.sys.boot.reason "reboot,Its Just So Hard"
+  adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
+  EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard
+  report_bootstat_logs reboot,its_just_so_hard
 }
 
 [ "USAGE: ${0##*/} [-s SERIAL] [tests]
