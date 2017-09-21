@@ -358,7 +358,12 @@ void RecordBootComplete() {
 // Records the boot_reason metric by querying the ro.boot.bootreason system
 // property.
 void RecordBootReason() {
-  int32_t boot_reason = BootReasonStrToEnum(GetProperty("ro.boot.bootreason"));
+  std::string boot_reason_str = GetProperty("ro.boot.bootreason");
+  android::metricslogger::LogMultiAction(android::metricslogger::ACTION_BOOT,
+                                         android::metricslogger::FIELD_PLATFORM_REASON,
+                                         boot_reason_str);
+
+  int32_t boot_reason = BootReasonStrToEnum(boot_reason_str);
   BootEventRecordStore boot_event_store;
   boot_event_store.AddBootEventWithValue("boot_reason", boot_reason);
 }

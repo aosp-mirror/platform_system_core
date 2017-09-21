@@ -262,7 +262,7 @@ static int do_mkdir(const std::vector<std::string>& args) {
                 "--prompt_and_wipe_data",
                 "--reason=set_policy_failed:"s + args[1]};
             reboot_into_recovery(options);
-            return -1;
+            return 0;
         }
     }
     return 0;
@@ -490,7 +490,8 @@ static int queue_fs_event(int code) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
-        ret = reboot_into_recovery(options);
+        reboot_into_recovery(options);
+        return 0;
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {

@@ -70,6 +70,7 @@ enum lmk_cmd {
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
+static bool has_inkernel_module;
 
 /* memory pressure level medium event */
 static int mpevfd[2];
@@ -81,6 +82,8 @@ static int critical_oomadj;
 static bool debug_process_killing;
 static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
+static int64_t downgrade_pressure;
+static bool is_go_device;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -332,7 +335,7 @@ static void cmd_target(int ntargets, int *params) {
 
     lowmem_targets_size = ntargets;
 
-    if (use_inkernel_interface) {
+    if (has_inkernel_module) {
         char minfreestr[128];
         char killpriostr[128];
 
@@ -347,9 +350,9 @@ static void cmd_target(int ntargets, int *params) {
                 strlcat(killpriostr, ",", sizeof(killpriostr));
             }
 
-            snprintf(val, sizeof(val), "%d", lowmem_minfree[i]);
+            snprintf(val, sizeof(val), "%d", use_inkernel_interface ? lowmem_minfree[i] : 0);
             strlcat(minfreestr, val, sizeof(minfreestr));
-            snprintf(val, sizeof(val), "%d", lowmem_adj[i]);
+            snprintf(val, sizeof(val), "%d", use_inkernel_interface ? lowmem_adj[i] : 0);
             strlcat(killpriostr, val, sizeof(killpriostr));
         }
 
@@ -623,9 +626,10 @@ static int kill_one_process(struct proc* procp, int min_score_adj, bool is_criti
  * Find a process to kill based on the current (possibly estimated) free memory
  * and cached memory sizes.  Returns the size of the killed processes.
  */
-static int find_and_kill_process(int min_score_adj, bool is_critical) {
+static int find_and_kill_process(bool is_critical) {
     int i;
     int killed_size = 0;
+    int min_score_adj = is_critical ? critical_oomadj : medium_oomadj;
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
@@ -673,32 +677,49 @@ static int64_t get_memory_usage(const char* path) {
 static void mp_event_common(bool is_critical) {
     int ret;
     unsigned long long evcount;
-    int min_adj_score = is_critical ? critical_oomadj : medium_oomadj;
     int index = is_critical ? CRITICAL_INDEX : MEDIUM_INDEX;
     int64_t mem_usage, memsw_usage;
+    int64_t mem_pressure;
 
     ret = read(mpevfd[index], &evcount, sizeof(evcount));
     if (ret < 0)
         ALOGE("Error reading memory pressure event fd; errno=%d",
               errno);
 
-    if (enable_pressure_upgrade && !is_critical) {
-        mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
-        memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
-        if (memsw_usage < 0 || mem_usage < 0) {
-            find_and_kill_process(min_adj_score, is_critical);
-            return;
-        }
+    mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
+    memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
+    if (memsw_usage < 0 || mem_usage < 0) {
+        find_and_kill_process(is_critical);
+        return;
+    }
 
-        // We are swapping too much, calculate percent for swappinness.
-        if (((mem_usage * 100) / memsw_usage) < upgrade_pressure) {
+    // Calculate percent for swappinness.
+    mem_pressure = (mem_usage * 100) / memsw_usage;
+
+    if (enable_pressure_upgrade && !is_critical) {
+        // We are swapping too much.
+        if (mem_pressure < upgrade_pressure) {
             ALOGI("Event upgraded to critical.");
-            min_adj_score = critical_oomadj;
             is_critical = true;
         }
     }
 
-    if (find_and_kill_process(min_adj_score, is_critical) == 0) {
+    // If the pressure is larger than downgrade_pressure lmk will not
+    // kill any process, since enough memory is available.
+    if (mem_pressure > downgrade_pressure) {
+        if (debug_process_killing) {
+            ALOGI("Ignore %s memory pressure", is_critical ? "critical" : "medium");
+        }
+        return;
+    } else if (is_critical && mem_pressure > upgrade_pressure) {
+        if (debug_process_killing) {
+            ALOGI("Downgrade critical memory pressure");
+        }
+        // Downgrade event to medium, since enough memory available.
+        is_critical = false;
+    }
+
+    if (find_and_kill_process(is_critical) == 0) {
         if (debug_process_killing) {
             ALOGI("Nothing to kill");
         }
@@ -821,7 +842,8 @@ static int init(void) {
     }
     maxevents++;
 
-    use_inkernel_interface = !access(INKERNEL_MINFREE_PATH, W_OK);
+    has_inkernel_module = !access(INKERNEL_MINFREE_PATH, W_OK);
+    use_inkernel_interface = has_inkernel_module && !is_go_device;
 
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
@@ -875,6 +897,8 @@ int main(int argc __unused, char **argv __unused) {
     debug_process_killing = property_get_bool("ro.lmk.debug", false);
     enable_pressure_upgrade = property_get_bool("ro.lmk.critical_upgrade", false);
     upgrade_pressure = (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 50);
+    downgrade_pressure = (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 60);
+    is_go_device = property_get_bool("ro.config.low_ram", false);
 
     mlockall(MCL_FUTURE);
     sched_setscheduler(0, SCHED_FIFO, &param);
