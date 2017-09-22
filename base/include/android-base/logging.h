@@ -438,14 +438,4 @@ class ScopedLogSeverity {
 }  // namespace base
 }  // namespace android
 
-namespace std {
-
-// Delete << with string* to avoid mistakes. The intention was most likely to print *string.
-// If you really want to print the pointer, consider static_cast<void*>.
-//
-// Note: for this to work, we need to have this in a namespace.
-std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer) = delete;
-
-}  // namespace std
-
 #endif  // ANDROID_BASE_LOGGING_H
