@@ -438,4 +438,36 @@ class ScopedLogSeverity {
 }  // namespace base
 }  // namespace android
 
+namespace std {
+
+// Emit a warning of ostream<< with std::string*. The intention was most likely to print *string.
+//
+// Note: for this to work, we need to have this in a namespace.
+// Note: lots of ifdef magic to make this work with Clang (platform) vs GCC (windows tools)
+// Note: using diagnose_if(true) under Clang and nothing under GCC/mingw as there is no common
+//       attribute support.
+// Note: using a pragma because "-Wgcc-compat" (included in "-Weverything") complains about
+//       diagnose_if.
+// Note: to print the pointer, use "<< static_cast<const void*>(string_pointer)" instead.
+// Note: a not-recommended alternative is to let Clang ignore the warning by adding
+//       -Wno-user-defined-warnings to CPPFLAGS.
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgcc-compat"
+#define OSTREAM_STRING_POINTER_USAGE_WARNING \
+    __attribute__((diagnose_if(true, "Unexpected logging of string pointer", "warning")))
+#else
+#define OSTREAM_STRING_POINTER_USAGE_WARNING /* empty */
+#endif
+inline std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer)
+    OSTREAM_STRING_POINTER_USAGE_WARNING {
+  return stream << static_cast<const void*>(string_pointer);
+}
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#undef OSTREAM_STRING_POINTER_USAGE_WARNING
+
+}  // namespace std
+
 #endif  // ANDROID_BASE_LOGGING_H
