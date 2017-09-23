@@ -185,8 +185,8 @@ static void intercept_accept_cb(evconnlistener* listener, evutil_socket_t sockfd
 }
 
 InterceptManager::InterceptManager(event_base* base, int intercept_socket) : base(base) {
-  this->listener = evconnlistener_new(base, intercept_accept_cb, this, -1, LEV_OPT_CLOSE_ON_FREE,
-                                      intercept_socket);
+  this->listener = evconnlistener_new(base, intercept_accept_cb, this, LEV_OPT_CLOSE_ON_FREE,
+                                      /* backlog */ -1, intercept_socket);
 }
 
 bool InterceptManager::GetIntercept(pid_t pid, DebuggerdDumpType dump_type,
