@@ -59,7 +59,7 @@ class ElfInterface {
 
   virtual bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* offset) = 0;
 
-  virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory);
+  virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
 
   Memory* CreateGnuDebugdataMemory();
 

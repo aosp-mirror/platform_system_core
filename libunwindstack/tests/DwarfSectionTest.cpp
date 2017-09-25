@@ -32,7 +32,7 @@ class MockDwarfSection : public DwarfSection {
 
   MOCK_METHOD4(Log, bool(uint8_t, uint64_t, uint64_t, const DwarfFde*));
 
-  MOCK_METHOD4(Eval, bool(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*));
+  MOCK_METHOD5(Eval, bool(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*));
 
   MOCK_METHOD3(GetCfaLocationInfo, bool(uint64_t, const DwarfFde*, dwarf_loc_regs_t*));
 
@@ -104,7 +104,8 @@ TEST_F(DwarfSectionTest, Step_fail_fde) {
   EXPECT_CALL(mock_section, GetFdeOffsetFromPc(0x1000, ::testing::_))
       .WillOnce(::testing::Return(false));
 
-  ASSERT_FALSE(mock_section.Step(0x1000, nullptr, nullptr));
+  bool finished;
+  ASSERT_FALSE(mock_section.Step(0x1000, nullptr, nullptr, &finished));
 }
 
 TEST_F(DwarfSectionTest, Step_fail_cie_null) {
@@ -118,7 +119,8 @@ TEST_F(DwarfSectionTest, Step_fail_cie_null) {
       .WillOnce(::testing::Return(true));
   EXPECT_CALL(mock_section, GetFdeFromOffset(::testing::_)).WillOnce(::testing::Return(&fde));
 
-  ASSERT_FALSE(mock_section.Step(0x1000, nullptr, nullptr));
+  bool finished;
+  ASSERT_FALSE(mock_section.Step(0x1000, nullptr, nullptr, &finished));
 }
 
 TEST_F(DwarfSectionTest, Step_fail_cfa_location) {
@@ -136,7 +138,8 @@ TEST_F(DwarfSectionTest, Step_fail_cfa_location) {
   EXPECT_CALL(mock_section, GetCfaLocationInfo(0x1000, &fde, ::testing::_))
       .WillOnce(::testing::Return(false));
 
-  ASSERT_FALSE(mock_section.Step(0x1000, nullptr, nullptr));
+  bool finished;
+  ASSERT_FALSE(mock_section.Step(0x1000, nullptr, nullptr, &finished));
 }
 
 TEST_F(DwarfSectionTest, Step_pass) {
@@ -155,10 +158,11 @@ TEST_F(DwarfSectionTest, Step_pass) {
       .WillOnce(::testing::Return(true));
 
   MemoryFake process;
-  EXPECT_CALL(mock_section, Eval(&cie, &process, ::testing::_, nullptr))
+  EXPECT_CALL(mock_section, Eval(&cie, &process, ::testing::_, nullptr, ::testing::_))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process));
+  bool finished;
+  ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process, &finished));
 }
 
 }  // namespace unwindstack
