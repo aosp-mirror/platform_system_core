@@ -82,6 +82,14 @@ struct dump_thread_t {
   int32_t done;
 };
 
+typedef Backtrace* (*create_func_t)(pid_t, pid_t, BacktraceMap*);
+typedef BacktraceMap* (*map_create_func_t)(pid_t, bool);
+
+static void VerifyLevelDump(Backtrace* backtrace, create_func_t create_func = nullptr,
+                            map_create_func_t map_func = nullptr);
+static void VerifyMaxDump(Backtrace* backtrace, create_func_t create_func = nullptr,
+                          map_create_func_t map_func = nullptr);
+
 static uint64_t NanoTime() {
   struct timespec t = { 0, 0 };
   clock_gettime(CLOCK_MONOTONIC, &t);
@@ -147,7 +155,7 @@ static bool ReadyLevelBacktrace(Backtrace* backtrace) {
   return found;
 }
 
-static void VerifyLevelDump(Backtrace* backtrace) {
+static void VerifyLevelDump(Backtrace* backtrace, create_func_t, map_create_func_t) {
   ASSERT_GT(backtrace->NumFrames(), static_cast<size_t>(0))
     << DumpFrames(backtrace);
   ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
@@ -189,7 +197,7 @@ static bool ReadyMaxBacktrace(Backtrace* backtrace) {
   return (backtrace->NumFrames() == MAX_BACKTRACE_FRAMES);
 }
 
-static void VerifyMaxDump(Backtrace* backtrace) {
+static void VerifyMaxDump(Backtrace* backtrace, create_func_t, map_create_func_t) {
   ASSERT_EQ(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
     << DumpFrames(backtrace);
   // Verify that the last frame is our recursive call.
@@ -251,10 +259,14 @@ TEST(libbacktrace, local_trace) {
 
 static void VerifyIgnoreFrames(Backtrace* bt_all, Backtrace* bt_ign1, Backtrace* bt_ign2,
                                const char* cur_proc) {
-  EXPECT_EQ(bt_all->NumFrames(), bt_ign1->NumFrames() + 1)
-    << "All backtrace:\n" << DumpFrames(bt_all) << "Ignore 1 backtrace:\n" << DumpFrames(bt_ign1);
-  EXPECT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2)
-    << "All backtrace:\n" << DumpFrames(bt_all) << "Ignore 2 backtrace:\n" << DumpFrames(bt_ign2);
+  ASSERT_EQ(bt_all->NumFrames(), bt_ign1->NumFrames() + 1) << "All backtrace:\n"
+                                                           << DumpFrames(bt_all)
+                                                           << "Ignore 1 backtrace:\n"
+                                                           << DumpFrames(bt_ign1);
+  ASSERT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2) << "All backtrace:\n"
+                                                           << DumpFrames(bt_all)
+                                                           << "Ignore 2 backtrace:\n"
+                                                           << DumpFrames(bt_ign2);
 
   // Check all of the frames are the same > the current frame.
   bool check = (cur_proc == nullptr);
@@ -305,9 +317,8 @@ TEST(libbacktrace, local_max_trace) {
 }
 
 static void VerifyProcTest(pid_t pid, pid_t tid, bool (*ReadyFunc)(Backtrace*),
-                           void (*VerifyFunc)(Backtrace*),
-                           Backtrace* (*back_func)(pid_t, pid_t, BacktraceMap*),
-                           BacktraceMap* (*map_func)(pid_t, bool)) {
+                           void (*VerifyFunc)(Backtrace*, create_func_t, map_create_func_t),
+                           create_func_t create_func, map_create_func_t map_create_func) {
   pid_t ptrace_tid;
   if (tid < 0) {
     ptrace_tid = pid;
@@ -324,13 +335,13 @@ static void VerifyProcTest(pid_t pid, pid_t tid, bool (*ReadyFunc)(Backtrace*),
       WaitForStop(ptrace_tid);
 
       std::unique_ptr<BacktraceMap> map;
-      map.reset(map_func(pid, false));
-      std::unique_ptr<Backtrace> backtrace(back_func(pid, tid, map.get()));
+      map.reset(map_create_func(pid, false));
+      std::unique_ptr<Backtrace> backtrace(create_func(pid, tid, map.get()));
       ASSERT_TRUE(backtrace.get() != nullptr);
       ASSERT_TRUE(backtrace->Unwind(0));
       ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
       if (ReadyFunc(backtrace.get())) {
-        VerifyFunc(backtrace.get());
+        VerifyFunc(backtrace.get(), create_func, map_create_func);
         verified = true;
       } else {
         last_dump = DumpFrames(backtrace.get());
@@ -399,13 +410,15 @@ TEST(libbacktrace, ptrace_max_trace_new) {
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
 }
 
-static void VerifyProcessIgnoreFrames(Backtrace* bt_all) {
-  std::unique_ptr<Backtrace> ign1(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
+static void VerifyProcessIgnoreFrames(Backtrace* bt_all, create_func_t create_func,
+                                      map_create_func_t map_create_func) {
+  std::unique_ptr<BacktraceMap> map(map_create_func(bt_all->Pid(), false));
+  std::unique_ptr<Backtrace> ign1(create_func(bt_all->Pid(), BACKTRACE_CURRENT_THREAD, map.get()));
   ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
   ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign1->GetError());
 
-  std::unique_ptr<Backtrace> ign2(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
+  std::unique_ptr<Backtrace> ign2(create_func(bt_all->Pid(), BACKTRACE_CURRENT_THREAD, map.get()));
   ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
   ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign2->GetError());
@@ -1702,9 +1715,8 @@ static void SetValueAndLoop(void* data) {
     ;
 }
 
-static void UnwindThroughSignal(bool use_action,
-                                Backtrace* (*back_func)(pid_t, pid_t, BacktraceMap*),
-                                BacktraceMap* (*map_func)(pid_t, bool)) {
+static void UnwindThroughSignal(bool use_action, create_func_t create_func,
+                                map_create_func_t map_create_func) {
   volatile int value = 0;
   pid_t pid;
   if ((pid = fork()) == 0) {
@@ -1730,8 +1742,8 @@ static void UnwindThroughSignal(bool use_action,
 
     WaitForStop(pid);
 
-    std::unique_ptr<BacktraceMap> map(map_func(pid, false));
-    std::unique_ptr<Backtrace> backtrace(back_func(pid, pid, map.get()));
+    std::unique_ptr<BacktraceMap> map(map_create_func(pid, false));
+    std::unique_ptr<Backtrace> backtrace(create_func(pid, pid, map.get()));
 
     size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(const_cast<int*>(&value)),
                                         reinterpret_cast<uint8_t*>(&read_value), sizeof(read_value));
@@ -1758,9 +1770,9 @@ static void UnwindThroughSignal(bool use_action,
 
     WaitForStop(pid);
 
-    map.reset(map_func(pid, false));
+    map.reset(map_create_func(pid, false));
     ASSERT_TRUE(map.get() != nullptr);
-    backtrace.reset(back_func(pid, pid, map.get()));
+    backtrace.reset(create_func(pid, pid, map.get()));
     ASSERT_TRUE(backtrace->Unwind(0));
     bool found = false;
     for (frame_iter = backtrace->begin(); frame_iter != backtrace->end(); ++frame_iter) {

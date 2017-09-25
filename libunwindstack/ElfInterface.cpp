@@ -348,7 +348,7 @@ bool ElfInterface::GetFunctionNameWithTemplate(uint64_t addr, std::string* name,
   return false;
 }
 
-bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
+bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   // Need to subtract off the load_bias to get the correct pc.
   if (pc < load_bias_) {
     return false;
@@ -357,16 +357,15 @@ bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
 
   // Try the eh_frame first.
   DwarfSection* eh_frame = eh_frame_.get();
-  if (eh_frame != nullptr && eh_frame->Step(pc, regs, process_memory)) {
+  if (eh_frame != nullptr && eh_frame->Step(pc, regs, process_memory, finished)) {
     return true;
   }
 
   // Try the debug_frame next.
   DwarfSection* debug_frame = debug_frame_.get();
-  if (debug_frame != nullptr && debug_frame->Step(pc, regs, process_memory)) {
+  if (debug_frame != nullptr && debug_frame->Step(pc, regs, process_memory, finished)) {
     return true;
   }
-
   return false;
 }
 

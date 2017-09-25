@@ -322,7 +322,8 @@ TEST_F(ElfInterfaceArmTest, StepExidx) {
   ElfInterfaceArm interface(&memory_);
 
   // FindEntry fails.
-  ASSERT_FALSE(interface.StepExidx(0x7000, nullptr, nullptr));
+  bool finished;
+  ASSERT_FALSE(interface.StepExidx(0x7000, nullptr, nullptr, &finished));
 
   // ExtractEntry should fail.
   interface.set_start_offset(0x1000);
@@ -335,15 +336,16 @@ TEST_F(ElfInterfaceArmTest, StepExidx) {
   regs[ARM_REG_LR] = 0x20000;
   regs.set_sp(regs[ARM_REG_SP]);
   regs.set_pc(0x1234);
-  ASSERT_FALSE(interface.StepExidx(0x7000, &regs, &process_memory_));
+  ASSERT_FALSE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
 
   // Eval should fail.
   memory_.SetData32(0x1004, 0x81000000);
-  ASSERT_FALSE(interface.StepExidx(0x7000, &regs, &process_memory_));
+  ASSERT_FALSE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
 
   // Everything should pass.
   memory_.SetData32(0x1004, 0x80b0b0b0);
-  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_));
+  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
+  ASSERT_FALSE(finished);
   ASSERT_EQ(0x1000U, regs.sp());
   ASSERT_EQ(0x1000U, regs[ARM_REG_SP]);
   ASSERT_EQ(0x20000U, regs.pc());
@@ -367,11 +369,57 @@ TEST_F(ElfInterfaceArmTest, StepExidx_pc_set) {
   regs.set_pc(0x1234);
 
   // Everything should pass.
-  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_));
+  bool finished;
+  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
+  ASSERT_FALSE(finished);
   ASSERT_EQ(0x10004U, regs.sp());
   ASSERT_EQ(0x10004U, regs[ARM_REG_SP]);
   ASSERT_EQ(0x10U, regs.pc());
   ASSERT_EQ(0x10U, regs[ARM_REG_PC]);
+}
+
+TEST_F(ElfInterfaceArmTest, StepExidx_cant_unwind) {
+  ElfInterfaceArm interface(&memory_);
+
+  interface.set_start_offset(0x1000);
+  interface.set_total_entries(1);
+  memory_.SetData32(0x1000, 0x6000);
+  memory_.SetData32(0x1004, 1);
+
+  RegsArm regs;
+  regs[ARM_REG_SP] = 0x10000;
+  regs[ARM_REG_LR] = 0x20000;
+  regs.set_sp(regs[ARM_REG_SP]);
+  regs.set_pc(0x1234);
+
+  bool finished;
+  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
+  ASSERT_TRUE(finished);
+  ASSERT_EQ(0x10000U, regs.sp());
+  ASSERT_EQ(0x10000U, regs[ARM_REG_SP]);
+  ASSERT_EQ(0x1234U, regs.pc());
+}
+
+TEST_F(ElfInterfaceArmTest, StepExidx_refuse_unwind) {
+  ElfInterfaceArm interface(&memory_);
+
+  interface.set_start_offset(0x1000);
+  interface.set_total_entries(1);
+  memory_.SetData32(0x1000, 0x6000);
+  memory_.SetData32(0x1004, 0x808000b0);
+
+  RegsArm regs;
+  regs[ARM_REG_SP] = 0x10000;
+  regs[ARM_REG_LR] = 0x20000;
+  regs.set_sp(regs[ARM_REG_SP]);
+  regs.set_pc(0x1234);
+
+  bool finished;
+  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
+  ASSERT_TRUE(finished);
+  ASSERT_EQ(0x10000U, regs.sp());
+  ASSERT_EQ(0x10000U, regs[ARM_REG_SP]);
+  ASSERT_EQ(0x1234U, regs.pc());
 }
 
 }  // namespace unwindstack
