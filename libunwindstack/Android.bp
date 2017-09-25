@@ -61,6 +61,7 @@ cc_library {
         "Maps.cpp",
         "Memory.cpp",
         "Regs.cpp",
+        "Unwinder.cpp",
         "Symbols.cpp",
     ],
 

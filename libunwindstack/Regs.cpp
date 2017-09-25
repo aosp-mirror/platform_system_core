@@ -91,6 +91,15 @@ void RegsArm::SetFromRaw() {
   set_sp(regs_[ARM_REG_SP]);
 }
 
+bool RegsArm::SetPcFromReturnAddress(Memory*) {
+  if (pc() == regs_[ARM_REG_LR]) {
+    return false;
+  }
+
+  set_pc(regs_[ARM_REG_LR]);
+  return true;
+}
+
 RegsArm64::RegsArm64()
     : RegsImpl<uint64_t>(ARM64_REG_LAST, ARM64_REG_SP, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
 
@@ -112,6 +121,15 @@ uint64_t RegsArm64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
 void RegsArm64::SetFromRaw() {
   set_pc(regs_[ARM64_REG_PC]);
   set_sp(regs_[ARM64_REG_SP]);
+}
+
+bool RegsArm64::SetPcFromReturnAddress(Memory*) {
+  if (pc() == regs_[ARM64_REG_LR]) {
+    return false;
+  }
+
+  set_pc(regs_[ARM64_REG_LR]);
+  return true;
 }
 
 RegsX86::RegsX86()
@@ -137,6 +155,17 @@ void RegsX86::SetFromRaw() {
   set_sp(regs_[X86_REG_SP]);
 }
 
+bool RegsX86::SetPcFromReturnAddress(Memory* process_memory) {
+  // Attempt to get the return address from the top of the stack.
+  uint32_t new_pc;
+  if (!process_memory->Read(sp_, &new_pc, sizeof(new_pc)) || new_pc == pc()) {
+    return false;
+  }
+
+  set_pc(new_pc);
+  return true;
+}
+
 RegsX86_64::RegsX86_64()
     : RegsImpl<uint64_t>(X86_64_REG_LAST, X86_64_REG_SP, Location(LOCATION_SP_OFFSET, -8)) {}
 
@@ -159,6 +188,17 @@ uint64_t RegsX86_64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
 void RegsX86_64::SetFromRaw() {
   set_pc(regs_[X86_64_REG_PC]);
   set_sp(regs_[X86_64_REG_SP]);
+}
+
+bool RegsX86_64::SetPcFromReturnAddress(Memory* process_memory) {
+  // Attempt to get the return address from the top of the stack.
+  uint64_t new_pc;
+  if (!process_memory->Read(sp_, &new_pc, sizeof(new_pc)) || new_pc == pc()) {
+    return false;
+  }
+
+  set_pc(new_pc);
+  return true;
 }
 
 static Regs* ReadArm(void* remote_data) {

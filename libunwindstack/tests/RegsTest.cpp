@@ -46,7 +46,7 @@ class ElfInterfaceFake : public ElfInterface {
   void InitHeaders() override {}
   bool GetSoname(std::string*) override { return false; }
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
-  bool Step(uint64_t, Regs*, Memory*) override { return false; }
+  bool Step(uint64_t, Regs*, Memory*, bool*) override { return false; }
 };
 
 template <typename TypeParam>
@@ -62,6 +62,7 @@ class RegsTestImpl : public RegsImpl<TypeParam> {
 
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
+  bool SetPcFromReturnAddress(Memory*) override { return false; }
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 };
 

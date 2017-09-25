@@ -129,7 +129,8 @@ TEST_F(ElfTest, elf_invalid) {
   uint64_t func_offset;
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
-  ASSERT_FALSE(elf.Step(0, nullptr, nullptr));
+  bool finished;
+  ASSERT_FALSE(elf.Step(0, nullptr, nullptr, &finished));
 }
 
 TEST_F(ElfTest, elf32_invalid_machine) {
