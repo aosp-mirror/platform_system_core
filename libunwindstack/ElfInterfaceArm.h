@@ -70,9 +70,9 @@ class ElfInterfaceArm : public ElfInterface32 {
 
   bool HandleType(uint64_t offset, uint32_t type) override;
 
-  bool Step(uint64_t pc, Regs* regs, Memory* process_memory) override;
+  bool Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) override;
 
-  bool StepExidx(uint64_t pc, Regs* regs, Memory* process_memory);
+  bool StepExidx(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished);
 
   uint64_t start_offset() { return start_offset_; }
 

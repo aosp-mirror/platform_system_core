@@ -63,6 +63,8 @@ class Regs {
 
   virtual void SetFromRaw() = 0;
 
+  virtual bool SetPcFromReturnAddress(Memory* process_memory) = 0;
+
   uint16_t sp_reg() { return sp_reg_; }
   uint16_t total_regs() { return total_regs_; }
 
@@ -113,6 +115,8 @@ class RegsArm : public RegsImpl<uint32_t> {
 
   void SetFromRaw() override;
 
+  bool SetPcFromReturnAddress(Memory* process_memory) override;
+
   bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 };
 
@@ -127,6 +131,8 @@ class RegsArm64 : public RegsImpl<uint64_t> {
 
   void SetFromRaw() override;
 
+  bool SetPcFromReturnAddress(Memory* process_memory) override;
+
   bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 };
 
@@ -140,6 +146,8 @@ class RegsX86 : public RegsImpl<uint32_t> {
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 
   void SetFromRaw() override;
+
+  bool SetPcFromReturnAddress(Memory* process_memory) override;
 
   bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 
@@ -156,6 +164,8 @@ class RegsX86_64 : public RegsImpl<uint64_t> {
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
 
   void SetFromRaw() override;
+
+  bool SetPcFromReturnAddress(Memory* process_memory) override;
 
   bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 
