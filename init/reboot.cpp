@@ -86,8 +86,8 @@ class MountEntry {
           mnt_type_(entry.mnt_type),
           mnt_opts_(entry.mnt_opts) {}
 
-    bool Umount() {
-        int r = umount2(mnt_dir_.c_str(), 0);
+    bool Umount(bool force) {
+        int r = umount2(mnt_dir_.c_str(), force ? MNT_FORCE : 0);
         if (r == 0) {
             LOG(INFO) << "umounted " << mnt_fsname_ << ":" << mnt_dir_ << " opts " << mnt_opts_;
             return true;
@@ -280,14 +280,15 @@ static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
         bool unmount_done = true;
         if (emulated_devices.size() > 0) {
             unmount_done = std::all_of(emulated_devices.begin(), emulated_devices.end(),
-                                       [](auto& entry) { return entry.Umount(); });
+                                       [](auto& entry) { return entry.Umount(false); });
             if (unmount_done) {
                 sync();
             }
         }
-        unmount_done = std::all_of(block_devices.begin(), block_devices.end(),
-                                   [](auto& entry) { return entry.Umount(); }) &&
-                       unmount_done;
+        unmount_done =
+            std::all_of(block_devices.begin(), block_devices.end(),
+                        [&timeout](auto& entry) { return entry.Umount(timeout == 0ms); }) &&
+            unmount_done;
         if (unmount_done) {
             return UMOUNT_STAT_SUCCESS;
         }
