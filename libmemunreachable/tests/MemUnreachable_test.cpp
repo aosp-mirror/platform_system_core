@@ -27,6 +27,9 @@ namespace android {
 
 class HiddenPointer {
  public:
+  // Since we're doing such a good job of hiding it, the static analyzer
+  // thinks that we're leaking this `malloc`. This is probably related to
+  // https://bugs.llvm.org/show_bug.cgi?id=34198. NOLINTNEXTLINE
   explicit HiddenPointer(size_t size = 256) { Set(malloc(size)); }
   ~HiddenPointer() { Free(); }
   void* Get() { return reinterpret_cast<void*>(~ptr_); }
