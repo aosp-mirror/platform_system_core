@@ -99,22 +99,25 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type) {
   return true;
 }
 
-bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory) {
+bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   // Dwarf unwind information is precise about whether a pc is covered or not,
   // but arm unwind information only has ranges of pc. In order to avoid
   // incorrectly doing a bad unwind using arm unwind information for a
   // different function, always try and unwind with the dwarf information first.
-  return ElfInterface32::Step(pc, regs, process_memory) || StepExidx(pc, regs, process_memory);
+  return ElfInterface32::Step(pc, regs, process_memory, finished) ||
+         StepExidx(pc, regs, process_memory, finished);
 }
 
-bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory) {
+bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   RegsArm* regs_arm = reinterpret_cast<RegsArm*>(regs);
   uint64_t entry_offset;
   if (!FindEntry(pc, &entry_offset)) {
     return false;
   }
+
   ArmExidx arm(regs_arm, memory_, process_memory);
   arm.set_cfa(regs_arm->sp());
+  bool return_value = false;
   if (arm.ExtractEntryData(entry_offset) && arm.Eval()) {
     // If the pc was not set, then use the LR registers for the PC.
     if (!arm.pc_set()) {
@@ -125,9 +128,15 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory)
     }
     regs_arm->set_sp(arm.cfa());
     (*regs_arm)[ARM_REG_SP] = regs_arm->sp();
+    *finished = false;
+    return_value = true;
+  }
+
+  if (arm.status() == ARM_STATUS_NO_UNWIND) {
+    *finished = true;
     return true;
   }
-  return false;
+  return return_value;
 }
 
 }  // namespace unwindstack

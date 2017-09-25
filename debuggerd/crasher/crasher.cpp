@@ -114,6 +114,11 @@ noinline int do_action_on_thread(const char* arg) {
     return reinterpret_cast<uintptr_t>(result);
 }
 
+noinline int crash_null() {
+  int (*null_func)() = nullptr;
+  return null_func();
+}
+
 noinline int crash3(int a) {
     *reinterpret_cast<int*>(0xdead) = a;
     return a*4;
@@ -169,6 +174,7 @@ static int usage() {
     fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  heap-usage            cause a libc abort by abusing a heap function\n");
+    fprintf(stderr, "  call-null             cause a crash by calling through a nullptr\n");
     fprintf(stderr, "  leak                  leak memory until we get OOM-killed\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  abort                 call abort()\n");
@@ -239,6 +245,8 @@ noinline int do_action(const char* arg) {
         crashnostack();
     } else if (!strcasecmp(arg, "exit")) {
         exit(1);
+    } else if (!strcasecmp(arg, "call-null")) {
+      return crash_null();
     } else if (!strcasecmp(arg, "crash") || !strcmp(arg, "SIGSEGV")) {
         return crash(42);
     } else if (!strcasecmp(arg, "abort")) {
