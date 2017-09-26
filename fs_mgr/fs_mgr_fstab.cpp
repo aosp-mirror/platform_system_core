@@ -782,11 +782,12 @@ int fs_mgr_add_entry(struct fstab *fstab,
  * Returns the 1st matching fstab_rec that follows the start_rec.
  * start_rec is the result of a previous search or NULL.
  */
-struct fstab_rec *fs_mgr_get_entry_for_mount_point_after(struct fstab_rec *start_rec, struct fstab *fstab, const char *path)
-{
+struct fstab_rec* fs_mgr_get_entry_for_mount_point_after(struct fstab_rec* start_rec,
+                                                         struct fstab* fstab,
+                                                         const std::string& path) {
     int i;
     if (!fstab) {
-        return NULL;
+        return nullptr;
     }
 
     if (start_rec) {
@@ -799,14 +800,14 @@ struct fstab_rec *fs_mgr_get_entry_for_mount_point_after(struct fstab_rec *start
     } else {
         i = 0;
     }
+
     for (; i < fstab->num_entries; i++) {
-        int len = strlen(fstab->recs[i].mount_point);
-        if (strncmp(path, fstab->recs[i].mount_point, len) == 0 &&
-            (path[len] == '\0' || path[len] == '/')) {
+        if (fstab->recs[i].mount_point && path == fstab->recs[i].mount_point) {
             return &fstab->recs[i];
         }
     }
-    return NULL;
+
+    return nullptr;
 }
 
 /*
