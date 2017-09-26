@@ -93,21 +93,9 @@ static bool set_verity_enabled_state(int fd, const char* block_device, const cha
 /* Helper function to get A/B suffix, if any. If the device isn't
  * using A/B the empty string is returned. Otherwise either "_a",
  * "_b", ... is returned.
- *
- * Note that since sometime in O androidboot.slot_suffix is deprecated
- * and androidboot.slot should be used instead. Since bootloaders may
- * be out of sync with the OS, we check both and for extra safety
- * prepend a leading underscore if there isn't one already.
  */
 static std::string get_ab_suffix() {
-    std::string ab_suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
-    if (ab_suffix == "") {
-        ab_suffix = android::base::GetProperty("ro.boot.slot", "");
-    }
-    if (ab_suffix.size() > 0 && ab_suffix[0] != '_') {
-        ab_suffix = std::string("_") + ab_suffix;
-    }
-    return ab_suffix;
+    return android::base::GetProperty("ro.boot.slot_suffix", "");
 }
 
 /* Use AVB to turn verity on/off */
