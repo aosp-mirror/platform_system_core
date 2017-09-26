@@ -73,8 +73,7 @@ static struct selabel_handle* sehandle_prop;
 
 void property_init() {
     if (__system_property_area_init()) {
-        LOG(ERROR) << "Failed to initialize property area";
-        exit(1);
+        LOG(FATAL) << "Failed to initialize property area";
     }
 }
 
@@ -216,7 +215,7 @@ static void PropertyChildLaunch() {
             LOG(ERROR) << "property_set_async(\"" << info.name << "\", \"" << info.value
                        << "\") failed";
         }
-        exit(0);
+        _exit(0);
     }
 }
 
@@ -712,8 +711,7 @@ void start_property_service() {
     property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
                                    false, 0666, 0, 0, nullptr);
     if (property_set_fd == -1) {
-        PLOG(ERROR) << "start_property_service socket creation failed";
-        exit(1);
+        PLOG(FATAL) << "start_property_service socket creation failed";
     }
 
     listen(property_set_fd, 8);
