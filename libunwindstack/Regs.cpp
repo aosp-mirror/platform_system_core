@@ -33,26 +33,6 @@
 
 namespace unwindstack {
 
-template <typename AddressType>
-bool RegsImpl<AddressType>::GetReturnAddressFromDefault(Memory* memory, uint64_t* value) {
-  switch (return_loc_.type) {
-  case LOCATION_REGISTER:
-    CHECK(return_loc_.value < total_regs_);
-    *value = regs_[return_loc_.value];
-    return true;
-  case LOCATION_SP_OFFSET:
-    AddressType return_value;
-    if (!memory->Read(sp_ + return_loc_.value, &return_value, sizeof(return_value))) {
-      return false;
-    }
-    *value = return_value;
-    return true;
-  case LOCATION_UNKNOWN:
-  default:
-    return false;
-  }
-}
-
 RegsArm::RegsArm()
     : RegsImpl<uint32_t>(ARM_REG_LAST, ARM_REG_SP, Location(LOCATION_REGISTER, ARM_REG_LR)) {}
 

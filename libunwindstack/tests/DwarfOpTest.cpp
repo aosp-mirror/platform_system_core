@@ -1486,7 +1486,7 @@ TYPED_TEST_P(DwarfOpTest, op_breg) {
   }
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  RegsFake<TypeParam> regs(32, 10);
+  RegsImplFake<TypeParam> regs(32, 10);
   for (size_t i = 0; i < 32; i++) {
     regs[i] = i + 10;
   }
@@ -1518,7 +1518,7 @@ TYPED_TEST_P(DwarfOpTest, op_breg_invalid_register) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  RegsFake<TypeParam> regs(16, 10);
+  RegsImplFake<TypeParam> regs(16, 10);
   for (size_t i = 0; i < 16; i++) {
     regs[i] = i + 10;
   }
@@ -1544,7 +1544,7 @@ TYPED_TEST_P(DwarfOpTest, op_bregx) {
                                         0x92, 0x80, 0x15, 0x80, 0x02};
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  RegsFake<TypeParam> regs(10, 10);
+  RegsImplFake<TypeParam> regs(10, 10);
   regs[5] = 0x45;
   regs[6] = 0x190;
   this->op_->set_regs(&regs);

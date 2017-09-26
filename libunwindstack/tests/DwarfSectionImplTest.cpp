@@ -90,7 +90,7 @@ TYPED_TEST_CASE_P(DwarfSectionImplTest);
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_eval_fail) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -105,7 +105,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_eval_fail) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_no_stack) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -121,7 +121,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_no_stack) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -141,7 +141,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_val_expr) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -159,7 +159,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_val_expr) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_is_register) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -175,7 +175,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_is_register) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_bad_regs) {
   DwarfCie cie{.return_address_register = 60};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   bool finished;
@@ -185,7 +185,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_bad_regs) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_no_cfa) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   bool finished;
@@ -195,7 +195,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_no_cfa) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_bad) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {20, 0}};
@@ -224,7 +224,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_bad) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_register_prev) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -241,7 +241,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_register_prev) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_register_from_value) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -259,7 +259,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_register_from_value) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_double_indirection) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -275,7 +275,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_double_indirection) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_invalid_register) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -290,7 +290,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_invalid_register) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_different_reg_locations) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   if (sizeof(TypeParam) == sizeof(uint64_t)) {
@@ -324,7 +324,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_different_reg_locations) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_return_address_undefined) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -342,7 +342,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_return_address_undefined) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_return_address) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -359,7 +359,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_return_address) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_ignore_large_reg_loc) {
   DwarfCie cie{.return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -378,7 +378,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_ignore_large_reg_loc) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_reg_expr) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -398,7 +398,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_reg_expr) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_reg_val_expr) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);
@@ -416,7 +416,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_reg_val_expr) {
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_same_cfa_same_pc) {
   DwarfCie cie{.version = 3, .return_address_register = 5};
-  RegsFake<TypeParam> regs(10, 9);
+  RegsImplFake<TypeParam> regs(10, 9);
   dwarf_loc_regs_t loc_regs;
 
   regs.set_pc(0x100);

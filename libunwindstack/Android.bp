@@ -107,6 +107,7 @@ cc_test {
         "tests/DwarfOpTest.cpp",
         "tests/DwarfSectionTest.cpp",
         "tests/DwarfSectionImplTest.cpp",
+        "tests/ElfFake.cpp",
         "tests/ElfInterfaceArmTest.cpp",
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
@@ -125,6 +126,7 @@ cc_test {
         "tests/RegsTest.cpp",
         "tests/SymbolsTest.cpp",
         "tests/UnwindTest.cpp",
+        "tests/UnwinderTest.cpp",
     ],
 
     cflags: [
