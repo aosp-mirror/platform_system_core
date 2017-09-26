@@ -101,7 +101,7 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   if (!(flags & PROT_READ)) {
     return nullptr;
   }
-  return new MemoryRange(process_memory, start, end);
+  return new MemoryRange(process_memory, start, end - start, 0);
 }
 
 Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {

@@ -79,6 +79,38 @@ TEST_F(MemoryRemoteTest, read) {
   ASSERT_TRUE(Detach(pid));
 }
 
+TEST_F(MemoryRemoteTest, ReadPartially) {
+  char* mapping = static_cast<char*>(
+      mmap(nullptr, 2 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+
+  ASSERT_NE(MAP_FAILED, mapping);
+
+  mprotect(mapping + getpagesize(), getpagesize(), PROT_NONE);
+  memset(mapping + getpagesize() - 1024, 0x4c, 1024);
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    while (true);
+    exit(1);
+  }
+  ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
+
+  ASSERT_TRUE(Attach(pid));
+
+  MemoryRemote remote(pid);
+
+  std::vector<uint8_t> dst(4096);
+  ASSERT_EQ(1024U, remote.ReadPartially(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024),
+                                        dst.data(), 4096));
+  for (size_t i = 0; i < 1024; i++) {
+    ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
+  }
+
+  ASSERT_TRUE(Detach(pid));
+  ASSERT_EQ(0, munmap(mapping, 2 * getpagesize()));
+}
+
 TEST_F(MemoryRemoteTest, read_fail) {
   int pagesize = getpagesize();
   void* src = mmap(nullptr, pagesize * 2, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE,-1, 0);
@@ -119,11 +151,23 @@ TEST_F(MemoryRemoteTest, read_fail) {
 }
 
 TEST_F(MemoryRemoteTest, read_overflow) {
-  MemoryFakeRemote remote;
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    while (true);
+    exit(1);
+  }
+  ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
+
+  ASSERT_TRUE(Attach(pid));
+
+  MemoryRemote remote(pid);
 
   // Check overflow condition is caught properly.
   std::vector<uint8_t> dst(200);
   ASSERT_FALSE(remote.Read(UINT64_MAX - 100, dst.data(), 200));
+
+  ASSERT_TRUE(Detach(pid));
 }
 
 TEST_F(MemoryRemoteTest, read_illegal) {
@@ -144,6 +188,34 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   ASSERT_FALSE(remote.Read(0, dst.data(), 100));
 
   ASSERT_TRUE(Detach(pid));
+}
+
+TEST_F(MemoryRemoteTest, read_hole) {
+  void* mapping =
+      mmap(nullptr, 3 * 4096, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, mapping);
+  memset(mapping, 0xFF, 3 * 4096);
+  mprotect(static_cast<char*>(mapping) + 4096, 4096, PROT_NONE);
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    while (true);
+    exit(1);
+  }
+  ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
+
+  ASSERT_TRUE(Attach(pid));
+
+  MemoryRemote remote(pid);
+  std::vector<uint8_t> dst(4096 * 3, 0xCC);
+  ASSERT_EQ(4096U, remote.ReadPartially(reinterpret_cast<uintptr_t>(mapping), dst.data(), 4096 * 3));
+  for (size_t i = 0; i < 4096; ++i) {
+    ASSERT_EQ(0xFF, dst[i]);
+  }
+  for (size_t i = 4096; i < 4096 * 3; ++i) {
+    ASSERT_EQ(0xCC, dst[i]);
+  }
 }
 
 }  // namespace unwindstack

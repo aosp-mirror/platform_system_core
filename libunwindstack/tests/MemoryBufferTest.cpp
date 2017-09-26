@@ -78,4 +78,24 @@ TEST_F(MemoryBufferTest, read_failure_overflow) {
   ASSERT_FALSE(memory_->Read(UINT64_MAX - 100, buffer.data(), 200));
 }
 
+TEST_F(MemoryBufferTest, ReadPartially) {
+  memory_->Resize(256);
+  ASSERT_EQ(256U, memory_->Size());
+  ASSERT_TRUE(memory_->GetPtr(0) != nullptr);
+  ASSERT_TRUE(memory_->GetPtr(1) != nullptr);
+  ASSERT_TRUE(memory_->GetPtr(255) != nullptr);
+  ASSERT_TRUE(memory_->GetPtr(256) == nullptr);
+
+  uint8_t* data = memory_->GetPtr(0);
+  for (size_t i = 0; i < memory_->Size(); i++) {
+    data[i] = i;
+  }
+
+  std::vector<uint8_t> buffer(memory_->Size());
+  ASSERT_EQ(128U, memory_->ReadPartially(128, buffer.data(), buffer.size()));
+  for (size_t i = 0; i < 128; i++) {
+    ASSERT_EQ(128 + i, buffer[i]) << "Failed at byte " << i;
+  }
+}
+
 }  // namespace unwindstack

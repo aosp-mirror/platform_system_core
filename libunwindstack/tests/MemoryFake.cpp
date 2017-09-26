@@ -35,16 +35,16 @@ void MemoryFake::SetMemory(uint64_t addr, const void* memory, size_t length) {
   }
 }
 
-bool MemoryFake::Read(uint64_t addr, void* memory, size_t size) {
+size_t MemoryFake::ReadPartially(uint64_t addr, void* memory, size_t size) {
   uint8_t* dst = reinterpret_cast<uint8_t*>(memory);
   for (size_t i = 0; i < size; i++, addr++) {
     auto value = data_.find(addr);
     if (value == data_.end()) {
-      return false;
+      return i;
     }
     dst[i] = value->second;
   }
-  return true;
+  return size;
 }
 
 }  // namespace unwindstack
