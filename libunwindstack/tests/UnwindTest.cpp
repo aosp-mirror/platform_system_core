@@ -31,12 +31,13 @@
 #include <thread>
 #include <vector>
 
-#include <unwindstack/Elf.h>
-#include <unwindstack/MapInfo.h>
+#include <android-base/stringprintf.h>
+
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 #include <unwindstack/RegsGetLocal.h>
+#include <unwindstack/Unwinder.h>
 
 #include "TestUtils.h"
 
@@ -56,11 +57,11 @@ static void ResetGlobals() {
   g_ucontext = 0;
 }
 
-static std::vector<const char*> kFunctionOrder{"InnerFunction", "MiddleFunction", "OuterFunction"};
+static std::vector<const char*> kFunctionOrder{"OuterFunction", "MiddleFunction", "InnerFunction"};
 
-static std::vector<const char*> kFunctionSignalOrder{"SignalInnerFunction", "SignalMiddleFunction",
-                                                     "SignalOuterFunction", "InnerFunction",
-                                                     "MiddleFunction",      "OuterFunction"};
+static std::vector<const char*> kFunctionSignalOrder{"OuterFunction",        "MiddleFunction",
+                                                     "InnerFunction",        "SignalOuterFunction",
+                                                     "SignalMiddleFunction", "SignalInnerFunction"};
 
 static void SignalHandler(int, siginfo_t*, void* sigcontext) {
   g_ucontext = reinterpret_cast<uintptr_t>(sigcontext);
@@ -86,62 +87,44 @@ static void SignalCallerHandler(int, siginfo_t*, void*) {
   SignalOuterFunction();
 }
 
-static std::string ErrorMsg(const std::vector<const char*>& function_names, size_t index,
-                            std::stringstream& unwind_stream) {
+static std::string ErrorMsg(const std::vector<const char*>& function_names, Unwinder& unwinder) {
+  std::string unwind;
+  for (size_t i = 0; i < unwinder.NumFrames(); i++) {
+    unwind += unwinder.FormatFrame(i) + '\n';
+  }
+
   return std::string(
              "Unwind completed without finding all frames\n"
              "  Looking for function: ") +
-         function_names[index] + "\n" + "Unwind data:\n" + unwind_stream.str();
+         function_names.front() + "\n" + "Unwind data:\n" + unwind;
 }
 
 static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
-                         std::vector<const char*>& function_names) {
-  size_t function_name_index = 0;
+                         std::vector<const char*> expected_function_names) {
+  auto process_memory(Memory::CreateProcessMemory(pid));
 
-  auto process_memory = Memory::CreateProcessMemory(pid);
-  std::stringstream unwind_stream;
-  unwind_stream << std::hex;
-  for (size_t frame_num = 0; frame_num < 64; frame_num++) {
-    ASSERT_NE(0U, regs->pc()) << ErrorMsg(function_names, function_name_index, unwind_stream);
-    MapInfo* map_info = maps->Find(regs->pc());
-    ASSERT_TRUE(map_info != nullptr) << ErrorMsg(function_names, function_name_index, unwind_stream);
+  Unwinder unwinder(512, maps, regs, process_memory);
+  unwinder.Unwind();
 
-    Elf* elf = map_info->GetElf(process_memory, true);
-    uint64_t rel_pc = elf->GetRelPc(regs->pc(), map_info);
-    uint64_t adjusted_rel_pc = rel_pc;
-    if (frame_num != 0) {
-      adjusted_rel_pc = regs->GetAdjustedPc(rel_pc, elf);
-    }
-    unwind_stream << "  PC: 0x" << regs->pc() << " Rel: 0x" << adjusted_rel_pc;
-    unwind_stream << " Map: ";
-    if (!map_info->name.empty()) {
-      unwind_stream << map_info->name;
-    } else {
-      unwind_stream << " anonymous";
-    }
-    unwind_stream << "<" << map_info->start << "-" << map_info->end << ">";
-
-    std::string name;
-    uint64_t func_offset;
-    if (elf->GetFunctionName(adjusted_rel_pc, &name, &func_offset)) {
-      if (name == function_names[function_name_index]) {
-        if (++function_name_index == function_names.size()) {
-          return;
-        }
+  std::string expected_function = expected_function_names.back();
+  expected_function_names.pop_back();
+  for (auto& frame : unwinder.frames()) {
+    if (frame.function_name == expected_function) {
+      if (expected_function_names.empty()) {
+        break;
       }
-      unwind_stream << " " << name;
+      expected_function = expected_function_names.back();
+      expected_function_names.pop_back();
     }
-    unwind_stream << "\n";
-    ASSERT_TRUE(elf->Step(rel_pc + map_info->elf_offset, regs, process_memory.get()))
-        << ErrorMsg(function_names, function_name_index, unwind_stream);
   }
-  ASSERT_TRUE(false) << ErrorMsg(function_names, function_name_index, unwind_stream);
+
+  ASSERT_TRUE(expected_function_names.empty()) << ErrorMsg(expected_function_names, unwinder);
 }
 
 // This test assumes that this code is compiled with optimizations turned
 // off. If this doesn't happen, then all of the calls will be optimized
 // away.
-extern "C" void InnerFunction(bool local) {
+extern "C" void InnerFunction(bool local, bool trigger_invalid_call) {
   if (local) {
     LocalMaps maps;
     ASSERT_TRUE(maps.Parse());
@@ -152,17 +135,21 @@ extern "C" void InnerFunction(bool local) {
   } else {
     g_ready_for_remote = true;
     g_ready = true;
+    if (trigger_invalid_call) {
+      void (*crash_func)() = nullptr;
+      crash_func();
+    }
     while (!g_finish.load()) {
     }
   }
 }
 
-extern "C" void MiddleFunction(bool local) {
-  InnerFunction(local);
+extern "C" void MiddleFunction(bool local, bool trigger_invalid_call) {
+  InnerFunction(local, trigger_invalid_call);
 }
 
-extern "C" void OuterFunction(bool local) {
-  MiddleFunction(local);
+extern "C" void OuterFunction(bool local, bool trigger_invalid_call) {
+  MiddleFunction(local, trigger_invalid_call);
 }
 
 class UnwindTest : public ::testing::Test {
@@ -171,7 +158,7 @@ class UnwindTest : public ::testing::Test {
 };
 
 TEST_F(UnwindTest, local) {
-  OuterFunction(true);
+  OuterFunction(true, false);
 }
 
 void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* completed) {
@@ -206,7 +193,7 @@ void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* complete
 TEST_F(UnwindTest, remote) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    OuterFunction(false);
+    OuterFunction(false, false);
     exit(0);
   }
   ASSERT_NE(-1, pid);
@@ -231,7 +218,7 @@ TEST_F(UnwindTest, from_context) {
   std::atomic_int tid(0);
   std::thread thread([&]() {
     tid = syscall(__NR_gettid);
-    OuterFunction(false);
+    OuterFunction(false, false);
   });
 
   struct sigaction act, oldact;
@@ -273,25 +260,27 @@ TEST_F(UnwindTest, from_context) {
   thread.join();
 }
 
-static void RemoteThroughSignal(unsigned int sa_flags) {
+static void RemoteThroughSignal(int signal, unsigned int sa_flags) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     struct sigaction act, oldact;
     memset(&act, 0, sizeof(act));
     act.sa_sigaction = SignalCallerHandler;
     act.sa_flags = SA_RESTART | SA_ONSTACK | sa_flags;
-    ASSERT_EQ(0, sigaction(SIGUSR1, &act, &oldact));
+    ASSERT_EQ(0, sigaction(signal, &act, &oldact));
 
-    OuterFunction(false);
+    OuterFunction(false, signal == SIGSEGV);
     exit(0);
   }
   ASSERT_NE(-1, pid);
   TestScopedPidReaper reap(pid);
 
   bool completed;
-  WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_ready_for_remote), false, &completed);
-  ASSERT_TRUE(completed) << "Timed out waiting for remote process to be ready.";
-  ASSERT_EQ(0, kill(pid, SIGUSR1));
+  if (signal != SIGSEGV) {
+    WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_ready_for_remote), false, &completed);
+    ASSERT_TRUE(completed) << "Timed out waiting for remote process to be ready.";
+    ASSERT_EQ(0, kill(pid, SIGUSR1));
+  }
   WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_signal_ready_for_remote), true, &completed);
   ASSERT_TRUE(completed) << "Timed out waiting for remote process to be in signal handler.";
 
@@ -307,11 +296,19 @@ static void RemoteThroughSignal(unsigned int sa_flags) {
 }
 
 TEST_F(UnwindTest, remote_through_signal) {
-  RemoteThroughSignal(0);
+  RemoteThroughSignal(SIGUSR1, 0);
 }
 
 TEST_F(UnwindTest, remote_through_signal_sa_siginfo) {
-  RemoteThroughSignal(SA_SIGINFO);
+  RemoteThroughSignal(SIGUSR1, SA_SIGINFO);
+}
+
+TEST_F(UnwindTest, remote_through_signal_with_invalid_func) {
+  RemoteThroughSignal(SIGSEGV, 0);
+}
+
+TEST_F(UnwindTest, remote_through_signal_sa_siginfo_with_invalid_func) {
+  RemoteThroughSignal(SIGSEGV, SA_SIGINFO);
 }
 
 }  // namespace unwindstack
