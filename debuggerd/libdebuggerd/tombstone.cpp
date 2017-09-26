@@ -413,15 +413,17 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
   }
 
   ScopedBacktraceMapIteratorLock lock(map);
-  _LOG(log, logtype::MAPS, "\n");
-  if (!print_fault_address_marker) {
-    _LOG(log, logtype::MAPS, "memory map:\n");
-  } else {
-    _LOG(log, logtype::MAPS, "memory map: (fault address prefixed with --->)\n");
+  _LOG(log, logtype::MAPS,
+       "\n"
+       "memory map (%zu entries):\n",
+       map->size());
+  if (print_fault_address_marker) {
     if (map->begin() != map->end() && addr < map->begin()->start) {
       _LOG(log, logtype::MAPS, "--->Fault address falls at %s before any mapped regions\n",
            get_addr_string(addr).c_str());
       print_fault_address_marker = false;
+    } else {
+      _LOG(log, logtype::MAPS, "(fault address prefixed with --->)\n");
     }
   }
 
