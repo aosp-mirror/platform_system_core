@@ -3,27 +3,6 @@
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-    healthd_mode_android.cpp \
-    BatteryPropertiesRegistrar.cpp
-
-LOCAL_MODULE := libhealthd_android
-LOCAL_EXPORT_C_INCLUDE_DIRS := \
-    $(LOCAL_PATH) \
-    $(LOCAL_PATH)/include
-
-LOCAL_STATIC_LIBRARIES := \
-    libbatterymonitor \
-    libbatteryservice \
-    libutils \
-    libbase \
-    libcutils \
-    liblog \
-    libc \
-
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
 
 LOCAL_MODULE := libhealthd_draw
 
@@ -174,41 +153,3 @@ include $(BUILD_PHONY_PACKAGE)
 _add-charger-image :=
 _img_modules :=
 endif # LOCAL_CHARGER_NO_UI
-
-### healthd ###
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES := \
-    healthd_common.cpp \
-    healthd.cpp \
-
-LOCAL_MODULE := healthd
-LOCAL_MODULE_TAGS := optional
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-
-ifneq ($(BOARD_PERIODIC_CHORES_INTERVAL_FAST),)
-LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_FAST=$(BOARD_PERIODIC_CHORES_INTERVAL_FAST)
-endif
-ifneq ($(BOARD_PERIODIC_CHORES_INTERVAL_SLOW),)
-LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_SLOW=$(BOARD_PERIODIC_CHORES_INTERVAL_SLOW)
-endif
-
-LOCAL_STATIC_LIBRARIES := \
-    libhealthd_android \
-    libbatterymonitor \
-    libbatteryservice \
-    android.hardware.health@1.0-convert \
-
-LOCAL_SHARED_LIBRARIES := \
-    libbinder \
-    libbase \
-    libutils \
-    libcutils \
-    liblog \
-    libm \
-    libc \
-    libhidlbase \
-    libhidltransport \
-    android.hardware.health@1.0 \
-
-include $(BUILD_EXECUTABLE)
