@@ -27,7 +27,8 @@
 #include <vector>
 
 #include <batteryservice/IBatteryPropertiesListener.h>
-#include <batteryservice/IBatteryPropertiesRegistrar.h>
+
+#include <android/hardware/health/2.0/IHealth.h>
 
 #define FRIEND_TEST(test_case_name, test_name) \
 friend class test_case_name##_##test_name##_Test
@@ -71,15 +72,15 @@ struct storaged_config {
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
-class storaged_t : public BnBatteryPropertiesListener,
-                   public IBinder::DeathRecipient {
-private:
+class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
+                   public android::hardware::hidl_death_recipient {
+  private:
     time_t mTimer;
     storaged_config mConfig;
     disk_stats_monitor mDsm;
     uid_monitor mUidm;
     time_t mStarttime;
-    sp<IBatteryPropertiesRegistrar> battery_properties;
+    sp<android::hardware::health::V2_0::IHealth> health;
     unique_ptr<storage_info_t> storage_info;
     static const uint32_t crc_init;
     static const string proto_file;
@@ -133,9 +134,10 @@ public:
         }
     };
 
-    void init_battery_service();
-    virtual void batteryPropertiesChanged(struct BatteryProperties props);
-    void binderDied(const wp<IBinder>& who);
+    void init_health_service();
+    virtual ::android::hardware::Return<void> healthInfoChanged(
+        const ::android::hardware::health::V2_0::HealthInfo& info);
+    void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);
 
     void report_storage_info();
 

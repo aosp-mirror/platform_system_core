@@ -27,12 +27,12 @@
 #include <sstream>
 #include <string>
 
+#include <android/hidl/manager/1.0/IServiceManager.h>
 #include <android-base/logging.h>
 #include <batteryservice/BatteryServiceConstants.h>
-#include <batteryservice/IBatteryPropertiesRegistrar.h>
-#include <binder/IPCThreadState.h>
-#include <binder/IServiceManager.h>
 #include <cutils/properties.h>
+#include <hidl/HidlTransportSupport.h>
+#include <hwbinder/IPCThreadState.h>
 #include <log/log.h>
 
 #include <storaged.h>
@@ -53,52 +53,77 @@ const uint32_t storaged_t::crc_init = 0x5108A4ED; /* STORAGED */
 const std::string storaged_t::proto_file =
     "/data/misc_ce/0/storaged/storaged.proto";
 
-sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
-    sp<IServiceManager> sm = defaultServiceManager();
-    if (sm == NULL) return NULL;
+using android::hardware::health::V1_0::BatteryStatus;
+using android::hardware::health::V1_0::toString;
+using android::hardware::health::V2_0::HealthInfo;
+using android::hardware::health::V2_0::IHealth;
+using android::hardware::health::V2_0::Result;
+using android::hardware::interfacesEqual;
+using android::hardware::Return;
+using android::hidl::manager::V1_0::IServiceManager;
 
-    sp<IBinder> binder = sm->getService(String16("batteryproperties"));
-    if (binder == NULL) return NULL;
-
-    sp<IBatteryPropertiesRegistrar> battery_properties =
-        interface_cast<IBatteryPropertiesRegistrar>(binder);
-
-    return battery_properties;
+static sp<IHealth> get_health_service() {
+    for (auto&& instanceName : {"default", "backup"}) {
+        if (IServiceManager::getService()->getTransport(IHealth::descriptor, instanceName) ==
+                IServiceManager::Transport::EMPTY) {
+            continue;
+        }
+        auto ret = IHealth::getService(instanceName);
+        if (ret != nullptr) {
+            return ret;
+        }
+        LOG_TO(SYSTEM, INFO) << "health: storaged: cannot get " << instanceName << " service";
+    }
+    return nullptr;
 }
 
-inline charger_stat_t is_charger_on(int64_t prop) {
-    return (prop == BATTERY_STATUS_CHARGING || prop == BATTERY_STATUS_FULL) ?
+inline charger_stat_t is_charger_on(BatteryStatus prop) {
+    return (prop == BatteryStatus::CHARGING || prop == BatteryStatus::FULL) ?
         CHARGER_ON : CHARGER_OFF;
 }
 
-void storaged_t::batteryPropertiesChanged(struct BatteryProperties props) {
-    mUidm.set_charger_state(is_charger_on(props.batteryStatus));
+Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
+    mUidm.set_charger_state(is_charger_on(props.legacy.batteryStatus));
+    return android::hardware::Void();
 }
 
-void storaged_t::init_battery_service() {
+void storaged_t::init_health_service() {
     if (!mUidm.enabled())
         return;
 
-    battery_properties = get_battery_properties_service();
-    if (battery_properties == NULL) {
-        LOG_TO(SYSTEM, WARNING) << "failed to find batteryproperties service";
+    health = get_health_service();
+    if (health == NULL) {
+        LOG_TO(SYSTEM, WARNING) << "health: failed to find IHealth service";
         return;
     }
 
-    struct BatteryProperty val;
-    battery_properties->getProperty(BATTERY_PROP_BATTERY_STATUS, &val);
-    mUidm.init(is_charger_on(val.valueInt64));
+    BatteryStatus status = BatteryStatus::UNKNOWN;
+    auto ret = health->getChargeStatus([&](Result r, BatteryStatus v) {
+        if (r != Result::SUCCESS) {
+            LOG_TO(SYSTEM, WARNING)
+                << "health: cannot get battery status " << toString(r);
+            return;
+        }
+        if (v == BatteryStatus::UNKNOWN) {
+            LOG_TO(SYSTEM, WARNING) << "health: invalid battery status";
+        }
+        status = v;
+    });
+    if (!ret.isOk()) {
+        LOG_TO(SYSTEM, WARNING) << "health: get charge status transaction error "
+            << ret.description();
+    }
 
+    mUidm.init(is_charger_on(status));
     // register listener after init uid_monitor
-    battery_properties->registerListener(this);
-    IInterface::asBinder(battery_properties)->linkToDeath(this);
+    health->registerCallback(this);
+    health->linkToDeath(this, 0 /* cookie */);
 }
 
-void storaged_t::binderDied(const wp<IBinder>& who) {
-    if (battery_properties != NULL &&
-        IInterface::asBinder(battery_properties) == who) {
-        LOG_TO(SYSTEM, ERROR) << "batteryproperties service died, exiting";
-        IPCThreadState::self()->stopProcess();
+void storaged_t::serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who) {
+    if (health != NULL && interfacesEqual(health, who.promote())) {
+        LOG_TO(SYSTEM, ERROR) << "health service died, exiting";
+        android::hardware::IPCThreadState::self()->stopProcess();
         exit(1);
     } else {
         LOG_TO(SYSTEM, ERROR) << "unknown service died";

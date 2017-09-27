@@ -18,10 +18,14 @@ cc_defaults {
     name: "storaged_defaults",
 
     shared_libs: [
+        "android.hardware.health@1.0",
+        "android.hardware.health@2.0",
         "libbase",
-        "libbatteryservice",
         "libbinder",
         "libcutils",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
         "liblog",
         "libprotobuf-cpp-lite",
         "libsysutils",
