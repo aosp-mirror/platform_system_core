@@ -43,7 +43,6 @@ std::string persistent_property_filename = "/data/property/persistent_properties
 
 namespace {
 
-constexpr const uint32_t kMagic = 0x8495E0B4;
 constexpr const char kLegacyPersistentPropertyDir[] = "/data/property";
 
 void AddPersistentProperty(const std::string& name, const std::string& value,
@@ -140,85 +139,6 @@ PersistentProperties LoadPersistentPropertiesFromMemory() {
     return persistent_properties;
 }
 
-class PersistentPropertyFileParser {
-  public:
-    PersistentPropertyFileParser(const std::string& contents) : contents_(contents), position_(0) {}
-    Result<PersistentProperties> Parse();
-
-  private:
-    Result<std::string> ReadString();
-    Result<uint32_t> ReadUint32();
-
-    const std::string& contents_;
-    size_t position_;
-};
-
-Result<PersistentProperties> PersistentPropertyFileParser::Parse() {
-    if (auto magic = ReadUint32(); magic) {
-        if (*magic != kMagic) {
-            return Error() << "Magic value '0x" << std::hex << *magic
-                           << "' does not match expected value '0x" << kMagic << "'";
-        }
-    } else {
-        return Error() << "Could not read magic value: " << magic.error();
-    }
-
-    if (auto version = ReadUint32(); version) {
-        if (*version != 1) {
-            return Error() << "Version '" << *version
-                           << "' does not match any compatible version: (1)";
-        }
-    } else {
-        return Error() << "Could not read version: " << version.error();
-    }
-
-    auto num_properties = ReadUint32();
-    if (!num_properties) {
-        return Error() << "Could not read num_properties: " << num_properties.error();
-    }
-
-    PersistentProperties result;
-    while (position_ < contents_.size()) {
-        auto name = ReadString();
-        if (!name) {
-            return Error() << "Could not read name: " << name.error();
-        }
-        if (!StartsWith(*name, "persist.")) {
-            return Error() << "Property '" << *name << "' does not starts with 'persist.'";
-        }
-        auto value = ReadString();
-        if (!value) {
-            return Error() << "Could not read value: " << value.error();
-        }
-        AddPersistentProperty(*name, *value, &result);
-    }
-
-    return result;
-}
-
-Result<std::string> PersistentPropertyFileParser::ReadString() {
-    auto string_length = ReadUint32();
-    if (!string_length) {
-        return Error() << "Could not read size for string";
-    }
-
-    if (position_ + *string_length > contents_.size()) {
-        return Error() << "String size would cause it to overflow the input buffer";
-    }
-    auto result = std::string(contents_, position_, *string_length);
-    position_ += *string_length;
-    return result;
-}
-
-Result<uint32_t> PersistentPropertyFileParser::ReadUint32() {
-    if (position_ + 3 > contents_.size()) {
-        return Error() << "Input buffer not large enough to read uint32_t";
-    }
-    uint32_t result = *reinterpret_cast<const uint32_t*>(&contents_[position_]);
-    position_ += sizeof(uint32_t);
-    return result;
-}
-
 Result<std::string> ReadPersistentPropertyFile() {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     if (access(temp_filename.c_str(), F_OK) == 0) {
@@ -240,24 +160,13 @@ Result<PersistentProperties> LoadPersistentPropertyFile() {
     auto file_contents = ReadPersistentPropertyFile();
     if (!file_contents) return file_contents.error();
 
-    // Check the intermediate "I should have used protobufs from the start" format.
-    // TODO: Remove this.
-    auto parsed_contents = PersistentPropertyFileParser(*file_contents).Parse();
-    if (parsed_contents) {
-        LOG(INFO) << "Intermediate format persistent property file found, converting to protobuf";
-
-        // Update to the protobuf format
-        WritePersistentPropertyFile(*parsed_contents);
-        return parsed_contents;
-    }
-
     PersistentProperties persistent_properties;
     if (persistent_properties.ParseFromString(*file_contents)) return persistent_properties;
 
     // If the file cannot be parsed in either format, then we don't have any recovery
     // mechanisms, so we delete it to allow for future writes to take place successfully.
     unlink(persistent_property_filename.c_str());
-    return Error() << "Unable to parse persistent property file: " << parsed_contents.error();
+    return Error() << "Unable to parse persistent property file: Could not parse protobuf";
 }
 
 Result<Success> WritePersistentPropertyFile(const PersistentProperties& persistent_properties) {
@@ -288,25 +197,24 @@ Result<Success> WritePersistentPropertyFile(const PersistentProperties& persiste
 // Persistent properties are not written often, so we rather not keep any data in memory and read
 // then rewrite the persistent property file for each update.
 void WritePersistentProperty(const std::string& name, const std::string& value) {
-    auto file_contents = ReadPersistentPropertyFile();
-    PersistentProperties persistent_properties;
+    auto persistent_properties = LoadPersistentPropertyFile();
 
-    if (!file_contents || !persistent_properties.ParseFromString(*file_contents)) {
+    if (!persistent_properties) {
         LOG(ERROR) << "Recovering persistent properties from memory: "
-                   << (!file_contents ? file_contents.error_string() : "Could not parse protobuf");
+                   << persistent_properties.error();
         persistent_properties = LoadPersistentPropertiesFromMemory();
     }
-    auto it = std::find_if(persistent_properties.mutable_properties()->begin(),
-                           persistent_properties.mutable_properties()->end(),
+    auto it = std::find_if(persistent_properties->mutable_properties()->begin(),
+                           persistent_properties->mutable_properties()->end(),
                            [&name](const auto& record) { return record.name() == name; });
-    if (it != persistent_properties.mutable_properties()->end()) {
+    if (it != persistent_properties->mutable_properties()->end()) {
         it->set_name(name);
         it->set_value(value);
     } else {
-        AddPersistentProperty(name, value, &persistent_properties);
+        AddPersistentProperty(name, value, &persistent_properties.value());
     }
 
-    if (auto result = WritePersistentPropertyFile(persistent_properties); !result) {
+    if (auto result = WritePersistentPropertyFile(*persistent_properties); !result) {
         LOG(ERROR) << "Could not store persistent property: " << result.error();
     }
 }
