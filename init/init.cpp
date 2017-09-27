@@ -569,8 +569,7 @@ int main(int argc, char** argv) {
 
     epoll_fd = epoll_create1(EPOLL_CLOEXEC);
     if (epoll_fd == -1) {
-        PLOG(ERROR) << "epoll_create1 failed";
-        exit(1);
+        PLOG(FATAL) << "epoll_create1 failed";
     }
 
     sigchld_handler_init();
