@@ -113,7 +113,7 @@ TEST_F(TombstoneTest, single_map) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump = \
-"\nmemory map:\n"
+"\nmemory map (1 entry):\n"
 #if defined(__LP64__)
 "    12345678'9abcd000-12345678'9abdefff ---         0     12000\n";
 #else
@@ -148,7 +148,7 @@ TEST_F(TombstoneTest, single_map_elf_build_id) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump = \
-"\nmemory map:\n"
+"\nmemory map (1 entry):\n"
 #if defined(__LP64__)
 "    12345678'9abcd000-12345678'9abdefff r--         0     12000  /system/lib/libfake.so (BuildId: abcdef1234567890abcdef1234567890)\n";
 #else
@@ -187,7 +187,7 @@ TEST_F(TombstoneTest, single_map_no_build_id) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump = \
-"\nmemory map:\n"
+"\nmemory map (2 entries):\n"
 #if defined(__LP64__)
 "    12345678'9abcd000-12345678'9abdefff -w-         0     12000\n"
 "    12345678'9abcd000-12345678'9abdefff -w-         0     12000  /system/lib/libfake.so\n";
@@ -245,7 +245,7 @@ TEST_F(TombstoneTest, multiple_maps) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump =
-      "\nmemory map:\n"
+      "\nmemory map (5 entries):\n"
 #if defined(__LP64__)
       "    00000000'0a234000-00000000'0a234fff ---         0      1000\n"
       "    00000000'0a334000-00000000'0a334fff r--      f000      1000\n"
@@ -305,7 +305,7 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_before) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump =
-      "\nmemory map: (fault address prefixed with --->)\n"
+      "\nmemory map (3 entries):\n"
 #if defined(__LP64__)
       "--->Fault address falls at 00000000'00001000 before any mapped regions\n"
       "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
@@ -363,7 +363,7 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_between) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump =
-      "\nmemory map: (fault address prefixed with --->)\n"
+      "\nmemory map (3 entries): (fault address prefixed with --->)\n"
 #if defined(__LP64__)
       "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
       "--->Fault address falls at 00000000'0a533000 between mapped regions\n"
@@ -421,7 +421,7 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_in_map) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump =
-      "\nmemory map: (fault address prefixed with --->)\n"
+      "\nmemory map (3 entries): (fault address prefixed with --->)\n"
 #if defined(__LP64__)
       "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
       "--->00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
@@ -481,7 +481,7 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump =
-      "\nmemory map: (fault address prefixed with --->)\n"
+      "\nmemory map (3 entries): (fault address prefixed with --->)\n"
 #if defined(__LP64__)
       "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n"
       "    00000000'0a534000-00000000'0a534fff --x      3000      1000  (load bias 0x2000)\n"
@@ -521,7 +521,7 @@ TEST_F(TombstoneTest, multiple_maps_getsiginfo_fail) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump =
-      "\nmemory map:\n"
+      "\nmemory map (1 entry):\n"
 #if defined(__LP64__)
       "    00000000'0a434000-00000000'0a434fff -w-      1000      1000  (load bias 0xd000)\n";
 #else
@@ -571,7 +571,7 @@ TEST_F(TombstoneTest, multiple_maps_check_signal_has_si_addr) {
     }
 
     const char* expected_addr_dump = \
-"\nmemory map: (fault address prefixed with --->)\n"
+"\nmemory map (1 entry):\n"
 #if defined(__LP64__)
 "--->Fault address falls at 00000000'00001000 before any mapped regions\n"
 "    00000000'0a434000-00000000'0a434fff -w-         0      1000\n";
@@ -580,7 +580,7 @@ TEST_F(TombstoneTest, multiple_maps_check_signal_has_si_addr) {
 "    0a434000-0a434fff -w-         0      1000\n";
 #endif
     const char* expected_dump = \
-"\nmemory map:\n"
+"\nmemory map (1 entry):\n"
 #if defined(__LP64__)
 "    00000000'0a434000-00000000'0a434fff -w-         0      1000\n";
 #else
