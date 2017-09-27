@@ -483,6 +483,8 @@ bool HandlePowerctlMessage(const std::string& command) {
                 // Run fsck once the file system is remounted in read-only mode.
                 run_fsck = true;
             } else if (cmd_params[1] == "thermal") {
+                // Turn off sources of heat immediately.
+                TurnOffBacklight();
                 // run_fsck is false to avoid delay
                 cmd = ANDROID_RB_THERMOFF;
             }
