@@ -119,8 +119,7 @@ void sigchld_handler_init() {
     // Create a signalling mechanism for SIGCHLD.
     int s[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {
-        PLOG(ERROR) << "socketpair failed";
-        exit(1);
+        PLOG(FATAL) << "socketpair failed in sigchld_handler_init";
     }
 
     signal_write_fd = s[0];
