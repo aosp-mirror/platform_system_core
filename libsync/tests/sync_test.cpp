@@ -448,6 +448,41 @@ TEST(FenceTest, MultiTimelineWait) {
     ASSERT_EQ(mergedFence.wait(100), 0);
 }
 
+TEST(FenceTest, GetInfoActive) {
+    SyncTimeline timeline;
+    ASSERT_TRUE(timeline.isValid());
+
+    SyncFence fence(timeline, 1);
+    ASSERT_TRUE(fence.isValid());
+
+    vector<SyncPointInfo> info = fence.getInfo();
+    ASSERT_EQ(info.size(), 1);
+
+    ASSERT_FALSE(info[0].driverName.empty());
+    ASSERT_FALSE(info[0].objectName.empty());
+    ASSERT_EQ(info[0].timeStampNs, 0);
+    ASSERT_EQ(info[0].status, 0);
+}
+
+TEST(FenceTest, GetInfoSignaled) {
+    SyncTimeline timeline;
+    ASSERT_TRUE(timeline.isValid());
+
+    SyncFence fence(timeline, 1);
+    ASSERT_TRUE(fence.isValid());
+
+    ASSERT_EQ(timeline.inc(1), 0);
+    ASSERT_EQ(fence.wait(), 0);
+
+    vector<SyncPointInfo> info = fence.getInfo();
+    ASSERT_EQ(info.size(), 1);
+
+    ASSERT_FALSE(info[0].driverName.empty());
+    ASSERT_FALSE(info[0].objectName.empty());
+    ASSERT_GT(info[0].timeStampNs, 0);
+    ASSERT_EQ(info[0].status, 1);
+}
+
 TEST(StressTest, TwoThreadsSharedTimeline) {
     const int iterations = 1 << 16;
     int counter = 0;
