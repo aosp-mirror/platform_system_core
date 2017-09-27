@@ -748,9 +748,6 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
 }
 
 int atransport::Write(apacket* p) {
-#if ADB_HOST
-    std::lock_guard<std::mutex> lock(write_msg_lock_);
-#endif
     return write_func_(p, this);
 }
 
@@ -758,11 +755,6 @@ void atransport::Kick() {
     if (!kicked_) {
         kicked_ = true;
         CHECK(kick_func_ != nullptr);
-#if ADB_HOST
-        // On host, adb server should avoid writing part of a packet, so don't
-        // kick a transport whiling writing a packet.
-        std::lock_guard<std::mutex> lock(write_msg_lock_);
-#endif
         kick_func_(this);
     }
 }
