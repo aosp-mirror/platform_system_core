@@ -73,7 +73,7 @@ bool uid_info::parse_uid_io_stats(std::string&& s)
         !ParseUint(fields[8],  &io[BACKGROUND].write_bytes) ||
         !ParseUint(fields[9],  &io[FOREGROUND].fsync) ||
         !ParseUint(fields[10], &io[BACKGROUND].fsync)) {
-        LOG_TO(SYSTEM, WARNING) << "Invalid I/O stats: \""
+        LOG_TO(SYSTEM, WARNING) << "Invalid uid I/O stats: \""
                                 << s << "\"";
         return false;
     }
@@ -84,23 +84,25 @@ bool uid_info::parse_uid_io_stats(std::string&& s)
 bool task_info::parse_task_io_stats(std::string&& s)
 {
     std::vector<std::string> fields = Split(s, ",");
-    if (fields.size() < 13 ||
-        !ParseInt(fields[2],  &pid) ||
-        !ParseUint(fields[3],  &io[FOREGROUND].rchar) ||
-        !ParseUint(fields[4],  &io[FOREGROUND].wchar) ||
-        !ParseUint(fields[5],  &io[FOREGROUND].read_bytes) ||
-        !ParseUint(fields[6],  &io[FOREGROUND].write_bytes) ||
-        !ParseUint(fields[7],  &io[BACKGROUND].rchar) ||
-        !ParseUint(fields[8],  &io[BACKGROUND].wchar) ||
-        !ParseUint(fields[9],  &io[BACKGROUND].read_bytes) ||
-        !ParseUint(fields[10], &io[BACKGROUND].write_bytes) ||
-        !ParseUint(fields[11], &io[FOREGROUND].fsync) ||
-        !ParseUint(fields[12], &io[BACKGROUND].fsync)) {
-        LOG_TO(SYSTEM, WARNING) << "Invalid I/O stats: \""
+    size_t size = fields.size();
+    if (size < 13 ||
+        !ParseInt(fields[size - 11],  &pid) ||
+        !ParseUint(fields[size - 10],  &io[FOREGROUND].rchar) ||
+        !ParseUint(fields[size - 9],  &io[FOREGROUND].wchar) ||
+        !ParseUint(fields[size - 8],  &io[FOREGROUND].read_bytes) ||
+        !ParseUint(fields[size - 7],  &io[FOREGROUND].write_bytes) ||
+        !ParseUint(fields[size - 6],  &io[BACKGROUND].rchar) ||
+        !ParseUint(fields[size - 5],  &io[BACKGROUND].wchar) ||
+        !ParseUint(fields[size - 4],  &io[BACKGROUND].read_bytes) ||
+        !ParseUint(fields[size - 3], &io[BACKGROUND].write_bytes) ||
+        !ParseUint(fields[size - 2], &io[FOREGROUND].fsync) ||
+        !ParseUint(fields[size - 1], &io[BACKGROUND].fsync)) {
+        LOG_TO(SYSTEM, WARNING) << "Invalid task I/O stats: \""
                                 << s << "\"";
         return false;
     }
-    comm = fields[1];
+    comm = Join(std::vector<std::string>(
+                fields.begin() + 1, fields.end() - 11), ',');
     return true;
 }
 
