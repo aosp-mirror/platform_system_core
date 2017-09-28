@@ -15,19 +15,11 @@ cc_library {
     cflags: ["-Werror"],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
+    shared_libs: [
+        "libz",
+        "libbase",
+    ],
     target: {
-        host: {
-            shared_libs: [
-                "libz-host",
-                "libbase",
-            ],
-        },
-        android: {
-            shared_libs: [
-                "libz",
-                "libbase",
-            ],
-        },
         windows: {
             enabled: true,
         },
