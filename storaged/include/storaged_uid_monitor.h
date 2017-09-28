@@ -23,6 +23,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "storaged.pb.h"
+
+using namespace storaged_proto;
+
 enum uid_stat_t {
     FOREGROUND = 0,
     BACKGROUND = 1,
@@ -113,8 +117,6 @@ private:
     uint64_t start_ts;
     // true if UID_IO_STATS_PATH is accessible
     const bool enable;
-    // protobuf file for io_history
-    static const std::string io_history_proto_file;
 
     // reads from /proc/uid_io/stats
     std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats_locked();
@@ -122,26 +124,27 @@ private:
     void add_records_locked(uint64_t curr_ts);
     // updates curr_io_stats and set last_uid_io_stats
     void update_curr_io_stats_locked();
-    // restores io_history from protobuf file
-    void load_io_history_from_proto();
-    // converts io_history to protobuf and writes to a file
-    void flush_io_history_to_proto();
+    // restores io_history from protobuf
+    void load_uid_io_proto(const UidIOUsage& proto);
+    // writes io_history to protobuf
+    void update_uid_io_proto(UidIOUsage* proto);
 
 public:
     uid_monitor();
     ~uid_monitor();
     // called by storaged main thread
-    void init(charger_stat_t stat);
+    void init(charger_stat_t stat, const UidIOUsage& proto);
     // called by storaged -u
     std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats();
     // called by dumpsys
     std::map<uint64_t, struct uid_records> dump(
-        double hours, uint64_t threshold, bool force_report);
+        double hours, uint64_t threshold, bool force_report,
+        UidIOUsage* uid_io_proto);
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
     // called by storaged periodic_chore or dump with force_report
     bool enabled() { return enable; };
-    void report();
+    void report(UidIOUsage* proto);
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */

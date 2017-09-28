@@ -32,18 +32,19 @@
 #include <storaged.h>
 #include <storaged_service.h>
 
+using namespace std;
 using namespace android::base;
 
 extern sp<storaged_t> storaged;
 
-std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
+vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
     Parcel data, reply;
     data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
 
     remote()->transact(DUMPUIDS, data, &reply);
 
     uint32_t res_size = reply.readInt32();
-    std::vector<struct uid_info> res(res_size);
+    vector<struct uid_info> res(res_size);
     for (auto&& uid : res) {
         uid.uid = reply.readInt32();
         uid.name = reply.readCString();
@@ -60,6 +61,32 @@ std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
     }
     return res;
 }
+
+vector<vector<uint32_t>> BpStoraged::dump_perf_history(const char* /*option*/) {
+    Parcel data, reply;
+    data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
+
+    remote()->transact(DUMPPERF, data, &reply);
+
+    vector<vector<uint32_t>> res(3);
+    uint32_t size = reply.readUint32();
+    res[0].resize(size);
+    for (uint32_t i = 0; i < size; i++) {
+        res[0][i] = reply.readUint32();
+    }
+    size = reply.readUint32();
+    res[1].resize(size);
+    for (uint32_t i = 0; i < size; i++) {
+        res[1][i] = reply.readUint32();
+    }
+    size = reply.readUint32();
+    res[2].resize(size);
+    for (uint32_t i = 0; i < size; i++) {
+        res[2][i] = reply.readUint32();
+    }
+    return res;
+}
+
 IMPLEMENT_META_INTERFACE(Storaged, "Storaged");
 
 status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
@@ -67,7 +94,7 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
         case DUMPUIDS: {
                 if (!data.checkInterface(this))
                     return BAD_TYPE;
-                std::vector<struct uid_info> res = dump_uids(NULL);
+                vector<struct uid_info> res = dump_uids(NULL);
                 reply->writeInt32(res.size());
                 for (const auto& uid : res) {
                     reply->writeInt32(uid.uid);
@@ -84,19 +111,42 @@ status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply
                 return NO_ERROR;
             }
             break;
+        case DUMPPERF: {
+            if (!data.checkInterface(this))
+                return BAD_TYPE;
+            vector<vector<uint32_t>> res = dump_perf_history(NULL);
+            reply->writeUint32(res[0].size());
+            for (const auto& item : res[0]) {
+                reply->writeUint32(item);
+            }
+            reply->writeUint32(res[1].size());
+            for (const auto& item : res[1]) {
+                reply->writeUint32(item);
+            }
+            reply->writeUint32(res[2].size());
+            for (const auto& item : res[2]) {
+                reply->writeUint32(item);
+            }
+            return NO_ERROR;
+        }
+        break;
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }
 }
 
-std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
-    std::vector<struct uid_info> uids_v;
-    std::unordered_map<uint32_t, struct uid_info> uids_m = storaged->get_uids();
+vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
+    vector<struct uid_info> uids_v;
+    unordered_map<uint32_t, struct uid_info> uids_m = storaged->get_uids();
 
     for (const auto& it : uids_m) {
         uids_v.push_back(it.second);
     }
     return uids_v;
+}
+
+vector<vector<uint32_t>> Storaged::dump_perf_history(const char* /* option */) {
+    return storaged->get_perf_history();
 }
 
 status_t Storaged::dump(int fd, const Vector<String16>& args) {
@@ -148,7 +198,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     }
 
     uint64_t last_ts = 0;
-    const std::map<uint64_t, struct uid_records>& records =
+    const map<uint64_t, struct uid_records>& records =
                 storaged->get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
         if (last_ts != it.second.start_ts) {
@@ -173,7 +223,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
             if (debug) {
                 for (const auto& task_it : record.ios.task_ios) {
                     const struct io_usage& task_usage = task_it.second;
-                    const std::string& comm = task_it.first;
+                    const string& comm = task_it.first;
                     dprintf(fd, "-> %s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
                             " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
                         comm.c_str(),

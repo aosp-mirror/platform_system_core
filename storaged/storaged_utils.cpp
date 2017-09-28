@@ -91,3 +91,26 @@ void log_console_running_uids_info(const std::vector<struct uid_info>& uids, boo
     }
     fflush(stdout);
 }
+
+void log_console_perf_history(const vector<vector<uint32_t>>& perf_history) {
+    if (perf_history.size() != 3) {
+        return;
+    }
+
+    printf("\nI/O perf history (KB/s) :  most_recent  <---------  least_recent \n");
+
+    std::stringstream line;
+    std::copy(perf_history[0].begin(), perf_history[0].end(),
+              std::ostream_iterator<int>(line, " "));
+    printf("last 24 hours : %s\n", line.str().c_str());
+
+    line.str("");
+    std::copy(perf_history[1].begin(), perf_history[1].end(),
+              std::ostream_iterator<int>(line, " "));
+    printf("last 7 days   : %s\n", line.str().c_str());
+
+    line.str("");
+    std::copy(perf_history[2].begin(), perf_history[2].end(),
+              std::ostream_iterator<int>(line, " "));
+    printf("last 52 weeks : %s\n", line.str().c_str());
+}

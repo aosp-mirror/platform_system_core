@@ -20,6 +20,8 @@
 #include <string.h>
 #include <sys/statvfs.h>
 
+#include <numeric>
+
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/logging.h>
@@ -27,9 +29,12 @@
 #include <log/log_event_list.h>
 
 #include "storaged.h"
+#include "storaged_info.h"
 
 using namespace std;
+using namespace chrono;
 using namespace android::base;
+using namespace storaged_proto;
 
 const string emmc_info_t::emmc_sysfs = "/sys/bus/mmc/devices/mmc0:0001/";
 const string emmc_info_t::emmc_debugfs = "/d/mmc0/mmc0:0001/ext_csd";
@@ -61,7 +66,37 @@ storage_info_t* storage_info_t::get_storage_info()
     return new storage_info_t;
 }
 
-void storage_info_t::refresh()
+void storage_info_t::init(const IOPerfHistory& perf_history)
+{
+    if (!perf_history.has_day_start_sec() ||
+        perf_history.daily_perf_size() > (int)daily_perf.size() ||
+        perf_history.weekly_perf_size() > (int)weekly_perf.size()) {
+        LOG_TO(SYSTEM, ERROR) << "Invalid IOPerfHistory proto";
+        return;
+    }
+
+    day_start_tp = {};
+    day_start_tp += seconds(perf_history.day_start_sec());
+
+    nr_samples = perf_history.nr_samples();
+    for (auto bw : perf_history.recent_perf()) {
+        recent_perf.push_back(bw);
+    }
+
+    nr_days = perf_history.nr_days();
+    int i = 0;
+    for (auto bw : perf_history.daily_perf()) {
+        daily_perf[i++] = bw;
+    }
+
+    nr_weeks = perf_history.nr_weeks();
+    i = 0;
+    for (auto bw : perf_history.weekly_perf()) {
+        weekly_perf[i++] = bw;
+    }
+}
+
+void storage_info_t::refresh(IOPerfHistory* perf_history)
 {
     struct statvfs buf;
     if (statvfs(userdata_path.c_str(), &buf) != 0) {
@@ -71,6 +106,24 @@ void storage_info_t::refresh()
 
     userdata_total_kb = buf.f_bsize * buf.f_blocks >> 10;
     userdata_free_kb = buf.f_bfree * buf.f_blocks >> 10;
+
+    unique_ptr<lock_t> lock(new lock_t(&si_lock));
+
+    perf_history->Clear();
+    perf_history->set_day_start_sec(
+        duration_cast<seconds>(day_start_tp.time_since_epoch()).count());
+    for (const uint32_t& bw : recent_perf) {
+        perf_history->add_recent_perf(bw);
+    }
+    perf_history->set_nr_samples(nr_samples);
+    for (const uint32_t& bw : daily_perf) {
+        perf_history->add_daily_perf(bw);
+    }
+    perf_history->set_nr_days(nr_days);
+    for (const uint32_t& bw : weekly_perf) {
+        perf_history->add_weekly_perf(bw);
+    }
+    perf_history->set_nr_weeks(nr_weeks);
 }
 
 void storage_info_t::publish()
@@ -78,6 +131,80 @@ void storage_info_t::publish()
     android_log_event_list(EVENTLOGTAG_EMMCINFO)
         << version << eol << lifetime_a << lifetime_b
         << LOG_ID_EVENTS;
+}
+
+void storage_info_t::update_perf_history(uint32_t bw,
+                                         const time_point<system_clock>& tp)
+{
+    unique_ptr<lock_t> lock(new lock_t(&si_lock));
+
+    if (tp > day_start_tp &&
+        duration_cast<seconds>(tp - day_start_tp).count() < DAY_TO_SEC) {
+        if (nr_samples >= recent_perf.size()) {
+            recent_perf.push_back(bw);
+        } else {
+            recent_perf[nr_samples] = bw;
+        }
+        nr_samples++;
+        return;
+    }
+
+    recent_perf.erase(recent_perf.begin() + nr_samples,
+                      recent_perf.end());
+
+    uint32_t daily_avg_bw = accumulate(recent_perf.begin(),
+        recent_perf.begin() + nr_samples, 0) / nr_samples;
+
+    day_start_tp = tp - seconds(duration_cast<seconds>(
+        tp.time_since_epoch()).count() % DAY_TO_SEC);
+
+    nr_samples = 0;
+    if (recent_perf.empty())
+        recent_perf.resize(1);
+    recent_perf[nr_samples++] = bw;
+
+    if (nr_days < WEEK_TO_DAYS) {
+        daily_perf[nr_days++] = daily_avg_bw;
+        return;
+    }
+
+    uint32_t week_avg_bw = accumulate(daily_perf.begin(),
+        daily_perf.begin() + nr_days, 0) / nr_days;
+
+    nr_days = 0;
+    daily_perf[nr_days++] = daily_avg_bw;
+
+    if (nr_weeks >= YEAR_TO_WEEKS) {
+        nr_weeks = 0;
+    }
+    weekly_perf[nr_weeks++] = week_avg_bw;
+}
+
+vector<vector<uint32_t>> storage_info_t::get_perf_history()
+{
+    unique_ptr<lock_t> lock(new lock_t(&si_lock));
+
+    vector<vector<uint32_t>> ret(3);
+
+    ret[0].resize(recent_perf.size());
+    for (size_t i = 0; i < recent_perf.size(); i++) {
+        int idx = (recent_perf.size() + nr_samples - 1 - i) % recent_perf.size();
+        ret[0][i] = recent_perf[idx];
+    }
+
+    ret[1].resize(daily_perf.size());
+    for (size_t i = 0; i < daily_perf.size(); i++) {
+        int idx = (daily_perf.size() + nr_days - 1 - i) % daily_perf.size();
+        ret[1][i] = daily_perf[idx];
+    }
+
+    ret[2].resize(weekly_perf.size());
+    for (size_t i = 0; i < weekly_perf.size(); i++) {
+        int idx = (weekly_perf.size() + nr_weeks - 1 - i) % weekly_perf.size();
+        ret[2][i] = weekly_perf[idx];
+    }
+
+    return ret;
 }
 
 void emmc_info_t::report()

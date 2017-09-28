@@ -32,12 +32,6 @@
 #define FRIEND_TEST(test_case_name, test_name) \
 friend class test_case_name##_##test_name##_Test
 
-#include "storaged_diskstats.h"
-#include "storaged_info.h"
-#include "storaged_uid_monitor.h"
-
-using namespace android;
-
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof((x)[0]))
 
 #define SECTOR_SIZE ( 512 )
@@ -47,12 +41,23 @@ using namespace android;
 #define SEC_TO_USEC ( 1000000 )
 #define HOUR_TO_SEC ( 3600 )
 #define DAY_TO_SEC ( 3600 * 24 )
+#define WEEK_TO_DAYS ( 7 )
+#define YEAR_TO_WEEKS ( 52 )
+
+#include "storaged_diskstats.h"
+#include "storaged_info.h"
+#include "storaged_uid_monitor.h"
+#include "storaged.pb.h"
+
+using namespace std;
+using namespace android;
 
 // Periodic chores intervals in seconds
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT (300)
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO (3600)
 
 // UID IO threshold in bytes
 #define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
@@ -61,6 +66,7 @@ struct storaged_config {
     int periodic_chores_interval_unit;
     int periodic_chores_interval_disk_stats_publish;
     int periodic_chores_interval_uid_io;
+    int periodic_chores_interval_flush_proto;
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
@@ -73,7 +79,10 @@ private:
     uid_monitor mUidm;
     time_t mStarttime;
     sp<IBatteryPropertiesRegistrar> battery_properties;
-    std::unique_ptr<storage_info_t> storage_info;
+    unique_ptr<storage_info_t> storage_info;
+    static const uint32_t crc_init;
+    static const string proto_file;
+    storaged_proto::StoragedProto proto;
 public:
     storaged_t(void);
     ~storaged_t() {}
@@ -87,12 +96,18 @@ public:
         return mStarttime;
     }
 
-    std::unordered_map<uint32_t, struct uid_info> get_uids(void) {
+    unordered_map<uint32_t, struct uid_info> get_uids(void) {
         return mUidm.get_uid_io_stats();
     }
-    std::map<uint64_t, struct uid_records> get_uid_records(
+
+    vector<vector<uint32_t>> get_perf_history(void) {
+        return storage_info->get_perf_history();
+    }
+
+    map<uint64_t, struct uid_records> get_uid_records(
             double hours, uint64_t threshold, bool force_report) {
-        return mUidm.dump(hours, threshold, force_report);
+        return mUidm.dump(hours, threshold, force_report,
+                          proto.mutable_uid_io_usage());
     }
     void update_uid_io_interval(int interval) {
         if (interval >= DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT) {
@@ -105,6 +120,9 @@ public:
     void binderDied(const wp<IBinder>& who);
 
     void report_storage_info();
+
+    void load_proto();
+    void flush_proto();
 };
 
 // Eventlog tag
