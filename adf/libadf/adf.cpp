@@ -132,8 +132,11 @@ int adf_get_device_data(struct adf_device *dev, struct adf_device_data *data)
 void adf_free_device_data(struct adf_device_data *data)
 {
     delete [] data->attachments;
+    data->attachments = nullptr;
     delete [] data->allowed_attachments;
+    data->allowed_attachments = nullptr;
     delete [] static_cast<char *>(data->custom_data);
+    data->custom_data = nullptr;
 }
 
 int adf_device_post(struct adf_device *dev,
@@ -236,9 +239,10 @@ ssize_t adf_interfaces_for_overlay_engine(struct adf_device *dev,
         return err;
 
     std::vector<adf_id_t> ids;
-    for (size_t i = 0; i < data.n_allowed_attachments; i++)
-        if (data.allowed_attachments[i].overlay_engine == overlay_engine)
-            ids.push_back(data.allowed_attachments[i].interface);
+    if (data.allowed_attachments != nullptr)
+        for (size_t i = 0; i < data.n_allowed_attachments; i++)
+            if (data.allowed_attachments[i].overlay_engine == overlay_engine)
+              ids.push_back(data.allowed_attachments[i].interface);
 
     adf_free_device_data(&data);
     return adf_id_vector_to_array(ids, interfaces);
@@ -450,9 +454,10 @@ ssize_t adf_overlay_engines_for_interface(struct adf_device *dev,
         return err;
 
     std::vector<adf_id_t> ids;
-    for (size_t i = 0; i < data.n_allowed_attachments; i++)
-        if (data.allowed_attachments[i].interface == interface)
-            ids.push_back(data.allowed_attachments[i].overlay_engine);
+    if (data.allowed_attachments != nullptr)
+        for (size_t i = 0; i < data.n_allowed_attachments; i++)
+            if (data.allowed_attachments[i].interface == interface)
+                ids.push_back(data.allowed_attachments[i].overlay_engine);
 
     return adf_id_vector_to_array(ids, overlay_engines);
 }
@@ -551,7 +556,9 @@ int adf_get_overlay_engine_data(int fd, struct adf_overlay_engine_data *data)
 void adf_free_overlay_engine_data(struct adf_overlay_engine_data *data)
 {
     delete [] data->supported_formats;
+    data->supported_formats = nullptr;
     delete [] static_cast<char *>(data->custom_data);
+    data->custom_data = nullptr;
 }
 
 bool adf_overlay_engine_supports_format(int fd, __u32 format)
@@ -564,10 +571,12 @@ bool adf_overlay_engine_supports_format(int fd, __u32 format)
     if (err < 0)
         return false;
 
-    for (i = 0; i < data.n_supported_formats; i++) {
-        if (data.supported_formats[i] == format) {
-            ret = true;
-            break;
+    if (data.supported_formats != nullptr) {
+        for (i = 0; i < data.n_supported_formats; i++) {
+            if (data.supported_formats[i] == format) {
+                ret = true;
+                break;
+            }
         }
     }
 
@@ -638,18 +647,18 @@ static bool adf_find_simple_post_overlay_engine(struct adf_device *dev,
         const __u32 *formats, size_t n_formats,
         adf_id_t interface, adf_id_t *overlay_engine)
 {
-    adf_id_t *engs;
+    adf_id_t *engs = nullptr;
     ssize_t n_engs = adf_overlay_engines_for_interface(dev, interface, &engs);
 
-    if (n_engs <= 0)
+    if (engs == nullptr)
         return false;
 
-    adf_id_t *filtered_engs;
+    adf_id_t *filtered_engs = nullptr;
     ssize_t n_filtered_engs = adf_overlay_engines_filter_by_format(dev,
             formats, n_formats, engs, n_engs, &filtered_engs);
     free(engs);
 
-    if (n_filtered_engs <= 0)
+    if (filtered_engs == nullptr)
         return false;
 
     *overlay_engine = filtered_engs[0];
@@ -700,17 +709,17 @@ int adf_find_simple_post_configuration(struct adf_device *dev,
 
     if (n_intfs < 0)
         return n_intfs;
-    else if (!n_intfs)
+    else if (!intfs)
         return -ENODEV;
 
-    adf_id_t *primary_intfs;
+    adf_id_t *primary_intfs = nullptr;
     ssize_t n_primary_intfs = adf_interfaces_filter_by_flag(dev,
             ADF_INTF_FLAG_PRIMARY, intfs, n_intfs, &primary_intfs);
     free(intfs);
 
     if (n_primary_intfs < 0)
         return n_primary_intfs;
-    else if (!n_primary_intfs)
+    else if (!primary_intfs)
         return -ENODEV;
 
     if (!formats) {
