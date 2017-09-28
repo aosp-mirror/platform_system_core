@@ -21,6 +21,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +37,7 @@
 #include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/thread_annotations.h>
 
 #include "adb.h"
 #include "adb_auth.h"
@@ -46,16 +48,22 @@
 
 static void transport_unref(atransport *t);
 
+// TODO: unordered_map<TransportId, atransport*>
 static auto& transport_list = *new std::list<atransport*>();
 static auto& pending_list = *new std::list<atransport*>();
 
-static std::mutex& transport_lock = *new std::mutex();
+static auto& transport_lock = *new std::recursive_mutex();
 
 const char* const kFeatureShell2 = "shell_v2";
 const char* const kFeatureCmd = "cmd";
 const char* const kFeatureStat2 = "stat_v2";
 const char* const kFeatureLibusb = "libusb";
 const char* const kFeaturePushSync = "push_sync";
+
+TransportId NextTransportId() {
+    static std::atomic<TransportId> next(1);
+    return next++;
+}
 
 static std::string dump_packet(const char* name, const char* func, apacket* p) {
     unsigned command = p->msg.command;
@@ -298,9 +306,11 @@ static void write_transport_thread(void* _t) {
 }
 
 void kick_transport(atransport* t) {
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     // As kick_transport() can be called from threads without guarantee that t is valid,
     // check if the transport is in transport_list first.
+    //
+    // TODO(jmgao): WTF? Is this actually true?
     if (std::find(transport_list.begin(), transport_list.end(), t) != transport_list.end()) {
         t->Kick();
     }
@@ -330,7 +340,7 @@ static void device_tracker_remove(device_tracker* tracker) {
     device_tracker** pnode = &device_tracker_list;
     device_tracker* node = *pnode;
 
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     while (node) {
         if (node == tracker) {
             *pnode = node->next;
@@ -403,7 +413,7 @@ asocket* create_device_tracker(void) {
 
 // Check if all of the USB transports are connected.
 bool iterate_transports(std::function<bool(const atransport*)> fn) {
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         if (!fn(t)) {
             return false;
@@ -507,7 +517,7 @@ static void transport_registration_func(int _fd, unsigned ev, void* data) {
         adb_close(t->fd);
 
         {
-            std::lock_guard<std::mutex> lock(transport_lock);
+            std::lock_guard<std::recursive_mutex> lock(transport_lock);
             transport_list.remove(t);
         }
 
@@ -546,7 +556,7 @@ static void transport_registration_func(int _fd, unsigned ev, void* data) {
     }
 
     {
-        std::lock_guard<std::mutex> lock(transport_lock);
+        std::lock_guard<std::recursive_mutex> lock(transport_lock);
         pending_list.remove(t);
         transport_list.push_front(t);
     }
@@ -573,7 +583,7 @@ void init_transport_registration(void) {
 
 void kick_all_transports() {
     // To avoid only writing part of a packet to a transport after exit, kick all transports.
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto t : transport_list) {
         t->Kick();
     }
@@ -603,15 +613,15 @@ static void remove_transport(atransport* transport) {
 static void transport_unref(atransport* t) {
     CHECK(t != nullptr);
 
-    size_t old_refcount = t->ref_count--;
-    CHECK_GT(old_refcount, 0u);
-
-    if (old_refcount == 1u) {
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
+    CHECK_GT(t->ref_count, 0u);
+    t->ref_count--;
+    if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
         t->close(t);
         remove_transport(t);
     } else {
-        D("transport: %s unref (count=%zu)", t->serial, old_refcount - 1);
+        D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
     }
 }
 
@@ -638,11 +648,15 @@ static int qual_match(const char* to_test, const char* prefix, const char* qual,
     return !*to_test;
 }
 
-atransport* acquire_one_transport(TransportType type, const char* serial, bool* is_ambiguous,
-                                  std::string* error_out, bool accept_any_state) {
+atransport* acquire_one_transport(TransportType type, const char* serial, TransportId transport_id,
+                                  bool* is_ambiguous, std::string* error_out,
+                                  bool accept_any_state) {
     atransport* result = nullptr;
 
-    if (serial) {
+    if (transport_id != 0) {
+        *error_out =
+            android::base::StringPrintf("no device with transport id '%" PRIu64 "'", transport_id);
+    } else if (serial) {
         *error_out = android::base::StringPrintf("device '%s' not found", serial);
     } else if (type == kTransportLocal) {
         *error_out = "no emulators found";
@@ -652,7 +666,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial, bool* 
         *error_out = "no devices found";
     }
 
-    std::unique_lock<std::mutex> lock(transport_lock);
+    std::unique_lock<std::recursive_mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         if (t->GetConnectionState() == kCsNoPerm) {
 #if ADB_HOST
@@ -661,8 +675,12 @@ atransport* acquire_one_transport(TransportType type, const char* serial, bool* 
             continue;
         }
 
-        // Check for matching serial number.
-        if (serial) {
+        if (transport_id) {
+            if (t->id == transport_id) {
+                result = t;
+                break;
+            }
+        } else if (serial) {
             if (t->MatchesTarget(serial)) {
                 if (result) {
                     *error_out = "more than one device";
@@ -889,18 +907,23 @@ bool atransport::MatchesTarget(const std::string& target) const {
 
 #if ADB_HOST
 
+// We use newline as our delimiter, make sure to never output it.
+static std::string sanitize(std::string str, bool alphanumeric) {
+    auto pred = alphanumeric ? [](const char c) { return !isalnum(c); }
+                             : [](const char c) { return c == '\n'; };
+    std::replace_if(str.begin(), str.end(), pred, '_');
+    return str;
+}
+
 static void append_transport_info(std::string* result, const char* key, const char* value,
-                                  bool sanitize) {
+                                  bool alphanumeric) {
     if (value == nullptr || *value == '\0') {
         return;
     }
 
     *result += ' ';
     *result += key;
-
-    for (const char* p = value; *p; ++p) {
-        result->push_back((!sanitize || isalnum(*p)) ? *p : '_');
-    }
+    *result += sanitize(value, alphanumeric);
 }
 
 static void append_transport(const atransport* t, std::string* result, bool long_listing) {
@@ -920,6 +943,11 @@ static void append_transport(const atransport* t, std::string* result, bool long
         append_transport_info(result, "product:", t->product, false);
         append_transport_info(result, "model:", t->model, true);
         append_transport_info(result, "device:", t->device, false);
+
+        // Put id at the end, so that anyone parsing the output here can always find it by scanning
+        // backwards from newlines, even with hypothetical devices named 'transport_id:1'.
+        *result += " transport_id:";
+        *result += std::to_string(t->id);
     }
     *result += '\n';
 }
@@ -927,7 +955,7 @@ static void append_transport(const atransport* t, std::string* result, bool long
 std::string list_transports(bool long_listing) {
     std::string result;
 
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         append_transport(t, &result, long_listing);
     }
@@ -935,7 +963,7 @@ std::string list_transports(bool long_listing) {
 }
 
 void close_usb_devices(std::function<bool(const atransport*)> predicate) {
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto& t : transport_list) {
         if (predicate(t)) {
             t->Kick();
@@ -964,7 +992,7 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
         return -1;
     }
 
-    std::unique_lock<std::mutex> lock(transport_lock);
+    std::unique_lock<std::recursive_mutex> lock(transport_lock);
     for (const auto& transport : pending_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
@@ -996,7 +1024,7 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
 atransport* find_transport(const char* serial) {
     atransport* result = nullptr;
 
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto& t : transport_list) {
         if (t->serial && strcmp(serial, t->serial) == 0) {
             result = t;
@@ -1008,7 +1036,7 @@ atransport* find_transport(const char* serial) {
 }
 
 void kick_all_tcp_devices() {
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto& t : transport_list) {
         if (t->IsTcpDevice()) {
             // Kicking breaks the read_transport thread of this transport out of any read, then
@@ -1037,7 +1065,7 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
     }
 
     {
-        std::lock_guard<std::mutex> lock(transport_lock);
+        std::lock_guard<std::recursive_mutex> lock(transport_lock);
         pending_list.push_front(t);
     }
 
@@ -1046,7 +1074,7 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
 
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle* usb) {
-    std::lock_guard<std::mutex> lock(transport_lock);
+    std::lock_guard<std::recursive_mutex> lock(transport_lock);
     transport_list.remove_if(
         [usb](atransport* t) { return t->usb == usb && t->GetConnectionState() == kCsNoPerm; });
 }
