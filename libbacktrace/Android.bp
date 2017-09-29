@@ -94,7 +94,6 @@ cc_library {
             ],
 
             static_libs: ["libcutils"],
-            host_ldlibs: ["-lrt"],
         },
         linux_bionic: {
             enabled: true,
@@ -229,15 +228,11 @@ cc_test {
         android: {
             cflags: ["-DENABLE_PSS_TESTS"],
             shared_libs: [
-                "libdl",
                 "libutils",
             ],
         },
         linux: {
             host_ldlibs: [
-                "-lpthread",
-                "-lrt",
-                "-ldl",
                 "-lncurses",
             ],
             static_libs: ["libutils"],
