@@ -132,9 +132,7 @@ namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}
 namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
 
 namespace.default.links = system
-namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%:libmedia.so:libandroid_runtime.so
-# libmedia.so must be removed after we have fix for lib-dplmedia.so (b/64427765)
-# libandroid_runtime.so must be removed after we have a fix for qseeproxydaemon (b/64820887)
+namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
 
 ###############################################################################
 # "system" namespace
