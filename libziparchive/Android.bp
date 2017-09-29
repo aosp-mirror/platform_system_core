@@ -69,11 +69,11 @@ cc_library {
     shared_libs: [
         "liblog",
         "libbase",
+        "libz",
     ],
     target: {
         android: {
             shared_libs: [
-                "libz",
                 "libutils",
             ],
         },
@@ -81,17 +81,7 @@ cc_library {
             static_libs: ["libutils"],
         },
         linux_bionic: {
-            static_libs: ["libz"],
             enabled: true,
-        },
-        linux: {
-            shared_libs: ["libz-host"],
-        },
-        darwin: {
-            shared_libs: ["libz-host"],
-        },
-        windows: {
-            shared_libs: ["libz-host"],
         },
     },
 }
@@ -105,7 +95,7 @@ cc_library {
         "libziparchive_defaults",
         "libziparchive_flags",
     ],
-    shared_libs: ["libz-host"],
+    shared_libs: ["libz"],
     static_libs: ["libutils"],
 }
 
