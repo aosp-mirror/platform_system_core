@@ -80,7 +80,6 @@ static const struct fs_path_config android_dirs[] = {
     { 00775, AID_ROOT,         AID_ROOT,         0, "data/preloads" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
-    { 00755, AID_ROOT,         AID_ROOT,         0, "root" },
     { 00750, AID_ROOT,         AID_SHELL,        0, "sbin" },
     { 00777, AID_ROOT,         AID_ROOT,         0, "sdcard" },
     { 00751, AID_ROOT,         AID_SDCARD_R,     0, "storage" },
