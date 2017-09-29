@@ -89,6 +89,8 @@ public:
   const_iterator begin() const { return maps_.begin(); }
   const_iterator end() const { return maps_.end(); }
 
+  size_t size() const { return maps_.size(); }
+
   virtual bool Build();
 
   static inline bool IsValid(const backtrace_map_t& map) {
