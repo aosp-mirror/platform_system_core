@@ -181,7 +181,6 @@ private:
     std::atomic<ConnectionState> connection_state_;
 #if ADB_HOST
     std::deque<std::shared_ptr<RSA>> keys_;
-    std::mutex write_msg_lock_;
     bool has_send_connect_on_error_ = false;
 #endif
 
