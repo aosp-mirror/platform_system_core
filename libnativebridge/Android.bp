@@ -22,13 +22,6 @@ cc_library {
     cppflags: [
         "-fvisibility=protected",
     ],
-
-    host_ldlibs: ["-ldl"],
-    target: {
-        android: {
-            shared_libs: ["libdl"],
-        },
-    },
 }
 
 subdirs = ["tests"]

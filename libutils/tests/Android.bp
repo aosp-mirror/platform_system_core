@@ -44,7 +44,6 @@ cc_test {
                 "libcutils",
                 "libutils",
                 "libbase",
-                "libdl",
             ],
         },
         linux: {
@@ -59,7 +58,6 @@ cc_test {
                 "liblog",
                 "libbase",
             ],
-            host_ldlibs: ["-ldl"],
         },
     },
 
