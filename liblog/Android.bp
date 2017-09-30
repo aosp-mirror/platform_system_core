@@ -91,9 +91,6 @@ cc_library {
         not_windows: {
             srcs: ["event_tag_map.cpp"],
         },
-        linux: {
-            host_ldlibs: ["-lrt"],
-        },
         linux_bionic: {
             enabled: true,
         },

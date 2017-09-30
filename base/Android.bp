@@ -95,7 +95,6 @@ cc_library {
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
-            host_ldlibs: ["-lrt"],
         },
         windows: {
             srcs: [
@@ -138,7 +137,6 @@ cc_test {
         },
         linux: {
             srcs: ["chrono_utils_test.cpp"],
-            host_ldlibs: ["-lrt"],
         },
         windows: {
             srcs: ["utf8_test.cpp"],
