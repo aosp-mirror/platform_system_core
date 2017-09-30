@@ -194,6 +194,7 @@ int main(int argc, char* argv[]) {
   ScopedMinijail j(minijail_new());
   minijail_change_uid(j.get(), uid);
   minijail_change_gid(j.get(), gid);
+  minijail_keep_supplementary_gids(j.get());
   minijail_enter(j.get());
 
   if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {

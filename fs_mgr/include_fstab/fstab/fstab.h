@@ -71,7 +71,6 @@ void fs_mgr_free_fstab(struct fstab* fstab);
 
 int fs_mgr_add_entry(struct fstab* fstab, const char* mount_point, const char* fs_type,
                      const char* blk_device);
-struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const char* path);
 int fs_mgr_is_voldmanaged(const struct fstab_rec* fstab);
 int fs_mgr_is_nonremovable(const struct fstab_rec* fstab);
 int fs_mgr_is_verified(const struct fstab_rec* fstab);
@@ -96,6 +95,7 @@ __END_DECLS
 // TODO: move this into separate header files under include/fs_mgr/*.h
 #ifdef __cplusplus
 std::string fs_mgr_get_slot_suffix();
+struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const std::string& path);
 #endif
 
 #endif /* __CORE_FS_TAB_H */
