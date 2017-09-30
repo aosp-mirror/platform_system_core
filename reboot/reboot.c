@@ -21,13 +21,13 @@
 #include <cutils/android_reboot.h>
 #include <unistd.h>
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
     int ret;
     size_t prop_len;
     char property_val[PROPERTY_VALUE_MAX];
-    const char *cmd = "reboot";
-    char *optarg = "";
+    static const char reboot[] = "reboot";
+    const char* cmd = reboot;
+    char* optarg = "";
 
     opterr = 0;
     do {
@@ -60,19 +60,23 @@ int main(int argc, char *argv[])
 
     prop_len = snprintf(property_val, sizeof(property_val), "%s,%s", cmd, optarg);
     if (prop_len >= sizeof(property_val)) {
-        fprintf(stderr, "reboot command too long: %s\n", optarg);
+        fprintf(stderr, "%s command too long: %s\n", cmd, optarg);
         exit(EXIT_FAILURE);
     }
 
     ret = property_set(ANDROID_RB_PROPERTY, property_val);
-    if(ret < 0) {
-        perror("reboot");
+    if (ret < 0) {
+        perror(cmd);
         exit(EXIT_FAILURE);
     }
 
     // Don't return early. Give the reboot command time to take effect
     // to avoid messing up scripts which do "adb shell reboot && adb wait-for-device"
-    while(1) { pause(); }
+    if (cmd == reboot) {
+        while (1) {
+            pause();
+        }
+    }
 
     fprintf(stderr, "Done\n");
     return 0;
