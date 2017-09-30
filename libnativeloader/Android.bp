@@ -11,14 +11,6 @@ cc_library {
         "libnativebridge",
         "libbase",
     ],
-    target: {
-        android: {
-            shared_libs: ["libdl"],
-        },
-        host: {
-            host_ldlibs: ["-ldl"],
-        },
-    },
     cflags: [
         "-Werror",
         "-Wall",
@@ -27,5 +19,4 @@ cc_library {
         "-fvisibility=hidden",
     ],
     export_include_dirs: ["include"],
-    local_include_dirs: ["include"],
 }

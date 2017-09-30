@@ -25,14 +25,6 @@ cc_defaults {
     ],
     header_libs: ["libnativebridge-dummy-headers"],
     cppflags: ["-fvisibility=protected"],
-    target: {
-        android: {
-            shared_libs: ["libdl"],
-        },
-        host: {
-            host_ldlibs: ["-ldl"],
-        },
-    },
 }
 
 cc_library_shared {
