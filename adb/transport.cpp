@@ -1101,11 +1101,4 @@ std::shared_ptr<RSA> atransport::NextKey() {
     keys_.pop_front();
     return result;
 }
-bool atransport::SetSendConnectOnError() {
-    if (has_send_connect_on_error_) {
-        return false;
-    }
-    has_send_connect_on_error_ = true;
-    return true;
-}
 #endif
