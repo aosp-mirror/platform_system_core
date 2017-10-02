@@ -15,9 +15,9 @@
  */
 #include <algorithm>
 #include <fstream>
+#include <memory>
 
 #include <gtest/gtest.h>
-#include <nativehelper/UniquePtr.h>
 #include <openssl/engine.h>
 
 #include <hardware/keymaster0.h>
@@ -181,7 +181,7 @@ TEST_F(SigningTest, RsaSuccess) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
@@ -200,7 +200,7 @@ TEST_F(SigningTest, RsaShortMessage) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8 - 1;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_UNKNOWN_ERROR, device.sign_data(&sig_params, ptr, size, message.get(),
@@ -217,7 +217,7 @@ TEST_F(SigningTest, RsaLongMessage) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8 + 1;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_UNKNOWN_ERROR, device.sign_data(&sig_params, ptr, size, message.get(),
@@ -272,7 +272,7 @@ TEST_F(SigningTest, EcdsaLargeMessageSuccess) {
 
     keymaster_ec_sign_params_t sig_params = {DIGEST_NONE};
     size_t message_len = 1024 * 7;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_len]);
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     // contents of message don't matter.
     uint8_t* signature;
     size_t siglen;
@@ -294,7 +294,7 @@ TEST_F(VerificationTest, RsaSuccess) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
@@ -315,7 +315,7 @@ TEST_F(VerificationTest, RsaBadSignature) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
@@ -338,7 +338,7 @@ TEST_F(VerificationTest, RsaBadMessage) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
@@ -360,7 +360,7 @@ TEST_F(VerificationTest, RsaShortMessage) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
@@ -382,7 +382,7 @@ TEST_F(VerificationTest, RsaLongMessage) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len + 1));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len + 1));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
@@ -422,7 +422,7 @@ TEST_F(VerificationTest, EcdsaLargeMessageSuccess) {
 
     keymaster_ec_sign_params_t sig_params = {DIGEST_NONE};
     size_t message_len = 1024 * 7;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_len]);
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     // contents of message don't matter.
     uint8_t* signature;
     size_t siglen;
@@ -453,7 +453,7 @@ TEST_F(ImportKeyTest, RsaSuccess) {
 
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_size = 1024 /* key size */ / 8;
-    UniquePtr<uint8_t[]> message(new uint8_t[message_size]);
+    std::unique_ptr<uint8_t[]> message(new uint8_t[message_size]);
     memset(message.get(), 'a', message_size);
     uint8_t* signature;
     size_t siglen;
@@ -491,9 +491,9 @@ struct EVP_PKEY_CTX_Delete {
 
 static void VerifySignature(const uint8_t* key, size_t key_len, const uint8_t* signature,
                             size_t signature_len, const uint8_t* message, size_t message_len) {
-    UniquePtr<EVP_PKEY, EVP_PKEY_Delete> pkey(d2i_PUBKEY(NULL, &key, key_len));
+    std::unique_ptr<EVP_PKEY, EVP_PKEY_Delete> pkey(d2i_PUBKEY(NULL, &key, key_len));
     ASSERT_TRUE(pkey.get() != NULL);
-    UniquePtr<EVP_PKEY_CTX, EVP_PKEY_CTX_Delete> ctx(EVP_PKEY_CTX_new(pkey.get(), NULL));
+    std::unique_ptr<EVP_PKEY_CTX, EVP_PKEY_CTX_Delete> ctx(EVP_PKEY_CTX_new(pkey.get(), NULL));
     ASSERT_TRUE(ctx.get() != NULL);
     ASSERT_EQ(1, EVP_PKEY_verify_init(ctx.get()));
     if (EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA)
@@ -518,7 +518,7 @@ TEST_F(ExportKeyTest, RsaSuccess) {
     // Sign a message so we can verify it with the exported pubkey.
     keymaster_rsa_sign_params_t sig_params = {DIGEST_NONE, PADDING_NONE};
     size_t message_len = params.modulus_size / 8;
-    UniquePtr<uint8_t[]> message(build_message(message_len));
+    std::unique_ptr<uint8_t[]> message(build_message(message_len));
     uint8_t* signature;
     size_t siglen;
     EXPECT_EQ(KM_ERROR_OK, device.sign_data(&sig_params, ptr, size, message.get(), message_len,
