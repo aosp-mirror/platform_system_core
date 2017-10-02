@@ -43,7 +43,7 @@ namespace init {
 // devices/configurations where these I/O operations are blocking for a long
 // time. We do not reboot or halt on failures, as this is a best-effort
 // attempt.
-Result<Success> MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args) {
+Result<Success> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
     unique_fd hwrandom_fd(
         TEMP_FAILURE_RETRY(open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (hwrandom_fd == -1) {
@@ -147,7 +147,7 @@ static bool __attribute__((unused)) SetMmapRndBitsMin(int start, int min, bool c
 // 9e08f57d684a x86: mm: support ARCH_MMAP_RND_BITS
 // ec9ee4acd97c drivers: char: random: add get_random_long()
 // 5ef11c35ce86 mm: ASLR: use get_random_long()
-Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args) {
+Result<Success> SetMmapRndBitsAction(const BuiltinArguments&) {
 // values are arch-dependent
 #if defined(USER_MODE_LINUX)
     // uml does not support mmap_rnd_bits
@@ -187,7 +187,7 @@ Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args) {
 // Set kptr_restrict to the highest available level.
 //
 // Aborts if unable to set this to an acceptable value.
-Result<Success> SetKptrRestrictAction(const std::vector<std::string>& args) {
+Result<Success> SetKptrRestrictAction(const BuiltinArguments&) {
     std::string path = KPTR_RESTRICT_PATH;
 
     if (!SetHighestAvailableOptionValue(path, KPTR_RESTRICT_MINVALUE, KPTR_RESTRICT_MAXVALUE)) {

@@ -25,32 +25,11 @@
 #include "import_parser.h"
 #include "keyword_map.h"
 #include "parser.h"
+#include "test_function_map.h"
 #include "util.h"
 
 namespace android {
 namespace init {
-
-class TestFunctionMap : public KeywordMap<BuiltinFunction> {
-  public:
-    // Helper for argument-less functions
-    using BuiltinFunctionNoArgs = std::function<void(void)>;
-    void Add(const std::string& name, const BuiltinFunctionNoArgs function) {
-        Add(name, 0, 0, [function](const std::vector<std::string>&) {
-            function();
-            return Success();
-        });
-    }
-
-    void Add(const std::string& name, std::size_t min_parameters, std::size_t max_parameters,
-             const BuiltinFunction function) {
-        builtin_functions_[name] = make_tuple(min_parameters, max_parameters, function);
-    }
-
-  private:
-    Map builtin_functions_ = {};
-
-    const Map& map() const override { return builtin_functions_; }
-};
 
 using ActionManagerCommand = std::function<void(ActionManager&)>;
 
@@ -61,7 +40,7 @@ void TestInit(const std::string& init_script_file, const TestFunctionMap& test_f
     Action::set_function_map(&test_function_map);
 
     Parser parser;
-    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
     ASSERT_TRUE(parser.ParseConfig(init_script_file));
@@ -171,14 +150,14 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     ASSERT_TRUE(android::base::WriteStringToFd(start_script, start.fd));
 
     int num_executed = 0;
-    auto execute_command = [&num_executed](const std::vector<std::string>& args) {
+    auto execute_command = [&num_executed](const BuiltinArguments& args) {
         EXPECT_EQ(2U, args.size());
         EXPECT_EQ(++num_executed, std::stoi(args[1]));
         return Success();
     };
 
     TestFunctionMap test_function_map;
-    test_function_map.Add("execute", 1, 1, execute_command);
+    test_function_map.Add("execute", 1, 1, false, execute_command);
 
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
