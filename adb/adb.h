@@ -224,9 +224,6 @@ void handle_online(atransport *t);
 void handle_offline(atransport *t);
 
 void send_connect(atransport *t);
-#if ADB_HOST
-void SendConnectOnHost(atransport* t);
-#endif
 
 void parse_banner(const std::string&, atransport* t);
 
