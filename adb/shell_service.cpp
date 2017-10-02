@@ -435,8 +435,7 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, unique_fd* error_sfd) {
 void Subprocess::ThreadHandler(void* userdata) {
     Subprocess* subprocess = reinterpret_cast<Subprocess*>(userdata);
 
-    adb_thread_setname(android::base::StringPrintf(
-            "shell srvc %d", subprocess->pid()));
+    adb_thread_setname(android::base::StringPrintf("shell svc %d", subprocess->pid()));
 
     D("passing data streams for PID %d", subprocess->pid());
     subprocess->PassDataStreams();

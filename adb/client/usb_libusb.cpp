@@ -412,8 +412,13 @@ static void device_disconnected(libusb_device* device) {
     if (it != usb_handles.end()) {
         if (!it->second->device_handle) {
             // If the handle is null, we were never able to open the device.
-            unregister_usb_transport(it->second.get());
+
+            // Temporarily release the usb handles mutex to avoid deadlock.
+            std::unique_ptr<usb_handle> handle = std::move(it->second);
             usb_handles.erase(it);
+            lock.unlock();
+            unregister_usb_transport(handle.get());
+            lock.lock();
         } else {
             // Closure of the transport will erase the usb_handle.
         }

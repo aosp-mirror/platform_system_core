@@ -58,6 +58,7 @@
 #include "transport.h"
 
 struct stinfo {
+    const char* service_name;
     void (*func)(int fd, void *cookie);
     int fd;
     void *cookie;
@@ -65,7 +66,7 @@ struct stinfo {
 
 static void service_bootstrap_func(void* x) {
     stinfo* sti = reinterpret_cast<stinfo*>(x);
-    adb_thread_setname(android::base::StringPrintf("service %d", sti->fd));
+    adb_thread_setname(android::base::StringPrintf("%s svc %d", sti->service_name, sti->fd));
     sti->func(sti->fd, sti->cookie);
     free(sti);
 }
@@ -159,8 +160,7 @@ static bool reboot_service_impl(int fd, const char* arg) {
     return true;
 }
 
-void reboot_service(int fd, void* arg)
-{
+void reboot_service(int fd, void* arg) {
     if (reboot_service_impl(fd, static_cast<const char*>(arg))) {
         // Don't return early. Give the reboot command time to take effect
         // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
@@ -187,7 +187,7 @@ int reverse_service(const char* command) {
         return -1;
     }
     VLOG(SERVICES) << "service socketpair: " << s[0] << ", " << s[1];
-    if (handle_forward_request(command, kTransportAny, nullptr, s[1]) < 0) {
+    if (handle_forward_request(command, kTransportAny, nullptr, 0, s[1]) < 0) {
         SendFail(s[1], "not a reverse forwarding command");
     }
     adb_close(s[1]);
@@ -235,8 +235,7 @@ static int ShellService(const std::string& args, const atransport* transport) {
 
 #endif  // !ADB_HOST
 
-static int create_service_thread(void (*func)(int, void *), void *cookie)
-{
+static int create_service_thread(const char* service_name, void (*func)(int, void*), void* cookie) {
     int s[2];
     if (adb_socketpair(s)) {
         printf("cannot create service socket pair\n");
@@ -257,6 +256,7 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
     if (sti == nullptr) {
         fatal("cannot allocate stinfo");
     }
+    sti->service_name = service_name;
     sti->func = func;
     sti->cookie = cookie;
     sti->fd = s[1];
@@ -280,7 +280,7 @@ int service_to_fd(const char* name, const atransport* transport) {
     } else if(!strncmp("dev:", name, 4)) {
         ret = unix_open(name + 4, O_RDWR | O_CLOEXEC);
     } else if(!strncmp(name, "framebuffer:", 12)) {
-        ret = create_service_thread(framebuffer_service, 0);
+        ret = create_service_thread("fb", framebuffer_service, nullptr);
     } else if (!strncmp(name, "jdwp:", 5)) {
         ret = create_jdwp_connection_fd(atoi(name+5));
     } else if(!strncmp(name, "shell", 5)) {
@@ -288,17 +288,17 @@ int service_to_fd(const char* name, const atransport* transport) {
     } else if(!strncmp(name, "exec:", 5)) {
         ret = StartSubprocess(name + 5, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if(!strncmp(name, "sync:", 5)) {
-        ret = create_service_thread(file_sync_service, NULL);
+        ret = create_service_thread("sync", file_sync_service, nullptr);
     } else if(!strncmp(name, "remount:", 8)) {
-        ret = create_service_thread(remount_service, NULL);
+        ret = create_service_thread("remount", remount_service, nullptr);
     } else if(!strncmp(name, "reboot:", 7)) {
         void* arg = strdup(name + 7);
         if (arg == NULL) return -1;
-        ret = create_service_thread(reboot_service, arg);
+        ret = create_service_thread("reboot", reboot_service, arg);
     } else if(!strncmp(name, "root:", 5)) {
-        ret = create_service_thread(restart_root_service, NULL);
+        ret = create_service_thread("root", restart_root_service, nullptr);
     } else if(!strncmp(name, "unroot:", 7)) {
-        ret = create_service_thread(restart_unroot_service, NULL);
+        ret = create_service_thread("unroot", restart_unroot_service, nullptr);
     } else if(!strncmp(name, "backup:", 7)) {
         ret = StartSubprocess(android::base::StringPrintf("/system/bin/bu backup %s",
                                                           (name + 7)).c_str(),
@@ -311,17 +311,20 @@ int service_to_fd(const char* name, const atransport* transport) {
         if (sscanf(name + 6, "%d", &port) != 1) {
             return -1;
         }
-        ret = create_service_thread(restart_tcp_service, (void *) (uintptr_t) port);
+        ret = create_service_thread("tcp", restart_tcp_service, reinterpret_cast<void*>(port));
     } else if(!strncmp(name, "usb:", 4)) {
-        ret = create_service_thread(restart_usb_service, NULL);
+        ret = create_service_thread("usb", restart_usb_service, nullptr);
     } else if (!strncmp(name, "reverse:", 8)) {
         ret = reverse_service(name + 8);
     } else if(!strncmp(name, "disable-verity:", 15)) {
-        ret = create_service_thread(set_verity_enabled_state_service, (void*)0);
+        ret = create_service_thread("verity-on", set_verity_enabled_state_service,
+                                    reinterpret_cast<void*>(0));
     } else if(!strncmp(name, "enable-verity:", 15)) {
-        ret = create_service_thread(set_verity_enabled_state_service, (void*)1);
+        ret = create_service_thread("verity-off", set_verity_enabled_state_service,
+                                    reinterpret_cast<void*>(1));
     } else if (!strcmp(name, "reconnect")) {
-        ret = create_service_thread(reconnect_service, const_cast<atransport*>(transport));
+        ret = create_service_thread("reconnect", reconnect_service,
+                                    const_cast<atransport*>(transport));
 #endif
     }
     if (ret >= 0) {
@@ -334,6 +337,7 @@ int service_to_fd(const char* name, const atransport* transport) {
 struct state_info {
     TransportType transport_type;
     std::string serial;
+    TransportId transport_id;
     ConnectionState state;
 };
 
@@ -346,7 +350,8 @@ static void wait_for_state(int fd, void* data) {
         bool is_ambiguous = false;
         std::string error = "unknown error";
         const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : NULL;
-        atransport* t = acquire_one_transport(sinfo->transport_type, serial, &is_ambiguous, &error);
+        atransport* t = acquire_one_transport(sinfo->transport_type, serial, sinfo->transport_id,
+                                              &is_ambiguous, &error);
         if (t != nullptr && (sinfo->state == kCsAny || sinfo->state == t->GetConnectionState())) {
             SendOkay(fd);
             break;
@@ -437,7 +442,7 @@ static void connect_service(int fd, void* data) {
 #endif
 
 #if ADB_HOST
-asocket* host_service_to_socket(const char* name, const char* serial) {
+asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id) {
     if (!strcmp(name,"track-devices")) {
         return create_device_tracker();
     } else if (android::base::StartsWith(name, "wait-for-")) {
@@ -450,6 +455,7 @@ asocket* host_service_to_socket(const char* name, const char* serial) {
         }
 
         if (serial) sinfo->serial = serial;
+        sinfo->transport_id = transport_id;
 
         if (android::base::StartsWith(name, "local")) {
             name += strlen("local");
@@ -478,11 +484,17 @@ asocket* host_service_to_socket(const char* name, const char* serial) {
             return nullptr;
         }
 
-        int fd = create_service_thread(wait_for_state, sinfo.release());
+        int fd = create_service_thread("wait", wait_for_state, sinfo.get());
+        if (fd != -1) {
+            sinfo.release();
+        }
         return create_local_socket(fd);
     } else if (!strncmp(name, "connect:", 8)) {
         char* host = strdup(name + 8);
-        int fd = create_service_thread(connect_service, host);
+        int fd = create_service_thread("connect", connect_service, host);
+        if (fd == -1) {
+            free(host);
+        }
         return create_local_socket(fd);
     }
     return NULL;
