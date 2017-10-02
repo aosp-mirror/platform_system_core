@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _BOOTCHART_H
-#define _BOOTCHART_H
+syntax = "proto2";
+option optimize_for = LITE_RUNTIME;
 
-#include <string>
-#include <vector>
+message SubcontextCommand {
+    message ExecuteCommand { repeated string args = 1; }
+    oneof command { ExecuteCommand execute_command = 1; }
+}
 
-#include "builtin_arguments.h"
-#include "result.h"
+message SubcontextReply {
+    message ResultMessage {
+        optional bool success = 1;
+        optional string error_string = 2;
+        optional int32 error_errno = 3;
+    }
 
-namespace android {
-namespace init {
-
-Result<Success> do_bootchart(const BuiltinArguments& args);
-
-}  // namespace init
-}  // namespace android
-
-#endif /* _BOOTCHART_H */
+    oneof reply { ResultMessage result = 1; }
+}

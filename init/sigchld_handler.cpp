@@ -60,22 +60,28 @@ static bool ReapOneProcess() {
     // want the pid to remain valid throughout that (and potentially future) usages.
     auto reaper = make_scope_guard([pid] { TEMP_FAILURE_RETRY(waitpid(pid, nullptr, WNOHANG)); });
 
-    if (PropertyChildReap(pid)) return true;
-
-    Service* service = ServiceList::GetInstance().FindService(pid, &Service::pid);
-
     std::string name;
     std::string wait_string;
-    if (service) {
-        name = StringPrintf("Service '%s' (pid %d)", service->name().c_str(), pid);
-        if (service->flags() & SVC_EXEC) {
-            auto exec_duration = boot_clock::now() - service->time_started();
-            auto exec_duration_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(exec_duration).count();
-            wait_string = StringPrintf(" waiting took %f seconds", exec_duration_ms / 1000.0f);
-        }
+    Service* service = nullptr;
+
+    if (PropertyChildReap(pid)) {
+        name = "Async property child";
+    } else if (SubcontextChildReap(pid)) {
+        name = "Subcontext";
     } else {
-        name = StringPrintf("Untracked pid %d", pid);
+        service = ServiceList::GetInstance().FindService(pid, &Service::pid);
+
+        if (service) {
+            name = StringPrintf("Service '%s' (pid %d)", service->name().c_str(), pid);
+            if (service->flags() & SVC_EXEC) {
+                auto exec_duration = boot_clock::now() - service->time_started();
+                auto exec_duration_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(exec_duration).count();
+                wait_string = StringPrintf(" waiting took %f seconds", exec_duration_ms / 1000.0f);
+            }
+        } else {
+            name = StringPrintf("Untracked pid %d", pid);
+        }
     }
 
     auto status = siginfo.si_status;

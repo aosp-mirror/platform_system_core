@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,30 @@
  * limitations under the License.
  */
 
-#ifndef _BOOTCHART_H
-#define _BOOTCHART_H
+#ifndef _INIT_BUILTIN_ARGUMENTS_H
+#define _INIT_BUILTIN_ARGUMENTS_H
 
 #include <string>
 #include <vector>
 
-#include "builtin_arguments.h"
-#include "result.h"
-
 namespace android {
 namespace init {
 
-Result<Success> do_bootchart(const BuiltinArguments& args);
+struct BuiltinArguments {
+    BuiltinArguments(const std::string& context) : context(context) {}
+    BuiltinArguments(std::vector<std::string> args, const std::string& context)
+        : args(std::move(args)), context(context) {}
+
+    const std::string& operator[](std::size_t i) const { return args[i]; }
+    auto begin() const { return args.begin(); }
+    auto end() const { return args.end(); }
+    auto size() const { return args.size(); }
+
+    std::vector<std::string> args;
+    const std::string& context;
+};
 
 }  // namespace init
 }  // namespace android
 
-#endif /* _BOOTCHART_H */
+#endif

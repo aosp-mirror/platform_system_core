@@ -37,7 +37,8 @@ TEST(service, pod_initialized) {
     }
 
     std::vector<std::string> dummy_args{"/bin/test"};
-    Service* service_in_old_memory = new (old_memory) Service("test_old_memory", dummy_args);
+    Service* service_in_old_memory =
+        new (old_memory) Service("test_old_memory", nullptr, dummy_args);
 
     EXPECT_EQ(0U, service_in_old_memory->flags());
     EXPECT_EQ(0, service_in_old_memory->pid());
@@ -56,8 +57,8 @@ TEST(service, pod_initialized) {
         old_memory[i] = 0xFF;
     }
 
-    Service* service_in_old_memory2 = new (old_memory)
-        Service("test_old_memory", 0U, 0U, 0U, std::vector<gid_t>(), CapSet(), 0U, "", dummy_args);
+    Service* service_in_old_memory2 = new (old_memory) Service(
+        "test_old_memory", 0U, 0U, 0U, std::vector<gid_t>(), CapSet(), 0U, "", nullptr, dummy_args);
 
     EXPECT_EQ(0U, service_in_old_memory2->flags());
     EXPECT_EQ(0, service_in_old_memory2->pid());
