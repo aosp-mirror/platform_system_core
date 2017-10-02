@@ -191,7 +191,7 @@ static Result<Success> do_bootchart_stop() {
     return Success();
 }
 
-Result<Success> do_bootchart(const std::vector<std::string>& args) {
+Result<Success> do_bootchart(const BuiltinArguments& args) {
     if (args[1] == "start") return do_bootchart_start();
     return do_bootchart_stop();
 }
