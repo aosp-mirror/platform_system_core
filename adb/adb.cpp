@@ -257,19 +257,6 @@ void send_connect(atransport* t) {
     send_packet(cp, t);
 }
 
-#if ADB_HOST
-
-void SendConnectOnHost(atransport* t) {
-    // Send an empty message before A_CNXN message. This is because the data toggle of the ep_out on
-    // host and ep_in on device may not be the same.
-    apacket* p = get_apacket();
-    CHECK(p);
-    send_packet(p, t);
-    send_connect(t);
-}
-
-#endif
-
 // qual_overwrite is used to overwrite a qualifier string.  dst is a
 // pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
 // was malloc'ed and needs to freed.  *dst will be set to a dup of src.
@@ -370,7 +357,7 @@ void handle_packet(apacket *p, atransport *t)
         if (p->msg.arg0){
             send_packet(p, t);
 #if ADB_HOST
-            SendConnectOnHost(t);
+            send_connect(t);
 #endif
         } else {
             t->SetConnectionState(kCsOffline);
