@@ -15,9 +15,12 @@
 cc_library_static {
     name: "libgrallocusage",
     vendor_available: true,
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     cppflags: [
         "-Weverything",
-        "-Werror",
         "-Wno-c++98-compat-pedantic",
         // Hide errors in headers we include
         "-Wno-global-constructors",
