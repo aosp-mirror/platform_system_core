@@ -442,6 +442,11 @@ void RefBase::decStrong(const void* id) const
     // and all accesses to refs happen before its deletion in the final decWeak.
     // The destructor can safely access mRefs because either it's deleting
     // mRefs itself, or it's running entirely before the final mWeak decrement.
+    //
+    // Since we're doing atomic loads of `flags`, the static analyzer assumes
+    // they can change between `delete this;` and `refs->decWeak(id);`. This is
+    // not the case. The analyzer may become more okay with this patten when
+    // https://bugs.llvm.org/show_bug.cgi?id=34365 gets resolved. NOLINTNEXTLINE
     refs->decWeak(id);
 }
 
