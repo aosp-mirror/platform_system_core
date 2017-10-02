@@ -24,34 +24,48 @@
 #include "util.h"
 
 using android::base::Join;
+using android::base::StartsWith;
 
 namespace android {
 namespace init {
 
-Command::Command(BuiltinFunction f, const std::vector<std::string>& args, int line)
-    : func_(f), args_(args), line_(line) {}
+Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
+                                   const std::vector<std::string>& args,
+                                   const std::string& context) {
+    auto builtin_arguments = BuiltinArguments(context);
 
-Result<Success> Command::InvokeFunc() const {
-    std::vector<std::string> expanded_args;
-    expanded_args.resize(args_.size());
-    expanded_args[0] = args_[0];
-    for (std::size_t i = 1; i < args_.size(); ++i) {
-        if (!expand_props(args_[i], &expanded_args[i])) {
-            return Error() << "cannot expand '" << args_[i] << "'";
+    builtin_arguments.args.resize(args.size());
+    builtin_arguments.args[0] = args[0];
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        if (!expand_props(args[i], &builtin_arguments.args[i])) {
+            return Error() << "cannot expand '" << args[i] << "'";
         }
     }
 
-    return func_(expanded_args);
+    return function(builtin_arguments);
+}
+
+Command::Command(BuiltinFunction f, bool execute_in_subcontext,
+                 const std::vector<std::string>& args, int line)
+    : func_(std::move(f)), execute_in_subcontext_(execute_in_subcontext), args_(args), line_(line) {}
+
+Result<Success> Command::InvokeFunc(Subcontext* subcontext) const {
+    if (execute_in_subcontext_ && subcontext) {
+        return subcontext->Execute(args_);
+    } else {
+        const std::string& context = subcontext ? subcontext->context() : kInitContext;
+        return RunBuiltinFunction(func_, args_, context);
+    }
 }
 
 std::string Command::BuildCommandString() const {
     return Join(args_, ' ');
 }
 
-Action::Action(bool oneshot, const std::string& filename, int line)
-    : oneshot_(oneshot), filename_(filename), line_(line) {}
+Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line)
+    : oneshot_(oneshot), subcontext_(subcontext), filename_(filename), line_(line) {}
 
-const KeywordMap<BuiltinFunction>* Action::function_map_ = nullptr;
+const KeywordFunctionMap* Action::function_map_ = nullptr;
 
 Result<Success> Action::AddCommand(const std::vector<std::string>& args, int line) {
     if (!function_map_) {
@@ -61,12 +75,12 @@ Result<Success> Action::AddCommand(const std::vector<std::string>& args, int lin
     auto function = function_map_->FindFunction(args);
     if (!function) return Error() << function.error();
 
-    AddCommand(*function, args, line);
+    commands_.emplace_back(function->second, function->first, args, line);
     return Success();
 }
 
 void Action::AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line) {
-    commands_.emplace_back(f, args, line);
+    commands_.emplace_back(f, false, args, line);
 }
 
 std::size_t Action::NumCommands() const {
@@ -88,7 +102,7 @@ void Action::ExecuteAllCommands() const {
 
 void Action::ExecuteCommand(const Command& command) const {
     android::base::Timer t;
-    auto result = command.InvokeFunc();
+    auto result = command.InvokeFunc(subcontext_);
     auto duration = t.duration();
 
     // There are many legacy paths in rootdir/init.rc that will virtually never exist on a new
@@ -261,7 +275,7 @@ void ActionManager::QueueAllPropertyActions() {
 }
 
 void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
-    auto action = std::make_unique<Action>(true, "<Builtin Action>", 0);
+    auto action = std::make_unique<Action>(true, nullptr, "<Builtin Action>", 0);
     std::vector<std::string> name_vector{name};
 
     if (auto result = action->InitSingleTrigger(name); !result) {
@@ -341,7 +355,17 @@ Result<Success> ActionParser::ParseSection(std::vector<std::string>&& args,
         return Error() << "Actions must have a trigger";
     }
 
-    auto action = std::make_unique<Action>(false, filename, line);
+    Subcontext* action_subcontext = nullptr;
+    if (subcontexts_) {
+        for (auto& subcontext : *subcontexts_) {
+            if (StartsWith(filename, subcontext.path_prefix().c_str())) {
+                action_subcontext = &subcontext;
+                break;
+            }
+        }
+    }
+
+    auto action = std::make_unique<Action>(false, action_subcontext, filename, line);
 
     if (auto result = action->InitTriggers(triggers); !result) {
         return Error() << "InitTriggers() failed: " << result.error();

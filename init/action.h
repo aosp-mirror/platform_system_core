@@ -27,21 +27,27 @@
 #include "keyword_map.h"
 #include "parser.h"
 #include "result.h"
+#include "subcontext.h"
 
 namespace android {
 namespace init {
 
+Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
+                                   const std::vector<std::string>& args, const std::string& context);
+
 class Command {
   public:
-    Command(BuiltinFunction f, const std::vector<std::string>& args, int line);
+    Command(BuiltinFunction f, bool execute_in_subcontext, const std::vector<std::string>& args,
+            int line);
 
-    Result<Success> InvokeFunc() const;
+    Result<Success> InvokeFunc(Subcontext* subcontext) const;
     std::string BuildCommandString() const;
 
     int line() const { return line_; }
 
   private:
     BuiltinFunction func_;
+    bool execute_in_subcontext_;
     std::vector<std::string> args_;
     int line_;
 };
@@ -52,7 +58,7 @@ using BuiltinAction = class Action*;
 
 class Action {
   public:
-    explicit Action(bool oneshot, const std::string& filename, int line);
+    Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line);
 
     Result<Success> AddCommand(const std::vector<std::string>& args, int line);
     void AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line);
@@ -70,12 +76,11 @@ class Action {
     bool oneshot() const { return oneshot_; }
     const std::string& filename() const { return filename_; }
     int line() const { return line_; }
-    static void set_function_map(const KeywordMap<BuiltinFunction>* function_map) {
+    static void set_function_map(const KeywordFunctionMap* function_map) {
         function_map_ = function_map;
     }
 
-
-private:
+  private:
     void ExecuteCommand(const Command& command) const;
     bool CheckPropertyTriggers(const std::string& name = "",
                                const std::string& value = "") const;
@@ -85,9 +90,10 @@ private:
     std::string event_trigger_;
     std::vector<Command> commands_;
     bool oneshot_;
+    Subcontext* subcontext_;
     std::string filename_;
     int line_;
-    static const KeywordMap<BuiltinFunction>* function_map_;
+    static const KeywordFunctionMap* function_map_;
 };
 
 class ActionManager {
@@ -119,8 +125,8 @@ class ActionManager {
 
 class ActionParser : public SectionParser {
   public:
-    ActionParser(ActionManager* action_manager)
-        : action_manager_(action_manager), action_(nullptr) {}
+    ActionParser(ActionManager* action_manager, std::vector<Subcontext>* subcontexts)
+        : action_manager_(action_manager), subcontexts_(subcontexts), action_(nullptr) {}
     Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line) override;
     Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
@@ -128,6 +134,7 @@ class ActionParser : public SectionParser {
 
   private:
     ActionManager* action_manager_;
+    std::vector<Subcontext>* subcontexts_;
     std::unique_ptr<Action> action_;
 };
 

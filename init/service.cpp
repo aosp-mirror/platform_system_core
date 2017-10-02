@@ -155,13 +155,14 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args) {
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
 
-Service::Service(const std::string& name, const std::vector<std::string>& args)
-    : Service(name, 0, 0, 0, {}, 0, 0, "", args) {}
+Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
+                 const std::vector<std::string>& args)
+    : Service(name, 0, 0, 0, {}, 0, 0, "", subcontext_for_restart_commands, args) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
                  unsigned namespace_flags, const std::string& seclabel,
-                 const std::vector<std::string>& args)
+                 Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args)
     : name_(name),
       classnames_({"default"}),
       flags_(flags),
@@ -173,7 +174,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       capabilities_(capabilities),
       namespace_flags_(namespace_flags),
       seclabel_(seclabel),
-      onrestart_(false, "<Service '" + name + "' onrestart>", 0),
+      onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0),
       keychord_id_(0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
@@ -1007,7 +1008,7 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
     }
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, no_capabilities,
-                                     namespace_flags, seclabel, str_args);
+                                     namespace_flags, seclabel, nullptr, str_args);
 }
 
 // Shutdown services in the opposite order that they were started.
@@ -1055,8 +1056,18 @@ Result<Success> ServiceParser::ParseSection(std::vector<std::string>&& args,
         return Error() << "ignored duplicate definition of service '" << name << "'";
     }
 
+    Subcontext* restart_action_subcontext = nullptr;
+    if (subcontexts_) {
+        for (auto& subcontext : *subcontexts_) {
+            if (StartsWith(filename, subcontext.path_prefix().c_str())) {
+                restart_action_subcontext = &subcontext;
+                break;
+            }
+        }
+    }
+
     std::vector<std::string> str_args(args.begin() + 2, args.end());
-    service_ = std::make_unique<Service>(name, str_args);
+    service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args);
     return Success();
 }
 
