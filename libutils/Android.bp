@@ -119,7 +119,7 @@ cc_library {
             },
         },
 
-        linux: {
+        linux_glibc: {
             srcs: [
                 "Looper.cpp",
                 "ProcessCallStack.cpp",
