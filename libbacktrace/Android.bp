@@ -83,20 +83,7 @@ cc_library {
         darwin: {
             enabled: true,
         },
-        linux_glibc: {
-            srcs: libbacktrace_sources,
-
-            shared_libs: [
-                "libbase",
-                "liblog",
-                "libunwind",
-                "libunwindstack",
-            ],
-
-            static_libs: ["libcutils"],
-        },
-        linux_bionic: {
-            enabled: true,
+        linux: {
             srcs: libbacktrace_sources,
 
             shared_libs: [
@@ -109,16 +96,7 @@ cc_library {
             static_libs: ["libcutils"],
         },
         android: {
-            srcs: libbacktrace_sources,
-
-            shared_libs: [
-                "libbase",
-                "liblog",
-                "libunwind",
-                "libunwindstack",
-            ],
-
-            static_libs: ["libasync_safe", "libcutils"],
+            static_libs: ["libasync_safe"],
         },
     },
     whole_static_libs: ["libdemangle"],
@@ -135,13 +113,7 @@ cc_library_shared {
     srcs: ["backtrace_testlib.cpp"],
 
     target: {
-        linux_glibc: {
-            shared_libs: [
-                "libunwind",
-                "libunwindstack",
-            ],
-        },
-        android: {
+        linux: {
             shared_libs: [
                 "libunwind",
                 "libunwindstack",
