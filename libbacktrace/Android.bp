@@ -83,7 +83,7 @@ cc_library {
         darwin: {
             enabled: true,
         },
-        linux: {
+        linux_glibc: {
             srcs: libbacktrace_sources,
 
             shared_libs: [
@@ -135,7 +135,7 @@ cc_library_shared {
     srcs: ["backtrace_testlib.cpp"],
 
     target: {
-        linux: {
+        linux_glibc: {
             shared_libs: [
                 "libunwind",
                 "libunwindstack",
@@ -231,7 +231,7 @@ cc_test {
                 "libutils",
             ],
         },
-        linux: {
+        linux_glibc: {
             host_ldlibs: [
                 "-lncurses",
             ],

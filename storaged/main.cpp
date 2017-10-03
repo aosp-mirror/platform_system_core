@@ -60,7 +60,7 @@ void* storaged_main(void* /* unused */) {
     return NULL;
 }
 
-static void help_message(void) {
+void help_message(void) {
     printf("usage: storaged [OPTION]\n");
     printf("  -u    --uid                   Dump uid I/O usage to stdout\n");
     printf("  -t    --task                  Dump task I/O usage to stdout\n");

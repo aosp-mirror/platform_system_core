@@ -33,6 +33,7 @@
 #include "descriptors.h"
 #include "keyword_map.h"
 #include "parser.h"
+#include "subcontext.h"
 
 #define SVC_DISABLED 0x001        // do not autostart with class
 #define SVC_ONESHOT 0x002         // do not restart on exit
@@ -60,12 +61,13 @@ namespace init {
 
 class Service {
   public:
-    Service(const std::string& name, const std::vector<std::string>& args);
+    Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
+            const std::vector<std::string>& args);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
             unsigned namespace_flags, const std::string& seclabel,
-            const std::vector<std::string>& args);
+            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args);
 
     static std::unique_ptr<Service> MakeTemporaryOneshotService(const std::vector<std::string>& args);
 
@@ -237,7 +239,8 @@ class ServiceList {
 
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser(ServiceList* service_list) : service_list_(service_list), service_(nullptr) {}
+    ServiceParser(ServiceList* service_list, std::vector<Subcontext>* subcontexts)
+        : service_list_(service_list), subcontexts_(subcontexts), service_(nullptr) {}
     Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line) override;
     Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
@@ -247,6 +250,7 @@ class ServiceParser : public SectionParser {
     bool IsValidName(const std::string& name) const;
 
     ServiceList* service_list_;
+    std::vector<Subcontext>* subcontexts_;
     std::unique_ptr<Service> service_;
 };
 

@@ -67,7 +67,7 @@ cc_library {
 
     target: {
         // Always disable optimizations for host to make it easier to debug.
-        linux: {
+        host: {
             cflags: ["-O0", "-g"],
         },
     },

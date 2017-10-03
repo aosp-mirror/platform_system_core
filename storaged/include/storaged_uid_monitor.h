@@ -85,6 +85,18 @@ struct uid_records {
     std::vector<struct uid_record> entries;
 };
 
+class lock_t {
+    sem_t* mSem;
+public:
+    lock_t(sem_t* sem) {
+        mSem = sem;
+        sem_wait(mSem);
+    }
+    ~lock_t() {
+        sem_post(mSem);
+    }
+};
+
 class uid_monitor {
 private:
     // last dump from /proc/uid_io/stats, uid -> uid_info
@@ -99,6 +111,8 @@ private:
     sem_t um_lock;
     // start time for IO records
     uint64_t start_ts;
+    // true if UID_IO_STATS_PATH is accessible
+    const bool enable;
     // protobuf file for io_history
     static const std::string io_history_proto_file;
 
@@ -126,6 +140,7 @@ public:
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
     // called by storaged periodic_chore or dump with force_report
+    bool enabled() { return enable; };
     void report();
 };
 

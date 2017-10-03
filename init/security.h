@@ -20,14 +20,15 @@
 #include <string>
 #include <vector>
 
+#include "builtin_arguments.h"
 #include "result.h"
 
 namespace android {
 namespace init {
 
-Result<Success> MixHwrngIntoLinuxRngAction(const std::vector<std::string>& args);
-Result<Success> SetMmapRndBitsAction(const std::vector<std::string>& args);
-Result<Success> SetKptrRestrictAction(const std::vector<std::string>& args);
+Result<Success> MixHwrngIntoLinuxRngAction(const BuiltinArguments&);
+Result<Success> SetMmapRndBitsAction(const BuiltinArguments&);
+Result<Success> SetKptrRestrictAction(const BuiltinArguments&);
 
 }  // namespace init
 }  // namespace android

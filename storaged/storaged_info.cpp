@@ -39,11 +39,15 @@ const char* emmc_info_t::emmc_ver_str[9] = {
 
 const string ufs_info_t::health_file = "/sys/devices/soc/624000.ufshc/health";
 
-static bool FileExists(const std::string& filename)
+namespace {
+
+bool FileExists(const std::string& filename)
 {
   struct stat buffer;
   return stat(filename.c_str(), &buffer) == 0;
 }
+
+} // namespace
 
 storage_info_t* storage_info_t::get_storage_info()
 {
@@ -121,12 +125,16 @@ bool emmc_info_t::report_sysfs()
     return true;
 }
 
+namespace {
+
 const size_t EXT_CSD_FILE_MIN_SIZE = 1024;
 /* 2 characters in string for each byte */
 const size_t EXT_CSD_REV_IDX = 192 * 2;
 const size_t EXT_PRE_EOL_INFO_IDX = 267 * 2;
 const size_t EXT_DEVICE_LIFE_TIME_EST_A_IDX = 268 * 2;
 const size_t EXT_DEVICE_LIFE_TIME_EST_B_IDX = 269 * 2;
+
+} // namespace
 
 bool emmc_info_t::report_debugfs()
 {
