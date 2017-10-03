@@ -40,8 +40,8 @@ using android::base::unique_fd;
 namespace android {
 namespace init {
 
-const std::string kInitContext = "u:object_r:init:s0";
-const std::string kVendorContext = "u:object_r:vendor_init:s0";
+const std::string kInitContext = "u:r:init:s0";
+const std::string kVendorContext = "u:r:vendor_init:s0";
 
 namespace {
 
