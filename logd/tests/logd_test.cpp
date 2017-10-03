@@ -1091,7 +1091,7 @@ static pid_t sepolicy_rate(unsigned rate, unsigned num) {
     // and dac_read_search on every try to get past the message
     // de-duper.  We will also rotate the file name in the directory
     // as another measure.
-    static const char file[] = "/data/backup/cannot_access_directory_%u";
+    static const char file[] = "/data/drm/cannot_access_directory_%u";
     static const unsigned avc_requests_per_access = 2;
 
     rate /= avc_requests_per_access;
