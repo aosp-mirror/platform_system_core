@@ -103,13 +103,6 @@ static int remote_read(apacket* p, atransport* t) {
 
 err_msg:
     p->msg.command = 0;
-    if (t->GetConnectionState() == kCsOffline) {
-        // If the data toggle of ep_out on device and ep_in on host are not the same, we may receive
-        // an error message. In this case, resend one A_CNXN message to connect the device.
-        if (t->SetSendConnectOnError()) {
-            SendConnectOnHost(t);
-        }
-    }
     return 0;
 }
 
@@ -162,8 +155,7 @@ static int remote_write(apacket *p, atransport *t)
     return 0;
 }
 
-static void remote_close(atransport *t)
-{
+static void remote_close(atransport* t) {
     usb_close(t->usb);
     t->usb = 0;
 }
