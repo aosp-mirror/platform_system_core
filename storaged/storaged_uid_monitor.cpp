@@ -45,11 +45,16 @@ using namespace android::content::pm;
 using namespace google::protobuf::io;
 using namespace storaged_proto;
 
-static bool refresh_uid_names;
-static const uint32_t crc_init = 0x5108A4ED; /* STORAGED */
+namespace {
+
+bool refresh_uid_names;
+const uint32_t crc_init = 0x5108A4ED; /* STORAGED */
+const char* UID_IO_STATS_PATH = "/proc/uid_io/stats";
+
+} // namepsace
 
 const std::string uid_monitor::io_history_proto_file =
-    "/data/misc/storaged/io_history.proto";
+"/data/misc/storaged/io_history.proto";
 
 std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats()
 {
@@ -119,7 +124,9 @@ bool io_usage::is_zero() const
     return true;
 }
 
-static void get_uid_names(const vector<int>& uids, const vector<std::string*>& uid_names)
+namespace {
+
+void get_uid_names(const vector<int>& uids, const vector<std::string*>& uid_names)
 {
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) {
@@ -150,6 +157,8 @@ static void get_uid_names(const vector<int>& uids, const vector<std::string*>& u
 
     refresh_uid_names = false;
 }
+
+} // namespace
 
 std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_locked()
 {
@@ -197,9 +206,11 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
     return uid_io_stats;
 }
 
-static const int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
+namespace {
 
-static inline size_t history_size(
+const int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
+
+inline size_t history_size(
     const std::map<uint64_t, struct uid_records>& history)
 {
     size_t count = 0;
@@ -208,6 +219,8 @@ static inline size_t history_size(
     }
     return count;
 }
+
+} // namespace
 
 void uid_monitor::add_records_locked(uint64_t curr_ts)
 {
@@ -367,7 +380,9 @@ void uid_monitor::report()
     flush_io_history_to_proto();
 }
 
-static void set_io_usage_proto(IOUsage* usage_proto, const struct io_usage& usage)
+namespace {
+
+void set_io_usage_proto(IOUsage* usage_proto, const struct io_usage& usage)
 {
     usage_proto->set_rd_fg_chg_on(usage.bytes[READ][FOREGROUND][CHARGER_ON]);
     usage_proto->set_rd_fg_chg_off(usage.bytes[READ][FOREGROUND][CHARGER_OFF]);
@@ -379,7 +394,7 @@ static void set_io_usage_proto(IOUsage* usage_proto, const struct io_usage& usag
     usage_proto->set_wr_bg_chg_off(usage.bytes[WRITE][BACKGROUND][CHARGER_OFF]);
 }
 
-static void get_io_usage_proto(struct io_usage* usage, const IOUsage& io_proto)
+void get_io_usage_proto(struct io_usage* usage, const IOUsage& io_proto)
 {
     usage->bytes[READ][FOREGROUND][CHARGER_ON] = io_proto.rd_fg_chg_on();
     usage->bytes[READ][FOREGROUND][CHARGER_OFF] = io_proto.rd_fg_chg_off();
@@ -390,6 +405,8 @@ static void get_io_usage_proto(struct io_usage* usage, const IOUsage& io_proto)
     usage->bytes[WRITE][BACKGROUND][CHARGER_ON] = io_proto.wr_bg_chg_on();
     usage->bytes[WRITE][BACKGROUND][CHARGER_OFF] = io_proto.wr_bg_chg_off();
 }
+
+} // namespace
 
 void uid_monitor::flush_io_history_to_proto()
 {
@@ -510,6 +527,7 @@ void uid_monitor::init(charger_stat_t stat)
 }
 
 uid_monitor::uid_monitor()
+    : enable(!access(UID_IO_STATS_PATH, R_OK))
 {
     sem_init(&um_lock, 0, 1);
 }

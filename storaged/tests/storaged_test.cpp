@@ -30,7 +30,9 @@
 #define MMC_DISK_STATS_PATH "/sys/block/mmcblk0/stat"
 #define SDA_DISK_STATS_PATH "/sys/block/sda/stat"
 
-static void pause(uint32_t sec) {
+namespace {
+
+void write_and_pause(uint32_t sec) {
     const char* path = "/cache/test";
     int fd = open(path, O_WRONLY | O_CREAT, 0600);
     ASSERT_LT(-1, fd);
@@ -52,6 +54,8 @@ static void pause(uint32_t sec) {
 
     sleep(sec);
 }
+
+} // namespace
 
 // the return values of the tested functions should be the expected ones
 const char* DISK_STATS_PATH;
@@ -77,13 +81,11 @@ TEST(storaged_test, retvals) {
     EXPECT_FALSE(parse_disk_stats(wrong_path, &stats));
 
     // reading a wrong path should not damage the output structure
-    EXPECT_EQ(0, memcmp(&stats, &old_stats, sizeof(disk_stats)));
+    EXPECT_EQ(stats, old_stats);
 }
 
 TEST(storaged_test, disk_stats) {
-    struct disk_stats stats;
-    memset(&stats, 0, sizeof(struct disk_stats));
-
+    struct disk_stats stats = {};
     ASSERT_TRUE(parse_disk_stats(DISK_STATS_PATH, &stats));
 
     // every entry of stats (except io_in_flight) should all be greater than 0
@@ -93,11 +95,7 @@ TEST(storaged_test, disk_stats) {
     }
 
     // accumulation of the increments should be the same with the overall increment
-    struct disk_stats base, tmp, curr, acc, inc[5];
-    memset(&base, 0, sizeof(struct disk_stats));
-    memset(&tmp, 0, sizeof(struct disk_stats));
-    memset(&acc, 0, sizeof(struct disk_stats));
-
+    struct disk_stats base = {}, tmp = {}, curr, acc = {}, inc[5];
     for (uint i = 0; i < 5; ++i) {
         ASSERT_TRUE(parse_disk_stats(DISK_STATS_PATH, &curr));
         if (i == 0) {
@@ -106,22 +104,18 @@ TEST(storaged_test, disk_stats) {
             sleep(5);
             continue;
         }
-        inc[i] = get_inc_disk_stats(&tmp, &curr);
+        get_inc_disk_stats(&tmp, &curr, &inc[i]);
         add_disk_stats(&inc[i], &acc);
         tmp = curr;
-        pause(5);
+        write_and_pause(5);
     }
-    struct disk_stats overall_inc;
-    memset(&overall_inc, 0, sizeof(disk_stats));
-    overall_inc= get_inc_disk_stats(&base, &curr);
+    struct disk_stats overall_inc = {};
+    get_inc_disk_stats(&base, &curr, &overall_inc);
 
-    for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
-        if (i == 8) continue; // skip io_in_flight which can be 0
-        EXPECT_EQ(*((uint64_t*)&overall_inc + i), *((uint64_t*)&acc + i));
-    }
+    EXPECT_EQ(overall_inc, acc);
 }
 
-static double mean(std::deque<uint32_t> nums) {
+double mean(std::deque<uint32_t> nums) {
     double sum = 0.0;
     for (uint32_t i : nums) {
     sum += i;
@@ -129,7 +123,7 @@ static double mean(std::deque<uint32_t> nums) {
     return sum / nums.size();
 }
 
-static double standard_deviation(std::deque<uint32_t> nums) {
+double standard_deviation(std::deque<uint32_t> nums) {
     double sum = 0.0;
     double avg = mean(nums);
     for (uint32_t i : nums) {
@@ -181,7 +175,7 @@ TEST(storaged_test, stream_stats) {
     }
 }
 
-static struct disk_perf disk_perf_multiply(struct disk_perf perf, double mul) {
+struct disk_perf disk_perf_multiply(struct disk_perf perf, double mul) {
     struct disk_perf retval;
     retval.read_perf = (double)perf.read_perf * mul;
     retval.read_ios = (double)perf.read_ios * mul;
@@ -192,7 +186,7 @@ static struct disk_perf disk_perf_multiply(struct disk_perf perf, double mul) {
     return retval;
 }
 
-static struct disk_stats disk_stats_add(struct disk_stats stats1, struct disk_stats stats2) {
+struct disk_stats disk_stats_add(struct disk_stats stats1, struct disk_stats stats2) {
     struct disk_stats retval;
     retval.read_ios = stats1.read_ios + stats2.read_ios;
     retval.read_merges = stats1.read_merges + stats2.read_merges;
@@ -208,6 +202,30 @@ static struct disk_stats disk_stats_add(struct disk_stats stats1, struct disk_st
     retval.end_time = stats1.end_time + stats2.end_time;
 
     return retval;
+}
+
+void expect_increasing(struct disk_stats stats1, struct disk_stats stats2) {
+    EXPECT_LE(stats1.read_ios, stats2.read_ios);
+    EXPECT_LE(stats1.read_merges, stats2.read_merges);
+    EXPECT_LE(stats1.read_sectors, stats2.read_sectors);
+    EXPECT_LE(stats1.read_ticks, stats2.read_ticks);
+    EXPECT_LE(stats1.write_ios, stats2.write_ios);
+    EXPECT_LE(stats1.write_merges, stats2.write_merges);
+    EXPECT_LE(stats1.write_sectors, stats2.write_sectors);
+    EXPECT_LE(stats1.write_ticks, stats2.write_ticks);
+    EXPECT_LE(stats1.io_ticks, stats2.io_ticks);
+    EXPECT_LE(stats1.io_in_queue, stats2.io_in_queue);
+
+    EXPECT_TRUE(stats1.read_ios < stats2.read_ios ||
+        stats1.read_merges < stats2.read_merges ||
+        stats1.read_sectors < stats2.read_sectors ||
+        stats1.read_ticks < stats2.read_ticks ||
+        stats1.write_ios < stats2.write_ios ||
+        stats1.write_merges < stats2.write_merges ||
+        stats1.write_sectors < stats2.write_sectors ||
+        stats1.write_ticks < stats2.write_ticks ||
+        stats1.io_ticks < stats2.io_ticks ||
+        stats1.io_in_queue < stats2.io_in_queue);
 }
 
 TEST(storaged_test, disk_stats_monitor) {
@@ -294,14 +312,12 @@ TEST(storaged_test, disk_stats_monitor) {
         .io_avg = 0
     };
 
-    struct disk_stats stats_base;
-    memset(&stats_base, 0, sizeof(stats_base));
-
+    struct disk_stats stats_base = {};
     int loop_size = 100;
     for (int i = 0; i < loop_size; ++i) {
         stats_base = disk_stats_add(stats_base, norm_inc);
         dsm_acc.update(&stats_base);
-        EXPECT_EQ(dsm_acc.mValid, (uint32_t)(i + 1) >= dsm_acc.mWindow);
+        EXPECT_EQ(dsm_acc.mValid, (uint32_t)i >= dsm_acc.mWindow);
         EXPECT_FALSE(dsm_acc.mStall);
     }
 
@@ -316,36 +332,14 @@ TEST(storaged_test, disk_stats_monitor) {
         EXPECT_TRUE(dsm_acc.mValid);
         EXPECT_FALSE(dsm_acc.mStall);
     }
-}
 
-static void expect_increasing(struct disk_stats stats1, struct disk_stats stats2) {
-    EXPECT_LE(stats1.read_ios, stats2.read_ios);
-    EXPECT_LE(stats1.read_merges, stats2.read_merges);
-    EXPECT_LE(stats1.read_sectors, stats2.read_sectors);
-    EXPECT_LE(stats1.read_ticks, stats2.read_ticks);
-
-    EXPECT_LE(stats1.write_ios, stats2.write_ios);
-    EXPECT_LE(stats1.write_merges, stats2.write_merges);
-    EXPECT_LE(stats1.write_sectors, stats2.write_sectors);
-    EXPECT_LE(stats1.write_ticks, stats2.write_ticks);
-
-    EXPECT_LE(stats1.io_ticks, stats2.io_ticks);
-    EXPECT_LE(stats1.io_in_queue, stats2.io_in_queue);
-}
-
-#define TEST_LOOPS 20
-TEST(storaged_test, disk_stats_publisher) {
-    // asserting that there is one file for diskstats
-    ASSERT_TRUE(access(MMC_DISK_STATS_PATH, R_OK) >= 0 || access(SDA_DISK_STATS_PATH, R_OK) >= 0);
-    disk_stats_publisher dsp;
-    struct disk_stats prev;
-    memset(&prev, 0, sizeof(prev));
-
-    for (int i = 0; i < TEST_LOOPS; ++i) {
-        dsp.update();
-        expect_increasing(prev, dsp.mPrevious);
-        prev = dsp.mPrevious;
-        pause(10);
+    struct disk_stats stats_prev = {};
+    loop_size = 10;
+    write_and_pause(5);
+    for (int i = 0; i < loop_size; ++i) {
+        dsm_detect.update();
+        expect_increasing(stats_prev, dsm_detect.mPrevious);
+        stats_prev = dsm_detect.mPrevious;
+        write_and_pause(5);
     }
 }
-
