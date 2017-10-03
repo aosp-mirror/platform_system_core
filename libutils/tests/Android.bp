@@ -46,7 +46,7 @@ cc_test {
                 "libbase",
             ],
         },
-        linux: {
+        linux_glibc: {
             srcs: [
                 "Looper_test.cpp",
                 "RefBase_test.cpp",

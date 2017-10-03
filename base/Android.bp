@@ -89,7 +89,7 @@ cc_library {
             cppflags: ["-Wexit-time-destructors"],
             enabled: true,
         },
-        linux: {
+        linux_glibc: {
             srcs: [
                 "chrono_utils.cpp",
                 "errors_unix.cpp",
@@ -135,7 +135,7 @@ cc_test {
                 misc_undefined: ["integer"],
             },
         },
-        linux: {
+        linux_glibc: {
             srcs: ["chrono_utils_test.cpp"],
         },
         windows: {
