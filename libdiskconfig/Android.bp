@@ -23,7 +23,7 @@ cc_library {
         darwin: {
             enabled: false,
         },
-        linux: {
+        linux_glibc: {
             cflags: [
                 "-O2",
                 "-g",
