@@ -95,6 +95,7 @@
 #include <vector>
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <private/android_logger.h>
 
@@ -212,6 +213,13 @@ Subprocess::~Subprocess() {
     WaitForExit();
 }
 
+static std::string GetHostName() {
+    char buf[HOST_NAME_MAX];
+    if (gethostname(buf, sizeof(buf)) != -1 && strcmp(buf, "localhost") != 0) return buf;
+
+    return android::base::GetProperty("ro.product.device", "android");
+}
+
 bool Subprocess::ForkAndExec(std::string* error) {
     unique_fd child_stdinout_sfd, child_stderr_sfd;
     unique_fd parent_error_sfd, child_error_sfd;
@@ -250,11 +258,11 @@ bool Subprocess::ForkAndExec(std::string* error) {
     }
 
     if (pw != nullptr) {
-        // TODO: $HOSTNAME? Normally bash automatically sets that, but mksh doesn't.
         env["HOME"] = pw->pw_dir;
+        env["HOSTNAME"] = GetHostName();
         env["LOGNAME"] = pw->pw_name;
-        env["USER"] = pw->pw_name;
         env["SHELL"] = pw->pw_shell;
+        env["USER"] = pw->pw_name;
     }
 
     if (!terminal_type_.empty()) {
