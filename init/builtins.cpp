@@ -99,7 +99,14 @@ static void ForEachServiceInClass(const std::string& classname, F function) {
 static Result<Success> do_class_start(const BuiltinArguments& args) {
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
-    ForEachServiceInClass(args[1], &Service::StartIfNotDisabled);
+    for (const auto& service : ServiceList::GetInstance()) {
+        if (service->classnames().count(args[1])) {
+            if (auto result = service->StartIfNotDisabled(); !result) {
+                LOG(ERROR) << "Could not start service '" << service->name()
+                           << "' as part of class '" << args[1] << "': " << result.error();
+            }
+        }
+    }
     return Success();
 }
 
