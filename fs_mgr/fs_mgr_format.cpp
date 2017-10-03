@@ -115,7 +115,9 @@ static int format_f2fs(char *fs_blkdev, uint64_t dev_sz, bool crypt_footer)
 
     std::string size_str = std::to_string(dev_sz / 4096);
     const char* const args[] = {
-        "/system/bin/make_f2fs", "-f", "-O", "encrypt", fs_blkdev, size_str.c_str(), nullptr};
+        "/system/bin/make_f2fs", "-d1", "-f",
+        "-O", "encrypt", "-O", "quota",
+        fs_blkdev, size_str.c_str(), nullptr};
 
     return android_fork_execvp_ext(arraysize(args), const_cast<char**>(args), NULL, true,
                                    LOG_KLOG, true, nullptr, nullptr, 0);
