@@ -552,6 +552,8 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
   return result;
 }
 
+static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len, off64_t off);
+
 /*
  * Parses the Zip archive's Central Directory.  Allocates and populates the
  * hash table.
@@ -630,6 +632,22 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
       return -1;
     }
   }
+
+  uint32_t lfh_start_bytes;
+  if (ReadAtOffset(archive->fd, reinterpret_cast<uint8_t*>(&lfh_start_bytes),
+                   sizeof(uint32_t), 0) != sizeof(uint32_t)) {
+    ALOGW("Zip: Unable to read header for entry at offset == 0.");
+    return -1;
+  }
+
+  if (lfh_start_bytes != LocalFileHeader::kSignature) {
+    ALOGW("Zip: Entry at offset zero has invalid LFH signature %" PRIx32, lfh_start_bytes);
+#if defined(__ANDROID__)
+    android_errorWriteLog(0x534e4554, "64211847");
+#endif
+    return -1;
+  }
+
   ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
 
   return 0;
