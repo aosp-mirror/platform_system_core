@@ -540,7 +540,7 @@ TEST(ziparchive, ExtractToFile) {
 // Manual changes :
 // [2] = 0xff  // Corrupt the LFH signature of entry 0.
 // [3] = 0xff  // Corrupt the LFH signature of entry 0.
-static const std::vector<uint8_t> kZipFileWithBrokenLfhSignature{
+static const uint8_t kZipFileWithBrokenLfhSignature[] = {
     //[lfh-sig-----------], [lfh contents---------------------------------
     0x50, 0x4b, 0xff, 0xff, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x77, 0x80,
     //--------------------------------------------------------------------
@@ -571,12 +571,16 @@ static const std::vector<uint8_t> kZipFileWithBrokenLfhSignature{
     0x00, 0x00, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 TEST(ziparchive, BrokenLfhSignature) {
-  TemporaryFile tmp_file;
-  ASSERT_NE(-1, tmp_file.fd);
-  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &kZipFileWithBrokenLfhSignature[0],
-                                        kZipFileWithBrokenLfhSignature.size()));
+  char kTempFilePattern[] = "zip_archive_input_XXXXXX";
+  int fd = make_temporary_file(kTempFilePattern);
+  ASSERT_NE(-1, fd);
+
+  ASSERT_EQ(static_cast<int32_t>(sizeof(kZipFileWithBrokenLfhSignature)),
+      TEMP_FAILURE_RETRY(write(fd, kZipFileWithBrokenLfhSignature,
+                               sizeof(kZipFileWithBrokenLfhSignature))));
   ZipArchiveHandle handle;
-  ASSERT_EQ(-1, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle));
+  ASSERT_EQ(-1, OpenArchiveFd(fd, "LeadingNonZipBytes", &handle));
+  close(fd);
 }
 
 int main(int argc, char** argv) {
