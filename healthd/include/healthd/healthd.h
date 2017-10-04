@@ -82,8 +82,13 @@ enum EventWakeup {
 
 int healthd_register_event(int fd, void (*handler)(uint32_t), EventWakeup wakeup = EVENT_NO_WAKEUP_FD);
 void healthd_battery_update();
+
+// deprecated.
+// TODO(b/62229583): This function should be removed since it is only used by
+// BatteryPropertiesRegistrar.
 android::status_t healthd_get_property(int id,
     struct android::BatteryProperty *val);
+
 void healthd_dump_battery_state(int fd);
 
 struct healthd_mode_ops {
