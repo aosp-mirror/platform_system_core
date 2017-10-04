@@ -10,6 +10,8 @@
 #ifndef _LIBS_LOG_SAFETYNET_H
 #define _LIBS_LOG_SAFETYNET_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
