@@ -531,25 +531,23 @@ int recognized_device(usb_handle* handle) {
         return 0;
     }
 
-    if (is_adb_interface(interf_desc.bInterfaceClass, interf_desc.bInterfaceSubClass,
-                         interf_desc.bInterfaceProtocol)) {
-        if (interf_desc.bInterfaceProtocol == 0x01) {
-            AdbEndpointInformation endpoint_info;
-            // assuming zero is a valid bulk endpoint ID
-            if (AdbGetEndpointInformation(handle->adb_interface, 0, &endpoint_info)) {
-                handle->max_packet_size = endpoint_info.max_packet_size;
-                handle->zero_mask = endpoint_info.max_packet_size - 1;
-                D("device zero_mask: 0x%x", handle->zero_mask);
-            } else {
-                D("AdbGetEndpointInformation failed: %s",
-                  android::base::SystemErrorCodeToString(GetLastError()).c_str());
-            }
-        }
-
-        return 1;
+    if (!is_adb_interface(interf_desc.bInterfaceClass, interf_desc.bInterfaceSubClass,
+                          interf_desc.bInterfaceProtocol)) {
+        return 0;
     }
 
-    return 0;
+    AdbEndpointInformation endpoint_info;
+    // assuming zero is a valid bulk endpoint ID
+    if (AdbGetEndpointInformation(handle->adb_interface, 0, &endpoint_info)) {
+        handle->max_packet_size = endpoint_info.max_packet_size;
+        handle->zero_mask = endpoint_info.max_packet_size - 1;
+        D("device zero_mask: 0x%x", handle->zero_mask);
+    } else {
+        D("AdbGetEndpointInformation failed: %s",
+          android::base::SystemErrorCodeToString(GetLastError()).c_str());
+    }
+
+    return 1;
 }
 
 void find_devices() {
