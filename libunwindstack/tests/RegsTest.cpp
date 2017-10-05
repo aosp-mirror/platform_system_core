@@ -23,48 +23,11 @@
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Regs.h>
 
+#include "ElfFake.h"
 #include "MemoryFake.h"
+#include "RegsFake.h"
 
 namespace unwindstack {
-
-class ElfFake : public Elf {
- public:
-  ElfFake(Memory* memory) : Elf(memory) { valid_ = true; }
-  virtual ~ElfFake() = default;
-
-  void set_elf_interface(ElfInterface* interface) { interface_.reset(interface); }
-};
-
-class ElfInterfaceFake : public ElfInterface {
- public:
-  ElfInterfaceFake(Memory* memory) : ElfInterface(memory) {}
-  virtual ~ElfInterfaceFake() = default;
-
-  void set_load_bias(uint64_t load_bias) { load_bias_ = load_bias; }
-
-  bool Init() override { return false; }
-  void InitHeaders() override {}
-  bool GetSoname(std::string*) override { return false; }
-  bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
-  bool Step(uint64_t, Regs*, Memory*, bool*) override { return false; }
-};
-
-template <typename TypeParam>
-class RegsTestImpl : public RegsImpl<TypeParam> {
- public:
-  RegsTestImpl(uint16_t total_regs, uint16_t regs_sp)
-      : RegsImpl<TypeParam>(total_regs, regs_sp, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
-  RegsTestImpl(uint16_t total_regs, uint16_t regs_sp, Regs::Location return_loc)
-      : RegsImpl<TypeParam>(total_regs, regs_sp, return_loc) {}
-  virtual ~RegsTestImpl() = default;
-
-  uint32_t MachineType() override { return 0; }
-
-  uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
-  void SetFromRaw() override {}
-  bool SetPcFromReturnAddress(Memory*) override { return false; }
-  bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
-};
 
 class RegsTest : public ::testing::Test {
  protected:
@@ -72,11 +35,8 @@ class RegsTest : public ::testing::Test {
     memory_ = new MemoryFake;
     elf_.reset(new ElfFake(memory_));
     elf_interface_ = new ElfInterfaceFake(elf_->memory());
-    elf_->set_elf_interface(elf_interface_);
+    elf_->FakeSetInterface(elf_interface_);
   }
-
-  template <typename AddressType>
-  void RegsReturnAddressRegister();
 
   ElfInterfaceFake* elf_interface_;
   MemoryFake* memory_;
@@ -84,7 +44,7 @@ class RegsTest : public ::testing::Test {
 };
 
 TEST_F(RegsTest, regs32) {
-  RegsTestImpl<uint32_t> regs32(50, 10);
+  RegsImplFake<uint32_t> regs32(50, 10);
   ASSERT_EQ(50U, regs32.total_regs());
   ASSERT_EQ(10U, regs32.sp_reg());
 
@@ -107,7 +67,7 @@ TEST_F(RegsTest, regs32) {
 }
 
 TEST_F(RegsTest, regs64) {
-  RegsTestImpl<uint64_t> regs64(30, 12);
+  RegsImplFake<uint64_t> regs64(30, 12);
   ASSERT_EQ(30U, regs64.total_regs());
   ASSERT_EQ(12U, regs64.sp_reg());
 
@@ -127,44 +87,6 @@ TEST_F(RegsTest, regs64) {
 
   regs64[8] = 10;
   ASSERT_EQ(10U, regs64[8]);
-}
-
-template <typename AddressType>
-void RegsTest::RegsReturnAddressRegister() {
-  RegsTestImpl<AddressType> regs(20, 10, Regs::Location(Regs::LOCATION_REGISTER, 5));
-
-  regs[5] = 0x12345;
-  uint64_t value;
-  ASSERT_TRUE(regs.GetReturnAddressFromDefault(memory_, &value));
-  ASSERT_EQ(0x12345U, value);
-}
-
-TEST_F(RegsTest, regs32_return_address_register) {
-  RegsReturnAddressRegister<uint32_t>();
-}
-
-TEST_F(RegsTest, regs64_return_address_register) {
-  RegsReturnAddressRegister<uint64_t>();
-}
-
-TEST_F(RegsTest, regs32_return_address_sp_offset) {
-  RegsTestImpl<uint32_t> regs(20, 10, Regs::Location(Regs::LOCATION_SP_OFFSET, -2));
-
-  regs.set_sp(0x2002);
-  memory_->SetData32(0x2000, 0x12345678);
-  uint64_t value;
-  ASSERT_TRUE(regs.GetReturnAddressFromDefault(memory_, &value));
-  ASSERT_EQ(0x12345678U, value);
-}
-
-TEST_F(RegsTest, regs64_return_address_sp_offset) {
-  RegsTestImpl<uint64_t> regs(20, 10, Regs::Location(Regs::LOCATION_SP_OFFSET, -8));
-
-  regs.set_sp(0x2008);
-  memory_->SetData64(0x2000, 0x12345678aabbccddULL);
-  uint64_t value;
-  ASSERT_TRUE(regs.GetReturnAddressFromDefault(memory_, &value));
-  ASSERT_EQ(0x12345678aabbccddULL, value);
 }
 
 TEST_F(RegsTest, rel_pc) {
@@ -193,7 +115,7 @@ TEST_F(RegsTest, rel_pc_arm) {
   RegsArm arm;
 
   // Check fence posts.
-  elf_interface_->set_load_bias(0);
+  elf_interface_->FakeSetLoadBias(0);
   ASSERT_EQ(3U,  arm.GetAdjustedPc(0x5, elf_.get()));
   ASSERT_EQ(4U,  arm.GetAdjustedPc(0x4, elf_.get()));
   ASSERT_EQ(3U,  arm.GetAdjustedPc(0x3, elf_.get()));
@@ -201,7 +123,7 @@ TEST_F(RegsTest, rel_pc_arm) {
   ASSERT_EQ(1U,  arm.GetAdjustedPc(0x1, elf_.get()));
   ASSERT_EQ(0U,  arm.GetAdjustedPc(0x0, elf_.get()));
 
-  elf_interface_->set_load_bias(0x100);
+  elf_interface_->FakeSetLoadBias(0x100);
   ASSERT_EQ(0xffU,  arm.GetAdjustedPc(0xff, elf_.get()));
   ASSERT_EQ(0x103U,  arm.GetAdjustedPc(0x105, elf_.get()));
   ASSERT_EQ(0x104U,  arm.GetAdjustedPc(0x104, elf_.get()));
@@ -211,13 +133,13 @@ TEST_F(RegsTest, rel_pc_arm) {
   ASSERT_EQ(0x100U,  arm.GetAdjustedPc(0x100, elf_.get()));
 
   // Check thumb instructions handling.
-  elf_interface_->set_load_bias(0);
+  elf_interface_->FakeSetLoadBias(0);
   memory_->SetData32(0x2000, 0);
   ASSERT_EQ(0x2003U,  arm.GetAdjustedPc(0x2005, elf_.get()));
   memory_->SetData32(0x2000, 0xe000f000);
   ASSERT_EQ(0x2001U,  arm.GetAdjustedPc(0x2005, elf_.get()));
 
-  elf_interface_->set_load_bias(0x400);
+  elf_interface_->FakeSetLoadBias(0x400);
   memory_->SetData32(0x2100, 0);
   ASSERT_EQ(0x2503U,  arm.GetAdjustedPc(0x2505, elf_.get()));
   memory_->SetData32(0x2100, 0xf111f111);
