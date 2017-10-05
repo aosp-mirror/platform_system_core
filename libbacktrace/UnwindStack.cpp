@@ -22,6 +22,7 @@
 #include <ucontext.h>
 
 #include <memory>
+#include <set>
 #include <string>
 
 #if !defined(__ANDROID__)
@@ -36,6 +37,8 @@
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 #include <unwindstack/RegsGetLocal.h>
+
+#include <unwindstack/Unwinder.h>
 
 #include "BacktraceLog.h"
 #include "UnwindStack.h"
@@ -63,135 +66,42 @@ static std::string GetFunctionName(BacktraceMap* back_map, uintptr_t pc, uintptr
   return name;
 }
 
-static bool IsUnwindLibrary(const std::string& map_name) {
-  const std::string library(basename(map_name.c_str()));
-  return library == "libunwindstack.so" || library == "libbacktrace.so";
-}
-
-static void SetFrameInfo(unwindstack::Regs* regs, unwindstack::MapInfo* map_info,
-                         uint64_t adjusted_rel_pc, backtrace_frame_data_t* frame) {
-  // This will point to the adjusted absolute pc. regs->pc() is
-  // unaltered.
-  frame->pc = map_info->start + adjusted_rel_pc;
-  frame->sp = regs->sp();
-  frame->rel_pc = adjusted_rel_pc;
-  frame->stack_size = 0;
-
-  frame->map.start = map_info->start;
-  frame->map.end = map_info->end;
-  frame->map.offset = map_info->offset;
-  frame->map.flags = map_info->flags;
-  frame->map.name = map_info->name;
-
-  unwindstack::Elf* elf = map_info->elf;
-  frame->map.load_bias = elf->GetLoadBias();
-  uint64_t func_offset = 0;
-  if (elf->GetFunctionName(adjusted_rel_pc, &frame->func_name, &func_offset)) {
-    frame->func_name = demangle(frame->func_name.c_str());
-  } else {
-    frame->func_name = "";
-  }
-  frame->func_offset = func_offset;
-}
-
 static bool Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                    std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames) {
+  static std::set<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
   UnwindStackMap* stack_map = reinterpret_cast<UnwindStackMap*>(back_map);
-  unwindstack::Maps* maps = stack_map->stack_maps();
-  bool adjust_rel_pc = false;
-  size_t num_frames = 0;
-  frames->clear();
-  bool return_address_attempted = false;
   auto process_memory = stack_map->process_memory();
-  while (num_frames < MAX_BACKTRACE_FRAMES) {
-    unwindstack::MapInfo* map_info = maps->Find(regs->pc());
-    bool stepped;
-    bool in_device_map = false;
-    if (map_info == nullptr) {
-      stepped = false;
-      if (num_ignore_frames == 0) {
-        frames->resize(num_frames + 1);
-        backtrace_frame_data_t* frame = &frames->at(num_frames);
-        frame->pc = regs->pc();
-        frame->sp = regs->sp();
-        frame->rel_pc = frame->pc;
-        num_frames++;
-      } else {
-        num_ignore_frames--;
-      }
-    } else {
-      unwindstack::Elf* elf = map_info->GetElf(process_memory, true);
-      uint64_t rel_pc = elf->GetRelPc(regs->pc(), map_info);
+  unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
+                                 regs, stack_map->process_memory());
+  unwinder.Unwind(&skip_names);
 
-      if (frames->size() != 0 || !IsUnwindLibrary(map_info->name)) {
-        if (num_ignore_frames == 0) {
-          uint64_t adjusted_rel_pc = rel_pc;
-          if (adjust_rel_pc) {
-            adjusted_rel_pc = regs->GetAdjustedPc(rel_pc, elf);
-          }
+  if (num_ignore_frames >= unwinder.NumFrames()) {
+    frames->resize(0);
+    return true;
+  }
 
-          frames->resize(num_frames + 1);
-          backtrace_frame_data_t* frame = &frames->at(num_frames);
-          frame->num = num_frames;
-          SetFrameInfo(regs, map_info, adjusted_rel_pc, frame);
+  frames->resize(unwinder.NumFrames() - num_ignore_frames);
+  auto unwinder_frames = unwinder.frames();
+  size_t cur_frame = 0;
+  for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++, cur_frame++) {
+    auto frame = &unwinder_frames[i];
+    backtrace_frame_data_t* back_frame = &frames->at(cur_frame);
 
-          if (num_frames > 0) {
-            // Set the stack size for the previous frame.
-            backtrace_frame_data_t* prev = &frames->at(num_frames - 1);
-            prev->stack_size = frame->sp - prev->sp;
-          }
-          num_frames++;
-        } else {
-          num_ignore_frames--;
-        }
-      }
+    back_frame->num = frame->num;
 
-      if (map_info->flags & PROT_DEVICE_MAP) {
-        // Do not stop here, fall through in case we are
-        // in the speculative unwind path and need to remove
-        // some of the speculative frames.
-        stepped = false;
-        in_device_map = true;
-      } else {
-        unwindstack::MapInfo* sp_info = maps->Find(regs->sp());
-        if (sp_info->flags & PROT_DEVICE_MAP) {
-          // Do not stop here, fall through in case we are
-          // in the speculative unwind path and need to remove
-          // some of the speculative frames.
-          stepped = false;
-          in_device_map = true;
-        } else {
-          bool finished;
-          stepped = elf->Step(rel_pc + map_info->elf_offset, regs, process_memory.get(), &finished);
-          if (stepped && finished) {
-            break;
-          }
-        }
-      }
-    }
-    adjust_rel_pc = true;
+    back_frame->rel_pc = frame->rel_pc;
+    back_frame->pc = frame->pc;
+    back_frame->sp = frame->sp;
 
-    if (!stepped) {
-      if (return_address_attempted) {
-        // Remove the speculative frame.
-        if (frames->size() > 0) {
-          frames->pop_back();
-        }
-        break;
-      } else if (in_device_map) {
-        // Do not attempt any other unwinding, pc or sp is in a device
-        // map.
-        break;
-      } else {
-        // Stepping didn't work, try this secondary method.
-        if (!regs->SetPcFromReturnAddress(process_memory.get())) {
-          break;
-        }
-        return_address_attempted = true;
-      }
-    } else {
-      return_address_attempted = false;
-    }
+    back_frame->func_name = frame->function_name;
+    back_frame->func_offset = frame->function_offset;
+
+    back_frame->map.name = frame->map_name;
+    back_frame->map.start = frame->map_start;
+    back_frame->map.end = frame->map_end;
+    back_frame->map.offset = frame->map_offset;
+    back_frame->map.load_bias = frame->map_load_bias;
+    back_frame->map.flags = frame->map_flags;
   }
 
   return true;

@@ -55,8 +55,6 @@ class Regs {
   virtual uint64_t pc() = 0;
   virtual uint64_t sp() = 0;
 
-  virtual bool GetReturnAddressFromDefault(Memory* memory, uint64_t* value) = 0;
-
   virtual uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) = 0;
 
   virtual bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) = 0;
@@ -85,8 +83,6 @@ class RegsImpl : public Regs {
   RegsImpl(uint16_t total_regs, uint16_t sp_reg, Location return_loc)
       : Regs(total_regs, sp_reg, return_loc), regs_(total_regs) {}
   virtual ~RegsImpl() = default;
-
-  bool GetReturnAddressFromDefault(Memory* memory, uint64_t* value) override;
 
   uint64_t pc() override { return pc_; }
   uint64_t sp() override { return sp_; }
