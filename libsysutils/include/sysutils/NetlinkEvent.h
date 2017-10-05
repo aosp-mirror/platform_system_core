@@ -64,6 +64,7 @@ public:
     bool parseNfPacketMessage(struct nlmsghdr *nh);
     bool parseRtMessage(const struct nlmsghdr *nh);
     bool parseNdUserOptMessage(const struct nlmsghdr *nh);
+    struct nlattr* findNlAttr(const nlmsghdr* nl, size_t hdrlen, uint16_t attr);
 };
 
 #endif
