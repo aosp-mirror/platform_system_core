@@ -21,6 +21,7 @@
 #include <sys/types.h>
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,9 @@
 #include <unwindstack/Regs.h>
 
 namespace unwindstack {
+
+// Forward declarations.
+class Elf;
 
 struct FrameData {
   size_t num;
@@ -44,6 +48,8 @@ struct FrameData {
   uint64_t map_offset;
   uint64_t map_start;
   uint64_t map_end;
+  uint64_t map_load_bias;
+  int map_flags;
 };
 
 class Unwinder {
@@ -54,7 +60,7 @@ class Unwinder {
   }
   ~Unwinder() = default;
 
-  void Unwind();
+  void Unwind(std::set<std::string>* initial_map_names_to_skip = nullptr);
 
   size_t NumFrames() { return frames_.size(); }
 
@@ -64,7 +70,7 @@ class Unwinder {
   static std::string FormatFrame(const FrameData& frame, bool bits32);
 
  private:
-  void FillInFrame(MapInfo* map_info, uint64_t* rel_pc);
+  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool adjust_pc);
 
   size_t max_frames_;
   Maps* maps_;

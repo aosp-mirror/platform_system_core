@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#define _GNU_SOURCE 1
 #include <elf.h>
 #include <inttypes.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -28,35 +30,33 @@
 
 namespace unwindstack {
 
-void Unwinder::FillInFrame(MapInfo* map_info, uint64_t* rel_pc) {
+void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool adjust_pc) {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
   frame->num = frame_num;
   frame->pc = regs_->pc();
   frame->sp = regs_->sp();
-  frame->rel_pc = frame->pc;
+  frame->rel_pc = rel_pc;
 
   if (map_info == nullptr) {
     return;
   }
 
-  Elf* elf = map_info->GetElf(process_memory_, true);
-  *rel_pc = elf->GetRelPc(regs_->pc(), map_info);
-  if (frame_num != 0) {
+  if (adjust_pc) {
     // Don't adjust the first frame pc.
-    frame->rel_pc = regs_->GetAdjustedPc(*rel_pc, elf);
+    frame->rel_pc = regs_->GetAdjustedPc(rel_pc, elf);
 
     // Adjust the original pc.
-    frame->pc -= *rel_pc - frame->rel_pc;
-  } else {
-    frame->rel_pc = *rel_pc;
+    frame->pc -= rel_pc - frame->rel_pc;
   }
 
   frame->map_name = map_info->name;
   frame->map_offset = map_info->elf_offset;
   frame->map_start = map_info->start;
   frame->map_end = map_info->end;
+  frame->map_flags = map_info->flags;
+  frame->map_load_bias = elf->GetLoadBias();
 
   if (!elf->GetFunctionName(frame->rel_pc, &frame->function_name, &frame->function_offset)) {
     frame->function_name = "";
@@ -64,31 +64,69 @@ void Unwinder::FillInFrame(MapInfo* map_info, uint64_t* rel_pc) {
   }
 }
 
-void Unwinder::Unwind() {
+void Unwinder::Unwind(std::set<std::string>* initial_map_names_to_skip) {
   frames_.clear();
 
   bool return_address_attempt = false;
+  bool adjust_pc = false;
   for (; frames_.size() < max_frames_;) {
     MapInfo* map_info = maps_->Find(regs_->pc());
 
     uint64_t rel_pc;
-    FillInFrame(map_info, &rel_pc);
+    Elf* elf;
+    if (map_info == nullptr) {
+      rel_pc = regs_->pc();
+    } else {
+      elf = map_info->GetElf(process_memory_, true);
+      rel_pc = elf->GetRelPc(regs_->pc(), map_info);
+    }
+
+    if (map_info == nullptr || initial_map_names_to_skip == nullptr ||
+        initial_map_names_to_skip->find(basename(map_info->name.c_str())) ==
+            initial_map_names_to_skip->end()) {
+      FillInFrame(map_info, elf, rel_pc, adjust_pc);
+      // Once a frame is added, stop skipping frames.
+      initial_map_names_to_skip = nullptr;
+    }
+    adjust_pc = true;
 
     bool stepped;
+    bool in_device_map = false;
     if (map_info == nullptr) {
       stepped = false;
     } else {
-      bool finished;
-      stepped = map_info->elf->Step(rel_pc + map_info->elf_offset, regs_, process_memory_.get(),
-                                    &finished);
-      if (stepped && finished) {
-        break;
+      if (map_info->flags & MAPS_FLAGS_DEVICE_MAP) {
+        // Do not stop here, fall through in case we are
+        // in the speculative unwind path and need to remove
+        // some of the speculative frames.
+        stepped = false;
+        in_device_map = true;
+      } else {
+        MapInfo* sp_info = maps_->Find(regs_->sp());
+        if (sp_info != nullptr && sp_info->flags & MAPS_FLAGS_DEVICE_MAP) {
+          // Do not stop here, fall through in case we are
+          // in the speculative unwind path and need to remove
+          // some of the speculative frames.
+          stepped = false;
+          in_device_map = true;
+        } else {
+          bool finished;
+          stepped =
+              elf->Step(rel_pc + map_info->elf_offset, regs_, process_memory_.get(), &finished);
+          if (stepped && finished) {
+            break;
+          }
+        }
       }
     }
     if (!stepped) {
       if (return_address_attempt) {
         // Remove the speculative frame.
         frames_.pop_back();
+        break;
+      } else if (in_device_map) {
+        // Do not attempt any other unwinding, pc or sp is in a device
+        // map.
         break;
       } else {
         // Steping didn't work, try this secondary method.
