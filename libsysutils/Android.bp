@@ -23,7 +23,6 @@ cc_library_shared {
         "libbase",
         "libcutils",
         "liblog",
-        "libnl",
     ],
 
     export_include_dirs: ["include"],
