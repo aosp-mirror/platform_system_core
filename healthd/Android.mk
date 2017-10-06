@@ -3,14 +3,6 @@
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := BatteryMonitor.cpp
-LOCAL_MODULE := libbatterymonitor
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libutils libbase libbinder
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
     healthd_mode_android.cpp \
     BatteryPropertiesRegistrar.cpp
