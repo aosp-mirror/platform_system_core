@@ -570,7 +570,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     ret = "reboot";
     if (android::base::StartsWith(reason, "reboot")) {
       reason = reason.substr(strlen("reboot"));
-      while (reason[0] == ',') {
+      while ((reason[0] == ',') || (reason[0] == '_')) {
         reason = reason.substr(1);
       }
     }
