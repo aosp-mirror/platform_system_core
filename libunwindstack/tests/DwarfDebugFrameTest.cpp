@@ -25,7 +25,6 @@
 
 #include "LogFake.h"
 #include "MemoryFake.h"
-#include "RegsFake.h"
 
 namespace unwindstack {
 
