@@ -328,7 +328,7 @@ bool LoadSplitPolicy() {
     std::vector<const char*> compile_args {
         "/system/bin/secilc",
         plat_policy_cil_file,
-        "-M", "true", "-G", "-N",
+        "-m", "-M", "true", "-G", "-N",
         // Target the highest policy language version supported by the kernel
         "-c", version_as_string.c_str(),
         mapping_file.c_str(),
