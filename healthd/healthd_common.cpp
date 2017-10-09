@@ -33,6 +33,10 @@
 #include <sys/timerfd.h>
 #include <utils/Errors.h>
 
+#ifdef HEALTHD_USE_HEALTH_2_0
+#include <health2/Health.h>
+#endif
+
 using namespace android;
 
 #ifndef BOARD_PERIODIC_CHORES_INTERVAL_FAST
@@ -84,9 +88,13 @@ static int awake_poll_interval = -1;
 
 static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 
-static BatteryMonitor* gBatteryMonitor;
+#ifndef HEALTHD_USE_HEALTH_2_0
+static BatteryMonitor* gBatteryMonitor = nullptr;
+#else
+extern sp<::android::hardware::health::V2_0::IHealth> gHealth;
+#endif
 
-struct healthd_mode_ops *healthd_mode_ops;
+struct healthd_mode_ops *healthd_mode_ops = nullptr;
 
 int healthd_register_event(int fd, void (*handler)(uint32_t), EventWakeup wakeup) {
     struct epoll_event ev;
@@ -127,17 +135,87 @@ static void wakealarm_set_interval(int interval) {
         KLOG_ERROR(LOG_TAG, "wakealarm_set_interval: timerfd_settime failed\n");
 }
 
+#ifdef HEALTHD_USE_HEALTH_2_0
+status_t convertStatus(android::hardware::health::V2_0::Result r) {
+    using android::hardware::health::V2_0::Result;
+    switch(r) {
+        case Result::SUCCESS:       return OK;
+        case Result::NOT_SUPPORTED: return BAD_VALUE;
+        case Result::NOT_FOUND:     return NAME_NOT_FOUND;
+        case Result::CALLBACK_DIED: return DEAD_OBJECT;
+        case Result::UNKNOWN: // fallthrough
+        default:
+            return UNKNOWN_ERROR;
+    }
+}
+#endif
+
 status_t healthd_get_property(int id, struct BatteryProperty *val) {
+#ifndef HEALTHD_USE_HEALTH_2_0
     return gBatteryMonitor->getProperty(id, val);
+#else
+    using android::hardware::health::V1_0::BatteryStatus;
+    using android::hardware::health::V2_0::Result;
+    val->valueInt64 = INT64_MIN;
+    status_t err = UNKNOWN_ERROR;
+    switch (id) {
+        case BATTERY_PROP_CHARGE_COUNTER: {
+            gHealth->getChargeCounter([&](Result r, int32_t v) {
+                err = convertStatus(r);
+                val->valueInt64 = v;
+            });
+            break;
+        }
+        case BATTERY_PROP_CURRENT_NOW: {
+            gHealth->getCurrentNow([&](Result r, int32_t v) {
+                err = convertStatus(r);
+                val->valueInt64 = v;
+            });
+            break;
+        }
+        case BATTERY_PROP_CURRENT_AVG: {
+            gHealth->getCurrentAverage([&](Result r, int32_t v) {
+                err = convertStatus(r);
+                val->valueInt64 = v;
+            });
+            break;
+        }
+        case BATTERY_PROP_CAPACITY: {
+            gHealth->getCapacity([&](Result r, int32_t v) {
+                err = convertStatus(r);
+                val->valueInt64 = v;
+            });
+            break;
+        }
+        case BATTERY_PROP_ENERGY_COUNTER: {
+            gHealth->getEnergyCounter([&](Result r, int64_t v) {
+                err = convertStatus(r);
+                val->valueInt64 = v;
+            });
+            break;
+        }
+        case BATTERY_PROP_BATTERY_STATUS: {
+            gHealth->getChargeStatus([&](Result r, BatteryStatus v) {
+                err = convertStatus(r);
+                val->valueInt64 = static_cast<int64_t>(v);
+            });
+            break;
+        }
+        default: {
+            err = BAD_VALUE;
+            break;
+        }
+    }
+    return err;
+#endif
 }
 
-void healthd_battery_update(void) {
+void healthd_battery_update_internal(bool charger_online) {
     // Fast wake interval when on charger (watch for overheat);
     // slow wake interval when on battery (watch for drained battery).
 
-   int new_wake_interval = gBatteryMonitor->update() ?
-       healthd_config.periodic_chores_interval_fast :
-           healthd_config.periodic_chores_interval_slow;
+    int new_wake_interval = charger_online ? healthd_config.periodic_chores_interval_fast
+                                           : healthd_config.periodic_chores_interval_slow;
 
     if (new_wake_interval != wakealarm_wake_interval)
             wakealarm_set_interval(new_wake_interval);
@@ -155,8 +233,25 @@ void healthd_battery_update(void) {
                 -1 : healthd_config.periodic_chores_interval_fast * 1000;
 }
 
+void healthd_battery_update(void) {
+#ifndef HEALTHD_USE_HEALTH_2_0
+    healthd_battery_update_internal(gBatteryMonitor->update());
+#else
+    gHealth->update();
+#endif
+}
+
 void healthd_dump_battery_state(int fd) {
+#ifndef HEALTHD_USE_HEALTH_2_0
     gBatteryMonitor->dumpState(fd);
+#else
+    native_handle_t* nativeHandle = native_handle_create(1, 0);
+    nativeHandle->data[0] = fd;
+    ::android::hardware::hidl_handle handle;
+    handle.setTo(nativeHandle, true /* shouldOwn */);
+    gHealth->debug(handle, {} /* options */);
+#endif
+
     fsync(fd);
 }
 
@@ -273,12 +368,21 @@ static int healthd_init() {
         return -1;
     }
 
+#ifndef HEALTHD_USE_HEALTH_2_0
     healthd_board_init(&healthd_config);
+#else
+    // healthd_board_* functions are removed in health@2.0
+#endif
+
     healthd_mode_ops->init(&healthd_config);
     wakealarm_init();
     uevent_init();
+
+#ifndef HEALTHD_USE_HEALTH_2_0
     gBatteryMonitor = new BatteryMonitor();
     gBatteryMonitor->init(&healthd_config);
+#endif
+
     return 0;
 }
 
