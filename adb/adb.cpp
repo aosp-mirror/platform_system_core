@@ -257,19 +257,6 @@ void send_connect(atransport* t) {
     send_packet(cp, t);
 }
 
-#if ADB_HOST
-
-void SendConnectOnHost(atransport* t) {
-    // Send an empty message before A_CNXN message. This is because the data toggle of the ep_out on
-    // host and ep_in on device may not be the same.
-    apacket* p = get_apacket();
-    CHECK(p);
-    send_packet(p, t);
-    send_connect(t);
-}
-
-#endif
-
 // qual_overwrite is used to overwrite a qualifier string.  dst is a
 // pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
 // was malloc'ed and needs to freed.  *dst will be set to a dup of src.
@@ -370,7 +357,7 @@ void handle_packet(apacket *p, atransport *t)
         if (p->msg.arg0){
             send_packet(p, t);
 #if ADB_HOST
-            SendConnectOnHost(t);
+            send_connect(t);
 #endif
         } else {
             t->SetConnectionState(kCsOffline);
@@ -956,8 +943,8 @@ int launch_server(const std::string& socket_spec) {
 // Try to handle a network forwarding request.
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
-int handle_forward_request(const char* service, TransportType type, const char* serial, int reply_fd)
-{
+int handle_forward_request(const char* service, TransportType type, const char* serial,
+                           TransportId transport_id, int reply_fd) {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
         std::string listeners = format_listeners();
@@ -1010,7 +997,8 @@ int handle_forward_request(const char* service, TransportType type, const char* 
         }
 
         std::string error_msg;
-        atransport* transport = acquire_one_transport(type, serial, nullptr, &error_msg);
+        atransport* transport =
+            acquire_one_transport(type, serial, transport_id, nullptr, &error_msg);
         if (!transport) {
             SendFail(reply_fd, error_msg);
             return 1;
@@ -1068,8 +1056,8 @@ static int SendOkay(int fd, const std::string& s) {
     return 0;
 }
 
-int handle_host_request(const char* service, TransportType type,
-                        const char* serial, int reply_fd, asocket* s) {
+int handle_host_request(const char* service, TransportType type, const char* serial,
+                        TransportId transport_id, int reply_fd, asocket* s) {
     if (strcmp(service, "kill") == 0) {
         fprintf(stderr, "adb server killed by remote request\n");
         fflush(stdout);
@@ -1089,7 +1077,14 @@ int handle_host_request(const char* service, TransportType type,
     if (!strncmp(service, "transport", strlen("transport"))) {
         TransportType type = kTransportAny;
 
-        if (!strncmp(service, "transport-usb", strlen("transport-usb"))) {
+        if (!strncmp(service, "transport-id:", strlen("transport-id:"))) {
+            service += strlen("transport-id:");
+            transport_id = strtoll(service, const_cast<char**>(&service), 10);
+            if (*service != '\0') {
+                SendFail(reply_fd, "invalid transport id");
+                return 1;
+            }
+        } else if (!strncmp(service, "transport-usb", strlen("transport-usb"))) {
             type = kTransportUsb;
         } else if (!strncmp(service, "transport-local", strlen("transport-local"))) {
             type = kTransportLocal;
@@ -1101,7 +1096,7 @@ int handle_host_request(const char* service, TransportType type,
         }
 
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t != nullptr) {
             s->transport = t;
             SendOkay(reply_fd);
@@ -1144,7 +1139,7 @@ int handle_host_request(const char* service, TransportType type,
 
     if (!strcmp(service, "features")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t != nullptr) {
             SendOkay(reply_fd, FeatureSetToString(t->features()));
         } else {
@@ -1197,7 +1192,7 @@ int handle_host_request(const char* service, TransportType type,
     // These always report "unknown" rather than the actual error, for scripts.
     if (!strcmp(service, "get-serialno")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             return SendOkay(reply_fd, t->serial ? t->serial : "unknown");
         } else {
@@ -1206,7 +1201,7 @@ int handle_host_request(const char* service, TransportType type,
     }
     if (!strcmp(service, "get-devpath")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             return SendOkay(reply_fd, t->devpath ? t->devpath : "unknown");
         } else {
@@ -1215,7 +1210,7 @@ int handle_host_request(const char* service, TransportType type,
     }
     if (!strcmp(service, "get-state")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             return SendOkay(reply_fd, t->connection_state_name());
         } else {
@@ -1233,7 +1228,7 @@ int handle_host_request(const char* service, TransportType type,
 
     if (!strcmp(service, "reconnect")) {
         std::string response;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &response, true);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &response, true);
         if (t != nullptr) {
             kick_transport(t);
             response =
@@ -1242,7 +1237,7 @@ int handle_host_request(const char* service, TransportType type,
         return SendOkay(reply_fd, response);
     }
 
-    int ret = handle_forward_request(service, type, serial, reply_fd);
+    int ret = handle_forward_request(service, type, serial, transport_id, reply_fd);
     if (ret >= 0)
       return ret - 1;
     return -1;

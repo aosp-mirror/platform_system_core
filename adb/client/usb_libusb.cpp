@@ -333,6 +333,13 @@ static void process_device(libusb_device* device) {
             return;
         }
 
+        rc = libusb_set_interface_alt_setting(handle.get(), interface_num, 0);
+        if (rc != 0) {
+            LOG(WARNING) << "failed to set interface alt setting for device '" << device_serial
+                         << "'" << libusb_error_name(rc);
+            return;
+        }
+
         for (uint8_t endpoint : {bulk_in, bulk_out}) {
             rc = libusb_clear_halt(handle.get(), endpoint);
             if (rc != 0) {
@@ -412,8 +419,13 @@ static void device_disconnected(libusb_device* device) {
     if (it != usb_handles.end()) {
         if (!it->second->device_handle) {
             // If the handle is null, we were never able to open the device.
-            unregister_usb_transport(it->second.get());
+
+            // Temporarily release the usb handles mutex to avoid deadlock.
+            std::unique_ptr<usb_handle> handle = std::move(it->second);
             usb_handles.erase(it);
+            lock.unlock();
+            unregister_usb_transport(handle.get());
+            lock.lock();
         } else {
             // Closure of the transport will erase the usb_handle.
         }
