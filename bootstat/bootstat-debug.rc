@@ -1,0 +1,7 @@
+# This file is the userdebug LOCAL_INIT_RC file for the bootstat command.
+
+# FOR TESTING
+# For devices w/o bootloader boot reason reported, mirror test boot reason
+# to bootloader boot reason to allow test to inject reasons
+on property:persist.test.boot.reason=*
+    setprop ro.boot.bootreason ${persist.test.boot.reason}
