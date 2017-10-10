@@ -543,15 +543,6 @@ static int fs_match(const char *in1, const char *in2)
     return ret;
 }
 
-static int device_is_force_encrypted() {
-    int ret = -1;
-    char value[PROP_VALUE_MAX];
-    ret = __system_property_get("ro.vold.forceencryption", value);
-    if (ret < 0)
-        return 0;
-    return strcmp(value, "1") ? 0 : 1;
-}
-
 /*
  * Tries to mount any of the consecutive fstab entries that match
  * the mountpoint of the one given by fstab->recs[start_idx].
@@ -726,7 +717,9 @@ out:
 
 static bool needs_block_encryption(const struct fstab_rec* rec)
 {
-    if (device_is_force_encrypted() && fs_mgr_is_encryptable(rec)) return true;
+    if (android::base::GetBoolProperty("ro.vold.forceencryption", false) &&
+        fs_mgr_is_encryptable(rec))
+        return true;
     if (rec->fs_mgr_flags & MF_FORCECRYPT) return true;
     if (rec->fs_mgr_flags & MF_CRYPT) {
         /* Check for existence of convert_fde breadcrumb file */
@@ -769,20 +762,7 @@ static int handle_encryptable(const struct fstab_rec* rec)
 }
 
 bool is_device_secure() {
-    int ret = -1;
-    char value[PROP_VALUE_MAX];
-    ret = __system_property_get("ro.secure", value);
-    if (ret == 0) {
-#ifdef ALLOW_SKIP_SECURE_CHECK
-        // Allow eng builds to skip this check if the property
-        // is not readable (happens during early mount)
-        return false;
-#else
-        // If error and not an 'eng' build, we want to fail secure.
-        return true;
-#endif
-    }
-    return strcmp(value, "0") ? true : false;
+    return android::base::GetBoolProperty("ro.secure", ALLOW_SKIP_SECURE_CHECK ? false : true);
 }
 
 /* When multiple fstab records share the same mount_point, it will
