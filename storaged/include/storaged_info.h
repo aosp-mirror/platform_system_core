@@ -19,10 +19,17 @@
 
 #include <string.h>
 
+#include <chrono>
+
+#include "storaged.h"
+#include "storaged.pb.h"
+
 #define FRIEND_TEST(test_case_name, test_name) \
 friend class test_case_name##_##test_name##_Test
 
 using namespace std;
+using namespace chrono;
+using namespace storaged_proto;
 
 class storage_info_t {
 protected:
@@ -36,16 +43,36 @@ protected:
     const string userdata_path = "/data";
     uint64_t userdata_total_kb;
     uint64_t userdata_free_kb;
+    // io perf history
+    time_point<system_clock> day_start_tp;
+    vector<uint32_t> recent_perf;
+    uint32_t nr_samples;
+    vector<uint32_t> daily_perf;
+    uint32_t nr_days;
+    vector<uint32_t> weekly_perf;
+    uint32_t nr_weeks;
+    sem_t si_lock;
 
     storage_info_t() : eol(0), lifetime_a(0), lifetime_b(0),
-        userdata_total_kb(0), userdata_free_kb(0) {}
+        userdata_total_kb(0), userdata_free_kb(0), nr_samples(0),
+        daily_perf(WEEK_TO_DAYS, 0), nr_days(0),
+        weekly_perf(YEAR_TO_WEEKS, 0), nr_weeks(0) {
+            sem_init(&si_lock, 0, 1);
+            day_start_tp = system_clock::now();
+            day_start_tp -= chrono::seconds(duration_cast<chrono::seconds>(
+                day_start_tp.time_since_epoch()).count() % DAY_TO_SEC);
+    }
     void publish();
     storage_info_t* s_info;
 public:
     static storage_info_t* get_storage_info();
-    virtual ~storage_info_t() {}
+    virtual ~storage_info_t() { sem_destroy(&si_lock); }
     virtual void report() {};
-    void refresh();
+    void init(const IOPerfHistory& perf_history);
+    void refresh(IOPerfHistory* perf_history);
+    void update_perf_history(uint32_t bw,
+                             const time_point<system_clock>& tp);
+    vector<vector<uint32_t>> get_perf_history(void);
 };
 
 class emmc_info_t : public storage_info_t {

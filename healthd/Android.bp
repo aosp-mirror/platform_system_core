@@ -18,3 +18,59 @@ cc_library_static {
     header_libs: ["libhealthd_headers"],
     export_header_lib_headers: ["libhealthd_headers"],
 }
+
+cc_library_static {
+    name: "android.hardware.health@2.0-impl",
+    vendor_available: true,
+    srcs: [
+        "Health.cpp",
+        "healthd_common.cpp",
+    ],
+
+    cflags: ["-DHEALTHD_USE_HEALTH_2_0"],
+
+    export_include_dirs: ["include"],
+
+    shared_libs: [
+        "libbase",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "liblog",
+        "libutils",
+        "libcutils",
+        "android.hardware.health@2.0",
+    ],
+
+    static_libs: [
+        "libbatterymonitor",
+        "android.hardware.health@1.0-convert",
+    ],
+}
+
+cc_binary {
+    name: "android.hardware.health@2.0-service",
+    init_rc: ["android.hardware.health@2.0-service.rc"],
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: ["HealthService.cpp"],
+
+    cflags: ["-DHEALTH_INSTANCE_NAME=\"default\""],
+
+    static_libs: [
+        "android.hardware.health@2.0-impl",
+        "android.hardware.health@1.0-convert",
+        "libbatterymonitor",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "liblog",
+        "libutils",
+        "android.hardware.health@2.0",
+    ],
+}
