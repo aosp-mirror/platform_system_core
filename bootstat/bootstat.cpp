@@ -233,6 +233,7 @@ const std::vector<const std::string> knownReasons = {
     "cold",
     "hard",
     "warm",
+    // super blunt
     "shutdown",    // Can not happen from ro.boot.bootreason
     "reboot",      // Default catch-all for anything unknown
     // clang-format on
@@ -543,19 +544,9 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       std::transform(content.begin(), content.end(), content.begin(), tounderline);
       std::transform(content.begin(), content.end(), content.begin(), toprintable);
 
-      // String is either "reboot,<reason>" or "shutdown,<reason>".
-      // We will set if default reasons, only override with detail if thermal.
-      if ((android::base::StartsWith(content, ret.c_str()) && (content[ret.length()] == ',')) ||
-          !isBluntRebootReason(content)) {
-        // Ok, we want it, let's squash it if secondReason is known.
-        size_t pos = content.find(',');
-        if (pos != std::string::npos) {
-          ++pos;
-          std::string secondReason(content.substr(pos));
-          ret = isKnownRebootReason(secondReason) ? secondReason : content;
-        } else {
-          ret = content;
-        }
+      // Anything in last is better than 'super-blunt' reboot or shutdown.
+      if ((ret == "") || (ret == "reboot") || (ret == "shutdown") || !isBluntRebootReason(content)) {
+        ret = content;
       }
     }
 
@@ -611,17 +602,11 @@ std::string CalculateBootCompletePrefix() {
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
     LOG(INFO) << "Canonical boot reason: reboot,factory_reset";
     SetProperty(system_reboot_reason_property, "reboot,factory_reset");
-    if (GetProperty(bootloader_reboot_reason_property) == "") {
-      SetProperty(bootloader_reboot_reason_property, "reboot,factory_reset");
-    }
   } else if (build_date != record.second) {
     boot_complete_prefix = "ota_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
     LOG(INFO) << "Canonical boot reason: reboot,ota";
     SetProperty(system_reboot_reason_property, "reboot,ota");
-    if (GetProperty(bootloader_reboot_reason_property) == "") {
-      SetProperty(bootloader_reboot_reason_property, "reboot,ota");
-    }
   }
 
   return boot_complete_prefix;
