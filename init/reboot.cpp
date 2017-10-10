@@ -56,6 +56,7 @@
 #include "service.h"
 #include "sigchld_handler.h"
 
+using android::base::Split;
 using android::base::StringPrintf;
 using android::base::Timer;
 
@@ -346,7 +347,16 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
 
-    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str());
+    // Ensure last reboot reason is reduced to canonical
+    // alias reported in bootloader or system boot reason.
+    size_t skip = 0;
+    std::vector<std::string> reasons = Split(reason, ",");
+    if (reasons.size() >= 2 && reasons[0] == "reboot" &&
+        (reasons[1] == "recovery" || reasons[1] == "bootloader" || reasons[1] == "cold" ||
+         reasons[1] == "hard" || reasons[1] == "warm")) {
+        skip = strlen("reboot,");
+    }
+    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
     sync();
 
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
@@ -469,7 +479,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
 
 bool HandlePowerctlMessage(const std::string& command) {
     unsigned int cmd = 0;
-    std::vector<std::string> cmd_params = android::base::Split(command, ",");
+    std::vector<std::string> cmd_params = Split(command, ",");
     std::string reboot_target = "";
     bool run_fsck = false;
     bool command_invalid = false;
