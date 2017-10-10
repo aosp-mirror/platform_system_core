@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <chrono>
 #include <deque>
 #include <fcntl.h>
 #include <random>
@@ -29,6 +30,9 @@
 
 #define MMC_DISK_STATS_PATH "/sys/block/mmcblk0/stat"
 #define SDA_DISK_STATS_PATH "/sys/block/sda/stat"
+
+using namespace std;
+using namespace chrono;
 
 namespace {
 
@@ -341,5 +345,63 @@ TEST(storaged_test, disk_stats_monitor) {
         expect_increasing(stats_prev, dsm_detect.mPrevious);
         stats_prev = dsm_detect.mPrevious;
         write_and_pause(5);
+    }
+}
+
+TEST(storaged_test, storage_info_t) {
+    storage_info_t si;
+    time_point<steady_clock> tp;
+    time_point<system_clock> stp;
+
+    // generate perf history [least_recent  ------> most recent]
+    // day 1:   5,  10,  15,  20            | daily average 12
+    // day 2:  25,  30,  35,  40,  45       | daily average 35
+    // day 3:  50,  55,  60,  65,  70       | daily average 60
+    // day 4:  75,  80,  85,  90,  95       | daily average 85
+    // day 5: 100, 105, 110, 115,           | daily average 107
+    // day 6: 120, 125, 130, 135, 140       | daily average 130
+    // day 7: 145, 150, 155, 160, 165       | daily average 155
+    // end of week 1:                       | weekly average 83
+    // day 1: 170, 175, 180, 185, 190       | daily average 180
+    // day 2: 195, 200, 205, 210, 215       | daily average 205
+    // day 3: 220, 225, 230, 235            | daily average 227
+    // day 4: 240, 245, 250, 255, 260       | daily average 250
+    // day 5: 265, 270, 275, 280, 285       | daily average 275
+    // day 6: 290, 295, 300, 305, 310       | daily average 300
+    // day 7: 315, 320, 325, 330, 335       | daily average 325
+    // end of week 2:                       | weekly average 251
+    // day 1: 340, 345, 350, 355            | daily average 347
+    // day 2: 360, 365, 370, 375
+    si.day_start_tp = {};
+    for (int i = 0; i < 75; i++) {
+        tp += hours(5);
+        stp = {};
+        stp += duration_cast<seconds>(tp.time_since_epoch());
+        si.update_perf_history((i + 1) * 5, stp);
+    }
+
+    vector<vector<uint32_t>> history = si.get_perf_history();
+    EXPECT_EQ(history.size(), 3UL);
+    EXPECT_EQ(history[0].size(), 4UL);
+    EXPECT_EQ(history[1].size(), 7UL);    // 7 days
+    EXPECT_EQ(history[2].size(), 52UL);   // 52 weeks
+    // last 24 hours
+    EXPECT_EQ(history[0][0], 375UL);
+    EXPECT_EQ(history[0][1], 370UL);
+    EXPECT_EQ(history[0][2], 365UL);
+    EXPECT_EQ(history[0][3], 360UL);
+    // daily average of last 7 days
+    EXPECT_EQ(history[1][0], 347UL);
+    EXPECT_EQ(history[1][1], 325UL);
+    EXPECT_EQ(history[1][2], 300UL);
+    EXPECT_EQ(history[1][3], 275UL);
+    EXPECT_EQ(history[1][4], 250UL);
+    EXPECT_EQ(history[1][5], 227UL);
+    EXPECT_EQ(history[1][6], 205UL);
+    // weekly average of last 52 weeks
+    EXPECT_EQ(history[2][0], 251UL);
+    EXPECT_EQ(history[2][1], 83UL);
+    for (int i = 2; i < 52; i++) {
+        EXPECT_EQ(history[2][i], 0UL);
     }
 }

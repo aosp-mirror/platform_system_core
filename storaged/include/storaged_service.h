@@ -24,16 +24,19 @@
 
 #include "storaged.h"
 
+using namespace std;
 using namespace android;
 
 // Interface
 class IStoraged : public IInterface {
 public:
     enum {
-        DUMPUIDS  = IBinder::FIRST_CALL_TRANSACTION,
+        DUMPUIDS = IBinder::FIRST_CALL_TRANSACTION,
+        DUMPPERF,
     };
     // Request the service to run the test function
-    virtual std::vector<struct uid_info> dump_uids(const char* option) = 0;
+    virtual vector<struct uid_info> dump_uids(const char* option) = 0;
+    virtual vector<vector<uint32_t>> dump_perf_history(const char* option) = 0;
 
     DECLARE_META_INTERFACE(Storaged);
 };
@@ -42,7 +45,8 @@ public:
 class BpStoraged : public BpInterface<IStoraged> {
 public:
     BpStoraged(const sp<IBinder>& impl) : BpInterface<IStoraged>(impl){};
-    virtual std::vector<struct uid_info> dump_uids(const char* option);
+    virtual vector<struct uid_info> dump_uids(const char* option);
+    virtual vector<vector<uint32_t>> dump_perf_history(const char* option);
 };
 
 // Server
@@ -51,7 +55,8 @@ class BnStoraged : public BnInterface<IStoraged> {
 };
 
 class Storaged : public BnStoraged {
-    virtual std::vector<struct uid_info> dump_uids(const char* option);
+    virtual vector<struct uid_info> dump_uids(const char* option);
+    virtual vector<vector<uint32_t>> dump_perf_history(const char* option);
     virtual status_t dump(int fd, const Vector<String16>& args);
 };
 

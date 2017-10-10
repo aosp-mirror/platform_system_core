@@ -35,5 +35,6 @@ void sort_running_uids_info(std::vector<struct uid_info> &uids);
 
 // Logging
 void log_console_running_uids_info(const std::vector<struct uid_info>& uids, bool flag_dump_task);
+void log_console_perf_history(const vector<vector<uint32_t>>& perf_history);
 
 #endif /* _STORAGED_UTILS_H_ */
