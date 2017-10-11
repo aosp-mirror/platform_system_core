@@ -31,8 +31,6 @@
 // turn verity off in userdebug builds.
 #define VERITY_METADATA_MAGIC_DISABLE 0x46464f56 // "VOFF"
 
-__BEGIN_DECLS
-
 // Verity modes
 enum verity_mode {
     VERITY_MODE_EIO = 0,
@@ -84,7 +82,5 @@ int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
 #define FS_MGR_SETUP_VERITY_FAIL (-1)
 #define FS_MGR_SETUP_VERITY_SUCCESS 0
 int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev);
-
-__END_DECLS
 
 #endif /* __CORE_FS_MGR_H */
