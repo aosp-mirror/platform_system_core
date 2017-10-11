@@ -65,6 +65,11 @@ cc_binary {
     static_libs: ["libbootstat"],
     shared_libs: ["liblogcat"],
     init_rc: ["bootstat.rc"],
+    product_variables: {
+        debuggable: {
+            init_rc: ["bootstat-debug.rc"],
+        },
+    },
     srcs: ["bootstat.cpp"],
 }
 
