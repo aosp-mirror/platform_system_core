@@ -74,6 +74,30 @@ checkDebugBuild() {
   fi >&2
 }
 
+[ "USAGE: setBootloaderBootReason [value]
+
+Returns: true if device supports and set boot reason injection" ]
+setBootloaderBootReason() {
+  inAdb || ( echo "ERROR: device not in adb mode." >&2 ; false ) || return 1
+  if [ -z "`adb shell ls /etc/init/bootstat-debug.rc 2>/dev/null`" ]; then
+    echo "ERROR: '${TEST}' test requires /etc/init/bootstat-debug.rc" >&2
+    return 1
+  fi
+  checkDebugBuild || return 1
+  if adb shell su root "cat /proc/cmdline | tr '\\0 ' '\\n\\n'" |
+     grep '^androidboot[.]bootreason=[^ ]' >/dev/null; then
+    echo "ERROR: '${TEST}' test requires a device with a bootloader that" >&2
+    echo "       does not set androidboot.bootreason kernel parameter." >&2
+    return 1
+  fi
+  adb shell su root setprop persist.test.boot.reason "'${1}'" 2>/dev/null
+  test_reason="`adb shell getprop persist.test.boot.reason 2>/dev/null`"
+  if [ X"${test_reason}" != X"${1}" ]; then
+    echo "ERROR: can not set persist.test.boot.reason to '${1}'." >&2
+    return 1
+  fi
+}
+
 [ "USAGE: enterPstore
 
 Prints a warning string requiring functional pstore
@@ -259,6 +283,8 @@ bootstat: Service started: /system/bin/bootstat -l
 bootstat: Battery level at shutdown 100%
 bootstat: Battery level at startup 100%
 init    : Parsing file /system/etc/init/bootstat.rc...
+init    : processing action (persist.test.boot.reason=*) from (/system/etc/init/bootstat-debug.rc:
+init    : Command 'setprop ro.boot.bootreason \${persist.test.boot.reason}' action=persist.test.boot.reason=* (/system/etc/init/bootstat-debug.rc:
 init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
 init    : processing action (boot) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=*) from (/system/etc/init/bootstat.rc
@@ -361,37 +387,33 @@ wrap_test() {
   end_test ${2}
 }
 
-[ "USAGE: validate_property <property>
+[ "USAGE: validate_reason <value>
 
 Check property for CTS compliance with our expectations. Return a cleansed
 string representing what is acceptable.
 
-NB: must roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
-validate_property() {
-  var=`adb shell getprop ${1} 2>&1`
-  var=`echo -n ${var} |
+NB: must also roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
+validate_reason() {
+  var=`echo -n ${*} |
        tr '[A-Z]' '[a-z]' |
        tr ' \f\t\r\n' '_____'`
   case ${var} in
-    watchdog) ;;
-    watchdog,?*) ;;
-    kernel_panic) ;;
-    kernel_panic,?*) ;;
-    recovery) ;;
-    recovery,?*) ;;
-    bootloader) ;;
-    bootloader,?*) ;;
-    cold) ;;
-    cold,?*) ;;
-    hard) ;;
-    hard,?*) ;;
-    warm) ;;
-    warm,?*) ;;
-    shutdown) ;;
-    shutdown,?*) ;;
-    reboot) ;;
-    reboot,?*) ;;
-    # Aliases
+    watchdog | watchdog,?* ) ;;
+    kernel_panic | kernel_panic,?*) ;;
+    recovery | recovery,?*) ;;
+    bootloader | bootloader,?*) ;;
+    cold | cold,?*) ;;
+    hard | hard,?*) ;;
+    warm | warm,?*) ;;
+    shutdown | shutdown,?*) ;;
+    reboot,reboot | reboot,reboot,* )     var=${var#reboot,} ; var=${var%,} ;;
+    reboot,cold | reboot,cold,* )         var=${var#reboot,} ; var=${var%,} ;;
+    reboot,hard | reboot,hard,* )         var=${var#reboot,} ; var=${var%,} ;;
+    reboot,warm | reboot,warm,* )         var=${var#reboot,} ; var=${var%,} ;;
+    reboot,recovery | reboot,recovery,* ) var=${var#reboot,} ; var=${var%,} ;;
+    reboot,bootloader | reboot,bootloader,* ) var=${var#reboot,} ; var=${var%,} ;;
+    reboot | reboot,?*) ;;
+    # Aliases and Heuristics
     *wdog* | *watchdog* )     var="watchdog" ;;
     *powerkey* )              var="cold,powerkey" ;;
     *panic* | *kernel_panic*) var="kernel_panic" ;;
@@ -399,10 +421,24 @@ validate_property() {
     *s3_wakeup*)              var="warm,s3_wakeup" ;;
     *hw_reset*)               var="hard,hw_reset" ;;
     *bootloader*)             var="bootloader" ;;
-    ?*)                       var="reboot,${var}" ;;
     *)                        var="reboot" ;;
   esac
   echo ${var}
+}
+
+[ "USAGE: validate_property <property>
+
+Check property for CTS compliance with our expectations. Return a cleansed
+string representing what is acceptable.
+
+NB: must also roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
+validate_property() {
+  val="`adb shell getprop ${1} 2>&1`"
+  ret=`validate_reason "${val}"`
+  if [ "reboot" = "${ret}" ]; then
+    ret=`validate_reason "reboot,${val}"`
+  fi
+  echo ${ret}
 }
 
 #
@@ -428,7 +464,7 @@ test_properties() {
   #  ERROR: expected "reboot" got ""
   #        for Android property persist.sys.boot.reason
   # following is mitigation for the persist.sys.boot.reason, skip it
-  if [ "reboot,factory_reset" = `validate_property ro.boot_bootreason` ]; then
+  if [ "reboot,factory_reset" = "`validate_property ro.boot_bootreason`" ]; then
     check_set="ro.boot.bootreason sys.boot.reason"
     bootloader="bootloader"
   fi
@@ -843,6 +879,94 @@ test_Its_Just_So_Hard_reboot() {
   report_bootstat_logs reboot,its_just_so_hard
 }
 
+[ "USAGE: run_bootloader [value [expected]]
+
+bootloader boot reason injection tests:
+- setBootloaderBootReason value
+- adb shell reboot
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report reboot,value" ]
+run_bootloader() {
+  bootloader_expected="${1}"
+  if [ -z "${bootloader_expected}" ]; then
+    bootloader_expected="${TEST#bootloader_}"
+  fi
+  if ! setBootloaderBootReason ${bootloader_expected}; then
+    echo "       Skipping FAILURE." 2>&1
+    return
+  fi
+  duration_test
+  if [ X"warm" = X"${bootloader_expected}" ]; then
+    last_expected=cold
+  else
+    last_expected=warm
+  fi
+  adb reboot ${last_expected}
+  wait_for_screen
+  # Reset so that other tests do not get unexpected injection
+  setBootloaderBootReason
+  # Determine the expected values
+  sys_expected="${2}"
+  if [ -z "${sys_expected}" ]; then
+    sys_expected="`validate_reason ${bootloader_expected}`"
+    if [ "reboot" = "${sys_expected}" ]; then
+      sys_expected="${last_expected}"
+    fi
+  else
+    sys_expected=`validate_reason ${sys_expected}`
+  fi
+  case ${sys_expected} in
+    kernel_panic | kernel_panic,* | watchdog | watchdog,* )
+      last_expected=${sys_expected}
+      ;;
+  esac
+  # Check values
+  EXPECT_PROPERTY ro.boot.bootreason "${bootloader_expected}"
+  EXPECT_PROPERTY sys.boot.reason "${sys_expected}"
+  EXPECT_PROPERTY persist.sys.boot.reason "${last_expected}"
+  report_bootstat_logs "${sys_expected}"
+}
+
+[ "USAGE: test_bootloader_<type>
+
+bootloader boot reasons test injection" ]
+test_bootloader_normal() {
+  run_bootloader
+}
+
+test_bootloader_watchdog() {
+  run_bootloader
+}
+
+test_bootloader_kernel_panic() {
+  run_bootloader
+}
+
+test_bootloader_oem_powerkey() {
+  run_bootloader
+}
+
+test_bootloader_wdog_reset() {
+  run_bootloader
+}
+
+test_bootloader_cold() {
+  run_bootloader
+}
+
+test_bootloader_warm() {
+  run_bootloader
+}
+
+test_bootloader_hard() {
+  run_bootloader
+}
+
+test_bootloader_recovery() {
+  run_bootloader
+}
+
 [ "USAGE: ${0##*/} [-s SERIAL] [tests]
 
 Mainline executive to run the above tests" ]
@@ -893,8 +1017,13 @@ if [ -z "$*" ]; then
                             grep -v '^optional_'`
   if [ -z "${2}" ]; then
     # Hard coded should shell fail to find them above (search/permission issues)
-    eval set ota cold factory_reset hard battery unknown kernel_panic warm \
-             thermal_shutdown userrequested_shutdown shell_reboot adb_reboot
+    eval set properties ota cold factory_reset hard battery unknown \
+             kernel_panic warm thermal_shutdown userrequested_shutdown \
+             shell_reboot adb_reboot Its_Just_So_Hard_reboot \
+             bootloader_normal bootloader_watchdog bootloader_kernel_panic \
+             bootloader_oem_powerkey bootloader_wdog_reset \
+             bootloader_wdog_reset bootloader_wdog_reset bootloader_hard \
+             bootloader_recovery
   fi
   if [ X"nothing" = X"${1}" ]; then
     shift 1
@@ -902,6 +1031,9 @@ if [ -z "$*" ]; then
 fi
 echo "INFO: selected test(s): ${@}" >&2
 echo
+# Prepare device
+setBootloaderBootReason 2>/dev/null
+# Start pouring through the tests.
 failures=
 successes=
 for t in "${@}"; do
