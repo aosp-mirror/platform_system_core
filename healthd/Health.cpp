@@ -120,7 +120,7 @@ Return<Result> Health::update() {
     }
 
     // Retrieve all information and call healthd_mode_ops->battery_update, which calls
-    // notifyListeners.
+    // updateAndNotify.
     bool chargerOnline = battery_monitor_->update();
 
     // adjust uevent / wakealarm periods
@@ -129,10 +129,19 @@ Return<Result> Health::update() {
     return Result::SUCCESS;
 }
 
-void Health::notifyListeners(const HealthInfo& info) {
+void Health::updateAndNotify(HealthInfo* info) {
+    // update 2.0 specific fields
+    struct BatteryProperty prop;
+    if (battery_monitor_->getProperty(BATTERY_PROP_CURRENT_AVG, &prop) == OK)
+        info->batteryCurrentAverage = static_cast<int32_t>(prop.valueInt64);
+    if (battery_monitor_->getProperty(BATTERY_PROP_CAPACITY, &prop) == OK)
+        info->batteryCapacity = static_cast<int32_t>(prop.valueInt64);
+    if (battery_monitor_->getProperty(BATTERY_PROP_ENERGY_COUNTER, &prop) == OK)
+        info->energyCounter = prop.valueInt64;
+
     std::lock_guard<std::mutex> _lock(callbacks_lock_);
     for (auto it = callbacks_.begin(); it != callbacks_.end();) {
-        auto ret = (*it)->healthInfoChanged(info);
+        auto ret = (*it)->healthInfoChanged(*info);
         if (!ret.isOk() && ret.isDeadObject()) {
             it = callbacks_.erase(it);
         } else {
