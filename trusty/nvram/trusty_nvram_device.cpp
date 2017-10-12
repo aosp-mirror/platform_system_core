@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <errno.h>
+
 #include <nvram/hal/nvram_device_adapter.h>
 
 #include "trusty_nvram_implementation.h"
