@@ -428,6 +428,14 @@ TEST(DemangleTest, StringTooLong) {
   ASSERT_EQ("_ZN3one3twoEDa", demangler.Parse("_ZN3one3twoEDa", 12));
 }
 
+TEST(DemangleTest, BooleanLiterals) {
+  Demangler demangler;
+
+  ASSERT_EQ("one<true>", demangler.Parse("_ZN3oneILb1EEE"));
+  ASSERT_EQ("one<false>", demangler.Parse("_ZN3oneILb0EEE"));
+  ASSERT_EQ("one<false, true>", demangler.Parse("_ZN3oneILb0ELb1EEE"));
+}
+
 TEST(DemangleTest, demangle) {
   std::string str;
 
