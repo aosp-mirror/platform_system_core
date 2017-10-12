@@ -660,6 +660,29 @@ const char* Demangler::ParseArguments(const char* name) {
   return nullptr;
 }
 
+const char* Demangler::ParseTemplateLiteral(const char* name) {
+  if (*name == 'E') {
+    parse_func_ = parse_funcs_.back();
+    parse_funcs_.pop_back();
+    return name + 1;
+  }
+  // Only understand boolean values with 0 or 1.
+  if (*name == 'b') {
+    name++;
+    if (*name == '0') {
+      AppendArgument("false");
+      cur_state_.str.clear();
+    } else if (*name == '1') {
+      AppendArgument("true");
+      cur_state_.str.clear();
+    } else {
+      return nullptr;
+    }
+    return name + 1;
+  }
+  return nullptr;
+}
+
 const char* Demangler::ParseTemplateArgumentsComplex(const char* name) {
   if (*name == 'E') {
     if (parse_funcs_.empty()) {
@@ -669,6 +692,11 @@ const char* Demangler::ParseTemplateArgumentsComplex(const char* name) {
     parse_funcs_.pop_back();
     FinalizeTemplate();
     Save(cur_state_.str, false);
+    return name + 1;
+  } else if (*name == 'L') {
+    // Literal value for a template.
+    parse_funcs_.push_back(parse_func_);
+    parse_func_ = &Demangler::ParseTemplateLiteral;
     return name + 1;
   }
   return ParseArguments(name);
