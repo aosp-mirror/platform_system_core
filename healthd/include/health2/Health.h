@@ -16,7 +16,6 @@ namespace V2_0 {
 namespace implementation {
 
 using V1_0::BatteryStatus;
-using V1_0::HealthInfo;
 
 using ::android::hidl::base::V1_0::IBase;
 
@@ -25,7 +24,7 @@ struct Health : public IHealth, hidl_death_recipient {
     Health(struct healthd_config* c);
 
     // TODO(b/62229583): clean up and hide these functions.
-    void notifyListeners(const HealthInfo& info);
+    void updateAndNotify(HealthInfo* info);
 
     // Methods from IHealth follow.
     Return<Result> registerCallback(const sp<IHealthInfoCallback>& callback) override;

@@ -36,13 +36,18 @@ std::string GetProperty(const std::string& key, const std::string& default_value
   const prop_info* pi = __system_property_find(key.c_str());
   if (pi == nullptr) return default_value;
 
-  char buf[PROP_VALUE_MAX];
-  if (__system_property_read(pi, nullptr, buf) > 0) return buf;
+  std::string property_value;
+  __system_property_read_callback(pi,
+                                  [](void* cookie, const char*, const char* value, unsigned) {
+                                    auto property_value = reinterpret_cast<std::string*>(cookie);
+                                    *property_value = value;
+                                  },
+                                  &property_value);
 
   // If the property exists but is empty, also return the default value.
   // Since we can't remove system properties, "empty" is traditionally
   // the same as "missing" (this was true for cutils' property_get).
-  return default_value;
+  return property_value.empty() ? default_value : property_value;
 }
 
 bool GetBoolProperty(const std::string& key, bool default_value) {

@@ -92,6 +92,7 @@ class Demangler {
   const char* ParseArguments(const char* name);
   const char* ParseTemplateArguments(const char* name);
   const char* ParseTemplateArgumentsComplex(const char* name);
+  const char* ParseTemplateLiteral(const char* name);
   const char* ParseFunctionArgument(const char* name);
   const char* ParseFunctionName(const char* name);
   const char* FindFunctionName(const char* name);

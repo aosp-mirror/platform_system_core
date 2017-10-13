@@ -129,6 +129,7 @@ void SetProperty(const char* key, const char* val) {
   property_set(key, val);
 }
 
+constexpr int32_t kEmptyBootReason = 0;
 constexpr int32_t kUnknownBootReason = 1;
 
 // A mapping from boot reason string, as read from the ro.boot.bootreason
@@ -136,6 +137,7 @@ constexpr int32_t kUnknownBootReason = 1;
 // the boot_reason metric may refer to this mapping to discern the histogram
 // values.
 const std::map<std::string, int32_t> kBootReasonMap = {
+    {"empty", kEmptyBootReason},
     {"unknown", kUnknownBootReason},
     {"normal", 2},
     {"recovery", 3},
@@ -205,6 +207,11 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,adb", 67},
     {"reboot,userrequested", 68},
     {"shutdown,container", 69},  // Host OS asking Android Container to shutdown
+    {"cold,powerkey", 70},
+    {"warm,s3_wakeup", 71},
+    {"hard,hw_reset", 72},
+    {"shutdown,suspend", 73},    // Suspend to RAM
+    {"shutdown,hibernate", 74},  // Suspend to DISK
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -214,6 +221,10 @@ int32_t BootReasonStrToEnum(const std::string& boot_reason) {
   auto mapping = kBootReasonMap.find(boot_reason);
   if (mapping != kBootReasonMap.end()) {
     return mapping->second;
+  }
+
+  if (boot_reason.empty()) {
+    return kEmptyBootReason;
   }
 
   LOG(INFO) << "Unknown boot reason: " << boot_reason;
@@ -747,8 +758,16 @@ void RecordBootComplete() {
 // property.
 void RecordBootReason() {
   const std::string reason(GetProperty(bootloader_reboot_reason_property));
-  android::metricslogger::LogMultiAction(android::metricslogger::ACTION_BOOT,
-                                         android::metricslogger::FIELD_PLATFORM_REASON, reason);
+
+  if (reason.empty()) {
+    // Log an empty boot reason value as '<EMPTY>' to ensure the value is intentional
+    // (and not corruption anywhere else in the reporting pipeline).
+    android::metricslogger::LogMultiAction(android::metricslogger::ACTION_BOOT,
+                                           android::metricslogger::FIELD_PLATFORM_REASON, "<EMPTY>");
+  } else {
+    android::metricslogger::LogMultiAction(android::metricslogger::ACTION_BOOT,
+                                           android::metricslogger::FIELD_PLATFORM_REASON, reason);
+  }
 
   // Log the raw bootloader_boot_reason property value.
   int32_t boot_reason = BootReasonStrToEnum(reason);

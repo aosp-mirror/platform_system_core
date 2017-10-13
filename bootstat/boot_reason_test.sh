@@ -22,6 +22,8 @@ TAB="	"
 GREEN="${ESCAPE}[38;5;40m"
 RED="${ESCAPE}[38;5;196m"
 NORMAL="${ESCAPE}[0m"
+# Best guess to an average device's reboot time, refined as tests return
+DURATION_DEFAULT=45
 
 # Helper functions
 
@@ -57,16 +59,43 @@ isDebuggable() {
   fi
 }
 
-[ "USAGE: checkDebugBuild
+[ "USAGE: checkDebugBuild [--noerror]
 
 Returns: true if device is a userdebug or eng release" ]
 checkDebugBuild() {
   if isDebuggable; then
     echo "INFO: '${TEST}' test requires userdebug build"
+  elif [ -n "${1}" ]; then
+    echo "WARNING: '${TEST}' test requires userdebug build"
+    false
   else
     echo "ERROR: '${TEST}' test requires userdebug build, skipping FAILURE"
     false
   fi >&2
+}
+
+[ "USAGE: setBootloaderBootReason [value]
+
+Returns: true if device supports and set boot reason injection" ]
+setBootloaderBootReason() {
+  inAdb || ( echo "ERROR: device not in adb mode." >&2 ; false ) || return 1
+  if [ -z "`adb shell ls /etc/init/bootstat-debug.rc 2>/dev/null`" ]; then
+    echo "ERROR: '${TEST}' test requires /etc/init/bootstat-debug.rc" >&2
+    return 1
+  fi
+  checkDebugBuild || return 1
+  if adb shell su root "cat /proc/cmdline | tr '\\0 ' '\\n\\n'" |
+     grep '^androidboot[.]bootreason=[^ ]' >/dev/null; then
+    echo "ERROR: '${TEST}' test requires a device with a bootloader that" >&2
+    echo "       does not set androidboot.bootreason kernel parameter." >&2
+    return 1
+  fi
+  adb shell su root setprop persist.test.boot.reason "'${1}'" 2>/dev/null
+  test_reason="`adb shell getprop persist.test.boot.reason 2>/dev/null`"
+  if [ X"${test_reason}" != X"${1}" ]; then
+    echo "ERROR: can not set persist.test.boot.reason to '${1}'." >&2
+    return 1
+  fi
 }
 
 [ "USAGE: enterPstore
@@ -204,7 +233,7 @@ EXPECT_EQ() {
   return 0
 }
 
-[ "USAGE: EXPECT_PROPERTY <prop> <value>
+[ "USAGE: EXPECT_PROPERTY <prop> <value> [--allow_failure]
 
 Returns true if current return (regex) value is true and the result matches" ]
 EXPECT_PROPERTY() {
@@ -214,6 +243,7 @@ EXPECT_PROPERTY() {
   shift 2
   val=`adb shell getprop ${property} 2>&1`
   EXPECT_EQ "${value}" "${val}" for Android property ${property} ||
+    [ -n "${1}" ] ||
     save_ret=${?}
   return ${save_ret}
 }
@@ -253,6 +283,8 @@ bootstat: Service started: /system/bin/bootstat -l
 bootstat: Battery level at shutdown 100%
 bootstat: Battery level at startup 100%
 init    : Parsing file /system/etc/init/bootstat.rc...
+init    : processing action (persist.test.boot.reason=*) from (/system/etc/init/bootstat-debug.rc:
+init    : Command 'setprop ro.boot.bootreason \${persist.test.boot.reason}' action=persist.test.boot.reason=* (/system/etc/init/bootstat-debug.rc:
 init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
 init    : processing action (boot) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=*) from (/system/etc/init/bootstat.rc
@@ -279,9 +311,42 @@ init    : Command 'exec - system log -- /system/bin/bootstat --record_time_since
 Record start of test, preserve exit status" ]
 start_test() {
   save_ret=${?}
+  duration_prefix="~"
+  duration_estimate=1
   START=`date +%s`
   echo "${GREEN}[ RUN      ]${NORMAL} ${TEST} ${*}"
   return ${save_ret}
+}
+
+duration_sum_diff=0
+duration_num=0
+[ "USAGE: duration_test [[prefix]seconds]
+
+Report the adjusted and expected test duration" ]
+duration_test() {
+  duration_prefix=${1%%[0123456789]*}
+  if [ -z "${duration_prefix}" ]; then
+    duration_prefix="~"
+  fi
+  duration_estimate="${1#${duration_prefix}}"
+  if [ -z "${duration_estimate}" ]; then
+    duration_estimate="${DURATION_DEFAULT}"
+  fi
+  duration_new_estimate="${duration_estimate}"
+  if [ 0 -ne ${duration_num} ]; then
+    duration_new_estimate=`expr ${duration_new_estimate} + \
+      \( ${duration_num} / 2 + ${duration_sum_diff} \) / ${duration_num}`
+    # guard against catastrophe
+    if [ -z "${duration_new_estimate}" ]; then
+      duration_new_estimate=${duration_estimate}
+    fi
+  fi
+  # negative values are so undignified
+  if [ 0 -ge ${duration_new_estimate} ]; then
+    duration_new_estimate=1
+  fi
+  echo "INFO: expected duration of '${TEST}' test" \
+       "${duration_prefix}`format_duration ${duration_new_estimate}`" >&2
 }
 
 [ "USAGE: end_test [message]
@@ -291,9 +356,16 @@ end_test() {
   save_ret=${?}
   END=`date +%s`
   duration=`expr ${END} - ${START} 2>/dev/null`
-  [ 0 = ${duration} ] ||
+  [ 0 -ge ${duration} ] ||
     echo "INFO: '${TEST}' test duration `format_duration ${duration}`" >&2
   if [ ${save_ret} = 0 ]; then
+    if [ 0 -lt ${duration} -a 0 -lt ${duration_estimate} -a \( \
+           X"~" = X"${duration_prefix}" -o \
+           ${duration_estimate} -gt ${duration} \) ]; then
+      duration_sum_diff=`expr ${duration_sum_diff} + \
+                              ${duration} - ${duration_estimate}`
+      duration_num=`expr ${duration_num} + 1`
+    fi
     echo "${GREEN}[       OK ]${NORMAL} ${TEST} ${*}"
   else
     echo "${RED}[  FAILED  ]${NORMAL} ${TEST} ${*}"
@@ -315,37 +387,33 @@ wrap_test() {
   end_test ${2}
 }
 
-[ "USAGE: validate_property <property>
+[ "USAGE: validate_reason <value>
 
 Check property for CTS compliance with our expectations. Return a cleansed
 string representing what is acceptable.
 
-NB: must roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
-validate_property() {
-  var=`adb shell getprop ${1} 2>&1`
-  var=`echo -n ${var} |
+NB: must also roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
+validate_reason() {
+  var=`echo -n ${*} |
        tr '[A-Z]' '[a-z]' |
        tr ' \f\t\r\n' '_____'`
   case ${var} in
-    watchdog) ;;
-    watchdog,?*) ;;
-    kernel_panic) ;;
-    kernel_panic,?*) ;;
-    recovery) ;;
-    recovery,?*) ;;
-    bootloader) ;;
-    bootloader,?*) ;;
-    cold) ;;
-    cold,?*) ;;
-    hard) ;;
-    hard,?*) ;;
-    warm) ;;
-    warm,?*) ;;
-    shutdown) ;;
-    shutdown,?*) ;;
-    reboot) ;;
-    reboot,?*) ;;
-    # Aliases
+    watchdog | watchdog,?* ) ;;
+    kernel_panic | kernel_panic,?*) ;;
+    recovery | recovery,?*) ;;
+    bootloader | bootloader,?*) ;;
+    cold | cold,?*) ;;
+    hard | hard,?*) ;;
+    warm | warm,?*) ;;
+    shutdown | shutdown,?*) ;;
+    reboot,reboot | reboot,reboot,* )     var=${var#reboot,} ; var=${var%,} ;;
+    reboot,cold | reboot,cold,* )         var=${var#reboot,} ; var=${var%,} ;;
+    reboot,hard | reboot,hard,* )         var=${var#reboot,} ; var=${var%,} ;;
+    reboot,warm | reboot,warm,* )         var=${var#reboot,} ; var=${var%,} ;;
+    reboot,recovery | reboot,recovery,* ) var=${var#reboot,} ; var=${var%,} ;;
+    reboot,bootloader | reboot,bootloader,* ) var=${var#reboot,} ; var=${var%,} ;;
+    reboot | reboot,?*) ;;
+    # Aliases and Heuristics
     *wdog* | *watchdog* )     var="watchdog" ;;
     *powerkey* )              var="cold,powerkey" ;;
     *panic* | *kernel_panic*) var="kernel_panic" ;;
@@ -353,10 +421,24 @@ validate_property() {
     *s3_wakeup*)              var="warm,s3_wakeup" ;;
     *hw_reset*)               var="hard,hw_reset" ;;
     *bootloader*)             var="bootloader" ;;
-    ?*)                       var="reboot,${var}" ;;
     *)                        var="reboot" ;;
   esac
   echo ${var}
+}
+
+[ "USAGE: validate_property <property>
+
+Check property for CTS compliance with our expectations. Return a cleansed
+string representing what is acceptable.
+
+NB: must also roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
+validate_property() {
+  val="`adb shell getprop ${1} 2>&1`"
+  ret=`validate_reason "${val}"`
+  if [ "reboot" = "${ret}" ]; then
+    ret=`validate_reason "reboot,${val}"`
+  fi
+  echo ${ret}
 }
 
 #
@@ -372,6 +454,7 @@ properties test
 - adb shell getprop sys.boot.reason (system reason)
 - NB: all should have a value that is compliant with our known set." ]
 test_properties() {
+  duration_test 1
   wait_for_screen
   retval=0
   check_set="ro.boot.bootreason persist.sys.boot.reason sys.boot.reason"
@@ -381,7 +464,7 @@ test_properties() {
   #  ERROR: expected "reboot" got ""
   #        for Android property persist.sys.boot.reason
   # following is mitigation for the persist.sys.boot.reason, skip it
-  if [ "reboot,factory_reset" = `validate_property ro.boot_bootreason` ]; then
+  if [ "reboot,factory_reset" = "`validate_property ro.boot_bootreason`" ]; then
     check_set="ro.boot.bootreason sys.boot.reason"
     bootloader="bootloader"
   fi
@@ -410,7 +493,7 @@ ota test
 Decision to change the build itself rather than trick bootstat by
 rummaging through its data files was made." ]
 test_ota() {
-  echo "INFO: expected duration of '${TEST}' test >`format_duration 300`" >&2
+  duration_test ">300"
   echo "      extended by build and flashing times" >&2
   if [ -z "${TARGET_PRODUCT}" -o \
        -z "${ANDROID_PRODUCT_OUT}" -o \
@@ -451,7 +534,7 @@ test_ota() {
 fast and fake (touch build_date on device to make it different)" ]
 test_optional_ota() {
   checkDebugBuild || return
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 45`" >&2
+  duration_test
   adb shell su root touch /data/misc/bootstat/build_date >&2
   adb reboot ota
   wait_for_screen
@@ -472,11 +555,11 @@ We interleave the simple reboot tests between the hard/complex ones
 as a means of checking sanity and any persistent side effect of the
 other tests." ]
 blind_reboot_test() {
+  duration_test
   case ${TEST} in
     bootloader | recovery | cold | hard | warm ) reason=${TEST} ;;
     *)                                           reason=reboot,${TEST} ;;
   esac
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 45`" >&2
   adb reboot ${TEST}
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${reason}
@@ -508,7 +591,7 @@ Decision to rummage through bootstat data files was made as
 a _real_ factory_reset is too destructive to the device." ]
 test_factory_reset() {
   checkDebugBuild || return
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 45`" >&2
+  duration_test
   adb shell su root rm /data/misc/bootstat/build_date >&2
   adb reboot >&2
   wait_for_screen
@@ -531,7 +614,7 @@ factory_reset test
 
 For realz, and disruptive" ]
 test_optional_factory_reset() {
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 60`" >&2
+  duration_test 60
   if ! inFastboot; then
     adb reboot-bootloader
   fi
@@ -585,7 +668,7 @@ battery test (trick):
 - (replace set logd.kernel true to the above, and retry test)" ]
 test_battery() {
   checkDebugBuild || return
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 120`" >&2
+  duration_test 120
   enterPstore
   # Send it _many_ times to combat devices with flakey pstore
   for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
@@ -626,7 +709,7 @@ battery shutdown test:
 - adb shell getprop sys.boot.reason
 - NB: should report shutdown,battery" ]
 test_optional_battery() {
-  echo "INFO: expected duration of '${TEST}' test >`format_duration 60`" >&2
+  duration_test ">60"
   echo "      power on request" >&2
   adb shell setprop sys.powerctl shutdown,battery
   sleep 5
@@ -646,7 +729,7 @@ battery thermal shutdown test:
 - adb shell getprop sys.boot.reason
 - NB: should report shutdown,thermal,battery" ]
 test_optional_battery_thermal() {
-  echo "INFO: expected duration of '${TEST}' test >`format_duration 60`" >&2
+  duration_test ">60"
   echo "      power on request" >&2
   adb shell setprop sys.powerctl shutdown,thermal,battery
   sleep 5
@@ -678,7 +761,7 @@ kernel_panic test:
 - NB: should report kernel_panic,sysrq" ]
 test_kernel_panic() {
   checkDebugBuild || return
-  echo "INFO: expected duration of '${TEST}' test >`format_duration 120`" >&2
+  duration_test ">90"
   panic_msg="kernel_panic,sysrq"
   enterPstore || panic_msg="\(kernel_panic,sysrq\|kernel_panic\)"
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
@@ -709,7 +792,7 @@ thermal shutdown test:
 - adb shell getprop sys.boot.reason
 - NB: should report shutdown,thermal" ]
 test_thermal_shutdown() {
-  echo "INFO: expected duration of '${TEST}' test >`format_duration 60`" >&2
+  durtion_test ">60"
   echo "      power on request" >&2
   adb shell setprop sys.powerctl shutdown,thermal
   sleep 5
@@ -729,7 +812,7 @@ userrequested shutdown test:
 - adb shell getprop sys.boot.reason
 - NB: should report shutdown,userrequested" ]
 test_userrequested_shutdown() {
-  echo "INFO: expected duration of '${TEST}' test >`format_duration 60`" >&2
+  duration_test ">60"
   echo "      power on request" >&2
   adb shell setprop sys.powerctl shutdown,userrequested
   sleep 5
@@ -748,7 +831,7 @@ shell reboot test:
 - adb shell getprop sys.boot.reason
 - NB: should report reboot,shell" ]
 test_shell_reboot() {
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 45`" >&2
+  duration_test
   adb shell reboot
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,shell
@@ -764,7 +847,7 @@ adb reboot test:
 - adb shell getprop sys.boot.reason
 - NB: should report reboot,adb" ]
 test_adb_reboot() {
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 45`" >&2
+  duration_test
   adb reboot
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,adb
@@ -781,15 +864,107 @@ Its Just So Hard reboot test:
 - NB: should report reboot,its_just_so_hard
 - NB: expect log \"... I bootstat: Unknown boot reason: reboot,its_just_so_hard\"" ]
 test_Its_Just_So_Hard_reboot() {
-  checkDebugBuild || return
-  echo "INFO: expected duration of '${TEST}' test ~`format_duration 45`" >&2
+  duration_test
   adb shell 'reboot "Its Just So Hard"'
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
   EXPECT_PROPERTY persist.sys.boot.reason "reboot,Its Just So Hard"
   adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard
+  if checkDebugBuild; then
+    flag=""
+  else
+    flag="--allow_failure"
+  fi
+  EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard ${flag}
   report_bootstat_logs reboot,its_just_so_hard
+}
+
+[ "USAGE: run_bootloader [value [expected]]
+
+bootloader boot reason injection tests:
+- setBootloaderBootReason value
+- adb shell reboot
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report reboot,value" ]
+run_bootloader() {
+  bootloader_expected="${1}"
+  if [ -z "${bootloader_expected}" ]; then
+    bootloader_expected="${TEST#bootloader_}"
+  fi
+  if ! setBootloaderBootReason ${bootloader_expected}; then
+    echo "       Skipping FAILURE." 2>&1
+    return
+  fi
+  duration_test
+  if [ X"warm" = X"${bootloader_expected}" ]; then
+    last_expected=cold
+  else
+    last_expected=warm
+  fi
+  adb reboot ${last_expected}
+  wait_for_screen
+  # Reset so that other tests do not get unexpected injection
+  setBootloaderBootReason
+  # Determine the expected values
+  sys_expected="${2}"
+  if [ -z "${sys_expected}" ]; then
+    sys_expected="`validate_reason ${bootloader_expected}`"
+    if [ "reboot" = "${sys_expected}" ]; then
+      sys_expected="${last_expected}"
+    fi
+  else
+    sys_expected=`validate_reason ${sys_expected}`
+  fi
+  case ${sys_expected} in
+    kernel_panic | kernel_panic,* | watchdog | watchdog,* )
+      last_expected=${sys_expected}
+      ;;
+  esac
+  # Check values
+  EXPECT_PROPERTY ro.boot.bootreason "${bootloader_expected}"
+  EXPECT_PROPERTY sys.boot.reason "${sys_expected}"
+  EXPECT_PROPERTY persist.sys.boot.reason "${last_expected}"
+  report_bootstat_logs "${sys_expected}"
+}
+
+[ "USAGE: test_bootloader_<type>
+
+bootloader boot reasons test injection" ]
+test_bootloader_normal() {
+  run_bootloader
+}
+
+test_bootloader_watchdog() {
+  run_bootloader
+}
+
+test_bootloader_kernel_panic() {
+  run_bootloader
+}
+
+test_bootloader_oem_powerkey() {
+  run_bootloader
+}
+
+test_bootloader_wdog_reset() {
+  run_bootloader
+}
+
+test_bootloader_cold() {
+  run_bootloader
+}
+
+test_bootloader_warm() {
+  run_bootloader
+}
+
+test_bootloader_hard() {
+  run_bootloader
+}
+
+test_bootloader_recovery() {
+  run_bootloader
 }
 
 [ "USAGE: ${0##*/} [-s SERIAL] [tests]
@@ -842,8 +1017,13 @@ if [ -z "$*" ]; then
                             grep -v '^optional_'`
   if [ -z "${2}" ]; then
     # Hard coded should shell fail to find them above (search/permission issues)
-    eval set ota cold factory_reset hard battery unknown kernel_panic warm \
-             thermal_shutdown userrequested_shutdown shell_reboot adb_reboot
+    eval set properties ota cold factory_reset hard battery unknown \
+             kernel_panic warm thermal_shutdown userrequested_shutdown \
+             shell_reboot adb_reboot Its_Just_So_Hard_reboot \
+             bootloader_normal bootloader_watchdog bootloader_kernel_panic \
+             bootloader_oem_powerkey bootloader_wdog_reset \
+             bootloader_wdog_reset bootloader_wdog_reset bootloader_hard \
+             bootloader_recovery
   fi
   if [ X"nothing" = X"${1}" ]; then
     shift 1
@@ -851,6 +1031,9 @@ if [ -z "$*" ]; then
 fi
 echo "INFO: selected test(s): ${@}" >&2
 echo
+# Prepare device
+setBootloaderBootReason 2>/dev/null
+# Start pouring through the tests.
 failures=
 successes=
 for t in "${@}"; do
