@@ -24,6 +24,8 @@
 
 #include "storaged.h"
 
+using namespace android::os::storaged;
+
 // Diskstats
 bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats);
 struct disk_perf get_disk_perf(struct disk_stats* stats);
@@ -31,10 +33,10 @@ void get_inc_disk_stats(const struct disk_stats* prev, const struct disk_stats* 
 void add_disk_stats(struct disk_stats* src, struct disk_stats* dst);
 
 // UID I/O
-void sort_running_uids_info(std::vector<struct uid_info> &uids);
+void sort_running_uids_info(std::vector<UidInfo> &uids);
 
 // Logging
-void log_console_running_uids_info(const std::vector<struct uid_info>& uids, bool flag_dump_task);
-void log_console_perf_history(const vector<vector<uint32_t>>& perf_history);
+void log_console_running_uids_info(const std::vector<UidInfo>& uids, bool flag_dump_task);
+void log_console_perf_history(const vector<int>& perf_history);
 
 #endif /* _STORAGED_UTILS_H_ */
