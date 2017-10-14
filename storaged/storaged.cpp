@@ -51,7 +51,7 @@ const uint32_t benchmark_unit_size = 16 * 1024;  // 16KB
 
 const uint32_t storaged_t::crc_init = 0x5108A4ED; /* STORAGED */
 const std::string storaged_t::proto_file =
-    "/data/misc/storaged/storaged.proto";
+    "/data/misc_ce/0/storaged/storaged.proto";
 
 sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
     sp<IServiceManager> sm = defaultServiceManager();
@@ -87,7 +87,7 @@ void storaged_t::init_battery_service() {
 
     struct BatteryProperty val;
     battery_properties->getProperty(BATTERY_PROP_BATTERY_STATUS, &val);
-    mUidm.init(is_charger_on(val.valueInt64), proto.uid_io_usage());
+    mUidm.init(is_charger_on(val.valueInt64));
 
     // register listener after init uid_monitor
     battery_properties->registerListener(this);
@@ -106,12 +106,11 @@ void storaged_t::binderDied(const wp<IBinder>& who) {
 }
 
 void storaged_t::report_storage_info() {
-    storage_info->init(proto.perf_history());
     storage_info->report();
 }
 
 /* storaged_t */
-storaged_t::storaged_t(void) {
+storaged_t::storaged_t(void) : proto_stat(NOT_AVAILABLE) {
     mConfig.periodic_chores_interval_unit =
         property_get_int32("ro.storaged.event.interval",
                            DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
@@ -143,11 +142,15 @@ void storaged_t::load_proto() {
 
     if (!in.good()) {
         PLOG_TO(SYSTEM, INFO) << "Open " << proto_file << " failed";
+        proto_stat = NOT_AVAILABLE;
         return;
     }
 
+    proto_stat = AVAILABLE;
+
     stringstream ss;
     ss << in.rdbuf();
+    proto.Clear();
     proto.ParseFromString(ss.str());
 
     uint32_t crc = proto.crc();
@@ -160,10 +163,18 @@ void storaged_t::load_proto() {
     if (crc != computed_crc) {
         LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << proto_file;
         proto.Clear();
+        return;
     }
+
+    proto_stat = LOADED;
+
+    storage_info->load_perf_history_proto(proto.perf_history());
+    mUidm.load_uid_io_proto(proto.uid_io_usage());
 }
 
 void storaged_t::flush_proto() {
+    if (proto_stat != LOADED) return;
+
     proto.set_version(1);
     proto.set_crc(crc_init);
     while (proto.ByteSize() < 128 * 1024) {
@@ -186,6 +197,7 @@ void storaged_t::flush_proto() {
                  S_IRUSR | S_IWUSR)));
     if (fd == -1) {
         PLOG_TO(SYSTEM, ERROR) << "Faied to open tmp file: " << tmp_file;
+        proto_stat = NOT_AVAILABLE;
         return;
     }
 
@@ -222,6 +234,10 @@ void storaged_t::flush_proto() {
 }
 
 void storaged_t::event(void) {
+    if (proto_stat == AVAILABLE) {
+        load_proto();
+    }
+
     if (mDsm.enabled()) {
         mDsm.update();
         if (!(mTimer % mConfig.periodic_chores_interval_disk_stats_publish)) {
@@ -229,13 +245,11 @@ void storaged_t::event(void) {
         }
     }
 
-    if (mUidm.enabled() &&
-        !(mTimer % mConfig.periodic_chores_interval_uid_io)) {
+    if (!(mTimer % mConfig.periodic_chores_interval_uid_io)) {
         mUidm.report(proto.mutable_uid_io_usage());
     }
 
     storage_info->refresh(proto.mutable_perf_history());
-
     if (!(mTimer % mConfig.periodic_chores_interval_flush_proto)) {
         flush_proto();
     }
