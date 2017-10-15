@@ -56,7 +56,6 @@ cc_library_static {
         "libfstab",
     ],
     cppflags: [
-        "-DALLOW_SKIP_SECURE_CHECK=0",
         "-DALLOW_ADBD_DISABLE_VERITY=0",
     ],
     product_variables: {
@@ -64,12 +63,6 @@ cc_library_static {
             cppflags: [
                 "-UALLOW_ADBD_DISABLE_VERITY",
                 "-DALLOW_ADBD_DISABLE_VERITY=1",
-            ],
-        },
-        eng: {
-            cppflags: [
-                "-UALLOW_SKIP_SECURE_CHECK",
-                "-DALLOW_SKIP_SECURE_CHECK=1",
             ],
         },
     },
