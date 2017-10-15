@@ -70,6 +70,8 @@ checkDebugBuild() {
     false
   else
     echo "ERROR: '${TEST}' test requires userdebug build, skipping FAILURE"
+    duration_prefix="~"
+    duration_estimate=1
     false
   fi >&2
 }
@@ -130,6 +132,8 @@ exitPstore() {
       return ${save_ret}
     fi
     echo "ERROR: '${TEST}' test requires functional pstore, skipping FAILURE"
+    duration_prefix="~"
+    duration_estimate=1
   fi >&2
 }
 
@@ -792,7 +796,7 @@ thermal shutdown test:
 - adb shell getprop sys.boot.reason
 - NB: should report shutdown,thermal" ]
 test_thermal_shutdown() {
-  durtion_test ">60"
+  duration_test ">60"
   echo "      power on request" >&2
   adb shell setprop sys.powerctl shutdown,thermal
   sleep 5
