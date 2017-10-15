@@ -765,13 +765,6 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     const std::string mount_point(basename(fstab->mount_point));
     bool verified_at_boot = false;
 
-    // This is a public API and so deserves its own check to see if verity
-    // setup is needed at all.
-    if (!is_device_secure()) {
-        LINFO << "Verity setup skipped for " << mount_point;
-        return FS_MGR_SETUP_VERITY_SKIPPED;
-    }
-
     if (fec_open(&f, fstab->blk_device, O_RDONLY, FEC_VERITY_DISABLE,
             FEC_DEFAULT_ROOTS) < 0) {
         PERROR << "Failed to open '" << fstab->blk_device << "'";
@@ -792,7 +785,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
 #ifdef ALLOW_ADBD_DISABLE_VERITY
     if (verity.disabled) {
         retval = FS_MGR_SETUP_VERITY_DISABLED;
-        LINFO << "Attempt to cleanly disable verity - only works in USERDEBUG";
+        LINFO << "Attempt to cleanly disable verity - only works in USERDEBUG/ENG";
         goto out;
     }
 #endif
