@@ -17,6 +17,7 @@
 #define LOG_TAG "TrustyKeymaster"
 
 #include <assert.h>
+#include <errno.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
 #include <stddef.h>
