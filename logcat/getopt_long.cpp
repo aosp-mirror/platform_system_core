@@ -49,7 +49,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
