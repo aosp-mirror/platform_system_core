@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
@@ -157,6 +158,12 @@ static uint32_t PropertySetImpl(const std::string& name, const std::string& valu
     if (valuelen >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
         LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
                    << "value too long";
+        return PROP_ERROR_INVALID_VALUE;
+    }
+
+    if (mbstowcs(nullptr, value.data(), 0) == static_cast<std::size_t>(-1)) {
+        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
+                   << "value not a UTF8 encoded string";
         return PROP_ERROR_INVALID_VALUE;
     }
 
