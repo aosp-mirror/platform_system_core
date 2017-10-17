@@ -149,12 +149,6 @@ static void BM_create_map(benchmark::State& state) {
 }
 BENCHMARK(BM_create_map);
 
-static void BM_create_map_new(benchmark::State& state) {
-  CreateMap(state, BacktraceMap::CreateNew);
-}
-BENCHMARK(BM_create_map_new);
-
-
 using BacktraceCreateFn = decltype(Backtrace::Create);
 
 static void CreateBacktrace(benchmark::State& state, BacktraceMap* map, BacktraceCreateFn fn) {
@@ -169,11 +163,5 @@ static void BM_create_backtrace(benchmark::State& state) {
   CreateBacktrace(state, backtrace_map.get(), Backtrace::Create);
 }
 BENCHMARK(BM_create_backtrace);
-
-static void BM_create_backtrace_new(benchmark::State& state) {
-  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::CreateNew(getpid()));
-  CreateBacktrace(state, backtrace_map.get(), Backtrace::CreateNew);
-}
-BENCHMARK(BM_create_backtrace_new);
 
 BENCHMARK_MAIN();
