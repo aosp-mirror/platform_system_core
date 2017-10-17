@@ -19,7 +19,6 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <linux/input.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
