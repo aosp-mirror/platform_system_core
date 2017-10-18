@@ -52,7 +52,7 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool ad
   }
 
   frame->map_name = map_info->name;
-  frame->map_offset = map_info->elf_offset;
+  frame->map_offset = map_info->offset;
   frame->map_start = map_info->start;
   frame->map_end = map_info->end;
   frame->map_flags = map_info->flags;
