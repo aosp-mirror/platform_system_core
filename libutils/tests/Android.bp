@@ -34,8 +34,6 @@ cc_test {
     target: {
         android: {
             srcs: [
-                "Looper_test.cpp",
-                "RefBase_test.cpp",
                 "SystemClock_test.cpp",
             ],
             shared_libs: [
@@ -46,7 +44,7 @@ cc_test {
                 "libbase",
             ],
         },
-        linux_glibc: {
+        linux: {
             srcs: [
                 "Looper_test.cpp",
                 "RefBase_test.cpp",
