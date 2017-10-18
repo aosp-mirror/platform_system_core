@@ -131,7 +131,7 @@ bool Elf::IsValidElf(Memory* memory) {
 
   // Verify that this is a valid elf file.
   uint8_t e_ident[SELFMAG + 1];
-  if (!memory->Read(0, e_ident, SELFMAG)) {
+  if (!memory->ReadFully(0, e_ident, SELFMAG)) {
     return false;
   }
 
@@ -151,7 +151,7 @@ void Elf::GetInfo(Memory* memory, bool* valid, uint64_t* size) {
 
   // Now read the section header information.
   uint8_t class_type;
-  if (!memory->Read(EI_CLASS, &class_type, 1)) {
+  if (!memory->ReadFully(EI_CLASS, &class_type, 1)) {
     return;
   }
   if (class_type == ELFCLASS32) {
@@ -169,12 +169,12 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
   }
 
   std::unique_ptr<ElfInterface> interface;
-  if (!memory->Read(EI_CLASS, &class_type_, 1)) {
+  if (!memory->ReadFully(EI_CLASS, &class_type_, 1)) {
     return nullptr;
   }
   if (class_type_ == ELFCLASS32) {
     Elf32_Half e_machine;
-    if (!memory->Read(EI_NIDENT + sizeof(Elf32_Half), &e_machine, sizeof(e_machine))) {
+    if (!memory->ReadFully(EI_NIDENT + sizeof(Elf32_Half), &e_machine, sizeof(e_machine))) {
       return nullptr;
     }
 
@@ -195,7 +195,7 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
     }
   } else if (class_type_ == ELFCLASS64) {
     Elf64_Half e_machine;
-    if (!memory->Read(EI_NIDENT + sizeof(Elf64_Half), &e_machine, sizeof(e_machine))) {
+    if (!memory->ReadFully(EI_NIDENT + sizeof(Elf64_Half), &e_machine, sizeof(e_machine))) {
       return nullptr;
     }
     if (e_machine != EM_AARCH64 && e_machine != EM_X86_64) {

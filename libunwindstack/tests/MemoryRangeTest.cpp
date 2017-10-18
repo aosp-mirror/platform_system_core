@@ -38,7 +38,7 @@ TEST(MemoryRangeTest, read) {
   MemoryRange range(process_memory, 9001, src.size(), 0);
 
   std::vector<uint8_t> dst(1024);
-  ASSERT_TRUE(range.Read(0, dst.data(), src.size()));
+  ASSERT_TRUE(range.ReadFully(0, dst.data(), src.size()));
   for (size_t i = 0; i < 1024; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
@@ -54,18 +54,18 @@ TEST(MemoryRangeTest, read_near_limit) {
   MemoryRange range(process_memory, 1000, 1024, 0);
 
   std::vector<uint8_t> dst(1024);
-  ASSERT_TRUE(range.Read(1020, dst.data(), 4));
+  ASSERT_TRUE(range.ReadFully(1020, dst.data(), 4));
   for (size_t i = 0; i < 4; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
 
   // Verify that reads outside of the range will fail.
-  ASSERT_FALSE(range.Read(1020, dst.data(), 5));
-  ASSERT_FALSE(range.Read(1024, dst.data(), 1));
-  ASSERT_FALSE(range.Read(1024, dst.data(), 1024));
+  ASSERT_FALSE(range.ReadFully(1020, dst.data(), 5));
+  ASSERT_FALSE(range.ReadFully(1024, dst.data(), 1));
+  ASSERT_FALSE(range.ReadFully(1024, dst.data(), 1024));
 
   // Verify that reading up to the end works.
-  ASSERT_TRUE(range.Read(1020, dst.data(), 4));
+  ASSERT_TRUE(range.ReadFully(1020, dst.data(), 4));
 }
 
 TEST(MemoryRangeTest, read_overflow) {
@@ -73,7 +73,7 @@ TEST(MemoryRangeTest, read_overflow) {
 
   std::shared_ptr<Memory> process_memory(new MemoryFakeAlwaysReadZero);
   std::unique_ptr<MemoryRange> overflow(new MemoryRange(process_memory, 100, 200, 0));
-  ASSERT_FALSE(overflow->Read(UINT64_MAX - 10, buffer.data(), 100));
+  ASSERT_FALSE(overflow->ReadFully(UINT64_MAX - 10, buffer.data(), 100));
 }
 
 TEST(MemoryRangeTest, ReadPartially) {

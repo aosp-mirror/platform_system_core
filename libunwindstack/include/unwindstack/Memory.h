@@ -38,7 +38,7 @@ class Memory {
 
   virtual size_t ReadPartially(uint64_t addr, void* dst, size_t size) = 0;
 
-  bool Read(uint64_t addr, void* dst, size_t size);
+  bool ReadFully(uint64_t addr, void* dst, size_t size);
 
   inline bool ReadField(uint64_t addr, void* start, void* field, size_t size) {
     if (reinterpret_cast<uintptr_t>(field) < reinterpret_cast<uintptr_t>(start)) {
@@ -49,12 +49,16 @@ class Memory {
       return false;
     }
     // The read will check if offset + size overflows.
-    return Read(offset, field, size);
+    return ReadFully(offset, field, size);
   }
 
-  inline bool Read32(uint64_t addr, uint32_t* dst) { return Read(addr, dst, sizeof(uint32_t)); }
+  inline bool Read32(uint64_t addr, uint32_t* dst) {
+    return ReadFully(addr, dst, sizeof(uint32_t));
+  }
 
-  inline bool Read64(uint64_t addr, uint64_t* dst) { return Read(addr, dst, sizeof(uint64_t)); }
+  inline bool Read64(uint64_t addr, uint64_t* dst) {
+    return ReadFully(addr, dst, sizeof(uint64_t));
+  }
 };
 
 class MemoryBuffer : public Memory {

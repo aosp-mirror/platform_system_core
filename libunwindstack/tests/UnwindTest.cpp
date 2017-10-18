@@ -174,7 +174,7 @@ void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* complete
       MemoryRemote memory(pid);
       // Read the remote value to see if we are ready.
       bool value;
-      if (memory.Read(addr, &value, sizeof(value)) && value) {
+      if (memory.ReadFully(addr, &value, sizeof(value)) && value) {
         *completed = true;
       }
       if (!*completed || !leave_attached) {

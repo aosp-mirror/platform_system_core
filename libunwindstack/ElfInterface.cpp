@@ -53,7 +53,7 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
   Crc64GenerateTable();
 
   std::vector<uint8_t> src(gnu_debugdata_size_);
-  if (!memory_->Read(gnu_debugdata_offset_, src.data(), gnu_debugdata_size_)) {
+  if (!memory_->ReadFully(gnu_debugdata_offset_, src.data(), gnu_debugdata_size_)) {
     gnu_debugdata_offset_ = 0;
     gnu_debugdata_size_ = static_cast<uint64_t>(-1);
     return nullptr;
@@ -131,7 +131,7 @@ void ElfInterface::InitHeadersWithTemplate() {
 template <typename EhdrType, typename PhdrType, typename ShdrType>
 bool ElfInterface::ReadAllHeaders(uint64_t* load_bias) {
   EhdrType ehdr;
-  if (!memory_->Read(0, &ehdr, sizeof(ehdr))) {
+  if (!memory_->ReadFully(0, &ehdr, sizeof(ehdr))) {
     return false;
   }
 
@@ -242,7 +242,7 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
     }
 
     if (shdr.sh_type == SHT_SYMTAB || shdr.sh_type == SHT_DYNSYM) {
-      if (!memory_->Read(offset, &shdr, sizeof(shdr))) {
+      if (!memory_->ReadFully(offset, &shdr, sizeof(shdr))) {
         return false;
       }
       // Need to go get the information about the section that contains
@@ -324,7 +324,7 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
   uint64_t offset = dynamic_offset_;
   uint64_t max_offset = offset + dynamic_size_;
   for (uint64_t offset = dynamic_offset_; offset < max_offset; offset += sizeof(DynType)) {
-    if (!memory_->Read(offset, &dyn, sizeof(dyn))) {
+    if (!memory_->ReadFully(offset, &dyn, sizeof(dyn))) {
       return false;
     }
 
@@ -388,7 +388,7 @@ bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* f
 template <typename EhdrType>
 void ElfInterface::GetMaxSizeWithTemplate(Memory* memory, uint64_t* size) {
   EhdrType ehdr;
-  if (!memory->Read(0, &ehdr, sizeof(ehdr))) {
+  if (!memory->ReadFully(0, &ehdr, sizeof(ehdr))) {
     return;
   }
   if (ehdr.e_shnum == 0) {

@@ -36,7 +36,7 @@ class MemoryBufferTest : public ::testing::Test {
 TEST_F(MemoryBufferTest, empty) {
   ASSERT_EQ(0U, memory_->Size());
   std::vector<uint8_t> buffer(1024);
-  ASSERT_FALSE(memory_->Read(0, buffer.data(), 1));
+  ASSERT_FALSE(memory_->ReadFully(0, buffer.data(), 1));
   ASSERT_EQ(nullptr, memory_->GetPtr(0));
   ASSERT_EQ(nullptr, memory_->GetPtr(1));
 }
@@ -55,7 +55,7 @@ TEST_F(MemoryBufferTest, write_read) {
   }
 
   std::vector<uint8_t> buffer(memory_->Size());
-  ASSERT_TRUE(memory_->Read(0, buffer.data(), buffer.size()));
+  ASSERT_TRUE(memory_->ReadFully(0, buffer.data(), buffer.size()));
   for (size_t i = 0; i < buffer.size(); i++) {
     ASSERT_EQ(i, buffer[i]) << "Failed at byte " << i;
   }
@@ -64,18 +64,18 @@ TEST_F(MemoryBufferTest, write_read) {
 TEST_F(MemoryBufferTest, read_failures) {
   memory_->Resize(100);
   std::vector<uint8_t> buffer(200);
-  ASSERT_FALSE(memory_->Read(0, buffer.data(), 101));
-  ASSERT_FALSE(memory_->Read(100, buffer.data(), 1));
-  ASSERT_FALSE(memory_->Read(101, buffer.data(), 2));
-  ASSERT_FALSE(memory_->Read(99, buffer.data(), 2));
-  ASSERT_TRUE(memory_->Read(99, buffer.data(), 1));
+  ASSERT_FALSE(memory_->ReadFully(0, buffer.data(), 101));
+  ASSERT_FALSE(memory_->ReadFully(100, buffer.data(), 1));
+  ASSERT_FALSE(memory_->ReadFully(101, buffer.data(), 2));
+  ASSERT_FALSE(memory_->ReadFully(99, buffer.data(), 2));
+  ASSERT_TRUE(memory_->ReadFully(99, buffer.data(), 1));
 }
 
 TEST_F(MemoryBufferTest, read_failure_overflow) {
   memory_->Resize(100);
   std::vector<uint8_t> buffer(200);
 
-  ASSERT_FALSE(memory_->Read(UINT64_MAX - 100, buffer.data(), 200));
+  ASSERT_FALSE(memory_->ReadFully(UINT64_MAX - 100, buffer.data(), 200));
 }
 
 TEST_F(MemoryBufferTest, ReadPartially) {

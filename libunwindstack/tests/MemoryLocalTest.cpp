@@ -33,14 +33,14 @@ TEST(MemoryLocalTest, read) {
   MemoryLocal local;
 
   std::vector<uint8_t> dst(1024);
-  ASSERT_TRUE(local.Read(reinterpret_cast<uint64_t>(src.data()), dst.data(), 1024));
+  ASSERT_TRUE(local.ReadFully(reinterpret_cast<uint64_t>(src.data()), dst.data(), 1024));
   ASSERT_EQ(0, memcmp(src.data(), dst.data(), 1024));
   for (size_t i = 0; i < 1024; i++) {
     ASSERT_EQ(0x4cU, dst[i]);
   }
 
   memset(src.data(), 0x23, 512);
-  ASSERT_TRUE(local.Read(reinterpret_cast<uint64_t>(src.data()), dst.data(), 1024));
+  ASSERT_TRUE(local.ReadFully(reinterpret_cast<uint64_t>(src.data()), dst.data(), 1024));
   ASSERT_EQ(0, memcmp(src.data(), dst.data(), 1024));
   for (size_t i = 0; i < 512; i++) {
     ASSERT_EQ(0x23U, dst[i]);
@@ -54,8 +54,8 @@ TEST(MemoryLocalTest, read_illegal) {
   MemoryLocal local;
 
   std::vector<uint8_t> dst(100);
-  ASSERT_FALSE(local.Read(0, dst.data(), 1));
-  ASSERT_FALSE(local.Read(0, dst.data(), 100));
+  ASSERT_FALSE(local.ReadFully(0, dst.data(), 1));
+  ASSERT_FALSE(local.ReadFully(0, dst.data(), 100));
 }
 
 TEST(MemoryLocalTest, read_overflow) {
@@ -65,7 +65,7 @@ TEST(MemoryLocalTest, read_overflow) {
   // version will always go through the overflow check.
   std::vector<uint8_t> dst(100);
   uint64_t value;
-  ASSERT_FALSE(local.Read(reinterpret_cast<uint64_t>(&value), dst.data(), SIZE_MAX));
+  ASSERT_FALSE(local.ReadFully(reinterpret_cast<uint64_t>(&value), dst.data(), SIZE_MAX));
 }
 
 TEST(MemoryLocalTest, ReadPartially) {

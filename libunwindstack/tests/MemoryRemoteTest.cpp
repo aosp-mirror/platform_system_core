@@ -71,7 +71,7 @@ TEST_F(MemoryRemoteTest, read) {
   MemoryRemote remote(pid);
 
   std::vector<uint8_t> dst(1024);
-  ASSERT_TRUE(remote.Read(reinterpret_cast<uint64_t>(src.data()), dst.data(), 1024));
+  ASSERT_TRUE(remote.ReadFully(reinterpret_cast<uint64_t>(src.data()), dst.data(), 1024));
   for (size_t i = 0; i < 1024; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
@@ -90,7 +90,8 @@ TEST_F(MemoryRemoteTest, ReadPartially) {
 
   pid_t pid;
   if ((pid = fork()) == 0) {
-    while (true);
+    while (true)
+      ;
     exit(1);
   }
   ASSERT_LT(0, pid);
@@ -133,17 +134,17 @@ TEST_F(MemoryRemoteTest, read_fail) {
   MemoryRemote remote(pid);
 
   std::vector<uint8_t> dst(pagesize);
-  ASSERT_TRUE(remote.Read(reinterpret_cast<uint64_t>(src), dst.data(), pagesize));
+  ASSERT_TRUE(remote.ReadFully(reinterpret_cast<uint64_t>(src), dst.data(), pagesize));
   for (size_t i = 0; i < 1024; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_FALSE(remote.Read(reinterpret_cast<uint64_t>(src) + pagesize, dst.data(), 1));
-  ASSERT_TRUE(remote.Read(reinterpret_cast<uint64_t>(src) + pagesize - 1, dst.data(), 1));
-  ASSERT_FALSE(remote.Read(reinterpret_cast<uint64_t>(src) + pagesize - 4, dst.data(), 8));
+  ASSERT_FALSE(remote.ReadFully(reinterpret_cast<uint64_t>(src) + pagesize, dst.data(), 1));
+  ASSERT_TRUE(remote.ReadFully(reinterpret_cast<uint64_t>(src) + pagesize - 1, dst.data(), 1));
+  ASSERT_FALSE(remote.ReadFully(reinterpret_cast<uint64_t>(src) + pagesize - 4, dst.data(), 8));
 
   // Check overflow condition is caught properly.
-  ASSERT_FALSE(remote.Read(UINT64_MAX - 100, dst.data(), 200));
+  ASSERT_FALSE(remote.ReadFully(UINT64_MAX - 100, dst.data(), 200));
 
   ASSERT_EQ(0, munmap(src, pagesize));
 
@@ -153,7 +154,8 @@ TEST_F(MemoryRemoteTest, read_fail) {
 TEST_F(MemoryRemoteTest, read_overflow) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    while (true);
+    while (true)
+      ;
     exit(1);
   }
   ASSERT_LT(0, pid);
@@ -165,7 +167,7 @@ TEST_F(MemoryRemoteTest, read_overflow) {
 
   // Check overflow condition is caught properly.
   std::vector<uint8_t> dst(200);
-  ASSERT_FALSE(remote.Read(UINT64_MAX - 100, dst.data(), 200));
+  ASSERT_FALSE(remote.ReadFully(UINT64_MAX - 100, dst.data(), 200));
 
   ASSERT_TRUE(Detach(pid));
 }
@@ -184,8 +186,8 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   MemoryRemote remote(pid);
 
   std::vector<uint8_t> dst(100);
-  ASSERT_FALSE(remote.Read(0, dst.data(), 1));
-  ASSERT_FALSE(remote.Read(0, dst.data(), 100));
+  ASSERT_FALSE(remote.ReadFully(0, dst.data(), 1));
+  ASSERT_FALSE(remote.ReadFully(0, dst.data(), 100));
 
   ASSERT_TRUE(Detach(pid));
 }

@@ -84,7 +84,7 @@ static size_t ProcessVmRead(pid_t pid, void* dst, uint64_t remote_src, size_t le
 
 namespace unwindstack {
 
-bool Memory::Read(uint64_t addr, void* dst, size_t size) {
+bool Memory::ReadFully(uint64_t addr, void* dst, size_t size) {
   size_t rc = ReadPartially(addr, dst, size);
   return rc == size;
 }
@@ -94,7 +94,7 @@ bool Memory::ReadString(uint64_t addr, std::string* string, uint64_t max_read) {
   uint64_t bytes_read = 0;
   while (bytes_read < max_read) {
     uint8_t value;
-    if (!Read(addr, &value, sizeof(value))) {
+    if (!ReadFully(addr, &value, sizeof(value))) {
       return false;
     }
     if (value == '\0') {
@@ -237,7 +237,7 @@ bool MemoryOffline::Init(const std::string& file, uint64_t offset) {
 
   // The first uint64_t value is the start of memory.
   uint64_t start;
-  if (!memory_file->Read(0, &start, sizeof(start))) {
+  if (!memory_file->ReadFully(0, &start, sizeof(start))) {
     return false;
   }
 
