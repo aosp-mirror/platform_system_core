@@ -95,6 +95,16 @@ class UnwinderTest : public ::testing::Test {
     info.elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
+
+    info.name = "/fake/fake.apk";
+    info.start = 0x43000;
+    info.end = 0x44000;
+    info.offset = 0x1d000;
+    info.flags = PROT_READ | PROT_WRITE;
+    elf = new ElfFake(nullptr);
+    info.elf = elf;
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    maps_.FakeAddMapInfo(info);
   }
 
   void SetUp() override {
@@ -166,6 +176,33 @@ TEST_F(UnwinderTest, multiple_frames) {
   EXPECT_EQ(0U, frame->map_offset);
   EXPECT_EQ(0x1000U, frame->map_start);
   EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, non_zero_map_offset) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.FakeSetPc(0x43000);
+  regs_.FakeSetSp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x43000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.apk", frame->map_name);
+  EXPECT_EQ(0x1d000U, frame->map_offset);
+  EXPECT_EQ(0x43000U, frame->map_start);
+  EXPECT_EQ(0x44000U, frame->map_end);
   EXPECT_EQ(0U, frame->map_load_bias);
   EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
