@@ -64,15 +64,19 @@ cc_library {
     target: {
         android: {
             srcs: [
-                "errors_unix.cpp",
                 "properties.cpp",
-                "chrono_utils.cpp",
             ],
-            cppflags: ["-Wexit-time-destructors"],
             sanitize: {
                 misc_undefined: ["integer"],
             },
 
+        },
+        linux: {
+            srcs: [
+                "chrono_utils.cpp",
+                "errors_unix.cpp",
+            ],
+            cppflags: ["-Wexit-time-destructors"],
         },
         darwin: {
             srcs: [
@@ -82,19 +86,7 @@ cc_library {
             cppflags: ["-Wexit-time-destructors"],
         },
         linux_bionic: {
-            srcs: [
-                "chrono_utils.cpp",
-                "errors_unix.cpp",
-            ],
-            cppflags: ["-Wexit-time-destructors"],
             enabled: true,
-        },
-        linux_glibc: {
-            srcs: [
-                "chrono_utils.cpp",
-                "errors_unix.cpp",
-            ],
-            cppflags: ["-Wexit-time-destructors"],
         },
         windows: {
             srcs: [
@@ -127,15 +119,12 @@ cc_test {
     ],
     target: {
         android: {
-            srcs: [
-                "chrono_utils_test.cpp",
-                "properties_test.cpp"
-            ],
+            srcs: ["properties_test.cpp"],
             sanitize: {
                 misc_undefined: ["integer"],
             },
         },
-        linux_glibc: {
+        linux: {
             srcs: ["chrono_utils_test.cpp"],
         },
         windows: {
