@@ -36,7 +36,7 @@ class Memory {
 
   virtual bool ReadString(uint64_t addr, std::string* string, uint64_t max_read = UINT64_MAX);
 
-  virtual size_t ReadPartially(uint64_t addr, void* dst, size_t size) = 0;
+  virtual size_t Read(uint64_t addr, void* dst, size_t size) = 0;
 
   bool ReadFully(uint64_t addr, void* dst, size_t size);
 
@@ -66,7 +66,7 @@ class MemoryBuffer : public Memory {
   MemoryBuffer() = default;
   virtual ~MemoryBuffer() = default;
 
-  size_t ReadPartially(uint64_t addr, void* dst, size_t size) override;
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
 
   uint8_t* GetPtr(size_t offset);
 
@@ -85,7 +85,7 @@ class MemoryFileAtOffset : public Memory {
 
   bool Init(const std::string& file, uint64_t offset, uint64_t size = UINT64_MAX);
 
-  size_t ReadPartially(uint64_t addr, void* dst, size_t size) override;
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
 
   size_t Size() { return size_; }
 
@@ -102,7 +102,7 @@ class MemoryRemote : public Memory {
   MemoryRemote(pid_t pid) : pid_(pid) {}
   virtual ~MemoryRemote() = default;
 
-  size_t ReadPartially(uint64_t addr, void* dst, size_t size) override;
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
 
   pid_t pid() { return pid_; }
 
@@ -115,7 +115,7 @@ class MemoryLocal : public Memory {
   MemoryLocal() = default;
   virtual ~MemoryLocal() = default;
 
-  size_t ReadPartially(uint64_t addr, void* dst, size_t size) override;
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
 };
 
 // MemoryRange maps one address range onto another.
@@ -127,7 +127,7 @@ class MemoryRange : public Memory {
               uint64_t offset);
   virtual ~MemoryRange() = default;
 
-  size_t ReadPartially(uint64_t addr, void* dst, size_t size) override;
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
 
  private:
   std::shared_ptr<Memory> memory_;
@@ -143,7 +143,7 @@ class MemoryOffline : public Memory {
 
   bool Init(const std::string& file, uint64_t offset);
 
-  size_t ReadPartially(uint64_t addr, void* dst, size_t size) override;
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
 
  private:
   std::unique_ptr<MemoryRange> memory_;

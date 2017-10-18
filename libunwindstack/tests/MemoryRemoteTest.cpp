@@ -79,7 +79,7 @@ TEST_F(MemoryRemoteTest, read) {
   ASSERT_TRUE(Detach(pid));
 }
 
-TEST_F(MemoryRemoteTest, ReadPartially) {
+TEST_F(MemoryRemoteTest, Read) {
   char* mapping = static_cast<char*>(
       mmap(nullptr, 2 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
 
@@ -102,8 +102,8 @@ TEST_F(MemoryRemoteTest, ReadPartially) {
   MemoryRemote remote(pid);
 
   std::vector<uint8_t> dst(4096);
-  ASSERT_EQ(1024U, remote.ReadPartially(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024),
-                                        dst.data(), 4096));
+  ASSERT_EQ(1024U, remote.Read(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024),
+                               dst.data(), 4096));
   for (size_t i = 0; i < 1024; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
@@ -211,7 +211,7 @@ TEST_F(MemoryRemoteTest, read_hole) {
 
   MemoryRemote remote(pid);
   std::vector<uint8_t> dst(4096 * 3, 0xCC);
-  ASSERT_EQ(4096U, remote.ReadPartially(reinterpret_cast<uintptr_t>(mapping), dst.data(), 4096 * 3));
+  ASSERT_EQ(4096U, remote.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), 4096 * 3));
   for (size_t i = 0; i < 4096; ++i) {
     ASSERT_EQ(0xFF, dst[i]);
   }

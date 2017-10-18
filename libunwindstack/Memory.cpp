@@ -85,7 +85,7 @@ static size_t ProcessVmRead(pid_t pid, void* dst, uint64_t remote_src, size_t le
 namespace unwindstack {
 
 bool Memory::ReadFully(uint64_t addr, void* dst, size_t size) {
-  size_t rc = ReadPartially(addr, dst, size);
+  size_t rc = Read(addr, dst, size);
   return rc == size;
 }
 
@@ -114,7 +114,7 @@ std::shared_ptr<Memory> Memory::CreateProcessMemory(pid_t pid) {
   return std::shared_ptr<Memory>(new MemoryRemote(pid));
 }
 
-size_t MemoryBuffer::ReadPartially(uint64_t addr, void* dst, size_t size) {
+size_t MemoryBuffer::Read(uint64_t addr, void* dst, size_t size) {
   if (addr >= raw_.size()) {
     return 0;
   }
@@ -185,7 +185,7 @@ bool MemoryFileAtOffset::Init(const std::string& file, uint64_t offset, uint64_t
   return true;
 }
 
-size_t MemoryFileAtOffset::ReadPartially(uint64_t addr, void* dst, size_t size) {
+size_t MemoryFileAtOffset::Read(uint64_t addr, void* dst, size_t size) {
   if (addr >= size_) {
     return 0;
   }
@@ -198,11 +198,11 @@ size_t MemoryFileAtOffset::ReadPartially(uint64_t addr, void* dst, size_t size) 
   return actual_len;
 }
 
-size_t MemoryRemote::ReadPartially(uint64_t addr, void* dst, size_t size) {
+size_t MemoryRemote::Read(uint64_t addr, void* dst, size_t size) {
   return ProcessVmRead(pid_, dst, addr, size);
 }
 
-size_t MemoryLocal::ReadPartially(uint64_t addr, void* dst, size_t size) {
+size_t MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
   return ProcessVmRead(getpid(), dst, addr, size);
 }
 
@@ -210,7 +210,7 @@ MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, 
                          uint64_t offset)
     : memory_(memory), begin_(begin), length_(length), offset_(offset) {}
 
-size_t MemoryRange::ReadPartially(uint64_t addr, void* dst, size_t size) {
+size_t MemoryRange::Read(uint64_t addr, void* dst, size_t size) {
   if (addr < offset_) {
     return 0;
   }
@@ -226,7 +226,7 @@ size_t MemoryRange::ReadPartially(uint64_t addr, void* dst, size_t size) {
     return 0;
   }
 
-  return memory_->ReadPartially(read_addr, dst, read_length);
+  return memory_->Read(read_addr, dst, read_length);
 }
 
 bool MemoryOffline::Init(const std::string& file, uint64_t offset) {
@@ -250,12 +250,12 @@ bool MemoryOffline::Init(const std::string& file, uint64_t offset) {
   return true;
 }
 
-size_t MemoryOffline::ReadPartially(uint64_t addr, void* dst, size_t size) {
+size_t MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
   if (!memory_) {
     return 0;
   }
 
-  return memory_->ReadPartially(addr, dst, size);
+  return memory_->Read(addr, dst, size);
 }
 
 }  // namespace unwindstack

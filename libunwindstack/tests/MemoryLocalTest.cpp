@@ -68,7 +68,7 @@ TEST(MemoryLocalTest, read_overflow) {
   ASSERT_FALSE(local.ReadFully(reinterpret_cast<uint64_t>(&value), dst.data(), SIZE_MAX));
 }
 
-TEST(MemoryLocalTest, ReadPartially) {
+TEST(MemoryLocalTest, Read) {
   char* mapping = static_cast<char*>(
       mmap(nullptr, 2 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
 
@@ -80,8 +80,8 @@ TEST(MemoryLocalTest, ReadPartially) {
   MemoryLocal local;
 
   std::vector<uint8_t> dst(4096);
-  ASSERT_EQ(1024U, local.ReadPartially(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024),
-                                       dst.data(), 4096));
+  ASSERT_EQ(1024U, local.Read(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024),
+                              dst.data(), 4096));
   for (size_t i = 0; i < 1024; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
@@ -98,7 +98,7 @@ TEST(MemoryLocalTest, read_hole) {
 
   MemoryLocal local;
   std::vector<uint8_t> dst(4096 * 3, 0xCC);
-  ASSERT_EQ(4096U, local.ReadPartially(reinterpret_cast<uintptr_t>(mapping), dst.data(), 4096 * 3));
+  ASSERT_EQ(4096U, local.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), 4096 * 3));
   for (size_t i = 0; i < 4096; ++i) {
     ASSERT_EQ(0xFF, dst[i]);
   }

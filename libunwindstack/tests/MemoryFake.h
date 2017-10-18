@@ -32,7 +32,7 @@ class MemoryFake : public Memory {
   MemoryFake() = default;
   virtual ~MemoryFake() = default;
 
-  size_t ReadPartially(uint64_t addr, void* buffer, size_t size) override;
+  size_t Read(uint64_t addr, void* buffer, size_t size) override;
 
   void SetMemory(uint64_t addr, const void* memory, size_t length);
 
@@ -71,7 +71,7 @@ class MemoryFakeAlwaysReadZero : public Memory {
   MemoryFakeAlwaysReadZero() = default;
   virtual ~MemoryFakeAlwaysReadZero() = default;
 
-  size_t ReadPartially(uint64_t, void* buffer, size_t size) override {
+  size_t Read(uint64_t, void* buffer, size_t size) override {
     memset(buffer, 0, size);
     return size;
   }
