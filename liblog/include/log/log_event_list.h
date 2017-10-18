@@ -108,6 +108,12 @@ android_log_context create_android_log_parser(const char* msg, size_t len);
 android_log_list_element android_log_read_next(android_log_context ctx);
 android_log_list_element android_log_peek_next(android_log_context ctx);
 
+/**
+ * Convert a writer context to a reader context. Useful for testing.
+ * Returns an error if ctx is already a reader.
+ */
+int android_log_writer_to_reader(android_log_context ctx);
+
 /* Finished with reader or writer context */
 int android_log_destroy(android_log_context* ctx);
 
@@ -122,6 +128,7 @@ class android_log_event_list {
  private:
   android_log_context ctx;
   int ret;
+  int tag_;
 
   android_log_event_list(const android_log_event_list&) = delete;
   void operator=(const android_log_event_list&) = delete;
@@ -129,11 +136,16 @@ class android_log_event_list {
  public:
   explicit android_log_event_list(int tag) : ret(0) {
     ctx = create_android_logger(static_cast<uint32_t>(tag));
+    tag_ = tag;
   }
+
   explicit android_log_event_list(log_msg& log_msg) : ret(0) {
-    ctx = create_android_log_parser(log_msg.msg() + sizeof(uint32_t),
+    const char* buf = log_msg.msg();
+    ctx = create_android_log_parser(buf + sizeof(uint32_t),
                                     log_msg.entry.len - sizeof(uint32_t));
+    tag_ = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
   }
+
   ~android_log_event_list() {
     android_log_destroy(&ctx);
   }
@@ -149,6 +161,10 @@ class android_log_event_list {
     return ctx;
   }
 
+  android_log_context context() const {
+    return ctx;
+  }
+
   /* return errors or transmit status */
   int status() const {
     return ret;
@@ -159,10 +175,15 @@ class android_log_event_list {
     if (retval < 0) ret = retval;
     return ret;
   }
+
   int end() {
     int retval = android_log_write_list_end(ctx);
     if (retval < 0) ret = retval;
     return ret;
+  }
+
+  uint32_t tag() {
+    return tag_;
   }
 
   android_log_event_list& operator<<(int32_t value) {
@@ -294,6 +315,10 @@ class android_log_event_list {
     int retval = android_log_write_string8_len(ctx, value, len);
     if (retval < 0) ret = retval;
     return ret >= 0;
+  }
+
+  int convert_to_reader() {
+    return android_log_writer_to_reader(ctx);
   }
 
   android_log_list_element read() {
