@@ -31,12 +31,6 @@ bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
     return false;
   }
 
-  // Need to subtract the load_bias from the pc.
-  if (pc < load_bias_) {
-    return false;
-  }
-  pc -= load_bias_;
-
   size_t first = 0;
   size_t last = total_entries_;
   while (first < last) {
@@ -81,7 +75,7 @@ bool ElfInterfaceArm::GetPrel31Addr(uint32_t offset, uint32_t* addr) {
 #define PT_ARM_EXIDX 0x70000001
 #endif
 
-bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type) {
+bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type, uint64_t load_bias) {
   if (type != PT_ARM_EXIDX) {
     return false;
   }
@@ -93,8 +87,7 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type) {
   if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
     return true;
   }
-  // The load_bias_ should always be set by this time.
-  start_offset_ = phdr.p_vaddr - load_bias_;
+  start_offset_ = phdr.p_vaddr - load_bias;
   total_entries_ = phdr.p_memsz / 8;
   return true;
 }
