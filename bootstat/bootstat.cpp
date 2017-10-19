@@ -508,7 +508,6 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
           android::base::ReadFdToString(fileno(fp), &content);
         }
         android_logcat_pclose(&ctx, fp);
-        android_logcat_destroy(&ctx);
         static const char logcat_battery[] = "W/healthd (    0): battery l=";
         const char* match = logcat_battery;
 
