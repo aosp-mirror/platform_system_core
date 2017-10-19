@@ -90,8 +90,6 @@ private:
     void add_records_locked(uint64_t curr_ts);
     // updates curr_io_stats and set last_uid_io_stats
     void update_curr_io_stats_locked();
-    // restores io_history from protobuf
-    void load_uid_io_proto(const UidIOUsage& proto);
     // writes io_history to protobuf
     void update_uid_io_proto(UidIOUsage* proto);
 
@@ -99,7 +97,7 @@ public:
     uid_monitor();
     ~uid_monitor();
     // called by storaged main thread
-    void init(charger_stat_t stat, const UidIOUsage& proto);
+    void init(charger_stat_t stat);
     // called by storaged -u
     std::unordered_map<uint32_t, uid_info> get_uid_io_stats();
     // called by dumpsys
@@ -111,6 +109,8 @@ public:
     // called by storaged periodic_chore or dump with force_report
     bool enabled() { return enable; };
     void report(UidIOUsage* proto);
+    // restores io_history from protobuf
+    void load_uid_io_proto(const UidIOUsage& proto);
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */

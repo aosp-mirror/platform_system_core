@@ -364,6 +364,8 @@ void uid_monitor::update_curr_io_stats_locked()
 
 void uid_monitor::report(UidIOUsage* proto)
 {
+    if (!enabled()) return;
+
     std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
 
     update_curr_io_stats_locked();
@@ -436,6 +438,8 @@ void uid_monitor::update_uid_io_proto(UidIOUsage* uid_io_proto)
 
 void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
 {
+    if (!enabled()) return;
+
     for (const auto& item_proto : uid_io_proto.uid_io_items()) {
         const UidIORecords& records_proto = item_proto.records();
         struct uid_records* recs = &io_history[item_proto.end_ts()];
@@ -468,11 +472,9 @@ void uid_monitor::set_charger_state(charger_stat_t stat)
     charger_stat = stat;
 }
 
-void uid_monitor::init(charger_stat_t stat, const UidIOUsage& proto)
+void uid_monitor::init(charger_stat_t stat)
 {
     charger_stat = stat;
-
-    load_uid_io_proto(proto);
 
     start_ts = time(NULL);
     last_uid_io_stats = get_uid_io_stats();

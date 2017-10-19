@@ -84,6 +84,12 @@ private:
     static const uint32_t crc_init;
     static const string proto_file;
     storaged_proto::StoragedProto proto;
+    enum stat {
+        NOT_AVAILABLE,
+        AVAILABLE,
+        LOADED,
+    };
+    stat proto_stat;
 public:
     storaged_t(void);
     ~storaged_t() {}
@@ -110,11 +116,22 @@ public:
         return mUidm.dump(hours, threshold, force_report,
                           proto.mutable_uid_io_usage());
     }
+
     void update_uid_io_interval(int interval) {
         if (interval >= DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT) {
             mConfig.periodic_chores_interval_uid_io = interval;
         }
     }
+
+    void set_proto_stat_available(bool available) {
+        if (available) {
+            if (proto_stat != LOADED) {
+                proto_stat = AVAILABLE;
+            }
+        } else {
+            proto_stat = NOT_AVAILABLE;
+        }
+    };
 
     void init_battery_service();
     virtual void batteryPropertiesChanged(struct BatteryProperties props);

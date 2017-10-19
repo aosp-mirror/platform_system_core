@@ -35,6 +35,13 @@
 using namespace std;
 using namespace android::base;
 
+/*
+ * The system user is the initial user that is implicitly created on first boot
+ * and hosts most of the system services. Keep this in sync with
+ * frameworks/base/core/java/android/os/UserManager.java
+ */
+const int USER_SYSTEM = 0;
+
 extern sp<storaged_t> storaged_sp;
 
 status_t StoragedService::start() {
@@ -140,10 +147,16 @@ status_t StoragedService::dump(int fd, const Vector<String16>& args) {
 }
 
 binder::Status StoragedService::onUserStarted(int32_t userId) {
+    if (userId == USER_SYSTEM) {
+        storaged_sp->set_proto_stat_available(true);
+    }
     return binder::Status::ok();
 }
 
 binder::Status StoragedService::onUserStopped(int32_t userId) {
+    if (userId == USER_SYSTEM) {
+        storaged_sp->set_proto_stat_available(false);
+    }
     return binder::Status::ok();
 }
 

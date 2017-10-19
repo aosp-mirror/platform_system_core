@@ -66,7 +66,7 @@ storage_info_t* storage_info_t::get_storage_info()
     return new storage_info_t;
 }
 
-void storage_info_t::init(const IOPerfHistory& perf_history)
+void storage_info_t::load_perf_history_proto(const IOPerfHistory& perf_history)
 {
     if (!perf_history.has_day_start_sec() ||
         perf_history.daily_perf_size() > (int)daily_perf.size() ||
