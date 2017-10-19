@@ -1014,7 +1014,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"verity_load_state",       {0,     0,    {false,  do_verity_load_state}}},
         {"verity_update_state",     {0,     0,    {false,  do_verity_update_state}}},
         {"wait",                    {1,     2,    {true,   do_wait}}},
-        {"wait_for_prop",           {2,     2,    {true,   do_wait_for_prop}}},
+        {"wait_for_prop",           {2,     2,    {false,  do_wait_for_prop}}},
         {"write",                   {2,     2,    {true,   do_write}}},
     };
     // clang-format on
