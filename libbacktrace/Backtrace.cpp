@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <assert.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -30,9 +31,10 @@
 #include <demangle.h>
 
 #include "BacktraceLog.h"
-#include "thread_utils.h"
 #include "UnwindCurrent.h"
 #include "UnwindPtrace.h"
+#include "UnwindStack.h"
+#include "thread_utils.h"
 
 using android::base::StringPrintf;
 
@@ -137,6 +139,34 @@ Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
     return new UnwindCurrent(pid, tid, map);
   } else {
     return new UnwindPtrace(pid, tid, map);
+  }
+}
+
+Backtrace* Backtrace::CreateNew(pid_t pid, pid_t tid, BacktraceMap* map) {
+  if (pid == BACKTRACE_CURRENT_PROCESS) {
+    pid = getpid();
+    if (tid == BACKTRACE_CURRENT_THREAD) {
+      tid = gettid();
+    }
+  } else if (tid == BACKTRACE_CURRENT_THREAD) {
+    tid = pid;
+  }
+
+  if (map == nullptr) {
+// This would cause the wrong type of map object to be created, so disallow.
+#if defined(__ANDROID__)
+    __assert2(__FILE__, __LINE__, __PRETTY_FUNCTION__,
+              "Backtrace::CreateNew() must be called with a real map pointer.");
+#else
+    BACK_LOGE("Backtrace::CreateNew() must be called with a real map pointer.");
+    abort();
+#endif
+  }
+
+  if (pid == getpid()) {
+    return new UnwindStackCurrent(pid, tid, map);
+  } else {
+    return new UnwindStackPtrace(pid, tid, map);
   }
 }
 
