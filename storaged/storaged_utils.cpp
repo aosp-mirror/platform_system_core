@@ -122,3 +122,11 @@ void log_console_perf_history(const vector<int>& perf_history) {
               std::ostream_iterator<int>(line, " "));
     printf("last 52 weeks : %s\n", line.str().c_str());
 }
+
+map<string, io_usage> merge_io_usage(const vector<uid_record>& entries) {
+    map<string, io_usage> merged_entries;
+    for (const auto& record : entries) {
+        merged_entries[record.name] += record.ios.uid_ios;
+    }
+    return merged_entries;
+}

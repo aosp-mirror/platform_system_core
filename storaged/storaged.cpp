@@ -16,6 +16,7 @@
 
 #define LOG_TAG "storaged"
 
+#include <dirent.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -28,6 +29,7 @@
 #include <string>
 
 #include <android/hidl/manager/1.0/IServiceManager.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <batteryservice/BatteryServiceConstants.h>
 #include <cutils/properties.h>
@@ -45,13 +47,18 @@ using namespace storaged_proto;
 
 namespace {
 
-const uint32_t benchmark_unit_size = 16 * 1024;  // 16KB
+/*
+ * The system user is the initial user that is implicitly created on first boot
+ * and hosts most of the system services. Keep this in sync with
+ * frameworks/base/core/java/android/os/UserManager.java
+ */
+constexpr int USER_SYSTEM = 0;
 
-}
+constexpr uint32_t benchmark_unit_size = 16 * 1024;  // 16KB
+
+}  // namespace
 
 const uint32_t storaged_t::crc_init = 0x5108A4ED; /* STORAGED */
-const std::string storaged_t::proto_file =
-    "/data/misc_ce/0/storaged/storaged.proto";
 
 using android::hardware::health::V1_0::BatteryStatus;
 using android::hardware::health::V1_0::toString;
@@ -135,7 +142,7 @@ void storaged_t::report_storage_info() {
 }
 
 /* storaged_t */
-storaged_t::storaged_t(void) : proto_stat(NOT_AVAILABLE) {
+storaged_t::storaged_t(void) {
     mConfig.periodic_chores_interval_unit =
         property_get_int32("ro.storaged.event.interval",
                            DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
@@ -161,68 +168,81 @@ storaged_t::storaged_t(void) : proto_stat(NOT_AVAILABLE) {
     mTimer = 0;
 }
 
-void storaged_t::load_proto() {
-    std::ifstream in(proto_file,
-        std::ofstream::in | std::ofstream::binary);
+void storaged_t::add_user_ce(userid_t user_id) {
+    Mutex::Autolock _l(proto_mutex);
+    protos.insert({user_id, {}});
+    load_proto_locked(user_id);
+    protos[user_id].set_loaded(1);
+}
 
-    if (!in.good()) {
-        PLOG_TO(SYSTEM, INFO) << "Open " << proto_file << " failed";
-        proto_stat = NOT_AVAILABLE;
-        return;
-    }
+void storaged_t::remove_user_ce(userid_t user_id) {
+    Mutex::Autolock _l(proto_mutex);
+    protos.erase(user_id);
+    RemoveFileIfExists(proto_path(user_id), nullptr);
+}
 
-    proto_stat = AVAILABLE;
+void storaged_t::load_proto_locked(userid_t user_id) {
+    string proto_file = proto_path(user_id);
+    ifstream in(proto_file, ofstream::in | ofstream::binary);
+
+    if (!in.good()) return;
 
     stringstream ss;
     ss << in.rdbuf();
-    proto.Clear();
-    proto.ParseFromString(ss.str());
+    StoragedProto* proto = &protos[user_id];
+    proto->Clear();
+    proto->ParseFromString(ss.str());
 
-    uint32_t crc = proto.crc();
-    proto.set_crc(crc_init);
-    std::string proto_str = proto.SerializeAsString();
+    uint32_t crc = proto->crc();
+    proto->set_crc(crc_init);
+    string proto_str = proto->SerializeAsString();
     uint32_t computed_crc = crc32(crc_init,
         reinterpret_cast<const Bytef*>(proto_str.c_str()),
         proto_str.size());
 
     if (crc != computed_crc) {
         LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << proto_file;
-        proto.Clear();
+        proto->Clear();
         return;
     }
 
-    proto_stat = LOADED;
+    mUidm.load_uid_io_proto(proto->uid_io_usage());
 
-    storage_info->load_perf_history_proto(proto.perf_history());
-    mUidm.load_uid_io_proto(proto.uid_io_usage());
+    if (user_id == USER_SYSTEM) {
+        storage_info->load_perf_history_proto(proto->perf_history());
+    }
 }
 
-void storaged_t::flush_proto() {
-    if (proto_stat != LOADED) return;
+void storaged_t:: prepare_proto(StoragedProto* proto, userid_t user_id) {
+    proto->set_version(2);
+    proto->set_crc(crc_init);
 
-    proto.set_version(1);
-    proto.set_crc(crc_init);
-    while (proto.ByteSize() < 128 * 1024) {
-        proto.add_padding(0xFEEDBABE);
+    if (user_id == USER_SYSTEM) {
+        while (proto->ByteSize() < 128 * 1024) {
+            proto->add_padding(0xFEEDBABE);
+        }
     }
-    std::string proto_str = proto.SerializeAsString();
-    proto.set_crc(crc32(crc_init,
+
+    string proto_str = proto->SerializeAsString();
+    proto->set_crc(crc32(crc_init,
         reinterpret_cast<const Bytef*>(proto_str.c_str()),
         proto_str.size()));
-    proto_str = proto.SerializeAsString();
+}
 
+void storaged_t::flush_proto_user_system_locked(StoragedProto* proto) {
+    string proto_str = proto->SerializeAsString();
     const char* data = proto_str.data();
     uint32_t size = proto_str.size();
     ssize_t ret;
     time_point<steady_clock> start, end;
 
-    std::string tmp_file = proto_file + "_tmp";
+    string proto_file = proto_path(USER_SYSTEM);
+    string tmp_file = proto_file + "_tmp";
     unique_fd fd(TEMP_FAILURE_RETRY(open(tmp_file.c_str(),
-                 O_DIRECT | O_SYNC | O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC,
-                 S_IRUSR | S_IWUSR)));
+                O_DIRECT | O_SYNC | O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC,
+                S_IRUSR | S_IWUSR)));
     if (fd == -1) {
         PLOG_TO(SYSTEM, ERROR) << "Faied to open tmp file: " << tmp_file;
-        proto_stat = NOT_AVAILABLE;
         return;
     }
 
@@ -258,11 +278,40 @@ void storaged_t::flush_proto() {
     rename(tmp_file.c_str(), proto_file.c_str());
 }
 
-void storaged_t::event(void) {
-    if (proto_stat == AVAILABLE) {
-        load_proto();
+void storaged_t::flush_proto_locked(userid_t user_id) {
+    StoragedProto* proto = &protos[user_id];
+    prepare_proto(proto, user_id);
+    if (user_id == USER_SYSTEM) {
+        flush_proto_user_system_locked(proto);
+        return;
     }
 
+    string proto_file = proto_path(user_id);
+    string tmp_file = proto_file + "_tmp";
+    if (!WriteStringToFile(proto->SerializeAsString(), tmp_file,
+                           S_IRUSR | S_IWUSR)) {
+        return;
+    }
+
+    /* Atomically replace existing proto file to reduce chance of data loss. */
+    rename(tmp_file.c_str(), proto_file.c_str());
+}
+
+void storaged_t::flush_protos() {
+    Mutex::Autolock _l(proto_mutex);
+    for (const auto& it : protos) {
+        /*
+         * Don't flush proto if we haven't loaded it from file and combined
+         * with data in memory.
+         */
+        if (it.second.loaded() != 1) {
+            continue;
+        }
+        flush_proto_locked(it.first);
+    }
+}
+
+void storaged_t::event(void) {
     if (mDsm.enabled()) {
         mDsm.update();
         if (!(mTimer % mConfig.periodic_chores_interval_disk_stats_publish)) {
@@ -271,12 +320,17 @@ void storaged_t::event(void) {
     }
 
     if (!(mTimer % mConfig.periodic_chores_interval_uid_io)) {
-        mUidm.report(proto.mutable_uid_io_usage());
+        Mutex::Autolock _l(proto_mutex);
+        mUidm.report(&protos);
     }
 
-    storage_info->refresh(proto.mutable_perf_history());
+    if (storage_info) {
+        Mutex::Autolock _l(proto_mutex);
+        storage_info->refresh(protos[USER_SYSTEM].mutable_perf_history());
+    }
+
     if (!(mTimer % mConfig.periodic_chores_interval_flush_proto)) {
-        flush_proto();
+        flush_protos();
     }
 
     mTimer += mConfig.periodic_chores_interval_unit;
