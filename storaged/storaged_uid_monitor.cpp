@@ -38,6 +38,7 @@
 using namespace android;
 using namespace android::base;
 using namespace android::content::pm;
+using namespace android::os::storaged;
 using namespace storaged_proto;
 
 namespace {
@@ -47,7 +48,7 @@ const char* UID_IO_STATS_PATH = "/proc/uid_io/stats";
 
 } // namepsace
 
-std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats()
+std::unordered_map<uint32_t, uid_info> uid_monitor::get_uid_io_stats()
 {
     std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
     return get_uid_io_stats_locked();
@@ -151,9 +152,9 @@ void get_uid_names(const vector<int>& uids, const vector<std::string*>& uid_name
 
 } // namespace
 
-std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_locked()
+std::unordered_map<uint32_t, uid_info> uid_monitor::get_uid_io_stats_locked()
 {
-    std::unordered_map<uint32_t, struct uid_info> uid_io_stats;
+    std::unordered_map<uint32_t, uid_info> uid_io_stats;
     std::string buffer;
     if (!ReadFileToString(UID_IO_STATS_PATH, &buffer)) {
         PLOG_TO(SYSTEM, ERROR) << UID_IO_STATS_PATH << ": ReadFileToString failed";
@@ -161,7 +162,7 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
     }
 
     std::vector<std::string> io_stats = Split(std::move(buffer), "\n");
-    struct uid_info u;
+    uid_info u;
     vector<int> uids;
     vector<std::string*> uid_names;
 
@@ -183,7 +184,7 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
                 uid_io_stats[u.uid].name = last_uid_io_stats[u.uid].name;
             }
         } else {
-            struct task_info t;
+            task_info t;
             if (!t.parse_task_io_stats(std::move(io_stats[i])))
                 continue;
             uid_io_stats[u.uid].tasks[t.pid] = t;
@@ -301,14 +302,14 @@ std::map<uint64_t, struct uid_records> uid_monitor::dump(
 
 void uid_monitor::update_curr_io_stats_locked()
 {
-    std::unordered_map<uint32_t, struct uid_info> uid_io_stats =
+    std::unordered_map<uint32_t, uid_info> uid_io_stats =
         get_uid_io_stats_locked();
     if (uid_io_stats.empty()) {
         return;
     }
 
     for (const auto& it : uid_io_stats) {
-        const struct uid_info& uid = it.second;
+        const uid_info& uid = it.second;
 
         if (curr_io_stats.find(uid.name) == curr_io_stats.end()) {
           curr_io_stats[uid.name] = {};
@@ -334,7 +335,7 @@ void uid_monitor::update_curr_io_stats_locked()
             (bg_wr_delta < 0) ? 0 : bg_wr_delta;
 
         for (const auto& task_it : uid.tasks) {
-            const struct task_info& task = task_it.second;
+            const task_info& task = task_it.second;
             const pid_t pid = task_it.first;
             const std::string& comm = task_it.second.comm;
             int64_t task_fg_rd_delta = task.io[FOREGROUND].read_bytes -

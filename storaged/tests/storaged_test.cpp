@@ -380,28 +380,29 @@ TEST(storaged_test, storage_info_t) {
         si.update_perf_history((i + 1) * 5, stp);
     }
 
-    vector<vector<uint32_t>> history = si.get_perf_history();
-    EXPECT_EQ(history.size(), 3UL);
-    EXPECT_EQ(history[0].size(), 4UL);
-    EXPECT_EQ(history[1].size(), 7UL);    // 7 days
-    EXPECT_EQ(history[2].size(), 52UL);   // 52 weeks
+    vector<int> history = si.get_perf_history();
+    EXPECT_EQ(history.size(), 66UL);
+    size_t i = 0;
+    EXPECT_EQ(history[i++], 4);
+    EXPECT_EQ(history[i++], 7);    // 7 days
+    EXPECT_EQ(history[i++], 52);   // 52 weeks
     // last 24 hours
-    EXPECT_EQ(history[0][0], 375UL);
-    EXPECT_EQ(history[0][1], 370UL);
-    EXPECT_EQ(history[0][2], 365UL);
-    EXPECT_EQ(history[0][3], 360UL);
+    EXPECT_EQ(history[i++], 375);
+    EXPECT_EQ(history[i++], 370);
+    EXPECT_EQ(history[i++], 365);
+    EXPECT_EQ(history[i++], 360);
     // daily average of last 7 days
-    EXPECT_EQ(history[1][0], 347UL);
-    EXPECT_EQ(history[1][1], 325UL);
-    EXPECT_EQ(history[1][2], 300UL);
-    EXPECT_EQ(history[1][3], 275UL);
-    EXPECT_EQ(history[1][4], 250UL);
-    EXPECT_EQ(history[1][5], 227UL);
-    EXPECT_EQ(history[1][6], 205UL);
+    EXPECT_EQ(history[i++], 347);
+    EXPECT_EQ(history[i++], 325);
+    EXPECT_EQ(history[i++], 300);
+    EXPECT_EQ(history[i++], 275);
+    EXPECT_EQ(history[i++], 250);
+    EXPECT_EQ(history[i++], 227);
+    EXPECT_EQ(history[i++], 205);
     // weekly average of last 52 weeks
-    EXPECT_EQ(history[2][0], 251UL);
-    EXPECT_EQ(history[2][1], 83UL);
-    for (int i = 2; i < 52; i++) {
-        EXPECT_EQ(history[2][i], 0UL);
+    EXPECT_EQ(history[i++], 251);
+    EXPECT_EQ(history[i++], 83);
+    for (; i < history.size(); i++) {
+        EXPECT_EQ(history[i], 0);
     }
 }

@@ -48,6 +48,7 @@ friend class test_case_name##_##test_name##_Test
 #include "storaged_info.h"
 #include "storaged_uid_monitor.h"
 #include "storaged.pb.h"
+#include "uid_info.h"
 
 using namespace std;
 using namespace android;
@@ -56,8 +57,8 @@ using namespace android;
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT (300)
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO (3600)
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT ( 300 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO ( 3600 )
 
 // UID IO threshold in bytes
 #define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
@@ -96,11 +97,11 @@ public:
         return mStarttime;
     }
 
-    unordered_map<uint32_t, struct uid_info> get_uids(void) {
+    unordered_map<uint32_t, uid_info> get_uids(void) {
         return mUidm.get_uid_io_stats();
     }
 
-    vector<vector<uint32_t>> get_perf_history(void) {
+    vector<int> get_perf_history(void) {
         return storage_info->get_perf_history();
     }
 

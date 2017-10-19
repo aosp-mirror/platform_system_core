@@ -35,121 +35,13 @@
 using namespace std;
 using namespace android::base;
 
-extern sp<storaged_t> storaged;
+extern sp<storaged_t> storaged_sp;
 
-vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
-    Parcel data, reply;
-    data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
-
-    remote()->transact(DUMPUIDS, data, &reply);
-
-    uint32_t res_size = reply.readInt32();
-    vector<struct uid_info> res(res_size);
-    for (auto&& uid : res) {
-        uid.uid = reply.readInt32();
-        uid.name = reply.readCString();
-        reply.read(&uid.io, sizeof(uid.io));
-
-        uint32_t tasks_size = reply.readInt32();
-        for (uint32_t i = 0; i < tasks_size; i++) {
-            struct task_info task;
-            task.pid = reply.readInt32();
-            task.comm = reply.readCString();
-            reply.read(&task.io, sizeof(task.io));
-            uid.tasks[task.pid] = task;
-        }
-    }
-    return res;
+status_t StoragedService::start() {
+    return BinderService<StoragedService>::publish();
 }
 
-vector<vector<uint32_t>> BpStoraged::dump_perf_history(const char* /*option*/) {
-    Parcel data, reply;
-    data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
-
-    remote()->transact(DUMPPERF, data, &reply);
-
-    vector<vector<uint32_t>> res(3);
-    uint32_t size = reply.readUint32();
-    res[0].resize(size);
-    for (uint32_t i = 0; i < size; i++) {
-        res[0][i] = reply.readUint32();
-    }
-    size = reply.readUint32();
-    res[1].resize(size);
-    for (uint32_t i = 0; i < size; i++) {
-        res[1][i] = reply.readUint32();
-    }
-    size = reply.readUint32();
-    res[2].resize(size);
-    for (uint32_t i = 0; i < size; i++) {
-        res[2][i] = reply.readUint32();
-    }
-    return res;
-}
-
-IMPLEMENT_META_INTERFACE(Storaged, "Storaged");
-
-status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
-    switch(code) {
-        case DUMPUIDS: {
-                if (!data.checkInterface(this))
-                    return BAD_TYPE;
-                vector<struct uid_info> res = dump_uids(NULL);
-                reply->writeInt32(res.size());
-                for (const auto& uid : res) {
-                    reply->writeInt32(uid.uid);
-                    reply->writeCString(uid.name.c_str());
-                    reply->write(&uid.io, sizeof(uid.io));
-
-                    reply->writeInt32(uid.tasks.size());
-                    for (const auto& task_it : uid.tasks) {
-                        reply->writeInt32(task_it.first);
-                        reply->writeCString(task_it.second.comm.c_str());
-                        reply->write(&task_it.second.io, sizeof(task_it.second.io));
-                    }
-                }
-                return NO_ERROR;
-            }
-            break;
-        case DUMPPERF: {
-            if (!data.checkInterface(this))
-                return BAD_TYPE;
-            vector<vector<uint32_t>> res = dump_perf_history(NULL);
-            reply->writeUint32(res[0].size());
-            for (const auto& item : res[0]) {
-                reply->writeUint32(item);
-            }
-            reply->writeUint32(res[1].size());
-            for (const auto& item : res[1]) {
-                reply->writeUint32(item);
-            }
-            reply->writeUint32(res[2].size());
-            for (const auto& item : res[2]) {
-                reply->writeUint32(item);
-            }
-            return NO_ERROR;
-        }
-        break;
-        default:
-            return BBinder::onTransact(code, data, reply, flags);
-    }
-}
-
-vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
-    vector<struct uid_info> uids_v;
-    unordered_map<uint32_t, struct uid_info> uids_m = storaged->get_uids();
-
-    for (const auto& it : uids_m) {
-        uids_v.push_back(it.second);
-    }
-    return uids_v;
-}
-
-vector<vector<uint32_t>> Storaged::dump_perf_history(const char* /* option */) {
-    return storaged->get_perf_history();
-}
-
-status_t Storaged::dump(int fd, const Vector<String16>& args) {
+status_t StoragedService::dump(int fd, const Vector<String16>& args) {
     IPCThreadState* self = IPCThreadState::self();
     const int pid = self->getCallingPid();
     const int uid = self->getCallingUid();
@@ -199,7 +91,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
 
     uint64_t last_ts = 0;
     const map<uint64_t, struct uid_records>& records =
-                storaged->get_uid_records(hours, threshold, force_report);
+                storaged_sp->get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
         if (last_ts != it.second.start_ts) {
             dprintf(fd, "%" PRIu64, it.second.start_ts);
@@ -241,20 +133,51 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     }
 
     if (time_window) {
-        storaged->update_uid_io_interval(time_window);
+        storaged_sp->update_uid_io_interval(time_window);
     }
 
     return NO_ERROR;
 }
 
-sp<IStoraged> get_storaged_service() {
+binder::Status StoragedService::onUserStarted(int32_t userId) {
+    return binder::Status::ok();
+}
+
+binder::Status StoragedService::onUserStopped(int32_t userId) {
+    return binder::Status::ok();
+}
+
+status_t StoragedPrivateService::start() {
+    return BinderService<StoragedPrivateService>::publish();
+}
+
+binder::Status StoragedPrivateService::dumpUids(
+        vector<::android::os::storaged::UidInfo>* _aidl_return) {
+    unordered_map<uint32_t, uid_info> uids_m = storaged_sp->get_uids();
+
+    for (const auto& it : uids_m) {
+        UidInfo uinfo;
+        uinfo.uid = it.second.uid;
+        uinfo.name = it.second.name;
+        uinfo.tasks = it.second.tasks;
+        memcpy(&uinfo.io, &it.second.io, sizeof(uinfo.io));
+        _aidl_return->push_back(uinfo);
+    }
+    return binder::Status::ok();
+}
+
+binder::Status StoragedPrivateService::dumpPerfHistory(
+        vector<int32_t>* _aidl_return) {
+    *_aidl_return = storaged_sp->get_perf_history();
+    return binder::Status::ok();
+}
+
+sp<IStoragedPrivate> get_storaged_pri_service() {
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) return NULL;
 
-    sp<IBinder> binder = sm->getService(String16("storaged"));
+    sp<IBinder> binder = sm->getService(String16("storaged_pri"));
     if (binder == NULL) return NULL;
 
-    sp<IStoraged> storaged = interface_cast<IStoraged>(binder);
-
-    return storaged;
+    return interface_cast<IStoragedPrivate>(binder);
 }

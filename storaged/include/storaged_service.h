@@ -19,47 +19,34 @@
 
 #include <vector>
 
-#include <binder/IInterface.h>
-#include <binder/IBinder.h>
+#include <binder/BinderService.h>
 
-#include "storaged.h"
+#include "android/os/BnStoraged.h"
+#include "android/os/storaged/BnStoragedPrivate.h"
 
 using namespace std;
-using namespace android;
+using namespace android::os;
+using namespace android::os::storaged;
 
-// Interface
-class IStoraged : public IInterface {
+class StoragedService : public BinderService<StoragedService>, public BnStoraged {
 public:
-    enum {
-        DUMPUIDS = IBinder::FIRST_CALL_TRANSACTION,
-        DUMPPERF,
-    };
-    // Request the service to run the test function
-    virtual vector<struct uid_info> dump_uids(const char* option) = 0;
-    virtual vector<vector<uint32_t>> dump_perf_history(const char* option) = 0;
+    static status_t start();
+    static char const* getServiceName() { return "storaged"; }
+    virtual status_t dump(int fd, const Vector<String16> &args) override;
 
-    DECLARE_META_INTERFACE(Storaged);
+    binder::Status onUserStarted(int32_t userId);
+    binder::Status onUserStopped(int32_t userId);
 };
 
-// Client
-class BpStoraged : public BpInterface<IStoraged> {
+class StoragedPrivateService : public BinderService<StoragedPrivateService>, public BnStoragedPrivate {
 public:
-    BpStoraged(const sp<IBinder>& impl) : BpInterface<IStoraged>(impl){};
-    virtual vector<struct uid_info> dump_uids(const char* option);
-    virtual vector<vector<uint32_t>> dump_perf_history(const char* option);
+    static status_t start();
+    static char const* getServiceName() { return "storaged_pri"; }
+
+    binder::Status dumpUids(vector<UidInfo>* _aidl_return);
+    binder::Status dumpPerfHistory(vector<int32_t>* _aidl_return);
 };
 
-// Server
-class BnStoraged : public BnInterface<IStoraged> {
-    virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0);
-};
-
-class Storaged : public BnStoraged {
-    virtual vector<struct uid_info> dump_uids(const char* option);
-    virtual vector<vector<uint32_t>> dump_perf_history(const char* option);
-    virtual status_t dump(int fd, const Vector<String16>& args);
-};
-
-sp<IStoraged> get_storaged_service();
+sp<IStoragedPrivate> get_storaged_pri_service();
 
 #endif /* _STORAGED_SERVICE_H_ */
