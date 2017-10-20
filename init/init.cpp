@@ -202,24 +202,90 @@ static std::optional<boot_clock::time_point> RestartProcesses() {
     return next_process_restart_time;
 }
 
+static Result<Success> DoControlStart(Service* service) {
+    return service->Start();
+}
+
+static Result<Success> DoControlStop(Service* service) {
+    service->Stop();
+    return Success();
+}
+
+static Result<Success> DoControlRestart(Service* service) {
+    service->Restart();
+    return Success();
+}
+
+enum class ControlTarget {
+    SERVICE,    // function gets called for the named service
+    INTERFACE,  // action gets called for every service that holds this interface
+};
+
+struct ControlMessageFunction {
+    ControlTarget target;
+    std::function<Result<Success>(Service*)> action;
+};
+
+static const std::map<std::string, ControlMessageFunction>& get_control_message_map() {
+    // clang-format off
+    static const std::map<std::string, ControlMessageFunction> control_message_functions = {
+        {"start",             {ControlTarget::SERVICE,   DoControlStart}},
+        {"stop",              {ControlTarget::SERVICE,   DoControlStop}},
+        {"restart",           {ControlTarget::SERVICE,   DoControlRestart}},
+        {"interface_start",   {ControlTarget::INTERFACE, DoControlStart}},
+        {"interface_stop",    {ControlTarget::INTERFACE, DoControlStop}},
+        {"interface_restart", {ControlTarget::INTERFACE, DoControlRestart}},
+    };
+    // clang-format on
+
+    return control_message_functions;
+}
+
 void handle_control_message(const std::string& msg, const std::string& name) {
-    Service* svc = ServiceList::GetInstance().FindService(name);
-    if (svc == nullptr) {
-        LOG(ERROR) << "no such service '" << name << "'";
+    const auto& map = get_control_message_map();
+    const auto it = map.find(msg);
+
+    if (it == map.end()) {
+        LOG(ERROR) << "Unknown control msg '" << msg << "'";
         return;
     }
 
-    if (msg == "start") {
-        if (auto result = svc->Start(); !result) {
-            LOG(ERROR) << "Could not ctl.start service '" << name << "': " << result.error();
+    const ControlMessageFunction& function = it->second;
+
+    if (function.target == ControlTarget::SERVICE) {
+        Service* svc = ServiceList::GetInstance().FindService(name);
+        if (svc == nullptr) {
+            LOG(ERROR) << "No such service '" << name << "' for ctl." << msg;
+            return;
         }
-    } else if (msg == "stop") {
-        svc->Stop();
-    } else if (msg == "restart") {
-        svc->Restart();
-    } else {
-        LOG(ERROR) << "unknown control msg '" << msg << "'";
+        if (auto result = function.action(svc); !result) {
+            LOG(ERROR) << "Could not ctl." << msg << " for service " << name << ": "
+                       << result.error();
+        }
+
+        return;
     }
+
+    if (function.target == ControlTarget::INTERFACE) {
+        for (const auto& svc : ServiceList::GetInstance()) {
+            if (svc->interfaces().count(name) == 0) {
+                continue;
+            }
+
+            if (auto result = function.action(svc.get()); !result) {
+                LOG(ERROR) << "Could not handle ctl." << msg << " for service " << svc->name()
+                           << " with interface " << name << ": " << result.error();
+            }
+
+            return;
+        }
+
+        LOG(ERROR) << "Could not find service hosting interface " << name;
+        return;
+    }
+
+    LOG(ERROR) << "Invalid function target from static map key '" << msg
+               << "': " << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
 }
 
 static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& args) {
