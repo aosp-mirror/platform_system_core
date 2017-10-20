@@ -37,6 +37,7 @@
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <hidl-util/FQName.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
 #include <system/thread_defs.h>
@@ -418,6 +419,37 @@ Result<Success> Service::ParsePriority(const std::vector<std::string>& args) {
     return Success();
 }
 
+Result<Success> Service::ParseInterface(const std::vector<std::string>& args) {
+    const std::string& interface_name = args[1];
+    const std::string& instance_name = args[2];
+
+    const FQName fq_name = FQName(interface_name);
+    if (!fq_name.isValid()) {
+        return Error() << "Invalid fully-qualified name for interface '" << interface_name << "'";
+    }
+
+    if (!fq_name.isFullyQualified()) {
+        return Error() << "Interface name not fully-qualified '" << interface_name << "'";
+    }
+
+    if (fq_name.isValidValueName()) {
+        return Error() << "Interface name must not be a value name '" << interface_name << "'";
+    }
+
+    const std::string fullname = interface_name + "/" + instance_name;
+
+    for (const auto& svc : ServiceList::GetInstance()) {
+        if (svc->interfaces().count(fullname) > 0) {
+            return Error() << "Interface '" << fullname << "' redefined in " << name()
+                           << " but is already defined by " << svc->name();
+        }
+    }
+
+    interfaces_.insert(fullname);
+
+    return Success();
+}
+
 Result<Success> Service::ParseIoprio(const std::vector<std::string>& args) {
     if (!ParseInt(args[2], &ioprio_pri_, 0, 7)) {
         return Error() << "priority value must be range 0 - 7";
@@ -619,6 +651,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"critical",    {0,     0,    &Service::ParseCritical}},
         {"disabled",    {0,     0,    &Service::ParseDisabled}},
         {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::ParseGroup}},
+        {"interface",   {2,     2,    &Service::ParseInterface}},
         {"ioprio",      {2,     2,    &Service::ParseIoprio}},
         {"priority",    {1,     1,    &Service::ParsePriority}},
         {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
