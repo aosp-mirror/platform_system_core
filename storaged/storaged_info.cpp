@@ -66,7 +66,7 @@ storage_info_t* storage_info_t::get_storage_info()
     return new storage_info_t;
 }
 
-void storage_info_t::init(const IOPerfHistory& perf_history)
+void storage_info_t::load_perf_history_proto(const IOPerfHistory& perf_history)
 {
     if (!perf_history.has_day_start_sec() ||
         perf_history.daily_perf_size() > (int)daily_perf.size() ||
@@ -180,28 +180,32 @@ void storage_info_t::update_perf_history(uint32_t bw,
     weekly_perf[nr_weeks++] = week_avg_bw;
 }
 
-vector<vector<uint32_t>> storage_info_t::get_perf_history()
+vector<int> storage_info_t::get_perf_history()
 {
     unique_ptr<lock_t> lock(new lock_t(&si_lock));
 
-    vector<vector<uint32_t>> ret(3);
+    vector<int> ret(3 + recent_perf.size() + daily_perf.size() + weekly_perf.size());
 
-    ret[0].resize(recent_perf.size());
+    ret[0] = recent_perf.size();
+    ret[1] = daily_perf.size();
+    ret[2] = weekly_perf.size();
+
+    int start = 3;
     for (size_t i = 0; i < recent_perf.size(); i++) {
         int idx = (recent_perf.size() + nr_samples - 1 - i) % recent_perf.size();
-        ret[0][i] = recent_perf[idx];
+        ret[start + i] = recent_perf[idx];
     }
 
-    ret[1].resize(daily_perf.size());
+    start += recent_perf.size();
     for (size_t i = 0; i < daily_perf.size(); i++) {
         int idx = (daily_perf.size() + nr_days - 1 - i) % daily_perf.size();
-        ret[1][i] = daily_perf[idx];
+        ret[start + i] = daily_perf[idx];
     }
 
-    ret[2].resize(weekly_perf.size());
+    start += daily_perf.size();
     for (size_t i = 0; i < weekly_perf.size(); i++) {
         int idx = (weekly_perf.size() + nr_weeks - 1 - i) % weekly_perf.size();
-        ret[2][i] = weekly_perf[idx];
+        ret[start + i] = weekly_perf[idx];
     }
 
     return ret;

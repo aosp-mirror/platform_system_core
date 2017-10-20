@@ -97,8 +97,6 @@ cc_library {
     target: {
         android: {
             srcs: [
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
                 "Trace.cpp",
             ],
 
@@ -115,6 +113,12 @@ cc_library {
                 misc_undefined: ["integer"],
             },
         },
+        linux: {
+            srcs: [
+                "Looper.cpp",
+                "ProcessCallStack.cpp",
+            ],
+        },
 
         host: {
             cflags: ["-DLIBUTILS_NATIVE=1"],
@@ -124,18 +128,8 @@ cc_library {
             },
         },
 
-        linux_glibc: {
-            srcs: [
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
-            ],
-        },
         linux_bionic: {
             enabled: true,
-            srcs: [
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
-            ],
         },
 
         darwin: {

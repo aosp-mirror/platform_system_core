@@ -27,7 +27,8 @@
 #include <vector>
 
 #include <batteryservice/IBatteryPropertiesListener.h>
-#include <batteryservice/IBatteryPropertiesRegistrar.h>
+
+#include <android/hardware/health/2.0/IHealth.h>
 
 #define FRIEND_TEST(test_case_name, test_name) \
 friend class test_case_name##_##test_name##_Test
@@ -48,6 +49,7 @@ friend class test_case_name##_##test_name##_Test
 #include "storaged_info.h"
 #include "storaged_uid_monitor.h"
 #include "storaged.pb.h"
+#include "uid_info.h"
 
 using namespace std;
 using namespace android;
@@ -56,8 +58,8 @@ using namespace android;
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT ( 60 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH ( 3600 )
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO ( 3600 )
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT (300)
-#define DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO (3600)
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT ( 300 )
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO ( 3600 )
 
 // UID IO threshold in bytes
 #define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
@@ -70,19 +72,25 @@ struct storaged_config {
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
-class storaged_t : public BnBatteryPropertiesListener,
-                   public IBinder::DeathRecipient {
-private:
+class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
+                   public android::hardware::hidl_death_recipient {
+  private:
     time_t mTimer;
     storaged_config mConfig;
     disk_stats_monitor mDsm;
     uid_monitor mUidm;
     time_t mStarttime;
-    sp<IBatteryPropertiesRegistrar> battery_properties;
+    sp<android::hardware::health::V2_0::IHealth> health;
     unique_ptr<storage_info_t> storage_info;
     static const uint32_t crc_init;
     static const string proto_file;
     storaged_proto::StoragedProto proto;
+    enum stat {
+        NOT_AVAILABLE,
+        AVAILABLE,
+        LOADED,
+    };
+    stat proto_stat;
 public:
     storaged_t(void);
     ~storaged_t() {}
@@ -96,11 +104,11 @@ public:
         return mStarttime;
     }
 
-    unordered_map<uint32_t, struct uid_info> get_uids(void) {
+    unordered_map<uint32_t, uid_info> get_uids(void) {
         return mUidm.get_uid_io_stats();
     }
 
-    vector<vector<uint32_t>> get_perf_history(void) {
+    vector<int> get_perf_history(void) {
         return storage_info->get_perf_history();
     }
 
@@ -109,15 +117,27 @@ public:
         return mUidm.dump(hours, threshold, force_report,
                           proto.mutable_uid_io_usage());
     }
+
     void update_uid_io_interval(int interval) {
         if (interval >= DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO_LIMIT) {
             mConfig.periodic_chores_interval_uid_io = interval;
         }
     }
 
-    void init_battery_service();
-    virtual void batteryPropertiesChanged(struct BatteryProperties props);
-    void binderDied(const wp<IBinder>& who);
+    void set_proto_stat_available(bool available) {
+        if (available) {
+            if (proto_stat != LOADED) {
+                proto_stat = AVAILABLE;
+            }
+        } else {
+            proto_stat = NOT_AVAILABLE;
+        }
+    };
+
+    void init_health_service();
+    virtual ::android::hardware::Return<void> healthInfoChanged(
+        const ::android::hardware::health::V2_0::HealthInfo& info);
+    void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);
 
     void report_storage_info();
 

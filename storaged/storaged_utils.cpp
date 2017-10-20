@@ -42,7 +42,7 @@
 #include <storaged.h>
 #include <storaged_utils.h>
 
-bool cmp_uid_info(struct uid_info l, struct uid_info r) {
+bool cmp_uid_info(const UidInfo& l, const UidInfo& r) {
     // Compare background I/O first.
     for (int i = UID_STATS - 1; i >= 0; i--) {
         uint64_t l_bytes = l.io[i].read_bytes + l.io[i].write_bytes;
@@ -61,12 +61,12 @@ bool cmp_uid_info(struct uid_info l, struct uid_info r) {
     return l.name < r.name;
 }
 
-void sort_running_uids_info(std::vector<struct uid_info> &uids) {
+void sort_running_uids_info(std::vector<UidInfo> &uids) {
     std::sort(uids.begin(), uids.end(), cmp_uid_info);
 }
 
 // Logging functions
-void log_console_running_uids_info(const std::vector<struct uid_info>& uids, bool flag_dump_task) {
+void log_console_running_uids_info(const std::vector<UidInfo>& uids, bool flag_dump_task) {
     printf("name/uid fg_rchar fg_wchar fg_rbytes fg_wbytes "
            "bg_rchar bg_wchar bg_rbytes bg_wbytes fg_fsync bg_fsync\n");
 
@@ -79,7 +79,7 @@ void log_console_running_uids_info(const std::vector<struct uid_info>& uids, boo
             uid.io[0].fsync, uid.io[1].fsync);
         if (flag_dump_task) {
             for (const auto& task_it : uid.tasks) {
-                const struct task_info& task = task_it.second;
+                const task_info& task = task_it.second;
                 printf("-> %s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
                         " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
                     task.comm.c_str(),
@@ -92,25 +92,33 @@ void log_console_running_uids_info(const std::vector<struct uid_info>& uids, boo
     fflush(stdout);
 }
 
-void log_console_perf_history(const vector<vector<uint32_t>>& perf_history) {
-    if (perf_history.size() != 3) {
+void log_console_perf_history(const vector<int>& perf_history) {
+    if (perf_history.size() < 3 ||
+        perf_history.size() != perf_history[0] +
+                               perf_history[1] +
+                               perf_history[2] + (size_t)3) {
         return;
     }
 
     printf("\nI/O perf history (KB/s) :  most_recent  <---------  least_recent \n");
 
     std::stringstream line;
-    std::copy(perf_history[0].begin(), perf_history[0].end(),
+    int start = 3;
+    int end = 3 + perf_history[0];
+    std::copy(perf_history.begin() + start, perf_history.begin() + end,
               std::ostream_iterator<int>(line, " "));
     printf("last 24 hours : %s\n", line.str().c_str());
 
     line.str("");
-    std::copy(perf_history[1].begin(), perf_history[1].end(),
+    start = end;
+    end += perf_history[1];
+    std::copy(perf_history.begin() + start, perf_history.begin() + end,
               std::ostream_iterator<int>(line, " "));
     printf("last 7 days   : %s\n", line.str().c_str());
 
     line.str("");
-    std::copy(perf_history[2].begin(), perf_history[2].end(),
+    start = end;
+    std::copy(perf_history.begin() + start, perf_history.end(),
               std::ostream_iterator<int>(line, " "));
     printf("last 52 weeks : %s\n", line.str().c_str());
 }

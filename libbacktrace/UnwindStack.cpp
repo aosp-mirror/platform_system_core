@@ -15,7 +15,6 @@
  */
 
 #define _GNU_SOURCE 1
-#include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,7 +92,7 @@ static bool Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     back_frame->pc = frame->pc;
     back_frame->sp = frame->sp;
 
-    back_frame->func_name = frame->function_name;
+    back_frame->func_name = demangle(frame->function_name.c_str());
     back_frame->func_offset = frame->function_offset;
 
     back_frame->map.name = frame->map_name;
@@ -148,32 +147,4 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
   return ::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
-}
-
-Backtrace* Backtrace::CreateNew(pid_t pid, pid_t tid, BacktraceMap* map) {
-  if (pid == BACKTRACE_CURRENT_PROCESS) {
-    pid = getpid();
-    if (tid == BACKTRACE_CURRENT_THREAD) {
-      tid = gettid();
-    }
-  } else if (tid == BACKTRACE_CURRENT_THREAD) {
-    tid = pid;
-  }
-
-  if (map == nullptr) {
-// This would cause the wrong type of map object to be created, so disallow.
-#if defined(__ANDROID__)
-    __assert2(__FILE__, __LINE__, __PRETTY_FUNCTION__,
-              "Backtrace::CreateNew() must be called with a real map pointer.");
-#else
-    BACK_LOGE("Backtrace::CreateNew() must be called with a real map pointer.");
-    abort();
-#endif
-  }
-
-  if (pid == getpid()) {
-    return new UnwindStackCurrent(pid, tid, map);
-  } else {
-    return new UnwindStackPtrace(pid, tid, map);
-  }
 }

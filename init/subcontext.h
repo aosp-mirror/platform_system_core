@@ -35,7 +35,7 @@ extern const std::string kVendorContext;
 class Subcontext {
   public:
     Subcontext(std::string path_prefix, std::string context)
-        : path_prefix_(path_prefix), context_(std::move(context)) {
+        : path_prefix_(std::move(path_prefix)), context_(std::move(context)) {
         Fork();
     }
 

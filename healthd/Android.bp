@@ -74,3 +74,29 @@ cc_binary {
         "android.hardware.health@2.0",
     ],
 }
+
+cc_binary {
+    name: "healthd",
+    srcs: ["HealthService.cpp"],
+    local_include_dirs: ["include"],
+
+    cflags: ["-DHEALTH_INSTANCE_NAME=\"backup\""],
+
+    static_libs: [
+        "android.hardware.health@2.0-impl",
+        "android.hardware.health@1.0-convert",
+        "libbatterymonitor",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "liblog",
+        "libutils",
+        "android.hardware.health@2.0",
+    ],
+
+}

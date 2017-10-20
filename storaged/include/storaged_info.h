@@ -68,11 +68,11 @@ public:
     static storage_info_t* get_storage_info();
     virtual ~storage_info_t() { sem_destroy(&si_lock); }
     virtual void report() {};
-    void init(const IOPerfHistory& perf_history);
+    void load_perf_history_proto(const IOPerfHistory& perf_history);
     void refresh(IOPerfHistory* perf_history);
     void update_perf_history(uint32_t bw,
                              const time_point<system_clock>& tp);
-    vector<vector<uint32_t>> get_perf_history(void);
+    vector<int> get_perf_history();
 };
 
 class emmc_info_t : public storage_info_t {

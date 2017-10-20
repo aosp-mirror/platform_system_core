@@ -1832,11 +1832,10 @@ int android_logcat_destroy(android_logcat_context* ctx) {
     }
     android::close_output(context);
     android::close_error(context);
+
     if (context->fds[1] >= 0) {
-        // NB: could be closed by the above fclose(s), ignore error.
-        int save_errno = errno;
+        // NB: this should be closed by close_output, but just in case...
         close(context->fds[1]);
-        errno = save_errno;
         context->fds[1] = -1;
     }
 

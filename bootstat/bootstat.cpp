@@ -212,6 +212,17 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"hard,hw_reset", 72},
     {"shutdown,suspend", 73},    // Suspend to RAM
     {"shutdown,hibernate", 74},  // Suspend to DISK
+    {"power_on_key", 75},
+    {"reboot_by_key", 76},
+    {"wdt_by_pass_pwk", 77},
+    {"reboot_longkey", 78},
+    {"powerkey", 79},
+    {"usb", 80},
+    {"wdt", 81},
+    {"tool_by_pass_pwk", 82},
+    {"2sec_reboot", 83},
+    {"reboot,by_key", 84},
+    {"reboot,longkey", 85},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -508,7 +519,6 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
           android::base::ReadFdToString(fileno(fp), &content);
         }
         android_logcat_pclose(&ctx, fp);
-        android_logcat_destroy(&ctx);
         static const char logcat_battery[] = "W/healthd (    0): battery l=";
         const char* match = logcat_battery;
 
