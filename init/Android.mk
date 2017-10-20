@@ -64,6 +64,7 @@ LOCAL_STATIC_LIBRARIES := \
     libfs_mgr \
     libfec \
     libfec_rs \
+    libhidl-gen-utils \
     libsquashfs_utils \
     liblogwrap \
     libext4_utils \
