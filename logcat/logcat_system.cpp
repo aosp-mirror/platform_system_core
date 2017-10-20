@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -98,8 +99,12 @@ FILE* android_logcat_popen(android_logcat_context* ctx, const char* command) {
         return NULL;
     }
 
-    FILE* retval = fdopen(fd, "reb");
-    if (!retval) android_logcat_destroy(ctx);
+    int duped = dup(fd);
+    FILE* retval = fdopen(duped, "reb");
+    if (!retval) {
+        close(duped);
+        android_logcat_destroy(ctx);
+    }
     return retval;
 }
 
