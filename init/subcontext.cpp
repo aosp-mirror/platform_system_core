@@ -28,6 +28,7 @@
 #include <selinux/android.h>
 
 #include "action.h"
+#include "selinux.h"
 #include "system/core/init/subcontext.pb.h"
 #include "util.h"
 
@@ -165,6 +166,7 @@ int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map
     auto context = std::string(argv[2]);
     auto init_fd = std::atoi(argv[3]);
 
+    SelabelInitialize();
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
     subcontext_process.MainLoop();
     return 0;
