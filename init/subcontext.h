@@ -35,7 +35,7 @@ extern const std::string kVendorContext;
 class Subcontext {
   public:
     Subcontext(std::string path_prefix, std::string context)
-        : path_prefix_(std::move(path_prefix)), context_(std::move(context)) {
+        : path_prefix_(std::move(path_prefix)), context_(std::move(context)), pid_(0) {
         Fork();
     }
 
@@ -53,21 +53,6 @@ class Subcontext {
     std::string context_;
     pid_t pid_;
     android::base::unique_fd socket_;
-};
-
-// For testing, to kill the subcontext after the test has completed.
-class SubcontextKiller {
-  public:
-    SubcontextKiller(const Subcontext& subcontext) : subcontext_(subcontext) {}
-    ~SubcontextKiller() {
-        if (subcontext_.pid() > 0) {
-            kill(subcontext_.pid(), SIGTERM);
-            kill(subcontext_.pid(), SIGKILL);
-        }
-    }
-
-  private:
-    const Subcontext& subcontext_;
 };
 
 int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map);

@@ -23,6 +23,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <gtest/gtest.h>
+#include <selinux/selinux.h>
 
 #include "builtin_arguments.h"
 #include "test_function_map.h"
@@ -38,88 +39,108 @@ using android::base::WaitForProperty;
 namespace android {
 namespace init {
 
+// I would use test fixtures, but I cannot skip the test if not root with them, so instead we have
+// this test runner.
+template <typename F>
+void RunTest(F&& test_function) {
+    if (getuid() != 0) {
+        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        return;
+    }
+
+    char* context;
+    ASSERT_EQ(0, getcon(&context));
+    auto context_string = std::string(context);
+    free(context);
+
+    auto subcontext = Subcontext("dummy_path", context_string);
+    ASSERT_NE(0, subcontext.pid());
+
+    test_function(subcontext, context_string);
+
+    if (subcontext.pid() > 0) {
+        kill(subcontext.pid(), SIGTERM);
+        kill(subcontext.pid(), SIGKILL);
+    }
+}
+
 TEST(subcontext, CheckDifferentPid) {
-    auto subcontext = Subcontext("path", kVendorContext);
-    auto subcontext_killer = SubcontextKiller(subcontext);
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto result = subcontext.Execute(std::vector<std::string>{"return_pids_as_error"});
+        ASSERT_FALSE(result);
 
-    auto result = subcontext.Execute(std::vector<std::string>{"return_pids_as_error"});
-    ASSERT_FALSE(result);
-
-    auto pids = Split(result.error_string(), " ");
-    ASSERT_EQ(2U, pids.size());
-    auto our_pid = std::to_string(getpid());
-    EXPECT_NE(our_pid, pids[0]);
-    EXPECT_EQ(our_pid, pids[1]);
+        auto pids = Split(result.error_string(), " ");
+        ASSERT_EQ(2U, pids.size());
+        auto our_pid = std::to_string(getpid());
+        EXPECT_NE(our_pid, pids[0]);
+        EXPECT_EQ(our_pid, pids[1]);
+    });
 }
 
 TEST(subcontext, SetProp) {
-    auto subcontext = Subcontext("path", kVendorContext);
-    auto subcontext_killer = SubcontextKiller(subcontext);
+    RunTest([](auto& subcontext, auto& context_string) {
+        SetProperty("init.test.subcontext", "fail");
+        WaitForProperty("init.test.subcontext", "fail");
 
-    SetProperty("init.test.subcontext", "fail");
-    WaitForProperty("init.test.subcontext", "fail");
-
-    auto args = std::vector<std::string>{
-        "setprop",
-        "init.test.subcontext",
-        "success",
-    };
-    auto result = subcontext.Execute(args);
-    ASSERT_TRUE(result) << result.error();
-
-    EXPECT_TRUE(WaitForProperty("init.test.subcontext", "success", 10s));
-}
-
-TEST(subcontext, MultipleCommands) {
-    auto subcontext = Subcontext("path", kVendorContext);
-    auto subcontext_killer = SubcontextKiller(subcontext);
-
-    auto first_pid = subcontext.pid();
-
-    auto expected_words = std::vector<std::string>{
-        "this",
-        "is",
-        "a",
-        "test",
-    };
-
-    for (const auto& word : expected_words) {
         auto args = std::vector<std::string>{
-            "add_word",
-            word,
+            "setprop",
+            "init.test.subcontext",
+            "success",
         };
         auto result = subcontext.Execute(args);
         ASSERT_TRUE(result) << result.error();
-    }
 
-    auto result = subcontext.Execute(std::vector<std::string>{"return_words_as_error"});
-    ASSERT_FALSE(result);
-    EXPECT_EQ(Join(expected_words, " "), result.error_string());
-    EXPECT_EQ(first_pid, subcontext.pid());
+        EXPECT_TRUE(WaitForProperty("init.test.subcontext", "success", 10s));
+    });
+}
+
+TEST(subcontext, MultipleCommands) {
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto first_pid = subcontext.pid();
+
+        auto expected_words = std::vector<std::string>{
+            "this",
+            "is",
+            "a",
+            "test",
+        };
+
+        for (const auto& word : expected_words) {
+            auto args = std::vector<std::string>{
+                "add_word",
+                word,
+            };
+            auto result = subcontext.Execute(args);
+            ASSERT_TRUE(result) << result.error();
+        }
+
+        auto result = subcontext.Execute(std::vector<std::string>{"return_words_as_error"});
+        ASSERT_FALSE(result);
+        EXPECT_EQ(Join(expected_words, " "), result.error_string());
+        EXPECT_EQ(first_pid, subcontext.pid());
+    });
 }
 
 TEST(subcontext, RecoverAfterAbort) {
-    auto subcontext = Subcontext("path", kVendorContext);
-    auto subcontext_killer = SubcontextKiller(subcontext);
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto first_pid = subcontext.pid();
 
-    auto first_pid = subcontext.pid();
+        auto result = subcontext.Execute(std::vector<std::string>{"cause_log_fatal"});
+        ASSERT_FALSE(result);
 
-    auto result = subcontext.Execute(std::vector<std::string>{"cause_log_fatal"});
-    ASSERT_FALSE(result);
-
-    auto result2 = subcontext.Execute(std::vector<std::string>{"generate_sane_error"});
-    ASSERT_FALSE(result2);
-    EXPECT_EQ("Sane error!", result2.error_string());
-    EXPECT_NE(subcontext.pid(), first_pid);
+        auto result2 = subcontext.Execute(std::vector<std::string>{"generate_sane_error"});
+        ASSERT_FALSE(result2);
+        EXPECT_EQ("Sane error!", result2.error_string());
+        EXPECT_NE(subcontext.pid(), first_pid);
+    });
 }
 
 TEST(subcontext, ContextString) {
-    auto subcontext = Subcontext("path", kVendorContext);
-    auto subcontext_killer = SubcontextKiller(subcontext);
-
-    auto result = subcontext.Execute(std::vector<std::string>{"return_context_as_error"});
-    ASSERT_FALSE(result);
-    ASSERT_EQ(kVendorContext, result.error_string());
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto result = subcontext.Execute(std::vector<std::string>{"return_context_as_error"});
+        ASSERT_FALSE(result);
+        ASSERT_EQ(context_string, result.error_string());
+    });
 }
 
 TestFunctionMap BuildTestFunctionMap() {
