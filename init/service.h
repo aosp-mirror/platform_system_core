@@ -108,6 +108,7 @@ class Service {
     void set_keychord_id(int keychord_id) { keychord_id_ = keychord_id; }
     IoSchedClass ioprio_class() const { return ioprio_class_; }
     int ioprio_pri() const { return ioprio_pri_; }
+    const std::set<std::string>& interfaces() const { return interfaces_; }
     int priority() const { return priority_; }
     int oom_score_adjust() const { return oom_score_adjust_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
@@ -132,6 +133,7 @@ class Service {
     Result<Success> ParseDisabled(const std::vector<std::string>& args);
     Result<Success> ParseGroup(const std::vector<std::string>& args);
     Result<Success> ParsePriority(const std::vector<std::string>& args);
+    Result<Success> ParseInterface(const std::vector<std::string>& args);
     Result<Success> ParseIoprio(const std::vector<std::string>& args);
     Result<Success> ParseKeycodes(const std::vector<std::string>& args);
     Result<Success> ParseOneshot(const std::vector<std::string>& args);
@@ -180,6 +182,8 @@ class Service {
     Action onrestart_;  // Commands to execute on restart.
 
     std::vector<std::string> writepid_files_;
+
+    std::set<std::string> interfaces_;  // e.g. some.package.foo@1.0::IBaz/instance-name
 
     // keycodes for triggering this service via /dev/keychord
     std::vector<int> keycodes_;

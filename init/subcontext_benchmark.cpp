@@ -17,6 +17,7 @@
 #include "subcontext.h"
 
 #include <benchmark/benchmark.h>
+#include <selinux/selinux.h>
 
 #include "test_function_map.h"
 
@@ -24,11 +25,26 @@ namespace android {
 namespace init {
 
 static void BenchmarkSuccess(benchmark::State& state) {
-    auto subcontext = Subcontext("path", kVendorContext);
-    auto subcontext_killer = SubcontextKiller(subcontext);
+    if (getuid() != 0) {
+        state.SkipWithError("Skipping benchmark, must be run as root.");
+        return;
+    }
+    char* context;
+    if (getcon(&context) != 0) {
+        state.SkipWithError("getcon() failed");
+        return;
+    }
+
+    auto subcontext = Subcontext("path", context);
+    free(context);
 
     while (state.KeepRunning()) {
         subcontext.Execute(std::vector<std::string>{"return_success"});
+    }
+
+    if (subcontext.pid() > 0) {
+        kill(subcontext.pid(), SIGTERM);
+        kill(subcontext.pid(), SIGKILL);
     }
 }
 

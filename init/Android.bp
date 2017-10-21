@@ -89,6 +89,7 @@ cc_library_static {
     whole_static_libs: ["libcap"],
     static_libs: [
         "libbase",
+        "libhidl-gen-utils",
         "libselinux",
         "liblog",
         "libprocessgroup",
@@ -136,6 +137,7 @@ cc_binary {
         "libfs_mgr",
         "libfec",
         "libfec_rs",
+        "libhidl-gen-utils",
         "libsquashfs_utils",
         "liblogwrap",
         "libext4_utils",
@@ -185,6 +187,7 @@ cc_test {
     ],
     static_libs: [
         "libinit",
+        "libhidl-gen-utils",
         "libselinux",
         "libcrypto",
         "libprotobuf-cpp-lite",
