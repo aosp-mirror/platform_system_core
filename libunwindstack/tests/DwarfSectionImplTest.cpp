@@ -340,6 +340,23 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_return_address_undefined) {
   EXPECT_EQ(0x10U, regs.sp());
 }
 
+TYPED_TEST_P(DwarfSectionImplTest, Eval_pc_zero) {
+  DwarfCie cie{.return_address_register = 5};
+  RegsImplFake<TypeParam> regs(10, 9);
+  dwarf_loc_regs_t loc_regs;
+
+  regs.set_pc(0x100);
+  regs.set_sp(0x2000);
+  regs[5] = 0;
+  regs[8] = 0x10;
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
+  bool finished;
+  ASSERT_TRUE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(0U, regs.pc());
+  EXPECT_EQ(0x10U, regs.sp());
+}
+
 TYPED_TEST_P(DwarfSectionImplTest, Eval_return_address) {
   DwarfCie cie{.return_address_register = 5};
   RegsImplFake<TypeParam> regs(10, 9);
@@ -854,7 +871,7 @@ REGISTER_TYPED_TEST_CASE_P(
     Eval_cfa_expr_is_register, Eval_cfa_expr, Eval_cfa_val_expr, Eval_bad_regs, Eval_no_cfa,
     Eval_cfa_bad, Eval_cfa_register_prev, Eval_cfa_register_from_value, Eval_double_indirection,
     Eval_invalid_register, Eval_different_reg_locations, Eval_return_address_undefined,
-    Eval_return_address, Eval_ignore_large_reg_loc, Eval_reg_expr, Eval_reg_val_expr,
+    Eval_pc_zero, Eval_return_address, Eval_ignore_large_reg_loc, Eval_reg_expr, Eval_reg_val_expr,
     Eval_same_cfa_same_pc, GetCie_fail_should_not_cache, GetCie_32_version_check,
     GetCie_negative_data_alignment_factor, GetCie_64_no_augment, GetCie_augment, GetCie_version_3,
     GetCie_version_4, GetFdeFromOffset_fail_should_not_cache, GetFdeFromOffset_32_no_augment,
