@@ -195,7 +195,15 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := ld.config.txt
 ifeq ($(PRODUCT_FULL_TREBLE)|$(SANITIZE_TARGET),true|)
+ifdef BOARD_VNDK_VERSION
+  ifeq ($(BOARD_VNDK_RUNTIME_DISABLE),true)
+    LOCAL_SRC_FILES := etc/ld.config.txt
+  else
+    LOCAL_SRC_FILES := etc/ld.config.vndk.txt
+  endif
+else
 LOCAL_SRC_FILES := etc/ld.config.txt
+endif
 else
 LOCAL_SRC_FILES := etc/ld.config.legacy.txt
 endif
