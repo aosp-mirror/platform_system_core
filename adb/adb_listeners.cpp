@@ -172,7 +172,7 @@ void close_smartsockets() EXCLUDES(listener_list_mutex) {
     auto pred = [](const std::unique_ptr<alistener>& listener) {
         return listener->local_name == "*smartsocket*";
     };
-    listener_list.erase(std::remove_if(listener_list.begin(), listener_list.end(), pred));
+    listener_list.remove_if(pred);
 }
 
 InstallStatus install_listener(const std::string& local_name, const char* connect_to,
