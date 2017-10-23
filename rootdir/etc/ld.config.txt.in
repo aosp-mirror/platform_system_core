@@ -65,7 +65,7 @@ namespace.sphal.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}
 namespace.sphal.links = default,vndk,rs
 
 # WARNING: only NDK libs can be listed here.
-namespace.sphal.link.default.shared_libs = %LLNDK_LIBRARIES%
+namespace.sphal.link.default.shared_libs = %LLNDK_LIBRARIES%:%SANITIZER_RUNTIME_LIBRARIES%
 
 # WARNING: only VNDK-SP libs can be listed here. DO NOT EDIT this line.
 namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
@@ -90,7 +90,7 @@ namespace.rs.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}
 namespace.rs.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data
 
 namespace.rs.links = default,vndk
-namespace.rs.link.default.shared_libs = %LLNDK_LIBRARIES%
+namespace.rs.link.default.shared_libs = %LLNDK_LIBRARIES%:%SANITIZER_RUNTIME_LIBRARIES%
 namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 
 ###############################################################################
@@ -109,7 +109,7 @@ namespace.vndk.asan.permitted.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.links = default
-namespace.vndk.link.default.shared_libs = %LLNDK_LIBRARIES%
+namespace.vndk.link.default.shared_libs = %LLNDK_LIBRARIES%:%SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
