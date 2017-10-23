@@ -27,6 +27,8 @@
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 
+#include "ElfInterfaceArm.h"
+
 namespace unwindstack {
 
 struct StepData {
@@ -48,6 +50,10 @@ class ElfFake : public Elf {
   ElfFake(Memory* memory) : Elf(memory) { valid_ = true; }
   virtual ~ElfFake() = default;
 
+  void FakeSetValid(bool valid) { valid_ = valid; }
+
+  void FakeSetLoadBias(uint64_t load_bias) { load_bias_ = load_bias; }
+
   void FakeSetInterface(ElfInterface* interface) { interface_.reset(interface); }
 };
 
@@ -56,15 +62,14 @@ class ElfInterfaceFake : public ElfInterface {
   ElfInterfaceFake(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterfaceFake() = default;
 
-  bool Init() override { return false; }
+  bool Init(uint64_t*) override { return false; }
   void InitHeaders() override {}
   bool GetSoname(std::string*) override { return false; }
 
-  bool GetFunctionName(uint64_t, std::string*, uint64_t*) override;
+  bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override;
 
   bool Step(uint64_t, Regs*, Memory*, bool*) override;
 
-  void FakeSetLoadBias(uint64_t load_bias) { load_bias_ = load_bias; }
 
   static void FakePushFunctionData(const FunctionData data) { functions_.push_back(data); }
   static void FakePushStepData(const StepData data) { steps_.push_back(data); }
@@ -77,6 +82,37 @@ class ElfInterfaceFake : public ElfInterface {
  private:
   static std::deque<FunctionData> functions_;
   static std::deque<StepData> steps_;
+};
+
+class ElfInterface32Fake : public ElfInterface32 {
+ public:
+  ElfInterface32Fake(Memory* memory) : ElfInterface32(memory) {}
+  virtual ~ElfInterface32Fake() = default;
+
+  void FakeSetEhFrameOffset(uint64_t offset) { eh_frame_offset_ = offset; }
+  void FakeSetEhFrameSize(uint64_t size) { eh_frame_size_ = size; }
+  void FakeSetDebugFrameOffset(uint64_t offset) { debug_frame_offset_ = offset; }
+  void FakeSetDebugFrameSize(uint64_t size) { debug_frame_size_ = size; }
+};
+
+class ElfInterface64Fake : public ElfInterface64 {
+ public:
+  ElfInterface64Fake(Memory* memory) : ElfInterface64(memory) {}
+  virtual ~ElfInterface64Fake() = default;
+
+  void FakeSetEhFrameOffset(uint64_t offset) { eh_frame_offset_ = offset; }
+  void FakeSetEhFrameSize(uint64_t size) { eh_frame_size_ = size; }
+  void FakeSetDebugFrameOffset(uint64_t offset) { debug_frame_offset_ = offset; }
+  void FakeSetDebugFrameSize(uint64_t size) { debug_frame_size_ = size; }
+};
+
+class ElfInterfaceArmFake : public ElfInterfaceArm {
+ public:
+  ElfInterfaceArmFake(Memory* memory) : ElfInterfaceArm(memory) {}
+  virtual ~ElfInterfaceArmFake() = default;
+
+  void FakeSetStartOffset(uint64_t offset) { start_offset_ = offset; }
+  void FakeSetTotalEntries(size_t entries) { total_entries_ = entries; }
 };
 
 }  // namespace unwindstack

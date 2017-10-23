@@ -110,9 +110,8 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   }
 
   elf = new Elf(CreateMemory(process_memory));
-  if (elf->Init() && init_gnu_debugdata) {
-    elf->InitGnuDebugdata();
-  }
+  elf->Init(init_gnu_debugdata);
+
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
   return elf;

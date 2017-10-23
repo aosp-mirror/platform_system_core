@@ -51,13 +51,14 @@ class ElfInterface {
   ElfInterface(Memory* memory) : memory_(memory) {}
   virtual ~ElfInterface();
 
-  virtual bool Init() = 0;
+  virtual bool Init(uint64_t* load_bias) = 0;
 
   virtual void InitHeaders() = 0;
 
   virtual bool GetSoname(std::string* name) = 0;
 
-  virtual bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* offset) = 0;
+  virtual bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
+                               uint64_t* offset) = 0;
 
   virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
 
@@ -66,8 +67,6 @@ class ElfInterface {
   Memory* memory() { return memory_; }
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads() { return pt_loads_; }
-  uint64_t load_bias() { return load_bias_; }
-  void set_load_bias(uint64_t load_bias) { load_bias_ = load_bias; }
 
   uint64_t dynamic_offset() { return dynamic_offset_; }
   uint64_t dynamic_size() { return dynamic_size_; }
@@ -86,10 +85,10 @@ class ElfInterface {
   void InitHeadersWithTemplate();
 
   template <typename EhdrType, typename PhdrType, typename ShdrType>
-  bool ReadAllHeaders();
+  bool ReadAllHeaders(uint64_t* load_bias);
 
   template <typename EhdrType, typename PhdrType>
-  bool ReadProgramHeaders(const EhdrType& ehdr);
+  bool ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias);
 
   template <typename EhdrType, typename ShdrType>
   bool ReadSectionHeaders(const EhdrType& ehdr);
@@ -98,16 +97,16 @@ class ElfInterface {
   bool GetSonameWithTemplate(std::string* soname);
 
   template <typename SymType>
-  bool GetFunctionNameWithTemplate(uint64_t addr, std::string* name, uint64_t* func_offset);
+  bool GetFunctionNameWithTemplate(uint64_t addr, uint64_t load_bias, std::string* name,
+                                   uint64_t* func_offset);
 
-  virtual bool HandleType(uint64_t, uint32_t) { return false; }
+  virtual bool HandleType(uint64_t, uint32_t, uint64_t) { return false; }
 
   template <typename EhdrType>
   static void GetMaxSizeWithTemplate(Memory* memory, uint64_t* size);
 
   Memory* memory_;
   std::unordered_map<uint64_t, LoadInfo> pt_loads_;
-  uint64_t load_bias_ = 0;
 
   // Stored elf data.
   uint64_t dynamic_offset_ = 0;
@@ -136,8 +135,8 @@ class ElfInterface32 : public ElfInterface {
   ElfInterface32(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterface32() = default;
 
-  bool Init() override {
-    return ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>();
+  bool Init(uint64_t* load_bias) override {
+    return ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(load_bias);
   }
 
   void InitHeaders() override { ElfInterface::InitHeadersWithTemplate<uint32_t>(); }
@@ -146,8 +145,9 @@ class ElfInterface32 : public ElfInterface {
     return ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(soname);
   }
 
-  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
-    return ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(addr, name, func_offset);
+  bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
+                       uint64_t* func_offset) override {
+    return ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(addr, load_bias, name, func_offset);
   }
 
   static void GetMaxSize(Memory* memory, uint64_t* size) {
@@ -160,8 +160,8 @@ class ElfInterface64 : public ElfInterface {
   ElfInterface64(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterface64() = default;
 
-  bool Init() override {
-    return ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>();
+  bool Init(uint64_t* load_bias) override {
+    return ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(load_bias);
   }
 
   void InitHeaders() override { ElfInterface::InitHeadersWithTemplate<uint64_t>(); }
@@ -170,8 +170,9 @@ class ElfInterface64 : public ElfInterface {
     return ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(soname);
   }
 
-  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
-    return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, name, func_offset);
+  bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
+                       uint64_t* func_offset) override {
+    return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, load_bias, name, func_offset);
   }
 
   static void GetMaxSize(Memory* memory, uint64_t* size) {
