@@ -174,7 +174,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         kr = (*iface)->GetInterfaceClass(iface, &if_class);
         kr = (*iface)->GetInterfaceSubClass(iface, &subclass);
         kr = (*iface)->GetInterfaceProtocol(iface, &protocol);
-        if(if_class != ADB_CLASS || subclass != ADB_SUBCLASS || protocol != ADB_PROTOCOL) {
+        if (!is_adb_interface(if_class, subclass, protocol)) {
             // Ignore non-ADB devices.
             LOG(DEBUG) << "Ignoring interface with incorrect class/subclass/protocol - " << if_class
                        << ", " << subclass << ", " << protocol;
