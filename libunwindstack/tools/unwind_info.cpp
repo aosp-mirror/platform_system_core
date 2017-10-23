@@ -53,7 +53,7 @@ void DumpArm(ElfInterfaceArm* interface) {
       uint64_t func_offset;
       uint64_t pc = addr + load_bias;
       // This might be a thumb function, so set the low bit.
-      if (interface->GetFunctionName(pc | 1, &name, &func_offset) && !name.empty()) {
+      if (interface->GetFunctionName(pc | 1, load_bias, &name, &func_offset) && !name.empty()) {
         printf(" <%s>", name.c_str());
       }
       printf("\n");
@@ -92,8 +92,7 @@ void DumpDwarfSection(ElfInterface* interface, DwarfSection* section, uint64_t l
     printf("\n  PC 0x%" PRIx64, fde->pc_start + load_bias);
     std::string name;
     uint64_t func_offset;
-    if (interface->GetFunctionName(fde->pc_start + load_bias, &name, &func_offset) &&
-        !name.empty()) {
+    if (interface->GetFunctionName(fde->pc_start, load_bias, &name, &func_offset) && !name.empty()) {
       printf(" <%s>", name.c_str());
     }
     printf("\n");
@@ -115,7 +114,7 @@ int GetElfInfo(const char* file) {
   }
 
   Elf elf(memory);
-  if (!elf.Init() || !elf.valid()) {
+  if (!elf.Init(true) || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;
   }
@@ -128,7 +127,7 @@ int GetElfInfo(const char* file) {
 
   if (interface->eh_frame() != nullptr) {
     printf("eh_frame information:\n");
-    DumpDwarfSection(interface, interface->eh_frame(), interface->load_bias());
+    DumpDwarfSection(interface, interface->eh_frame(), elf.GetLoadBias());
     printf("\n");
   } else {
     printf("\nno eh_frame information\n");
@@ -136,7 +135,7 @@ int GetElfInfo(const char* file) {
 
   if (interface->debug_frame() != nullptr) {
     printf("\ndebug_frame information:\n");
-    DumpDwarfSection(interface, interface->debug_frame(), interface->load_bias());
+    DumpDwarfSection(interface, interface->debug_frame(), elf.GetLoadBias());
     printf("\n");
   } else {
     printf("\nno debug_frame information\n");

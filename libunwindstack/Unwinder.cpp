@@ -64,7 +64,19 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool ad
   }
 }
 
-void Unwinder::Unwind(std::set<std::string>* initial_map_names_to_skip) {
+static bool ShouldStop(const std::set<std::string>* map_suffixes_to_ignore, std::string& map_name) {
+  if (map_suffixes_to_ignore == nullptr) {
+    return false;
+  }
+  auto pos = map_name.find_last_of('.');
+  if (pos == std::string::npos) {
+    return false;
+  }
+  return map_suffixes_to_ignore->find(map_name.substr(pos + 1)) != map_suffixes_to_ignore->end();
+}
+
+void Unwinder::Unwind(const std::set<std::string>* initial_map_names_to_skip,
+                      const std::set<std::string>* map_suffixes_to_ignore) {
   frames_.clear();
 
   bool return_address_attempt = false;
@@ -77,6 +89,9 @@ void Unwinder::Unwind(std::set<std::string>* initial_map_names_to_skip) {
     if (map_info == nullptr) {
       rel_pc = regs_->pc();
     } else {
+      if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
+        break;
+      }
       elf = map_info->GetElf(process_memory_, true);
       rel_pc = elf->GetRelPc(regs_->pc(), map_info);
     }
@@ -111,8 +126,7 @@ void Unwinder::Unwind(std::set<std::string>* initial_map_names_to_skip) {
           in_device_map = true;
         } else {
           bool finished;
-          stepped =
-              elf->Step(rel_pc + map_info->elf_offset, regs_, process_memory_.get(), &finished);
+          stepped = elf->Step(rel_pc, map_info->elf_offset, regs_, process_memory_.get(), &finished);
           if (stepped && finished) {
             break;
           }
