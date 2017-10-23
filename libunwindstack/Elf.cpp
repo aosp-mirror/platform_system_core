@@ -35,7 +35,8 @@
 
 namespace unwindstack {
 
-bool Elf::Init() {
+bool Elf::Init(bool init_gnu_debugdata) {
+  load_bias_ = 0;
   if (!memory_) {
     return false;
   }
@@ -45,9 +46,14 @@ bool Elf::Init() {
     return false;
   }
 
-  valid_ = interface_->Init();
+  valid_ = interface_->Init(&load_bias_);
   if (valid_) {
     interface_->InitHeaders();
+    if (init_gnu_debugdata) {
+      InitGnuDebugdata();
+    } else {
+      gnu_debugdata_interface_.reset(nullptr);
+    }
   } else {
     interface_.reset(nullptr);
   }
@@ -67,7 +73,11 @@ void Elf::InitGnuDebugdata() {
   if (gnu == nullptr) {
     return;
   }
-  if (gnu->Init()) {
+
+  // Ignore the load_bias from the compressed section, the correct load bias
+  // is in the uncompressed data.
+  uint64_t load_bias;
+  if (gnu->Init(&load_bias)) {
     gnu->InitHeaders();
   } else {
     // Free all of the memory associated with the gnu_debugdata section.
@@ -81,36 +91,37 @@ bool Elf::GetSoname(std::string* name) {
 }
 
 uint64_t Elf::GetRelPc(uint64_t pc, const MapInfo* map_info) {
-  uint64_t load_bias = 0;
-  if (valid()) {
-    load_bias = interface_->load_bias();
-  }
-
-  return pc - map_info->start + load_bias + map_info->elf_offset;
+  return pc - map_info->start + load_bias_ + map_info->elf_offset;
 }
 
 bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
-  return valid_ && (interface_->GetFunctionName(addr, name, func_offset) ||
-                    (gnu_debugdata_interface_ &&
-                     gnu_debugdata_interface_->GetFunctionName(addr, name, func_offset)));
+  return valid_ && (interface_->GetFunctionName(addr, load_bias_, name, func_offset) ||
+                    (gnu_debugdata_interface_ && gnu_debugdata_interface_->GetFunctionName(
+                                                     addr, load_bias_, name, func_offset)));
 }
 
-bool Elf::Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished) {
+// The relative pc is always relative to the start of the map from which it comes.
+bool Elf::Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process_memory,
+               bool* finished) {
   if (!valid_) {
     return false;
   }
-  if (regs->StepIfSignalHandler(rel_pc, this, process_memory)) {
+
+  // The relative pc expectd by StepIfSignalHandler is relative to the start of the elf.
+  if (regs->StepIfSignalHandler(rel_pc + elf_offset, this, process_memory)) {
     *finished = false;
     return true;
   }
+
+  // Adjust the load bias to get the real relative pc.
+  if (rel_pc < load_bias_) {
+    return false;
+  }
+  rel_pc -= load_bias_;
+
   return interface_->Step(rel_pc, regs, process_memory, finished) ||
          (gnu_debugdata_interface_ &&
           gnu_debugdata_interface_->Step(rel_pc, regs, process_memory, finished));
-}
-
-uint64_t Elf::GetLoadBias() {
-  if (!valid_) return 0;
-  return interface_->load_bias();
 }
 
 bool Elf::IsValidElf(Memory* memory) {

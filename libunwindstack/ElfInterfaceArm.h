@@ -68,7 +68,7 @@ class ElfInterfaceArm : public ElfInterface32 {
 
   bool FindEntry(uint32_t pc, uint64_t* entry_offset);
 
-  bool HandleType(uint64_t offset, uint32_t type) override;
+  bool HandleType(uint64_t offset, uint32_t type, uint64_t load_bias) override;
 
   bool Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) override;
 
@@ -76,13 +76,9 @@ class ElfInterfaceArm : public ElfInterface32 {
 
   uint64_t start_offset() { return start_offset_; }
 
-  void set_start_offset(uint64_t start_offset) { start_offset_ = start_offset; }
-
   size_t total_entries() { return total_entries_; }
 
-  void set_total_entries(size_t total_entries) { total_entries_ = total_entries; }
-
- private:
+ protected:
   uint64_t start_offset_ = 0;
   size_t total_entries_ = 0;
 

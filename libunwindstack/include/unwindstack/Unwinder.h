@@ -60,7 +60,8 @@ class Unwinder {
   }
   ~Unwinder() = default;
 
-  void Unwind(std::set<std::string>* initial_map_names_to_skip = nullptr);
+  void Unwind(const std::set<std::string>* initial_map_names_to_skip = nullptr,
+              const std::set<std::string>* map_suffixes_to_ignore = nullptr);
 
   size_t NumFrames() { return frames_.size(); }
 

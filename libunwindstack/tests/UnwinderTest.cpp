@@ -96,6 +96,15 @@ class UnwinderTest : public ::testing::Test {
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
+    info.name = "/fake/compressed.so";
+    info.start = 0x33000;
+    info.end = 0x34000;
+    info.flags = PROT_READ | PROT_WRITE;
+    elf = new ElfFake(nullptr);
+    info.elf = elf;
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    maps_.FakeAddMapInfo(info);
+
     info.name = "/fake/fake.apk";
     info.start = 0x43000;
     info.end = 0x44000;
@@ -104,6 +113,14 @@ class UnwinderTest : public ::testing::Test {
     elf = new ElfFake(nullptr);
     info.elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    maps_.FakeAddMapInfo(info);
+
+    info.name = "/fake/fake.oat";
+    info.start = 0x53000;
+    info.end = 0x54000;
+    info.offset = 0;
+    info.flags = PROT_READ | PROT_WRITE;
+    info.elf = nullptr;
     maps_.FakeAddMapInfo(info);
   }
 
@@ -345,7 +362,7 @@ TEST_F(UnwinderTest, sp_not_in_map) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
 
   regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x53000);
+  regs_.FakeSetSp(0x63000);
   ElfInterfaceFake::FakePushStepData(StepData(0x21002, 0x50020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
@@ -358,7 +375,7 @@ TEST_F(UnwinderTest, sp_not_in_map) {
   EXPECT_EQ(0U, frame->num);
   EXPECT_EQ(0U, frame->rel_pc);
   EXPECT_EQ(0x1000U, frame->pc);
-  EXPECT_EQ(0x53000U, frame->sp);
+  EXPECT_EQ(0x63000U, frame->sp);
   EXPECT_EQ("Frame0", frame->function_name);
   EXPECT_EQ(0U, frame->function_offset);
   EXPECT_EQ("/system/fake/libc.so", frame->map_name);
@@ -538,6 +555,59 @@ TEST_F(UnwinderTest, speculative_frame_removed) {
   EXPECT_EQ(0U, frame->map_end);
   EXPECT_EQ(0U, frame->map_load_bias);
   EXPECT_EQ(0, frame->map_flags);
+}
+
+// Verify that an unwind stops when a frame is in given suffix.
+TEST_F(UnwinderTest, map_ignore_suffixes) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame3", 3));
+
+  // Fake as if code called a nullptr function.
+  regs_.FakeSetPc(0x1000);
+  regs_.FakeSetSp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0x43402, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x53502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  std::set<std::string> suffixes{"oat"};
+  unwinder.Unwind(nullptr, &suffixes);
+
+  ASSERT_EQ(2U, unwinder.NumFrames());
+  // Make sure the elf was not initialized.
+  MapInfo* map_info = maps_.Find(0x53000);
+  ASSERT_TRUE(map_info != nullptr);
+  EXPECT_TRUE(map_info->elf == nullptr);
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0x400U, frame->rel_pc);
+  EXPECT_EQ(0x43400U, frame->pc);
+  EXPECT_EQ(0x10010U, frame->sp);
+  EXPECT_EQ("Frame1", frame->function_name);
+  EXPECT_EQ(1U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.apk", frame->map_name);
+  EXPECT_EQ(0x1d000U, frame->map_offset);
+  EXPECT_EQ(0x43000U, frame->map_start);
+  EXPECT_EQ(0x44000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
 
 // Verify format frame code.
