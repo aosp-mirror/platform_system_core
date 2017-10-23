@@ -253,7 +253,7 @@ static void find_usb_device(const std::string& base,
                             continue;
                         }
                             /* aproto 01 needs 0 termination */
-                        if (interface->bInterfaceProtocol == 0x01) {
+                        if (interface->bInterfaceProtocol == ADB_PROTOCOL) {
                             max_packet_size = ep1->wMaxPacketSize;
                             zero_mask = ep1->wMaxPacketSize - 1;
                         }
