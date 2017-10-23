@@ -35,7 +35,9 @@
 #ifndef __ANDROID__
 pid_t gettid() {
 #if defined(__APPLE__)
-  return syscall(SYS_thread_selfid);
+  uint64_t tid;
+  pthread_threadid_np(NULL, &tid);
+  return tid;
 #elif defined(__linux__)
   return syscall(__NR_gettid);
 #elif defined(_WIN32)
