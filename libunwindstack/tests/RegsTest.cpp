@@ -115,7 +115,7 @@ TEST_F(RegsTest, rel_pc_arm) {
   RegsArm arm;
 
   // Check fence posts.
-  elf_interface_->FakeSetLoadBias(0);
+  elf_->FakeSetLoadBias(0);
   ASSERT_EQ(3U,  arm.GetAdjustedPc(0x5, elf_.get()));
   ASSERT_EQ(4U,  arm.GetAdjustedPc(0x4, elf_.get()));
   ASSERT_EQ(3U,  arm.GetAdjustedPc(0x3, elf_.get()));
@@ -123,7 +123,7 @@ TEST_F(RegsTest, rel_pc_arm) {
   ASSERT_EQ(1U,  arm.GetAdjustedPc(0x1, elf_.get()));
   ASSERT_EQ(0U,  arm.GetAdjustedPc(0x0, elf_.get()));
 
-  elf_interface_->FakeSetLoadBias(0x100);
+  elf_->FakeSetLoadBias(0x100);
   ASSERT_EQ(0xffU,  arm.GetAdjustedPc(0xff, elf_.get()));
   ASSERT_EQ(0x103U,  arm.GetAdjustedPc(0x105, elf_.get()));
   ASSERT_EQ(0x104U,  arm.GetAdjustedPc(0x104, elf_.get()));
@@ -133,13 +133,13 @@ TEST_F(RegsTest, rel_pc_arm) {
   ASSERT_EQ(0x100U,  arm.GetAdjustedPc(0x100, elf_.get()));
 
   // Check thumb instructions handling.
-  elf_interface_->FakeSetLoadBias(0);
+  elf_->FakeSetLoadBias(0);
   memory_->SetData32(0x2000, 0);
   ASSERT_EQ(0x2003U,  arm.GetAdjustedPc(0x2005, elf_.get()));
   memory_->SetData32(0x2000, 0xe000f000);
   ASSERT_EQ(0x2001U,  arm.GetAdjustedPc(0x2005, elf_.get()));
 
-  elf_interface_->FakeSetLoadBias(0x400);
+  elf_->FakeSetLoadBias(0x400);
   memory_->SetData32(0x2100, 0);
   ASSERT_EQ(0x2503U,  arm.GetAdjustedPc(0x2505, elf_.get()));
   memory_->SetData32(0x2100, 0xf111f111);

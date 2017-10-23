@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
   }
 
   unwindstack::Elf elf(memory);
-  if (!elf.Init() || !elf.valid()) {
+  if (!elf.Init(true) || !elf.valid()) {
     printf("%s is not a valid elf file.\n", argv[1]);
     return 1;
   }
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
   }
 
   std::string name;
-  uint64_t load_bias = elf.interface()->load_bias();
+  uint64_t load_bias = elf.GetLoadBias();
   if (argc == 3) {
     std::string cur_name;
     uint64_t func_offset;

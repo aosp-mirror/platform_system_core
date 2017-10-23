@@ -20,11 +20,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
 
+#include "ElfFake.h"
 #include "ElfTestUtils.h"
 #include "LogFake.h"
 #include "MemoryFake.h"
@@ -107,7 +109,7 @@ class ElfTest : public ::testing::Test {
 TEST_F(ElfTest, invalid_memory) {
   Elf elf(memory_);
 
-  ASSERT_FALSE(elf.Init());
+  ASSERT_FALSE(elf.Init(false));
   ASSERT_FALSE(elf.valid());
 }
 
@@ -119,7 +121,7 @@ TEST_F(ElfTest, elf_invalid) {
   // Corrupt the ELF signature.
   memory_->SetData32(0, 0x7f000000);
 
-  ASSERT_FALSE(elf.Init());
+  ASSERT_FALSE(elf.Init(false));
   ASSERT_FALSE(elf.valid());
   ASSERT_TRUE(elf.interface() == nullptr);
 
@@ -130,7 +132,7 @@ TEST_F(ElfTest, elf_invalid) {
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
   bool finished;
-  ASSERT_FALSE(elf.Step(0, nullptr, nullptr, &finished));
+  ASSERT_FALSE(elf.Step(0, 0, nullptr, nullptr, &finished));
 }
 
 TEST_F(ElfTest, elf32_invalid_machine) {
@@ -139,7 +141,7 @@ TEST_F(ElfTest, elf32_invalid_machine) {
   InitElf32(EM_PPC);
 
   ResetLogs();
-  ASSERT_FALSE(elf.Init());
+  ASSERT_FALSE(elf.Init(false));
 
   ASSERT_EQ("", GetFakeLogBuf());
   ASSERT_EQ("4 unwind 32 bit elf that is neither arm nor x86: e_machine = 20\n\n",
@@ -152,7 +154,7 @@ TEST_F(ElfTest, elf64_invalid_machine) {
   InitElf64(EM_PPC64);
 
   ResetLogs();
-  ASSERT_FALSE(elf.Init());
+  ASSERT_FALSE(elf.Init(false));
 
   ASSERT_EQ("", GetFakeLogBuf());
   ASSERT_EQ("4 unwind 64 bit elf that is neither aarch64 nor x86_64: e_machine = 21\n\n",
@@ -164,7 +166,7 @@ TEST_F(ElfTest, elf_arm) {
 
   InitElf32(EM_ARM);
 
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.valid());
   ASSERT_EQ(static_cast<uint32_t>(EM_ARM), elf.machine_type());
   ASSERT_EQ(ELFCLASS32, elf.class_type());
@@ -176,7 +178,7 @@ TEST_F(ElfTest, elf_x86) {
 
   InitElf32(EM_386);
 
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.valid());
   ASSERT_EQ(static_cast<uint32_t>(EM_386), elf.machine_type());
   ASSERT_EQ(ELFCLASS32, elf.class_type());
@@ -188,7 +190,7 @@ TEST_F(ElfTest, elf_arm64) {
 
   InitElf64(EM_AARCH64);
 
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.valid());
   ASSERT_EQ(static_cast<uint32_t>(EM_AARCH64), elf.machine_type());
   ASSERT_EQ(ELFCLASS64, elf.class_type());
@@ -200,7 +202,7 @@ TEST_F(ElfTest, elf_x86_64) {
 
   InitElf64(EM_X86_64);
 
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.valid());
   ASSERT_EQ(static_cast<uint32_t>(EM_X86_64), elf.machine_type());
   ASSERT_EQ(ELFCLASS64, elf.class_type());
@@ -214,7 +216,7 @@ TEST_F(ElfTest, gnu_debugdata_init_fail32) {
                                                });
 
   Elf elf(memory_);
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.interface() != nullptr);
   ASSERT_TRUE(elf.gnu_debugdata_interface() == nullptr);
   EXPECT_EQ(0x1acU, elf.interface()->gnu_debugdata_offset());
@@ -228,7 +230,7 @@ TEST_F(ElfTest, gnu_debugdata_init_fail64) {
                                                });
 
   Elf elf(memory_);
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.interface() != nullptr);
   ASSERT_TRUE(elf.gnu_debugdata_interface() == nullptr);
   EXPECT_EQ(0x200U, elf.interface()->gnu_debugdata_offset());
@@ -242,14 +244,11 @@ TEST_F(ElfTest, gnu_debugdata_init32) {
                                                });
 
   Elf elf(memory_);
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(true));
   ASSERT_TRUE(elf.interface() != nullptr);
-  ASSERT_TRUE(elf.gnu_debugdata_interface() == nullptr);
+  ASSERT_TRUE(elf.gnu_debugdata_interface() != nullptr);
   EXPECT_EQ(0x1acU, elf.interface()->gnu_debugdata_offset());
   EXPECT_EQ(0x8cU, elf.interface()->gnu_debugdata_size());
-
-  elf.InitGnuDebugdata();
-  ASSERT_TRUE(elf.gnu_debugdata_interface() != nullptr);
 }
 
 TEST_F(ElfTest, gnu_debugdata_init64) {
@@ -259,42 +258,109 @@ TEST_F(ElfTest, gnu_debugdata_init64) {
                                                });
 
   Elf elf(memory_);
-  ASSERT_TRUE(elf.Init());
+  ASSERT_TRUE(elf.Init(true));
   ASSERT_TRUE(elf.interface() != nullptr);
-  ASSERT_TRUE(elf.gnu_debugdata_interface() == nullptr);
+  ASSERT_TRUE(elf.gnu_debugdata_interface() != nullptr);
   EXPECT_EQ(0x200U, elf.interface()->gnu_debugdata_offset());
   EXPECT_EQ(0x90U, elf.interface()->gnu_debugdata_size());
-
-  elf.InitGnuDebugdata();
-  ASSERT_TRUE(elf.gnu_debugdata_interface() != nullptr);
 }
 
-class MockElf : public Elf {
- public:
-  MockElf(Memory* memory) : Elf(memory) {}
-  virtual ~MockElf() = default;
-
-  void set_valid(bool valid) { valid_ = valid; }
-  void set_elf_interface(ElfInterface* interface) { interface_.reset(interface); }
-};
-
 TEST_F(ElfTest, rel_pc) {
-  MockElf elf(memory_);
+  ElfFake elf(memory_);
 
-  ElfInterface* interface = new ElfInterface32(memory_);
-  elf.set_elf_interface(interface);
+  ElfInterfaceFake* interface = new ElfInterfaceFake(memory_);
+  elf.FakeSetInterface(interface);
 
-  elf.set_valid(true);
-  interface->set_load_bias(0);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
   MapInfo map_info{.start = 0x1000, .end = 0x2000};
 
   ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
 
-  interface->set_load_bias(0x3000);
+  elf.FakeSetLoadBias(0x3000);
   ASSERT_EQ(0x3101U, elf.GetRelPc(0x1101, &map_info));
 
-  elf.set_valid(false);
+  elf.FakeSetValid(false);
+  elf.FakeSetLoadBias(0);
   ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
+}
+
+TEST_F(ElfTest, step_in_signal_map) {
+  ElfFake elf(memory_);
+
+  RegsArm regs;
+  regs[13] = 0x50000;
+  regs[15] = 0x8000;
+  regs.SetFromRaw();
+
+  ElfInterfaceFake* interface = new ElfInterfaceFake(memory_);
+  elf.FakeSetInterface(interface);
+
+  memory_->SetData32(0x3000, 0xdf0027ad);
+  MemoryFake process_memory;
+  process_memory.SetData32(0x50000, 0);
+  for (size_t i = 0; i < 16; i++) {
+    process_memory.SetData32(0x500a0 + i * sizeof(uint32_t), i);
+  }
+
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+  bool finished;
+  ASSERT_TRUE(elf.Step(0x1000, 0x2000, &regs, &process_memory, &finished));
+  EXPECT_FALSE(finished);
+  EXPECT_EQ(15U, regs.pc());
+  EXPECT_EQ(13U, regs.sp());
+}
+
+class ElfInterfaceMock : public ElfInterface {
+ public:
+  ElfInterfaceMock(Memory* memory) : ElfInterface(memory) {}
+  virtual ~ElfInterfaceMock() = default;
+
+  bool Init(uint64_t*) override { return false; }
+  void InitHeaders() override {}
+  bool GetSoname(std::string*) override { return false; }
+  bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override { return false; }
+  MOCK_METHOD4(Step, bool(uint64_t, Regs*, Memory*, bool*));
+};
+
+TEST_F(ElfTest, step_in_interface) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  RegsArm regs;
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+  MemoryFake process_memory;
+
+  bool finished;
+  EXPECT_CALL(*interface, Step(0x1000, &regs, &process_memory, &finished))
+      .WillOnce(::testing::Return(true));
+
+  ASSERT_TRUE(elf.Step(0x1000, 0x2000, &regs, &process_memory, &finished));
+}
+
+TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0x4000);
+
+  RegsArm regs;
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+  MemoryFake process_memory;
+
+  // Invalid relative pc given load_bias.
+  bool finished;
+  ASSERT_FALSE(elf.Step(0x1000, 0x2000, &regs, &process_memory, &finished));
+
+  EXPECT_CALL(*interface, Step(0x3300, &regs, &process_memory, &finished))
+      .WillOnce(::testing::Return(true));
+
+  ASSERT_TRUE(elf.Step(0x7300, 0x2000, &regs, &process_memory, &finished));
 }
 
 }  // namespace unwindstack

@@ -25,6 +25,7 @@
 #include "DwarfEncoding.h"
 #include "ElfInterfaceArm.h"
 
+#include "ElfFake.h"
 #include "MemoryFake.h"
 
 #if !defined(PT_ARM_EXIDX)
@@ -134,7 +135,9 @@ void ElfInterfaceTest::SinglePtLoad() {
   phdr.p_align = 0x1000;
   memory_.SetMemory(0x100, &phdr, sizeof(phdr));
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0x2000U, load_bias);
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads = elf->pt_loads();
   ASSERT_EQ(1U, pt_loads.size());
@@ -190,7 +193,9 @@ void ElfInterfaceTest::MultipleExecutablePtLoads() {
   phdr.p_align = 0x1002;
   memory_.SetMemory(0x100 + 2 * sizeof(phdr), &phdr, sizeof(phdr));
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0x2000U, load_bias);
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads = elf->pt_loads();
   ASSERT_EQ(3U, pt_loads.size());
@@ -257,7 +262,9 @@ void ElfInterfaceTest::MultipleExecutablePtLoadsIncrementsNotSizeOfPhdr() {
   phdr.p_align = 0x1002;
   memory_.SetMemory(0x100 + 2 * (sizeof(phdr) + 100), &phdr, sizeof(phdr));
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0x2000U, load_bias);
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads = elf->pt_loads();
   ASSERT_EQ(3U, pt_loads.size());
@@ -326,7 +333,9 @@ void ElfInterfaceTest::NonExecutablePtLoads() {
   phdr.p_align = 0x1002;
   memory_.SetMemory(0x100 + 2 * sizeof(phdr), &phdr, sizeof(phdr));
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads = elf->pt_loads();
   ASSERT_EQ(1U, pt_loads.size());
@@ -398,7 +407,9 @@ void ElfInterfaceTest::ManyPhdrs() {
   memory_.SetMemory(phdr_offset, &phdr, sizeof(phdr));
   phdr_offset += sizeof(phdr);
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0x2000U, load_bias);
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads = elf->pt_loads();
   ASSERT_EQ(1U, pt_loads.size());
@@ -438,7 +449,9 @@ TEST_F(ElfInterfaceTest, elf32_arm) {
   memory_.SetData32(0x2000, 0x1000);
   memory_.SetData32(0x2008, 0x1000);
 
-  ASSERT_TRUE(elf_arm.Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf_arm.Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
 
   std::vector<uint32_t> entries;
   for (auto addr : elf_arm) {
@@ -493,7 +506,10 @@ void ElfInterfaceTest::Soname() {
 
   SetStringMemory(0x10010, "fake_soname.so");
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+
   std::string name;
   ASSERT_TRUE(elf->GetSoname(&name));
   ASSERT_STREQ("fake_soname.so", name.c_str());
@@ -549,7 +565,10 @@ void ElfInterfaceTest::SonameAfterDtNull() {
 
   SetStringMemory(0x10010, "fake_soname.so");
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+
   std::string name;
   ASSERT_FALSE(elf->GetSoname(&name));
 }
@@ -603,7 +622,10 @@ void ElfInterfaceTest::SonameSize() {
 
   SetStringMemory(0x10010, "fake_soname.so");
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+
   std::string name;
   ASSERT_FALSE(elf->GetSoname(&name));
 }
@@ -616,38 +638,14 @@ TEST_F(ElfInterfaceTest, elf64_soname_size) {
   SonameSize<Elf64_Ehdr, Elf64_Phdr, Elf64_Dyn, ElfInterface64>();
 }
 
-class MockElfInterface32 : public ElfInterface32 {
- public:
-  MockElfInterface32(Memory* memory) : ElfInterface32(memory) {}
-  virtual ~MockElfInterface32() = default;
-
-  void TestSetEhFrameOffset(uint64_t offset) { eh_frame_offset_ = offset; }
-  void TestSetEhFrameSize(uint64_t size) { eh_frame_size_ = size; }
-
-  void TestSetDebugFrameOffset(uint64_t offset) { debug_frame_offset_ = offset; }
-  void TestSetDebugFrameSize(uint64_t size) { debug_frame_size_ = size; }
-};
-
-class MockElfInterface64 : public ElfInterface64 {
- public:
-  MockElfInterface64(Memory* memory) : ElfInterface64(memory) {}
-  virtual ~MockElfInterface64() = default;
-
-  void TestSetEhFrameOffset(uint64_t offset) { eh_frame_offset_ = offset; }
-  void TestSetEhFrameSize(uint64_t size) { eh_frame_size_ = size; }
-
-  void TestSetDebugFrameOffset(uint64_t offset) { debug_frame_offset_ = offset; }
-  void TestSetDebugFrameSize(uint64_t size) { debug_frame_size_ = size; }
-};
-
 template <typename ElfType>
 void ElfInterfaceTest::InitHeadersEhFrameTest() {
   ElfType elf(&memory_);
 
-  elf.TestSetEhFrameOffset(0x10000);
-  elf.TestSetEhFrameSize(0);
-  elf.TestSetDebugFrameOffset(0);
-  elf.TestSetDebugFrameSize(0);
+  elf.FakeSetEhFrameOffset(0x10000);
+  elf.FakeSetEhFrameSize(0);
+  elf.FakeSetDebugFrameOffset(0);
+  elf.FakeSetDebugFrameSize(0);
 
   memory_.SetMemory(0x10000,
                     std::vector<uint8_t>{0x1, DW_EH_PE_udata2, DW_EH_PE_udata2, DW_EH_PE_udata2});
@@ -661,21 +659,21 @@ void ElfInterfaceTest::InitHeadersEhFrameTest() {
 }
 
 TEST_F(ElfInterfaceTest, init_headers_eh_frame32) {
-  InitHeadersEhFrameTest<MockElfInterface32>();
+  InitHeadersEhFrameTest<ElfInterface32Fake>();
 }
 
 TEST_F(ElfInterfaceTest, init_headers_eh_frame64) {
-  InitHeadersEhFrameTest<MockElfInterface64>();
+  InitHeadersEhFrameTest<ElfInterface64Fake>();
 }
 
 template <typename ElfType>
 void ElfInterfaceTest::InitHeadersDebugFrame() {
   ElfType elf(&memory_);
 
-  elf.TestSetEhFrameOffset(0);
-  elf.TestSetEhFrameSize(0);
-  elf.TestSetDebugFrameOffset(0x5000);
-  elf.TestSetDebugFrameSize(0x200);
+  elf.FakeSetEhFrameOffset(0);
+  elf.FakeSetEhFrameSize(0);
+  elf.FakeSetDebugFrameOffset(0x5000);
+  elf.FakeSetDebugFrameSize(0x200);
 
   memory_.SetData32(0x5000, 0xfc);
   memory_.SetData32(0x5004, 0xffffffff);
@@ -694,21 +692,21 @@ void ElfInterfaceTest::InitHeadersDebugFrame() {
 }
 
 TEST_F(ElfInterfaceTest, init_headers_debug_frame32) {
-  InitHeadersDebugFrame<MockElfInterface32>();
+  InitHeadersDebugFrame<ElfInterface32Fake>();
 }
 
 TEST_F(ElfInterfaceTest, init_headers_debug_frame64) {
-  InitHeadersDebugFrame<MockElfInterface64>();
+  InitHeadersDebugFrame<ElfInterface64Fake>();
 }
 
 template <typename ElfType>
 void ElfInterfaceTest::InitHeadersEhFrameFail() {
   ElfType elf(&memory_);
 
-  elf.TestSetEhFrameOffset(0x1000);
-  elf.TestSetEhFrameSize(0x100);
-  elf.TestSetDebugFrameOffset(0);
-  elf.TestSetDebugFrameSize(0);
+  elf.FakeSetEhFrameOffset(0x1000);
+  elf.FakeSetEhFrameSize(0x100);
+  elf.FakeSetDebugFrameOffset(0);
+  elf.FakeSetDebugFrameSize(0);
 
   elf.InitHeaders();
 
@@ -719,21 +717,21 @@ void ElfInterfaceTest::InitHeadersEhFrameFail() {
 }
 
 TEST_F(ElfInterfaceTest, init_headers_eh_frame32_fail) {
-  InitHeadersEhFrameFail<MockElfInterface32>();
+  InitHeadersEhFrameFail<ElfInterface32Fake>();
 }
 
 TEST_F(ElfInterfaceTest, init_headers_eh_frame64_fail) {
-  InitHeadersEhFrameFail<MockElfInterface64>();
+  InitHeadersEhFrameFail<ElfInterface64Fake>();
 }
 
 template <typename ElfType>
 void ElfInterfaceTest::InitHeadersDebugFrameFail() {
   ElfType elf(&memory_);
 
-  elf.TestSetEhFrameOffset(0);
-  elf.TestSetEhFrameSize(0);
-  elf.TestSetDebugFrameOffset(0x1000);
-  elf.TestSetDebugFrameSize(0x100);
+  elf.FakeSetEhFrameOffset(0);
+  elf.FakeSetEhFrameSize(0);
+  elf.FakeSetDebugFrameOffset(0x1000);
+  elf.FakeSetDebugFrameSize(0x100);
 
   elf.InitHeaders();
 
@@ -744,11 +742,11 @@ void ElfInterfaceTest::InitHeadersDebugFrameFail() {
 }
 
 TEST_F(ElfInterfaceTest, init_headers_debug_frame32_fail) {
-  InitHeadersDebugFrameFail<MockElfInterface32>();
+  InitHeadersDebugFrameFail<ElfInterface32Fake>();
 }
 
 TEST_F(ElfInterfaceTest, init_headers_debug_frame64_fail) {
-  InitHeadersDebugFrameFail<MockElfInterface64>();
+  InitHeadersDebugFrameFail<ElfInterface64Fake>();
 }
 
 template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
@@ -762,7 +760,9 @@ void ElfInterfaceTest::InitSectionHeadersMalformed() {
   ehdr.e_shentsize = sizeof(Shdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
 }
 
 TEST_F(ElfInterfaceTest, init_section_headers_malformed32) {
@@ -827,7 +827,9 @@ void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
   InitSym<Sym>(0x5000, 0x90000, 0x1000, 0x100, 0xf000, "function_one");
   InitSym<Sym>(0x6000, 0xd0000, 0x1000, 0x300, 0xf000, "function_two");
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
   EXPECT_EQ(0U, elf->debug_frame_offset());
   EXPECT_EQ(0U, elf->debug_frame_size());
   EXPECT_EQ(0U, elf->gnu_debugdata_offset());
@@ -836,10 +838,10 @@ void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
   // Look in the first symbol table.
   std::string name;
   uint64_t name_offset;
-  ASSERT_TRUE(elf->GetFunctionName(0x90010, &name, &name_offset));
+  ASSERT_TRUE(elf->GetFunctionName(0x90010, 0, &name, &name_offset));
   EXPECT_EQ("function_one", name);
   EXPECT_EQ(16U, name_offset);
-  ASSERT_TRUE(elf->GetFunctionName(0xd0020, &name, &name_offset));
+  ASSERT_TRUE(elf->GetFunctionName(0xd0020, 0, &name, &name_offset));
   EXPECT_EQ("function_two", name);
   EXPECT_EQ(32U, name_offset);
 }
@@ -911,7 +913,9 @@ void ElfInterfaceTest::InitSectionHeadersOffsets() {
   memory_.SetMemory(0xf100, ".debug_frame", sizeof(".debug_frame"));
   memory_.SetMemory(0xf200, ".gnu_debugdata", sizeof(".gnu_debugdata"));
 
-  ASSERT_TRUE(elf->Init());
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
   EXPECT_EQ(0x6000U, elf->debug_frame_offset());
   EXPECT_EQ(0x500U, elf->debug_frame_size());
   EXPECT_EQ(0x5000U, elf->gnu_debugdata_offset());

@@ -40,7 +40,7 @@ class Elf {
   Elf(Memory* memory) : memory_(memory) {}
   virtual ~Elf() = default;
 
-  bool Init();
+  bool Init(bool init_gnu_debugdata);
 
   void InitGnuDebugdata();
 
@@ -50,11 +50,12 @@ class Elf {
 
   uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
 
-  bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
+  bool Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process_memory,
+            bool* finished);
 
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
 
-  uint64_t GetLoadBias();
+  uint64_t GetLoadBias() { return load_bias_; }
 
   bool valid() { return valid_; }
 
@@ -74,6 +75,7 @@ class Elf {
 
  protected:
   bool valid_ = false;
+  uint64_t load_bias_ = 0;
   std::unique_ptr<ElfInterface> interface_;
   std::unique_ptr<Memory> memory_;
   uint32_t machine_type_;
