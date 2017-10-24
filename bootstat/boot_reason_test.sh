@@ -569,6 +569,8 @@ blind_reboot_test() {
   esac
   adb reboot ${TEST}
   wait_for_screen
+  bootloader_reason=`validate_property ro.boot.bootreason`
+  EXPECT_PROPERTY ro.boot.bootreason ${bootloader_reason}
   EXPECT_PROPERTY sys.boot.reason ${reason}
   EXPECT_PROPERTY persist.sys.boot.reason ${reason}
   report_bootstat_logs ${reason}
