@@ -115,7 +115,7 @@ bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]) {
         // fork succeeded -- this is executing in the child process
 
         // Close the pipe FD not used by this process
-        TEMP_FAILURE_RETRY(close(pipe_fds[0]));
+        close(pipe_fds[0]);
 
         // Redirect stderr to the pipe FD provided by the parent
         if (TEMP_FAILURE_RETRY(dup2(pipe_fds[1], STDERR_FILENO)) == -1) {
@@ -123,7 +123,7 @@ bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]) {
             _exit(127);
             return false;
         }
-        TEMP_FAILURE_RETRY(close(pipe_fds[1]));
+        close(pipe_fds[1]);
 
         if (execv(filename, argv) == -1) {
             PLOG(ERROR) << "Failed to execve " << filename;
@@ -137,7 +137,7 @@ bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]) {
         // fork succeeded -- this is executing in the original/parent process
 
         // Close the pipe FD not used by this process
-        TEMP_FAILURE_RETRY(close(pipe_fds[1]));
+        close(pipe_fds[1]);
 
         // Log the redirected output of the child process.
         // It's unfortunate that there's no standard way to obtain an istream for a file descriptor.
@@ -148,7 +148,7 @@ bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]) {
         if (!android::base::ReadFdToString(child_out_fd, &child_output)) {
             PLOG(ERROR) << "Failed to capture full output of " << filename;
         }
-        TEMP_FAILURE_RETRY(close(child_out_fd));
+        close(child_out_fd);
         if (!child_output.empty()) {
             // Log captured output, line by line, because LOG expects to be invoked for each line
             std::istringstream in(child_output);
