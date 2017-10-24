@@ -15,7 +15,11 @@
  */
 
 #define LOG_TAG "Unicode_test"
-#include <utils/Log.h>
+
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include <log/log.h>
 #include <utils/Unicode.h>
 
 #include <gtest/gtest.h>
@@ -117,6 +121,31 @@ TEST_F(UnicodeTest, UTF8toUTF16Normal) {
 TEST_F(UnicodeTest, strstr16EmptyTarget) {
     EXPECT_EQ(strstr16(kSearchString, u""), kSearchString)
             << "should return the original pointer";
+}
+
+TEST_F(UnicodeTest, strstr16EmptyTarget_bug) {
+    // In the original code when target is an empty string strlen16() would
+    // start reading the memory until a "terminating null" (that is, zero)
+    // character is found.   This happens because "*target++" in the original
+    // code would increment the pointer beyond the actual string.
+    void* memptr;
+    const size_t alignment = sysconf(_SC_PAGESIZE);
+    const size_t size = 2 * alignment;
+    ASSERT_EQ(posix_memalign(&memptr, alignment, size), 0);
+    // Fill allocated memory.
+    memset(memptr, 'A', size);
+    // Create a pointer to an "empty" string on the first page.
+    char16_t* const emptyString = (char16_t* const)((char*)memptr + alignment - 4);
+    *emptyString = (char16_t)0;
+    // Protect the second page to show that strstr16() violates that.
+    ASSERT_EQ(mprotect((char*)memptr + alignment, alignment, PROT_NONE), 0);
+    // Test strstr16(): when bug is present a segmentation fault is raised.
+    ASSERT_EQ(strstr16((char16_t*)memptr, emptyString), (char16_t*)memptr)
+        << "should not read beyond the first char16_t.";
+    // Reset protection of the second page
+    ASSERT_EQ(mprotect((char*)memptr + alignment, alignment, PROT_READ | PROT_WRITE), 0);
+    // Free allocated memory.
+    free(memptr);
 }
 
 TEST_F(UnicodeTest, strstr16SameString) {
