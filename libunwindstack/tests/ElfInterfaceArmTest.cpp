@@ -401,4 +401,40 @@ TEST_F(ElfInterfaceArmTest, StepExidx_refuse_unwind) {
   ASSERT_EQ(0x1234U, regs.pc());
 }
 
+TEST_F(ElfInterfaceArmTest, StepExidx_pc_zero) {
+  ElfInterfaceArmFake interface(&memory_);
+
+  interface.FakeSetStartOffset(0x1000);
+  interface.FakeSetTotalEntries(1);
+  memory_.SetData32(0x1000, 0x6000);
+  // Set the pc using a pop r15 command.
+  memory_.SetData32(0x1004, 0x808800b0);
+
+  // pc value of zero.
+  process_memory_.SetData32(0x10000, 0);
+
+  RegsArm regs;
+  regs[ARM_REG_SP] = 0x10000;
+  regs[ARM_REG_LR] = 0x20000;
+  regs.set_sp(regs[ARM_REG_SP]);
+  regs.set_pc(0x1234);
+
+  bool finished;
+  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
+  ASSERT_TRUE(finished);
+  ASSERT_EQ(0U, regs.pc());
+
+  // Now set the pc from the lr register (pop r14).
+  memory_.SetData32(0x1004, 0x808400b0);
+
+  regs[ARM_REG_SP] = 0x10000;
+  regs[ARM_REG_LR] = 0x20000;
+  regs.set_sp(regs[ARM_REG_SP]);
+  regs.set_pc(0x1234);
+
+  ASSERT_TRUE(interface.StepExidx(0x7000, &regs, &process_memory_, &finished));
+  ASSERT_TRUE(finished);
+  ASSERT_EQ(0U, regs.pc());
+}
+
 }  // namespace unwindstack
