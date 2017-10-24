@@ -105,7 +105,7 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
                 android::base::WriteStringToFd(
                     formatEntry_locked(it.first, AID_ROOT), fd);
             }
-            TEMP_FAILURE_RETRY(close(fd));
+            close(fd);
         }
     }
 
@@ -601,7 +601,7 @@ void LogTags::WriteDynamicEventLogTags(uint32_t tag, uid_t uid) {
 
     std::string ret = formatEntry_locked(tag, uid, false);
     android::base::WriteStringToFd(ret, fd);
-    TEMP_FAILURE_RETRY(close(fd));
+    close(fd);
 
     size_t size = 0;
     file2watermark_const_iterator iwater;
@@ -625,7 +625,7 @@ void LogTags::WriteDebugEventLogTags(uint32_t tag, uid_t uid) {
 
     std::string ret = formatEntry_locked(tag, uid, false);
     android::base::WriteStringToFd(ret, fd);
-    TEMP_FAILURE_RETRY(close(fd));
+    close(fd);
 
     size_t size = 0;
     file2watermark_const_iterator iwater;
