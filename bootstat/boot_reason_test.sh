@@ -287,6 +287,7 @@ bootstat: Service started: /system/bin/bootstat -l
 bootstat: Battery level at shutdown 100%
 bootstat: Battery level at startup 100%
 init    : Parsing file /system/etc/init/bootstat.rc...
+init    : Parsing file /system/etc/init/bootstat-debug.rc...
 init    : processing action (persist.test.boot.reason=*) from (/system/etc/init/bootstat-debug.rc:
 init    : Command 'setprop ro.boot.bootreason \${persist.test.boot.reason}' action=persist.test.boot.reason=* (/system/etc/init/bootstat-debug.rc:
 init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
