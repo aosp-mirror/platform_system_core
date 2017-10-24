@@ -194,10 +194,12 @@ wait_for_screen() {
               sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
         if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
         then
+          sleep 1
           break
         fi
         if [ "${vals}" = "`echo logbootcomplete=1 ; echo boot_completed=1`" ]
         then
+          sleep 1
           break
         fi
       fi
