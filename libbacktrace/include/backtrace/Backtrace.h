@@ -77,6 +77,10 @@ struct backtrace_stackinfo_t {
   const uint8_t* data;
 };
 
+namespace unwindstack {
+class Regs;
+}
+
 class Backtrace {
 public:
   // Create the correct Backtrace object based on what is to be unwound.
@@ -105,6 +109,9 @@ public:
 
   // Get the current stack trace and store in the backtrace_ structure.
   virtual bool Unwind(size_t num_ignore_frames, ucontext_t* context = NULL) = 0;
+
+  static bool Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
+                     std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames);
 
   // Get the function name and offset into the function given the pc.
   // If the string is empty, then no valid function name was found,
