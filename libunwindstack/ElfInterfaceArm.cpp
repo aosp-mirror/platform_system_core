@@ -121,8 +121,10 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory,
     }
     regs_arm->set_sp(arm.cfa());
     (*regs_arm)[ARM_REG_SP] = regs_arm->sp();
-    *finished = false;
     return_value = true;
+
+    // If the pc was set to zero, consider this the final frame.
+    *finished = (regs_arm->pc() == 0) ? true : false;
   }
 
   if (arm.status() == ARM_STATUS_NO_UNWIND) {
