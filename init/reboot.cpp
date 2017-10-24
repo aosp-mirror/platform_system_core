@@ -280,16 +280,16 @@ static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
         }
         bool unmount_done = true;
         if (emulated_devices.size() > 0) {
-            unmount_done = std::all_of(emulated_devices.begin(), emulated_devices.end(),
-                                       [](auto& entry) { return entry.Umount(false); });
+            for (auto& entry : emulated_devices) {
+                if (!entry.Umount(false)) unmount_done = false;
+            }
             if (unmount_done) {
                 sync();
             }
         }
-        unmount_done =
-            std::all_of(block_devices.begin(), block_devices.end(),
-                        [&timeout](auto& entry) { return entry.Umount(timeout == 0ms); }) &&
-            unmount_done;
+        for (auto& entry : block_devices) {
+            if (!entry.Umount(timeout == 0ms)) unmount_done = false;
+        }
         if (unmount_done) {
             return UMOUNT_STAT_SUCCESS;
         }

@@ -42,6 +42,8 @@ class RegsFake : public Regs {
     return true;
   }
 
+  void IterateRegisters(std::function<void(const char*, uint64_t)>) override {}
+
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf*) override { return rel_pc - 2; }
 
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }

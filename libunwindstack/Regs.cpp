@@ -45,7 +45,7 @@ uint64_t RegsArm::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
     return rel_pc;
   }
 
-  uint64_t load_bias = elf->interface()->load_bias();
+  uint64_t load_bias = elf->GetLoadBias();
   if (rel_pc < load_bias) {
     return rel_pc;
   }
@@ -80,6 +80,25 @@ bool RegsArm::SetPcFromReturnAddress(Memory*) {
   return true;
 }
 
+void RegsArm::IterateRegisters(std::function<void(const char*, uint64_t)> fn) {
+  fn("r0", regs_[ARM_REG_R0]);
+  fn("r1", regs_[ARM_REG_R1]);
+  fn("r2", regs_[ARM_REG_R2]);
+  fn("r3", regs_[ARM_REG_R3]);
+  fn("r4", regs_[ARM_REG_R4]);
+  fn("r5", regs_[ARM_REG_R5]);
+  fn("r6", regs_[ARM_REG_R6]);
+  fn("r7", regs_[ARM_REG_R7]);
+  fn("r8", regs_[ARM_REG_R8]);
+  fn("r9", regs_[ARM_REG_R9]);
+  fn("r10", regs_[ARM_REG_R10]);
+  fn("r11", regs_[ARM_REG_R11]);
+  fn("ip", regs_[ARM_REG_R12]);
+  fn("sp", regs_[ARM_REG_SP]);
+  fn("lr", regs_[ARM_REG_LR]);
+  fn("pc", regs_[ARM_REG_PC]);
+}
+
 RegsArm64::RegsArm64()
     : RegsImpl<uint64_t>(ARM64_REG_LAST, ARM64_REG_SP, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
 
@@ -110,6 +129,42 @@ bool RegsArm64::SetPcFromReturnAddress(Memory*) {
 
   set_pc(regs_[ARM64_REG_LR]);
   return true;
+}
+
+void RegsArm64::IterateRegisters(std::function<void(const char*, uint64_t)> fn) {
+  fn("x0", regs_[ARM64_REG_R0]);
+  fn("x1", regs_[ARM64_REG_R1]);
+  fn("x2", regs_[ARM64_REG_R2]);
+  fn("x3", regs_[ARM64_REG_R3]);
+  fn("x4", regs_[ARM64_REG_R4]);
+  fn("x5", regs_[ARM64_REG_R5]);
+  fn("x6", regs_[ARM64_REG_R6]);
+  fn("x7", regs_[ARM64_REG_R7]);
+  fn("x8", regs_[ARM64_REG_R8]);
+  fn("x9", regs_[ARM64_REG_R9]);
+  fn("x10", regs_[ARM64_REG_R10]);
+  fn("x11", regs_[ARM64_REG_R11]);
+  fn("x12", regs_[ARM64_REG_R12]);
+  fn("x13", regs_[ARM64_REG_R13]);
+  fn("x14", regs_[ARM64_REG_R14]);
+  fn("x15", regs_[ARM64_REG_R15]);
+  fn("x16", regs_[ARM64_REG_R16]);
+  fn("x17", regs_[ARM64_REG_R17]);
+  fn("x18", regs_[ARM64_REG_R18]);
+  fn("x19", regs_[ARM64_REG_R19]);
+  fn("x20", regs_[ARM64_REG_R20]);
+  fn("x21", regs_[ARM64_REG_R21]);
+  fn("x22", regs_[ARM64_REG_R22]);
+  fn("x23", regs_[ARM64_REG_R23]);
+  fn("x24", regs_[ARM64_REG_R24]);
+  fn("x25", regs_[ARM64_REG_R25]);
+  fn("x26", regs_[ARM64_REG_R26]);
+  fn("x27", regs_[ARM64_REG_R27]);
+  fn("x28", regs_[ARM64_REG_R28]);
+  fn("x29", regs_[ARM64_REG_R29]);
+  fn("sp", regs_[ARM64_REG_SP]);
+  fn("lr", regs_[ARM64_REG_LR]);
+  fn("pc", regs_[ARM64_REG_PC]);
 }
 
 RegsX86::RegsX86()
@@ -146,6 +201,18 @@ bool RegsX86::SetPcFromReturnAddress(Memory* process_memory) {
   return true;
 }
 
+void RegsX86::IterateRegisters(std::function<void(const char*, uint64_t)> fn) {
+  fn("eax", regs_[X86_REG_EAX]);
+  fn("ebx", regs_[X86_REG_EBX]);
+  fn("ecx", regs_[X86_REG_ECX]);
+  fn("edx", regs_[X86_REG_EDX]);
+  fn("ebp", regs_[X86_REG_EBP]);
+  fn("edi", regs_[X86_REG_EDI]);
+  fn("esi", regs_[X86_REG_ESI]);
+  fn("esp", regs_[X86_REG_ESP]);
+  fn("eip", regs_[X86_REG_EIP]);
+}
+
 RegsX86_64::RegsX86_64()
     : RegsImpl<uint64_t>(X86_64_REG_LAST, X86_64_REG_SP, Location(LOCATION_SP_OFFSET, -8)) {}
 
@@ -179,6 +246,26 @@ bool RegsX86_64::SetPcFromReturnAddress(Memory* process_memory) {
 
   set_pc(new_pc);
   return true;
+}
+
+void RegsX86_64::IterateRegisters(std::function<void(const char*, uint64_t)> fn) {
+  fn("rax", regs_[X86_64_REG_RAX]);
+  fn("rbx", regs_[X86_64_REG_RBX]);
+  fn("rcx", regs_[X86_64_REG_RCX]);
+  fn("rdx", regs_[X86_64_REG_RDX]);
+  fn("r8", regs_[X86_64_REG_R8]);
+  fn("r9", regs_[X86_64_REG_R9]);
+  fn("r10", regs_[X86_64_REG_R10]);
+  fn("r11", regs_[X86_64_REG_R11]);
+  fn("r12", regs_[X86_64_REG_R12]);
+  fn("r13", regs_[X86_64_REG_R13]);
+  fn("r14", regs_[X86_64_REG_R14]);
+  fn("r15", regs_[X86_64_REG_R15]);
+  fn("rdi", regs_[X86_64_REG_RDI]);
+  fn("rsi", regs_[X86_64_REG_RSI]);
+  fn("rbp", regs_[X86_64_REG_RBP]);
+  fn("rsp", regs_[X86_64_REG_RSP]);
+  fn("rip", regs_[X86_64_REG_RIP]);
 }
 
 static Regs* ReadArm(void* remote_data) {
