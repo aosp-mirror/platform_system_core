@@ -225,11 +225,13 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
   // Find the return address location.
   if (return_address_undefined) {
     cur_regs->set_pc(0);
-    *finished = true;
   } else {
     cur_regs->set_pc((*cur_regs)[cie->return_address_register]);
-    *finished = false;
   }
+
+  // If the pc was set to zero, consider this the final frame.
+  *finished = (cur_regs->pc() == 0) ? true : false;
+
   cur_regs->set_sp(cfa);
   // Return false if the unwind is not finished or the cfa and pc didn't change.
   return *finished || prev_cfa != cfa || prev_pc != cur_regs->pc();
