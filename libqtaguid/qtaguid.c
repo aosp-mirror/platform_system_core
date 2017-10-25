@@ -26,13 +26,13 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <log/log.h>
 #include <cutils/qtaguid.h>
+#include <log/log.h>
 
 static const char* CTRL_PROCPATH = "/proc/net/xt_qtaguid/ctrl";
 static const int CTRL_MAX_INPUT_LEN = 128;
-static const char *GLOBAL_PACIFIER_PARAM = "/sys/module/xt_qtaguid/parameters/passive";
-static const char *TAG_PACIFIER_PARAM = "/sys/module/xt_qtaguid/parameters/tag_tracking_passive";
+static const char* GLOBAL_PACIFIER_PARAM = "/sys/module/xt_qtaguid/parameters/passive";
+static const char* TAG_PACIFIER_PARAM = "/sys/module/xt_qtaguid/parameters/tag_tracking_passive";
 
 /*
  * One per proccess.
@@ -55,7 +55,7 @@ void qtaguid_resTrack(void) {
  *   0 on success.
  *   -errno on failure.
  */
-static int write_ctrl(const char *cmd) {
+static int write_ctrl(const char* cmd) {
     int fd, res, savedErrno;
 
     ALOGV("write_ctrl(%s)", cmd);
@@ -79,7 +79,7 @@ static int write_ctrl(const char *cmd) {
     return -savedErrno;
 }
 
-static int write_param(const char *param_path, const char *value) {
+static int write_param(const char* param_path, const char* value) {
     int param_fd;
     int res;
 
@@ -108,8 +108,8 @@ int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
 
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        ALOGI("Tagging socket %d with tag %" PRIx64 "(%d) for uid %d failed errno=%d",
-             sockfd, kTag, tag, uid, res);
+        ALOGI("Tagging socket %d with tag %" PRIx64 "(%d) for uid %d failed errno=%d", sockfd, kTag,
+              tag, uid, res);
     }
 
     return res;
@@ -154,14 +154,14 @@ int qtaguid_deleteTagData(int tag, uid_t uid) {
     res = write_ctrl(lineBuf);
     if (res < 0) {
         ALOGI("Deleting tag data with tag %" PRIx64 "/%d for uid %d failed with cnt=%d errno=%d",
-             kTag, tag, uid, cnt, errno);
+              kTag, tag, uid, cnt, errno);
     }
 
     return res;
 }
 
 int qtaguid_setPacifier(int on) {
-    const char *value;
+    const char* value;
 
     value = on ? "Y" : "N";
     if (write_param(GLOBAL_PACIFIER_PARAM, value) < 0) {
