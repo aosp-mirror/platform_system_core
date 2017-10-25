@@ -308,8 +308,8 @@ TEST_F(UnwinderTest, verify_frames_skipped) {
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
-  std::set<std::string> skip_set{"libunwind.so", "libanother.so"};
-  unwinder.Unwind(&skip_set);
+  std::vector<std::string> skip_libs{"libunwind.so", "libanother.so"};
+  unwinder.Unwind(&skip_libs);
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -572,7 +572,7 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
-  std::set<std::string> suffixes{"oat"};
+  std::vector<std::string> suffixes{"oat"};
   unwinder.Unwind(nullptr, &suffixes);
 
   ASSERT_EQ(2U, unwinder.NumFrames());
