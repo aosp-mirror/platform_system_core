@@ -230,5 +230,6 @@ cc_benchmark {
     shared_libs: [
         "libbacktrace",
         "libbase",
+        "libunwindstack",
     ],
 }

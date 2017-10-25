@@ -32,6 +32,7 @@
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
+#include <unwindstack/Memory.h>
 
 // Definitions of prctl arguments to set a vma name in Android kernels.
 #define ANDROID_PR_SET_VMA 0x53564d41
@@ -152,5 +153,27 @@ static void BM_create_map_new(benchmark::State& state) {
   CreateMap(state, BacktraceMap::CreateNew);
 }
 BENCHMARK(BM_create_map_new);
+
+
+using BacktraceCreateFn = decltype(Backtrace::Create);
+
+static void CreateBacktrace(benchmark::State& state, BacktraceMap* map, BacktraceCreateFn fn) {
+  while (state.KeepRunning()) {
+    std::unique_ptr<Backtrace> backtrace(fn(getpid(), gettid(), map));
+    backtrace->Unwind(0);
+  }
+}
+
+static void BM_create_backtrace(benchmark::State& state) {
+  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(getpid()));
+  CreateBacktrace(state, backtrace_map.get(), Backtrace::Create);
+}
+BENCHMARK(BM_create_backtrace);
+
+static void BM_create_backtrace_new(benchmark::State& state) {
+  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::CreateNew(getpid()));
+  CreateBacktrace(state, backtrace_map.get(), Backtrace::CreateNew);
+}
+BENCHMARK(BM_create_backtrace_new);
 
 BENCHMARK_MAIN();
