@@ -21,7 +21,6 @@
 #include <sys/types.h>
 
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -60,8 +59,8 @@ class Unwinder {
   }
   ~Unwinder() = default;
 
-  void Unwind(const std::set<std::string>* initial_map_names_to_skip = nullptr,
-              const std::set<std::string>* map_suffixes_to_ignore = nullptr);
+  void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
+              const std::vector<std::string>* map_suffixes_to_ignore = nullptr);
 
   size_t NumFrames() { return frames_.size(); }
 

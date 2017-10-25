@@ -107,13 +107,20 @@ public:
     return map.end > 0;
   }
 
-protected:
+  void SetSuffixesToIgnore(std::vector<std::string> suffixes) {
+    suffixes_to_ignore_.insert(suffixes_to_ignore_.end(), suffixes.begin(), suffixes.end());
+  }
+
+  const std::vector<std::string>& GetSuffixesToIgnore() { return suffixes_to_ignore_; }
+
+ protected:
   BacktraceMap(pid_t pid);
 
   virtual bool ParseLine(const char* line, backtrace_map_t* map);
 
-  std::deque<backtrace_map_t> maps_;
   pid_t pid_;
+  std::deque<backtrace_map_t> maps_;
+  std::vector<std::string> suffixes_to_ignore_;
 };
 
 class ScopedBacktraceMapIteratorLock {

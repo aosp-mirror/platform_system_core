@@ -45,12 +45,12 @@
 
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                        std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames) {
-  static std::set<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
+  static std::vector<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
   UnwindStackMap* stack_map = reinterpret_cast<UnwindStackMap*>(back_map);
   auto process_memory = stack_map->process_memory();
   unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
                                  regs, stack_map->process_memory());
-  unwinder.Unwind(&skip_names);
+  unwinder.Unwind(&skip_names, &stack_map->GetSuffixesToIgnore());
 
   if (num_ignore_frames >= unwinder.NumFrames()) {
     frames->resize(0);
