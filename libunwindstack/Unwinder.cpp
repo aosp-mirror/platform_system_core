@@ -22,6 +22,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
+
 #include <android-base/stringprintf.h>
 
 #include <unwindstack/Elf.h>
@@ -64,7 +66,8 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool ad
   }
 }
 
-static bool ShouldStop(const std::set<std::string>* map_suffixes_to_ignore, std::string& map_name) {
+static bool ShouldStop(const std::vector<std::string>* map_suffixes_to_ignore,
+                       std::string& map_name) {
   if (map_suffixes_to_ignore == nullptr) {
     return false;
   }
@@ -72,11 +75,13 @@ static bool ShouldStop(const std::set<std::string>* map_suffixes_to_ignore, std:
   if (pos == std::string::npos) {
     return false;
   }
-  return map_suffixes_to_ignore->find(map_name.substr(pos + 1)) != map_suffixes_to_ignore->end();
+
+  return std::find(map_suffixes_to_ignore->begin(), map_suffixes_to_ignore->end(),
+                   map_name.substr(pos + 1)) != map_suffixes_to_ignore->end();
 }
 
-void Unwinder::Unwind(const std::set<std::string>* initial_map_names_to_skip,
-                      const std::set<std::string>* map_suffixes_to_ignore) {
+void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
+                      const std::vector<std::string>* map_suffixes_to_ignore) {
   frames_.clear();
 
   bool return_address_attempt = false;
@@ -97,8 +102,8 @@ void Unwinder::Unwind(const std::set<std::string>* initial_map_names_to_skip,
     }
 
     if (map_info == nullptr || initial_map_names_to_skip == nullptr ||
-        initial_map_names_to_skip->find(basename(map_info->name.c_str())) ==
-            initial_map_names_to_skip->end()) {
+        std::find(initial_map_names_to_skip->begin(), initial_map_names_to_skip->end(),
+                  basename(map_info->name.c_str())) == initial_map_names_to_skip->end()) {
       FillInFrame(map_info, elf, rel_pc, adjust_pc);
       // Once a frame is added, stop skipping frames.
       initial_map_names_to_skip = nullptr;
