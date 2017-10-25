@@ -100,9 +100,13 @@ TEST(liblog, android_logger_get_) {
       EXPECT_LT(0, get_log_size);
       // crash buffer is allowed to be empty, that is actually healthy!
       // kernel buffer is allowed to be empty on "user" builds
+      // stats buffer is allowed to be empty TEMPORARILY.
+      // TODO: remove stats buffer from here once we start to use it in
+      // framework (b/68266385).
       EXPECT_LE(  // boolean 1 or 0 depending on expected content or empty
           !!((strcmp("crash", name) != 0) &&
-             ((strcmp("kernel", name) != 0) || __android_log_is_debuggable())),
+             ((strcmp("kernel", name) != 0) || __android_log_is_debuggable()) &&
+             (strcmp("stats", name) != 0)),
           android_logger_get_log_readable_size(logger));
     } else {
       EXPECT_NE(0, get_log_size);
