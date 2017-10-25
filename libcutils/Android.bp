@@ -110,7 +110,7 @@ cc_library {
                 "klog.cpp",
                 "partition_utils.c",
                 "properties.cpp",
-                "qtaguid.c",
+                "qtaguid.cpp",
                 "trace-dev.c",
                 "uevent.c",
             ],
