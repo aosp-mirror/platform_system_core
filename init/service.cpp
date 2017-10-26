@@ -720,14 +720,20 @@ Result<Success> Service::ExecStart() {
 }
 
 Result<Success> Service::Start() {
+    bool disabled = (flags_ & (SVC_DISABLED | SVC_RESET));
     // Starting a service removes it from the disabled or reset state and
     // immediately takes it out of the restarting state if it was in there.
     flags_ &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
 
     // Running processes require no additional work --- if they're in the
     // process of exiting, we've ensured that they will immediately restart
-    // on exit, unless they are ONESHOT.
+    // on exit, unless they are ONESHOT. For ONESHOT service, if it's in
+    // stopping status, we just set SVC_RESTART flag so it will get restarted
+    // in Reap().
     if (flags_ & SVC_RUNNING) {
+        if ((flags_ & SVC_ONESHOT) && disabled) {
+            flags_ |= SVC_RESTART;
+        }
         // It is not an error to try to start a service that is already running.
         return Success();
     }
