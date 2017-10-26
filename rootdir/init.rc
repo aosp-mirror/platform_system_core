@@ -169,9 +169,6 @@ on init
     mkdir /dev/cpuset/foreground
     copy /dev/cpuset/cpus /dev/cpuset/foreground/cpus
     copy /dev/cpuset/mems /dev/cpuset/foreground/mems
-    mkdir /dev/cpuset/foreground/boost
-    copy /dev/cpuset/cpus /dev/cpuset/foreground/boost/cpus
-    copy /dev/cpuset/mems /dev/cpuset/foreground/boost/mems
     mkdir /dev/cpuset/background
     copy /dev/cpuset/cpus /dev/cpuset/background/cpus
     copy /dev/cpuset/mems /dev/cpuset/background/mems
@@ -190,13 +187,11 @@ on init
     # change permissions for all cpusets we'll touch at runtime
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
-    chown system system /dev/cpuset/foreground/boost
     chown system system /dev/cpuset/background
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
-    chown system system /dev/cpuset/foreground/boost/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
@@ -205,7 +200,6 @@ on init
     chmod 0775 /dev/cpuset/system-background
 
     chmod 0664 /dev/cpuset/foreground/tasks
-    chmod 0664 /dev/cpuset/foreground/boost/tasks
     chmod 0664 /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/system-background/tasks
     chmod 0664 /dev/cpuset/top-app/tasks
