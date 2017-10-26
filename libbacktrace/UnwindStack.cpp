@@ -64,7 +64,7 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     auto frame = &unwinder_frames[i];
     backtrace_frame_data_t* back_frame = &frames->at(cur_frame);
 
-    back_frame->num = frame->num;
+    back_frame->num = frame->num - num_ignore_frames;
 
     back_frame->rel_pc = frame->rel_pc;
     back_frame->pc = frame->pc;
