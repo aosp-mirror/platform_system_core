@@ -873,17 +873,30 @@ Its Just So Hard reboot test:
 - NB: should report reboot,its_just_so_hard
 - NB: expect log \"... I bootstat: Unknown boot reason: reboot,its_just_so_hard\"" ]
 test_Its_Just_So_Hard_reboot() {
-  duration_test
+  if isDebuggable; then       # see below
+    duration_test
+  else
+    duration_test `expr ${DURATION_DEFAULT} + ${DURATION_DEFAULT}`
+  fi
   adb shell 'reboot "Its Just So Hard"'
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
   EXPECT_PROPERTY persist.sys.boot.reason "reboot,Its Just So Hard"
-  adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
-  if checkDebugBuild; then
-    flag=""
+  # Do not leave this test with an illegal value in persist.sys.boot.reason
+  save_ret=${?}           # hold on to error code from above two lines
+  if isDebuggable; then   # can do this easy, or we can do this hard.
+    adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
+    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   else
-    flag="--allow_failure"
+    report_bootstat_logs reboot,its_just_so_hard  # report what we have so far
+    # user build mitigation
+    adb shell reboot its_just_so_hard
+    wait_for_screen
+    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
+    EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
   fi
+  # Ensure persist.sys.boot.reason now valid, failure here acts as a signal
+  # that we could choke up following tests.  For example test_properties.
   EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard ${flag}
   report_bootstat_logs reboot,its_just_so_hard
 }
