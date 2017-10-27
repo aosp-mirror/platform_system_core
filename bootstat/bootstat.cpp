@@ -225,6 +225,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,longkey", 85},
     {"reboot,2sec", 86},
     {"shutdown,thermal,battery", 87},
+    {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
+    {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -351,8 +353,16 @@ bool addKernelPanicSubReason(const std::string& console, std::string& ret) {
 char tounderline(char c) {
   return ::isblank(c) ? '_' : c;
 }
+
 char toprintable(char c) {
   return ::isprint(c) ? c : '?';
+}
+
+// Cleanup boot_reason regarding acceptable character set
+void transformReason(std::string& reason) {
+  std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
+  std::transform(reason.begin(), reason.end(), reason.begin(), tounderline);
+  std::transform(reason.begin(), reason.end(), reason.begin(), toprintable);
 }
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
@@ -368,10 +378,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
   // If sys.boot.reason == ro.boot.bootreason, let's re-evaluate
   if (reason == ret) ret = "";
 
-  // Cleanup boot_reason regarding acceptable character set
-  std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
-  std::transform(reason.begin(), reason.end(), reason.begin(), tounderline);
-  std::transform(reason.begin(), reason.end(), reason.begin(), toprintable);
+  transformReason(reason);
 
   // Is the current system boot reason sys.boot.reason valid?
   if (!isKnownRebootReason(ret)) ret = "";
@@ -460,18 +467,20 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         pos += strlen(cmd);
         std::string subReason(content.substr(pos, max_reason_length));
         for (pos = 0; pos < subReason.length(); ++pos) {
-          char c = tounderline(subReason[pos]);
+          char c = subReason[pos];
           if (!::isprint(c) || (c == '\'')) {
             subReason.erase(pos);
             break;
           }
-          subReason[pos] = ::tolower(c);
         }
+        transformReason(subReason);
         if (subReason != "") {  // Will not land "reboot" as that is too blunt.
           if (isKernelRebootReason(subReason)) {
             ret = "reboot," + subReason;  // User space can't talk kernel reasons.
-          } else {
+          } else if (isKnownRebootReason(subReason)) {
             ret = subReason;
+          } else {
+            ret = "reboot," + subReason;  // legitimize unknown reasons
           }
         }
       }
@@ -563,10 +572,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       // Content buffer no longer will have console data. Beware if more
       // checks added below, that depend on parsing console content.
       content = GetProperty(last_reboot_reason_property);
-      // Cleanup last_boot_reason regarding acceptable character set
-      std::transform(content.begin(), content.end(), content.begin(), ::tolower);
-      std::transform(content.begin(), content.end(), content.begin(), tounderline);
-      std::transform(content.begin(), content.end(), content.begin(), toprintable);
+      transformReason(content);
 
       // Anything in last is better than 'super-blunt' reboot or shutdown.
       if ((ret == "") || (ret == "reboot") || (ret == "shutdown") || !isBluntRebootReason(content)) {
