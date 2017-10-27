@@ -86,19 +86,6 @@ cc_library {
     },
 }
 
-// Also provide libziparchive-host until everything is switched over to using libziparchive
-cc_library {
-    name: "libziparchive-host",
-    host_supported: true,
-    device_supported: false,
-    defaults: [
-        "libziparchive_defaults",
-        "libziparchive_flags",
-    ],
-    shared_libs: ["libz"],
-    static_libs: ["libutils"],
-}
-
 // Tests.
 cc_test {
     name: "ziparchive-tests",
