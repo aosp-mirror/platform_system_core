@@ -241,7 +241,8 @@ EXPECT_EQ() {
 
 [ "USAGE: EXPECT_PROPERTY <prop> <value> [--allow_failure]
 
-Returns true if current return (regex) value is true and the result matches" ]
+Returns true (0) if current return (regex) value is true and the result matches
+and the incoming return value is true as well (wired-or)" ]
 EXPECT_PROPERTY() {
   save_ret=${?}
   property="${1}"
@@ -628,8 +629,13 @@ test_optional_factory_reset() {
     adb reboot-bootloader
   fi
   fastboot format userdata >&2
+  save_ret=${?}
+  if [ 0 != ${save_ret} ]; then
+    echo "ERROR: fastboot can not format userdata" >&2
+  fi
   fastboot reboot >&2
   wait_for_screen
+  ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
   EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,factory_reset bootloader \
