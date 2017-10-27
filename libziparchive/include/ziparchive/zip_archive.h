@@ -230,4 +230,44 @@ int32_t ProcessZipEntryContents(ZipArchiveHandle handle, ZipEntry* entry,
                                 ProcessZipEntryFunction func, void* cookie);
 #endif
 
+namespace zip_archive {
+
+class Writer {
+ public:
+  virtual bool Append(uint8_t* buf, size_t buf_size) = 0;
+  virtual ~Writer();
+
+ protected:
+  Writer() = default;
+
+ private:
+  Writer(const Writer&) = delete;
+  void operator=(const Writer&) = delete;
+};
+
+class Reader {
+ public:
+  virtual bool ReadAtOffset(uint8_t* buf, size_t len, uint32_t offset) const = 0;
+  virtual ~Reader();
+
+ protected:
+  Reader() = default;
+
+ private:
+  Reader(const Reader&) = delete;
+  void operator=(const Reader&) = delete;
+};
+
+/*
+ * Inflates the first |compressed_length| bytes of |reader| to a given |writer|.
+ * |crc_out| is set to the CRC32 checksum of the uncompressed data.
+ *
+ * Returns 0 on success and negative values on failure, for example if |reader|
+ * cannot supply the right amount of data, or if the number of bytes written to
+ * data does not match |uncompressed_length|.
+ */
+int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
+                const uint32_t uncompressed_length, Writer* writer, uint64_t* crc_out);
+}  // namespace zip_archive
+
 #endif  // LIBZIPARCHIVE_ZIPARCHIVE_H_
