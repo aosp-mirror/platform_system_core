@@ -444,13 +444,13 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
                                  const char* cmdline) {
     int64_t ksize;
     void* kdata = load_file(kernel.c_str(), &ksize);
-    if (kdata == nullptr) die("cannot load '%s': %s\n", kernel.c_str(), strerror(errno));
+    if (kdata == nullptr) die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
 
     // Is this actually a boot image?
     if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
         if (cmdline) bootimg_set_cmdline((boot_img_hdr*) kdata, cmdline);
 
-        if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk\n");
+        if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
 
         *sz = ksize;
         return kdata;
@@ -460,14 +460,14 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
     int64_t rsize = 0;
     if (!ramdisk.empty()) {
         rdata = load_file(ramdisk.c_str(), &rsize);
-        if (rdata == nullptr) die("cannot load '%s': %s\n", ramdisk.c_str(), strerror(errno));
+        if (rdata == nullptr) die("cannot load '%s': %s", ramdisk.c_str(), strerror(errno));
     }
 
     void* sdata = nullptr;
     int64_t ssize = 0;
     if (!second_stage.empty()) {
         sdata = load_file(second_stage.c_str(), &ssize);
-        if (sdata == nullptr) die("cannot load '%s': %s\n", second_stage.c_str(), strerror(errno));
+        if (sdata == nullptr) die("cannot load '%s': %s", second_stage.c_str(), strerror(errno));
     }
 
     fprintf(stderr,"creating boot image...\n");
@@ -476,7 +476,7 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
                       rdata, rsize, ramdisk_offset,
                       sdata, ssize, second_offset,
                       page_size, base_addr, tags_offset, &bsize);
-    if (bdata == nullptr) die("failed to create boot.img\n");
+    if (bdata == nullptr) die("failed to create boot.img");
 
     if (cmdline) bootimg_set_cmdline((boot_img_hdr*) bdata, cmdline);
     fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", bsize);
@@ -490,24 +490,17 @@ static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* s
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
-        return 0;
+        return nullptr;
     }
 
     *sz = zip_entry.uncompressed_length;
 
     fprintf(stderr, "extracting %s (%" PRId64 " MB)...\n", entry_name, *sz / 1024 / 1024);
     uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
-    if (data == nullptr) {
-        fprintf(stderr, "failed to allocate %" PRId64 " bytes for '%s'\n", *sz, entry_name);
-        return 0;
-    }
+    if (data == nullptr) die("failed to allocate %" PRId64 " bytes for '%s'", *sz, entry_name);
 
     int error = ExtractToMemory(zip, &zip_entry, data, zip_entry.uncompressed_length);
-    if (error != 0) {
-        fprintf(stderr, "failed to extract '%s': %s\n", entry_name, ErrorCodeString(error));
-        free(data);
-        return 0;
-    }
+    if (error != 0) die("failed to extract '%s': %s", entry_name, ErrorCodeString(error));
 
     return data;
 }
@@ -524,14 +517,12 @@ static FILE* win32_tmpfile() {
     char temp_path[PATH_MAX];
     DWORD nchars = GetTempPath(sizeof(temp_path), temp_path);
     if (nchars == 0 || nchars >= sizeof(temp_path)) {
-        fprintf(stderr, "GetTempPath failed, error %ld\n", GetLastError());
-        return nullptr;
+        die("GetTempPath failed, error %ld", GetLastError());
     }
 
     char filename[PATH_MAX];
     if (GetTempFileName(temp_path, "fastboot", 0, filename) == 0) {
-        fprintf(stderr, "GetTempFileName failed, error %ld\n", GetLastError());
-        return nullptr;
+        die("GetTempFileName failed, error %ld", GetLastError());
     }
 
     return fopen(filename, "w+bTD");
@@ -540,8 +531,7 @@ static FILE* win32_tmpfile() {
 #define tmpfile win32_tmpfile
 
 static std::string make_temporary_directory() {
-    fprintf(stderr, "make_temporary_directory not supported under Windows, sorry!");
-    return "";
+    die("make_temporary_directory not supported under Windows, sorry!");
 }
 
 static int make_temporary_fd() {
@@ -613,9 +603,7 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
 static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd());
     if (fd == -1) {
-        fprintf(stderr, "failed to create temporary file for '%s': %s\n",
-                entry_name, strerror(errno));
-        return -1;
+        die("failed to create temporary file for '%s': %s", entry_name, strerror(errno));
     }
 
     ZipString zip_entry_name(entry_name);
@@ -629,12 +617,13 @@ static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
             zip_entry.uncompressed_length / 1024 / 1024);
     int error = ExtractEntryToFile(zip, &zip_entry, fd);
     if (error != 0) {
-        fprintf(stderr, "failed to extract '%s': %s\n", entry_name, ErrorCodeString(error));
-        return -1;
+        die("failed to extract '%s': %s", entry_name, ErrorCodeString(error));
     }
 
-    lseek(fd, 0, SEEK_SET);
-    // TODO: We're leaking 'fp' here.
+    if (lseek(fd, 0, SEEK_SET) != 0) {
+        die("lseek on extracted file '%s' failed: %s", entry_name, strerror(errno));
+    }
+
     return fd.release();
 }
 
@@ -738,27 +727,18 @@ static void queue_info_dump() {
     fb_queue_notice("--------------------------------------------");
 }
 
-static struct sparse_file **load_sparse_files(int fd, int max_size)
-{
+static struct sparse_file** load_sparse_files(int fd, int max_size) {
     struct sparse_file* s = sparse_file_import_auto(fd, false, true);
-    if (!s) {
-        die("cannot sparse read file\n");
-    }
+    if (!s) die("cannot sparse read file");
 
     int files = sparse_file_resparse(s, max_size, nullptr, 0);
-    if (files < 0) {
-        die("Failed to resparse\n");
-    }
+    if (files < 0) die("Failed to resparse");
 
     sparse_file** out_s = reinterpret_cast<sparse_file**>(calloc(sizeof(struct sparse_file *), files + 1));
-    if (!out_s) {
-        die("Failed to allocate sparse file array\n");
-    }
+    if (!out_s) die("Failed to allocate sparse file array");
 
     files = sparse_file_resparse(s, max_size, out_s, files);
-    if (files < 0) {
-        die("Failed to resparse\n");
-    }
+    if (files < 0) die("Failed to resparse");
 
     return out_s;
 }
@@ -1017,18 +997,18 @@ static std::string verify_slot(Transport* transport, const std::string& slot_nam
             if (count > 0) {
                 return "a";
             } else {
-                die("No known slots.");
+                die("No known slots");
             }
         }
     }
 
     int count = get_slot_count(transport);
-    if (count == 0) die("Device does not support slots.\n");
+    if (count == 0) die("Device does not support slots");
 
     if (slot == "other") {
         std::string other = get_other_slot(transport, count);
         if (other == "") {
-           die("No known slots.");
+           die("No known slots");
         }
         return other;
     }
@@ -1060,7 +1040,7 @@ static void do_for_partition(Transport* transport, const std::string& part, cons
         if (slot == "") {
             current_slot = get_current_slot(transport);
             if (current_slot == "") {
-                die("Failed to identify current slot.\n");
+                die("Failed to identify current slot");
             }
             func(part + "_" + current_slot);
         } else {
@@ -1086,7 +1066,7 @@ static void do_for_partitions(Transport* transport, const std::string& part, con
 
     if (slot == "all") {
         if (!fb_getvar(transport, "has-slot:" + part, &has_slot)) {
-            die("Could not check if partition %s has slot.", part.c_str());
+            die("Could not check if partition %s has slot %s", part.c_str(), slot.c_str());
         }
         if (has_slot == "yes") {
             for (int i=0; i < get_slot_count(transport); i++) {
@@ -1146,14 +1126,12 @@ static void do_update(Transport* transport, const char* filename, const std::str
     ZipArchiveHandle zip;
     int error = OpenArchive(filename, &zip);
     if (error != 0) {
-        CloseArchive(zip);
         die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
     }
 
     int64_t sz;
     void* data = unzip_file(zip, "android-info.txt", &sz);
     if (data == nullptr) {
-        CloseArchive(zip);
         die("update package '%s' has no android-info.txt", filename);
     }
 
@@ -1186,17 +1164,17 @@ static void do_update(Transport* transport, const char* filename, const std::str
         int fd = unzip_to_file(zip, images[i].img_name);
         if (fd == -1) {
             if (images[i].is_optional) {
-                continue;
+                continue; // An optional file is missing, so ignore it.
             }
-            CloseArchive(zip);
-            exit(1); // unzip_to_file already explained why.
+            die("non-optional file %s missing", images[i].img_name);
         }
+
         fastboot_buffer buf;
         if (!load_buf_fd(transport, fd, &buf)) {
             die("cannot load %s from flash: %s", images[i].img_name, strerror(errno));
         }
 
-        auto update = [&](const std::string &partition) {
+        auto update = [&](const std::string& partition) {
             do_update_signature(zip, images[i].sig_name);
             if (erase_first && needs_erase(transport, partition.c_str())) {
                 fb_queue_erase(partition.c_str());
@@ -1210,12 +1188,13 @@ static void do_update(Transport* transport, const char* filename, const std::str
         do_for_partitions(transport, images[i].part_name, slot, update, false);
     }
 
-    CloseArchive(zip);
     if (slot_override == "all") {
         set_active(transport, "a");
     } else {
         set_active(transport, slot_override);
     }
+
+    CloseArchive(zip);
 }
 
 static void do_send_signature(const std::string& fn) {
@@ -1274,7 +1253,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
         fastboot_buffer buf;
         if (!load_buf(transport, fname.c_str(), &buf)) {
             if (images[i].is_optional) continue;
-            die("could not load '%s': %s\n", images[i].img_name, strerror(errno));
+            die("could not load '%s': %s", images[i].img_name, strerror(errno));
         }
 
         auto flashall = [&](const std::string &partition) {
@@ -1463,7 +1442,7 @@ static void fb_perform_format(Transport* transport,
 
     if (fs_generator_generate(gen, output.path, size, initial_dir,
             eraseBlkSize, logicalBlkSize)) {
-        die("Cannot generate image for %s\n", partition);
+        die("Cannot generate image for %s", partition);
         return;
     }
 
@@ -1583,9 +1562,7 @@ int main(int argc, char **argv)
             break;
         case 'S':
             sparse_limit = parse_num(optarg);
-            if (sparse_limit < 0) {
-                    die("invalid sparse limit");
-            }
+            if (sparse_limit < 0) die("invalid sparse limit");
             break;
         case 'u':
             erase_first = false;
@@ -1718,7 +1695,7 @@ int main(int argc, char **argv)
             std::string filename = next_arg(&args);
             data = load_file(filename.c_str(), &sz);
             if (data == nullptr) die("could not load '%s': %s", filename.c_str(), strerror(errno));
-            if (sz != 256) die("signature must be 256 bytes");
+            if (sz != 256) die("signature must be 256 bytes (got %" PRId64 ")", sz);
             fb_queue_download("signature", data, sz);
             fb_queue_command("signature", "installing signature");
         } else if (command == "reboot") {
