@@ -960,6 +960,13 @@ void Service::StopOrReset(int how) {
     } else {
         flags_ |= how;
     }
+    // Make sure it's in right status when a restart immediately follow a
+    // stop/reset or vice versa.
+    if (how == SVC_RESTART) {
+        flags_ &= (~(SVC_DISABLED | SVC_RESET));
+    } else {
+        flags_ &= (~SVC_RESTART);
+    }
 
     if (pid_) {
         KillProcessGroup(SIGKILL);
