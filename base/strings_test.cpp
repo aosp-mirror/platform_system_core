@@ -51,6 +51,14 @@ TEST(strings, split_with_empty_part) {
   ASSERT_EQ("bar", parts[2]);
 }
 
+TEST(strings, split_with_trailing_empty_part) {
+  std::vector<std::string> parts = android::base::Split("foo,bar,", ",");
+  ASSERT_EQ(3U, parts.size());
+  ASSERT_EQ("foo", parts[0]);
+  ASSERT_EQ("bar", parts[1]);
+  ASSERT_EQ("", parts[2]);
+}
+
 TEST(strings, split_null_char) {
   std::vector<std::string> parts =
       android::base::Split(std::string("foo\0bar", 7), std::string("\0", 1));
