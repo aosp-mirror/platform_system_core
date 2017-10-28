@@ -799,7 +799,7 @@ class FileWriter : public zip_archive::Writer {
       // disk does not have enough space.
       result = TEMP_FAILURE_RETRY(fallocate(fd, 0, current_offset, declared_length));
       if (result == -1 && errno == ENOSPC) {
-        ALOGW("Zip: unable to allocate  %" PRId64 " bytes at offset %" PRId64 " : %s",
+        ALOGW("Zip: unable to allocate %" PRId64 " bytes at offset %" PRId64 ": %s",
               static_cast<int64_t>(declared_length), static_cast<int64_t>(current_offset),
               strerror(errno));
         return std::unique_ptr<FileWriter>(nullptr);
