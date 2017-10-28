@@ -65,6 +65,10 @@ cc_library {
         "Symbols.cpp",
     ],
 
+    cflags: [
+        "-Wexit-time-destructors",
+    ],
+
     target: {
         // Always disable optimizations for host to make it easier to debug.
         host: {
