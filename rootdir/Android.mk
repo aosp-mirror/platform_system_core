@@ -62,7 +62,6 @@ SANITIZE_ASAN_OPTIONS_FOR := \
   cameraserver \
   cnd \
   debuggerd \
-  debuggerd64 \
   dex2oat \
   drmserver \
   fingerprintd \
