@@ -32,13 +32,13 @@
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
+#include <unwindstack/Memory.h>
 
 // Definitions of prctl arguments to set a vma name in Android kernels.
 #define ANDROID_PR_SET_VMA 0x53564d41
 #define ANDROID_PR_SET_VMA_ANON_NAME 0
 
 constexpr size_t kNumMaps = 2000;
-constexpr size_t kNumIterations = 1000;
 
 static bool CountMaps(pid_t pid, size_t* num_maps) {
   // Minimize the calls that might allocate memory. If too much memory
@@ -132,14 +132,12 @@ static void CreateMap(benchmark::State& state, BacktraceMap* (*map_func)(pid_t, 
   }
 
   while (state.KeepRunning()) {
-    for (size_t i = 0; i < static_cast<size_t>(state.range(0)); i++) {
-      BacktraceMap* map = map_func(pid, false);
-      if (map == nullptr) {
-        fprintf(stderr, "Failed to create map\n");
-        return;
-      }
-      delete map;
+    BacktraceMap* map = map_func(pid, false);
+    if (map == nullptr) {
+      fprintf(stderr, "Failed to create map\n");
+      return;
     }
+    delete map;
   }
 
   kill(pid, SIGKILL);
@@ -149,11 +147,33 @@ static void CreateMap(benchmark::State& state, BacktraceMap* (*map_func)(pid_t, 
 static void BM_create_map(benchmark::State& state) {
   CreateMap(state, BacktraceMap::Create);
 }
-BENCHMARK(BM_create_map)->Arg(kNumIterations);
+BENCHMARK(BM_create_map);
 
 static void BM_create_map_new(benchmark::State& state) {
   CreateMap(state, BacktraceMap::CreateNew);
 }
-BENCHMARK(BM_create_map_new)->Arg(kNumIterations);
+BENCHMARK(BM_create_map_new);
+
+
+using BacktraceCreateFn = decltype(Backtrace::Create);
+
+static void CreateBacktrace(benchmark::State& state, BacktraceMap* map, BacktraceCreateFn fn) {
+  while (state.KeepRunning()) {
+    std::unique_ptr<Backtrace> backtrace(fn(getpid(), gettid(), map));
+    backtrace->Unwind(0);
+  }
+}
+
+static void BM_create_backtrace(benchmark::State& state) {
+  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::Create(getpid()));
+  CreateBacktrace(state, backtrace_map.get(), Backtrace::Create);
+}
+BENCHMARK(BM_create_backtrace);
+
+static void BM_create_backtrace_new(benchmark::State& state) {
+  std::unique_ptr<BacktraceMap> backtrace_map(BacktraceMap::CreateNew(getpid()));
+  CreateBacktrace(state, backtrace_map.get(), Backtrace::CreateNew);
+}
+BENCHMARK(BM_create_backtrace_new);
 
 BENCHMARK_MAIN();
