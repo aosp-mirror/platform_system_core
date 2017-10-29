@@ -348,11 +348,6 @@ int main(int argc, char** argv) {
       LOG(FATAL) << "failed to create backtrace map";
     }
   }
-  std::unique_ptr<BacktraceMap> backtrace_map_new;
-  backtrace_map_new.reset(BacktraceMap::CreateNew(main_tid));
-  if (!backtrace_map_new) {
-    LOG(FATAL) << "failed to create backtrace map new";
-  }
 
   // Collect the list of open files.
   OpenFilesList open_files;
@@ -432,9 +427,8 @@ int main(int argc, char** argv) {
     dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, process_name, threads, 0);
   } else {
     ATRACE_NAME("engrave_tombstone");
-    engrave_tombstone(output_fd.get(), backtrace_map.get(), backtrace_map_new.get(), &open_files,
-                      target, main_tid, process_name, threads, abort_address,
-                      fatal_signal ? &amfd_data : nullptr);
+    engrave_tombstone(output_fd.get(), backtrace_map.get(), &open_files, target, main_tid,
+                      process_name, threads, abort_address, fatal_signal ? &amfd_data : nullptr);
   }
 
   // We don't actually need to PTRACE_DETACH, as long as our tracees aren't in
