@@ -19,8 +19,9 @@
 #include <memory>
 #include <string>
 
-#include <gtest/gtest.h>
 #include <android-base/file.h>
+#include <android-base/properties.h>
+#include <gtest/gtest.h>
 
 #include "libdebuggerd/utility.h"
 
@@ -639,7 +640,10 @@ TEST_F(TombstoneTest, dump_log_file_error) {
 TEST_F(TombstoneTest, dump_header_info) {
   dump_header_info(&log_);
 
-  std::string expected = "Build fingerprint: 'unknown'\nRevision: 'unknown'\n";
+  std::string expected = android::base::StringPrintf(
+      "Build fingerprint: '%s'\nRevision: '%s'\n",
+      android::base::GetProperty("ro.build.fingerprint", "unknown").c_str(),
+      android::base::GetProperty("ro.revision", "unknown").c_str());
   expected += android::base::StringPrintf("ABI: '%s'\n", ABI_STRING);
   ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
 }
