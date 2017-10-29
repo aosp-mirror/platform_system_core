@@ -193,7 +193,6 @@ cc_test {
         "libdebuggerd/test/elf_fake.cpp",
         "libdebuggerd/test/log_fake.cpp",
         "libdebuggerd/test/open_files_list_test.cpp",
-        "libdebuggerd/test/property_fake.cpp",
         "libdebuggerd/test/ptrace_fake.cpp",
         "libdebuggerd/test/tombstone_test.cpp",
     ],
