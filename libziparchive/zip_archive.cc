@@ -741,22 +741,10 @@ int32_t Next(void* cookie, ZipEntry* data, ZipString* name) {
   return kIterationEnd;
 }
 
-class Writer {
- public:
-  virtual bool Append(uint8_t* buf, size_t buf_size) = 0;
-  virtual ~Writer() {}
-
- protected:
-  Writer() = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(Writer);
-};
-
 // A Writer that writes data to a fixed size memory region.
 // The size of the memory region must be equal to the total size of
 // the data appended to it.
-class MemoryWriter : public Writer {
+class MemoryWriter : public zip_archive::Writer {
  public:
   MemoryWriter(uint8_t* buf, size_t size) : Writer(), buf_(buf), size_(size), bytes_written_(0) {}
 
@@ -780,7 +768,7 @@ class MemoryWriter : public Writer {
 
 // A Writer that appends data to a file |fd| at its current position.
 // The file will be truncated to the end of the written data.
-class FileWriter : public Writer {
+class FileWriter : public zip_archive::Writer {
  public:
   // Creates a FileWriter for |fd| and prepare to write |entry| to it,
   // guaranteeing that the file descriptor is valid and that there's enough
@@ -864,6 +852,22 @@ class FileWriter : public Writer {
   size_t total_bytes_written_;
 };
 
+class EntryReader : public zip_archive::Reader {
+ public:
+  EntryReader(const MappedZipFile& zip_file, const ZipEntry* entry)
+      : Reader(), zip_file_(zip_file), entry_(entry) {}
+
+  virtual bool ReadAtOffset(uint8_t* buf, size_t len, uint32_t offset) const {
+    return zip_file_.ReadAtOffset(buf, len, entry_->offset + offset);
+  }
+
+  virtual ~EntryReader() {}
+
+ private:
+  const MappedZipFile& zip_file_;
+  const ZipEntry* entry_;
+};
+
 // This method is using libz macros with old-style-casts
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
@@ -872,8 +876,14 @@ static inline int zlib_inflateInit2(z_stream* stream, int window_bits) {
 }
 #pragma GCC diagnostic pop
 
-static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entry,
-                                    Writer* writer, uint64_t* crc_out) {
+namespace zip_archive {
+
+// Moved out of line to avoid -Wweak-vtables.
+Reader::~Reader() {}
+Writer::~Writer() {}
+
+int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
+                const uint32_t uncompressed_length, Writer* writer, uint64_t* crc_out) {
   const size_t kBufSize = 32768;
   std::vector<uint8_t> read_buf(kBufSize);
   std::vector<uint8_t> write_buf(kBufSize);
@@ -914,25 +924,23 @@ static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* e
 
   std::unique_ptr<z_stream, decltype(zstream_deleter)> zstream_guard(&zstream, zstream_deleter);
 
-  const uint32_t uncompressed_length = entry->uncompressed_length;
-
   uint64_t crc = 0;
-  uint32_t compressed_length = entry->compressed_length;
+  uint32_t remaining_bytes = compressed_length;
   do {
     /* read as much as we can */
     if (zstream.avail_in == 0) {
-      const size_t getSize = (compressed_length > kBufSize) ? kBufSize : compressed_length;
-      off64_t offset = entry->offset + (entry->compressed_length - compressed_length);
+      const size_t read_size = (remaining_bytes > kBufSize) ? kBufSize : remaining_bytes;
+      const uint32_t offset = (compressed_length - remaining_bytes);
       // Make sure to read at offset to ensure concurrent access to the fd.
-      if (!mapped_zip.ReadAtOffset(read_buf.data(), getSize, offset)) {
-        ALOGW("Zip: inflate read failed, getSize = %zu: %s", getSize, strerror(errno));
+      if (!reader.ReadAtOffset(read_buf.data(), read_size, offset)) {
+        ALOGW("Zip: inflate read failed, getSize = %zu: %s", read_size, strerror(errno));
         return kIoError;
       }
 
-      compressed_length -= getSize;
+      remaining_bytes -= read_size;
 
       zstream.next_in = &read_buf[0];
-      zstream.avail_in = getSize;
+      zstream.avail_in = read_size;
     }
 
     /* uncompress the data */
@@ -968,7 +976,7 @@ static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* e
   // the same manner that we have above.
   *crc_out = crc;
 
-  if (zstream.total_out != uncompressed_length || compressed_length != 0) {
+  if (zstream.total_out != uncompressed_length || remaining_bytes != 0) {
     ALOGW("Zip: size mismatch on inflated file (%lu vs %" PRIu32 ")", zstream.total_out,
           uncompressed_length);
     return kInconsistentInformation;
@@ -976,9 +984,18 @@ static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* e
 
   return 0;
 }
+}  // namespace zip_archive
 
-static int32_t CopyEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entry, Writer* writer,
-                                 uint64_t* crc_out) {
+static int32_t InflateEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entry,
+                                    zip_archive::Writer* writer, uint64_t* crc_out) {
+  const EntryReader reader(mapped_zip, entry);
+
+  return zip_archive::Inflate(reader, entry->compressed_length, entry->uncompressed_length, writer,
+                              crc_out);
+}
+
+static int32_t CopyEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entry,
+                                 zip_archive::Writer* writer, uint64_t* crc_out) {
   static const uint32_t kBufSize = 32768;
   std::vector<uint8_t> buf(kBufSize);
 
@@ -1011,7 +1028,7 @@ static int32_t CopyEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entr
   return 0;
 }
 
-int32_t ExtractToWriter(ZipArchiveHandle handle, ZipEntry* entry, Writer* writer) {
+int32_t ExtractToWriter(ZipArchiveHandle handle, ZipEntry* entry, zip_archive::Writer* writer) {
   ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
   const uint16_t method = entry->method;
 
@@ -1041,12 +1058,12 @@ int32_t ExtractToWriter(ZipArchiveHandle handle, ZipEntry* entry, Writer* writer
 }
 
 int32_t ExtractToMemory(ZipArchiveHandle handle, ZipEntry* entry, uint8_t* begin, uint32_t size) {
-  std::unique_ptr<Writer> writer(new MemoryWriter(begin, size));
+  std::unique_ptr<zip_archive::Writer> writer(new MemoryWriter(begin, size));
   return ExtractToWriter(handle, entry, writer.get());
 }
 
 int32_t ExtractEntryToFile(ZipArchiveHandle handle, ZipEntry* entry, int fd) {
-  std::unique_ptr<Writer> writer(FileWriter::Create(fd, entry));
+  std::unique_ptr<zip_archive::Writer> writer(FileWriter::Create(fd, entry));
   if (writer.get() == nullptr) {
     return kIoError;
   }
@@ -1079,7 +1096,7 @@ ZipString::ZipString(const char* entry_name) : name(reinterpret_cast<const uint8
 }
 
 #if !defined(_WIN32)
-class ProcessWriter : public Writer {
+class ProcessWriter : public zip_archive::Writer {
  public:
   ProcessWriter(ProcessZipEntryFunction func, void* cookie)
       : Writer(), proc_function_(func), cookie_(cookie) {}
@@ -1134,7 +1151,7 @@ off64_t MappedZipFile::GetFileLength() const {
 }
 
 // Attempts to read |len| bytes into |buf| at offset |off|.
-bool MappedZipFile::ReadAtOffset(uint8_t* buf, size_t len, off64_t off) {
+bool MappedZipFile::ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const {
   if (has_fd_) {
     if (!android::base::ReadFullyAtOffset(fd_, buf, len, off)) {
       ALOGE("Zip: failed to read at offset %" PRId64 "\n", off);

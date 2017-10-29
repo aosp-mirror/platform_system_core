@@ -194,10 +194,12 @@ wait_for_screen() {
               sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
         if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
         then
+          sleep 1
           break
         fi
         if [ "${vals}" = "`echo logbootcomplete=1 ; echo boot_completed=1`" ]
         then
+          sleep 1
           break
         fi
       fi
@@ -239,7 +241,8 @@ EXPECT_EQ() {
 
 [ "USAGE: EXPECT_PROPERTY <prop> <value> [--allow_failure]
 
-Returns true if current return (regex) value is true and the result matches" ]
+Returns true (0) if current return (regex) value is true and the result matches
+and the incoming return value is true as well (wired-or)" ]
 EXPECT_PROPERTY() {
   save_ret=${?}
   property="${1}"
@@ -287,6 +290,7 @@ bootstat: Service started: /system/bin/bootstat -l
 bootstat: Battery level at shutdown 100%
 bootstat: Battery level at startup 100%
 init    : Parsing file /system/etc/init/bootstat.rc...
+init    : Parsing file /system/etc/init/bootstat-debug.rc...
 init    : processing action (persist.test.boot.reason=*) from (/system/etc/init/bootstat-debug.rc:
 init    : Command 'setprop ro.boot.bootreason \${persist.test.boot.reason}' action=persist.test.boot.reason=* (/system/etc/init/bootstat-debug.rc:
 init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
@@ -566,6 +570,8 @@ blind_reboot_test() {
   esac
   adb reboot ${TEST}
   wait_for_screen
+  bootloader_reason=`validate_property ro.boot.bootreason`
+  EXPECT_PROPERTY ro.boot.bootreason ${bootloader_reason}
   EXPECT_PROPERTY sys.boot.reason ${reason}
   EXPECT_PROPERTY persist.sys.boot.reason ${reason}
   report_bootstat_logs ${reason}
@@ -623,8 +629,13 @@ test_optional_factory_reset() {
     adb reboot-bootloader
   fi
   fastboot format userdata >&2
+  save_ret=${?}
+  if [ 0 != ${save_ret} ]; then
+    echo "ERROR: fastboot can not format userdata" >&2
+  fi
   fastboot reboot >&2
   wait_for_screen
+  ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
   EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,factory_reset bootloader \
@@ -868,17 +879,30 @@ Its Just So Hard reboot test:
 - NB: should report reboot,its_just_so_hard
 - NB: expect log \"... I bootstat: Unknown boot reason: reboot,its_just_so_hard\"" ]
 test_Its_Just_So_Hard_reboot() {
-  duration_test
+  if isDebuggable; then       # see below
+    duration_test
+  else
+    duration_test `expr ${DURATION_DEFAULT} + ${DURATION_DEFAULT}`
+  fi
   adb shell 'reboot "Its Just So Hard"'
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
   EXPECT_PROPERTY persist.sys.boot.reason "reboot,Its Just So Hard"
-  adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
-  if checkDebugBuild; then
-    flag=""
+  # Do not leave this test with an illegal value in persist.sys.boot.reason
+  save_ret=${?}           # hold on to error code from above two lines
+  if isDebuggable; then   # can do this easy, or we can do this hard.
+    adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
+    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   else
-    flag="--allow_failure"
+    report_bootstat_logs reboot,its_just_so_hard  # report what we have so far
+    # user build mitigation
+    adb shell reboot its_just_so_hard
+    wait_for_screen
+    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
+    EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
   fi
+  # Ensure persist.sys.boot.reason now valid, failure here acts as a signal
+  # that we could choke up following tests.  For example test_properties.
   EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard ${flag}
   report_bootstat_logs reboot,its_just_so_hard
 }

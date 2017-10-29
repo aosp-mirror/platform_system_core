@@ -106,7 +106,7 @@ class MappedZipFile {
 
   off64_t GetFileLength() const;
 
-  bool ReadAtOffset(uint8_t* buf, size_t len, off64_t off);
+  bool ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const;
 
  private:
   // If has_fd_ is true, fd is valid and we'll read contents of a zip archive

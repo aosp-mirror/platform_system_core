@@ -1844,6 +1844,22 @@ TEST(libbacktrace, unwind_remote_through_signal_using_action_new) {
   UnwindThroughSignal(true, Backtrace::CreateNew, BacktraceMap::CreateNew);
 }
 
+static void TestFrameSkipNumbering(create_func_t create_func, map_create_func_t map_create_func) {
+  std::unique_ptr<BacktraceMap> map(map_create_func(getpid(), false));
+  std::unique_ptr<Backtrace> backtrace(create_func(getpid(), gettid(), map.get()));
+  backtrace->Unwind(1);
+  ASSERT_NE(0U, backtrace->NumFrames());
+  ASSERT_EQ(0U, backtrace->GetFrame(0)->num);
+}
+
+TEST(libbacktrace, unwind_frame_skip_numbering) {
+  TestFrameSkipNumbering(Backtrace::Create, BacktraceMap::Create);
+}
+
+TEST(libbacktrace, unwind_frame_skip_numbering_new) {
+  TestFrameSkipNumbering(Backtrace::CreateNew, BacktraceMap::CreateNew);
+}
+
 #if defined(ENABLE_PSS_TESTS)
 #include "GetPss.h"
 

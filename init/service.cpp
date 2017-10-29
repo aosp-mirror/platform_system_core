@@ -101,8 +101,22 @@ static void SetUpPidNamespace(const std::string& service_name) {
 
     // It's OK to LOG(FATAL) in this function since it's running in the first
     // child process.
-    if (mount("", "/proc", "proc", kSafeFlags | MS_REMOUNT, "") == -1) {
-        PLOG(FATAL) << "couldn't remount(/proc) for " << service_name;
+
+    // Recursively remount / as slave like zygote does so unmounting and mounting /proc
+    // doesn't interfere with the parent namespace's /proc mount. This will also
+    // prevent any other mounts/unmounts initiated by the service from interfering
+    // with the parent namespace but will still allow mount events from the parent
+    // namespace to propagate to the child.
+    if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
+        PLOG(FATAL) << "couldn't remount(/) recursively as slave for " << service_name;
+    }
+    // umount() then mount() /proc.
+    // Note that it is not sufficient to mount with MS_REMOUNT.
+    if (umount("/proc") == -1) {
+        PLOG(FATAL) << "couldn't umount(/proc) for " << service_name;
+    }
+    if (mount("", "/proc", "proc", kSafeFlags, "") == -1) {
+        PLOG(FATAL) << "couldn't mount(/proc) for " << service_name;
     }
 
     if (prctl(PR_SET_NAME, service_name.c_str()) == -1) {
@@ -706,14 +720,20 @@ Result<Success> Service::ExecStart() {
 }
 
 Result<Success> Service::Start() {
+    bool disabled = (flags_ & (SVC_DISABLED | SVC_RESET));
     // Starting a service removes it from the disabled or reset state and
     // immediately takes it out of the restarting state if it was in there.
     flags_ &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
 
     // Running processes require no additional work --- if they're in the
     // process of exiting, we've ensured that they will immediately restart
-    // on exit, unless they are ONESHOT.
+    // on exit, unless they are ONESHOT. For ONESHOT service, if it's in
+    // stopping status, we just set SVC_RESTART flag so it will get restarted
+    // in Reap().
     if (flags_ & SVC_RUNNING) {
+        if ((flags_ & SVC_ONESHOT) && disabled) {
+            flags_ |= SVC_RESTART;
+        }
         // It is not an error to try to start a service that is already running.
         return Success();
     }
@@ -939,6 +959,13 @@ void Service::StopOrReset(int how) {
         flags_ |= (flags_ & SVC_RC_DISABLED) ? SVC_DISABLED : SVC_RESET;
     } else {
         flags_ |= how;
+    }
+    // Make sure it's in right status when a restart immediately follow a
+    // stop/reset or vice versa.
+    if (how == SVC_RESTART) {
+        flags_ &= (~(SVC_DISABLED | SVC_RESET));
+    } else {
+        flags_ &= (~SVC_RESTART);
     }
 
     if (pid_) {
