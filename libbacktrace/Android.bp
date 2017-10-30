@@ -73,6 +73,10 @@ cc_library {
     defaults: ["libbacktrace_common"],
     host_supported: true,
 
+    cflags: [
+        "-Wexit-time-destructors",
+    ],
+
     srcs: [
         "BacktraceMap.cpp",
     ],
@@ -230,5 +234,6 @@ cc_benchmark {
     shared_libs: [
         "libbacktrace",
         "libbase",
+        "libunwindstack",
     ],
 }
