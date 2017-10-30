@@ -265,6 +265,9 @@ class Reader {
  * Returns 0 on success and negative values on failure, for example if |reader|
  * cannot supply the right amount of data, or if the number of bytes written to
  * data does not match |uncompressed_length|.
+ *
+ * If |crc_out| is not nullptr, it is set to the crc32 checksum of the
+ * uncompressed data.
  */
 int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
                 const uint32_t uncompressed_length, Writer* writer, uint64_t* crc_out);

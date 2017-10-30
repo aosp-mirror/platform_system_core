@@ -908,6 +908,7 @@ int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
 
   std::unique_ptr<z_stream, decltype(zstream_deleter)> zstream_guard(&zstream, zstream_deleter);
 
+  const bool compute_crc = (crc_out != nullptr);
   uint64_t crc = 0;
   uint32_t remaining_bytes = compressed_length;
   do {
@@ -939,9 +940,8 @@ int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
     if (zstream.avail_out == 0 || (zerr == Z_STREAM_END && zstream.avail_out != kBufSize)) {
       const size_t write_size = zstream.next_out - &write_buf[0];
       if (!writer->Append(&write_buf[0], write_size)) {
-        // The file might have declared a bogus length.
-        return kInconsistentInformation;
-      } else {
+        return kIoError;
+      } else if (compute_crc) {
         crc = crc32(crc, &write_buf[0], write_size);
       }
 
@@ -958,7 +958,9 @@ int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
   // it ourselves above because there are no additional gains to be made by
   // having zlib calculate it for us, since they do it by calling crc32 in
   // the same manner that we have above.
-  *crc_out = crc;
+  if (compute_crc) {
+    *crc_out = crc;
+  }
 
   if (zstream.total_out != uncompressed_length || remaining_bytes != 0) {
     ALOGW("Zip: size mismatch on inflated file (%lu vs %" PRIu32 ")", zstream.total_out,
