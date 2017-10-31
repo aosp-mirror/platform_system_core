@@ -103,7 +103,7 @@ std::shared_ptr<unwindstack::Memory> UnwindStackMap::GetProcessMemory() {
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
 //-------------------------------------------------------------------------
-BacktraceMap* BacktraceMap::CreateNew(pid_t pid, bool uncached) {
+BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
   BacktraceMap* map;
 
   if (uncached) {
