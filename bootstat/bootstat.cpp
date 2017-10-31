@@ -227,6 +227,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"shutdown,thermal,battery", 87},
     {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
     {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
+    {"usb", 90},
 };
 
 // Converts a string value representing the reason the system booted to an
