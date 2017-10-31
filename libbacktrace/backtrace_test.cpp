@@ -368,20 +368,6 @@ TEST(libbacktrace, ptrace_trace) {
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
 }
 
-TEST(libbacktrace, ptrace_trace_new) {
-  pid_t pid;
-  if ((pid = fork()) == 0) {
-    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
-    _exit(1);
-  }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyLevelDump,
-                 Backtrace::CreateNew, BacktraceMap::CreateNew);
-
-  kill(pid, SIGKILL);
-  int status;
-  ASSERT_EQ(waitpid(pid, &status, 0), pid);
-}
-
 TEST(libbacktrace, ptrace_max_trace) {
   pid_t pid;
   if ((pid = fork()) == 0) {
@@ -390,20 +376,6 @@ TEST(libbacktrace, ptrace_max_trace) {
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyMaxBacktrace, VerifyMaxDump, Backtrace::Create,
                  BacktraceMap::Create);
-
-  kill(pid, SIGKILL);
-  int status;
-  ASSERT_EQ(waitpid(pid, &status, 0), pid);
-}
-
-TEST(libbacktrace, ptrace_max_trace_new) {
-  pid_t pid;
-  if ((pid = fork()) == 0) {
-    ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES + 10, nullptr, nullptr), 0);
-    _exit(1);
-  }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyMaxBacktrace, VerifyMaxDump,
-                 Backtrace::CreateNew, BacktraceMap::CreateNew);
 
   kill(pid, SIGKILL);
   int status;
@@ -434,20 +406,6 @@ TEST(libbacktrace, ptrace_ignore_frames) {
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyProcessIgnoreFrames,
                  Backtrace::Create, BacktraceMap::Create);
-
-  kill(pid, SIGKILL);
-  int status;
-  ASSERT_EQ(waitpid(pid, &status, 0), pid);
-}
-
-TEST(libbacktrace, ptrace_ignore_frames_new) {
-  pid_t pid;
-  if ((pid = fork()) == 0) {
-    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
-    _exit(1);
-  }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyProcessIgnoreFrames,
-                 Backtrace::CreateNew, BacktraceMap::CreateNew);
 
   kill(pid, SIGKILL);
   int status;
@@ -512,45 +470,6 @@ TEST(libbacktrace, ptrace_threads) {
     }
     VerifyProcTest(pid, *it, ReadyLevelBacktrace, VerifyLevelDump, Backtrace::Create,
                    BacktraceMap::Create);
-  }
-
-  FinishRemoteProcess(pid);
-}
-
-TEST(libbacktrace, ptrace_threads_new) {
-  pid_t pid;
-  if ((pid = fork()) == 0) {
-    for (size_t i = 0; i < NUM_PTRACE_THREADS; i++) {
-      pthread_attr_t attr;
-      pthread_attr_init(&attr);
-      pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-      pthread_t thread;
-      ASSERT_TRUE(pthread_create(&thread, &attr, PtraceThreadLevelRun, nullptr) == 0);
-    }
-    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
-    _exit(1);
-  }
-
-  // Check to see that all of the threads are running before unwinding.
-  std::vector<pid_t> threads;
-  uint64_t start = NanoTime();
-  do {
-    usleep(US_PER_MSEC);
-    threads.clear();
-    GetThreads(pid, &threads);
-  } while ((threads.size() != NUM_PTRACE_THREADS + 1) && ((NanoTime() - start) <= 5 * NS_PER_SEC));
-  ASSERT_EQ(threads.size(), static_cast<size_t>(NUM_PTRACE_THREADS + 1));
-
-  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
-  WaitForStop(pid);
-  for (std::vector<int>::const_iterator it = threads.begin(); it != threads.end(); ++it) {
-    // Skip the current forked process, we only care about the threads.
-    if (pid == *it) {
-      continue;
-    }
-    VerifyProcTest(pid, *it, ReadyLevelBacktrace, VerifyLevelDump, Backtrace::CreateNew,
-                   BacktraceMap::CreateNew);
   }
 
   FinishRemoteProcess(pid);
@@ -1663,7 +1582,7 @@ TEST(libbacktrace, unwind_disallow_device_map_local) {
   munmap(device_map, DEVICE_MAP_SIZE);
 }
 
-TEST(libbacktrace, unwind_disallow_device_map_remote_new) {
+TEST(libbacktrace, unwind_disallow_device_map_remote) {
   void* device_map;
   SetupDeviceMap(&device_map);
 
@@ -1672,9 +1591,7 @@ TEST(libbacktrace, unwind_disallow_device_map_remote_new) {
   CreateRemoteProcess(&pid);
 
   // Now create an unwind object.
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::CreateNew(pid));
-  ASSERT_TRUE(map.get() != nullptr);
-  std::unique_ptr<Backtrace> backtrace(Backtrace::CreateNew(pid, pid, map.get()));
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
 
   UnwindFromDevice(backtrace.get(), device_map);
 
@@ -1832,16 +1749,8 @@ TEST(libbacktrace, unwind_remote_through_signal_using_handler) {
   UnwindThroughSignal(false, Backtrace::Create, BacktraceMap::Create);
 }
 
-TEST(libbacktrace, unwind_remote_through_signal_using_handler_new) {
-  UnwindThroughSignal(false, Backtrace::CreateNew, BacktraceMap::CreateNew);
-}
-
 TEST(libbacktrace, unwind_remote_through_signal_using_action) {
   UnwindThroughSignal(true, Backtrace::Create, BacktraceMap::Create);
-}
-
-TEST(libbacktrace, unwind_remote_through_signal_using_action_new) {
-  UnwindThroughSignal(true, Backtrace::CreateNew, BacktraceMap::CreateNew);
 }
 
 static void TestFrameSkipNumbering(create_func_t create_func, map_create_func_t map_create_func) {
@@ -1856,19 +1765,17 @@ TEST(libbacktrace, unwind_frame_skip_numbering) {
   TestFrameSkipNumbering(Backtrace::Create, BacktraceMap::Create);
 }
 
-TEST(libbacktrace, unwind_frame_skip_numbering_new) {
-  TestFrameSkipNumbering(Backtrace::CreateNew, BacktraceMap::CreateNew);
-}
-
 #if defined(ENABLE_PSS_TESTS)
 #include "GetPss.h"
 
 #define MAX_LEAK_BYTES (32*1024UL)
 
 static void CheckForLeak(pid_t pid, pid_t tid) {
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid));
+
   // Do a few runs to get the PSS stable.
   for (size_t i = 0; i < 100; i++) {
-    Backtrace* backtrace = Backtrace::Create(pid, tid);
+    Backtrace* backtrace = Backtrace::Create(pid, tid, map.get());
     ASSERT_TRUE(backtrace != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
     ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
@@ -1879,7 +1786,7 @@ static void CheckForLeak(pid_t pid, pid_t tid) {
 
   // Loop enough that even a small leak should be detectable.
   for (size_t i = 0; i < 4096; i++) {
-    Backtrace* backtrace = Backtrace::Create(pid, tid);
+    Backtrace* backtrace = Backtrace::Create(pid, tid, map.get());
     ASSERT_TRUE(backtrace != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
     ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
