@@ -94,8 +94,6 @@ public:
   // If map is NULL, then create the map and manage it internally.
   // If map is not NULL, the map is still owned by the caller.
   static Backtrace* Create(pid_t pid, pid_t tid, BacktraceMap* map = NULL);
-  // Same as above, but uses a different underlying unwinder.
-  static Backtrace* CreateNew(pid_t pid, pid_t tid, BacktraceMap* map = NULL);
 
   // Create an offline Backtrace object that can be used to do an unwind without a process
   // that is still running. If cache_file is set to true, then elf information will be cached
