@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <batteryservice/IBatteryPropertiesListener.h>
+#include <utils/Mutex.h>
 
 #include <android/hardware/health/2.0/IHealth.h>
 
@@ -83,17 +84,18 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
     sp<android::hardware::health::V2_0::IHealth> health;
     unique_ptr<storage_info_t> storage_info;
     static const uint32_t crc_init;
-    static const string proto_file;
-    storaged_proto::StoragedProto proto;
-    enum stat {
-        NOT_AVAILABLE,
-        AVAILABLE,
-        LOADED,
-    };
-    stat proto_stat;
+    unordered_map<int, storaged_proto::StoragedProto> protos;
+    Mutex proto_mutex;
+    void load_proto_locked(userid_t user_id);
+    void prepare_proto(StoragedProto* proto, userid_t user_id);
+    void flush_proto_locked(userid_t user_id);
+    void flush_proto_user_system_locked(StoragedProto* proto);
+    string proto_path(userid_t user_id) {
+        return string("/data/misc_ce/") + to_string(user_id) +
+               "/storaged/storaged.proto";
+    }
 public:
     storaged_t(void);
-    ~storaged_t() {}
     void event(void);
     void event_checked(void);
     void pause(void) {
@@ -114,8 +116,7 @@ public:
 
     map<uint64_t, struct uid_records> get_uid_records(
             double hours, uint64_t threshold, bool force_report) {
-        return mUidm.dump(hours, threshold, force_report,
-                          proto.mutable_uid_io_usage());
+        return mUidm.dump(hours, threshold, force_report, &protos);
     }
 
     void update_uid_io_interval(int interval) {
@@ -124,15 +125,8 @@ public:
         }
     }
 
-    void set_proto_stat_available(bool available) {
-        if (available) {
-            if (proto_stat != LOADED) {
-                proto_stat = AVAILABLE;
-            }
-        } else {
-            proto_stat = NOT_AVAILABLE;
-        }
-    };
+    void add_user_ce(userid_t user_id);
+    void remove_user_ce(userid_t user_id);
 
     void init_health_service();
     virtual ::android::hardware::Return<void> healthInfoChanged(
@@ -141,8 +135,7 @@ public:
 
     void report_storage_info();
 
-    void load_proto();
-    void flush_proto();
+    void flush_protos();
 };
 
 // Eventlog tag

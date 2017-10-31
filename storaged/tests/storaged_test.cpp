@@ -33,6 +33,7 @@
 
 using namespace std;
 using namespace chrono;
+using namespace storaged_proto;
 
 namespace {
 
@@ -376,7 +377,7 @@ TEST(storaged_test, storage_info_t) {
     for (int i = 0; i < 75; i++) {
         tp += hours(5);
         stp = {};
-        stp += duration_cast<seconds>(tp.time_since_epoch());
+        stp += duration_cast<chrono::seconds>(tp.time_since_epoch());
         si.update_perf_history((i + 1) * 5, stp);
     }
 
@@ -405,4 +406,187 @@ TEST(storaged_test, storage_info_t) {
     for (; i < history.size(); i++) {
         EXPECT_EQ(history[i], 0);
     }
+}
+
+TEST(storaged_test, uid_monitor) {
+    uid_monitor uidm;
+
+    uidm.io_history[200] = {
+        .start_ts = 100,
+        .entries = {
+            { "app1", {
+                .user_id = 0,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON] = 1000,
+              }
+            },
+            { "app2", {
+                .user_id = 0,
+                .uid_ios.bytes[READ][FOREGROUND][CHARGER_OFF] = 1000,
+              }
+            },
+            { "app1", {
+                .user_id = 1,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON] = 1000,
+                .uid_ios.bytes[READ][FOREGROUND][CHARGER_ON] = 1000,
+              }
+            },
+        },
+    };
+
+    uidm.io_history[300] = {
+        .start_ts = 200,
+        .entries = {
+            { "app1", {
+                .user_id = 1,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_OFF] = 1000,
+              }
+            },
+            { "app3", {
+                .user_id = 0,
+                .uid_ios.bytes[READ][BACKGROUND][CHARGER_OFF] = 1000,
+              }
+            },
+        },
+    };
+
+    StoragedProto proto_0;
+    UidIOItem* item = proto_0.mutable_uid_io_usage()->add_uid_io_items();
+    item->set_end_ts(200);
+    item->mutable_records()->set_start_ts(100);
+    UidRecord* rec = item->mutable_records()->add_entries();
+    rec->set_uid_name("app1");
+    rec->set_user_id(0);
+    rec->mutable_uid_io()->set_wr_fg_chg_on(1000);
+
+    unordered_map<int, StoragedProto> protos;
+    protos[0] = proto_0;
+
+    uidm.update_uid_io_proto(&protos);
+
+    EXPECT_EQ(protos.size(), 2U);
+    EXPECT_EQ(protos.count(0), 1UL);
+    EXPECT_EQ(protos.count(1), 1UL);
+
+    EXPECT_EQ(protos[0].uid_io_usage().uid_io_items_size(), 2);
+    const UidIOItem& user_0_item_0 = protos[0].uid_io_usage().uid_io_items(0);
+    EXPECT_EQ(user_0_item_0.end_ts(), 200UL);
+    EXPECT_EQ(user_0_item_0.records().start_ts(), 100UL);
+    EXPECT_EQ(user_0_item_0.records().entries_size(), 2);
+    EXPECT_EQ(user_0_item_0.records().entries(0).uid_name(), "app1");
+    EXPECT_EQ(user_0_item_0.records().entries(0).user_id(), 0UL);
+    EXPECT_EQ(user_0_item_0.records().entries(0).uid_io().wr_fg_chg_on(), 1000UL);
+    EXPECT_EQ(user_0_item_0.records().entries(1).uid_name(), "app2");
+    EXPECT_EQ(user_0_item_0.records().entries(1).user_id(), 0UL);
+    EXPECT_EQ(user_0_item_0.records().entries(1).uid_io().rd_fg_chg_off(), 1000UL);
+    const UidIOItem& user_0_item_1 = protos[0].uid_io_usage().uid_io_items(1);
+    EXPECT_EQ(user_0_item_1.end_ts(), 300UL);
+    EXPECT_EQ(user_0_item_1.records().start_ts(), 200UL);
+    EXPECT_EQ(user_0_item_1.records().entries_size(), 1);
+    EXPECT_EQ(user_0_item_1.records().entries(0).uid_name(), "app3");
+    EXPECT_EQ(user_0_item_1.records().entries(0).user_id(), 0UL);
+    EXPECT_EQ(user_0_item_1.records().entries(0).uid_io().rd_bg_chg_off(), 1000UL);
+
+    EXPECT_EQ(protos[1].uid_io_usage().uid_io_items_size(), 2);
+    const UidIOItem& user_1_item_0 = protos[1].uid_io_usage().uid_io_items(0);
+    EXPECT_EQ(user_1_item_0.end_ts(), 200UL);
+    EXPECT_EQ(user_1_item_0.records().start_ts(), 100UL);
+    EXPECT_EQ(user_1_item_0.records().entries_size(), 1);
+    EXPECT_EQ(user_1_item_0.records().entries(0).uid_name(), "app1");
+    EXPECT_EQ(user_1_item_0.records().entries(0).user_id(), 1UL);
+    EXPECT_EQ(user_1_item_0.records().entries(0).uid_io().rd_fg_chg_on(), 1000UL);
+    EXPECT_EQ(user_1_item_0.records().entries(0).uid_io().wr_fg_chg_on(), 1000UL);
+    const UidIOItem& user_1_item_1 = protos[1].uid_io_usage().uid_io_items(1);
+    EXPECT_EQ(user_1_item_1.end_ts(), 300UL);
+    EXPECT_EQ(user_1_item_1.records().start_ts(), 200UL);
+    EXPECT_EQ(user_1_item_1.records().entries_size(), 1);
+    EXPECT_EQ(user_1_item_1.records().entries(0).uid_name(), "app1");
+    EXPECT_EQ(user_1_item_1.records().entries(0).user_id(), 1UL);
+    EXPECT_EQ(user_1_item_1.records().entries(0).uid_io().wr_fg_chg_off(), 1000UL);
+
+    uidm.io_history.clear();
+
+    uidm.io_history[300] = {
+        .start_ts = 200,
+        .entries = {
+            { "app1", {
+                .user_id = 0,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON] = 1000,
+              }
+            },
+        },
+    };
+
+    uidm.io_history[400] = {
+        .start_ts = 300,
+        .entries = {
+            { "app1", {
+                .user_id = 0,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON] = 1000,
+              }
+            },
+        },
+    };
+
+    uidm.load_uid_io_proto(protos[0].uid_io_usage());
+    uidm.load_uid_io_proto(protos[1].uid_io_usage());
+
+    EXPECT_EQ(uidm.io_history.size(), 3UL);
+    EXPECT_EQ(uidm.io_history.count(200), 1UL);
+    EXPECT_EQ(uidm.io_history.count(300), 1UL);
+    EXPECT_EQ(uidm.io_history.count(400), 1UL);
+
+    EXPECT_EQ(uidm.io_history[200].start_ts, 100UL);
+    const vector<struct uid_record>& entries_0 = uidm.io_history[200].entries;
+    EXPECT_EQ(entries_0.size(), 3UL);
+    EXPECT_EQ(entries_0[0].name, "app1");
+    EXPECT_EQ(entries_0[0].ios.user_id, 0UL);
+    EXPECT_EQ(entries_0[0].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
+    EXPECT_EQ(entries_0[1].name, "app2");
+    EXPECT_EQ(entries_0[1].ios.user_id, 0UL);
+    EXPECT_EQ(entries_0[1].ios.uid_ios.bytes[READ][FOREGROUND][CHARGER_OFF], 1000UL);
+    EXPECT_EQ(entries_0[2].name, "app1");
+    EXPECT_EQ(entries_0[2].ios.user_id, 1UL);
+    EXPECT_EQ(entries_0[2].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
+    EXPECT_EQ(entries_0[2].ios.uid_ios.bytes[READ][FOREGROUND][CHARGER_ON], 1000UL);
+
+    EXPECT_EQ(uidm.io_history[300].start_ts, 200UL);
+    const vector<struct uid_record>& entries_1 = uidm.io_history[300].entries;
+    EXPECT_EQ(entries_1.size(), 3UL);
+    EXPECT_EQ(entries_1[0].name, "app1");
+    EXPECT_EQ(entries_1[0].ios.user_id, 0UL);
+    EXPECT_EQ(entries_1[0].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
+    EXPECT_EQ(entries_1[1].name, "app3");
+    EXPECT_EQ(entries_1[1].ios.user_id, 0UL);
+    EXPECT_EQ(entries_1[1].ios.uid_ios.bytes[READ][BACKGROUND][CHARGER_OFF], 1000UL);
+    EXPECT_EQ(entries_1[2].name, "app1");
+    EXPECT_EQ(entries_1[2].ios.user_id, 1UL);
+    EXPECT_EQ(entries_1[2].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_OFF], 1000UL);
+
+    EXPECT_EQ(uidm.io_history[400].start_ts, 300UL);
+    const vector<struct uid_record>& entries_2 = uidm.io_history[400].entries;
+    EXPECT_EQ(entries_2.size(), 1UL);
+    EXPECT_EQ(entries_2[0].name, "app1");
+    EXPECT_EQ(entries_2[0].ios.user_id, 0UL);
+    EXPECT_EQ(entries_2[0].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
+
+    map<string, io_usage> merged_entries_0 = merge_io_usage(entries_0);
+    EXPECT_EQ(merged_entries_0.size(), 2UL);
+    EXPECT_EQ(merged_entries_0.count("app1"), 1UL);
+    EXPECT_EQ(merged_entries_0.count("app2"), 1UL);
+    EXPECT_EQ(merged_entries_0["app1"].bytes[READ][FOREGROUND][CHARGER_ON], 1000UL);
+    EXPECT_EQ(merged_entries_0["app1"].bytes[WRITE][FOREGROUND][CHARGER_ON], 2000UL);
+    EXPECT_EQ(merged_entries_0["app2"].bytes[READ][FOREGROUND][CHARGER_OFF], 1000UL);
+
+    map<string, io_usage> merged_entries_1 = merge_io_usage(entries_1);
+    EXPECT_EQ(merged_entries_1.size(), 2UL);
+    EXPECT_EQ(merged_entries_1.count("app1"), 1UL);
+    EXPECT_EQ(merged_entries_1.count("app3"), 1UL);
+    EXPECT_EQ(merged_entries_1["app1"].bytes[WRITE][FOREGROUND][CHARGER_OFF], 1000UL);
+    EXPECT_EQ(merged_entries_1["app1"].bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
+    EXPECT_EQ(merged_entries_1["app3"].bytes[READ][BACKGROUND][CHARGER_OFF], 1000UL);
+
+    map<string, io_usage> merged_entries_2 = merge_io_usage(entries_2);
+    EXPECT_EQ(merged_entries_2.size(), 1UL);
+    EXPECT_EQ(merged_entries_2.count("app1"), 1UL);
+    EXPECT_EQ(merged_entries_2["app1"].bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
 }

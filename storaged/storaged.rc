@@ -1,7 +1,3 @@
-# remove this after vold can create directory for us.
-on property:sys.user.0.ce_available=true
-    mkdir /data/misc_ce/0/storaged
-
 service storaged /system/bin/storaged
     class main
     priority 10

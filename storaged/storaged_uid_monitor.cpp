@@ -50,7 +50,7 @@ const char* UID_IO_STATS_PATH = "/proc/uid_io/stats";
 
 std::unordered_map<uint32_t, uid_info> uid_monitor::get_uid_io_stats()
 {
-    std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
+    Mutex::Autolock _l(uidm_mutex);
     return get_uid_io_stats_locked();
 };
 
@@ -227,6 +227,7 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
         struct uid_record record = {};
         record.name = p.first;
         if (!p.second.uid_ios.is_zero()) {
+            record.ios.user_id = p.second.user_id;
             record.ios.uid_ios = p.second.uid_ios;
             for (const auto& p_task : p.second.task_ios) {
                 if (!p_task.second.is_zero())
@@ -256,13 +257,14 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
 }
 
 std::map<uint64_t, struct uid_records> uid_monitor::dump(
-    double hours, uint64_t threshold, bool force_report, UidIOUsage* uid_io_proto)
+    double hours, uint64_t threshold, bool force_report,
+    unordered_map<int, StoragedProto>* protos)
 {
     if (force_report) {
-        report(uid_io_proto);
+        report(protos);
     }
 
-    std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
+    Mutex::Autolock _l(uidm_mutex);
 
     std::map<uint64_t, struct uid_records> dump_records;
     uint64_t first_ts = 0;
@@ -310,12 +312,13 @@ void uid_monitor::update_curr_io_stats_locked()
 
     for (const auto& it : uid_io_stats) {
         const uid_info& uid = it.second;
-
         if (curr_io_stats.find(uid.name) == curr_io_stats.end()) {
-          curr_io_stats[uid.name] = {};
+            curr_io_stats[uid.name] = {};
         }
 
         struct uid_io_usage& usage = curr_io_stats[uid.name];
+        usage.user_id = multiuser_get_user_id(uid.uid);
+
         int64_t fg_rd_delta = uid.io[FOREGROUND].read_bytes -
             last_uid_io_stats[uid.uid].io[FOREGROUND].read_bytes;
         int64_t bg_rd_delta = uid.io[BACKGROUND].read_bytes -
@@ -347,7 +350,7 @@ void uid_monitor::update_curr_io_stats_locked()
             int64_t task_bg_wr_delta = task.io[BACKGROUND].write_bytes -
                 last_uid_io_stats[uid.uid].tasks[pid].io[BACKGROUND].write_bytes;
 
-            struct io_usage& task_usage = usage.task_ios[comm];
+            io_usage& task_usage = usage.task_ios[comm];
             task_usage.bytes[READ][FOREGROUND][charger_stat] +=
                 (task_fg_rd_delta < 0) ? 0 : task_fg_rd_delta;
             task_usage.bytes[READ][BACKGROUND][charger_stat] +=
@@ -362,21 +365,21 @@ void uid_monitor::update_curr_io_stats_locked()
     last_uid_io_stats = uid_io_stats;
 }
 
-void uid_monitor::report(UidIOUsage* proto)
+void uid_monitor::report(unordered_map<int, StoragedProto>* protos)
 {
     if (!enabled()) return;
 
-    std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
+    Mutex::Autolock _l(uidm_mutex);
 
     update_curr_io_stats_locked();
     add_records_locked(time(NULL));
 
-    update_uid_io_proto(proto);
+    update_uid_io_proto(protos);
 }
 
 namespace {
 
-void set_io_usage_proto(IOUsage* usage_proto, const struct io_usage& usage)
+void set_io_usage_proto(IOUsage* usage_proto, const io_usage& usage)
 {
     usage_proto->set_rd_fg_chg_on(usage.bytes[READ][FOREGROUND][CHARGER_ON]);
     usage_proto->set_rd_fg_chg_off(usage.bytes[READ][FOREGROUND][CHARGER_OFF]);
@@ -388,7 +391,7 @@ void set_io_usage_proto(IOUsage* usage_proto, const struct io_usage& usage)
     usage_proto->set_wr_bg_chg_off(usage.bytes[WRITE][BACKGROUND][CHARGER_OFF]);
 }
 
-void get_io_usage_proto(struct io_usage* usage, const IOUsage& io_proto)
+void get_io_usage_proto(io_usage* usage, const IOUsage& io_proto)
 {
     usage->bytes[READ][FOREGROUND][CHARGER_ON] = io_proto.rd_fg_chg_on();
     usage->bytes[READ][FOREGROUND][CHARGER_OFF] = io_proto.rd_fg_chg_off();
@@ -402,31 +405,41 @@ void get_io_usage_proto(struct io_usage* usage, const IOUsage& io_proto)
 
 } // namespace
 
-void uid_monitor::update_uid_io_proto(UidIOUsage* uid_io_proto)
+void uid_monitor::update_uid_io_proto(unordered_map<int, StoragedProto>* protos)
 {
-    uid_io_proto->Clear();
+    for (auto it : *protos) {
+        it.second.mutable_uid_io_usage()->Clear();
+    }
 
     for (const auto& item : io_history) {
         const uint64_t& end_ts = item.first;
         const struct uid_records& recs = item.second;
-
-        UidIOItem* item_proto = uid_io_proto->add_uid_io_items();
-        item_proto->set_end_ts(end_ts);
-
-        UidIORecords* recs_proto = item_proto->mutable_records();
-        recs_proto->set_start_ts(recs.start_ts);
+        unordered_map<userid_t, UidIOItem*> user_items;
 
         for (const auto& entry : recs.entries) {
+            userid_t user_id = entry.ios.user_id;
+            UidIOItem* item_proto = user_items[user_id];
+            if (item_proto == nullptr) {
+                item_proto = (*protos)[user_id].mutable_uid_io_usage()
+                             ->add_uid_io_items();
+                user_items[user_id] = item_proto;
+            }
+            item_proto->set_end_ts(end_ts);
+
+            UidIORecords* recs_proto = item_proto->mutable_records();
+            recs_proto->set_start_ts(recs.start_ts);
+
             UidRecord* rec_proto = recs_proto->add_entries();
             rec_proto->set_uid_name(entry.name);
+            rec_proto->set_user_id(user_id);
 
             IOUsage* uid_io_proto = rec_proto->mutable_uid_io();
-            const struct io_usage& uio_ios = entry.ios.uid_ios;
+            const io_usage& uio_ios = entry.ios.uid_ios;
             set_io_usage_proto(uid_io_proto, uio_ios);
 
             for (const auto& task_io : entry.ios.task_ios) {
                 const std::string& task_name = task_io.first;
-                const struct io_usage& task_ios = task_io.second;
+                const io_usage& task_ios = task_io.second;
 
                 TaskIOUsage* task_io_proto = rec_proto->add_task_io();
                 task_io_proto->set_task_name(task_name);
@@ -448,6 +461,7 @@ void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
         for (const auto& rec_proto : records_proto.entries()) {
             struct uid_record record;
             record.name = rec_proto.uid_name();
+            record.ios.user_id = rec_proto.user_id();
             get_io_usage_proto(&record.ios.uid_ios, rec_proto.uid_io());
 
             for (const auto& task_io_proto : rec_proto.task_io()) {
@@ -462,7 +476,7 @@ void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
 
 void uid_monitor::set_charger_state(charger_stat_t stat)
 {
-    std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
+    Mutex::Autolock _l(uidm_mutex);
 
     if (charger_stat == stat) {
         return;
@@ -481,12 +495,5 @@ void uid_monitor::init(charger_stat_t stat)
 }
 
 uid_monitor::uid_monitor()
-    : enable(!access(UID_IO_STATS_PATH, R_OK))
-{
-    sem_init(&um_lock, 0, 1);
-}
-
-uid_monitor::~uid_monitor()
-{
-    sem_destroy(&um_lock);
+    : enable(!access(UID_IO_STATS_PATH, R_OK)) {
 }
