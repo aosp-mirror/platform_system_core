@@ -457,7 +457,7 @@ static void show_help(android_logcat_context_internal* context) {
                     "  -d              Dump the log and then exit (don't block)\n"
                     "  -e <expr>, --regex=<expr>\n"
                     "                  Only print lines where the log message matches <expr>\n"
-                    "                  where <expr> is a regular expression\n"
+                    "                  where <expr> is a Perl-compatible regular expression\n"
                     // Leave --head undocumented as alias for -m
                     "  -m <count>, --max-count=<count>\n"
                     "                  Quit after printing <count> lines. This is meant to be\n"
