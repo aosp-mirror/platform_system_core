@@ -127,6 +127,7 @@ class UnwinderTest : public ::testing::Test {
   void SetUp() override {
     ElfInterfaceFake::FakeClear();
     regs_.FakeSetMachineType(EM_ARM);
+    regs_.FakeSetReturnAddressValid(false);
   }
 
   static MapsFake maps_;
@@ -606,6 +607,71 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   EXPECT_EQ(0x1d000U, frame->map_offset);
   EXPECT_EQ(0x43000U, frame->map_start);
   EXPECT_EQ(0x44000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+// Verify that an unwind stops when the sp and pc don't change.
+TEST_F(UnwinderTest, sp_pc_do_not_change) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame3", 3));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame4", 4));
+
+  regs_.FakeSetPc(0x1000);
+  regs_.FakeSetSp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0x33402, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+
+  ASSERT_EQ(3U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0x400U, frame->rel_pc);
+  EXPECT_EQ(0x33400U, frame->pc);
+  EXPECT_EQ(0x10010U, frame->sp);
+  EXPECT_EQ("Frame1", frame->function_name);
+  EXPECT_EQ(1U, frame->function_offset);
+  EXPECT_EQ("/fake/compressed.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x33000U, frame->map_start);
+  EXPECT_EQ(0x34000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[2];
+  EXPECT_EQ(2U, frame->num);
+  EXPECT_EQ(0x500U, frame->rel_pc);
+  EXPECT_EQ(0x33500U, frame->pc);
+  EXPECT_EQ(0x10020U, frame->sp);
+  EXPECT_EQ("Frame2", frame->function_name);
+  EXPECT_EQ(2U, frame->function_offset);
+  EXPECT_EQ("/fake/compressed.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x33000U, frame->map_start);
+  EXPECT_EQ(0x34000U, frame->map_end);
   EXPECT_EQ(0U, frame->map_load_bias);
   EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
