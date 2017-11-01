@@ -59,7 +59,6 @@ int main(int argc, char* argv[]) {
     }
 
     bool test_fails = false;
-    size_t uargc = static_cast<size_t>(argc);  // |argc| >= 3.
     for (size_t i = 1; i < static_cast<size_t>(argc); i = i + 2) {
         std::string expected_value = argv[i + 1];
         auto f = fields.find(argv[i]);
