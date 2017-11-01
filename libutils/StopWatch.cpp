@@ -30,10 +30,7 @@
 
 namespace android {
 
-
-StopWatch::StopWatch(const char *name, int clock, uint32_t flags)
-    :   mName(name), mClock(clock), mFlags(flags)
-{
+StopWatch::StopWatch(const char* name, int clock) : mName(name), mClock(clock) {
     reset();
 }
 

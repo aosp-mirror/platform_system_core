@@ -20,7 +20,11 @@ cc_defaults {
         misc_undefined: ["integer"],
     },
     local_include_dirs: ["include/"],
-    cppflags: ["-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-variable",
+    ],
 }
 
 cc_library_static {
