@@ -80,7 +80,7 @@ static int fs_prepare_path_impl(const char* path, mode_t mode, uid_t uid, gid_t 
 create:
     create_result = prepare_as_dir
         ? TEMP_FAILURE_RETRY(mkdir(path, mode))
-        : TEMP_FAILURE_RETRY(open(path, O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_RDONLY));
+        : TEMP_FAILURE_RETRY(open(path, O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_RDONLY, 0644));
     if (create_result == -1) {
         if (errno != EEXIST) {
             ALOGE("Failed to %s(%s): %s",

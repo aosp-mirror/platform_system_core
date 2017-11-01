@@ -32,11 +32,11 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <libminijail.h>
+#include <log/log_properties.h>
 #include <scoped_minijail.h>
 
-#include "debuggerd/client.h"
 #include <private/android_filesystem_config.h>
-#include <private/android_logger.h>
+#include "debuggerd/handler.h"
 #include "selinux/android.h"
 
 #include "adb.h"
@@ -44,6 +44,8 @@
 #include "adb_listeners.h"
 #include "adb_utils.h"
 #include "transport.h"
+
+#include "mdns.h"
 
 static const char* root_seclabel = nullptr;
 
@@ -105,10 +107,10 @@ static void drop_privileges(int server_port) {
     // AID_SDCARD_RW to allow writing to the SD card
     // AID_NET_BW_STATS to read out qtaguid statistics
     // AID_READPROC for reading /proc entries across UID boundaries
-    gid_t groups[] = {AID_ADB,      AID_LOG,       AID_INPUT,
-                      AID_INET,     AID_NET_BT,    AID_NET_BT_ADMIN,
-                      AID_SDCARD_R, AID_SDCARD_RW, AID_NET_BW_STATS,
-                      AID_READPROC};
+    // AID_UHID for using 'hid' command to read/write to /dev/uhid
+    gid_t groups[] = {AID_ADB,          AID_LOG,          AID_INPUT,    AID_INET,
+                      AID_NET_BT,       AID_NET_BT_ADMIN, AID_SDCARD_R, AID_SDCARD_RW,
+                      AID_NET_BW_STATS, AID_READPROC,     AID_UHID};
     minijail_set_supplementary_gids(jail.get(), arraysize(groups), groups);
 
     // Don't listen on a port (default 5037) if running in secure mode.
@@ -138,6 +140,11 @@ static void drop_privileges(int server_port) {
             LOG(FATAL) << "Could not install *smartsocket* listener: " << error;
         }
     }
+}
+
+static void setup_port(int port) {
+    local_init(port);
+    setup_mdns(port);
 }
 
 int adbd_main(int server_port) {
@@ -188,10 +195,10 @@ int adbd_main(int server_port) {
     if (sscanf(prop_port.c_str(), "%d", &port) == 1 && port > 0) {
         D("using port=%d", port);
         // Listen on TCP port specified by service.adb.tcp.port property.
-        local_init(port);
+        setup_port(port);
     } else if (!is_usb) {
         // Listen on default port.
-        local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
+        setup_port(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     }
 
     D("adbd_main(): pre init_jdwp()");
@@ -226,9 +233,8 @@ int main(int argc, char** argv) {
             adb_device_banner = optarg;
             break;
         case 'v':
-            printf("Android Debug Bridge Daemon version %d.%d.%d %s\n",
-                   ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
-                   ADB_REVISION);
+            printf("Android Debug Bridge Daemon version %d.%d.%d (%s)\n", ADB_VERSION_MAJOR,
+                   ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_VERSION);
             return 0;
         default:
             // getopt already prints "adbd: invalid option -- %c" for us.

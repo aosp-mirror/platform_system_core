@@ -1,0 +1,82 @@
+cc_defaults {
+    name: "crasher-defaults",
+
+    cflags: [
+        "-W",
+        "-Wall",
+        "-Wextra",
+        "-Wunused",
+        "-Werror",
+        "-O0",
+        "-fstack-protector-all",
+        "-Wno-free-nonheap-object",
+        "-Wno-date-time",
+    ],
+    srcs: ["crasher.cpp"],
+    arch: {
+        arm: {
+            srcs: ["arm/crashglue.S"],
+
+            neon: {
+                asflags: ["-DHAS_VFP_D32"],
+            },
+        },
+        arm64: {
+            srcs: ["arm64/crashglue.S"],
+        },
+        mips: {
+            srcs: ["mips/crashglue.S"],
+        },
+        mips64: {
+            srcs: ["mips64/crashglue.S"],
+        },
+        x86: {
+            srcs: ["x86/crashglue.S"],
+        },
+        x86_64: {
+            srcs: ["x86_64/crashglue.S"],
+        },
+    },
+    compile_multilib: "both",
+}
+
+cc_binary {
+    name: "crasher",
+
+    defaults: ["crasher-defaults"],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libseccomp_policy",
+    ],
+    multilib: {
+        lib32: {
+            stem: "crasher",
+        },
+        lib64: {
+            stem: "crasher64",
+        },
+    },
+}
+
+cc_binary {
+    name: "static_crasher",
+
+    defaults: ["crasher-defaults"],
+    cppflags: ["-DSTATIC_CRASHER"],
+    static_executable: true,
+    static_libs: [
+        "libdebuggerd_handler",
+        "libbase",
+        "liblog",
+        "libseccomp_policy",
+    ],
+    multilib: {
+        lib32: {
+            stem: "static_crasher",
+        },
+        lib64: {
+            stem: "static_crasher64",
+        },
+    },
+}

@@ -32,6 +32,7 @@ class BatteryPropertiesRegistrar : public BnBatteryPropertiesRegistrar,
 public:
     void publish(const sp<BatteryPropertiesRegistrar>& service);
     void notifyListeners(const struct BatteryProperties& props);
+    void scheduleUpdate();
 
 private:
     Mutex mRegistrationLock;

@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/ion.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -30,81 +31,89 @@
 #include <unistd.h>
 
 #include <ion/ion.h>
+#include "ion_4.12.h"
+
 #include <log/log.h>
 
-int ion_open()
-{
+enum ion_version { ION_VERSION_UNKNOWN, ION_VERSION_MODERN, ION_VERSION_LEGACY };
+
+static atomic_int g_ion_version = ATOMIC_VAR_INIT(ION_VERSION_UNKNOWN);
+
+int ion_is_legacy(int fd) {
+    int version = atomic_load_explicit(&g_ion_version, memory_order_acquire);
+    if (version == ION_VERSION_UNKNOWN) {
+        /**
+          * Check for FREE IOCTL here; it is available only in the old
+          * kernels, not the new ones.
+          */
+        int err = ion_free(fd, (ion_user_handle_t)NULL);
+        version = (err == -ENOTTY) ? ION_VERSION_MODERN : ION_VERSION_LEGACY;
+        atomic_store_explicit(&g_ion_version, version, memory_order_release);
+    }
+    return version == ION_VERSION_LEGACY;
+}
+
+int ion_open() {
     int fd = open("/dev/ion", O_RDONLY | O_CLOEXEC);
-    if (fd < 0)
-        ALOGE("open /dev/ion failed!\n");
+    if (fd < 0) ALOGE("open /dev/ion failed!\n");
+
     return fd;
 }
 
-int ion_close(int fd)
-{
+int ion_close(int fd) {
     int ret = close(fd);
-    if (ret < 0)
-        return -errno;
+    if (ret < 0) return -errno;
     return ret;
 }
 
-static int ion_ioctl(int fd, int req, void *arg)
-{
+static int ion_ioctl(int fd, int req, void* arg) {
     int ret = ioctl(fd, req, arg);
     if (ret < 0) {
-        ALOGE("ioctl %x failed with code %d: %s\n", req,
-              ret, strerror(errno));
+        ALOGE("ioctl %x failed with code %d: %s\n", req, ret, strerror(errno));
         return -errno;
     }
     return ret;
 }
 
-int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask,
-              unsigned int flags, ion_user_handle_t *handle)
-{
-    int ret;
+int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask, unsigned int flags,
+              ion_user_handle_t* handle) {
+    int ret = 0;
+
+    if ((handle == NULL) || (!ion_is_legacy(fd))) return -EINVAL;
+
     struct ion_allocation_data data = {
-        .len = len,
-        .align = align,
-        .heap_id_mask = heap_mask,
-        .flags = flags,
+        .len = len, .align = align, .heap_id_mask = heap_mask, .flags = flags,
     };
 
-    if (handle == NULL)
-        return -EINVAL;
-
     ret = ion_ioctl(fd, ION_IOC_ALLOC, &data);
-    if (ret < 0)
-        return ret;
+    if (ret < 0) return ret;
+
     *handle = data.handle;
+
     return ret;
 }
 
-int ion_free(int fd, ion_user_handle_t handle)
-{
+int ion_free(int fd, ion_user_handle_t handle) {
     struct ion_handle_data data = {
         .handle = handle,
     };
     return ion_ioctl(fd, ION_IOC_FREE, &data);
 }
 
-int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
-            int flags, off_t offset, unsigned char **ptr, int *map_fd)
-{
+int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot, int flags, off_t offset,
+            unsigned char** ptr, int* map_fd) {
+    if (!ion_is_legacy(fd)) return -EINVAL;
     int ret;
-    unsigned char *tmp_ptr;
+    unsigned char* tmp_ptr;
     struct ion_fd_data data = {
         .handle = handle,
     };
 
-    if (map_fd == NULL)
-        return -EINVAL;
-    if (ptr == NULL)
-        return -EINVAL;
+    if (map_fd == NULL) return -EINVAL;
+    if (ptr == NULL) return -EINVAL;
 
     ret = ion_ioctl(fd, ION_IOC_MAP, &data);
-    if (ret < 0)
-        return ret;
+    if (ret < 0) return ret;
     if (data.fd < 0) {
         ALOGE("map ioctl returned negative fd\n");
         return -EINVAL;
@@ -119,19 +128,17 @@ int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
     return ret;
 }
 
-int ion_share(int fd, ion_user_handle_t handle, int *share_fd)
-{
+int ion_share(int fd, ion_user_handle_t handle, int* share_fd) {
     int ret;
     struct ion_fd_data data = {
         .handle = handle,
     };
 
-    if (share_fd == NULL)
-        return -EINVAL;
+    if (!ion_is_legacy(fd)) return -EINVAL;
+    if (share_fd == NULL) return -EINVAL;
 
     ret = ion_ioctl(fd, ION_IOC_SHARE, &data);
-    if (ret < 0)
-        return ret;
+    if (ret < 0) return ret;
     if (data.fd < 0) {
         ALOGE("share ioctl returned negative fd\n");
         return -EINVAL;
@@ -140,40 +147,75 @@ int ion_share(int fd, ion_user_handle_t handle, int *share_fd)
     return ret;
 }
 
-int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask,
-                 unsigned int flags, int *handle_fd) {
+int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask, unsigned int flags,
+                 int* handle_fd) {
     ion_user_handle_t handle;
     int ret;
 
-    ret = ion_alloc(fd, len, align, heap_mask, flags, &handle);
-    if (ret < 0)
-        return ret;
-    ret = ion_share(fd, handle, handle_fd);
-    ion_free(fd, handle);
+    if (!ion_is_legacy(fd)) {
+        struct ion_new_allocation_data data = {
+            .len = len,
+            .heap_id_mask = heap_mask,
+            .flags = flags,
+        };
+
+        ret = ion_ioctl(fd, ION_IOC_NEW_ALLOC, &data);
+        if (ret < 0) return ret;
+        *handle_fd = data.fd;
+    } else {
+        ret = ion_alloc(fd, len, align, heap_mask, flags, &handle);
+        if (ret < 0) return ret;
+        ret = ion_share(fd, handle, handle_fd);
+        ion_free(fd, handle);
+    }
     return ret;
 }
 
-int ion_import(int fd, int share_fd, ion_user_handle_t *handle)
-{
+int ion_import(int fd, int share_fd, ion_user_handle_t* handle) {
     int ret;
     struct ion_fd_data data = {
         .fd = share_fd,
     };
 
-    if (handle == NULL)
-        return -EINVAL;
+    if (!ion_is_legacy(fd)) return -EINVAL;
+
+    if (handle == NULL) return -EINVAL;
 
     ret = ion_ioctl(fd, ION_IOC_IMPORT, &data);
-    if (ret < 0)
-        return ret;
+    if (ret < 0) return ret;
     *handle = data.handle;
     return ret;
 }
 
-int ion_sync_fd(int fd, int handle_fd)
-{
+int ion_sync_fd(int fd, int handle_fd) {
     struct ion_fd_data data = {
         .fd = handle_fd,
     };
+
+    if (!ion_is_legacy(fd)) return -EINVAL;
+
     return ion_ioctl(fd, ION_IOC_SYNC, &data);
+}
+
+int ion_query_heap_cnt(int fd, int* cnt) {
+    int ret;
+    struct ion_heap_query query;
+
+    memset(&query, 0, sizeof(query));
+
+    ret = ion_ioctl(fd, ION_IOC_HEAP_QUERY, &query);
+    if (ret < 0) return ret;
+
+    *cnt = query.cnt;
+    return ret;
+}
+
+int ion_query_get_heaps(int fd, int cnt, void* buffers) {
+    int ret;
+    struct ion_heap_query query = {
+        .cnt = cnt, .heaps = (uintptr_t)buffers,
+    };
+
+    ret = ion_ioctl(fd, ION_IOC_HEAP_QUERY, &query);
+    return ret;
 }

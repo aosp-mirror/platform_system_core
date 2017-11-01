@@ -17,27 +17,30 @@
 #ifndef _INIT_IMPORT_PARSER_H
 #define _INIT_IMPORT_PARSER_H
 
-#include "init_parser.h"
-
 #include <string>
 #include <vector>
 
+#include "parser.h"
+
+namespace android {
+namespace init {
+
 class ImportParser : public SectionParser {
-public:
-    ImportParser()  {
-    }
-    bool ParseSection(const std::vector<std::string>& args,
-                      std::string* err) override;
-    bool ParseLineSection(const std::vector<std::string>& args,
-                          const std::string& filename, int line,
-                          std::string* err) const override {
-        return true;
-    }
-    void EndSection() override {
-    }
-    void EndFile(const std::string& filename) override;
-private:
-    std::vector<std::string> imports_;
+  public:
+    ImportParser(Parser* parser) : parser_(parser) {}
+    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                                 int line) override;
+    void EndFile() override;
+
+  private:
+    Parser* parser_;
+    // Store filename for later error reporting.
+    std::string filename_;
+    // Vector of imports and their line numbers for later error reporting.
+    std::vector<std::pair<std::string, int>> imports_;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

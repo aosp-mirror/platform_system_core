@@ -55,7 +55,6 @@ TEST(adb_utils, directory_exists) {
   ASSERT_FALSE(directory_exists(subdir(profiles_dir, "does-not-exist")));
 #else
   ASSERT_TRUE(directory_exists("/proc"));
-  ASSERT_FALSE(directory_exists("/proc/self")); // Symbolic link.
   ASSERT_FALSE(directory_exists("/proc/does-not-exist"));
 #endif
 }
@@ -107,18 +106,6 @@ TEST(adb_utils, escape_arg) {
   ASSERT_EQ(R"('abc\')", escape_arg("abc\\"));
   ASSERT_EQ(R"('abc(')", escape_arg("abc("));
   ASSERT_EQ(R"('abc)')", escape_arg("abc)"));
-}
-
-TEST(adb_utils, adb_basename) {
-  EXPECT_EQ("sh", adb_basename("/system/bin/sh"));
-  EXPECT_EQ("sh", adb_basename("sh"));
-  EXPECT_EQ("sh", adb_basename("/system/bin/sh/"));
-}
-
-TEST(adb_utils, adb_dirname) {
-  EXPECT_EQ("/system/bin", adb_dirname("/system/bin/sh"));
-  EXPECT_EQ(".", adb_dirname("sh"));
-  EXPECT_EQ("/system/bin", adb_dirname("/system/bin/sh/"));
 }
 
 void test_mkdirs(const std::string& basepath) {

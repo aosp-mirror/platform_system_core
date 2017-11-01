@@ -27,11 +27,12 @@ test_c_flags := \
     -fno-builtin \
 
 # -----------------------------------------------------------------------------
-# Benchmarks (actually a gTest where the result code does not matter)
+# Benchmarks
 # ----------------------------------------------------------------------------
 
 benchmark_src_files := \
-    logcat_benchmark.cpp
+    logcat_benchmark.cpp \
+    exec_benchmark.cpp \
 
 # Build benchmarks for the device. Run with:
 #   adb shell /data/nativetest/logcat-benchmarks/logcat-benchmarks
@@ -40,7 +41,8 @@ LOCAL_MODULE := $(test_module_prefix)benchmarks
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(test_c_flags)
 LOCAL_SRC_FILES := $(benchmark_src_files)
-include $(BUILD_NATIVE_TEST)
+LOCAL_SHARED_LIBRARIES := libbase liblogcat
+include $(BUILD_NATIVE_BENCHMARK)
 
 # -----------------------------------------------------------------------------
 # Unit tests.
@@ -48,6 +50,8 @@ include $(BUILD_NATIVE_TEST)
 
 test_src_files := \
     logcat_test.cpp \
+    logcatd_test.cpp \
+    liblogcat_test.cpp \
 
 # Build tests for the device (with .so). Run with:
 #   adb shell /data/nativetest/logcat-unit-tests/logcat-unit-tests
@@ -55,6 +59,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := $(test_module_prefix)unit-tests
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(test_c_flags)
-LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := liblog libbase liblogcat
 LOCAL_SRC_FILES := $(test_src_files)
 include $(BUILD_NATIVE_TEST)

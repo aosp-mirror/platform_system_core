@@ -17,6 +17,13 @@
 #ifndef ANDROID_LIBAPPFUSE_FUSEBRIDGELOOP_H_
 #define ANDROID_LIBAPPFUSE_FUSEBRIDGELOOP_H_
 
+#include <map>
+#include <mutex>
+#include <queue>
+#include <unordered_set>
+
+#include <android-base/macros.h>
+
 #include "libappfuse/FuseBuffer.h"
 
 namespace android {
@@ -24,12 +31,41 @@ namespace fuse {
 
 class FuseBridgeLoopCallback {
  public:
-  virtual void OnMount() = 0;
-  virtual ~FuseBridgeLoopCallback() = default;
+   virtual void OnMount(int mount_id) = 0;
+   virtual void OnClosed(int mount_id) = 0;
+   virtual ~FuseBridgeLoopCallback() = default;
 };
 
-bool StartFuseBridgeLoop(
-    int dev_fd, int proxy_fd, FuseBridgeLoopCallback* callback);
+class FuseBridgeEntry;
+class BridgeEpollController;
+
+class FuseBridgeLoop final {
+  public:
+    FuseBridgeLoop();
+    ~FuseBridgeLoop();
+
+    void Start(FuseBridgeLoopCallback* callback);
+
+    // Add bridge to the loop. It's OK to invoke the method from a different
+    // thread from one which invokes |Start|.
+    bool AddBridge(int mount_id, base::unique_fd dev_fd, base::unique_fd proxy_fd);
+
+  private:
+    bool ProcessEventLocked(const std::unordered_set<FuseBridgeEntry*>& entries,
+                            FuseBridgeLoopCallback* callback);
+
+    std::unique_ptr<BridgeEpollController> epoll_controller_;
+
+    // Map between |mount_id| and bridge entry.
+    std::map<int, std::unique_ptr<FuseBridgeEntry>> bridges_;
+
+    // Lock for multi-threading.
+    std::mutex mutex_;
+
+    bool opened_;
+
+    DISALLOW_COPY_AND_ASSIGN(FuseBridgeLoop);
+};
 
 }  // namespace fuse
 }  // namespace android

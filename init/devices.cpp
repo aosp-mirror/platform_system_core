@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007-2014 The Android Open Source Project
+ * Copyright (C) 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,1038 +14,417 @@
  * limitations under the License.
  */
 
-#include <dirent.h>
+#include "devices.h"
+
 #include <errno.h>
-#include <fcntl.h>
 #include <fnmatch.h>
-#include <libgen.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/sendfile.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <sys/wait.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
-#include <linux/netlink.h>
-
 #include <memory>
-#include <thread>
 
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-#include <selinux/android.h>
-#include <selinux/avc.h>
-
-#include <private/android_filesystem_config.h>
-
-#include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
-#include <android-base/unique_fd.h>
-#include <cutils/list.h>
-#include <cutils/uevent.h>
+#include <android-base/strings.h>
+#include <private/android_filesystem_config.h>
+#include <selinux/android.h>
+#include <selinux/selinux.h>
 
-#include "devices.h"
-#include "ueventd_parser.h"
+#include "selinux.h"
+#include "ueventd.h"
 #include "util.h"
-#include "log.h"
 
-#define SYSFS_PREFIX    "/sys"
-static const char *firmware_dirs[] = { "/etc/firmware",
-                                       "/vendor/firmware",
-                                       "/firmware/image" };
+#ifdef _INIT_INIT_H
+#error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
+#endif
 
-extern struct selabel_handle *sehandle;
+using android::base::Basename;
+using android::base::Dirname;
+using android::base::Readlink;
+using android::base::Realpath;
+using android::base::StartsWith;
+using android::base::StringPrintf;
 
-static int device_fd = -1;
+namespace android {
+namespace init {
 
-struct uevent {
-    const char *action;
-    const char *path;
-    const char *subsystem;
-    const char *firmware;
-    const char *partition_name;
-    const char *device_name;
-    int partition_num;
-    int major;
-    int minor;
-};
+/* Given a path that may start with a PCI device, populate the supplied buffer
+ * with the PCI domain/bus number and the peripheral ID and return 0.
+ * If it doesn't start with a PCI device, or there is some error, return -1 */
+static bool FindPciDevicePrefix(const std::string& path, std::string* result) {
+    result->clear();
 
-struct perms_ {
-    char *name;
-    char *attr;
-    mode_t perm;
-    unsigned int uid;
-    unsigned int gid;
-    unsigned short prefix;
-    unsigned short wildcard;
-};
+    if (!StartsWith(path, "/devices/pci")) return false;
 
-struct perm_node {
-    struct perms_ dp;
-    struct listnode plist;
-};
+    /* Beginning of the prefix is the initial "pci" after "/devices/" */
+    std::string::size_type start = 9;
 
-struct platform_node {
-    char *name;
-    char *path;
-    int path_len;
-    struct listnode list;
-};
+    /* End of the prefix is two path '/' later, capturing the domain/bus number
+     * and the peripheral ID. Example: pci0000:00/0000:00:1f.2 */
+    auto end = path.find('/', start);
+    if (end == std::string::npos) return false;
 
-static list_declare(sys_perms);
-static list_declare(dev_perms);
-static list_declare(platform_names);
+    end = path.find('/', end + 1);
+    if (end == std::string::npos) return false;
 
-int add_dev_perms(const char *name, const char *attr,
-                  mode_t perm, unsigned int uid, unsigned int gid,
-                  unsigned short prefix,
-                  unsigned short wildcard) {
-    struct perm_node *node = (perm_node*) calloc(1, sizeof(*node));
-    if (!node)
-        return -ENOMEM;
-
-    node->dp.name = strdup(name);
-    if (!node->dp.name) {
-        free(node);
-        return -ENOMEM;
+    auto length = end - start;
+    if (length <= 4) {
+        // The minimum string that will get to this check is 'pci/', which is malformed,
+        // so return false
+        return false;
     }
 
-    if (attr) {
-        node->dp.attr = strdup(attr);
-        if (!node->dp.attr) {
-            free(node->dp.name);
-            free(node);
-            return -ENOMEM;
-        }
-    }
-
-    node->dp.perm = perm;
-    node->dp.uid = uid;
-    node->dp.gid = gid;
-    node->dp.prefix = prefix;
-    node->dp.wildcard = wildcard;
-
-    if (attr)
-        list_add_tail(&sys_perms, &node->plist);
-    else
-        list_add_tail(&dev_perms, &node->plist);
-
-    return 0;
+    *result = path.substr(start, length);
+    return true;
 }
 
-static bool perm_path_matches(const char *path, struct perms_ *dp)
-{
-    if (dp->prefix) {
-        if (strncmp(path, dp->name, strlen(dp->name)) == 0)
+/* Given a path that may start with a virtual block device, populate
+ * the supplied buffer with the virtual block device ID and return 0.
+ * If it doesn't start with a virtual block device, or there is some
+ * error, return -1 */
+static bool FindVbdDevicePrefix(const std::string& path, std::string* result) {
+    result->clear();
+
+    if (!StartsWith(path, "/devices/vbd-")) return false;
+
+    /* Beginning of the prefix is the initial "vbd-" after "/devices/" */
+    std::string::size_type start = 13;
+
+    /* End of the prefix is one path '/' later, capturing the
+       virtual block device ID. Example: 768 */
+    auto end = path.find('/', start);
+    if (end == std::string::npos) return false;
+
+    auto length = end - start;
+    if (length == 0) return false;
+
+    *result = path.substr(start, length);
+    return true;
+}
+
+Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid)
+    : name_(name), perm_(perm), uid_(uid), gid_(gid), prefix_(false), wildcard_(false) {
+    // Set 'prefix_' or 'wildcard_' based on the below cases:
+    //
+    // 1) No '*' in 'name' -> Neither are set and Match() checks a given path for strict
+    //    equality with 'name'
+    //
+    // 2) '*' only appears as the last character in 'name' -> 'prefix'_ is set to true and
+    //    Match() checks if 'name' is a prefix of a given path.
+    //
+    // 3) '*' appears elsewhere -> 'wildcard_' is set to true and Match() uses fnmatch()
+    //    with FNM_PATHNAME to compare 'name' to a given path.
+
+    auto wildcard_position = name_.find('*');
+    if (wildcard_position != std::string::npos) {
+        if (wildcard_position == name_.length() - 1) {
+            prefix_ = true;
+            name_.pop_back();
+        } else {
+            wildcard_ = true;
+        }
+    }
+}
+
+bool Permissions::Match(const std::string& path) const {
+    if (prefix_) return StartsWith(path, name_.c_str());
+    if (wildcard_) return fnmatch(name_.c_str(), path.c_str(), FNM_PATHNAME) == 0;
+    return path == name_;
+}
+
+bool SysfsPermissions::MatchWithSubsystem(const std::string& path,
+                                          const std::string& subsystem) const {
+    std::string path_basename = Basename(path);
+    if (name().find(subsystem) != std::string::npos) {
+        if (Match("/sys/class/" + subsystem + "/" + path_basename)) return true;
+        if (Match("/sys/bus/" + subsystem + "/devices/" + path_basename)) return true;
+    }
+    return Match(path);
+}
+
+void SysfsPermissions::SetPermissions(const std::string& path) const {
+    std::string attribute_file = path + "/" + attribute_;
+    LOG(VERBOSE) << "fixup " << attribute_file << " " << uid() << " " << gid() << " " << std::oct
+                 << perm();
+
+    if (access(attribute_file.c_str(), F_OK) == 0) {
+        if (chown(attribute_file.c_str(), uid(), gid()) != 0) {
+            PLOG(ERROR) << "chown(" << attribute_file << ", " << uid() << ", " << gid()
+                        << ") failed";
+        }
+        if (chmod(attribute_file.c_str(), perm()) != 0) {
+            PLOG(ERROR) << "chmod(" << attribute_file << ", " << perm() << ") failed";
+        }
+    }
+}
+
+// Given a path that may start with a platform device, find the parent platform device by finding a
+// parent directory with a 'subsystem' symlink that points to the platform bus.
+// If it doesn't start with a platform device, return false
+bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_device_path) const {
+    platform_device_path->clear();
+
+    // Uevents don't contain the mount point, so we need to add it here.
+    path.insert(0, sysfs_mount_point_);
+
+    std::string directory = Dirname(path);
+
+    while (directory != "/" && directory != ".") {
+        std::string subsystem_link_path;
+        if (Realpath(directory + "/subsystem", &subsystem_link_path) &&
+            subsystem_link_path == sysfs_mount_point_ + "/bus/platform") {
+            // We need to remove the mount point that we added above before returning.
+            directory.erase(0, sysfs_mount_point_.size());
+            *platform_device_path = directory;
             return true;
-    } else if (dp->wildcard) {
-        if (fnmatch(dp->name, path, FNM_PATHNAME) == 0)
-            return true;
-    } else {
-        if (strcmp(path, dp->name) == 0)
-            return true;
+        }
+
+        auto last_slash = path.rfind('/');
+        if (last_slash == std::string::npos) return false;
+
+        path.erase(last_slash);
+        directory = Dirname(path);
     }
 
     return false;
 }
 
-static bool match_subsystem(perms_* dp, const char* pattern,
-                            const char* path, const char* subsystem) {
-    if (!pattern || !subsystem || strstr(dp->name, subsystem) == NULL) {
-        return false;
-    }
-
-    std::string subsys_path = android::base::StringPrintf(pattern, subsystem, basename(path));
-    return perm_path_matches(subsys_path.c_str(), dp);
-}
-
-static void fixup_sys_perms(const char* upath, const char* subsystem) {
+void DeviceHandler::FixupSysPermissions(const std::string& upath,
+                                        const std::string& subsystem) const {
     // upaths omit the "/sys" that paths in this list
     // contain, so we prepend it...
-    std::string path = std::string(SYSFS_PREFIX) + upath;
+    std::string path = "/sys" + upath;
 
-    listnode* node;
-    list_for_each(node, &sys_perms) {
-        perms_* dp = &(node_to_item(node, perm_node, plist))->dp;
-        if (match_subsystem(dp, SYSFS_PREFIX "/class/%s/%s", path.c_str(), subsystem)) {
-            ; // matched
-        } else if (match_subsystem(dp, SYSFS_PREFIX "/bus/%s/devices/%s", path.c_str(), subsystem)) {
-            ; // matched
-        } else if (!perm_path_matches(path.c_str(), dp)) {
-            continue;
-        }
-
-        std::string attr_file = path + "/" + dp->attr;
-        LOG(INFO) << "fixup " << attr_file
-                  << " " << dp->uid << " " << dp->gid << " " << std::oct << dp->perm;
-        chown(attr_file.c_str(), dp->uid, dp->gid);
-        chmod(attr_file.c_str(), dp->perm);
+    for (const auto& s : sysfs_permissions_) {
+        if (s.MatchWithSubsystem(path, subsystem)) s.SetPermissions(path);
     }
 
-    if (access(path.c_str(), F_OK) == 0) {
+    if (!skip_restorecon_ && access(path.c_str(), F_OK) == 0) {
         LOG(VERBOSE) << "restorecon_recursive: " << path;
-        restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
+        if (selinux_android_restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
+            PLOG(ERROR) << "selinux_android_restorecon(" << path << ") failed";
+        }
     }
 }
 
-static mode_t get_device_perm(const char *path, const char **links,
-                unsigned *uid, unsigned *gid)
-{
-    struct listnode *node;
-    struct perm_node *perm_node;
-    struct perms_ *dp;
-
-    /* search the perms list in reverse so that ueventd.$hardware can
-     * override ueventd.rc
-     */
-    list_for_each_reverse(node, &dev_perms) {
-        bool match = false;
-
-        perm_node = node_to_item(node, struct perm_node, plist);
-        dp = &perm_node->dp;
-
-        if (perm_path_matches(path, dp)) {
-            match = true;
-        } else {
-            if (links) {
-                int i;
-                for (i = 0; links[i]; i++) {
-                    if (perm_path_matches(links[i], dp)) {
-                        match = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (match) {
-            *uid = dp->uid;
-            *gid = dp->gid;
-            return dp->perm;
+std::tuple<mode_t, uid_t, gid_t> DeviceHandler::GetDevicePermissions(
+    const std::string& path, const std::vector<std::string>& links) const {
+    // Search the perms list in reverse so that ueventd.$hardware can override ueventd.rc.
+    for (auto it = dev_permissions_.crbegin(); it != dev_permissions_.crend(); ++it) {
+        if (it->Match(path) || std::any_of(links.cbegin(), links.cend(),
+                                           [it](const auto& link) { return it->Match(link); })) {
+            return {it->perm(), it->uid(), it->gid()};
         }
     }
     /* Default if nothing found. */
-    *uid = 0;
-    *gid = 0;
-    return 0600;
+    return {0600, 0, 0};
 }
 
-static void make_device(const char *path,
-                        const char */*upath*/,
-                        int block, int major, int minor,
-                        const char **links)
-{
-    unsigned uid;
-    unsigned gid;
-    mode_t mode;
-    dev_t dev;
-    char *secontext = NULL;
+void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, int minor,
+                               const std::vector<std::string>& links) const {
+    auto[mode, uid, gid] = GetDevicePermissions(path, links);
+    mode |= (block ? S_IFBLK : S_IFCHR);
 
-    mode = get_device_perm(path, links, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
-
-    if (selabel_lookup_best_match(sehandle, &secontext, path, links, mode)) {
+    std::string secontext;
+    if (!SelabelLookupFileContextBestMatch(path, links, mode, &secontext)) {
         PLOG(ERROR) << "Device '" << path << "' not created; cannot find SELinux label";
         return;
     }
-    setfscreatecon(secontext);
+    if (!secontext.empty()) {
+        setfscreatecon(secontext.c_str());
+    }
 
-    dev = makedev(major, minor);
+    dev_t dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
      * device node. Unforunately changing the euid would prevent creation of
      * some device nodes, so the uid has to be set with chown() and is still
      * racy. Fixing the gid race at least fixed the issue with system_server
      * opening dynamic input devices under the AID_INPUT gid. */
-    setegid(gid);
+    if (setegid(gid)) {
+        PLOG(ERROR) << "setegid(" << gid << ") for " << path << " device failed";
+        goto out;
+    }
     /* If the node already exists update its SELinux label to handle cases when
      * it was created with the wrong context during coldboot procedure. */
-    if (mknod(path, mode, dev) && (errno == EEXIST)) {
-
+    if (mknod(path.c_str(), mode, dev) && (errno == EEXIST) && !secontext.empty()) {
         char* fcon = nullptr;
-        int rc = lgetfilecon(path, &fcon);
+        int rc = lgetfilecon(path.c_str(), &fcon);
         if (rc < 0) {
             PLOG(ERROR) << "Cannot get SELinux label on '" << path << "' device";
             goto out;
         }
 
-        bool different = strcmp(fcon, secontext) != 0;
+        bool different = fcon != secontext;
         freecon(fcon);
 
-        if (different && lsetfilecon(path, secontext)) {
-            PLOG(ERROR) << "Cannot set '" << secontext << "' SELinux label on '" << path << "' device";
+        if (different && lsetfilecon(path.c_str(), secontext.c_str())) {
+            PLOG(ERROR) << "Cannot set '" << secontext << "' SELinux label on '" << path
+                        << "' device";
         }
     }
 
 out:
-    chown(path, uid, -1);
-    setegid(AID_ROOT);
-
-    freecon(secontext);
-    setfscreatecon(NULL);
-}
-
-static void add_platform_device(const char *path)
-{
-    int path_len = strlen(path);
-    struct platform_node *bus;
-    const char *name = path;
-
-    if (!strncmp(path, "/devices/", 9)) {
-        name += 9;
-        if (!strncmp(name, "platform/", 9))
-            name += 9;
+    chown(path.c_str(), uid, -1);
+    if (setegid(AID_ROOT)) {
+        PLOG(FATAL) << "setegid(AID_ROOT) failed";
     }
 
-    LOG(VERBOSE) << "adding platform device " << name << " (" << path << ")";
-
-    bus = (platform_node*) calloc(1, sizeof(struct platform_node));
-    bus->path = strdup(path);
-    bus->path_len = path_len;
-    bus->name = bus->path + (name - path);
-    list_add_tail(&platform_names, &bus->list);
-}
-
-/*
- * given a path that may start with a platform device, find the length of the
- * platform device prefix.  If it doesn't start with a platform device, return
- * 0.
- */
-static struct platform_node *find_platform_device(const char *path)
-{
-    int path_len = strlen(path);
-    struct listnode *node;
-    struct platform_node *bus;
-
-    list_for_each_reverse(node, &platform_names) {
-        bus = node_to_item(node, struct platform_node, list);
-        if ((bus->path_len < path_len) &&
-                (path[bus->path_len] == '/') &&
-                !strncmp(path, bus->path, bus->path_len))
-            return bus;
-    }
-
-    return NULL;
-}
-
-static void remove_platform_device(const char *path)
-{
-    struct listnode *node;
-    struct platform_node *bus;
-
-    list_for_each_reverse(node, &platform_names) {
-        bus = node_to_item(node, struct platform_node, list);
-        if (!strcmp(path, bus->path)) {
-            LOG(INFO) << "removing platform device " << bus->name;
-            free(bus->path);
-            list_remove(node);
-            free(bus);
-            return;
-        }
+    if (!secontext.empty()) {
+        setfscreatecon(nullptr);
     }
 }
 
-/* Given a path that may start with a PCI device, populate the supplied buffer
- * with the PCI domain/bus number and the peripheral ID and return 0.
- * If it doesn't start with a PCI device, or there is some error, return -1 */
-static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
-{
-    const char *start, *end;
+// replaces any unacceptable characters with '_', the
+// length of the resulting string is equal to the input string
+void SanitizePartitionName(std::string* string) {
+    const char* accept =
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789"
+        "_-.";
 
-    if (strncmp(path, "/devices/pci", 12))
-        return -1;
+    if (!string) return;
 
-    /* Beginning of the prefix is the initial "pci" after "/devices/" */
-    start = path + 9;
-
-    /* End of the prefix is two path '/' later, capturing the domain/bus number
-     * and the peripheral ID. Example: pci0000:00/0000:00:1f.2 */
-    end = strchr(start, '/');
-    if (!end)
-        return -1;
-    end = strchr(end + 1, '/');
-    if (!end)
-        return -1;
-
-    /* Make sure we have enough room for the string plus null terminator */
-    if (end - start + 1 > buf_sz)
-        return -1;
-
-    strncpy(buf, start, end - start);
-    buf[end - start] = '\0';
-    return 0;
+    std::string::size_type pos = 0;
+    while ((pos = string->find_first_not_of(accept, pos)) != std::string::npos) {
+        (*string)[pos] = '_';
+    }
 }
 
-static void parse_event(const char *msg, struct uevent *uevent)
-{
-    uevent->action = "";
-    uevent->path = "";
-    uevent->subsystem = "";
-    uevent->firmware = "";
-    uevent->major = -1;
-    uevent->minor = -1;
-    uevent->partition_name = NULL;
-    uevent->partition_num = -1;
-    uevent->device_name = NULL;
+std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uevent) const {
+    std::string device;
+    std::string type;
 
-        /* currently ignoring SEQNUM */
-    while(*msg) {
-        if(!strncmp(msg, "ACTION=", 7)) {
-            msg += 7;
-            uevent->action = msg;
-        } else if(!strncmp(msg, "DEVPATH=", 8)) {
-            msg += 8;
-            uevent->path = msg;
-        } else if(!strncmp(msg, "SUBSYSTEM=", 10)) {
-            msg += 10;
-            uevent->subsystem = msg;
-        } else if(!strncmp(msg, "FIRMWARE=", 9)) {
-            msg += 9;
-            uevent->firmware = msg;
-        } else if(!strncmp(msg, "MAJOR=", 6)) {
-            msg += 6;
-            uevent->major = atoi(msg);
-        } else if(!strncmp(msg, "MINOR=", 6)) {
-            msg += 6;
-            uevent->minor = atoi(msg);
-        } else if(!strncmp(msg, "PARTN=", 6)) {
-            msg += 6;
-            uevent->partition_num = atoi(msg);
-        } else if(!strncmp(msg, "PARTNAME=", 9)) {
-            msg += 9;
-            uevent->partition_name = msg;
-        } else if(!strncmp(msg, "DEVNAME=", 8)) {
-            msg += 8;
-            uevent->device_name = msg;
+    if (FindPlatformDevice(uevent.path, &device)) {
+        // Skip /devices/platform or /devices/ if present
+        static const std::string devices_platform_prefix = "/devices/platform/";
+        static const std::string devices_prefix = "/devices/";
+
+        if (StartsWith(device, devices_platform_prefix.c_str())) {
+            device = device.substr(devices_platform_prefix.length());
+        } else if (StartsWith(device, devices_prefix.c_str())) {
+            device = device.substr(devices_prefix.length());
         }
 
-        /* advance to after the next \0 */
-        while(*msg++)
-            ;
-    }
-
-    if (LOG_UEVENTS) {
-        LOG(INFO) << android::base::StringPrintf("event { '%s', '%s', '%s', '%s', %d, %d }",
-                                                 uevent->action, uevent->path, uevent->subsystem,
-                                                 uevent->firmware, uevent->major, uevent->minor);
-    }
-}
-
-static char **get_character_device_symlinks(struct uevent *uevent)
-{
-    const char *parent;
-    const char *slash;
-    char **links;
-    int link_num = 0;
-    int width;
-    struct platform_node *pdev;
-
-    pdev = find_platform_device(uevent->path);
-    if (!pdev)
-        return NULL;
-
-    links = (char**) malloc(sizeof(char *) * 2);
-    if (!links)
-        return NULL;
-    memset(links, 0, sizeof(char *) * 2);
-
-    /* skip "/devices/platform/<driver>" */
-    parent = strchr(uevent->path + pdev->path_len, '/');
-    if (!parent)
-        goto err;
-
-    if (!strncmp(parent, "/usb", 4)) {
-        /* skip root hub name and device. use device interface */
-        while (*++parent && *parent != '/');
-        if (*parent)
-            while (*++parent && *parent != '/');
-        if (!*parent)
-            goto err;
-        slash = strchr(++parent, '/');
-        if (!slash)
-            goto err;
-        width = slash - parent;
-        if (width <= 0)
-            goto err;
-
-        if (asprintf(&links[link_num], "/dev/usb/%s%.*s", uevent->subsystem, width, parent) > 0)
-            link_num++;
-        else
-            links[link_num] = NULL;
-        mkdir("/dev/usb", 0755);
-    }
-    else {
-        goto err;
-    }
-
-    return links;
-err:
-    free(links);
-    return NULL;
-}
-
-static char **get_block_device_symlinks(struct uevent *uevent)
-{
-    const char *device;
-    struct platform_node *pdev;
-    const char *slash;
-    const char *type;
-    char buf[256];
-    char link_path[256];
-    int link_num = 0;
-    char *p;
-
-    pdev = find_platform_device(uevent->path);
-    if (pdev) {
-        device = pdev->name;
         type = "platform";
-    } else if (!find_pci_device_prefix(uevent->path, buf, sizeof(buf))) {
-        device = buf;
+    } else if (FindPciDevicePrefix(uevent.path, &device)) {
         type = "pci";
+    } else if (FindVbdDevicePrefix(uevent.path, &device)) {
+        type = "vbd";
     } else {
-        return NULL;
+        return {};
     }
 
-    char **links = (char**) malloc(sizeof(char *) * 4);
-    if (!links)
-        return NULL;
-    memset(links, 0, sizeof(char *) * 4);
+    std::vector<std::string> links;
 
-    LOG(INFO) << "found " << type << " device " << device;
+    LOG(VERBOSE) << "found " << type << " device " << device;
 
-    snprintf(link_path, sizeof(link_path), "/dev/block/%s/%s", type, device);
+    auto link_path = "/dev/block/" + type + "/" + device;
 
-    if (uevent->partition_name) {
-        p = strdup(uevent->partition_name);
-        sanitize(p);
-        if (strcmp(uevent->partition_name, p)) {
-            LOG(VERBOSE) << "Linking partition '" << uevent->partition_name << "' as '" << p << "'";
+    if (!uevent.partition_name.empty()) {
+        std::string partition_name_sanitized(uevent.partition_name);
+        SanitizePartitionName(&partition_name_sanitized);
+        if (partition_name_sanitized != uevent.partition_name) {
+            LOG(VERBOSE) << "Linking partition '" << uevent.partition_name << "' as '"
+                         << partition_name_sanitized << "'";
         }
-        if (asprintf(&links[link_num], "%s/by-name/%s", link_path, p) > 0)
-            link_num++;
-        else
-            links[link_num] = NULL;
-        free(p);
+        links.emplace_back(link_path + "/by-name/" + partition_name_sanitized);
     }
 
-    if (uevent->partition_num >= 0) {
-        if (asprintf(&links[link_num], "%s/by-num/p%d", link_path, uevent->partition_num) > 0)
-            link_num++;
-        else
-            links[link_num] = NULL;
+    if (uevent.partition_num >= 0) {
+        links.emplace_back(link_path + "/by-num/p" + std::to_string(uevent.partition_num));
     }
 
-    slash = strrchr(uevent->path, '/');
-    if (asprintf(&links[link_num], "%s/%s", link_path, slash + 1) > 0)
-        link_num++;
-    else
-        links[link_num] = NULL;
+    auto last_slash = uevent.path.rfind('/');
+    links.emplace_back(link_path + "/" + uevent.path.substr(last_slash + 1));
 
     return links;
 }
 
-static void make_link_init(const char* oldpath, const char* newpath) {
-  const char* slash = strrchr(newpath, '/');
-  if (!slash) return;
+void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath, bool block,
+                                 int major, int minor, const std::vector<std::string>& links) const {
+    if (action == "add") {
+        MakeDevice(devpath, block, major, minor, links);
+        for (const auto& link : links) {
+            if (!mkdir_recursive(Dirname(link), 0755)) {
+                PLOG(ERROR) << "Failed to create directory " << Dirname(link);
+            }
 
-  if (mkdir_recursive(dirname(newpath), 0755)) {
-    PLOG(ERROR) << "Failed to create directory " << dirname(newpath);
-  }
-
-  if (symlink(oldpath, newpath) && errno != EEXIST) {
-    PLOG(ERROR) << "Failed to symlink " << oldpath << " to " << newpath;
-  }
-}
-
-static void remove_link(const char* oldpath, const char* newpath) {
-  std::string path;
-  if (android::base::Readlink(newpath, &path) && path == oldpath) unlink(newpath);
-}
-
-static void handle_device(const char *action, const char *devpath,
-        const char *path, int block, int major, int minor, char **links)
-{
-    if(!strcmp(action, "add")) {
-        make_device(devpath, path, block, major, minor, (const char **)links);
-        if (links) {
-            for (int i = 0; links[i]; i++) {
-                make_link_init(devpath, links[i]);
+            if (symlink(devpath.c_str(), link.c_str()) && errno != EEXIST) {
+                PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link;
             }
         }
     }
 
-    if(!strcmp(action, "remove")) {
-        if (links) {
-            for (int i = 0; links[i]; i++) {
-                remove_link(devpath, links[i]);
+    if (action == "remove") {
+        for (const auto& link : links) {
+            std::string link_path;
+            if (Readlink(link, &link_path) && link_path == devpath) {
+                unlink(link.c_str());
             }
         }
-        unlink(devpath);
+        unlink(devpath.c_str());
+    }
+}
+
+void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
+    if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
+        FixupSysPermissions(uevent.path, uevent.subsystem);
     }
 
-    if (links) {
-        for (int i = 0; links[i]; i++) {
-            free(links[i]);
+    // if it's not a /dev device, nothing to do
+    if (uevent.major < 0 || uevent.minor < 0) return;
+
+    std::string devpath;
+    std::vector<std::string> links;
+    bool block = false;
+
+    if (uevent.subsystem == "block") {
+        block = true;
+        devpath = "/dev/block/" + Basename(uevent.path);
+
+        if (StartsWith(uevent.path, "/devices")) {
+            links = GetBlockDeviceSymlinks(uevent);
         }
-        free(links);
-    }
-}
-
-static void handle_platform_device_event(struct uevent *uevent)
-{
-    const char *path = uevent->path;
-
-    if (!strcmp(uevent->action, "add"))
-        add_platform_device(path);
-    else if (!strcmp(uevent->action, "remove"))
-        remove_platform_device(path);
-}
-
-static const char *parse_device_name(struct uevent *uevent, unsigned int len)
-{
-    const char *name;
-
-    /* if it's not a /dev device, nothing else to do */
-    if((uevent->major < 0) || (uevent->minor < 0))
-        return NULL;
-
-    /* do we have a name? */
-    name = strrchr(uevent->path, '/');
-    if(!name)
-        return NULL;
-    name++;
-
-    /* too-long names would overrun our buffer */
-    if(strlen(name) > len) {
-        LOG(ERROR) << "DEVPATH=" << name << " exceeds " << len << "-character limit on filename; ignoring event";
-        return NULL;
-    }
-
-    return name;
-}
-
-#define DEVPATH_LEN 96
-#define MAX_DEV_NAME 64
-
-static void handle_block_device_event(struct uevent *uevent)
-{
-    const char *base = "/dev/block/";
-    const char *name;
-    char devpath[DEVPATH_LEN];
-    char **links = NULL;
-
-    name = parse_device_name(uevent, MAX_DEV_NAME);
-    if (!name)
-        return;
-
-    snprintf(devpath, sizeof(devpath), "%s%s", base, name);
-    make_dir(base, 0755);
-
-    if (!strncmp(uevent->path, "/devices/", 9))
-        links = get_block_device_symlinks(uevent);
-
-    handle_device(uevent->action, devpath, uevent->path, 1,
-            uevent->major, uevent->minor, links);
-}
-
-static bool assemble_devpath(char *devpath, const char *dirname,
-        const char *devname)
-{
-    int s = snprintf(devpath, DEVPATH_LEN, "%s/%s", dirname, devname);
-    if (s < 0) {
-        PLOG(ERROR) << "failed to assemble device path; ignoring event";
-        return false;
-    } else if (s >= DEVPATH_LEN) {
-        LOG(ERROR) << dirname << "/" << devname
-                   << " exceeds " << DEVPATH_LEN << "-character limit on path; ignoring event";
-        return false;
-    }
-    return true;
-}
-
-static void mkdir_recursive_for_devpath(const char *devpath)
-{
-    char dir[DEVPATH_LEN];
-    char *slash;
-
-    strcpy(dir, devpath);
-    slash = strrchr(dir, '/');
-    *slash = '\0';
-    mkdir_recursive(dir, 0755);
-}
-
-static void handle_generic_device_event(struct uevent *uevent)
-{
-    const char *base;
-    const char *name;
-    char devpath[DEVPATH_LEN] = {0};
-    char **links = NULL;
-
-    name = parse_device_name(uevent, MAX_DEV_NAME);
-    if (!name)
-        return;
-
-    struct ueventd_subsystem *subsystem =
-            ueventd_subsystem_find_by_name(uevent->subsystem);
-
-    if (subsystem) {
-        const char *devname;
-
-        switch (subsystem->devname_src) {
-        case DEVNAME_UEVENT_DEVNAME:
-            devname = uevent->device_name;
-            break;
-
-        case DEVNAME_UEVENT_DEVPATH:
-            devname = name;
-            break;
-
-        default:
-            LOG(ERROR) << uevent->subsystem << " subsystem's devpath option is not set; ignoring event";
-            return;
+    } else if (const auto subsystem =
+                   std::find(subsystems_.cbegin(), subsystems_.cend(), uevent.subsystem);
+               subsystem != subsystems_.cend()) {
+        devpath = subsystem->ParseDevPath(uevent);
+    } else if (uevent.subsystem == "usb") {
+        if (!uevent.device_name.empty()) {
+            devpath = "/dev/" + uevent.device_name;
+        } else {
+            // This imitates the file system that would be created
+            // if we were using devfs instead.
+            // Minors are broken up into groups of 128, starting at "001"
+            int bus_id = uevent.minor / 128 + 1;
+            int device_id = uevent.minor % 128 + 1;
+            devpath = StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
         }
-
-        if (!assemble_devpath(devpath, subsystem->dirname, devname))
-            return;
-        mkdir_recursive_for_devpath(devpath);
-    } else if (!strncmp(uevent->subsystem, "usb", 3)) {
-         if (!strcmp(uevent->subsystem, "usb")) {
-            if (uevent->device_name) {
-                if (!assemble_devpath(devpath, "/dev", uevent->device_name))
-                    return;
-                mkdir_recursive_for_devpath(devpath);
-             }
-             else {
-                 /* This imitates the file system that would be created
-                  * if we were using devfs instead.
-                  * Minors are broken up into groups of 128, starting at "001"
-                  */
-                 int bus_id = uevent->minor / 128 + 1;
-                 int device_id = uevent->minor % 128 + 1;
-                 /* build directories */
-                 make_dir("/dev/bus", 0755);
-                 make_dir("/dev/bus/usb", 0755);
-                 snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d", bus_id);
-                 make_dir(devpath, 0755);
-                 snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
-             }
-         } else {
-             /* ignore other USB events */
-             return;
-         }
-     } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
-         base = "/dev/graphics/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "drm", 3)) {
-         base = "/dev/dri/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
-         base = "/dev/oncrpc/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
-         base = "/dev/adsp/";
-         make_dir(base, 0755);
-     } else if (!strncmp(uevent->subsystem, "msm_camera", 10)) {
-         base = "/dev/msm_camera/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "input", 5)) {
-         base = "/dev/input/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
-         base = "/dev/mtd/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "sound", 5)) {
-         base = "/dev/snd/";
-         make_dir(base, 0755);
-     } else if(!strncmp(uevent->subsystem, "misc", 4) && !strncmp(name, "log_", 4)) {
-         LOG(INFO) << "kernel logger is deprecated";
-         base = "/dev/log/";
-         make_dir(base, 0755);
-         name += 4;
-     } else
-         base = "/dev/";
-     links = get_character_device_symlinks(uevent);
-
-     if (!devpath[0])
-         snprintf(devpath, sizeof(devpath), "%s%s", base, name);
-
-     handle_device(uevent->action, devpath, uevent->path, 0,
-             uevent->major, uevent->minor, links);
-}
-
-static void handle_device_event(struct uevent *uevent)
-{
-    if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change") || !strcmp(uevent->action, "online"))
-        fixup_sys_perms(uevent->path, uevent->subsystem);
-
-    if (!strncmp(uevent->subsystem, "block", 5)) {
-        handle_block_device_event(uevent);
-    } else if (!strncmp(uevent->subsystem, "platform", 8)) {
-        handle_platform_device_event(uevent);
+    } else if (StartsWith(uevent.subsystem, "usb")) {
+        // ignore other USB events
+        return;
     } else {
-        handle_generic_device_event(uevent);
+        devpath = "/dev/" + Basename(uevent.path);
     }
+
+    mkdir_recursive(Dirname(devpath), 0755);
+
+    HandleDevice(uevent.action, devpath, block, uevent.major, uevent.minor, links);
 }
 
-static void load_firmware(uevent* uevent, const std::string& root,
-                          int fw_fd, size_t fw_size,
-                          int loading_fd, int data_fd) {
-    // Start transfer.
-    android::base::WriteFully(loading_fd, "1", 1);
+DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
+                             std::vector<SysfsPermissions> sysfs_permissions,
+                             std::vector<Subsystem> subsystems, bool skip_restorecon)
+    : dev_permissions_(std::move(dev_permissions)),
+      sysfs_permissions_(std::move(sysfs_permissions)),
+      subsystems_(std::move(subsystems)),
+      skip_restorecon_(skip_restorecon),
+      sysfs_mount_point_("/sys") {}
 
-    // Copy the firmware.
-    int rc = sendfile(data_fd, fw_fd, nullptr, fw_size);
-    if (rc == -1) {
-        PLOG(ERROR) << "firmware: sendfile failed { '" << root << "', '" << uevent->firmware << "' }";
-    }
+DeviceHandler::DeviceHandler()
+    : DeviceHandler(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
+                    std::vector<Subsystem>{}, false) {}
 
-    // Tell the firmware whether to abort or commit.
-    const char* response = (rc != -1) ? "0" : "-1";
-    android::base::WriteFully(loading_fd, response, strlen(response));
-}
-
-static int is_booting() {
-    return access("/dev/.booting", F_OK) == 0;
-}
-
-static void process_firmware_event(uevent* uevent) {
-    int booting = is_booting();
-
-    LOG(INFO) << "firmware: loading '" << uevent->firmware << "' for '" << uevent->path << "'";
-
-    std::string root = android::base::StringPrintf("/sys%s", uevent->path);
-    std::string loading = root + "/loading";
-    std::string data = root + "/data";
-
-    android::base::unique_fd loading_fd(open(loading.c_str(), O_WRONLY|O_CLOEXEC));
-    if (loading_fd == -1) {
-        PLOG(ERROR) << "couldn't open firmware loading fd for " << uevent->firmware;
-        return;
-    }
-
-    android::base::unique_fd data_fd(open(data.c_str(), O_WRONLY|O_CLOEXEC));
-    if (data_fd == -1) {
-        PLOG(ERROR) << "couldn't open firmware data fd for " << uevent->firmware;
-        return;
-    }
-
-try_loading_again:
-    for (size_t i = 0; i < arraysize(firmware_dirs); i++) {
-        std::string file = android::base::StringPrintf("%s/%s", firmware_dirs[i], uevent->firmware);
-        android::base::unique_fd fw_fd(open(file.c_str(), O_RDONLY|O_CLOEXEC));
-        struct stat sb;
-        if (fw_fd != -1 && fstat(fw_fd, &sb) != -1) {
-            load_firmware(uevent, root, fw_fd, sb.st_size, loading_fd, data_fd);
-            return;
-        }
-    }
-
-    if (booting) {
-        // If we're not fully booted, we may be missing
-        // filesystems needed for firmware, wait and retry.
-        std::this_thread::sleep_for(100ms);
-        booting = is_booting();
-        goto try_loading_again;
-    }
-
-    LOG(ERROR) << "firmware: could not find firmware for " << uevent->firmware;
-
-    // Write "-1" as our response to the kernel's firmware request, since we have nothing for it.
-    write(loading_fd, "-1", 2);
-}
-
-static void handle_firmware_event(uevent* uevent) {
-    if (strcmp(uevent->subsystem, "firmware")) return;
-    if (strcmp(uevent->action, "add")) return;
-
-    // Loading the firmware in a child means we can do that in parallel...
-    // (We ignore SIGCHLD rather than wait for our children.)
-    pid_t pid = fork();
-    if (pid == 0) {
-        Timer t;
-        process_firmware_event(uevent);
-        LOG(INFO) << "loading " << uevent->path << " took " << t;
-        _exit(EXIT_SUCCESS);
-    } else if (pid == -1) {
-        PLOG(ERROR) << "could not fork to process firmware event for " << uevent->firmware;
-    }
-}
-
-#define UEVENT_MSG_LEN  2048
-
-static inline void handle_device_fd_with(void (handle_uevent)(struct uevent*))
-{
-    char msg[UEVENT_MSG_LEN+2];
-    int n;
-    while ((n = uevent_kernel_multicast_recv(device_fd, msg, UEVENT_MSG_LEN)) > 0) {
-        if(n >= UEVENT_MSG_LEN)   /* overflow -- discard */
-            continue;
-
-        msg[n] = '\0';
-        msg[n+1] = '\0';
-
-        struct uevent uevent;
-        parse_event(msg, &uevent);
-        handle_uevent(&uevent);
-    }
-}
-
-void handle_device_fd()
-{
-    handle_device_fd_with(
-        [](struct uevent *uevent) {
-            if (selinux_status_updated() > 0) {
-                struct selabel_handle *sehandle2;
-                sehandle2 = selinux_android_file_context_handle();
-                if (sehandle2) {
-                    selabel_close(sehandle);
-                    sehandle = sehandle2;
-                }
-            }
-
-            handle_device_event(uevent);
-            handle_firmware_event(uevent);
-        });
-}
-
-/* Coldboot walks parts of the /sys tree and pokes the uevent files
-** to cause the kernel to regenerate device add events that happened
-** before init's device manager was started
-**
-** We drain any pending events from the netlink socket every time
-** we poke another uevent file to make sure we don't overrun the
-** socket's buffer.
-*/
-
-static void do_coldboot(DIR *d)
-{
-    struct dirent *de;
-    int dfd, fd;
-
-    dfd = dirfd(d);
-
-    fd = openat(dfd, "uevent", O_WRONLY);
-    if(fd >= 0) {
-        write(fd, "add\n", 4);
-        close(fd);
-        handle_device_fd();
-    }
-
-    while((de = readdir(d))) {
-        DIR *d2;
-
-        if(de->d_type != DT_DIR || de->d_name[0] == '.')
-            continue;
-
-        fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY);
-        if(fd < 0)
-            continue;
-
-        d2 = fdopendir(fd);
-        if(d2 == 0)
-            close(fd);
-        else {
-            do_coldboot(d2);
-            closedir(d2);
-        }
-    }
-}
-
-static void coldboot(const char *path)
-{
-    std::unique_ptr<DIR, decltype(&closedir)> d(opendir(path), closedir);
-    if(d) {
-        do_coldboot(d.get());
-    }
-}
-
-static void early_uevent_handler(struct uevent *uevent, const char *base, bool is_block)
-{
-    const char *name;
-    char devpath[DEVPATH_LEN];
-
-    if (is_block && strncmp(uevent->subsystem, "block", 5))
-        return;
-
-    name = parse_device_name(uevent, MAX_DEV_NAME);
-    if (!name) {
-        LOG(ERROR) << "Failed to parse dev name from uevent: " << uevent->action
-                   << " " << uevent->partition_name << " " << uevent->partition_num
-                   << " " << uevent->major << ":" << uevent->minor;
-        return;
-    }
-
-    snprintf(devpath, sizeof(devpath), "%s%s", base, name);
-    make_dir(base, 0755);
-
-    dev_t dev = makedev(uevent->major, uevent->minor);
-    mode_t mode = 0600 | (is_block ? S_IFBLK : S_IFCHR);
-    mknod(devpath, mode, dev);
-}
-
-void early_create_dev(const std::string& syspath, early_device_type dev_type)
-{
-    android::base::unique_fd dfd(open(syspath.c_str(), O_RDONLY));
-    if (dfd < 0) {
-        LOG(ERROR) << "Failed to open " << syspath;
-        return;
-    }
-
-    android::base::unique_fd fd(openat(dfd, "uevent", O_WRONLY));
-    if (fd < 0) {
-        LOG(ERROR) << "Failed to open " << syspath << "/uevent";
-        return;
-    }
-
-    fcntl(device_fd, F_SETFL, O_NONBLOCK);
-
-    write(fd, "add\n", 4);
-    handle_device_fd_with(dev_type == EARLY_BLOCK_DEV ?
-        [](struct uevent *uevent) {
-            early_uevent_handler(uevent, "/dev/block/", true);
-        } :
-        [](struct uevent *uevent) {
-            early_uevent_handler(uevent, "/dev/", false);
-        });
-}
-
-int early_device_socket_open() {
-    device_fd = uevent_open_socket(256*1024, true);
-    return device_fd < 0;
-}
-
-void early_device_socket_close() {
-    close(device_fd);
-}
-
-void device_init() {
-    sehandle = selinux_android_file_context_handle();
-    selinux_status_open(true);
-
-    /* is 256K enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(256*1024, true);
-    if (device_fd == -1) {
-        return;
-    }
-    fcntl(device_fd, F_SETFL, O_NONBLOCK);
-
-    if (access(COLDBOOT_DONE, F_OK) == 0) {
-        LOG(VERBOSE) << "Skipping coldboot, already done!";
-        return;
-    }
-
-    Timer t;
-    coldboot("/sys/class");
-    coldboot("/sys/block");
-    coldboot("/sys/devices");
-    close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
-    LOG(INFO) << "Coldboot took " << t;
-}
-
-int get_device_fd() {
-    return device_fd;
-}
+}  // namespace init
+}  // namespace android

@@ -34,6 +34,8 @@
 
 using namespace std::chrono_literals;
 
+namespace android {
+
 class ThreadListTest : public ::testing::TestWithParam<int> {
  public:
   ThreadListTest() : stop_(false) {}
@@ -45,17 +47,15 @@ class ThreadListTest : public ::testing::TestWithParam<int> {
     WaitForThreads();
   }
 
-  virtual void TearDown() {
-    ASSERT_TRUE(heap.empty());
-  }
+  virtual void TearDown() { ASSERT_TRUE(heap.empty()); }
 
  protected:
-  template<class Function>
+  template <class Function>
   void StartThreads(unsigned int threads, Function&& func) {
     threads_.reserve(threads);
     tids_.reserve(threads);
     for (unsigned int i = 0; i < threads; i++) {
-      threads_.emplace_back([&, i, threads, this]() {
+      threads_.emplace_back([&, threads, this]() {
         {
           std::lock_guard<std::mutex> lk(m_);
           tids_.push_back(gettid());
@@ -68,14 +68,14 @@ class ThreadListTest : public ::testing::TestWithParam<int> {
 
         {
           std::unique_lock<std::mutex> lk(m_);
-          cv_stop_.wait(lk, [&] {return stop_;});
+          cv_stop_.wait(lk, [&] { return stop_; });
         }
       });
     }
 
     {
       std::unique_lock<std::mutex> lk(m_);
-      cv_start_.wait(lk, [&]{ return tids_.size() == threads; });
+      cv_start_.wait(lk, [&] { return tids_.size() == threads; });
     }
   }
 
@@ -93,9 +93,7 @@ class ThreadListTest : public ::testing::TestWithParam<int> {
     tids_.clear();
   }
 
-  std::vector<pid_t>& tids() {
-    return tids_;
-  }
+  std::vector<pid_t>& tids() { return tids_; }
 
   Heap heap;
 
@@ -143,7 +141,7 @@ TEST_F(ThreadListTest, list_one) {
 TEST_P(ThreadListTest, list_some) {
   const unsigned int threads = GetParam() - 1;
 
-  StartThreads(threads, [](){});
+  StartThreads(threads, []() {});
   std::vector<pid_t> expected_tids = tids();
   expected_tids.push_back(getpid());
 
@@ -176,10 +174,8 @@ class ThreadCaptureTest : public ThreadListTest {
  public:
   ThreadCaptureTest() {}
   ~ThreadCaptureTest() {}
-  void Fork(std::function<void()>&& child_init,
-      std::function<void()>&& child_cleanup,
-      std::function<void(pid_t)>&& parent) {
-
+  void Fork(std::function<void()>&& child_init, std::function<void()>&& child_cleanup,
+            std::function<void(pid_t)>&& parent) {
     ScopedPipe start_pipe;
     ScopedPipe stop_pipe;
 
@@ -211,39 +207,40 @@ class ThreadCaptureTest : public ThreadListTest {
 TEST_P(ThreadCaptureTest, capture_some) {
   const unsigned int threads = GetParam();
 
-  Fork([&](){
-    // child init
-    StartThreads(threads - 1, [](){});
-  },
-  [&](){
-    // child cleanup
-    StopThreads();
-  },
-  [&](pid_t child){
-    // parent
-    ASSERT_GT(child, 0);
+  Fork(
+      [&]() {
+        // child init
+        StartThreads(threads - 1, []() {});
+      },
+      [&]() {
+        // child cleanup
+        StopThreads();
+      },
+      [&](pid_t child) {
+        // parent
+        ASSERT_GT(child, 0);
 
-    {
-      ScopedDisableMallocTimeout disable_malloc;
+        {
+          ScopedDisableMallocTimeout disable_malloc;
 
-      ThreadCapture thread_capture(child, heap);
-      auto list_tids = allocator::vector<pid_t>(heap);
+          ThreadCapture thread_capture(child, heap);
+          auto list_tids = allocator::vector<pid_t>(heap);
 
-      ASSERT_TRUE(thread_capture.ListThreads(list_tids));
-      ASSERT_EQ(threads, list_tids.size());
+          ASSERT_TRUE(thread_capture.ListThreads(list_tids));
+          ASSERT_EQ(threads, list_tids.size());
 
-      ASSERT_TRUE(thread_capture.CaptureThreads());
+          ASSERT_TRUE(thread_capture.CaptureThreads());
 
-      auto thread_info = allocator::vector<ThreadInfo>(heap);
-      ASSERT_TRUE(thread_capture.CapturedThreadInfo(thread_info));
-      ASSERT_EQ(threads, thread_info.size());
-      ASSERT_TRUE(thread_capture.ReleaseThreads());
+          auto thread_info = allocator::vector<ThreadInfo>(heap);
+          ASSERT_TRUE(thread_capture.CapturedThreadInfo(thread_info));
+          ASSERT_EQ(threads, thread_info.size());
+          ASSERT_TRUE(thread_capture.ReleaseThreads());
 
-      if (!HasFailure()) {
-        ASSERT_FALSE(disable_malloc.timed_out());
-      }
-}
-  });
+          if (!HasFailure()) {
+            ASSERT_FALSE(disable_malloc.timed_out());
+          }
+        }
+      });
 }
 
 INSTANTIATE_TEST_CASE_P(ThreadCaptureTest, ThreadCaptureTest, ::testing::Values(1, 2, 10, 1024));
@@ -262,7 +259,7 @@ TEST_F(ThreadCaptureTest, capture_kill) {
       ScopedDisableMallocTimeout disable_malloc;
 
       ThreadCapture thread_capture(ret, heap);
-      thread_capture.InjectTestFunc([&](pid_t tid){
+      thread_capture.InjectTestFunc([&](pid_t tid) {
         syscall(SYS_tgkill, ret, tid, SIGKILL);
         usleep(10000);
       });
@@ -288,62 +285,65 @@ TEST_F(ThreadCaptureTest, capture_signal) {
   // For signal handler
   static ScopedPipe* g_pipe;
 
-  Fork([&](){
-    // child init
-    pipe.CloseReceiver();
+  Fork(
+      [&]() {
+        // child init
+        pipe.CloseReceiver();
 
-    g_pipe = &pipe;
+        g_pipe = &pipe;
 
-    struct sigaction act{};
-    act.sa_handler = [](int){
-      char buf = '+';
-      write(g_pipe->Sender(), &buf, 1);
-      g_pipe->CloseSender();
-    };
-    sigaction(sig, &act, NULL);
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, sig);
-    pthread_sigmask(SIG_UNBLOCK, &set, NULL);
-  },
-  [&](){
-    // child cleanup
-    g_pipe = nullptr;
-    pipe.Close();
-  },
-  [&](pid_t child){
-    // parent
-    ASSERT_GT(child, 0);
-    pipe.CloseSender();
+        struct sigaction act {};
+        act.sa_handler = [](int) {
+          char buf = '+';
+          write(g_pipe->Sender(), &buf, 1);
+          g_pipe->CloseSender();
+        };
+        sigaction(sig, &act, NULL);
+        sigset_t set;
+        sigemptyset(&set);
+        sigaddset(&set, sig);
+        pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+      },
+      [&]() {
+        // child cleanup
+        g_pipe = nullptr;
+        pipe.Close();
+      },
+      [&](pid_t child) {
+        // parent
+        ASSERT_GT(child, 0);
+        pipe.CloseSender();
 
-    {
-      ScopedDisableMallocTimeout disable_malloc;
+        {
+          ScopedDisableMallocTimeout disable_malloc;
 
-      ThreadCapture thread_capture(child, heap);
-      thread_capture.InjectTestFunc([&](pid_t tid){
-        syscall(SYS_tgkill, child, tid, sig);
-        usleep(10000);
+          ThreadCapture thread_capture(child, heap);
+          thread_capture.InjectTestFunc([&](pid_t tid) {
+            syscall(SYS_tgkill, child, tid, sig);
+            usleep(10000);
+          });
+          auto list_tids = allocator::vector<pid_t>(heap);
+
+          ASSERT_TRUE(thread_capture.ListThreads(list_tids));
+          ASSERT_EQ(1U, list_tids.size());
+
+          ASSERT_TRUE(thread_capture.CaptureThreads());
+
+          auto thread_info = allocator::vector<ThreadInfo>(heap);
+          ASSERT_TRUE(thread_capture.CapturedThreadInfo(thread_info));
+          ASSERT_EQ(1U, thread_info.size());
+          ASSERT_TRUE(thread_capture.ReleaseThreads());
+
+          usleep(100000);
+          char buf;
+          ASSERT_EQ(1, TEMP_FAILURE_RETRY(read(pipe.Receiver(), &buf, 1)));
+          ASSERT_EQ(buf, '+');
+
+          if (!HasFailure()) {
+            ASSERT_FALSE(disable_malloc.timed_out());
+          }
+        }
       });
-      auto list_tids = allocator::vector<pid_t>(heap);
-
-      ASSERT_TRUE(thread_capture.ListThreads(list_tids));
-      ASSERT_EQ(1U, list_tids.size());
-
-      ASSERT_TRUE(thread_capture.CaptureThreads());
-
-      auto thread_info = allocator::vector<ThreadInfo>(heap);
-      ASSERT_TRUE(thread_capture.CapturedThreadInfo(thread_info));
-      ASSERT_EQ(1U, thread_info.size());
-      ASSERT_TRUE(thread_capture.ReleaseThreads());
-
-      usleep(100000);
-      char buf;
-      ASSERT_EQ(1, TEMP_FAILURE_RETRY(read(pipe.Receiver(), &buf, 1)));
-      ASSERT_EQ(buf, '+');
-
-      if (!HasFailure()) {
-        ASSERT_FALSE(disable_malloc.timed_out());
-      }
-    }
-  });
 }
+
+}  // namespace android

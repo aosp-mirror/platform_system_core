@@ -17,6 +17,37 @@
 #ifndef ANDROID_BASE_LOGGING_H
 #define ANDROID_BASE_LOGGING_H
 
+//
+// Google-style C++ logging.
+//
+
+// This header provides a C++ stream interface to logging.
+//
+// To log:
+//
+//   LOG(INFO) << "Some text; " << some_value;
+//
+// Replace `INFO` with any severity from `enum LogSeverity`.
+//
+// To log the result of a failed function and include the string
+// representation of `errno` at the end:
+//
+//   PLOG(ERROR) << "Write failed";
+//
+// The output will be something like `Write failed: I/O error`.
+// Remember this as 'P' as in perror(3).
+//
+// To output your own types, simply implement operator<< as normal.
+//
+// By default, output goes to logcat on Android and stderr on the host.
+// A process can use `SetLogger` to decide where all logging goes.
+// Implementations are provided for logcat, stderr, and dmesg.
+
+// This header also provides assertions:
+//
+//   CHECK(must_be_true);
+//   CHECK_EQ(a, b) << z_is_interesting_too;
+
 // NOTE: For Windows, you must include logging.h after windows.h to allow the
 // following code to suppress the evil ERROR macro:
 #ifdef _WIN32
@@ -133,9 +164,31 @@ class ErrnoRestorer {
   using ::android::base::FATAL;               \
   return (severity); }())
 
+#ifdef __clang_analyzer__
+// Clang's static analyzer does not see the conditional statement inside
+// LogMessage's destructor that will abort on FATAL severity.
+#define ABORT_AFTER_LOG_FATAL for (;; abort())
+
+struct LogAbortAfterFullExpr {
+  ~LogAbortAfterFullExpr() __attribute__((noreturn)) { abort(); }
+  explicit operator bool() const { return false; }
+};
+// Provides an expression that evaluates to the truthiness of `x`, automatically
+// aborting if `c` is true.
+#define ABORT_AFTER_LOG_EXPR_IF(c, x) (((c) && ::android::base::LogAbortAfterFullExpr()) || (x))
+// Note to the static analyzer that we always execute FATAL logs in practice.
+#define MUST_LOG_MESSAGE(severity) (SEVERITY_LAMBDA(severity) == ::android::base::FATAL)
+#else
+#define ABORT_AFTER_LOG_FATAL
+#define ABORT_AFTER_LOG_EXPR_IF(c, x) (x)
+#define MUST_LOG_MESSAGE(severity) false
+#endif
+#define ABORT_AFTER_LOG_FATAL_EXPR(x) ABORT_AFTER_LOG_EXPR_IF(true, x)
+
 // Defines whether the given severity will be logged or silently swallowed.
 #define WOULD_LOG(severity) \
-  UNLIKELY((SEVERITY_LAMBDA(severity)) >= ::android::base::GetMinimumLogSeverity())
+  (UNLIKELY((SEVERITY_LAMBDA(severity)) >= ::android::base::GetMinimumLogSeverity()) || \
+   MUST_LOG_MESSAGE(severity))
 
 // Get an ostream that can be used for logging at the given severity and to the default
 // destination.
@@ -159,41 +212,34 @@ class ErrnoRestorer {
 //     LOG(FATAL) << "We didn't expect to reach here";
 #define LOG(severity) LOG_TO(DEFAULT, severity)
 
+// Checks if we want to log something, and sets up appropriate RAII objects if
+// so.
+// Note: DO NOT USE DIRECTLY. This is an implementation detail.
+#define LOGGING_PREAMBLE(severity)                                                         \
+  (WOULD_LOG(severity) &&                                                                  \
+   ABORT_AFTER_LOG_EXPR_IF((SEVERITY_LAMBDA(severity)) == ::android::base::FATAL, true) && \
+   ::android::base::ErrnoRestorer())
+
 // Logs a message to logcat with the specified log ID on Android otherwise to
 // stderr. If the severity is FATAL it also causes an abort.
-// Use an if-else statement instead of just an if statement here. So if there is a
-// else statement after LOG() macro, it won't bind to the if statement in the macro.
-// do-while(0) statement doesn't work here. Because we need to support << operator
-// following the macro, like "LOG(DEBUG) << xxx;".
-
-#define LOG_TO(dest, severity) \
-  WOULD_LOG(severity) &&                   \
-    ::android::base::ErrnoRestorer() &&    \
-      LOG_STREAM_TO(dest, severity)
+// Use an expression here so we can support the << operator following the macro,
+// like "LOG(DEBUG) << xxx;".
+#define LOG_TO(dest, severity) LOGGING_PREAMBLE(severity) && LOG_STREAM_TO(dest, severity)
 
 // A variant of LOG that also logs the current errno value. To be used when
 // library calls fail.
 #define PLOG(severity) PLOG_TO(DEFAULT, severity)
 
 // Behaves like PLOG, but logs to the specified log ID.
-#define PLOG_TO(dest, severity)                         \
-  WOULD_LOG(SEVERITY_LAMBDA(severity)) &&               \
-    ::android::base::ErrnoRestorer() &&                 \
-      ::android::base::LogMessage(__FILE__, __LINE__,   \
-          ::android::base::dest,                        \
-          SEVERITY_LAMBDA(severity), errno).stream()
+#define PLOG_TO(dest, severity)                                              \
+  LOGGING_PREAMBLE(severity) &&                                              \
+      ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::dest, \
+                                  SEVERITY_LAMBDA(severity), errno)          \
+          .stream()
 
 // Marker that code is yet to be implemented.
 #define UNIMPLEMENTED(level) \
   LOG(level) << __PRETTY_FUNCTION__ << " unimplemented "
-
-#ifdef __clang_analyzer__
-// ClangL static analyzer does not see the conditional statement inside
-// LogMessage's destructor that will abort on FATAL severity.
-#define ABORT_AFTER_LOG_FATAL for (;;abort())
-#else
-#define ABORT_AFTER_LOG_FATAL
-#endif
 
 // Check whether condition x holds and LOG(FATAL) if not. The value of the
 // expression x is only evaluated once. Extra logging can be appended using <<
@@ -201,12 +247,12 @@ class ErrnoRestorer {
 //
 //     CHECK(false == true) results in a log message of
 //       "Check failed: false == true".
-#define CHECK(x)                                                              \
-  LIKELY((x)) ||                                                              \
-    ABORT_AFTER_LOG_FATAL                                                     \
-    ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT, \
-                                ::android::base::FATAL, -1).stream()          \
-        << "Check failed: " #x << " "
+#define CHECK(x)                                                                \
+  LIKELY((x)) || ABORT_AFTER_LOG_FATAL_EXPR(false) ||                           \
+      ::android::base::LogMessage(                                              \
+          __FILE__, __LINE__, ::android::base::DEFAULT, ::android::base::FATAL, \
+          -1).stream()                                                          \
+          << "Check failed: " #x << " "
 
 // Helper for CHECK_xx(x,y) macros.
 #define CHECK_OP(LHS, RHS, OP)                                              \
@@ -273,7 +319,7 @@ class ErrnoRestorer {
 // DCHECKs are debug variants of CHECKs only enabled in debug builds. Generally
 // CHECK should be used unless profiling identifies a CHECK as being in
 // performance critical code.
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(__clang_analyzer__)
 static constexpr bool kEnableDChecks = false;
 #else
 static constexpr bool kEnableDChecks = true;
@@ -297,7 +343,7 @@ static constexpr bool kEnableDChecks = true;
   if (::android::base::kEnableDChecks) CHECK_STREQ(s1, s2)
 #define DCHECK_STRNE(s1, s2) \
   if (::android::base::kEnableDChecks) CHECK_STRNE(s1, s2)
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(__clang_analyzer__)
 #define DCHECK_CONSTEXPR(x, out, dummy)
 #else
 #define DCHECK_CONSTEXPR(x, out, dummy) CHECK_CONSTEXPR(x, out, dummy)
@@ -391,5 +437,37 @@ class ScopedLogSeverity {
 
 }  // namespace base
 }  // namespace android
+
+namespace std {
+
+// Emit a warning of ostream<< with std::string*. The intention was most likely to print *string.
+//
+// Note: for this to work, we need to have this in a namespace.
+// Note: lots of ifdef magic to make this work with Clang (platform) vs GCC (windows tools)
+// Note: using diagnose_if(true) under Clang and nothing under GCC/mingw as there is no common
+//       attribute support.
+// Note: using a pragma because "-Wgcc-compat" (included in "-Weverything") complains about
+//       diagnose_if.
+// Note: to print the pointer, use "<< static_cast<const void*>(string_pointer)" instead.
+// Note: a not-recommended alternative is to let Clang ignore the warning by adding
+//       -Wno-user-defined-warnings to CPPFLAGS.
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgcc-compat"
+#define OSTREAM_STRING_POINTER_USAGE_WARNING \
+    __attribute__((diagnose_if(true, "Unexpected logging of string pointer", "warning")))
+#else
+#define OSTREAM_STRING_POINTER_USAGE_WARNING /* empty */
+#endif
+inline std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer)
+    OSTREAM_STRING_POINTER_USAGE_WARNING {
+  return stream << static_cast<const void*>(string_pointer);
+}
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#undef OSTREAM_STRING_POINTER_USAGE_WARNING
+
+}  // namespace std
 
 #endif  // ANDROID_BASE_LOGGING_H

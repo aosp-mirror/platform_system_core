@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-#include <errno.h>
+#include "keychords.h"
+
 #include <fcntl.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <linux/keychord.h>
 #include <unistd.h>
 
+#include <android-base/logging.h>
+#include <android-base/properties.h>
+
 #include "init.h"
-#include "log.h"
-#include "property_service.h"
-#include "service.h"
+
+namespace android {
+namespace init {
 
 static struct input_keychord *keychords = 0;
 static int keychords_count = 0;
@@ -74,12 +77,15 @@ static void handle_keychord() {
     }
 
     // Only handle keychords if adb is enabled.
-    std::string adb_enabled = property_get("init.svc.adbd");
+    std::string adb_enabled = android::base::GetProperty("init.svc.adbd", "");
     if (adb_enabled == "running") {
-        Service* svc = ServiceManager::GetInstance().FindServiceByKeychord(id);
+        Service* svc = ServiceList::GetInstance().FindService(id, &Service::keychord_id);
         if (svc) {
-            LOG(INFO) << "Starting service " << svc->name() << " from keychord " << id;
-            svc->Start();
+            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord " << id;
+            if (auto result = svc->Start(); !result) {
+                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord " << id
+                           << ": " << result.error();
+            }
         } else {
             LOG(ERROR) << "Service for keychord " << id << " not found";
         }
@@ -89,7 +95,9 @@ static void handle_keychord() {
 }
 
 void keychord_init() {
-    ServiceManager::GetInstance().ForEachService(add_service_keycodes);
+    for (const auto& service : ServiceList::GetInstance()) {
+        add_service_keycodes(service.get());
+    }
 
     // Nothing to do if no services require keychords.
     if (!keychords) {
@@ -113,3 +121,6 @@ void keychord_init() {
 
     register_epoll_handler(keychord_fd, handle_keychord);
 }
+
+}  // namespace init
+}  // namespace android

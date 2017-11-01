@@ -166,6 +166,71 @@ int adf_getDisplayAttributes(struct adf_hwc_helper *dev, int disp,
     return 0;
 }
 
+static int32_t adf_display_attribute_hwc2(const adf_interface_data &data,
+        const drm_mode_modeinfo &mode, const uint32_t attribute)
+{
+    switch (attribute) {
+    case HWC2_ATTRIBUTE_VSYNC_PERIOD:
+        if (mode.vrefresh)
+            return 1000000000 / mode.vrefresh;
+        return 0;
+
+    case HWC2_ATTRIBUTE_WIDTH:
+        return mode.hdisplay;
+
+    case HWC2_ATTRIBUTE_HEIGHT:
+        return mode.vdisplay;
+
+    case HWC2_ATTRIBUTE_DPI_X:
+        return dpi(mode.hdisplay, data.width_mm);
+
+    case HWC2_ATTRIBUTE_DPI_Y:
+        return dpi(mode.vdisplay, data.height_mm);
+
+    default:
+        ALOGE("unknown display attribute %u", attribute);
+        return -EINVAL;
+    }
+}
+
+int adf_getDisplayAttributes_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config, const uint32_t *attributes, int32_t *values)
+{
+    if ((size_t)disp >= dev->intf_fds.size())
+        return -EINVAL;
+
+    if (config >= dev->display_configs.size())
+        return -EINVAL;
+
+    adf_interface_data data;
+    int err = adf_get_interface_data(dev->intf_fds[disp], &data);
+    if (err < 0) {
+        ALOGE("failed to get ADF interface data: %s", strerror(err));
+        return err;
+    }
+
+    for (int i = 0; attributes[i] != HWC2_ATTRIBUTE_INVALID; i++)
+        values[i] = adf_display_attribute_hwc2(data,
+                dev->display_configs[config], attributes[i]);
+
+    adf_free_interface_data(&data);
+    return 0;
+}
+
+int adf_set_active_config_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config)
+{
+    if ((size_t)disp >= dev->intf_fds.size())
+        return -EINVAL;
+
+    if (config >= dev->display_configs.size())
+        return -EINVAL;
+
+    struct drm_mode_modeinfo mode = dev->display_configs[config];
+
+    return adf_interface_set_mode(dev->intf_fds[disp], &mode);
+}
+
 static void handle_adf_event(struct adf_hwc_helper *dev, int disp)
 {
     adf_event *event;
@@ -208,28 +273,39 @@ static void *adf_event_thread(void *data)
 
     setpriority(PRIO_PROCESS, 0, HAL_PRIORITY_URGENT_DISPLAY);
 
-    pollfd *fds = new pollfd[dev->intf_fds.size()];
+    struct sigaction action = { };
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    action.sa_handler = [](int) { pthread_exit(0); };
+
+    if (sigaction(SIGUSR2, &action, NULL) < 0) {
+        ALOGE("failed to set thread exit action %s", strerror(errno));
+        return NULL;
+    }
+
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, SIGUSR2);
+
+    pthread_sigmask(SIG_UNBLOCK, &signal_set, NULL);
+
+    pollfd fds[dev->intf_fds.size()];
     for (size_t i = 0; i < dev->intf_fds.size(); i++) {
         fds[i].fd = dev->intf_fds[i];
         fds[i].events = POLLIN | POLLPRI;
     }
 
     while (true) {
-        int err = poll(fds, dev->intf_fds.size(), -1);
-
-        if (err > 0) {
-            for (size_t i = 0; i < dev->intf_fds.size(); i++)
-                if (fds[i].revents & (POLLIN | POLLPRI))
-                    handle_adf_event(dev, i);
-        }
-        else if (err == -1) {
-            if (errno == EINTR)
-                break;
+        if (TEMP_FAILURE_RETRY(poll(fds, dev->intf_fds.size(), -1)) < 0) {
             ALOGE("error in event thread: %s", strerror(errno));
+            break;
         }
+
+        for (size_t i = 0; i < dev->intf_fds.size(); i++)
+            if (fds[i].revents & (POLLIN | POLLPRI))
+                handle_adf_event(dev, i);
     }
 
-    delete [] fds;
     return NULL;
 }
 
@@ -264,6 +340,12 @@ int adf_hwc_open(int *intf_fds, size_t n_intfs,
         }
     }
 
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, SIGUSR2);
+
+    pthread_sigmask(SIG_BLOCK, &signal_set, NULL);
+
     ret = pthread_create(&dev_ret->event_thread, NULL, adf_event_thread,
             dev_ret);
     if (ret) {
@@ -284,7 +366,7 @@ err:
 
 void adf_hwc_close(struct adf_hwc_helper *dev)
 {
-    pthread_kill(dev->event_thread, SIGTERM);
+    pthread_kill(dev->event_thread, SIGUSR2);
     pthread_join(dev->event_thread, NULL);
 
     for (size_t i = 0; i < dev->intf_fds.size(); i++)

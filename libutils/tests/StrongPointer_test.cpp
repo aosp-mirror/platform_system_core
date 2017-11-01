@@ -21,13 +21,13 @@
 
 using namespace android;
 
-class Foo : public LightRefBase<Foo> {
+class SPFoo : public LightRefBase<SPFoo> {
 public:
-    explicit Foo(bool* deleted_check) : mDeleted(deleted_check) {
+    explicit SPFoo(bool* deleted_check) : mDeleted(deleted_check) {
         *mDeleted = false;
     }
 
-    ~Foo() {
+    ~SPFoo() {
         *mDeleted = true;
     }
 private:
@@ -36,13 +36,13 @@ private:
 
 TEST(StrongPointer, move) {
     bool isDeleted;
-    Foo* foo = new Foo(&isDeleted);
+    SPFoo* foo = new SPFoo(&isDeleted);
     ASSERT_EQ(0, foo->getStrongCount());
     ASSERT_FALSE(isDeleted) << "Already deleted...?";
-    sp<Foo> sp1(foo);
+    sp<SPFoo> sp1(foo);
     ASSERT_EQ(1, foo->getStrongCount());
     {
-        sp<Foo> sp2 = std::move(sp1);
+        sp<SPFoo> sp2 = std::move(sp1);
         ASSERT_EQ(1, foo->getStrongCount()) << "std::move failed, incremented refcnt";
         ASSERT_EQ(nullptr, sp1.get()) << "std::move failed, sp1 is still valid";
         // The strong count isn't increasing, let's double check the old object
@@ -52,7 +52,7 @@ TEST(StrongPointer, move) {
     ASSERT_FALSE(isDeleted) << "deleted too early! still has a reference!";
     {
         // Now let's double check it deletes on time
-        sp<Foo> sp2 = std::move(sp1);
+        sp<SPFoo> sp2 = std::move(sp1);
     }
     ASSERT_TRUE(isDeleted) << "foo was leaked!";
 }

@@ -41,4 +41,6 @@ std::string format_listeners();
 InstallStatus remove_listener(const char* local_name, atransport* transport);
 void remove_all_listeners(void);
 
+void close_smartsockets();
+
 #endif /* __ADB_LISTENERS_H */

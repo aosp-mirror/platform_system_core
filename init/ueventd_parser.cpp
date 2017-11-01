@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,228 +14,127 @@
  * limitations under the License.
  */
 
-#include <ctype.h>
-#include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "ueventd.h"
 #include "ueventd_parser.h"
-#include "parser.h"
-#include "log.h"
-#include "util.h"
 
-static list_declare(subsystem_list);
+#include <grp.h>
+#include <pwd.h>
 
-static void parse_line_device(struct parse_state *state, int nargs, char **args);
+#include "keyword_map.h"
 
-#define SECTION 0x01
-#define OPTION  0x02
+namespace android {
+namespace init {
 
-#include "ueventd_keywords.h"
-
-#define KEYWORD(symbol, flags, nargs) \
-    [ K_##symbol ] = { #symbol, (nargs) + 1, flags, },
-
-static struct {
-    const char *name;
-    unsigned char nargs;
-    unsigned char flags;
-} keyword_info[KEYWORD_COUNT] = {
-    [ K_UNKNOWN ] = { "unknown", 0, 0 },
-#include "ueventd_keywords.h"
-};
-#undef KEYWORD
-
-#define kw_is(kw, type) (keyword_info[kw].flags & (type))
-#define kw_nargs(kw) (keyword_info[kw].nargs)
-
-static int lookup_keyword(const char *s)
-{
-    switch (*s++) {
-    case 'd':
-        if (!strcmp(s, "evname")) return K_devname;
-        if (!strcmp(s, "irname")) return K_dirname;
-        break;
-    case 's':
-        if (!strcmp(s, "ubsystem")) return K_subsystem;
-        break;
-    }
-    return K_UNKNOWN;
-}
-
-static void parse_line_no_op(struct parse_state*, int, char**) {
-}
-
-static int valid_name(const char *name)
-{
-    while (*name) {
-        if (!isalnum(*name) && (*name != '_') && (*name != '-')) {
-            return 0;
-        }
-        name++;
-    }
-    return 1;
-}
-
-struct ueventd_subsystem *ueventd_subsystem_find_by_name(const char *name)
-{
-    struct listnode *node;
-    struct ueventd_subsystem *s;
-
-    list_for_each(node, &subsystem_list) {
-        s = node_to_item(node, struct ueventd_subsystem, slist);
-        if (!strcmp(s->name, name)) {
-            return s;
-        }
-    }
-    return 0;
-}
-
-static void *parse_subsystem(parse_state* state, int /*nargs*/, char** args) {
-    if (!valid_name(args[1])) {
-        parse_error(state, "invalid subsystem name '%s'\n", args[1]);
-        return 0;
+Result<Success> ParsePermissionsLine(std::vector<std::string>&& args,
+                                     std::vector<SysfsPermissions>* out_sysfs_permissions,
+                                     std::vector<Permissions>* out_dev_permissions) {
+    bool is_sysfs = out_sysfs_permissions != nullptr;
+    if (is_sysfs && args.size() != 5) {
+        return Error() << "/sys/ lines must have 5 entries";
     }
 
-    ueventd_subsystem* s = ueventd_subsystem_find_by_name(args[1]);
-    if (s) {
-        parse_error(state, "ignored duplicate definition of subsystem '%s'\n",
-                args[1]);
-        return 0;
+    if (!is_sysfs && args.size() != 4) {
+        return Error() << "/dev/ lines must have 4 entries";
     }
 
-    s = (ueventd_subsystem*) calloc(1, sizeof(*s));
-    if (!s) {
-        parse_error(state, "out of memory\n");
-        return 0;
-    }
-    s->name = args[1];
-    s->dirname = "/dev";
-    list_add_tail(&subsystem_list, &s->slist);
-    return s;
-}
+    auto it = args.begin();
+    const std::string& name = *it++;
 
-static void parse_line_subsystem(struct parse_state *state, int nargs,
-        char **args)
-{
-    struct ueventd_subsystem *s = (ueventd_subsystem*) state->context;
-    int kw;
+    std::string sysfs_attribute;
+    if (is_sysfs) sysfs_attribute = *it++;
 
-    if (nargs == 0) {
-        return;
+    // args is now common to both sys and dev entries and contains: <perm> <uid> <gid>
+    std::string& perm_string = *it++;
+    char* end_pointer = 0;
+    mode_t perm = strtol(perm_string.c_str(), &end_pointer, 8);
+    if (end_pointer == nullptr || *end_pointer != '\0') {
+        return Error() << "invalid mode '" << perm_string << "'";
     }
 
-    kw = lookup_keyword(args[0]);
-    switch (kw) {
-    case K_devname:
-        if (!strcmp(args[1], "uevent_devname"))
-            s->devname_src = DEVNAME_UEVENT_DEVNAME;
-        else if (!strcmp(args[1], "uevent_devpath"))
-            s->devname_src = DEVNAME_UEVENT_DEVPATH;
-        else
-            parse_error(state, "invalid devname '%s'\n", args[1]);
-        break;
-
-    case K_dirname:
-        if (args[1][0] == '/')
-            s->dirname = args[1];
-        else
-            parse_error(state, "dirname '%s' does not start with '/'\n",
-                    args[1]);
-        break;
-
-    default:
-        parse_error(state, "invalid option '%s'\n", args[0]);
+    std::string& uid_string = *it++;
+    passwd* pwd = getpwnam(uid_string.c_str());
+    if (!pwd) {
+        return Error() << "invalid uid '" << uid_string << "'";
     }
-}
+    uid_t uid = pwd->pw_uid;
 
-static void parse_new_section(struct parse_state *state, int kw,
-                       int nargs, char **args)
-{
-    printf("[ %s %s ]\n", args[0],
-           nargs > 1 ? args[1] : "");
-
-    switch(kw) {
-    case K_subsystem:
-        state->context = parse_subsystem(state, nargs, args);
-        if (state->context) {
-            state->parse_line = parse_line_subsystem;
-            return;
-        }
-        break;
+    std::string& gid_string = *it++;
+    struct group* grp = getgrnam(gid_string.c_str());
+    if (!grp) {
+        return Error() << "invalid gid '" << gid_string << "'";
     }
-    state->parse_line = parse_line_no_op;
-}
+    gid_t gid = grp->gr_gid;
 
-static void parse_line(struct parse_state *state, char **args, int nargs)
-{
-    int kw = lookup_keyword(args[0]);
-    int kw_nargs = kw_nargs(kw);
-
-    if (nargs < kw_nargs) {
-        parse_error(state, "%s requires %d %s\n", args[0], kw_nargs - 1,
-            kw_nargs > 2 ? "arguments" : "argument");
-        return;
-    }
-
-    if (kw_is(kw, SECTION)) {
-        parse_new_section(state, kw, nargs, args);
-    } else if (kw_is(kw, OPTION)) {
-        state->parse_line(state, nargs, args);
+    if (is_sysfs) {
+        out_sysfs_permissions->emplace_back(name, sysfs_attribute, perm, uid, gid);
     } else {
-        parse_line_device(state, nargs, args);
+        out_dev_permissions->emplace_back(name, perm, uid, gid);
     }
+    return Success();
 }
 
-static void parse_config(const char *fn, const std::string& data)
-{
-    char *args[UEVENTD_PARSER_MAXARGS];
+Result<Success> SubsystemParser::ParseSection(std::vector<std::string>&& args,
+                                              const std::string& filename, int line) {
+    if (args.size() != 2) {
+        return Error() << "subsystems must have exactly one name";
+    }
 
-    int nargs = 0;
-    parse_state state;
-    state.filename = fn;
-    state.line = 1;
-    state.ptr = strdup(data.c_str());  // TODO: fix this code!
-    state.nexttoken = 0;
-    state.parse_line = parse_line_no_op;
-    for (;;) {
-        int token = next_token(&state);
-        switch (token) {
-        case T_EOF:
-            parse_line(&state, args, nargs);
-            return;
-        case T_NEWLINE:
-            if (nargs) {
-                parse_line(&state, args, nargs);
-                nargs = 0;
-            }
-            state.line++;
-            break;
-        case T_TEXT:
-            if (nargs < UEVENTD_PARSER_MAXARGS) {
-                args[nargs++] = state.text;
-            }
-            break;
+    if (std::find(subsystems_->begin(), subsystems_->end(), args[1]) != subsystems_->end()) {
+        return Error() << "ignoring duplicate subsystem entry";
+    }
+
+    subsystem_ = Subsystem(std::move(args[1]));
+
+    return Success();
+}
+
+Result<Success> SubsystemParser::ParseDevName(std::vector<std::string>&& args) {
+    if (args[1] == "uevent_devname") {
+        subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVNAME;
+        return Success();
+    }
+    if (args[1] == "uevent_devpath") {
+        subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVPATH;
+        return Success();
+    }
+
+    return Error() << "invalid devname '" << args[1] << "'";
+}
+
+Result<Success> SubsystemParser::ParseDirName(std::vector<std::string>&& args) {
+    if (args[1].front() != '/') {
+        return Error() << "dirname '" << args[1] << " ' does not start with '/'";
+    }
+
+    subsystem_.dir_name_ = args[1];
+    return Success();
+}
+
+Result<Success> SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line) {
+    using OptionParser = Result<Success> (SubsystemParser::*)(std::vector<std::string> && args);
+
+    static class OptionParserMap : public KeywordMap<OptionParser> {
+      private:
+        const Map& map() const override {
+            // clang-format off
+            static const Map option_parsers = {
+                {"devname",     {1,     1,      &SubsystemParser::ParseDevName}},
+                {"dirname",     {1,     1,      &SubsystemParser::ParseDirName}},
+            };
+            // clang-format on
+            return option_parsers;
         }
-    }
+    } parser_map;
+
+    auto parser = parser_map.FindFunction(args);
+
+    if (!parser) return Error() << parser.error();
+
+    return std::invoke(*parser, this, std::move(args));
 }
 
-int ueventd_parse_config_file(const char *fn)
-{
-    std::string data;
-    if (!read_file(fn, &data)) {
-        return -1;
-    }
-
-    data.push_back('\n'); // TODO: fix parse_config.
-    parse_config(fn, data);
-    return 0;
+void SubsystemParser::EndSection() {
+    subsystems_->emplace_back(std::move(subsystem_));
 }
 
-static void parse_line_device(parse_state*, int nargs, char** args) {
-    set_device_permission(nargs, args);
-}
+}  // namespace init
+}  // namespace android

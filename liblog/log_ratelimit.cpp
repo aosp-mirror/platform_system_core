@@ -31,8 +31,8 @@ static time_t g_last_clock;
 // of varying the 'seconds' argument to their pleasure.
 static time_t g_last_seconds;
 static const time_t last_seconds_default = 10;
-static const time_t last_seconds_max = 24 * 60 * 60; // maximum of a day
-static const time_t last_seconds_min = 2; // granularity
+static const time_t last_seconds_max = 24 * 60 * 60;  // maximum of a day
+static const time_t last_seconds_min = 2;             // granularity
 // Lock to protect last_clock and last_seconds, but also 'last'
 // argument (not NULL) as supplied to __android_log_ratelimit.
 static pthread_mutex_t lock_ratelimit = PTHREAD_MUTEX_INITIALIZER;
@@ -43,44 +43,44 @@ static pthread_mutex_t lock_ratelimit = PTHREAD_MUTEX_INITIALIZER;
 // can not acquire a lock, 0 if we are not to log a message, and 1
 // if we are ok to log a message.  Caller should check > 0 for true.
 LIBLOG_ABI_PUBLIC int __android_log_ratelimit(time_t seconds, time_t* last) {
-    int save_errno = errno;
+  int save_errno = errno;
 
-    // Two reasons for trylock failure:
-    //   1. In a signal handler. Must prevent deadlock
-    //   2. Too many threads calling __android_log_ratelimit.
-    //      Bonus to not print if they race here because that
-    //      dovetails the goal of ratelimiting. One may print
-    //      and the others will wait their turn ...
-    if (pthread_mutex_trylock(&lock_ratelimit)) {
-        if (save_errno) errno = save_errno;
-        return -1;
-    }
+  // Two reasons for trylock failure:
+  //   1. In a signal handler. Must prevent deadlock
+  //   2. Too many threads calling __android_log_ratelimit.
+  //      Bonus to not print if they race here because that
+  //      dovetails the goal of ratelimiting. One may print
+  //      and the others will wait their turn ...
+  if (pthread_mutex_trylock(&lock_ratelimit)) {
+    if (save_errno) errno = save_errno;
+    return -1;
+  }
 
-    if (seconds == 0) {
-        seconds = last_seconds_default;
-    } else if (seconds < last_seconds_min) {
-        seconds = last_seconds_min;
-    } else if (seconds > last_seconds_max) {
-        seconds = last_seconds_max;
-    }
+  if (seconds == 0) {
+    seconds = last_seconds_default;
+  } else if (seconds < last_seconds_min) {
+    seconds = last_seconds_min;
+  } else if (seconds > last_seconds_max) {
+    seconds = last_seconds_max;
+  }
 
-    if (!last) {
-        if (g_last_seconds > seconds) {
-            seconds = g_last_seconds;
-        } else if (g_last_seconds < seconds) {
-            g_last_seconds = seconds;
-        }
-        last = &g_last_clock;
+  if (!last) {
+    if (g_last_seconds > seconds) {
+      seconds = g_last_seconds;
+    } else if (g_last_seconds < seconds) {
+      g_last_seconds = seconds;
     }
+    last = &g_last_clock;
+  }
 
-    time_t now = time(NULL);
-    if ((now == (time_t)-1) || ((*last + seconds) > now)) {
-        pthread_mutex_unlock(&lock_ratelimit);
-        if (save_errno) errno = save_errno;
-        return 0;
-    }
-    *last = now;
+  time_t now = time(NULL);
+  if ((now == (time_t)-1) || ((*last + seconds) > now)) {
     pthread_mutex_unlock(&lock_ratelimit);
     if (save_errno) errno = save_errno;
-    return 1;
+    return 0;
+  }
+  *last = now;
+  pthread_mutex_unlock(&lock_ratelimit);
+  if (save_errno) errno = save_errno;
+  return 1;
 }

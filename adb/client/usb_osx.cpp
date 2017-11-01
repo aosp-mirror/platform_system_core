@@ -38,6 +38,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/thread_annotations.h>
 
 #include "adb.h"
 #include "transport.h"
@@ -51,15 +52,21 @@ struct usb_handle
     UInt8 bulkOut;
     IOUSBInterfaceInterface190** interface;
     unsigned int zero_mask;
+    size_t max_packet_size;
 
     // For garbage collecting disconnected devices.
     bool mark;
     std::string devpath;
     std::atomic<bool> dead;
 
-    usb_handle() : bulkIn(0), bulkOut(0), interface(nullptr),
-        zero_mask(0), mark(false), dead(false) {
-    }
+    usb_handle()
+        : bulkIn(0),
+          bulkOut(0),
+          interface(nullptr),
+          zero_mask(0),
+          max_packet_size(0),
+          mark(false),
+          dead(false) {}
 };
 
 static std::atomic<bool> usb_inited_flag;
@@ -167,7 +174,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         kr = (*iface)->GetInterfaceClass(iface, &if_class);
         kr = (*iface)->GetInterfaceSubClass(iface, &subclass);
         kr = (*iface)->GetInterfaceProtocol(iface, &protocol);
-        if(if_class != ADB_CLASS || subclass != ADB_SUBCLASS || protocol != ADB_PROTOCOL) {
+        if (!is_adb_interface(if_class, subclass, protocol)) {
             // Ignore non-ADB devices.
             LOG(DEBUG) << "Ignoring interface with incorrect class/subclass/protocol - " << if_class
                        << ", " << subclass << ", " << protocol;
@@ -390,6 +397,7 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
         }
 
         handle->zero_mask = maxPacketSize - 1;
+        handle->max_packet_size = maxPacketSize;
     }
 
     handle->interface = interface;
@@ -405,7 +413,7 @@ err_get_num_ep:
 
 std::mutex& operate_device_lock = *new std::mutex();
 
-static void RunLoopThread(void* unused) {
+static void RunLoopThread() {
     adb_thread_setname("RunLoop");
 
     VLOG(USB) << "RunLoopThread started";
@@ -422,7 +430,7 @@ static void RunLoopThread(void* unused) {
     VLOG(USB) << "RunLoopThread done";
 }
 
-static void usb_cleanup() {
+void usb_cleanup() NO_THREAD_SAFETY_ANALYSIS {
     VLOG(USB) << "usb_cleanup";
     // Wait until usb operations in RunLoopThread finish, and prevent further operations.
     operate_device_lock.lock();
@@ -432,13 +440,9 @@ static void usb_cleanup() {
 void usb_init() {
     static bool initialized = false;
     if (!initialized) {
-        atexit(usb_cleanup);
-
         usb_inited_flag = false;
 
-        if (!adb_thread_create(RunLoopThread, nullptr)) {
-            fatal_errno("cannot create RunLoop thread");
-        }
+        std::thread(RunLoopThread).detach();
 
         // Wait for initialization to finish
         while (!usb_inited_flag) {
@@ -520,7 +524,7 @@ int usb_read(usb_handle *handle, void *buf, int len)
     }
 
     if (kIOReturnSuccess == result)
-        return 0;
+        return numBytes;
     else {
         LOG(ERROR) << "usb_read failed with status: " << std::hex << result;
     }
@@ -560,4 +564,9 @@ void usb_kick(usb_handle *handle) {
     std::lock_guard<std::mutex> lock_guard(g_usb_handles_mutex);
     usb_kick_locked(handle);
 }
+
+size_t usb_get_max_packet_size(usb_handle* handle) {
+    return handle->max_packet_size;
+}
+
 } // namespace native

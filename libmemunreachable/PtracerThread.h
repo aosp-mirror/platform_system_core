@@ -24,6 +24,8 @@
 
 #include "Allocator.h"
 
+namespace android {
+
 class Stack;
 
 // PtracerThread is similar to std::thread, except that it creates a "thread"
@@ -36,6 +38,7 @@ class PtracerThread {
   ~PtracerThread();
   bool Start();
   int Join();
+
  private:
   void SetTracer(pid_t);
   void ClearTracer();
@@ -47,4 +50,6 @@ class PtracerThread {
   pid_t child_pid_;
 };
 
-#endif // LIBMEMUNREACHABLE_PTRACER_THREAD_H_
+}  // namespace android
+
+#endif  // LIBMEMUNREACHABLE_PTRACER_THREAD_H_

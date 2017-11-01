@@ -17,19 +17,9 @@
 #define LOG_TAG "RefBase"
 // #define LOG_NDEBUG 0
 
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <typeinfo>
-#include <unistd.h>
-
 #include <utils/RefBase.h>
 
 #include <utils/CallStack.h>
-#include <utils/Log.h>
-#include <utils/threads.h>
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))
@@ -420,8 +410,7 @@ void RefBase::incStrong(const void* id) const
         return;
     }
 
-    int32_t old = refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE,
-            std::memory_order_relaxed);
+    int32_t old __unused = refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE, std::memory_order_relaxed);
     // A decStrong() must still happen after us.
     ALOG_ASSERT(old > INITIAL_STRONG_VALUE, "0x%x too small", old);
     refs->mBase->onFirstRef();
@@ -452,6 +441,11 @@ void RefBase::decStrong(const void* id) const
     // and all accesses to refs happen before its deletion in the final decWeak.
     // The destructor can safely access mRefs because either it's deleting
     // mRefs itself, or it's running entirely before the final mWeak decrement.
+    //
+    // Since we're doing atomic loads of `flags`, the static analyzer assumes
+    // they can change between `delete this;` and `refs->decWeak(id);`. This is
+    // not the case. The analyzer may become more okay with this patten when
+    // https://bugs.llvm.org/show_bug.cgi?id=34365 gets resolved. NOLINTNEXTLINE
     refs->decWeak(id);
 }
 
@@ -769,7 +763,5 @@ void RefBase::renameRefId(RefBase* ref,
     ref->mRefs->renameStrongRefId(old_id, new_id);
     ref->mRefs->renameWeakRefId(old_id, new_id);
 }
-
-VirtualLightRefBase::~VirtualLightRefBase() {}
 
 }; // namespace android

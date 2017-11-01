@@ -21,15 +21,18 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
+
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "uptime_parser.h"
+#include <gtest/gtest.h>
 
 using testing::UnorderedElementsAreArray;
 
@@ -42,14 +45,6 @@ namespace {
 bool CreateEmptyBootEventRecord(const std::string& record_path, int32_t value) {
   android::base::unique_fd record_fd(creat(record_path.c_str(), S_IRUSR | S_IWUSR));
   if (record_fd == -1) {
-    return false;
-  }
-
-  // Writing the value as content in the record file is a debug measure to
-  // ensure the validity of the file mtime value, i.e., to check that the record
-  // file mtime values are not changed once set.
-  // TODO(jhawkins): Remove this block.
-  if (!android::base::WriteStringToFd(std::to_string(value), record_fd)) {
     return false;
   }
 
@@ -97,15 +92,18 @@ void DeleteDirectory(const std::string& path) {
   rmdir(path.c_str());
 }
 
+// Returns the time in seconds since boot.
+time_t GetUptimeSeconds() {
+  return std::chrono::duration_cast<std::chrono::seconds>(
+             android::base::boot_clock::now().time_since_epoch())
+      .count();
+}
+
 class BootEventRecordStoreTest : public ::testing::Test {
  public:
-  BootEventRecordStoreTest() {
-    store_path_ = std::string(store_dir_.path) + "/";
-  }
+  BootEventRecordStoreTest() { store_path_ = std::string(store_dir_.path) + "/"; }
 
-  const std::string& GetStorePathForTesting() const {
-    return store_path_;
-  }
+  const std::string& GetStorePathForTesting() const { return store_path_; }
 
  private:
   void TearDown() {
@@ -134,7 +132,7 @@ TEST_F(BootEventRecordStoreTest, AddSingleBootEvent) {
   BootEventRecordStore store;
   store.SetStorePath(GetStorePathForTesting());
 
-  time_t uptime = bootstat::ParseUptime();
+  time_t uptime = GetUptimeSeconds();
   ASSERT_NE(-1, uptime);
 
   store.AddBootEvent("cenozoic");
@@ -149,7 +147,7 @@ TEST_F(BootEventRecordStoreTest, AddMultipleBootEvents) {
   BootEventRecordStore store;
   store.SetStorePath(GetStorePathForTesting());
 
-  time_t uptime = bootstat::ParseUptime();
+  time_t uptime = GetUptimeSeconds();
   ASSERT_NE(-1, uptime);
 
   store.AddBootEvent("cretaceous");
@@ -157,9 +155,7 @@ TEST_F(BootEventRecordStoreTest, AddMultipleBootEvents) {
   store.AddBootEvent("triassic");
 
   const std::string EXPECTED_NAMES[] = {
-    "cretaceous",
-    "jurassic",
-    "triassic",
+      "cretaceous", "jurassic", "triassic",
   };
 
   auto events = store.GetAllBootEvents();

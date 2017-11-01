@@ -53,16 +53,35 @@ libbacktrace_sources = [
     "UnwindCurrent.cpp",
     "UnwindMap.cpp",
     "UnwindPtrace.cpp",
+    "UnwindStack.cpp",
+    "UnwindStackMap.cpp",
 ]
+
+cc_library_headers {
+    name: "libbacktrace_headers",
+    vendor_available: true,
+    export_include_dirs: ["include"],
+}
 
 cc_library {
     name: "libbacktrace",
+    vendor_available: false,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     defaults: ["libbacktrace_common"],
     host_supported: true,
+
+    cflags: [
+        "-Wexit-time-destructors",
+    ],
 
     srcs: [
         "BacktraceMap.cpp",
     ],
+
+    export_include_dirs: ["include"],
 
     target: {
         darwin: {
@@ -75,23 +94,16 @@ cc_library {
                 "libbase",
                 "liblog",
                 "libunwind",
+                "libunwindstack",
             ],
 
             static_libs: ["libcutils"],
-            host_ldlibs: ["-lrt"],
         },
         android: {
-            srcs: libbacktrace_sources,
-
-            shared_libs: [
-                "libbase",
-                "liblog",
-                "libunwind",
-            ],
-
-            static_libs: ["libcutils"],
+            static_libs: ["libasync_safe"],
         },
     },
+    whole_static_libs: ["libdemangle"],
 }
 
 cc_library_shared {
@@ -102,17 +114,13 @@ cc_library_shared {
         none: true,
     },
     cflags: ["-O0"],
-    srcs: ["backtrace_testlib.c"],
+    srcs: ["backtrace_testlib.cpp"],
 
     target: {
         linux: {
             shared_libs: [
                 "libunwind",
-            ],
-        },
-        android: {
-            shared_libs: [
-                "libunwind",
+                "libunwindstack",
             ],
         },
     }
@@ -139,6 +147,8 @@ cc_library_static {
     shared_libs = [
         "libbase",
         "libunwind",
+        "libunwindstack",
+        "libziparchive",
     ],
 }
 
@@ -169,6 +179,7 @@ cc_test {
         "libcutils",
         "liblog",
         "libunwind",
+        "libunwindstack",
     ],
 
     group_static_libs: true,
@@ -193,18 +204,36 @@ cc_test {
         android: {
             cflags: ["-DENABLE_PSS_TESTS"],
             shared_libs: [
-                "libdl",
                 "libutils",
             ],
         },
-        linux: {
+        linux_glibc: {
             host_ldlibs: [
-                "-lpthread",
-                "-lrt",
-                "-ldl",
                 "-lncurses",
             ],
             static_libs: ["libutils"],
         },
     },
+
+    data: [
+        "testdata/arm/*",
+        "testdata/arm64/*",
+        "testdata/x86/*",
+        "testdata/x86_64/*",
+    ],
+}
+
+cc_benchmark {
+    name: "backtrace_benchmarks",
+    defaults: ["libbacktrace_common"],
+
+    srcs: [
+        "backtrace_benchmarks.cpp",
+    ],
+
+    shared_libs: [
+        "libbacktrace",
+        "libbase",
+        "libunwindstack",
+    ],
 }

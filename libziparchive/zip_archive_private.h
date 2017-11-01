@@ -26,24 +26,79 @@
 
 #include <utils/FileMap.h>
 #include <ziparchive/zip_archive.h>
+#include "android-base/macros.h"
+
+static const char* kErrorMessages[] = {
+    "Success",
+    "Iteration ended",
+    "Zlib error",
+    "Invalid file",
+    "Invalid handle",
+    "Duplicate entries in archive",
+    "Empty archive",
+    "Entry not found",
+    "Invalid offset",
+    "Inconsistent information",
+    "Invalid entry name",
+    "I/O error",
+    "File mapping failed",
+};
+
+enum ErrorCodes : int32_t {
+  kIterationEnd = -1,
+
+  // We encountered a Zlib error when inflating a stream from this file.
+  // Usually indicates file corruption.
+  kZlibError = -2,
+
+  // The input file cannot be processed as a zip archive. Usually because
+  // it's too small, too large or does not have a valid signature.
+  kInvalidFile = -3,
+
+  // An invalid iteration / ziparchive handle was passed in as an input
+  // argument.
+  kInvalidHandle = -4,
+
+  // The zip archive contained two (or possibly more) entries with the same
+  // name.
+  kDuplicateEntry = -5,
+
+  // The zip archive contains no entries.
+  kEmptyArchive = -6,
+
+  // The specified entry was not found in the archive.
+  kEntryNotFound = -7,
+
+  // The zip archive contained an invalid local file header pointer.
+  kInvalidOffset = -8,
+
+  // The zip archive contained inconsistent entry information. This could
+  // be because the central directory & local file header did not agree, or
+  // if the actual uncompressed length or crc32 do not match their declared
+  // values.
+  kInconsistentInformation = -9,
+
+  // An invalid entry name was encountered.
+  kInvalidEntryName = -10,
+
+  // An I/O related system call (read, lseek, ftruncate, map) failed.
+  kIoError = -11,
+
+  // We were not able to mmap the central directory or entry contents.
+  kMmapFailed = -12,
+
+  kLastErrorCode = kMmapFailed,
+};
 
 class MappedZipFile {
  public:
-  explicit MappedZipFile(const int fd) :
-    has_fd_(true),
-    fd_(fd),
-    base_ptr_(nullptr),
-    data_length_(0),
-    read_pos_(0) {}
+  explicit MappedZipFile(const int fd)
+      : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0) {}
 
-  explicit MappedZipFile(void* address, size_t length) :
-    has_fd_(false),
-    fd_(-1),
-    base_ptr_(address),
-    data_length_(static_cast<off64_t>(length)),
-    read_pos_(0) {}
+  explicit MappedZipFile(void* address, size_t length)
+      : has_fd_(false), fd_(-1), base_ptr_(address), data_length_(static_cast<off64_t>(length)) {}
 
-  bool HasFd() const {return has_fd_;}
+  bool HasFd() const { return has_fd_; }
 
   int GetFileDescriptor() const;
 
@@ -51,11 +106,7 @@ class MappedZipFile {
 
   off64_t GetFileLength() const;
 
-  bool SeekToOffset(off64_t offset);
-
-  bool ReadData(uint8_t* buffer, size_t read_amount);
-
-  bool ReadAtOffset(uint8_t* buf, size_t len, off64_t off);
+  bool ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const;
 
  private:
   // If has_fd_ is true, fd is valid and we'll read contents of a zip archive
@@ -68,19 +119,15 @@ class MappedZipFile {
 
   void* const base_ptr_;
   const off64_t data_length_;
-  // read_pos_ is the offset to the base_ptr_ where we read data from.
-  size_t read_pos_;
 };
 
 class CentralDirectory {
  public:
-  CentralDirectory(void) :
-    base_ptr_(nullptr),
-    length_(0) {}
+  CentralDirectory(void) : base_ptr_(nullptr), length_(0) {}
 
-  const uint8_t* GetBasePtr() const {return base_ptr_;}
+  const uint8_t* GetBasePtr() const { return base_ptr_; }
 
-  size_t GetMapLength() const {return length_;}
+  size_t GetMapLength() const { return length_; }
 
   void Initialize(void* map_base_ptr, off64_t cd_start_offset, size_t cd_size);
 
@@ -109,25 +156,25 @@ struct ZipArchive {
   uint32_t hash_table_size;
   ZipString* hash_table;
 
-  ZipArchive(const int fd, bool assume_ownership) :
-    mapped_zip(fd),
-    close_file(assume_ownership),
-    directory_offset(0),
-    central_directory(),
-    directory_map(new android::FileMap()),
-    num_entries(0),
-    hash_table_size(0),
-    hash_table(nullptr) {}
+  ZipArchive(const int fd, bool assume_ownership)
+      : mapped_zip(fd),
+        close_file(assume_ownership),
+        directory_offset(0),
+        central_directory(),
+        directory_map(new android::FileMap()),
+        num_entries(0),
+        hash_table_size(0),
+        hash_table(nullptr) {}
 
-  ZipArchive(void* address, size_t length) :
-    mapped_zip(address, length),
-    close_file(false),
-    directory_offset(0),
-    central_directory(),
-    directory_map(new android::FileMap()),
-    num_entries(0),
-    hash_table_size(0),
-    hash_table(nullptr) {}
+  ZipArchive(void* address, size_t length)
+      : mapped_zip(address, length),
+        close_file(false),
+        directory_offset(0),
+        central_directory(),
+        directory_map(new android::FileMap()),
+        num_entries(0),
+        hash_table_size(0),
+        hash_table(nullptr) {}
 
   ~ZipArchive() {
     if (close_file && mapped_zip.GetFileDescriptor() >= 0) {
@@ -139,7 +186,6 @@ struct ZipArchive {
 
   bool InitializeCentralDirectory(const char* debug_file_name, off64_t cd_start_offset,
                                   size_t cd_size);
-
 };
 
 #endif  // LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_

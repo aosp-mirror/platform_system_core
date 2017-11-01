@@ -17,23 +17,51 @@
 #ifndef ANDROID_LIBAPPFUSE_FUSEAPPLOOP_H_
 #define ANDROID_LIBAPPFUSE_FUSEAPPLOOP_H_
 
+#include <memory>
+#include <mutex>
+
+#include <android-base/unique_fd.h>
+
 #include "libappfuse/FuseBuffer.h"
 
 namespace android {
 namespace fuse {
 
+class EpollController;
+
 class FuseAppLoopCallback {
  public:
-  virtual bool IsActive() = 0;
-  virtual int64_t OnGetSize(uint64_t inode) = 0;
-  virtual int32_t OnFsync(uint64_t inode) = 0;
-  virtual int32_t OnWrite(
-      uint64_t inode, uint64_t offset, uint32_t size, const void* data) = 0;
-  virtual int32_t OnRead(
-      uint64_t inode, uint64_t offset, uint32_t size, void* data) = 0;
-  virtual int32_t OnOpen(uint64_t inode) = 0;
-  virtual int32_t OnRelease(uint64_t inode) = 0;
-  virtual ~FuseAppLoopCallback() = default;
+   virtual void OnLookup(uint64_t unique, uint64_t inode) = 0;
+   virtual void OnGetAttr(uint64_t unique, uint64_t inode) = 0;
+   virtual void OnFsync(uint64_t unique, uint64_t inode) = 0;
+   virtual void OnWrite(uint64_t unique, uint64_t inode, uint64_t offset, uint32_t size,
+                        const void* data) = 0;
+   virtual void OnRead(uint64_t unique, uint64_t inode, uint64_t offset, uint32_t size) = 0;
+   virtual void OnOpen(uint64_t unique, uint64_t inode) = 0;
+   virtual void OnRelease(uint64_t unique, uint64_t inode) = 0;
+   virtual ~FuseAppLoopCallback();
+};
+
+class FuseAppLoop final {
+  public:
+    FuseAppLoop(base::unique_fd&& fd);
+
+    void Start(FuseAppLoopCallback* callback);
+    void Break();
+
+    bool ReplySimple(uint64_t unique, int32_t result);
+    bool ReplyLookup(uint64_t unique, uint64_t inode, int64_t size);
+    bool ReplyGetAttr(uint64_t unique, uint64_t inode, int64_t size, int mode);
+    bool ReplyOpen(uint64_t unique, uint64_t fh);
+    bool ReplyWrite(uint64_t unique, uint32_t size);
+    bool ReplyRead(uint64_t unique, uint32_t size, const void* data);
+
+  private:
+    base::unique_fd fd_;
+    base::unique_fd break_fd_;
+
+    // Lock for multi-threading.
+    std::mutex mutex_;
 };
 
 bool StartFuseAppLoop(int fd, FuseAppLoopCallback* callback);

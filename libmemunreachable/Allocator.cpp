@@ -33,9 +33,11 @@
 
 #include "android-base/macros.h"
 
-#include "anon_vma_naming.h"
 #include "Allocator.h"
 #include "LinkedList.h"
+#include "anon_vma_naming.h"
+
+namespace android {
 
 // runtime interfaces used:
 // abort
@@ -57,10 +59,9 @@ static constexpr size_t kChunkSize = 256 * 1024;
 static constexpr size_t kUsableChunkSize = kChunkSize - kPageSize;
 static constexpr size_t kMaxBucketAllocationSize = kChunkSize / 4;
 static constexpr size_t kMinBucketAllocationSize = 8;
-static constexpr unsigned int kNumBuckets = const_log2(kMaxBucketAllocationSize)
-    - const_log2(kMinBucketAllocationSize) + 1;
-static constexpr unsigned int kUsablePagesPerChunk = kUsableChunkSize
-    / kPageSize;
+static constexpr unsigned int kNumBuckets =
+    const_log2(kMaxBucketAllocationSize) - const_log2(kMinBucketAllocationSize) + 1;
+static constexpr unsigned int kUsablePagesPerChunk = kUsableChunkSize / kPageSize;
 
 std::atomic<int> heap_count;
 
@@ -93,7 +94,7 @@ class HeapImpl {
   void FreeLocked(void* ptr);
 
   struct MapAllocation {
-    void *ptr;
+    void* ptr;
     size_t size;
     MapAllocation* next;
   };
@@ -107,8 +108,7 @@ static inline unsigned int log2(size_t n) {
 }
 
 static inline unsigned int size_to_bucket(size_t size) {
-  if (size < kMinBucketAllocationSize)
-    return kMinBucketAllocationSize;
+  if (size < kMinBucketAllocationSize) return kMinBucketAllocationSize;
   return log2(size - 1) + 1 - const_log2(kMinBucketAllocationSize);
 }
 
@@ -140,8 +140,7 @@ static void* MapAligned(size_t size, size_t align) {
 
   // Trim beginning
   if (aligned_ptr != ptr) {
-    ptrdiff_t extra = reinterpret_cast<uintptr_t>(aligned_ptr)
-        - reinterpret_cast<uintptr_t>(ptr);
+    ptrdiff_t extra = reinterpret_cast<uintptr_t>(aligned_ptr) - reinterpret_cast<uintptr_t>(ptr);
     munmap(ptr, extra);
     map_size -= extra;
     ptr = aligned_ptr;
@@ -151,14 +150,13 @@ static void* MapAligned(size_t size, size_t align) {
   if (map_size != size) {
     assert(map_size > size);
     assert(ptr != NULL);
-    munmap(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) + size),
-        map_size - size);
+    munmap(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) + size), map_size - size);
   }
 
-#define PR_SET_VMA   0x53564d41
-#define PR_SET_VMA_ANON_NAME    0
-  prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME,
-      reinterpret_cast<uintptr_t>(ptr), size, "leak_detector_malloc");
+#define PR_SET_VMA 0x53564d41
+#define PR_SET_VMA_ANON_NAME 0
+  prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, reinterpret_cast<uintptr_t>(ptr), size,
+        "leak_detector_malloc");
 
   return ptr;
 }
@@ -170,36 +168,31 @@ class Chunk {
   Chunk(HeapImpl* heap, int bucket);
   ~Chunk() {}
 
-  void *Alloc();
+  void* Alloc();
   void Free(void* ptr);
   void Purge();
   bool Empty();
 
   static Chunk* ptr_to_chunk(void* ptr) {
-    return reinterpret_cast<Chunk*>(reinterpret_cast<uintptr_t>(ptr)
-        & ~(kChunkSize - 1));
+    return reinterpret_cast<Chunk*>(reinterpret_cast<uintptr_t>(ptr) & ~(kChunkSize - 1));
   }
   static bool is_chunk(void* ptr) {
     return (reinterpret_cast<uintptr_t>(ptr) & (kChunkSize - 1)) != 0;
   }
 
-  unsigned int free_count() {
-    return free_count_;
-  }
-  HeapImpl* heap() {
-    return heap_;
-  }
-  LinkedList<Chunk*> node_; // linked list sorted by minimum free count
+  unsigned int free_count() { return free_count_; }
+  HeapImpl* heap() { return heap_; }
+  LinkedList<Chunk*> node_;  // linked list sorted by minimum free count
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Chunk);
   HeapImpl* heap_;
   unsigned int bucket_;
-  unsigned int allocation_size_; // size of allocations in chunk, min 8 bytes
-  unsigned int max_allocations_; // maximum number of allocations in the chunk
-  unsigned int first_free_bitmap_; // index into bitmap for first non-full entry
-  unsigned int free_count_; // number of available allocations
-  unsigned int frees_since_purge_; // number of calls to Free since last Purge
+  unsigned int allocation_size_;    // size of allocations in chunk, min 8 bytes
+  unsigned int max_allocations_;    // maximum number of allocations in the chunk
+  unsigned int first_free_bitmap_;  // index into bitmap for first non-full entry
+  unsigned int free_count_;         // number of available allocations
+  unsigned int frees_since_purge_;  // number of calls to Free since last Purge
 
   // bitmap of pages that have been dirtied
   uint32_t dirty_pages_[div_round_up(kUsablePagesPerChunk, 32)];
@@ -210,13 +203,10 @@ class Chunk {
   char data_[0];
 
   unsigned int ptr_to_n(void* ptr) {
-    ptrdiff_t offset = reinterpret_cast<uintptr_t>(ptr)
-        - reinterpret_cast<uintptr_t>(data_);
+    ptrdiff_t offset = reinterpret_cast<uintptr_t>(ptr) - reinterpret_cast<uintptr_t>(data_);
     return offset / allocation_size_;
   }
-  void* n_to_ptr(unsigned int n) {
-    return data_ + n * allocation_size_;
-  }
+  void* n_to_ptr(unsigned int n) { return data_ + n * allocation_size_; }
 };
 static_assert(sizeof(Chunk) <= kPageSize, "header must fit in page");
 
@@ -225,23 +215,27 @@ void* Chunk::operator new(std::size_t count __attribute__((unused))) noexcept {
   assert(count == sizeof(Chunk));
   void* mem = MapAligned(kChunkSize, kChunkSize);
   if (!mem) {
-    abort(); //throw std::bad_alloc;
+    abort();  // throw std::bad_alloc;
   }
 
   return mem;
 }
 
 // Override new operator on chunk to use mmap to allocate kChunkSize
-void Chunk::operator delete(void *ptr) {
+void Chunk::operator delete(void* ptr) {
   assert(reinterpret_cast<Chunk*>(ptr) == ptr_to_chunk(ptr));
   munmap(ptr, kChunkSize);
 }
 
-Chunk::Chunk(HeapImpl* heap, int bucket) :
-    node_(this), heap_(heap), bucket_(bucket), allocation_size_(
-        bucket_to_size(bucket)), max_allocations_(
-        kUsableChunkSize / allocation_size_), first_free_bitmap_(0), free_count_(
-        max_allocations_), frees_since_purge_(0) {
+Chunk::Chunk(HeapImpl* heap, int bucket)
+    : node_(this),
+      heap_(heap),
+      bucket_(bucket),
+      allocation_size_(bucket_to_size(bucket)),
+      max_allocations_(kUsableChunkSize / allocation_size_),
+      first_free_bitmap_(0),
+      free_count_(max_allocations_),
+      frees_since_purge_(0) {
   memset(dirty_pages_, 0, sizeof(dirty_pages_));
   memset(free_bitmap_, 0xff, sizeof(free_bitmap_));
 }
@@ -254,8 +248,7 @@ void* Chunk::Alloc() {
   assert(free_count_ > 0);
 
   unsigned int i = first_free_bitmap_;
-  while (free_bitmap_[i] == 0)
-    i++;
+  while (free_bitmap_[i] == 0) i++;
   assert(i < arraysize(free_bitmap_));
   unsigned int bit = __builtin_ffs(free_bitmap_[i]) - 1;
   assert(free_bitmap_[i] & (1U << bit));
@@ -306,38 +299,35 @@ void Chunk::Free(void* ptr) {
 void Chunk::Purge() {
   frees_since_purge_ = 0;
 
-  //unsigned int allocsPerPage = kPageSize / allocation_size_;
+  // unsigned int allocsPerPage = kPageSize / allocation_size_;
 }
 
 // Override new operator on HeapImpl to use mmap to allocate a page
-void* HeapImpl::operator new(std::size_t count __attribute__((unused)))
-    noexcept {
+void* HeapImpl::operator new(std::size_t count __attribute__((unused))) noexcept {
   assert(count == sizeof(HeapImpl));
   void* mem = MapAligned(kPageSize, kPageSize);
   if (!mem) {
-    abort(); //throw std::bad_alloc;
+    abort();  // throw std::bad_alloc;
   }
 
   heap_count++;
   return mem;
 }
 
-void HeapImpl::operator delete(void *ptr) {
+void HeapImpl::operator delete(void* ptr) {
   munmap(ptr, kPageSize);
 }
 
-HeapImpl::HeapImpl() :
-    free_chunks_(), full_chunks_(), map_allocation_list_(NULL) {
-}
+HeapImpl::HeapImpl() : free_chunks_(), full_chunks_(), map_allocation_list_(NULL) {}
 
 bool HeapImpl::Empty() {
   for (unsigned int i = 0; i < kNumBuckets; i++) {
-    for (LinkedList<Chunk*> *it = free_chunks_[i].next(); it->data() != NULL; it = it->next()) {
+    for (LinkedList<Chunk*>* it = free_chunks_[i].next(); it->data() != NULL; it = it->next()) {
       if (!it->data()->Empty()) {
         return false;
       }
     }
-    for (LinkedList<Chunk*> *it = full_chunks_[i].next(); it->data() != NULL; it = it->next()) {
+    for (LinkedList<Chunk*>* it = full_chunks_[i].next(); it->data() != NULL; it = it->next()) {
       if (!it->data()->Empty()) {
         return false;
       }
@@ -350,12 +340,12 @@ bool HeapImpl::Empty() {
 HeapImpl::~HeapImpl() {
   for (unsigned int i = 0; i < kNumBuckets; i++) {
     while (!free_chunks_[i].empty()) {
-      Chunk *chunk = free_chunks_[i].next()->data();
+      Chunk* chunk = free_chunks_[i].next()->data();
       chunk->node_.remove();
       delete chunk;
     }
     while (!full_chunks_[i].empty()) {
-      Chunk *chunk = full_chunks_[i].next()->data();
+      Chunk* chunk = full_chunks_[i].next()->data();
       chunk->node_.remove();
       delete chunk;
     }
@@ -373,18 +363,18 @@ void* HeapImpl::AllocLocked(size_t size) {
   }
   int bucket = size_to_bucket(size);
   if (free_chunks_[bucket].empty()) {
-    Chunk *chunk = new Chunk(this, bucket);
+    Chunk* chunk = new Chunk(this, bucket);
     free_chunks_[bucket].insert(chunk->node_);
   }
   return free_chunks_[bucket].next()->data()->Alloc();
 }
 
-void HeapImpl::Free(void *ptr) {
+void HeapImpl::Free(void* ptr) {
   std::lock_guard<std::mutex> lk(m_);
   FreeLocked(ptr);
 }
 
-void HeapImpl::FreeLocked(void *ptr) {
+void HeapImpl::FreeLocked(void* ptr) {
   if (!Chunk::is_chunk(ptr)) {
     HeapImpl::MapFree(ptr);
   } else {
@@ -397,12 +387,11 @@ void HeapImpl::FreeLocked(void *ptr) {
 void* HeapImpl::MapAlloc(size_t size) {
   size = (size + kPageSize - 1) & ~(kPageSize - 1);
 
-  MapAllocation* allocation = reinterpret_cast<MapAllocation*>(AllocLocked(
-      sizeof(MapAllocation)));
+  MapAllocation* allocation = reinterpret_cast<MapAllocation*>(AllocLocked(sizeof(MapAllocation)));
   void* ptr = MapAligned(size, kChunkSize);
   if (!ptr) {
     FreeLocked(allocation);
-    abort(); //throw std::bad_alloc;
+    abort();  // throw std::bad_alloc;
   }
   allocation->ptr = ptr;
   allocation->size = size;
@@ -412,10 +401,9 @@ void* HeapImpl::MapAlloc(size_t size) {
   return ptr;
 }
 
-void HeapImpl::MapFree(void *ptr) {
-  MapAllocation **allocation = &map_allocation_list_;
-  while (*allocation && (*allocation)->ptr != ptr)
-    allocation = &(*allocation)->next;
+void HeapImpl::MapFree(void* ptr) {
+  MapAllocation** allocation = &map_allocation_list_;
+  while (*allocation && (*allocation)->ptr != ptr) allocation = &(*allocation)->next;
 
   assert(*allocation != nullptr);
 
@@ -425,22 +413,22 @@ void HeapImpl::MapFree(void *ptr) {
   *allocation = (*allocation)->next;
 }
 
-void HeapImpl::MoveToFreeList(Chunk *chunk, int bucket) {
+void HeapImpl::MoveToFreeList(Chunk* chunk, int bucket) {
   MoveToList(chunk, &free_chunks_[bucket]);
 }
 
-void HeapImpl::MoveToFullList(Chunk *chunk, int bucket) {
+void HeapImpl::MoveToFullList(Chunk* chunk, int bucket) {
   MoveToList(chunk, &full_chunks_[bucket]);
 }
 
-void HeapImpl::MoveToList(Chunk *chunk, LinkedList<Chunk*>* head) {
+void HeapImpl::MoveToList(Chunk* chunk, LinkedList<Chunk*>* head) {
   // Remove from old list
   chunk->node_.remove();
 
-  LinkedList<Chunk*> *node = head;
+  LinkedList<Chunk*>* node = head;
   // Insert into new list, sorted by lowest free count
-  while (node->next() != head && node->data() != nullptr
-      && node->data()->free_count() < chunk->free_count())
+  while (node->next() != head && node->data() != nullptr &&
+         node->data()->free_count() < chunk->free_count())
     node = node->next();
 
   node->insert(chunk->node_);
@@ -469,10 +457,12 @@ void Heap::deallocate(void* ptr) {
   impl_->Free(ptr);
 }
 
-void Heap::deallocate(HeapImpl*impl, void* ptr) {
+void Heap::deallocate(HeapImpl* impl, void* ptr) {
   impl->Free(ptr);
 }
 
 bool Heap::empty() {
   return impl_->Empty();
 }
+
+}  // namespace android

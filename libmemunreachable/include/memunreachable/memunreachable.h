@@ -17,12 +17,15 @@
 #ifndef LIBMEMUNREACHABLE_MEMUNREACHABLE_H_
 #define LIBMEMUNREACHABLE_MEMUNREACHABLE_H_
 
+#include <string.h>
 #include <sys/cdefs.h>
 
 #ifdef __cplusplus
 
-#include <vector>
 #include <string>
+#include <vector>
+
+namespace android {
 
 struct Leak {
   uintptr_t begin;
@@ -73,6 +76,8 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit = 100);
 
 std::string GetUnreachableMemoryString(bool log_contents = false, size_t limit = 100);
 
+}  // namespace android
+
 #endif
 
 __BEGIN_DECLS
@@ -83,4 +88,4 @@ bool NoLeaks();
 
 __END_DECLS
 
-#endif // LIBMEMUNREACHABLE_MEMUNREACHABLE_H_
+#endif  // LIBMEMUNREACHABLE_MEMUNREACHABLE_H_

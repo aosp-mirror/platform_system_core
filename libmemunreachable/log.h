@@ -19,6 +19,39 @@
 
 #define LOG_TAG "libmemunreachable"
 
+#if defined(__ANDROID__)
+
+#include <async_safe/log.h>
+
+#define MEM_ALOGE(...) async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, ##__VA_ARGS__)
+#define MEM_ALOGW(...) async_safe_format_log(ANDROID_LOG_WARN, LOG_TAG, ##__VA_ARGS__)
+#define MEM_ALOGI(...) async_safe_format_log(ANDROID_LOG_INFO, LOG_TAG, ##__VA_ARGS__)
+#define MEM_ALOGV_IMPL(...) async_safe_format_log(ANDROID_LOG_VERBOSE, LOG_TAG, ##__VA_ARGS__)
+
+#ifdef NDEBUG
+#define MEM_ALOGV(...)             \
+  do {                             \
+    if (0) {                       \
+      MEM_ALOGV_IMPL(__VA_ARGS__); \
+    }                              \
+  } while (0)
+#else
+#define MEM_ALOGV(...) MEM_ALOGV_IMPL(__VA_ARGS__)
+#endif
+
+#define MEM_LOG_ALWAYS_FATAL(...) async_safe_fatal(__VA_ARGS__)
+
+#else
+
 #include <log/log.h>
 
-#endif // LIBMEMUNREACHABLE_LOG_H_
+#define MEM_ALOGW ALOGW
+#define MEM_ALOGE ALOGE
+#define MEM_ALOGV ALOGV
+#define MEM_ALOGI ALOGI
+
+#define MEM_LOG_ALWAYS_FATAL LOG_ALWAYS_FATAL
+
+#endif
+
+#endif  // LIBMEMUNREACHABLE_LOG_H_

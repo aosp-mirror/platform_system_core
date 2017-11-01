@@ -34,19 +34,6 @@ static int autosuspend_init(void)
         return 0;
     }
 
-    autosuspend_ops = autosuspend_earlysuspend_init();
-    if (autosuspend_ops) {
-        goto out;
-    }
-
-/* Remove autosleep so userspace can manager suspend/resume and keep stats */
-#if 0
-    autosuspend_ops = autosuspend_autosleep_init();
-    if (autosuspend_ops) {
-        goto out;
-    }
-#endif
-
     autosuspend_ops = autosuspend_wakeup_count_init();
     if (autosuspend_ops) {
         goto out;

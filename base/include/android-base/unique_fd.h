@@ -17,6 +17,13 @@
 #ifndef ANDROID_BASE_UNIQUE_FD_H
 #define ANDROID_BASE_UNIQUE_FD_H
 
+#include <fcntl.h>
+
+#if !defined(_WIN32)
+#include <sys/socket.h>
+#endif
+
+#include <sys/types.h>
 #include <unistd.h>
 
 // DO NOT INCLUDE OTHER LIBBASE HEADERS!
@@ -87,6 +94,49 @@ class unique_fd_impl final {
 };
 
 using unique_fd = unique_fd_impl<DefaultCloser>;
+
+#if !defined(_WIN32)
+
+// Inline functions, so that they can be used header-only.
+inline bool Pipe(unique_fd* read, unique_fd* write) {
+  int pipefd[2];
+
+#if defined(__linux__)
+  if (pipe2(pipefd, O_CLOEXEC) != 0) {
+    return false;
+  }
+#else  // defined(__APPLE__)
+  if (pipe(pipefd) != 0) {
+    return false;
+  }
+
+  if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 || fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return false;
+  }
+#endif
+
+  read->reset(pipefd[0]);
+  write->reset(pipefd[1]);
+  return true;
+}
+
+inline bool Socketpair(int domain, int type, int protocol, unique_fd* left, unique_fd* right) {
+  int sockfd[2];
+  if (socketpair(domain, type, protocol, sockfd) != 0) {
+    return false;
+  }
+  left->reset(sockfd[0]);
+  right->reset(sockfd[1]);
+  return true;
+}
+
+inline bool Socketpair(int type, unique_fd* left, unique_fd* right) {
+  return Socketpair(AF_UNIX, type, 0, left, right);
+}
+
+#endif  // !defined(_WIN32)
 
 }  // namespace base
 }  // namespace android

@@ -16,34 +16,20 @@
 
 #include "NativeBridgeTest.h"
 
+#include <android-base/macros.h>
+
 namespace android {
 
 static const char* kISAs[] = { "arm", "arm64", "mips", "mips64", "x86", "x86_64", "random", "64arm",
                                "64_x86", "64_x86_64", "", "reallylongstringabcd", nullptr };
 
-#if defined(__arm__)
-static const char* kRuntimeISA = "arm";
-#elif defined(__aarch64__)
-static const char* kRuntimeISA = "arm64";
-#elif defined(__mips__) && !defined(__LP64__)
-static const char* kRuntimeISA = "mips";
-#elif defined(__mips__) && defined(__LP64__)
-static const char* kRuntimeISA = "mips64";
-#elif defined(__i386__)
-static const char* kRuntimeISA = "x86";
-#elif defined(__x86_64__)
-static const char* kRuntimeISA = "x86_64";
-#else
-static const char* kRuntimeISA = "unknown";
-#endif
-
 TEST_F(NativeBridgeTest, NeedsNativeBridge) {
-    EXPECT_EQ(false, NeedsNativeBridge(kRuntimeISA));
+  EXPECT_EQ(false, NeedsNativeBridge(ABI_STRING));
 
-    const size_t kISACount = sizeof(kISAs)/sizeof(kISAs[0]);
-    for (size_t i = 0; i < kISACount; i++) {
-        EXPECT_EQ(kISAs[i] == nullptr ? false : strcmp(kISAs[i], kRuntimeISA) != 0,
-                  NeedsNativeBridge(kISAs[i]));
+  const size_t kISACount = sizeof(kISAs) / sizeof(kISAs[0]);
+  for (size_t i = 0; i < kISACount; i++) {
+    EXPECT_EQ(kISAs[i] == nullptr ? false : strcmp(kISAs[i], ABI_STRING) != 0,
+              NeedsNativeBridge(kISAs[i]));
     }
 }
 

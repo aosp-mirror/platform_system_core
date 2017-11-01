@@ -50,45 +50,40 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
-}
 
+    export_include_dirs: ["include"],
+}
 
 cc_library {
     name: "libziparchive",
     host_supported: true,
-    defaults: ["libziparchive_defaults", "libziparchive_flags"],
-    shared_libs: ["liblog", "libbase"],
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+
+    defaults: [
+        "libziparchive_defaults",
+        "libziparchive_flags",
+    ],
+    shared_libs: [
+        "liblog",
+        "libbase",
+        "libz",
+    ],
     target: {
         android: {
-            shared_libs: ["libz", "libutils"],
+            shared_libs: [
+                "libutils",
+            ],
         },
         host: {
             static_libs: ["libutils"],
         },
         linux_bionic: {
-            static_libs: ["libz"],
             enabled: true,
         },
-        linux: {
-            shared_libs: ["libz-host"],
-        },
-        darwin: {
-            shared_libs: ["libz-host"],
-        },
-        windows: {
-            shared_libs: ["libz-host"],
-        },
     },
-}
-
-// Also provide libziparchive-host until everything is switched over to using libziparchive
-cc_library {
-    name: "libziparchive-host",
-    host_supported: true,
-    device_supported: false,
-    defaults: ["libziparchive_defaults", "libziparchive_flags"],
-    shared_libs: ["libz-host"],
-    static_libs: ["libutils"],
 }
 
 // Tests.
@@ -121,4 +116,40 @@ cc_test {
             enabled: true,
         },
     },
+}
+
+// Performance benchmarks.
+cc_benchmark {
+    name: "ziparchive-benchmarks",
+    defaults: ["libziparchive_flags"],
+
+    srcs: [
+        "zip_archive_benchmark.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    static_libs: [
+        "libziparchive",
+        "libz",
+        "libutils",
+    ],
+
+    target: {
+        host: {
+            cppflags: ["-Wno-unnamed-type-template-args"],
+        },
+    },
+}
+
+cc_binary {
+    name: "unzip",
+    defaults: ["libziparchive_flags"],
+    srcs: ["unzip.cpp"],
+    shared_libs: [
+        "libbase",
+        "libziparchive",
+    ],
 }

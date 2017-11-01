@@ -27,10 +27,13 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
+#include <demangle.h>
+
 #include "BacktraceLog.h"
-#include "thread_utils.h"
 #include "UnwindCurrent.h"
 #include "UnwindPtrace.h"
+#include "UnwindStack.h"
+#include "thread_utils.h"
 
 using android::base::StringPrintf;
 
@@ -52,9 +55,17 @@ Backtrace::~Backtrace() {
   }
 }
 
-std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
-  std::string func_name = GetFunctionNameRaw(pc, offset);
-  return func_name;
+std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const backtrace_map_t* map) {
+  backtrace_map_t map_value;
+  if (map == nullptr) {
+    FillInMap(pc, &map_value);
+    map = &map_value;
+  }
+  // If no map is found, or this map is backed by a device, then return nothing.
+  if (map->start == 0 || (map->flags & PROT_DEVICE_MAP)) {
+    return "";
+  }
+  return demangle(GetFunctionNameRaw(pc, offset).c_str());
 }
 
 bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, word_t* out_value) {
@@ -74,10 +85,8 @@ std::string Backtrace::FormatFrameData(size_t frame_num) {
 }
 
 std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
-  uintptr_t relative_pc;
   std::string map_name;
   if (BacktraceMap::IsValid(frame->map)) {
-    relative_pc = BacktraceMap::GetRelativePc(frame->map, frame->pc);
     if (!frame->map.name.empty()) {
       map_name = frame->map.name.c_str();
       if (map_name[0] == '[' && map_name[map_name.size() - 1] == ']') {
@@ -89,10 +98,9 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
     }
   } else {
     map_name = "<unknown>";
-    relative_pc = frame->pc;
   }
 
-  std::string line(StringPrintf("#%02zu pc %" PRIPTR "  ", frame->num, relative_pc));
+  std::string line(StringPrintf("#%02zu pc %" PRIPTR "  ", frame->num, frame->rel_pc));
   line += map_name;
   // Special handling for non-zero offset maps, we need to print that
   // information.
@@ -127,9 +135,9 @@ Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
   }
 
   if (pid == getpid()) {
-    return new UnwindCurrent(pid, tid, map);
+    return new UnwindStackCurrent(pid, tid, map);
   } else {
-    return new UnwindPtrace(pid, tid, map);
+    return new UnwindStackPtrace(pid, tid, map);
   }
 }
 
@@ -146,7 +154,7 @@ std::string Backtrace::GetErrorString(BacktraceUnwindError error) {
   case BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST:
     return "Thread doesn't exist";
   case BACKTRACE_UNWIND_ERROR_THREAD_TIMEOUT:
-    return "Thread has not repsonded to signal in time";
+    return "Thread has not responded to signal in time";
   case BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION:
     return "Attempt to use an unsupported feature";
   case BACKTRACE_UNWIND_ERROR_NO_CONTEXT:

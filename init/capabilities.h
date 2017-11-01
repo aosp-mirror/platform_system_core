@@ -15,16 +15,28 @@
 #ifndef _INIT_CAPABILITIES_H
 #define _INIT_CAPABILITIES_H
 
-#include <linux/capability.h>
+#include <sys/capability.h>
 
 #include <bitset>
 #include <string>
+#include <type_traits>
+
+namespace android {
+namespace init {
+
+struct CapDeleter {
+    void operator()(cap_t caps) const { cap_free(caps); }
+};
 
 using CapSet = std::bitset<CAP_LAST_CAP + 1>;
+using ScopedCaps = std::unique_ptr<std::remove_pointer<cap_t>::type, CapDeleter>;
 
 int LookupCap(const std::string& cap_name);
 bool CapAmbientSupported();
 unsigned int GetLastValidCap();
 bool SetCapsForExec(const CapSet& to_keep);
+
+}  // namespace init
+}  // namespace android
 
 #endif  // _INIT_CAPABILITIES_H

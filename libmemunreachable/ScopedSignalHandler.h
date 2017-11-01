@@ -26,33 +26,29 @@
 
 #include "log.h"
 
+namespace android {
+
 class ScopedSignalHandler {
  public:
   using Fn = std::function<void(ScopedSignalHandler&, int, siginfo_t*, void*)>;
 
   explicit ScopedSignalHandler(Allocator<Fn> allocator) : allocator_(allocator), signal_(-1) {}
-  ~ScopedSignalHandler() {
-    reset();
-  }
+  ~ScopedSignalHandler() { reset(); }
 
   template <class F>
   void install(int signal, F&& f) {
-    LOG_ALWAYS_FATAL_IF(signal_ != -1, "ScopedSignalHandler already installed");
+    if (signal_ != -1) MEM_LOG_ALWAYS_FATAL("ScopedSignalHandler already installed");
 
     handler_ = SignalFn(std::allocator_arg, allocator_,
-        [=](int signal, siginfo_t* si, void* uctx) {
-          f(*this, signal, si, uctx);
-        });
+                        [=](int signal, siginfo_t* si, void* uctx) { f(*this, signal, si, uctx); });
 
-    struct sigaction act{};
-    act.sa_sigaction = [](int signal, siginfo_t* si, void* uctx) {
-      handler_(signal, si, uctx);
-    };
+    struct sigaction act {};
+    act.sa_sigaction = [](int signal, siginfo_t* si, void* uctx) { handler_(signal, si, uctx); };
     act.sa_flags = SA_SIGINFO;
 
     int ret = sigaction(signal, &act, &old_act_);
     if (ret < 0) {
-      LOG_ALWAYS_FATAL("failed to install segfault handler: %s", strerror(errno));
+      MEM_LOG_ALWAYS_FATAL("failed to install segfault handler: %s", strerror(errno));
     }
 
     signal_ = signal;
@@ -62,13 +58,12 @@ class ScopedSignalHandler {
     if (signal_ != -1) {
       int ret = sigaction(signal_, &old_act_, NULL);
       if (ret < 0) {
-        ALOGE("failed to uninstall segfault handler");
+        MEM_ALOGE("failed to uninstall segfault handler");
       }
       handler_ = SignalFn{};
       signal_ = -1;
     }
   }
-
 
  private:
   using SignalFn = std::function<void(int, siginfo_t*, void*)>;
@@ -81,4 +76,6 @@ class ScopedSignalHandler {
   static SignalFn handler_;
 };
 
-#endif // LIBMEMUNREACHABLE_SCOPED_SIGNAL_HANDLER_H_
+}  // namespace android
+
+#endif  // LIBMEMUNREACHABLE_SCOPED_SIGNAL_HANDLER_H_

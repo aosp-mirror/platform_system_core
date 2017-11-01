@@ -90,10 +90,12 @@
 
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <private/android_logger.h>
 
@@ -211,6 +213,13 @@ Subprocess::~Subprocess() {
     WaitForExit();
 }
 
+static std::string GetHostName() {
+    char buf[HOST_NAME_MAX];
+    if (gethostname(buf, sizeof(buf)) != -1 && strcmp(buf, "localhost") != 0) return buf;
+
+    return android::base::GetProperty("ro.product.device", "android");
+}
+
 bool Subprocess::ForkAndExec(std::string* error) {
     unique_fd child_stdinout_sfd, child_stderr_sfd;
     unique_fd parent_error_sfd, child_error_sfd;
@@ -249,11 +258,11 @@ bool Subprocess::ForkAndExec(std::string* error) {
     }
 
     if (pw != nullptr) {
-        // TODO: $HOSTNAME? Normally bash automatically sets that, but mksh doesn't.
         env["HOME"] = pw->pw_dir;
+        env["HOSTNAME"] = GetHostName();
         env["LOGNAME"] = pw->pw_name;
-        env["USER"] = pw->pw_name;
         env["SHELL"] = pw->pw_shell;
+        env["USER"] = pw->pw_name;
     }
 
     if (!terminal_type_.empty()) {
@@ -319,6 +328,10 @@ bool Subprocess::ForkAndExec(std::string* error) {
         child_stderr_sfd.reset(-1);
         parent_error_sfd.reset(-1);
         close_on_exec(child_error_sfd);
+
+        // adbd sets SIGPIPE to SIG_IGN to get EPIPE instead, and Linux propagates that to child
+        // processes, so we need to manually reset back to SIG_DFL here (http://b/35209888).
+        signal(SIGPIPE, SIG_DFL);
 
         if (command_.empty()) {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr, cenv.data());
@@ -388,12 +401,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
 
 bool Subprocess::StartThread(std::unique_ptr<Subprocess> subprocess, std::string* error) {
     Subprocess* raw = subprocess.release();
-    if (!adb_thread_create(ThreadHandler, raw)) {
-        *error =
-            android::base::StringPrintf("failed to create subprocess thread: %s", strerror(errno));
-        kill(raw->pid_, SIGKILL);
-        return false;
-    }
+    std::thread(ThreadHandler, raw).detach();
 
     return true;
 }
@@ -435,8 +443,7 @@ int Subprocess::OpenPtyChildFd(const char* pts_name, unique_fd* error_sfd) {
 void Subprocess::ThreadHandler(void* userdata) {
     Subprocess* subprocess = reinterpret_cast<Subprocess*>(userdata);
 
-    adb_thread_setname(android::base::StringPrintf(
-            "shell srvc %d", subprocess->pid()));
+    adb_thread_setname(android::base::StringPrintf("shell svc %d", subprocess->pid()));
 
     D("passing data streams for PID %d", subprocess->pid());
     subprocess->PassDataStreams();

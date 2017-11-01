@@ -31,6 +31,8 @@
 #include <time.h>
 
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -47,7 +49,9 @@
 #include "adb_auth.h"
 #include "adb_io.h"
 #include "adb_listeners.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "sysdeps/chrono.h"
 #include "transport.h"
 
 #if !ADB_HOST
@@ -61,9 +65,9 @@ std::string adb_version() {
     // Don't change the format of this --- it's parsed by ddmlib.
     return android::base::StringPrintf(
         "Android Debug Bridge version %d.%d.%d\n"
-        "Revision %s\n"
+        "Version %s\n"
         "Installed as %s\n",
-        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_REVISION,
+        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_VERSION,
         android::base::GetExecutablePath().c_str());
 }
 
@@ -299,29 +303,25 @@ void parse_banner(const std::string& banner, atransport* t) {
     const std::string& type = pieces[0];
     if (type == "bootloader") {
         D("setting connection_state to kCsBootloader");
-        t->connection_state = kCsBootloader;
-        update_transports();
+        t->SetConnectionState(kCsBootloader);
     } else if (type == "device") {
         D("setting connection_state to kCsDevice");
-        t->connection_state = kCsDevice;
-        update_transports();
+        t->SetConnectionState(kCsDevice);
     } else if (type == "recovery") {
         D("setting connection_state to kCsRecovery");
-        t->connection_state = kCsRecovery;
-        update_transports();
+        t->SetConnectionState(kCsRecovery);
     } else if (type == "sideload") {
         D("setting connection_state to kCsSideload");
-        t->connection_state = kCsSideload;
-        update_transports();
+        t->SetConnectionState(kCsSideload);
     } else {
         D("setting connection_state to kCsHost");
-        t->connection_state = kCsHost;
+        t->SetConnectionState(kCsHost);
     }
 }
 
 static void handle_new_connection(atransport* t, apacket* p) {
-    if (t->connection_state != kCsOffline) {
-        t->connection_state = kCsOffline;
+    if (t->GetConnectionState() != kCsOffline) {
+        t->SetConnectionState(kCsOffline);
         handle_offline(t);
     }
 
@@ -340,6 +340,8 @@ static void handle_new_connection(atransport* t, apacket* p) {
         send_auth_request(t);
     }
 #endif
+
+    update_transports();
 }
 
 void handle_packet(apacket *p, atransport *t)
@@ -358,7 +360,7 @@ void handle_packet(apacket *p, atransport *t)
             send_connect(t);
 #endif
         } else {
-            t->connection_state = kCsOffline;
+            t->SetConnectionState(kCsOffline);
             handle_offline(t);
             send_packet(p, t);
         }
@@ -372,7 +374,9 @@ void handle_packet(apacket *p, atransport *t)
         switch (p->msg.arg0) {
 #if ADB_HOST
             case ADB_AUTH_TOKEN:
-                t->connection_state = kCsUnauthorized;
+                if (t->GetConnectionState() == kCsOffline) {
+                    t->SetConnectionState(kCsUnauthorized);
+                }
                 send_auth_response(p->data, p->msg.data_length, t);
                 break;
 #else
@@ -391,7 +395,7 @@ void handle_packet(apacket *p, atransport *t)
                 break;
 #endif
             default:
-                t->connection_state = kCsOffline;
+                t->SetConnectionState(kCsOffline);
                 handle_offline(t);
                 break;
         }
@@ -507,8 +511,8 @@ static bool _make_handle_noninheritable(HANDLE h) {
     if (!_try_make_handle_noninheritable(h)) {
         // Show the handle value to give us a clue in case we have problems
         // with pseudo-handle values.
-        fprintf(stderr, "Cannot make handle 0x%p non-inheritable: %s\n",
-                h, android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        fprintf(stderr, "adb: cannot make handle 0x%p non-inheritable: %s\n", h,
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return false;
     }
 
@@ -523,7 +527,7 @@ static bool _create_anonymous_pipe(unique_handle* pipe_read_out,
     HANDLE pipe_read_raw = NULL;
     HANDLE pipe_write_raw = NULL;
     if (!CreatePipe(&pipe_read_raw, &pipe_write_raw, sa, 0)) {
-        fprintf(stderr, "Cannot create pipe: %s\n",
+        fprintf(stderr, "adb: CreatePipe failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return false;
     }
@@ -554,7 +558,8 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
     std::unique_ptr<FILE, decltype(&fclose)> stream(nullptr, fclose);
 
     if (original_fd == -1) {
-        fprintf(stderr, "Failed to get file descriptor for %s: %s\n", output_name, strerror(errno));
+        fprintf(stderr, "adb: failed to get file descriptor for %s: %s\n", output_name,
+                strerror(errno));
         return EXIT_FAILURE;
     }
 
@@ -566,7 +571,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
         // call this function if subprocesses may be started concurrently.
         const int fd = dup(original_fd);
         if (fd == -1) {
-            fprintf(stderr, "Failed to duplicate file descriptor for %s: %s\n", output_name,
+            fprintf(stderr, "adb: failed to duplicate file descriptor for %s: %s\n", output_name,
                     strerror(errno));
             return EXIT_FAILURE;
         }
@@ -574,7 +579,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
         // Note that although we call fdopen() below with a binary flag, it may not adhere to that
         // flag, so we have to set the mode manually.
         if (_setmode(fd, _O_BINARY) == -1) {
-            fprintf(stderr, "Failed to set binary mode for duplicate of %s: %s\n", output_name,
+            fprintf(stderr, "adb: failed to set binary mode for duplicate of %s: %s\n", output_name,
                     strerror(errno));
             unix_close(fd);
             return EXIT_FAILURE;
@@ -582,7 +587,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
 
         stream.reset(fdopen(fd, "wb"));
         if (stream.get() == nullptr) {
-            fprintf(stderr, "Failed to open duplicate stream for %s: %s\n", output_name,
+            fprintf(stderr, "adb: failed to open duplicate stream for %s: %s\n", output_name,
                     strerror(errno));
             unix_close(fd);
             return EXIT_FAILURE;
@@ -591,7 +596,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
         // Unbuffer the stream because it will be buffered by default and we want subprocess output
         // to be shown immediately.
         if (setvbuf(stream.get(), NULL, _IONBF, 0) == -1) {
-            fprintf(stderr, "Failed to unbuffer %s: %s\n", output_name, strerror(errno));
+            fprintf(stderr, "adb: failed to unbuffer %s: %s\n", output_name, strerror(errno));
             return EXIT_FAILURE;
         }
 
@@ -608,7 +613,7 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
             if (err == ERROR_BROKEN_PIPE) {
                 return EXIT_SUCCESS;
             } else {
-                fprintf(stderr, "Failed to read from %s: %s\n", output_name,
+                fprintf(stderr, "adb: failed to read from %s: %s\n", output_name,
                         android::base::SystemErrorCodeToString(err).c_str());
                 return EXIT_FAILURE;
             }
@@ -619,8 +624,8 @@ static unsigned _redirect_pipe_thread(HANDLE h, DWORD nStdHandle) {
             // fwrite() actually calls adb_fwrite() which can write UTF-8 to the console.
             const size_t bytes_written = fwrite(buf, 1, bytes_read, stream.get());
             if (bytes_written != bytes_read) {
-                fprintf(stderr, "Only wrote %zu of %lu bytes to %s\n", bytes_written, bytes_read,
-                        output_name);
+                fprintf(stderr, "adb: error: only wrote %zu of %lu bytes to %s\n", bytes_written,
+                        bytes_read, output_name);
                 return EXIT_FAILURE;
             }
         }
@@ -638,6 +643,26 @@ static unsigned __stdcall _redirect_stderr_thread(HANDLE h) {
 }
 
 #endif
+
+static void ReportServerStartupFailure(pid_t pid) {
+    fprintf(stderr, "ADB server didn't ACK\n");
+    fprintf(stderr, "Full server startup log: %s\n", GetLogFilePath().c_str());
+    fprintf(stderr, "Server had pid: %d\n", pid);
+
+    unique_fd fd(adb_open(GetLogFilePath().c_str(), O_RDONLY));
+    if (fd == -1) return;
+
+    // Let's not show more than 128KiB of log...
+    adb_lseek(fd, -128 * 1024, SEEK_END);
+    std::string content;
+    if (!android::base::ReadFdToString(fd, &content)) return;
+
+    std::string header = android::base::StringPrintf("--- adb starting (pid %d) ---", pid);
+    std::vector<std::string> lines = android::base::Split(content, "\n");
+    int i = lines.size() - 1;
+    while (i >= 0 && lines[i] != header) --i;
+    while (static_cast<size_t>(i) < lines.size()) fprintf(stderr, "%s\n", lines[i++].c_str());
+}
 
 int launch_server(const std::string& socket_spec) {
 #if defined(_WIN32)
@@ -663,7 +688,7 @@ int launch_server(const std::string& socket_spec) {
             FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL, NULL));
     if (nul_read.get() == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "Cannot open 'nul': %s\n",
+        fprintf(stderr, "adb: CreateFileW 'nul' failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
@@ -725,8 +750,7 @@ int launch_server(const std::string& socket_spec) {
         // If this fires, either handle values are larger than 32-bits or else
         // there is a bug in our casting.
         // https://msdn.microsoft.com/en-us/library/windows/desktop/aa384203%28v=vs.85%29.aspx
-        fprintf(stderr, "Cannot fit pipe handle value into 32-bits: 0x%p\n",
-                ack_write.get());
+        fprintf(stderr, "adb: cannot fit pipe handle value into 32-bits: 0x%p\n", ack_write.get());
         return -1;
     }
 
@@ -736,7 +760,7 @@ int launch_server(const std::string& socket_spec) {
                                                    arraysize(program_path));
     if ((module_result >= arraysize(program_path)) || (module_result == 0)) {
         // String truncation or some other error.
-        fprintf(stderr, "Cannot get executable path: %s\n",
+        fprintf(stderr, "adb: cannot get executable path: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
@@ -761,7 +785,7 @@ int launch_server(const std::string& socket_spec) {
             NULL,                    /* use parent's starting directory */
             &startup,                 /* startup info, i.e. std handles */
             &pinfo )) {
-        fprintf(stderr, "Cannot create process: %s\n",
+        fprintf(stderr, "adb: CreateProcessW failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
@@ -791,7 +815,7 @@ int launch_server(const std::string& socket_spec) {
             _beginthreadex(NULL, 0, _redirect_stdout_thread, stdout_read.get(),
                            0, NULL)));
     if (stdout_thread.get() == nullptr) {
-        fprintf(stderr, "Cannot create thread: %s\n", strerror(errno));
+        fprintf(stderr, "adb: cannot create thread: %s\n", strerror(errno));
         return -1;
     }
     stdout_read.release();  // Transfer ownership to new thread
@@ -800,7 +824,7 @@ int launch_server(const std::string& socket_spec) {
             _beginthreadex(NULL, 0, _redirect_stderr_thread, stderr_read.get(),
                            0, NULL)));
     if (stderr_thread.get() == nullptr) {
-        fprintf(stderr, "Cannot create thread: %s\n", strerror(errno));
+        fprintf(stderr, "adb: cannot create thread: %s\n", strerror(errno));
         return -1;
     }
     stderr_read.release();  // Transfer ownership to new thread
@@ -819,7 +843,8 @@ int launch_server(const std::string& socket_spec) {
                 memcmp(temp, expected, expected_length) == 0) {
                 got_ack = true;
             } else {
-                fprintf(stderr, "ADB server didn't ACK\n");
+                ReportServerStartupFailure(GetProcessId(process_handle.get()));
+                return -1;
             }
         } else {
             const DWORD err = GetLastError();
@@ -845,22 +870,20 @@ int launch_server(const std::string& socket_spec) {
     if (wait_result == WAIT_TIMEOUT) {
         // Threads did not finish after waiting a little while. Perhaps the
         // server didn't close pipes, or it is hung.
-        fprintf(stderr, "Timed-out waiting for threads to finish reading from "
-                "ADB Server\n");
+        fprintf(stderr, "adb: timed out waiting for threads to finish reading from ADB server\n");
         // Process handles are signaled when the process exits, so if we wait
         // on the handle for 0 seconds and it returns 'timeout', that means that
         // the process is still running.
         if (WaitForSingleObject(process_handle.get(), 0) == WAIT_TIMEOUT) {
             // We could TerminateProcess(), but that seems somewhat presumptive.
-            fprintf(stderr, "ADB Server is running: process id %lu\n",
-                    pinfo.dwProcessId);
+            fprintf(stderr, "adb: server is running with process id %lu\n", pinfo.dwProcessId);
         }
         return -1;
     }
 
     if (wait_result != WAIT_OBJECT_0) {
-        fprintf(stderr, "Unexpected result waiting for threads: %lu: %s\n",
-                wait_result, android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        fprintf(stderr, "adb: unexpected result waiting for threads: %lu: %s\n", wait_result,
+                android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return -1;
     }
 
@@ -894,13 +917,10 @@ int launch_server(const std::string& socket_spec) {
         int result = execl(path.c_str(), "adb", "-L", socket_spec.c_str(), "fork-server", "server",
                            "--reply-fd", reply_fd, NULL);
         // this should not return
-        fprintf(stderr, "OOPS! execl returned %d, errno: %d\n", result, errno);
-    } else  {
+        fprintf(stderr, "adb: execl returned %d: %s\n", result, strerror(errno));
+    } else {
         // parent side of the fork
-
-        char  temp[3];
-
-        temp[0] = 'A'; temp[1] = 'B'; temp[2] = 'C';
+        char temp[3] = {};
         // wait for the "OK\n" message
         adb_close(fd[1]);
         int ret = adb_read(fd[0], temp, 3);
@@ -911,7 +931,7 @@ int launch_server(const std::string& socket_spec) {
             return -1;
         }
         if (ret != 3 || temp[0] != 'O' || temp[1] != 'K' || temp[2] != '\n') {
-            fprintf(stderr, "ADB server didn't ACK\n" );
+            ReportServerStartupFailure(pid);
             return -1;
         }
     }
@@ -923,8 +943,8 @@ int launch_server(const std::string& socket_spec) {
 // Try to handle a network forwarding request.
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
-int handle_forward_request(const char* service, TransportType type, const char* serial, int reply_fd)
-{
+int handle_forward_request(const char* service, TransportType type, const char* serial,
+                           TransportId transport_id, int reply_fd) {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
         std::string listeners = format_listeners();
@@ -977,7 +997,8 @@ int handle_forward_request(const char* service, TransportType type, const char* 
         }
 
         std::string error_msg;
-        atransport* transport = acquire_one_transport(type, serial, nullptr, &error_msg);
+        atransport* transport =
+            acquire_one_transport(type, serial, transport_id, nullptr, &error_msg);
         if (!transport) {
             SendFail(reply_fd, error_msg);
             return 1;
@@ -1034,26 +1055,21 @@ static int SendOkay(int fd, const std::string& s) {
     SendProtocolString(fd, s);
     return 0;
 }
-#endif
 
-int handle_host_request(const char* service, TransportType type,
-                        const char* serial, int reply_fd, asocket* s) {
+int handle_host_request(const char* service, TransportType type, const char* serial,
+                        TransportId transport_id, int reply_fd, asocket* s) {
     if (strcmp(service, "kill") == 0) {
         fprintf(stderr, "adb server killed by remote request\n");
         fflush(stdout);
+
+        // Send a reply even though we don't read it anymore, so that old versions
+        // of adb that do read it don't spew error messages.
         SendOkay(reply_fd);
 
-        // On Windows, if the process exits with open sockets that
-        // shutdown(SD_SEND) has not been called on, TCP RST segments will be
-        // sent to the peers which will cause their next recv() to error-out
-        // with WSAECONNRESET. In the case of this code, that means the client
-        // may not read the OKAY sent above.
-        adb_shutdown(reply_fd);
-
+        // Rely on process exit to close the socket for us.
         android::base::quick_exit(0);
     }
 
-#if ADB_HOST
     // "transport:" is used for switching transport with a specified serial number
     // "transport-usb:" is used for switching transport to the only USB transport
     // "transport-local:" is used for switching transport to the only local transport
@@ -1061,7 +1077,14 @@ int handle_host_request(const char* service, TransportType type,
     if (!strncmp(service, "transport", strlen("transport"))) {
         TransportType type = kTransportAny;
 
-        if (!strncmp(service, "transport-usb", strlen("transport-usb"))) {
+        if (!strncmp(service, "transport-id:", strlen("transport-id:"))) {
+            service += strlen("transport-id:");
+            transport_id = strtoll(service, const_cast<char**>(&service), 10);
+            if (*service != '\0') {
+                SendFail(reply_fd, "invalid transport id");
+                return 1;
+            }
+        } else if (!strncmp(service, "transport-usb", strlen("transport-usb"))) {
             type = kTransportUsb;
         } else if (!strncmp(service, "transport-local", strlen("transport-local"))) {
             type = kTransportLocal;
@@ -1073,7 +1096,7 @@ int handle_host_request(const char* service, TransportType type,
         }
 
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t != nullptr) {
             s->transport = t;
             SendOkay(reply_fd);
@@ -1098,16 +1121,10 @@ int handle_host_request(const char* service, TransportType type,
     if (!strcmp(service, "reconnect-offline")) {
         std::string response;
         close_usb_devices([&response](const atransport* transport) {
-            switch (transport->connection_state) {
+            switch (transport->GetConnectionState()) {
                 case kCsOffline:
                 case kCsUnauthorized:
-                    response += "reconnecting ";
-                    if (transport->serial) {
-                        response += transport->serial;
-                    } else {
-                        response += "<unknown>";
-                    }
-                    response += "\n";
+                    response += "reconnecting " + transport->serial_name() + "\n";
                     return true;
                 default:
                     return false;
@@ -1122,7 +1139,7 @@ int handle_host_request(const char* service, TransportType type,
 
     if (!strcmp(service, "features")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t != nullptr) {
             SendOkay(reply_fd, FeatureSetToString(t->features()));
         } else {
@@ -1131,17 +1148,16 @@ int handle_host_request(const char* service, TransportType type,
         return 0;
     }
 
-#if ADB_HOST
     if (!strcmp(service, "host-features")) {
         FeatureSet features = supported_features();
         // Abuse features to report libusb status.
         if (should_use_libusb()) {
             features.insert(kFeatureLibusb);
         }
+        features.insert(kFeaturePushSync);
         SendOkay(reply_fd, FeatureSetToString(features));
         return 0;
     }
-#endif
 
     // remove TCP transport
     if (!strncmp(service, "disconnect:", 11)) {
@@ -1176,7 +1192,7 @@ int handle_host_request(const char* service, TransportType type,
     // These always report "unknown" rather than the actual error, for scripts.
     if (!strcmp(service, "get-serialno")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             return SendOkay(reply_fd, t->serial ? t->serial : "unknown");
         } else {
@@ -1185,7 +1201,7 @@ int handle_host_request(const char* service, TransportType type,
     }
     if (!strcmp(service, "get-devpath")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             return SendOkay(reply_fd, t->devpath ? t->devpath : "unknown");
         } else {
@@ -1194,7 +1210,7 @@ int handle_host_request(const char* service, TransportType type,
     }
     if (!strcmp(service, "get-state")) {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             return SendOkay(reply_fd, t->connection_state_name());
         } else {
@@ -1211,15 +1227,63 @@ int handle_host_request(const char* service, TransportType type,
     }
 
     if (!strcmp(service, "reconnect")) {
-        if (s->transport != nullptr) {
-            kick_transport(s->transport);
+        std::string response;
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &response, true);
+        if (t != nullptr) {
+            kick_transport(t);
+            response =
+                "reconnecting " + t->serial_name() + " [" + t->connection_state_name() + "]\n";
         }
-        return SendOkay(reply_fd, "done");
+        return SendOkay(reply_fd, response);
     }
-#endif // ADB_HOST
 
-    int ret = handle_forward_request(service, type, serial, reply_fd);
+    int ret = handle_forward_request(service, type, serial, transport_id, reply_fd);
     if (ret >= 0)
       return ret - 1;
     return -1;
 }
+
+static auto& init_mutex = *new std::mutex();
+static auto& init_cv = *new std::condition_variable();
+static bool device_scan_complete = false;
+static bool transports_ready = false;
+
+void update_transport_status() {
+    bool result = iterate_transports([](const atransport* t) {
+        if (t->type == kTransportUsb && t->online != 1) {
+            return false;
+        }
+        return true;
+    });
+
+    bool ready;
+    {
+        std::lock_guard<std::mutex> lock(init_mutex);
+        transports_ready = result;
+        ready = transports_ready && device_scan_complete;
+    }
+
+    if (ready) {
+        init_cv.notify_all();
+    }
+}
+
+void adb_notify_device_scan_complete() {
+    {
+        std::lock_guard<std::mutex> lock(init_mutex);
+        if (device_scan_complete) {
+            return;
+        }
+
+        device_scan_complete = true;
+    }
+
+    update_transport_status();
+}
+
+void adb_wait_for_device_initialization() {
+    std::unique_lock<std::mutex> lock(init_mutex);
+    init_cv.wait_for(lock, 3s, []() { return device_scan_complete && transports_ready; });
+}
+
+#endif  // ADB_HOST

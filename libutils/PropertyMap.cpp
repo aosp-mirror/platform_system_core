@@ -16,11 +16,7 @@
 
 #define LOG_TAG "PropertyMap"
 
-#include <stdlib.h>
-#include <string.h>
-
 #include <utils/PropertyMap.h>
-#include <utils/Log.h>
 
 // Enables debug output for the parser.
 #define DEBUG_PARSER 0

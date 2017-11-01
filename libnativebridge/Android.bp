@@ -1,11 +1,19 @@
 
+cc_library_headers {
+    name: "libnativebridge-dummy-headers",
+
+    host_supported: true,
+    export_include_dirs=["include"],
+}
+
 cc_library {
     name: "libnativebridge",
 
     host_supported: true,
     srcs: ["native_bridge.cc"],
-    shared_libs: ["liblog"],
-    clang: true,
+    shared_libs: ["liblog", "libbase"],
+
+    export_include_dirs=["include"],
 
     cflags: [
         "-Werror",
@@ -14,11 +22,6 @@ cc_library {
     cppflags: [
         "-fvisibility=protected",
     ],
-
-    host_ldlibs: ["-ldl"],
-    target: {
-        android: {
-            shared_libs: ["libdl"],
-        },
-    },
 }
+
+subdirs = ["tests"]

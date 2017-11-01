@@ -21,13 +21,13 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <map>
 #include <memory>
@@ -38,6 +38,8 @@
 
 #include "Allocator.h"
 #include "log.h"
+
+namespace android {
 
 // bionic interfaces used:
 // atoi
@@ -50,12 +52,12 @@
 // Convert a pid > 0 to a string.  sprintf might allocate, so we can't use it.
 // Returns a pointer somewhere in buf to a null terminated string, or NULL
 // on error.
-static char *pid_to_str(char *buf, size_t len, pid_t pid) {
+static char* pid_to_str(char* buf, size_t len, pid_t pid) {
   if (pid <= 0) {
     return nullptr;
   }
 
-  char *ptr = buf + len - 1;
+  char* ptr = buf + len - 1;
   *ptr = 0;
   while (pid > 0) {
     ptr--;
@@ -79,6 +81,7 @@ class ThreadCaptureImpl {
   bool ReleaseThread(pid_t tid);
   bool CapturedThreadInfo(ThreadInfoList& threads);
   void InjectTestFunc(std::function<void(pid_t)>&& f) { inject_test_func_ = f; }
+
  private:
   int CaptureThread(pid_t tid);
   bool ReleaseThread(pid_t tid, unsigned int signal);
@@ -92,9 +95,8 @@ class ThreadCaptureImpl {
   std::function<void(pid_t)> inject_test_func_;
 };
 
-ThreadCaptureImpl::ThreadCaptureImpl(pid_t pid, Allocator<ThreadCaptureImpl>& allocator) :
-    captured_threads_(allocator), allocator_(allocator), pid_(pid) {
-}
+ThreadCaptureImpl::ThreadCaptureImpl(pid_t pid, Allocator<ThreadCaptureImpl>& allocator)
+    : captured_threads_(allocator), allocator_(allocator), pid_(pid) {}
 
 bool ThreadCaptureImpl::ListThreads(TidList& tids) {
   tids.clear();
@@ -110,23 +112,23 @@ bool ThreadCaptureImpl::ListThreads(TidList& tids) {
 
   android::base::unique_fd fd(open(path, O_CLOEXEC | O_DIRECTORY | O_RDONLY));
   if (fd == -1) {
-    ALOGE("failed to open %s: %s", path, strerror(errno));
+    MEM_ALOGE("failed to open %s: %s", path, strerror(errno));
     return false;
   }
 
   struct linux_dirent64 {
-    uint64_t  d_ino;
-    int64_t   d_off;
-    uint16_t  d_reclen;
-    char      d_type;
-    char      d_name[];
+    uint64_t d_ino;
+    int64_t d_off;
+    uint16_t d_reclen;
+    char d_type;
+    char d_name[];
   } __attribute((packed));
   char dirent_buf[4096];
   ssize_t nread;
   do {
     nread = syscall(SYS_getdents64, fd.get(), dirent_buf, sizeof(dirent_buf));
     if (nread < 0) {
-      ALOGE("failed to get directory entries from %s: %s", path, strerror(errno));
+      MEM_ALOGE("failed to get directory entries from %s: %s", path, strerror(errno));
       return false;
     } else if (nread > 0) {
       ssize_t off = 0;
@@ -177,8 +179,7 @@ bool ThreadCaptureImpl::CaptureThreads() {
 void ThreadCaptureImpl::PtraceDetach(pid_t tid, unsigned int signal) {
   void* sig_ptr = reinterpret_cast<void*>(static_cast<uintptr_t>(signal));
   if (ptrace(PTRACE_DETACH, tid, NULL, sig_ptr) < 0 && errno != ESRCH) {
-    ALOGE("failed to detach from thread %d of process %d: %s", tid, pid_,
-        strerror(errno));
+    MEM_ALOGE("failed to detach from thread %d of process %d: %s", tid, pid_, strerror(errno));
   }
 }
 
@@ -187,8 +188,7 @@ void ThreadCaptureImpl::PtraceDetach(pid_t tid, unsigned int signal) {
 int ThreadCaptureImpl::PtraceAttach(pid_t tid) {
   int ret = ptrace(PTRACE_SEIZE, tid, NULL, NULL);
   if (ret < 0) {
-    ALOGE("failed to attach to thread %d of process %d: %s", tid, pid_,
-        strerror(errno));
+    MEM_ALOGE("failed to attach to thread %d of process %d: %s", tid, pid_, strerror(errno));
     return -1;
   }
 
@@ -200,8 +200,7 @@ int ThreadCaptureImpl::PtraceAttach(pid_t tid) {
     if (errno == ESRCH) {
       return 0;
     } else {
-      ALOGE("failed to interrupt thread %d of process %d: %s", tid, pid_,
-          strerror(errno));
+      MEM_ALOGE("failed to interrupt thread %d of process %d: %s", tid, pid_, strerror(errno));
       PtraceDetach(tid, 0);
       return -1;
     }
@@ -212,15 +211,14 @@ int ThreadCaptureImpl::PtraceAttach(pid_t tid) {
 bool ThreadCaptureImpl::PtraceThreadInfo(pid_t tid, ThreadInfo& thread_info) {
   thread_info.tid = tid;
 
-  const unsigned int max_num_regs = 128; // larger than number of registers on any device
+  const unsigned int max_num_regs = 128;  // larger than number of registers on any device
   uintptr_t regs[max_num_regs];
   struct iovec iovec;
   iovec.iov_base = &regs;
   iovec.iov_len = sizeof(regs);
 
   if (ptrace(PTRACE_GETREGSET, tid, reinterpret_cast<void*>(NT_PRSTATUS), &iovec)) {
-    ALOGE("ptrace getregset for thread %d of process %d failed: %s",
-        tid, pid_, strerror(errno));
+    MEM_ALOGE("ptrace getregset for thread %d of process %d failed: %s", tid, pid_, strerror(errno));
     return false;
   }
 
@@ -247,7 +245,7 @@ bool ThreadCaptureImpl::PtraceThreadInfo(pid_t tid, ThreadInfo& thread_info) {
 
   thread_info.stack = std::pair<uintptr_t, uintptr_t>(regs[sp], 0);
 
-   return true;
+  return true;
 }
 
 int ThreadCaptureImpl::CaptureThread(pid_t tid) {
@@ -258,21 +256,19 @@ int ThreadCaptureImpl::CaptureThread(pid_t tid) {
 
   int status = 0;
   if (TEMP_FAILURE_RETRY(waitpid(tid, &status, __WALL)) < 0) {
-    ALOGE("failed to wait for pause of thread %d of process %d: %s", tid, pid_,
-        strerror(errno));
+    MEM_ALOGE("failed to wait for pause of thread %d of process %d: %s", tid, pid_, strerror(errno));
     PtraceDetach(tid, 0);
     return -1;
   }
 
   if (!WIFSTOPPED(status)) {
-    ALOGE("thread %d of process %d was not paused after waitpid, killed?",
-        tid, pid_);
+    MEM_ALOGE("thread %d of process %d was not paused after waitpid, killed?", tid, pid_);
     return 0;
   }
 
   unsigned int resume_signal = 0;
 
-  unsigned int signal =  WSTOPSIG(status);
+  unsigned int signal = WSTOPSIG(status);
   if ((status >> 16) == PTRACE_EVENT_STOP) {
     switch (signal) {
       case SIGSTOP:
@@ -285,8 +281,8 @@ int ThreadCaptureImpl::CaptureThread(pid_t tid) {
         // normal ptrace interrupt stop
         break;
       default:
-        ALOGE("unexpected signal %d with PTRACE_EVENT_STOP for thread %d of process %d",
-            signal, tid, pid_);
+        MEM_ALOGE("unexpected signal %d with PTRACE_EVENT_STOP for thread %d of process %d", signal,
+                  tid, pid_);
         return -1;
     }
   } else {
@@ -313,7 +309,7 @@ bool ThreadCaptureImpl::ReleaseThread(pid_t tid, unsigned int signal) {
 
 bool ThreadCaptureImpl::ReleaseThreads() {
   bool ret = true;
-  for (auto it = captured_threads_.begin(); it != captured_threads_.end(); ) {
+  for (auto it = captured_threads_.begin(); it != captured_threads_.end();) {
     if (ReleaseThread(it->first, it->second)) {
       it = captured_threads_.erase(it);
     } else {
@@ -367,3 +363,5 @@ bool ThreadCapture::CapturedThreadInfo(ThreadInfoList& threads) {
 void ThreadCapture::InjectTestFunc(std::function<void(pid_t)>&& f) {
   impl_->InjectTestFunc(std::forward<std::function<void(pid_t)>>(f));
 }
+
+}  // namespace android

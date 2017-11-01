@@ -20,14 +20,16 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <utime.h>
+
+#include <chrono>
 #include <cstdlib>
 #include <string>
 #include <utility>
+
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
-#include "histogram_logger.h"
-#include "uptime_parser.h"
 
 namespace {
 
@@ -46,24 +48,6 @@ bool ParseRecordEventTime(const std::string& path, int32_t* uptime) {
 
   *uptime = file_stat.st_mtime;
 
-  // The following code (till function exit) is a debug test to ensure the
-  // validity of the file mtime value, i.e., to check that the record file
-  // mtime values are not changed once set.
-  // TODO(jhawkins): Remove this code.
-  std::string content;
-  if (!android::base::ReadFileToString(path, &content)) {
-    PLOG(ERROR) << "Failed to read " << path;
-    return false;
-  }
-
-  // Ignore existing bootstat records (which do not contain file content).
-  if (!content.empty()) {
-    int32_t value;
-    if (android::base::ParseInt(content, &value)) {
-      bootstat::LogHistogram("bootstat_mtime_matches_content", value == *uptime);
-    }
-  }
-
   return true;
 }
 
@@ -74,28 +58,19 @@ BootEventRecordStore::BootEventRecordStore() {
 }
 
 void BootEventRecordStore::AddBootEvent(const std::string& event) {
-  AddBootEventWithValue(event, bootstat::ParseUptime());
+  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+      android::base::boot_clock::now().time_since_epoch());
+  AddBootEventWithValue(event, uptime.count());
 }
 
 // The implementation of AddBootEventValue makes use of the mtime file
 // attribute to store the value associated with a boot event in order to
 // optimize on-disk size requirements and small-file thrashing.
-void BootEventRecordStore::AddBootEventWithValue(
-    const std::string& event, int32_t value) {
+void BootEventRecordStore::AddBootEventWithValue(const std::string& event, int32_t value) {
   std::string record_path = GetBootEventPath(event);
   int record_fd = creat(record_path.c_str(), S_IRUSR | S_IWUSR);
   if (record_fd == -1) {
     PLOG(ERROR) << "Failed to create " << record_path;
-    return;
-  }
-
-  // Writing the value as content in the record file is a debug measure to
-  // ensure the validity of the file mtime value, i.e., to check that the record
-  // file mtime values are not changed once set.
-  // TODO(jhawkins): Remove this block.
-  if (!android::base::WriteStringToFd(std::to_string(value), record_fd)) {
-    PLOG(ERROR) << "Failed to write value to " << record_path;
-    close(record_fd);
     return;
   }
 
@@ -120,8 +95,7 @@ void BootEventRecordStore::AddBootEventWithValue(
   close(record_fd);
 }
 
-bool BootEventRecordStore::GetBootEvent(
-    const std::string& event, BootEventRecord* record) const {
+bool BootEventRecordStore::GetBootEvent(const std::string& event, BootEventRecord* record) const {
   CHECK_NE(static_cast<BootEventRecord*>(nullptr), record);
   CHECK(!event.empty());
 
@@ -136,8 +110,7 @@ bool BootEventRecordStore::GetBootEvent(
   return true;
 }
 
-std::vector<BootEventRecordStore::BootEventRecord> BootEventRecordStore::
-    GetAllBootEvents() const {
+std::vector<BootEventRecordStore::BootEventRecord> BootEventRecordStore::GetAllBootEvents() const {
   std::vector<BootEventRecord> events;
 
   std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(store_path_.c_str()), closedir);
@@ -171,8 +144,7 @@ void BootEventRecordStore::SetStorePath(const std::string& path) {
   store_path_ = path;
 }
 
-std::string BootEventRecordStore::GetBootEventPath(
-    const std::string& event) const {
+std::string BootEventRecordStore::GetBootEventPath(const std::string& event) const {
   DCHECK_EQ('/', store_path_.back());
   return store_path_ + event;
 }

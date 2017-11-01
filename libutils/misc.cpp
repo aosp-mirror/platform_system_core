@@ -16,21 +16,19 @@
 
 #define LOG_TAG "misc"
 
-//
-// Miscellaneous utility functions.
-//
 #include <utils/misc.h>
+
+#include <pthread.h>
+
 #include <utils/Log.h>
+#include <utils/Vector.h>
 
-#include <sys/stat.h>
-#include <string.h>
-#include <stdio.h>
-
-#if !defined(_WIN32)
-# include <pthread.h>
+#if defined(__ANDROID__)
+#include <dlfcn.h>
+#include <vndksupport/linker.h>
 #endif
 
-#include <utils/Vector.h>
+extern "C" void do_report_sysprop_change();
 
 using namespace android;
 
@@ -70,7 +68,36 @@ void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
 #endif
 }
 
+#if defined(__ANDROID__)
+void (*get_report_sysprop_change_func())() {
+    void (*func)() = nullptr;
+    void* handle = android_load_sphal_library("libutils.so", RTLD_NOW);
+    if (handle != nullptr) {
+        func = reinterpret_cast<decltype(func)>(dlsym(handle, "do_report_sysprop_change"));
+    }
+
+    return func;
+}
+#endif
+
 void report_sysprop_change() {
+    do_report_sysprop_change();
+
+#if defined(__ANDROID__)
+    // libutils.so is double loaded; from the default namespace and from the
+    // 'sphal' namespace. Redirect the sysprop change event to the other instance
+    // of libutils.so loaded in the 'sphal' namespace so that listeners attached
+    // to that instance is also notified with this event.
+    static auto func = get_report_sysprop_change_func();
+    if (func != nullptr) {
+        (*func)();
+    }
+#endif
+}
+
+};  // namespace android
+
+void do_report_sysprop_change() {
 #if !defined(_WIN32)
     pthread_mutex_lock(&gSyspropMutex);
     Vector<sysprop_change_callback_info> listeners;
@@ -85,5 +112,3 @@ void report_sysprop_change() {
     }
 #endif
 }
-
-}; // namespace android

@@ -2,13 +2,23 @@
 
 cc_library_shared {
     name: "libmemtrack",
-    srcs: ["memtrack.c"],
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+    srcs: ["memtrack.cpp"],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
     include_dirs: ["hardware/libhardware/include"],
     shared_libs: [
         "libhardware",
         "liblog",
+        "libbase",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "libutils",
+        "android.hardware.memtrack@1.0",
     ],
     cflags: [
         "-Wall",

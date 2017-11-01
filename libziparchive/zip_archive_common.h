@@ -57,6 +57,7 @@ struct EocdRecord {
   uint32_t cd_start_offset;
   // Length of the central directory comment.
   uint16_t comment_length;
+
  private:
   EocdRecord() = default;
   DISALLOW_COPY_AND_ASSIGN(EocdRecord);
@@ -73,7 +74,7 @@ struct CentralDirectoryRecord {
 
   // The start of record signature. Must be |kSignature|.
   uint32_t record_signature;
-  // Tool version. Ignored by this implementation.
+  // Source tool version. Top byte gives source OS.
   uint16_t version_made_by;
   // Tool version. Ignored by this implementation.
   uint16_t version_needed;
@@ -106,11 +107,12 @@ struct CentralDirectoryRecord {
   uint16_t file_start_disk;
   // File attributes. Ignored by this implementation.
   uint16_t internal_file_attributes;
-  // File attributes. Ignored by this implementation.
+  // File attributes. For archives created on Unix, the top bits are the mode.
   uint32_t external_file_attributes;
   // The offset to the local file header for this entry, from the
   // beginning of this archive.
   uint32_t local_file_header_offset;
+
  private:
   CentralDirectoryRecord() = default;
   DISALLOW_COPY_AND_ASSIGN(CentralDirectoryRecord);
@@ -149,6 +151,7 @@ struct LocalFileHeader {
   // The length of the extra field info (in bytes). This data
   // will appear immediately after the entry file name.
   uint16_t extra_field_length;
+
  private:
   LocalFileHeader() = default;
   DISALLOW_COPY_AND_ASSIGN(LocalFileHeader);
@@ -164,6 +167,7 @@ struct DataDescriptor {
   uint32_t compressed_size;
   // Uncompressed size of the entry.
   uint32_t uncompressed_size;
+
  private:
   DataDescriptor() = default;
   DISALLOW_COPY_AND_ASSIGN(DataDescriptor);

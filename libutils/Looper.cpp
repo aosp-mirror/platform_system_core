@@ -13,17 +13,8 @@
 // Debugs callback registration and invocation.
 #define DEBUG_CALLBACKS 0
 
-#include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <string.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
-
-#include <log/log.h>
 #include <utils/Looper.h>
-#include <utils/Timers.h>
+#include <sys/eventfd.h>
 
 namespace android {
 
@@ -83,6 +74,7 @@ Looper::Looper(bool allowNonCallbacks) :
 
 Looper::~Looper() {
     close(mWakeEventFd);
+    mWakeEventFd = -1;
     if (mEpollFd >= 0) {
         close(mEpollFd);
     }
@@ -412,7 +404,8 @@ void Looper::wake() {
     ssize_t nWrite = TEMP_FAILURE_RETRY(write(mWakeEventFd, &inc, sizeof(uint64_t)));
     if (nWrite != sizeof(uint64_t)) {
         if (errno != EAGAIN) {
-            ALOGW("Could not write wake signal: %s", strerror(errno));
+            LOG_ALWAYS_FATAL("Could not write wake signal to fd %d: %s",
+                    mWakeEventFd, strerror(errno));
         }
     }
 }

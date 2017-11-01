@@ -1,0 +1,3 @@
+# When /data is available, look for /system/asan.tar.gz and potentially extract.
+on post-fs-data
+    exec - system system -- /system/bin/asan_extract

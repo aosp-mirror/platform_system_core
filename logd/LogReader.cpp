@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <inttypes.h>
 #include <poll.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -29,9 +30,8 @@
 #include "LogReader.h"
 #include "LogUtils.h"
 
-LogReader::LogReader(LogBuffer *logbuf) :
-        SocketListener(getLogSocket(), true),
-        mLogbuf(*logbuf) {
+LogReader::LogReader(LogBuffer* logbuf)
+    : SocketListener(getLogSocket(), true), mLogbuf(*logbuf) {
 }
 
 // When we are notified a new log entry is available, inform
@@ -41,7 +41,7 @@ void LogReader::notifyNewLog() {
     runOnEachSocket(&command);
 }
 
-bool LogReader::onDataAvailable(SocketClient *cli) {
+bool LogReader::onDataAvailable(SocketClient* cli) {
     static bool name_set;
     if (!name_set) {
         prctl(PR_SET_NAME, "logd.reader");
@@ -59,7 +59,7 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
 
     unsigned long tail = 0;
     static const char _tail[] = " tail=";
-    char *cp = strstr(buffer, _tail);
+    char* cp = strstr(buffer, _tail);
     if (cp) {
         tail = atol(cp + sizeof(_tail) - 1);
     }
@@ -111,91 +111,111 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
     if (!fastcmp<strncmp>(buffer, "dumpAndClose", 12)) {
         // Allow writer to get some cycles, and wait for pending notifications
         sched_yield();
-        LogTimeEntry::lock();
+        LogTimeEntry::wrlock();
         LogTimeEntry::unlock();
         sched_yield();
         nonBlock = true;
     }
 
-    uint64_t sequence = 1;
-    // Convert realtime to sequence number
-    if (start != log_time::EPOCH) {
-        class LogFindStart {
+    log_time sequence = start;
+    //
+    // This somewhat expensive data validation operation is required
+    // for non-blocking, with timeout.  The incoming timestamp must be
+    // in range of the list, if not, return immediately.  This is
+    // used to prevent us from from getting stuck in timeout processing
+    // with an invalid time.
+    //
+    // Find if time is really present in the logs, monotonic or real, implicit
+    // conversion from monotonic or real as necessary to perform the check.
+    // Exit in the check loop ASAP as you find a transition from older to
+    // newer, but use the last entry found to ensure overlap.
+    //
+    if (nonBlock && (sequence != log_time::EPOCH) && timeout) {
+        class LogFindStart {  // A lambda by another name
+           private:
             const pid_t mPid;
             const unsigned mLogMask;
-            bool startTimeSet;
-            log_time &start;
-            uint64_t &sequence;
-            uint64_t last;
-            bool isMonotonic;
+            bool mStartTimeSet;
+            log_time mStart;
+            log_time& mSequence;
+            log_time mLast;
+            bool mIsMonotonic;
 
-        public:
-            LogFindStart(unsigned logMask, pid_t pid, log_time &start, uint64_t &sequence, bool isMonotonic) :
-                    mPid(pid),
-                    mLogMask(logMask),
-                    startTimeSet(false),
-                    start(start),
-                    sequence(sequence),
-                    last(sequence),
-                    isMonotonic(isMonotonic) {
+           public:
+            LogFindStart(pid_t pid, unsigned logMask, log_time& sequence,
+                         bool isMonotonic)
+                : mPid(pid),
+                  mLogMask(logMask),
+                  mStartTimeSet(false),
+                  mStart(sequence),
+                  mSequence(sequence),
+                  mLast(sequence),
+                  mIsMonotonic(isMonotonic) {
             }
 
-            static int callback(const LogBufferElement *element, void *obj) {
-                LogFindStart *me = reinterpret_cast<LogFindStart *>(obj);
-                if ((!me->mPid || (me->mPid == element->getPid()))
-                        && (me->mLogMask & (1 << element->getLogId()))) {
-                    if (me->start == element->getRealTime()) {
-                        me->sequence = element->getSequence();
-                        me->startTimeSet = true;
+            static int callback(const LogBufferElement* element, void* obj) {
+                LogFindStart* me = reinterpret_cast<LogFindStart*>(obj);
+                if ((!me->mPid || (me->mPid == element->getPid())) &&
+                    (me->mLogMask & (1 << element->getLogId()))) {
+                    log_time real = element->getRealTime();
+                    if (me->mStart == real) {
+                        me->mSequence = real;
+                        me->mStartTimeSet = true;
                         return -1;
-                    } else if (!me->isMonotonic ||
-                            android::isMonotonic(element->getRealTime())) {
-                        if (me->start < element->getRealTime()) {
-                            me->sequence = me->last;
-                            me->startTimeSet = true;
+                    } else if (!me->mIsMonotonic || android::isMonotonic(real)) {
+                        if (me->mStart < real) {
+                            me->mSequence = me->mLast;
+                            me->mStartTimeSet = true;
                             return -1;
                         }
-                        me->last = element->getSequence();
+                        me->mLast = real;
                     } else {
-                        me->last = element->getSequence();
+                        me->mLast = real;
                     }
                 }
                 return false;
             }
 
-            bool found() { return startTimeSet; }
-        } logFindStart(logMask, pid, start, sequence,
+            bool found() {
+                return mStartTimeSet;
+            }
+
+        } logFindStart(pid, logMask, sequence,
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
-        logbuf().flushTo(cli, sequence, FlushCommand::hasReadLogs(cli),
+        logbuf().flushTo(cli, sequence, nullptr, FlushCommand::hasReadLogs(cli),
                          FlushCommand::hasSecurityLogs(cli),
                          logFindStart.callback, &logFindStart);
 
         if (!logFindStart.found()) {
-            if (nonBlock) {
-                doSocketDelete(cli);
-                return false;
-            }
-            sequence = LogBufferElement::getCurrentSequence();
+            doSocketDelete(cli);
+            return false;
         }
     }
+
+    android::prdebug(
+        "logdr: UID=%d GID=%d PID=%d %c tail=%lu logMask=%x pid=%d "
+        "start=%" PRIu64 "ns timeout=%" PRIu64 "ns\n",
+        cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail,
+        logMask, (int)pid, sequence.nsec(), timeout);
 
     FlushCommand command(*this, nonBlock, tail, logMask, pid, sequence, timeout);
 
     // Set acceptable upper limit to wait for slow reader processing b/27242723
     struct timeval t = { LOGD_SNDTIMEO, 0 };
-    setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char *)&t, sizeof(t));
+    setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char*)&t,
+               sizeof(t));
 
     command.runSocketCommand(cli);
     return true;
 }
 
-void LogReader::doSocketDelete(SocketClient *cli) {
-    LastLogTimes &times = mLogbuf.mTimes;
-    LogTimeEntry::lock();
+void LogReader::doSocketDelete(SocketClient* cli) {
+    LastLogTimes& times = mLogbuf.mTimes;
+    LogTimeEntry::wrlock();
     LastLogTimes::iterator it = times.begin();
-    while(it != times.end()) {
-        LogTimeEntry *entry = (*it);
+    while (it != times.end()) {
+        LogTimeEntry* entry = (*it);
         if (entry->mClient == cli) {
             times.erase(it);
             entry->release_Locked();
@@ -211,9 +231,8 @@ int LogReader::getLogSocket() {
     int sock = android_get_control_socket(socketName);
 
     if (sock < 0) {
-        sock = socket_local_server(socketName,
-                                   ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                   SOCK_SEQPACKET);
+        sock = socket_local_server(
+            socketName, ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET);
     }
 
     return sock;

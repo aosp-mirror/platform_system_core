@@ -14,19 +14,22 @@
 // limitations under the License.
 //
 
-libprocinfo_cppflags = [
-    "-Wall",
-    "-Wextra",
-    "-Werror",
-]
+cc_defaults {
+    name: "libprocinfo_defaults",
+    cflags: ["-Wall", "-Werror", "-Wextra"],
+}
 
 cc_library {
     name: "libprocinfo",
+    defaults: ["libprocinfo_defaults"],
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     host_supported: true,
     srcs: [
         "process.cpp",
     ],
-    cppflags: libprocinfo_cppflags,
 
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
@@ -34,6 +37,9 @@ cc_library {
     target: {
         darwin: {
             enabled: false,
+        },
+        linux_bionic: {
+            enabled: true,
         },
         windows: {
             enabled: false,
@@ -45,6 +51,7 @@ cc_library {
 // ------------------------------------------------------------------------------
 cc_test {
     name: "libprocinfo_test",
+    defaults: ["libprocinfo_defaults"],
     host_supported: true,
     srcs: [
         "process_test.cpp",
@@ -58,7 +65,6 @@ cc_test {
         },
     },
 
-    cppflags: libprocinfo_cppflags,
     shared_libs: ["libbase", "libprocinfo"],
 
     compile_multilib: "both",

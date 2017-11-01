@@ -57,7 +57,7 @@ bool UnwindMapRemote::GenerateMap() {
     map.start = unw_map.start;
     map.end = unw_map.end;
     map.offset = unw_map.offset;
-    map.load_base = unw_map.load_base;
+    map.load_bias = unw_map.load_base;
     map.flags = unw_map.flags;
     map.name = unw_map.path;
 
@@ -106,7 +106,7 @@ bool UnwindMapLocal::GenerateMap() {
       map.start = unw_map.start;
       map.end = unw_map.end;
       map.offset = unw_map.offset;
-      map.load_base = unw_map.load_base;
+      map.load_bias = unw_map.load_base;
       map.flags = unw_map.flags;
       map.name = unw_map.path;
 
@@ -145,25 +145,4 @@ void UnwindMapLocal::FillIn(uintptr_t addr, backtrace_map_t* map) {
       }
     }
   }
-}
-
-//-------------------------------------------------------------------------
-// BacktraceMap create function.
-//-------------------------------------------------------------------------
-BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
-  BacktraceMap* map;
-
-  if (uncached) {
-    // Force use of the base class to parse the maps when this call is made.
-    map = new BacktraceMap(pid);
-  } else if (pid == getpid()) {
-    map = new UnwindMapLocal();
-  } else {
-    map = new UnwindMapRemote(pid);
-  }
-  if (!map->Build()) {
-    delete map;
-    return nullptr;
-  }
-  return map;
 }

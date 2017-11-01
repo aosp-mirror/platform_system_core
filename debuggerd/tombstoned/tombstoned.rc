@@ -1,0 +1,11 @@
+service tombstoned /system/bin/tombstoned
+    user tombstoned
+    group system
+
+    # Don't start tombstoned until after the real /data is mounted.
+    class late_start
+
+    socket tombstoned_crash seqpacket 0666 system system
+    socket tombstoned_intercept seqpacket 0666 system system
+    socket tombstoned_java_trace seqpacket 0666 system system
+    writepid /dev/cpuset/system-background/tasks

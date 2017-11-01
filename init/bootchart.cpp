@@ -16,10 +16,7 @@
 
 #include "bootchart.h"
 
-#include "property_service.h"
-
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,16 +30,18 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <thread>
-#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 
 using android::base::StringPrintf;
 using namespace std::chrono_literals;
+
+namespace android {
+namespace init {
 
 static std::thread* g_bootcharting_thread;
 
@@ -72,7 +71,7 @@ static void log_header() {
   utsname uts;
   if (uname(&uts) == -1) return;
 
-  std::string fingerprint = property_get("ro.build.fingerprint");
+  std::string fingerprint = android::base::GetProperty("ro.build.fingerprint", "");
   if (fingerprint.empty()) return;
 
   std::string kernel_cmdline;
@@ -164,35 +163,38 @@ static void bootchart_thread_main() {
   LOG(INFO) << "Bootcharting finished";
 }
 
-static int do_bootchart_start() {
-  // We don't care about the content, but we do care that /data/bootchart/enabled actually exists.
-  std::string start;
-  if (!android::base::ReadFileToString("/data/bootchart/enabled", &start)) {
-    LOG(VERBOSE) << "Not bootcharting";
-    return 0;
-  }
+static Result<Success> do_bootchart_start() {
+    // We don't care about the content, but we do care that /data/bootchart/enabled actually exists.
+    std::string start;
+    if (!android::base::ReadFileToString("/data/bootchart/enabled", &start)) {
+        LOG(VERBOSE) << "Not bootcharting";
+        return Success();
+    }
 
-  g_bootcharting_thread = new std::thread(bootchart_thread_main);
-  return 0;
+    g_bootcharting_thread = new std::thread(bootchart_thread_main);
+    return Success();
 }
 
-static int do_bootchart_stop() {
-  if (!g_bootcharting_thread) return 0;
+static Result<Success> do_bootchart_stop() {
+    if (!g_bootcharting_thread) return Success();
 
-  // Tell the worker thread it's time to quit.
-  {
-    std::lock_guard<std::mutex> lock(g_bootcharting_finished_mutex);
-    g_bootcharting_finished = true;
-    g_bootcharting_finished_cv.notify_one();
-  }
+    // Tell the worker thread it's time to quit.
+    {
+        std::lock_guard<std::mutex> lock(g_bootcharting_finished_mutex);
+        g_bootcharting_finished = true;
+        g_bootcharting_finished_cv.notify_one();
+    }
 
-  g_bootcharting_thread->join();
-  delete g_bootcharting_thread;
-  g_bootcharting_thread = nullptr;
-  return 0;
+    g_bootcharting_thread->join();
+    delete g_bootcharting_thread;
+    g_bootcharting_thread = nullptr;
+    return Success();
 }
 
-int do_bootchart(const std::vector<std::string>& args) {
-  if (args[1] == "start") return do_bootchart_start();
-  return do_bootchart_stop();
+Result<Success> do_bootchart(const BuiltinArguments& args) {
+    if (args[1] == "start") return do_bootchart_start();
+    return do_bootchart_stop();
 }
+
+}  // namespace init
+}  // namespace android

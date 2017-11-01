@@ -5,23 +5,27 @@
 
 LOCAL_PATH:= $(call my-dir)
 
+include $(LOCAL_PATH)/../platform_tools_tool_version.mk
+
 adb_host_sanitize :=
 adb_target_sanitize :=
-
-adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/null)-android
 
 ADB_COMMON_CFLAGS := \
     -Wall -Wextra -Werror \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \
     -Wvla \
-    -DADB_REVISION='"$(adb_version)"' \
+    -DADB_VERSION="\"$(tool_version)\"" \
+
+ADB_COMMON_posix_CFLAGS := \
+    -Wexit-time-destructors \
+    -Wthread-safety \
 
 ADB_COMMON_linux_CFLAGS := \
-    -Wexit-time-destructors \
+    $(ADB_COMMON_posix_CFLAGS) \
 
 ADB_COMMON_darwin_CFLAGS := \
-    -Wexit-time-destructors \
+    $(ADB_COMMON_posix_CFLAGS) \
 
 # Define windows.h and tchar.h Unicode preprocessor symbols so that
 # CreateFile(), _tfopen(), etc. map to versions that take wchar_t*, breaking the
@@ -104,7 +108,6 @@ LIBADB_TEST_windows_SRCS := \
     sysdeps_win32_test.cpp \
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_MODULE := libadbd_usb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := daemon/usb.cpp
@@ -113,12 +116,11 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libasyncio
 
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
@@ -131,7 +133,7 @@ LOCAL_SANITIZE := $(adb_target_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libqemu_pipe libbase
 
 LOCAL_WHOLE_STATIC_LIBRARIES := libadbd_usb
 
@@ -147,6 +149,7 @@ LOCAL_CFLAGS_darwin := $(LIBADB_darwin_CFLAGS)
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     adb_auth_host.cpp \
+    transport_mdns.cpp \
 
 LOCAL_SRC_FILES_darwin := $(LIBADB_darwin_SRC_FILES)
 LOCAL_SRC_FILES_linux := $(LIBADB_linux_SRC_FILES)
@@ -156,7 +159,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libmdnssd
 LOCAL_STATIC_LIBRARIES_linux := libusb
 LOCAL_STATIC_LIBRARIES_darwin := libusb
 
@@ -166,7 +169,6 @@ LOCAL_MULTILIB := first
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := true
 LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := \
@@ -178,7 +180,7 @@ LOCAL_SRC_FILES := \
     shell_service_test.cpp \
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
-LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils libcrypto libusb
+LOCAL_STATIC_LIBRARIES := libadbd libcrypto_utils libcrypto libusb libmdnssd
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
@@ -219,13 +221,14 @@ LOCAL_SRC_FILES_linux := $(LIBADB_TEST_linux_SRCS)
 LOCAL_SRC_FILES_darwin := $(LIBADB_TEST_darwin_SRCS)
 LOCAL_SRC_FILES_windows := $(LIBADB_TEST_windows_SRCS)
 LOCAL_SANITIZE := $(adb_host_sanitize)
-LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_STATIC_LIBRARIES := \
     libadb \
+    libbase \
     libcrypto_utils \
     libcrypto \
     libcutils \
     libdiagnose_usb \
+    libmdnssd \
     libgmock_host \
 
 LOCAL_STATIC_LIBRARIES_linux := libusb
@@ -294,6 +297,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcrypto \
     libdiagnose_usb \
     liblog \
+    libmdnssd \
 
 # Don't use libcutils on Windows.
 LOCAL_STATIC_LIBRARIES_darwin := libcutils
@@ -323,10 +327,9 @@ endif
 
 include $(CLEAR_VARS)
 
-LOCAL_CLANG := true
-
 LOCAL_SRC_FILES := \
     daemon/main.cpp \
+    daemon/mdns.cpp \
     services.cpp \
     file_sync_service.cpp \
     framebuffer_service.cpp \
@@ -352,29 +355,36 @@ endif
 LOCAL_MODULE := adbd
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
-LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
 LOCAL_SANITIZE := $(adb_target_sanitize)
 LOCAL_STRIP_MODULE := keep_symbols
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
+    libasyncio \
+    libavb_user \
     libbase \
+    libqemu_pipe \
     libbootloader_message \
     libfs_mgr \
     libfec \
     libfec_rs \
     libselinux \
     liblog \
-    libext4_utils_static \
+    libext4_utils \
     libsquashfs_utils \
     libcutils \
     libbase \
     libcrypto_utils \
     libcrypto \
     libminijail \
-    libdebuggerd_client \
+    libmdnssd \
+    libdebuggerd_handler \
 
 include $(BUILD_EXECUTABLE)
+
+# adb integration test
+# =========================================================
+$(call dist-for-goals,sdk,$(ALL_MODULES.adb_integration_test_adb.BUILT))
+$(call dist-for-goals,sdk,$(ALL_MODULES.adb_integration_test_device.BUILT))
 
 include $(call first-makefiles-under,$(LOCAL_PATH))

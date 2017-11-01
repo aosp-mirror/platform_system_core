@@ -26,15 +26,19 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <functional>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/thread_annotations.h>
 
 #include "adb_io.h"
 #include "adb_trace.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 
 #if !ADB_HOST
@@ -75,13 +79,17 @@ static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
 static unsigned long main_thread_id;
 
-static void check_main_thread() {
+static auto& run_queue_notify_fd = *new unique_fd();
+static auto& run_queue_mutex = *new std::mutex();
+static auto& run_queue GUARDED_BY(run_queue_mutex) = *new std::vector<std::function<void()>>();
+
+void check_main_thread() {
     if (main_thread_valid) {
         CHECK_EQ(main_thread_id, adb_thread_id());
     }
 }
 
-static void set_main_thread() {
+void set_main_thread() {
     main_thread_valid = true;
     main_thread_id = adb_thread_id();
 }
@@ -112,8 +120,7 @@ static std::string dump_fde(const fdevent* fde) {
     return android::base::StringPrintf("(fdevent %d %s)", fde->fd, state.c_str());
 }
 
-fdevent *fdevent_create(int fd, fd_func func, void *arg)
-{
+fdevent* fdevent_create(int fd, fd_func func, void* arg) {
     check_main_thread();
     fdevent *fde = (fdevent*) malloc(sizeof(fdevent));
     if(fde == 0) return 0;
@@ -122,8 +129,7 @@ fdevent *fdevent_create(int fd, fd_func func, void *arg)
     return fde;
 }
 
-void fdevent_destroy(fdevent *fde)
-{
+void fdevent_destroy(fdevent* fde) {
     check_main_thread();
     if(fde == 0) return;
     if(!(fde->state & FDE_CREATED)) {
@@ -278,8 +284,7 @@ static void fdevent_process() {
     }
 }
 
-static void fdevent_call_fdfunc(fdevent* fde)
-{
+static void fdevent_call_fdfunc(fdevent* fde) {
     unsigned events = fde->events;
     fde->events = 0;
     CHECK(fde->state & FDE_PENDING);
@@ -292,10 +297,7 @@ static void fdevent_call_fdfunc(fdevent* fde)
 
 #include <sys/ioctl.h>
 
-static void fdevent_subproc_event_func(int fd, unsigned ev,
-                                       void* /* userdata */)
-{
-
+static void fdevent_subproc_event_func(int fd, unsigned ev, void* /* userdata */) {
     D("subproc handling on fd = %d, ev = %x", fd, ev);
 
     CHECK_GE(fd, 0);
@@ -342,8 +344,7 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
     }
 }
 
-void fdevent_subproc_setup()
-{
+static void fdevent_subproc_setup() {
     int s[2];
 
     if(adb_socketpair(s)) {
@@ -358,12 +359,63 @@ void fdevent_subproc_setup()
 }
 #endif // !ADB_HOST
 
-void fdevent_loop()
-{
+static void fdevent_run_flush() REQUIRES(run_queue_mutex) {
+    for (auto& f : run_queue) {
+        f();
+    }
+    run_queue.clear();
+}
+
+static void fdevent_run_func(int fd, unsigned ev, void* /* userdata */) {
+    CHECK_GE(fd, 0);
+    CHECK(ev & FDE_READ);
+
+    char buf[1024];
+
+    // Empty the fd.
+    if (adb_read(fd, buf, sizeof(buf)) == -1) {
+        PLOG(FATAL) << "failed to empty run queue notify fd";
+    }
+
+    std::lock_guard<std::mutex> lock(run_queue_mutex);
+    fdevent_run_flush();
+}
+
+static void fdevent_run_setup() {
+    std::lock_guard<std::mutex> lock(run_queue_mutex);
+    CHECK(run_queue_notify_fd.get() == -1);
+    int s[2];
+    if (adb_socketpair(s) != 0) {
+        PLOG(FATAL) << "failed to create run queue notify socketpair";
+    }
+
+    run_queue_notify_fd.reset(s[0]);
+    fdevent* fde = fdevent_create(s[1], fdevent_run_func, nullptr);
+    CHECK(fde != nullptr);
+    fdevent_add(fde, FDE_READ);
+
+    fdevent_run_flush();
+}
+
+void fdevent_run_on_main_thread(std::function<void()> fn) {
+    std::lock_guard<std::mutex> lock(run_queue_mutex);
+    run_queue.push_back(std::move(fn));
+
+    // run_queue_notify_fd could still be -1 if we're called before fdevent has finished setting up.
+    // In that case, rely on the setup code to flush the queue without a notification being needed.
+    if (run_queue_notify_fd != -1) {
+        if (adb_write(run_queue_notify_fd.get(), "", 1) != 1) {
+            PLOG(FATAL) << "failed to write to run queue notify fd";
+        }
+    }
+}
+
+void fdevent_loop() {
     set_main_thread();
 #if !ADB_HOST
     fdevent_subproc_setup();
 #endif // !ADB_HOST
+    fdevent_run_setup();
 
     while (true) {
         if (terminate_loop) {
@@ -393,6 +445,11 @@ size_t fdevent_installed_count() {
 void fdevent_reset() {
     g_poll_node_map.clear();
     g_pending_list.clear();
+
+    std::lock_guard<std::mutex> lock(run_queue_mutex);
+    run_queue_notify_fd.reset();
+    run_queue.clear();
+
     main_thread_valid = false;
     terminate_loop = false;
 }

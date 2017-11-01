@@ -64,7 +64,7 @@ PruneList::~PruneList() {
     }
 }
 
-int PruneList::init(const char *str) {
+int PruneList::init(const char* str) {
     mWorstUidEnabled = true;
     mWorstPidOfSystemEnabled = true;
     PruneCollection::iterator it;
@@ -113,13 +113,13 @@ int PruneList::init(const char *str) {
     mWorstUidEnabled = false;
     mWorstPidOfSystemEnabled = false;
 
-    for(str = filter.c_str(); *str; ++str) {
+    for (str = filter.c_str(); *str; ++str) {
         if (isspace(*str)) {
             continue;
         }
 
-        PruneCollection *list;
-        if ((*str == '~') || (*str == '!')) { // ~ supported, ! undocumented
+        PruneCollection* list;
+        if ((*str == '~') || (*str == '!')) {  // ~ supported, ! undocumented
             ++str;
             // special case, translates to worst UID at priority in blacklist
             if (*str == '!') {
@@ -184,7 +184,7 @@ int PruneList::init(const char *str) {
         // insert sequentially into list
         PruneCollection::iterator it = list->begin();
         while (it != list->end()) {
-            Prune &p = *it;
+            Prune& p = *it;
             int m = uid - p.mUid;
             if (m == 0) {
                 if (p.mPid == p.pid_all) {
@@ -198,14 +198,14 @@ int PruneList::init(const char *str) {
             }
             if (m <= 0) {
                 if (m < 0) {
-                    list->insert(it, Prune(uid,pid));
+                    list->insert(it, Prune(uid, pid));
                 }
                 break;
             }
             ++it;
         }
         if (it == list->end()) {
-            list->push_back(Prune(uid,pid));
+            list->push_back(Prune(uid, pid));
         }
         if (!*str) {
             break;
@@ -217,7 +217,7 @@ int PruneList::init(const char *str) {
 
 std::string PruneList::format() {
     static const char nice_format[] = " %s";
-    const char *fmt = nice_format + 1;
+    const char* fmt = nice_format + 1;
 
     std::string string;
 
@@ -250,7 +250,7 @@ std::string PruneList::format() {
 // If there is scaling issues, resort to a better algorithm than linear
 // based on these assumptions.
 
-bool PruneList::naughty(LogBufferElement *element) {
+bool PruneList::naughty(LogBufferElement* element) {
     PruneCollection::iterator it;
     for (it = mNaughty.begin(); it != mNaughty.end(); ++it) {
         if (!(*it).cmp(element)) {
@@ -260,7 +260,7 @@ bool PruneList::naughty(LogBufferElement *element) {
     return false;
 }
 
-bool PruneList::nice(LogBufferElement *element) {
+bool PruneList::nice(LogBufferElement* element) {
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end(); ++it) {
         if (!(*it).cmp(element)) {

@@ -28,6 +28,8 @@
 #include "ScopedSignalHandler.h"
 #include "log.h"
 
+namespace android {
+
 bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   if (end == begin) {
     end = begin + 1;
@@ -42,11 +44,9 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   } else {
     Range overlap = inserted.first->first;
     if (overlap != range) {
-      ALOGE("range %p-%p overlaps with existing range %p-%p",
-          reinterpret_cast<void*>(begin),
-          reinterpret_cast<void*>(end),
-          reinterpret_cast<void*>(overlap.begin),
-          reinterpret_cast<void*>(overlap.end));
+      MEM_ALOGE("range %p-%p overlaps with existing range %p-%p", reinterpret_cast<void*>(begin),
+                reinterpret_cast<void*>(end), reinterpret_cast<void*>(overlap.begin),
+                reinterpret_cast<void*>(overlap.end));
     }
     return false;
   }
@@ -116,8 +116,8 @@ bool HeapWalker::DetectLeaks() {
   return true;
 }
 
-bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
-    size_t* num_leaks_out, size_t* leak_bytes_out) {
+bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit, size_t* num_leaks_out,
+                        size_t* leak_bytes_out) {
   leaked.clear();
 
   size_t num_leaks = 0;
@@ -150,27 +150,30 @@ bool HeapWalker::Leaked(allocator::vector<Range>& leaked, size_t limit,
 
 static bool MapOverPage(void* addr) {
   const size_t page_size = sysconf(_SC_PAGE_SIZE);
-  void *page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & ~(page_size-1));
+  void* page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & ~(page_size - 1));
 
-  void* ret = mmap(page, page_size, PROT_READ, MAP_ANONYMOUS|MAP_PRIVATE|MAP_FIXED, -1, 0);
+  void* ret = mmap(page, page_size, PROT_READ, MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
   if (ret == MAP_FAILED) {
-    ALOGE("failed to map page at %p: %s", page, strerror(errno));
+    MEM_ALOGE("failed to map page at %p: %s", page, strerror(errno));
     return false;
   }
 
   return true;
 }
 
-void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginfo_t* si, void* /*uctx*/) {
+void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginfo_t* si,
+                                void* /*uctx*/) {
   uintptr_t addr = reinterpret_cast<uintptr_t>(si->si_addr);
   if (addr != walking_ptr_) {
     handler.reset();
     return;
   }
-  ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
+  MEM_ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
   if (!MapOverPage(si->si_addr)) {
     handler.reset();
   }
 }
 
 ScopedSignalHandler::SignalFn ScopedSignalHandler::handler_;
+
+}  // namespace android

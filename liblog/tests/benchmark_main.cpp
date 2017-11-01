@@ -22,8 +22,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <string>
 #include <map>
+#include <string>
 #include <vector>
 
 static uint64_t gBytesProcessed;
@@ -32,21 +32,21 @@ static uint64_t gBenchmarkTotalTimeNsSquared;
 static uint64_t gBenchmarkNum;
 static uint64_t gBenchmarkStartTimeNs;
 
-typedef std::vector< ::testing::Benchmark* > BenchmarkList;
+typedef std::vector< ::testing::Benchmark*> BenchmarkList;
 static BenchmarkList* gBenchmarks;
 
 static int Round(int n) {
   int base = 1;
-  while (base*10 < n) {
+  while (base * 10 < n) {
     base *= 10;
   }
-  if (n < 2*base) {
-    return 2*base;
+  if (n < 2 * base) {
+    return 2 * base;
   }
-  if (n < 5*base) {
-    return 5*base;
+  if (n < 5 * base) {
+    return 5 * base;
   }
-  return 10*base;
+  return 10 * base;
 }
 
 static uint64_t NanoTime() {
@@ -58,20 +58,19 @@ static uint64_t NanoTime() {
 
 namespace testing {
 
-int PrettyPrintInt(char* str, int len, unsigned int arg)
-{
-  if (arg >= (1<<30) && arg % (1<<30) == 0) {
-    return snprintf(str, len, "%uGi", arg/(1<<30));
-  } else if (arg >= (1<<20) && arg % (1<<20) == 0) {
-    return snprintf(str, len, "%uMi", arg/(1<<20));
-  } else if (arg >= (1<<10) && arg % (1<<10) == 0) {
-    return snprintf(str, len, "%uKi", arg/(1<<10));
+int PrettyPrintInt(char* str, int len, unsigned int arg) {
+  if (arg >= (1 << 30) && arg % (1 << 30) == 0) {
+    return snprintf(str, len, "%uGi", arg / (1 << 30));
+  } else if (arg >= (1 << 20) && arg % (1 << 20) == 0) {
+    return snprintf(str, len, "%uMi", arg / (1 << 20));
+  } else if (arg >= (1 << 10) && arg % (1 << 10) == 0) {
+    return snprintf(str, len, "%uKi", arg / (1 << 10));
   } else if (arg >= 1000000000 && arg % 1000000000 == 0) {
-    return snprintf(str, len, "%uG", arg/1000000000);
+    return snprintf(str, len, "%uG", arg / 1000000000);
   } else if (arg >= 1000000 && arg % 1000000 == 0) {
-    return snprintf(str, len, "%uM", arg/1000000);
+    return snprintf(str, len, "%uM", arg / 1000000);
   } else if (arg >= 1000 && arg % 1000 == 0) {
-    return snprintf(str, len, "%uK", arg/1000);
+    return snprintf(str, len, "%uK", arg / 1000);
   } else {
     return snprintf(str, len, "%u", arg);
   }
@@ -86,7 +85,8 @@ bool ShouldRun(Benchmark* b, int argc, char* argv[]) {
   for (int i = 1; i < argc; i++) {
     regex_t re;
     if (regcomp(&re, argv[i], 0) != 0) {
-      fprintf(stderr, "couldn't compile \"%s\" as a regular expression!\n", argv[i]);
+      fprintf(stderr, "couldn't compile \"%s\" as a regular expression!\n",
+              argv[i]);
       exit(EXIT_FAILURE);
     }
     int match = regexec(&re, b->Name(), 0, NULL, 0);
@@ -111,9 +111,8 @@ void RunRepeatedly(Benchmark* b, int iterations) {
   uint64_t StartTimeNs = NanoTime();
   b->RunFn(iterations);
   // Catch us if we fail to log anything.
-  if ((gBenchmarkTotalTimeNs == 0)
-   && (StartTimeNs != 0)
-   && (gBenchmarkStartTimeNs == 0)) {
+  if ((gBenchmarkTotalTimeNs == 0) && (StartTimeNs != 0) &&
+      (gBenchmarkStartTimeNs == 0)) {
     gBenchmarkTotalTimeNs = NanoTime() - StartTimeNs;
   }
 }
@@ -126,12 +125,13 @@ void Run(Benchmark* b) {
   s = NanoTime() - s;
   while (s < 2e9 && gBenchmarkTotalTimeNs < 1e9 && iterations < 1e9) {
     unsigned last = iterations;
-    if (gBenchmarkTotalTimeNs/iterations == 0) {
+    if (gBenchmarkTotalTimeNs / iterations == 0) {
       iterations = 1e9;
     } else {
-      iterations = 1e9 / (gBenchmarkTotalTimeNs/iterations);
+      iterations = 1e9 / (gBenchmarkTotalTimeNs / iterations);
     }
-    iterations = std::max(last + 1, std::min(iterations + iterations/2, 100*last));
+    iterations =
+        std::max(last + 1, std::min(iterations + iterations / 2, 100 * last));
     iterations = Round(iterations);
     s = NanoTime();
     RunRepeatedly(b, iterations);
@@ -141,30 +141,30 @@ void Run(Benchmark* b) {
   char throughput[100];
   throughput[0] = '\0';
   if (gBenchmarkTotalTimeNs > 0 && gBytesProcessed > 0) {
-    double mib_processed = static_cast<double>(gBytesProcessed)/1e6;
-    double seconds = static_cast<double>(gBenchmarkTotalTimeNs)/1e9;
-    snprintf(throughput, sizeof(throughput), " %8.2f MiB/s", mib_processed/seconds);
+    double mib_processed = static_cast<double>(gBytesProcessed) / 1e6;
+    double seconds = static_cast<double>(gBenchmarkTotalTimeNs) / 1e9;
+    snprintf(throughput, sizeof(throughput), " %8.2f MiB/s",
+             mib_processed / seconds);
   }
 
   char full_name[100];
   snprintf(full_name, sizeof(full_name), "%s%s%s", b->Name(),
-           b->ArgName() ? "/" : "",
-           b->ArgName() ? b->ArgName() : "");
+           b->ArgName() ? "/" : "", b->ArgName() ? b->ArgName() : "");
 
   uint64_t mean = gBenchmarkTotalTimeNs / iterations;
   uint64_t sdev = 0;
   if (gBenchmarkNum == iterations) {
     mean = gBenchmarkTotalTimeNs / gBenchmarkNum;
-    uint64_t nXvariance = gBenchmarkTotalTimeNsSquared * gBenchmarkNum
-                        - (gBenchmarkTotalTimeNs * gBenchmarkTotalTimeNs);
+    uint64_t nXvariance = gBenchmarkTotalTimeNsSquared * gBenchmarkNum -
+                          (gBenchmarkTotalTimeNs * gBenchmarkTotalTimeNs);
     sdev = (sqrt((double)nXvariance) / gBenchmarkNum / gBenchmarkNum) + 0.5;
   }
   if (mean > (10000 * sdev)) {
     printf("%-25s %10" PRIu64 " %10" PRIu64 "%s\n", full_name,
-            static_cast<uint64_t>(iterations), mean, throughput);
+           static_cast<uint64_t>(iterations), mean, throughput);
   } else {
-    printf("%-25s %10" PRIu64 " %10" PRIu64 "(\317\203%" PRIu64 ")%s\n", full_name,
-           static_cast<uint64_t>(iterations), mean, sdev, throughput);
+    printf("%-25s %10" PRIu64 " %10" PRIu64 "(\317\203%" PRIu64 ")%s\n",
+           full_name, static_cast<uint64_t>(iterations), mean, sdev, throughput);
   }
   fflush(stdout);
 }

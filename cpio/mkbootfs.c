@@ -301,6 +301,7 @@ static void read_canned_config(char* filename)
             allocated *= 2;
             canned_config = (struct fs_config_entry*)realloc(
                 canned_config, allocated * sizeof(struct fs_config_entry));
+            if (canned_config == NULL) die("failed to reallocate memory");
         }
 
         struct fs_config_entry* cc = canned_config + used;
@@ -320,6 +321,7 @@ static void read_canned_config(char* filename)
         ++allocated;
         canned_config = (struct fs_config_entry*)realloc(
             canned_config, allocated * sizeof(struct fs_config_entry));
+        if (canned_config == NULL) die("failed to reallocate memory");
     }
     canned_config[used].name = NULL;
 

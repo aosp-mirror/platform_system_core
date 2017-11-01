@@ -44,6 +44,8 @@
 #define OP_NOTICE     4
 #define OP_DOWNLOAD_SPARSE 5
 #define OP_WAIT_FOR_DISCONNECT 6
+#define OP_DOWNLOAD_FD 7
+#define OP_UPLOAD 8
 
 typedef struct Action Action;
 
@@ -56,6 +58,7 @@ struct Action {
     char cmd[CMD_SIZE];
     const char* prod;
     void* data;
+    int fd;
 
     // The protocol only supports 32-bit sizes, so you'll have to break
     // anything larger into chunks.
@@ -142,7 +145,20 @@ void fb_queue_erase(const char *ptn)
     a->msg = mkmsg("erasing '%s'", ptn);
 }
 
-void fb_queue_flash(const char *ptn, void *data, unsigned sz)
+void fb_queue_flash_fd(const char *ptn, int fd, uint32_t sz)
+{
+    Action *a;
+
+    a = queue_action(OP_DOWNLOAD_FD, "");
+    a->fd = fd;
+    a->size = sz;
+    a->msg = mkmsg("sending '%s' (%d KB)", ptn, sz / 1024);
+
+    a = queue_action(OP_COMMAND, "flash:%s", ptn);
+    a->msg = mkmsg("writing '%s'", ptn);
+}
+
+void fb_queue_flash(const char *ptn, void *data, uint32_t sz)
 {
     Action *a;
 
@@ -155,7 +171,7 @@ void fb_queue_flash(const char *ptn, void *data, unsigned sz)
     a->msg = mkmsg("writing '%s'", ptn);
 }
 
-void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, unsigned sz, size_t current,
+void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, uint32_t sz, size_t current,
                            size_t total) {
     Action *a;
 
@@ -242,6 +258,12 @@ static int cb_reject(Action* a, int status, const char* resp) {
     return cb_check(a, status, resp, 1);
 }
 
+static char* xstrdup(const char* s) {
+    char* result = strdup(s);
+    if (!result) die("out of memory");
+    return result;
+}
+
 void fb_queue_require(const char *prod, const char *var,
                       bool invert, size_t nvalues, const char **value)
 {
@@ -260,16 +282,14 @@ static int cb_display(Action* a, int status, const char* resp) {
         fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
         return status;
     }
-    fprintf(stderr, "%s: %s\n", (char*) a->data, resp);
+    fprintf(stderr, "%s: %s\n", static_cast<const char*>(a->data), resp);
+    free(static_cast<char*>(a->data));
     return 0;
 }
 
-void fb_queue_display(const char *var, const char *prettyname)
-{
-    Action *a;
-    a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->data = strdup(prettyname);
-    if (a->data == nullptr) die("out of memory");
+void fb_queue_display(const char* var, const char* prettyname) {
+    Action* a = queue_action(OP_QUERY, "getvar:%s", var);
+    a->data = xstrdup(prettyname);
     a->func = cb_display;
 }
 
@@ -282,11 +302,9 @@ static int cb_save(Action* a, int status, const char* resp) {
     return 0;
 }
 
-void fb_queue_query_save(const char *var, char *dest, unsigned dest_size)
-{
-    Action *a;
-    a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->data = (void *)dest;
+void fb_queue_query_save(const char* var, char* dest, uint32_t dest_size) {
+    Action* a = queue_action(OP_QUERY, "getvar:%s", var);
+    a->data = dest;
     a->size = dest_size;
     a->func = cb_save;
 }
@@ -309,7 +327,7 @@ void fb_queue_command(const char *cmd, const char *msg)
     a->msg = msg;
 }
 
-void fb_queue_download(const char *name, void *data, unsigned size)
+void fb_queue_download(const char *name, void *data, uint32_t size)
 {
     Action *a = queue_action(OP_DOWNLOAD, "");
     a->data = data;
@@ -317,8 +335,22 @@ void fb_queue_download(const char *name, void *data, unsigned size)
     a->msg = mkmsg("downloading '%s'", name);
 }
 
-void fb_queue_notice(const char *notice)
+void fb_queue_download_fd(const char *name, int fd, uint32_t sz)
 {
+    Action *a;
+    a = queue_action(OP_DOWNLOAD_FD, "");
+    a->fd = fd;
+    a->size = sz;
+    a->msg = mkmsg("sending '%s' (%d KB)", name, sz / 1024);
+}
+
+void fb_queue_upload(const char* outfile) {
+    Action* a = queue_action(OP_UPLOAD, "");
+    a->data = xstrdup(outfile);
+    a->msg = mkmsg("uploading '%s'", outfile);
+}
+
+void fb_queue_notice(const char* notice) {
     Action *a = queue_action(OP_NOTICE, "");
     a->data = (void*) notice;
 }
@@ -328,11 +360,11 @@ void fb_queue_wait_for_disconnect(void)
     queue_action(OP_WAIT_FOR_DISCONNECT, "");
 }
 
-int fb_execute_queue(Transport* transport)
+int64_t fb_execute_queue(Transport* transport)
 {
     Action *a;
     char resp[FB_RESPONSE_SZ+1];
-    int status = 0;
+    int64_t status = 0;
 
     a = action_list;
     if (!a)
@@ -351,6 +383,10 @@ int fb_execute_queue(Transport* transport)
             status = fb_download_data(transport, a->data, a->size);
             status = a->func(a, status, status ? fb_get_error().c_str() : "");
             if (status) break;
+        } else if (a->op == OP_DOWNLOAD_FD) {
+            status = fb_download_data_fd(transport, a->fd, a->size);
+            status = a->func(a, status, status ? fb_get_error().c_str() : "");
+            if (status) break;
         } else if (a->op == OP_COMMAND) {
             status = fb_command(transport, a->cmd);
             status = a->func(a, status, status ? fb_get_error().c_str() : "");
@@ -367,6 +403,9 @@ int fb_execute_queue(Transport* transport)
             if (status) break;
         } else if (a->op == OP_WAIT_FOR_DISCONNECT) {
             transport->WaitForDisconnect();
+        } else if (a->op == OP_UPLOAD) {
+            status = fb_upload_data(transport, reinterpret_cast<char*>(a->data));
+            status = a->func(a, status, status ? fb_get_error().c_str() : "");
         } else {
             die("bogus action");
         }

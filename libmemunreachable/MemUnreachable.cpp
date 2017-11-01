@@ -15,18 +15,20 @@
  */
 
 #include <inttypes.h>
+#include <string.h>
 
 #include <functional>
 #include <iomanip>
 #include <mutex>
-#include <string>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 
-#include <backtrace.h>
 #include <android-base/macros.h>
+#include <backtrace.h>
 
 #include "Allocator.h"
+#include "Binder.h"
 #include "HeapWalker.h"
 #include "Leak.h"
 #include "LeakFolding.h"
@@ -37,30 +39,34 @@
 #include "Semaphore.h"
 #include "ThreadCapture.h"
 
-#include "memunreachable/memunreachable.h"
 #include "bionic.h"
 #include "log.h"
-
-const size_t Leak::contents_length;
+#include "memunreachable/memunreachable.h"
 
 using namespace std::chrono_literals;
 
+namespace android {
+
+const size_t Leak::contents_length;
+
 class MemUnreachable {
  public:
-  MemUnreachable(pid_t pid, Allocator<void> allocator) : pid_(pid), allocator_(allocator),
-      heap_walker_(allocator_) {}
+  MemUnreachable(pid_t pid, Allocator<void> allocator)
+      : pid_(pid), allocator_(allocator), heap_walker_(allocator_) {}
   bool CollectAllocations(const allocator::vector<ThreadInfo>& threads,
-      const allocator::vector<Mapping>& mappings);
-  bool GetUnreachableMemory(allocator::vector<Leak>& leaks, size_t limit,
-      size_t* num_leaks, size_t* leak_bytes);
+                          const allocator::vector<Mapping>& mappings,
+                          const allocator::vector<uintptr_t>& refs);
+  bool GetUnreachableMemory(allocator::vector<Leak>& leaks, size_t limit, size_t* num_leaks,
+                            size_t* leak_bytes);
   size_t Allocations() { return heap_walker_.Allocations(); }
   size_t AllocationBytes() { return heap_walker_.AllocationBytes(); }
+
  private:
   bool ClassifyMappings(const allocator::vector<Mapping>& mappings,
-      allocator::vector<Mapping>& heap_mappings,
-      allocator::vector<Mapping>& anon_mappings,
-      allocator::vector<Mapping>& globals_mappings,
-      allocator::vector<Mapping>& stack_mappings);
+                        allocator::vector<Mapping>& heap_mappings,
+                        allocator::vector<Mapping>& anon_mappings,
+                        allocator::vector<Mapping>& globals_mappings,
+                        allocator::vector<Mapping>& stack_mappings);
   DISALLOW_COPY_AND_ASSIGN(MemUnreachable);
   pid_t pid_;
   Allocator<void> allocator_;
@@ -68,74 +74,75 @@ class MemUnreachable {
 };
 
 static void HeapIterate(const Mapping& heap_mapping,
-    const std::function<void(uintptr_t, size_t)>& func) {
+                        const std::function<void(uintptr_t, size_t)>& func) {
   malloc_iterate(heap_mapping.begin, heap_mapping.end - heap_mapping.begin,
-      [](uintptr_t base, size_t size, void* arg) {
-    auto f = reinterpret_cast<const std::function<void(uintptr_t, size_t)>*>(arg);
-    (*f)(base, size);
-  }, const_cast<void*>(reinterpret_cast<const void*>(&func)));
+                 [](uintptr_t base, size_t size, void* arg) {
+                   auto f = reinterpret_cast<const std::function<void(uintptr_t, size_t)>*>(arg);
+                   (*f)(base, size);
+                 },
+                 const_cast<void*>(reinterpret_cast<const void*>(&func)));
 }
 
 bool MemUnreachable::CollectAllocations(const allocator::vector<ThreadInfo>& threads,
-    const allocator::vector<Mapping>& mappings) {
-  ALOGI("searching process %d for allocations", pid_);
+                                        const allocator::vector<Mapping>& mappings,
+                                        const allocator::vector<uintptr_t>& refs) {
+  MEM_ALOGI("searching process %d for allocations", pid_);
   allocator::vector<Mapping> heap_mappings{mappings};
   allocator::vector<Mapping> anon_mappings{mappings};
   allocator::vector<Mapping> globals_mappings{mappings};
   allocator::vector<Mapping> stack_mappings{mappings};
-  if (!ClassifyMappings(mappings, heap_mappings, anon_mappings,
-      globals_mappings, stack_mappings)) {
+  if (!ClassifyMappings(mappings, heap_mappings, anon_mappings, globals_mappings, stack_mappings)) {
     return false;
   }
 
   for (auto it = heap_mappings.begin(); it != heap_mappings.end(); it++) {
-    ALOGV("Heap mapping %" PRIxPTR "-%" PRIxPTR " %s", it->begin, it->end, it->name);
-    HeapIterate(*it, [&](uintptr_t base, size_t size) {
-      heap_walker_.Allocation(base, base + size);
-    });
+    MEM_ALOGV("Heap mapping %" PRIxPTR "-%" PRIxPTR " %s", it->begin, it->end, it->name);
+    HeapIterate(*it,
+                [&](uintptr_t base, size_t size) { heap_walker_.Allocation(base, base + size); });
   }
 
   for (auto it = anon_mappings.begin(); it != anon_mappings.end(); it++) {
-    ALOGV("Anon mapping %" PRIxPTR "-%" PRIxPTR " %s", it->begin, it->end, it->name);
+    MEM_ALOGV("Anon mapping %" PRIxPTR "-%" PRIxPTR " %s", it->begin, it->end, it->name);
     heap_walker_.Allocation(it->begin, it->end);
   }
 
   for (auto it = globals_mappings.begin(); it != globals_mappings.end(); it++) {
-    ALOGV("Globals mapping %" PRIxPTR "-%" PRIxPTR " %s", it->begin, it->end, it->name);
+    MEM_ALOGV("Globals mapping %" PRIxPTR "-%" PRIxPTR " %s", it->begin, it->end, it->name);
     heap_walker_.Root(it->begin, it->end);
   }
 
   for (auto thread_it = threads.begin(); thread_it != threads.end(); thread_it++) {
     for (auto it = stack_mappings.begin(); it != stack_mappings.end(); it++) {
       if (thread_it->stack.first >= it->begin && thread_it->stack.first <= it->end) {
-        ALOGV("Stack %" PRIxPTR "-%" PRIxPTR " %s", thread_it->stack.first, it->end, it->name);
+        MEM_ALOGV("Stack %" PRIxPTR "-%" PRIxPTR " %s", thread_it->stack.first, it->end, it->name);
         heap_walker_.Root(thread_it->stack.first, it->end);
       }
     }
     heap_walker_.Root(thread_it->regs);
   }
 
-  ALOGI("searching done");
+  heap_walker_.Root(refs);
+
+  MEM_ALOGI("searching done");
 
   return true;
 }
 
-bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks,
-    size_t limit, size_t* num_leaks, size_t* leak_bytes) {
-  ALOGI("sweeping process %d for unreachable memory", pid_);
+bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks, size_t limit,
+                                          size_t* num_leaks, size_t* leak_bytes) {
+  MEM_ALOGI("sweeping process %d for unreachable memory", pid_);
   leaks.clear();
 
   if (!heap_walker_.DetectLeaks()) {
     return false;
   }
 
-
   allocator::vector<Range> leaked1{allocator_};
   heap_walker_.Leaked(leaked1, 0, num_leaks, leak_bytes);
 
-  ALOGI("sweeping done");
+  MEM_ALOGI("sweeping done");
 
-  ALOGI("folding related leaks");
+  MEM_ALOGI("folding related leaks");
 
   LeakFolding folding(allocator_, heap_walker_);
   if (!folding.FoldLeaks()) {
@@ -154,12 +161,12 @@ bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks,
   // in backtrace_map.
   leaks.reserve(leaked.size());
 
-  for (auto& it: leaked) {
+  for (auto& it : leaked) {
     leaks.emplace_back();
     Leak* leak = &leaks.back();
 
-    ssize_t num_backtrace_frames = malloc_backtrace(reinterpret_cast<void*>(it.range.begin),
-        leak->backtrace.frames, leak->backtrace.max_frames);
+    ssize_t num_backtrace_frames = malloc_backtrace(
+        reinterpret_cast<void*>(it.range.begin), leak->backtrace.frames, leak->backtrace.max_frames);
     if (num_backtrace_frames > 0) {
       leak->backtrace.num_frames = num_backtrace_frames;
 
@@ -185,14 +192,13 @@ bool MemUnreachable::GetUnreachableMemory(allocator::vector<Leak>& leaks,
     leak->referenced_size = it.referenced_size;
     leak->total_size = leak->size + leak->referenced_size;
     memcpy(leak->contents, reinterpret_cast<void*>(it.range.begin),
-        std::min(leak->size, Leak::contents_length));
+           std::min(leak->size, Leak::contents_length));
   }
 
-  ALOGI("folding done");
+  MEM_ALOGI("folding done");
 
-  std::sort(leaks.begin(), leaks.end(), [](const Leak& a, const Leak& b) {
-    return a.total_size > b.total_size;
-  });
+  std::sort(leaks.begin(), leaks.end(),
+            [](const Leak& a, const Leak& b) { return a.total_size > b.total_size; });
 
   if (leaks.size() > limit) {
     leaks.resize(limit);
@@ -207,11 +213,10 @@ static bool has_prefix(const allocator::string& s, const char* prefix) {
 }
 
 bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings,
-    allocator::vector<Mapping>& heap_mappings,
-    allocator::vector<Mapping>& anon_mappings,
-    allocator::vector<Mapping>& globals_mappings,
-    allocator::vector<Mapping>& stack_mappings)
-{
+                                      allocator::vector<Mapping>& heap_mappings,
+                                      allocator::vector<Mapping>& anon_mappings,
+                                      allocator::vector<Mapping>& globals_mappings,
+                                      allocator::vector<Mapping>& stack_mappings) {
   heap_mappings.clear();
   anon_mappings.clear();
   globals_mappings.clear();
@@ -247,7 +252,8 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
       stack_mappings.emplace_back(*it);
     } else if (mapping_name.size() == 0) {
       globals_mappings.emplace_back(*it);
-    } else if (has_prefix(mapping_name, "[anon:") && mapping_name != "[anon:leak_detector_malloc]") {
+    } else if (has_prefix(mapping_name, "[anon:") &&
+               mapping_name != "[anon:leak_detector_malloc]") {
       // TODO(ccross): it would be nice to treat named anonymous mappings as
       // possible leaks, but naming something in a .bss or .data section makes
       // it impossible to distinguish them from mmaped and then named mappings.
@@ -258,7 +264,7 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
   return true;
 }
 
-template<typename T>
+template <typename T>
 static inline const char* plural(T val) {
   return (val == 1) ? "" : "s";
 }
@@ -276,11 +282,12 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
     /////////////////////////////////////////////
     // Collection thread
     /////////////////////////////////////////////
-    ALOGI("collecting thread info for process %d...", parent_pid);
+    MEM_ALOGI("collecting thread info for process %d...", parent_pid);
 
     ThreadCapture thread_capture(parent_pid, heap);
     allocator::vector<ThreadInfo> thread_info(heap);
     allocator::vector<Mapping> mappings(heap);
+    allocator::vector<uintptr_t> refs(heap);
 
     // ptrace all the threads
     if (!thread_capture.CaptureThreads()) {
@@ -296,6 +303,11 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
     // snapshot /proc/pid/maps
     if (!ProcessMappings(parent_pid, mappings)) {
+      continue_parent_sem.Post();
+      return 1;
+    }
+
+    if (!BinderReferences(refs)) {
       continue_parent_sem.Post();
       return 1;
     }
@@ -325,7 +337,7 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
 
       MemUnreachable unreachable{parent_pid, heap};
 
-      if (!unreachable.CollectAllocations(thread_info, mappings)) {
+      if (!unreachable.CollectAllocations(thread_info, mappings, refs)) {
         _exit(2);
       }
       size_t num_allocations = unreachable.Allocations();
@@ -351,7 +363,7 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
     } else {
       // Nothing left to do in the collection thread, return immediately,
       // releasing all the captured threads.
-      ALOGI("collection thread done");
+      MEM_ALOGI("collection thread done");
       return 0;
     }
   }};
@@ -397,15 +409,14 @@ bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
     return false;
   }
 
-  ALOGI("unreachable memory detection done");
-  ALOGE("%zu bytes in %zu allocation%s unreachable out of %zu bytes in %zu allocation%s",
-      info.leak_bytes, info.num_leaks, plural(info.num_leaks),
-      info.allocation_bytes, info.num_allocations, plural(info.num_allocations));
+  MEM_ALOGI("unreachable memory detection done");
+  MEM_ALOGE("%zu bytes in %zu allocation%s unreachable out of %zu bytes in %zu allocation%s",
+            info.leak_bytes, info.num_leaks, plural(info.num_leaks), info.allocation_bytes,
+            info.num_allocations, plural(info.num_allocations));
   return true;
 }
 
 std::string Leak::ToString(bool log_contents) const {
-
   std::ostringstream oss;
 
   oss << "  " << std::dec << size;
@@ -468,23 +479,6 @@ std::string Leak::ToString(bool log_contents) const {
   return oss.str();
 }
 
-// Figure out the abi based on defined macros.
-#if defined(__arm__)
-#define ABI_STRING "arm"
-#elif defined(__aarch64__)
-#define ABI_STRING "arm64"
-#elif defined(__mips__) && !defined(__LP64__)
-#define ABI_STRING "mips"
-#elif defined(__mips__) && defined(__LP64__)
-#define ABI_STRING "mips64"
-#elif defined(__i386__)
-#define ABI_STRING "x86"
-#elif defined(__x86_64__)
-#define ABI_STRING "x86_64"
-#else
-#error "Unsupported ABI"
-#endif
-
 std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
   std::ostringstream oss;
   oss << "  " << leak_bytes << " bytes in ";
@@ -494,8 +488,8 @@ std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
   oss << std::endl;
 
   for (auto it = leaks.begin(); it != leaks.end(); it++) {
-      oss << it->ToString(log_contents);
-      oss << std::endl;
+    oss << it->ToString(log_contents);
+    oss << std::endl;
   }
 
   return oss.str();
@@ -504,28 +498,32 @@ std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
 std::string GetUnreachableMemoryString(bool log_contents, size_t limit) {
   UnreachableMemoryInfo info;
   if (!GetUnreachableMemory(info, limit)) {
-    return "Failed to get unreachable memory\n";
+    return "Failed to get unreachable memory\n"
+           "If you are trying to get unreachable memory from a system app\n"
+           "(like com.android.systemui), disable selinux first using\n"
+           "setenforce 0\n";
   }
 
   return info.ToString(log_contents);
 }
 
+}  // namespace android
+
 bool LogUnreachableMemory(bool log_contents, size_t limit) {
-  UnreachableMemoryInfo info;
-  if (!GetUnreachableMemory(info, limit)) {
+  android::UnreachableMemoryInfo info;
+  if (!android::GetUnreachableMemory(info, limit)) {
     return false;
   }
 
   for (auto it = info.leaks.begin(); it != info.leaks.end(); it++) {
-    ALOGE("%s", it->ToString(log_contents).c_str());
+    MEM_ALOGE("%s", it->ToString(log_contents).c_str());
   }
   return true;
 }
 
-
 bool NoLeaks() {
-  UnreachableMemoryInfo info;
-  if (!GetUnreachableMemory(info, 0)) {
+  android::UnreachableMemoryInfo info;
+  if (!android::GetUnreachableMemory(info, 0)) {
     return false;
   }
 

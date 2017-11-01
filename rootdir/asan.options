@@ -5,3 +5,4 @@ allocator_may_return_null=1
 detect_container_overflow=0
 abort_on_error=1
 include_if_exists=/system/asan.options.%b
+include_if_exists=/data/asan/system/asan.options.%b

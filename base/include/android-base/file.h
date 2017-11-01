@@ -18,10 +18,16 @@
 #define ANDROID_BASE_FILE_H
 
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <string>
 
 #if !defined(_WIN32) && !defined(O_BINARY)
 #define O_BINARY 0
+#endif
+
+#if defined(__APPLE__)
+/* Mac OS has always had a 64-bit off_t, so it doesn't have off64_t. */
+typedef off_t off64_t;
 #endif
 
 namespace android {
@@ -42,15 +48,33 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
 #endif
 
 bool ReadFully(int fd, void* data, size_t byte_count);
+
+// Reads `byte_count` bytes from the file descriptor at the specified offset.
+// Returns false if there was an IO error or EOF was reached before reading `byte_count` bytes.
+//
+// NOTE: On Linux/Mac, this function wraps pread, which provides atomic read support without
+// modifying the read pointer of the file descriptor. On Windows, however, the read pointer does
+// get modified. This means that ReadFullyAtOffset can be used concurrently with other calls to the
+// same function, but concurrently seeking or reading incrementally can lead to unexpected
+// behavior.
+bool ReadFullyAtOffset(int fd, void* data, size_t byte_count, off64_t offset);
+
 bool WriteFully(int fd, const void* data, size_t byte_count);
 
 bool RemoveFileIfExists(const std::string& path, std::string* err = nullptr);
 
 #if !defined(_WIN32)
+bool Realpath(const std::string& path, std::string* result);
 bool Readlink(const std::string& path, std::string* result);
 #endif
 
 std::string GetExecutablePath();
+std::string GetExecutableDirectory();
+
+// Like the regular basename and dirname, but thread-safe on all
+// platforms and capable of correctly handling exotic Windows paths.
+std::string Basename(const std::string& path);
+std::string Dirname(const std::string& path);
 
 }  // namespace base
 }  // namespace android

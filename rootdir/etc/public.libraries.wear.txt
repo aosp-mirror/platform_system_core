@@ -1,4 +1,6 @@
+# See https://android.googlesource.com/platform/ndk/+/master/docs/PlatformApis.md
 libandroid.so
+libaaudio.so
 libc.so
 libcamera2ndk.so
 libdl.so
@@ -12,9 +14,11 @@ libjnigraphics.so
 liblog.so
 libmediandk.so
 libm.so
+libnativewindow.so
 libOpenMAXAL.so
 libOpenSLES.so
 libRS.so
 libstdc++.so
+libsync.so
 libvulkan.so
 libz.so

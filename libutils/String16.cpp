@@ -17,11 +17,7 @@
 #include <utils/String16.h>
 
 #include <utils/Log.h>
-#include <utils/Unicode.h>
-#include <utils/threads.h>
 
-#include <memory.h>
-#include <stdio.h>
 #include <ctype.h>
 
 #include "SharedBuffer.h"

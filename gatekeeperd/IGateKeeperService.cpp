@@ -158,6 +158,12 @@ status_t BnGateKeeperService::onTransact(
             reply->writeNoException();
             return NO_ERROR;
         }
+        case REPORT_DEVICE_SETUP_COMPLETE: {
+            CHECK_INTERFACE(IGateKeeperService, data, reply);
+            reportDeviceSetupComplete();
+            reply->writeNoException();
+            return NO_ERROR;
+        }
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

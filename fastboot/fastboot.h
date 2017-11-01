@@ -41,8 +41,10 @@ struct sparse_file;
 /* protocol.c - fastboot protocol */
 int fb_command(Transport* transport, const char* cmd);
 int fb_command_response(Transport* transport, const char* cmd, char* response);
-int fb_download_data(Transport* transport, const void* data, uint32_t size);
+int64_t fb_download_data(Transport* transport, const void* data, uint32_t size);
+int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size);
 int fb_download_data_sparse(Transport* transport, struct sparse_file* s);
+int64_t fb_upload_data(Transport* transport, const char* outfile);
 const std::string fb_get_error();
 
 #define FB_COMMAND_SZ 64
@@ -51,6 +53,7 @@ const std::string fb_get_error();
 /* engine.c - high level command queue engine */
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value);
 void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
+void fb_queue_flash_fd(const char *ptn, int fd, uint32_t sz);
 void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, uint32_t sz, size_t current,
                            size_t total);
 void fb_queue_erase(const char *ptn);
@@ -62,9 +65,11 @@ void fb_queue_query_save(const char *var, char *dest, uint32_t dest_size);
 void fb_queue_reboot(void);
 void fb_queue_command(const char *cmd, const char *msg);
 void fb_queue_download(const char *name, void *data, uint32_t size);
+void fb_queue_download_fd(const char *name, int fd, uint32_t sz);
+void fb_queue_upload(const char* outfile);
 void fb_queue_notice(const char *notice);
 void fb_queue_wait_for_disconnect(void);
-int fb_execute_queue(Transport* transport);
+int64_t fb_execute_queue(Transport* transport);
 void fb_set_active(const char *slot);
 
 /* util stuff */

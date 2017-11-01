@@ -144,17 +144,17 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
  * usb_device_get_product_name and usb_device_get_serial.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_string(struct usb_device *device, int id);
+char* usb_device_get_string(struct usb_device *device, int id, int timeout);
 
 /* Returns the manufacturer name for the USB device.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_manufacturer_name(struct usb_device *device);
+char* usb_device_get_manufacturer_name(struct usb_device *device, int timeout);
 
 /* Returns the product name for the USB device.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_product_name(struct usb_device *device);
+char* usb_device_get_product_name(struct usb_device *device, int timeout);
 
 /* Returns the version number for the USB device.
  */
@@ -163,7 +163,7 @@ int usb_device_get_version(struct usb_device *device);
 /* Returns the USB serial number for the USB device.
  * Call free() to free the result when you are done with it.
  */
-char* usb_device_get_serial(struct usb_device *device);
+char* usb_device_get_serial(struct usb_device *device, int timeout);
 
 /* Returns true if we have write access to the USB device,
  * and false if we only have access to the USB device configuration.
@@ -232,10 +232,11 @@ void usb_request_free(struct usb_request *req);
 /* Submits a read or write request on the specified device */
 int usb_request_queue(struct usb_request *req);
 
- /* Waits for the results of a previous usb_request_queue operation.
+ /* Waits for the results of a previous usb_request_queue operation. timeoutMillis == -1 requests
+  * to wait forever.
   * Returns a usb_request, or NULL for error.
   */
-struct usb_request *usb_request_wait(struct usb_device *dev);
+struct usb_request *usb_request_wait(struct usb_device *dev, int timeoutMillis);
 
 /* Cancels a pending usb_request_queue() operation. */
 int usb_request_cancel(struct usb_request *req);

@@ -54,12 +54,10 @@ static std::string find_proc_mount(const char* dir) {
 
 // Returns the device used to mount a directory in the fstab.
 static std::string find_fstab_mount(const char* dir) {
-    std::string fstab_filename = "/fstab." + android::base::GetProperty("ro.hardware", "");
-    struct fstab* fstab = fs_mgr_read_fstab(fstab_filename.c_str());
-    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab, dir);
-    std::string dev = rec ? std::string(rec->blk_device) : "";
-    fs_mgr_free_fstab(fstab);
-    return dev;
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), dir);
+    return rec ? rec->blk_device : "";
 }
 
 // The proc entry for / is full of lies, so check fstab instead.
