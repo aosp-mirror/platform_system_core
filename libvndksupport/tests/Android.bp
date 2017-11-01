@@ -17,6 +17,7 @@ cc_test {
     srcs: [
         "linker_test.cpp",
     ],
+    cflags: ["-Wall", "-Werror"],
 
     host_supported: false,
     shared_libs: [

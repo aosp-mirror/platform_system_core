@@ -20,7 +20,7 @@ cc_defaults {
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
     },
-    cppflags: [
+    cflags: [
         "-DLOG_UEVENTS=0",
         "-Wall",
         "-Wextra",

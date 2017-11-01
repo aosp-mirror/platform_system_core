@@ -14,11 +14,10 @@
 // limitations under the License.
 //
 
-libbase_cppflags = [
-    "-Wall",
-    "-Wextra",
-    "-Werror",
-]
+cc_defaults {
+    name: "libbase_defaults",
+    cflags: ["-Wall", "-Werror", "-Wextra"],
+}
 
 cc_library_headers {
     name: "libbase_headers",
@@ -38,6 +37,7 @@ cc_library_headers {
 
 cc_library {
     name: "libbase",
+    defaults: ["libbase_defaults"],
     vendor_available: true,
     host_supported: true,
     vndk: {
@@ -59,7 +59,6 @@ cc_library {
     ],
     export_header_lib_headers: ["libbase_headers"],
 
-    cppflags: libbase_cppflags,
     shared_libs: ["liblog"],
     target: {
         android: {
@@ -102,6 +101,7 @@ cc_library {
 // ------------------------------------------------------------------------------
 cc_test {
     name: "libbase_test",
+    defaults: ["libbase_defaults"],
     host_supported: true,
     srcs: [
         "endian_test.cpp",
@@ -133,7 +133,6 @@ cc_test {
         },
     },
     local_include_dirs: ["."],
-    cppflags: libbase_cppflags,
     shared_libs: ["libbase"],
     compile_multilib: "both",
     multilib: {
