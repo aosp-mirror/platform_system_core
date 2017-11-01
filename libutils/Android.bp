@@ -75,7 +75,7 @@ cc_library {
         "misc.cpp",
     ],
 
-    cflags: ["-Werror"],
+    cflags: ["-Wall", "-Werror"],
     include_dirs: ["external/safe-iop/include"],
     header_libs: [
         "libutils_headers",
@@ -154,6 +154,7 @@ cc_test {
     static_libs: ["libutils"],
     shared_libs: ["liblog"],
     srcs: ["SharedBufferTest.cpp"],
+    cflags: ["-Wall", "-Werror"],
 }
 
 subdirs = ["tests"]

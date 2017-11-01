@@ -25,4 +25,5 @@ cc_test {
         "liblog",
     ],
     gtest: false,
+    cflags: ["-Wall", "-Werror"],
 }
