@@ -334,6 +334,29 @@ TEST(DemangleTest, TemplateFunction) {
   // Template within templates.
   ASSERT_EQ("one::two<three<char, int>>", demangler.Parse("_ZN3one3twoIN5threeIciEEEE"));
   ASSERT_EQ("one::two<three<char, four<int>>>", demangler.Parse("_ZN3one3twoIN5threeIcN4fourIiEEEEEE"));
+
+  ASSERT_EQ("one<char>", demangler.Parse("_Z3oneIcE"));
+  ASSERT_EQ("one<void>", demangler.Parse("_Z3oneIvE"));
+  ASSERT_EQ("one<void*>", demangler.Parse("_Z3oneIPvE"));
+  ASSERT_EQ("one<void const>", demangler.Parse("_Z3oneIKvE"));
+  ASSERT_EQ("one<char, int, bool>", demangler.Parse("_Z3oneIcibE"));
+  ASSERT_EQ("one(two<three>)", demangler.Parse("_Z3one3twoIN5threeEE"));
+  ASSERT_EQ("one<char, int, two::three>", demangler.Parse("_Z3oneIciN3two5threeEE"));
+  // Template within templates.
+  ASSERT_EQ("one(two<three<char, int>>)", demangler.Parse("_Z3one3twoIN5threeIciEEE"));
+  ASSERT_EQ("one(two<three<char, four<int>>>)",
+            demangler.Parse("_Z3one3twoIN5threeIcN4fourIiEEEEE"));
+}
+
+TEST(DemangleTest, TemplateFunctionWithReturnType) {
+  Demangler demangler;
+
+  ASSERT_EQ("char one<int>(char)", demangler.Parse("_Z3oneIiEcc"));
+  ASSERT_EQ("void one<int>()", demangler.Parse("_Z3oneIiEvv"));
+  ASSERT_EQ("char one<int>()", demangler.Parse("_Z3oneIiEcv"));
+  ASSERT_EQ("char one<int>(void, void)", demangler.Parse("_Z3oneIiEcvv"));
+  ASSERT_EQ("char one<int>()", demangler.Parse("_ZN3oneIiEEcv"));
+  ASSERT_EQ("char one<int>(void, void)", demangler.Parse("_ZN3oneIiEEcvv"));
 }
 
 TEST(DemangleTest, TemplateArguments) {
@@ -410,6 +433,28 @@ TEST(DemangleTest, ComplexSubstitution) {
             demangler.Parse("_ZN3one3two5three4fourINS_4fiveEED2EPS3_"));
 }
 
+TEST(DemangleTest, TemplateSubstitution) {
+  Demangler demangler;
+
+  ASSERT_EQ("void one<int, double>(int)", demangler.Parse("_ZN3oneIidEEvT_"));
+  ASSERT_EQ("void one<int, double>(double)", demangler.Parse("_ZN3oneIidEEvT0_"));
+  ASSERT_EQ("void one<int, double, char, void>(char)", demangler.Parse("_ZN3oneIidcvEEvT1_"));
+
+  ASSERT_EQ("void one<int, double>(int)", demangler.Parse("_Z3oneIidEvT_"));
+  ASSERT_EQ("void one<int, double>(double)", demangler.Parse("_Z3oneIidEvT0_"));
+  ASSERT_EQ("void one<int, double, char, void>(char)", demangler.Parse("_Z3oneIidcvEvT1_"));
+
+  ASSERT_EQ("void one<a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r>(l)",
+            demangler.Parse("_ZN3oneI1a1b1c1d1e1f1g1h1i1j1k1l1m1n1o1p1q1rEEvT10_"));
+  ASSERT_EQ("void one<a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r>(m)",
+            demangler.Parse("_ZN3oneI1a1b1c1d1e1f1g1h1i1j1k1l1m1n1o1p1q1rEEvT11_"));
+
+  ASSERT_EQ("void one<a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r>(l)",
+            demangler.Parse("_Z3oneI1a1b1c1d1e1f1g1h1i1j1k1l1m1n1o1p1q1rEvT10_"));
+  ASSERT_EQ("void one<a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r>(m)",
+            demangler.Parse("_Z3oneI1a1b1c1d1e1f1g1h1i1j1k1l1m1n1o1p1q1rEvT11_"));
+}
+
 TEST(DemangleTest, StringTooLong) {
   Demangler demangler;
 
@@ -434,6 +479,13 @@ TEST(DemangleTest, BooleanLiterals) {
   ASSERT_EQ("one<true>", demangler.Parse("_ZN3oneILb1EEE"));
   ASSERT_EQ("one<false>", demangler.Parse("_ZN3oneILb0EEE"));
   ASSERT_EQ("one<false, true>", demangler.Parse("_ZN3oneILb0ELb1EEE"));
+
+  ASSERT_EQ("one<true>", demangler.Parse("_Z3oneILb1EE"));
+  ASSERT_EQ("one<false>", demangler.Parse("_Z3oneILb0EE"));
+  ASSERT_EQ("one<false, true>", demangler.Parse("_Z3oneILb0ELb1EE"));
+
+  ASSERT_EQ("one(two<three<four>, false, true>)",
+            demangler.Parse("_ZN3oneE3twoI5threeI4fourELb0ELb1EE"));
 }
 
 TEST(DemangleTest, demangle) {
