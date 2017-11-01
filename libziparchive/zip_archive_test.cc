@@ -717,6 +717,93 @@ TEST(ziparchive, ErrorCodeString) {
   ASSERT_STREQ("I/O error", ErrorCodeString(kIoError));
 }
 
+class VectorReader : public zip_archive::Reader {
+ public:
+  VectorReader(const std::vector<uint8_t>& input) : Reader(), input_(input) {}
+
+  bool ReadAtOffset(uint8_t* buf, size_t len, uint32_t offset) const {
+    if ((offset + len) < input_.size()) {
+      return false;
+    }
+
+    memcpy(buf, &input_[offset], len);
+    return true;
+  }
+
+ private:
+  const std::vector<uint8_t>& input_;
+};
+
+class VectorWriter : public zip_archive::Writer {
+ public:
+  VectorWriter() : Writer() {}
+
+  bool Append(uint8_t* buf, size_t size) {
+    output_.insert(output_.end(), buf, buf + size);
+    return true;
+  }
+
+  std::vector<uint8_t>& GetOutput() { return output_; }
+
+ private:
+  std::vector<uint8_t> output_;
+};
+
+class BadReader : public zip_archive::Reader {
+ public:
+  BadReader() : Reader() {}
+
+  bool ReadAtOffset(uint8_t*, size_t, uint32_t) const { return false; }
+};
+
+class BadWriter : public zip_archive::Writer {
+ public:
+  BadWriter() : Writer() {}
+
+  bool Append(uint8_t*, size_t) { return false; }
+};
+
+TEST(ziparchive, Inflate) {
+  const uint32_t compressed_length = kATxtContentsCompressed.size();
+  const uint32_t uncompressed_length = kATxtContents.size();
+
+  const VectorReader reader(kATxtContentsCompressed);
+  {
+    VectorWriter writer;
+    uint64_t crc_out = 0;
+
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, &crc_out);
+    ASSERT_EQ(0, ret);
+    ASSERT_EQ(kATxtContents, writer.GetOutput());
+    ASSERT_EQ(0x950821C5u, crc_out);
+  }
+
+  {
+    VectorWriter writer;
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, nullptr);
+    ASSERT_EQ(0, ret);
+    ASSERT_EQ(kATxtContents, writer.GetOutput());
+  }
+
+  {
+    BadWriter writer;
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, nullptr);
+    ASSERT_EQ(kIoError, ret);
+  }
+
+  {
+    BadReader reader;
+    VectorWriter writer;
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, nullptr);
+    ASSERT_EQ(kIoError, ret);
+    ASSERT_EQ(0u, writer.GetOutput().size());
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
