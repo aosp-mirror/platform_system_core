@@ -107,7 +107,6 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
     return false;
   }
 
-  AddressType prev_pc = regs->pc();
   AddressType prev_cfa = regs->sp();
 
   AddressType cfa;
@@ -233,8 +232,8 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
   *finished = (cur_regs->pc() == 0) ? true : false;
 
   cur_regs->set_sp(cfa);
-  // Return false if the unwind is not finished or the cfa and pc didn't change.
-  return *finished || prev_cfa != cfa || prev_pc != cur_regs->pc();
+
+  return true;
 }
 
 template <typename AddressType>
