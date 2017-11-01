@@ -22,8 +22,9 @@ message TaskIOUsage {
 
 message UidRecord {
   optional string uid_name = 1;
-  optional IOUsage uid_io = 2;
-  repeated TaskIOUsage task_io = 3;
+  optional uint32 user_id = 2;
+  optional IOUsage uid_io = 3;
+  repeated TaskIOUsage task_io = 4;
 }
 
 message UidIORecords {
@@ -53,7 +54,8 @@ message IOPerfHistory {
 message StoragedProto {
   optional uint32 crc = 1;
   optional uint32 version = 2;
-  optional UidIOUsage uid_io_usage = 3;
-  optional IOPerfHistory perf_history = 4;
-  repeated uint32 padding = 5;
+  optional uint32 loaded = 3;
+  optional UidIOUsage uid_io_usage = 4;
+  optional IOPerfHistory perf_history = 5;
+  repeated uint32 padding = 6;
 }

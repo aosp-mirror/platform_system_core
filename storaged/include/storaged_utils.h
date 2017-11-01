@@ -33,6 +33,7 @@ void get_inc_disk_stats(const struct disk_stats* prev, const struct disk_stats* 
 void add_disk_stats(struct disk_stats* src, struct disk_stats* dst);
 
 // UID I/O
+map<string, io_usage> merge_io_usage(const vector<uid_record>& entries);
 void sort_running_uids_info(std::vector<UidInfo> &uids);
 
 // Logging

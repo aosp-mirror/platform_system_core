@@ -76,7 +76,7 @@ void storage_info_t::load_perf_history_proto(const IOPerfHistory& perf_history)
     }
 
     day_start_tp = {};
-    day_start_tp += seconds(perf_history.day_start_sec());
+    day_start_tp += chrono::seconds(perf_history.day_start_sec());
 
     nr_samples = perf_history.nr_samples();
     for (auto bw : perf_history.recent_perf()) {
@@ -107,11 +107,11 @@ void storage_info_t::refresh(IOPerfHistory* perf_history)
     userdata_total_kb = buf.f_bsize * buf.f_blocks >> 10;
     userdata_free_kb = buf.f_bfree * buf.f_blocks >> 10;
 
-    unique_ptr<lock_t> lock(new lock_t(&si_lock));
+    Mutex::Autolock _l(si_mutex);
 
     perf_history->Clear();
     perf_history->set_day_start_sec(
-        duration_cast<seconds>(day_start_tp.time_since_epoch()).count());
+        duration_cast<chrono::seconds>(day_start_tp.time_since_epoch()).count());
     for (const uint32_t& bw : recent_perf) {
         perf_history->add_recent_perf(bw);
     }
@@ -136,10 +136,10 @@ void storage_info_t::publish()
 void storage_info_t::update_perf_history(uint32_t bw,
                                          const time_point<system_clock>& tp)
 {
-    unique_ptr<lock_t> lock(new lock_t(&si_lock));
+    Mutex::Autolock _l(si_mutex);
 
     if (tp > day_start_tp &&
-        duration_cast<seconds>(tp - day_start_tp).count() < DAY_TO_SEC) {
+        duration_cast<chrono::seconds>(tp - day_start_tp).count() < DAY_TO_SEC) {
         if (nr_samples >= recent_perf.size()) {
             recent_perf.push_back(bw);
         } else {
@@ -155,7 +155,7 @@ void storage_info_t::update_perf_history(uint32_t bw,
     uint32_t daily_avg_bw = accumulate(recent_perf.begin(),
         recent_perf.begin() + nr_samples, 0) / nr_samples;
 
-    day_start_tp = tp - seconds(duration_cast<seconds>(
+    day_start_tp = tp - chrono::seconds(duration_cast<chrono::seconds>(
         tp.time_since_epoch()).count() % DAY_TO_SEC);
 
     nr_samples = 0;
@@ -182,7 +182,7 @@ void storage_info_t::update_perf_history(uint32_t bw,
 
 vector<int> storage_info_t::get_perf_history()
 {
-    unique_ptr<lock_t> lock(new lock_t(&si_lock));
+    Mutex::Autolock _l(si_mutex);
 
     vector<int> ret(3 + recent_perf.size() + daily_perf.size() + weekly_perf.size());
 

@@ -29,6 +29,9 @@ using namespace android::os;
 using namespace android::os::storaged;
 
 class StoragedService : public BinderService<StoragedService>, public BnStoraged {
+private:
+    void dumpUidRecordsDebug(int fd, const vector<struct uid_record>& entries);
+    void dumpUidRecords(int fd, const vector<struct uid_record>& entries);
 public:
     static status_t start();
     static char const* getServiceName() { return "storaged"; }

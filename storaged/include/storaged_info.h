@@ -21,6 +21,8 @@
 
 #include <chrono>
 
+#include <utils/Mutex.h>
+
 #include "storaged.h"
 #include "storaged.pb.h"
 
@@ -28,6 +30,7 @@
 friend class test_case_name##_##test_name##_Test
 
 using namespace std;
+using namespace android;
 using namespace chrono;
 using namespace storaged_proto;
 
@@ -51,13 +54,12 @@ protected:
     uint32_t nr_days;
     vector<uint32_t> weekly_perf;
     uint32_t nr_weeks;
-    sem_t si_lock;
+    Mutex si_mutex;
 
     storage_info_t() : eol(0), lifetime_a(0), lifetime_b(0),
         userdata_total_kb(0), userdata_free_kb(0), nr_samples(0),
         daily_perf(WEEK_TO_DAYS, 0), nr_days(0),
         weekly_perf(YEAR_TO_WEEKS, 0), nr_weeks(0) {
-            sem_init(&si_lock, 0, 1);
             day_start_tp = system_clock::now();
             day_start_tp -= chrono::seconds(duration_cast<chrono::seconds>(
                 day_start_tp.time_since_epoch()).count() % DAY_TO_SEC);
@@ -66,7 +68,7 @@ protected:
     storage_info_t* s_info;
 public:
     static storage_info_t* get_storage_info();
-    virtual ~storage_info_t() { sem_destroy(&si_lock); }
+    virtual ~storage_info_t() {};
     virtual void report() {};
     void load_perf_history_proto(const IOPerfHistory& perf_history);
     void refresh(IOPerfHistory* perf_history);
