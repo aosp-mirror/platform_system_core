@@ -19,16 +19,15 @@
 #include "adb_utils.h"
 #include "adb_unique_fd.h"
 
-#include <libgen.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <algorithm>
-#include <mutex>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
@@ -76,7 +75,7 @@ bool getcwd(std::string* s) {
 
 bool directory_exists(const std::string& path) {
   struct stat sb;
-  return lstat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode);
+  return stat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode);
 }
 
 std::string escape_arg(const std::string& s) {
@@ -97,52 +96,6 @@ std::string escape_arg(const std::string& s) {
   // Prefix and suffix the whole string with '.
   result.insert(result.begin(), '\'');
   result.push_back('\'');
-  return result;
-}
-
-std::string adb_basename(const std::string& path) {
-  static std::mutex& basename_lock = *new std::mutex();
-
-  // Copy path because basename may modify the string passed in.
-  std::string result(path);
-
-  // Use lock because basename() may write to a process global and return a
-  // pointer to that. Note that this locking strategy only works if all other
-  // callers to basename in the process also grab this same lock.
-  std::lock_guard<std::mutex> lock(basename_lock);
-
-  // Note that if std::string uses copy-on-write strings, &str[0] will cause
-  // the copy to be made, so there is no chance of us accidentally writing to
-  // the storage for 'path'.
-  char* name = basename(&result[0]);
-
-  // In case dirname returned a pointer to a process global, copy that string
-  // before leaving the lock.
-  result.assign(name);
-
-  return result;
-}
-
-std::string adb_dirname(const std::string& path) {
-  static std::mutex& dirname_lock = *new std::mutex();
-
-  // Copy path because dirname may modify the string passed in.
-  std::string result(path);
-
-  // Use lock because dirname() may write to a process global and return a
-  // pointer to that. Note that this locking strategy only works if all other
-  // callers to dirname in the process also grab this same lock.
-  std::lock_guard<std::mutex> lock(dirname_lock);
-
-  // Note that if std::string uses copy-on-write strings, &str[0] will cause
-  // the copy to be made, so there is no chance of us accidentally writing to
-  // the storage for 'path'.
-  char* parent = dirname(&result[0]);
-
-  // In case dirname returned a pointer to a process global, copy that string
-  // before leaving the lock.
-  result.assign(parent);
-
   return result;
 }
 
@@ -171,7 +124,7 @@ bool mkdirs(const std::string& path) {
     return true;
   }
 
-  const std::string parent(adb_dirname(path));
+  const std::string parent(android::base::Dirname(path));
 
   // If dirname returned the same path as what we passed in, don't go recursive.
   // This can happen on Windows when walking up the directory hierarchy and not
@@ -204,7 +157,12 @@ bool mkdirs(const std::string& path) {
 }
 
 std::string dump_hex(const void* data, size_t byte_count) {
-    byte_count = std::min(byte_count, size_t(16));
+    size_t truncate_len = 16;
+    bool truncated = false;
+    if (byte_count > truncate_len) {
+        byte_count = truncate_len;
+        truncated = true;
+    }
 
     const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
 
@@ -217,6 +175,10 @@ std::string dump_hex(const void* data, size_t byte_count) {
     for (size_t i = 0; i < byte_count; ++i) {
         int ch = p[i];
         line.push_back(isprint(ch) ? ch : '.');
+    }
+
+    if (truncated) {
+        line += " [truncated]";
     }
 
     return line;
@@ -312,4 +274,42 @@ std::string adb_get_android_dir_path() {
 
 void AdbCloser::Close(int fd) {
     adb_close(fd);
+}
+
+int syntax_error(const char* fmt, ...) {
+    fprintf(stderr, "adb: usage: ");
+
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    fprintf(stderr, "\n");
+    return 1;
+}
+
+std::string GetLogFilePath() {
+#if defined(_WIN32)
+    const char log_name[] = "adb.log";
+    WCHAR temp_path[MAX_PATH];
+
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/aa364992%28v=vs.85%29.aspx
+    DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
+    if (nchars >= arraysize(temp_path) || nchars == 0) {
+        // If string truncation or some other error.
+        fatal("cannot retrieve temporary file path: %s\n",
+              android::base::SystemErrorCodeToString(GetLastError()).c_str());
+    }
+
+    std::string temp_path_utf8;
+    if (!android::base::WideToUTF8(temp_path, &temp_path_utf8)) {
+        fatal_errno("cannot convert temporary file path from UTF-16 to UTF-8");
+    }
+
+    return temp_path_utf8 + log_name;
+#else
+    const char* tmp_dir = getenv("TMPDIR");
+    if (tmp_dir == nullptr) tmp_dir = "/tmp";
+    return android::base::StringPrintf("%s/adb.%u.log", tmp_dir, getuid());
+#endif
 }

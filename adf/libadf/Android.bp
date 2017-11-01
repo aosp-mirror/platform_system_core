@@ -14,8 +14,10 @@
 
 cc_library_static {
     name: "libadf",
-    srcs: ["adf.c"],
+    srcs: ["adf.cpp"],
     cflags: ["-Werror"],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
 }
+
+subdirs = ["tests"]

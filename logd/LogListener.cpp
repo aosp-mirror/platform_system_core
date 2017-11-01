@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <limits.h>
+#include <stdio.h>
 #include <sys/cdefs.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -30,32 +32,24 @@
 #include "LogListener.h"
 #include "LogUtils.h"
 
-LogListener::LogListener(LogBuffer *buf, LogReader *reader) :
-        SocketListener(getLogSocket(), false),
-        logbuf(buf),
-        reader(reader) {
+LogListener::LogListener(LogBufferInterface* buf, LogReader* reader)
+    : SocketListener(getLogSocket(), false), logbuf(buf), reader(reader) {
 }
 
-bool LogListener::onDataAvailable(SocketClient *cli) {
+bool LogListener::onDataAvailable(SocketClient* cli) {
     static bool name_set;
     if (!name_set) {
         prctl(PR_SET_NAME, "logd.writer");
         name_set = true;
     }
 
-    char buffer[sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time)
-        + LOGGER_ENTRY_MAX_PAYLOAD];
+    char buffer[sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time) +
+                LOGGER_ENTRY_MAX_PAYLOAD];
     struct iovec iov = { buffer, sizeof(buffer) };
 
     alignas(4) char control[CMSG_SPACE(sizeof(struct ucred))];
     struct msghdr hdr = {
-        NULL,
-        0,
-        &iov,
-        1,
-        control,
-        sizeof(control),
-        0,
+        NULL, 0, &iov, 1, control, sizeof(control), 0,
     };
 
     int socket = cli->getSocket();
@@ -68,20 +62,23 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
         return false;
     }
 
-    struct ucred *cred = NULL;
+    struct ucred* cred = NULL;
 
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&hdr);
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&hdr);
     while (cmsg != NULL) {
-        if (cmsg->cmsg_level == SOL_SOCKET
-                && cmsg->cmsg_type  == SCM_CREDENTIALS) {
-            cred = (struct ucred *)CMSG_DATA(cmsg);
+        if (cmsg->cmsg_level == SOL_SOCKET &&
+            cmsg->cmsg_type == SCM_CREDENTIALS) {
+            cred = (struct ucred*)CMSG_DATA(cmsg);
             break;
         }
         cmsg = CMSG_NXTHDR(&hdr, cmsg);
     }
 
+    struct ucred fake_cred;
     if (cred == NULL) {
-        return false;
+        cred = &fake_cred;
+        cred->pid = 0;
+        cred->uid = DEFAULT_OVERFLOWUID;
     }
 
     if (cred->uid == AID_LOGD) {
@@ -91,27 +88,54 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
         return false;
     }
 
-    android_log_header_t *header = reinterpret_cast<android_log_header_t *>(buffer);
-    if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX || header->id == LOG_ID_KERNEL) {
+    android_log_header_t* header =
+        reinterpret_cast<android_log_header_t*>(buffer);
+    if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX ||
+        header->id == LOG_ID_KERNEL) {
         return false;
     }
 
     if ((header->id == LOG_ID_SECURITY) &&
-            (!__android_log_security() ||
-             !clientHasLogCredentials(cred->uid, cred->gid, cred->pid))) {
+        (!__android_log_security() ||
+         !clientHasLogCredentials(cred->uid, cred->gid, cred->pid))) {
         return false;
     }
 
-    char *msg = ((char *)buffer) + sizeof(android_log_header_t);
+    // Check credential validity, acquire corrected details if not supplied.
+    if (cred->pid == 0) {
+        cred->pid = logbuf ? logbuf->tidToPid(header->tid)
+                           : android::tidToPid(header->tid);
+        if (cred->pid == getpid()) {
+            // We expect that /proc/<tid>/ is accessible to self even without
+            // readproc group, so that we will always drop messages that come
+            // from any of our logd threads and their library calls.
+            return false;  // ignore self
+        }
+    }
+    if (cred->uid == DEFAULT_OVERFLOWUID) {
+        uid_t uid =
+            logbuf ? logbuf->pidToUid(cred->pid) : android::pidToUid(cred->pid);
+        if (uid == AID_LOGD) {
+            uid = logbuf ? logbuf->pidToUid(header->tid)
+                         : android::pidToUid(cred->pid);
+        }
+        if (uid != AID_LOGD) cred->uid = uid;
+    }
+
+    char* msg = ((char*)buffer) + sizeof(android_log_header_t);
     n -= sizeof(android_log_header_t);
 
     // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
     // truncated message to the logs.
 
-    if (logbuf->log((log_id_t)header->id, header->realtime,
-            cred->uid, cred->pid, header->tid, msg,
-            ((size_t) n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX) >= 0) {
-        reader->notifyNewLog();
+    if (logbuf != nullptr) {
+        int res = logbuf->log(
+            (log_id_t)header->id, header->realtime, cred->uid, cred->pid,
+            header->tid, msg,
+            ((size_t)n <= USHRT_MAX) ? (unsigned short)n : USHRT_MAX);
+        if (res > 0 && reader != nullptr) {
+            reader->notifyNewLog();
+        }
     }
 
     return true;
@@ -121,15 +145,14 @@ int LogListener::getLogSocket() {
     static const char socketName[] = "logdw";
     int sock = android_get_control_socket(socketName);
 
-    if (sock < 0) {
-        sock = socket_local_server(socketName,
-                                   ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                   SOCK_DGRAM);
-    }
+    if (sock < 0) {  // logd started up in init.sh
+        sock = socket_local_server(
+            socketName, ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_DGRAM);
 
-    int on = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on)) < 0) {
-        return -1;
+        int on = 1;
+        if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
+            return -1;
+        }
     }
     return sock;
 }

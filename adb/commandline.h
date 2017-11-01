@@ -87,13 +87,12 @@ class DefaultStandardStreamsCallback : public StandardStreamsCallbackInterface {
 extern DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK;
 
 int adb_commandline(int argc, const char** argv);
-int usage();
 
 // Connects to the device "shell" service with |command| and prints the
 // resulting output.
 // if |callback| is non-null, stdout/stderr output will be handled by it.
-int send_shell_command(TransportType transport_type, const char* serial, const std::string& command,
-                       bool disable_shell_protocol, StandardStreamsCallbackInterface* callback =
-                                                        &DEFAULT_STANDARD_STREAMS_CALLBACK);
+int send_shell_command(
+    const std::string& command, bool disable_shell_protocol,
+    StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
 
 #endif  // COMMANDLINE_H

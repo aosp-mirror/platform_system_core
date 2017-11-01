@@ -17,19 +17,30 @@
 #ifndef _INIT_BUILTINS_H
 #define _INIT_BUILTINS_H
 
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
 
+#include "builtin_arguments.h"
 #include "keyword_map.h"
+#include "result.h"
 
-using BuiltinFunction = int (*) (const std::vector<std::string>& args);
-class BuiltinFunctionMap : public KeywordMap<BuiltinFunction> {
-public:
-    BuiltinFunctionMap() {
-    }
-private:
-    Map& map() const override;
+namespace android {
+namespace init {
+
+using BuiltinFunction = std::function<Result<Success>(const BuiltinArguments&)>;
+
+using KeywordFunctionMap = KeywordMap<std::pair<bool, BuiltinFunction>>;
+class BuiltinFunctionMap : public KeywordFunctionMap {
+  public:
+    BuiltinFunctionMap() {}
+
+  private:
+    const Map& map() const override;
 };
+
+}  // namespace init
+}  // namespace android
 
 #endif

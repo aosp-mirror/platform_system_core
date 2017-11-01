@@ -16,16 +16,23 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/watchdog.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include <linux/watchdog.h>
+#include <android-base/logging.h>
 
 #include "log.h"
-#include "util.h"
+
+#ifdef _INIT_INIT_H
+#error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
+#endif
 
 #define DEV_NAME "/dev/watchdog"
+
+namespace android {
+namespace init {
 
 int watchdogd_main(int argc, char **argv) {
     InitKernelLogging(argv);
@@ -69,3 +76,6 @@ int watchdogd_main(int argc, char **argv) {
         sleep(interval);
     }
 }
+
+}  // namespace init
+}  // namespace android

@@ -1,0 +1,15 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Bionic loader config file.
+# This gives the exactly the same namespace setup in pre-O.
+#
+
+# All binaries gets the same configuration 'legacy'
+dir.legacy = /system
+dir.legacy = /vendor
+dir.legacy = /sbin
+
+[legacy]
+namespace.default.isolated = false
+namespace.default.search.paths = /system/${LIB}:/vendor/${LIB}
+namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}

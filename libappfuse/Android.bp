@@ -8,7 +8,6 @@ cc_defaults {
         "-Wall",
         "-Werror",
     ],
-    clang: true
 }
 
 cc_library_shared {
@@ -19,11 +18,13 @@ cc_library_shared {
         "FuseAppLoop.cc",
         "FuseBuffer.cc",
         "FuseBridgeLoop.cc",
+        "EpollController.cc",
     ]
 }
 
 cc_test {
     name: "libappfuse_test",
+    test_suites: ["device-tests"],
     defaults: ["libappfuse_defaults"],
     shared_libs: ["libappfuse"],
     srcs: [

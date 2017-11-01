@@ -29,12 +29,35 @@ libcutils_nonwindows_sources = [
     "str_parms.c",
 ]
 
+cc_library_headers {
+    name: "libcutils_headers",
+    vendor_available: true,
+    host_supported: true,
+    export_include_dirs: ["include"],
+    target: {
+        vendor: {
+            export_include_dirs: ["include_vndk"],
+        },
+        linux_bionic: {
+            enabled: true,
+        },
+        windows: {
+            enabled: true,
+        },
+    },
+}
+
 cc_library {
     name: "libcutils",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     host_supported: true,
     srcs: [
         "config_utils.c",
-        "fs_config.c",
+        "fs_config.cpp",
         "canned_fs_config.c",
         "hashmap.c",
         "iosched_policy.c",
@@ -42,7 +65,7 @@ cc_library {
         "native_handle.c",
         "open_memstream.c",
         "record_stream.c",
-        "sched_policy.c",
+        "sched_policy.cpp",
         "sockets.cpp",
         "strdup16to8.c",
         "strdup8to16.c",
@@ -53,6 +76,10 @@ cc_library {
     target: {
         host: {
             srcs: ["dlmalloc_stubs.c"],
+        },
+        linux_bionic: {
+            enabled: true,
+            exclude_srcs: ["dlmalloc_stubs.c"],
         },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
@@ -71,23 +98,25 @@ cc_library {
             shared: {
                 enabled: false,
             },
+            cflags: [
+                "-D_GNU_SOURCE",
+            ],
         },
 
         android: {
             srcs: libcutils_nonwindows_sources + [
                 "android_reboot.c",
                 "ashmem-dev.c",
-                "debugger.c",
                 "klog.cpp",
                 "partition_utils.c",
-                "properties.c",
+                "properties.cpp",
                 "qtaguid.c",
                 "trace-dev.c",
                 "uevent.c",
             ],
-
-            static_libs: ["libdebuggerd_client"],
-            export_static_lib_headers: ["libdebuggerd_client"],
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
         },
 
         android_arm: {
@@ -120,24 +149,18 @@ cc_library {
     },
 
     shared_libs: ["liblog"],
-    product_variables: {
-        cpusets: {
-            cflags: ["-DUSE_CPUSETS"],
-        },
-        schedboost: {
-            cflags: ["-DUSE_SCHEDBOOST"],
-        },
-    },
+    header_libs: [
+        "libcutils_headers",
+        "libutils_headers",
+    ],
+    export_header_lib_headers: ["libcutils_headers"],
+    local_include_dirs: ["include"],
+
     cflags: [
         "-Werror",
         "-Wall",
         "-Wextra",
     ],
-
-    clang: true,
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
 }
 
 subdirs = ["tests"]

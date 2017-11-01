@@ -1,0 +1,16 @@
+cc_library {
+    name: "libkeyutils",
+    cflags: ["-Werror"],
+    defaults: ["linux_bionic_supported"],
+    export_include_dirs: ["include/"],
+    local_include_dirs: ["include/"],
+    srcs: ["keyutils.cpp"],
+    stl: "none",
+}
+
+cc_test {
+    name: "libkeyutils-tests",
+    cflags: ["-Werror"],
+    shared_libs: ["libkeyutils"],
+    srcs: ["keyutils_test.cpp"],
+}

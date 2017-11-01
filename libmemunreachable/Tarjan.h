@@ -24,7 +24,9 @@
 
 #include "Allocator.h"
 
-template<class T>
+namespace android {
+
+template <class T>
 class Node {
  public:
   allocator::set<Node<T>*> references_in;
@@ -34,39 +36,41 @@ class Node {
 
   T* ptr;
 
-  Node(T* ptr, Allocator<Node> allocator) : references_in(allocator), references_out(allocator),
-      ptr(ptr) {};
+  Node(T* ptr, Allocator<Node> allocator)
+      : references_in(allocator), references_out(allocator), ptr(ptr){};
   Node(Node&& rhs) = default;
   void Edge(Node<T>* ref) {
     references_out.emplace(ref);
     ref->references_in.emplace(this);
   }
-  template<class F>
+  template <class F>
   void Foreach(F&& f) {
-    for (auto& node: references_out) {
+    for (auto& node : references_out) {
       f(node->ptr);
     }
   }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(Node<T>);
 };
 
-template<class T>
+template <class T>
 using Graph = allocator::vector<Node<T>*>;
 
-template<class T>
+template <class T>
 using SCC = allocator::vector<Node<T>*>;
 
-template<class T>
+template <class T>
 using SCCList = allocator::vector<SCC<T>>;
 
-template<class T>
+template <class T>
 class TarjanAlgorithm {
  public:
-  explicit TarjanAlgorithm(Allocator<void> allocator) : index_(0),
-    stack_(allocator), components_(allocator) {}
+  explicit TarjanAlgorithm(Allocator<void> allocator)
+      : index_(0), stack_(allocator), components_(allocator) {}
 
   void Execute(Graph<T>& graph, SCCList<T>& out);
+
  private:
   static constexpr size_t UNDEFINED_INDEX = static_cast<size_t>(-1);
   void Tarjan(Node<T>* vertex, Graph<T>& graph);
@@ -76,17 +80,17 @@ class TarjanAlgorithm {
   SCCList<T> components_;
 };
 
-template<class T>
+template <class T>
 void TarjanAlgorithm<T>::Execute(Graph<T>& graph, SCCList<T>& out) {
   stack_.clear();
   components_.clear();
   index_ = 0;
-  for (auto& it: graph) {
+  for (auto& it : graph) {
     it->index = UNDEFINED_INDEX;
     it->lowlink = UNDEFINED_INDEX;
   }
 
-  for (auto& it: graph) {
+  for (auto& it : graph) {
     if (it->index == UNDEFINED_INDEX) {
       Tarjan(it, graph);
     }
@@ -94,14 +98,14 @@ void TarjanAlgorithm<T>::Execute(Graph<T>& graph, SCCList<T>& out) {
   out.swap(components_);
 }
 
-template<class T>
+template <class T>
 void TarjanAlgorithm<T>::Tarjan(Node<T>* vertex, Graph<T>& graph) {
   assert(vertex->index == UNDEFINED_INDEX);
   vertex->index = index_;
   vertex->lowlink = index_;
   index_++;
   stack_.push_back(vertex);
-  for (auto& it: vertex->references_out) {
+  for (auto& it : vertex->references_out) {
     Node<T>* vertex_next = it;
     if (vertex_next->index == UNDEFINED_INDEX) {
       Tarjan(vertex_next, graph);
@@ -123,10 +127,12 @@ void TarjanAlgorithm<T>::Tarjan(Node<T>* vertex, Graph<T>& graph) {
   }
 }
 
-template<class T>
+template <class T>
 void Tarjan(Graph<T>& graph, SCCList<T>& out) {
   TarjanAlgorithm<T> tarjan{graph.get_allocator()};
   tarjan.Execute(graph, out);
 }
 
-#endif // LIBMEMUNREACHABLE_TARJAN_H_
+}  // namespace android
+
+#endif  // LIBMEMUNREACHABLE_TARJAN_H_

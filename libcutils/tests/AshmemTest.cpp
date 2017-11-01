@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#include <sys/mman.h>
+#include <android-base/unique_fd.h>
 #include <cutils/ashmem.h>
 #include <gtest/gtest.h>
-#include <android-base/unique_fd.h>
+#include <linux/fs.h>
+#include <sys/mman.h>
 
 using android::base::unique_fd;
 
@@ -29,13 +30,17 @@ void TestCreateRegion(size_t size, unique_fd &fd, int prot) {
     ASSERT_EQ(0, ashmem_set_prot_region(fd, prot));
 }
 
-void TestMmap(const unique_fd &fd, size_t size, int prot, void **region) {
-    *region = mmap(nullptr, size, prot, MAP_SHARED, fd, 0);
+void TestMmap(const unique_fd& fd, size_t size, int prot, void** region, off_t off = 0) {
+    *region = mmap(nullptr, size, prot, MAP_SHARED, fd, off);
     ASSERT_NE(MAP_FAILED, *region);
 }
 
 void TestProtDenied(const unique_fd &fd, size_t size, int prot) {
     EXPECT_EQ(MAP_FAILED, mmap(nullptr, size, prot, MAP_SHARED, fd, 0));
+}
+
+void TestProtIs(const unique_fd& fd, int prot) {
+    EXPECT_EQ(prot, ioctl(fd, ASHMEM_GET_PROT_MASK));
 }
 
 void FillData(uint8_t* data, size_t dataLen) {
@@ -101,6 +106,63 @@ TEST(AshmemTest, ForkTest) {
     EXPECT_EQ(0, munmap(region2, size));
 }
 
+TEST(AshmemTest, FileOperationsTest) {
+    unique_fd fd;
+    void* region;
+
+    // Allocate a 4-page buffer, but leave page-sized holes on either side
+    constexpr size_t size = PAGE_SIZE * 4;
+    constexpr size_t dataSize = PAGE_SIZE * 2;
+    constexpr size_t holeSize = PAGE_SIZE;
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+    ASSERT_NO_FATAL_FAILURE(TestMmap(fd, dataSize, PROT_READ | PROT_WRITE, &region, holeSize));
+
+    uint8_t data[dataSize];
+    FillData(data, dataSize);
+    memcpy(region, data, dataSize);
+
+    constexpr off_t dataStart = holeSize;
+    constexpr off_t dataEnd = dataStart + dataSize;
+
+    // The sequence of seeks below looks something like this:
+    //
+    // [    ][data][data][    ]
+    // --^                          lseek(99, SEEK_SET)
+    //   ------^                    lseek(dataStart, SEEK_CUR)
+    // ------^                      lseek(0, SEEK_DATA)
+    //       ------------^          lseek(dataStart, SEEK_HOLE)
+    //                      ^--     lseek(-99, SEEK_END)
+    //                ^------       lseek(-dataStart, SEEK_CUR)
+    const struct {
+        // lseek() parameters
+        off_t offset;
+        int whence;
+        // Expected lseek() return value
+        off_t ret;
+    } seeks[] = {
+        {99, SEEK_SET, 99},         {dataStart, SEEK_CUR, dataStart + 99},
+        {0, SEEK_DATA, dataStart},  {dataStart, SEEK_HOLE, dataEnd},
+        {-99, SEEK_END, size - 99}, {-dataStart, SEEK_CUR, dataEnd - 99},
+    };
+    for (const auto& cfg : seeks) {
+        errno = 0;
+        auto off = lseek(fd, cfg.offset, cfg.whence);
+        ASSERT_EQ(cfg.ret, off) << "lseek(" << cfg.offset << ", " << cfg.whence << ") failed"
+                                << (errno ? ": " : "") << (errno ? strerror(errno) : "");
+
+        if (off >= dataStart && off < dataEnd) {
+            off_t dataOff = off - dataStart;
+            ssize_t readSize = dataSize - dataOff;
+            uint8_t buf[readSize];
+
+            ASSERT_EQ(readSize, TEMP_FAILURE_RETRY(read(fd, buf, readSize)));
+            EXPECT_EQ(0, memcmp(buf, data + dataOff, readSize));
+        }
+    }
+
+    EXPECT_EQ(0, munmap(region, dataSize));
+}
+
 TEST(AshmemTest, ProtTest) {
     unique_fd fd;
     constexpr size_t size = PAGE_SIZE;
@@ -108,13 +170,25 @@ TEST(AshmemTest, ProtTest) {
 
     ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ));
     TestProtDenied(fd, size, PROT_WRITE);
+    TestProtIs(fd, PROT_READ);
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ, &region));
     EXPECT_EQ(0, munmap(region, size));
 
     ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_WRITE));
     TestProtDenied(fd, size, PROT_READ);
+    TestProtIs(fd, PROT_WRITE);
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_WRITE, &region));
     EXPECT_EQ(0, munmap(region, size));
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+    TestProtIs(fd, PROT_READ | PROT_WRITE);
+    ASSERT_EQ(0, ashmem_set_prot_region(fd, PROT_READ));
+    errno = 0;
+    ASSERT_EQ(-1, ashmem_set_prot_region(fd, PROT_READ | PROT_WRITE))
+        << "kernel shouldn't allow adding protection bits";
+    EXPECT_EQ(EINVAL, errno);
+    TestProtIs(fd, PROT_READ);
+    TestProtDenied(fd, size, PROT_WRITE);
 }
 
 TEST(AshmemTest, ForkProtTest) {

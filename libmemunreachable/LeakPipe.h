@@ -26,6 +26,8 @@
 #include "ScopedPipe.h"
 #include "log.h"
 
+namespace android {
+
 // LeakPipe implements a pipe that can transfer vectors of simple objects
 // between processes.  The pipe is created in the sending process and
 // transferred over a socketpair that was created before forking.  This ensures
@@ -34,15 +36,13 @@
 class LeakPipe {
  public:
   LeakPipe() {
-    int ret = socketpair(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0, sv_);
+    int ret = socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv_);
     if (ret < 0) {
-      LOG_ALWAYS_FATAL("failed to create socketpair: %s", strerror(errno));
+      MEM_LOG_ALWAYS_FATAL("failed to create socketpair: %s", strerror(errno));
     }
   }
 
-  ~LeakPipe() {
-    Close();
-  }
+  ~LeakPipe() { Close(); }
 
   void Close() {
     close(sv_[0]);
@@ -77,13 +77,9 @@ class LeakPipe {
    public:
     LeakPipeBase() : fd_(-1) {}
 
-    ~LeakPipeBase() {
-      Close();
-    }
+    ~LeakPipeBase() { Close(); }
 
-    void SetFd(int fd) {
-      fd_ = fd;
-    }
+    void SetFd(int fd) { fd_ = fd; }
 
     void Close() {
       close(fd_);
@@ -101,21 +97,21 @@ class LeakPipe {
    public:
     using LeakPipeBase::LeakPipeBase;
 
-    template<typename T>
+    template <typename T>
     bool Send(const T& value) {
       ssize_t ret = TEMP_FAILURE_RETRY(write(fd_, &value, sizeof(T)));
       if (ret < 0) {
-        ALOGE("failed to send value: %s", strerror(errno));
+        MEM_ALOGE("failed to send value: %s", strerror(errno));
         return false;
       } else if (static_cast<size_t>(ret) != sizeof(T)) {
-        ALOGE("eof while writing value");
+        MEM_ALOGE("eof while writing value");
         return false;
       }
 
       return true;
     }
 
-    template<class T, class Alloc = std::allocator<T>>
+    template <class T, class Alloc = std::allocator<T>>
     bool SendVector(const std::vector<T, Alloc>& vector) {
       size_t size = vector.size() * sizeof(T);
       if (!Send(size)) {
@@ -124,10 +120,10 @@ class LeakPipe {
 
       ssize_t ret = TEMP_FAILURE_RETRY(write(fd_, vector.data(), size));
       if (ret < 0) {
-        ALOGE("failed to send vector: %s", strerror(errno));
+        MEM_ALOGE("failed to send vector: %s", strerror(errno));
         return false;
       } else if (static_cast<size_t>(ret) != size) {
-        ALOGE("eof while writing vector");
+        MEM_ALOGE("eof while writing vector");
         return false;
       }
 
@@ -139,21 +135,21 @@ class LeakPipe {
    public:
     using LeakPipeBase::LeakPipeBase;
 
-    template<typename T>
+    template <typename T>
     bool Receive(T* value) {
       ssize_t ret = TEMP_FAILURE_RETRY(read(fd_, reinterpret_cast<void*>(value), sizeof(T)));
       if (ret < 0) {
-        ALOGE("failed to receive value: %s", strerror(errno));
+        MEM_ALOGE("failed to receive value: %s", strerror(errno));
         return false;
       } else if (static_cast<size_t>(ret) != sizeof(T)) {
-        ALOGE("eof while receiving value");
+        MEM_ALOGE("eof while receiving value");
         return false;
       }
 
       return true;
     }
 
-    template<class T, class Alloc = std::allocator<T>>
+    template <class T, class Alloc = std::allocator<T>>
     bool ReceiveVector(std::vector<T, Alloc>& vector) {
       size_t size = 0;
       if (!Receive(&size)) {
@@ -166,10 +162,10 @@ class LeakPipe {
       while (size > 0) {
         ssize_t ret = TEMP_FAILURE_RETRY(read(fd_, ptr, size));
         if (ret < 0) {
-          ALOGE("failed to send vector: %s", strerror(errno));
+          MEM_ALOGE("failed to send vector: %s", strerror(errno));
           return false;
         } else if (ret == 0) {
-          ALOGE("eof while reading vector");
+          MEM_ALOGE("eof while reading vector");
           return false;
         }
         size -= ret;
@@ -178,16 +174,11 @@ class LeakPipe {
 
       return true;
     }
-
   };
 
-  LeakPipeReceiver& Receiver() {
-    return receiver_;
-  }
+  LeakPipeReceiver& Receiver() { return receiver_; }
 
-  LeakPipeSender& Sender() {
-    return sender_;
-  }
+  LeakPipeSender& Sender() { return sender_; }
 
  private:
   LeakPipeReceiver receiver_;
@@ -198,4 +189,6 @@ class LeakPipe {
   int sv_[2];
 };
 
-#endif // LIBMEMUNREACHABLE_LEAK_PIPE_H_
+}  // namespace android
+
+#endif  // LIBMEMUNREACHABLE_LEAK_PIPE_H_

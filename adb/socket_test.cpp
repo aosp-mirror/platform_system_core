@@ -42,10 +42,6 @@ struct ThreadArg {
 
 class LocalSocketTest : public FdeventTest {};
 
-static void FdEventThreadFunc(void*) {
-    fdevent_loop();
-}
-
 constexpr auto SLEEP_FOR_FDEVENT = 100ms;
 
 TEST_F(LocalSocketTest, smoke) {
@@ -88,8 +84,7 @@ TEST_F(LocalSocketTest, smoke) {
     connect(prev_tail, end);
 
     PrepareThread();
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(FdEventThreadFunc, nullptr, &thread));
+    std::thread thread(fdevent_loop);
 
     for (size_t i = 0; i < MESSAGE_LOOP_COUNT; ++i) {
         std::string read_buffer = MESSAGE;
@@ -152,9 +147,7 @@ TEST_F(LocalSocketTest, close_socket_with_packet) {
     arg.cause_close_fd = cause_close_fd[1];
 
     PrepareThread();
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(CloseWithPacketThreadFunc),
-                                  &arg, &thread));
+    std::thread thread(CloseWithPacketThreadFunc, &arg);
     // Wait until the fdevent_loop() starts.
     std::this_thread::sleep_for(SLEEP_FOR_FDEVENT);
     ASSERT_EQ(0, adb_close(cause_close_fd[0]));
@@ -177,9 +170,7 @@ TEST_F(LocalSocketTest, read_from_closing_socket) {
     arg.cause_close_fd = cause_close_fd[1];
 
     PrepareThread();
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(CloseWithPacketThreadFunc),
-                                  &arg, &thread));
+    std::thread thread(CloseWithPacketThreadFunc, &arg);
     // Wait until the fdevent_loop() starts.
     std::this_thread::sleep_for(SLEEP_FOR_FDEVENT);
     ASSERT_EQ(0, adb_close(cause_close_fd[0]));
@@ -211,10 +202,7 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     arg.cause_close_fd = cause_close_fd[1];
 
     PrepareThread();
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(CloseWithPacketThreadFunc),
-                                  &arg, &thread));
-
+    std::thread thread(CloseWithPacketThreadFunc, &arg);
     // Wait until the fdevent_loop() starts.
     std::this_thread::sleep_for(SLEEP_FOR_FDEVENT);
     EXPECT_EQ(2u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
@@ -252,9 +240,7 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
     int listen_fd = network_inaddr_any_server(5038, SOCK_STREAM, &error);
     ASSERT_GE(listen_fd, 0);
 
-    adb_thread_t client_thread;
-    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(ClientThreadFunc), nullptr,
-                                  &client_thread));
+    std::thread client_thread(ClientThreadFunc);
 
     int accept_fd = adb_socket_accept(listen_fd, nullptr, nullptr);
     ASSERT_GE(accept_fd, 0);
@@ -262,16 +248,14 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
     arg.socket_fd = accept_fd;
 
     PrepareThread();
-    adb_thread_t thread;
-    ASSERT_TRUE(adb_thread_create(reinterpret_cast<void (*)(void*)>(CloseRdHupSocketThreadFunc),
-                                  &arg, &thread));
+    std::thread thread(CloseRdHupSocketThreadFunc, &arg);
 
     // Wait until the fdevent_loop() starts.
     std::this_thread::sleep_for(SLEEP_FOR_FDEVENT);
     EXPECT_EQ(1u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
 
     // Wait until the client closes its socket.
-    ASSERT_TRUE(adb_thread_join(client_thread));
+    client_thread.join();
 
     std::this_thread::sleep_for(SLEEP_FOR_FDEVENT);
     ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());

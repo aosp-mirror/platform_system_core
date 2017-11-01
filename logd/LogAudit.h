@@ -17,6 +17,7 @@
 #ifndef _LOGD_LOG_AUDIT_H__
 #define _LOGD_LOG_AUDIT_H__
 
+#include <map>
 #include <queue>
 
 #include <sysutils/SocketListener.h>
@@ -26,9 +27,9 @@
 class LogReader;
 
 class LogAudit : public SocketListener {
-    LogBuffer *logbuf;
-    LogReader *reader;
-    int fdDmesg; // fdDmesg >= 0 is functionally bool dmesg
+    LogBuffer* logbuf;
+    LogReader* reader;
+    int fdDmesg;  // fdDmesg >= 0 is functionally bool dmesg
     bool main;
     bool events;
     bool initialized;
@@ -38,18 +39,24 @@ class LogAudit : public SocketListener {
     std::queue<log_time> bucket;
     void checkRateLimit();
 
-public:
-    LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg);
-    int log(char *buf, size_t len);
-    bool isMonotonic() { return logbuf->isMonotonic(); }
+   public:
+    LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg);
+    int log(char* buf, size_t len);
+    bool isMonotonic() {
+        return logbuf->isMonotonic();
+    }
 
-protected:
-    virtual bool onDataAvailable(SocketClient *cli);
+   protected:
+    virtual bool onDataAvailable(SocketClient* cli);
 
-private:
+   private:
     static int getLogSocket();
-    int logPrint(const char *fmt, ...)
-        __attribute__ ((__format__ (__printf__, 2, 3)));
+    std::map<std::string, std::string> populateDenialMap();
+    std::string denialParse(const std::string& denial, char terminator,
+                            const std::string& search_term);
+    void logParse(const std::string& string, std::string* bug_num);
+    int logPrint(const char* fmt, ...)
+        __attribute__((__format__(__printf__, 2, 3)));
 };
 
 #endif

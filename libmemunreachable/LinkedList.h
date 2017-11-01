@@ -17,44 +17,47 @@
 #ifndef LIBMEMUNREACHABLE_LINKED_LIST_H_
 #define LIBMEMUNREACHABLE_LINKED_LIST_H_
 
-template<class T>
+namespace android {
+
+template <class T>
 class LinkedList {
-public:
-    LinkedList() : next_(this), prev_(this), data_() {}
-    explicit LinkedList(T data) : LinkedList() {
-        data_ = data;
-    }
-    ~LinkedList() {}
-    void insert(LinkedList<T>& node) {
-        assert(node.empty());
-        node.next_ = this->next_;
-        node.next_->prev_ = &node;
-        this->next_ = &node;
-        node.prev_ = this;
-    }
-    void remove() {
-        this->next_->prev_ = this->prev_;
-        this->prev_->next_ = this->next_;
-        this->next_ = this;
-        this->prev_ = this;
-    }
-    T data() { return data_; }
-    bool empty() { return next_ == this && prev_ == this; }
-    LinkedList<T> *next() { return next_; }
-private:
-    LinkedList<T> *next_;
-    LinkedList<T> *prev_;
-    T data_;
+ public:
+  LinkedList() : next_(this), prev_(this), data_() {}
+  explicit LinkedList(T data) : LinkedList() { data_ = data; }
+  ~LinkedList() {}
+  void insert(LinkedList<T>& node) {
+    assert(node.empty());
+    node.next_ = this->next_;
+    node.next_->prev_ = &node;
+    this->next_ = &node;
+    node.prev_ = this;
+  }
+  void remove() {
+    this->next_->prev_ = this->prev_;
+    this->prev_->next_ = this->next_;
+    this->next_ = this;
+    this->prev_ = this;
+  }
+  T data() { return data_; }
+  bool empty() { return next_ == this && prev_ == this; }
+  LinkedList<T>* next() { return next_; }
+
+ private:
+  LinkedList<T>* next_;
+  LinkedList<T>* prev_;
+  T data_;
 };
 
-template<class T>
+template <class T>
 class LinkedListHead {
-public:
-    LinkedListHead() : node_() {}
-    ~LinkedListHead() {}
+ public:
+  LinkedListHead() : node_() {}
+  ~LinkedListHead() {}
 
-private:
-    LinkedList<T> node_;
+ private:
+  LinkedList<T> node_;
 };
+
+}  // namespace android
 
 #endif

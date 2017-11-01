@@ -22,16 +22,14 @@
 #include <stdbool.h>
 #include <linux/dm-ioctl.h>
 
+#include <fstab/fstab.h>
+
 // Magic number at start of verity metadata
 #define VERITY_METADATA_MAGIC_NUMBER 0xb001b001
 
 // Replacement magic number at start of verity metadata to cleanly
 // turn verity off in userdebug builds.
 #define VERITY_METADATA_MAGIC_DISABLE 0x46464f56 // "VOFF"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // Verity modes
 enum verity_mode {
@@ -49,44 +47,12 @@ enum mount_mode {
     MOUNT_MODE_LATE = 2
 };
 
-/*
- * The entries must be kept in the same order as they were seen in the fstab.
- * Unless explicitly requested, a lookup on mount point should always
- * return the 1st one.
- */
-struct fstab {
-    int num_entries;
-    struct fstab_rec *recs;
-    char *fstab_filename;
-};
-
-struct fstab_rec {
-    char *blk_device;
-    char *mount_point;
-    char *fs_type;
-    unsigned long flags;
-    char *fs_options;
-    int fs_mgr_flags;
-    char *key_loc;
-    char *verity_loc;
-    long long length;
-    char *label;
-    int partnum;
-    int swap_prio;
-    int max_comp_streams;
-    unsigned int zram_size;
-    uint64_t reserved_size;
-    unsigned int file_encryption_mode;
-};
-
 // Callback function for verity status
 typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
         const char *mount_point, int mode, int status);
 
-struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file);
-struct fstab *fs_mgr_read_fstab(const char *fstab_path);
-void fs_mgr_free_fstab(struct fstab *fstab);
-
+#define FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED 7
+#define FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION 6
 #define FS_MGR_MNTALL_DEV_FILE_ENCRYPTED 5
 #define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 4
 #define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 3
@@ -98,43 +64,25 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode);
 
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
+#define FS_MGR_DOMNT_SUCCESS 0
 
-int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
+int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
                     char *tmp_mount_point);
-int fs_mgr_do_tmpfs_mount(char *n_name);
+int fs_mgr_do_mount_one(struct fstab_rec *rec);
+int fs_mgr_do_tmpfs_mount(const char *n_name);
 int fs_mgr_unmount_all(struct fstab *fstab);
-int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc,
-                          char *real_blk_device, int size);
-int fs_mgr_load_verity_state(int *mode);
-int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
-int fs_mgr_add_entry(struct fstab *fstab,
-                     const char *mount_point, const char *fs_type,
-                     const char *blk_device);
-struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path);
-int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab);
-int fs_mgr_is_nonremovable(const struct fstab_rec *fstab);
-int fs_mgr_is_verified(const struct fstab_rec *fstab);
-int fs_mgr_is_encryptable(const struct fstab_rec *fstab);
-int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab);
-const char* fs_mgr_get_file_encryption_mode(const struct fstab_rec *fstab);
-int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab);
-int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab);
-int fs_mgr_is_notrim(struct fstab_rec *fstab);
-int fs_mgr_is_formattable(struct fstab_rec *fstab);
-int fs_mgr_is_nofail(struct fstab_rec *fstab);
-int fs_mgr_is_latemount(struct fstab_rec *fstab);
-int fs_mgr_is_quota(struct fstab_rec *fstab);
+struct fstab_rec const* fs_mgr_get_crypt_entry(struct fstab const* fstab);
+void fs_mgr_get_crypt_info(struct fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
+bool fs_mgr_load_verity_state(int* mode);
+bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
 int fs_mgr_swapon_all(struct fstab *fstab);
 
 int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
 
-#define FS_MGR_EARLY_SETUP_VERITY_NO_VERITY -2
-#define FS_MGR_EARLY_SETUP_VERITY_FAIL -1
-#define FS_MGR_EARLY_SETUP_VERITY_SUCCESS 0
-int fs_mgr_early_setup_verity(struct fstab_rec *fstab);
-
-#ifdef __cplusplus
-}
-#endif
+#define FS_MGR_SETUP_VERITY_SKIPPED  (-3)
+#define FS_MGR_SETUP_VERITY_DISABLED (-2)
+#define FS_MGR_SETUP_VERITY_FAIL (-1)
+#define FS_MGR_SETUP_VERITY_SUCCESS 0
+int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev);
 
 #endif /* __CORE_FS_MGR_H */

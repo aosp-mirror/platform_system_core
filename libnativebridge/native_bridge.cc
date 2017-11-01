@@ -28,6 +28,7 @@
 
 #include <cstring>
 
+#include <android-base/macros.h>
 #include <log/log.h>
 
 namespace android {
@@ -85,12 +86,14 @@ static NativeBridgeState state = NativeBridgeState::kNotSetup;
 // Nativebridge implementation.
 // Used by isCompatibleWith() which is introduced in v2.
 enum NativeBridgeImplementationVersion {
-    // first version, not used.
-    DEFAULT_VERSION = 1,
-    // The version which signal semantic is introduced.
-    SIGNAL_VERSION = 2,
-    // The version which namespace semantic is introduced.
-    NAMESPACE_VERSION = 3,
+  // first version, not used.
+  DEFAULT_VERSION = 1,
+  // The version which signal semantic is introduced.
+  SIGNAL_VERSION = 2,
+  // The version which namespace semantic is introduced.
+  NAMESPACE_VERSION = 3,
+  // The version with vendor namespaces
+  VENDOR_NAMESPACE_VERSION = 4,
 };
 
 // Whether we had an error at some point.
@@ -241,29 +244,12 @@ bool LoadNativeBridge(const char* nb_library_filename,
   }
 }
 
-#if defined(__arm__)
-static const char* kRuntimeISA = "arm";
-#elif defined(__aarch64__)
-static const char* kRuntimeISA = "arm64";
-#elif defined(__mips__) && !defined(__LP64__)
-static const char* kRuntimeISA = "mips";
-#elif defined(__mips__) && defined(__LP64__)
-static const char* kRuntimeISA = "mips64";
-#elif defined(__i386__)
-static const char* kRuntimeISA = "x86";
-#elif defined(__x86_64__)
-static const char* kRuntimeISA = "x86_64";
-#else
-static const char* kRuntimeISA = "unknown";
-#endif
-
-
 bool NeedsNativeBridge(const char* instruction_set) {
   if (instruction_set == nullptr) {
     ALOGE("Null instruction set in NeedsNativeBridge.");
     return false;
   }
-  return strncmp(instruction_set, kRuntimeISA, strlen(kRuntimeISA) + 1) != 0;
+  return strncmp(instruction_set, ABI_STRING, strlen(ABI_STRING) + 1) != 0;
 }
 
 #ifdef __APPLE__
@@ -573,11 +559,11 @@ bool NativeBridgeIsPathSupported(const char* path) {
   return false;
 }
 
-bool NativeBridgeInitNamespace(const char* public_ns_sonames,
-                               const char* anon_ns_library_path) {
+bool NativeBridgeInitAnonymousNamespace(const char* public_ns_sonames,
+                                        const char* anon_ns_library_path) {
   if (NativeBridgeInitialized()) {
     if (isCompatibleWith(NAMESPACE_VERSION)) {
-      return callbacks->initNamespace(public_ns_sonames, anon_ns_library_path);
+      return callbacks->initAnonymousNamespace(public_ns_sonames, anon_ns_library_path);
     } else {
       ALOGE("not compatible with version %d, cannot init namespace", NAMESPACE_VERSION);
     }
@@ -606,6 +592,27 @@ native_bridge_namespace_t* NativeBridgeCreateNamespace(const char* name,
   }
 
   return nullptr;
+}
+
+bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_namespace_t* to,
+                                const char* shared_libs_sonames) {
+  if (NativeBridgeInitialized()) {
+    if (isCompatibleWith(NAMESPACE_VERSION)) {
+      return callbacks->linkNamespaces(from, to, shared_libs_sonames);
+    } else {
+      ALOGE("not compatible with version %d, cannot init namespace", NAMESPACE_VERSION);
+    }
+  }
+
+  return false;
+}
+
+native_bridge_namespace_t* NativeBridgeGetVendorNamespace() {
+  if (!NativeBridgeInitialized() || !isCompatibleWith(VENDOR_NAMESPACE_VERSION)) {
+    return nullptr;
+  }
+
+  return callbacks->getVendorNamespace();
 }
 
 void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_namespace_t* ns) {

@@ -23,12 +23,23 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
+#include <android-base/logging.h>
 #include <backtrace/Backtrace.h>
 
 #include "BacktraceLog.h"
 #include "UnwindCurrent.h"
 
 std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
+  if (!initialized_) {
+    // If init local is not called, then trying to get a function name will
+    // fail, so try to initialize first.
+    std::unique_ptr<unw_cursor_t> cursor(new unw_cursor_t);
+    if (unw_init_local(cursor.get(), &context_) < 0) {
+      return "";
+    }
+    initialized_ = true;
+  }
+
   *offset = 0;
   char buf[512];
   unw_word_t value;
@@ -85,6 +96,7 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
     error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
+  initialized_ = true;
 
   size_t num_frames = 0;
   do {
@@ -115,16 +127,36 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
       if (num_ignore_frames == 0) {
         // GetFunctionName is an expensive call, only do it if we are
         // keeping the frame.
-        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
+        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset, &frame->map);
         if (num_frames > 0) {
           // Set the stack size for the previous frame.
           backtrace_frame_data_t* prev = &frames_.at(num_frames-1);
           prev->stack_size = frame->sp - prev->sp;
         }
+        if (BacktraceMap::IsValid(frame->map)) {
+          frame->rel_pc = frame->pc - frame->map.start + frame->map.load_bias;
+        } else {
+          frame->rel_pc = frame->pc;
+        }
         num_frames++;
       } else {
         num_ignore_frames--;
+        // Set the number of frames to zero to remove the frame added
+        // above. By definition, if we still have frames to ignore
+        // there should only be one frame in the vector.
+        CHECK(num_frames == 0);
+        frames_.resize(0);
       }
+    }
+    // If the pc is in a device map, then don't try to step.
+    if (frame->map.flags & PROT_DEVICE_MAP) {
+      break;
+    }
+    // Verify the sp is not in a device map too.
+    backtrace_map_t map;
+    FillInMap(frame->sp, &map);
+    if (map.flags & PROT_DEVICE_MAP) {
+      break;
     }
     ret = unw_step (cursor.get());
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);

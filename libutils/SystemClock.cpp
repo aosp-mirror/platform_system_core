@@ -19,17 +19,17 @@
  * System clock functions.
  */
 
-#include <sys/time.h>
-#include <limits.h>
-#include <fcntl.h>
+#define LOG_TAG "SystemClock"
+
+#include <utils/SystemClock.h>
+
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 #include <cutils/compiler.h>
-#include <utils/SystemClock.h>
-#include <utils/Timers.h>
 
-#define LOG_TAG "SystemClock"
+#include <utils/Timers.h>
 #include <utils/Log.h>
 
 namespace android {

@@ -48,8 +48,16 @@ using namespace android;
 
 // Constructor.  Create an empty object.
 FileMap::FileMap(void)
-    : mFileName(NULL), mBasePtr(NULL), mBaseLength(0),
-      mDataPtr(NULL), mDataLength(0)
+    : mFileName(NULL),
+      mBasePtr(NULL),
+      mBaseLength(0),
+      mDataPtr(NULL),
+      mDataLength(0)
+#if defined(__MINGW32__)
+      ,
+      mFileHandle(INVALID_HANDLE_VALUE),
+      mFileMapping(NULL)
+#endif
 {
 }
 
@@ -65,8 +73,8 @@ FileMap::FileMap(FileMap&& other)
     other.mBasePtr = NULL;
     other.mDataPtr = NULL;
 #if defined(__MINGW32__)
-    other.mFileHandle = 0;
-    other.mFileMapping = 0;
+    other.mFileHandle = INVALID_HANDLE_VALUE;
+    other.mFileMapping = NULL;
 #endif
 }
 
@@ -84,8 +92,8 @@ FileMap& FileMap::operator=(FileMap&& other) {
 #if defined(__MINGW32__)
     mFileHandle = other.mFileHandle;
     mFileMapping = other.mFileMapping;
-    other.mFileHandle = 0;
-    other.mFileMapping = 0;
+    other.mFileHandle = INVALID_HANDLE_VALUE;
+    other.mFileMapping = NULL;
 #endif
     return *this;
 }
@@ -101,7 +109,7 @@ FileMap::~FileMap(void)
         ALOGD("UnmapViewOfFile(%p) failed, error = %lu\n", mBasePtr,
               GetLastError() );
     }
-    if (mFileMapping != INVALID_HANDLE_VALUE) {
+    if (mFileMapping != NULL) {
         CloseHandle(mFileMapping);
     }
 #else
@@ -156,7 +164,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
         ALOGE("MapViewOfFile(%" PRId64 ", %zu) failed with error %lu\n",
               adjOffset, adjLength, GetLastError() );
         CloseHandle(mFileMapping);
-        mFileMapping = INVALID_HANDLE_VALUE;
+        mFileMapping = NULL;
         return false;
     }
 #else // !defined(__MINGW32__)

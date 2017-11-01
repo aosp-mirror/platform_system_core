@@ -18,33 +18,73 @@
 
 cc_test {
     name: "libutils_tests",
+    host_supported: true,
 
     srcs: [
-        "BlobCache_test.cpp",
         "BitSet_test.cpp",
-        "Looper_test.cpp",
         "LruCache_test.cpp",
-        "RefBase_test.cpp",
+        "Mutex_test.cpp",
+        "Singleton_test.cpp",
         "String8_test.cpp",
         "StrongPointer_test.cpp",
-        "SystemClock_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
     ],
 
-    shared_libs: [
-        "libz",
-        "liblog",
-        "libcutils",
-        "libutils",
+    target: {
+        android: {
+            srcs: [
+                "SystemClock_test.cpp",
+            ],
+            shared_libs: [
+                "libz",
+                "liblog",
+                "libcutils",
+                "libutils",
+                "libbase",
+            ],
+        },
+        linux: {
+            srcs: [
+                "Looper_test.cpp",
+                "RefBase_test.cpp",
+            ],
+        },
+        host: {
+            static_libs: [
+                "libutils",
+                "liblog",
+                "libbase",
+            ],
+        },
+    },
+
+    required: [
+        "libutils_tests_singleton1",
+        "libutils_tests_singleton2",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wthread-safety",
     ],
 }
 
-cc_test_host {
-    name: "libutils_tests_host",
-    srcs: ["Vector_test.cpp"],
-    static_libs: [
-        "libutils",
-        "liblog",
-    ],
+cc_test_library {
+    name: "libutils_tests_singleton1",
+    host_supported: true,
+    relative_install_path: "libutils_tests",
+    srcs: ["Singleton_test1.cpp"],
+    cflags: ["-Wall", "-Werror"],
+}
+
+cc_test_library {
+    name: "libutils_tests_singleton2",
+    host_supported: true,
+    relative_install_path: "libutils_tests",
+    srcs: ["Singleton_test2.cpp"],
+    cflags: ["-Wall", "-Werror"],
+    shared_libs: ["libutils_tests_singleton1"],
 }

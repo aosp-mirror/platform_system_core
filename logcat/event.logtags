@@ -30,12 +30,15 @@
 # 4: Number of allocations
 # 5: Id
 # 6: Percent
+# s: Number of seconds (monotonic time)
 # Default value for data of type int/long is 2 (bytes).
 #
 # TODO: generate ".java" and ".h" files with integer constants from this file.
 
 # These are used for testing, do not modify without updating
 # tests/framework-tests/src/android/util/EventLogFunctionalTest.java.
+# system/core/liblog/tests/liblog_benchmark.cpp
+# system/core/liblog/tests/liblog_test.cpp
 42    answer (to life the universe etc|3)
 314   pi
 2718  e

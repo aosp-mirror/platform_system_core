@@ -42,6 +42,9 @@ int healthd_mode_android_preparetowait(void) {
     return -1;
 }
 
+void healthd_mode_android_heartbeat(void) {
+}
+
 static void binder_event(uint32_t /*epevents*/) {
     IPCThreadState::self()->handlePolledCommands();
 }

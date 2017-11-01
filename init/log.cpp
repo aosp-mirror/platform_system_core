@@ -17,18 +17,47 @@
 #include "log.h"
 
 #include <fcntl.h>
-#include <string.h>
-
 #include <linux/audit.h>
-#include <netlink/netlink.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <android-base/logging.h>
+#include <cutils/android_reboot.h>
 #include <selinux/selinux.h>
+
+#include "reboot.h"
+
+namespace android {
+namespace init {
+
+static void InitAborter(const char* abort_message) {
+    // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
+    // simply abort instead of trying to reboot the system.
+    if (getpid() != 1) {
+        android::base::DefaultAborter(abort_message);
+        return;
+    }
+
+    // DoReboot() does a lot to try to shutdown the system cleanly.  If something happens to call
+    // LOG(FATAL) in the shutdown path, we want to catch this and immediately use the syscall to
+    // reboot instead of recursing here.
+    static bool has_aborted = false;
+    if (!has_aborted) {
+        has_aborted = true;
+        // Do not queue "shutdown" trigger since we want to shutdown immediately and it's not likely
+        // that we can even run the ActionQueue at this point.
+        DoReboot(ANDROID_RB_RESTART2, "reboot", "bootloader", false);
+    } else {
+        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+    }
+}
 
 void InitKernelLogging(char* argv[]) {
     // Make stdin/stdout/stderr all point to /dev/null.
     int fd = open("/sys/fs/selinux/null", O_RDWR);
     if (fd == -1) {
         int saved_errno = errno;
-        android::base::InitLogging(argv, &android::base::KernelLogger);
+        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
         errno = saved_errno;
         PLOG(FATAL) << "Couldn't open /sys/fs/selinux/null";
     }
@@ -37,25 +66,7 @@ void InitKernelLogging(char* argv[]) {
     dup2(fd, 2);
     if (fd > 2) close(fd);
 
-    android::base::InitLogging(argv, &android::base::KernelLogger);
-}
-
-static void selinux_avc_log(char* buf, size_t buf_len) {
-    size_t str_len = strnlen(buf, buf_len);
-
-    // trim newline at end of string
-    buf[str_len - 1] = '\0';
-
-    struct nl_sock* sk = nl_socket_alloc();
-    if (sk == NULL) {
-        return;
-    }
-    nl_connect(sk, NETLINK_AUDIT);
-    int result;
-    do {
-        result = nl_send_simple(sk, AUDIT_USER_AVC, 0, buf, str_len);
-    } while (result == -NLE_INTR);
-    nl_socket_free(sk);
+    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
 int selinux_klog_callback(int type, const char *fmt, ...) {
@@ -68,15 +79,11 @@ int selinux_klog_callback(int type, const char *fmt, ...) {
     char buf[1024];
     va_list ap;
     va_start(ap, fmt);
-    int res = vsnprintf(buf, sizeof(buf), fmt, ap);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    if (res <= 0) {
-        return 0;
-    }
-    if (type == SELINUX_AVC) {
-        selinux_avc_log(buf, sizeof(buf));
-    } else {
-        android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
-    }
+    android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
     return 0;
 }
+
+}  // namespace init
+}  // namespace android

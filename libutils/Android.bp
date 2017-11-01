@@ -12,16 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+cc_library_headers {
+    name: "libutils_headers",
+    vendor_available: true,
+    host_supported: true,
+
+    header_libs: [
+        "liblog_headers",
+        "libsystem_headers",
+        "libcutils_headers"
+    ],
+    export_header_lib_headers: [
+        "liblog_headers",
+        "libsystem_headers",
+        "libcutils_headers"
+    ],
+    export_include_dirs: ["include"],
+
+    target: {
+        android: {
+            header_libs: ["libbacktrace_headers"],
+            export_header_lib_headers: ["libbacktrace_headers"],
+        },
+        linux_bionic: {
+            enabled: true,
+        },
+        windows: {
+            enabled: true,
+        },
+    },
+}
+
 cc_library {
     name: "libutils",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     host_supported: true,
 
     srcs: [
         "CallStack.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
-        "LinearTransform.cpp",
-        "Log.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
         "PropertyMap.cpp",
@@ -31,6 +65,7 @@ cc_library {
         "StopWatch.cpp",
         "String8.cpp",
         "String16.cpp",
+        "StrongPointer.cpp",
         "SystemClock.cpp",
         "Threads.cpp",
         "Timers.cpp",
@@ -40,8 +75,18 @@ cc_library {
         "misc.cpp",
     ],
 
-    cflags: ["-Werror"],
+    cflags: ["-Wall", "-Werror"],
     include_dirs: ["external/safe-iop/include"],
+    header_libs: [
+        "libutils_headers",
+    ],
+    export_header_lib_headers: [
+        "libutils_headers",
+    ],
+
+    shared_libs: [
+        "liblog",
+    ],
 
     arch: {
         mips: {
@@ -52,9 +97,6 @@ cc_library {
     target: {
         android: {
             srcs: [
-                "BlobCache.cpp",
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
                 "Trace.cpp",
             ],
 
@@ -64,12 +106,18 @@ cc_library {
                 "libbacktrace",
                 "libcutils",
                 "libdl",
-                "liblog",
+                "libvndksupport",
             ],
 
             sanitize: {
                 misc_undefined: ["integer"],
             },
+        },
+        linux: {
+            srcs: [
+                "Looper.cpp",
+                "ProcessCallStack.cpp",
+            ],
         },
 
         host: {
@@ -80,18 +128,8 @@ cc_library {
             },
         },
 
-        linux: {
-            srcs: [
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
-            ],
-        },
         linux_bionic: {
             enabled: true,
-            srcs: [
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
-            ],
         },
 
         darwin: {
@@ -105,8 +143,6 @@ cc_library {
             enabled: true,
         },
     },
-
-    clang: true,
 }
 
 // Include subdirectory makefiles
@@ -118,6 +154,7 @@ cc_test {
     static_libs: ["libutils"],
     shared_libs: ["liblog"],
     srcs: ["SharedBufferTest.cpp"],
+    cflags: ["-Wall", "-Werror"],
 }
 
 subdirs = ["tests"]

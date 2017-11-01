@@ -32,18 +32,20 @@
 #include <libunwind.h>
 
 class UnwindCurrent : public BacktraceCurrent {
-public:
+ public:
   UnwindCurrent(pid_t pid, pid_t tid, BacktraceMap* map) : BacktraceCurrent(pid, tid, map) {}
   virtual ~UnwindCurrent() {}
 
   std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) override;
 
-private:
+ private:
   void GetUnwContextFromUcontext(const ucontext_t* ucontext);
 
   bool UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) override;
 
   unw_context_t context_;
+
+  bool initialized_ = false;
 };
 
 #endif // _LIBBACKTRACE_UNWIND_CURRENT_H

@@ -27,21 +27,24 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <thread>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 #include <private/android_filesystem_config.h>
 
 #include <processgroup/processgroup.h>
 
-using namespace std::chrono_literals;
+using android::base::WriteStringToFile;
 
-// Uncomment line below use memory cgroups for keeping track of (forked) PIDs
-// #define USE_MEMCG 1
+using namespace std::chrono_literals;
 
 #define MEM_CGROUP_PATH "/dev/memcg/apps"
 #define MEM_CGROUP_TASKS "/dev/memcg/apps/tasks"
@@ -64,16 +67,30 @@ using namespace std::chrono_literals;
 
 std::once_flag init_path_flag;
 
-struct ctx {
-    bool initialized;
-    int fd;
-    char buf[128];
-    char *buf_ptr;
-    size_t buf_len;
+class ProcessGroup {
+  public:
+    ProcessGroup() : buf_ptr_(buf_), buf_len_(0) {}
+
+    bool Open(uid_t uid, int pid);
+
+    // Return positive number and sets *pid = next pid in process cgroup on success
+    // Returns 0 if there are no pids left in the process cgroup
+    // Returns -errno if an error was encountered
+    int GetOneAppProcess(pid_t* pid);
+
+  private:
+    // Returns positive number of bytes filled on success
+    // Returns 0 if there was nothing to read
+    // Returns -errno if an error was encountered
+    int RefillBuffer();
+
+    android::base::unique_fd fd_;
+    char buf_[128];
+    char* buf_ptr_;
+    size_t buf_len_;
 };
 
 static const char* getCgroupRootPath() {
-#ifdef USE_MEMCG
     static const char* cgroup_root_path = NULL;
     std::call_once(init_path_flag, [&]() {
             // Check if mem cgroup is mounted, only then check for write-access to avoid
@@ -82,9 +99,6 @@ static const char* getCgroupRootPath() {
                     ACCT_CGROUP_PATH : MEM_CGROUP_PATH;
             });
     return cgroup_root_path;
-#else
-    return ACCT_CGROUP_PATH;
-#endif
 }
 
 static int convertUidToPath(char *path, size_t size, uid_t uid)
@@ -105,87 +119,67 @@ static int convertUidPidToPath(char *path, size_t size, uid_t uid, int pid)
             pid);
 }
 
-static int initCtx(uid_t uid, int pid, struct ctx *ctx)
-{
-    int ret;
+bool ProcessGroup::Open(uid_t uid, int pid) {
     char path[PROCESSGROUP_MAX_PATH_LEN] = {0};
     convertUidPidToPath(path, sizeof(path), uid, pid);
     strlcat(path, PROCESSGROUP_CGROUP_PROCS_FILE, sizeof(path));
 
     int fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        ret = -errno;
-        PLOG(WARNING) << "failed to open " << path;
-        return ret;
-    }
+    if (fd < 0) return false;
 
-    ctx->fd = fd;
-    ctx->buf_ptr = ctx->buf;
-    ctx->buf_len = 0;
-    ctx->initialized = true;
+    fd_.reset(fd);
 
     LOG(VERBOSE) << "Initialized context for " << path;
 
-    return 0;
+    return true;
 }
 
-static int refillBuffer(struct ctx *ctx)
-{
-    memmove(ctx->buf, ctx->buf_ptr, ctx->buf_len);
-    ctx->buf_ptr = ctx->buf;
+int ProcessGroup::RefillBuffer() {
+    memmove(buf_, buf_ptr_, buf_len_);
+    buf_ptr_ = buf_;
 
-    ssize_t ret = read(ctx->fd, ctx->buf_ptr + ctx->buf_len,
-                sizeof(ctx->buf) - ctx->buf_len - 1);
+    ssize_t ret = read(fd_, buf_ptr_ + buf_len_, sizeof(buf_) - buf_len_ - 1);
     if (ret < 0) {
         return -errno;
     } else if (ret == 0) {
         return 0;
     }
 
-    ctx->buf_len += ret;
-    ctx->buf[ctx->buf_len] = 0;
-    LOG(VERBOSE) << "Read " << ret << " to buffer: " << ctx->buf;
+    buf_len_ += ret;
+    buf_[buf_len_] = 0;
+    LOG(VERBOSE) << "Read " << ret << " to buffer: " << buf_;
 
-    assert(ctx->buf_len <= sizeof(ctx->buf));
+    assert(buf_len_ <= sizeof(buf_));
 
     return ret;
 }
 
-static pid_t getOneAppProcess(uid_t uid, int appProcessPid, struct ctx *ctx)
-{
-    if (!ctx->initialized) {
-        int ret = initCtx(uid, appProcessPid, ctx);
-        if (ret < 0) {
-            return ret;
-        }
-    }
+int ProcessGroup::GetOneAppProcess(pid_t* out_pid) {
+    *out_pid = 0;
 
-    char *eptr;
-    while ((eptr = (char *)memchr(ctx->buf_ptr, '\n', ctx->buf_len)) == NULL) {
-        int ret = refillBuffer(ctx);
-        if (ret == 0) {
-            return -ERANGE;
-        }
-        if (ret < 0) {
-            return ret;
-        }
+    char* eptr;
+    while ((eptr = static_cast<char*>(memchr(buf_ptr_, '\n', buf_len_))) == nullptr) {
+        int ret = RefillBuffer();
+        if (ret <= 0) return ret;
     }
 
     *eptr = '\0';
-    char *pid_eptr = NULL;
+    char* pid_eptr = nullptr;
     errno = 0;
-    long pid = strtol(ctx->buf_ptr, &pid_eptr, 10);
+    long pid = strtol(buf_ptr_, &pid_eptr, 10);
     if (errno != 0) {
         return -errno;
     }
     if (pid_eptr != eptr) {
-        return -EINVAL;
+        errno = EINVAL;
+        return -errno;
     }
 
-    ctx->buf_len -= (eptr - ctx->buf_ptr) + 1;
-    ctx->buf_ptr = eptr + 1;
+    buf_len_ -= (eptr - buf_ptr_) + 1;
+    buf_ptr_ = eptr + 1;
 
-    return (pid_t)pid;
+    *out_pid = static_cast<pid_t>(pid);
+    return 1;
 }
 
 static int removeProcessGroup(uid_t uid, int pid)
@@ -219,8 +213,8 @@ static void removeUidProcessGroups(const char *uid_path)
             }
 
             snprintf(path, sizeof(path), "%s/%s", uid_path, dir->d_name);
-            LOG(VERBOSE) << "removing " << path;
-            if (rmdir(path) == -1) PLOG(WARNING) << "failed to remove " << path;
+            LOG(VERBOSE) << "Removing " << path;
+            if (rmdir(path) == -1) PLOG(WARNING) << "Failed to remove " << path;
         }
     }
 }
@@ -231,7 +225,7 @@ void removeAllProcessGroups()
     const char* cgroup_root_path = getCgroupRootPath();
     std::unique_ptr<DIR, decltype(&closedir)> root(opendir(cgroup_root_path), closedir);
     if (root == NULL) {
-        PLOG(ERROR) << "failed to open " << cgroup_root_path;
+        PLOG(ERROR) << "Failed to open " << cgroup_root_path;
     } else {
         dirent* dir;
         while ((dir = readdir(root.get())) != nullptr) {
@@ -246,21 +240,32 @@ void removeAllProcessGroups()
 
             snprintf(path, sizeof(path), "%s/%s", cgroup_root_path, dir->d_name);
             removeUidProcessGroups(path);
-            LOG(VERBOSE) << "removing " << path;
-            if (rmdir(path) == -1) PLOG(WARNING) << "failed to remove " << path;
+            LOG(VERBOSE) << "Removing " << path;
+            if (rmdir(path) == -1) PLOG(WARNING) << "Failed to remove " << path;
         }
     }
 }
 
-static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
-{
-    int processes = 0;
-    struct ctx ctx;
+// Returns number of processes killed on success
+// Returns 0 if there are no processes in the process cgroup left to kill
+// Returns -errno on error
+static int doKillProcessGroupOnce(uid_t uid, int initialPid, int signal) {
+    ProcessGroup process_group;
+    if (!process_group.Open(uid, initialPid)) {
+        PLOG(WARNING) << "Failed to open process cgroup uid " << uid << " pid " << initialPid;
+        return -errno;
+    }
+
+    // We separate all of the pids in the cgroup into those pids that are also the leaders of
+    // process groups (stored in the pgids set) and those that are not (stored in the pids set).
+    std::set<pid_t> pgids;
+    pgids.emplace(initialPid);
+    std::set<pid_t> pids;
+
+    int ret;
     pid_t pid;
-
-    ctx.initialized = false;
-
-    while ((pid = getOneAppProcess(uid, initialPid, &ctx)) >= 0) {
+    int processes = 0;
+    while ((ret = process_group.GetOneAppProcess(&pid)) > 0 && pid >= 0) {
         processes++;
         if (pid == 0) {
             // Should never happen...  but if it does, trying to kill this
@@ -268,49 +273,100 @@ static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
             LOG(WARNING) << "Yikes, we've been told to kill pid 0!  How about we don't do that?";
             continue;
         }
-        LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid
-                     << " as part of process group " << initialPid;
+        pid_t pgid = getpgid(pid);
+        if (pgid == -1) PLOG(ERROR) << "getpgid(" << pid << ") failed";
+        if (pgid == pid) {
+            pgids.emplace(pid);
+        } else {
+            pids.emplace(pid);
+        }
+    }
+
+    // Erase all pids that will be killed when we kill the process groups.
+    for (auto it = pids.begin(); it != pids.end();) {
+        pid_t pgid = getpgid(pid);
+        if (pgids.count(pgid) == 1) {
+            it = pids.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Kill all process groups.
+    for (const auto pgid : pgids) {
+        LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
+                     << " as part of process cgroup " << initialPid;
+
+        if (kill(-pgid, signal) == -1) {
+            PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
+        }
+    }
+
+    // Kill remaining pids.
+    for (const auto pid : pids) {
+        LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
+                     << initialPid;
+
         if (kill(pid, signal) == -1) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
     }
 
-    if (ctx.initialized) {
-        close(ctx.fd);
-    }
-
-    return processes;
+    return ret >= 0 ? processes : ret;
 }
 
-int killProcessGroup(uid_t uid, int initialPid, int signal)
-{
+static int killProcessGroup(uid_t uid, int initialPid, int signal, int retries) {
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
-    int retry = 40;
+    int retry = retries;
     int processes;
-    while ((processes = killProcessGroupOnce(uid, initialPid, signal)) > 0) {
-        LOG(VERBOSE) << "killed " << processes << " processes for processgroup " << initialPid;
+    while ((processes = doKillProcessGroupOnce(uid, initialPid, signal)) > 0) {
+        LOG(VERBOSE) << "Killed " << processes << " processes for processgroup " << initialPid;
         if (retry > 0) {
             std::this_thread::sleep_for(5ms);
             --retry;
         } else {
-            LOG(ERROR) << "failed to kill " << processes << " processes for processgroup "
-                       << initialPid;
             break;
         }
     }
 
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    LOG(VERBOSE) << "Killed process group uid " << uid << " pid " << initialPid << " in "
-                 << static_cast<int>(ms) << "ms, " << processes << " procs remain";
-
-    if (processes == 0) {
-        return removeProcessGroup(uid, initialPid);
-    } else {
+    if (processes < 0) {
+        PLOG(ERROR) << "Error encountered killing process cgroup uid " << uid << " pid "
+                    << initialPid;
         return -1;
     }
+
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+    // We only calculate the number of 'processes' when killing the processes.
+    // In the retries == 0 case, we only kill the processes once and therefore
+    // will not have waited then recalculated how many processes are remaining
+    // after the first signals have been sent.
+    // Logging anything regarding the number of 'processes' here does not make sense.
+
+    if (processes == 0) {
+        if (retries > 0) {
+            LOG(INFO) << "Successfully killed process cgroup uid " << uid << " pid " << initialPid
+                      << " in " << static_cast<int>(ms) << "ms";
+        }
+        return removeProcessGroup(uid, initialPid);
+    } else {
+        if (retries > 0) {
+            LOG(ERROR) << "Failed to kill process cgroup uid " << uid << " pid " << initialPid
+                       << " in " << static_cast<int>(ms) << "ms, " << processes
+                       << " processes remain";
+        }
+        return -1;
+    }
+}
+
+int killProcessGroup(uid_t uid, int initialPid, int signal) {
+    return killProcessGroup(uid, initialPid, signal, 40 /*retries*/);
+}
+
+int killProcessGroupOnce(uid_t uid, int initialPid, int signal) {
+    return killProcessGroup(uid, initialPid, signal, 0 /*retries*/);
 }
 
 static bool mkdirAndChown(const char *path, mode_t mode, uid_t uid, gid_t gid)
@@ -336,35 +392,53 @@ int createProcessGroup(uid_t uid, int initialPid)
     convertUidToPath(path, sizeof(path), uid);
 
     if (!mkdirAndChown(path, 0750, AID_SYSTEM, AID_SYSTEM)) {
-        PLOG(ERROR) << "failed to make and chown " << path;
+        PLOG(ERROR) << "Failed to make and chown " << path;
         return -errno;
     }
 
     convertUidPidToPath(path, sizeof(path), uid, initialPid);
 
     if (!mkdirAndChown(path, 0750, AID_SYSTEM, AID_SYSTEM)) {
-        PLOG(ERROR) << "failed to make and chown " << path;
+        PLOG(ERROR) << "Failed to make and chown " << path;
         return -errno;
     }
 
     strlcat(path, PROCESSGROUP_CGROUP_PROCS_FILE, sizeof(path));
 
-    int fd = open(path, O_WRONLY);
-    if (fd == -1) {
-        int ret = -errno;
-        PLOG(ERROR) << "failed to open " << path;
-        return ret;
-    }
-
-    char pid[PROCESSGROUP_MAX_PID_LEN + 1] = {0};
-    int len = snprintf(pid, sizeof(pid), "%d", initialPid);
-
     int ret = 0;
-    if (write(fd, pid, len) < 0) {
+    if (!WriteStringToFile(std::to_string(initialPid), path)) {
         ret = -errno;
-        PLOG(ERROR) << "failed to write '" << pid << "' to " << path;
+        PLOG(ERROR) << "Failed to write '" << initialPid << "' to " << path;
     }
 
-    close(fd);
     return ret;
+}
+
+static bool setProcessGroupValue(uid_t uid, int pid, const char* fileName, int64_t value) {
+    char path[PROCESSGROUP_MAX_PATH_LEN] = {0};
+    if (strcmp(getCgroupRootPath(), MEM_CGROUP_PATH)) {
+        PLOG(ERROR) << "Memcg is not mounted." << path;
+        return false;
+    }
+
+    convertUidPidToPath(path, sizeof(path), uid, pid);
+    strlcat(path, fileName, sizeof(path));
+
+    if (!WriteStringToFile(std::to_string(value), path)) {
+        PLOG(ERROR) << "Failed to write '" << value << "' to " << path;
+        return false;
+    }
+    return true;
+}
+
+bool setProcessGroupSwappiness(uid_t uid, int pid, int swappiness) {
+    return setProcessGroupValue(uid, pid, "/memory.swappiness", swappiness);
+}
+
+bool setProcessGroupSoftLimit(uid_t uid, int pid, int64_t soft_limit_in_bytes) {
+    return setProcessGroupValue(uid, pid, "/memory.soft_limit_in_bytes", soft_limit_in_bytes);
+}
+
+bool setProcessGroupLimit(uid_t uid, int pid, int64_t limit_in_bytes) {
+    return setProcessGroupValue(uid, pid, "/memory.limit_in_bytes", limit_in_bytes);
 }

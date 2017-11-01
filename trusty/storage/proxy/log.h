@@ -16,5 +16,5 @@
 
 #define LOG_TAG "storageproxyd"
 
-#include <android/log.h>
+#include <log/log.h>
 

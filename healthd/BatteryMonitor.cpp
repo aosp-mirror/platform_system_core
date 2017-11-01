@@ -116,6 +116,10 @@ int BatteryMonitor::getBatteryHealth(const char* status) {
         { "Over voltage", BATTERY_HEALTH_OVER_VOLTAGE },
         { "Unspecified failure", BATTERY_HEALTH_UNSPECIFIED_FAILURE },
         { "Cold", BATTERY_HEALTH_COLD },
+        // battery health values from JEITA spec
+        { "Warm", BATTERY_HEALTH_GOOD },
+        { "Cool", BATTERY_HEALTH_GOOD },
+        { "Hot", BATTERY_HEALTH_OVERHEAT },
         { NULL, 0 },
     };
 
@@ -129,7 +133,7 @@ int BatteryMonitor::getBatteryHealth(const char* status) {
 }
 
 int BatteryMonitor::readFromFile(const String8& path, std::string* buf) {
-    if (android::base::ReadFileToString(String8::std_string(path), buf)) {
+    if (android::base::ReadFileToString(path.c_str(), buf)) {
         *buf = android::base::Trim(*buf);
     }
     return buf->length();
@@ -347,6 +351,7 @@ int BatteryMonitor::getChargeStatus() {
 
 status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
     status_t ret = BAD_VALUE;
+    std::string buf;
 
     val->valueInt64 = LONG_MIN;
 
@@ -397,6 +402,15 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         } else {
             ret = NAME_NOT_FOUND;
         }
+        break;
+
+    case BATTERY_PROP_BATTERY_STATUS:
+        if (mAlwaysPluggedDevice) {
+            val->valueInt64 = BATTERY_STATUS_CHARGING;
+        } else {
+            val->valueInt64 = getChargeStatus();
+        }
+        ret = NO_ERROR;
         break;
 
     default:

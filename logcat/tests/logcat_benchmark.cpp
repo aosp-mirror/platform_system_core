@@ -18,19 +18,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gtest/gtest.h>
+#include <benchmark/benchmark.h>
 
 static const char begin[] = "--------- beginning of ";
 
-TEST(logcat, sorted_order) {
-    FILE *fp;
+static void BM_logcat_sorted_order(benchmark::State& state) {
+    FILE* fp;
 
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v time -b radio -b events -b system -b main -d 2>/dev/null",
-      "r")));
+    if (!state.KeepRunning()) return;
+
+    fp = popen(
+        "logcat -v time -b radio -b events -b system -b main -d 2>/dev/null",
+        "r");
+    if (!fp) return;
 
     class timestamp {
-    private:
+       private:
         int month;
         int day;
         int hour;
@@ -39,44 +42,39 @@ TEST(logcat, sorted_order) {
         int millisecond;
         bool ok;
 
-    public:
-        void init(const char *buffer)
-        {
+       public:
+        void init(const char* buffer) {
             ok = false;
             if (buffer != NULL) {
-                ok = sscanf(buffer, "%d-%d %d:%d:%d.%d ",
-                    &month, &day, &hour, &minute, &second, &millisecond) == 6;
+                ok = sscanf(buffer, "%d-%d %d:%d:%d.%d ", &month, &day, &hour,
+                            &minute, &second, &millisecond) == 6;
             }
         }
 
-        explicit timestamp(const char *buffer)
-        {
+        explicit timestamp(const char* buffer) {
             init(buffer);
         }
 
-        bool operator< (timestamp &T)
-        {
-            return !ok || !T.ok
-             || (month < T.month)
-             || ((month == T.month)
-              && ((day < T.day)
-               || ((day == T.day)
-                && ((hour < T.hour)
-                 || ((hour == T.hour)
-                  && ((minute < T.minute)
-                   || ((minute == T.minute)
-                    && ((second < T.second)
-                     || ((second == T.second)
-                      && (millisecond < T.millisecond))))))))));
+        bool operator<(timestamp& T) {
+            return !ok || !T.ok || (month < T.month) ||
+                   ((month == T.month) &&
+                    ((day < T.day) ||
+                     ((day == T.day) &&
+                      ((hour < T.hour) ||
+                       ((hour == T.hour) &&
+                        ((minute < T.minute) ||
+                         ((minute == T.minute) &&
+                          ((second < T.second) ||
+                           ((second == T.second) &&
+                            (millisecond < T.millisecond))))))))));
         }
 
-        bool valid(void)
-        {
+        bool valid(void) {
             return ok;
         }
     } last(NULL);
 
-    char *last_buffer = NULL;
+    char* last_buffer = NULL;
     char buffer[5120];
 
     int count = 0;
@@ -114,15 +112,22 @@ TEST(logcat, sorted_order) {
 
     // Allow few fails, happens with readers active
     fprintf(stderr, "%s: %d/%d out of order entries\n",
-            (next_lt_last)
-                ? ((next_lt_last <= max_ok)
-                    ? "WARNING"
-                    : "ERROR")
-                : "INFO",
+            (next_lt_last) ? ((next_lt_last <= max_ok) ? "WARNING" : "ERROR")
+                           : "INFO",
             next_lt_last, count);
 
-    EXPECT_GE(max_ok, next_lt_last);
+    if (next_lt_last > max_ok) {
+        fprintf(stderr, "EXPECT_GE(max_ok=%d, next_lt_last=%d)\n", max_ok,
+                next_lt_last);
+    }
 
     // sample statistically too small
-    EXPECT_LT(100, count);
+    if (count < 100) {
+        fprintf(stderr, "EXPECT_LT(100, count=%d)\n", count);
+    }
+
+    state.KeepRunning();
 }
+BENCHMARK(BM_logcat_sorted_order);
+
+BENCHMARK_MAIN();

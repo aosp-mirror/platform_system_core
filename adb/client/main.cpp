@@ -39,33 +39,7 @@
 #include "sysdeps/chrono.h"
 #include "transport.h"
 
-static std::string GetLogFilePath() {
-#if defined(_WIN32)
-    const char log_name[] = "adb.log";
-    WCHAR temp_path[MAX_PATH];
-
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/aa364992%28v=vs.85%29.aspx
-    DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
-    if (nchars >= arraysize(temp_path) || nchars == 0) {
-        // If string truncation or some other error.
-        fatal("cannot retrieve temporary file path: %s\n",
-              android::base::SystemErrorCodeToString(GetLastError()).c_str());
-    }
-
-    std::string temp_path_utf8;
-    if (!android::base::WideToUTF8(temp_path, &temp_path_utf8)) {
-        fatal_errno("cannot convert temporary file path from UTF-16 to UTF-8");
-    }
-
-    return temp_path_utf8 + log_name;
-#else
-    const char* tmp_dir = getenv("TMPDIR");
-    if (tmp_dir == nullptr) tmp_dir = "/tmp";
-    return android::base::StringPrintf("%s/adb.%u.log", tmp_dir, getuid());
-#endif
-}
-
-static void setup_daemon_logging(void) {
+static void setup_daemon_logging() {
     const std::string log_file_path(GetLogFilePath());
     int fd = unix_open(log_file_path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0640);
     if (fd == -1) {
@@ -92,6 +66,16 @@ static BOOL WINAPI ctrlc_handler(DWORD type) {
 }
 #endif
 
+void adb_server_cleanup() {
+    // Upon exit, we want to clean up in the following order:
+    //   1. close_smartsockets, so that we don't get any new clients
+    //   2. kick_all_transports, to avoid writing only part of a packet to a transport.
+    //   3. usb_cleanup, to tear down the USB stack.
+    close_smartsockets();
+    kick_all_transports();
+    usb_cleanup();
+}
+
 int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd) {
 #if defined(_WIN32)
     // adb start-server starts us up with stdout and stderr hooked up to
@@ -111,11 +95,19 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     SetConsoleCtrlHandler(ctrlc_handler, TRUE);
 #else
     signal(SIGINT, [](int) {
-        android::base::quick_exit(0);
+        fdevent_run_on_main_thread([]() { android::base::quick_exit(0); });
     });
 #endif
 
+    if (is_daemon) {
+        close_stdin();
+        setup_daemon_logging();
+    }
+
+    android::base::at_quick_exit(adb_server_cleanup);
+
     init_transport_registration();
+    init_mdns_transport_discovery();
 
     usb_init();
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
@@ -135,11 +127,6 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         std::this_thread::sleep_for(100ms);
     }
 
-    if (is_daemon) {
-        close_stdin();
-        setup_daemon_logging();
-    }
-
     adb_auth_init();
 
     if (is_daemon) {
@@ -154,33 +141,38 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         }
 #endif
 
-        // Inform our parent that we are up and running.
+        // Wait for the USB scan to complete before notifying the parent that we're up.
+        // We need to perform this in a thread, because we would otherwise block the event loop.
+        std::thread notify_thread([ack_reply_fd]() {
+            adb_wait_for_device_initialization();
 
-        // Any error output written to stderr now goes to adb.log. We could
-        // keep around a copy of the stderr fd and use that to write any errors
-        // encountered by the following code, but that is probably overkill.
+            // Any error output written to stderr now goes to adb.log. We could
+            // keep around a copy of the stderr fd and use that to write any errors
+            // encountered by the following code, but that is probably overkill.
 #if defined(_WIN32)
-        const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
-        const CHAR ack[] = "OK\n";
-        const DWORD bytes_to_write = arraysize(ack) - 1;
-        DWORD written = 0;
-        if (!WriteFile(ack_reply_handle, ack, bytes_to_write, &written, NULL)) {
-            fatal("adb: cannot write ACK to handle 0x%p: %s", ack_reply_handle,
-                  android::base::SystemErrorCodeToString(GetLastError()).c_str());
-        }
-        if (written != bytes_to_write) {
-            fatal("adb: cannot write %lu bytes of ACK: only wrote %lu bytes",
-                  bytes_to_write, written);
-        }
-        CloseHandle(ack_reply_handle);
+            const HANDLE ack_reply_handle = cast_int_to_handle(ack_reply_fd);
+            const CHAR ack[] = "OK\n";
+            const DWORD bytes_to_write = arraysize(ack) - 1;
+            DWORD written = 0;
+            if (!WriteFile(ack_reply_handle, ack, bytes_to_write, &written, NULL)) {
+                fatal("adb: cannot write ACK to handle 0x%p: %s", ack_reply_handle,
+                      android::base::SystemErrorCodeToString(GetLastError()).c_str());
+            }
+            if (written != bytes_to_write) {
+                fatal("adb: cannot write %lu bytes of ACK: only wrote %lu bytes", bytes_to_write,
+                      written);
+            }
+            CloseHandle(ack_reply_handle);
 #else
-        // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
-        // "OKAY".
-        if (!android::base::WriteStringToFd("OK\n", ack_reply_fd)) {
-            fatal_errno("error writing ACK to fd %d", ack_reply_fd);
-        }
-        unix_close(ack_reply_fd);
+            // TODO(danalbert): Can't use SendOkay because we're sending "OK\n", not
+            // "OKAY".
+            if (!android::base::WriteStringToFd("OK\n", ack_reply_fd)) {
+                fatal_errno("error writing ACK to fd %d", ack_reply_fd);
+            }
+            unix_close(ack_reply_fd);
 #endif
+        });
+        notify_thread.detach();
     }
 
     D("Event loop starting");

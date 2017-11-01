@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "socket.h"
 #include "sysdeps.h"
 
@@ -51,18 +53,18 @@ class FdeventTest : public ::testing::Test {
 
     size_t GetAdditionalLocalSocketCount() {
 #if ADB_HOST
-        // dummy socket installed in PrepareThread()
-        return 1;
-#else
-        // dummy socket and one more socket installed in fdevent_subproc_setup()
+        // dummy socket installed in PrepareThread() + fdevent_run_on_main_thread socket
         return 2;
+#else
+        // dummy socket + fdevent_run_on_main_thread + fdevent_subproc_setup() sockets
+        return 3;
 #endif
     }
 
-    void TerminateThread(adb_thread_t thread) {
+    void TerminateThread(std::thread& thread) {
         fdevent_terminate_loop();
         ASSERT_TRUE(WriteFdExactly(dummy, "", 1));
-        ASSERT_TRUE(adb_thread_join(thread));
+        thread.join();
         ASSERT_EQ(0, adb_close(dummy));
     }
 };

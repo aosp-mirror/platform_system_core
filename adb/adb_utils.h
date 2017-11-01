@@ -17,19 +17,19 @@
 #ifndef _ADB_UTILS_H_
 #define _ADB_UTILS_H_
 
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <vector>
 
 #include <android-base/macros.h>
+
+int syntax_error(const char*, ...);
 
 void close_stdin();
 
 bool getcwd(std::string* cwd);
 bool directory_exists(const std::string& path);
-
-// Like the regular basename and dirname, but thread-safe on all
-// platforms and capable of correctly handling exotic Windows paths.
-std::string adb_basename(const std::string& path);
-std::string adb_dirname(const std::string& path);
 
 // Return the user's home directory.
 std::string adb_get_homedir_path();
@@ -55,5 +55,40 @@ extern int adb_close(int fd);
 // if needed.
 bool forward_targets_are_valid(const std::string& source, const std::string& dest,
                                std::string* error);
+
+// A thread-safe blocking queue.
+template <typename T>
+class BlockingQueue {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::vector<T> queue;
+
+  public:
+    void Push(const T& t) {
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            queue.push_back(t);
+        }
+        cv.notify_one();
+    }
+
+    template <typename Fn>
+    void PopAll(Fn fn) {
+        std::vector<T> popped;
+
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            cv.wait(lock, [this]() { return !queue.empty(); });
+            popped = std::move(queue);
+            queue.clear();
+        }
+
+        for (const T& t : popped) {
+            fn(t);
+        }
+    }
+};
+
+std::string GetLogFilePath();
 
 #endif

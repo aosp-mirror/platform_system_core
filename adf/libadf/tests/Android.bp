@@ -17,6 +17,7 @@
 cc_test {
     name: "adf-unit-tests",
     srcs: ["adf_test.cpp"],
+    shared_libs: ["libsync"],
     static_libs: ["libadf"],
     cflags: ["-Werror"],
 }

@@ -54,9 +54,8 @@ __BEGIN_DECLS
  *           the specified log until the child has exited.
  *   file_path: if log_target has the LOG_FILE bit set, then this parameter
  *           must be set to the pathname of the file to log to.
- *   opts: set to non-NULL if you want to use one or more of the
- *           FORK_EXECVP_OPTION_* features.
- *   opts_len: the length of the opts array. When opts is NULL, pass 0.
+ *   unused_opts: currently unused.
+ *   unused_opts_len: currently unused.
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
@@ -72,30 +71,10 @@ __BEGIN_DECLS
 #define LOG_KLOG        2
 #define LOG_FILE        4
 
-/* Write data to child's stdin. */
-#define FORK_EXECVP_OPTION_INPUT             0
-/* Capture data from child's stdout and stderr. */
-#define FORK_EXECVP_OPTION_CAPTURE_OUTPUT    1
-
-struct AndroidForkExecvpOption {
-    int opt_type;
-    union {
-        struct {
-            const uint8_t* input;
-            size_t input_len;
-        } opt_input;
-        struct {
-            void (*on_output)(const uint8_t* /*output*/,
-                              size_t /*output_len*/,
-                              void* /* user_pointer */);
-            void* user_pointer;
-        } opt_capture_output;
-    };
-};
-
+// TODO: Remove unused_opts / unused_opts_len in a followup change.
 int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int_quit,
-        int log_target, bool abbreviated, char *file_path,
-        const struct AndroidForkExecvpOption* opts, size_t opts_len);
+        int log_target, bool abbreviated, char *file_path, void* unused_opts,
+        int unused_opts_len);
 
 /* Similar to above, except abbreviated logging is not available, and if logwrap
  * is true, logging is to the Android system log, and if false, there is no

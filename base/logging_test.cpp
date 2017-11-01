@@ -594,3 +594,7 @@ TEST(logging, LOG_FATAL_ABORTER_MESSAGE) {
 
   EXPECT_EQ(CountLineAborter::newline_count, 1U + 1U);  // +1 for final '\n'.
 }
+
+__attribute__((constructor)) void TestLoggingInConstructor() {
+  LOG(ERROR) << "foobar";
+}

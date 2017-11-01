@@ -63,7 +63,7 @@ int socket_network_client_timeout(const char* host, int port, int type, int time
     for (struct addrinfo* addr = addrs; addr != NULL; addr = addr->ai_next) {
         // The Mac doesn't have SOCK_NONBLOCK.
         int s = socket(addr->ai_family, type, addr->ai_protocol);
-        if (s == -1 || toggle_O_NONBLOCK(s) == -1) return -1;
+        if (s == -1 || toggle_O_NONBLOCK(s) == -1) break;
 
         int rc = connect(s, addr->ai_addr, addr->ai_addrlen);
         if (rc == 0) {

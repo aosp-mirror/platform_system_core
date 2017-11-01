@@ -21,44 +21,44 @@
 #include "log_portability.h"
 
 /* In the future, we would like to make this list extensible */
-static const char *LOG_NAME[LOG_ID_MAX] = {
-    [LOG_ID_MAIN] = "main",
-    [LOG_ID_RADIO] = "radio",
-    [LOG_ID_EVENTS] = "events",
-    [LOG_ID_SYSTEM] = "system",
-    [LOG_ID_CRASH] = "crash",
-    [LOG_ID_SECURITY] = "security",
-    [LOG_ID_KERNEL] = "kernel",
+static const char* LOG_NAME[LOG_ID_MAX] = {
+  /* clang-format off */
+  [LOG_ID_MAIN] = "main",
+  [LOG_ID_RADIO] = "radio",
+  [LOG_ID_EVENTS] = "events",
+  [LOG_ID_SYSTEM] = "system",
+  [LOG_ID_CRASH] = "crash",
+  [LOG_ID_SECURITY] = "security",
+  [LOG_ID_KERNEL] = "kernel",
+  /* clang-format on */
 };
 
-LIBLOG_ABI_PUBLIC const char *android_log_id_to_name(log_id_t log_id)
-{
-    if (log_id >= LOG_ID_MAX) {
-        log_id = LOG_ID_MAIN;
-    }
-    return LOG_NAME[log_id];
+LIBLOG_ABI_PUBLIC const char* android_log_id_to_name(log_id_t log_id) {
+  if (log_id >= LOG_ID_MAX) {
+    log_id = LOG_ID_MAIN;
+  }
+  return LOG_NAME[log_id];
 }
 
-LIBLOG_ABI_PUBLIC log_id_t android_name_to_log_id(const char *logName)
-{
-    const char *b;
-    int ret;
+LIBLOG_ABI_PUBLIC log_id_t android_name_to_log_id(const char* logName) {
+  const char* b;
+  int ret;
 
-    if (!logName) {
-        return -1; /* NB: log_id_t is unsigned */
-    }
-    b = strrchr(logName, '/');
-    if (!b) {
-        b = logName;
-    } else {
-        ++b;
-    }
+  if (!logName) {
+    return -1; /* NB: log_id_t is unsigned */
+  }
+  b = strrchr(logName, '/');
+  if (!b) {
+    b = logName;
+  } else {
+    ++b;
+  }
 
-    for(ret = LOG_ID_MIN; ret < LOG_ID_MAX; ++ret) {
-        const char *l = LOG_NAME[ret];
-        if (l && !strcmp(b, l)) {
-            return ret;
-        }
+  for (ret = LOG_ID_MIN; ret < LOG_ID_MAX; ++ret) {
+    const char* l = LOG_NAME[ret];
+    if (l && !strcmp(b, l)) {
+      return ret;
     }
-    return -1;   /* should never happen */
+  }
+  return -1; /* should never happen */
 }

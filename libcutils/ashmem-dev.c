@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -50,7 +51,7 @@ static int __ashmem_open_locked()
     int ret;
     struct stat st;
 
-    int fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR));
+    int fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR | O_CLOEXEC));
     if (fd < 0) {
         return fd;
     }

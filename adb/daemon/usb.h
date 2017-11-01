@@ -20,12 +20,16 @@
 #include <condition_variable>
 #include <mutex>
 
-// Writes larger than 16k fail on some devices (seed with 3.10.49-g209ea2f in particular).
-#define USB_FFS_MAX_WRITE 16384
+#include <asyncio/AsyncIO.h>
 
-// The kernel allocates a contiguous buffer for reads, which can fail for large ones due to
-// fragmentation. 16k chosen arbitrarily to match the write limit.
-#define USB_FFS_MAX_READ 16384
+struct aio_block {
+    std::vector<struct iocb> iocb;
+    std::vector<struct iocb*> iocbs;
+    std::vector<struct io_event> events;
+    aio_context_t ctx;
+    int num_submitted;
+    int fd;
+};
 
 struct usb_handle {
     usb_handle() : kicked(false) {
@@ -45,6 +49,12 @@ struct usb_handle {
     int control = -1;
     int bulk_out = -1; /* "out" from the host's perspective => source for adbd */
     int bulk_in = -1;  /* "in" from the host's perspective => sink for adbd */
+
+    // Access to these blocks is very not thread safe. Have one block for both the
+    // read and write threads.
+    struct aio_block read_aiob;
+    struct aio_block write_aiob;
+
+    int max_rw;
 };
 
-bool init_functionfs(struct usb_handle* h);

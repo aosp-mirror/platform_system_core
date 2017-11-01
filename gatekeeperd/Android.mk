@@ -33,7 +33,12 @@ LOCAL_SHARED_LIBRARIES := \
 	libbase \
 	libutils \
 	libcrypto \
-	libkeystore_binder
+	libkeystore_binder \
+	libhidlbase \
+	libhidltransport \
+	libhwbinder \
+	android.hardware.gatekeeper@1.0 \
+
 LOCAL_STATIC_LIBRARIES := libscrypt_static
 LOCAL_C_INCLUDES := external/scrypt/lib/crypto
 LOCAL_INIT_RC := gatekeeperd.rc

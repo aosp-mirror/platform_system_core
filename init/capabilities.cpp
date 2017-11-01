@@ -25,6 +25,9 @@
 
 #define CAP_MAP_ENTRY(cap) { #cap, CAP_##cap }
 
+namespace android {
+namespace init {
+
 static const std::map<std::string, int> cap_map = {
     CAP_MAP_ENTRY(CHOWN),
     CAP_MAP_ENTRY(DAC_OVERRIDE),
@@ -104,17 +107,15 @@ static bool DropBoundingSet(const CapSet& to_keep) {
 }
 
 static bool SetProcCaps(const CapSet& to_keep, bool add_setpcap) {
-    cap_t caps = cap_init();
-    auto deleter = [](cap_t* p) { cap_free(*p); };
-    std::unique_ptr<cap_t, decltype(deleter)> ptr_caps(&caps, deleter);
+    ScopedCaps caps(cap_init());
 
-    cap_clear(caps);
+    cap_clear(caps.get());
     cap_value_t value[1];
     for (size_t cap = 0; cap < to_keep.size(); ++cap) {
         if (to_keep.test(cap)) {
             value[0] = cap;
-            if (cap_set_flag(caps, CAP_INHERITABLE, arraysize(value), value, CAP_SET) != 0 ||
-                cap_set_flag(caps, CAP_PERMITTED, arraysize(value), value, CAP_SET) != 0) {
+            if (cap_set_flag(caps.get(), CAP_INHERITABLE, arraysize(value), value, CAP_SET) != 0 ||
+                cap_set_flag(caps.get(), CAP_PERMITTED, arraysize(value), value, CAP_SET) != 0) {
                 PLOG(ERROR) << "cap_set_flag(INHERITABLE|PERMITTED, " << cap << ") failed";
                 return false;
             }
@@ -123,14 +124,14 @@ static bool SetProcCaps(const CapSet& to_keep, bool add_setpcap) {
 
     if (add_setpcap) {
         value[0] = CAP_SETPCAP;
-        if (cap_set_flag(caps, CAP_PERMITTED, arraysize(value), value, CAP_SET) != 0 ||
-            cap_set_flag(caps, CAP_EFFECTIVE, arraysize(value), value, CAP_SET) != 0) {
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, arraysize(value), value, CAP_SET) != 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, arraysize(value), value, CAP_SET) != 0) {
             PLOG(ERROR) << "cap_set_flag(PERMITTED|EFFECTIVE, " << CAP_SETPCAP << ") failed";
             return false;
         }
     }
 
-    if (cap_set_proc(caps) != 0) {
+    if (cap_set_proc(caps.get()) != 0) {
         PLOG(ERROR) << "cap_set_proc(" << to_keep.to_ulong() << ") failed";
         return false;
     }
@@ -192,3 +193,6 @@ bool SetCapsForExec(const CapSet& to_keep) {
     // See http://man7.org/linux/man-pages/man7/capabilities.7.html.
     return SetAmbientCaps(to_keep);
 }
+
+}  // namespace init
+}  // namespace android

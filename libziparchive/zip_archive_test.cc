@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "zip_archive_private.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -38,23 +40,17 @@ static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
 static const std::string kLargeZip = "large.zip";
 static const std::string kBadCrcZip = "bad_crc.zip";
+static const std::string kCrashApk = "crash.apk";
+static const std::string kBadFilenameZip = "bad_filename.zip";
 static const std::string kUpdateZip = "dummy-update.zip";
 
-static const std::vector<uint8_t> kATxtContents {
-  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
-  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
-  '\n'
-};
+static const std::vector<uint8_t> kATxtContents{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'a',
+                                                'b', 'c', 'd', 'e', 'f', 'g', 'h', '\n'};
 
-static const std::vector<uint8_t> kATxtContentsCompressed {
-  'K', 'L', 'J', 'N', 'I', 'M', 'K', 207, 'H',
-  132, 210, '\\', '\0'
-};
+static const std::vector<uint8_t> kATxtContentsCompressed{'K', 'L', 'J', 'N', 'I',  'M', 'K',
+                                                          207, 'H', 132, 210, '\\', '\0'};
 
-static const std::vector<uint8_t> kBTxtContents {
-  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
-  '\n'
-};
+static const std::vector<uint8_t> kBTxtContents{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', '\n'};
 
 static const std::string kATxtName("a.txt");
 static const std::string kBTxtName("b.txt");
@@ -63,14 +59,12 @@ static const std::string kEmptyTxtName("empty.txt");
 static const std::string kLargeCompressTxtName("compress.txt");
 static const std::string kLargeUncompressTxtName("uncompress.txt");
 
-static int32_t OpenArchiveWrapper(const std::string& name,
-                                  ZipArchiveHandle* handle) {
+static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* handle) {
   const std::string abs_path = test_data_dir + "/" + name;
   return OpenArchive(abs_path.c_str(), handle);
 }
 
-static void AssertNameEquals(const std::string& name_str,
-                             const ZipString& name) {
+static void AssertNameEquals(const std::string& name_str, const ZipString& name) {
   ASSERT_EQ(name_str.size(), name.name_length);
   ASSERT_EQ(0, memcmp(name_str.c_str(), name.name, name.name_length));
 }
@@ -83,7 +77,15 @@ static void SetZipString(ZipString* zip_str, const std::string& str) {
 TEST(ziparchive, Open) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+  CloseArchive(handle);
 
+  ASSERT_EQ(-1, OpenArchiveWrapper(kBadFilenameZip, &handle));
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, OutOfBound) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(-8, OpenArchiveWrapper(kCrashApk, &handle));
   CloseArchive(handle);
 }
 
@@ -333,47 +335,36 @@ TEST(ziparchive, ExtractToMemory) {
 }
 
 static const uint32_t kEmptyEntriesZip[] = {
-      0x04034b50, 0x0000000a, 0x63600000, 0x00004438, 0x00000000, 0x00000000,
-      0x00090000, 0x6d65001c, 0x2e797470, 0x55747874, 0x03000954, 0x52e25c13,
-      0x52e25c24, 0x000b7875, 0x42890401, 0x88040000, 0x50000013, 0x1e02014b,
-      0x00000a03, 0x60000000, 0x00443863, 0x00000000, 0x00000000, 0x09000000,
-      0x00001800, 0x00000000, 0xa0000000, 0x00000081, 0x706d6500, 0x742e7974,
-      0x54557478, 0x13030005, 0x7552e25c, 0x01000b78, 0x00428904, 0x13880400,
-      0x4b500000, 0x00000605, 0x00010000, 0x004f0001, 0x00430000, 0x00000000 };
+    0x04034b50, 0x0000000a, 0x63600000, 0x00004438, 0x00000000, 0x00000000, 0x00090000,
+    0x6d65001c, 0x2e797470, 0x55747874, 0x03000954, 0x52e25c13, 0x52e25c24, 0x000b7875,
+    0x42890401, 0x88040000, 0x50000013, 0x1e02014b, 0x00000a03, 0x60000000, 0x00443863,
+    0x00000000, 0x00000000, 0x09000000, 0x00001800, 0x00000000, 0xa0000000, 0x00000081,
+    0x706d6500, 0x742e7974, 0x54557478, 0x13030005, 0x7552e25c, 0x01000b78, 0x00428904,
+    0x13880400, 0x4b500000, 0x00000605, 0x00010000, 0x004f0001, 0x00430000, 0x00000000};
 
 // This is a zip file containing a single entry (ab.txt) that contains
 // 90072 repetitions of the string "ab\n" and has an uncompressed length
 // of 270216 bytes.
 static const uint16_t kAbZip[] = {
-  0x4b50, 0x0403, 0x0014, 0x0000, 0x0008, 0x51d2, 0x4698, 0xc4b0,
-  0x2cda, 0x011b, 0x0000, 0x1f88, 0x0004, 0x0006, 0x001c, 0x6261,
-  0x742e, 0x7478, 0x5455, 0x0009, 0x7c03, 0x3a09, 0x7c55, 0x3a09,
-  0x7555, 0x0b78, 0x0100, 0x8904, 0x0042, 0x0400, 0x1388, 0x0000,
-  0xc2ed, 0x0d31, 0x0000, 0x030c, 0x7fa0, 0x3b2e, 0x22ff, 0xa2aa,
-  0x841f, 0x45fc, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
-  0x5555, 0x5555, 0x5555, 0x5555, 0xdd55, 0x502c, 0x014b, 0x1e02,
-  0x1403, 0x0000, 0x0800, 0xd200, 0x9851, 0xb046, 0xdac4, 0x1b2c,
-  0x0001, 0x8800, 0x041f, 0x0600, 0x1800, 0x0000, 0x0000, 0x0100,
-  0x0000, 0xa000, 0x0081, 0x0000, 0x6100, 0x2e62, 0x7874, 0x5574,
-  0x0554, 0x0300, 0x097c, 0x553a, 0x7875, 0x000b, 0x0401, 0x4289,
-  0x0000, 0x8804, 0x0013, 0x5000, 0x054b, 0x0006, 0x0000, 0x0100,
-  0x0100, 0x4c00, 0x0000, 0x5b00, 0x0001, 0x0000, 0x0000
-};
+    0x4b50, 0x0403, 0x0014, 0x0000, 0x0008, 0x51d2, 0x4698, 0xc4b0, 0x2cda, 0x011b, 0x0000, 0x1f88,
+    0x0004, 0x0006, 0x001c, 0x6261, 0x742e, 0x7478, 0x5455, 0x0009, 0x7c03, 0x3a09, 0x7c55, 0x3a09,
+    0x7555, 0x0b78, 0x0100, 0x8904, 0x0042, 0x0400, 0x1388, 0x0000, 0xc2ed, 0x0d31, 0x0000, 0x030c,
+    0x7fa0, 0x3b2e, 0x22ff, 0xa2aa, 0x841f, 0x45fc, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+    0x5555, 0x5555, 0x5555, 0x5555, 0xdd55, 0x502c, 0x014b, 0x1e02, 0x1403, 0x0000, 0x0800, 0xd200,
+    0x9851, 0xb046, 0xdac4, 0x1b2c, 0x0001, 0x8800, 0x041f, 0x0600, 0x1800, 0x0000, 0x0000, 0x0100,
+    0x0000, 0xa000, 0x0081, 0x0000, 0x6100, 0x2e62, 0x7874, 0x5574, 0x0554, 0x0300, 0x097c, 0x553a,
+    0x7875, 0x000b, 0x0401, 0x4289, 0x0000, 0x8804, 0x0013, 0x5000, 0x054b, 0x0006, 0x0000, 0x0100,
+    0x0100, 0x4c00, 0x0000, 0x5b00, 0x0001, 0x0000, 0x0000};
 
 static const std::string kAbTxtName("ab.txt");
 static const size_t kAbUncompressedSize = 270216;
@@ -394,7 +385,6 @@ TEST(ziparchive, EmptyEntries) {
   uint8_t buffer[1];
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
 
-
   TemporaryFile tmp_output_file;
   ASSERT_NE(-1, tmp_output_file.fd);
   ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_output_file.fd));
@@ -408,7 +398,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   TemporaryFile tmp_file;
   ASSERT_NE(-1, tmp_file.fd);
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, reinterpret_cast<const uint8_t*>(kAbZip),
-                         sizeof(kAbZip) - 1));
+                                        sizeof(kAbZip) - 1));
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle));
 
@@ -436,8 +426,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   // the same as the memory buffer we extracted directly to.
   std::vector<uint8_t> file_contents(kAbUncompressedSize);
   ASSERT_EQ(0, lseek64(tmp_output_file.fd, 0, SEEK_SET));
-  ASSERT_TRUE(android::base::ReadFully(tmp_output_file.fd, &file_contents[0],
-                                       file_contents.size()));
+  ASSERT_TRUE(android::base::ReadFully(tmp_output_file.fd, &file_contents[0], file_contents.size()));
   ASSERT_EQ(file_contents, buffer);
 
   for (int i = 0; i < 90072; ++i) {
@@ -453,7 +442,7 @@ TEST(ziparchive, TrailerAfterEOCD) {
   ASSERT_NE(-1, tmp_file.fd);
 
   // Create a file with 8 bytes of random garbage.
-  static const uint8_t trailer[] = { 'A' ,'n', 'd', 'r', 'o', 'i', 'd', 'z' };
+  static const uint8_t trailer[] = {'A', 'n', 'd', 'r', 'o', 'i', 'd', 'z'};
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, kEmptyEntriesZip, sizeof(kEmptyEntriesZip)));
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, trailer, sizeof(trailer)));
 
@@ -464,7 +453,7 @@ TEST(ziparchive, TrailerAfterEOCD) {
 TEST(ziparchive, ExtractToFile) {
   TemporaryFile tmp_file;
   ASSERT_NE(-1, tmp_file.fd);
-  const uint8_t data[8] = { '1', '2', '3', '4', '5', '6', '7', '8' };
+  const uint8_t data[8] = {'1', '2', '3', '4', '5', '6', '7', '8'};
   const size_t data_size = sizeof(data);
 
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, data, data_size));
@@ -478,7 +467,6 @@ TEST(ziparchive, ExtractToFile) {
   ASSERT_EQ(0, FindEntry(handle, name, &entry));
   ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_file.fd));
 
-
   // Assert that the first 8 bytes of the file haven't been clobbered.
   uint8_t read_buffer[data_size];
   ASSERT_EQ(0, lseek64(tmp_file.fd, 0, SEEK_SET));
@@ -487,10 +475,9 @@ TEST(ziparchive, ExtractToFile) {
 
   // Assert that the remainder of the file contains the incompressed data.
   std::vector<uint8_t> uncompressed_data(entry.uncompressed_length);
-  ASSERT_TRUE(android::base::ReadFully(tmp_file.fd, uncompressed_data.data(),
-                                       entry.uncompressed_length));
-  ASSERT_EQ(0, memcmp(&uncompressed_data[0], kATxtContents.data(),
-                      kATxtContents.size()));
+  ASSERT_TRUE(
+      android::base::ReadFully(tmp_file.fd, uncompressed_data.data(), entry.uncompressed_length));
+  ASSERT_EQ(0, memcmp(&uncompressed_data[0], kATxtContents.data(), kATxtContents.size()));
 
   // Assert that the total length of the file is sane
   ASSERT_EQ(static_cast<ssize_t>(data_size + kATxtContents.size()),
@@ -507,7 +494,7 @@ TEST(ziparchive, OpenFromMemory) {
 
   // Memory map the file first and open the archive from the memory region.
   android::FileMap file_map;
-  file_map.create(zip_path.c_str(), fd, 0/*offset*/, sb.st_size, true);
+  file_map.create(zip_path.c_str(), fd, 0 /*offset*/, sb.st_size, true);
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFromMemory(file_map.getDataPtr(), file_map.getDataLength(),
                                      zip_path.c_str(), &handle));
@@ -523,9 +510,8 @@ TEST(ziparchive, OpenFromMemory) {
 }
 #endif
 
-static void ZipArchiveStreamTest(
-    ZipArchiveHandle& handle, const std::string& entry_name, bool raw,
-    bool verified, ZipEntry* entry, std::vector<uint8_t>* read_data) {
+static void ZipArchiveStreamTest(ZipArchiveHandle& handle, const std::string& entry_name, bool raw,
+                                 bool verified, ZipEntry* entry, std::vector<uint8_t>* read_data) {
   ZipString name;
   SetZipString(&name, entry_name);
   ASSERT_EQ(0, FindEntry(handle, name, entry));
@@ -554,9 +540,9 @@ static void ZipArchiveStreamTest(
   ASSERT_EQ(total_size, read_data->size());
 }
 
-static void ZipArchiveStreamTestUsingContents(
-    const std::string& zip_file, const std::string& entry_name,
-    const std::vector<uint8_t>& contents, bool raw) {
+static void ZipArchiveStreamTestUsingContents(const std::string& zip_file,
+                                              const std::string& entry_name,
+                                              const std::vector<uint8_t>& contents, bool raw) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(zip_file, &handle));
 
@@ -570,7 +556,8 @@ static void ZipArchiveStreamTestUsingContents(
   CloseArchive(handle);
 }
 
-static void ZipArchiveStreamTestUsingMemory(const std::string& zip_file, const std::string& entry_name) {
+static void ZipArchiveStreamTestUsingMemory(const std::string& zip_file,
+                                            const std::string& entry_name) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(zip_file, &handle));
 
@@ -632,13 +619,196 @@ TEST(ziparchive, StreamUncompressedBadCrc) {
   CloseArchive(handle);
 }
 
+// Generated using the following Java program:
+//     public static void main(String[] foo) throws Exception {
+//       FileOutputStream fos = new
+//       FileOutputStream("/tmp/data_descriptor.zip");
+//       ZipOutputStream zos = new ZipOutputStream(fos);
+//       ZipEntry ze = new ZipEntry("name");
+//       ze.setMethod(ZipEntry.DEFLATED);
+//       zos.putNextEntry(ze);
+//       zos.write("abdcdefghijk".getBytes());
+//       zos.closeEntry();
+//       zos.close();
+//     }
+//
+// cat /tmp/data_descriptor.zip | xxd -i
+//
+static const std::vector<uint8_t> kDataDescriptorZipFile{
+    0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x08, 0x08, 0x08, 0x00, 0x30, 0x59, 0xce, 0x4a, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6e, 0x61,
+    0x6d, 0x65, 0x4b, 0x4c, 0x4a, 0x49, 0x4e, 0x49, 0x4d, 0x4b, 0xcf, 0xc8, 0xcc, 0xca, 0x06, 0x00,
+    //[sig---------------], [crc32---------------], [csize---------------], [size----------------]
+    0x50, 0x4b, 0x07, 0x08, 0x3d, 0x4e, 0x0e, 0xf9, 0x0e, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00,
+    0x50, 0x4b, 0x01, 0x02, 0x14, 0x00, 0x14, 0x00, 0x08, 0x08, 0x08, 0x00, 0x30, 0x59, 0xce, 0x4a,
+    0x3d, 0x4e, 0x0e, 0xf9, 0x0e, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6e, 0x61,
+    0x6d, 0x65, 0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x32, 0x00,
+    0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+// The offsets of the data descriptor in this file, so we can mess with
+// them later in the test.
+static constexpr uint32_t kDataDescriptorOffset = 48;
+static constexpr uint32_t kCSizeOffset = kDataDescriptorOffset + 8;
+static constexpr uint32_t kSizeOffset = kCSizeOffset + 4;
+
+static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
+                                 std::vector<uint8_t>* entry_out, int32_t* error_code_out) {
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &zip_data[0], zip_data.size()));
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "ExtractEntryToMemory", &handle));
+
+  // This function expects a variant of kDataDescriptorZipFile, for look for
+  // an entry whose name is "name" and whose size is 12 (contents =
+  // "abdcdefghijk").
+  ZipEntry entry;
+  ZipString empty_name;
+  SetZipString(&empty_name, "name");
+
+  ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
+  ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
+
+  entry_out->resize(12);
+  (*error_code_out) = ExtractToMemory(handle, &entry, &((*entry_out)[0]), 12);
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, ValidDataDescriptors) {
+  std::vector<uint8_t> entry;
+  int32_t error_code = 0;
+  ExtractEntryToMemory(kDataDescriptorZipFile, &entry, &error_code);
+
+  ASSERT_EQ(0, error_code);
+  ASSERT_EQ(12u, entry.size());
+  ASSERT_EQ('a', entry[0]);
+  ASSERT_EQ('k', entry[11]);
+}
+
+TEST(ziparchive, InvalidDataDescriptors) {
+  std::vector<uint8_t> invalid_csize = kDataDescriptorZipFile;
+  invalid_csize[kCSizeOffset] = 0xfe;
+
+  std::vector<uint8_t> entry;
+  int32_t error_code = 0;
+  ExtractEntryToMemory(invalid_csize, &entry, &error_code);
+
+  ASSERT_EQ(kInconsistentInformation, error_code);
+
+  std::vector<uint8_t> invalid_size = kDataDescriptorZipFile;
+  invalid_csize[kSizeOffset] = 0xfe;
+
+  error_code = 0;
+  entry.clear();
+  ExtractEntryToMemory(invalid_csize, &entry, &error_code);
+
+  ASSERT_EQ(kInconsistentInformation, error_code);
+}
+
+TEST(ziparchive, ErrorCodeString) {
+  ASSERT_STREQ("Success", ErrorCodeString(0));
+
+  // Out of bounds.
+  ASSERT_STREQ("Unknown return code", ErrorCodeString(1));
+  ASSERT_STREQ("Unknown return code", ErrorCodeString(-13));
+
+  ASSERT_STREQ("I/O error", ErrorCodeString(kIoError));
+}
+
+class VectorReader : public zip_archive::Reader {
+ public:
+  VectorReader(const std::vector<uint8_t>& input) : Reader(), input_(input) {}
+
+  bool ReadAtOffset(uint8_t* buf, size_t len, uint32_t offset) const {
+    if ((offset + len) < input_.size()) {
+      return false;
+    }
+
+    memcpy(buf, &input_[offset], len);
+    return true;
+  }
+
+ private:
+  const std::vector<uint8_t>& input_;
+};
+
+class VectorWriter : public zip_archive::Writer {
+ public:
+  VectorWriter() : Writer() {}
+
+  bool Append(uint8_t* buf, size_t size) {
+    output_.insert(output_.end(), buf, buf + size);
+    return true;
+  }
+
+  std::vector<uint8_t>& GetOutput() { return output_; }
+
+ private:
+  std::vector<uint8_t> output_;
+};
+
+class BadReader : public zip_archive::Reader {
+ public:
+  BadReader() : Reader() {}
+
+  bool ReadAtOffset(uint8_t*, size_t, uint32_t) const { return false; }
+};
+
+class BadWriter : public zip_archive::Writer {
+ public:
+  BadWriter() : Writer() {}
+
+  bool Append(uint8_t*, size_t) { return false; }
+};
+
+TEST(ziparchive, Inflate) {
+  const uint32_t compressed_length = kATxtContentsCompressed.size();
+  const uint32_t uncompressed_length = kATxtContents.size();
+
+  const VectorReader reader(kATxtContentsCompressed);
+  {
+    VectorWriter writer;
+    uint64_t crc_out = 0;
+
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, &crc_out);
+    ASSERT_EQ(0, ret);
+    ASSERT_EQ(kATxtContents, writer.GetOutput());
+    ASSERT_EQ(0x950821C5u, crc_out);
+  }
+
+  {
+    VectorWriter writer;
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, nullptr);
+    ASSERT_EQ(0, ret);
+    ASSERT_EQ(kATxtContents, writer.GetOutput());
+  }
+
+  {
+    BadWriter writer;
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, nullptr);
+    ASSERT_EQ(kIoError, ret);
+  }
+
+  {
+    BadReader reader;
+    VectorWriter writer;
+    int32_t ret =
+        zip_archive::Inflate(reader, compressed_length, uncompressed_length, &writer, nullptr);
+    ASSERT_EQ(kIoError, ret);
+    ASSERT_EQ(0u, writer.GetOutput().size());
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
-  static struct option options[] = {
-    { "test_data_dir", required_argument, nullptr, 't' },
-    { nullptr, 0, nullptr, 0 }
-  };
+  static struct option options[] = {{"test_data_dir", required_argument, nullptr, 't'},
+                                    {nullptr, 0, nullptr, 0}};
 
   while (true) {
     int option_index;

@@ -35,16 +35,6 @@ extern "C" {
 struct memtrack_proc;
 
 /**
- * memtrack_init
- *
- * Must be called once before calling any other functions.  After this function
- * is called, everything else is thread-safe.
- *
- * Returns 0 on success, -errno on error.
- */
-int memtrack_init(void);
-
-/**
  * memtrack_proc_new
  *
  * Return a new handle to hold process memory stats.

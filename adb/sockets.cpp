@@ -32,7 +32,7 @@
 
 #if !ADB_HOST
 #include <android-base/properties.h>
-#include <private/android_logger.h>
+#include <log/log_properties.h>
 #endif
 
 #include "adb.h"
@@ -96,7 +96,7 @@ void install_local_socket(asocket* s) {
 }
 
 void remove_socket(asocket* s) {
-    // socket_list_lock should already be held
+    std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
     if (s->prev && s->next) {
         s->prev->next = s->next;
         s->next->prev = s->prev;
@@ -430,10 +430,11 @@ asocket* create_local_service_socket(const char* name, const atransport* transpo
 }
 
 #if ADB_HOST
-static asocket* create_host_service_socket(const char* name, const char* serial) {
+static asocket* create_host_service_socket(const char* name, const char* serial,
+                                           TransportId transport_id) {
     asocket* s;
 
-    s = host_service_to_socket(name, serial);
+    s = host_service_to_socket(name, serial, transport_id);
 
     if (s != NULL) {
         D("LS(%d) bound to '%s'", s->id, name);
@@ -658,6 +659,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
 #if ADB_HOST
     char* service = nullptr;
     char* serial = nullptr;
+    TransportId transport_id = 0;
     TransportType type = kTransportAny;
 #endif
 
@@ -686,7 +688,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
     }
 
     len = unhex(p->data, 4);
-    if ((len < 1) || (len > MAX_PAYLOAD_V1)) {
+    if ((len < 1) || (len > MAX_PAYLOAD)) {
         D("SS(%d): bad size (%d)", s->id, len);
         goto fail;
     }
@@ -715,6 +717,14 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
             serial = service;
             service = serial_end + 1;
         }
+    } else if (!strncmp(service, "host-transport-id:", strlen("host-transport-id:"))) {
+        service += strlen("host-transport-id:");
+        transport_id = strtoll(service, &service, 10);
+
+        if (*service != ':') {
+            return -1;
+        }
+        service++;
     } else if (!strncmp(service, "host-usb:", strlen("host-usb:"))) {
         type = kTransportUsb;
         service += strlen("host-usb:");
@@ -736,7 +746,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
         ** the OKAY or FAIL message and all we have to do
         ** is clean up.
         */
-        if (handle_host_request(service, type, serial, s->peer->fd, s) == 0) {
+        if (handle_host_request(service, type, serial, transport_id, s->peer->fd, s) == 0) {
             /* XXX fail message? */
             D("SS(%d): handled host service '%s'", s->id, service);
             goto fail;
@@ -751,7 +761,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
         ** if no such service exists, we'll fail out
         ** and tear down here.
         */
-        s2 = create_host_service_socket(service, serial);
+        s2 = create_host_service_socket(service, serial, transport_id);
         if (s2 == 0) {
             D("SS(%d): couldn't create host service '%s'", s->id, service);
             SendFail(s->peer->fd, "unknown host service");
@@ -783,7 +793,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
 #else /* !ADB_HOST */
     if (s->transport == nullptr) {
         std::string error_msg = "unknown failure";
-        s->transport = acquire_one_transport(kTransportAny, nullptr, nullptr, &error_msg);
+        s->transport = acquire_one_transport(kTransportAny, nullptr, 0, nullptr, &error_msg);
         if (s->transport == nullptr) {
             SendFail(s->peer->fd, error_msg);
             goto fail;
@@ -794,7 +804,7 @@ static int smart_socket_enqueue(asocket* s, apacket* p) {
     if (!s->transport) {
         SendFail(s->peer->fd, "device offline (no transport)");
         goto fail;
-    } else if (s->transport->connection_state == kCsOffline) {
+    } else if (s->transport->GetConnectionState() == kCsOffline) {
         /* if there's no remote we fail the connection
          ** right here and terminate it
          */

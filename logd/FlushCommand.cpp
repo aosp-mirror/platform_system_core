@@ -26,20 +26,16 @@
 #include "LogTimes.h"
 #include "LogUtils.h"
 
-FlushCommand::FlushCommand(LogReader &reader,
-                           bool nonBlock,
-                           unsigned long tail,
-                           unsigned int logMask,
-                           pid_t pid,
-                           uint64_t start,
-                           uint64_t timeout) :
-        mReader(reader),
-        mNonBlock(nonBlock),
-        mTail(tail),
-        mLogMask(logMask),
-        mPid(pid),
-        mStart(start),
-        mTimeout((start > 1) ? timeout : 0) {
+FlushCommand::FlushCommand(LogReader& reader, bool nonBlock, unsigned long tail,
+                           unsigned int logMask, pid_t pid, log_time start,
+                           uint64_t timeout)
+    : mReader(reader),
+      mNonBlock(nonBlock),
+      mTail(tail),
+      mLogMask(logMask),
+      mPid(pid),
+      mStart(start),
+      mTimeout((start != log_time::EPOCH) ? timeout : 0) {
 }
 
 // runSocketCommand is called once for every open client on the
@@ -48,21 +44,31 @@ FlushCommand::FlushCommand(LogReader &reader,
 // LogTimeEntrys, and spawn a transitory per-client thread to
 // work at filing data to the  socket.
 //
-// global LogTimeEntry::lock() is used to protect access,
+// global LogTimeEntry::wrlock() is used to protect access,
 // reference counts are used to ensure that individual
 // LogTimeEntry lifetime is managed when not protected.
-void FlushCommand::runSocketCommand(SocketClient *client) {
-    LogTimeEntry *entry = NULL;
-    LastLogTimes &times = mReader.logbuf().mTimes;
+void FlushCommand::runSocketCommand(SocketClient* client) {
+    LogTimeEntry* entry = NULL;
+    LastLogTimes& times = mReader.logbuf().mTimes;
 
-    LogTimeEntry::lock();
+    LogTimeEntry::wrlock();
     LastLogTimes::iterator it = times.begin();
-    while(it != times.end()) {
+    while (it != times.end()) {
         entry = (*it);
         if (entry->mClient == client) {
             if (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec) {
-                LogTimeEntry::unlock();
-                return;
+                if (mReader.logbuf().isMonotonic()) {
+                    LogTimeEntry::unlock();
+                    return;
+                }
+                // If the user changes the time in a gross manner that
+                // invalidates the timeout, fall through and trigger.
+                log_time now(CLOCK_REALTIME);
+                if (((entry->mEnd + entry->mTimeout) > now) &&
+                    (now > entry->mEnd)) {
+                    LogTimeEntry::unlock();
+                    return;
+                }
             }
             entry->triggerReader_Locked();
             if (entry->runningReader_Locked()) {
@@ -77,7 +83,7 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
 
     if (it == times.end()) {
         // Create LogTimeEntry in notifyNewLog() ?
-        if (mTail == (unsigned long) -1) {
+        if (mTail == (unsigned long)-1) {
             LogTimeEntry::unlock();
             return;
         }
@@ -93,14 +99,14 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
     LogTimeEntry::unlock();
 }
 
-bool FlushCommand::hasReadLogs(SocketClient *client) {
+bool FlushCommand::hasReadLogs(SocketClient* client) {
     return clientHasLogCredentials(client);
 }
 
-static bool clientHasSecurityCredentials(SocketClient *client) {
+static bool clientHasSecurityCredentials(SocketClient* client) {
     return (client->getUid() == AID_SYSTEM) || (client->getGid() == AID_SYSTEM);
 }
 
-bool FlushCommand::hasSecurityLogs(SocketClient *client) {
+bool FlushCommand::hasSecurityLogs(SocketClient* client) {
     return clientHasSecurityCredentials(client);
 }

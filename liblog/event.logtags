@@ -29,6 +29,7 @@
 # 4: Number of allocations
 # 5: Id
 # 6: Percent
+# s: Number of seconds (monotonic time)
 # Default value for data of type int/long is 2 (bytes).
 #
 # TODO: generate ".java" and ".h" files with integer constants from this file.

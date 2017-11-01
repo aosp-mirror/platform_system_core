@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-#include "HeapWalker.h"
 #include "LeakFolding.h"
+#include "HeapWalker.h"
 
-#include <gtest/gtest.h>
 #include <ScopedDisableMalloc.h>
+#include <gtest/gtest.h>
 #include "Allocator.h"
+
+namespace android {
 
 class LeakFoldingTest : public ::testing::Test {
  public:
@@ -84,7 +86,7 @@ TEST_F(LeakFoldingTest, two) {
   ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(2U, num_leaks);
-  EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(2 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(2U, leaked.size());
   EXPECT_EQ(0U, leaked[0].referenced_count);
   EXPECT_EQ(0U, leaked[0].referenced_size);
@@ -113,7 +115,7 @@ TEST_F(LeakFoldingTest, dominator) {
   ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(2U, num_leaks);
-  EXPECT_EQ(2*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(2 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(1U, leaked.size());
   EXPECT_EQ(1U, leaked[0].referenced_count);
   EXPECT_EQ(sizeof(uintptr_t), leaked[0].referenced_size);
@@ -144,10 +146,10 @@ TEST_F(LeakFoldingTest, cycle) {
   ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(3U, num_leaks);
-  EXPECT_EQ(3*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(3 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(1U, leaked.size());
   EXPECT_EQ(2U, leaked[0].referenced_count);
-  EXPECT_EQ(2*sizeof(uintptr_t), leaked[0].referenced_size);
+  EXPECT_EQ(2 * sizeof(uintptr_t), leaked[0].referenced_size);
 }
 
 TEST_F(LeakFoldingTest, dominator_cycle) {
@@ -175,13 +177,13 @@ TEST_F(LeakFoldingTest, dominator_cycle) {
   ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(3U, num_leaks);
-  EXPECT_EQ(5*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(5 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(2U, leaked.size());
 
   EXPECT_EQ(2U, leaked[0].referenced_count);
-  EXPECT_EQ(3*sizeof(uintptr_t), leaked[0].referenced_size);
+  EXPECT_EQ(3 * sizeof(uintptr_t), leaked[0].referenced_size);
   EXPECT_EQ(2U, leaked[1].referenced_count);
-  EXPECT_EQ(3*sizeof(uintptr_t), leaked[1].referenced_size);
+  EXPECT_EQ(3 * sizeof(uintptr_t), leaked[1].referenced_size);
 }
 
 TEST_F(LeakFoldingTest, two_cycles) {
@@ -218,12 +220,12 @@ TEST_F(LeakFoldingTest, two_cycles) {
   ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(6U, num_leaks);
-  EXPECT_EQ(6*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(6 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(2U, leaked.size());
   EXPECT_EQ(2U, leaked[0].referenced_count);
-  EXPECT_EQ(2*sizeof(uintptr_t), leaked[0].referenced_size);
+  EXPECT_EQ(2 * sizeof(uintptr_t), leaked[0].referenced_size);
   EXPECT_EQ(2U, leaked[1].referenced_count);
-  EXPECT_EQ(2*sizeof(uintptr_t), leaked[1].referenced_size);
+  EXPECT_EQ(2 * sizeof(uintptr_t), leaked[1].referenced_size);
 }
 
 TEST_F(LeakFoldingTest, two_dominator_cycles) {
@@ -254,7 +256,7 @@ TEST_F(LeakFoldingTest, two_dominator_cycles) {
   ASSERT_EQ(true, folding.Leaked(leaked, &num_leaks, &leaked_bytes));
 
   EXPECT_EQ(4U, num_leaks);
-  EXPECT_EQ(4*sizeof(uintptr_t), leaked_bytes);
+  EXPECT_EQ(4 * sizeof(uintptr_t), leaked_bytes);
   ASSERT_EQ(4U, leaked.size());
   EXPECT_EQ(1U, leaked[0].referenced_count);
   EXPECT_EQ(sizeof(uintptr_t), leaked[0].referenced_size);
@@ -272,13 +274,13 @@ TEST_F(LeakFoldingTest, giant_dominator_cycle) {
 
   HeapWalker heap_walker(heap_);
 
-  for (size_t i = 0; i < n; i ++) {
+  for (size_t i = 0; i < n; i++) {
     ASSERT_TRUE(heap_walker.Allocation(reinterpret_cast<uintptr_t>(&buffer[i]),
-        reinterpret_cast<uintptr_t>(&buffer[i+1])));
+                                       reinterpret_cast<uintptr_t>(&buffer[i + 1])));
   }
 
   for (size_t i = 0; i < n - 1; i++) {
-    buffer[i] = &buffer[i+1];
+    buffer[i] = &buffer[i + 1];
   }
   buffer[n - 1] = &buffer[0];
 
@@ -306,15 +308,15 @@ TEST_F(LeakFoldingTest, giant_cycle) {
   HeapWalker heap_walker(heap_);
 
   for (size_t i = 0; i < n - 1; i++) {
-    buffer[i] = &buffer[i+1];
+    buffer[i] = &buffer[i + 1];
   }
   buffer[n - 1] = &buffer[0];
 
   buffer1[0] = &buffer[0];
 
-  for (size_t i = 0; i < n; i ++) {
+  for (size_t i = 0; i < n; i++) {
     ASSERT_TRUE(heap_walker.Allocation(reinterpret_cast<uintptr_t>(&buffer[i]),
-        reinterpret_cast<uintptr_t>(&buffer[i+1])));
+                                       reinterpret_cast<uintptr_t>(&buffer[i + 1])));
   }
 
   ALLOCATION(heap_walker, buffer1);
@@ -425,3 +427,5 @@ TEST_F(LeakFoldingTest, multicycle) {
   EXPECT_EQ(3U, leaked[3].referenced_count);
   EXPECT_EQ(6 * sizeof(uintptr_t), leaked[3].referenced_size);
 }
+
+}  // namespace android

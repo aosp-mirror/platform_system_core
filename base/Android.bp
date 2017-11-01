@@ -14,16 +14,36 @@
 // limitations under the License.
 //
 
-libbase_cppflags = [
-    "-Wall",
-    "-Wextra",
-    "-Werror",
-]
+cc_defaults {
+    name: "libbase_defaults",
+    cflags: ["-Wall", "-Werror", "-Wextra"],
+}
+
+cc_library_headers {
+    name: "libbase_headers",
+    vendor_available: true,
+    host_supported: true,
+    export_include_dirs: ["include"],
+
+    target: {
+        linux_bionic: {
+            enabled: true,
+        },
+        windows: {
+            enabled: true,
+        },
+    },
+}
 
 cc_library {
     name: "libbase",
-    clang: true,
+    defaults: ["libbase_defaults"],
+    vendor_available: true,
     host_supported: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
     srcs: [
         "file.cpp",
         "logging.cpp",
@@ -33,30 +53,39 @@ cc_library {
         "strings.cpp",
         "test_utils.cpp",
     ],
-    local_include_dirs: ["include"],
-    cppflags: libbase_cppflags,
-    export_include_dirs: ["include"],
+
+    header_libs: [
+        "libbase_headers",
+    ],
+    export_header_lib_headers: ["libbase_headers"],
+
     shared_libs: ["liblog"],
     target: {
         android: {
             srcs: [
-                "errors_unix.cpp",
                 "properties.cpp",
+            ],
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
+
+        },
+        linux: {
+            srcs: [
+                "chrono_utils.cpp",
+                "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
         },
         darwin: {
-            srcs: ["errors_unix.cpp"],
+            srcs: [
+                "chrono_utils.cpp",
+                "errors_unix.cpp",
+            ],
             cppflags: ["-Wexit-time-destructors"],
         },
         linux_bionic: {
-            srcs: ["errors_unix.cpp"],
-            cppflags: ["-Wexit-time-destructors"],
             enabled: true,
-        },
-        linux: {
-            srcs: ["errors_unix.cpp"],
-            cppflags: ["-Wexit-time-destructors"],
         },
         windows: {
             srcs: [
@@ -72,9 +101,10 @@ cc_library {
 // ------------------------------------------------------------------------------
 cc_test {
     name: "libbase_test",
+    defaults: ["libbase_defaults"],
     host_supported: true,
-    clang: true,
     srcs: [
+        "endian_test.cpp",
         "errors_test.cpp",
         "file_test.cpp",
         "logging_test.cpp",
@@ -82,6 +112,7 @@ cc_test {
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
         "quick_exit_test.cpp",
+        "scopeguard_test.cpp",
         "stringprintf_test.cpp",
         "strings_test.cpp",
         "test_main.cpp",
@@ -89,6 +120,12 @@ cc_test {
     target: {
         android: {
             srcs: ["properties_test.cpp"],
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
+        },
+        linux: {
+            srcs: ["chrono_utils_test.cpp"],
         },
         windows: {
             srcs: ["utf8_test.cpp"],
@@ -96,7 +133,6 @@ cc_test {
         },
     },
     local_include_dirs: ["."],
-    cppflags: libbase_cppflags,
     shared_libs: ["libbase"],
     compile_multilib: "both",
     multilib: {

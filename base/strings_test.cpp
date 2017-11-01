@@ -51,6 +51,14 @@ TEST(strings, split_with_empty_part) {
   ASSERT_EQ("bar", parts[2]);
 }
 
+TEST(strings, split_with_trailing_empty_part) {
+  std::vector<std::string> parts = android::base::Split("foo,bar,", ",");
+  ASSERT_EQ(3U, parts.size());
+  ASSERT_EQ("foo", parts[0]);
+  ASSERT_EQ("bar", parts[1]);
+  ASSERT_EQ("", parts[2]);
+}
+
 TEST(strings, split_null_char) {
   std::vector<std::string> parts =
       android::base::Split(std::string("foo\0bar", 7), std::string("\0", 1));
@@ -243,4 +251,15 @@ TEST(strings, EndsWith_contains_prefix) {
 TEST(strings, EndsWithIgnoreCase_contains_prefix) {
   ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "OBA"));
   ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "FOO"));
+}
+
+TEST(strings, EqualsIgnoreCase) {
+  ASSERT_TRUE(android::base::EqualsIgnoreCase("foo", "FOO"));
+  ASSERT_TRUE(android::base::EqualsIgnoreCase("FOO", "foo"));
+  ASSERT_FALSE(android::base::EqualsIgnoreCase("foo", "bar"));
+  ASSERT_FALSE(android::base::EqualsIgnoreCase("foo", "fool"));
+}
+
+TEST(strings, ubsan_28729303) {
+  android::base::Split("/dev/null", ":");
 }

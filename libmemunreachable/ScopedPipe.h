@@ -21,36 +21,32 @@
 
 #include "log.h"
 
+namespace android {
+
 class ScopedPipe {
  public:
   ScopedPipe() : pipefd_{-1, -1} {
     int ret = pipe2(pipefd_, O_CLOEXEC);
     if (ret < 0) {
-      LOG_ALWAYS_FATAL("failed to open pipe");
+      MEM_LOG_ALWAYS_FATAL("failed to open pipe");
     }
   }
-  ~ScopedPipe() {
-    Close();
-  }
+  ~ScopedPipe() { Close(); }
 
   ScopedPipe(ScopedPipe&& other) {
     SetReceiver(other.ReleaseReceiver());
     SetSender(other.ReleaseSender());
   }
 
-  ScopedPipe& operator = (ScopedPipe&& other) {
+  ScopedPipe& operator=(ScopedPipe&& other) {
     SetReceiver(other.ReleaseReceiver());
     SetSender(other.ReleaseSender());
     return *this;
   }
 
-  void CloseReceiver() {
-    close(ReleaseReceiver());
-  }
+  void CloseReceiver() { close(ReleaseReceiver()); }
 
-  void CloseSender() {
-    close(ReleaseSender());
-  }
+  void CloseSender() { close(ReleaseSender()); }
 
   void Close() {
     CloseReceiver();
@@ -78,4 +74,7 @@ class ScopedPipe {
 
   int pipefd_[2];
 };
+
+}  // namespace android
+
 #endif

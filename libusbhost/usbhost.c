@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 // #define DEBUG 1
 #if DEBUG
 
 #ifdef USE_LIBLOG
 #define LOG_TAG "usbhost"
-#include "utils/Log.h"
+#include "log/log.h"
 #define D ALOGD
 #else
 #define D printf
@@ -43,6 +47,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <ctype.h>
+#include <poll.h>
 #include <pthread.h>
 
 #include <linux/usbdevice_fs.h>
@@ -449,7 +454,7 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
     return (struct usb_device_descriptor*)device->desc;
 }
 
-char* usb_device_get_string(struct usb_device *device, int id)
+char* usb_device_get_string(struct usb_device *device, int id, int timeout)
 {
     char string[256];
     __u16 buffer[MAX_STRING_DESCRIPTOR_LENGTH / sizeof(__u16)];
@@ -465,7 +470,8 @@ char* usb_device_get_string(struct usb_device *device, int id)
     // read list of supported languages
     result = usb_device_control_transfer(device,
             USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-            (USB_DT_STRING << 8) | 0, 0, languages, sizeof(languages), 0);
+            (USB_DT_STRING << 8) | 0, 0, languages, sizeof(languages),
+            timeout);
     if (result > 0)
         languageCount = (result - 2) / 2;
 
@@ -474,7 +480,8 @@ char* usb_device_get_string(struct usb_device *device, int id)
 
         result = usb_device_control_transfer(device,
                 USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-                (USB_DT_STRING << 8) | id, languages[i], buffer, sizeof(buffer), 0);
+                (USB_DT_STRING << 8) | id, languages[i], buffer, sizeof(buffer),
+                timeout);
         if (result > 0) {
             int i;
             // skip first word, and copy the rest to the string, changing shorts to bytes.
@@ -489,16 +496,16 @@ char* usb_device_get_string(struct usb_device *device, int id)
     return NULL;
 }
 
-char* usb_device_get_manufacturer_name(struct usb_device *device)
+char* usb_device_get_manufacturer_name(struct usb_device *device, int timeout)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
-    return usb_device_get_string(device, desc->iManufacturer);
+    return usb_device_get_string(device, desc->iManufacturer, timeout);
 }
 
-char* usb_device_get_product_name(struct usb_device *device)
+char* usb_device_get_product_name(struct usb_device *device, int timeout)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
-    return usb_device_get_string(device, desc->iProduct);
+    return usb_device_get_string(device, desc->iProduct, timeout);
 }
 
 int usb_device_get_version(struct usb_device *device)
@@ -507,10 +514,10 @@ int usb_device_get_version(struct usb_device *device)
     return desc->bcdUSB;
 }
 
-char* usb_device_get_serial(struct usb_device *device)
+char* usb_device_get_serial(struct usb_device *device, int timeout)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
-    return usb_device_get_string(device, desc->iSerialNumber);
+    return usb_device_get_string(device, desc->iSerialNumber, timeout);
 }
 
 int usb_device_is_writeable(struct usb_device *device)
@@ -681,29 +688,38 @@ int usb_request_queue(struct usb_request *req)
     return res;
 }
 
-struct usb_request *usb_request_wait(struct usb_device *dev)
+struct usb_request *usb_request_wait(struct usb_device *dev, int timeoutMillis)
 {
-    struct usbdevfs_urb *urb = NULL;
-    struct usb_request *req = NULL;
+    // Poll until a request becomes available if there is a timeout
+    if (timeoutMillis > 0) {
+        struct pollfd p = {.fd = dev->fd, .events = POLLOUT, .revents = 0};
 
-    while (1) {
-        int res = ioctl(dev->fd, USBDEVFS_REAPURB, &urb);
-        D("USBDEVFS_REAPURB returned %d\n", res);
-        if (res < 0) {
-            if(errno == EINTR) {
-                continue;
-            }
-            D("[ reap urb - error ]\n");
+        int res = poll(&p, 1, timeoutMillis);
+
+        if (res != 1 || p.revents != POLLOUT) {
+            D("[ poll - event %d, error %d]\n", p.revents, errno);
             return NULL;
-        } else {
-            D("[ urb @%p status = %d, actual = %d ]\n",
-                urb, urb->status, urb->actual_length);
-            req = (struct usb_request*)urb->usercontext;
-            req->actual_length = urb->actual_length;
         }
-        break;
     }
-    return req;
+
+    // Read the request. This should usually succeed as we polled before, but it can fail e.g. when
+    // two threads are reading usb requests at the same time and only a single request is available.
+    struct usbdevfs_urb *urb = NULL;
+    int res = TEMP_FAILURE_RETRY(ioctl(dev->fd, timeoutMillis == -1 ? USBDEVFS_REAPURB :
+                                       USBDEVFS_REAPURBNDELAY, &urb));
+    D("%s returned %d\n", timeoutMillis == -1 ? "USBDEVFS_REAPURB" : "USBDEVFS_REAPURBNDELAY", res);
+
+    if (res < 0) {
+        D("[ reap urb - error %d]\n", errno);
+        return NULL;
+    } else {
+        D("[ urb @%p status = %d, actual = %d ]\n", urb, urb->status, urb->actual_length);
+
+        struct usb_request *req = (struct usb_request*)urb->usercontext;
+        req->actual_length = urb->actual_length;
+
+        return req;
+    }
 }
 
 int usb_request_cancel(struct usb_request *req)
@@ -711,4 +727,3 @@ int usb_request_cancel(struct usb_request *req)
     struct usbdevfs_urb *urb = ((struct usbdevfs_urb*)req->private_data);
     return ioctl(req->dev->fd, USBDEVFS_DISCARDURB, urb);
 }
-

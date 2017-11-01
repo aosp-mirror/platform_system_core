@@ -20,6 +20,8 @@
 #include <stddef.h>
 #include <stdint.h>  /* for int64_t */
 
+#include <functional>
+
 /* events that may be observed */
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
@@ -76,9 +78,15 @@ void fdevent_set_timeout(fdevent *fde, int64_t  timeout_ms);
 */
 void fdevent_loop();
 
+void check_main_thread();
+
+// Queue an operation to run on the main thread.
+void fdevent_run_on_main_thread(std::function<void()> fn);
+
 // The following functions are used only for tests.
 void fdevent_terminate_loop();
 size_t fdevent_installed_count();
 void fdevent_reset();
+void set_main_thread();
 
 #endif

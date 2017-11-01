@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/strings.h>
 
 #include "sysdeps.h"
@@ -46,7 +47,8 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
           invalid_lines_(),
           show_progress_(show_progress),
           status_(0),
-          line_() {
+          line_(),
+          last_progress_percentage_(0) {
         SetLineMessage("generating");
     }
 
@@ -65,6 +67,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
     void OnStderr(const char* buffer, int length) {
         OnStream(nullptr, stderr, buffer, length);
     }
+
     int Done(int unused_) {
         // Process remaining line, if any.
         ProcessLine(line_);
@@ -99,7 +102,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             std::vector<const char*> srcs{src_file_.c_str()};
             SetLineMessage("pulling");
             status_ =
-                br_->DoSyncPull(srcs, destination.c_str(), true, line_message_.c_str()) ? 0 : 1;
+                br_->DoSyncPull(srcs, destination.c_str(), false, line_message_.c_str()) ? 0 : 1;
             if (status_ != 0) {
                 fprintf(stderr,
                         "Bug report finished but could not be copied to '%s'.\n"
@@ -113,14 +116,14 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 
   private:
     void SetLineMessage(const std::string& action) {
-        line_message_ = action + " " + adb_basename(dest_file_);
+        line_message_ = action + " " + android::base::Basename(dest_file_);
     }
 
     void SetSrcFile(const std::string path) {
         src_file_ = path;
         if (!dest_dir_.empty()) {
             // Only uses device-provided name when user passed a directory.
-            dest_file_ = adb_basename(path);
+            dest_file_ = android::base::Basename(path);
             SetLineMessage("generating");
         }
     }
@@ -134,7 +137,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             SetSrcFile(&line[strlen(BUGZ_OK_PREFIX)]);
         } else if (android::base::StartsWith(line, BUGZ_FAIL_PREFIX)) {
             const char* error_message = &line[strlen(BUGZ_FAIL_PREFIX)];
-            fprintf(stderr, "Device failed to take a zipped bugreport: %s\n", error_message);
+            fprintf(stderr, "adb: device failed to take a zipped bugreport: %s\n", error_message);
             status_ = -1;
         } else if (show_progress_ && android::base::StartsWith(line, BUGZ_PROGRESS_PREFIX)) {
             // progress_line should have the following format:
@@ -145,7 +148,13 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             size_t idx2 = line.rfind(BUGZ_PROGRESS_SEPARATOR);
             int progress = std::stoi(line.substr(idx1, (idx2 - idx1)));
             int total = std::stoi(line.substr(idx2 + 1));
-            br_->UpdateProgress(line_message_, progress, total);
+            int progress_percentage = (progress * 100 / total);
+            if (progress_percentage != 0 && progress_percentage <= last_progress_percentage_) {
+                // Ignore.
+                return;
+            }
+            last_progress_percentage_ = progress_percentage;
+            br_->UpdateProgress(line_message_, progress_percentage);
         } else {
             invalid_lines_.push_back(line);
         }
@@ -179,19 +188,20 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
     // Temporary buffer containing the characters read since the last newline (\n).
     std::string line_;
 
+    // Last displayed progress.
+    // Since dumpstate progress can recede, only forward progress should be displayed
+    int last_progress_percentage_;
+
     DISALLOW_COPY_AND_ASSIGN(BugreportStandardStreamsCallback);
 };
 
-// Implemented in commandline.cpp
-int usage();
-
-int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, const char** argv) {
-    if (argc > 2) return usage();
+int Bugreport::DoIt(int argc, const char** argv) {
+    if (argc > 2) return syntax_error("adb bugreport [PATH]");
 
     // Gets bugreportz version.
     std::string bugz_stdout, bugz_stderr;
     DefaultStandardStreamsCallback version_callback(&bugz_stdout, &bugz_stderr);
-    int status = SendShellCommand(transport_type, serial, "bugreportz -v", false, &version_callback);
+    int status = SendShellCommand("bugreportz -v", false, &version_callback);
     std::string bugz_version = android::base::Trim(bugz_stderr);
     std::string bugz_output = android::base::Trim(bugz_stdout);
 
@@ -204,7 +214,7 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
             fprintf(stderr,
                     "Failed to get bugreportz version, which is only available on devices "
                     "running Android 7.0 or later.\nTrying a plain-text bug report instead.\n");
-            return SendShellCommand(transport_type, serial, "bugreport", false);
+            return SendShellCommand("bugreport", false);
         }
 
         // But if user explicitly asked for a zipped bug report, fails instead (otherwise calling
@@ -255,20 +265,18 @@ int Bugreport::DoIt(TransportType transport_type, const char* serial, int argc, 
         bugz_command = "bugreportz";
     }
     BugreportStandardStreamsCallback bugz_callback(dest_dir, dest_file, show_progress, this);
-    return SendShellCommand(transport_type, serial, bugz_command, false, &bugz_callback);
+    return SendShellCommand(bugz_command, false, &bugz_callback);
 }
 
-void Bugreport::UpdateProgress(const std::string& message, int progress, int total) {
-    int progress_percentage = (progress * 100 / total);
+void Bugreport::UpdateProgress(const std::string& message, int progress_percentage) {
     line_printer_.Print(
         android::base::StringPrintf("[%3d%%] %s", progress_percentage, message.c_str()),
         LinePrinter::INFO);
 }
 
-int Bugreport::SendShellCommand(TransportType transport_type, const char* serial,
-                                const std::string& command, bool disable_shell_protocol,
+int Bugreport::SendShellCommand(const std::string& command, bool disable_shell_protocol,
                                 StandardStreamsCallbackInterface* callback) {
-    return send_shell_command(transport_type, serial, command, disable_shell_protocol, callback);
+    return send_shell_command(command, disable_shell_protocol, callback);
 }
 
 bool Bugreport::DoSyncPull(const std::vector<const char*>& srcs, const char* dst, bool copy_attrs,

@@ -73,9 +73,14 @@ struct healthd_config {
     bool (*screen_on)(android::BatteryProperties *props);
 };
 
+enum EventWakeup {
+    EVENT_NO_WAKEUP_FD,
+    EVENT_WAKEUP_FD,
+};
+
 // Global helper functions
 
-int healthd_register_event(int fd, void (*handler)(uint32_t));
+int healthd_register_event(int fd, void (*handler)(uint32_t), EventWakeup wakeup = EVENT_NO_WAKEUP_FD);
 void healthd_battery_update();
 android::status_t healthd_get_property(int id,
     struct android::BatteryProperty *val);

@@ -19,272 +19,205 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <fts.h>
+#include <linux/loop.h>
+#include <linux/module.h>
 #include <mntent.h>
 #include <net/if.h>
-#include <signal.h>
 #include <sched.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/mount.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/system_properties.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <linux/loop.h>
-#include <linux/module.h>
 
-#include <string>
-#include <thread>
-
-#include <selinux/android.h>
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-
-#include <fs_mgr.h>
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/parseint.h>
-#include <android-base/strings.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
-#include <cutils/partition_utils.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/ext4_crypt.h>
 #include <ext4_utils/ext4_crypt_init_extensions.h>
-#include <logwrap/logwrap.h>
+#include <fs_mgr.h>
+#include <selinux/android.h>
+#include <selinux/label.h>
+#include <selinux/selinux.h>
+#include <system/thread_defs.h>
 
 #include "action.h"
 #include "bootchart.h"
-#include "devices.h"
 #include "init.h"
-#include "init_parser.h"
-#include "log.h"
+#include "parser.h"
 #include "property_service.h"
+#include "reboot.h"
+#include "rlimit_parser.h"
 #include "service.h"
-#include "signal_handler.h"
+#include "subcontext.h"
 #include "util.h"
 
 using namespace std::literals::string_literals;
 
+using android::base::unique_fd;
+
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
-#define UNMOUNT_CHECK_TIMES 10
+
+namespace android {
+namespace init {
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
-static int insmod(const char *filename, const char *options, int flags) {
-    int fd = open(filename, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    if (fd == -1) {
-        PLOG(ERROR) << "insmod: open(\"" << filename << "\") failed";
-        return -1;
-    }
-    int rc = syscall(__NR_finit_module, fd, options, flags);
-    if (rc == -1) {
-        PLOG(ERROR) << "finit_module for \"" << filename << "\" failed";
-    }
-    close(fd);
-    return rc;
-}
-
-static int __ifupdown(const char *interface, int up) {
-    struct ifreq ifr;
-    int s, ret;
-
-    strlcpy(ifr.ifr_name, interface, IFNAMSIZ);
-
-    s = socket(AF_INET, SOCK_DGRAM, 0);
-    if (s < 0)
-        return -1;
-
-    ret = ioctl(s, SIOCGIFFLAGS, &ifr);
-    if (ret < 0) {
-        goto done;
-    }
-
-    if (up)
-        ifr.ifr_flags |= IFF_UP;
-    else
-        ifr.ifr_flags &= ~IFF_UP;
-
-    ret = ioctl(s, SIOCSIFFLAGS, &ifr);
-
-done:
-    close(s);
-    return ret;
-}
-
-// Turn off backlight while we are performing power down cleanup activities.
-static void turnOffBacklight() {
-    static const char off[] = "0";
-
-    android::base::WriteStringToFile(off, "/sys/class/leds/lcd-backlight/brightness");
-
-    static const char backlightDir[] = "/sys/class/backlight";
-    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(backlightDir), closedir);
-    if (!dir) {
-        return;
-    }
-
-    struct dirent *dp;
-    while ((dp = readdir(dir.get())) != NULL) {
-        if (((dp->d_type != DT_DIR) && (dp->d_type != DT_LNK)) ||
-                (dp->d_name[0] == '.')) {
-            continue;
-        }
-
-        std::string fileName = android::base::StringPrintf("%s/%s/brightness",
-                                                           backlightDir,
-                                                           dp->d_name);
-        android::base::WriteStringToFile(off, fileName);
-    }
-}
-
-static int reboot_into_recovery(const std::vector<std::string>& options) {
+static Result<Success> reboot_into_recovery(const std::vector<std::string>& options) {
     std::string err;
     if (!write_bootloader_message(options, &err)) {
-        LOG(ERROR) << "failed to set bootloader message: " << err;
-        return -1;
+        return Error() << "Failed to set bootloader message: " << err;
     }
-    reboot("recovery");
+    property_set("sys.powerctl", "reboot,recovery");
+    return Success();
 }
 
-static void unmount_and_fsck(const struct mntent *entry) {
-    if (strcmp(entry->mnt_type, "f2fs") && strcmp(entry->mnt_type, "ext4"))
-        return;
-
-    /* First, lazily unmount the directory. This unmount request finishes when
-     * all processes that open a file or directory in |entry->mnt_dir| exit.
-     */
-    TEMP_FAILURE_RETRY(umount2(entry->mnt_dir, MNT_DETACH));
-
-    /* Next, kill all processes except init, kthreadd, and kthreadd's
-     * children to finish the lazy unmount. Killing all processes here is okay
-     * because this callback function is only called right before reboot().
-     * It might be cleaner to selectively kill processes that actually use
-     * |entry->mnt_dir| rather than killing all, probably by reusing a function
-     * like killProcessesWithOpenFiles() in vold/, but the selinux policy does
-     * not allow init to scan /proc/<pid> files which the utility function
-     * heavily relies on. The policy does not allow the process to execute
-     * killall/pkill binaries either. Note that some processes might
-     * automatically restart after kill(), but that is not really a problem
-     * because |entry->mnt_dir| is no longer visible to such new processes.
-     */
-    ServiceManager::GetInstance().ForEachService([] (Service* s) { s->Stop(); });
-    TEMP_FAILURE_RETRY(kill(-1, SIGKILL));
-
-    // Restart Watchdogd to allow us to complete umounting and fsck
-    Service *svc = ServiceManager::GetInstance().FindServiceByName("watchdogd");
-    if (svc) {
-        do {
-            sched_yield(); // do not be so eager, let cleanup have priority
-            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
-        } while (svc->flags() & SVC_RUNNING); // Paranoid Cargo
-        svc->Start();
+template <typename F>
+static void ForEachServiceInClass(const std::string& classname, F function) {
+    for (const auto& service : ServiceList::GetInstance()) {
+        if (service->classnames().count(classname)) std::invoke(function, service);
     }
+}
 
-    turnOffBacklight();
-
-    int count = 0;
-    while (count++ < UNMOUNT_CHECK_TIMES) {
-        int fd = TEMP_FAILURE_RETRY(open(entry->mnt_fsname, O_RDONLY | O_EXCL));
-        if (fd >= 0) {
-            /* |entry->mnt_dir| has sucessfully been unmounted. */
-            close(fd);
-            break;
-        } else if (errno == EBUSY) {
-            // Some processes using |entry->mnt_dir| are still alive. Wait for a
-            // while then retry.
-            std::this_thread::sleep_for(5000ms / UNMOUNT_CHECK_TIMES);
-            continue;
-        } else {
-            /* Cannot open the device. Give up. */
-            return;
+static Result<Success> do_class_start(const BuiltinArguments& args) {
+    // Starting a class does not start services which are explicitly disabled.
+    // They must  be started individually.
+    for (const auto& service : ServiceList::GetInstance()) {
+        if (service->classnames().count(args[1])) {
+            if (auto result = service->StartIfNotDisabled(); !result) {
+                LOG(ERROR) << "Could not start service '" << service->name()
+                           << "' as part of class '" << args[1] << "': " << result.error();
+            }
         }
     }
+    return Success();
+}
 
-    // NB: With watchdog still running, there is no cap on the time it takes
-    // to complete the fsck, from the users perspective the device graphics
-    // and responses are locked-up and they may choose to hold the power
-    // button in frustration if it drags out.
+static Result<Success> do_class_stop(const BuiltinArguments& args) {
+    ForEachServiceInClass(args[1], &Service::Stop);
+    return Success();
+}
 
-    int st;
-    if (!strcmp(entry->mnt_type, "f2fs")) {
-        const char *f2fs_argv[] = {
-            "/system/bin/fsck.f2fs", "-f", entry->mnt_fsname,
-        };
-        android_fork_execvp_ext(arraysize(f2fs_argv), (char **)f2fs_argv,
-                                &st, true, LOG_KLOG, true, NULL, NULL, 0);
-    } else if (!strcmp(entry->mnt_type, "ext4")) {
-        const char *ext4_argv[] = {
-            "/system/bin/e2fsck", "-f", "-y", entry->mnt_fsname,
-        };
-        android_fork_execvp_ext(arraysize(ext4_argv), (char **)ext4_argv,
-                                &st, true, LOG_KLOG, true, NULL, NULL, 0);
+static Result<Success> do_class_reset(const BuiltinArguments& args) {
+    ForEachServiceInClass(args[1], &Service::Reset);
+    return Success();
+}
+
+static Result<Success> do_class_restart(const BuiltinArguments& args) {
+    ForEachServiceInClass(args[1], &Service::Restart);
+    return Success();
+}
+
+static Result<Success> do_domainname(const BuiltinArguments& args) {
+    if (auto result = WriteFile("/proc/sys/kernel/domainname", args[1]); !result) {
+        return Error() << "Unable to write to /proc/sys/kernel/domainname: " << result.error();
     }
+    return Success();
 }
 
-static int do_class_start(const std::vector<std::string>& args) {
-        /* Starting a class does not start services
-         * which are explicitly disabled.  They must
-         * be started individually.
-         */
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->StartIfNotDisabled(); });
-    return 0;
-}
+static Result<Success> do_enable(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
+    if (!svc) return Error() << "Could not find service";
 
-static int do_class_stop(const std::vector<std::string>& args) {
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->Stop(); });
-    return 0;
-}
-
-static int do_class_reset(const std::vector<std::string>& args) {
-    ServiceManager::GetInstance().
-        ForEachServiceInClass(args[1], [] (Service* s) { s->Reset(); });
-    return 0;
-}
-
-static int do_domainname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/domainname", args[1].c_str()) ? 0 : 1;
-}
-
-static int do_enable(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
-    if (!svc) {
-        return -1;
+    if (auto result = svc->Enable(); !result) {
+        return Error() << "Could not enable service: " << result.error();
     }
-    return svc->Enable();
+
+    return Success();
 }
 
-static int do_exec(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().MakeExecOneshotService(args);
-    if (!svc) {
-        return -1;
+static Result<Success> do_exec(const BuiltinArguments& args) {
+    auto service = Service::MakeTemporaryOneshotService(args.args);
+    if (!service) {
+        return Error() << "Could not create exec service";
     }
-    if (!svc->Start()) {
-        return -1;
+    if (auto result = service->ExecStart(); !result) {
+        return Error() << "Could not start exec service: " << result.error();
     }
-    waiting_for_exec = true;
-    return 0;
+
+    ServiceList::GetInstance().AddService(std::move(service));
+    return Success();
 }
 
-static int do_export(const std::vector<std::string>& args) {
-    return add_environment(args[1].c_str(), args[2].c_str());
+static Result<Success> do_exec_background(const BuiltinArguments& args) {
+    auto service = Service::MakeTemporaryOneshotService(args.args);
+    if (!service) {
+        return Error() << "Could not create exec background service";
+    }
+    if (auto result = service->Start(); !result) {
+        return Error() << "Could not start exec background service: " << result.error();
+    }
+
+    ServiceList::GetInstance().AddService(std::move(service));
+    return Success();
 }
 
-static int do_hostname(const std::vector<std::string>& args) {
-    return write_file("/proc/sys/kernel/hostname", args[1].c_str()) ? 0 : 1;
+static Result<Success> do_exec_start(const BuiltinArguments& args) {
+    Service* service = ServiceList::GetInstance().FindService(args[1]);
+    if (!service) {
+        return Error() << "Service not found";
+    }
+
+    if (auto result = service->ExecStart(); !result) {
+        return Error() << "Could not start exec service: " << result.error();
+    }
+
+    return Success();
 }
 
-static int do_ifup(const std::vector<std::string>& args) {
-    return __ifupdown(args[1].c_str(), 1);
+static Result<Success> do_export(const BuiltinArguments& args) {
+    if (setenv(args[1].c_str(), args[2].c_str(), 1) == -1) {
+        return ErrnoError() << "setenv() failed";
+    }
+    return Success();
 }
 
-static int do_insmod(const std::vector<std::string>& args) {
+static Result<Success> do_hostname(const BuiltinArguments& args) {
+    if (auto result = WriteFile("/proc/sys/kernel/hostname", args[1]); !result) {
+        return Error() << "Unable to write to /proc/sys/kernel/hostname: " << result.error();
+    }
+    return Success();
+}
+
+static Result<Success> do_ifup(const BuiltinArguments& args) {
+    struct ifreq ifr;
+
+    strlcpy(ifr.ifr_name, args[1].c_str(), IFNAMSIZ);
+
+    unique_fd s(TEMP_FAILURE_RETRY(socket(AF_INET, SOCK_DGRAM, 0)));
+    if (s < 0) return ErrnoError() << "opening socket failed";
+
+    if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0) {
+        return ErrnoError() << "ioctl(..., SIOCGIFFLAGS, ...) failed";
+    }
+
+    ifr.ifr_flags |= IFF_UP;
+
+    if (ioctl(s, SIOCSIFFLAGS, &ifr) < 0) {
+        return ErrnoError() << "ioctl(..., SIOCSIFFLAGS, ...) failed";
+    }
+
+    return Success();
+}
+
+static Result<Success> do_insmod(const BuiltinArguments& args) {
     int flags = 0;
     auto it = args.begin() + 1;
 
@@ -295,45 +228,56 @@ static int do_insmod(const std::vector<std::string>& args) {
 
     std::string filename = *it++;
     std::string options = android::base::Join(std::vector<std::string>(it, args.end()), ' ');
-    return insmod(filename.c_str(), options.c_str(), flags);
+
+    unique_fd fd(TEMP_FAILURE_RETRY(open(filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
+    if (fd == -1) return ErrnoError() << "open(\"" << filename << "\") failed";
+
+    int rc = syscall(__NR_finit_module, fd.get(), options.c_str(), flags);
+    if (rc == -1) return ErrnoError() << "finit_module for \"" << filename << "\" failed";
+
+    return Success();
 }
 
-static int do_mkdir(const std::vector<std::string>& args) {
+// mkdir <path> [mode] [owner] [group]
+static Result<Success> do_mkdir(const BuiltinArguments& args) {
     mode_t mode = 0755;
-    int ret;
-
-    /* mkdir <path> [mode] [owner] [group] */
-
     if (args.size() >= 3) {
         mode = std::strtoul(args[2].c_str(), 0, 8);
     }
 
-    ret = make_dir(args[1].c_str(), mode);
-    /* chmod in case the directory already exists */
-    if (ret == -1 && errno == EEXIST) {
-        ret = fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW);
-    }
-    if (ret == -1) {
-        return -errno;
+    if (!make_dir(args[1], mode)) {
+        /* chmod in case the directory already exists */
+        if (errno == EEXIST) {
+            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
+                return ErrnoError() << "fchmodat() failed";
+            }
+        } else {
+            return ErrnoError() << "mkdir() failed";
+        }
     }
 
     if (args.size() >= 4) {
-        uid_t uid = decode_uid(args[3].c_str());
-        gid_t gid = -1;
+        auto uid = DecodeUid(args[3]);
+        if (!uid) {
+            return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
+        }
+        Result<gid_t> gid = -1;
 
         if (args.size() == 5) {
-            gid = decode_uid(args[4].c_str());
+            gid = DecodeUid(args[4]);
+            if (!gid) {
+                return Error() << "Unable to decode GID for '" << args[3] << "': " << gid.error();
+            }
         }
 
-        if (lchown(args[1].c_str(), uid, gid) == -1) {
-            return -errno;
+        if (lchown(args[1].c_str(), *uid, *gid) == -1) {
+            return ErrnoError() << "lchown failed";
         }
 
         /* chown may have cleared S_ISUID and S_ISGID, chmod again */
         if (mode & (S_ISUID | S_ISGID)) {
-            ret = fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW);
-            if (ret == -1) {
-                return -errno;
+            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
+                return ErrnoError() << "fchmodat failed";
             }
         }
     }
@@ -344,15 +288,18 @@ static int do_mkdir(const std::vector<std::string>& args) {
                 "--prompt_and_wipe_data",
                 "--reason=set_policy_failed:"s + args[1]};
             reboot_into_recovery(options);
-            return -1;
+            return Success();
         }
     }
-    return 0;
+    return Success();
 }
 
 /* umount <path> */
-static int do_umount(const std::vector<std::string>& args) {
-  return umount(args[1].c_str());
+static Result<Success> do_umount(const BuiltinArguments& args) {
+    if (umount(args[1].c_str()) < 0) {
+        return ErrnoError() << "umount() failed";
+    }
+    return Success();
 }
 
 static struct {
@@ -380,16 +327,13 @@ static struct {
 #define DATA_MNT_POINT "/data"
 
 /* mount <type> <device> <path> <flags ...> <options> */
-static int do_mount(const std::vector<std::string>& args) {
-    char tmp[64];
-    const char *source, *target, *system;
-    const char *options = NULL;
+static Result<Success> do_mount(const BuiltinArguments& args) {
+    const char* options = nullptr;
     unsigned flags = 0;
-    std::size_t na = 0;
-    int n, i;
-    int wait = 0;
+    bool wait = false;
 
-    for (na = 4; na < args.size(); na++) {
+    for (size_t na = 4; na < args.size(); na++) {
+        size_t i;
         for (i = 0; mount_flags[i].name; i++) {
             if (!args[na].compare(mount_flags[i].name)) {
                 flags |= mount_flags[i].flag;
@@ -398,71 +342,54 @@ static int do_mount(const std::vector<std::string>& args) {
         }
 
         if (!mount_flags[i].name) {
-            if (!args[na].compare("wait"))
-                wait = 1;
-            /* if our last argument isn't a flag, wolf it up as an option string */
-            else if (na + 1 == args.size())
+            if (!args[na].compare("wait")) {
+                wait = true;
+                // If our last argument isn't a flag, wolf it up as an option string.
+            } else if (na + 1 == args.size()) {
                 options = args[na].c_str();
+            }
         }
     }
 
-    system = args[1].c_str();
-    source = args[2].c_str();
-    target = args[3].c_str();
+    const char* system = args[1].c_str();
+    const char* source = args[2].c_str();
+    const char* target = args[3].c_str();
 
-    if (!strncmp(source, "loop@", 5)) {
-        int mode, loop, fd;
-        struct loop_info info;
+    if (android::base::StartsWith(source, "loop@")) {
+        int mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
+        unique_fd fd(TEMP_FAILURE_RETRY(open(source + 5, mode | O_CLOEXEC)));
+        if (fd < 0) return ErrnoError() << "open(" << source + 5 << ", " << mode << ") failed";
 
-        mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
-        fd = open(source + 5, mode | O_CLOEXEC);
-        if (fd < 0) {
-            return -1;
-        }
+        for (size_t n = 0;; n++) {
+            std::string tmp = android::base::StringPrintf("/dev/block/loop%zu", n);
+            unique_fd loop(TEMP_FAILURE_RETRY(open(tmp.c_str(), mode | O_CLOEXEC)));
+            if (loop < 0) return ErrnoError() << "open(" << tmp << ", " << mode << ") failed";
 
-        for (n = 0; ; n++) {
-            snprintf(tmp, sizeof(tmp), "/dev/block/loop%d", n);
-            loop = open(tmp, mode | O_CLOEXEC);
-            if (loop < 0) {
-                close(fd);
-                return -1;
-            }
-
+            loop_info info;
             /* if it is a blank loop device */
             if (ioctl(loop, LOOP_GET_STATUS, &info) < 0 && errno == ENXIO) {
                 /* if it becomes our loop device */
-                if (ioctl(loop, LOOP_SET_FD, fd) >= 0) {
-                    close(fd);
-
-                    if (mount(tmp, target, system, flags, options) < 0) {
+                if (ioctl(loop, LOOP_SET_FD, fd.get()) >= 0) {
+                    if (mount(tmp.c_str(), target, system, flags, options) < 0) {
                         ioctl(loop, LOOP_CLR_FD, 0);
-                        close(loop);
-                        return -1;
+                        return ErrnoError() << "mount() failed";
                     }
-
-                    close(loop);
-                    goto exit_success;
+                    return Success();
                 }
             }
-
-            close(loop);
         }
 
-        close(fd);
-        LOG(ERROR) << "out of loopback devices";
-        return -1;
+        return Error() << "out of loopback devices";
     } else {
         if (wait)
             wait_for_file(source, kCommandRetryTimeout);
         if (mount(source, target, system, flags, options) < 0) {
-            return -1;
+            return ErrnoError() << "mount() failed";
         }
 
     }
 
-exit_success:
-    return 0;
-
+    return Success();
 }
 
 /* Imports .rc files from the specified paths. Default ones are applied if none is given.
@@ -470,32 +397,31 @@ exit_success:
  * start_index: index of the first path in the args list
  */
 static void import_late(const std::vector<std::string>& args, size_t start_index, size_t end_index) {
-    Parser& parser = Parser::GetInstance();
+    auto& action_manager = ActionManager::GetInstance();
+    auto& service_list = ServiceList::GetInstance();
+    Parser parser = CreateParser(action_manager, service_list);
     if (end_index <= start_index) {
-        // Use the default set if no path is given
-        static const std::vector<std::string> init_directories = {
-            "/system/etc/init",
-            "/vendor/etc/init",
-            "/odm/etc/init"
-        };
-
-        for (const auto& dir : init_directories) {
-            parser.ParseConfig(dir);
+        // Fallbacks for partitions on which early mount isn't enabled.
+        for (const auto& path : late_import_paths) {
+            parser.ParseConfig(path);
         }
+        late_import_paths.clear();
     } else {
         for (size_t i = start_index; i < end_index; ++i) {
             parser.ParseConfig(args[i]);
         }
     }
+
+    // Turning this on and letting the INFO logging be discarded adds 0.2s to
+    // Nexus 9 boot time, so it's disabled by default.
+    if (false) DumpState();
 }
 
 /* mount_fstab
  *
  *  Call fs_mgr_mount_all() to mount the given fstab
  */
-static int mount_fstab(const char* fstabfile, int mount_mode) {
-    int ret = -1;
-
+static Result<int> mount_fstab(const char* fstabfile, int mount_mode) {
     /*
      * Call fs_mgr_mount_all() to mount all filesystems.  We fork(2) and
      * do the call in the child to provide protection to the main init
@@ -513,9 +439,9 @@ static int mount_fstab(const char* fstabfile, int mount_mode) {
         }
 
         if (WIFEXITED(status)) {
-            ret = WEXITSTATUS(status);
+            return WEXITSTATUS(status);
         } else {
-            ret = -1;
+            return Error() << "child aborted";
         }
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
@@ -532,10 +458,8 @@ static int mount_fstab(const char* fstabfile, int mount_mode) {
         }
         _exit(child_ret);
     } else {
-        /* fork failed, return an error */
-        return -1;
+        return Error() << "fork() failed";
     }
-    return ret;
 }
 
 /* Queue event based on fs_mgr return code.
@@ -547,29 +471,33 @@ static int mount_fstab(const char* fstabfile, int mount_mode) {
  *
  * return code is processed based on input code
  */
-static int queue_fs_event(int code) {
-    int ret = code;
+static Result<Success> queue_fs_event(int code) {
     if (code == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
         ActionManager::GetInstance().QueueEventTrigger("encrypt");
+        return Success();
     } else if (code == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
+        return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
+        return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
         property_set("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
+        return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
-        ret = reboot_into_recovery(options);
+        reboot_into_recovery(options);
+        return Success();
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
-            return -1;
+            return Error() << "e4crypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -577,12 +505,32 @@ static int queue_fs_event(int code) {
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
+        return Success();
+    } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
+        if (e4crypt_install_keyring()) {
+            return Error() << "e4crypt_install_keyring() failed";
+        }
+        property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "file");
+
+        // defaultcrypto detects file/block encryption. init flow is same for each.
+        ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
+        return Success();
+    } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+        if (e4crypt_install_keyring()) {
+            return Error() << "e4crypt_install_keyring() failed";
+        }
+        property_set("ro.crypto.type", "file");
+
+        // encrypt detects file/block encryption. init flow is same for each.
+        ActionManager::GetInstance().QueueEventTrigger("encrypt");
+        return Success();
     } else if (code > 0) {
-        PLOG(ERROR) << "fs_mgr_mount_all returned unexpected error " << code;
+        Error() << "fs_mgr_mount_all() returned unexpected error " << code;
     }
     /* else ... < 0: error */
 
-    return ret;
+    return Error() << "Invalid code: " << code;
 }
 
 /* mount_all <fstab> [ <path> ]* [--<options>]*
@@ -590,43 +538,55 @@ static int queue_fs_event(int code) {
  * This function might request a reboot, in which case it will
  * not return.
  */
-static int do_mount_all(const std::vector<std::string>& args) {
+static Result<Success> do_mount_all(const BuiltinArguments& args) {
     std::size_t na = 0;
     bool import_rc = true;
     bool queue_event = true;
     int mount_mode = MOUNT_MODE_DEFAULT;
     const char* fstabfile = args[1].c_str();
     std::size_t path_arg_end = args.size();
+    const char* prop_post_fix = "default";
 
     for (na = args.size() - 1; na > 1; --na) {
         if (args[na] == "--early") {
             path_arg_end = na;
             queue_event = false;
             mount_mode = MOUNT_MODE_EARLY;
+            prop_post_fix = "early";
         } else if (args[na] == "--late") {
             path_arg_end = na;
             import_rc = false;
             mount_mode = MOUNT_MODE_LATE;
+            prop_post_fix = "late";
         }
     }
 
-    int ret =  mount_fstab(fstabfile, mount_mode);
+    std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
+    android::base::Timer t;
+    auto mount_fstab_return_code = mount_fstab(fstabfile, mount_mode);
+    if (!mount_fstab_return_code) {
+        return Error() << "mount_fstab() failed " << mount_fstab_return_code.error();
+    }
+    property_set(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc) {
         /* Paths of .rc files are specified at the 2nd argument and beyond */
-        import_late(args, 2, path_arg_end);
+        import_late(args.args, 2, path_arg_end);
     }
 
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        ret = queue_fs_event(ret);
+        auto queue_fs_result = queue_fs_event(*mount_fstab_return_code);
+        if (!queue_fs_result) {
+            return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
+        }
     }
 
-    return ret;
+    return Success();
 }
 
-static int do_swapon_all(const std::vector<std::string>& args) {
+static Result<Success> do_swapon_all(const BuiltinArguments& args) {
     struct fstab *fstab;
     int ret;
 
@@ -634,260 +594,238 @@ static int do_swapon_all(const std::vector<std::string>& args) {
     ret = fs_mgr_swapon_all(fstab);
     fs_mgr_free_fstab(fstab);
 
-    return ret;
+    if (ret != 0) return Error() << "fs_mgr_swapon_all() failed";
+    return Success();
 }
 
-static int do_setprop(const std::vector<std::string>& args) {
-    const char* name = args[1].c_str();
-    const char* value = args[2].c_str();
-    property_set(name, value);
-    return 0;
+static Result<Success> do_setprop(const BuiltinArguments& args) {
+    property_set(args[1], args[2]);
+    return Success();
 }
 
-static int do_setrlimit(const std::vector<std::string>& args) {
-    struct rlimit limit;
-    int resource;
-    if (android::base::ParseInt(args[1], &resource) &&
-        android::base::ParseUint(args[2], &limit.rlim_cur) &&
-        android::base::ParseUint(args[3], &limit.rlim_max)) {
-        return setrlimit(resource, &limit);
+static Result<Success> do_setrlimit(const BuiltinArguments& args) {
+    auto rlimit = ParseRlimit(args.args);
+    if (!rlimit) return rlimit.error();
+
+    if (setrlimit(rlimit->first, &rlimit->second) == -1) {
+        return ErrnoError() << "setrlimit failed";
     }
-    LOG(WARNING) << "ignoring setrlimit " << args[1] << " " << args[2] << " " << args[3];
-    return -1;
+    return Success();
 }
 
-static int do_start(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
-    if (!svc) {
-        LOG(ERROR) << "do_start: Service " << args[1] << " not found";
-        return -1;
+static Result<Success> do_start(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
+    if (!svc) return Error() << "service " << args[1] << " not found";
+    if (auto result = svc->Start(); !result) {
+        return Error() << "Could not start service: " << result.error();
     }
-    if (!svc->Start())
-        return -1;
-    return 0;
+    return Success();
 }
 
-static int do_stop(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
-    if (!svc) {
-        LOG(ERROR) << "do_stop: Service " << args[1] << " not found";
-        return -1;
-    }
+static Result<Success> do_stop(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
+    if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Stop();
-    return 0;
+    return Success();
 }
 
-static int do_restart(const std::vector<std::string>& args) {
-    Service* svc = ServiceManager::GetInstance().FindServiceByName(args[1]);
-    if (!svc) {
-        LOG(ERROR) << "do_restart: Service " << args[1] << " not found";
-        return -1;
-    }
+static Result<Success> do_restart(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindService(args[1]);
+    if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Restart();
-    return 0;
+    return Success();
 }
 
-static int do_powerctl(const std::vector<std::string>& args) {
-    const char* command = args[1].c_str();
-    int len = 0;
-    unsigned int cmd = 0;
-    const char *reboot_target = "";
-    void (*callback_on_ro_remount)(const struct mntent*) = NULL;
-
-    if (strncmp(command, "shutdown", 8) == 0) {
-        cmd = ANDROID_RB_POWEROFF;
-        len = 8;
-    } else if (strncmp(command, "reboot", 6) == 0) {
-        cmd = ANDROID_RB_RESTART2;
-        len = 6;
-    } else {
-        LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
-        return -EINVAL;
-    }
-
-    if (command[len] == ',') {
-        if (cmd == ANDROID_RB_POWEROFF &&
-            !strcmp(&command[len + 1], "userrequested")) {
-            // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
-            // Run fsck once the file system is remounted in read-only mode.
-            callback_on_ro_remount = unmount_and_fsck;
-        } else if (cmd == ANDROID_RB_RESTART2) {
-            reboot_target = &command[len + 1];
-            // When rebooting to the bootloader notify the bootloader writing
-            // also the BCB.
-            if (strcmp(reboot_target, "bootloader") == 0) {
-                std::string err;
-                if (!write_reboot_bootloader(&err)) {
-                    LOG(ERROR) << "reboot-bootloader: Error writing "
-                                  "bootloader_message: " << err;
-                }
-            }
-        }
-    } else if (command[len] != '\0') {
-        LOG(ERROR) << "powerctl: unrecognized reboot target '" << &command[len] << "'";
-        return -EINVAL;
-    }
-
-    std::string timeout = property_get("ro.build.shutdown_timeout");
-    unsigned int delay = 0;
-
-    if (android::base::ParseUint(timeout, &delay) && delay > 0) {
-        Timer t;
-        // Ask all services to terminate.
-        ServiceManager::GetInstance().ForEachService(
-            [] (Service* s) { s->Terminate(); });
-
-        while (t.duration_s() < delay) {
-            ServiceManager::GetInstance().ReapAnyOutstandingChildren();
-
-            int service_count = 0;
-            ServiceManager::GetInstance().ForEachService(
-                [&service_count] (Service* s) {
-                    // Count the number of services running.
-                    // Exclude the console as it will ignore the SIGTERM signal
-                    // and not exit.
-                    // Note: SVC_CONSOLE actually means "requires console" but
-                    // it is only used by the shell.
-                    if (s->pid() != 0 && (s->flags() & SVC_CONSOLE) == 0) {
-                        service_count++;
-                    }
-                });
-
-            if (service_count == 0) {
-                // All terminable services terminated. We can exit early.
-                break;
-            }
-
-            // Wait a bit before recounting the number or running services.
-            std::this_thread::sleep_for(50ms);
-        }
-        LOG(VERBOSE) << "Terminating running services took " << t;
-    }
-
-    return android_reboot_with_callback(cmd, 0, reboot_target, callback_on_ro_remount);
-}
-
-static int do_trigger(const std::vector<std::string>& args) {
+static Result<Success> do_trigger(const BuiltinArguments& args) {
     ActionManager::GetInstance().QueueEventTrigger(args[1]);
-    return 0;
+    return Success();
 }
 
-static int do_symlink(const std::vector<std::string>& args) {
-    return symlink(args[1].c_str(), args[2].c_str());
-}
-
-static int do_rm(const std::vector<std::string>& args) {
-    return unlink(args[1].c_str());
-}
-
-static int do_rmdir(const std::vector<std::string>& args) {
-    return rmdir(args[1].c_str());
-}
-
-static int do_sysclktz(const std::vector<std::string>& args) {
-    struct timezone tz = {};
-    if (android::base::ParseInt(args[1], &tz.tz_minuteswest) && settimeofday(NULL, &tz) != -1) {
-        return 0;
+static Result<Success> do_symlink(const BuiltinArguments& args) {
+    if (symlink(args[1].c_str(), args[2].c_str()) < 0) {
+        // The symlink builtin is often used to create symlinks for older devices to be backwards
+        // compatible with new paths, therefore we skip reporting this error.
+        if (errno == EEXIST && android::base::GetMinimumLogSeverity() > android::base::DEBUG) {
+            return Success();
+        }
+        return ErrnoError() << "symlink() failed";
     }
-    return -1;
+    return Success();
 }
 
-static int do_verity_load_state(const std::vector<std::string>& args) {
+static Result<Success> do_rm(const BuiltinArguments& args) {
+    if (unlink(args[1].c_str()) < 0) {
+        return ErrnoError() << "unlink() failed";
+    }
+    return Success();
+}
+
+static Result<Success> do_rmdir(const BuiltinArguments& args) {
+    if (rmdir(args[1].c_str()) < 0) {
+        return ErrnoError() << "rmdir() failed";
+    }
+    return Success();
+}
+
+static Result<Success> do_sysclktz(const BuiltinArguments& args) {
+    struct timezone tz = {};
+    if (!android::base::ParseInt(args[1], &tz.tz_minuteswest)) {
+        return Error() << "Unable to parse mins_west_of_gmt";
+    }
+
+    if (settimeofday(nullptr, &tz) == -1) {
+        return ErrnoError() << "settimeofday() failed";
+    }
+    return Success();
+}
+
+static Result<Success> do_verity_load_state(const BuiltinArguments& args) {
     int mode = -1;
-    int rc = fs_mgr_load_verity_state(&mode);
-    if (rc == 0 && mode != VERITY_MODE_DEFAULT) {
+    bool loaded = fs_mgr_load_verity_state(&mode);
+    if (loaded && mode != VERITY_MODE_DEFAULT) {
         ActionManager::GetInstance().QueueEventTrigger("verity-logging");
     }
-    return rc;
+    if (!loaded) return Error() << "Could not load verity state";
+
+    return Success();
 }
 
 static void verity_update_property(fstab_rec *fstab, const char *mount_point,
                                    int mode, int status) {
-    property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(),
-                 android::base::StringPrintf("%d", mode).c_str());
+    property_set("partition."s + mount_point + ".verified", std::to_string(mode));
 }
 
-static int do_verity_update_state(const std::vector<std::string>& args) {
-    return fs_mgr_update_verity_state(verity_update_property);
+static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
+    if (!fs_mgr_update_verity_state(verity_update_property)) {
+        return Error() << "fs_mgr_update_verity_state() failed";
+    }
+    return Success();
 }
 
-static int do_write(const std::vector<std::string>& args) {
-    const char* path = args[1].c_str();
-    const char* value = args[2].c_str();
-    return write_file(path, value) ? 0 : 1;
-}
-
-static int do_copy(const std::vector<std::string>& args) {
-    char *buffer = NULL;
-    int rc = 0;
-    int fd1 = -1, fd2 = -1;
-    struct stat info;
-    int brtw, brtr;
-    char *p;
-
-    if (stat(args[1].c_str(), &info) < 0)
-        return -1;
-
-    if ((fd1 = open(args[1].c_str(), O_RDONLY|O_CLOEXEC)) < 0)
-        goto out_err;
-
-    if ((fd2 = open(args[2].c_str(), O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0660)) < 0)
-        goto out_err;
-
-    if (!(buffer = (char*) malloc(info.st_size)))
-        goto out_err;
-
-    p = buffer;
-    brtr = info.st_size;
-    while(brtr) {
-        rc = read(fd1, p, brtr);
-        if (rc < 0)
-            goto out_err;
-        if (rc == 0)
-            break;
-        p += rc;
-        brtr -= rc;
+static Result<Success> do_write(const BuiltinArguments& args) {
+    if (auto result = WriteFile(args[1], args[2]); !result) {
+        return Error() << "Unable to write to file '" << args[1] << "': " << result.error();
     }
 
-    p = buffer;
-    brtw = info.st_size;
-    while(brtw) {
-        rc = write(fd2, p, brtw);
-        if (rc < 0)
-            goto out_err;
-        if (rc == 0)
-            break;
-        p += rc;
-        brtw -= rc;
-    }
-
-    rc = 0;
-    goto out;
-out_err:
-    rc = -1;
-out:
-    if (buffer)
-        free(buffer);
-    if (fd1 >= 0)
-        close(fd1);
-    if (fd2 >= 0)
-        close(fd2);
-    return rc;
+    return Success();
 }
 
-static int do_chown(const std::vector<std::string>& args) {
-    /* GID is optional. */
-    if (args.size() == 3) {
-        if (lchown(args[2].c_str(), decode_uid(args[1].c_str()), -1) == -1)
-            return -errno;
-    } else if (args.size() == 4) {
-        if (lchown(args[3].c_str(), decode_uid(args[1].c_str()),
-                   decode_uid(args[2].c_str())) == -1)
-            return -errno;
-    } else {
-        return -1;
+static Result<Success> readahead_file(const std::string& filename, bool fully) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(filename.c_str(), O_RDONLY)));
+    if (fd == -1) {
+        return ErrnoError() << "Error opening file";
     }
-    return 0;
+    if (posix_fadvise(fd, 0, 0, POSIX_FADV_WILLNEED)) {
+        return ErrnoError() << "Error posix_fadvise file";
+    }
+    if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
+        return ErrnoError() << "Error readahead file";
+    }
+    if (fully) {
+        char buf[BUFSIZ];
+        ssize_t n;
+        while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
+        }
+        if (n != 0) {
+            return ErrnoError() << "Error reading file";
+        }
+    }
+    return Success();
+}
+
+static Result<Success> do_readahead(const BuiltinArguments& args) {
+    struct stat sb;
+
+    if (stat(args[1].c_str(), &sb)) {
+        return ErrnoError() << "Error opening " << args[1];
+    }
+
+    bool readfully = false;
+    if (args.size() == 3 && args[2] == "--fully") {
+        readfully = true;
+    }
+    // We will do readahead in a forked process in order not to block init
+    // since it may block while it reads the
+    // filesystem metadata needed to locate the requested blocks.  This
+    // occurs frequently with ext[234] on large files using indirect blocks
+    // instead of extents, giving the appearance that the call blocks until
+    // the requested data has been read.
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (setpriority(PRIO_PROCESS, 0, static_cast<int>(ANDROID_PRIORITY_LOWEST)) != 0) {
+            PLOG(WARNING) << "setpriority failed";
+        }
+        if (android_set_ioprio(0, IoSchedClass_IDLE, 7)) {
+            PLOG(WARNING) << "ioprio_get failed";
+        }
+        android::base::Timer t;
+        if (S_ISREG(sb.st_mode)) {
+            if (auto result = readahead_file(args[1], readfully); !result) {
+                LOG(WARNING) << "Unable to readahead '" << args[1] << "': " << result.error();
+                _exit(EXIT_FAILURE);
+            }
+        } else if (S_ISDIR(sb.st_mode)) {
+            char* paths[] = {const_cast<char*>(args[1].data()), nullptr};
+            std::unique_ptr<FTS, decltype(&fts_close)> fts(
+                fts_open(paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, nullptr), fts_close);
+            if (!fts) {
+                PLOG(ERROR) << "Error opening directory: " << args[1];
+                _exit(EXIT_FAILURE);
+            }
+            // Traverse the entire hierarchy and do readahead
+            for (FTSENT* ftsent = fts_read(fts.get()); ftsent != nullptr;
+                 ftsent = fts_read(fts.get())) {
+                if (ftsent->fts_info & FTS_F) {
+                    const std::string filename = ftsent->fts_accpath;
+                    if (auto result = readahead_file(filename, readfully); !result) {
+                        LOG(WARNING)
+                            << "Unable to readahead '" << filename << "': " << result.error();
+                    }
+                }
+            }
+        }
+        LOG(INFO) << "Readahead " << args[1] << " took " << t << " asynchronously";
+        _exit(0);
+    } else if (pid < 0) {
+        return ErrnoError() << "Fork failed";
+    }
+    return Success();
+}
+
+static Result<Success> do_copy(const BuiltinArguments& args) {
+    auto file_contents = ReadFile(args[1]);
+    if (!file_contents) {
+        return Error() << "Could not read input file '" << args[1] << "': " << file_contents.error();
+    }
+    if (auto result = WriteFile(args[2], *file_contents); !result) {
+        return Error() << "Could not write to output file '" << args[2] << "': " << result.error();
+    }
+
+    return Success();
+}
+
+static Result<Success> do_chown(const BuiltinArguments& args) {
+    auto uid = DecodeUid(args[1]);
+    if (!uid) {
+        return Error() << "Unable to decode UID for '" << args[1] << "': " << uid.error();
+    }
+
+    // GID is optional and pushes the index of path out by one if specified.
+    const std::string& path = (args.size() == 4) ? args[3] : args[2];
+    Result<gid_t> gid = -1;
+
+    if (args.size() == 4) {
+        gid = DecodeUid(args[2]);
+        if (!gid) {
+            return Error() << "Unable to decode GID for '" << args[2] << "': " << gid.error();
+        }
+    }
+
+    if (lchown(path.c_str(), *uid, *gid) == -1) {
+        return ErrnoError() << "lchown() failed";
+    }
+
+    return Success();
 }
 
 static mode_t get_mode(const char *s) {
@@ -903,15 +841,15 @@ static mode_t get_mode(const char *s) {
     return mode;
 }
 
-static int do_chmod(const std::vector<std::string>& args) {
+static Result<Success> do_chmod(const BuiltinArguments& args) {
     mode_t mode = get_mode(args[1].c_str());
     if (fchmodat(AT_FDCWD, args[2].c_str(), mode, AT_SYMLINK_NOFOLLOW) < 0) {
-        return -errno;
+        return ErrnoError() << "fchmodat() failed";
     }
-    return 0;
+    return Success();
 }
 
-static int do_restorecon(const std::vector<std::string>& args) {
+static Result<Success> do_restorecon(const BuiltinArguments& args) {
     int ret = 0;
 
     struct flag_type {const char* name; int value;};
@@ -928,8 +866,7 @@ static int do_restorecon(const std::vector<std::string>& args) {
     for (size_t i = 1; i < args.size(); ++i) {
         if (android::base::StartsWith(args[i], "--")) {
             if (!in_flags) {
-                LOG(ERROR) << "restorecon - flags must precede paths";
-                return -1;
+                return Error() << "flags must precede paths";
             }
             bool found = false;
             for (size_t j = 0; flags[j].name; ++j) {
@@ -940,26 +877,27 @@ static int do_restorecon(const std::vector<std::string>& args) {
                 }
             }
             if (!found) {
-                LOG(ERROR) << "restorecon - bad flag " << args[i];
-                return -1;
+                return Error() << "bad flag " << args[i];
             }
         } else {
             in_flags = false;
-            if (restorecon(args[i].c_str(), flag) < 0) {
-                ret = -errno;
+            if (selinux_android_restorecon(args[i].c_str(), flag) < 0) {
+                ret = errno;
             }
         }
     }
-    return ret;
+
+    if (ret) return ErrnoError() << "selinux_android_restorecon() failed";
+    return Success();
 }
 
-static int do_restorecon_recursive(const std::vector<std::string>& args) {
-    std::vector<std::string> non_const_args(args);
+static Result<Success> do_restorecon_recursive(const BuiltinArguments& args) {
+    std::vector<std::string> non_const_args(args.args);
     non_const_args.insert(std::next(non_const_args.begin()), "--recursive");
-    return do_restorecon(non_const_args);
+    return do_restorecon({std::move(non_const_args), args.context});
 }
 
-static int do_loglevel(const std::vector<std::string>& args) {
+static Result<Success> do_loglevel(const BuiltinArguments& args) {
     // TODO: support names instead/as well?
     int log_level = -1;
     android::base::ParseInt(args[1], &log_level);
@@ -974,107 +912,133 @@ static int do_loglevel(const std::vector<std::string>& args) {
         case 1:
         case 0: severity = android::base::FATAL; break;
         default:
-            LOG(ERROR) << "loglevel: invalid log level " << log_level;
-            return -EINVAL;
+            return Error() << "invalid log level " << log_level;
     }
     android::base::SetMinimumLogSeverity(severity);
-    return 0;
+    return Success();
 }
 
-static int do_load_persist_props(const std::vector<std::string>& args) {
+static Result<Success> do_load_persist_props(const BuiltinArguments& args) {
     load_persist_props();
-    return 0;
+    return Success();
 }
 
-static int do_load_system_props(const std::vector<std::string>& args) {
+static Result<Success> do_load_system_props(const BuiltinArguments& args) {
     load_system_props();
-    return 0;
+    return Success();
 }
 
-static int do_wait(const std::vector<std::string>& args) {
-    if (args.size() == 2) {
-        return wait_for_file(args[1].c_str(), kCommandRetryTimeout);
-    } else if (args.size() == 3) {
-        int timeout;
-        if (android::base::ParseInt(args[2], &timeout)) {
-            return wait_for_file(args[1].c_str(), std::chrono::seconds(timeout));
+static Result<Success> do_wait(const BuiltinArguments& args) {
+    auto timeout = kCommandRetryTimeout;
+    if (args.size() == 3) {
+        int timeout_int;
+        if (!android::base::ParseInt(args[2], &timeout_int)) {
+            return Error() << "failed to parse timeout";
         }
+        timeout = std::chrono::seconds(timeout_int);
     }
-    return -1;
+
+    if (wait_for_file(args[1].c_str(), timeout) != 0) {
+        return Error() << "wait_for_file() failed";
+    }
+
+    return Success();
 }
 
-/*
- * Callback to make a directory from the ext4 code
- */
-static int do_installkeys_ensure_dir_exists(const char* dir) {
-    if (make_dir(dir, 0700) && errno != EEXIST) {
-        return -1;
-    }
+static Result<Success> do_wait_for_prop(const BuiltinArguments& args) {
+    const char* name = args[1].c_str();
+    const char* value = args[2].c_str();
+    size_t value_len = strlen(value);
 
-    return 0;
+    if (!is_legal_property_name(name)) {
+        return Error() << "is_legal_property_name(" << name << ") failed";
+    }
+    if (value_len >= PROP_VALUE_MAX) {
+        return Error() << "value too long";
+    }
+    if (!start_waiting_for_property(name, value)) {
+        return Error() << "already waiting for a property";
+    }
+    return Success();
 }
 
 static bool is_file_crypto() {
-    std::string value = property_get("ro.crypto.type");
-    return value == "file";
+    return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
-static int do_installkey(const std::vector<std::string>& args) {
-    if (!is_file_crypto()) {
-        return 0;
+static Result<Success> do_installkey(const BuiltinArguments& args) {
+    if (!is_file_crypto()) return Success();
+
+    auto unencrypted_dir = args[1] + e4crypt_unencrypted_folder;
+    if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
+        return ErrnoError() << "Failed to create " << unencrypted_dir;
     }
-    return e4crypt_create_device_key(args[1].c_str(),
-                                     do_installkeys_ensure_dir_exists);
+    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
+                                          "enablefilecrypto"};
+    return do_exec({std::move(exec_args), args.context});
 }
 
-static int do_init_user0(const std::vector<std::string>& args) {
-    return e4crypt_do_init_user0();
+static Result<Success> do_init_user0(const BuiltinArguments& args) {
+    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
+                                          "init_user0"};
+    return do_exec({std::move(exec_args), args.context});
 }
 
-BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
+const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+    // clang-format off
     static const Map builtin_functions = {
-        {"bootchart",               {1,     1,    do_bootchart}},
-        {"chmod",                   {2,     2,    do_chmod}},
-        {"chown",                   {2,     3,    do_chown}},
-        {"class_reset",             {1,     1,    do_class_reset}},
-        {"class_start",             {1,     1,    do_class_start}},
-        {"class_stop",              {1,     1,    do_class_stop}},
-        {"copy",                    {2,     2,    do_copy}},
-        {"domainname",              {1,     1,    do_domainname}},
-        {"enable",                  {1,     1,    do_enable}},
-        {"exec",                    {1,     kMax, do_exec}},
-        {"export",                  {2,     2,    do_export}},
-        {"hostname",                {1,     1,    do_hostname}},
-        {"ifup",                    {1,     1,    do_ifup}},
-        {"init_user0",              {0,     0,    do_init_user0}},
-        {"insmod",                  {1,     kMax, do_insmod}},
-        {"installkey",              {1,     1,    do_installkey}},
-        {"load_persist_props",      {0,     0,    do_load_persist_props}},
-        {"load_system_props",       {0,     0,    do_load_system_props}},
-        {"loglevel",                {1,     1,    do_loglevel}},
-        {"mkdir",                   {1,     4,    do_mkdir}},
-        {"mount_all",               {1,     kMax, do_mount_all}},
-        {"mount",                   {3,     kMax, do_mount}},
-        {"umount",                  {1,     1,    do_umount}},
-        {"powerctl",                {1,     1,    do_powerctl}},
-        {"restart",                 {1,     1,    do_restart}},
-        {"restorecon",              {1,     kMax, do_restorecon}},
-        {"restorecon_recursive",    {1,     kMax, do_restorecon_recursive}},
-        {"rm",                      {1,     1,    do_rm}},
-        {"rmdir",                   {1,     1,    do_rmdir}},
-        {"setprop",                 {2,     2,    do_setprop}},
-        {"setrlimit",               {3,     3,    do_setrlimit}},
-        {"start",                   {1,     1,    do_start}},
-        {"stop",                    {1,     1,    do_stop}},
-        {"swapon_all",              {1,     1,    do_swapon_all}},
-        {"symlink",                 {2,     2,    do_symlink}},
-        {"sysclktz",                {1,     1,    do_sysclktz}},
-        {"trigger",                 {1,     1,    do_trigger}},
-        {"verity_load_state",       {0,     0,    do_verity_load_state}},
-        {"verity_update_state",     {0,     0,    do_verity_update_state}},
-        {"wait",                    {1,     2,    do_wait}},
-        {"write",                   {2,     2,    do_write}},
+        {"bootchart",               {1,     1,    {false,  do_bootchart}}},
+        {"chmod",                   {2,     2,    {true,   do_chmod}}},
+        {"chown",                   {2,     3,    {true,   do_chown}}},
+        {"class_reset",             {1,     1,    {false,  do_class_reset}}},
+        {"class_restart",           {1,     1,    {false,  do_class_restart}}},
+        {"class_start",             {1,     1,    {false,  do_class_start}}},
+        {"class_stop",              {1,     1,    {false,  do_class_stop}}},
+        {"copy",                    {2,     2,    {true,   do_copy}}},
+        {"domainname",              {1,     1,    {true,   do_domainname}}},
+        {"enable",                  {1,     1,    {false,  do_enable}}},
+        {"exec",                    {1,     kMax, {false,  do_exec}}},
+        {"exec_background",         {1,     kMax, {false,  do_exec_background}}},
+        {"exec_start",              {1,     1,    {false,  do_exec_start}}},
+        {"export",                  {2,     2,    {false,  do_export}}},
+        {"hostname",                {1,     1,    {true,   do_hostname}}},
+        {"ifup",                    {1,     1,    {true,   do_ifup}}},
+        {"init_user0",              {0,     0,    {false,  do_init_user0}}},
+        {"insmod",                  {1,     kMax, {true,   do_insmod}}},
+        {"installkey",              {1,     1,    {false,  do_installkey}}},
+        {"load_persist_props",      {0,     0,    {false,  do_load_persist_props}}},
+        {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
+        {"loglevel",                {1,     1,    {false,  do_loglevel}}},
+        {"mkdir",                   {1,     4,    {true,   do_mkdir}}},
+        {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
+        {"mount",                   {3,     kMax, {false,  do_mount}}},
+        {"umount",                  {1,     1,    {false,  do_umount}}},
+        {"readahead",               {1,     2,    {true,   do_readahead}}},
+        {"restart",                 {1,     1,    {false,  do_restart}}},
+        {"restorecon",              {1,     kMax, {true,   do_restorecon}}},
+        {"restorecon_recursive",    {1,     kMax, {true,   do_restorecon_recursive}}},
+        {"rm",                      {1,     1,    {true,   do_rm}}},
+        {"rmdir",                   {1,     1,    {true,   do_rmdir}}},
+        //  TODO: setprop should be run in the subcontext, but property service needs to be split
+        //        out from init before that is possible.
+        {"setprop",                 {2,     2,    {false,  do_setprop}}},
+        {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
+        {"start",                   {1,     1,    {false,  do_start}}},
+        {"stop",                    {1,     1,    {false,  do_stop}}},
+        {"swapon_all",              {1,     1,    {false,  do_swapon_all}}},
+        {"symlink",                 {2,     2,    {true,   do_symlink}}},
+        {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},
+        {"trigger",                 {1,     1,    {false,  do_trigger}}},
+        {"verity_load_state",       {0,     0,    {false,  do_verity_load_state}}},
+        {"verity_update_state",     {0,     0,    {false,  do_verity_update_state}}},
+        {"wait",                    {1,     2,    {true,   do_wait}}},
+        {"wait_for_prop",           {2,     2,    {false,  do_wait_for_prop}}},
+        {"write",                   {2,     2,    {true,   do_write}}},
     };
+    // clang-format on
     return builtin_functions;
 }
+
+}  // namespace init
+}  // namespace android

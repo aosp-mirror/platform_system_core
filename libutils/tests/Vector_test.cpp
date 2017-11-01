@@ -74,12 +74,9 @@ TEST_F(VectorTest, CopyOnWrite_CopyAndAddElements) {
     EXPECT_EQ(other[3], 5);
 }
 
-// TODO: gtest isn't capable of parsing Abort messages formatted by
-// Android (fails differently on host and target), so we always need to
-// use an empty error message for death tests.
 TEST_F(VectorTest, SetCapacity_Overflow) {
   Vector<int> vector;
-  EXPECT_DEATH(vector.setCapacity(SIZE_MAX / sizeof(int) + 1), "");
+  EXPECT_DEATH(vector.setCapacity(SIZE_MAX / sizeof(int) + 1), "Assertion failed");
 }
 
 TEST_F(VectorTest, SetCapacity_ShrinkBelowSize) {
@@ -95,20 +92,13 @@ TEST_F(VectorTest, SetCapacity_ShrinkBelowSize) {
   ASSERT_EQ(8U, vector.capacity());
 }
 
-// NOTE: All of the tests below are useless because of the "TODO" above.
-// We have no way of knowing *why* the process crashed. Given that we're
-// inserting a NULL array, we'll fail with a SIGSEGV eventually. We need
-// the ability to make assertions on the abort message to make sure we're
-// failing for the right reasons.
 TEST_F(VectorTest, _grow_OverflowSize) {
   Vector<int> vector;
   vector.add(1);
 
   // Checks that the size calculation (not the capacity calculation) doesn't
   // overflow : the size here will be (1 + SIZE_MAX).
-  //
-  // EXPECT_DEATH(vector.insertArrayAt(NULL, 0, SIZE_MAX), "new_size_overflow");
-  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, SIZE_MAX), "");
+  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, SIZE_MAX), "new_size overflow");
 }
 
 TEST_F(VectorTest, _grow_OverflowCapacityDoubling) {
@@ -116,18 +106,14 @@ TEST_F(VectorTest, _grow_OverflowCapacityDoubling) {
 
   // This should fail because the calculated capacity will overflow even though
   // the size of the vector doesn't.
-  //
-  // EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX - 1)), "new_capacity_overflow");
-  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX - 1)), "");
+  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX - 1)), "new_capacity overflow");
 }
 
 TEST_F(VectorTest, _grow_OverflowBufferAlloc) {
   Vector<int> vector;
   // This should fail because the capacity * sizeof(int) overflows, even
   // though the capacity itself doesn't.
-  //
-  // EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX / 2)), "new_alloc_size overflow");
-  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX / 2)), "");
+  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX / 2)), "new_alloc_size overflow");
 }
 
 TEST_F(VectorTest, editArray_Shared) {

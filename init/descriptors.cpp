@@ -19,17 +19,19 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 
-#include "init.h"
-#include "log.h"
 #include "util.h"
+
+namespace android {
+namespace init {
 
 DescriptorInfo::DescriptorInfo(const std::string& name, const std::string& type, uid_t uid,
                                gid_t gid, int perm, const std::string& context)
@@ -58,8 +60,8 @@ void DescriptorInfo::CreateAndPublish(const std::string& globalContext) const {
   std::for_each(publishedName.begin(), publishedName.end(),
                 [] (char& c) { c = isalnum(c) ? c : '_'; });
 
-  std::string val = android::base::StringPrintf("%d", fd);
-  add_environment(publishedName.c_str(), val.c_str());
+  std::string val = std::to_string(fd);
+  setenv(publishedName.c_str(), val.c_str(), 1);
 
   // make sure we don't close on exec
   fcntl(fd, F_SETFD, 0);
@@ -74,14 +76,16 @@ SocketInfo::SocketInfo(const std::string& name, const std::string& type, uid_t u
 }
 
 void SocketInfo::Clean() const {
-  unlink(android::base::StringPrintf(ANDROID_SOCKET_DIR "/%s", name().c_str()).c_str());
+    std::string path = android::base::StringPrintf("%s/%s", ANDROID_SOCKET_DIR, name().c_str());
+    unlink(path.c_str());
 }
 
 int SocketInfo::Create(const std::string& context) const {
-  int flags = ((type() == "stream" ? SOCK_STREAM :
-                (type() == "dgram" ? SOCK_DGRAM :
-                 SOCK_SEQPACKET)));
-  return create_socket(name().c_str(), flags, perm(), uid(), gid(), context.c_str());
+    auto types = android::base::Split(type(), "+");
+    int flags =
+        ((types[0] == "stream" ? SOCK_STREAM : (types[0] == "dgram" ? SOCK_DGRAM : SOCK_SEQPACKET)));
+    bool passcred = types.size() > 1 && types[1] == "passcred";
+    return CreateSocket(name().c_str(), flags, passcred, perm(), uid(), gid(), context.c_str());
 }
 
 const std::string SocketInfo::key() const {
@@ -123,3 +127,6 @@ int FileInfo::Create(const std::string&) const {
 const std::string FileInfo::key() const {
   return ANDROID_FILE_ENV_PREFIX;
 }
+
+}  // namespace init
+}  // namespace android

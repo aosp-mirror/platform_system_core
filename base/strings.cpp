@@ -36,11 +36,12 @@ std::vector<std::string> Split(const std::string& s,
 
   size_t base = 0;
   size_t found;
-  do {
+  while (true) {
     found = s.find_first_of(delimiters, base);
     result.push_back(s.substr(base, found - base));
+    if (found == s.npos) break;
     base = found + 1;
-  } while (found != s.npos);
+  }
 
   return result;
 }
@@ -110,6 +111,10 @@ bool EndsWith(const std::string& s, const char* suffix) {
 
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {
   return EndsWith(s, suffix, false);
+}
+
+bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs) {
+  return strcasecmp(lhs.c_str(), rhs.c_str()) == 0;
 }
 
 }  // namespace base

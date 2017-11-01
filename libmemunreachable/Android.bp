@@ -6,11 +6,18 @@ cc_defaults {
         "-Wextra",
         "-Werror",
     ],
-    clang: true,
     shared_libs: [
         "libbase",
-        "liblog",
     ],
+
+    target: {
+        android: {
+            static_libs: ["libasync_safe"],
+        },
+        host: {
+            shared_libs: ["liblog"],
+        }
+    },
 }
 
 cc_library_shared {
@@ -18,6 +25,7 @@ cc_library_shared {
     defaults: ["libmemunreachable_defaults"],
     srcs: [
         "Allocator.cpp",
+        "Binder.cpp",
         "HeapWalker.cpp",
         "LeakFolding.cpp",
         "LeakPipe.cpp",
@@ -30,7 +38,6 @@ cc_library_shared {
 
     static_libs: [
         "libc_malloc_debug_backtrace",
-        "libc_logging",
     ],
     // Only need this for arm since libc++ uses its own unwind code that
     // doesn't mix with the other default unwind code.
@@ -76,4 +83,19 @@ cc_test {
             enabled: false,
         },
     },
+}
+
+cc_test {
+    name: "memunreachable_binder_test",
+    defaults: ["libmemunreachable_defaults"],
+    srcs: [
+        "tests/Binder_test.cpp",
+        "tests/MemUnreachable_test.cpp",
+    ],
+    shared_libs: [
+        "libbinder",
+        "libhwbinder",
+        "libmemunreachable",
+        "libutils",
+    ],
 }

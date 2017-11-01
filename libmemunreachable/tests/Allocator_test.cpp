@@ -16,44 +16,44 @@
 
 #include <Allocator.h>
 
-#include <gtest/gtest.h>
 #include <ScopedDisableMalloc.h>
+#include <gtest/gtest.h>
 
+namespace android {
 
 std::function<void()> ScopedAlarm::func_;
 
 class AllocatorTest : public testing::Test {
  protected:
   AllocatorTest() : heap(), disable_malloc_() {}
-  virtual void SetUp() {
-    heap_count = 0;
-  }
+  virtual void SetUp() { heap_count = 0; }
   virtual void TearDown() {
     ASSERT_EQ(heap_count, 0);
     ASSERT_TRUE(heap.empty());
     ASSERT_FALSE(disable_malloc_.timed_out());
   }
   Heap heap;
+
  private:
   ScopedDisableMallocTimeout disable_malloc_;
 };
 
 TEST_F(AllocatorTest, simple) {
   Allocator<char[100]> allocator(heap);
-  void *ptr = allocator.allocate();
+  void* ptr = allocator.allocate();
   ASSERT_TRUE(ptr != NULL);
   allocator.deallocate(ptr);
 }
 
 TEST_F(AllocatorTest, multiple) {
   Allocator<char[100]> allocator(heap);
-  void *ptr1 = allocator.allocate();
+  void* ptr1 = allocator.allocate();
   ASSERT_TRUE(ptr1 != NULL);
-  void *ptr2 = allocator.allocate();
+  void* ptr2 = allocator.allocate();
   ASSERT_TRUE(ptr2 != NULL);
   ASSERT_NE(ptr1, ptr2);
   allocator.deallocate(ptr1);
-  void *ptr3 = allocator.allocate();
+  void* ptr3 = allocator.allocate();
   ASSERT_EQ(ptr1, ptr3);
   allocator.deallocate(ptr3);
   allocator.deallocate(ptr2);
@@ -63,7 +63,7 @@ TEST_F(AllocatorTest, many) {
   const int num = 4096;
   const int size = 128;
   Allocator<char[size]> allocator(heap);
-  void *ptr[num];
+  void* ptr[num];
   for (int i = 0; i < num; i++) {
     ptr[i] = allocator.allocate();
     memset(ptr[i], 0xaa, size);
@@ -87,7 +87,7 @@ TEST_F(AllocatorTest, many) {
 TEST_F(AllocatorTest, large) {
   const size_t size = 1024 * 1024;
   Allocator<char[size]> allocator(heap);
-  void *ptr = allocator.allocate();
+  void* ptr = allocator.allocate();
   memset(ptr, 0xaa, size);
   allocator.deallocate(ptr);
 }
@@ -96,7 +96,7 @@ TEST_F(AllocatorTest, many_large) {
   const int num = 128;
   const int size = 1024 * 1024;
   Allocator<char[size]> allocator(heap);
-  void *ptr[num];
+  void* ptr[num];
   for (int i = 0; i < num; i++) {
     ptr[i] = allocator.allocate();
     memset(ptr[i], 0xaa, size);
@@ -172,3 +172,5 @@ TEST_F(AllocatorTest, unique) {
 
   ASSERT_NE(ptr, nullptr);
 }
+
+}  // namespace android

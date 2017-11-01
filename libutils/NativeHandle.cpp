@@ -19,14 +19,14 @@
 
 namespace android {
 
-sp<NativeHandle> NativeHandle::create(
-        native_handle_t* handle, bool ownsHandle) {
+sp<NativeHandle> NativeHandle::create(native_handle_t* handle, bool ownsHandle) {
     return handle ? new NativeHandle(handle, ownsHandle) : NULL;
 }
 
 NativeHandle::NativeHandle(native_handle_t* handle, bool ownsHandle)
-:   mHandle(handle), mOwnsHandle(ownsHandle)
-{}
+        : mHandle(handle), mOwnsHandle(ownsHandle) {
+
+}
 
 NativeHandle::~NativeHandle() {
     if (mOwnsHandle) {

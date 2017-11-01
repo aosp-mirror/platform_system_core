@@ -27,7 +27,8 @@ cc_defaults {
                 "test_str_parms.cpp",
                 "android_get_control_socket_test.cpp",
                 "android_get_control_file_test.cpp",
-                "multiuser_test.cpp"
+                "multiuser_test.cpp",
+                "fs_config.cpp",
             ],
         },
 
@@ -46,6 +47,12 @@ cc_defaults {
             suffix: "64",
         },
     },
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
 }
 
 test_libraries = [
@@ -56,6 +63,7 @@ test_libraries = [
 
 cc_test {
     name: "libcutils_test",
+    test_suites: ["device-tests"],
     defaults: ["libcutils_test_default"],
     host_supported: true,
     shared_libs: test_libraries,
@@ -63,6 +71,7 @@ cc_test {
 
 cc_test {
     name: "libcutils_test_static",
+    test_suites: ["device-tests"],
     defaults: ["libcutils_test_default"],
     static_libs: ["libc"] + test_libraries,
     stl: "libc++_static",

@@ -1,0 +1,13 @@
+cc_binary {
+    name: "lmkd",
+
+    srcs: ["lmkd.c"],
+    shared_libs: [
+        "liblog",
+        "libprocessgroup",
+        "libcutils",
+    ],
+    cflags: ["-Werror"],
+
+    init_rc: ["lmkd.rc"],
+}

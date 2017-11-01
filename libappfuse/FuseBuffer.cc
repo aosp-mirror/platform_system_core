@@ -23,81 +23,168 @@
 #include <algorithm>
 #include <type_traits>
 
+#include <sys/socket.h>
+#include <sys/uio.h>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 
 namespace android {
 namespace fuse {
+namespace {
 
-static_assert(
-    std::is_standard_layout<FuseBuffer>::value,
-    "FuseBuffer must be standard layout union.");
+constexpr useconds_t kRetrySleepForWriting = 1000;  // 1 ms
 
 template <typename T>
-bool FuseMessage<T>::CheckHeaderLength(const char* name) const {
-  const auto& header = static_cast<const T*>(this)->header;
-  if (header.len >= sizeof(header) && header.len <= sizeof(T)) {
+bool CheckHeaderLength(const FuseMessage<T>* self, const char* name, size_t max_size) {
+    const auto& header = static_cast<const T*>(self)->header;
+    if (header.len >= sizeof(header) && header.len <= max_size) {
+        return true;
+    } else {
+        LOG(ERROR) << "Invalid header length is found in " << name << ": " << header.len;
+        return false;
+    }
+}
+
+template <typename T>
+ResultOrAgain ReadInternal(FuseMessage<T>* self, int fd, int sockflag) {
+    char* const buf = reinterpret_cast<char*>(self);
+    const ssize_t result = sockflag ? TEMP_FAILURE_RETRY(recv(fd, buf, sizeof(T), sockflag))
+                                    : TEMP_FAILURE_RETRY(read(fd, buf, sizeof(T)));
+
+    switch (result) {
+        case 0:
+            // Expected EOF.
+            return ResultOrAgain::kFailure;
+        case -1:
+            if (errno == EAGAIN) {
+                return ResultOrAgain::kAgain;
+            }
+            PLOG(ERROR) << "Failed to read a FUSE message";
+            return ResultOrAgain::kFailure;
+    }
+
+    const auto& header = static_cast<const T*>(self)->header;
+    if (result < static_cast<ssize_t>(sizeof(header))) {
+        LOG(ERROR) << "Read bytes " << result << " are shorter than header size " << sizeof(header);
+        return ResultOrAgain::kFailure;
+    }
+
+    if (!CheckHeaderLength<T>(self, "Read", sizeof(T))) {
+        return ResultOrAgain::kFailure;
+    }
+
+    if (static_cast<uint32_t>(result) != header.len) {
+        LOG(ERROR) << "Read bytes " << result << " are different from header.len " << header.len;
+        return ResultOrAgain::kFailure;
+    }
+
+    return ResultOrAgain::kSuccess;
+}
+
+template <typename T>
+ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, const void* data,
+                            size_t max_size) {
+    if (!CheckHeaderLength<T>(self, "Write", max_size)) {
+        return ResultOrAgain::kFailure;
+    }
+
+    const char* const buf = reinterpret_cast<const char*>(self);
+    const auto& header = static_cast<const T*>(self)->header;
+
+    while (true) {
+        int result;
+        if (sockflag) {
+            CHECK(data == nullptr);
+            result = TEMP_FAILURE_RETRY(send(fd, buf, header.len, sockflag));
+        } else if (data) {
+            const struct iovec vec[] = {{const_cast<char*>(buf), sizeof(header)},
+                                        {const_cast<void*>(data), header.len - sizeof(header)}};
+            result = TEMP_FAILURE_RETRY(writev(fd, vec, arraysize(vec)));
+        } else {
+            result = TEMP_FAILURE_RETRY(write(fd, buf, header.len));
+        }
+        if (result == -1) {
+            switch (errno) {
+                case ENOBUFS:
+                    // When returning ENOBUFS, epoll still reports the FD is writable. Just usleep
+                    // and retry again.
+                    usleep(kRetrySleepForWriting);
+                    continue;
+                case EAGAIN:
+                    return ResultOrAgain::kAgain;
+                default:
+                    PLOG(ERROR) << "Failed to write a FUSE message: "
+                                << "fd=" << fd << " "
+                                << "sockflag=" << sockflag << " "
+                                << "data=" << data;
+                    return ResultOrAgain::kFailure;
+            }
+        }
+
+        if (static_cast<unsigned int>(result) != header.len) {
+            LOG(ERROR) << "Written bytes " << result << " is different from length in header "
+                       << header.len;
+            return ResultOrAgain::kFailure;
+        }
+        return ResultOrAgain::kSuccess;
+    }
+}
+}
+
+static_assert(std::is_standard_layout<FuseBuffer>::value,
+              "FuseBuffer must be standard layout union.");
+
+bool SetupMessageSockets(base::unique_fd (*result)[2]) {
+    base::unique_fd fds[2];
+    {
+        int raw_fds[2];
+        if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, raw_fds) == -1) {
+            PLOG(ERROR) << "Failed to create sockets for proxy";
+            return false;
+        }
+        fds[0].reset(raw_fds[0]);
+        fds[1].reset(raw_fds[1]);
+    }
+
+    constexpr int kMaxMessageSize = sizeof(FuseBuffer);
+    if (setsockopt(fds[0], SOL_SOCKET, SO_SNDBUFFORCE, &kMaxMessageSize, sizeof(int)) != 0 ||
+        setsockopt(fds[1], SOL_SOCKET, SO_SNDBUFFORCE, &kMaxMessageSize, sizeof(int)) != 0) {
+        PLOG(ERROR) << "Failed to update buffer size for socket";
+        return false;
+    }
+
+    (*result)[0] = std::move(fds[0]);
+    (*result)[1] = std::move(fds[1]);
     return true;
-  } else {
-    LOG(ERROR) << "Invalid header length is found in " << name << ": " <<
-        header.len;
-    return false;
-  }
 }
 
 template <typename T>
 bool FuseMessage<T>::Read(int fd) {
-  char* const buf = reinterpret_cast<char*>(this);
-  const ssize_t result = TEMP_FAILURE_RETRY(::read(fd, buf, sizeof(T)));
-  if (result < 0) {
-    PLOG(ERROR) << "Failed to read a FUSE message";
-    return false;
-  }
+    return ReadInternal(this, fd, 0) == ResultOrAgain::kSuccess;
+}
 
-  const auto& header = static_cast<const T*>(this)->header;
-  if (result < static_cast<ssize_t>(sizeof(header))) {
-    LOG(ERROR) << "Read bytes " << result << " are shorter than header size " <<
-        sizeof(header);
-    return false;
-  }
-
-  if (!CheckHeaderLength("Read")) {
-    return false;
-  }
-
-  if (static_cast<uint32_t>(result) > header.len) {
-    LOG(ERROR) << "Read bytes " << result << " are longer than header.len " <<
-        header.len;
-    return false;
-  }
-
-  if (!base::ReadFully(fd, buf + result, header.len - result)) {
-    PLOG(ERROR) << "ReadFully failed";
-    return false;
-  }
-
-  return true;
+template <typename T>
+ResultOrAgain FuseMessage<T>::ReadOrAgain(int fd) {
+    return ReadInternal(this, fd, MSG_DONTWAIT);
 }
 
 template <typename T>
 bool FuseMessage<T>::Write(int fd) const {
-  if (!CheckHeaderLength("Write")) {
-    return false;
-  }
-
-  const char* const buf = reinterpret_cast<const char*>(this);
-  const auto& header = static_cast<const T*>(this)->header;
-  if (!base::WriteFully(fd, buf, header.len)) {
-    PLOG(ERROR) << "WriteFully failed";
-    return false;
-  }
-
-  return true;
+    return WriteInternal(this, fd, 0, nullptr, sizeof(T)) == ResultOrAgain::kSuccess;
 }
 
-template class FuseMessage<FuseRequest>;
-template class FuseMessage<FuseResponse>;
+template <typename T>
+bool FuseMessage<T>::WriteWithBody(int fd, size_t max_size, const void* data) const {
+    CHECK(data != nullptr);
+    return WriteInternal(this, fd, 0, data, max_size) == ResultOrAgain::kSuccess;
+}
+
+template <typename T>
+ResultOrAgain FuseMessage<T>::WriteOrAgain(int fd) const {
+    return WriteInternal(this, fd, MSG_DONTWAIT, nullptr, sizeof(T));
+}
 
 void FuseRequest::Reset(
     uint32_t data_length, uint32_t opcode, uint64_t unique) {
@@ -107,17 +194,18 @@ void FuseRequest::Reset(
   header.unique = unique;
 }
 
-void FuseResponse::ResetHeader(
-    uint32_t data_length, int32_t error, uint64_t unique) {
-  CHECK_LE(error, 0) << "error should be zero or negative.";
-  header.len = sizeof(fuse_out_header) + data_length;
-  header.error = error;
-  header.unique = unique;
+template <size_t N>
+void FuseResponseBase<N>::ResetHeader(uint32_t data_length, int32_t error, uint64_t unique) {
+    CHECK_LE(error, 0) << "error should be zero or negative.";
+    header.len = sizeof(fuse_out_header) + data_length;
+    header.error = error;
+    header.unique = unique;
 }
 
-void FuseResponse::Reset(uint32_t data_length, int32_t error, uint64_t unique) {
-  memset(this, 0, sizeof(fuse_out_header) + data_length);
-  ResetHeader(data_length, error, unique);
+template <size_t N>
+void FuseResponseBase<N>::Reset(uint32_t data_length, int32_t error, uint64_t unique) {
+    memset(this, 0, sizeof(fuse_out_header) + data_length);
+    ResetHeader(data_length, error, unique);
 }
 
 void FuseBuffer::HandleInit() {
@@ -163,9 +251,17 @@ void FuseBuffer::HandleInit() {
 void FuseBuffer::HandleNotImpl() {
   LOG(VERBOSE) << "NOTIMPL op=" << request.header.opcode << " uniq="
       << request.header.unique << " nid=" << request.header.nodeid;
-  const uint64_t unique = request.header.unique;
+  // Add volatile as a workaround for compiler issue which removes the temporary
+  // variable.
+  const volatile uint64_t unique = request.header.unique;
   response.Reset(0, -ENOSYS, unique);
 }
+
+template class FuseMessage<FuseRequest>;
+template class FuseMessage<FuseResponse>;
+template class FuseMessage<FuseSimpleResponse>;
+template struct FuseResponseBase<0u>;
+template struct FuseResponseBase<kFuseMaxRead>;
 
 }  // namespace fuse
 }  // namespace android

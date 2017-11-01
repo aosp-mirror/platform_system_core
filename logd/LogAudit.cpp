@@ -25,42 +25,60 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
+#include <fstream>
+#include <sstream>
+
 #include <android-base/macros.h>
+#include <log/log_properties.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "libaudit.h"
 #include "LogAudit.h"
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
 #include "LogUtils.h"
+#include "libaudit.h"
 
-#define KMSG_PRIORITY(PRI)                          \
-    '<',                                            \
-    '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) / 10, \
-    '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, \
-    '>'
+#define KMSG_PRIORITY(PRI)                               \
+    '<', '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) / 10, \
+        '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, '>'
 
-LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg) :
-        SocketListener(mSock = getLogSocket(), false),
-        logbuf(buf),
-        reader(reader),
-        fdDmesg(fdDmesg),
-        main(__android_logger_property_get_bool("ro.logd.auditd.main",
+LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg)
+    : SocketListener(mSock = getLogSocket(), false),
+      logbuf(buf),
+      reader(reader),
+      fdDmesg(fdDmesg),
+      main(__android_logger_property_get_bool("ro.logd.auditd.main",
+                                              BOOL_DEFAULT_TRUE)),
+      events(__android_logger_property_get_bool("ro.logd.auditd.events",
                                                 BOOL_DEFAULT_TRUE)),
-        events(__android_logger_property_get_bool("ro.logd.auditd.events",
-                                                  BOOL_DEFAULT_TRUE)),
-        initialized(false),
-        tooFast(false) {
+      initialized(false),
+      tooFast(false) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
-        'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
-        ' ', 's', 't', 'a', 'r', 't', '\n' };
+                                           'l',
+                                           'o',
+                                           'g',
+                                           'd',
+                                           '.',
+                                           'a',
+                                           'u',
+                                           'd',
+                                           'i',
+                                           't',
+                                           'd',
+                                           ':',
+                                           ' ',
+                                           's',
+                                           't',
+                                           'a',
+                                           'r',
+                                           't',
+                                           '\n' };
     write(fdDmesg, auditd_message, sizeof(auditd_message));
 }
 
 void LogAudit::checkRateLimit() {
-
     // trim list for AUDIT_RATE_LIMIT_BURST_DURATION of history
     log_time oldest(AUDIT_RATE_LIMIT_BURST_DURATION, 0);
     bucket.emplace(android_log_clockid());
@@ -69,8 +87,9 @@ void LogAudit::checkRateLimit() {
 
     static const size_t upperThreshold =
         ((AUDIT_RATE_LIMIT_BURST_DURATION *
-          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) + 1) /
-                              2;
+          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
+         1) /
+        2;
     if (bucket.size() >= upperThreshold) {
         // Hit peak, slow down source
         if (!tooFast) {
@@ -89,8 +108,8 @@ void LogAudit::checkRateLimit() {
 
     if (!tooFast) return;
 
-    static const size_t lowerThreshold = AUDIT_RATE_LIMIT_BURST_DURATION *
-                                         AUDIT_RATE_LIMIT_MAX;
+    static const size_t lowerThreshold =
+        AUDIT_RATE_LIMIT_BURST_DURATION * AUDIT_RATE_LIMIT_MAX;
 
     if (bucket.size() >= lowerThreshold) return;
 
@@ -99,7 +118,7 @@ void LogAudit::checkRateLimit() {
     audit_rate_limit(mSock, AUDIT_RATE_LIMIT_DEFAULT);
 }
 
-bool LogAudit::onDataAvailable(SocketClient *cli) {
+bool LogAudit::onDataAvailable(SocketClient* cli) {
     if (!initialized) {
         prctl(PR_SET_NAME, "logd.auditd");
         initialized = true;
@@ -123,14 +142,79 @@ bool LogAudit::onDataAvailable(SocketClient *cli) {
     return true;
 }
 
-int LogAudit::logPrint(const char *fmt, ...) {
+static inline bool hasMetadata(char* str, int str_len) {
+    // need to check and see if str already contains bug metadata from
+    // possibility of stuttering if log audit crashes and then reloads kernel
+    // messages. Kernel denials that contain metadata will either end in
+    // "b/[0-9]+$" or "b/[0-9]+  duplicate messages suppressed$" which will put
+    // a '/' character at either 9 or 39 indices away from the end of the str.
+    return str_len >= 39 &&
+           (str[str_len - 9] == '/' || str[str_len - 39] == '/');
+}
+
+std::map<std::string, std::string> LogAudit::populateDenialMap() {
+    std::ifstream bug_file("/system/etc/selinux/selinux_denial_metadata");
+    std::string line;
+    // allocate a map for the static map pointer in logParse to keep track of,
+    // this function only runs once
+    std::map<std::string, std::string> denial_to_bug;
+    if (bug_file.good()) {
+        std::string scontext;
+        std::string tcontext;
+        std::string tclass;
+        std::string bug_num;
+        while (std::getline(bug_file, line)) {
+            std::stringstream split_line(line);
+            split_line >> scontext >> tcontext >> tclass >> bug_num;
+            denial_to_bug.emplace(scontext + tcontext + tclass, bug_num);
+        }
+    }
+    return denial_to_bug;
+}
+
+std::string LogAudit::denialParse(const std::string& denial, char terminator,
+                                  const std::string& search_term) {
+    size_t start_index = denial.find(search_term);
+    if (start_index != std::string::npos) {
+        start_index += search_term.length();
+        return denial.substr(
+            start_index, denial.find(terminator, start_index) - start_index);
+    }
+    return "";
+}
+
+void LogAudit::logParse(const std::string& string, std::string* bug_num) {
+    if (!__android_log_is_debuggable()) {
+        bug_num->assign("");
+        return;
+    }
+    static std::map<std::string, std::string> denial_to_bug =
+        populateDenialMap();
+    std::string scontext = denialParse(string, ':', "scontext=u:object_r:");
+    std::string tcontext = denialParse(string, ':', "tcontext=u:object_r:");
+    std::string tclass = denialParse(string, ' ', "tclass=");
+    if (scontext.empty()) {
+        scontext = denialParse(string, ':', "scontext=u:r:");
+    }
+    if (tcontext.empty()) {
+        tcontext = denialParse(string, ':', "tcontext=u:r:");
+    }
+    auto search = denial_to_bug.find(scontext + tcontext + tclass);
+    if (search != denial_to_bug.end()) {
+        bug_num->assign(" b/" + search->second);
+    } else {
+        bug_num->assign("");
+    }
+}
+
+int LogAudit::logPrint(const char* fmt, ...) {
     if (fmt == NULL) {
         return -EINVAL;
     }
 
     va_list args;
 
-    char *str = NULL;
+    char* str = NULL;
     va_start(args, fmt);
     int rc = vasprintf(&str, fmt, args);
     va_end(args);
@@ -138,8 +222,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     if (rc < 0) {
         return rc;
     }
-
-    char *cp;
+    char* cp;
     // Work around kernels missing
     // https://github.com/torvalds/linux/commit/b8f89caafeb55fba75b74bea25adc4e4cd91be67
     // Such kernels improperly add newlines inside audit messages.
@@ -150,29 +233,29 @@ int LogAudit::logPrint(const char *fmt, ...) {
     while ((cp = strstr(str, "  "))) {
         memmove(cp, cp + 1, strlen(cp + 1) + 1);
     }
-
     bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
+    static std::string bug_metadata;
     if ((fdDmesg >= 0) && initialized) {
-        struct iovec iov[3];
+        struct iovec iov[4];
         static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
         static const char log_warning[] = { KMSG_PRIORITY(LOG_WARNING) };
         static const char newline[] = "\n";
 
         // Dedupe messages, checking for identical messages starting with avc:
         static unsigned count;
-        static char *last_str;
+        static char* last_str;
         static bool last_info;
 
         if (last_str != NULL) {
             static const char avc[] = "): avc: ";
-            char *avcl = strstr(last_str, avc);
+            char* avcl = strstr(last_str, avc);
             bool skip = false;
 
             if (avcl) {
-                char *avcr = strstr(str, avc);
+                char* avcr = strstr(str, avc);
 
-                skip = avcr && !fastcmp<strcmp>(avcl + strlen(avc),
-                                                avcr + strlen(avc));
+                skip = avcr &&
+                       !fastcmp<strcmp>(avcl + strlen(avc), avcr + strlen(avc));
                 if (skip) {
                     ++count;
                     free(last_str);
@@ -182,21 +265,20 @@ int LogAudit::logPrint(const char *fmt, ...) {
             }
             if (!skip) {
                 static const char resume[] = " duplicate messages suppressed\n";
-
-                iov[0].iov_base = last_info ?
-                    const_cast<char *>(log_info) :
-                    const_cast<char *>(log_warning);
-                iov[0].iov_len = last_info ?
-                    sizeof(log_info) :
-                    sizeof(log_warning);
+                iov[0].iov_base = last_info ? const_cast<char*>(log_info)
+                                            : const_cast<char*>(log_warning);
+                iov[0].iov_len =
+                    last_info ? sizeof(log_info) : sizeof(log_warning);
                 iov[1].iov_base = last_str;
                 iov[1].iov_len = strlen(last_str);
+                iov[2].iov_base = const_cast<char*>(bug_metadata.c_str());
+                iov[2].iov_len = bug_metadata.length();
                 if (count > 1) {
-                    iov[2].iov_base = const_cast<char *>(resume);
-                    iov[2].iov_len = strlen(resume);
+                    iov[3].iov_base = const_cast<char*>(resume);
+                    iov[3].iov_len = strlen(resume);
                 } else {
-                    iov[2].iov_base = const_cast<char *>(newline);
-                    iov[2].iov_len = strlen(newline);
+                    iov[3].iov_base = const_cast<char*>(newline);
+                    iov[3].iov_len = strlen(newline);
                 }
 
                 writev(fdDmesg, iov, arraysize(iov));
@@ -210,16 +292,16 @@ int LogAudit::logPrint(const char *fmt, ...) {
             last_info = info;
         }
         if (count == 0) {
-            iov[0].iov_base = info ?
-                const_cast<char *>(log_info) :
-                const_cast<char *>(log_warning);
-            iov[0].iov_len = info ?
-                sizeof(log_info) :
-                sizeof(log_warning);
+            logParse(str, &bug_metadata);
+            iov[0].iov_base = info ? const_cast<char*>(log_info)
+                                   : const_cast<char*>(log_warning);
+            iov[0].iov_len = info ? sizeof(log_info) : sizeof(log_warning);
             iov[1].iov_base = str;
             iov[1].iov_len = strlen(str);
-            iov[2].iov_base = const_cast<char *>(newline);
-            iov[2].iov_len = strlen(newline);
+            iov[2].iov_base = const_cast<char*>(bug_metadata.c_str());
+            iov[2].iov_len = bug_metadata.length();
+            iov[3].iov_base = const_cast<char*>(newline);
+            iov[3].iov_len = strlen(newline);
 
             writev(fdDmesg, iov, arraysize(iov));
         }
@@ -236,10 +318,10 @@ int LogAudit::logPrint(const char *fmt, ...) {
     log_time now;
 
     static const char audit_str[] = " audit(";
-    char *timeptr = strstr(str, audit_str);
-    if (timeptr
-            && ((cp = now.strptime(timeptr + sizeof(audit_str) - 1, "%s.%q")))
-            && (*cp == ':')) {
+    char* timeptr = strstr(str, audit_str);
+    if (timeptr &&
+        ((cp = now.strptime(timeptr + sizeof(audit_str) - 1, "%s.%q"))) &&
+        (*cp == ':')) {
         memcpy(timeptr + sizeof(audit_str) - 1, "0.0", 3);
         memmove(timeptr + sizeof(audit_str) - 1 + 3, cp, strlen(cp) + 1);
         if (!isMonotonic()) {
@@ -258,7 +340,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     }
 
     static const char pid_str[] = " pid=";
-    char *pidptr = strstr(str, pid_str);
+    char* pidptr = strstr(str, pid_str);
     if (pidptr && isdigit(pidptr[sizeof(pid_str) - 1])) {
         cp = pidptr + sizeof(pid_str) - 1;
         pid = 0;
@@ -267,7 +349,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
             ++cp;
         }
         tid = pid;
-        logbuf->lock();
+        logbuf->wrlock();
         uid = logbuf->pidToUid(pid);
         logbuf->unlock();
         memmove(pidptr, cp, strlen(cp) + 1);
@@ -275,24 +357,32 @@ int LogAudit::logPrint(const char *fmt, ...) {
 
     // log to events
 
-    size_t l = strnlen(str, LOGGER_ENTRY_MAX_PAYLOAD);
-    size_t n = l + sizeof(android_log_event_string_t);
+    size_t str_len = strnlen(str, LOGGER_ENTRY_MAX_PAYLOAD);
+    if (((fdDmesg < 0) || !initialized) && !hasMetadata(str, str_len))
+        logParse(str, &bug_metadata);
+    str_len = (str_len + bug_metadata.length() <= LOGGER_ENTRY_MAX_PAYLOAD)
+                  ? str_len + bug_metadata.length()
+                  : LOGGER_ENTRY_MAX_PAYLOAD;
+    size_t message_len = str_len + sizeof(android_log_event_string_t);
 
     bool notify = false;
 
-    if (events) {   // begin scope for event buffer
-        uint32_t buffer[(n + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
+    if (events) {  // begin scope for event buffer
+        uint32_t buffer[(message_len + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
 
-        android_log_event_string_t *event
-            = reinterpret_cast<android_log_event_string_t *>(buffer);
+        android_log_event_string_t* event =
+            reinterpret_cast<android_log_event_string_t*>(buffer);
         event->header.tag = htole32(AUDITD_LOG_TAG);
         event->type = EVENT_TYPE_STRING;
-        event->length = htole32(l);
-        memcpy(event->data, str, l);
+        event->length = htole32(message_len);
+        memcpy(event->data, str, str_len - bug_metadata.length());
+        memcpy(event->data + str_len - bug_metadata.length(),
+               bug_metadata.c_str(), bug_metadata.length());
 
-        rc = logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid,
-                         reinterpret_cast<char *>(event),
-                         (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
+        rc = logbuf->log(
+            LOG_ID_EVENTS, now, uid, pid, tid, reinterpret_cast<char*>(event),
+            (message_len <= USHRT_MAX) ? (unsigned short)message_len
+                                       : USHRT_MAX);
         if (rc >= 0) {
             notify = true;
         }
@@ -302,9 +392,9 @@ int LogAudit::logPrint(const char *fmt, ...) {
     // log to main
 
     static const char comm_str[] = " comm=\"";
-    const char *comm = strstr(str, comm_str);
-    const char *estr = str + strlen(str);
-    const char *commfree = NULL;
+    const char* comm = strstr(str, comm_str);
+    const char* estr = str + strlen(str);
+    const char* commfree = NULL;
     if (comm) {
         estr = comm;
         comm += sizeof(comm_str) - 1;
@@ -312,7 +402,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
         pid = tid;
         comm = "auditd";
     } else {
-        logbuf->lock();
+        logbuf->wrlock();
         comm = commfree = logbuf->pidToName(pid);
         logbuf->unlock();
         if (!comm) {
@@ -320,31 +410,34 @@ int LogAudit::logPrint(const char *fmt, ...) {
         }
     }
 
-    const char *ecomm = strchr(comm, '"');
+    const char* ecomm = strchr(comm, '"');
     if (ecomm) {
         ++ecomm;
-        l = ecomm - comm;
+        str_len = ecomm - comm;
     } else {
-        l = strlen(comm) + 1;
+        str_len = strlen(comm) + 1;
         ecomm = "";
     }
-    size_t b = estr - str;
-    if (b > LOGGER_ENTRY_MAX_PAYLOAD) {
-        b = LOGGER_ENTRY_MAX_PAYLOAD;
+    size_t prefix_len = estr - str;
+    if (prefix_len > LOGGER_ENTRY_MAX_PAYLOAD) {
+        prefix_len = LOGGER_ENTRY_MAX_PAYLOAD;
     }
-    size_t e = strnlen(ecomm, LOGGER_ENTRY_MAX_PAYLOAD - b);
-    n = b + e + l + 2;
+    size_t suffix_len = strnlen(ecomm, LOGGER_ENTRY_MAX_PAYLOAD - prefix_len);
+    message_len = str_len + prefix_len + suffix_len + bug_metadata.length() + 2;
 
-    if (main) {   // begin scope for main buffer
-        char newstr[n];
+    if (main) {  // begin scope for main buffer
+        char newstr[message_len];
 
         *newstr = info ? ANDROID_LOG_INFO : ANDROID_LOG_WARN;
-        strlcpy(newstr + 1, comm, l);
-        strncpy(newstr + 1 + l, str, b);
-        strncpy(newstr + 1 + l + b, ecomm, e);
+        strlcpy(newstr + 1, comm, str_len);
+        strncpy(newstr + 1 + str_len, str, prefix_len);
+        strncpy(newstr + 1 + str_len + prefix_len, ecomm, suffix_len);
+        strncpy(newstr + 1 + str_len + prefix_len + suffix_len,
+                bug_metadata.c_str(), bug_metadata.length());
 
         rc = logbuf->log(LOG_ID_MAIN, now, uid, pid, tid, newstr,
-                         (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
+                         (message_len <= USHRT_MAX) ? (unsigned short)message_len
+                                                    : USHRT_MAX);
 
         if (rc >= 0) {
             notify = true;
@@ -352,21 +445,21 @@ int LogAudit::logPrint(const char *fmt, ...) {
         // end scope for main buffer
     }
 
-    free(const_cast<char *>(commfree));
+    free(const_cast<char*>(commfree));
     free(str);
 
     if (notify) {
         reader->notifyNewLog();
         if (rc < 0) {
-            rc = n;
+            rc = message_len;
         }
     }
 
     return rc;
 }
 
-int LogAudit::log(char *buf, size_t len) {
-    char *audit = strstr(buf, " audit(");
+int LogAudit::log(char* buf, size_t len) {
+    char* audit = strstr(buf, " audit(");
     if (!audit || (audit >= &buf[len])) {
         return 0;
     }
@@ -374,7 +467,7 @@ int LogAudit::log(char *buf, size_t len) {
     *audit = '\0';
 
     int rc;
-    char *type = strstr(buf, "type=");
+    char* type = strstr(buf, "type=");
     if (type && (type < &buf[len])) {
         rc = logPrint("%s %s", type, audit + 1);
     } else {

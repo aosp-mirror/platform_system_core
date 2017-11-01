@@ -16,9 +16,7 @@
 
 #define LOG_TAG "StopWatch"
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <utils/StopWatch.h>
 
 /* for PRId64 */
 #ifndef __STDC_FORMAT_MACROS
@@ -27,17 +25,12 @@
 #include <inttypes.h>
 
 #include <utils/Log.h>
-#include <utils/Errors.h>
-#include <utils/StopWatch.h>
 
 /*****************************************************************************/
 
 namespace android {
 
-
-StopWatch::StopWatch(const char *name, int clock, uint32_t flags)
-    :   mName(name), mClock(clock), mFlags(flags)
-{
+StopWatch::StopWatch(const char* name, int clock) : mName(name), mClock(clock) {
     reset();
 }
 

@@ -584,7 +584,7 @@ static int output_file_init(struct output_file *out, int block_size,
 				.file_hdr_sz = SPARSE_HEADER_LEN,
 				.chunk_hdr_sz = CHUNK_HEADER_LEN,
 				.blk_sz = out->block_size,
-				.total_blks = out->len / out->block_size,
+				.total_blks = DIV_ROUND_UP(out->len, out->block_size),
 				.total_chunks = chunks,
 				.image_checksum = 0
 		};

@@ -25,60 +25,44 @@
 #include <ostream>
 #include <string>
 
+#include <android-base/chrono_utils.h>
+#include <selinux/label.h>
+
+#include "result.h"
+
 #define COLDBOOT_DONE "/dev/.coldboot_done"
 
+using android::base::boot_clock;
 using namespace std::chrono_literals;
 
-int create_socket(const char *name, int type, mode_t perm,
-                  uid_t uid, gid_t gid, const char *socketcon);
+namespace android {
+namespace init {
 
-bool read_file(const char* path, std::string* content);
-bool write_file(const char* path, const char* content);
+int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
+                 const char* socketcon);
 
-// A std::chrono clock based on CLOCK_BOOTTIME.
-class boot_clock {
- public:
-  typedef std::chrono::nanoseconds duration;
-  typedef std::chrono::time_point<boot_clock, duration> time_point;
-  static constexpr bool is_steady = true;
+Result<std::string> ReadFile(const std::string& path);
+Result<Success> WriteFile(const std::string& path, const std::string& content);
 
-  static time_point now();
-};
+Result<uid_t> DecodeUid(const std::string& name);
 
-class Timer {
- public:
-  Timer() : start_(boot_clock::now()) {
-  }
-
-  double duration_s() const {
-    typedef std::chrono::duration<double> double_duration;
-    return std::chrono::duration_cast<double_duration>(boot_clock::now() - start_).count();
-  }
-
-  int64_t duration_ns() const {
-    return (boot_clock::now() - start_).count();
-  }
-
- private:
-  boot_clock::time_point start_;
-};
-
-std::ostream& operator<<(std::ostream& os, const Timer& t);
-
-unsigned int decode_uid(const char *s);
-
-int mkdir_recursive(const char *pathname, mode_t mode);
-void sanitize(char *p);
+bool mkdir_recursive(const std::string& pathname, mode_t mode);
 int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);
 void import_kernel_cmdline(bool in_qemu,
                            const std::function<void(const std::string&, const std::string&, bool)>&);
-int make_dir(const char *path, mode_t mode);
-int restorecon(const char *pathname, int flags = 0);
+bool make_dir(const std::string& path, mode_t mode);
 std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len);
 bool is_dir(const char* pathname);
 bool expand_props(const std::string& src, std::string* dst);
 
-void reboot(const char* destination) __attribute__((__noreturn__));
-void panic() __attribute__((__noreturn__));
+// Returns the platform's Android DT directory as specified in the kernel cmdline.
+// If the platform does not configure a custom DT path, returns the standard one (based in procfs).
+const std::string& get_android_dt_dir();
+// Reads or compares the content of device tree file under the platform's Android DT directory.
+bool read_android_dt_file(const std::string& sub_path, std::string* dt_content);
+bool is_android_dt_value_expected(const std::string& sub_path, const std::string& expected_content);
+
+}  // namespace init
+}  // namespace android
 
 #endif

@@ -17,6 +17,7 @@
 #ifndef ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
 #define ANDROID_LIBAPPFUSE_FUSEBUFFER_H_
 
+#include <android-base/unique_fd.h>
 #include <linux/fuse.h>
 
 namespace android {
@@ -28,13 +29,23 @@ constexpr size_t kFuseMaxWrite = 256 * 1024;
 constexpr size_t kFuseMaxRead = 128 * 1024;
 constexpr int32_t kFuseSuccess = 0;
 
+// Setup sockets to transfer FuseMessage.
+bool SetupMessageSockets(base::unique_fd (*sockets)[2]);
+
+enum class ResultOrAgain {
+    kSuccess,
+    kFailure,
+    kAgain,
+};
+
 template<typename T>
 class FuseMessage {
  public:
   bool Read(int fd);
   bool Write(int fd) const;
- private:
-  bool CheckHeaderLength(const char* name) const;
+  bool WriteWithBody(int fd, size_t max_size, const void* data) const;
+  ResultOrAgain ReadOrAgain(int fd);
+  ResultOrAgain WriteOrAgain(int fd) const;
 };
 
 // FuseRequest represents file operation requests from /dev/fuse. It starts
@@ -54,32 +65,36 @@ struct FuseRequest : public FuseMessage<FuseRequest> {
     // for FUSE_READ
     fuse_read_in read_in;
     // for FUSE_LOOKUP
-    char lookup_name[0];
+    char lookup_name[kFuseMaxWrite];
   };
   void Reset(uint32_t data_length, uint32_t opcode, uint64_t unique);
 };
 
 // FuseResponse represents file operation responses to /dev/fuse. It starts
 // from fuse_out_header. The body layout depends on the operation code.
-struct FuseResponse : public FuseMessage<FuseResponse> {
-  fuse_out_header header;
-  union {
-    // for FUSE_INIT
-    fuse_init_out init_out;
-    // for FUSE_LOOKUP
-    fuse_entry_out entry_out;
-    // for FUSE_GETATTR
-    fuse_attr_out attr_out;
-    // for FUSE_OPEN
-    fuse_open_out open_out;
-    // for FUSE_READ
-    char read_data[kFuseMaxRead];
-    // for FUSE_WRITE
-    fuse_write_out write_out;
-  };
-  void Reset(uint32_t data_length, int32_t error, uint64_t unique);
-  void ResetHeader(uint32_t data_length, int32_t error, uint64_t unique);
+template <size_t N>
+struct FuseResponseBase : public FuseMessage<FuseResponseBase<N>> {
+    fuse_out_header header;
+    union {
+        // for FUSE_INIT
+        fuse_init_out init_out;
+        // for FUSE_LOOKUP
+        fuse_entry_out entry_out;
+        // for FUSE_GETATTR
+        fuse_attr_out attr_out;
+        // for FUSE_OPEN
+        fuse_open_out open_out;
+        // for FUSE_READ
+        char read_data[N];
+        // for FUSE_WRITE
+        fuse_write_out write_out;
+    };
+    void Reset(uint32_t data_length, int32_t error, uint64_t unique);
+    void ResetHeader(uint32_t data_length, int32_t error, uint64_t unique);
 };
+
+using FuseResponse = FuseResponseBase<kFuseMaxRead>;
+using FuseSimpleResponse = FuseResponseBase<0u>;
 
 // To reduce memory usage, FuseBuffer shares the memory region for request and
 // response.

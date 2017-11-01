@@ -17,18 +17,35 @@
 #ifndef __CORE_FS_MGR_PRIV_H
 #define __CORE_FS_MGR_PRIV_H
 
-#include <cutils/klog.h>
-#include <fs_mgr.h>
+#include <chrono>
+#include <string>
 
-__BEGIN_DECLS
+#include <android-base/logging.h>
 
-#define INFO(x...)    KLOG_INFO("fs_mgr", x)
-#define WARNING(x...) KLOG_WARNING("fs_mgr", x)
-#define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
+#include "fs_mgr.h"
+#include "fs_mgr_priv_boot_config.h"
+
+/* The CHECK() in logging.h will use program invocation name as the tag.
+ * Thus, the log will have prefix "init: " when libfs_mgr is statically
+ * linked in the init process. This might be opaque when debugging.
+ * Appends "in libfs_mgr" at the end of the abort message to explicitly
+ * indicate the check happens in fs_mgr.
+ */
+#define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
+
+#define FS_MGR_TAG "[libfs_mgr]"
+
+// Logs a message to kernel
+#define LINFO    LOG(INFO) << FS_MGR_TAG
+#define LWARNING LOG(WARNING) << FS_MGR_TAG
+#define LERROR   LOG(ERROR) << FS_MGR_TAG
+
+// Logs a message with strerror(errno) at the end
+#define PINFO    PLOG(INFO) << FS_MGR_TAG
+#define PWARNING PLOG(WARNING) << FS_MGR_TAG
+#define PERROR   PLOG(ERROR) << FS_MGR_TAG
 
 #define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
-
-#define WAIT_TIMEOUT 20
 
 /* fstab has the following format:
  *
@@ -89,12 +106,22 @@ __BEGIN_DECLS
 #define MF_MAX_COMP_STREAMS 0x100000
 #define MF_RESERVEDSIZE     0x200000
 #define MF_QUOTA            0x400000
+#define MF_ERASEBLKSIZE     0x800000
+#define MF_LOGICALBLKSIZE  0X1000000
+#define MF_AVB             0X2000000
+#define MF_KEYDIRECTORY 0X4000000
 
 #define DM_BUF_SIZE 4096
 
-int fs_mgr_set_blk_ro(const char *blockdev);
-int fs_mgr_update_for_slotselect(struct fstab *fstab);
+using namespace std::chrono_literals;
 
-__END_DECLS
+int fs_mgr_set_blk_ro(const char *blockdev);
+bool fs_mgr_wait_for_file(const std::string& filename,
+                          const std::chrono::milliseconds relative_timeout);
+bool fs_mgr_update_for_slotselect(struct fstab *fstab);
+bool fs_mgr_is_device_unlocked();
+const std::string& get_android_dt_dir();
+bool is_dt_compatible();
+int load_verity_state(struct fstab_rec* fstab, int* mode);
 
 #endif /* __CORE_FS_MGR_PRIV_H */

@@ -23,6 +23,7 @@
 #include <video/adf.h>
 
 #include <hardware/hwcomposer.h>
+#include <hardware/hwcomposer2.h>
 
 struct adf_hwc_helper;
 
@@ -123,6 +124,16 @@ int adf_getDisplayConfigs(struct adf_hwc_helper *dev, int disp,
         uint32_t *configs, size_t *numConfigs);
 int adf_getDisplayAttributes(struct adf_hwc_helper *dev, int disp,
         uint32_t config, const uint32_t *attributes, int32_t *values);
+/**
+ * Generic implementation of common HWC2 functions.
+ *
+ * The HWC2 should not return these functions directly through getFunction.
+ * Instead, the HWC2 should return stub functions which call these helpers.
+ */
+int adf_getDisplayAttributes_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config, const uint32_t *attributes, int32_t *values);
+int adf_set_active_config_hwc2(struct adf_hwc_helper *dev, int disp,
+        uint32_t config);
 
 __END_DECLS
 

@@ -1,3 +1,17 @@
+ndk_headers {
+    name: "libsync_headers",
+    from: "include/ndk",
+    to: "android",
+    srcs: ["include/ndk/sync.h"],
+    license: "NOTICE",
+}
+
+ndk_library {
+    name: "libsync",
+    symbol_file: "libsync.map.txt",
+    first_version: "26",
+}
+
 cc_defaults {
     name: "libsync_defaults",
     srcs: ["sync.c"],
@@ -9,6 +23,12 @@ cc_defaults {
 cc_library_shared {
     name: "libsync",
     defaults: ["libsync_defaults"],
+}
+
+llndk_library {
+    name: "libsync",
+    symbol_file: "libsync.map.txt",
+    export_include_dirs: ["include"],
 }
 
 // libsync_recovery is only intended for the recovery binary.
@@ -37,5 +57,4 @@ cc_test {
         "-Wno-missing-field-initializers",
         "-Wno-sign-compare",
     ],
-    clang: true,
 }
