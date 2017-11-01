@@ -87,8 +87,10 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   bool return_address_attempt = false;
   bool adjust_pc = false;
   for (; frames_.size() < max_frames_;) {
-    MapInfo* map_info = maps_->Find(regs_->pc());
+    uint64_t cur_pc = regs_->pc();
+    uint64_t cur_sp = regs_->sp();
 
+    MapInfo* map_info = maps_->Find(regs_->pc());
     uint64_t rel_pc;
     Elf* elf;
     if (map_info == nullptr) {
@@ -138,6 +140,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         }
       }
     }
+
     if (!stepped) {
       if (return_address_attempt) {
         // Remove the speculative frame.
@@ -156,6 +159,11 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       }
     } else {
       return_address_attempt = false;
+    }
+
+    // If the pc and sp didn't change, then consider everything stopped.
+    if (cur_pc == regs_->pc() && cur_sp == regs_->sp()) {
+      break;
     }
   }
 }
