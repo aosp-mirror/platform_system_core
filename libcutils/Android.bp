@@ -112,7 +112,7 @@ cc_library {
                 "properties.cpp",
                 "qtaguid.c",
                 "trace-dev.c",
-                "uevent.c",
+                "uevent.cpp",
             ],
             sanitize: {
                 misc_undefined: ["integer"],
