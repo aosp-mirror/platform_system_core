@@ -388,7 +388,7 @@ const char* Demangler::ParseFunctionName(const char* name) {
       saves_.pop_back();
     }
 
-    function_name_ = cur_state_.str;
+    function_name_ += cur_state_.str;
     while (!cur_state_.suffixes.empty()) {
       function_suffix_ += cur_state_.suffixes.back();
       cur_state_.suffixes.pop_back();
@@ -786,6 +786,30 @@ const char* Demangler::ParseFunctionTemplateArguments(const char* name) {
 }
 
 const char* Demangler::FindFunctionName(const char* name) {
+  if (*name == 'T') {
+    // non-virtual thunk, verify that it matches one of these patterns:
+    //   Thn[0-9]+_
+    //   Th[0-9]+_
+    //   Thn_
+    //   Th_
+    name++;
+    if (*name != 'h') {
+      return nullptr;
+    }
+    name++;
+    if (*name == 'n') {
+      name++;
+    }
+    while (std::isdigit(*name)) {
+      name++;
+    }
+    if (*name != '_') {
+      return nullptr;
+    }
+    function_name_ = "non-virtual thunk to ";
+    return name + 1;
+  }
+
   if (*name == 'N') {
     parse_funcs_.push_back(&Demangler::ParseArgumentsAtTopLevel);
     parse_func_ = &Demangler::ParseFunctionName;
