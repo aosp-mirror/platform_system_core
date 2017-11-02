@@ -120,6 +120,8 @@ static int generate_ext4_image(const char* fileName, long long partSize,
         int raid_stripe_width = eraseBlkSize / block_size;
         // stride should be the max of 8kb and logical block size
         if (logicalBlkSize != 0 && logicalBlkSize < 8192) raid_stride = 8192 / block_size;
+        // stripe width should be >= stride
+        if (raid_stripe_width < raid_stride) raid_stripe_width = raid_stride;
         ext_attr += StringPrintf(",stride=%d,stripe-width=%d", raid_stride, raid_stripe_width);
     }
     mke2fs_args.push_back("-E");
