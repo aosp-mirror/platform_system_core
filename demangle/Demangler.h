@@ -39,6 +39,7 @@ class Demangler {
   std::string GetArgumentsString();
   void FinalizeTemplate();
   const char* ParseS(const char* name);
+  const char* ParseT(const char* name);
   const char* AppendOperatorString(const char* name);
   void Save(const std::string& str, bool is_name);
 
@@ -50,17 +51,21 @@ class Demangler {
     first_save_.clear();
     cur_state_.Clear();
     saves_.clear();
+    template_saves_.clear();
     while (!state_stack_.empty()) {
       state_stack_.pop();
     }
     last_save_name_ = false;
+    template_found_ = false;
   }
 
   using parse_func_type = const char* (Demangler::*)(const char*);
   parse_func_type parse_func_;
   std::vector<parse_func_type> parse_funcs_;
   std::vector<std::string> saves_;
+  std::vector<std::string> template_saves_;
   bool last_save_name_;
+  bool template_found_;
 
   std::string function_name_;
   std::string function_suffix_;
@@ -89,12 +94,15 @@ class Demangler {
   // Parsing functions.
   const char* ParseComplexString(const char* name);
   const char* ParseComplexArgument(const char* name);
+  const char* ParseArgumentsAtTopLevel(const char* name);
   const char* ParseArguments(const char* name);
   const char* ParseTemplateArguments(const char* name);
   const char* ParseTemplateArgumentsComplex(const char* name);
   const char* ParseTemplateLiteral(const char* name);
   const char* ParseFunctionArgument(const char* name);
   const char* ParseFunctionName(const char* name);
+  const char* ParseFunctionNameTemplate(const char* name);
+  const char* ParseFunctionTemplateArguments(const char* name);
   const char* FindFunctionName(const char* name);
   const char* Fail(const char*) { return nullptr; }
 

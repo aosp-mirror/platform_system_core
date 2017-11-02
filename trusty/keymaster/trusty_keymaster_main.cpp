@@ -289,7 +289,6 @@ static bool test_import_ecdsa(TrustyKeymasterDevice* device) {
     std::unique_ptr<const uint8_t[]> deleter(key.key_material);
 
     printf("=== Signing with imported ECDSA key ===\n");
-    keymaster_ec_sign_params_t sign_params = {DIGEST_NONE};
     size_t message_len = 30 /* arbitrary */;
     std::unique_ptr<uint8_t[]> message(new uint8_t[message_len]);
     memset(message.get(), 'a', message_len);

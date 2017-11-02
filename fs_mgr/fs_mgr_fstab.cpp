@@ -700,25 +700,44 @@ struct fstab *fs_mgr_read_fstab_dt()
 }
 
 /*
- * tries to load default fstab.<hardware> file from /odm/etc, /vendor/etc
- * or /. loads the first one found and also combines fstab entries passed
- * in from device tree.
+ * Identify path to fstab file. Lookup is based on pattern
+ * fstab.<hardware>, fstab.<hardware.platform> in folders
+   /odm/etc, vendor/etc, or /.
+ */
+static std::string get_fstab_path()
+{
+    for (const char* prop : {"hardware", "hardware.platform"}) {
+        std::string hw;
+
+        if (!fs_mgr_get_boot_config(prop, &hw)) continue;
+
+        for (const char* prefix : {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab."}) {
+            std::string fstab_path = prefix + hw;
+            if (access(fstab_path.c_str(), F_OK) == 0) {
+                return fstab_path;
+            }
+        }
+    }
+
+    return std::string();
+}
+
+/*
+ * loads the fstab file and combines with fstab entries passed in from device tree.
  */
 struct fstab *fs_mgr_read_fstab_default()
 {
-    std::string hw;
     std::string default_fstab;
 
     // Use different fstab paths for normal boot and recovery boot, respectively
     if (access("/sbin/recovery", F_OK) == 0) {
         default_fstab = "/etc/recovery.fstab";
-    } else if (fs_mgr_get_boot_config("hardware", &hw)) {  // normal boot
-        for (const char *prefix : {"/odm/etc/fstab.","/vendor/etc/fstab.", "/fstab."}) {
-            default_fstab = prefix + hw;
-            if (access(default_fstab.c_str(), F_OK) == 0) break;
-        }
-    } else {
-        LWARNING << __FUNCTION__ << "(): failed to find device hardware name";
+    } else {  // normal boot
+        default_fstab = get_fstab_path();
+    }
+
+    if (default_fstab.empty()) {
+        LWARNING << __FUNCTION__ << "(): failed to find device default fstab";
     }
 
     // combines fstab entries passed in from device tree with
