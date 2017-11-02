@@ -488,6 +488,27 @@ TEST(DemangleTest, BooleanLiterals) {
             demangler.Parse("_ZN3oneE3twoI5threeI4fourELb0ELb1EE"));
 }
 
+TEST(DemangleTest, non_virtual_thunk) {
+  Demangler demangler;
+
+  ASSERT_EQ("non-virtual thunk to one", demangler.Parse("_ZThn0_N3oneE"));
+  ASSERT_EQ("non-virtual thunk to two", demangler.Parse("_ZThn0_3two"));
+  ASSERT_EQ("non-virtual thunk to three", demangler.Parse("_ZTh0_5three"));
+  ASSERT_EQ("non-virtual thunk to four", demangler.Parse("_ZTh_4four"));
+  ASSERT_EQ("non-virtual thunk to five", demangler.Parse("_ZTh0123456789_4five"));
+  ASSERT_EQ("non-virtual thunk to six", demangler.Parse("_ZThn0123456789_3six"));
+
+  ASSERT_EQ("_ZThn0N3oneE", demangler.Parse("_ZThn0N3oneE"));
+  ASSERT_EQ("_ZThn03two", demangler.Parse("_ZThn03two"));
+  ASSERT_EQ("_ZTh05three", demangler.Parse("_ZTh05three"));
+  ASSERT_EQ("_ZTh4four", demangler.Parse("_ZTh4four"));
+  ASSERT_EQ("_ZTh01234567894five", demangler.Parse("_ZTh01234567894five"));
+  ASSERT_EQ("_ZThn01234567893six", demangler.Parse("_ZThn01234567893six"));
+  ASSERT_EQ("_ZT_N3oneE", demangler.Parse("_ZT_N3oneE"));
+  ASSERT_EQ("_ZT0_N3oneE", demangler.Parse("_ZT0_N3oneE"));
+  ASSERT_EQ("_ZTH_N3oneE", demangler.Parse("_ZTH_N3oneE"));
+}
+
 TEST(DemangleTest, demangle) {
   std::string str;
 
