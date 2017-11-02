@@ -324,28 +324,38 @@ void usb_host_run(struct usb_host_context *context,
 
 struct usb_device *usb_device_open(const char *dev_name)
 {
-    int fd, did_retry = 0, writeable = 1;
-
+    int fd, attempts, writeable = 1;
+    const int SLEEP_BETWEEN_ATTEMPTS_US = 100000; /* 100 ms */
+    const int64_t MAX_ATTEMPTS = 10;              /* 1s */
     D("usb_device_open %s\n", dev_name);
 
-retry:
-    fd = open(dev_name, O_RDWR);
-    if (fd < 0) {
-        /* if we fail, see if have read-only access */
-        fd = open(dev_name, O_RDONLY);
-        D("usb_device_open open returned %d errno %d\n", fd, errno);
-        if (fd < 0 && (errno == EACCES || errno == ENOENT) && !did_retry) {
-            /* work around race condition between inotify and permissions management */
-            sleep(1);
-            did_retry = 1;
-            goto retry;
+    /* Hack around waiting for permissions to be set on the USB device node.
+     * Should really be a timeout instead of attempt count, and should REALLY
+     * be triggered by the perm change via inotify rather than polling.
+     */
+    for (attempts = 0; attempts < MAX_ATTEMPTS; ++attempts) {
+        if (access(dev_name, R_OK | W_OK) == 0) {
+            writeable = 1;
+            break;
+        } else {
+            if (access(dev_name, R_OK) == 0) {
+                /* double check that write permission didn't just come along too! */
+                writeable = (access(dev_name, R_OK | W_OK) == 0);
+                break;
+            }
         }
-
-        if (fd < 0)
-            return NULL;
-        writeable = 0;
-        D("[ usb open read-only %s fd = %d]\n", dev_name, fd);
+        /* not writeable or readable - sleep and try again. */
+        D("usb_device_open no access sleeping\n");
+        usleep(SLEEP_BETWEEN_ATTEMPTS_US);
     }
+
+    if (writeable) {
+        fd = open(dev_name, O_RDWR);
+    } else {
+        fd = open(dev_name, O_RDONLY);
+    }
+    D("usb_device_open open returned %d writeable %d errno %d\n", fd, writeable, errno);
+    if (fd < 0) return NULL;
 
     struct usb_device* result = usb_device_new(dev_name, fd);
     if (result)
