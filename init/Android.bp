@@ -95,6 +95,8 @@ cc_library_static {
         "libprocessgroup",
         "libfs_mgr",
         "libprotobuf-cpp-lite",
+        "libpropertyinfoserializer",
+        "libpropertyinfoparser",
     ],
     include_dirs: [
         "system/core/mkbootimg",
@@ -191,6 +193,7 @@ cc_test {
         "libselinux",
         "libcrypto",
         "libprotobuf-cpp-lite",
+        "libpropertyinfoparser",
     ],
 }
 
