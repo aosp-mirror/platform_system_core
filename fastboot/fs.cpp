@@ -23,7 +23,6 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
-#include <ext4_utils/make_ext4fs.h>
 #include <sparse/sparse.h>
 
 using android::base::StringPrintf;
