@@ -1365,9 +1365,8 @@ static unsigned fb_get_flash_block_size(Transport* transport, std::string name) 
         fprintf(stderr, "Couldn't parse %s '%s'.\n", name.c_str(), sizeString.c_str());
         return 0;
     }
-    if (size < 4096 || (size & (size - 1)) != 0) {
-        fprintf(stderr, "Invalid %s %u: must be a power of 2 and at least 4096.\n",
-                name.c_str(), size);
+    if ((size & (size - 1)) != 0) {
+        fprintf(stderr, "Invalid %s %u: must be a power of 2.\n", name.c_str(), size);
         return 0;
     }
     return size;
