@@ -40,9 +40,9 @@ public:
     const AssemblyKey<needs_t>& key() const { return mKey; }
 };
 
+#if ANDROID_ARM_CODEGEN
 static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
 {
-#if ANDROID_ARM_CODEGEN
     GGLContext* c;
     gglInit(&c);
     needs_t needs;
@@ -73,10 +73,12 @@ static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
         printf("error %08x (%s)\n", err, strerror(-err));
     }
     gglUninit(c);
-#else
-    printf("This test runs only on ARM, Arm64 or MIPS\n");
-#endif
 }
+#else
+static void ggl_test_codegen(uint32_t, uint32_t, uint32_t, uint32_t) {
+    printf("This test runs only on ARM, Arm64 or MIPS\n");
+}
+#endif
 
 int main(int argc, char** argv)
 {
