@@ -407,7 +407,7 @@ void get_io_usage_proto(io_usage* usage, const IOUsage& io_proto)
 
 void uid_monitor::update_uid_io_proto(unordered_map<int, StoragedProto>* protos)
 {
-    for (auto it : *protos) {
+    for (auto& it : *protos) {
         it.second.mutable_uid_io_usage()->Clear();
     }
 
