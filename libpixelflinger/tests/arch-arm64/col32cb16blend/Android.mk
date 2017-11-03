@@ -11,6 +11,8 @@ LOCAL_C_INCLUDES :=
 
 LOCAL_MODULE:= test-pixelflinger-arm64-col32cb16blend
 
+LOCAL_CFLAGS := -Wall -Werror
+
 LOCAL_MODULE_TAGS := tests
 
 LOCAL_MULTILIB := 64
