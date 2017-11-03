@@ -44,13 +44,13 @@
 #include "UnwindStackMap.h"
 
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
-                       std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames) {
-  std::vector<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
+                       std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
+                       std::vector<std::string>* skip_names) {
   UnwindStackMap* stack_map = reinterpret_cast<UnwindStackMap*>(back_map);
   auto process_memory = stack_map->process_memory();
   unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
                                  regs, stack_map->process_memory());
-  unwinder.Unwind(&skip_names, &stack_map->GetSuffixesToIgnore());
+  unwinder.Unwind(skip_names, &stack_map->GetSuffixesToIgnore());
 
   if (num_ignore_frames >= unwinder.NumFrames()) {
     frames->resize(0);
@@ -104,7 +104,8 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
-  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
+  std::vector<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, &skip_names);
 }
 
 UnwindStackPtrace::UnwindStackPtrace(pid_t pid, pid_t tid, BacktraceMap* map)
@@ -124,5 +125,5 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
-  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames);
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr);
 }
