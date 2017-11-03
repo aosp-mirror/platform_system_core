@@ -70,6 +70,8 @@ class ElfInterface {
 
   uint64_t dynamic_offset() { return dynamic_offset_; }
   uint64_t dynamic_size() { return dynamic_size_; }
+  uint64_t eh_frame_hdr_offset() { return eh_frame_hdr_offset_; }
+  uint64_t eh_frame_hdr_size() { return eh_frame_hdr_size_; }
   uint64_t eh_frame_offset() { return eh_frame_offset_; }
   uint64_t eh_frame_size() { return eh_frame_size_; }
   uint64_t debug_frame_offset() { return debug_frame_offset_; }
@@ -111,6 +113,9 @@ class ElfInterface {
   // Stored elf data.
   uint64_t dynamic_offset_ = 0;
   uint64_t dynamic_size_ = 0;
+
+  uint64_t eh_frame_hdr_offset_ = 0;
+  uint64_t eh_frame_hdr_size_ = 0;
 
   uint64_t eh_frame_offset_ = 0;
   uint64_t eh_frame_size_ = 0;

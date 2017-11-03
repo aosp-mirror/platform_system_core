@@ -20,13 +20,13 @@
 #include <unwindstack/Memory.h>
 
 #include "Check.h"
-#include "DwarfEhFrame.h"
+#include "DwarfEhFrameWithHdr.h"
 #include "DwarfError.h"
 
 namespace unwindstack {
 
 template <typename AddressType>
-bool DwarfEhFrame<AddressType>::Init(uint64_t offset, uint64_t size) {
+bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size) {
   uint8_t data[4];
 
   memory_.clear_func_offset();
@@ -73,7 +73,7 @@ bool DwarfEhFrame<AddressType>::Init(uint64_t offset, uint64_t size) {
 }
 
 template <typename AddressType>
-const DwarfFde* DwarfEhFrame<AddressType>::GetFdeFromIndex(size_t index) {
+const DwarfFde* DwarfEhFrameWithHdr<AddressType>::GetFdeFromIndex(size_t index) {
   const FdeInfo* info = GetFdeInfoFromIndex(index);
   if (info == nullptr) {
     return nullptr;
@@ -82,8 +82,8 @@ const DwarfFde* DwarfEhFrame<AddressType>::GetFdeFromIndex(size_t index) {
 }
 
 template <typename AddressType>
-const typename DwarfEhFrame<AddressType>::FdeInfo* DwarfEhFrame<AddressType>::GetFdeInfoFromIndex(
-    size_t index) {
+const typename DwarfEhFrameWithHdr<AddressType>::FdeInfo*
+DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
   auto entry = fde_info_.find(index);
   if (entry != fde_info_.end()) {
     return &fde_info_[index];
@@ -105,8 +105,8 @@ const typename DwarfEhFrame<AddressType>::FdeInfo* DwarfEhFrame<AddressType>::Ge
 }
 
 template <typename AddressType>
-bool DwarfEhFrame<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_offset,
-                                                   uint64_t total_entries) {
+bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_offset,
+                                                          uint64_t total_entries) {
   CHECK(fde_count_ > 0);
   CHECK(total_entries <= fde_count_);
 
@@ -134,7 +134,7 @@ bool DwarfEhFrame<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_of
 }
 
 template <typename AddressType>
-bool DwarfEhFrame<AddressType>::GetFdeOffsetSequential(uint64_t pc, uint64_t* fde_offset) {
+bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetSequential(uint64_t pc, uint64_t* fde_offset) {
   CHECK(fde_count_ != 0);
   last_error_ = DWARF_ERROR_NONE;
   // We can do a binary search if the pc is in the range of the elements
@@ -196,7 +196,7 @@ bool DwarfEhFrame<AddressType>::GetFdeOffsetSequential(uint64_t pc, uint64_t* fd
 }
 
 template <typename AddressType>
-bool DwarfEhFrame<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) {
+bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) {
   if (fde_count_ == 0) {
     return false;
   }
@@ -210,8 +210,8 @@ bool DwarfEhFrame<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_of
   }
 }
 
-// Explicitly instantiate DwarfEhFrame.
-template class DwarfEhFrame<uint32_t>;
-template class DwarfEhFrame<uint64_t>;
+// Explicitly instantiate DwarfEhFrameWithHdr
+template class DwarfEhFrameWithHdr<uint32_t>;
+template class DwarfEhFrameWithHdr<uint64_t>;
 
 }  // namespace unwindstack
