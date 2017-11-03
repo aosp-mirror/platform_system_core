@@ -94,8 +94,6 @@ int GGLAssembler::scanline(const needs_t& needs, context_t const* c)
 
 int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
 {
-    int64_t duration = ggl_system_time();
-
     mBlendFactorCached = 0;
     mBlending = 0;
     mMasking = 0;
@@ -353,7 +351,6 @@ void GGLAssembler::build_scanline_prolog(
     fragment_parts_t& parts, const needs_t& needs)
 {
     Scratch scratches(registerFile());
-    int Rctx = mBuilderContext.Rctx;
 
     // compute count
     comment("compute ct (# of pixels to process)");
