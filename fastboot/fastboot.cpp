@@ -1354,7 +1354,7 @@ static std::string fb_fix_numeric_var(std::string var) {
 
 static unsigned fb_get_flash_block_size(Transport* transport, std::string name) {
     std::string sizeString;
-    if (!fb_getvar(transport, name.c_str(), &sizeString)) {
+    if (!fb_getvar(transport, name.c_str(), &sizeString) || sizeString.empty()) {
         /* This device does not report flash block sizes, so return 0 */
         return 0;
     }
