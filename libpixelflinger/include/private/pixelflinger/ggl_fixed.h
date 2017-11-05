@@ -497,7 +497,6 @@ inline GGLfixed gglMulSubx(GGLfixed x, GGLfixed y, GGLfixed a, int shift)
 {
 
     GGLfixed result;
-    int rshift;
 
     asm("smull  %x[result], %w[x], %w[y]                     \n"
         "lsr    %x[result], %x[result], %x[shift]            \n"

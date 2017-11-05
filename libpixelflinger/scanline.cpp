@@ -2144,7 +2144,6 @@ void scanline_t32cb16(context_t* c)
     const int32_t u = (c->state.texture[0].shade.is0>>16) + x;
     const int32_t v = (c->state.texture[0].shade.it0>>16) + y;
     uint32_t *src = reinterpret_cast<uint32_t*>(tex->data)+(u+(tex->stride*v));
-    int sR, sG, sB;
     uint32_t s, d;
 
     if (ct==1 || uintptr_t(dst)&2) {

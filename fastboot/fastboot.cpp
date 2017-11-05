@@ -1354,7 +1354,7 @@ static std::string fb_fix_numeric_var(std::string var) {
 
 static unsigned fb_get_flash_block_size(Transport* transport, std::string name) {
     std::string sizeString;
-    if (!fb_getvar(transport, name.c_str(), &sizeString)) {
+    if (!fb_getvar(transport, name.c_str(), &sizeString) || sizeString.empty()) {
         /* This device does not report flash block sizes, so return 0 */
         return 0;
     }
@@ -1365,9 +1365,8 @@ static unsigned fb_get_flash_block_size(Transport* transport, std::string name) 
         fprintf(stderr, "Couldn't parse %s '%s'.\n", name.c_str(), sizeString.c_str());
         return 0;
     }
-    if (size < 4096 || (size & (size - 1)) != 0) {
-        fprintf(stderr, "Invalid %s %u: must be a power of 2 and at least 4096.\n",
-                name.c_str(), size);
+    if ((size & (size - 1)) != 0) {
+        fprintf(stderr, "Invalid %s %u: must be a power of 2.\n", name.c_str(), size);
         return 0;
     }
     return size;

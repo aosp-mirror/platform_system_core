@@ -11,6 +11,8 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_MODULE:= test-pixelflinger-gglmul
 
+LOCAL_CFLAGS:= -Wall -Werror
+
 LOCAL_MODULE_TAGS := tests
 
 include $(BUILD_NATIVE_TEST)
