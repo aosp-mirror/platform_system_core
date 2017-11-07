@@ -233,8 +233,8 @@ int main(int argc, char** argv) {
             adb_device_banner = optarg;
             break;
         case 'v':
-            printf("Android Debug Bridge Daemon version %d.%d.%d (%s)\n", ADB_VERSION_MAJOR,
-                   ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_VERSION);
+            printf("Android Debug Bridge Daemon version %d.%d.%d\n", ADB_VERSION_MAJOR,
+                   ADB_VERSION_MINOR, ADB_SERVER_VERSION);
             return 0;
         default:
             // getopt already prints "adbd: invalid option -- %c" for us.
