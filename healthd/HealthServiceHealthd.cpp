@@ -14,13 +14,75 @@
  * limitations under the License.
  */
 
-#include <healthd/healthd.h>
+#define LOG_TAG "healthd"
+#include <android-base/logging.h>
 
-void healthd_board_init(struct healthd_config*) {
-    // use defaults
+#include <android/hardware/health/1.0/IHealth.h>
+#include <android/hardware/health/1.0/types.h>
+#include <hal_conversion.h>
+#include <healthd/healthd.h>
+#include <hidl/HidlTransportSupport.h>
+
+using android::OK;
+using android::NAME_NOT_FOUND;
+using android::hardware::health::V1_0::HealthConfig;
+using android::hardware::health::V1_0::HealthInfo;
+using android::hardware::health::V1_0::Result;
+using android::hardware::health::V1_0::hal_conversion::convertFromHealthConfig;
+using android::hardware::health::V1_0::hal_conversion::convertToHealthConfig;
+using android::hardware::health::V1_0::hal_conversion::convertFromHealthInfo;
+using android::hardware::health::V1_0::hal_conversion::convertToHealthInfo;
+
+using IHealthLegacy = android::hardware::health::V1_0::IHealth;
+
+static android::sp<IHealthLegacy> gHealth_1_0;
+
+static int healthd_board_get_energy_counter(int64_t* energy) {
+    if (gHealth_1_0 == nullptr) {
+        return NAME_NOT_FOUND;
+    }
+
+    Result result = Result::NOT_SUPPORTED;
+    gHealth_1_0->energyCounter([energy, &result](Result ret, int64_t energyOut) {
+        result = ret;
+        *energy = energyOut;
+    });
+
+    return result == Result::SUCCESS ? OK : NAME_NOT_FOUND;
 }
 
-int healthd_board_battery_update(struct android::BatteryProperties*) {
-    // return 0 to log periodic polled battery status to kernel log
-    return 0;
+void healthd_board_init(struct healthd_config* config) {
+    gHealth_1_0 = IHealthLegacy::getService();
+
+    if (gHealth_1_0 == nullptr) {
+        return;
+    }
+
+    HealthConfig halConfig{};
+    convertToHealthConfig(config, halConfig);
+    gHealth_1_0->init(halConfig, [config](const auto& halConfigOut) {
+        convertFromHealthConfig(halConfigOut, config);
+        // always redirect energy counter queries
+        config->energyCounter = healthd_board_get_energy_counter;
+    });
+    LOG(INFO) << LOG_TAG << ": redirecting calls to 1.0 health HAL";
+}
+
+// TODO(b/68724651): Move this function into healthd_mode_service_2_0_battery_update
+// with logthis returned.
+int healthd_board_battery_update(struct android::BatteryProperties* props) {
+    int logthis = 0;
+
+    if (gHealth_1_0 == nullptr) {
+        return logthis;
+    }
+
+    HealthInfo info;
+    convertToHealthInfo(props, info);
+    gHealth_1_0->update(info, [props, &logthis](int32_t ret, const auto& infoOut) {
+        logthis = ret;
+        convertFromHealthInfo(infoOut, props);
+    });
+
+    return logthis;
 }
