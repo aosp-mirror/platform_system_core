@@ -399,13 +399,25 @@ TYPED_TEST_P(DwarfEhFrameTest, GetCieFde64) {
   EXPECT_EQ(0x20U, fde->cie->return_address_register);
 }
 
+TYPED_TEST_P(DwarfEhFrameTest, GetFdeFromPc_fde_not_found) {
+  this->eh_frame_->TestSetTableEntrySize(16);
+  this->eh_frame_->TestSetFdeCount(1);
+
+  typename DwarfEhFrame<TypeParam>::FdeInfo info;
+  info.pc = 0x550;
+  info.offset = 0x10500;
+  this->eh_frame_->TestSetFdeInfo(0, info);
+
+  ASSERT_EQ(nullptr, this->eh_frame_->GetFdeFromPc(0x800));
+}
+
 REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameTest, Init, GetFdeInfoFromIndex_expect_cache_fail,
                            GetFdeInfoFromIndex_read_pcrel, GetFdeInfoFromIndex_read_datarel,
                            GetFdeInfoFromIndex_cached, GetFdeOffsetBinary_verify,
                            GetFdeOffsetSequential, GetFdeOffsetSequential_last_element,
                            GetFdeOffsetSequential_end_check, GetFdeOffsetFromPc_fail_fde_count,
                            GetFdeOffsetFromPc_binary_search, GetFdeOffsetFromPc_sequential_search,
-                           GetCieFde32, GetCieFde64);
+                           GetCieFde32, GetCieFde64, GetFdeFromPc_fde_not_found);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfEhFrameTest, DwarfEhFrameTestTypes);
