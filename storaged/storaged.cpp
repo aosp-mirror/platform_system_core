@@ -71,10 +71,6 @@ using android::hidl::manager::V1_0::IServiceManager;
 
 static sp<IHealth> get_health_service() {
     for (auto&& instanceName : {"default", "backup"}) {
-        if (IServiceManager::getService()->getTransport(IHealth::descriptor, instanceName) ==
-                IServiceManager::Transport::EMPTY) {
-            continue;
-        }
         auto ret = IHealth::getService(instanceName);
         if (ret != nullptr) {
             return ret;
