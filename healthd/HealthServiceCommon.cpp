@@ -36,8 +36,6 @@ using android::hardware::health::V2_0::implementation::Health;
 // see healthd_common.cpp
 android::sp<IHealth> gHealth;
 
-static int gBinderFd;
-
 extern int healthd_main(void);
 
 static void binder_event(uint32_t /*epevents*/) {
@@ -45,14 +43,16 @@ static void binder_event(uint32_t /*epevents*/) {
 }
 
 void healthd_mode_service_2_0_init(struct healthd_config* config) {
+    int binderFd;
+
     LOG(INFO) << LOG_TAG << " Hal is starting up...";
 
     configureRpcThreadpool(1, false /* callerWillJoin */);
     IPCThreadState::self()->disableBackgroundScheduling(true);
-    IPCThreadState::self()->setupPolling(&gBinderFd);
+    IPCThreadState::self()->setupPolling(&binderFd);
 
-    if (gBinderFd >= 0) {
-        if (healthd_register_event(gBinderFd, binder_event))
+    if (binderFd >= 0) {
+        if (healthd_register_event(binderFd, binder_event))
             LOG(ERROR) << LOG_TAG << ": Register for binder events failed";
     }
 
