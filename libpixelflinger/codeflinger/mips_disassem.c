@@ -57,6 +57,7 @@
 // #include <ddb/db_extern.h>
 // #include <ddb/db_sym.h>
 
+#define __unused __attribute__((__unused__))
 
 static char *sprintf_buffer;
 static int sprintf_buf_len;
@@ -183,7 +184,7 @@ db_addr_t mips_disassem(db_addr_t loc, char *di_buffer, int alt_dis_format);
  * 'loc' may in fact contain a breakpoint instruction.
  */
 static db_addr_t
-db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
+db_disasm_insn(int insn, db_addr_t loc, bool altfmt __unused)
 {
     bool bdslot = false;
     InstFmt i;

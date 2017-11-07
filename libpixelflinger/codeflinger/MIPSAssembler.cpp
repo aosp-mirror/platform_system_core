@@ -51,6 +51,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include <cutils/properties.h>
 #include <log/log.h>
@@ -59,6 +60,8 @@
 #include "CodeCache.h"
 #include "MIPSAssembler.h"
 #include "mips_disassem.h"
+
+#define __unused __attribute__((__unused__))
 
 // Choose MIPS arch variant following gcc flags
 #if defined(__mips__) && __mips==32 && __mips_isa_rev>=2
@@ -167,7 +170,7 @@ void ArmToMipsAssembler::prolog()
     mMips->MOVE(R_v0, R_a0);    // move context * passed in a0 to v0 (arm r0)
 }
 
-void ArmToMipsAssembler::epilog(uint32_t touched)
+void ArmToMipsAssembler::epilog(uint32_t touched __unused)
 {
     mArmPC[mInum++] = pc();  // save starting PC for this instr
 
@@ -213,7 +216,7 @@ int ArmToMipsAssembler::buildImmediate(
 
 // shifters...
 
-bool ArmToMipsAssembler::isValidImmediate(uint32_t immediate)
+bool ArmToMipsAssembler::isValidImmediate(uint32_t immediate __unused)
 {
     // for MIPS, any 32-bit immediate is OK
     return true;
@@ -234,13 +237,14 @@ uint32_t ArmToMipsAssembler::reg_imm(int Rm, int type, uint32_t shift)
     return AMODE_REG_IMM;
 }
 
-uint32_t ArmToMipsAssembler::reg_rrx(int Rm)
+uint32_t ArmToMipsAssembler::reg_rrx(int Rm __unused)
 {
     // reg_rrx mode is not used in the GLLAssember code at this time
     return AMODE_UNSUPPORTED;
 }
 
-uint32_t ArmToMipsAssembler::reg_reg(int Rm, int type, int Rs)
+uint32_t ArmToMipsAssembler::reg_reg(int Rm __unused, int type __unused,
+                                     int Rs __unused)
 {
     // reg_reg mode is not used in the GLLAssember code at this time
     return AMODE_UNSUPPORTED;
@@ -281,14 +285,15 @@ uint32_t ArmToMipsAssembler::reg_scale_pre(int Rm, int type,
     return AMODE_REG_SCALE_PRE;
 }
 
-uint32_t ArmToMipsAssembler::reg_scale_post(int Rm, int type, uint32_t shift)
+uint32_t ArmToMipsAssembler::reg_scale_post(int Rm __unused, int type __unused,
+                                            uint32_t shift __unused)
 {
     LOG_ALWAYS_FATAL("adr mode reg_scale_post not yet implemented\n");
     return AMODE_UNSUPPORTED;
 }
 
 // LDRH/LDRSB/LDRSH/STRH (immediate and Rm can be negative, which indicate U=0)
-uint32_t ArmToMipsAssembler::immed8_pre(int32_t immed8, int W)
+uint32_t ArmToMipsAssembler::immed8_pre(int32_t immed8, int W __unused)
 {
     // uint32_t offset = abs(immed8);
 
@@ -318,7 +323,7 @@ uint32_t ArmToMipsAssembler::reg_pre(int Rm, int W)
     return AMODE_REG_PRE;
 }
 
-uint32_t ArmToMipsAssembler::reg_post(int Rm)
+uint32_t ArmToMipsAssembler::reg_post(int Rm __unused)
 {
     LOG_ALWAYS_FATAL("adr mode reg_post not yet implemented\n");
     return AMODE_UNSUPPORTED;
@@ -332,12 +337,6 @@ uint32_t ArmToMipsAssembler::reg_post(int Rm)
 #pragma mark -
 #pragma mark Data Processing...
 #endif
-
-
-static const char * const dpOpNames[] = {
-    "AND", "EOR", "SUB", "RSB", "ADD", "ADC", "SBC", "RSC",
-    "TST", "TEQ", "CMP", "CMN", "ORR", "MOV", "BIC", "MVN"
-};
 
 // check if the operand registers from a previous CMP or S-bit instruction
 // would be overwritten by this instruction. If so, move the value to a
@@ -605,7 +604,7 @@ void ArmToMipsAssembler::dataProcessing(int opcode, int cc,
 #endif
 
 // multiply, accumulate
-void ArmToMipsAssembler::MLA(int cc, int s,
+void ArmToMipsAssembler::MLA(int cc __unused, int s,
         int Rd, int Rm, int Rs, int Rn) {
 
     mArmPC[mInum++] = pc();  // save starting PC for this instr
@@ -618,7 +617,7 @@ void ArmToMipsAssembler::MLA(int cc, int s,
     }
 }
 
-void ArmToMipsAssembler::MUL(int cc, int s,
+void ArmToMipsAssembler::MUL(int cc __unused, int s,
         int Rd, int Rm, int Rs) {
     mArmPC[mInum++] = pc();
     mMips->MUL(Rd, Rm, Rs);
@@ -628,7 +627,7 @@ void ArmToMipsAssembler::MUL(int cc, int s,
     }
 }
 
-void ArmToMipsAssembler::UMULL(int cc, int s,
+void ArmToMipsAssembler::UMULL(int cc __unused, int s,
         int RdLo, int RdHi, int Rm, int Rs) {
     mArmPC[mInum++] = pc();
     mMips->MULT(Rm, Rs);
@@ -641,8 +640,8 @@ void ArmToMipsAssembler::UMULL(int cc, int s,
     }
 }
 
-void ArmToMipsAssembler::UMUAL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs) {
+void ArmToMipsAssembler::UMUAL(int cc __unused, int s,
+        int RdLo __unused, int RdHi, int Rm __unused, int Rs __unused) {
     LOG_FATAL_IF(RdLo==Rm || RdHi==Rm || RdLo==RdHi,
                         "UMUAL(r%u,r%u,r%u,r%u)", RdLo,RdHi,Rm,Rs);
     // *mPC++ =    (cc<<28) | (1<<23) | (1<<21) | (s<<20) |
@@ -657,8 +656,8 @@ void ArmToMipsAssembler::UMUAL(int cc, int s,
     }
 }
 
-void ArmToMipsAssembler::SMULL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs) {
+void ArmToMipsAssembler::SMULL(int cc __unused, int s,
+        int RdLo __unused, int RdHi, int Rm __unused, int Rs __unused) {
     LOG_FATAL_IF(RdLo==Rm || RdHi==Rm || RdLo==RdHi,
                         "SMULL(r%u,r%u,r%u,r%u)", RdLo,RdHi,Rm,Rs);
     // *mPC++ =    (cc<<28) | (1<<23) | (1<<22) | (s<<20) |
@@ -672,8 +671,8 @@ void ArmToMipsAssembler::SMULL(int cc, int s,
         LOG_ALWAYS_FATAL("Condition on SMULL must be on 64-bit result\n");
     }
 }
-void ArmToMipsAssembler::SMUAL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs) {
+void ArmToMipsAssembler::SMUAL(int cc __unused, int s,
+        int RdLo __unused, int RdHi, int Rm __unused, int Rs __unused) {
     LOG_FATAL_IF(RdLo==Rm || RdHi==Rm || RdLo==RdHi,
                         "SMUAL(r%u,r%u,r%u,r%u)", RdLo,RdHi,Rm,Rs);
     // *mPC++ =    (cc<<28) | (1<<23) | (1<<22) | (1<<21) | (s<<20) |
@@ -727,26 +726,26 @@ void ArmToMipsAssembler::B(int cc, const char* label)
     }
 }
 
-void ArmToMipsAssembler::BL(int cc, const char* label)
+void ArmToMipsAssembler::BL(int cc __unused, const char* label __unused)
 {
     LOG_ALWAYS_FATAL("branch-and-link not supported yet\n");
     mArmPC[mInum++] = pc();
 }
 
 // no use for Branches with integer PC, but they're in the Interface class ....
-void ArmToMipsAssembler::B(int cc, uint32_t* to_pc)
+void ArmToMipsAssembler::B(int cc __unused, uint32_t* to_pc __unused)
 {
     LOG_ALWAYS_FATAL("branch to absolute PC not supported, use Label\n");
     mArmPC[mInum++] = pc();
 }
 
-void ArmToMipsAssembler::BL(int cc, uint32_t* to_pc)
+void ArmToMipsAssembler::BL(int cc __unused, uint32_t* to_pc __unused)
 {
     LOG_ALWAYS_FATAL("branch to absolute PC not supported, use Label\n");
     mArmPC[mInum++] = pc();
 }
 
-void ArmToMipsAssembler::BX(int cc, int Rn)
+void ArmToMipsAssembler::BX(int cc __unused, int Rn __unused)
 {
     LOG_ALWAYS_FATAL("branch to absolute PC not supported, use Label\n");
     mArmPC[mInum++] = pc();
@@ -760,7 +759,7 @@ void ArmToMipsAssembler::BX(int cc, int Rn)
 #endif
 
 // data transfer...
-void ArmToMipsAssembler::LDR(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::LDR(int cc __unused, int Rd, int Rn, uint32_t offset)
 {
     mArmPC[mInum++] = pc();
     // work-around for ARM default address mode of immed12_pre(0)
@@ -794,7 +793,7 @@ void ArmToMipsAssembler::LDR(int cc, int Rd, int Rn, uint32_t offset)
     }
 }
 
-void ArmToMipsAssembler::LDRB(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::LDRB(int cc __unused, int Rd, int Rn, uint32_t offset)
 {
     mArmPC[mInum++] = pc();
     // work-around for ARM default address mode of immed12_pre(0)
@@ -823,7 +822,7 @@ void ArmToMipsAssembler::LDRB(int cc, int Rd, int Rn, uint32_t offset)
 
 }
 
-void ArmToMipsAssembler::STR(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::STR(int cc __unused, int Rd, int Rn, uint32_t offset)
 {
     mArmPC[mInum++] = pc();
     // work-around for ARM default address mode of immed12_pre(0)
@@ -859,7 +858,7 @@ void ArmToMipsAssembler::STR(int cc, int Rd, int Rn, uint32_t offset)
     }
 }
 
-void ArmToMipsAssembler::STRB(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::STRB(int cc __unused, int Rd, int Rn, uint32_t offset)
 {
     mArmPC[mInum++] = pc();
     // work-around for ARM default address mode of immed12_pre(0)
@@ -887,7 +886,7 @@ void ArmToMipsAssembler::STRB(int cc, int Rd, int Rn, uint32_t offset)
     }
 }
 
-void ArmToMipsAssembler::LDRH(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::LDRH(int cc __unused, int Rd, int Rn, uint32_t offset)
 {
     mArmPC[mInum++] = pc();
     // work-around for ARM default address mode of immed8_pre(0)
@@ -915,21 +914,23 @@ void ArmToMipsAssembler::LDRH(int cc, int Rd, int Rn, uint32_t offset)
     }
 }
 
-void ArmToMipsAssembler::LDRSB(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::LDRSB(int cc __unused, int Rd __unused,
+                               int Rn __unused, uint32_t offset __unused)
 {
     mArmPC[mInum++] = pc();
     mMips->NOP2();
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::LDRSH(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::LDRSH(int cc __unused, int Rd __unused,
+                               int Rn __unused, uint32_t offset __unused)
 {
     mArmPC[mInum++] = pc();
     mMips->NOP2();
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::STRH(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToMipsAssembler::STRH(int cc __unused, int Rd, int Rn, uint32_t offset)
 {
     mArmPC[mInum++] = pc();
     // work-around for ARM default address mode of immed8_pre(0)
@@ -965,8 +966,8 @@ void ArmToMipsAssembler::STRH(int cc, int Rd, int Rn, uint32_t offset)
 #endif
 
 // block data transfer...
-void ArmToMipsAssembler::LDM(int cc, int dir,
-        int Rn, int W, uint32_t reg_list)
+void ArmToMipsAssembler::LDM(int cc __unused, int dir __unused,
+        int Rn __unused, int W __unused, uint32_t reg_list __unused)
 {   //                        ED FD EA FA      IB IA DB DA
     // const uint8_t P[8] = { 1, 0, 1, 0,      1, 0, 1, 0 };
     // const uint8_t U[8] = { 1, 1, 0, 0,      1, 1, 0, 0 };
@@ -977,8 +978,8 @@ void ArmToMipsAssembler::LDM(int cc, int dir,
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::STM(int cc, int dir,
-        int Rn, int W, uint32_t reg_list)
+void ArmToMipsAssembler::STM(int cc __unused, int dir __unused,
+        int Rn __unused, int W __unused, uint32_t reg_list __unused)
 {   //                        FA EA FD ED      IB IA DB DA
     // const uint8_t P[8] = { 0, 1, 0, 1,      1, 0, 1, 0 };
     // const uint8_t U[8] = { 0, 0, 1, 1,      1, 1, 0, 0 };
@@ -997,21 +998,23 @@ void ArmToMipsAssembler::STM(int cc, int dir,
 #endif
 
 // special...
-void ArmToMipsAssembler::SWP(int cc, int Rn, int Rd, int Rm) {
+void ArmToMipsAssembler::SWP(int cc __unused, int Rn __unused,
+                             int Rd __unused, int Rm __unused) {
     // *mPC++ = (cc<<28) | (2<<23) | (Rn<<16) | (Rd << 12) | 0x90 | Rm;
     mArmPC[mInum++] = pc();
     mMips->NOP2();
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::SWPB(int cc, int Rn, int Rd, int Rm) {
+void ArmToMipsAssembler::SWPB(int cc __unused, int Rn __unused,
+                              int Rd __unused, int Rm __unused) {
     // *mPC++ = (cc<<28) | (2<<23) | (1<<22) | (Rn<<16) | (Rd << 12) | 0x90 | Rm;
     mArmPC[mInum++] = pc();
     mMips->NOP2();
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::SWI(int cc, uint32_t comment) {
+void ArmToMipsAssembler::SWI(int cc __unused, uint32_t comment __unused) {
     // *mPC++ = (cc<<28) | (0xF<<24) | comment;
     mArmPC[mInum++] = pc();
     mMips->NOP2();
@@ -1025,7 +1028,7 @@ void ArmToMipsAssembler::SWI(int cc, uint32_t comment) {
 #endif
 
 // DSP instructions...
-void ArmToMipsAssembler::PLD(int Rn, uint32_t offset) {
+void ArmToMipsAssembler::PLD(int Rn __unused, uint32_t offset) {
     LOG_ALWAYS_FATAL_IF(!((offset&(1<<24)) && !(offset&(1<<21))),
                         "PLD only P=1, W=0");
     // *mPC++ = 0xF550F000 | (Rn<<16) | offset;
@@ -1034,13 +1037,14 @@ void ArmToMipsAssembler::PLD(int Rn, uint32_t offset) {
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::CLZ(int cc, int Rd, int Rm)
+void ArmToMipsAssembler::CLZ(int cc __unused, int Rd, int Rm)
 {
     mArmPC[mInum++] = pc();
     mMips->CLZ(Rd, Rm);
 }
 
-void ArmToMipsAssembler::QADD(int cc,  int Rd, int Rm, int Rn)
+void ArmToMipsAssembler::QADD(int cc __unused,  int Rd __unused,
+                              int Rm __unused, int Rn __unused)
 {
     // *mPC++ = (cc<<28) | 0x1000050 | (Rn<<16) | (Rd<<12) | Rm;
     mArmPC[mInum++] = pc();
@@ -1048,7 +1052,8 @@ void ArmToMipsAssembler::QADD(int cc,  int Rd, int Rm, int Rn)
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::QDADD(int cc,  int Rd, int Rm, int Rn)
+void ArmToMipsAssembler::QDADD(int cc __unused,  int Rd __unused,
+                               int Rm __unused, int Rn __unused)
 {
     // *mPC++ = (cc<<28) | 0x1400050 | (Rn<<16) | (Rd<<12) | Rm;
     mArmPC[mInum++] = pc();
@@ -1056,7 +1061,8 @@ void ArmToMipsAssembler::QDADD(int cc,  int Rd, int Rm, int Rn)
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::QSUB(int cc,  int Rd, int Rm, int Rn)
+void ArmToMipsAssembler::QSUB(int cc __unused,  int Rd __unused,
+                              int Rm __unused, int Rn __unused)
 {
     // *mPC++ = (cc<<28) | 0x1200050 | (Rn<<16) | (Rd<<12) | Rm;
     mArmPC[mInum++] = pc();
@@ -1064,7 +1070,8 @@ void ArmToMipsAssembler::QSUB(int cc,  int Rd, int Rm, int Rn)
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::QDSUB(int cc,  int Rd, int Rm, int Rn)
+void ArmToMipsAssembler::QDSUB(int cc __unused,  int Rd __unused,
+                               int Rm __unused, int Rn __unused)
 {
     // *mPC++ = (cc<<28) | 0x1600050 | (Rn<<16) | (Rd<<12) | Rm;
     mArmPC[mInum++] = pc();
@@ -1073,7 +1080,7 @@ void ArmToMipsAssembler::QDSUB(int cc,  int Rd, int Rm, int Rn)
 }
 
 // 16 x 16 signed multiply (like SMLAxx without the accumulate)
-void ArmToMipsAssembler::SMUL(int cc, int xy,
+void ArmToMipsAssembler::SMUL(int cc __unused, int xy,
                 int Rd, int Rm, int Rs)
 {
     mArmPC[mInum++] = pc();
@@ -1112,7 +1119,7 @@ void ArmToMipsAssembler::SMUL(int cc, int xy,
 }
 
 // signed 32b x 16b multiple, save top 32-bits of 48-bit result
-void ArmToMipsAssembler::SMULW(int cc, int y,
+void ArmToMipsAssembler::SMULW(int cc __unused, int y,
                 int Rd, int Rm, int Rs)
 {
     mArmPC[mInum++] = pc();
@@ -1132,7 +1139,7 @@ void ArmToMipsAssembler::SMULW(int cc, int y,
 }
 
 // 16 x 16 signed multiply, accumulate: Rd = Rm{16} * Rs{16} + Rn
-void ArmToMipsAssembler::SMLA(int cc, int xy,
+void ArmToMipsAssembler::SMLA(int cc __unused, int xy,
                 int Rd, int Rm, int Rs, int Rn)
 {
     mArmPC[mInum++] = pc();
@@ -1172,8 +1179,9 @@ void ArmToMipsAssembler::SMLA(int cc, int xy,
     mMips->ADDU(Rd, R_at, Rn);
 }
 
-void ArmToMipsAssembler::SMLAL(int cc, int xy,
-                int RdHi, int RdLo, int Rs, int Rm)
+void ArmToMipsAssembler::SMLAL(int cc __unused, int xy __unused,
+                               int RdHi __unused, int RdLo __unused,
+                               int Rs __unused, int Rm __unused)
 {
     // *mPC++ = (cc<<28) | 0x1400080 | (RdHi<<16) | (RdLo<<12) | (Rs<<8) | (xy<<4) | Rm;
     mArmPC[mInum++] = pc();
@@ -1181,8 +1189,9 @@ void ArmToMipsAssembler::SMLAL(int cc, int xy,
     NOT_IMPLEMENTED();
 }
 
-void ArmToMipsAssembler::SMLAW(int cc, int y,
-                int Rd, int Rm, int Rs, int Rn)
+void ArmToMipsAssembler::SMLAW(int cc __unused, int y __unused,
+                               int Rd __unused, int Rm __unused,
+                               int Rs __unused, int Rn __unused)
 {
     // *mPC++ = (cc<<28) | 0x1200080 | (Rd<<16) | (Rn<<12) | (Rs<<8) | (y<<4) | Rm;
     mArmPC[mInum++] = pc();
@@ -1191,7 +1200,7 @@ void ArmToMipsAssembler::SMLAW(int cc, int y,
 }
 
 // used by ARMv6 version of GGLAssembler::filter32
-void ArmToMipsAssembler::UXTB16(int cc, int Rd, int Rm, int rotate)
+void ArmToMipsAssembler::UXTB16(int cc __unused, int Rd, int Rm, int rotate)
 {
     mArmPC[mInum++] = pc();
 
@@ -1202,7 +1211,9 @@ void ArmToMipsAssembler::UXTB16(int cc, int Rd, int Rm, int rotate)
     mMips->AND(Rd, Rm, 0x00FF00FF);
 }
 
-void ArmToMipsAssembler::UBFX(int cc, int Rd, int Rn, int lsb, int width)
+void ArmToMipsAssembler::UBFX(int cc __unused, int Rd __unused,
+                              int Rn __unused, int lsb __unused,
+                              int width __unused)
 {
      /* Placeholder for UBFX */
      mArmPC[mInum++] = pc();
@@ -1339,11 +1350,6 @@ void MIPSAssembler::disassemble(const char* name)
         }
     }
 
-    // iArm is an index to Arm instructions 1...n for this assembly sequence
-    // mArmPC[iArm] holds the value of the Mips-PC for the first MIPS
-    // instruction corresponding to that Arm instruction number
-
-    int iArm = 0;
     size_t count = pc()-base();
     uint32_t* mipsPC = base();
     while (count--) {
@@ -1359,7 +1365,7 @@ void MIPSAssembler::disassemble(const char* name)
         ::mips_disassem(mipsPC, di_buf, arm_disasm_fmt);
         string_detab(di_buf);
         string_pad(di_buf, 30);
-        ALOGW("%08x:    %08x    %s", uintptr_t(mipsPC), uint32_t(*mipsPC), di_buf);
+        ALOGW("0x%p:    %08x    %s", mipsPC, uint32_t(*mipsPC), di_buf);
         mipsPC++;
     }
 }
@@ -1381,7 +1387,7 @@ void MIPSAssembler::prolog()
     // empty - done in ArmToMipsAssembler
 }
 
-void MIPSAssembler::epilog(uint32_t touched)
+void MIPSAssembler::epilog(uint32_t touched __unused)
 {
     // empty - done in ArmToMipsAssembler
 }
@@ -1403,7 +1409,7 @@ int MIPSAssembler::generate(const char* name)
 
     // the instruction & data caches are flushed by CodeCache
     const int64_t duration = ggl_system_time() - mDuration;
-    const char * const format = "generated %s (%d ins) at [%p:%p] in %lld ns\n";
+    const char * const format = "generated %s (%d ins) at [%p:%p] in %" PRId64 " ns\n";
     ALOGI(format, name, int(pc()-base()), base(), pc(), duration);
 
     char value[PROPERTY_VALUE_MAX];
@@ -1864,7 +1870,7 @@ void MIPSAssembler::BEQZ(int Rs, const char* label)
     BEQ(Rs, R_zero, label);
 }
 
-void MIPSAssembler::BNEZ(int Rs, const char* label)
+void MIPSAssembler::BNEZ(int Rs __unused, const char* label)
 {
     BNE(R_at, R_zero, label);
 }
