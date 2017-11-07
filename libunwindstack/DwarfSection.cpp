@@ -39,6 +39,10 @@ const DwarfFde* DwarfSection::GetFdeFromPc(uint64_t pc) {
     return nullptr;
   }
   const DwarfFde* fde = GetFdeFromOffset(fde_offset);
+  if (fde == nullptr) {
+    return nullptr;
+  }
+
   // Guaranteed pc >= pc_start, need to check pc in the fde range.
   if (pc < fde->pc_end) {
     return fde;
