@@ -432,9 +432,11 @@ class pstoreConsole {
     if (needle.length() > pos) return std::string::npos;
     pos -= needle.length();
     // fuzzy match to maximum kBitErrorRate
-    do {
+    for (;;) {
       if (numError(pos, needle) != std::string::npos) return pos;
-    } while (pos-- != 0);
+      if (pos == 0) break;
+      --pos;
+    }
     return std::string::npos;
   }
 
