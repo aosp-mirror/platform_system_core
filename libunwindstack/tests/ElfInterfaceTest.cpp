@@ -910,8 +910,32 @@ void ElfInterfaceTest::InitSectionHeadersOffsets() {
   memory_.SetMemory(offset, &shdr, sizeof(shdr));
   offset += ehdr.e_shentsize;
 
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_link = 2;
+  shdr.sh_name = 0x300;
+  shdr.sh_addr = 0x7000;
+  shdr.sh_offset = 0x7000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = 0x800;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_link = 2;
+  shdr.sh_name = 0x400;
+  shdr.sh_addr = 0x6000;
+  shdr.sh_offset = 0xa000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = 0xf00;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
   memory_.SetMemory(0xf100, ".debug_frame", sizeof(".debug_frame"));
   memory_.SetMemory(0xf200, ".gnu_debugdata", sizeof(".gnu_debugdata"));
+  memory_.SetMemory(0xf300, ".eh_frame", sizeof(".eh_frame"));
+  memory_.SetMemory(0xf400, ".eh_frame_hdr", sizeof(".eh_frame_hdr"));
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
@@ -920,6 +944,10 @@ void ElfInterfaceTest::InitSectionHeadersOffsets() {
   EXPECT_EQ(0x500U, elf->debug_frame_size());
   EXPECT_EQ(0x5000U, elf->gnu_debugdata_offset());
   EXPECT_EQ(0x800U, elf->gnu_debugdata_size());
+  EXPECT_EQ(0x7000U, elf->eh_frame_offset());
+  EXPECT_EQ(0x800U, elf->eh_frame_size());
+  EXPECT_EQ(0xa000U, elf->eh_frame_hdr_offset());
+  EXPECT_EQ(0xf00U, elf->eh_frame_hdr_size());
 }
 
 TEST_F(ElfInterfaceTest, init_section_headers_offsets32) {

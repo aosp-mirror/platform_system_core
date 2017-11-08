@@ -32,6 +32,7 @@
 
 #include "DwarfDebugFrame.h"
 #include "DwarfEhFrame.h"
+#include "DwarfEhFrameWithHdr.h"
 #include "Symbols.h"
 
 namespace unwindstack {
@@ -98,7 +99,17 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
 
 template <typename AddressType>
 void ElfInterface::InitHeadersWithTemplate() {
-  if (eh_frame_offset_ != 0) {
+  if (eh_frame_hdr_offset_ != 0) {
+    eh_frame_.reset(new DwarfEhFrameWithHdr<AddressType>(memory_));
+    if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_)) {
+      // Even if the eh_frame_offset_ is non-zero, do not bother
+      // trying to read that since something has gone wrong.
+      eh_frame_.reset(nullptr);
+      eh_frame_hdr_offset_ = 0;
+      eh_frame_hdr_size_ = static_cast<uint64_t>(-1);
+    }
+  } else if (eh_frame_offset_ != 0) {
+    // If there is a eh_frame section without a eh_frame_hdr section.
     eh_frame_.reset(new DwarfEhFrame<AddressType>(memory_));
     if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_)) {
       eh_frame_.reset(nullptr);
@@ -181,11 +192,12 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
       if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
         return false;
       }
-      eh_frame_offset_ = phdr.p_offset;
+      // This is really the pointer to the .eh_frame_hdr section.
+      eh_frame_hdr_offset_ = phdr.p_offset;
       if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
         return false;
       }
-      eh_frame_size_ = phdr.p_memsz;
+      eh_frame_hdr_size_ = phdr.p_memsz;
       break;
 
     case PT_DYNAMIC:
@@ -271,6 +283,12 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
           } else if (name == ".gnu_debugdata") {
             offset_ptr = &gnu_debugdata_offset_;
             size_ptr = &gnu_debugdata_size_;
+          } else if (name == ".eh_frame") {
+            offset_ptr = &eh_frame_offset_;
+            size_ptr = &eh_frame_size_;
+          } else if (eh_frame_hdr_offset_ == 0 && name == ".eh_frame_hdr") {
+            offset_ptr = &eh_frame_hdr_offset_;
+            size_ptr = &eh_frame_hdr_size_;
           }
           if (offset_ptr != nullptr &&
               memory_->ReadField(offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset)) &&
