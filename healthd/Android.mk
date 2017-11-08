@@ -47,6 +47,8 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/include
 
 LOCAL_STATIC_LIBRARIES := \
+    android.hardware.health@2.0 \
+    android.hardware.health@1.0 \
     libminui \
     libpng \
     libz \
@@ -74,7 +76,6 @@ LOCAL_CHARGER_NO_UI := true
 endif
 
 LOCAL_SRC_FILES := \
-    healthd_common.cpp \
     charger.cpp \
 
 LOCAL_MODULE := charger
@@ -96,6 +97,13 @@ LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_SLOW=$(BOARD_PERIODIC_CHORES_IN
 endif
 
 LOCAL_STATIC_LIBRARIES := \
+    android.hardware.health@2.0-impl \
+    android.hardware.health@2.0 \
+    android.hardware.health@1.0 \
+    libhidltransport \
+    libhidlbase \
+    libhwbinder \
+    libvndksupport \
     libhealthd_charger \
     libhealthd_draw \
     libbatterymonitor \
