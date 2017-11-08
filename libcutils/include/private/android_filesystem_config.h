@@ -170,6 +170,14 @@
 #define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
 #define AID_SHARED_GID_END 59999   /* end of gids for apps in each user to share */
 
+/*
+ * This is a magic number in the kernel and not something that was picked
+ * arbitrarily. This value is returned whenever a uid that has no mapping in the
+ * user namespace is returned to userspace:
+ * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/highuid.h?h=v4.4#n40
+ */
+#define AID_OVERFLOWUID 65534 /* unmapped user in the user namespace */
+
 #define AID_ISOLATED_START 99000 /* start of uids for fully isolated sandboxed processes */
 #define AID_ISOLATED_END 99999   /* end of uids for fully isolated sandboxed processes */
 
