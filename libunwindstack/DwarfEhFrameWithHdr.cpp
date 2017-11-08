@@ -115,6 +115,9 @@ bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t*
   while (first < last) {
     size_t current = (first + last) / 2;
     const FdeInfo* info = GetFdeInfoFromIndex(current);
+    if (info == nullptr) {
+      return false;
+    }
     if (pc == info->pc) {
       *fde_offset = info->offset;
       return true;
@@ -127,6 +130,9 @@ bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetBinary(uint64_t pc, uint64_t*
   }
   if (last != 0) {
     const FdeInfo* info = GetFdeInfoFromIndex(last - 1);
+    if (info == nullptr) {
+      return false;
+    }
     *fde_offset = info->offset;
     return true;
   }
