@@ -212,13 +212,19 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     if (log_id != LOG_ID_SECURITY) {
         int prio = ANDROID_LOG_INFO;
         const char* tag = nullptr;
+        size_t tag_len = 0;
         if (log_id == LOG_ID_EVENTS) {
             tag = tagToName(elem->getTag());
+            if (tag) {
+                tag_len = strlen(tag);
+            }
         } else {
             prio = *msg;
             tag = msg + 1;
+            tag_len = strnlen(tag, len - 1);
         }
-        if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+        if (!__android_log_is_loggable_len(prio, tag, tag_len,
+                                           ANDROID_LOG_VERBOSE)) {
             // Log traffic received to total
             wrlock();
             stats.addTotal(elem);
