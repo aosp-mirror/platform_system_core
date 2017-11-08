@@ -87,7 +87,7 @@ inline __always_inline void RegsGetLocal(Regs* regs) {
   regs->SetFromRaw();
 }
 
-#elif defined(__i386__) || defined(__x86_64__)
+#elif defined(__i386__) || defined(__x86_64__) || defined(__mips__)
 
 extern "C" void AsmGetRegs(void* regs);
 
@@ -96,11 +96,6 @@ inline void RegsGetLocal(Regs* regs) {
 
   regs->SetFromRaw();
 }
-
-#elif defined(__mips__)
-
-// Stub to allow mips to build.
-void RegsGetLocal(Regs*) {}
 
 #endif
 
