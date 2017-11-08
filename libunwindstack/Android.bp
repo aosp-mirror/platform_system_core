@@ -48,8 +48,7 @@ cc_library {
     srcs: [
         "ArmExidx.cpp",
         "DwarfCfa.cpp",
-        "DwarfDebugFrame.cpp",
-        "DwarfEhFrame.cpp",
+        "DwarfEhFrameWithHdr.cpp",
         "DwarfMemory.cpp",
         "DwarfOp.cpp",
         "DwarfSection.cpp",
@@ -106,6 +105,7 @@ cc_test {
         "tests/DwarfCfaTest.cpp",
         "tests/DwarfDebugFrameTest.cpp",
         "tests/DwarfEhFrameTest.cpp",
+        "tests/DwarfEhFrameWithHdrTest.cpp",
         "tests/DwarfMemoryTest.cpp",
         "tests/DwarfOpLogTest.cpp",
         "tests/DwarfOpTest.cpp",

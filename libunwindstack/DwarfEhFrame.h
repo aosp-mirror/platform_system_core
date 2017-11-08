@@ -20,74 +20,30 @@
 #include <stdint.h>
 
 #include <unwindstack/DwarfSection.h>
+#include <unwindstack/Memory.h>
 
 namespace unwindstack {
-
-// Forward declarations.
-class Memory;
 
 template <typename AddressType>
 class DwarfEhFrame : public DwarfSectionImpl<AddressType> {
  public:
-  // Add these so that the protected members of DwarfSectionImpl
-  // can be accessed without needing a this->.
-  using DwarfSectionImpl<AddressType>::memory_;
-  using DwarfSectionImpl<AddressType>::fde_count_;
-  using DwarfSectionImpl<AddressType>::last_error_;
-
-  struct FdeInfo {
-    AddressType pc;
-    uint64_t offset;
-  };
-
   DwarfEhFrame(Memory* memory) : DwarfSectionImpl<AddressType>(memory) {}
   virtual ~DwarfEhFrame() = default;
 
-  bool Init(uint64_t offset, uint64_t size) override;
-
-  bool GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) override;
-
-  const DwarfFde* GetFdeFromIndex(size_t index) override;
-
-  bool IsCie32(uint32_t value32) override { return value32 == 0; }
-
-  bool IsCie64(uint64_t value64) override { return value64 == 0; }
-
   uint64_t GetCieOffsetFromFde32(uint32_t pointer) override {
-    return memory_.cur_offset() - pointer - 4;
+    return this->memory_.cur_offset() - pointer - 4;
   }
 
   uint64_t GetCieOffsetFromFde64(uint64_t pointer) override {
-    return memory_.cur_offset() - pointer - 8;
+    return this->memory_.cur_offset() - pointer - 8;
   }
 
   uint64_t AdjustPcFromFde(uint64_t pc) override {
     // The eh_frame uses relative pcs.
-    return pc + memory_.cur_offset();
+    return pc + this->memory_.cur_offset();
   }
-
-  const FdeInfo* GetFdeInfoFromIndex(size_t index);
-
-  bool GetFdeOffsetSequential(uint64_t pc, uint64_t* fde_offset);
-
-  bool GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_offset, uint64_t total_entries);
-
- protected:
-  uint8_t version_;
-  uint8_t ptr_encoding_;
-  uint8_t table_encoding_;
-  size_t table_entry_size_;
-
-  uint64_t ptr_offset_;
-
-  uint64_t entries_offset_;
-  uint64_t entries_end_;
-  uint64_t entries_data_offset_;
-  uint64_t cur_entries_offset_ = 0;
-
-  std::unordered_map<uint64_t, FdeInfo> fde_info_;
 };
 
 }  // namespace unwindstack
 
-#endif  // _LIBUNWINDSTACK_DWARF_EH_FRAME_H
+#endif  // _LIBUNWINDSTACK_DWARF_EH_FRAME_WITH_HDR_H

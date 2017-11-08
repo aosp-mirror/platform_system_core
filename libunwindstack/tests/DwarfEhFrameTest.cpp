@@ -34,28 +34,19 @@ class MockDwarfEhFrame : public DwarfEhFrame<TypeParam> {
   MockDwarfEhFrame(Memory* memory) : DwarfEhFrame<TypeParam>(memory) {}
   ~MockDwarfEhFrame() = default;
 
-  void TestSetTableEncoding(uint8_t encoding) { this->table_encoding_ = encoding; }
-  void TestSetEntriesOffset(uint64_t offset) { this->entries_offset_ = offset; }
-  void TestSetEntriesEnd(uint64_t end) { this->entries_end_ = end; }
-  void TestSetEntriesDataOffset(uint64_t offset) { this->entries_data_offset_ = offset; }
-  void TestSetCurEntriesOffset(uint64_t offset) { this->cur_entries_offset_ = offset; }
-  void TestSetTableEntrySize(size_t size) { this->table_entry_size_ = size; }
-
   void TestSetFdeCount(uint64_t count) { this->fde_count_ = count; }
-  void TestSetFdeInfo(uint64_t index, const typename DwarfEhFrame<TypeParam>::FdeInfo& info) {
-    this->fde_info_[index] = info;
+  void TestSetOffset(uint64_t offset) { this->entries_offset_ = offset; }
+  void TestSetEndOffset(uint64_t offset) { this->entries_end_ = offset; }
+  void TestPushFdeInfo(const typename DwarfEhFrame<TypeParam>::FdeInfo& info) {
+    this->fdes_.push_back(info);
   }
 
-  uint8_t TestGetVersion() { return this->version_; }
-  uint8_t TestGetPtrEncoding() { return this->ptr_encoding_; }
-  uint64_t TestGetPtrOffset() { return this->ptr_offset_; }
-  uint8_t TestGetTableEncoding() { return this->table_encoding_; }
-  uint64_t TestGetTableEntrySize() { return this->table_entry_size_; }
   uint64_t TestGetFdeCount() { return this->fde_count_; }
-  uint64_t TestGetEntriesOffset() { return this->entries_offset_; }
-  uint64_t TestGetEntriesEnd() { return this->entries_end_; }
-  uint64_t TestGetEntriesDataOffset() { return this->entries_data_offset_; }
-  uint64_t TestGetCurEntriesOffset() { return this->cur_entries_offset_; }
+  uint8_t TestGetOffset() { return this->offset_; }
+  uint8_t TestGetEndOffset() { return this->end_offset_; }
+  void TestGetFdeInfo(size_t index, typename DwarfEhFrame<TypeParam>::FdeInfo* info) {
+    *info = this->fdes_[index];
+  }
 };
 
 template <typename TypeParam>
@@ -76,248 +67,304 @@ TYPED_TEST_CASE_P(DwarfEhFrameTest);
 
 // NOTE: All test class variables need to be referenced as this->.
 
-TYPED_TEST_P(DwarfEhFrameTest, Init) {
-  this->memory_.SetMemory(
-      0x1000, std::vector<uint8_t>{0x1, DW_EH_PE_udata2, DW_EH_PE_udata4, DW_EH_PE_sdata4});
-  this->memory_.SetData16(0x1004, 0x500);
-  this->memory_.SetData32(0x1006, 126);
+TYPED_TEST_P(DwarfEhFrameTest, Init32) {
+  // CIE 32 information.
+  this->memory_.SetData32(0x5000, 0xfc);
+  this->memory_.SetData32(0x5004, 0);
+  this->memory_.SetData8(0x5008, 1);
+  this->memory_.SetData8(0x5009, '\0');
 
-  ASSERT_TRUE(this->eh_frame_->Init(0x1000, 0x100));
-  EXPECT_EQ(1U, this->eh_frame_->TestGetVersion());
-  EXPECT_EQ(DW_EH_PE_udata2, this->eh_frame_->TestGetPtrEncoding());
-  EXPECT_EQ(DW_EH_PE_sdata4, this->eh_frame_->TestGetTableEncoding());
-  EXPECT_EQ(4U, this->eh_frame_->TestGetTableEntrySize());
-  EXPECT_EQ(126U, this->eh_frame_->TestGetFdeCount());
-  EXPECT_EQ(0x500U, this->eh_frame_->TestGetPtrOffset());
-  EXPECT_EQ(0x100aU, this->eh_frame_->TestGetEntriesOffset());
-  EXPECT_EQ(0x1100U, this->eh_frame_->TestGetEntriesEnd());
-  EXPECT_EQ(0x1000U, this->eh_frame_->TestGetEntriesDataOffset());
-  EXPECT_EQ(0x100aU, this->eh_frame_->TestGetCurEntriesOffset());
+  // FDE 32 information.
+  this->memory_.SetData32(0x5100, 0xfc);
+  this->memory_.SetData32(0x5104, 0x104);
+  this->memory_.SetData32(0x5108, 0x1500);
+  this->memory_.SetData32(0x510c, 0x200);
 
-  // Verify an unexpected version will cause a fail.
-  this->memory_.SetData8(0x1000, 0);
-  ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
-  ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->last_error());
-  this->memory_.SetData8(0x1000, 2);
-  ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
-  ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->last_error());
+  this->memory_.SetData32(0x5200, 0xfc);
+  this->memory_.SetData32(0x5204, 0x204);
+  this->memory_.SetData32(0x5208, 0x2500);
+  this->memory_.SetData32(0x520c, 0x300);
+
+  // CIE 32 information.
+  this->memory_.SetData32(0x5300, 0xfc);
+  this->memory_.SetData32(0x5304, 0);
+  this->memory_.SetData8(0x5308, 1);
+  this->memory_.SetData8(0x5309, '\0');
+
+  // FDE 32 information.
+  this->memory_.SetData32(0x5400, 0xfc);
+  this->memory_.SetData32(0x5404, 0x104);
+  this->memory_.SetData32(0x5408, 0x3500);
+  this->memory_.SetData32(0x540c, 0x400);
+
+  this->memory_.SetData32(0x5500, 0xfc);
+  this->memory_.SetData32(0x5504, 0x204);
+  this->memory_.SetData32(0x5508, 0x4500);
+  this->memory_.SetData32(0x550c, 0x500);
+
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_EQ(4U, this->eh_frame_->TestGetFdeCount());
+
+  typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
+
+  this->eh_frame_->TestGetFdeInfo(0, &info);
+  EXPECT_EQ(0x5100U, info.offset);
+  EXPECT_EQ(0x660cU, info.start);
+  EXPECT_EQ(0x680cU, info.end);
+
+  this->eh_frame_->TestGetFdeInfo(1, &info);
+  EXPECT_EQ(0x5200U, info.offset);
+  EXPECT_EQ(0x770cU, info.start);
+  EXPECT_EQ(0x7a0cU, info.end);
+
+  this->eh_frame_->TestGetFdeInfo(2, &info);
+  EXPECT_EQ(0x5400U, info.offset);
+  EXPECT_EQ(0x890cU, info.start);
+  EXPECT_EQ(0x8d0cU, info.end);
+
+  this->eh_frame_->TestGetFdeInfo(3, &info);
+  EXPECT_EQ(0x5500U, info.offset);
+  EXPECT_EQ(0x9a0cU, info.start);
+  EXPECT_EQ(0x9f0cU, info.end);
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_expect_cache_fail) {
-  this->eh_frame_->TestSetTableEntrySize(0x10);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-  ASSERT_TRUE(this->eh_frame_->GetFdeInfoFromIndex(0) == nullptr);
-  ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->eh_frame_->last_error());
-  ASSERT_TRUE(this->eh_frame_->GetFdeInfoFromIndex(0) == nullptr);
-  ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->eh_frame_->last_error());
+TYPED_TEST_P(DwarfEhFrameTest, Init32_fde_not_following_cie) {
+  // CIE 32 information.
+  this->memory_.SetData32(0x5000, 0xfc);
+  this->memory_.SetData32(0x5004, 0);
+  this->memory_.SetData8(0x5008, 1);
+  this->memory_.SetData8(0x5009, '\0');
+
+  // FDE 32 information.
+  this->memory_.SetData32(0x5100, 0xfc);
+  this->memory_.SetData32(0x5104, 0x1000);
+  this->memory_.SetData32(0x5108, 0x1500);
+  this->memory_.SetData32(0x510c, 0x200);
+
+  ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->last_error());
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_read_pcrel) {
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_pcrel | DW_EH_PE_udata4);
-  this->eh_frame_->TestSetEntriesOffset(0x1000);
-  this->eh_frame_->TestSetEntriesDataOffset(0x3000);
-  this->eh_frame_->TestSetTableEntrySize(0x10);
+TYPED_TEST_P(DwarfEhFrameTest, Init64) {
+  // CIE 64 information.
+  this->memory_.SetData32(0x5000, 0xffffffff);
+  this->memory_.SetData64(0x5004, 0xf4);
+  this->memory_.SetData64(0x500c, 0);
+  this->memory_.SetData8(0x5014, 1);
+  this->memory_.SetData8(0x5015, '\0');
 
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
+  // FDE 64 information.
+  this->memory_.SetData32(0x5100, 0xffffffff);
+  this->memory_.SetData64(0x5104, 0xf4);
+  this->memory_.SetData64(0x510c, 0x10c);
+  this->memory_.SetData64(0x5114, 0x1500);
+  this->memory_.SetData64(0x511c, 0x200);
 
-  auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
-  ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x1384U, info->pc);
-  EXPECT_EQ(0x1540U, info->offset);
+  this->memory_.SetData32(0x5200, 0xffffffff);
+  this->memory_.SetData64(0x5204, 0xf4);
+  this->memory_.SetData64(0x520c, 0x20c);
+  this->memory_.SetData64(0x5214, 0x2500);
+  this->memory_.SetData64(0x521c, 0x300);
+
+  // CIE 64 information.
+  this->memory_.SetData32(0x5300, 0xffffffff);
+  this->memory_.SetData64(0x5304, 0xf4);
+  this->memory_.SetData64(0x530c, 0);
+  this->memory_.SetData8(0x5314, 1);
+  this->memory_.SetData8(0x5315, '\0');
+
+  // FDE 64 information.
+  this->memory_.SetData32(0x5400, 0xffffffff);
+  this->memory_.SetData64(0x5404, 0xf4);
+  this->memory_.SetData64(0x540c, 0x10c);
+  this->memory_.SetData64(0x5414, 0x3500);
+  this->memory_.SetData64(0x541c, 0x400);
+
+  this->memory_.SetData32(0x5500, 0xffffffff);
+  this->memory_.SetData64(0x5504, 0xf4);
+  this->memory_.SetData64(0x550c, 0x20c);
+  this->memory_.SetData64(0x5514, 0x4500);
+  this->memory_.SetData64(0x551c, 0x500);
+
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_EQ(4U, this->eh_frame_->TestGetFdeCount());
+
+  typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
+
+  this->eh_frame_->TestGetFdeInfo(0, &info);
+  EXPECT_EQ(0x5100U, info.offset);
+  EXPECT_EQ(0x661cU, info.start);
+  EXPECT_EQ(0x681cU, info.end);
+
+  this->eh_frame_->TestGetFdeInfo(1, &info);
+  EXPECT_EQ(0x5200U, info.offset);
+  EXPECT_EQ(0x771cU, info.start);
+  EXPECT_EQ(0x7a1cU, info.end);
+
+  this->eh_frame_->TestGetFdeInfo(2, &info);
+  EXPECT_EQ(0x5400U, info.offset);
+  EXPECT_EQ(0x891cU, info.start);
+  EXPECT_EQ(0x8d1cU, info.end);
+
+  this->eh_frame_->TestGetFdeInfo(3, &info);
+  EXPECT_EQ(0x5500U, info.offset);
+  EXPECT_EQ(0x9a1cU, info.start);
+  EXPECT_EQ(0x9f1cU, info.end);
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_read_datarel) {
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_datarel | DW_EH_PE_udata4);
-  this->eh_frame_->TestSetEntriesOffset(0x1000);
-  this->eh_frame_->TestSetEntriesDataOffset(0x3000);
-  this->eh_frame_->TestSetTableEntrySize(0x10);
+TYPED_TEST_P(DwarfEhFrameTest, Init64_fde_not_following_cie) {
+  // CIE 64 information.
+  this->memory_.SetData32(0x5000, 0xffffffff);
+  this->memory_.SetData64(0x5004, 0xf4);
+  this->memory_.SetData64(0x500c, 0);
+  this->memory_.SetData8(0x5014, 1);
+  this->memory_.SetData8(0x5015, '\0');
 
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
+  // FDE 64 information.
+  this->memory_.SetData32(0x5100, 0xffffffff);
+  this->memory_.SetData64(0x5104, 0xf4);
+  this->memory_.SetData64(0x510c, 0x1000);
+  this->memory_.SetData64(0x5114, 0x1500);
+  this->memory_.SetData64(0x511c, 0x200);
 
-  auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
-  ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x3344U, info->pc);
-  EXPECT_EQ(0x3500U, info->offset);
+  ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->last_error());
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeInfoFromIndex_cached) {
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-  this->eh_frame_->TestSetEntriesOffset(0x1000);
-  this->eh_frame_->TestSetTableEntrySize(0x10);
+TYPED_TEST_P(DwarfEhFrameTest, Init_version1) {
+  // CIE 32 information.
+  this->memory_.SetData32(0x5000, 0xfc);
+  this->memory_.SetData32(0x5004, 0);
+  this->memory_.SetData8(0x5008, 1);
+  // Augment string.
+  this->memory_.SetMemory(0x5009, std::vector<uint8_t>{'z', 'R', 'P', 'L', '\0'});
+  // Code alignment factor.
+  this->memory_.SetMemory(0x500e, std::vector<uint8_t>{0x80, 0x00});
+  // Data alignment factor.
+  this->memory_.SetMemory(0x5010, std::vector<uint8_t>{0x81, 0x80, 0x80, 0x00});
+  // Return address register
+  this->memory_.SetData8(0x5014, 0x84);
+  // Augmentation length
+  this->memory_.SetMemory(0x5015, std::vector<uint8_t>{0x84, 0x00});
+  // R data.
+  this->memory_.SetData8(0x5017, DW_EH_PE_pcrel | DW_EH_PE_udata2);
 
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
+  // FDE 32 information.
+  this->memory_.SetData32(0x5100, 0xfc);
+  this->memory_.SetData32(0x5104, 0x104);
+  this->memory_.SetData16(0x5108, 0x1500);
+  this->memory_.SetData16(0x510a, 0x200);
 
-  auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
-  ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x344U, info->pc);
-  EXPECT_EQ(0x500U, info->offset);
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200));
+  ASSERT_EQ(1U, this->eh_frame_->TestGetFdeCount());
 
-  // Clear the memory so that this will fail if it doesn't read cached data.
-  this->memory_.Clear();
-
-  info = this->eh_frame_->GetFdeInfoFromIndex(2);
-  ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x344U, info->pc);
-  EXPECT_EQ(0x500U, info->offset);
+  typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
+  this->eh_frame_->TestGetFdeInfo(0, &info);
+  EXPECT_EQ(0x5100U, info.offset);
+  EXPECT_EQ(0x660aU, info.start);
+  EXPECT_EQ(0x680aU, info.end);
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetBinary_verify) {
-  this->eh_frame_->TestSetTableEntrySize(0x10);
-  this->eh_frame_->TestSetFdeCount(10);
+TYPED_TEST_P(DwarfEhFrameTest, Init_version4) {
+  // CIE 32 information.
+  this->memory_.SetData32(0x5000, 0xfc);
+  this->memory_.SetData32(0x5004, 0);
+  this->memory_.SetData8(0x5008, 4);
+  // Augment string.
+  this->memory_.SetMemory(0x5009, std::vector<uint8_t>{'z', 'L', 'P', 'R', '\0'});
+  // Address size.
+  this->memory_.SetData8(0x500e, 4);
+  // Segment size.
+  this->memory_.SetData8(0x500f, 0);
+  // Code alignment factor.
+  this->memory_.SetMemory(0x5010, std::vector<uint8_t>{0x80, 0x00});
+  // Data alignment factor.
+  this->memory_.SetMemory(0x5012, std::vector<uint8_t>{0x81, 0x80, 0x80, 0x00});
+  // Return address register
+  this->memory_.SetMemory(0x5016, std::vector<uint8_t>{0x85, 0x10});
+  // Augmentation length
+  this->memory_.SetMemory(0x5018, std::vector<uint8_t>{0x84, 0x00});
+  // L data.
+  this->memory_.SetData8(0x501a, 0x10);
+  // P data.
+  this->memory_.SetData8(0x501b, DW_EH_PE_udata4);
+  this->memory_.SetData32(0x501c, 0x100);
+  // R data.
+  this->memory_.SetData8(0x5020, DW_EH_PE_pcrel | DW_EH_PE_udata2);
 
-  typename DwarfEhFrame<TypeParam>::FdeInfo info;
-  for (size_t i = 0; i < 10; i++) {
-    info.pc = 0x1000 * (i + 1);
+  // FDE 32 information.
+  this->memory_.SetData32(0x5100, 0xfc);
+  this->memory_.SetData32(0x5104, 0x104);
+  this->memory_.SetData16(0x5108, 0x1500);
+  this->memory_.SetData16(0x510a, 0x200);
+
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200));
+  ASSERT_EQ(1U, this->eh_frame_->TestGetFdeCount());
+
+  typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
+  this->eh_frame_->TestGetFdeInfo(0, &info);
+  EXPECT_EQ(0x5100U, info.offset);
+  EXPECT_EQ(0x660aU, info.start);
+  EXPECT_EQ(0x680aU, info.end);
+}
+
+TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc) {
+  typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
+  for (size_t i = 0; i < 9; i++) {
+    info.start = 0x1000 * (i + 1);
+    info.end = 0x1000 * (i + 2) - 0x10;
     info.offset = 0x5000 + i * 0x20;
-    this->eh_frame_->TestSetFdeInfo(i, info);
+    this->eh_frame_->TestPushFdeInfo(info);
   }
 
+  this->eh_frame_->TestSetFdeCount(0);
   uint64_t fde_offset;
-  EXPECT_FALSE(this->eh_frame_->GetFdeOffsetBinary(0x100, &fde_offset, 10));
-  // Not an error, just not found.
+  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x1000, &fde_offset));
   ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
-  // Even number of elements.
-  for (size_t i = 0; i < 10; i++) {
-    TypeParam pc = 0x1000 * (i + 1);
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc, &fde_offset, 10)) << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 1, &fde_offset, 10)) << "Failed at index "
-                                                                              << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 0xfff, &fde_offset, 10))
-        << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-  }
+
+  this->eh_frame_->TestSetFdeCount(9);
+  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x100, &fde_offset));
+  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
   // Odd number of elements.
   for (size_t i = 0; i < 9; i++) {
     TypeParam pc = 0x1000 * (i + 1);
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc, &fde_offset, 9)) << "Failed at index " << i;
+    ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc, &fde_offset)) << "Failed at index " << i;
     EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 1, &fde_offset, 9)) << "Failed at index "
-                                                                             << i;
+    ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 1, &fde_offset)) << "Failed at index " << i;
     EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 0xfff, &fde_offset, 9))
+    ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xeff, &fde_offset))
         << "Failed at index " << i;
     EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
+    ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xfff, &fde_offset))
+        << "Failed at index " << i;
+    ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+  }
+
+  // Even number of elements.
+  this->eh_frame_->TestSetFdeCount(10);
+  info.start = 0xa000;
+  info.end = 0xaff0;
+  info.offset = 0x5120;
+  this->eh_frame_->TestPushFdeInfo(info);
+
+  for (size_t i = 0; i < 10; i++) {
+    TypeParam pc = 0x1000 * (i + 1);
+    ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc, &fde_offset)) << "Failed at index " << i;
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
+    ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 1, &fde_offset)) << "Failed at index " << i;
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
+    ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xeff, &fde_offset))
+        << "Failed at index " << i;
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
+    ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xfff, &fde_offset))
+        << "Failed at index " << i;
+    ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
   }
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetSequential) {
-  this->eh_frame_->TestSetFdeCount(10);
-  this->eh_frame_->TestSetEntriesDataOffset(0x100);
-  this->eh_frame_->TestSetEntriesEnd(0x2000);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
-
-  this->memory_.SetData32(0x1048, 0x440);
-  this->memory_.SetData32(0x104c, 0x600);
-
-  // Verify that if entries is zero, that it fails.
-  uint64_t fde_offset;
-  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x344, &fde_offset));
-  this->eh_frame_->TestSetCurEntriesOffset(0x1040);
-
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x344, &fde_offset));
-  EXPECT_EQ(0x500U, fde_offset);
-
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x444, &fde_offset));
-  EXPECT_EQ(0x600U, fde_offset);
-
-  // Expect that the data is cached so no more memory reads will occur.
-  this->memory_.Clear();
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x444, &fde_offset));
-  EXPECT_EQ(0x600U, fde_offset);
-}
-
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetSequential_last_element) {
-  this->eh_frame_->TestSetFdeCount(2);
-  this->eh_frame_->TestSetEntriesDataOffset(0x100);
-  this->eh_frame_->TestSetEntriesEnd(0x2000);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-  this->eh_frame_->TestSetCurEntriesOffset(0x1040);
-
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
-
-  this->memory_.SetData32(0x1048, 0x440);
-  this->memory_.SetData32(0x104c, 0x600);
-
-  uint64_t fde_offset;
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x540, &fde_offset));
-  EXPECT_EQ(0x600U, fde_offset);
-}
-
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetSequential_end_check) {
-  this->eh_frame_->TestSetFdeCount(2);
-  this->eh_frame_->TestSetEntriesDataOffset(0x100);
-  this->eh_frame_->TestSetEntriesEnd(0x1048);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
-
-  this->memory_.SetData32(0x1048, 0x440);
-  this->memory_.SetData32(0x104c, 0x600);
-
-  uint64_t fde_offset;
-  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x540, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
-}
-
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc_fail_fde_count) {
-  this->eh_frame_->TestSetFdeCount(0);
-
-  uint64_t fde_offset;
-  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x100, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
-}
-
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc_binary_search) {
-  this->eh_frame_->TestSetTableEntrySize(16);
-  this->eh_frame_->TestSetFdeCount(10);
-
-  typename DwarfEhFrame<TypeParam>::FdeInfo info;
-  info.pc = 0x550;
-  info.offset = 0x10500;
-  this->eh_frame_->TestSetFdeInfo(5, info);
-  info.pc = 0x750;
-  info.offset = 0x10700;
-  this->eh_frame_->TestSetFdeInfo(7, info);
-  info.pc = 0x850;
-  info.offset = 0x10800;
-  this->eh_frame_->TestSetFdeInfo(8, info);
-
-  uint64_t fde_offset;
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(0x800, &fde_offset));
-  EXPECT_EQ(0x10700U, fde_offset);
-}
-
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc_sequential_search) {
-  this->eh_frame_->TestSetFdeCount(10);
-  this->eh_frame_->TestSetTableEntrySize(0);
-
-  typename DwarfEhFrame<TypeParam>::FdeInfo info;
-  info.pc = 0x50;
-  info.offset = 0x10000;
-  this->eh_frame_->TestSetFdeInfo(0, info);
-  info.pc = 0x150;
-  info.offset = 0x10100;
-  this->eh_frame_->TestSetFdeInfo(1, info);
-  info.pc = 0x250;
-  info.offset = 0x10200;
-  this->eh_frame_->TestSetFdeInfo(2, info);
-
-  uint64_t fde_offset;
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(0x200, &fde_offset));
-  EXPECT_EQ(0x10100U, fde_offset);
-}
-
 TYPED_TEST_P(DwarfEhFrameTest, GetCieFde32) {
+  this->eh_frame_->TestSetOffset(0x4000);
+
   // CIE 32 information.
   this->memory_.SetData32(0xf000, 0x100);
   this->memory_.SetData32(0xf004, 0);
@@ -358,6 +405,8 @@ TYPED_TEST_P(DwarfEhFrameTest, GetCieFde32) {
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, GetCieFde64) {
+  this->eh_frame_->TestSetOffset(0x2000);
+
   // CIE 64 information.
   this->memory_.SetData32(0x6000, 0xffffffff);
   this->memory_.SetData64(0x6004, 0x100);
@@ -399,25 +448,9 @@ TYPED_TEST_P(DwarfEhFrameTest, GetCieFde64) {
   EXPECT_EQ(0x20U, fde->cie->return_address_register);
 }
 
-TYPED_TEST_P(DwarfEhFrameTest, GetFdeFromPc_fde_not_found) {
-  this->eh_frame_->TestSetTableEntrySize(16);
-  this->eh_frame_->TestSetFdeCount(1);
-
-  typename DwarfEhFrame<TypeParam>::FdeInfo info;
-  info.pc = 0x550;
-  info.offset = 0x10500;
-  this->eh_frame_->TestSetFdeInfo(0, info);
-
-  ASSERT_EQ(nullptr, this->eh_frame_->GetFdeFromPc(0x800));
-}
-
-REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameTest, Init, GetFdeInfoFromIndex_expect_cache_fail,
-                           GetFdeInfoFromIndex_read_pcrel, GetFdeInfoFromIndex_read_datarel,
-                           GetFdeInfoFromIndex_cached, GetFdeOffsetBinary_verify,
-                           GetFdeOffsetSequential, GetFdeOffsetSequential_last_element,
-                           GetFdeOffsetSequential_end_check, GetFdeOffsetFromPc_fail_fde_count,
-                           GetFdeOffsetFromPc_binary_search, GetFdeOffsetFromPc_sequential_search,
-                           GetCieFde32, GetCieFde64, GetFdeFromPc_fde_not_found);
+REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameTest, Init32, Init32_fde_not_following_cie, Init64,
+                           Init64_fde_not_following_cie, Init_version1, Init_version4,
+                           GetFdeOffsetFromPc, GetCieFde32, GetCieFde64);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfEhFrameTest, DwarfEhFrameTestTypes);
