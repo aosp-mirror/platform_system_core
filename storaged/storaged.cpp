@@ -62,7 +62,7 @@ const uint32_t storaged_t::crc_init = 0x5108A4ED; /* STORAGED */
 
 using android::hardware::health::V1_0::BatteryStatus;
 using android::hardware::health::V1_0::toString;
-using android::hardware::health::V2_0::HealthInfo;
+using android::hardware::health::V1_0::HealthInfo;
 using android::hardware::health::V2_0::IHealth;
 using android::hardware::health::V2_0::Result;
 using android::hardware::interfacesEqual;
@@ -71,10 +71,6 @@ using android::hidl::manager::V1_0::IServiceManager;
 
 static sp<IHealth> get_health_service() {
     for (auto&& instanceName : {"default", "backup"}) {
-        if (IServiceManager::getService()->getTransport(IHealth::descriptor, instanceName) ==
-                IServiceManager::Transport::EMPTY) {
-            continue;
-        }
         auto ret = IHealth::getService(instanceName);
         if (ret != nullptr) {
             return ret;
@@ -90,7 +86,7 @@ inline charger_stat_t is_charger_on(BatteryStatus prop) {
 }
 
 Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
-    mUidm.set_charger_state(is_charger_on(props.legacy.batteryStatus));
+    mUidm.set_charger_state(is_charger_on(props.batteryStatus));
     return android::hardware::Void();
 }
 
