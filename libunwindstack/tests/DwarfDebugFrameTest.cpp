@@ -35,8 +35,8 @@ class MockDwarfDebugFrame : public DwarfDebugFrame<TypeParam> {
   ~MockDwarfDebugFrame() = default;
 
   void TestSetFdeCount(uint64_t count) { this->fde_count_ = count; }
-  void TestSetOffset(uint64_t offset) { this->offset_ = offset; }
-  void TestSetEndOffset(uint64_t offset) { this->end_offset_ = offset; }
+  void TestSetOffset(uint64_t offset) { this->entries_offset_ = offset; }
+  void TestSetEndOffset(uint64_t offset) { this->entries_end_ = offset; }
   void TestPushFdeInfo(const typename DwarfDebugFrame<TypeParam>::FdeInfo& info) {
     this->fdes_.push_back(info);
   }
