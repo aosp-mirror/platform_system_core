@@ -21,7 +21,8 @@
 #define LOG_TAG "vndksupport"
 #include <log/log.h>
 
-extern struct android_namespace_t* android_get_exported_namespace(const char*);
+__attribute__((weak)) extern struct android_namespace_t* android_get_exported_namespace(const char*);
+__attribute__((weak)) extern void* android_dlopen_ext(const char*, int, const android_dlextinfo*);
 
 static const char* namespace_name = NULL;
 
@@ -31,7 +32,9 @@ static struct android_namespace_t* get_vendor_namespace() {
     if (vendor_namespace == NULL) {
         int name_idx = 0;
         while (namespace_names[name_idx] != NULL) {
-            vendor_namespace = android_get_exported_namespace(namespace_names[name_idx]);
+            if (android_get_exported_namespace != NULL) {
+                vendor_namespace = android_get_exported_namespace(namespace_names[name_idx]);
+            }
             if (vendor_namespace != NULL) {
                 namespace_name = namespace_names[name_idx];
                 break;
@@ -48,7 +51,10 @@ void* android_load_sphal_library(const char* name, int flag) {
         const android_dlextinfo dlextinfo = {
             .flags = ANDROID_DLEXT_USE_NAMESPACE, .library_namespace = vendor_namespace,
         };
-        void* handle = android_dlopen_ext(name, flag, &dlextinfo);
+        void* handle = NULL;
+        if (android_dlopen_ext != NULL) {
+            handle = android_dlopen_ext(name, flag, &dlextinfo);
+        }
         if (!handle) {
             ALOGE("Could not load %s from %s namespace: %s.", name, namespace_name, dlerror());
         }
