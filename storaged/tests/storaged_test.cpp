@@ -449,17 +449,7 @@ TEST(storaged_test, uid_monitor) {
         },
     };
 
-    StoragedProto proto_0;
-    UidIOItem* item = proto_0.mutable_uid_io_usage()->add_uid_io_items();
-    item->set_end_ts(200);
-    item->mutable_records()->set_start_ts(100);
-    UidRecord* rec = item->mutable_records()->add_entries();
-    rec->set_uid_name("app1");
-    rec->set_user_id(0);
-    rec->mutable_uid_io()->set_wr_fg_chg_on(1000);
-
     unordered_map<int, StoragedProto> protos;
-    protos[0] = proto_0;
 
     uidm.update_uid_io_proto(&protos);
 
@@ -589,4 +579,17 @@ TEST(storaged_test, uid_monitor) {
     EXPECT_EQ(merged_entries_2.size(), 1UL);
     EXPECT_EQ(merged_entries_2.count("app1"), 1UL);
     EXPECT_EQ(merged_entries_2["app1"].bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
+
+    uidm.clear_user_history(0);
+
+    EXPECT_EQ(uidm.io_history.size(), 2UL);
+    EXPECT_EQ(uidm.io_history.count(200), 1UL);
+    EXPECT_EQ(uidm.io_history.count(300), 1UL);
+
+    EXPECT_EQ(uidm.io_history[200].entries.size(), 1UL);
+    EXPECT_EQ(uidm.io_history[300].entries.size(), 1UL);
+
+    uidm.clear_user_history(1);
+
+    EXPECT_EQ(uidm.io_history.size(), 0UL);
 }
