@@ -53,7 +53,10 @@ cc_binary {
     init_rc: ["android.hardware.health@2.0-service.rc"],
     vendor: true,
     relative_install_path: "hw",
-    srcs: ["HealthService.cpp"],
+    srcs: [
+        "HealthServiceCommon.cpp",
+        "HealthServiceDefault.cpp",
+    ],
 
     cflags: ["-DHEALTH_INSTANCE_NAME=\"default\""],
 
@@ -77,7 +80,10 @@ cc_binary {
 
 cc_binary {
     name: "healthd",
-    srcs: ["HealthService.cpp"],
+    srcs: [
+        "HealthServiceCommon.cpp",
+        "HealthServiceHealthd.cpp",
+    ],
     local_include_dirs: ["include"],
 
     cflags: ["-DHEALTH_INSTANCE_NAME=\"backup\""],
@@ -96,6 +102,7 @@ cc_binary {
         "libhwbinder",
         "liblog",
         "libutils",
+        "android.hardware.health@1.0",
         "android.hardware.health@2.0",
     ],
 
