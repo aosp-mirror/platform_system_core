@@ -50,12 +50,24 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
     state.nexttoken = 0;
 
     SectionParser* section_parser = nullptr;
+    int section_start_line = -1;
     std::vector<std::string> args;
+
+    auto end_section = [&] {
+        if (section_parser == nullptr) return;
+
+        if (auto result = section_parser->EndSection(); !result) {
+            LOG(ERROR) << filename << ": " << section_start_line << ": " << result.error();
+        }
+
+        section_parser = nullptr;
+        section_start_line = -1;
+    };
 
     for (;;) {
         switch (next_token(&state)) {
             case T_EOF:
-                if (section_parser) section_parser->EndSection();
+                end_section();
                 return;
             case T_NEWLINE:
                 state.line++;
@@ -65,18 +77,18 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 // uevent.
                 for (const auto& [prefix, callback] : line_callbacks_) {
                     if (android::base::StartsWith(args[0], prefix.c_str())) {
-                        if (section_parser) section_parser->EndSection();
+                        end_section();
 
                         if (auto result = callback(std::move(args)); !result) {
                             LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         }
-                        section_parser = nullptr;
                         break;
                     }
                 }
                 if (section_parsers_.count(args[0])) {
-                    if (section_parser) section_parser->EndSection();
+                    end_section();
                     section_parser = section_parsers_[args[0]].get();
+                    section_start_line = state.line;
                     if (auto result =
                             section_parser->ParseSection(std::move(args), filename, state.line);
                         !result) {

@@ -1135,10 +1135,12 @@ Result<Success> ServiceParser::ParseLineSection(std::vector<std::string>&& args,
     return service_ ? service_->ParseLine(std::move(args)) : Success();
 }
 
-void ServiceParser::EndSection() {
+Result<Success> ServiceParser::EndSection() {
     if (service_) {
         service_list_->AddService(std::move(service_));
     }
+
+    return Success();
 }
 
 bool ServiceParser::IsValidName(const std::string& name) const {

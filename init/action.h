@@ -130,7 +130,7 @@ class ActionParser : public SectionParser {
     Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line) override;
     Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
-    void EndSection() override;
+    Result<Success> EndSection() override;
 
   private:
     ActionManager* action_manager_;

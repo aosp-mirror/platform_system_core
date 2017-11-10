@@ -54,7 +54,7 @@ class SectionParser {
     virtual Result<Success> ParseSection(std::vector<std::string>&& args,
                                          const std::string& filename, int line) = 0;
     virtual Result<Success> ParseLineSection(std::vector<std::string>&&, int) { return Success(); };
-    virtual void EndSection(){};
+    virtual Result<Success> EndSection() { return Success(); };
     virtual void EndFile(){};
 };
 
