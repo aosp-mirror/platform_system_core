@@ -1111,11 +1111,6 @@ Result<Success> ServiceParser::ParseSection(std::vector<std::string>&& args,
         return Error() << "invalid service name '" << name << "'";
     }
 
-    Service* old_service = service_list_->FindService(name);
-    if (old_service) {
-        return Error() << "ignored duplicate definition of service '" << name << "'";
-    }
-
     Subcontext* restart_action_subcontext = nullptr;
     if (subcontexts_) {
         for (auto& subcontext : *subcontexts_) {
@@ -1137,6 +1132,11 @@ Result<Success> ServiceParser::ParseLineSection(std::vector<std::string>&& args,
 
 Result<Success> ServiceParser::EndSection() {
     if (service_) {
+        Service* old_service = service_list_->FindService(service_->name());
+        if (old_service) {
+            return Error() << "ignored duplicate definition of service '" << service_->name() << "'";
+        }
+
         service_list_->AddService(std::move(service_));
     }
 
