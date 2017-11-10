@@ -68,6 +68,8 @@ storage_info_t* storage_info_t::get_storage_info()
 
 void storage_info_t::load_perf_history_proto(const IOPerfHistory& perf_history)
 {
+    Mutex::Autolock _l(si_mutex);
+
     if (!perf_history.has_day_start_sec() ||
         perf_history.daily_perf_size() > (int)daily_perf.size() ||
         perf_history.weekly_perf_size() > (int)weekly_perf.size()) {

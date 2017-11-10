@@ -111,8 +111,7 @@ public:
     unordered_map<uint32_t, uid_info> get_uid_io_stats();
     // called by dumpsys
     map<uint64_t, struct uid_records> dump(
-        double hours, uint64_t threshold, bool force_report,
-        unordered_map<int, StoragedProto>* protos);
+        double hours, uint64_t threshold, bool force_report);
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
     // called by storaged periodic_chore or dump with force_report
@@ -120,6 +119,7 @@ public:
     void report(unordered_map<int, StoragedProto>* protos);
     // restores io_history from protobuf
     void load_uid_io_proto(const UidIOUsage& proto);
+    void clear_user_history(userid_t user_id);
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */

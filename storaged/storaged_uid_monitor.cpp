@@ -257,11 +257,10 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
 }
 
 std::map<uint64_t, struct uid_records> uid_monitor::dump(
-    double hours, uint64_t threshold, bool force_report,
-    unordered_map<int, StoragedProto>* protos)
+    double hours, uint64_t threshold, bool force_report)
 {
     if (force_report) {
-        report(protos);
+        report(nullptr);
     }
 
     Mutex::Autolock _l(uidm_mutex);
@@ -374,7 +373,9 @@ void uid_monitor::report(unordered_map<int, StoragedProto>* protos)
     update_curr_io_stats_locked();
     add_records_locked(time(NULL));
 
-    update_uid_io_proto(protos);
+    if (protos) {
+        update_uid_io_proto(protos);
+    }
 }
 
 namespace {
@@ -407,10 +408,6 @@ void get_io_usage_proto(io_usage* usage, const IOUsage& io_proto)
 
 void uid_monitor::update_uid_io_proto(unordered_map<int, StoragedProto>* protos)
 {
-    for (auto& it : *protos) {
-        it.second.mutable_uid_io_usage()->Clear();
-    }
-
     for (const auto& item : io_history) {
         const uint64_t& end_ts = item.first;
         const struct uid_records& recs = item.second;
@@ -449,9 +446,33 @@ void uid_monitor::update_uid_io_proto(unordered_map<int, StoragedProto>* protos)
     }
 }
 
+void uid_monitor::clear_user_history(userid_t user_id)
+{
+    Mutex::Autolock _l(uidm_mutex);
+
+    for (auto& item : io_history) {
+        vector<uid_record>* entries = &item.second.entries;
+        entries->erase(
+            remove_if(entries->begin(), entries->end(),
+                [user_id](const uid_record& rec) {
+                    return rec.ios.user_id == user_id;}),
+            entries->end());
+    }
+
+    for (auto it = io_history.begin(); it != io_history.end(); ) {
+        if (it->second.entries.empty()) {
+            it = io_history.erase(it);
+        } else {
+            it++;
+        }
+    }
+}
+
 void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
 {
     if (!enabled()) return;
+
+    Mutex::Autolock _l(uidm_mutex);
 
     for (const auto& item_proto : uid_io_proto.uid_io_items()) {
         const UidIORecords& records_proto = item_proto.records();

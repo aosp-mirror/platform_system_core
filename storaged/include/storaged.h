@@ -84,12 +84,11 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
     sp<android::hardware::health::V2_0::IHealth> health;
     unique_ptr<storage_info_t> storage_info;
     static const uint32_t crc_init;
-    unordered_map<int, storaged_proto::StoragedProto> protos;
-    Mutex proto_mutex;
-    void load_proto_locked(userid_t user_id);
-    void prepare_proto(StoragedProto* proto, userid_t user_id);
-    void flush_proto_locked(userid_t user_id);
-    void flush_proto_user_system_locked(StoragedProto* proto);
+    unordered_map<userid_t, bool> proto_loaded;
+    void load_proto(userid_t user_id);
+    void prepare_proto(userid_t user_id, StoragedProto* proto);
+    void flush_proto(userid_t user_id, StoragedProto* proto);
+    void flush_proto_user_system(StoragedProto* proto);
     string proto_path(userid_t user_id) {
         return string("/data/misc_ce/") + to_string(user_id) +
                "/storaged/storaged.proto";
@@ -116,7 +115,7 @@ public:
 
     map<uint64_t, struct uid_records> get_uid_records(
             double hours, uint64_t threshold, bool force_report) {
-        return mUidm.dump(hours, threshold, force_report, &protos);
+        return mUidm.dump(hours, threshold, force_report);
     }
 
     void update_uid_io_interval(int interval) {
@@ -135,7 +134,7 @@ public:
 
     void report_storage_info();
 
-    void flush_protos();
+    void flush_protos(unordered_map<int, StoragedProto>* protos);
 };
 
 // Eventlog tag

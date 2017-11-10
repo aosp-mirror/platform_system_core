@@ -165,19 +165,17 @@ storaged_t::storaged_t(void) {
 }
 
 void storaged_t::add_user_ce(userid_t user_id) {
-    Mutex::Autolock _l(proto_mutex);
-    protos.insert({user_id, {}});
-    load_proto_locked(user_id);
-    protos[user_id].set_loaded(1);
+    load_proto(user_id);
+    proto_loaded[user_id] = true;
 }
 
 void storaged_t::remove_user_ce(userid_t user_id) {
-    Mutex::Autolock _l(proto_mutex);
-    protos.erase(user_id);
+    proto_loaded[user_id] = false;
+    mUidm.clear_user_history(user_id);
     RemoveFileIfExists(proto_path(user_id), nullptr);
 }
 
-void storaged_t::load_proto_locked(userid_t user_id) {
+void storaged_t::load_proto(userid_t user_id) {
     string proto_file = proto_path(user_id);
     ifstream in(proto_file, ofstream::in | ofstream::binary);
 
@@ -185,32 +183,30 @@ void storaged_t::load_proto_locked(userid_t user_id) {
 
     stringstream ss;
     ss << in.rdbuf();
-    StoragedProto* proto = &protos[user_id];
-    proto->Clear();
-    proto->ParseFromString(ss.str());
+    StoragedProto proto;
+    proto.ParseFromString(ss.str());
 
-    uint32_t crc = proto->crc();
-    proto->set_crc(crc_init);
-    string proto_str = proto->SerializeAsString();
+    uint32_t crc = proto.crc();
+    proto.set_crc(crc_init);
+    string proto_str = proto.SerializeAsString();
     uint32_t computed_crc = crc32(crc_init,
         reinterpret_cast<const Bytef*>(proto_str.c_str()),
         proto_str.size());
 
     if (crc != computed_crc) {
         LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << proto_file;
-        proto->Clear();
         return;
     }
 
-    mUidm.load_uid_io_proto(proto->uid_io_usage());
+    mUidm.load_uid_io_proto(proto.uid_io_usage());
 
     if (user_id == USER_SYSTEM) {
-        storage_info->load_perf_history_proto(proto->perf_history());
+        storage_info->load_perf_history_proto(proto.perf_history());
     }
 }
 
-void storaged_t:: prepare_proto(StoragedProto* proto, userid_t user_id) {
-    proto->set_version(2);
+void storaged_t:: prepare_proto(userid_t user_id, StoragedProto* proto) {
+    proto->set_version(3);
     proto->set_crc(crc_init);
 
     if (user_id == USER_SYSTEM) {
@@ -225,7 +221,7 @@ void storaged_t:: prepare_proto(StoragedProto* proto, userid_t user_id) {
         proto_str.size()));
 }
 
-void storaged_t::flush_proto_user_system_locked(StoragedProto* proto) {
+void storaged_t::flush_proto_user_system(StoragedProto* proto) {
     string proto_str = proto->SerializeAsString();
     const char* data = proto_str.data();
     uint32_t size = proto_str.size();
@@ -274,11 +270,11 @@ void storaged_t::flush_proto_user_system_locked(StoragedProto* proto) {
     rename(tmp_file.c_str(), proto_file.c_str());
 }
 
-void storaged_t::flush_proto_locked(userid_t user_id) {
-    StoragedProto* proto = &protos[user_id];
-    prepare_proto(proto, user_id);
+void storaged_t::flush_proto(userid_t user_id, StoragedProto* proto) {
+    prepare_proto(user_id, proto);
+
     if (user_id == USER_SYSTEM) {
-        flush_proto_user_system_locked(proto);
+        flush_proto_user_system(proto);
         return;
     }
 
@@ -293,21 +289,20 @@ void storaged_t::flush_proto_locked(userid_t user_id) {
     rename(tmp_file.c_str(), proto_file.c_str());
 }
 
-void storaged_t::flush_protos() {
-    Mutex::Autolock _l(proto_mutex);
-    for (const auto& it : protos) {
+void storaged_t::flush_protos(unordered_map<int, StoragedProto>* protos) {
+    for (auto& it : *protos) {
         /*
-         * Don't flush proto if we haven't loaded it from file and combined
-         * with data in memory.
+         * Don't flush proto if we haven't attempted to load it from file.
          */
-        if (it.second.loaded() != 1) {
-            continue;
+        if (proto_loaded[it.first]) {
+            flush_proto(it.first, &it.second);
         }
-        flush_proto_locked(it.first);
     }
 }
 
 void storaged_t::event(void) {
+    unordered_map<int, StoragedProto> protos;
+
     if (mDsm.enabled()) {
         mDsm.update();
         if (!(mTimer % mConfig.periodic_chores_interval_disk_stats_publish)) {
@@ -316,17 +311,15 @@ void storaged_t::event(void) {
     }
 
     if (!(mTimer % mConfig.periodic_chores_interval_uid_io)) {
-        Mutex::Autolock _l(proto_mutex);
         mUidm.report(&protos);
     }
 
     if (storage_info) {
-        Mutex::Autolock _l(proto_mutex);
         storage_info->refresh(protos[USER_SYSTEM].mutable_perf_history());
     }
 
     if (!(mTimer % mConfig.periodic_chores_interval_flush_proto)) {
-        flush_protos();
+        flush_protos(&protos);
     }
 
     mTimer += mConfig.periodic_chores_interval_unit;
