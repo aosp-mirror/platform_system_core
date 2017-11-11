@@ -40,7 +40,7 @@ bool fs_mgr_update_for_slotselect(struct fstab *fstab) {
             char *tmp;
             if (ab_suffix.empty()) {
                 ab_suffix = fs_mgr_get_slot_suffix();
-                // Returns false as non A/B devices should not have MF_SLOTSELECT.
+                // Return false if failed to get ab_suffix when MF_SLOTSELECT is specified.
                 if (ab_suffix.empty()) return false;
             }
             if (asprintf(&tmp, "%s%s", fstab->recs[n].blk_device, ab_suffix.c_str()) > 0) {
