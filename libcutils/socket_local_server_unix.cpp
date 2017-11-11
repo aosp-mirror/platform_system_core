@@ -94,7 +94,7 @@ int socket_local_server_bind(int s, const char *name, int namespaceId)
  *  Returns fd on success, -1 on fail
  */
 
-int socket_local_server(const char *name, int namespace, int type)
+int socket_local_server(const char *name, int namespaceId, int type)
 {
     int err;
     int s;
@@ -102,7 +102,7 @@ int socket_local_server(const char *name, int namespace, int type)
     s = socket(AF_LOCAL, type, 0);
     if (s < 0) return -1;
 
-    err = socket_local_server_bind(s, name, namespace);
+    err = socket_local_server_bind(s, name, namespaceId);
 
     if (err < 0) {
         close(s);
