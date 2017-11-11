@@ -14,6 +14,8 @@
 ** limitations under the License.
 */
 
+#include <cutils/sockets.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
@@ -26,8 +28,6 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <netdb.h>
-
-#include <cutils/sockets.h>
 
 static int toggle_O_NONBLOCK(int s) {
     int flags = fcntl(s, F_GETFL);

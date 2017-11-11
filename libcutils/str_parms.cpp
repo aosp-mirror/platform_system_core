@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/str_parms.h>
+
 #define LOG_TAG "str_params"
 //#define LOG_NDEBUG 0
 
@@ -26,7 +28,6 @@
 
 #include <cutils/hashmap.h>
 #include <cutils/memory.h>
-#include <cutils/str_parms.h>
 #include <log/log.h>
 
 #define UNUSED __attribute__((unused))
@@ -62,30 +63,24 @@ __attribute__((no_sanitize("integer")))
 static int str_hash_fn(void *str)
 {
     uint32_t hash = 5381;
-    char *p;
 
-    for (p = str; p && *p; p++)
+    for (char* p = static_cast<char*>(str); p && *p; p++)
         hash = ((hash << 5) + hash) + *p;
     return (int)hash;
 }
 
 struct str_parms *str_parms_create(void)
 {
-    struct str_parms *str_parms;
+    str_parms* s = static_cast<str_parms*>(calloc(1, sizeof(str_parms)));
+    if (!s) return NULL;
 
-    str_parms = calloc(1, sizeof(struct str_parms));
-    if (!str_parms)
+    s->map = hashmapCreate(5, str_hash_fn, str_eq);
+    if (!s->map) {
+        free(s);
         return NULL;
+    }
 
-    str_parms->map = hashmapCreate(5, str_hash_fn, str_eq);
-    if (!str_parms->map)
-        goto err;
-
-    return str_parms;
-
-err:
-    free(str_parms);
-    return NULL;
+    return s;
 }
 
 struct remove_ctxt {
@@ -95,7 +90,7 @@ struct remove_ctxt {
 
 static bool remove_pair(void *key, void *value, void *context)
 {
-    struct remove_ctxt *ctxt = context;
+    remove_ctxt* ctxt = static_cast<remove_ctxt*>(context);
     bool should_continue;
 
     /*
@@ -109,7 +104,7 @@ static bool remove_pair(void *key, void *value, void *context)
     if (!ctxt->key) {
         should_continue = true;
         goto do_remove;
-    } else if (!strcmp(ctxt->key, key)) {
+    } else if (!strcmp(ctxt->key, static_cast<const char*>(key))) {
         should_continue = false;
         goto do_remove;
     }
@@ -292,9 +287,8 @@ int str_parms_has_key(struct str_parms *str_parms, const char *key) {
 int str_parms_get_str(struct str_parms *str_parms, const char *key, char *val,
                       int len)
 {
-    char *value;
-
-    value = hashmapGet(str_parms->map, (void *)key);
+    // TODO: hashmapGet should take a const* key.
+    char* value = static_cast<char*>(hashmapGet(str_parms->map, (void*)key));
     if (value)
         return strlcpy(val, value, len);
 
@@ -303,10 +297,10 @@ int str_parms_get_str(struct str_parms *str_parms, const char *key, char *val,
 
 int str_parms_get_int(struct str_parms *str_parms, const char *key, int *val)
 {
-    char *value;
     char *end;
 
-    value = hashmapGet(str_parms->map, (void *)key);
+    // TODO: hashmapGet should take a const* key.
+    char* value = static_cast<char*>(hashmapGet(str_parms->map, (void*)key));
     if (!value)
         return -ENOENT;
 
@@ -321,10 +315,10 @@ int str_parms_get_float(struct str_parms *str_parms, const char *key,
                         float *val)
 {
     float out;
-    char *value;
     char *end;
 
-    value = hashmapGet(str_parms->map, (void *)key);
+    // TODO: hashmapGet should take a const* key.
+    char* value = static_cast<char*>(hashmapGet(str_parms->map, (void*)(key)));
     if (!value)
         return -ENOENT;
 
@@ -338,7 +332,7 @@ int str_parms_get_float(struct str_parms *str_parms, const char *key,
 
 static bool combine_strings(void *key, void *value, void *context)
 {
-    char **old_str = context;
+    char** old_str = static_cast<char**>(context);
     char *new_str;
     int ret;
 

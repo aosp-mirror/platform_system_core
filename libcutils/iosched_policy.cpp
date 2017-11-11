@@ -14,14 +14,14 @@
 ** limitations under the License.
 */
 
+#include <cutils/iosched_policy.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <cutils/iosched_policy.h>
 
 #if defined(__ANDROID__)
 #define IOPRIO_WHO_PROCESS (1)
@@ -49,7 +49,7 @@ int android_get_ioprio(int pid __android_unused, IoSchedClass *clazz, int *iopri
         return -1;
     }
 
-    *clazz = (rc >> IOPRIO_CLASS_SHIFT);
+    *clazz = static_cast<IoSchedClass>(rc >> IOPRIO_CLASS_SHIFT);
     *ioprio = (rc & 0xff);
 #else
     *clazz = IoSchedClass_NONE;
