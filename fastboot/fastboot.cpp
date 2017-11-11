@@ -485,7 +485,7 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
     return bdata;
 }
 
-static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* sz) {
+static void* unzip_to_memory(ZipArchiveHandle zip, const char* entry_name, int64_t* sz) {
     ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
@@ -495,7 +495,7 @@ static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, int64_t* s
 
     *sz = zip_entry.uncompressed_length;
 
-    fprintf(stderr, "extracting %s (%" PRId64 " MB)...\n", entry_name, *sz / 1024 / 1024);
+    fprintf(stderr, "extracting %s (%" PRId64 " MB) to RAM...\n", entry_name, *sz / 1024 / 1024);
     uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
     if (data == nullptr) die("failed to allocate %" PRId64 " bytes for '%s'", *sz, entry_name);
 
@@ -613,16 +613,19 @@ static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
         return -1;
     }
 
-    fprintf(stderr, "extracting %s (%" PRIu32 " MB)...\n", entry_name,
+    fprintf(stderr, "extracting %s (%" PRIu32 " MB) to disk...", entry_name,
             zip_entry.uncompressed_length / 1024 / 1024);
+    double start = now();
     int error = ExtractEntryToFile(zip, &zip_entry, fd);
     if (error != 0) {
-        die("failed to extract '%s': %s", entry_name, ErrorCodeString(error));
+        die("\nfailed to extract '%s': %s", entry_name, ErrorCodeString(error));
     }
 
     if (lseek(fd, 0, SEEK_SET) != 0) {
-        die("lseek on extracted file '%s' failed: %s", entry_name, strerror(errno));
+        die("\nlseek on extracted file '%s' failed: %s", entry_name, strerror(errno));
     }
+
+    fprintf(stderr, " took %.3fs\n", now() - start);
 
     return fd.release();
 }
@@ -1091,7 +1094,7 @@ static void do_flash(Transport* transport, const char* pname, const char* fname)
 
 static void do_update_signature(ZipArchiveHandle zip, const char* filename) {
     int64_t sz;
-    void* data = unzip_file(zip, filename, &sz);
+    void* data = unzip_to_memory(zip, filename, &sz);
     if (data == nullptr) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
@@ -1130,7 +1133,7 @@ static void do_update(Transport* transport, const char* filename, const std::str
     }
 
     int64_t sz;
-    void* data = unzip_file(zip, "android-info.txt", &sz);
+    void* data = unzip_to_memory(zip, "android-info.txt", &sz);
     if (data == nullptr) {
         die("update package '%s' has no android-info.txt", filename);
     }
