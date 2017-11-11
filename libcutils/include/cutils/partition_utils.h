@@ -17,6 +17,8 @@
 #ifndef __CUTILS_PARTITION_WIPED_H__
 #define __CUTILS_PARTITION_WIPED_H__
 
+#include <sys/cdefs.h>
+
 __BEGIN_DECLS
 
 int partition_wiped(char *source);

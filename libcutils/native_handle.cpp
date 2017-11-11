@@ -45,7 +45,7 @@ native_handle_t* native_handle_create(int numFds, int numInts) {
     }
 
     size_t mallocSize = sizeof(native_handle_t) + (sizeof(int) * (numFds + numInts));
-    native_handle_t* h = malloc(mallocSize);
+    native_handle_t* h = static_cast<native_handle_t*>(malloc(mallocSize));
     if (h) {
         h->version = sizeof(native_handle_t);
         h->numFds = numFds;
