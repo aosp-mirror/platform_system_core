@@ -330,8 +330,8 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     async_safe_format_buffer(debuggerd_dump_type, sizeof(debuggerd_dump_type), "%d",
                              get_dump_type(thread_info));
 
-    execl(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, debuggerd_dump_type,
-          nullptr);
+    execle(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, debuggerd_dump_type,
+           nullptr, nullptr);
 
     fatal_errno("exec failed");
   } else {

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/fs.h>
+
 #define LOG_TAG "cutils"
 
 /* These defines are only needed because prebuilt headers are out of date */
@@ -32,7 +34,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cutils/fs.h>
 #include <log/log.h>
 
 #define ALL_PERMS (S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
@@ -40,6 +41,11 @@
 
 static int fs_prepare_path_impl(const char* path, mode_t mode, uid_t uid, gid_t gid,
         int allow_fixup, int prepare_as_dir) {
+    // TODO: fix the goto hell below.
+    int type_ok;
+    int owner_match;
+    int mode_match;
+
     // Check if path needs to be created
     struct stat sb;
     int create_result = -1;
@@ -53,14 +59,14 @@ static int fs_prepare_path_impl(const char* path, mode_t mode, uid_t uid, gid_t 
     }
 
     // Exists, verify status
-    int type_ok = prepare_as_dir ? S_ISDIR(sb.st_mode) : S_ISREG(sb.st_mode);
+    type_ok = prepare_as_dir ? S_ISDIR(sb.st_mode) : S_ISREG(sb.st_mode);
     if (!type_ok) {
         ALOGE("Not a %s: %s", (prepare_as_dir ? "directory" : "regular file"), path);
         return -1;
     }
 
-    int owner_match = ((sb.st_uid == uid) && (sb.st_gid == gid));
-    int mode_match = ((sb.st_mode & ALL_PERMS) == mode);
+    owner_match = ((sb.st_uid == uid) && (sb.st_gid == gid));
+    mode_match = ((sb.st_mode & ALL_PERMS) == mode);
     if (owner_match && mode_match) {
         return 0;
     } else if (allow_fixup) {
@@ -188,23 +194,20 @@ fail_closed:
 #ifndef __APPLE__
 
 int fs_mkdirs(const char* path, mode_t mode) {
-    int res = 0;
-    int fd = 0;
-    struct stat sb;
-    char* buf = strdup(path);
-
-    if (*buf != '/') {
-        ALOGE("Relative paths are not allowed: %s", buf);
-        res = -EINVAL;
-        goto done;
+    if (*path != '/') {
+        ALOGE("Relative paths are not allowed: %s", path);
+        return -EINVAL;
     }
 
-    if ((fd = open("/", 0)) == -1) {
+    int fd = open("/", 0);
+    if (fd == -1) {
         ALOGE("Failed to open(/): %s", strerror(errno));
-        res = -errno;
-        goto done;
+        return -errno;
     }
 
+    struct stat sb;
+    int res = 0;
+    char* buf = strdup(path);
     char* segment = buf + 1;
     char* p = segment;
     while (*p != '\0') {
@@ -266,7 +269,6 @@ int fs_mkdirs(const char* path, mode_t mode) {
 
 done_close:
     close(fd);
-done:
     free(buf);
     return res;
 }

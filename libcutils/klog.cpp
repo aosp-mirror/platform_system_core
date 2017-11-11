@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/klog.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -25,7 +27,6 @@
 #include <unistd.h>
 
 #include <cutils/android_get_control_file.h>
-#include <cutils/klog.h>
 
 static int klog_level = KLOG_INFO_LEVEL;
 

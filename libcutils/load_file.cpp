@@ -15,6 +15,8 @@
 ** limitations under the License.
 */
 
+#include <cutils/misc.h>
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>

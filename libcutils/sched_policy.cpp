@@ -14,6 +14,8 @@
 ** limitations under the License.
 */
 
+#include <cutils/sched_policy.h>
+
 #define LOG_TAG "SchedPolicy"
 
 #include <errno.h>
@@ -24,7 +26,6 @@
 #include <unistd.h>
 
 #include <log/log.h>
-#include <cutils/sched_policy.h>
 
 #define UNUSED __attribute__((__unused__))
 

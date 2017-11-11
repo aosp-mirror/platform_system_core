@@ -232,7 +232,6 @@ void GGLAssembler::expand(integer_t& dst, const integer_t& src, int dbits)
 void GGLAssembler::downshift(
         pixel_t& d, int component, component_t s, const reg_t& dither)
 {
-    const needs_t& needs = mBuilderContext.needs;
     Scratch scratches(registerFile());
 
     int sh = s.h;
