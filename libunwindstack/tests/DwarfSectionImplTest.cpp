@@ -42,15 +42,15 @@ class MockDwarfSectionImpl : public DwarfSectionImpl<TypeParam> {
 
   MOCK_METHOD1(GetFdeFromIndex, const DwarfFde*(size_t));
 
-  MOCK_METHOD1(IsCie32, bool(uint32_t));
-
-  MOCK_METHOD1(IsCie64, bool(uint64_t));
-
   MOCK_METHOD1(GetCieOffsetFromFde32, uint64_t(uint32_t));
 
   MOCK_METHOD1(GetCieOffsetFromFde64, uint64_t(uint64_t));
 
   MOCK_METHOD1(AdjustPcFromFde, uint64_t(uint64_t));
+
+  void TestSetCie32Value(uint32_t value32) { this->cie32_value_ = value32; }
+
+  void TestSetCie64Value(uint64_t value64) { this->cie64_value_ = value64; }
 
   void TestSetCachedCieEntry(uint64_t offset, const DwarfCie& cie) {
     this->cie_entries_[offset] = cie;
@@ -77,6 +77,8 @@ class DwarfSectionImplTest : public ::testing::Test {
     memory_.Clear();
     section_ = new MockDwarfSectionImpl<TypeParam>(&memory_);
     ResetLogs();
+    section_->TestSetCie32Value(static_cast<uint32_t>(-1));
+    section_->TestSetCie64Value(static_cast<uint64_t>(-1));
   }
 
   void TearDown() override { delete section_; }
@@ -448,8 +450,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_32_version_check) {
   this->memory_.SetData8(0x500b, 8);
   this->memory_.SetData8(0x500c, 0x20);
 
-  EXPECT_CALL(*this->section_, IsCie32(0xffffffff)).WillRepeatedly(::testing::Return(true));
-
   const DwarfCie* cie = this->section_->GetCie(0x5000);
   ASSERT_TRUE(cie != nullptr);
   EXPECT_EQ(1U, cie->version);
@@ -493,8 +493,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_negative_data_alignment_factor) {
   this->memory_.SetMemory(0x500b, std::vector<uint8_t>{0xfc, 0xff, 0xff, 0xff, 0x7f});
   this->memory_.SetData8(0x5010, 0x20);
 
-  EXPECT_CALL(*this->section_, IsCie32(0xffffffff)).WillRepeatedly(::testing::Return(true));
-
   const DwarfCie* cie = this->section_->GetCie(0x5000);
   ASSERT_TRUE(cie != nullptr);
   EXPECT_EQ(1U, cie->version);
@@ -514,14 +512,12 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_negative_data_alignment_factor) {
 TYPED_TEST_P(DwarfSectionImplTest, GetCie_64_no_augment) {
   this->memory_.SetData32(0x8000, 0xffffffff);
   this->memory_.SetData64(0x8004, 0x200);
-  this->memory_.SetData64(0x800c, 0xffffffff);
+  this->memory_.SetData64(0x800c, 0xffffffffffffffffULL);
   this->memory_.SetData8(0x8014, 0x1);
   this->memory_.SetData8(0x8015, '\0');
   this->memory_.SetData8(0x8016, 4);
   this->memory_.SetData8(0x8017, 8);
   this->memory_.SetData8(0x8018, 0x20);
-
-  EXPECT_CALL(*this->section_, IsCie64(0xffffffff)).WillRepeatedly(::testing::Return(true));
 
   const DwarfCie* cie = this->section_->GetCie(0x8000);
   ASSERT_TRUE(cie != nullptr);
@@ -557,8 +553,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_augment) {
   // R data.
   this->memory_.SetData8(0x5018, DW_EH_PE_udata2);
 
-  EXPECT_CALL(*this->section_, IsCie32(0xffffffff)).WillRepeatedly(::testing::Return(true));
-
   const DwarfCie* cie = this->section_->GetCie(0x5000);
   ASSERT_TRUE(cie != nullptr);
   EXPECT_EQ(1U, cie->version);
@@ -588,8 +582,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_version_3) {
   this->memory_.SetData8(0x500b, 8);
   this->memory_.SetMemory(0x500c, std::vector<uint8_t>{0x81, 0x03});
 
-  EXPECT_CALL(*this->section_, IsCie32(0xffffffff)).WillRepeatedly(::testing::Return(true));
-
   const DwarfCie* cie = this->section_->GetCie(0x5000);
   ASSERT_TRUE(cie != nullptr);
   EXPECT_EQ(3U, cie->version);
@@ -616,8 +608,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_version_4) {
   this->memory_.SetData8(0x500c, 4);
   this->memory_.SetData8(0x500d, 8);
   this->memory_.SetMemory(0x500e, std::vector<uint8_t>{0x81, 0x03});
-
-  EXPECT_CALL(*this->section_, IsCie32(0xffffffff)).WillRepeatedly(::testing::Return(true));
 
   const DwarfCie* cie = this->section_->GetCie(0x5000);
   ASSERT_TRUE(cie != nullptr);
@@ -649,7 +639,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetFdeFromOffset_32_no_augment) {
   this->memory_.SetData32(0x4008, 0x5000);
   this->memory_.SetData32(0x400c, 0x100);
 
-  EXPECT_CALL(*this->section_, IsCie32(0x8000)).WillOnce(::testing::Return(false));
   EXPECT_CALL(*this->section_, GetCieOffsetFromFde32(0x8000)).WillOnce(::testing::Return(0x8000));
   DwarfCie cie{};
   cie.fde_address_encoding = DW_EH_PE_udata4;
@@ -673,7 +662,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetFdeFromOffset_32_no_augment_non_zero_segme
   this->memory_.SetData32(0x4018, 0x5000);
   this->memory_.SetData32(0x401c, 0x100);
 
-  EXPECT_CALL(*this->section_, IsCie32(0x8000)).WillOnce(::testing::Return(false));
   EXPECT_CALL(*this->section_, GetCieOffsetFromFde32(0x8000)).WillOnce(::testing::Return(0x8000));
   DwarfCie cie{};
   cie.fde_address_encoding = DW_EH_PE_udata4;
@@ -700,7 +688,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetFdeFromOffset_32_augment) {
   this->memory_.SetMemory(0x4010, std::vector<uint8_t>{0x82, 0x01});
   this->memory_.SetData16(0x4012, 0x1234);
 
-  EXPECT_CALL(*this->section_, IsCie32(0x8000)).WillOnce(::testing::Return(false));
   EXPECT_CALL(*this->section_, GetCieOffsetFromFde32(0x8000)).WillOnce(::testing::Return(0x8000));
   DwarfCie cie{};
   cie.fde_address_encoding = DW_EH_PE_udata4;
@@ -727,7 +714,6 @@ TYPED_TEST_P(DwarfSectionImplTest, GetFdeFromOffset_64_no_augment) {
   this->memory_.SetData32(0x4014, 0x5000);
   this->memory_.SetData32(0x4018, 0x100);
 
-  EXPECT_CALL(*this->section_, IsCie64(0x12345678)).WillOnce(::testing::Return(false));
   EXPECT_CALL(*this->section_, GetCieOffsetFromFde64(0x12345678))
       .WillOnce(::testing::Return(0x12345678));
   DwarfCie cie{};

@@ -37,7 +37,7 @@
 // Both adb (1) and Chrome (2) purposefully avoid WSACleanup() with no issues.
 // (1) https://android.googlesource.com/platform/system/core.git/+/master/adb/sysdeps_win32.cpp
 // (2) https://code.google.com/p/chromium/codesearch#chromium/src/net/base/winsock_init.cc
-extern "C" bool initialize_windows_sockets() {
+bool initialize_windows_sockets() {
     // There's no harm in calling WSAStartup() multiple times but no benefit
     // either, we may as well skip it after the first.
     static bool init_success = false;

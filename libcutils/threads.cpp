@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-#include "cutils/threads.h"
+#include <cutils/threads.h>
 
 // For gettid.
 #if defined(__APPLE__)

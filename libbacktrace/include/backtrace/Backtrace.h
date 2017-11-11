@@ -109,7 +109,8 @@ public:
   virtual bool Unwind(size_t num_ignore_frames, ucontext_t* context = NULL) = 0;
 
   static bool Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
-                     std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames);
+                     std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
+                     std::vector<std::string>* skip_names);
 
   // Get the function name and offset into the function given the pc.
   // If the string is empty, then no valid function name was found,

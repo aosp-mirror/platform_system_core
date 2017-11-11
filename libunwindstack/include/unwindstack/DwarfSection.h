@@ -90,10 +90,6 @@ class DwarfSection {
 
   virtual bool GetCfaLocationInfo(uint64_t pc, const DwarfFde* fde, dwarf_loc_regs_t* loc_regs) = 0;
 
-  virtual bool IsCie32(uint32_t value32) = 0;
-
-  virtual bool IsCie64(uint64_t value64) = 0;
-
   virtual uint64_t GetCieOffsetFromFde32(uint32_t pointer) = 0;
 
   virtual uint64_t GetCieOffsetFromFde64(uint64_t pointer) = 0;
@@ -106,6 +102,9 @@ class DwarfSection {
   DwarfMemory memory_;
   DwarfError last_error_;
 
+  uint32_t cie32_value_ = 0;
+  uint64_t cie64_value_ = 0;
+
   uint64_t fde_count_ = 0;
   std::unordered_map<uint64_t, DwarfFde> fde_entries_;
   std::unordered_map<uint64_t, DwarfCie> cie_entries_;
@@ -115,8 +114,23 @@ class DwarfSection {
 template <typename AddressType>
 class DwarfSectionImpl : public DwarfSection {
  public:
+  struct FdeInfo {
+    FdeInfo(uint64_t offset, uint64_t start, uint64_t length)
+        : offset(offset), start(start), end(start + length) {}
+
+    uint64_t offset;
+    AddressType start;
+    AddressType end;
+  };
+
   DwarfSectionImpl(Memory* memory) : DwarfSection(memory) {}
   virtual ~DwarfSectionImpl() = default;
+
+  bool Init(uint64_t offset, uint64_t size) override;
+
+  bool GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) override;
+
+  const DwarfFde* GetFdeFromIndex(size_t index) override;
 
   bool Eval(const DwarfCie* cie, Memory* regular_memory, const dwarf_loc_regs_t& loc_regs,
             Regs* regs, bool* finished) override;
@@ -134,6 +148,16 @@ class DwarfSectionImpl : public DwarfSection {
  protected:
   bool EvalExpression(const DwarfLocation& loc, uint8_t version, Memory* regular_memory,
                       AddressType* value);
+
+  bool GetCieInfo(uint8_t* segment_size, uint8_t* encoding);
+
+  bool AddFdeInfo(uint64_t entry_offset, uint8_t segment_size, uint8_t encoding);
+
+  bool CreateSortedFdeList();
+
+  std::vector<FdeInfo> fdes_;
+  uint64_t entries_offset_;
+  uint64_t entries_end_;
 };
 
 }  // namespace unwindstack

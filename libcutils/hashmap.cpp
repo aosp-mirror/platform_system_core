@@ -15,6 +15,7 @@
  */
 
 #include <cutils/hashmap.h>
+
 #include <assert.h>
 #include <errno.h>
 #include <cutils/threads.h>
@@ -45,7 +46,7 @@ Hashmap* hashmapCreate(size_t initialCapacity,
     assert(hash != NULL);
     assert(equals != NULL);
     
-    Hashmap* map = malloc(sizeof(Hashmap));
+    Hashmap* map = static_cast<Hashmap*>(malloc(sizeof(Hashmap)));
     if (map == NULL) {
         return NULL;
     }
@@ -58,7 +59,7 @@ Hashmap* hashmapCreate(size_t initialCapacity,
         map->bucketCount <<= 1; 
     }
 
-    map->buckets = calloc(map->bucketCount, sizeof(Entry*));
+    map->buckets = static_cast<Entry**>(calloc(map->bucketCount, sizeof(Entry*)));
     if (map->buckets == NULL) {
         free(map);
         return NULL;
@@ -106,7 +107,7 @@ static void expandIfNecessary(Hashmap* map) {
     if (map->size > (map->bucketCount * 3 / 4)) {
         // Start off with a 0.33 load factor.
         size_t newBucketCount = map->bucketCount << 1;
-        Entry** newBuckets = calloc(newBucketCount, sizeof(Entry*));
+        Entry** newBuckets = static_cast<Entry**>(calloc(newBucketCount, sizeof(Entry*)));
         if (newBuckets == NULL) {
             // Abort expansion.
             return;
@@ -171,7 +172,7 @@ int hashmapHash(void* key, size_t keySize) {
 }
 
 static Entry* createEntry(void* key, int hash, void* value) {
-    Entry* entry = malloc(sizeof(Entry));
+    Entry* entry = static_cast<Entry*>(malloc(sizeof(Entry)));
     if (entry == NULL) {
         return NULL;
     }
