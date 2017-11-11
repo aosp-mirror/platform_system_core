@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/qtaguid.h>
+
 // #define LOG_NDEBUG 0
 
 #define LOG_TAG "qtaguid"
@@ -26,7 +28,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <cutils/qtaguid.h>
 #include <log/log.h>
 
 class netdHandler {

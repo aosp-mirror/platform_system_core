@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/trace.h>
+
 #include "trace-dev.inc"
 
 #include <cutils/sockets.h>

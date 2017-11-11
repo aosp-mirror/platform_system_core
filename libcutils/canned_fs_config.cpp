@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#include <private/android_filesystem_config.h>
+#include <private/canned_fs_config.h>
+#include <private/fs_config.h>
+
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -21,10 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <private/android_filesystem_config.h>
-#include <private/fs_config.h>
-#include <private/canned_fs_config.h>
 
 typedef struct {
     const char* path;

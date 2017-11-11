@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/ashmem.h>
+
 /*
  * Implementation of the user-space ashmem API for the simulator, which lacks
  * an ashmem-enabled kernel. See ashmem-dev.c for the real ashmem-based version.
@@ -31,7 +33,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <cutils/ashmem.h>
 #include <utils/Compat.h>
 
 #ifndef __unused
@@ -40,12 +41,12 @@
 
 int ashmem_create_region(const char *ignored __unused, size_t size)
 {
-    char template[PATH_MAX];
-    snprintf(template, sizeof(template), "/tmp/android-ashmem-%d-XXXXXXXXX", getpid());
-    int fd = mkstemp(template);
+    char pattern[PATH_MAX];
+    snprintf(pattern, sizeof(pattern), "/tmp/android-ashmem-%d-XXXXXXXXX", getpid());
+    int fd = mkstemp(pattern);
     if (fd == -1) return -1;
 
-    unlink(template);
+    unlink(pattern);
 
     if (TEMP_FAILURE_RETRY(ftruncate(fd, size)) == -1) {
       close(fd);

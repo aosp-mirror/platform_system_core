@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/partition_utils.h>
+
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h> /* for BLKGETSIZE */
