@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _CANNED_FS_CONFIG_H
-#define _CANNED_FS_CONFIG_H
+#include <healthd/healthd.h>
 
-#include <inttypes.h>
+void healthd_board_init(struct healthd_config*) {
+    // use defaults
+}
 
-__BEGIN_DECLS
-
-int load_canned_fs_config(const char* fn);
-void canned_fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid,
-                      unsigned* gid, unsigned* mode, uint64_t* capabilities);
-
-__END_DECLS
-
-#endif
+int healthd_board_battery_update(struct android::BatteryProperties*) {
+    // return 0 to log periodic polled battery status to kernel log
+    return 0;
+}

@@ -36,37 +36,32 @@ using android::hardware::health::V2_0::implementation::Health;
 // see healthd_common.cpp
 android::sp<IHealth> gHealth;
 
-static int gBinderFd;
-
 extern int healthd_main(void);
 
 static void binder_event(uint32_t /*epevents*/) {
     IPCThreadState::self()->handlePolledCommands();
 }
 
-// TODO(b/67463967): healthd_board_* functions should be removed in health@2.0
-int healthd_board_battery_update(struct android::BatteryProperties*)
-{
-    // return 0 to log periodic polled battery status to kernel log
-    return 0;
-}
-
 void healthd_mode_service_2_0_init(struct healthd_config* config) {
+    int binderFd;
+
     LOG(INFO) << LOG_TAG << " Hal is starting up...";
+
+    configureRpcThreadpool(1, false /* callerWillJoin */);
+    IPCThreadState::self()->disableBackgroundScheduling(true);
+    IPCThreadState::self()->setupPolling(&binderFd);
+
+    if (binderFd >= 0) {
+        if (healthd_register_event(binderFd, binder_event))
+            LOG(ERROR) << LOG_TAG << ": Register for binder events failed";
+    }
 
     // Implementation-defined init logic goes here.
     // 1. config->periodic_chores_interval_* variables
     // 2. config->battery*Path variables
     // 3. config->energyCounter. In this implementation, energyCounter is not defined.
-
-    configureRpcThreadpool(1, false /* callerWillJoin */);
-    IPCThreadState::self()->disableBackgroundScheduling(true);
-    IPCThreadState::self()->setupPolling(&gBinderFd);
-
-    if (gBinderFd >= 0) {
-        if (healthd_register_event(gBinderFd, binder_event))
-            LOG(ERROR) << LOG_TAG << ": Register for binder events failed";
-    }
+    // TODO(b/68724651): healthd_board_* functions should be removed in health@2.0
+    healthd_board_init(config);
 
     gHealth = new ::android::hardware::health::V2_0::implementation::Health(config);
     CHECK_EQ(gHealth->registerAsService(HEALTH_INSTANCE_NAME), android::OK)
@@ -85,7 +80,6 @@ void healthd_mode_service_2_0_heartbeat(void) {
 }
 
 void healthd_mode_service_2_0_battery_update(struct android::BatteryProperties* prop) {
-
     // Implementation-defined update logic goes here. An implementation
     // can make modifications to prop before broadcasting it to all callbacks.
 

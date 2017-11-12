@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+#include <cutils/sockets.h>
+
 #include <errno.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <cutils/sockets.h>
 
 #if defined(_WIN32)
 

@@ -25,6 +25,9 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <cutils/android_get_control_file.h>
+
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -35,8 +38,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include <cutils/android_get_control_file.h>
 
 #include "android_get_control_env.h"
 

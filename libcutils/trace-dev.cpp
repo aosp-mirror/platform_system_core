@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cutils/trace.h>
+
 #include "trace-dev.inc"
 
 static pthread_once_t atrace_once_control = PTHREAD_ONCE_INIT;

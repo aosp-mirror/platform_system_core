@@ -17,6 +17,7 @@
 #ifndef __CUTILS_ANDROID_REBOOT_H__
 #define __CUTILS_ANDROID_REBOOT_H__
 
+#include <sys/cdefs.h>
 
 __BEGIN_DECLS
 

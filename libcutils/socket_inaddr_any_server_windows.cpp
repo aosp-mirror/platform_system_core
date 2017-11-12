@@ -26,9 +26,9 @@
  * SUCH DAMAGE.
  */
 
-#include <errno.h>
-
 #include <cutils/sockets.h>
+
+#include <errno.h>
 
 #define LISTEN_BACKLOG 4
 
