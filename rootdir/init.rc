@@ -712,7 +712,7 @@ service ueventd /sbin/ueventd
     shutdown critical
 
 service healthd /system/bin/healthd
-    class core
+    class hal
     critical
     group root system wakelock
 
