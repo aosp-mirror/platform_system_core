@@ -74,12 +74,8 @@ cc_library {
     ],
 
     target: {
-        host: {
-            srcs: ["dlmalloc_stubs.c"],
-        },
         linux_bionic: {
             enabled: true,
-            exclude_srcs: ["dlmalloc_stubs.c"],
         },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
