@@ -247,7 +247,7 @@ sanitizer_runtime_libraries :=
 else # if _enforce_vndk_at_runtime is not true
 
 LOCAL_MODULE := ld.config.txt
-ifeq ($(PRODUCT_FULL_TREBLE)|$(SANITIZE_TARGET),true|)
+ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
 LOCAL_SRC_FILES := etc/ld.config.txt
 else
 LOCAL_SRC_FILES := etc/ld.config.legacy.txt
