@@ -1,7 +1,6 @@
 #include "fs.h"
 
 #include "fastboot.h"
-#include "make_f2fs.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -23,7 +22,6 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
-#include <sparse/sparse.h>
 
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -160,16 +158,32 @@ static int generate_ext4_image(const char* fileName, long long partSize,
 static int generate_f2fs_image(const char* fileName, long long partSize, const std::string& initial_dir,
                                unsigned /* unused */, unsigned /* unused */)
 {
+    const std::string exec_dir = android::base::GetExecutableDirectory();
+    const std::string mkf2fs_path = exec_dir + "/make_f2fs";
+    std::vector<const char*> mkf2fs_args = {mkf2fs_path.c_str()};
+
+    mkf2fs_args.push_back("-S");
+    std::string size_str = std::to_string(partSize);
+    mkf2fs_args.push_back(size_str.c_str());
+    mkf2fs_args.push_back("-f");
+    mkf2fs_args.push_back("-O");
+    mkf2fs_args.push_back("encrypt");
+    mkf2fs_args.push_back("-O");
+    mkf2fs_args.push_back("quota");
+    mkf2fs_args.push_back(fileName);
+    mkf2fs_args.push_back(nullptr);
+
+    int ret = exec_e2fs_cmd(mkf2fs_args[0], const_cast<char**>(mkf2fs_args.data()));
+    if (ret != 0) {
+        fprintf(stderr, "mkf2fs failed: %d\n", ret);
+        return -1;
+    }
+
     if (!initial_dir.empty()) {
         fprintf(stderr, "Unable to set initial directory on F2FS filesystem: %s\n", strerror(errno));
         return -1;
     }
-    unique_fd fd(open(fileName, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR));
-    if (fd == -1) {
-        fprintf(stderr, "Unable to open output file for F2FS filesystem: %s\n", strerror(errno));
-        return -1;
-    }
-    return make_f2fs_sparse_fd(fd, partSize, NULL, NULL);
+    return 0;
 }
 #endif
 
