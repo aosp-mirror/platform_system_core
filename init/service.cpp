@@ -530,6 +530,11 @@ Result<Success> Service::ParseOomScoreAdjust(const std::vector<std::string>& arg
     return Success();
 }
 
+Result<Success> Service::ParseOverride(const std::vector<std::string>& args) {
+    override_ = true;
+    return Success();
+}
+
 Result<Success> Service::ParseMemcgSwappiness(const std::vector<std::string>& args) {
     if (!ParseInt(args[1], &swappiness_, 0)) {
         return Error() << "swappiness value must be equal or greater than 0";
@@ -671,6 +676,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
         {"oneshot",     {0,     0,    &Service::ParseOneshot}},
         {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
+        {"override",    {0,     0,    &Service::ParseOverride}},
         {"oom_score_adjust",
                         {1,     1,    &Service::ParseOomScoreAdjust}},
         {"memcg.swappiness",
@@ -1134,7 +1140,13 @@ Result<Success> ServiceParser::EndSection() {
     if (service_) {
         Service* old_service = service_list_->FindService(service_->name());
         if (old_service) {
-            return Error() << "ignored duplicate definition of service '" << service_->name() << "'";
+            if (!service_->is_override()) {
+                return Error() << "ignored duplicate definition of service '" << service_->name()
+                               << "'";
+            }
+
+            service_list_->RemoveService(*old_service);
+            old_service = nullptr;
         }
 
         service_list_->AddService(std::move(service_));

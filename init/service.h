@@ -111,6 +111,7 @@ class Service {
     const std::set<std::string>& interfaces() const { return interfaces_; }
     int priority() const { return priority_; }
     int oom_score_adjust() const { return oom_score_adjust_; }
+    bool is_override() const { return override_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
     const std::vector<std::string>& args() const { return args_; }
@@ -139,6 +140,7 @@ class Service {
     Result<Success> ParseOneshot(const std::vector<std::string>& args);
     Result<Success> ParseOnrestart(const std::vector<std::string>& args);
     Result<Success> ParseOomScoreAdjust(const std::vector<std::string>& args);
+    Result<Success> ParseOverride(const std::vector<std::string>& args);
     Result<Success> ParseMemcgLimitInBytes(const std::vector<std::string>& args);
     Result<Success> ParseMemcgSoftLimitInBytes(const std::vector<std::string>& args);
     Result<Success> ParseMemcgSwappiness(const std::vector<std::string>& args);
@@ -200,6 +202,8 @@ class Service {
     int limit_in_bytes_;
 
     bool process_cgroup_empty_ = false;
+
+    bool override_ = false;
 
     unsigned long start_order_;
 
