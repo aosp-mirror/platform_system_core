@@ -27,8 +27,6 @@ cc_library_static {
         "healthd_common.cpp",
     ],
 
-    cflags: ["-DHEALTHD_USE_HEALTH_2_0"],
-
     export_include_dirs: ["include"],
 
     shared_libs: [

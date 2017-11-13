@@ -33,25 +33,14 @@
 #include <sys/timerfd.h>
 #include <utils/Errors.h>
 
-#ifdef HEALTHD_USE_HEALTH_2_0
 #include <health2/Health.h>
-#endif
 
 using namespace android;
 
-#ifndef BOARD_PERIODIC_CHORES_INTERVAL_FAST
-  // Periodic chores fast interval in seconds
-  #define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
-#else
-  #define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (BOARD_PERIODIC_CHORES_INTERVAL_FAST)
-#endif
-
-#ifndef BOARD_PERIODIC_CHORES_INTERVAL_SLOW
-  // Periodic chores fast interval in seconds
-  #define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
-#else
-  #define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (BOARD_PERIODIC_CHORES_INTERVAL_SLOW)
-#endif
+// Periodic chores fast interval in seconds
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
+// Periodic chores fast interval in seconds
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
 
 static struct healthd_config healthd_config = {
     .periodic_chores_interval_fast = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST,
@@ -88,11 +77,7 @@ static int awake_poll_interval = -1;
 
 static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 
-#ifndef HEALTHD_USE_HEALTH_2_0
-static BatteryMonitor* gBatteryMonitor = nullptr;
-#else
 using ::android::hardware::health::V2_0::implementation::Health;
-#endif
 
 struct healthd_mode_ops *healthd_mode_ops = nullptr;
 
@@ -135,81 +120,6 @@ static void wakealarm_set_interval(int interval) {
         KLOG_ERROR(LOG_TAG, "wakealarm_set_interval: timerfd_settime failed\n");
 }
 
-#ifdef HEALTHD_USE_HEALTH_2_0
-status_t convertStatus(android::hardware::health::V2_0::Result r) {
-    using android::hardware::health::V2_0::Result;
-    switch(r) {
-        case Result::SUCCESS:       return OK;
-        case Result::NOT_SUPPORTED: return BAD_VALUE;
-        case Result::NOT_FOUND:     return NAME_NOT_FOUND;
-        case Result::CALLBACK_DIED: return DEAD_OBJECT;
-        case Result::UNKNOWN: // fallthrough
-        default:
-            return UNKNOWN_ERROR;
-    }
-}
-#endif
-
-status_t healthd_get_property(int id, struct BatteryProperty *val) {
-#ifndef HEALTHD_USE_HEALTH_2_0
-    return gBatteryMonitor->getProperty(id, val);
-#else
-    using android::hardware::health::V1_0::BatteryStatus;
-    using android::hardware::health::V2_0::Result;
-    val->valueInt64 = INT64_MIN;
-    status_t err = UNKNOWN_ERROR;
-    switch (id) {
-        case BATTERY_PROP_CHARGE_COUNTER: {
-            Health::getImplementation()->getChargeCounter([&](Result r, int32_t v) {
-                err = convertStatus(r);
-                val->valueInt64 = v;
-            });
-            break;
-        }
-        case BATTERY_PROP_CURRENT_NOW: {
-            Health::getImplementation()->getCurrentNow([&](Result r, int32_t v) {
-                err = convertStatus(r);
-                val->valueInt64 = v;
-            });
-            break;
-        }
-        case BATTERY_PROP_CURRENT_AVG: {
-            Health::getImplementation()->getCurrentAverage([&](Result r, int32_t v) {
-                err = convertStatus(r);
-                val->valueInt64 = v;
-            });
-            break;
-        }
-        case BATTERY_PROP_CAPACITY: {
-            Health::getImplementation()->getCapacity([&](Result r, int32_t v) {
-                err = convertStatus(r);
-                val->valueInt64 = v;
-            });
-            break;
-        }
-        case BATTERY_PROP_ENERGY_COUNTER: {
-            Health::getImplementation()->getEnergyCounter([&](Result r, int64_t v) {
-                err = convertStatus(r);
-                val->valueInt64 = v;
-            });
-            break;
-        }
-        case BATTERY_PROP_BATTERY_STATUS: {
-            Health::getImplementation()->getChargeStatus([&](Result r, BatteryStatus v) {
-                err = convertStatus(r);
-                val->valueInt64 = static_cast<int64_t>(v);
-            });
-            break;
-        }
-        default: {
-            err = BAD_VALUE;
-            break;
-        }
-    }
-    return err;
-#endif
-}
-
 void healthd_battery_update_internal(bool charger_online) {
     // Fast wake interval when on charger (watch for overheat);
     // slow wake interval when on battery (watch for drained battery).
@@ -233,26 +143,8 @@ void healthd_battery_update_internal(bool charger_online) {
                 -1 : healthd_config.periodic_chores_interval_fast * 1000;
 }
 
-void healthd_battery_update(void) {
-#ifndef HEALTHD_USE_HEALTH_2_0
-    healthd_battery_update_internal(gBatteryMonitor->update());
-#else
+static void healthd_battery_update(void) {
     Health::getImplementation()->update();
-#endif
-}
-
-void healthd_dump_battery_state(int fd) {
-#ifndef HEALTHD_USE_HEALTH_2_0
-    gBatteryMonitor->dumpState(fd);
-#else
-    native_handle_t* nativeHandle = native_handle_create(1, 0);
-    nativeHandle->data[0] = fd;
-    ::android::hardware::hidl_handle handle;
-    handle.setTo(nativeHandle, true /* shouldOwn */);
-    Health::getImplementation()->debug(handle, {} /* options */);
-#endif
-
-    fsync(fd);
 }
 
 static void periodic_chores() {
@@ -368,20 +260,9 @@ static int healthd_init() {
         return -1;
     }
 
-#ifndef HEALTHD_USE_HEALTH_2_0
-    healthd_board_init(&healthd_config);
-#else
-    // healthd_board_* functions are removed in health@2.0
-#endif
-
     healthd_mode_ops->init(&healthd_config);
     wakealarm_init();
     uevent_init();
-
-#ifndef HEALTHD_USE_HEALTH_2_0
-    gBatteryMonitor = new BatteryMonitor();
-    gBatteryMonitor->init(&healthd_config);
-#endif
 
     return 0;
 }
