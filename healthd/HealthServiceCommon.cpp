@@ -33,9 +33,6 @@ using android::hardware::health::V1_0::hal_conversion::convertToHealthInfo;
 using android::hardware::health::V2_0::IHealth;
 using android::hardware::health::V2_0::implementation::Health;
 
-// see healthd_common.cpp
-android::sp<IHealth> gHealth;
-
 extern int healthd_main(void);
 
 static void binder_event(uint32_t /*epevents*/) {
@@ -63,8 +60,8 @@ void healthd_mode_service_2_0_init(struct healthd_config* config) {
     // TODO(b/68724651): healthd_board_* functions should be removed in health@2.0
     healthd_board_init(config);
 
-    gHealth = new ::android::hardware::health::V2_0::implementation::Health(config);
-    CHECK_EQ(gHealth->registerAsService(HEALTH_INSTANCE_NAME), android::OK)
+    android::sp<IHealth> service = Health::initInstance(config);
+    CHECK_EQ(service->registerAsService(HEALTH_INSTANCE_NAME), android::OK)
         << LOG_TAG << ": Failed to register HAL";
 
     LOG(INFO) << LOG_TAG << ": Hal init done";
@@ -85,7 +82,7 @@ void healthd_mode_service_2_0_battery_update(struct android::BatteryProperties* 
 
     HealthInfo info;
     convertToHealthInfo(prop, info);
-    static_cast<Health*>(gHealth.get())->notifyListeners(info);
+    Health::getImplementation()->notifyListeners(info);
 }
 
 static struct healthd_mode_ops healthd_mode_service_2_0_ops = {
