@@ -22,9 +22,16 @@ using ::android::hidl::base::V1_0::IBase;
 
 struct Health : public IHealth, hidl_death_recipient {
   public:
+    static sp<IHealth> initInstance(struct healthd_config* c);
+    // Should only be called by implementation itself (-impl, -service).
+    // Clients should not call this function. Instead, initInstance() initializes and returns the
+    // global instance that has fewer functions.
+    // TODO(b/62229583): clean up and hide these functions after update() logic is simplified.
+    static sp<Health> getImplementation();
+
     Health(struct healthd_config* c);
 
-    // TODO(b/62229583): clean up and hide these functions.
+    // TODO(b/62229583): clean up and hide these functions after update() logic is simplified.
     void notifyListeners(const HealthInfo& info);
 
     // Methods from IHealth follow.
@@ -44,6 +51,8 @@ struct Health : public IHealth, hidl_death_recipient {
     void serviceDied(uint64_t cookie, const wp<IBase>& /* who */) override;
 
   private:
+    static sp<Health> instance_;
+
     std::mutex callbacks_lock_;
     std::vector<sp<IHealthInfoCallback>> callbacks_;
     std::unique_ptr<BatteryMonitor> battery_monitor_;

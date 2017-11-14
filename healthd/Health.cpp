@@ -13,6 +13,8 @@ namespace health {
 namespace V2_0 {
 namespace implementation {
 
+sp<Health> Health::instance_;
+
 Health::Health(struct healthd_config* c) {
     battery_monitor_ = std::make_unique<BatteryMonitor>();
     battery_monitor_->init(c);
@@ -154,7 +156,17 @@ void Health::serviceDied(uint64_t /* cookie */, const wp<IBase>& who) {
     (void)unregisterCallbackInternal(who.promote());
 }
 
-// Methods from ::android::hidl::base::V1_0::IBase follow.
+sp<IHealth> Health::initInstance(struct healthd_config* c) {
+    if (instance_ == nullptr) {
+        instance_ = new Health(c);
+    }
+    return instance_;
+}
+
+sp<Health> Health::getImplementation() {
+    CHECK(instance_ != nullptr);
+    return instance_;
+}
 
 }  // namespace implementation
 }  // namespace V2_0

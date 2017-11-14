@@ -91,7 +91,7 @@ static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 #ifndef HEALTHD_USE_HEALTH_2_0
 static BatteryMonitor* gBatteryMonitor = nullptr;
 #else
-extern sp<::android::hardware::health::V2_0::IHealth> gHealth;
+using ::android::hardware::health::V2_0::implementation::Health;
 #endif
 
 struct healthd_mode_ops *healthd_mode_ops = nullptr;
@@ -160,42 +160,42 @@ status_t healthd_get_property(int id, struct BatteryProperty *val) {
     status_t err = UNKNOWN_ERROR;
     switch (id) {
         case BATTERY_PROP_CHARGE_COUNTER: {
-            gHealth->getChargeCounter([&](Result r, int32_t v) {
+            Health::getImplementation()->getChargeCounter([&](Result r, int32_t v) {
                 err = convertStatus(r);
                 val->valueInt64 = v;
             });
             break;
         }
         case BATTERY_PROP_CURRENT_NOW: {
-            gHealth->getCurrentNow([&](Result r, int32_t v) {
+            Health::getImplementation()->getCurrentNow([&](Result r, int32_t v) {
                 err = convertStatus(r);
                 val->valueInt64 = v;
             });
             break;
         }
         case BATTERY_PROP_CURRENT_AVG: {
-            gHealth->getCurrentAverage([&](Result r, int32_t v) {
+            Health::getImplementation()->getCurrentAverage([&](Result r, int32_t v) {
                 err = convertStatus(r);
                 val->valueInt64 = v;
             });
             break;
         }
         case BATTERY_PROP_CAPACITY: {
-            gHealth->getCapacity([&](Result r, int32_t v) {
+            Health::getImplementation()->getCapacity([&](Result r, int32_t v) {
                 err = convertStatus(r);
                 val->valueInt64 = v;
             });
             break;
         }
         case BATTERY_PROP_ENERGY_COUNTER: {
-            gHealth->getEnergyCounter([&](Result r, int64_t v) {
+            Health::getImplementation()->getEnergyCounter([&](Result r, int64_t v) {
                 err = convertStatus(r);
                 val->valueInt64 = v;
             });
             break;
         }
         case BATTERY_PROP_BATTERY_STATUS: {
-            gHealth->getChargeStatus([&](Result r, BatteryStatus v) {
+            Health::getImplementation()->getChargeStatus([&](Result r, BatteryStatus v) {
                 err = convertStatus(r);
                 val->valueInt64 = static_cast<int64_t>(v);
             });
@@ -237,7 +237,7 @@ void healthd_battery_update(void) {
 #ifndef HEALTHD_USE_HEALTH_2_0
     healthd_battery_update_internal(gBatteryMonitor->update());
 #else
-    gHealth->update();
+    Health::getImplementation()->update();
 #endif
 }
 
@@ -249,7 +249,7 @@ void healthd_dump_battery_state(int fd) {
     nativeHandle->data[0] = fd;
     ::android::hardware::hidl_handle handle;
     handle.setTo(nativeHandle, true /* shouldOwn */);
-    gHealth->debug(handle, {} /* options */);
+    Health::getImplementation()->debug(handle, {} /* options */);
 #endif
 
     fsync(fd);
