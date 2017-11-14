@@ -96,7 +96,7 @@ ifneq ($(BOARD_PERIODIC_CHORES_INTERVAL_SLOW),)
 LOCAL_CFLAGS += -DBOARD_PERIODIC_CHORES_INTERVAL_SLOW=$(BOARD_PERIODIC_CHORES_INTERVAL_SLOW)
 endif
 
-LOCAL_STATIC_LIBRARIES := \
+CHARGER_STATIC_LIBRARIES := \
     android.hardware.health@2.0-impl \
     android.hardware.health@2.0 \
     android.hardware.health@1.0 \
@@ -113,6 +113,8 @@ LOCAL_STATIC_LIBRARIES := \
     liblog \
     libm \
     libc \
+
+LOCAL_STATIC_LIBRARIES := $(CHARGER_STATIC_LIBRARIES)
 
 ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
 LOCAL_STATIC_LIBRARIES += \
@@ -133,6 +135,21 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT) \
     && ln -sf /sbin/charger $(TARGET_ROOT_OUT)/charger
 
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := charger_test
+LOCAL_MODULE_TAGS := optional
+LOCAL_FORCE_STATIC_EXECUTABLE := true
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_CFLAGS := -Wall -Werror -DCHARGER_TEST -DCHARGER_NO_UI
+LOCAL_STATIC_LIBRARIES := $(CHARGER_STATIC_LIBRARIES)
+LOCAL_SRC_FILES := \
+    charger.cpp \
+    charger_test.cpp \
+
+include $(BUILD_EXECUTABLE)
+
+CHARGER_STATIC_LIBRARIES :=
 
 ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
 define _add-charger-image

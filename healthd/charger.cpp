@@ -79,7 +79,7 @@ static void healthd_mode_nop_battery_update(
     struct android::BatteryProperties* /*props*/) {
 }
 
-int main(int argc, char **argv) {
+int healthd_charger_main(int argc, char** argv) {
     int ch;
 
     healthd_mode_ops = &charger_ops;
@@ -103,3 +103,9 @@ int main(int argc, char **argv) {
 
     return healthd_main();
 }
+
+#ifndef CHARGER_TEST
+int main(int argc, char** argv) {
+    return healthd_charger_main(argc, argv);
+}
+#endif
