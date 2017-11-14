@@ -20,7 +20,7 @@
 libcutils_nonwindows_sources = [
     "android_get_control_file.cpp",
     "fs.cpp",
-    "multiuser.c",
+    "multiuser.cpp",
     "socket_inaddr_any_server_unix.cpp",
     "socket_local_client_unix.cpp",
     "socket_local_server_unix.cpp",
