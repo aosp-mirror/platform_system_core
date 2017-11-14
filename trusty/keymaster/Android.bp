@@ -25,6 +25,7 @@
 // and ECDSA keys.
 cc_binary {
     name: "trusty_keymaster_tipc",
+    vendor: true,
     srcs: [
         "trusty_keymaster_device.cpp",
         "trusty_keymaster_ipc.cpp",
@@ -46,6 +47,7 @@ cc_binary {
 // keystore.trusty is the HAL used by keystore on Trusty devices.
 cc_library_shared {
     name: "keystore.trusty",
+    vendor: true,
     relative_install_path: "hw",
     srcs: [
         "module.cpp",
@@ -66,4 +68,5 @@ cc_library_shared {
         "liblog",
         "libcutils",
     ],
+    header_libs: ["libhardware_headers"],
 }

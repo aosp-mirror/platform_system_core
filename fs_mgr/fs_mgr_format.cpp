@@ -38,7 +38,6 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
 {
     uint64_t dev_sz;
     int fd, rc = 0;
-    int status;
 
     if ((fd = open(fs_blkdev, O_WRONLY)) < 0) {
         PERROR << "Cannot open block device";
@@ -62,7 +61,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
     const char* const mke2fs_args[] = {
         "/system/bin/mke2fs", "-t", "ext4", "-b", "4096", fs_blkdev, size_str.c_str(), nullptr};
 
-    rc = android_fork_execvp_ext(arraysize(mke2fs_args), const_cast<char**>(mke2fs_args), &status,
+    rc = android_fork_execvp_ext(arraysize(mke2fs_args), const_cast<char**>(mke2fs_args), NULL,
                                  true, LOG_KLOG, true, nullptr, nullptr, 0);
     if (rc) {
         LERROR << "mke2fs returned " << rc;
@@ -78,7 +77,7 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
         nullptr};
 
     rc = android_fork_execvp_ext(arraysize(e2fsdroid_args), const_cast<char**>(e2fsdroid_args),
-                                 &status, true, LOG_KLOG, true, nullptr, nullptr, 0);
+                                 NULL, true, LOG_KLOG, true, nullptr, nullptr, 0);
     if (rc) {
         LERROR << "e2fsdroid returned " << rc;
     }
@@ -88,10 +87,9 @@ static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
 
 static int format_f2fs(char *fs_blkdev)
 {
-    int status;
     const char* const args[] = {"/system/bin/make_f2fs", "-f", "-O encrypt", fs_blkdev, nullptr};
 
-    return android_fork_execvp_ext(arraysize(args), const_cast<char**>(args), &status, true,
+    return android_fork_execvp_ext(arraysize(args), const_cast<char**>(args), NULL, true,
                                    LOG_KLOG, true, nullptr, nullptr, 0);
 }
 

@@ -21,8 +21,7 @@ LOCAL_CFLAGS := -Wall -Wextra -Werror -Wunused
 LOCAL_SRC_FILES := \
 	SoftGateKeeperDevice.cpp \
 	IGateKeeperService.cpp \
-	gatekeeperd.cpp \
-	IUserManager.cpp
+	gatekeeperd.cpp
 
 LOCAL_MODULE := gatekeeperd
 LOCAL_SHARED_LIBRARIES := \
