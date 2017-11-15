@@ -1126,8 +1126,9 @@ static int __logcat(android_logcat_context_internal* context) {
                     }
                     if (found) continue;
 
-                    bool binary =
-                        !strcmp(name, "events") || !strcmp(name, "security");
+                    bool binary = !strcmp(name, "events") ||
+                                  !strcmp(name, "security") ||
+                                  !strcmp(name, "stats");
                     log_device_t* d = new log_device_t(name, binary);
 
                     if (dev) {

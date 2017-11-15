@@ -546,6 +546,19 @@ LIBLOG_ABI_PUBLIC int __android_log_bwrite(int32_t tag, const void* payload,
   return write_to_log(LOG_ID_EVENTS, vec, 2);
 }
 
+LIBLOG_ABI_PUBLIC int __android_log_stats_bwrite(int32_t tag,
+                                                 const void* payload,
+                                                 size_t len) {
+  struct iovec vec[2];
+
+  vec[0].iov_base = &tag;
+  vec[0].iov_len = sizeof(tag);
+  vec[1].iov_base = (void*)payload;
+  vec[1].iov_len = len;
+
+  return write_to_log(LOG_ID_STATS, vec, 2);
+}
+
 LIBLOG_ABI_PUBLIC int __android_log_security_bwrite(int32_t tag,
                                                     const void* payload,
                                                     size_t len) {
