@@ -132,8 +132,10 @@ Result<Success> SubsystemParser::ParseLineSection(std::vector<std::string>&& arg
     return std::invoke(*parser, this, std::move(args));
 }
 
-void SubsystemParser::EndSection() {
+Result<Success> SubsystemParser::EndSection() {
     subsystems_->emplace_back(std::move(subsystem_));
+
+    return Success();
 }
 
 }  // namespace init
