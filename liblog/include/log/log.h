@@ -95,6 +95,8 @@ int __android_log_btwrite(int32_t tag, char type, const void* payload,
                           size_t len);
 int __android_log_bswrite(int32_t tag, const char* payload);
 
+int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len);
+
 #define android_bWriteLog(tag, payload, len) \
   __android_log_bwrite(tag, payload, len)
 #define android_btWriteLog(tag, type, payload, len) \

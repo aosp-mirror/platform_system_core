@@ -301,7 +301,7 @@ LIBLOG_ABI_PUBLIC int android_log_write_list(android_log_context ctx,
   const char* msg;
   ssize_t len;
 
-  if ((id != LOG_ID_EVENTS) && (id != LOG_ID_SECURITY)) {
+  if ((id != LOG_ID_EVENTS) && (id != LOG_ID_SECURITY) && (id != LOG_ID_STATS)) {
     return -EINVAL;
   }
 
@@ -326,7 +326,9 @@ LIBLOG_ABI_PUBLIC int android_log_write_list(android_log_context ctx,
   }
   return (id == LOG_ID_EVENTS)
              ? __android_log_bwrite(context->tag, msg, len)
-             : __android_log_security_bwrite(context->tag, msg, len);
+             : ((id == LOG_ID_STATS)
+                    ? __android_log_stats_bwrite(context->tag, msg, len)
+                    : __android_log_security_bwrite(context->tag, msg, len));
 }
 
 LIBLOG_ABI_PRIVATE int android_log_write_list_buffer(android_log_context ctx,
