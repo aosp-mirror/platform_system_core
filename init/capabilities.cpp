@@ -194,5 +194,18 @@ bool SetCapsForExec(const CapSet& to_keep) {
     return SetAmbientCaps(to_keep);
 }
 
+bool DropInheritableCaps() {
+    ScopedCaps caps(cap_get_proc());
+    if (cap_clear_flag(caps.get(), CAP_INHERITABLE) == -1) {
+        PLOG(ERROR) << "cap_clear_flag(INHERITABLE) failed";
+        return false;
+    }
+    if (cap_set_proc(caps.get()) != 0) {
+        PLOG(ERROR) << "cap_set_proc() failed";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace init
 }  // namespace android

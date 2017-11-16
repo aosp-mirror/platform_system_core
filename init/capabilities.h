@@ -35,6 +35,7 @@ int LookupCap(const std::string& cap_name);
 bool CapAmbientSupported();
 unsigned int GetLastValidCap();
 bool SetCapsForExec(const CapSet& to_keep);
+bool DropInheritableCaps();
 
 }  // namespace init
 }  // namespace android
