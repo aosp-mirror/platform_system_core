@@ -22,7 +22,7 @@
 
 /* In the future, we would like to make this list extensible */
 static const char* LOG_NAME[LOG_ID_MAX] = {
-  /* clang-format off */
+      /* clang-format off */
   [LOG_ID_MAIN] = "main",
   [LOG_ID_RADIO] = "radio",
   [LOG_ID_EVENTS] = "events",

@@ -140,5 +140,8 @@
 
 1397638484 snet_event_log (subtag|3) (uid|1) (message|3)
 
+# for events that go to stats log buffer
+1937006964 stats_log (atom_id|1|5),(data|4)
+
 # NOTE - the range 1000000-2000000 is reserved for partners and others who
 # want to define their own log tags without conflicting with the core platform.
