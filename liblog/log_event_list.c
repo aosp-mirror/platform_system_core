@@ -565,26 +565,3 @@ LIBLOG_ABI_PUBLIC android_log_list_element
 android_log_peek_next(android_log_context ctx) {
   return android_log_read_next_internal(ctx, 1);
 }
-
-LIBLOG_ABI_PUBLIC int android_log_writer_to_reader(android_log_context ctx) {
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
-
-  if (!context || context->read_write_flag != kAndroidLoggerWrite) {
-    return -EBADF;
-  }
-
-  context->len = context->pos;
-  context->storage[1] =
-      context
-          ->count[0];  // What does this do?!?! It's copied from the write func
-  context->pos = 0;
-  memset(context->count, 0, sizeof(context->count));
-  memset(context->list, 0, sizeof(context->list));
-  context->list_nest_depth = 0;
-  context->read_write_flag = kAndroidLoggerRead;
-  context->list_stop = false;
-
-  return 0;
-}
