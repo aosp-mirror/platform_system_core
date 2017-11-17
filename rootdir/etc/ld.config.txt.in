@@ -120,28 +120,31 @@ additional.namespaces = system
 ###############################################################################
 # "default" namespace
 #
-# Vendor-side code runs in this namespace.
+# This is the default linker namespace for a vendor process (a process started
+# from /vendor/bin/*). The main executable and the libs under /vendor/lib[64]
+# are loaded directly into this namespace. However, other libs under the system
+# partition (VNDK and LLNDK libraries) are not loaded here but from the
+# separate namespace 'system'. The delegation to the system namespace is done
+# via the 'namespace.default.link.system.shared_libs' property below.
 ###############################################################################
 namespace.default.isolated = true
 namespace.default.visible = true
 
-namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/vendor/${LIB}/vndk${VNDK_VER}:/system/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.default.permitted.paths = /vendor:/system/${LIB}/vndk${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/vendor/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.permitted.paths = /vendor
 
-namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk${VNDK_VER}:/data/asan/system/${LIB}/vndk${VNDK_VER}:/system/${LIB}/vndk${VNDK_VER}:/data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:/data/asan/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor:/data/asan/system/${LIB}/vndk${VNDK_VER}:/system/${LIB}/vndk${VNDK_VER}:/data/asan/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk${VNDK_VER}:/data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor
 
 namespace.default.links = system
-namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
+namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%:%VNDK_SAMEPROCESS_LIBRARIES%:%VNDK_CORE_LIBRARIES%
 
 ###############################################################################
 # "system" namespace
 #
-# This is for vendor process to use LL-NDK in system partition.
+# This namespace is where system libs (VNDK and LLNDK libs) are loaded for
+# a vendor process.
 ###############################################################################
 namespace.system.isolated = false
-namespace.system.search.paths = /system/${LIB}
-namespace.system.permitted.paths = /system/${LIB}
+namespace.system.search.paths = /system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk${VNDK_VER}:/system/${LIB}
 
-namespace.system.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}
-namespace.system.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}
+namespace.system.asan.search.paths = /data/asan/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}:/data/asan/system/${LIB}/vndk${VNDK_VER}:/system/${LIB}/vndk${VNDK_VER}:/data/asan/system/${LIB}:/system/${LIB}
