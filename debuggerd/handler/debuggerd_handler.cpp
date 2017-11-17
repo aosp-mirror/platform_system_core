@@ -429,7 +429,12 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     abort_message = g_callbacks.get_abort_message();
   }
 
-  if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
+  // If sival_int is ~0, it means that the fallback handler has been called
+  // once before and this function is being called again to dump the stack
+  // of a specific thread. It is possible that the prctl call might return 1,
+  // then return 0 in subsequent calls, so check the sival_int to determine if
+  // the fallback handler should be called first.
+  if (info->si_value.sival_int == ~0 || prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) {
     // This check might be racy if another thread sets NO_NEW_PRIVS, but this should be unlikely,
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
