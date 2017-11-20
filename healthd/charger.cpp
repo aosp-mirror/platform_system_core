@@ -17,6 +17,7 @@
 #define LOG_TAG "charger"
 #define KLOG_LEVEL 6
 
+#include <health2/Health.h>
 #include <healthd/healthd.h>
 
 #include <stdlib.h>
@@ -62,7 +63,9 @@ static struct healthd_mode_ops charger_ops = {
 };
 #endif
 
-static void healthd_mode_nop_init(struct healthd_config* /*config*/) {
+static void healthd_mode_nop_init(struct healthd_config* config) {
+    using android::hardware::health::V2_0::implementation::Health;
+    Health::initInstance(config);
 }
 
 static int healthd_mode_nop_preparetowait(void) {

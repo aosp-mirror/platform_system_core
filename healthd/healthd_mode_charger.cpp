@@ -49,6 +49,7 @@
 #include "AnimationParser.h"
 #include "healthd_draw.h"
 
+#include <health2/Health.h>
 #include <healthd/healthd.h>
 
 using namespace android;
@@ -612,6 +613,8 @@ animation* init_animation() {
 }
 
 void healthd_mode_charger_init(struct healthd_config* config) {
+    using android::hardware::health::V2_0::implementation::Health;
+
     int ret;
     charger* charger = &charger_state;
     int i;
@@ -666,6 +669,10 @@ void healthd_mode_charger_init(struct healthd_config* config) {
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
+
+    // Initialize Health implementation (which initializes the internal BatteryMonitor).
+    Health::initInstance(config);
+
     healthd_config = config;
     charger->boot_min_cap = config->boot_min_cap;
 }
