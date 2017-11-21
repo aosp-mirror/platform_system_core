@@ -17,10 +17,18 @@
 #include <healthd/healthd.h>
 
 void healthd_board_init(struct healthd_config*) {
+    // Implementation-defined init logic goes here.
+    // 1. config->periodic_chores_interval_* variables
+    // 2. config->battery*Path variables
+    // 3. config->energyCounter. In this implementation, energyCounter is not defined.
+
     // use defaults
 }
 
 int healthd_board_battery_update(struct android::BatteryProperties*) {
+    // Implementation-defined update logic goes here. An implementation
+    // can make modifications to prop before broadcasting it to all callbacks.
+
     // return 0 to log periodic polled battery status to kernel log
     return 0;
 }

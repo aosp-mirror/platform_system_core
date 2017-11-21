@@ -53,13 +53,6 @@ void healthd_mode_service_2_0_init(struct healthd_config* config) {
             LOG(ERROR) << LOG_TAG << ": Register for binder events failed";
     }
 
-    // Implementation-defined init logic goes here.
-    // 1. config->periodic_chores_interval_* variables
-    // 2. config->battery*Path variables
-    // 3. config->energyCounter. In this implementation, energyCounter is not defined.
-    // TODO(b/68724651): healthd_board_* functions should be removed in health@2.0
-    healthd_board_init(config);
-
     android::sp<IHealth> service = Health::initInstance(config);
     CHECK_EQ(service->registerAsService(HEALTH_INSTANCE_NAME), android::OK)
         << LOG_TAG << ": Failed to register HAL";
@@ -77,9 +70,6 @@ void healthd_mode_service_2_0_heartbeat(void) {
 }
 
 void healthd_mode_service_2_0_battery_update(struct android::BatteryProperties* prop) {
-    // Implementation-defined update logic goes here. An implementation
-    // can make modifications to prop before broadcasting it to all callbacks.
-
     HealthInfo info;
     convertToHealthInfo(prop, info);
     Health::getImplementation()->notifyListeners(info);

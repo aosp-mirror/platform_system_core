@@ -16,6 +16,8 @@ namespace implementation {
 sp<Health> Health::instance_;
 
 Health::Health(struct healthd_config* c) {
+    // TODO(b/69268160): remove when libhealthd is removed.
+    healthd_board_init(c);
     battery_monitor_ = std::make_unique<BatteryMonitor>();
     battery_monitor_->init(c);
 }
