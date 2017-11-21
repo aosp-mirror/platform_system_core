@@ -778,7 +778,12 @@ test_kernel_panic() {
   checkDebugBuild || return
   duration_test ">90"
   panic_msg="kernel_panic,sysrq"
-  enterPstore || panic_msg="\(kernel_panic,sysrq\|kernel_panic\)"
+  enterPstore
+  if [ ${?} != 0 ]; then
+    echo "         or functional bootloader" >&2
+    panic_msg="\(kernel_panic,sysrq\|kernel_panic\)"
+    pstore_ok=true
+  fi
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
