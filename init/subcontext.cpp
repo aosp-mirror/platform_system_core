@@ -23,7 +23,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <selinux/android.h>
 
@@ -32,7 +31,6 @@
 #include "system/core/init/subcontext.pb.h"
 #include "util.h"
 
-using android::base::GetBoolProperty;
 using android::base::GetExecutablePath;
 using android::base::Join;
 using android::base::Socketpair;
@@ -262,13 +260,11 @@ Result<Success> Subcontext::Execute(const std::vector<std::string>& args) {
 static std::vector<Subcontext> subcontexts;
 
 std::vector<Subcontext>* InitializeSubcontexts() {
-    if (GetBoolProperty("ro.init.subcontexts_enabled", false)) {
-        static const char* const paths_and_secontexts[][2] = {
-            {"/vendor", kVendorContext.c_str()},
-        };
-        for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
-            subcontexts.emplace_back(path_prefix, secontext);
-        }
+    static const char* const paths_and_secontexts[][2] = {
+        {"/vendor", kVendorContext.c_str()},
+    };
+    for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
+        subcontexts.emplace_back(path_prefix, secontext);
     }
     return &subcontexts;
 }
