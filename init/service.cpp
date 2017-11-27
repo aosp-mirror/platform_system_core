@@ -291,6 +291,11 @@ void Service::SetProcessAttributes() {
         if (!SetCapsForExec(capabilities_)) {
             LOG(FATAL) << "cannot set capabilities for " << name_;
         }
+    } else if (uid_) {
+        // Inheritable caps can be non-zero when running in a container.
+        if (!DropInheritableCaps()) {
+            LOG(FATAL) << "cannot drop inheritable caps for " << name_;
+        }
     }
 }
 
