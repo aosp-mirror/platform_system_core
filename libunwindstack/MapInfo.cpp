@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include <unwindstack/Elf.h>
@@ -105,6 +106,9 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
 }
 
 Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {
+  // Make sure no other thread is trying to add the elf to this map.
+  std::lock_guard<std::mutex> guard(mutex_);
+
   if (elf) {
     return elf;
   }
