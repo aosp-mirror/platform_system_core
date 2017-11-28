@@ -35,9 +35,7 @@ namespace android {
 
 // ---------------------------------------------------------------------------
 
-class SharedBuffer;
 class String8;
-class TextOutput;
 
 //! This is a string holding UTF-16 characters.
 class String16
