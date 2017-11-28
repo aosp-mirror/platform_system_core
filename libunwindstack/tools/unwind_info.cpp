@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -102,12 +103,12 @@ void DumpDwarfSection(ElfInterface* interface, DwarfSection* section, uint64_t l
   }
 }
 
-int GetElfInfo(const char* file) {
+int GetElfInfo(const char* file, uint64_t offset) {
   // Send all log messages to stdout.
   log_to_stdout(true);
 
   MemoryFileAtOffset* memory = new MemoryFileAtOffset;
-  if (!memory->Init(file, 0)) {
+  if (!memory->Init(file, offset)) {
     // Initializatation failed.
     printf("Failed to init\n");
     return 1;
@@ -164,8 +165,12 @@ int GetElfInfo(const char* file) {
 }  // namespace unwindstack
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    printf("Need to pass the name of an elf file to the program.\n");
+  if (argc != 2 && argc != 3) {
+    printf("Usage: unwind_info ELF_FILE [OFFSET]\n");
+    printf("  ELF_FILE\n");
+    printf("    The path to an elf file.\n");
+    printf("  OFFSET\n");
+    printf("    Use the offset into the ELF file as the beginning of the elf.\n");
     return 1;
   }
 
@@ -179,5 +184,15 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  return unwindstack::GetElfInfo(argv[1]);
+  uint64_t offset = 0;
+  if (argc == 3) {
+    char* end;
+    offset = strtoull(argv[2], &end, 16);
+    if (*end != '\0') {
+      printf("Malformed OFFSET value: %s\n", argv[2]);
+      return 1;
+    }
+  }
+
+  return unwindstack::GetElfInfo(argv[1], offset);
 }
