@@ -415,15 +415,17 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
   }
 
   ScopedBacktraceMapIteratorLock lock(map);
-  _LOG(log, logtype::MAPS, "\n");
-  if (!print_fault_address_marker) {
-    _LOG(log, logtype::MAPS, "memory map:\n");
-  } else {
-    _LOG(log, logtype::MAPS, "memory map: (fault address prefixed with --->)\n");
+  _LOG(log, logtype::MAPS,
+       "\n"
+       "memory map (%zu entries):\n",
+       map->size());
+  if (print_fault_address_marker) {
     if (map->begin() != map->end() && addr < map->begin()->start) {
       _LOG(log, logtype::MAPS, "--->Fault address falls at %s before any mapped regions\n",
            get_addr_string(addr).c_str());
       print_fault_address_marker = false;
+    } else {
+      _LOG(log, logtype::MAPS, "(fault address prefixed with --->)\n");
     }
   }
 
@@ -783,10 +785,22 @@ void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, s
   dump_abort_message(backtrace.get(), &log, abort_msg_address);
   dump_registers(&log, ucontext);
 
-  // TODO: Dump registers from the ucontext.
   if (backtrace->Unwind(0, ucontext)) {
     dump_backtrace_and_stack(backtrace.get(), &log);
   } else {
     ALOGE("Unwind failed: pid = %d, tid = %d", pid, tid);
+  }
+
+  // TODO: Make this match the format of dump_all_maps above.
+  _LOG(&log, logtype::MAPS, "memory map:\n");
+  android::base::unique_fd maps_fd(open("/proc/self/maps", O_RDONLY | O_CLOEXEC));
+  if (maps_fd == -1) {
+    _LOG(&log, logtype::MAPS, "    failed to open /proc/self/maps: %s", strerror(errno));
+  } else {
+    char buf[256];
+    ssize_t rc;
+    while ((rc = TEMP_FAILURE_RETRY(read(maps_fd.get(), buf, sizeof(buf)))) > 0) {
+      android::base::WriteFully(tombstone_fd, buf, rc);
+    }
   }
 }

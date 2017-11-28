@@ -7,10 +7,14 @@
 dir.system = /system/bin/
 dir.system = /system/xbin/
 dir.vendor = /vendor/bin/
-dir.test = /data/nativetest/
-dir.test = /data/nativetest64/
-dir.test = /data/benchmarktest/
-dir.test = /data/benchmarktest64/
+dir.vendor = /data/nativetest/vendor
+dir.vendor = /data/nativetest64/vendor
+dir.vendor = /data/benchmarktest/vendor
+dir.vendor = /data/benchmarktest64/vendor
+dir.system = /data/nativetest
+dir.system = /data/nativetest64
+dir.system = /data/benchmarktest
+dir.system = /data/benchmarktest64
 
 [system]
 additional.namespaces = sphal,vndk,rs
@@ -98,6 +102,7 @@ namespace.rs.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:androi
 # This namespace is exclusively for vndk-sp libs.
 ###############################################################################
 namespace.vndk.isolated = true
+namespace.vndk.visible = true
 namespace.vndk.search.paths = /vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp
 namespace.vndk.permitted.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl
 
@@ -121,12 +126,3 @@ namespace.default.isolated = false
 namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/system/${LIB}/vndk:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/system/${LIB}
 
 namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/system/${LIB}:/system/${LIB}
-
-###############################################################################
-# Namespace config for tests. No VNDK restriction is enforced for these tests.
-###############################################################################
-[test]
-namespace.default.isolated = false
-namespace.default.search.paths = /vendor/${LIB}:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/system/${LIB}
-
-namespace.default.asan.search.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/system/${LIB}:/system/${LIB}

@@ -19,84 +19,83 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "fdevent.h"
 
 struct apacket;
 class atransport;
 
 /* An asocket represents one half of a connection between a local and
-** remote entity.  A local asocket is bound to a file descriptor.  A
-** remote asocket is bound to the protocol engine.
-*/
+ * remote entity.  A local asocket is bound to a file descriptor.  A
+ * remote asocket is bound to the protocol engine.
+ */
 struct asocket {
-        /* chain pointers for the local/remote list of
-        ** asockets that this asocket lives in
-        */
-    asocket *next;
-    asocket *prev;
+    /* chain pointers for the local/remote list of
+     * asockets that this asocket lives in
+     */
+    asocket* next;
+    asocket* prev;
 
-        /* the unique identifier for this asocket
-        */
+    /* the unique identifier for this asocket
+     */
     unsigned id;
 
-        /* flag: set when the socket's peer has closed
-        ** but packets are still queued for delivery
-        */
-    int    closing;
+    /* flag: set when the socket's peer has closed
+     * but packets are still queued for delivery
+     */
+    int closing;
 
     // flag: set when the socket failed to write, so the socket will not wait to
     // write packets and close directly.
     bool has_write_error;
 
-        /* flag: quit adbd when both ends close the
-        ** local service socket
-        */
-    int    exit_on_close;
+    /* flag: quit adbd when both ends close the
+     * local service socket
+     */
+    int exit_on_close;
 
-        /* the asocket we are connected to
-        */
+    // the asocket we are connected to
+    asocket* peer;
 
-    asocket *peer;
-
-        /* For local asockets, the fde is used to bind
-        ** us to our fd event system.  For remote asockets
-        ** these fields are not used.
-        */
+    /* For local asockets, the fde is used to bind
+     * us to our fd event system.  For remote asockets
+     * these fields are not used.
+     */
     fdevent fde;
     int fd;
 
-        /* queue of apackets waiting to be written
-        */
-    apacket *pkt_first;
-    apacket *pkt_last;
+    // queue of apackets waiting to be written
+    apacket* pkt_first;
+    apacket* pkt_last;
 
-        /* enqueue is called by our peer when it has data
-        ** for us.  It should return 0 if we can accept more
-        ** data or 1 if not.  If we return 1, we must call
-        ** peer->ready() when we once again are ready to
-        ** receive data.
-        */
-    int (*enqueue)(asocket *s, apacket *pkt);
+    /* enqueue is called by our peer when it has data
+     * for us.  It should return 0 if we can accept more
+     * data or 1 if not.  If we return 1, we must call
+     * peer->ready() when we once again are ready to
+     * receive data.
+     */
+    int (*enqueue)(asocket* s, apacket* pkt);
 
-        /* ready is called by the peer when it is ready for
-        ** us to send data via enqueue again
-        */
-    void (*ready)(asocket *s);
+    /* ready is called by the peer when it is ready for
+     * us to send data via enqueue again
+     */
+    void (*ready)(asocket* s);
 
-        /* shutdown is called by the peer before it goes away.
-        ** the socket should not do any further calls on its peer.
-        ** Always followed by a call to close. Optional, i.e. can be NULL.
-        */
-    void (*shutdown)(asocket *s);
+    /* shutdown is called by the peer before it goes away.
+     * the socket should not do any further calls on its peer.
+     * Always followed by a call to close. Optional, i.e. can be NULL.
+     */
+    void (*shutdown)(asocket* s);
 
-        /* close is called by the peer when it has gone away.
-        ** we are not allowed to make any further calls on the
-        ** peer once our close method is called.
-        */
-    void (*close)(asocket *s);
+    /* close is called by the peer when it has gone away.
+     * we are not allowed to make any further calls on the
+     * peer once our close method is called.
+     */
+    void (*close)(asocket* s);
 
-        /* A socket is bound to atransport */
-    atransport *transport;
+    /* A socket is bound to atransport */
+    atransport* transport;
 
     size_t get_max_payload() const;
 };

@@ -218,22 +218,33 @@ vndk_sameprocess_libraries := $(subst $(space),:,$(addsuffix .so,$(VNDK_SAMEPROC
 
 vndk_core_libraries := $(subst $(space),:,$(addsuffix .so,$(VNDK_CORE_LIBRARIES)))
 
+sanitizer_runtime_libraries := $(subst $(space),:,$(addsuffix .so,\
+$(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+$(UBSAN_RUNTIME_LIBRARY) \
+$(TSAN_RUNTIME_LIBRARY) \
+$(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+$(2ND_UBSAN_RUNTIME_LIBRARY) \
+$(2ND_TSAN_RUNTIME_LIBRARY)))
+
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(llndk_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(vndk_sameprocess_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_PRIVATE_LIBRARIES := $(llndk_private_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(vndk_core_libraries)
+$(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := $(sanitizer_runtime_libraries)
 $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/etc/ld.config.txt.in $(vndk_lib_dep)
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
 	$(hide) sed -e 's?%LLNDK_LIBRARIES%?$(PRIVATE_LLNDK_LIBRARIES)?g' $< >$@
 	$(hide) sed -i -e 's?%VNDK_SAMEPROCESS_LIBRARIES%?$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES)?g' $@
 	$(hide) sed -i -e 's?%VNDK_CORE_LIBRARIES%?$(PRIVATE_VNDK_CORE_LIBRARIES)?g' $@
+	$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
 
 vndk_lib_md5 :=
 vndk_lib_dep :=
 llndk_libraries :=
 vndk_sameprocess_libraries :=
 vndk_core_libraries :=
+sanitizer_runtime_libraries :=
 else # if _enforce_vndk_at_runtime is not true
 
 LOCAL_MODULE := ld.config.txt
@@ -247,3 +258,45 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_PREBUILT)
 endif
+
+#######################################
+# llndk.libraries.txt
+include $(CLEAR_VARS)
+LOCAL_MODULE := llndk.libraries.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_SYSTEM)/base_rules.mk
+llndk_md5 = $(word 1, $(shell echo $(LLNDK_LIBRARIES) | $(MD5SUM)))
+llndk_dep = $(intermediates)/$(llndk_md5).dep
+$(llndk_dep):
+	$(hide) mkdir -p $(dir $@) && rm -rf $(dir $@)*.dep && touch $@
+
+$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(LLNDK_LIBRARIES)
+$(LOCAL_BUILT_MODULE): $(llndk_dep)
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo -n > $@
+	$(hide) $(foreach lib,$(PRIVATE_LLNDK_LIBRARIES), \
+		echo $(lib).so >> $@;)
+
+#######################################
+# vndksp.libraries.txt
+include $(CLEAR_VARS)
+LOCAL_MODULE := vndksp.libraries.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_SYSTEM)/base_rules.mk
+vndksp_md5 = $(word 1, $(shell echo $(LLNDK_LIBRARIES) | $(MD5SUM)))
+vndksp_dep = $(intermediates)/$(vndksp_md5).dep
+$(vndksp_dep):
+	$(hide) mkdir -p $(dir $@) && rm -rf $(dir $@)*.dep && touch $@
+
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(VNDK_SAMEPROCESS_LIBRARIES)
+$(LOCAL_BUILT_MODULE): $(vndksp_dep)
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo -n > $@
+	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
+		echo $(lib).so >> $@;)
