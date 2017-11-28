@@ -641,6 +641,7 @@ void property_load_boot_defaults() {
             load_properties_from_file("/default.prop", NULL);
         }
     }
+    load_properties_from_file("/product/build.prop", NULL);
     load_properties_from_file("/odm/default.prop", NULL);
     load_properties_from_file("/vendor/default.prop", NULL);
 
