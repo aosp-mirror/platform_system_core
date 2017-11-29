@@ -94,7 +94,7 @@ TemporaryFile MapInfoCreateMemoryTest::elf32_at_map_;
 TemporaryFile MapInfoCreateMemoryTest::elf64_at_map_;
 
 TEST_F(MapInfoCreateMemoryTest, end_le_start) {
-  MapInfo info{.start = 0x100, .end = 0x100, .offset = 0, .name = elf_.path};
+  MapInfo info(0x100, 0x100, 0, 0, elf_.path);
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() == nullptr);
@@ -112,7 +112,7 @@ TEST_F(MapInfoCreateMemoryTest, end_le_start) {
 // Verify that if the offset is non-zero but there is no elf at the offset,
 // that the full file is used.
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
-  MapInfo info{.start = 0x100, .end = 0x200, .offset = 0x100, .name = elf_.path};
+  MapInfo info(0x100, 0x200, 0x100, 0, elf_.path);
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
@@ -133,7 +133,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
 // Verify that if the offset is non-zero and there is an elf at that
 // offset, that only part of the file is used.
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
-  MapInfo info{.start = 0x100, .end = 0x200, .offset = 0x100, .name = elf_at_100_.path};
+  MapInfo info(0x100, 0x200, 0x100, 0, elf_at_100_.path);
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
@@ -156,7 +156,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
 // embedded elf is bigger than the initial map, the new object is larger
 // than the original map size. Do this for a 32 bit elf and a 64 bit elf.
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_elf32) {
-  MapInfo info{.start = 0x5000, .end = 0x6000, .offset = 0x1000, .name = elf32_at_map_.path};
+  MapInfo info(0x5000, 0x6000, 0x1000, 0, elf32_at_map_.path);
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
@@ -172,7 +172,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
 }
 
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_elf64) {
-  MapInfo info{.start = 0x7000, .end = 0x8000, .offset = 0x2000, .name = elf64_at_map_.path};
+  MapInfo info(0x7000, 0x8000, 0x2000, 0, elf64_at_map_.path);
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
