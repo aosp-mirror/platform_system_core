@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #define LOG_TAG "unwind"
@@ -87,6 +88,7 @@ void Elf::InitGnuDebugdata() {
 }
 
 bool Elf::GetSoname(std::string* name) {
+  std::lock_guard<std::mutex> guard(lock_);
   return valid_ && interface_->GetSoname(name);
 }
 
@@ -95,6 +97,7 @@ uint64_t Elf::GetRelPc(uint64_t pc, const MapInfo* map_info) {
 }
 
 bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
+  std::lock_guard<std::mutex> guard(lock_);
   return valid_ && (interface_->GetFunctionName(addr, load_bias_, name, func_offset) ||
                     (gnu_debugdata_interface_ && gnu_debugdata_interface_->GetFunctionName(
                                                      addr, load_bias_, name, func_offset)));
@@ -119,6 +122,8 @@ bool Elf::Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process
   }
   rel_pc -= load_bias_;
 
+  // Lock during the step which can update information in the object.
+  std::lock_guard<std::mutex> guard(lock_);
   return interface_->Step(rel_pc, regs, process_memory, finished) ||
          (gnu_debugdata_interface_ &&
           gnu_debugdata_interface_->Step(rel_pc, regs, process_memory, finished));
