@@ -30,10 +30,10 @@ namespace.default.isolated = true
 namespace.default.search.paths = /system/${LIB}
 # /vendor/app, /vendor/framework were added since libart should be able to dlopen
 # the odex files from the directory.
-namespace.default.permitted.paths = /system/${LIB}/drm:/system/${LIB}/extractors:/system/${LIB}/hw:/system/framework:/system/app:/system/priv-app:/vendor/app:/vendor/framework:/oem/app:/data:/mnt/expand
+namespace.default.permitted.paths = /system/${LIB}/drm:/system/${LIB}/extractors:/system/${LIB}/hw:/system/framework:/system/app:/system/priv-app:/vendor/app:/vendor/priv-app:/vendor/framework:/oem/app:/data:/mnt/expand
 
 namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}
-namespace.default.asan.permitted.paths = /data:/system/${LIB}/drm:/system/${LIB}/extractors:/system/${LIB}/hw:/system/framework:/system/app:/system/priv-app:/vendor/app:/vendor/framework:/oem/app:/mnt/expand
+namespace.default.asan.permitted.paths = /data:/system/${LIB}/drm:/system/${LIB}/extractors:/system/${LIB}/hw:/system/framework:/system/app:/system/priv-app:/vendor/app:/vendor/priv-app:/vendor/framework:/oem/app:/mnt/expand
 
 ###############################################################################
 # "sphal" namespace
