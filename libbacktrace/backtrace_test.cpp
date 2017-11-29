@@ -77,6 +77,7 @@ struct thread_t {
 
 struct dump_thread_t {
   thread_t thread;
+  BacktraceMap* map;
   Backtrace* backtrace;
   int32_t* now;
   int32_t done;
@@ -632,7 +633,7 @@ static void* ThreadDump(void* data) {
   }
 
   // The status of the actual unwind will be checked elsewhere.
-  dump->backtrace = Backtrace::Create(getpid(), dump->thread.tid);
+  dump->backtrace = Backtrace::Create(getpid(), dump->thread.tid, dump->map);
   dump->backtrace->Unwind(0);
 
   android_atomic_acquire_store(1, &dump->done);
@@ -640,8 +641,8 @@ static void* ThreadDump(void* data) {
   return nullptr;
 }
 
-TEST(libbacktrace, thread_multiple_dump) {
-  // Dump NUM_THREADS simultaneously.
+static void MultipleThreadDumpTest(bool share_map) {
+  // Dump NUM_THREADS simultaneously using the same map.
   std::vector<thread_t> runners(NUM_THREADS);
   std::vector<dump_thread_t> dumpers(NUM_THREADS);
 
@@ -662,12 +663,17 @@ TEST(libbacktrace, thread_multiple_dump) {
 
   // Start all of the dumpers at once, they will spin until they are signalled
   // to begin their dump run.
+  std::unique_ptr<BacktraceMap> map;
+  if (share_map) {
+    map.reset(BacktraceMap::Create(getpid()));
+  }
   int32_t dump_now = 0;
   for (size_t i = 0; i < NUM_THREADS; i++) {
     dumpers[i].thread.tid = runners[i].tid;
     dumpers[i].thread.state = 0;
     dumpers[i].done = 0;
     dumpers[i].now = &dump_now;
+    dumpers[i].map = map.get();
 
     ASSERT_TRUE(pthread_create(&dumpers[i].thread.threadId, &attr, ThreadDump, &dumpers[i]) == 0);
   }
@@ -689,47 +695,12 @@ TEST(libbacktrace, thread_multiple_dump) {
   }
 }
 
-TEST(libbacktrace, thread_multiple_dump_same_thread) {
-  pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-  thread_t runner;
-  runner.tid = 0;
-  runner.state = 0;
-  ASSERT_TRUE(pthread_create(&runner.threadId, &attr, ThreadMaxRun, &runner) == 0);
+TEST(libbacktrace, thread_multiple_dump) {
+  MultipleThreadDumpTest(false);
+}
 
-  // Wait for tids to be set.
-  ASSERT_TRUE(WaitForNonZero(&runner.state, 30));
-
-  // Start all of the dumpers at once, they will spin until they are signalled
-  // to begin their dump run.
-  int32_t dump_now = 0;
-  // Dump the same thread NUM_THREADS simultaneously.
-  std::vector<dump_thread_t> dumpers(NUM_THREADS);
-  for (size_t i = 0; i < NUM_THREADS; i++) {
-    dumpers[i].thread.tid = runner.tid;
-    dumpers[i].thread.state = 0;
-    dumpers[i].done = 0;
-    dumpers[i].now = &dump_now;
-
-    ASSERT_TRUE(pthread_create(&dumpers[i].thread.threadId, &attr, ThreadDump, &dumpers[i]) == 0);
-  }
-
-  // Start all of the dumpers going at once.
-  android_atomic_acquire_store(1, &dump_now);
-
-  for (size_t i = 0; i < NUM_THREADS; i++) {
-    ASSERT_TRUE(WaitForNonZero(&dumpers[i].done, 30));
-
-    ASSERT_TRUE(dumpers[i].backtrace != nullptr);
-    VerifyMaxDump(dumpers[i].backtrace);
-
-    delete dumpers[i].backtrace;
-    dumpers[i].backtrace = nullptr;
-  }
-
-  // Tell the runner thread to exit its infinite loop.
-  android_atomic_acquire_store(0, &runner.state);
+TEST(libbacktrace, thread_multiple_dump_same_map) {
+  MultipleThreadDumpTest(true);
 }
 
 // This test is for UnwindMaps that should share the same map cursor when

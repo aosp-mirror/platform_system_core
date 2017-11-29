@@ -44,15 +44,15 @@ bool UnwindStackMap::Build() {
   }
 
   // Iterate through the maps and fill in the backtrace_map_t structure.
-  for (auto& map_info : *stack_maps_) {
+  for (auto* map_info : *stack_maps_) {
     backtrace_map_t map;
-    map.start = map_info.start;
-    map.end = map_info.end;
-    map.offset = map_info.offset;
+    map.start = map_info->start;
+    map.end = map_info->end;
+    map.offset = map_info->offset;
     // Set to -1 so that it is demand loaded.
     map.load_bias = static_cast<uintptr_t>(-1);
-    map.flags = map_info.flags;
-    map.name = map_info.name;
+    map.flags = map_info->flags;
+    map.name = map_info->name;
 
     maps_.push_back(map);
   }
