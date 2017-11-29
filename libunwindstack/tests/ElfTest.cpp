@@ -273,7 +273,7 @@ TEST_F(ElfTest, rel_pc) {
 
   elf.FakeSetValid(true);
   elf.FakeSetLoadBias(0);
-  MapInfo map_info{.start = 0x1000, .end = 0x2000};
+  MapInfo map_info(0x1000, 0x2000);
 
   ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
 
