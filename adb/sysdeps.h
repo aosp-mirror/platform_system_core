@@ -31,27 +31,13 @@
 
 // Include this before open/close/unlink are defined as macros below.
 #include <android-base/errors.h>
+#include <android-base/macros.h>
 #include <android-base/unique_fd.h>
 #include <android-base/utf8.h>
 
 #include "sysdeps/errno.h"
 #include "sysdeps/network.h"
 #include "sysdeps/stat.h"
-
-/*
- * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
- * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
- * not already defined, then define it here.
- */
-#ifndef TEMP_FAILURE_RETRY
-/* Used to retry syscalls that can return EINTR. */
-#define TEMP_FAILURE_RETRY(exp) ({         \
-    typeof (exp) _rc;                      \
-    do {                                   \
-        _rc = (exp);                       \
-    } while (_rc == -1 && errno == EINTR); \
-    _rc; })
-#endif
 
 // Some printf-like functions are implemented in terms of
 // android::base::StringAppendV, so they should use the same attribute for
