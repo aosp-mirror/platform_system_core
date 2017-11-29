@@ -4,7 +4,7 @@
 #
 
 # Don't change the order here. The first pattern that matches with the
-# absolution path of an executable is selected.
+# absolute path of an executable is selected.
 dir.system = /system/bin/
 dir.system = /system/xbin/
 dir.vendor = /vendor/bin/
