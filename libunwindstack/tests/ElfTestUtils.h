@@ -18,6 +18,7 @@
 #define _LIBUNWINDSTACK_TESTS_ELF_TEST_UTILS_H
 
 #include <functional>
+#include <string>
 
 namespace unwindstack {
 
@@ -29,6 +30,8 @@ void TestInitEhdr(Ehdr* ehdr, uint32_t elf_class, uint32_t machine_type);
 template <typename Ehdr, typename Shdr>
 void TestInitGnuDebugdata(uint32_t elf_class, uint32_t machine_type, bool init_gnu_debudata,
                           TestCopyFuncType copy_func);
+
+std::string TestGetFileDirectory();
 
 }  // namespace unwindstack
 

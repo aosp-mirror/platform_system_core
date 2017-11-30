@@ -104,8 +104,8 @@ bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offse
 }
 
 // The relative pc is always relative to the start of the map from which it comes.
-bool Elf::Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process_memory,
-               bool* finished) {
+bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
+               Memory* process_memory, bool* finished) {
   if (!valid_) {
     return false;
   }
@@ -117,16 +117,16 @@ bool Elf::Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process
   }
 
   // Adjust the load bias to get the real relative pc.
-  if (rel_pc < load_bias_) {
+  if (adjusted_rel_pc < load_bias_) {
     return false;
   }
-  rel_pc -= load_bias_;
+  adjusted_rel_pc -= load_bias_;
 
   // Lock during the step which can update information in the object.
   std::lock_guard<std::mutex> guard(lock_);
-  return interface_->Step(rel_pc, regs, process_memory, finished) ||
+  return interface_->Step(adjusted_rel_pc, regs, process_memory, finished) ||
          (gnu_debugdata_interface_ &&
-          gnu_debugdata_interface_->Step(rel_pc, regs, process_memory, finished));
+          gnu_debugdata_interface_->Step(adjusted_rel_pc, regs, process_memory, finished));
 }
 
 bool Elf::IsValidElf(Memory* memory) {
