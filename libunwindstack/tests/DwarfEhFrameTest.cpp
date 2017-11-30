@@ -109,23 +109,23 @@ TYPED_TEST_P(DwarfEhFrameTest, Init32) {
 
   this->eh_frame_->TestGetFdeInfo(0, &info);
   EXPECT_EQ(0x5100U, info.offset);
-  EXPECT_EQ(0x660cU, info.start);
-  EXPECT_EQ(0x680cU, info.end);
+  EXPECT_EQ(0x6608U, info.start);
+  EXPECT_EQ(0x6808U, info.end);
 
   this->eh_frame_->TestGetFdeInfo(1, &info);
   EXPECT_EQ(0x5200U, info.offset);
-  EXPECT_EQ(0x770cU, info.start);
-  EXPECT_EQ(0x7a0cU, info.end);
+  EXPECT_EQ(0x7708U, info.start);
+  EXPECT_EQ(0x7a08U, info.end);
 
   this->eh_frame_->TestGetFdeInfo(2, &info);
   EXPECT_EQ(0x5400U, info.offset);
-  EXPECT_EQ(0x890cU, info.start);
-  EXPECT_EQ(0x8d0cU, info.end);
+  EXPECT_EQ(0x8908U, info.start);
+  EXPECT_EQ(0x8d08U, info.end);
 
   this->eh_frame_->TestGetFdeInfo(3, &info);
   EXPECT_EQ(0x5500U, info.offset);
-  EXPECT_EQ(0x9a0cU, info.start);
-  EXPECT_EQ(0x9f0cU, info.end);
+  EXPECT_EQ(0x9a08U, info.start);
+  EXPECT_EQ(0x9f08U, info.end);
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, Init32_fde_not_following_cie) {
@@ -193,23 +193,23 @@ TYPED_TEST_P(DwarfEhFrameTest, Init64) {
 
   this->eh_frame_->TestGetFdeInfo(0, &info);
   EXPECT_EQ(0x5100U, info.offset);
-  EXPECT_EQ(0x661cU, info.start);
-  EXPECT_EQ(0x681cU, info.end);
+  EXPECT_EQ(0x6618U, info.start);
+  EXPECT_EQ(0x6818U, info.end);
 
   this->eh_frame_->TestGetFdeInfo(1, &info);
   EXPECT_EQ(0x5200U, info.offset);
-  EXPECT_EQ(0x771cU, info.start);
-  EXPECT_EQ(0x7a1cU, info.end);
+  EXPECT_EQ(0x7718U, info.start);
+  EXPECT_EQ(0x7a18U, info.end);
 
   this->eh_frame_->TestGetFdeInfo(2, &info);
   EXPECT_EQ(0x5400U, info.offset);
-  EXPECT_EQ(0x891cU, info.start);
-  EXPECT_EQ(0x8d1cU, info.end);
+  EXPECT_EQ(0x8918U, info.start);
+  EXPECT_EQ(0x8d18U, info.end);
 
   this->eh_frame_->TestGetFdeInfo(3, &info);
   EXPECT_EQ(0x5500U, info.offset);
-  EXPECT_EQ(0x9a1cU, info.start);
-  EXPECT_EQ(0x9f1cU, info.end);
+  EXPECT_EQ(0x9a18U, info.start);
+  EXPECT_EQ(0x9f18U, info.end);
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, Init64_fde_not_following_cie) {
@@ -261,8 +261,8 @@ TYPED_TEST_P(DwarfEhFrameTest, Init_version1) {
   typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
   this->eh_frame_->TestGetFdeInfo(0, &info);
   EXPECT_EQ(0x5100U, info.offset);
-  EXPECT_EQ(0x660aU, info.start);
-  EXPECT_EQ(0x680aU, info.end);
+  EXPECT_EQ(0x6606U, info.start);
+  EXPECT_EQ(0x6806U, info.end);
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, Init_version4) {
@@ -304,8 +304,8 @@ TYPED_TEST_P(DwarfEhFrameTest, Init_version4) {
   typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
   this->eh_frame_->TestGetFdeInfo(0, &info);
   EXPECT_EQ(0x5100U, info.offset);
-  EXPECT_EQ(0x660aU, info.start);
-  EXPECT_EQ(0x680aU, info.end);
+  EXPECT_EQ(0x6606U, info.start);
+  EXPECT_EQ(0x6806U, info.end);
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc) {
@@ -384,8 +384,8 @@ TYPED_TEST_P(DwarfEhFrameTest, GetCieFde32) {
   ASSERT_TRUE(fde != nullptr);
   EXPECT_EQ(0x14010U, fde->cfa_instructions_offset);
   EXPECT_EQ(0x14024U, fde->cfa_instructions_end);
-  EXPECT_EQ(0x1d00cU, fde->pc_start);
-  EXPECT_EQ(0x1d10cU, fde->pc_end);
+  EXPECT_EQ(0x1d008U, fde->pc_start);
+  EXPECT_EQ(0x1d108U, fde->pc_end);
   EXPECT_EQ(0xf000U, fde->cie_offset);
   EXPECT_EQ(0U, fde->lsda_address);
 
@@ -428,8 +428,8 @@ TYPED_TEST_P(DwarfEhFrameTest, GetCieFde64) {
   ASSERT_TRUE(fde != nullptr);
   EXPECT_EQ(0x8024U, fde->cfa_instructions_offset);
   EXPECT_EQ(0x820cU, fde->cfa_instructions_end);
-  EXPECT_EQ(0xd01cU, fde->pc_start);
-  EXPECT_EQ(0xd31cU, fde->pc_end);
+  EXPECT_EQ(0xd018U, fde->pc_start);
+  EXPECT_EQ(0xd318U, fde->pc_end);
   EXPECT_EQ(0x6000U, fde->cie_offset);
   EXPECT_EQ(0U, fde->lsda_address);
 

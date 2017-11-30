@@ -40,7 +40,7 @@ class DwarfEhFrame : public DwarfSectionImpl<AddressType> {
 
   uint64_t AdjustPcFromFde(uint64_t pc) override {
     // The eh_frame uses relative pcs.
-    return pc + this->memory_.cur_offset();
+    return pc + this->memory_.cur_offset() - 4;
   }
 };
 

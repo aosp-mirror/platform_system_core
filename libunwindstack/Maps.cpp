@@ -64,13 +64,13 @@ static MapInfo* InternalParseLine(const char* line) {
   // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
   char* str;
   const char* old_str = line;
-  uint64_t start = strtoul(old_str, &str, 16);
+  uint64_t start = strtoull(old_str, &str, 16);
   if (old_str == str || *str++ != '-') {
     return nullptr;
   }
 
   old_str = str;
-  uint64_t end = strtoul(old_str, &str, 16);
+  uint64_t end = strtoull(old_str, &str, 16);
   if (old_str == str || !std::isspace(*str++)) {
     return nullptr;
   }
@@ -112,14 +112,14 @@ static MapInfo* InternalParseLine(const char* line) {
   }
 
   old_str = str;
-  uint64_t offset = strtoul(old_str, &str, 16);
+  uint64_t offset = strtoull(old_str, &str, 16);
   if (old_str == str || !std::isspace(*str)) {
     return nullptr;
   }
 
   // Ignore the 00:00 values.
   old_str = str;
-  (void)strtoul(old_str, &str, 16);
+  (void)strtoull(old_str, &str, 16);
   if (old_str == str || *str++ != ':') {
     return nullptr;
   }
@@ -129,14 +129,14 @@ static MapInfo* InternalParseLine(const char* line) {
 
   // Skip the inode.
   old_str = str;
-  (void)strtoul(str, &str, 16);
+  (void)strtoull(str, &str, 16);
   if (old_str == str || !std::isspace(*str++)) {
     return nullptr;
   }
 
   // Skip decimal digit.
   old_str = str;
-  (void)strtoul(old_str, &str, 10);
+  (void)strtoull(old_str, &str, 10);
   if (old_str == str || (!std::isspace(*str) && *str != '\0')) {
     return nullptr;
   }
