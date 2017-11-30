@@ -129,6 +129,7 @@ cc_test {
         },
         windows: {
             srcs: ["utf8_test.cpp"],
+            cflags: ["-Wno-unused-parameter"],
             enabled: true,
         },
     },

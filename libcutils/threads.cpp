@@ -84,7 +84,7 @@ void*  thread_store_get( thread_store_t*  store )
 
 void   thread_store_set( thread_store_t*          store,
                          void*                    value,
-                         thread_store_destruct_t  destroy )
+                         thread_store_destruct_t  /*destroy*/ )
 {
     /* XXX: can't use destructor on thread exit */
     if (!store->lock_init) {
