@@ -32,6 +32,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libbase \
 	libutils \
 	libcrypto \
+	libkeystore_aidl \
 	libkeystore_binder \
 	libhidlbase \
 	libhidltransport \

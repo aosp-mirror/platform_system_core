@@ -19,34 +19,48 @@
 
 #include <stdint.h>
 
+#include <mutex>
 #include <string>
+
+#include <unwindstack/Elf.h>
 
 namespace unwindstack {
 
 // Forward declarations.
-class Elf;
 class Memory;
 
 struct MapInfo {
-  uint64_t start;
-  uint64_t end;
-  uint64_t offset;
-  uint16_t flags;
+  MapInfo() = default;
+  MapInfo(uint64_t start, uint64_t end) : start(start), end(end) {}
+  MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const std::string& name)
+      : start(start), end(end), offset(offset), flags(flags), name(name) {}
+  ~MapInfo() { delete elf; }
+
+  uint64_t start = 0;
+  uint64_t end = 0;
+  uint64_t offset = 0;
+  uint16_t flags = 0;
   std::string name;
   Elf* elf = nullptr;
   // This value is only non-zero if the offset is non-zero but there is
   // no elf signature found at that offset. This indicates that the
   // entire file is represented by the Memory object returned by CreateMemory,
   // instead of a portion of the file.
-  uint64_t elf_offset;
+  uint64_t elf_offset = 0;
 
   // This function guarantees it will never return nullptr.
   Elf* GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata = false);
 
  private:
+  MapInfo(const MapInfo&) = delete;
+  void operator=(const MapInfo&) = delete;
+
   Memory* GetFileMemory();
 
   Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
+
+  // Protect the creation of the elf object.
+  std::mutex mutex_;
 };
 
 }  // namespace unwindstack

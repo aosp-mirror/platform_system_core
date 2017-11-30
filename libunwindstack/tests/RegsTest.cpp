@@ -147,28 +147,29 @@ TEST_F(RegsTest, rel_pc_arm) {
 }
 
 TEST_F(RegsTest, elf_invalid) {
-  Elf invalid_elf(new MemoryFake);
   RegsArm regs_arm;
   RegsArm64 regs_arm64;
   RegsX86 regs_x86;
   RegsX86_64 regs_x86_64;
-  MapInfo map_info{.start = 0x1000, .end = 0x2000};
+  MapInfo map_info(0x1000, 0x2000);
+  Elf* invalid_elf = new Elf(new MemoryFake);
+  map_info.elf = invalid_elf;
 
   regs_arm.set_pc(0x1500);
-  ASSERT_EQ(0x500U, invalid_elf.GetRelPc(regs_arm.pc(), &map_info));
-  ASSERT_EQ(0x500U, regs_arm.GetAdjustedPc(0x500U, &invalid_elf));
+  EXPECT_EQ(0x500U, invalid_elf->GetRelPc(regs_arm.pc(), &map_info));
+  EXPECT_EQ(0x500U, regs_arm.GetAdjustedPc(0x500U, invalid_elf));
 
   regs_arm64.set_pc(0x1600);
-  ASSERT_EQ(0x600U, invalid_elf.GetRelPc(regs_arm64.pc(), &map_info));
-  ASSERT_EQ(0x600U, regs_arm64.GetAdjustedPc(0x600U, &invalid_elf));
+  EXPECT_EQ(0x600U, invalid_elf->GetRelPc(regs_arm64.pc(), &map_info));
+  EXPECT_EQ(0x600U, regs_arm64.GetAdjustedPc(0x600U, invalid_elf));
 
   regs_x86.set_pc(0x1700);
-  ASSERT_EQ(0x700U, invalid_elf.GetRelPc(regs_x86.pc(), &map_info));
-  ASSERT_EQ(0x700U, regs_x86.GetAdjustedPc(0x700U, &invalid_elf));
+  EXPECT_EQ(0x700U, invalid_elf->GetRelPc(regs_x86.pc(), &map_info));
+  EXPECT_EQ(0x700U, regs_x86.GetAdjustedPc(0x700U, invalid_elf));
 
   regs_x86_64.set_pc(0x1800);
-  ASSERT_EQ(0x800U, invalid_elf.GetRelPc(regs_x86_64.pc(), &map_info));
-  ASSERT_EQ(0x800U, regs_x86_64.GetAdjustedPc(0x800U, &invalid_elf));
+  EXPECT_EQ(0x800U, invalid_elf->GetRelPc(regs_x86_64.pc(), &map_info));
+  EXPECT_EQ(0x800U, regs_x86_64.GetAdjustedPc(0x800U, invalid_elf));
 }
 
 TEST_F(RegsTest, arm_set_from_raw) {
