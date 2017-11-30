@@ -7,16 +7,16 @@ The Android Debug Bridge (ADB) is used to:
 - keep track of all Android devices and emulators instances
   connected to or running on a given host developer machine
 
-- implement various control commands (e.g. "adb shell", "adb pull", etc..)
+- implement various control commands (e.g. "adb shell", "adb pull", etc.)
   for the benefit of clients (command-line users, or helper programs like
-  DDMS). These commands are what is called a 'service' in ADB.
+  DDMS). These commands are called 'services' in ADB.
 
 As a whole, everything works through the following components:
 
   1. The ADB server
 
     This is a background process that runs on the host machine. Its purpose
-    if to sense the USB ports to know when devices are attached/removed,
+    is to sense the USB ports to know when devices are attached/removed,
     as well as when emulator instances start/stop.
 
     It thus maintains a list of "connected devices" and assigns a 'state'
@@ -40,7 +40,7 @@ As a whole, everything works through the following components:
     meaning that the ADB server detected a new device/emulator, but could not
     connect to the adbd daemon.
 
-    the BOOTLOADER and RECOVERY states correspond to alternate states of
+    The BOOTLOADER and RECOVERY states correspond to alternate states of
     devices when they are in the bootloader or recovery mode.
 
   3. The ADB command-line client
@@ -49,8 +49,7 @@ As a whole, everything works through the following components:
     or a script. It first tries to locate the ADB server on the host machine,
     and will start one automatically if none is found.
 
-    then, the client sends its service requests to the ADB server. It doesn't
-    need to know.
+    Then, the client sends its service requests to the ADB server.
 
     Currently, a single 'adb' binary is used for both the server and client.
     this makes distribution and starting the server easier.
@@ -61,13 +60,13 @@ As a whole, everything works through the following components:
     There are essentially two kinds of services that a client can talk to.
 
     Host Services:
-      these services run within the ADB Server and thus do not need to
+      These services run within the ADB Server and thus do not need to
       communicate with a device at all. A typical example is "adb devices"
       which is used to return the list of currently known devices and their
-      state. They are a few couple other services though.
+      states. They are a few other services though.
 
     Local Services:
-      these services either run within the adbd daemon, or are started by
+      These services either run within the adbd daemon, or are started by
       it on the device. The ADB server is used to multiplex streams
       between the client and the service running in adbd. In this case
       its role is to initiate the connection, then of being a pass-through
@@ -109,7 +108,7 @@ II. Protocol details:
 
     Note that the connection is still alive after an OKAY, which allows the
     client to make other requests. But in certain cases, an OKAY will even
-    change the state of the connection. 
+    change the state of the connection.
 
     For example, the case of the 'host:transport:<serialnumber>' request,
     where '<serialnumber>' is used to identify a given device/emulator; after
