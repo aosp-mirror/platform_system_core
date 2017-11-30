@@ -47,7 +47,7 @@ void TestInitEhdr(Ehdr* ehdr, uint32_t elf_class, uint32_t machine_type) {
   ehdr->e_ehsize = sizeof(Ehdr);
 }
 
-static std::string GetTestFileDirectory() {
+std::string TestGetFileDirectory() {
   std::string exec(testing::internal::GetArgvs()[0]);
   auto const value = exec.find_last_of('/');
   if (value == std::string::npos) {
@@ -102,7 +102,7 @@ void TestInitGnuDebugdata(uint32_t elf_class, uint32_t machine, bool init_gnu_de
   offset = symtab_offset + 0x100;
   if (init_gnu_debugdata) {
     // Read in the compressed elf data and copy it in.
-    name = GetTestFileDirectory();
+    name = TestGetFileDirectory();
     if (elf_class == ELFCLASS32) {
       name += "elf32.xz";
     } else {

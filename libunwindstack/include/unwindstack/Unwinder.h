@@ -70,7 +70,7 @@ class Unwinder {
   static std::string FormatFrame(const FrameData& frame, bool bits32);
 
  private:
-  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool adjust_pc);
+  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc);
 
   size_t max_frames_;
   Maps* maps_;
