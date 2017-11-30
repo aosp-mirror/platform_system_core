@@ -192,6 +192,7 @@ TEST(logging, WOULD_LOG_VERBOSE_enabled) {
 #undef CHECK_WOULD_LOG_ENABLED
 
 
+#if !defined(_WIN32)
 static std::string make_log_pattern(android::base::LogSeverity severity,
                                     const char* message) {
   static const char log_characters[] = "VDIWEFF";
@@ -203,6 +204,7 @@ static std::string make_log_pattern(android::base::LogSeverity severity,
       "%c \\d+-\\d+ \\d+:\\d+:\\d+ \\s*\\d+ \\s*\\d+ %s:\\d+] %s",
       log_char, basename(&holder[0]), message);
 }
+#endif
 
 static void CheckMessage(const CapturedStderr& cap,
                          android::base::LogSeverity severity, const char* expected) {

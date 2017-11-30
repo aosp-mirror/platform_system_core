@@ -27,7 +27,7 @@ using android::base::StringPrintf;
 using android::base::unique_fd;
 
 #ifdef WIN32
-static int exec_e2fs_cmd(const char* path, char* const argv[]) {
+static int exec_e2fs_cmd(const char* /*path*/, char* const argv[]) {
     std::string cmd;
     int i = 0;
     while (argv[i] != nullptr) {

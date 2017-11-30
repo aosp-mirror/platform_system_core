@@ -348,7 +348,7 @@ Mutex::Mutex()
     mState = (void*) hMutex;
 }
 
-Mutex::Mutex(const char* name)
+Mutex::Mutex(const char* /*name*/)
 {
     // XXX: name not used for now
     HANDLE hMutex;
@@ -359,7 +359,7 @@ Mutex::Mutex(const char* name)
     mState = (void*) hMutex;
 }
 
-Mutex::Mutex(int type, const char* name)
+Mutex::Mutex(int /*type*/, const char* /*name*/)
 {
     // XXX: type and name not used for now
     HANDLE hMutex;
