@@ -25,9 +25,9 @@
 #include <sys/types.h>
 
 #include <algorithm>  // std::max
-#include <experimental/string_view>
 #include <memory>
-#include <string>  // std::string
+#include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <android-base/stringprintf.h>
@@ -495,7 +495,7 @@ struct TagEntry : public EntryBaseDropped {
 
 struct TagNameKey {
     std::string* alloc;
-    std::experimental::string_view name;  // Saves space if const char*
+    std::string_view name;  // Saves space if const char*
 
     explicit TagNameKey(const LogBufferElement* element)
         : alloc(nullptr), name("", strlen("")) {
@@ -504,31 +504,31 @@ struct TagNameKey {
             if (tag) {
                 const char* cp = android::tagToName(tag);
                 if (cp) {
-                    name = std::experimental::string_view(cp, strlen(cp));
+                    name = std::string_view(cp, strlen(cp));
                     return;
                 }
             }
             alloc = new std::string(
                 android::base::StringPrintf("[%" PRIu32 "]", tag));
             if (!alloc) return;
-            name = std::experimental::string_view(alloc->c_str(), alloc->size());
+            name = std::string_view(alloc->c_str(), alloc->size());
             return;
         }
         const char* msg = element->getMsg();
         if (!msg) {
-            name = std::experimental::string_view("chatty", strlen("chatty"));
+            name = std::string_view("chatty", strlen("chatty"));
             return;
         }
         ++msg;
         unsigned short len = element->getMsgLen();
         len = (len <= 1) ? 0 : strnlen(msg, len - 1);
         if (!len) {
-            name = std::experimental::string_view("<NULL>", strlen("<NULL>"));
+            name = std::string_view("<NULL>", strlen("<NULL>"));
             return;
         }
         alloc = new std::string(msg, len);
         if (!alloc) return;
-        name = std::experimental::string_view(alloc->c_str(), alloc->size());
+        name = std::string_view(alloc->c_str(), alloc->size());
     }
 
     explicit TagNameKey(TagNameKey&& rval)
@@ -545,7 +545,7 @@ struct TagNameKey {
         if (alloc) delete alloc;
     }
 
-    operator const std::experimental::string_view() const {
+    operator const std::string_view() const {
         return name;
     }
 
@@ -576,8 +576,7 @@ struct std::hash<TagNameKey>
     : public std::unary_function<const TagNameKey&, size_t> {
     size_t operator()(const TagNameKey& __t) const noexcept {
         if (!__t.length()) return 0;
-        return std::hash<std::experimental::string_view>()(
-            std::experimental::string_view(__t));
+        return std::hash<std::string_view>()(std::string_view(__t));
     }
 };
 
