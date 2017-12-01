@@ -302,18 +302,18 @@ bool LoadSplitPolicy() {
     }
     std::string mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
 
-    // vendor_sepolicy.cil and nonplat_declaration.cil are the new design to replace
+    // vendor_sepolicy.cil and plat_pub_versioned.cil are the new design to replace
     // nonplat_sepolicy.cil.
-    std::string nonplat_declaration_cil_file("/vendor/etc/selinux/nonplat_declaration.cil");
+    std::string plat_pub_versioned_cil_file("/vendor/etc/selinux/plat_pub_versioned.cil");
     std::string vendor_policy_cil_file("/vendor/etc/selinux/vendor_sepolicy.cil");
 
     if (access(vendor_policy_cil_file.c_str(), F_OK) == -1) {
         // For backward compatibility.
         // TODO: remove this after no device is using nonplat_sepolicy.cil.
         vendor_policy_cil_file = "/vendor/etc/selinux/nonplat_sepolicy.cil";
-        nonplat_declaration_cil_file.clear();
-    } else if (access(nonplat_declaration_cil_file.c_str(), F_OK) == -1) {
-        LOG(ERROR) << "Missing " << nonplat_declaration_cil_file;
+        plat_pub_versioned_cil_file.clear();
+    } else if (access(plat_pub_versioned_cil_file.c_str(), F_OK) == -1) {
+        LOG(ERROR) << "Missing " << plat_pub_versioned_cil_file;
         return false;
     }
 
@@ -338,8 +338,8 @@ bool LoadSplitPolicy() {
     };
     // clang-format on
 
-    if (!nonplat_declaration_cil_file.empty()) {
-        compile_args.push_back(nonplat_declaration_cil_file.c_str());
+    if (!plat_pub_versioned_cil_file.empty()) {
+        compile_args.push_back(plat_pub_versioned_cil_file.c_str());
     }
     if (!vendor_policy_cil_file.empty()) {
         compile_args.push_back(vendor_policy_cil_file.c_str());
