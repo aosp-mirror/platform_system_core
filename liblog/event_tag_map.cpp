@@ -25,9 +25,9 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include <experimental/string_view>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <log/event_tag_map.h>
@@ -44,10 +44,10 @@
 class MapString {
  private:
   const std::string* alloc;                  // HAS-AN
-  const std::experimental::string_view str;  // HAS-A
+  const std::string_view str;                // HAS-A
 
  public:
-  operator const std::experimental::string_view() const {
+  operator const std::string_view() const {
     return str;
   }
 
@@ -92,8 +92,7 @@ struct std::hash<MapString>
     : public std::unary_function<const MapString&, size_t> {
   size_t operator()(const MapString& __t) const noexcept {
     if (!__t.length()) return 0;
-    return std::hash<std::experimental::string_view>()(
-        std::experimental::string_view(__t));
+    return std::hash<std::string_view>()(std::string_view(__t));
   }
 };
 
