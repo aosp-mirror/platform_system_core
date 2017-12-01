@@ -39,8 +39,6 @@ int socket_local_client(const char *name, int namespaceId, int type)
 
 #include "socket_local_unix.h"
 
-#define UNUSED __attribute__((unused))
-
 #define LISTEN_BACKLOG 4
 
 /* Documented in header file. */
@@ -123,9 +121,7 @@ error:
  * 
  * Used by AndroidSocketImpl
  */
-int socket_local_client_connect(int fd, const char *name, int namespaceId, 
-        int type UNUSED)
-{
+int socket_local_client_connect(int fd, const char* name, int namespaceId, int /*type*/) {
     struct sockaddr_un addr;
     socklen_t alen;
     int err;
