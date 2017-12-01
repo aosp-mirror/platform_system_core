@@ -30,8 +30,6 @@
 #include <cutils/memory.h>
 #include <log/log.h>
 
-#define UNUSED __attribute__((unused))
-
 /* When an object is allocated but not freed in a function,
  * because its ownership is released to other object like a hashmap,
  * call RELEASE_OWNERSHIP to tell the clang analyzer and avoid
@@ -364,8 +362,7 @@ char *str_parms_to_str(struct str_parms *str_parms)
     return str;
 }
 
-static bool dump_entry(void *key, void *value, void *context UNUSED)
-{
+static bool dump_entry(void* key, void* value, void* /*context*/) {
     ALOGI("key: '%s' value: '%s'\n", (char *)key, (char *)value);
     return true;
 }
