@@ -27,8 +27,6 @@
 
 #include <log/log.h>
 
-#define UNUSED __attribute__((__unused__))
-
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
  * Call this any place a SchedPolicy is used as an input parameter.
  * Returns the possibly re-mapped policy.
@@ -445,13 +443,11 @@ int set_sched_policy(int tid, SchedPolicy policy)
 
 /* Stubs for non-Android targets. */
 
-int set_sched_policy(int tid UNUSED, SchedPolicy policy UNUSED)
-{
+int set_sched_policy(int /*tid*/, SchedPolicy /*policy*/) {
     return 0;
 }
 
-int get_sched_policy(int tid UNUSED, SchedPolicy *policy)
-{
+int get_sched_policy(int /*tid*/, SchedPolicy* policy) {
     *policy = SP_SYSTEM_DEFAULT;
     return 0;
 }
