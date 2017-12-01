@@ -99,8 +99,7 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
     // one extra function call appearing in the unwind.
     unwindstack::RegsGetLocal(regs.get());
   } else {
-    regs.reset(
-        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentMachineType(), ucontext));
+    regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
@@ -120,8 +119,7 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   if (context == nullptr) {
     regs.reset(unwindstack::Regs::RemoteGet(Tid()));
   } else {
-    regs.reset(
-        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentMachineType(), context));
+    regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), context));
   }
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;

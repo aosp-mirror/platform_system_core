@@ -31,7 +31,6 @@
 #include <unwindstack/Regs.h>
 
 #include "ElfInterfaceArm.h"
-#include "Machine.h"
 #include "Symbols.h"
 
 namespace unwindstack {
@@ -183,18 +182,15 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
       return nullptr;
     }
 
-    if (e_machine != EM_ARM && e_machine != EM_386) {
-      // Unsupported.
-      ALOGI("32 bit elf that is neither arm nor x86: e_machine = %d\n", e_machine);
-      return nullptr;
-    }
-
     machine_type_ = e_machine;
     if (e_machine == EM_ARM) {
+      arch_ = ARCH_ARM;
       interface.reset(new ElfInterfaceArm(memory));
     } else if (e_machine == EM_386) {
+      arch_ = ARCH_X86;
       interface.reset(new ElfInterface32(memory));
     } else {
+      // Unsupported.
       ALOGI("32 bit elf that is neither arm nor x86: e_machine = %d\n", e_machine);
       return nullptr;
     }
@@ -203,12 +199,17 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
     if (!memory->ReadFully(EI_NIDENT + sizeof(Elf64_Half), &e_machine, sizeof(e_machine))) {
       return nullptr;
     }
-    if (e_machine != EM_AARCH64 && e_machine != EM_X86_64) {
+
+    machine_type_ = e_machine;
+    if (e_machine == EM_AARCH64) {
+      arch_ = ARCH_ARM64;
+    } else if (e_machine == EM_X86_64) {
+      arch_ = ARCH_X86_64;
+    } else {
       // Unsupported.
       ALOGI("64 bit elf that is neither aarch64 nor x86_64: e_machine = %d\n", e_machine);
       return nullptr;
     }
-    machine_type_ = e_machine;
     interface.reset(new ElfInterface64(memory));
   }
 

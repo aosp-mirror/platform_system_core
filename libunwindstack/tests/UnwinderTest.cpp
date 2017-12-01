@@ -95,7 +95,7 @@ class UnwinderTest : public ::testing::Test {
 
   void SetUp() override {
     ElfInterfaceFake::FakeClear();
-    regs_.FakeSetMachineType(EM_ARM);
+    regs_.FakeSetArch(ARCH_ARM);
     regs_.FakeSetReturnAddressValid(false);
   }
 
@@ -702,14 +702,14 @@ TEST_F(UnwinderTest, format_frame) {
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
-  regs_.FakeSetMachineType(EM_ARM);
+  regs_.FakeSetArch(ARCH_ARM);
   EXPECT_EQ("  #00 pc 00001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
-  regs_.FakeSetMachineType(EM_386);
+  regs_.FakeSetArch(ARCH_X86);
   EXPECT_EQ("  #00 pc 00001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
 
-  regs_.FakeSetMachineType(EM_AARCH64);
+  regs_.FakeSetArch(ARCH_ARM64);
   EXPECT_EQ("  #00 pc 0000000000001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
-  regs_.FakeSetMachineType(EM_X86_64);
+  regs_.FakeSetArch(ARCH_X86_64);
   EXPECT_EQ("  #00 pc 0000000000001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
 
   EXPECT_EQ("", unwinder.FormatFrame(1));
