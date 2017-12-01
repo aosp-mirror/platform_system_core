@@ -185,6 +185,7 @@ static int generate_f2fs_image(const char* fileName, long long partSize, const s
     }
     return 0;
 #else
+    UNUSED(fileName, partSize, initial_dir);
     fprintf(stderr, "make_f2fs not supported on Windows\n");
     return -1;
 #endif
