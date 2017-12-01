@@ -35,12 +35,7 @@
 
 #include <utils/Compat.h>
 
-#ifndef __unused
-#define __unused __attribute__((__unused__))
-#endif
-
-int ashmem_create_region(const char *ignored __unused, size_t size)
-{
+int ashmem_create_region(const char* /*ignored*/, size_t size) {
     char pattern[PATH_MAX];
     snprintf(pattern, sizeof(pattern), "/tmp/android-ashmem-%d-XXXXXXXXX", getpid());
     int fd = mkstemp(pattern);
@@ -56,18 +51,15 @@ int ashmem_create_region(const char *ignored __unused, size_t size)
     return fd;
 }
 
-int ashmem_set_prot_region(int fd __unused, int prot __unused)
-{
+int ashmem_set_prot_region(int /*fd*/, int /*prot*/) {
     return 0;
 }
 
-int ashmem_pin_region(int fd __unused, size_t offset __unused, size_t len __unused)
-{
+int ashmem_pin_region(int /*fd*/, size_t /*offset*/, size_t /*len*/) {
     return 0 /*ASHMEM_NOT_PURGED*/;
 }
 
-int ashmem_unpin_region(int fd __unused, size_t offset __unused, size_t len __unused)
-{
+int ashmem_unpin_region(int /*fd*/, size_t /*offset*/, size_t /*len*/) {
     return 0 /*ASHMEM_IS_UNPINNED*/;
 }
 
