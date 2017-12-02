@@ -148,6 +148,26 @@ bool ElfInterface::ReadAllHeaders(uint64_t* load_bias) {
 }
 
 template <typename EhdrType, typename PhdrType>
+uint64_t ElfInterface::GetLoadBias(Memory* memory) {
+  EhdrType ehdr;
+  if (!memory->Read(0, &ehdr, sizeof(ehdr))) {
+    return false;
+  }
+
+  uint64_t offset = ehdr.e_phoff;
+  for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
+    PhdrType phdr;
+    if (!memory->Read(offset, &phdr, sizeof(phdr))) {
+      return 0;
+    }
+    if (phdr.p_type == PT_LOAD && phdr.p_offset == 0) {
+      return phdr.p_vaddr;
+    }
+  }
+  return 0;
+}
+
+template <typename EhdrType, typename PhdrType>
 bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias) {
   uint64_t offset = ehdr.e_phoff;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
@@ -420,5 +440,8 @@ template bool ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(uint64_t, uin
 
 template void ElfInterface::GetMaxSizeWithTemplate<Elf32_Ehdr>(Memory*, uint64_t*);
 template void ElfInterface::GetMaxSizeWithTemplate<Elf64_Ehdr>(Memory*, uint64_t*);
+
+template uint64_t ElfInterface::GetLoadBias<Elf32_Ehdr, Elf32_Phdr>(Memory*);
+template uint64_t ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(Memory*);
 
 }  // namespace unwindstack

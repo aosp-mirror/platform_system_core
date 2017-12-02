@@ -82,6 +82,9 @@ class ElfInterface {
   DwarfSection* eh_frame() { return eh_frame_.get(); }
   DwarfSection* debug_frame() { return debug_frame_.get(); }
 
+  template <typename EhdrType, typename PhdrType>
+  static uint64_t GetLoadBias(Memory* memory);
+
  protected:
   template <typename AddressType>
   void InitHeadersWithTemplate();

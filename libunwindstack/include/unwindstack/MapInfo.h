@@ -51,6 +51,8 @@ struct MapInfo {
   // This function guarantees it will never return nullptr.
   Elf* GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata = false);
 
+  uint64_t GetLoadBias(const std::shared_ptr<Memory>& process_memory);
+
  private:
   MapInfo(const MapInfo&) = delete;
   void operator=(const MapInfo&) = delete;
