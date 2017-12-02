@@ -61,7 +61,7 @@ cc_library_static {
         "storaged_uid_monitor.cpp",
         "uid_info.cpp",
         "storaged.proto",
-        "binder/android/os/IStoraged.aidl",
+        ":storaged_aidl",
         "binder/android/os/storaged/IStoragedPrivate.aidl",
     ],
 
@@ -99,4 +99,12 @@ cc_test {
     srcs: ["tests/storaged_test.cpp"],
 
     static_libs: ["libstoraged"],
+}
+
+// AIDL interface between storaged and framework.jar
+filegroup {
+    name: "storaged_aidl",
+    srcs: [
+        "binder/android/os/IStoraged.aidl",
+    ],
 }
