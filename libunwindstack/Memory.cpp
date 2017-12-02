@@ -32,14 +32,69 @@
 
 #include "Check.h"
 
+static size_t ProcessVmRead(pid_t pid, void* dst, uint64_t remote_src, size_t len) {
+  struct iovec dst_iov = {
+      .iov_base = dst,
+      .iov_len = len,
+  };
+
+  // Split up the remote read across page boundaries.
+  // From the manpage:
+  //   A partial read/write may result if one of the remote_iov elements points to an invalid
+  //   memory region in the remote process.
+  //
+  //   Partial transfers apply at the granularity of iovec elements.  These system calls won't
+  //   perform a partial transfer that splits a single iovec element.
+  constexpr size_t kMaxIovecs = 64;
+  struct iovec src_iovs[kMaxIovecs];
+  size_t iovecs_used = 0;
+
+  uint64_t cur = remote_src;
+  while (len > 0) {
+    if (iovecs_used == kMaxIovecs) {
+      errno = EINVAL;
+      return 0;
+    }
+
+    // struct iovec uses void* for iov_base.
+    if (cur >= UINTPTR_MAX) {
+      errno = EFAULT;
+      return 0;
+    }
+
+    src_iovs[iovecs_used].iov_base = reinterpret_cast<void*>(cur);
+
+    uintptr_t misalignment = cur & (getpagesize() - 1);
+    size_t iov_len = getpagesize() - misalignment;
+    iov_len = std::min(iov_len, len);
+
+    len -= iov_len;
+    if (__builtin_add_overflow(cur, iov_len, &cur)) {
+      errno = EFAULT;
+      return 0;
+    }
+
+    src_iovs[iovecs_used].iov_len = iov_len;
+    ++iovecs_used;
+  }
+
+  ssize_t rc = process_vm_readv(pid, &dst_iov, 1, src_iovs, iovecs_used, 0);
+  return rc == -1 ? 0 : rc;
+}
+
 namespace unwindstack {
+
+bool Memory::ReadFully(uint64_t addr, void* dst, size_t size) {
+  size_t rc = Read(addr, dst, size);
+  return rc == size;
+}
 
 bool Memory::ReadString(uint64_t addr, std::string* string, uint64_t max_read) {
   string->clear();
   uint64_t bytes_read = 0;
   while (bytes_read < max_read) {
     uint8_t value;
-    if (!Read(addr, &value, sizeof(value))) {
+    if (!ReadFully(addr, &value, sizeof(value))) {
       return false;
     }
     if (value == '\0') {
@@ -59,16 +114,17 @@ std::shared_ptr<Memory> Memory::CreateProcessMemory(pid_t pid) {
   return std::shared_ptr<Memory>(new MemoryRemote(pid));
 }
 
-bool MemoryBuffer::Read(uint64_t addr, void* dst, size_t size) {
-  uint64_t last_read_byte;
-  if (__builtin_add_overflow(size, addr, &last_read_byte)) {
-    return false;
+size_t MemoryBuffer::Read(uint64_t addr, void* dst, size_t size) {
+  if (addr >= raw_.size()) {
+    return 0;
   }
-  if (last_read_byte > raw_.size()) {
-    return false;
-  }
-  memcpy(dst, &raw_[addr], size);
-  return true;
+
+  size_t bytes_left = raw_.size() - static_cast<size_t>(addr);
+  const unsigned char* actual_base = static_cast<const unsigned char*>(raw_.data()) + addr;
+  size_t actual_len = std::min(bytes_left, size);
+
+  memcpy(dst, actual_base, actual_len);
+  return actual_len;
 }
 
 uint8_t* MemoryBuffer::GetPtr(size_t offset) {
@@ -129,145 +185,77 @@ bool MemoryFileAtOffset::Init(const std::string& file, uint64_t offset, uint64_t
   return true;
 }
 
-bool MemoryFileAtOffset::Read(uint64_t addr, void* dst, size_t size) {
-  uint64_t max_size;
-  if (__builtin_add_overflow(addr, size, &max_size) || max_size > size_) {
-    return false;
+size_t MemoryFileAtOffset::Read(uint64_t addr, void* dst, size_t size) {
+  if (addr >= size_) {
+    return 0;
   }
-  memcpy(dst, &data_[addr], size);
-  return true;
+
+  size_t bytes_left = size_ - static_cast<size_t>(addr);
+  const unsigned char* actual_base = static_cast<const unsigned char*>(data_) + addr;
+  size_t actual_len = std::min(bytes_left, size);
+
+  memcpy(dst, actual_base, actual_len);
+  return actual_len;
 }
 
-bool MemoryRemote::PtraceRead(uint64_t addr, long* value) {
-#if !defined(__LP64__)
-  // Cannot read an address greater than 32 bits.
-  if (addr > UINT32_MAX) {
-    return false;
-  }
-#endif
-  // ptrace() returns -1 and sets errno when the operation fails.
-  // To disambiguate -1 from a valid result, we clear errno beforehand.
-  errno = 0;
-  *value = ptrace(PTRACE_PEEKTEXT, pid_, reinterpret_cast<void*>(addr), nullptr);
-  if (*value == -1 && errno) {
-    return false;
-  }
-  return true;
+size_t MemoryRemote::Read(uint64_t addr, void* dst, size_t size) {
+  return ProcessVmRead(pid_, dst, addr, size);
 }
 
-bool MemoryRemote::Read(uint64_t addr, void* dst, size_t bytes) {
-  // Make sure that there is no overflow.
-  uint64_t max_size;
-  if (__builtin_add_overflow(addr, bytes, &max_size)) {
-    return false;
-  }
-
-  size_t bytes_read = 0;
-  long data;
-  size_t align_bytes = addr & (sizeof(long) - 1);
-  if (align_bytes != 0) {
-    if (!PtraceRead(addr & ~(sizeof(long) - 1), &data)) {
-      return false;
-    }
-    size_t copy_bytes = std::min(sizeof(long) - align_bytes, bytes);
-    memcpy(dst, reinterpret_cast<uint8_t*>(&data) + align_bytes, copy_bytes);
-    addr += copy_bytes;
-    dst = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(dst) + copy_bytes);
-    bytes -= copy_bytes;
-    bytes_read += copy_bytes;
-  }
-
-  for (size_t i = 0; i < bytes / sizeof(long); i++) {
-    if (!PtraceRead(addr, &data)) {
-      return false;
-    }
-    memcpy(dst, &data, sizeof(long));
-    dst = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(dst) + sizeof(long));
-    addr += sizeof(long);
-    bytes_read += sizeof(long);
-  }
-
-  size_t left_over = bytes & (sizeof(long) - 1);
-  if (left_over) {
-    if (!PtraceRead(addr, &data)) {
-      return false;
-    }
-    memcpy(dst, &data, left_over);
-    bytes_read += left_over;
-  }
-  return true;
+size_t MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
+  return ProcessVmRead(getpid(), dst, addr, size);
 }
 
-bool MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
-  // Make sure that there is no overflow.
-  uint64_t max_size;
-  if (__builtin_add_overflow(addr, size, &max_size)) {
-    return false;
+MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t length,
+                         uint64_t offset)
+    : memory_(memory), begin_(begin), length_(length), offset_(offset) {}
+
+size_t MemoryRange::Read(uint64_t addr, void* dst, size_t size) {
+  if (addr < offset_) {
+    return 0;
   }
 
-  // The process_vm_readv call will not always work on remote
-  // processes, so only use it for reads from the current pid.
-  // Use this method to avoid crashes if an address is invalid since
-  // unwind data could try to access any part of the address space.
-  struct iovec local_io;
-  local_io.iov_base = dst;
-  local_io.iov_len = size;
-
-  struct iovec remote_io;
-  remote_io.iov_base = reinterpret_cast<void*>(static_cast<uintptr_t>(addr));
-  remote_io.iov_len = size;
-
-  ssize_t bytes_read = process_vm_readv(getpid(), &local_io, 1, &remote_io, 1, 0);
-  if (bytes_read == -1) {
-    return false;
+  uint64_t read_offset = addr - offset_;
+  if (read_offset >= length_) {
+    return 0;
   }
-  return static_cast<size_t>(bytes_read) == size;
+
+  uint64_t read_length = std::min(static_cast<uint64_t>(size), length_ - read_offset);
+  uint64_t read_addr;
+  if (__builtin_add_overflow(read_offset, begin_, &read_addr)) {
+    return 0;
+  }
+
+  return memory_->Read(read_addr, dst, read_length);
 }
 
 bool MemoryOffline::Init(const std::string& file, uint64_t offset) {
-  if (!MemoryFileAtOffset::Init(file, offset)) {
+  auto memory_file = std::make_shared<MemoryFileAtOffset>();
+  if (!memory_file->Init(file, offset)) {
     return false;
   }
+
   // The first uint64_t value is the start of memory.
-  if (!MemoryFileAtOffset::Read(0, &start_, sizeof(start_))) {
+  uint64_t start;
+  if (!memory_file->ReadFully(0, &start, sizeof(start))) {
     return false;
   }
-  // Subtract the first 64 bit value from the total size.
-  size_ -= sizeof(start_);
+
+  uint64_t size = memory_file->Size();
+  if (__builtin_sub_overflow(size, sizeof(start), &size)) {
+    return false;
+  }
+
+  memory_ = std::make_unique<MemoryRange>(memory_file, sizeof(start), size, start);
   return true;
 }
 
-bool MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
-  uint64_t max_size;
-  if (__builtin_add_overflow(addr, size, &max_size)) {
-    return false;
+size_t MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
+  if (!memory_) {
+    return 0;
   }
 
-  uint64_t real_size;
-  if (__builtin_add_overflow(start_, offset_, &real_size) ||
-      __builtin_add_overflow(real_size, size_, &real_size)) {
-    return false;
-  }
-
-  if (addr < start_ || max_size > real_size) {
-    return false;
-  }
-  memcpy(dst, &data_[addr + offset_ - start_ + sizeof(start_)], size);
-  return true;
-}
-
-MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t end)
-    : memory_(memory), begin_(begin), length_(end - begin) {
-  CHECK(end > begin);
-}
-
-bool MemoryRange::Read(uint64_t addr, void* dst, size_t size) {
-  uint64_t max_read;
-  if (__builtin_add_overflow(addr, size, &max_read) || max_read > length_) {
-    return false;
-  }
-  // The check above guarantees that addr + begin_ will not overflow.
-  return memory_->Read(addr + begin_, dst, size);
+  return memory_->Read(addr, dst, size);
 }
 
 }  // namespace unwindstack
