@@ -142,7 +142,7 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
         return false;
       }
       if (loc->type == DWARF_LOCATION_EXPRESSION) {
-        if (!regular_memory->Read(value, &cfa, sizeof(AddressType))) {
+        if (!regular_memory->ReadFully(value, &cfa, sizeof(AddressType))) {
           last_error_ = DWARF_ERROR_MEMORY_INVALID;
           return false;
         }
@@ -175,7 +175,8 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
     const DwarfLocation* loc = &entry.second;
     switch (loc->type) {
       case DWARF_LOCATION_OFFSET:
-        if (!regular_memory->Read(cfa + loc->values[0], &(*cur_regs)[reg], sizeof(AddressType))) {
+        if (!regular_memory->ReadFully(cfa + loc->values[0], &(*cur_regs)[reg],
+                                       sizeof(AddressType))) {
           last_error_ = DWARF_ERROR_MEMORY_INVALID;
           return false;
         }
@@ -210,7 +211,7 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
           return false;
         }
         if (loc->type == DWARF_LOCATION_EXPRESSION) {
-          if (!regular_memory->Read(value, &(*cur_regs)[reg], sizeof(AddressType))) {
+          if (!regular_memory->ReadFully(value, &(*cur_regs)[reg], sizeof(AddressType))) {
             last_error_ = DWARF_ERROR_MEMORY_INVALID;
             return false;
           }

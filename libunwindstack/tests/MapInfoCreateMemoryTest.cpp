@@ -120,14 +120,14 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
 
   // Read the entire file.
   std::vector<uint8_t> buffer(1024);
-  ASSERT_TRUE(memory->Read(0, buffer.data(), 1024));
+  ASSERT_TRUE(memory->ReadFully(0, buffer.data(), 1024));
   ASSERT_TRUE(memcmp(buffer.data(), ELFMAG, SELFMAG) == 0);
   ASSERT_EQ(ELFCLASS32, buffer[EI_CLASS]);
   for (size_t i = EI_CLASS + 1; i < buffer.size(); i++) {
     ASSERT_EQ(0, buffer[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_FALSE(memory->Read(1024, buffer.data(), 1));
+  ASSERT_FALSE(memory->ReadFully(1024, buffer.data(), 1));
 }
 
 // Verify that if the offset is non-zero and there is an elf at that
@@ -141,14 +141,14 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
 
   // Read the valid part of the file.
   std::vector<uint8_t> buffer(0x100);
-  ASSERT_TRUE(memory->Read(0, buffer.data(), 0x100));
+  ASSERT_TRUE(memory->ReadFully(0, buffer.data(), 0x100));
   ASSERT_TRUE(memcmp(buffer.data(), ELFMAG, SELFMAG) == 0);
   ASSERT_EQ(ELFCLASS64, buffer[EI_CLASS]);
   for (size_t i = EI_CLASS + 1; i < buffer.size(); i++) {
     ASSERT_EQ(0, buffer[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_FALSE(memory->Read(0x100, buffer.data(), 1));
+  ASSERT_FALSE(memory->ReadFully(0x100, buffer.data(), 1));
 }
 
 // Verify that if the offset is non-zero and there is an elf at that
@@ -164,11 +164,11 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
 
   // Verify the memory is a valid elf.
   uint8_t e_ident[SELFMAG + 1];
-  ASSERT_TRUE(memory->Read(0, e_ident, SELFMAG));
+  ASSERT_TRUE(memory->ReadFully(0, e_ident, SELFMAG));
   ASSERT_EQ(0, memcmp(e_ident, ELFMAG, SELFMAG));
 
   // Read past the end of what would normally be the size of the map.
-  ASSERT_TRUE(memory->Read(0x1000, e_ident, 1));
+  ASSERT_TRUE(memory->ReadFully(0x1000, e_ident, 1));
 }
 
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_elf64) {
@@ -180,11 +180,11 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
 
   // Verify the memory is a valid elf.
   uint8_t e_ident[SELFMAG + 1];
-  ASSERT_TRUE(memory->Read(0, e_ident, SELFMAG));
+  ASSERT_TRUE(memory->ReadFully(0, e_ident, SELFMAG));
   ASSERT_EQ(0, memcmp(e_ident, ELFMAG, SELFMAG));
 
   // Read past the end of what would normally be the size of the map.
-  ASSERT_TRUE(memory->Read(0x1000, e_ident, 1));
+  ASSERT_TRUE(memory->ReadFully(0x1000, e_ident, 1));
 }
 
 // Verify that device file names will never result in Memory object creation.
@@ -221,13 +221,13 @@ TEST_F(MapInfoCreateMemoryTest, process_memory) {
   ASSERT_TRUE(memory.get() != nullptr);
 
   memset(buffer.data(), 0, buffer.size());
-  ASSERT_TRUE(memory->Read(0, buffer.data(), buffer.size()));
+  ASSERT_TRUE(memory->ReadFully(0, buffer.data(), buffer.size()));
   for (size_t i = 0; i < buffer.size(); i++) {
     ASSERT_EQ(i % 256, buffer[i]) << "Failed at byte " << i;
   }
 
   // Try to read outside of the map size.
-  ASSERT_FALSE(memory->Read(buffer.size(), buffer.data(), 1));
+  ASSERT_FALSE(memory->ReadFully(buffer.size(), buffer.data(), 1));
 }
 
 }  // namespace unwindstack
