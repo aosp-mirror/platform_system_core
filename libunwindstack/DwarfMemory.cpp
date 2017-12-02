@@ -27,7 +27,7 @@
 namespace unwindstack {
 
 bool DwarfMemory::ReadBytes(void* dst, size_t num_bytes) {
-  if (!memory_->Read(cur_offset_, dst, num_bytes)) {
+  if (!memory_->ReadFully(cur_offset_, dst, num_bytes)) {
     return false;
   }
   cur_offset_ += num_bytes;
