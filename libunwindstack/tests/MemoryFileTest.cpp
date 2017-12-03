@@ -49,7 +49,7 @@ TEST_F(MemoryFileTest, init_offset_0) {
 
   ASSERT_TRUE(memory_.Init(tf_->path, 0));
   std::vector<char> buffer(11);
-  ASSERT_TRUE(memory_.Read(0, buffer.data(), 10));
+  ASSERT_TRUE(memory_.ReadFully(0, buffer.data(), 10));
   buffer[10] = '\0';
   ASSERT_STREQ("0123456789", buffer.data());
 }
@@ -59,7 +59,7 @@ TEST_F(MemoryFileTest, init_offset_non_zero) {
 
   ASSERT_TRUE(memory_.Init(tf_->path, 10));
   std::vector<char> buffer(11);
-  ASSERT_TRUE(memory_.Read(0, buffer.data(), 10));
+  ASSERT_TRUE(memory_.ReadFully(0, buffer.data(), 10));
   buffer[10] = '\0';
   ASSERT_STREQ("abcdefghij", buffer.data());
 }
@@ -75,7 +75,7 @@ TEST_F(MemoryFileTest, init_offset_non_zero_larger_than_pagesize) {
 
   ASSERT_TRUE(memory_.Init(tf_->path, pagesize + 15));
   std::vector<char> buffer(9);
-  ASSERT_TRUE(memory_.Read(0, buffer.data(), 8));
+  ASSERT_TRUE(memory_.ReadFully(0, buffer.data(), 8));
   buffer[8] = '\0';
   ASSERT_STREQ("abcdefgh", buffer.data());
 }
@@ -91,7 +91,7 @@ TEST_F(MemoryFileTest, init_offset_pagesize_aligned) {
 
   ASSERT_TRUE(memory_.Init(tf_->path, 2 * pagesize));
   std::vector<char> buffer(11);
-  ASSERT_TRUE(memory_.Read(0, buffer.data(), 10));
+  ASSERT_TRUE(memory_.ReadFully(0, buffer.data(), 10));
   buffer[10] = '\0';
   std::string expected_str;
   for (size_t i = 0; i < 5; i++) {
@@ -112,7 +112,7 @@ TEST_F(MemoryFileTest, init_offset_pagesize_aligned_plus_extra) {
 
   ASSERT_TRUE(memory_.Init(tf_->path, 2 * pagesize + 10));
   std::vector<char> buffer(11);
-  ASSERT_TRUE(memory_.Read(0, buffer.data(), 10));
+  ASSERT_TRUE(memory_.ReadFully(0, buffer.data(), 10));
   buffer[10] = '\0';
   std::string expected_str;
   for (size_t i = 0; i < 5; i++) {
@@ -149,19 +149,19 @@ TEST_F(MemoryFileTest, read_error) {
   std::vector<char> buffer(100);
 
   // Read before init.
-  ASSERT_FALSE(memory_.Read(0, buffer.data(), 10));
+  ASSERT_FALSE(memory_.ReadFully(0, buffer.data(), 10));
 
   ASSERT_TRUE(memory_.Init(tf_->path, 0));
 
-  ASSERT_FALSE(memory_.Read(10000, buffer.data(), 10));
-  ASSERT_FALSE(memory_.Read(5000, buffer.data(), 10));
-  ASSERT_FALSE(memory_.Read(4990, buffer.data(), 11));
-  ASSERT_TRUE(memory_.Read(4990, buffer.data(), 10));
-  ASSERT_FALSE(memory_.Read(4999, buffer.data(), 2));
-  ASSERT_TRUE(memory_.Read(4999, buffer.data(), 1));
+  ASSERT_FALSE(memory_.ReadFully(10000, buffer.data(), 10));
+  ASSERT_FALSE(memory_.ReadFully(5000, buffer.data(), 10));
+  ASSERT_FALSE(memory_.ReadFully(4990, buffer.data(), 11));
+  ASSERT_TRUE(memory_.ReadFully(4990, buffer.data(), 10));
+  ASSERT_FALSE(memory_.ReadFully(4999, buffer.data(), 2));
+  ASSERT_TRUE(memory_.ReadFully(4999, buffer.data(), 1));
 
   // Check that overflow fails properly.
-  ASSERT_FALSE(memory_.Read(UINT64_MAX - 100, buffer.data(), 200));
+  ASSERT_FALSE(memory_.ReadFully(UINT64_MAX - 100, buffer.data(), 200));
 }
 
 TEST_F(MemoryFileTest, read_past_file_within_mapping) {
@@ -178,7 +178,8 @@ TEST_F(MemoryFileTest, read_past_file_within_mapping) {
 
   for (size_t i = 0; i < 100; i++) {
     uint8_t value;
-    ASSERT_FALSE(memory_.Read(buffer.size() + i, &value, 1)) << "Should have failed at value " << i;
+    ASSERT_FALSE(memory_.ReadFully(buffer.size() + i, &value, 1))
+        << "Should have failed at value " << i;
   }
 }
 
@@ -195,8 +196,8 @@ TEST_F(MemoryFileTest, map_partial_offset_aligned) {
 
   std::vector<uint8_t> read_buffer(pagesize * 2);
   // Make sure that reading after mapped data is a failure.
-  ASSERT_FALSE(memory_.Read(pagesize * 2, read_buffer.data(), 1));
-  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize * 2));
+  ASSERT_FALSE(memory_.ReadFully(pagesize * 2, read_buffer.data(), 1));
+  ASSERT_TRUE(memory_.ReadFully(0, read_buffer.data(), pagesize * 2));
   for (size_t i = 0; i < pagesize; i++) {
     ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
   }
@@ -219,8 +220,8 @@ TEST_F(MemoryFileTest, map_partial_offset_unaligned) {
 
   std::vector<uint8_t> read_buffer(pagesize * 2);
   // Make sure that reading after mapped data is a failure.
-  ASSERT_FALSE(memory_.Read(pagesize * 2, read_buffer.data(), 1));
-  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize * 2));
+  ASSERT_FALSE(memory_.ReadFully(pagesize * 2, read_buffer.data(), 1));
+  ASSERT_TRUE(memory_.ReadFully(0, read_buffer.data(), pagesize * 2));
   for (size_t i = 0; i < pagesize - 0x100; i++) {
     ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
   }
@@ -245,8 +246,8 @@ TEST_F(MemoryFileTest, map_overflow) {
   ASSERT_TRUE(memory_.Init(tf_->path, pagesize + 0x100, UINT64_MAX));
 
   std::vector<uint8_t> read_buffer(pagesize * 10);
-  ASSERT_FALSE(memory_.Read(pagesize * 9 - 0x100 + 1, read_buffer.data(), 1));
-  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize * 9 - 0x100));
+  ASSERT_FALSE(memory_.ReadFully(pagesize * 9 - 0x100 + 1, read_buffer.data(), 1));
+  ASSERT_TRUE(memory_.ReadFully(0, read_buffer.data(), pagesize * 9 - 0x100));
 }
 
 TEST_F(MemoryFileTest, init_reinit) {
@@ -259,14 +260,14 @@ TEST_F(MemoryFileTest, init_reinit) {
 
   ASSERT_TRUE(memory_.Init(tf_->path, 0));
   std::vector<uint8_t> read_buffer(buffer.size());
-  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize));
+  ASSERT_TRUE(memory_.ReadFully(0, read_buffer.data(), pagesize));
   for (size_t i = 0; i < pagesize; i++) {
     ASSERT_EQ(1, read_buffer[i]) << "Failed at byte " << i;
   }
 
   // Now reinit.
   ASSERT_TRUE(memory_.Init(tf_->path, pagesize));
-  ASSERT_TRUE(memory_.Read(0, read_buffer.data(), pagesize));
+  ASSERT_TRUE(memory_.ReadFully(0, read_buffer.data(), pagesize));
   for (size_t i = 0; i < pagesize; i++) {
     ASSERT_EQ(2, read_buffer[i]) << "Failed at byte " << i;
   }

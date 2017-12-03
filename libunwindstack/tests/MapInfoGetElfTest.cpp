@@ -216,13 +216,13 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_full_file) {
 
   // Read the entire file.
   memset(buffer.data(), 0, buffer.size());
-  ASSERT_TRUE(elf->memory()->Read(0, buffer.data(), buffer.size()));
+  ASSERT_TRUE(elf->memory()->ReadFully(0, buffer.data(), buffer.size()));
   ASSERT_EQ(0, memcmp(buffer.data(), &ehdr, sizeof(ehdr)));
   for (size_t i = sizeof(ehdr); i < buffer.size(); i++) {
     ASSERT_EQ(0, buffer[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_FALSE(elf->memory()->Read(buffer.size(), buffer.data(), 1));
+  ASSERT_FALSE(elf->memory()->ReadFully(buffer.size(), buffer.data(), 1));
 }
 
 // Verify that if the offset is non-zero and there is an elf at that
@@ -244,13 +244,13 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file) {
   ASSERT_EQ(0U, info.elf_offset);
 
   // Read the valid part of the file.
-  ASSERT_TRUE(elf->memory()->Read(0, buffer.data(), 0x1000));
+  ASSERT_TRUE(elf->memory()->ReadFully(0, buffer.data(), 0x1000));
   ASSERT_EQ(0, memcmp(buffer.data(), &ehdr, sizeof(ehdr)));
   for (size_t i = sizeof(ehdr); i < 0x1000; i++) {
     ASSERT_EQ(0, buffer[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_FALSE(elf->memory()->Read(0x1000, buffer.data(), 1));
+  ASSERT_FALSE(elf->memory()->ReadFully(0x1000, buffer.data(), 1));
 }
 
 // Verify that if the offset is non-zero and there is an elf at that
@@ -278,11 +278,11 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf32) 
 
   // Verify the memory is a valid elf.
   memset(buffer.data(), 0, buffer.size());
-  ASSERT_TRUE(elf->memory()->Read(0, buffer.data(), 0x1000));
+  ASSERT_TRUE(elf->memory()->ReadFully(0, buffer.data(), 0x1000));
   ASSERT_EQ(0, memcmp(buffer.data(), &ehdr, sizeof(ehdr)));
 
   // Read past the end of what would normally be the size of the map.
-  ASSERT_TRUE(elf->memory()->Read(0x1000, buffer.data(), 1));
+  ASSERT_TRUE(elf->memory()->ReadFully(0x1000, buffer.data(), 1));
 }
 
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) {
@@ -306,11 +306,11 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) 
 
   // Verify the memory is a valid elf.
   memset(buffer.data(), 0, buffer.size());
-  ASSERT_TRUE(elf->memory()->Read(0, buffer.data(), 0x1000));
+  ASSERT_TRUE(elf->memory()->ReadFully(0, buffer.data(), 0x1000));
   ASSERT_EQ(0, memcmp(buffer.data(), &ehdr, sizeof(ehdr)));
 
   // Read past the end of what would normally be the size of the map.
-  ASSERT_TRUE(elf->memory()->Read(0x1000, buffer.data(), 1));
+  ASSERT_TRUE(elf->memory()->ReadFully(0x1000, buffer.data(), 1));
 }
 
 TEST_F(MapInfoGetElfTest, process_memory_not_read_only) {

@@ -235,6 +235,13 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"abnormal_reset", 95},
     {"oemerr_unknown", 96},
     {"reboot_fastboot_mode", 97},
+    {"watchdog_apps_bite", 98},
+    {"xpu_err", 99},
+    {"power_on_usb", 100},
+    {"watchdog_rpm", 101},
+    {"watchdog_nonsec", 102},
+    {"watchdog_apps_bark", 103},
+    {"reboot_dmverity_corrupted", 104},
 };
 
 // Converts a string value representing the reason the system booted to an

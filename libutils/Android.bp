@@ -136,9 +136,12 @@ cc_library {
             cflags: ["-Wno-unused-parameter"],
         },
 
-        // Under MinGW, ctype.h doesn't need multi-byte support
         windows: {
-            cflags: ["-DMB_CUR_MAX=1"],
+            cflags: [
+                // Under MinGW, ctype.h doesn't need multi-byte support
+                "-DMB_CUR_MAX=1",
+                "-Wno-unused-private-field",
+            ],
 
             enabled: true,
         },

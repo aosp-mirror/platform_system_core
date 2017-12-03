@@ -27,7 +27,7 @@
 #include <thread>
 #include <vector>
 
-#include <healthd/healthd.h>
+#include <health2/Health.h>
 
 #define LOG_THIS(fmt, ...)     \
     ALOGE(fmt, ##__VA_ARGS__); \
@@ -97,6 +97,16 @@ int expectContains(const std::string& content, const std::vector<std::string>& f
     return status;
 }
 
+::android::hardware::hidl_handle createHidlHandle(const char* filepath) {
+    int fd = creat(filepath, S_IRUSR | S_IWUSR);
+    if (fd < 0) return {};
+    native_handle_t* nativeHandle = native_handle_create(1, 0);
+    nativeHandle->data[0] = fd;
+    ::android::hardware::hidl_handle handle;
+    handle.setTo(nativeHandle, true /* shouldOwn */);
+    return handle;
+}
+
 void healthd_board_init(struct healthd_config* config) {
     config->periodic_chores_interval_fast = 60;
     config->periodic_chores_interval_slow = 600;
@@ -129,6 +139,8 @@ int healthd_board_battery_update(struct android::BatteryProperties*) {
 extern int healthd_charger_main(int argc, char** argv);
 
 int main(int argc, char** argv) {
+    using android::hardware::health::V2_0::implementation::Health;
+
     const char* dumpFile = "/data/local/tmp/dump.txt";
 
     std::thread bgThread([=] {
@@ -141,12 +153,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    int fd = creat(dumpFile, S_IRUSR | S_IWUSR);
-    if (fd < 0) {
-        exit(errno);
-    }
-    healthd_dump_battery_state(fd);
-    close(fd);
+    Health::getImplementation()->debug(createHidlHandle(dumpFile), {} /* options */);
 
     std::string content = openToString(dumpFile);
     int status = expectContains(content, {

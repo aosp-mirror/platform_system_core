@@ -71,7 +71,7 @@ bool Symbols::GetName(uint64_t addr, uint64_t load_bias, Memory* elf_memory, std
   bool return_value = false;
   while (cur_offset_ + entry_size_ <= end_) {
     SymType entry;
-    if (!elf_memory->Read(cur_offset_, &entry, sizeof(entry))) {
+    if (!elf_memory->ReadFully(cur_offset_, &entry, sizeof(entry))) {
       // Stop all processing, something looks like it is corrupted.
       cur_offset_ = UINT64_MAX;
       return false;
