@@ -79,14 +79,13 @@ TEST_F(MemoryRemoteTest, read) {
   ASSERT_TRUE(Detach(pid));
 }
 
-TEST_F(MemoryRemoteTest, Read) {
+TEST_F(MemoryRemoteTest, read_partial) {
   char* mapping = static_cast<char*>(
-      mmap(nullptr, 2 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-
+      mmap(nullptr, 4 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   ASSERT_NE(MAP_FAILED, mapping);
-
-  mprotect(mapping + getpagesize(), getpagesize(), PROT_NONE);
-  memset(mapping + getpagesize() - 1024, 0x4c, 1024);
+  memset(mapping, 0x4c, 4 * getpagesize());
+  ASSERT_EQ(0, mprotect(mapping + getpagesize(), getpagesize(), PROT_NONE));
+  ASSERT_EQ(0, munmap(mapping + 3 * getpagesize(), getpagesize()));
 
   pid_t pid;
   if ((pid = fork()) == 0) {
@@ -97,19 +96,31 @@ TEST_F(MemoryRemoteTest, Read) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
+  // Unmap from our process.
+  ASSERT_EQ(0, munmap(mapping, 3 * getpagesize()));
+
   ASSERT_TRUE(Attach(pid));
 
   MemoryRemote remote(pid);
 
   std::vector<uint8_t> dst(4096);
-  ASSERT_EQ(1024U, remote.Read(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024),
-                               dst.data(), 4096));
-  for (size_t i = 0; i < 1024; i++) {
+  size_t bytes =
+      remote.Read(reinterpret_cast<uint64_t>(mapping + getpagesize() - 1024), dst.data(), 4096);
+  // Some read methods can read PROT_NONE maps, allow that.
+  ASSERT_LE(1024U, bytes);
+  for (size_t i = 0; i < bytes; i++) {
+    ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
+  }
+
+  // Now verify that reading stops at the end of a map.
+  bytes =
+      remote.Read(reinterpret_cast<uint64_t>(mapping + 3 * getpagesize() - 1024), dst.data(), 4096);
+  ASSERT_EQ(1024U, bytes);
+  for (size_t i = 0; i < bytes; i++) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
 
   ASSERT_TRUE(Detach(pid));
-  ASSERT_EQ(0, munmap(mapping, 2 * getpagesize()));
 }
 
 TEST_F(MemoryRemoteTest, read_fail) {
@@ -192,12 +203,13 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   ASSERT_TRUE(Detach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_hole) {
+TEST_F(MemoryRemoteTest, read_mprotect_hole) {
+  size_t page_size = getpagesize();
   void* mapping =
-      mmap(nullptr, 3 * 4096, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+      mmap(nullptr, 3 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   ASSERT_NE(MAP_FAILED, mapping);
-  memset(mapping, 0xFF, 3 * 4096);
-  mprotect(static_cast<char*>(mapping) + 4096, 4096, PROT_NONE);
+  memset(mapping, 0xFF, 3 * page_size);
+  ASSERT_EQ(0, mprotect(static_cast<char*>(mapping) + page_size, page_size, PROT_NONE));
 
   pid_t pid;
   if ((pid = fork()) == 0) {
@@ -207,15 +219,53 @@ TEST_F(MemoryRemoteTest, read_hole) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
+  ASSERT_EQ(0, munmap(mapping, 3 * page_size));
+
   ASSERT_TRUE(Attach(pid));
 
   MemoryRemote remote(pid);
-  std::vector<uint8_t> dst(4096 * 3, 0xCC);
-  ASSERT_EQ(4096U, remote.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), 4096 * 3));
-  for (size_t i = 0; i < 4096; ++i) {
+  std::vector<uint8_t> dst(getpagesize() * 4, 0xCC);
+  size_t read_size = remote.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), page_size * 3);
+  // Some read methods can read PROT_NONE maps, allow that.
+  ASSERT_LE(page_size, read_size);
+  for (size_t i = 0; i < read_size; ++i) {
     ASSERT_EQ(0xFF, dst[i]);
   }
-  for (size_t i = 4096; i < 4096 * 3; ++i) {
+  for (size_t i = read_size; i < dst.size(); ++i) {
+    ASSERT_EQ(0xCC, dst[i]);
+  }
+}
+
+TEST_F(MemoryRemoteTest, read_munmap_hole) {
+  size_t page_size = getpagesize();
+  void* mapping =
+      mmap(nullptr, 3 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, mapping);
+  memset(mapping, 0xFF, 3 * page_size);
+  ASSERT_EQ(0, munmap(static_cast<char*>(mapping) + page_size, page_size));
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    while (true)
+      ;
+    exit(1);
+  }
+  ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
+
+  ASSERT_EQ(0, munmap(mapping, page_size));
+  ASSERT_EQ(0, munmap(static_cast<char*>(mapping) + 2 * page_size, page_size));
+
+  ASSERT_TRUE(Attach(pid));
+
+  MemoryRemote remote(pid);
+  std::vector<uint8_t> dst(getpagesize() * 4, 0xCC);
+  size_t read_size = remote.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), page_size * 3);
+  ASSERT_EQ(page_size, read_size);
+  for (size_t i = 0; i < read_size; ++i) {
+    ASSERT_EQ(0xFF, dst[i]);
+  }
+  for (size_t i = read_size; i < dst.size(); ++i) {
     ASSERT_EQ(0xCC, dst[i]);
   }
 }
