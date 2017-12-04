@@ -270,7 +270,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
       /* If only we could reset downstream logd counter */
       return -EPERM;
     }
-  } else if (log_id == LOG_ID_EVENTS) {
+  } else if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
     const char* tag;
     size_t len;
     EventTagMap *m, *f;

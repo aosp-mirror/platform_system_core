@@ -213,7 +213,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
         int prio = ANDROID_LOG_INFO;
         const char* tag = nullptr;
         size_t tag_len = 0;
-        if (log_id == LOG_ID_EVENTS) {
+        if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
             tag = tagToName(elem->getTag());
             if (tag) {
                 tag_len = strlen(tag);
