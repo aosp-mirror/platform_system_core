@@ -26,6 +26,8 @@
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
 
+typedef unsigned int log_mask_t;
+
 class LogReader;
 class LogBufferElement;
 
@@ -41,7 +43,7 @@ class LogTimeEntry {
     LogReader& mReader;
     static void* threadStart(void* me);
     static void threadStop(void* me);
-    const unsigned int mLogMask;
+    const log_mask_t mLogMask;
     const pid_t mPid;
     unsigned int skipAhead[LOG_ID_MAX];
     pid_t mLastTid[LOG_ID_MAX];
@@ -51,7 +53,7 @@ class LogTimeEntry {
 
    public:
     LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
-                 unsigned long tail, unsigned int logMask, pid_t pid,
+                 unsigned long tail, log_mask_t logMask, pid_t pid,
                  log_time start, uint64_t timeout);
 
     SocketClient* mClient;
@@ -133,8 +135,11 @@ class LogTimeEntry {
         // No one else is holding a reference to this
         delete this;
     }
-    bool isWatching(log_id_t id) {
-        return (mLogMask & (1 << id)) != 0;
+    bool isWatching(log_id_t id) const {
+        return mLogMask & (1 << id);
+    }
+    bool isWatchingMultiple(log_mask_t logMask) const {
+        return mLogMask & logMask;
     }
     // flushTo filter callbacks
     static int FilterFirstPass(const LogBufferElement* element, void* me);
