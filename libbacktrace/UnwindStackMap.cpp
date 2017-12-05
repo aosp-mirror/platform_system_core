@@ -71,8 +71,19 @@ void UnwindStackMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
   if (map_info == nullptr) {
     return;
   }
-  unwindstack::Elf* elf = map_info->GetElf(process_memory_, true);
-  map->load_bias = elf->GetLoadBias();
+  map->load_bias = map_info->GetLoadBias(process_memory_);
+}
+
+uint64_t UnwindStackMap::GetLoadBias(size_t index) {
+  if (index >= stack_maps_->Total()) {
+    return 0;
+  }
+
+  unwindstack::MapInfo* map_info = stack_maps_->Get(index);
+  if (map_info == nullptr) {
+    return 0;
+  }
+  return map_info->GetLoadBias(process_memory_);
 }
 
 std::string UnwindStackMap::GetFunctionName(uintptr_t pc, uintptr_t* offset) {

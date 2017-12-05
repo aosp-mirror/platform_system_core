@@ -417,7 +417,7 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
        "memory map (%zu entr%s):",
        map->size(), map->size() == 1 ? "y" : "ies");
   if (print_fault_address_marker) {
-    if (map->begin() != map->end() && addr < map->begin()->start) {
+    if (map->begin() != map->end() && addr < (*map->begin())->start) {
       _LOG(log, logtype::MAPS, "\n--->Fault address falls at %s before any mapped regions\n",
            get_addr_string(addr).c_str());
       print_fault_address_marker = false;
@@ -429,49 +429,50 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
   }
 
   std::string line;
-  for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
+  for (auto it = map->begin(); it != map->end(); ++it) {
+    const backtrace_map_t* entry = *it;
     line = "    ";
     if (print_fault_address_marker) {
-      if (addr < it->start) {
+      if (addr < entry->start) {
         _LOG(log, logtype::MAPS, "--->Fault address falls at %s between mapped regions\n",
              get_addr_string(addr).c_str());
         print_fault_address_marker = false;
-      } else if (addr >= it->start && addr < it->end) {
+      } else if (addr >= entry->start && addr < entry->end) {
         line = "--->";
         print_fault_address_marker = false;
       }
     }
-    line += get_addr_string(it->start) + '-' + get_addr_string(it->end - 1) + ' ';
-    if (it->flags & PROT_READ) {
+    line += get_addr_string(entry->start) + '-' + get_addr_string(entry->end - 1) + ' ';
+    if (entry->flags & PROT_READ) {
       line += 'r';
     } else {
       line += '-';
     }
-    if (it->flags & PROT_WRITE) {
+    if (entry->flags & PROT_WRITE) {
       line += 'w';
     } else {
       line += '-';
     }
-    if (it->flags & PROT_EXEC) {
+    if (entry->flags & PROT_EXEC) {
       line += 'x';
     } else {
       line += '-';
     }
-    line += StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR, it->offset, it->end - it->start);
+    line += StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR, entry->offset, entry->end - entry->start);
     bool space_needed = true;
-    if (it->name.length() > 0) {
+    if (entry->name.length() > 0) {
       space_needed = false;
-      line += "  " + it->name;
+      line += "  " + entry->name;
       std::string build_id;
-      if ((it->flags & PROT_READ) && elf_get_build_id(backtrace, it->start, &build_id)) {
+      if ((entry->flags & PROT_READ) && elf_get_build_id(backtrace, entry->start, &build_id)) {
         line += " (BuildId: " + build_id + ")";
       }
     }
-    if (it->load_bias != 0) {
+    if (entry->load_bias != 0) {
       if (space_needed) {
         line += ' ';
       }
-      line += StringPrintf(" (load bias 0x%" PRIxPTR ")", it->load_bias);
+      line += StringPrintf(" (load bias 0x%" PRIxPTR ")", entry->load_bias);
     }
     _LOG(log, logtype::MAPS, "%s\n", line.c_str());
   }

@@ -118,6 +118,7 @@ cc_test {
         "tests/ElfTestUtils.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoGetElfTest.cpp",
+        "tests/MapInfoGetLoadBiasTest.cpp",
         "tests/MapsTest.cpp",
         "tests/MemoryBufferTest.cpp",
         "tests/MemoryFake.cpp",
