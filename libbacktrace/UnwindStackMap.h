@@ -42,6 +42,8 @@ class UnwindStackMap : public BacktraceMap {
   const std::shared_ptr<unwindstack::Memory>& process_memory() { return process_memory_; }
 
  protected:
+  uint64_t GetLoadBias(size_t index) override;
+
   std::unique_ptr<unwindstack::Maps> stack_maps_;
   std::shared_ptr<unwindstack::Memory> process_memory_;
 };
