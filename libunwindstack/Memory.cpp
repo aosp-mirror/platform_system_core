@@ -198,8 +198,68 @@ size_t MemoryFileAtOffset::Read(uint64_t addr, void* dst, size_t size) {
   return actual_len;
 }
 
+static bool PtraceReadLong(pid_t pid, uint64_t addr, long* value) {
+  // ptrace() returns -1 and sets errno when the operation fails.
+  // To disambiguate -1 from a valid result, we clear errno beforehand.
+  errno = 0;
+  *value = ptrace(PTRACE_PEEKTEXT, pid, reinterpret_cast<void*>(addr), nullptr);
+  if (*value == -1 && errno) {
+    return false;
+  }
+  return true;
+}
+
+static size_t ReadWithPtrace(pid_t pid, uint64_t addr, void* dst, size_t bytes) {
+  // Make sure that there is no overflow.
+  uint64_t max_size;
+  if (__builtin_add_overflow(addr, bytes, &max_size)) {
+    return 0;
+  }
+
+  size_t bytes_read = 0;
+  long data;
+  size_t align_bytes = addr & (sizeof(long) - 1);
+  if (align_bytes != 0) {
+    if (!PtraceReadLong(pid, addr & ~(sizeof(long) - 1), &data)) {
+      return 0;
+    }
+    size_t copy_bytes = std::min(sizeof(long) - align_bytes, bytes);
+    memcpy(dst, reinterpret_cast<uint8_t*>(&data) + align_bytes, copy_bytes);
+    addr += copy_bytes;
+    dst = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(dst) + copy_bytes);
+    bytes -= copy_bytes;
+    bytes_read += copy_bytes;
+  }
+
+  for (size_t i = 0; i < bytes / sizeof(long); i++) {
+    if (!PtraceReadLong(pid, addr, &data)) {
+      return bytes_read;
+    }
+    memcpy(dst, &data, sizeof(long));
+    dst = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(dst) + sizeof(long));
+    addr += sizeof(long);
+    bytes_read += sizeof(long);
+  }
+
+  size_t left_over = bytes & (sizeof(long) - 1);
+  if (left_over) {
+    if (!PtraceReadLong(pid, addr, &data)) {
+      return bytes_read;
+    }
+    memcpy(dst, &data, left_over);
+    bytes_read += left_over;
+  }
+  return bytes_read;
+}
+
 size_t MemoryRemote::Read(uint64_t addr, void* dst, size_t size) {
-  return ProcessVmRead(pid_, dst, addr, size);
+#if !defined(__LP64__)
+  // Cannot read an address greater than 32 bits.
+  if (addr > UINT32_MAX) {
+    return 0;
+  }
+#endif
+  return ReadWithPtrace(pid_, addr, dst, size);
 }
 
 size_t MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
