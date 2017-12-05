@@ -1,6 +1,8 @@
 phony {
     name: "shell_and_utilities",
     required: [
+        "awk",
+        "awk_vendor",
         "bzip2",
         "grep",
         "grep_vendor",

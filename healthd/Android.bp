@@ -9,6 +9,7 @@ cc_library_headers {
 cc_library_static {
     name: "libbatterymonitor",
     srcs: ["BatteryMonitor.cpp"],
+    cflags: ["-Wall", "-Werror"],
     vendor_available: true,
     export_include_dirs: ["include"],
     shared_libs: [
@@ -25,6 +26,11 @@ cc_library_static {
     srcs: [
         "Health.cpp",
         "healthd_common.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
     ],
 
     export_include_dirs: ["include"],
@@ -56,7 +62,11 @@ cc_binary {
         "HealthServiceDefault.cpp",
     ],
 
-    cflags: ["-DHEALTH_INSTANCE_NAME=\"default\""],
+    cflags: [
+        "-DHEALTH_INSTANCE_NAME=\"default\"",
+        "-Wall",
+        "-Werror",
+    ],
 
     static_libs: [
         "android.hardware.health@2.0-impl",
@@ -84,7 +94,11 @@ cc_binary {
     ],
     local_include_dirs: ["include"],
 
-    cflags: ["-DHEALTH_INSTANCE_NAME=\"backup\""],
+    cflags: [
+        "-DHEALTH_INSTANCE_NAME=\"backup\"",
+        "-Wall",
+        "-Werror",
+    ],
 
     static_libs: [
         "android.hardware.health@2.0-impl",
