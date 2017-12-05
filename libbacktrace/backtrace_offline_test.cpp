@@ -171,10 +171,12 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   testdata += android::base::StringPrintf("pid: %d tid: %d\n", getpid(), arg.tid);
   // 2. Dump maps
   for (auto it = map->begin(); it != map->end(); ++it) {
-    testdata += android::base::StringPrintf(
-        "map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR " load_bias: %" PRIxPTR
-        " flags: %d name: %s\n",
-        it->start, it->end, it->offset, it->load_bias, it->flags, it->name.c_str());
+    const backtrace_map_t* entry = *it;
+    testdata +=
+        android::base::StringPrintf("map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR
+                                    " load_bias: %" PRIxPTR " flags: %d name: %s\n",
+                                    entry->start, entry->end, entry->offset, entry->load_bias,
+                                    entry->flags, entry->name.c_str());
   }
   // 3. Dump registers
   testdata += android::base::StringPrintf("registers: %zu ", sizeof(arg.unw_context));

@@ -857,6 +857,34 @@ struct map_test_t {
 
 static bool map_sort(map_test_t i, map_test_t j) { return i.start < j.start; }
 
+static std::string GetTestMapsAsString(const std::vector<map_test_t>& maps) {
+  if (maps.size() == 0) {
+    return "No test map entries\n";
+  }
+  std::string map_txt;
+  for (auto map : maps) {
+    map_txt += android::base::StringPrintf("%" PRIxPTR "-%" PRIxPTR "\n", map.start, map.end);
+  }
+  return map_txt;
+}
+
+static std::string GetMapsAsString(BacktraceMap* maps) {
+  if (maps->size() == 0) {
+    return "No map entries\n";
+  }
+  std::string map_txt;
+  for (const backtrace_map_t* map : *maps) {
+    map_txt += android::base::StringPrintf(
+        "%" PRIxPTR "-%" PRIxPTR " flags: 0x%x offset: 0x%" PRIxPTR " load_bias: 0x%" PRIxPTR,
+        map->start, map->end, map->flags, map->offset, map->load_bias);
+    if (!map->name.empty()) {
+      map_txt += ' ' + map->name;
+    }
+    map_txt += '\n';
+  }
+  return map_txt;
+}
+
 static void VerifyMap(pid_t pid) {
   char buffer[4096];
   snprintf(buffer, sizeof(buffer), "/proc/%d/maps", pid);
@@ -875,12 +903,20 @@ static void VerifyMap(pid_t pid) {
   std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid));
 
   // Basic test that verifies that the map is in the expected order.
-  ScopedBacktraceMapIteratorLock lock(map.get());
-  std::vector<map_test_t>::const_iterator test_it = test_maps.begin();
-  for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
-    ASSERT_TRUE(test_it != test_maps.end());
-    ASSERT_EQ(test_it->start, it->start);
-    ASSERT_EQ(test_it->end, it->end);
+  auto test_it = test_maps.begin();
+  for (auto it = map->begin(); it != map->end(); ++it) {
+    ASSERT_TRUE(test_it != test_maps.end()) << "Mismatch in number of maps, expected test maps:\n"
+                                            << GetTestMapsAsString(test_maps) << "Actual maps:\n"
+                                            << GetMapsAsString(map.get());
+    ASSERT_EQ(test_it->start, (*it)->start) << "Mismatch in map data, expected test maps:\n"
+                                            << GetTestMapsAsString(test_maps) << "Actual maps:\n"
+                                            << GetMapsAsString(map.get());
+    ASSERT_EQ(test_it->end, (*it)->end) << "Mismatch maps in map data, expected test maps:\n"
+                                        << GetTestMapsAsString(test_maps) << "Actual maps:\n"
+                                        << GetMapsAsString(map.get());
+    // Make sure the load bias get set to a value.
+    ASSERT_NE(static_cast<uint64_t>(-1), (*it)->load_bias) << "Found uninitialized load_bias\n"
+                                                           << GetMapsAsString(map.get());
     ++test_it;
   }
   ASSERT_TRUE(test_it == test_maps.end());

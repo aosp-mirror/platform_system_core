@@ -74,6 +74,8 @@ class Elf {
 
   static void GetInfo(Memory* memory, bool* valid, uint64_t* size);
 
+  static uint64_t GetLoadBias(Memory* memory);
+
  protected:
   bool valid_ = false;
   uint64_t load_bias_ = 0;
