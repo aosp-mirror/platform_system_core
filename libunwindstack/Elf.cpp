@@ -215,4 +215,22 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
   return interface.release();
 }
 
+uint64_t Elf::GetLoadBias(Memory* memory) {
+  if (!IsValidElf(memory)) {
+    return 0;
+  }
+
+  uint8_t class_type;
+  if (!memory->Read(EI_CLASS, &class_type, 1)) {
+    return 0;
+  }
+
+  if (class_type == ELFCLASS32) {
+    return ElfInterface::GetLoadBias<Elf32_Ehdr, Elf32_Phdr>(memory);
+  } else if (class_type == ELFCLASS64) {
+    return ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(memory);
+  }
+  return 0;
+}
+
 }  // namespace unwindstack
