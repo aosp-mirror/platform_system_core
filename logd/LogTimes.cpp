@@ -28,9 +28,8 @@
 pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
 LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
-                           bool nonBlock, unsigned long tail,
-                           unsigned int logMask, pid_t pid, log_time start,
-                           uint64_t timeout)
+                           bool nonBlock, unsigned long tail, log_mask_t logMask,
+                           pid_t pid, log_time start, uint64_t timeout)
     : mRefCount(1),
       mRelease(false),
       mError(false),
