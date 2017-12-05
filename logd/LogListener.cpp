@@ -94,12 +94,13 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
 
     android_log_header_t* header =
         reinterpret_cast<android_log_header_t*>(buffer);
-    if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX ||
-        header->id == LOG_ID_KERNEL) {
+    log_id_t logId = static_cast<log_id_t>(header->id);
+    if (/* logId < LOG_ID_MIN || */ logId >= LOG_ID_MAX ||
+        logId == LOG_ID_KERNEL) {
         return false;
     }
 
-    if ((header->id == LOG_ID_SECURITY) &&
+    if ((logId == LOG_ID_SECURITY) &&
         (!__android_log_security() ||
          !clientHasLogCredentials(cred->uid, cred->gid, cred->pid))) {
         return false;
@@ -142,11 +143,10 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
 
     if (logbuf != nullptr) {
         int res = logbuf->log(
-            (log_id_t)header->id, header->realtime, cred->uid, cred->pid,
-            header->tid, msg,
+            logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
             ((size_t)n <= USHRT_MAX) ? (unsigned short)n : USHRT_MAX);
         if (res > 0 && reader != nullptr) {
-            reader->notifyNewLog();
+            reader->notifyNewLog(static_cast<log_mask_t>(1 << logId));
         }
     }
 
