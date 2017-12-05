@@ -242,6 +242,10 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"watchdog_nonsec", 102},
     {"watchdog_apps_bark", 103},
     {"reboot_dmverity_corrupted", 104},
+    {"reboot_smpl", 105},
+    {"watchdog_sdi_apps_reset", 106},
+    {"smpl", 107},
+    {"oem_modem_failed_to_powerup", 108},
 };
 
 // Converts a string value representing the reason the system booted to an
