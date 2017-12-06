@@ -16,15 +16,18 @@
 
 cc_library_static {
     name: "libtrustystorage",
+    vendor: true,
 
     srcs: ["storage.c"],
 
     export_include_dirs: ["include"],
 
     static_libs: [
-        "liblog",
         "libtrusty",
         "libtrustystorageinterface",
+    ],
+    shared_libs: [
+        "liblog",
     ],
 
     cflags: [

@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-cc_library_static {
+cc_library {
     name: "libadf",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
     srcs: ["adf.cpp"],
     cflags: ["-Werror"],
     local_include_dirs: ["include"],
