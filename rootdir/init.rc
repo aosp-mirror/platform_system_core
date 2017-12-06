@@ -148,6 +148,9 @@ on init
     write /proc/sys/net/ipv4/conf/all/accept_redirects 0
     write /proc/sys/net/ipv6/conf/all/accept_redirects 0
 
+    # /proc/net/fib_trie leaks interface IP addresses
+    chmod 0400 /proc/net/fib_trie
+
     # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
     mount cgroup none /dev/cpuctl cpu

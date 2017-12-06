@@ -16,6 +16,7 @@
 
 cc_binary {
     name: "storageproxyd",
+    vendor: true,
 
     srcs: [
         "ipc.c",
@@ -25,6 +26,7 @@ cc_binary {
     ],
 
     shared_libs: ["liblog"],
+    header_libs: ["libcutils_headers"],
 
     static_libs: [
         "libtrustystorageinterface",

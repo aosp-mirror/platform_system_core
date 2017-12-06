@@ -9,7 +9,6 @@ LIBSTORAGED_SHARED_LIBRARIES := \
     libcutils \
     liblog \
     libsysutils \
-    libpackagelistparser \
     libbatteryservice \
 
 include $(CLEAR_VARS)

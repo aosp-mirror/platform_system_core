@@ -14,12 +14,14 @@
 
 cc_test {
     name: "tipc-test",
-    static_executable: true,
+    vendor: true,
 
     srcs: ["tipc_test.c"],
     static_libs: [
-        "libc",
         "libtrusty",
+    ],
+    shared_libs: [
+        "libc",
         "liblog",
     ],
     gtest: false,

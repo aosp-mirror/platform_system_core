@@ -256,6 +256,7 @@ private:
     uid_monitor mUidm;
     time_t mStarttime;
     sp<IBatteryPropertiesRegistrar> battery_properties;
+    std::unique_ptr<storage_info_t> storage_info;
 public:
     storaged_t(void);
     ~storaged_t() {}
@@ -285,6 +286,8 @@ public:
     void init_battery_service();
     virtual void batteryPropertiesChanged(struct BatteryProperties props);
     void binderDied(const wp<IBinder>& who);
+
+    void report_storage_info();
 };
 
 // Eventlog tag

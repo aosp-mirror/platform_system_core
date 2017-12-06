@@ -179,7 +179,11 @@ class FuseBridgeEntry {
         }
 
         const uint32_t opcode = buffer_.request.header.opcode;
-        LOG(VERBOSE) << "Read a fuse packet, opcode=" << opcode;
+        const uint64_t unique = buffer_.request.header.unique;
+        LOG(VERBOSE) << "Read a fuse packet, opcode=" << opcode << " unique=" << unique;
+        if (unique == 0) {
+            return FuseBridgeState::kWaitToReadEither;
+        }
         switch (opcode) {
             case FUSE_FORGET:
                 // Do not reply to FUSE_FORGET.
