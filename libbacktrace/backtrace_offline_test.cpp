@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -249,12 +250,21 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
         return false;
       }
       HexStringToRawData(&line[pos], &testdata->unw_context, size);
+#if defined(__arm__)
+    } else if (android::base::StartsWith(line, "regs:")) {
+      uint64_t pc;
+      uint64_t sp;
+      sscanf(line.c_str(), "regs: pc: %" SCNx64 " sp: %" SCNx64, &pc, &sp);
+      testdata->unw_context.regs[13] = sp;
+      testdata->unw_context.regs[15] = pc;
+#endif
     } else if (android::base::StartsWith(line, "stack:")) {
       size_t size;
       int pos;
       sscanf(line.c_str(),
              "stack: start: %" SCNx64 " end: %" SCNx64 " size: %zu %n",
              &testdata->stack_info.start, &testdata->stack_info.end, &size, &pos);
+      CHECK_EQ(testdata->stack_info.end - testdata->stack_info.start, size);
       testdata->stack.resize(size);
       HexStringToRawData(&line[pos], &testdata->stack[0], size);
       testdata->stack_info.data = testdata->stack.data();
@@ -383,6 +393,47 @@ TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
   // The last frame is outside of libart.so
   ASSERT_EQ(testdata.symbols.size() + 1, backtrace->NumFrames());
   for (size_t i = 0; i + 1 < backtrace->NumFrames(); ++i) {
+    uintptr_t vaddr_in_file =
+        backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
+    std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
+    ASSERT_EQ(name, testdata.symbols[i].name);
+  }
+}
+
+TEST(libbacktrace, offline_debug_frame_with_load_bias) {
+  if (std::string(ABI_STRING) != "arm") {
+    GTEST_LOG_(INFO) << "Skipping test since offline for arm on " << ABI_STRING
+                     << " isn't supported.";
+    return;
+  }
+  const std::string testlib_path(GetTestPath("libandroid_runtime.so"));
+  struct stat st;
+  ASSERT_EQ(0, stat(testlib_path.c_str(), &st)) << "can't find testlib " << testlib_path;
+
+  const std::string offline_testdata_path(GetTestPath("offline_testdata_for_libandroid_runtime"));
+  OfflineTestData testdata;
+  ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
+
+  // Fix path of /system/lib/libandroid_runtime.so.
+  for (auto& map : testdata.maps) {
+    if (map.name.find("libandroid_runtime.so") != std::string::npos) {
+      map.name = testlib_path;
+    }
+  }
+
+  // Do offline backtrace.
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(testdata.pid, testdata.maps));
+  ASSERT_TRUE(map != nullptr);
+
+  std::unique_ptr<Backtrace> backtrace(
+      Backtrace::CreateOffline(testdata.pid, testdata.tid, map.get(), testdata.stack_info));
+  ASSERT_TRUE(backtrace != nullptr);
+
+  ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
+  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
+
+  ASSERT_EQ(testdata.symbols.size(), backtrace->NumFrames());
+  for (size_t i = 0; i < backtrace->NumFrames(); ++i) {
     uintptr_t vaddr_in_file =
         backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
