@@ -6,7 +6,12 @@
 # Don't change the order here.
 dir.system = /system/bin/
 dir.system = /system/xbin/
+dir.vendor = /odm/bin/
 dir.vendor = /vendor/bin/
+dir.vendor = /data/nativetest/odm
+dir.vendor = /data/nativetest64/odm
+dir.vendor = /data/benchmarktest/odm
+dir.vendor = /data/benchmarktest64/odm
 dir.vendor = /data/nativetest/vendor
 dir.vendor = /data/nativetest64/vendor
 dir.vendor = /data/benchmarktest/vendor
@@ -26,8 +31,8 @@ additional.namespaces = sphal,vndk,rs
 # can't be loaded in this namespace.
 ###############################################################################
 namespace.default.isolated = false
-namespace.default.search.paths = /system/${LIB}:/vendor/${LIB}
-namespace.default.permitted.paths = /system/${LIB}:/vendor/${LIB}
+namespace.default.search.paths = /system/${LIB}:/odm/${LIB}:/vendor/${LIB}
+namespace.default.permitted.paths = /system/${LIB}:/odm/${LIB}:/vendor/${LIB}
 
 namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}
 namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}
@@ -123,6 +128,6 @@ namespace.vndk.link.default.shared_libs = android.hidl.memory@1.0-impl.so:libc.s
 ###############################################################################
 [vendor]
 namespace.default.isolated = false
-namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/system/${LIB}/vndk:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/system/${LIB}
+namespace.default.search.paths = /odm/${LIB}/hw:/odm/${LIB}/egl:/odm/${LIB}:/vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/system/${LIB}/vndk:/odm/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/system/${LIB}
 
-namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/system/${LIB}:/system/${LIB}
+namespace.default.asan.search.paths = /data/asan/odm/${LIB}/hw:/odm/${LIB}/hw:/data/asan/odm/${LIB}/egl:/odm/${LIB}/egl:/data/asan/odm/${LIB}:/odm/${LIB}:/data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/system/${LIB}/vndk:/system/${LIB}/vndk:/data/asan/odm/${LIB}/vndk-sp:/odm/${LIB}/vndk-sp:/data/asan/vendor/${LIB}/vndk-sp:/vendor/${LIB}/vndk-sp:/data/asan/system/${LIB}/vndk-sp:/system/${LIB}/vndk-sp:/data/asan/system/${LIB}:/system/${LIB}

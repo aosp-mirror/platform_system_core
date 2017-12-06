@@ -30,6 +30,7 @@
 #endif
 
 #include <deque>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,49 @@ public:
 
   virtual ~BacktraceMap();
 
+  class iterator : public std::iterator<std::bidirectional_iterator_tag, backtrace_map_t*> {
+   public:
+    iterator(BacktraceMap* map, size_t index) : map_(map), index_(index) {}
+
+    iterator& operator++() {
+      index_++;
+      return *this;
+    }
+    iterator& operator++(int increment) {
+      index_ += increment;
+      return *this;
+    }
+    iterator& operator--() {
+      index_--;
+      return *this;
+    }
+    iterator& operator--(int decrement) {
+      index_ -= decrement;
+      return *this;
+    }
+
+    bool operator==(const iterator& rhs) { return this->index_ == rhs.index_; }
+    bool operator!=(const iterator& rhs) { return this->index_ != rhs.index_; }
+
+    const backtrace_map_t* operator*() {
+      if (index_ >= map_->size()) {
+        return nullptr;
+      }
+      backtrace_map_t* map = &map_->maps_[index_];
+      if (map->load_bias == static_cast<uintptr_t>(-1)) {
+        map->load_bias = map_->GetLoadBias(index_);
+      }
+      return map;
+    }
+
+   private:
+    BacktraceMap* map_ = nullptr;
+    size_t index_ = 0;
+  };
+
+  iterator begin() { return iterator(this, 0); }
+  iterator end() { return iterator(this, maps_.size()); }
+
   // Fill in the map data structure for the given address.
   virtual void FillIn(uintptr_t addr, backtrace_map_t* map);
 
@@ -89,14 +133,6 @@ public:
   virtual void LockIterator() {}
   virtual void UnlockIterator() {}
 
-  typedef std::deque<backtrace_map_t>::iterator iterator;
-  iterator begin() { return maps_.begin(); }
-  iterator end() { return maps_.end(); }
-
-  typedef std::deque<backtrace_map_t>::const_iterator const_iterator;
-  const_iterator begin() const { return maps_.begin(); }
-  const_iterator end() const { return maps_.end(); }
-
   size_t size() const { return maps_.size(); }
 
   virtual bool Build();
@@ -113,6 +149,8 @@ public:
 
  protected:
   BacktraceMap(pid_t pid);
+
+  virtual uint64_t GetLoadBias(size_t /* index */) { return 0; }
 
   virtual bool ParseLine(const char* line, backtrace_map_t* map);
 

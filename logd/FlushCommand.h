@@ -29,16 +29,36 @@ class FlushCommand : public SocketClientCommand {
     LogReader& mReader;
     bool mNonBlock;
     unsigned long mTail;
-    unsigned int mLogMask;
+    log_mask_t mLogMask;
     pid_t mPid;
     log_time mStart;
     uint64_t mTimeout;
 
    public:
-    explicit FlushCommand(LogReader& mReader, bool nonBlock = false,
-                          unsigned long tail = -1, unsigned int logMask = -1,
-                          pid_t pid = 0, log_time start = log_time::EPOCH,
-                          uint64_t timeout = 0);
+    // for opening a reader
+    explicit FlushCommand(LogReader& reader, bool nonBlock, unsigned long tail,
+                          log_mask_t logMask, pid_t pid, log_time start,
+                          uint64_t timeout)
+        : mReader(reader),
+          mNonBlock(nonBlock),
+          mTail(tail),
+          mLogMask(logMask),
+          mPid(pid),
+          mStart(start),
+          mTimeout((start != log_time::EPOCH) ? timeout : 0) {
+    }
+
+    // for notification of an update
+    explicit FlushCommand(LogReader& reader, log_mask_t logMask)
+        : mReader(reader),
+          mNonBlock(false),
+          mTail(-1),
+          mLogMask(logMask),
+          mPid(0),
+          mStart(log_time::EPOCH),
+          mTimeout(0) {
+    }
+
     virtual void runSocketCommand(SocketClient* client);
 
     static bool hasReadLogs(SocketClient* client);

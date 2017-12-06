@@ -78,8 +78,8 @@ static void ProcessFirmwareEvent(const Uevent& uevent) {
         return;
     }
 
-    static const char* firmware_dirs[] = {"/etc/firmware/", "/vendor/firmware/",
-                                          "/firmware/image/"};
+    static const char* firmware_dirs[] = {"/etc/firmware/", "/odm/firmware/",
+                                          "/vendor/firmware/", "/firmware/image/"};
 
 try_loading_again:
     for (size_t i = 0; i < arraysize(firmware_dirs); i++) {
