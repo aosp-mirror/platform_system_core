@@ -24,6 +24,7 @@
 class TemporaryFile {
  public:
   TemporaryFile();
+  explicit TemporaryFile(const std::string& tmp_dir);
   ~TemporaryFile();
 
   // Release the ownership of fd, caller is reponsible for closing the
