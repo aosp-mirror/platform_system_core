@@ -207,14 +207,11 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
 
-llndk_libraries := $(subst $(space),:,$(addsuffix .so,\
-$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
+llndk_libraries := $(subst $(space),:,$(addsuffix .so,$(LLNDK_LIBRARIES)))
 
-vndk_sameprocess_libraries := $(subst $(space),:,$(addsuffix .so,\
-$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_SAMEPROCESS_LIBRARIES))))
+vndk_sameprocess_libraries := $(subst $(space),:,$(addsuffix .so,$(VNDK_SAMEPROCESS_LIBRARIES)))
 
-vndk_core_libraries := $(subst $(space),:,$(addsuffix .so,\
-$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_CORE_LIBRARIES))))
+vndk_core_libraries := $(subst $(space),:,$(addsuffix .so,$(VNDK_CORE_LIBRARIES)))
 
 sanitizer_runtime_libraries := $(subst $(space),:,$(addsuffix .so,\
 $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
