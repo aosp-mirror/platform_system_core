@@ -83,7 +83,7 @@ static int exec_e2fs_cmd(const char* path, const char** argv, const char** envp)
     int status;
     pid_t child;
     if ((child = fork()) == 0) {
-        execvpe(path, const_cast<char**>(argv), const_cast<char**>(envp));
+        execve(path, const_cast<char**>(argv), const_cast<char**>(envp));
         _exit(EXIT_FAILURE);
     }
     if (child < 0) {
