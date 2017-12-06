@@ -40,6 +40,10 @@ cc_defaults {
     cflags: common_cflags,
     local_include_dirs: ["upstream-netbsd/include/"],
     symlinks: ["egrep", "fgrep"],
+
+    sanitize: {
+        integer_overflow: false,
+    },
 }
 
 cc_binary {
