@@ -66,7 +66,9 @@ class atransport {
     atransport(ConnectionState state = kCsOffline)
         : id(NextTransportId()), connection_state_(state) {
         transport_fde = {};
-        protocol_version = A_VERSION;
+        // Initialize protocol to min version for compatibility with older versions.
+        // Version will be updated post-connect.
+        protocol_version = A_VERSION_MIN;
         max_payload = MAX_PAYLOAD;
     }
     virtual ~atransport() {}
@@ -223,7 +225,6 @@ int register_socket_transport(int s, const char* serial, int port, int local);
 void unregister_usb_transport(usb_handle* usb);
 
 bool check_header(apacket* p, atransport* t);
-bool check_data(apacket* p);
 
 void close_usb_devices();
 void close_usb_devices(std::function<bool(const atransport*)> predicate);
