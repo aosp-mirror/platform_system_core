@@ -19,9 +19,15 @@
 #include <gtest/gtest.h>
 
 #include <unwindstack/Elf.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
+#include <unwindstack/RegsArm64.h>
+#include <unwindstack/RegsX86.h>
+#include <unwindstack/RegsX86_64.h>
 
-#include "Machine.h"
+#include "MachineArm.h"
+#include "MachineArm64.h"
+#include "MachineX86.h"
+#include "MachineX86_64.h"
 
 #include "MemoryFake.h"
 

@@ -26,75 +26,44 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _LIBUNWINDSTACK_USER_H
-#define _LIBUNWINDSTACK_USER_H
+#ifndef _LIBUNWINDSTACK_UCONTEXT_ARM64_H
+#define _LIBUNWINDSTACK_UCONTEXT_ARM64_H
+
+#include <stdint.h>
+
+#include "MachineArm64.h"
 
 namespace unwindstack {
 
-struct x86_user_regs {
-  uint32_t ebx;
-  uint32_t ecx;
-  uint32_t edx;
-  uint32_t esi;
-  uint32_t edi;
-  uint32_t ebp;
-  uint32_t eax;
-  uint32_t xds;
-  uint32_t xes;
-  uint32_t xfs;
-  uint32_t xgs;
-  uint32_t orig_eax;
-  uint32_t eip;
-  uint32_t xcs;
-  uint32_t eflags;
-  uint32_t esp;
-  uint32_t xss;
+struct arm64_stack_t {
+  uint64_t ss_sp;    // void __user*
+  int32_t ss_flags;  // int
+  uint64_t ss_size;  // size_t
 };
 
-struct x86_64_user_regs {
-  uint64_t r15;
-  uint64_t r14;
-  uint64_t r13;
-  uint64_t r12;
-  uint64_t rbp;
-  uint64_t rbx;
-  uint64_t r11;
-  uint64_t r10;
-  uint64_t r9;
-  uint64_t r8;
-  uint64_t rax;
-  uint64_t rcx;
-  uint64_t rdx;
-  uint64_t rsi;
-  uint64_t rdi;
-  uint64_t orig_rax;
-  uint64_t rip;
-  uint64_t cs;
-  uint64_t eflags;
-  uint64_t rsp;
-  uint64_t ss;
-  uint64_t fs_base;
-  uint64_t gs_base;
-  uint64_t ds;
-  uint64_t es;
-  uint64_t fs;
-  uint64_t gs;
+struct arm64_sigset_t {
+  uint64_t sig;  // unsigned long
 };
 
-struct arm_user_regs {
-  uint32_t regs[18];
+struct arm64_mcontext_t {
+  uint64_t fault_address;         // __u64
+  uint64_t regs[ARM64_REG_LAST];  // __u64
+  uint64_t pstate;                // __u64
+  // Nothing else is used, so don't define it.
 };
 
-struct arm64_user_regs {
-  uint64_t regs[31];
-  uint64_t sp;
-  uint64_t pc;
-  uint64_t pstate;
+struct arm64_ucontext_t {
+  uint64_t uc_flags;  // unsigned long
+  uint64_t uc_link;   // struct ucontext*
+  arm64_stack_t uc_stack;
+  arm64_sigset_t uc_sigmask;
+  // The kernel adds extra padding after uc_sigmask to match glibc sigset_t on ARM64.
+  char __padding[128 - sizeof(arm64_sigset_t)];
+  // The full structure requires 16 byte alignment, but our partial structure
+  // doesn't, so force the alignment.
+  arm64_mcontext_t uc_mcontext __attribute__((aligned(16)));
 };
-
-// The largest user structure.
-constexpr size_t MAX_USER_REGS_SIZE = sizeof(arm64_user_regs) + 10;
 
 }  // namespace unwindstack
 
-#endif  // _LIBUNWINDSTACK_USER_H
+#endif  // _LIBUNWINDSTACK_UCONTEXT_ARM64_H
