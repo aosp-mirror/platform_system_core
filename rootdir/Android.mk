@@ -207,11 +207,17 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
 
-llndk_libraries := $(subst $(space),:,$(addsuffix .so,$(LLNDK_LIBRARIES)))
+llndk_libraries := $(subst $(space),:,$(addsuffix .so,\
+$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
 
-vndk_sameprocess_libraries := $(subst $(space),:,$(addsuffix .so,$(VNDK_SAMEPROCESS_LIBRARIES)))
+private_llndk_libraries := $(subst $(space),:,$(addsuffix .so,\
+$(filter $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
 
-vndk_core_libraries := $(subst $(space),:,$(addsuffix .so,$(VNDK_CORE_LIBRARIES)))
+vndk_sameprocess_libraries := $(subst $(space),:,$(addsuffix .so,\
+$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_SAMEPROCESS_LIBRARIES))))
+
+vndk_core_libraries := $(subst $(space),:,$(addsuffix .so,\
+$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_CORE_LIBRARIES))))
 
 sanitizer_runtime_libraries := $(subst $(space),:,$(addsuffix .so,\
 $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
@@ -222,6 +228,7 @@ $(2ND_UBSAN_RUNTIME_LIBRARY) \
 $(2ND_TSAN_RUNTIME_LIBRARY)))
 
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(llndk_libraries)
+$(LOCAL_BUILT_MODULE): PRIVATE_PRIVATE_LLNDK_LIBRARIES := $(private_llndk_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(vndk_sameprocess_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_PRIVATE_LIBRARIES := $(llndk_private_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(vndk_core_libraries)
@@ -230,6 +237,7 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/etc/ld.config.txt.in
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
 	$(hide) sed -e 's?%LLNDK_LIBRARIES%?$(PRIVATE_LLNDK_LIBRARIES)?g' $< >$@
+	$(hide) sed -i -e 's?%PRIVATE_LLNDK_LIBRARIES%?$(PRIVATE_PRIVATE_LLNDK_LIBRARIES)?g' $@
 	$(hide) sed -i -e 's?%VNDK_SAMEPROCESS_LIBRARIES%?$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES)?g' $@
 	$(hide) sed -i -e 's?%VNDK_CORE_LIBRARIES%?$(PRIVATE_VNDK_CORE_LIBRARIES)?g' $@
 	$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
