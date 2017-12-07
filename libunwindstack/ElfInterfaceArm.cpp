@@ -18,11 +18,11 @@
 #include <stdint.h>
 
 #include <unwindstack/Memory.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
 
 #include "ArmExidx.h"
 #include "ElfInterfaceArm.h"
-#include "Machine.h"
+#include "MachineArm.h"
 
 namespace unwindstack {
 
