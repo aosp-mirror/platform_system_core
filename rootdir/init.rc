@@ -48,8 +48,10 @@ on init
     copy /proc/cmdline /dev/urandom
     copy /default.prop /dev/urandom
 
-    # Backward compatibility.
+    symlink /system/bin /bin
     symlink /system/etc /etc
+
+    # Backward compatibility.
     symlink /sys/kernel/debug /d
 
     # Link /vendor to /system/vendor for devices without a vendor partition.
