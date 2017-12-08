@@ -39,7 +39,7 @@ LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
-LOCAL_REQUIRED_MODULES := mke2fs e2fsdroid mke2fs.conf make_f2fs
+LOCAL_REQUIRED_MODULES := mke2fs e2fsdroid mke2fs.conf make_f2fs sload_f2fs
 
 LOCAL_SRC_FILES_linux := usb_linux.cpp
 LOCAL_STATIC_LIBRARIES_linux := libselinux
@@ -79,6 +79,7 @@ my_dist_files := $(LOCAL_BUILT_MODULE)
 my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs$(HOST_EXECUTABLE_SUFFIX)
 my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid$(HOST_EXECUTABLE_SUFFIX)
 my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs$(HOST_EXECUTABLE_SUFFIX)
+my_dist_files += $(HOST_OUT_EXECUTABLES)/sload_f2fs$(HOST_EXECUTABLE_SUFFIX)
 $(call dist-for-goals,dist_files sdk win_sdk,$(my_dist_files))
 ifdef HOST_CROSS_OS
 # Archive fastboot.exe for win_sdk build.

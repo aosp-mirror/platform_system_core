@@ -118,6 +118,8 @@ cc_binary {
     required: [
         "e2fsdroid",
         "mke2fs",
+        "sload_f2fs",
+        "make_f2fs",
     ],
     static_executable: true,
     srcs: [
