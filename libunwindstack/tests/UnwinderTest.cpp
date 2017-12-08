@@ -28,6 +28,10 @@
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
+#include <unwindstack/RegsArm64.h>
+#include <unwindstack/RegsX86.h>
+#include <unwindstack/RegsX86_64.h>
 #include <unwindstack/Unwinder.h>
 
 #include "ElfFake.h"
@@ -53,7 +57,7 @@ class UnwinderTest : public ::testing::Test {
   static void SetUpTestCase() {
     maps_.FakeClear();
     MapInfo* info = new MapInfo(0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so");
-    ElfFake* elf = new ElfFake(nullptr);
+    ElfFake* elf = new ElfFake(new MemoryFake);
     info->elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
@@ -66,31 +70,33 @@ class UnwinderTest : public ::testing::Test {
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x20000, 0x22000, 0, PROT_READ | PROT_WRITE, "/system/fake/libunwind.so");
-    elf = new ElfFake(nullptr);
+    elf = new ElfFake(new MemoryFake);
     info->elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x23000, 0x24000, 0, PROT_READ | PROT_WRITE, "/fake/libanother.so");
-    elf = new ElfFake(nullptr);
+    elf = new ElfFake(new MemoryFake);
     info->elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so");
-    elf = new ElfFake(nullptr);
+    elf = new ElfFake(new MemoryFake);
     info->elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk");
-    elf = new ElfFake(nullptr);
+    elf = new ElfFake(new MemoryFake);
     info->elf = elf;
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
     maps_.FakeAddMapInfo(info);
+
+    process_memory_.reset(new MemoryFake);
   }
 
   void SetUp() override {
@@ -690,29 +696,67 @@ TEST_F(UnwinderTest, format_frame_static) {
   EXPECT_EQ("  #01 pc 00001000  <unknown>", Unwinder::FormatFrame(frame, true));
 }
 
+static std::string ArchToString(ArchEnum arch) {
+  if (arch == ARCH_ARM) {
+    return "Arm";
+  } else if (arch == ARCH_ARM64) {
+    return "Arm64";
+  } else if (arch == ARCH_X86) {
+    return "X86";
+  } else if (arch == ARCH_X86_64) {
+    return "X86_64";
+  } else {
+    return "Unknown";
+  }
+}
+
 // Verify format frame code.
 TEST_F(UnwinderTest, format_frame) {
-  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 10));
+  std::vector<Regs*> reg_list;
+  RegsArm* arm = new RegsArm;
+  arm->set_pc(0x2300);
+  arm->set_sp(0x10000);
+  reg_list.push_back(arm);
 
-  regs_.FakeSetPc(0x2300);
-  regs_.FakeSetSp(0x10000);
+  RegsArm64* arm64 = new RegsArm64;
+  arm64->set_pc(0x2300);
+  arm64->set_sp(0x10000);
+  reg_list.push_back(arm64);
 
-  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
-  unwinder.Unwind();
+  RegsX86* x86 = new RegsX86;
+  x86->set_pc(0x2300);
+  x86->set_sp(0x10000);
+  reg_list.push_back(x86);
 
-  ASSERT_EQ(1U, unwinder.NumFrames());
+  RegsX86_64* x86_64 = new RegsX86_64;
+  x86_64->set_pc(0x2300);
+  x86_64->set_sp(0x10000);
+  reg_list.push_back(x86_64);
 
-  regs_.FakeSetArch(ARCH_ARM);
-  EXPECT_EQ("  #00 pc 00001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
-  regs_.FakeSetArch(ARCH_X86);
-  EXPECT_EQ("  #00 pc 00001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
+  for (auto regs : reg_list) {
+    ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 10));
 
-  regs_.FakeSetArch(ARCH_ARM64);
-  EXPECT_EQ("  #00 pc 0000000000001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
-  regs_.FakeSetArch(ARCH_X86_64);
-  EXPECT_EQ("  #00 pc 0000000000001300  /system/fake/libc.so (Frame0+10)", unwinder.FormatFrame(0));
+    Unwinder unwinder(64, &maps_, regs, process_memory_);
+    unwinder.Unwind();
 
-  EXPECT_EQ("", unwinder.FormatFrame(1));
+    ASSERT_EQ(1U, unwinder.NumFrames());
+    std::string expected;
+    switch (regs->Arch()) {
+      case ARCH_ARM:
+      case ARCH_X86:
+        expected = "  #00 pc 00001300  /system/fake/libc.so (Frame0+10)";
+        break;
+      case ARCH_ARM64:
+      case ARCH_X86_64:
+        expected = "  #00 pc 0000000000001300  /system/fake/libc.so (Frame0+10)";
+        break;
+      default:
+        expected = "";
+    }
+    EXPECT_EQ(expected, unwinder.FormatFrame(0))
+        << "Mismatch of frame format for regs arch " << ArchToString(regs->Arch());
+    delete regs;
+  }
 }
 
 }  // namespace unwindstack
