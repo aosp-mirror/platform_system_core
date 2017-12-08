@@ -140,6 +140,23 @@ uint16_t usb_device_get_product_id(struct usb_device *device);
 /* Returns a pointer to device descriptor */
 const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_device *device);
 
+/* Returns a USB descriptor string for the given string ID.
+ * Return value: < 0 on error.  0 on success.
+ * The string is returned in ucs2_out in USB-native UCS-2 encoding.
+ *
+ * parameters:
+ *  id - the string descriptor index.
+ *  timeout - in milliseconds (see Documentation/driver-api/usb/usb.rst)
+ *  ucs2_out - Must point to null on call.
+ *             Will be filled in with a buffer on success.
+ *             If this is non-null on return, it must be free()d.
+ *  response_size - size, in bytes, of ucs-2 string in ucs2_out.
+ *                  The size isn't guaranteed to include null termination.
+ * Call free() to free the result when you are done with it.
+ */
+int usb_device_get_string_ucs2(struct usb_device* device, int id, int timeout, void** ucs2_out,
+                               size_t* response_size);
+
 /* Returns the length in bytes read into the raw descriptors array */
 size_t usb_device_get_descriptors_length(const struct usb_device* device);
 
@@ -149,6 +166,7 @@ const unsigned char* usb_device_get_raw_descriptors(const struct usb_device* dev
 /* Returns a USB descriptor string for the given string ID.
  * Used to implement usb_device_get_manufacturer_name,
  * usb_device_get_product_name and usb_device_get_serial.
+ * Returns ascii - non ascii characters will be replaced with '?'.
  * Call free() to free the result when you are done with it.
  */
 char* usb_device_get_string(struct usb_device *device, int id, int timeout);
