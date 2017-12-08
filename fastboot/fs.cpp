@@ -165,7 +165,6 @@ static int generate_ext4_image(const char* fileName, long long partSize,
 static int generate_f2fs_image(const char* fileName, long long partSize, const std::string& initial_dir,
                                unsigned /* unused */, unsigned /* unused */)
 {
-#ifndef WIN32
     const std::string exec_dir = android::base::GetExecutableDirectory();
     const std::string mkf2fs_path = exec_dir + "/make_f2fs";
     std::vector<const char*> mkf2fs_args = {mkf2fs_path.c_str()};
@@ -195,11 +194,6 @@ static int generate_f2fs_image(const char* fileName, long long partSize, const s
                                        "-f", initial_dir.c_str(), fileName, nullptr};
 
     return exec_cmd(sload_args[0], sload_args.data(), nullptr);
-#else
-    UNUSED(fileName, partSize, initial_dir);
-    fprintf(stderr, "generate_f2fs_image: Not supported on Windows\n");
-    return -1;
-#endif
 }
 
 static const struct fs_generator {
