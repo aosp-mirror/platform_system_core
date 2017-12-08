@@ -29,9 +29,9 @@ class BacktracePtrace : public Backtrace {
   BacktracePtrace(pid_t pid, pid_t tid, BacktraceMap* map) : Backtrace(pid, tid, map) {}
   virtual ~BacktracePtrace() {}
 
-  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes);
+  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) override;
 
-  bool ReadWord(uintptr_t ptr, word_t* out_value);
+  bool ReadWord(uintptr_t ptr, word_t* out_value) override;
 };
 
 #endif // _LIBBACKTRACE_BACKTRACE_PTRACE_H
