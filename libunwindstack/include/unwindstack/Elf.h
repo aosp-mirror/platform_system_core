@@ -36,6 +36,14 @@ namespace unwindstack {
 struct MapInfo;
 class Regs;
 
+enum ArchEnum : uint8_t {
+  ARCH_UNKNOWN = 0,
+  ARCH_ARM,
+  ARCH_ARM64,
+  ARCH_X86,
+  ARCH_X86_64,
+};
+
 class Elf {
  public:
   Elf(Memory* memory) : memory_(memory) {}
@@ -64,6 +72,8 @@ class Elf {
 
   uint8_t class_type() { return class_type_; }
 
+  ArchEnum arch() { return arch_; }
+
   Memory* memory() { return memory_.get(); }
 
   ElfInterface* interface() { return interface_.get(); }
@@ -83,6 +93,7 @@ class Elf {
   std::unique_ptr<Memory> memory_;
   uint32_t machine_type_;
   uint8_t class_type_;
+  ArchEnum arch_;
   // Protect calls that can modify internal state of the interface object.
   std::mutex lock_;
 
