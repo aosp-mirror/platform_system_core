@@ -108,7 +108,7 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
 }
 
 UnwindStackPtrace::UnwindStackPtrace(pid_t pid, pid_t tid, BacktraceMap* map)
-    : BacktracePtrace(pid, tid, map) {}
+    : BacktracePtrace(pid, tid, map), memory_(pid) {}
 
 std::string UnwindStackPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
   return GetMap()->GetFunctionName(pc, offset);
@@ -124,4 +124,8 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
 
   error_ = BACKTRACE_UNWIND_NO_ERROR;
   return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr);
+}
+
+size_t UnwindStackPtrace::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+  return memory_.Read(addr, buffer, bytes);
 }
