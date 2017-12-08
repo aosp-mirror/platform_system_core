@@ -921,9 +921,14 @@ int main(int argc __unused, char **argv __unused) {
     level_oomadj[VMPRESS_LEVEL_CRITICAL] =
         property_get_int32("ro.lmk.critical", 0);
     debug_process_killing = property_get_bool("ro.lmk.debug", false);
-    enable_pressure_upgrade = property_get_bool("ro.lmk.critical_upgrade", false);
-    upgrade_pressure = (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 50);
-    downgrade_pressure = (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 60);
+
+    /* By default disable upgrade/downgrade logic */
+    enable_pressure_upgrade =
+        property_get_bool("ro.lmk.critical_upgrade", false);
+    upgrade_pressure =
+        (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 100);
+    downgrade_pressure =
+        (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 100);
     is_go_device = property_get_bool("ro.config.low_ram", false);
 
     // MCL_ONFAULT pins pages as they fault instead of loading
