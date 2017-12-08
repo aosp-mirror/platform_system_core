@@ -225,7 +225,7 @@ TEST_F(MemoryRemoteTest, read_mprotect_hole) {
 
   MemoryRemote remote(pid);
   std::vector<uint8_t> dst(getpagesize() * 4, 0xCC);
-  size_t read_size = remote.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), page_size * 3);
+  size_t read_size = remote.Read(reinterpret_cast<uint64_t>(mapping), dst.data(), page_size * 3);
   // Some read methods can read PROT_NONE maps, allow that.
   ASSERT_LE(page_size, read_size);
   for (size_t i = 0; i < read_size; ++i) {
@@ -260,7 +260,7 @@ TEST_F(MemoryRemoteTest, read_munmap_hole) {
 
   MemoryRemote remote(pid);
   std::vector<uint8_t> dst(getpagesize() * 4, 0xCC);
-  size_t read_size = remote.Read(reinterpret_cast<uintptr_t>(mapping), dst.data(), page_size * 3);
+  size_t read_size = remote.Read(reinterpret_cast<uint64_t>(mapping), dst.data(), page_size * 3);
   ASSERT_EQ(page_size, read_size);
   for (size_t i = 0; i < read_size; ++i) {
     ASSERT_EQ(0xFF, dst[i]);
@@ -268,6 +268,57 @@ TEST_F(MemoryRemoteTest, read_munmap_hole) {
   for (size_t i = read_size; i < dst.size(); ++i) {
     ASSERT_EQ(0xCC, dst[i]);
   }
+}
+
+// Verify that the memory remote object chooses a memory read function
+// properly. Either process_vm_readv or ptrace.
+TEST_F(MemoryRemoteTest, read_choose_correctly) {
+  size_t page_size = getpagesize();
+  void* mapping =
+      mmap(nullptr, 2 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, mapping);
+  memset(mapping, 0xFC, 2 * page_size);
+  ASSERT_EQ(0, mprotect(static_cast<char*>(mapping), page_size, PROT_NONE));
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    while (true)
+      ;
+    exit(1);
+  }
+  ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
+
+  ASSERT_EQ(0, munmap(mapping, 2 * page_size));
+
+  ASSERT_TRUE(Attach(pid));
+
+  // We know that process_vm_readv of a mprotect'd PROT_NONE region will fail.
+  // Read from the PROT_NONE area first to force the choice of ptrace.
+  MemoryRemote remote_ptrace(pid);
+  uint32_t value;
+  size_t bytes = remote_ptrace.Read(reinterpret_cast<uint64_t>(mapping), &value, sizeof(value));
+  ASSERT_EQ(sizeof(value), bytes);
+  ASSERT_EQ(0xfcfcfcfcU, value);
+  bytes = remote_ptrace.Read(reinterpret_cast<uint64_t>(mapping) + page_size, &value, sizeof(value));
+  ASSERT_EQ(sizeof(value), bytes);
+  ASSERT_EQ(0xfcfcfcfcU, value);
+  bytes = remote_ptrace.Read(reinterpret_cast<uint64_t>(mapping), &value, sizeof(value));
+  ASSERT_EQ(sizeof(value), bytes);
+  ASSERT_EQ(0xfcfcfcfcU, value);
+
+  // Now verify that choosing process_vm_readv results in failing reads of
+  // the PROT_NONE part of the map. Read from a valid map first which
+  // should prefer process_vm_readv, and keep that as the read function.
+  MemoryRemote remote_readv(pid);
+  bytes = remote_readv.Read(reinterpret_cast<uint64_t>(mapping) + page_size, &value, sizeof(value));
+  ASSERT_EQ(sizeof(value), bytes);
+  ASSERT_EQ(0xfcfcfcfcU, value);
+  bytes = remote_readv.Read(reinterpret_cast<uint64_t>(mapping), &value, sizeof(value));
+  ASSERT_EQ(0U, bytes);
+  bytes = remote_readv.Read(reinterpret_cast<uint64_t>(mapping) + page_size, &value, sizeof(value));
+  ASSERT_EQ(sizeof(value), bytes);
+  ASSERT_EQ(0xfcfcfcfcU, value);
 }
 
 }  // namespace unwindstack

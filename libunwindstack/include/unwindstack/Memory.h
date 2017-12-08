@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -99,7 +100,7 @@ class MemoryFileAtOffset : public Memory {
 
 class MemoryRemote : public Memory {
  public:
-  MemoryRemote(pid_t pid) : pid_(pid) {}
+  MemoryRemote(pid_t pid) : pid_(pid), read_redirect_func_(0) {}
   virtual ~MemoryRemote() = default;
 
   size_t Read(uint64_t addr, void* dst, size_t size) override;
@@ -108,6 +109,7 @@ class MemoryRemote : public Memory {
 
  private:
   pid_t pid_;
+  std::atomic_uintptr_t read_redirect_func_;
 };
 
 class MemoryLocal : public Memory {
