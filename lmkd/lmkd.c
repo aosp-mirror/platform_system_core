@@ -91,6 +91,7 @@ static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
 static int64_t downgrade_pressure;
 static bool is_go_device;
+static bool kill_heaviest_task;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -593,6 +594,29 @@ static struct proc *proc_adj_lru(int oomadj) {
     return (struct proc *)adjslot_tail(&procadjslot_list[ADJTOSLOT(oomadj)]);
 }
 
+static struct proc *proc_get_heaviest(int oomadj) {
+    struct adjslot_list *head = &procadjslot_list[ADJTOSLOT(oomadj)];
+    struct adjslot_list *curr = head->next;
+    struct proc *maxprocp = NULL;
+    int maxsize = 0;
+    while (curr != head) {
+        int pid = ((struct proc *)curr)->pid;
+        int tasksize = proc_get_size(pid);
+        if (tasksize <= 0) {
+            struct adjslot_list *next = curr->next;
+            pid_remove(pid);
+            curr = next;
+        } else {
+            if (tasksize > maxsize) {
+                maxsize = tasksize;
+                maxprocp = (struct proc *)curr;
+            }
+            curr = curr->next;
+        }
+    }
+    return maxprocp;
+}
+
 /* Kill one process specified by procp.  Returns the size of the process killed */
 static int kill_one_process(struct proc* procp, int min_score_adj,
                             enum vmpressure_level level) {
@@ -643,7 +667,10 @@ static int find_and_kill_process(enum vmpressure_level level) {
         struct proc *procp;
 
 retry:
-        procp = proc_adj_lru(i);
+        if (kill_heaviest_task)
+            procp = proc_get_heaviest(i);
+        else
+            procp = proc_adj_lru(i);
 
         if (procp) {
             killed_size = kill_one_process(procp, min_score_adj, level);
@@ -929,6 +956,8 @@ int main(int argc __unused, char **argv __unused) {
         (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 100);
     downgrade_pressure =
         (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 100);
+    kill_heaviest_task =
+        property_get_bool("ro.lmk.kill_heaviest_task", true);
     is_go_device = property_get_bool("ro.config.low_ram", false);
 
     // MCL_ONFAULT pins pages as they fault instead of loading
