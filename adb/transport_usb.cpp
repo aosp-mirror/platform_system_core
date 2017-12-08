@@ -27,11 +27,18 @@
 
 #if ADB_HOST
 
+#if defined(__APPLE__)
+#define CHECK_PACKET_OVERFLOW 0
+#else
+#define CHECK_PACKET_OVERFLOW 1
+#endif
+
 // Call usb_read using a buffer having a multiple of usb_get_max_packet_size() bytes
 // to avoid overflow. See http://libusb.sourceforge.net/api-1.0/packetoverflow.html.
 static int UsbReadMessage(usb_handle* h, amessage* msg) {
     D("UsbReadMessage");
 
+#if CHECK_PACKET_OVERFLOW
     size_t usb_packet_size = usb_get_max_packet_size(h);
     CHECK_GE(usb_packet_size, sizeof(*msg));
     CHECK_LT(usb_packet_size, 4096ULL);
@@ -44,6 +51,9 @@ static int UsbReadMessage(usb_handle* h, amessage* msg) {
     }
     memcpy(msg, buffer, sizeof(*msg));
     return n;
+#else
+    return usb_read(h, msg, sizeof(*msg));
+#endif
 }
 
 // Call usb_read using a buffer having a multiple of usb_get_max_packet_size() bytes
@@ -51,6 +61,7 @@ static int UsbReadMessage(usb_handle* h, amessage* msg) {
 static int UsbReadPayload(usb_handle* h, apacket* p) {
     D("UsbReadPayload(%d)", p->msg.data_length);
 
+#if CHECK_PACKET_OVERFLOW
     size_t usb_packet_size = usb_get_max_packet_size(h);
     CHECK_EQ(0ULL, sizeof(p->data) % usb_packet_size);
 
@@ -64,6 +75,9 @@ static int UsbReadPayload(usb_handle* h, apacket* p) {
     }
     CHECK_LE(len, sizeof(p->data));
     return usb_read(h, &p->data, len);
+#else
+    return usb_read(h, &p->data, p->msg.data_length);
+#endif
 }
 
 static int remote_read(apacket* p, atransport* t) {
