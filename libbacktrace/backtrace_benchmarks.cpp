@@ -103,8 +103,9 @@ static void CreateMap(benchmark::State& state, BacktraceMap* (*map_func)(pid_t, 
       exit(1);
     }
 
-    if (num_maps != kNumMaps) {
-      fprintf(stderr, "Maps set incorrectly: %zu found, %zu expected.\n", num_maps, kNumMaps);
+    if (num_maps < kNumMaps) {
+      fprintf(stderr, "Maps set incorrectly: %zu found, %zu expected at least.\n", num_maps,
+              kNumMaps);
       std::string str;
       android::base::ReadFileToString("/proc/self/maps", &str);
       fprintf(stderr, "%s\n", str.c_str());
@@ -121,12 +122,12 @@ static void CreateMap(benchmark::State& state, BacktraceMap* (*map_func)(pid_t, 
 
   size_t num_maps = 0;
   for (size_t i = 0; i < 2000; i++) {
-    if (CountMaps(pid, &num_maps) && num_maps == kNumMaps) {
+    if (CountMaps(pid, &num_maps) && num_maps >= kNumMaps) {
       break;
     }
     usleep(1000);
   }
-  if (num_maps != kNumMaps) {
+  if (num_maps < kNumMaps) {
     fprintf(stderr, "Timed out waiting for the number of maps available: %zu\n", num_maps);
     return;
   }
