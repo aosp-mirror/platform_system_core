@@ -29,8 +29,8 @@
     void usb_kick(handle_ref_type h);                            \
     size_t usb_get_max_packet_size(handle_ref_type)
 
-#if defined(_WIN32) || !ADB_HOST
-// Windows and the daemon have a single implementation.
+#if !ADB_HOST
+// The daemon has a single implementation.
 
 struct usb_handle;
 ADB_USB_INTERFACE(usb_handle*);
