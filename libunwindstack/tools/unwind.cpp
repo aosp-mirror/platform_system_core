@@ -76,6 +76,12 @@ void DoUnwind(pid_t pid) {
     case unwindstack::ARCH_X86_64:
       printf("x86_64");
       break;
+    case unwindstack::ARCH_MIPS:
+      printf("mips");
+      break;
+    case unwindstack::ARCH_MIPS64:
+      printf("mips64");
+      break;
     default:
       printf("unknown\n");
       return;
