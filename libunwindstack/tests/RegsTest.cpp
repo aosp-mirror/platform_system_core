@@ -21,7 +21,10 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/MapInfo.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
+#include <unwindstack/RegsArm64.h>
+#include <unwindstack/RegsX86.h>
+#include <unwindstack/RegsX86_64.h>
 
 #include "ElfFake.h"
 #include "MemoryFake.h"
@@ -210,6 +213,20 @@ TEST_F(RegsTest, x86_64_set_from_raw) {
   x86_64.SetFromRaw();
   EXPECT_EQ(0x1200000000U, x86_64.sp());
   EXPECT_EQ(0x4900000000U, x86_64.pc());
+}
+
+TEST_F(RegsTest, machine_type) {
+  RegsArm arm_regs;
+  EXPECT_EQ(ARCH_ARM, arm_regs.Arch());
+
+  RegsArm64 arm64_regs;
+  EXPECT_EQ(ARCH_ARM64, arm64_regs.Arch());
+
+  RegsX86 x86_regs;
+  EXPECT_EQ(ARCH_X86, x86_regs.Arch());
+
+  RegsX86_64 x86_64_regs;
+  EXPECT_EQ(ARCH_X86_64, x86_64_regs.Arch());
 }
 
 }  // namespace unwindstack

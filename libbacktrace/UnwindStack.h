@@ -45,6 +45,11 @@ class UnwindStackPtrace : public BacktracePtrace {
   bool Unwind(size_t num_ignore_frames, ucontext_t* context) override;
 
   std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
+
+  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) override;
+
+ private:
+  unwindstack::MemoryRemote memory_;
 };
 
 #endif  // _LIBBACKTRACE_UNWIND_STACK_H

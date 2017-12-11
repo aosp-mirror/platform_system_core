@@ -25,6 +25,7 @@
 
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
+#include <unwindstack/RegsArm.h>
 
 #include "ElfFake.h"
 #include "ElfTestUtils.h"

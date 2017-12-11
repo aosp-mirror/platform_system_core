@@ -174,8 +174,7 @@ std::string Unwinder::FormatFrame(size_t frame_num) {
   if (frame_num >= frames_.size()) {
     return "";
   }
-  return FormatFrame(frames_[frame_num],
-                     regs_->MachineType() == EM_ARM || regs_->MachineType() == EM_386);
+  return FormatFrame(frames_[frame_num], regs_->Format32Bit());
 }
 
 std::string Unwinder::FormatFrame(const FrameData& frame, bool bits32) {

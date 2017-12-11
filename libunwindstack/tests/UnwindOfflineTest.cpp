@@ -27,10 +27,12 @@
 
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
+#include <unwindstack/RegsArm64.h>
 #include <unwindstack/Unwinder.h>
 
-#include "Machine.h"
+#include "MachineArm.h"
+#include "MachineArm64.h"
 
 #include "ElfTestUtils.h"
 
@@ -73,7 +75,7 @@ TEST(UnwindOfflineTest, pc_straddle_arm32) {
   BufferMaps maps(buffer.data());
   ASSERT_TRUE(maps.Parse());
 
-  ASSERT_EQ(static_cast<uint32_t>(EM_ARM), regs.MachineType());
+  ASSERT_EQ(ARCH_ARM, regs.Arch());
 
   std::shared_ptr<Memory> process_memory(memory);
 
@@ -125,7 +127,7 @@ TEST(UnwindOfflineTest, pc_straddle_arm64) {
   BufferMaps maps(buffer.data());
   ASSERT_TRUE(maps.Parse());
 
-  ASSERT_EQ(static_cast<uint32_t>(EM_AARCH64), regs.MachineType());
+  ASSERT_EQ(ARCH_ARM64, regs.Arch());
 
   std::shared_ptr<Memory> process_memory(memory);
 

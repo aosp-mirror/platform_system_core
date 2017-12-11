@@ -28,7 +28,7 @@ using android::base::StringPrintf;
 using android::base::unique_fd;
 
 #ifdef WIN32
-static int exec_e2fs_cmd(const char* /*path*/, const char** argv, const char** envp) {
+static int exec_cmd(const char* path, const char** argv, const char** envp) {
     std::string cmd;
     int i = 0;
     while (argv[i] != nullptr) {
@@ -76,10 +76,14 @@ static int exec_e2fs_cmd(const char* /*path*/, const char** argv, const char** e
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    return exit_code != 0;
+    if (exit_code != 0) {
+        fprintf(stderr, "%s failed: %lu\n", path, exit_code);
+        return -1;
+    }
+    return 0;
 }
 #else
-static int exec_e2fs_cmd(const char* path, const char** argv, const char** envp) {
+static int exec_cmd(const char* path, const char** argv, const char** envp) {
     int status;
     pid_t child;
     if ((child = fork()) == 0) {
@@ -97,11 +101,13 @@ static int exec_e2fs_cmd(const char* path, const char** argv, const char** envp)
     int ret = -1;
     if (WIFEXITED(status)) {
         ret = WEXITSTATUS(status);
-        if (ret != 0) {
-            fprintf(stderr, "%s failed with status %d\n", path, ret);
-        }
     }
-    return ret;
+
+    if (ret != 0) {
+        fprintf(stderr, "%s failed with status %d\n", path, ret);
+        return -1;
+    }
+    return 0;
 }
 #endif
 
@@ -140,9 +146,8 @@ static int generate_ext4_image(const char* fileName, long long partSize,
     const std::string mke2fs_env = "MKE2FS_CONFIG=" + GetExecutableDirectory() + "/mke2fs.conf";
     std::vector<const char*> mke2fs_envp = {mke2fs_env.c_str(), nullptr};
 
-    int ret = exec_e2fs_cmd(mke2fs_args[0], mke2fs_args.data(), mke2fs_envp.data());
+    int ret = exec_cmd(mke2fs_args[0], mke2fs_args.data(), mke2fs_envp.data());
     if (ret != 0) {
-        fprintf(stderr, "mke2fs failed: %d\n", ret);
         return -1;
     }
 
@@ -154,19 +159,12 @@ static int generate_ext4_image(const char* fileName, long long partSize,
     std::vector<const char*> e2fsdroid_args = {e2fsdroid_path.c_str(), "-f", initial_dir.c_str(),
                                                fileName, nullptr};
 
-    ret = exec_e2fs_cmd(e2fsdroid_args[0], e2fsdroid_args.data(), nullptr);
-    if (ret != 0) {
-        fprintf(stderr, "e2fsdroid failed: %d\n", ret);
-        return -1;
-    }
-
-    return 0;
+    return exec_cmd(e2fsdroid_args[0], e2fsdroid_args.data(), nullptr);
 }
 
 static int generate_f2fs_image(const char* fileName, long long partSize, const std::string& initial_dir,
                                unsigned /* unused */, unsigned /* unused */)
 {
-#ifndef WIN32
     const std::string exec_dir = android::base::GetExecutableDirectory();
     const std::string mkf2fs_path = exec_dir + "/make_f2fs";
     std::vector<const char*> mkf2fs_args = {mkf2fs_path.c_str()};
@@ -182,22 +180,20 @@ static int generate_f2fs_image(const char* fileName, long long partSize, const s
     mkf2fs_args.push_back(fileName);
     mkf2fs_args.push_back(nullptr);
 
-    int ret = exec_e2fs_cmd(mkf2fs_args[0], mkf2fs_args.data(), nullptr);
+    int ret = exec_cmd(mkf2fs_args[0], mkf2fs_args.data(), nullptr);
     if (ret != 0) {
-        fprintf(stderr, "mkf2fs failed: %d\n", ret);
         return -1;
     }
 
-    if (!initial_dir.empty()) {
-        fprintf(stderr, "sload.f2s not supported yet\n");
+    if (initial_dir.empty()) {
         return 0;
     }
-    return 0;
-#else
-    UNUSED(fileName, partSize, initial_dir);
-    fprintf(stderr, "make_f2fs not supported on Windows\n");
-    return -1;
-#endif
+
+    const std::string sload_path = exec_dir + "/sload_f2fs";
+    std::vector<const char*> sload_args = {sload_path.c_str(), "-S",
+                                       "-f", initial_dir.c_str(), fileName, nullptr};
+
+    return exec_cmd(sload_args[0], sload_args.data(), nullptr);
 }
 
 static const struct fs_generator {

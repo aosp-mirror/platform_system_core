@@ -24,7 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <unwindstack/Log.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
 
 #include "ArmExidx.h"
 
