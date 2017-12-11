@@ -25,6 +25,9 @@ cc_defaults {
         "-Werror",
         "-Wno-unused-variable",
     ],
+    cppflags: [
+        "-std=gnu++1z",
+    ],
 }
 
 cc_library_static {
