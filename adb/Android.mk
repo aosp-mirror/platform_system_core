@@ -101,6 +101,8 @@ LIBADB_windows_SRC_FILES := \
     sysdeps_win32.cpp \
     sysdeps/win32/errno.cpp \
     sysdeps/win32/stat.cpp \
+    client/usb_dispatch.cpp \
+    client/usb_libusb.cpp \
     client/usb_windows.cpp \
 
 LIBADB_TEST_windows_SRCS := \
@@ -159,9 +161,7 @@ LOCAL_SANITIZE := $(adb_host_sanitize)
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libmdnssd
-LOCAL_STATIC_LIBRARIES_linux := libusb
-LOCAL_STATIC_LIBRARIES_darwin := libusb
+LOCAL_STATIC_LIBRARIES := libcrypto_utils libcrypto libbase libmdnssd libusb
 
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api/
 LOCAL_MULTILIB := first
@@ -230,9 +230,7 @@ LOCAL_STATIC_LIBRARIES := \
     libdiagnose_usb \
     libmdnssd \
     libgmock_host \
-
-LOCAL_STATIC_LIBRARIES_linux := libusb
-LOCAL_STATIC_LIBRARIES_darwin := libusb
+    libusb \
 
 # Set entrypoint to wmain from sysdeps_win32.cpp instead of main
 LOCAL_LDFLAGS_windows := -municode
@@ -298,13 +296,11 @@ LOCAL_STATIC_LIBRARIES := \
     libdiagnose_usb \
     liblog \
     libmdnssd \
+    libusb \
 
 # Don't use libcutils on Windows.
 LOCAL_STATIC_LIBRARIES_darwin := libcutils
 LOCAL_STATIC_LIBRARIES_linux := libcutils
-
-LOCAL_STATIC_LIBRARIES_darwin += libusb
-LOCAL_STATIC_LIBRARIES_linux += libusb
 
 LOCAL_CXX_STL := libc++_static
 
