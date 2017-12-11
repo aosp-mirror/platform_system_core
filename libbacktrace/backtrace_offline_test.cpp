@@ -357,68 +357,24 @@ TEST(libbacktrace, offline_arm_exidx) {
   BacktraceOfflineTest("arm", "libbacktrace_test_arm_exidx.so");
 }
 
-// This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
-// overlap with each other, which appears in /system/lib/libart.so.
-TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
-  // TODO: For now, only run on the given arch.
-  if (std::string(ABI_STRING) != "arm") {
+static void LibUnwindingTest(const std::string& arch, const std::string& testdata_name,
+                             const std::string& testlib_name) {
+  if (std::string(ABI_STRING) != arch) {
     GTEST_LOG_(INFO) << "Skipping test since offline for arm on " << ABI_STRING
                      << " isn't supported.";
     return;
   }
-  const std::string testlib_path(GetTestPath("libart.so"));
+  const std::string testlib_path(GetTestPath(testlib_name));
   struct stat st;
   ASSERT_EQ(0, stat(testlib_path.c_str(), &st)) << "can't find testlib " << testlib_path;
 
-  const std::string offline_testdata_path(GetTestPath("offline_testdata_for_libart"));
+  const std::string offline_testdata_path(GetTestPath(testdata_name));
   OfflineTestData testdata;
   ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
 
-  // Fix path of /system/lib/libart.so.
+  // Fix path of the testlib.
   for (auto& map : testdata.maps) {
-    if (map.name.find("libart.so") != std::string::npos) {
-      map.name = testlib_path;
-    }
-  }
-
-  // Do offline backtrace.
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(testdata.pid, testdata.maps));
-  ASSERT_TRUE(map != nullptr);
-
-  std::unique_ptr<Backtrace> backtrace(
-      Backtrace::CreateOffline(testdata.pid, testdata.tid, map.get(), testdata.stack_info));
-  ASSERT_TRUE(backtrace != nullptr);
-
-  ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
-  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
-
-  // The last frame is outside of libart.so
-  ASSERT_EQ(testdata.symbols.size() + 1, backtrace->NumFrames());
-  for (size_t i = 0; i + 1 < backtrace->NumFrames(); ++i) {
-    uintptr_t vaddr_in_file =
-        backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
-    std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
-    ASSERT_EQ(name, testdata.symbols[i].name);
-  }
-}
-
-TEST(libbacktrace, offline_debug_frame_with_load_bias) {
-  if (std::string(ABI_STRING) != "arm") {
-    GTEST_LOG_(INFO) << "Skipping test since offline for arm on " << ABI_STRING
-                     << " isn't supported.";
-    return;
-  }
-  const std::string testlib_path(GetTestPath("libandroid_runtime.so"));
-  struct stat st;
-  ASSERT_EQ(0, stat(testlib_path.c_str(), &st)) << "can't find testlib " << testlib_path;
-
-  const std::string offline_testdata_path(GetTestPath("offline_testdata_for_libandroid_runtime"));
-  OfflineTestData testdata;
-  ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
-
-  // Fix path of /system/lib/libandroid_runtime.so.
-  for (auto& map : testdata.maps) {
-    if (map.name.find("libandroid_runtime.so") != std::string::npos) {
+    if (map.name.find(testlib_name) != std::string::npos) {
       map.name = testlib_path;
     }
   }
@@ -441,4 +397,18 @@ TEST(libbacktrace, offline_debug_frame_with_load_bias) {
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
   }
+}
+
+// This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
+// overlap with each other, which appears in /system/lib/libart.so.
+TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
+  LibUnwindingTest("arm", "offline_testdata_for_libart", "libart.so");
+}
+
+TEST(libbacktrace, offline_debug_frame_with_load_bias) {
+  LibUnwindingTest("arm", "offline_testdata_for_libandroid_runtime", "libandroid_runtime.so");
+}
+
+TEST(libbacktrace, offline_try_armexidx_after_debug_frame) {
+  LibUnwindingTest("arm", "offline_testdata_for_libGLESv2_adreno", "libGLESv2_adreno.so");
 }
