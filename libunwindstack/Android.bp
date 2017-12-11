@@ -64,6 +64,8 @@ cc_library {
         "RegsArm64.cpp",
         "RegsX86.cpp",
         "RegsX86_64.cpp",
+        "RegsMips.cpp",
+        "RegsMips64.cpp",
         "Unwinder.cpp",
         "Symbols.cpp",
     ],
@@ -85,6 +87,12 @@ cc_library {
         },
         x86_64: {
             srcs: ["AsmGetRegsX86_64.S"],
+        },
+        mips: {
+            srcs: ["AsmGetRegsMips.S"],
+        },
+        mips64: {
+            srcs: ["AsmGetRegsMips64.S"],
         },
     },
 
