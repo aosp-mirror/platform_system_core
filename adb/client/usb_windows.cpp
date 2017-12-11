@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <algorithm>
 #include <mutex>
 #include <thread>
 
@@ -40,6 +41,8 @@
 #include "sysdeps/chrono.h"
 #include "transport.h"
 
+namespace native {
+
 /** Structure usb_handle describes our connection to the usb device via
   AdbWinApi.dll. This structure is returned from usb_open() routine and
   is expected in each subsequent call that is accessing the device.
@@ -48,13 +51,7 @@
   rely on AdbWinApi.dll's handle validation and AdbCloseHandle(endpoint)'s
   ability to break a thread out of pipe IO.
 */
-struct usb_handle {
-    /// Previous entry in the list of opened usb handles
-    usb_handle* prev;
-
-    /// Next entry in the list of opened usb handles
-    usb_handle* next;
-
+struct usb_handle : public ::usb_handle {
     /// Handle to USB interface
     ADBAPIHANDLE adb_interface;
 
@@ -78,9 +75,7 @@ struct usb_handle {
 static const GUID usb_class_id = ANDROID_USB_CLASS_ID;
 
 /// List of opened usb handles
-static usb_handle handle_list = {
-    .prev = &handle_list, .next = &handle_list,
-};
+static std::vector<usb_handle*> handle_list;
 
 /// Locker for the list of opened usb handles
 static std::mutex& usb_lock = *new std::mutex();
@@ -131,11 +126,9 @@ void usb_kick(usb_handle* handle);
 int usb_close(usb_handle* handle);
 
 int known_device_locked(const wchar_t* dev_name) {
-    usb_handle* usb;
-
     if (NULL != dev_name) {
         // Iterate through the list looking for the name match.
-        for (usb = handle_list.next; usb != &handle_list; usb = usb->next) {
+        for (usb_handle* usb : handle_list) {
             // In Windows names are not case sensetive!
             if ((NULL != usb->interface_name) && (0 == wcsicmp(usb->interface_name, dev_name))) {
                 return 1;
@@ -168,10 +161,7 @@ int register_new_device(usb_handle* handle) {
     }
 
     // Not in the list. Add this handle to the list.
-    handle->next = &handle_list;
-    handle->prev = handle_list.prev;
-    handle->prev->next = handle;
-    handle->next->prev = handle;
+    handle_list.push_back(handle);
 
     return 1;
 }
@@ -273,10 +263,6 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
         D("Could not allocate %u bytes for usb_handle: %s", sizeof(usb_handle), strerror(errno));
         goto fail;
     }
-
-    // Set linkers back to the handle
-    ret->next = ret;
-    ret->prev = ret;
 
     // Create interface.
     ret->adb_interface = AdbCreateInterfaceByName(interface_name);
@@ -484,13 +470,8 @@ int usb_close(usb_handle* handle) {
         // Remove handle from the list
         {
             std::lock_guard<std::mutex> lock(usb_lock);
-
-            if ((handle->next != handle) && (handle->prev != handle)) {
-                handle->next->prev = handle->prev;
-                handle->prev->next = handle->next;
-                handle->prev = handle;
-                handle->next = handle;
-            }
+            handle_list.erase(std::remove(handle_list.begin(), handle_list.end(), handle),
+                              handle_list.end());
         }
 
         // Cleanup handle
@@ -623,7 +604,9 @@ static void kick_devices() {
     // Need to acquire lock to safely walk the list which might be modified
     // by another thread.
     std::lock_guard<std::mutex> lock(usb_lock);
-    for (usb_handle* usb = handle_list.next; usb != &handle_list; usb = usb->next) {
+    for (usb_handle* usb : handle_list) {
         usb_kick_locked(usb);
     }
 }
+
+}  // namespace native
