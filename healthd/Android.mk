@@ -48,6 +48,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 
 LOCAL_STATIC_LIBRARIES := \
     android.hardware.health@2.0 \
+    android.hardware.health@2.0-impl \
     android.hardware.health@1.0 \
     libminui \
     libpng \
