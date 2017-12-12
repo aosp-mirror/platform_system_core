@@ -48,8 +48,10 @@ on init
     copy /proc/cmdline /dev/urandom
     copy /default.prop /dev/urandom
 
-    # Backward compatibility.
+    symlink /system/bin /bin
     symlink /system/etc /etc
+
+    # Backward compatibility.
     symlink /sys/kernel/debug /d
 
     # Link /vendor to /system/vendor for devices without a vendor partition.
@@ -147,6 +149,9 @@ on init
     # disable icmp redirects
     write /proc/sys/net/ipv4/conf/all/accept_redirects 0
     write /proc/sys/net/ipv6/conf/all/accept_redirects 0
+
+    # /proc/net/fib_trie leaks interface IP addresses
+    chmod 0400 /proc/net/fib_trie
 
     # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
@@ -409,6 +414,7 @@ on post-fs-data
     mkdir /data/misc/net 0750 root shell
     mkdir /data/misc/radio 0770 system radio
     mkdir /data/misc/sms 0770 system radio
+    mkdir /data/misc/carrierid 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
     mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
@@ -432,6 +438,8 @@ on post-fs-data
     mkdir /data/misc/update_engine 0700 root root
     mkdir /data/misc/update_engine_log 02750 root log
     mkdir /data/misc/trace 0700 root root
+    # create location to store surface and window trace files
+    mkdir /data/misc/wmtrace 0700 system system
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
@@ -480,6 +488,10 @@ on post-fs-data
     mkdir /data/mediadrm 0770 mediadrm mediadrm
 
     mkdir /data/anr 0775 system system
+
+    # NFC: create data/nfc for nv storage
+    mkdir /data/nfc 0770 nfc nfc
+    mkdir /data/nfc/param 0770 nfc nfc
 
     # Create all remaining /data root dirs so that they are made through init
     # and get proper encryption policy installed
@@ -726,6 +738,8 @@ on property:ro.debuggable=1
     # Give writes to anyone for the trace folder on debug builds.
     # The folder is used to store method traces.
     chmod 0773 /data/misc/trace
+    # Give reads to anyone for the window trace folder on debug builds.
+    chmod 0775 /data/misc/wmtrace
     start console
 
 service flash_recovery /system/bin/install-recovery.sh

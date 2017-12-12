@@ -22,39 +22,62 @@
 #include <string>
 #include <unordered_map>
 
+#include <android/content/pm/IPackageManagerNative.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
+#include <binder/IServiceManager.h>
 #include <log/log_event_list.h>
-#include <packagelistparser/packagelistparser.h>
 
 #include "storaged.h"
 #include "storaged_uid_monitor.h"
 
 using namespace android;
 using namespace android::base;
+using namespace android::content::pm;
 
-static bool packagelist_parse_cb(pkg_info* info, void* userdata)
-{
-    std::unordered_map<uint32_t, struct uid_info>* uids =
-        reinterpret_cast<std::unordered_map<uint32_t, struct uid_info>*>(userdata);
-
-    if (uids->find(info->uid) != uids->end()) {
-        (*uids)[info->uid].name = info->name;
-    }
-
-    packagelist_free(info);
-    return true;
-}
+static bool refresh_uid_names;
 
 std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats()
 {
     std::unique_ptr<lock_t> lock(new lock_t(&um_lock));
     return get_uid_io_stats_locked();
 };
+
+static void get_uid_names(const vector<int>& uids, const vector<std::string*>& uid_names)
+{
+    sp<IServiceManager> sm = defaultServiceManager();
+    if (sm == NULL) {
+        LOG_TO(SYSTEM, ERROR) << "defaultServiceManager failed";
+        return;
+    }
+
+    sp<IBinder> binder = sm->getService(String16("package_native"));
+    if (binder == NULL) {
+        LOG_TO(SYSTEM, ERROR) << "getService package_native failed";
+        return;
+    }
+
+    sp<IPackageManagerNative> package_mgr = interface_cast<IPackageManagerNative>(binder);
+    std::vector<std::string> names;
+    binder::Status status = package_mgr->getNamesForUids(uids, &names);
+    if (!status.isOk()) {
+        LOG_TO(SYSTEM, ERROR) << "package_native::getNamesForUids failed: "
+                              << status.exceptionMessage();
+        return;
+    }
+
+    for (uint32_t i = 0; i < uid_names.size(); i++) {
+        if (!names[i].empty()) {
+            *uid_names[i] = names[i];
+        }
+    }
+
+    refresh_uid_names = false;
+}
 
 std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_locked()
 {
@@ -67,7 +90,8 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
 
     std::vector<std::string> io_stats = Split(buffer, "\n");
     struct uid_info u;
-    bool refresh_uid = false;
+    vector<int> uids;
+    vector<std::string*> uid_names;
 
     for (uint32_t i = 0; i < io_stats.size(); i++) {
         if (io_stats[i].empty()) {
@@ -91,17 +115,19 @@ std::unordered_map<uint32_t, struct uid_info> uid_monitor::get_uid_io_stats_lock
             continue;
         }
 
-        if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
-            refresh_uid = true;
-            u.name = std::to_string(u.uid);
-        } else {
-            u.name = last_uid_io_stats[u.uid].name;
-        }
         uid_io_stats[u.uid] = u;
+        uid_io_stats[u.uid].name = std::to_string(u.uid);
+        uids.push_back(u.uid);
+        uid_names.push_back(&uid_io_stats[u.uid].name);
+        if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
+            refresh_uid_names = true;
+        } else {
+            uid_io_stats[u.uid].name = last_uid_io_stats[u.uid].name;
+        }
     }
 
-    if (refresh_uid) {
-        packagelist_parse(packagelist_parse_cb, &uid_io_stats);
+    if (!uids.empty() && refresh_uid_names) {
+        get_uid_names(uids, uid_names);
     }
 
     return uid_io_stats;
@@ -228,13 +254,13 @@ void uid_monitor::update_curr_io_stats_locked()
             last_uid_io_stats[uid.uid].io[BACKGROUND].write_bytes;
 
         usage.bytes[READ][FOREGROUND][charger_stat] +=
-            (fg_rd_delta < 0) ? uid.io[FOREGROUND].read_bytes : fg_rd_delta;
+            (fg_rd_delta < 0) ? 0 : fg_rd_delta;
         usage.bytes[READ][BACKGROUND][charger_stat] +=
-            (bg_rd_delta < 0) ? uid.io[BACKGROUND].read_bytes : bg_rd_delta;
+            (bg_rd_delta < 0) ? 0 : bg_rd_delta;
         usage.bytes[WRITE][FOREGROUND][charger_stat] +=
-            (fg_wr_delta < 0) ? uid.io[FOREGROUND].write_bytes : fg_wr_delta;
+            (fg_wr_delta < 0) ? 0 : fg_wr_delta;
         usage.bytes[WRITE][BACKGROUND][charger_stat] +=
-            (bg_wr_delta < 0) ? uid.io[BACKGROUND].write_bytes : bg_wr_delta;
+            (bg_wr_delta < 0) ? 0 : bg_wr_delta;
     }
 
     last_uid_io_stats = uid_io_stats;

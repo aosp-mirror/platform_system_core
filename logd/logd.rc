@@ -20,4 +20,3 @@ on fs
 "
     chown logd logd /dev/event-log-tags
     chmod 0644 /dev/event-log-tags
-    restorecon /dev/event-log-tags

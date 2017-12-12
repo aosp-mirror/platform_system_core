@@ -1,4 +1,4 @@
-This file tries to document file related requests a client can make
+This file tries to document file-related requests a client can make
 to the ADB server of an adbd daemon. See the OVERVIEW.TXT document
 to understand what's going on here. See the SERVICES.TXT to learn more
 about the other requests that are possible.
@@ -8,16 +8,16 @@ SYNC SERVICES:
 
 Requesting the sync service ("sync:") using the protocol as described in
 SERVICES.TXT sets the connection in sync mode. This mode is a binary mode that
-differ from the regular adb protocol. The connection stays in sync mode until
+differs from the regular adb protocol. The connection stays in sync mode until
 explicitly terminated (see below).
 
 After the initial "sync:" command is sent the server must respond with either
-"OKAY" or "FAIL" as per usual. 
+"OKAY" or "FAIL" as per usual.
 
 In sync mode both the server and the client will frequently use eight-byte
-packets to communicate in this document called sync request and sync
-responses. The first four bytes is an id and specifies sync request is
-represented by four utf-8 characters. The last four bytes is a Little-Endian
+packets to communicate. In this document these are called sync requests and sync
+responses. The first four bytes are an id that specifies the sync request. It is
+represented by four utf-8 characters. The last four bytes are a Little-Endian
 integer, with various uses. This number will be called "length" below. In fact
 all binary integers are Little-Endian in the sync mode. Sync mode is
 implicitly exited after each sync request, and normal adb communication
@@ -29,8 +29,8 @@ RECV - Retrieve a file from device
 SEND - Send a file to device
 STAT - Stat a file
 
-For all of the sync request above the must be followed by length number of
-bytes containing an utf-8 string with a remote filename.
+All of the sync requests above must be followed by "length": the number of
+bytes containing a utf-8 string with a remote filename.
 
 LIST:
 Lists files in the directory specified by the remote filename. The server will
@@ -45,7 +45,7 @@ The directory entries will be returned in the following form
 6. length number of bytes containing an utf-8 string representing the file
    name.
 
-When an sync response "DONE" is received the listing is done.
+When a sync response "DONE" is received the listing is done.
 
 SEND:
 The remote file name is split into two parts separated by the last
@@ -65,7 +65,7 @@ transferred. Each chunk must not be larger than 64k.
 
 When the file is transferred a sync request "DONE" is sent, where length is set
 to the last modified time for the file. The server responds to this last
-request (but not to chuck requests) with an "OKAY" sync response (length can
+request (but not to chunk requests) with an "OKAY" sync response (length can
 be ignored).
 
 
@@ -73,9 +73,8 @@ RECV:
 Retrieves a file from device to a local file. The remote path is the path to
 the file that will be returned. Just as for the SEND sync request the file
 received is split up into chunks. The sync response id is "DATA" and length is
-the chuck size. After follows chunk size number of bytes. This is repeated
-until the file is transferred. Each chuck will not be larger than 64k.
+the chunk size. After follows chunk size number of bytes. This is repeated
+until the file is transferred. Each chunk will not be larger than 64k.
 
 When the file is transferred a sync response "DONE" is retrieved where the
 length can be ignored.
-

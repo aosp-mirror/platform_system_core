@@ -141,7 +141,7 @@ bool DwarfOp<AddressType>::op_deref() {
   // Read the address and dereference it.
   AddressType addr = StackPop();
   AddressType value;
-  if (!regular_memory()->Read(addr, &value, sizeof(value))) {
+  if (!regular_memory()->ReadFully(addr, &value, sizeof(value))) {
     last_error_ = DWARF_ERROR_MEMORY_INVALID;
     return false;
   }
@@ -159,7 +159,7 @@ bool DwarfOp<AddressType>::op_deref_size() {
   // Read the address and dereference it.
   AddressType addr = StackPop();
   AddressType value = 0;
-  if (!regular_memory()->Read(addr, &value, bytes_to_read)) {
+  if (!regular_memory()->ReadFully(addr, &value, bytes_to_read)) {
     last_error_ = DWARF_ERROR_MEMORY_INVALID;
     return false;
   }

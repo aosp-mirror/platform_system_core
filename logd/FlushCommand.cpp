@@ -26,18 +26,6 @@
 #include "LogTimes.h"
 #include "LogUtils.h"
 
-FlushCommand::FlushCommand(LogReader& reader, bool nonBlock, unsigned long tail,
-                           unsigned int logMask, pid_t pid, log_time start,
-                           uint64_t timeout)
-    : mReader(reader),
-      mNonBlock(nonBlock),
-      mTail(tail),
-      mLogMask(logMask),
-      mPid(pid),
-      mStart(start),
-      mTimeout((start != log_time::EPOCH) ? timeout : 0) {
-}
-
 // runSocketCommand is called once for every open client on the
 // log reader socket. Here we manage and associated the reader
 // client tracking and log region locks LastLogTimes list of
@@ -56,6 +44,10 @@ void FlushCommand::runSocketCommand(SocketClient* client) {
     while (it != times.end()) {
         entry = (*it);
         if (entry->mClient == client) {
+            if (!entry->isWatchingMultiple(mLogMask)) {
+                LogTimeEntry::unlock();
+                return;
+            }
             if (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec) {
                 if (mReader.logbuf().isMonotonic()) {
                     LogTimeEntry::unlock();

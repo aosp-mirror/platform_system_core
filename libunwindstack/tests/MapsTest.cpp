@@ -35,7 +35,12 @@ static void VerifyLine(std::string line, MapInfo* info) {
     ASSERT_TRUE(maps.Parse()) << "Failed on: " + line;
     MapInfo* element = maps.Get(0);
     ASSERT_TRUE(element != nullptr) << "Failed on: " + line;
-    *info = *element;
+    info->start = element->start;
+    info->end = element->end;
+    info->offset = element->offset;
+    info->flags = element->flags;
+    info->name = element->name;
+    info->elf_offset = element->elf_offset;
   }
 }
 
@@ -139,38 +144,48 @@ TEST(MapsTest, parse_permissions) {
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(5U, maps.Total());
-  auto it = maps.begin();
-  ASSERT_EQ(PROT_NONE, it->flags);
-  ASSERT_EQ(0x1000U, it->start);
-  ASSERT_EQ(0x2000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(PROT_READ, it->flags);
-  ASSERT_EQ(0x2000U, it->start);
-  ASSERT_EQ(0x3000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(PROT_WRITE, it->flags);
-  ASSERT_EQ(0x3000U, it->start);
-  ASSERT_EQ(0x4000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(PROT_EXEC, it->flags);
-  ASSERT_EQ(0x4000U, it->start);
-  ASSERT_EQ(0x5000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, it->flags);
-  ASSERT_EQ(0x5000U, it->start);
-  ASSERT_EQ(0x6000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(it, maps.end());
+
+  MapInfo* info = maps.Get(0);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(PROT_NONE, info->flags);
+  EXPECT_EQ(0x1000U, info->start);
+  EXPECT_EQ(0x2000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ("", info->name);
+
+  info = maps.Get(1);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(PROT_READ, info->flags);
+  EXPECT_EQ(0x2000U, info->start);
+  EXPECT_EQ(0x3000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ("", info->name);
+
+  info = maps.Get(2);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(PROT_WRITE, info->flags);
+  EXPECT_EQ(0x3000U, info->start);
+  EXPECT_EQ(0x4000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ("", info->name);
+
+  info = maps.Get(3);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(PROT_EXEC, info->flags);
+  EXPECT_EQ(0x4000U, info->start);
+  EXPECT_EQ(0x5000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ("", info->name);
+
+  info = maps.Get(4);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info->flags);
+  EXPECT_EQ(0x5000U, info->start);
+  EXPECT_EQ(0x6000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ("", info->name);
+
+  ASSERT_TRUE(maps.Get(5) == nullptr);
 }
 
 TEST(MapsTest, parse_name) {
@@ -181,26 +196,32 @@ TEST(MapsTest, parse_name) {
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(3U, maps.Total());
-  auto it = maps.begin();
-  ASSERT_EQ("", it->name);
-  ASSERT_EQ(0x7b29b000U, it->start);
-  ASSERT_EQ(0x7b29e000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
-  ++it;
-  ASSERT_EQ("/system/lib/fake.so", it->name);
-  ASSERT_EQ(0x7b29e000U, it->start);
-  ASSERT_EQ(0x7b29f000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
-  ++it;
-  ASSERT_EQ("", it->name);
-  ASSERT_EQ(0x7b29f000U, it->start);
-  ASSERT_EQ(0x7b2a0000U, it->end);
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
-  ++it;
-  ASSERT_EQ(it, maps.end());
+
+  MapInfo* info = maps.Get(0);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ("", info->name);
+  EXPECT_EQ(0x7b29b000U, info->start);
+  EXPECT_EQ(0x7b29e000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, info->flags);
+
+  info = maps.Get(1);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ("/system/lib/fake.so", info->name);
+  EXPECT_EQ(0x7b29e000U, info->start);
+  EXPECT_EQ(0x7b29f000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, info->flags);
+
+  info = maps.Get(2);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ("", info->name);
+  EXPECT_EQ(0x7b29f000U, info->start);
+  EXPECT_EQ(0x7b2a0000U, info->end);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, info->flags);
+
+  ASSERT_TRUE(maps.Get(3) == nullptr);
 }
 
 TEST(MapsTest, parse_offset) {
@@ -210,20 +231,60 @@ TEST(MapsTest, parse_offset) {
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(2U, maps.Total());
-  auto it = maps.begin();
-  ASSERT_EQ(0U, it->offset);
-  ASSERT_EQ(0xa000U, it->start);
-  ASSERT_EQ(0xe000U, it->end);
-  ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
-  ASSERT_EQ("/system/lib/fake.so", it->name);
+
+  MapInfo* info = maps.Get(0);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0U, info->offset);
+  EXPECT_EQ(0xa000U, info->start);
+  EXPECT_EQ(0xe000U, info->end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, info->flags);
+  EXPECT_EQ("/system/lib/fake.so", info->name);
+
+  info = maps.Get(1);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0xa12345U, info->offset);
+  EXPECT_EQ(0xe000U, info->start);
+  EXPECT_EQ(0xf000U, info->end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, info->flags);
+  EXPECT_EQ("/system/lib/fake.so", info->name);
+
+  ASSERT_TRUE(maps.Get(2) == nullptr);
+}
+
+TEST(MapsTest, iterate) {
+  BufferMaps maps(
+      "a000-e000 rw-p 00000000 00:00 0 /system/lib/fake.so\n"
+      "e000-f000 rw-p 00a12345 00:00 0 /system/lib/fake.so\n");
+
+  ASSERT_TRUE(maps.Parse());
+  ASSERT_EQ(2U, maps.Total());
+
+  Maps::iterator it = maps.begin();
+  EXPECT_EQ(0xa000U, (*it)->start);
+  EXPECT_EQ(0xe000U, (*it)->end);
   ++it;
-  ASSERT_EQ(0xa12345U, it->offset);
-  ASSERT_EQ(0xe000U, it->start);
-  ASSERT_EQ(0xf000U, it->end);
-  ASSERT_EQ(PROT_READ | PROT_WRITE, it->flags);
-  ASSERT_EQ("/system/lib/fake.so", it->name);
+  EXPECT_EQ(0xe000U, (*it)->start);
+  EXPECT_EQ(0xf000U, (*it)->end);
   ++it;
-  ASSERT_EQ(maps.end(), it);
+  EXPECT_EQ(maps.end(), it);
+}
+
+TEST(MapsTest, const_iterate) {
+  BufferMaps maps(
+      "a000-e000 rw-p 00000000 00:00 0 /system/lib/fake.so\n"
+      "e000-f000 rw-p 00a12345 00:00 0 /system/lib/fake.so\n");
+
+  ASSERT_TRUE(maps.Parse());
+  ASSERT_EQ(2U, maps.Total());
+
+  Maps::const_iterator it = maps.begin();
+  EXPECT_EQ(0xa000U, (*it)->start);
+  EXPECT_EQ(0xe000U, (*it)->end);
+  ++it;
+  EXPECT_EQ(0xe000U, (*it)->start);
+  EXPECT_EQ(0xf000U, (*it)->end);
+  ++it;
+  EXPECT_EQ(maps.end(), it);
 }
 
 TEST(MapsTest, device) {
@@ -235,18 +296,23 @@ TEST(MapsTest, device) {
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(4U, maps.Total());
-  auto it = maps.begin();
-  ASSERT_TRUE(it->flags & 0x8000);
-  ASSERT_EQ("/dev/", it->name);
-  ++it;
-  ASSERT_TRUE(it->flags & 0x8000);
-  ASSERT_EQ("/dev/does_not_exist", it->name);
-  ++it;
-  ASSERT_FALSE(it->flags & 0x8000);
-  ASSERT_EQ("/dev/ashmem/does_not_exist", it->name);
-  ++it;
-  ASSERT_FALSE(it->flags & 0x8000);
-  ASSERT_EQ("/devsomething/does_not_exist", it->name);
+
+  MapInfo* info = maps.Get(0);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_TRUE(info->flags & 0x8000);
+  EXPECT_EQ("/dev/", info->name);
+
+  info = maps.Get(1);
+  EXPECT_TRUE(info->flags & 0x8000);
+  EXPECT_EQ("/dev/does_not_exist", info->name);
+
+  info = maps.Get(2);
+  EXPECT_FALSE(info->flags & 0x8000);
+  EXPECT_EQ("/dev/ashmem/does_not_exist", info->name);
+
+  info = maps.Get(3);
+  EXPECT_FALSE(info->flags & 0x8000);
+  EXPECT_EQ("/devsomething/does_not_exist", info->name);
 }
 
 TEST(MapsTest, file_smoke) {
@@ -263,26 +329,32 @@ TEST(MapsTest, file_smoke) {
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(3U, maps.Total());
-  auto it = maps.begin();
-  ASSERT_EQ(0x7b29b000U, it->start);
-  ASSERT_EQ(0x7b29e000U, it->end);
-  ASSERT_EQ(0xa0000000U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
-  ASSERT_EQ("/fake.so", it->name);
-  ++it;
-  ASSERT_EQ(0x7b2b0000U, it->start);
-  ASSERT_EQ(0x7b2e0000U, it->end);
-  ASSERT_EQ(0xb0000000U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
-  ASSERT_EQ("/fake2.so", it->name);
-  ++it;
-  ASSERT_EQ(0x7b2e0000U, it->start);
-  ASSERT_EQ(0x7b2f0000U, it->end);
-  ASSERT_EQ(0xc0000000U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
-  ASSERT_EQ("/fake3.so", it->name);
-  ++it;
-  ASSERT_EQ(it, maps.end());
+
+  MapInfo* info = maps.Get(0);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0x7b29b000U, info->start);
+  EXPECT_EQ(0x7b29e000U, info->end);
+  EXPECT_EQ(0xa0000000U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_EXEC, info->flags);
+  EXPECT_EQ("/fake.so", info->name);
+
+  info = maps.Get(1);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0x7b2b0000U, info->start);
+  EXPECT_EQ(0x7b2e0000U, info->end);
+  EXPECT_EQ(0xb0000000U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_EXEC, info->flags);
+  EXPECT_EQ("/fake2.so", info->name);
+
+  info = maps.Get(2);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0x7b2e0000U, info->start);
+  EXPECT_EQ(0x7b2f0000U, info->end);
+  EXPECT_EQ(0xc0000000U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_EXEC, info->flags);
+  EXPECT_EQ("/fake3.so", info->name);
+
+  ASSERT_TRUE(maps.Get(3) == nullptr);
 }
 
 TEST(MapsTest, file_no_map_name) {
@@ -299,26 +371,32 @@ TEST(MapsTest, file_no_map_name) {
 
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(3U, maps.Total());
-  auto it = maps.begin();
-  ASSERT_EQ(0x7b29b000U, it->start);
-  ASSERT_EQ(0x7b29e000U, it->end);
-  ASSERT_EQ(0xa0000000U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(0x7b2b0000U, it->start);
-  ASSERT_EQ(0x7b2e0000U, it->end);
-  ASSERT_EQ(0xb0000000U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
-  ASSERT_EQ("/fake2.so", it->name);
-  ++it;
-  ASSERT_EQ(0x7b2e0000U, it->start);
-  ASSERT_EQ(0x7b2f0000U, it->end);
-  ASSERT_EQ(0xc0000000U, it->offset);
-  ASSERT_EQ(PROT_READ | PROT_EXEC, it->flags);
-  ASSERT_EQ("", it->name);
-  ++it;
-  ASSERT_EQ(it, maps.end());
+
+  MapInfo* info = maps.Get(0);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0x7b29b000U, info->start);
+  EXPECT_EQ(0x7b29e000U, info->end);
+  EXPECT_EQ(0xa0000000U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_EXEC, info->flags);
+  EXPECT_EQ("", info->name);
+
+  info = maps.Get(1);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0x7b2b0000U, info->start);
+  EXPECT_EQ(0x7b2e0000U, info->end);
+  EXPECT_EQ(0xb0000000U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_EXEC, info->flags);
+  EXPECT_EQ("/fake2.so", info->name);
+
+  info = maps.Get(2);
+  ASSERT_TRUE(info != nullptr);
+  EXPECT_EQ(0x7b2e0000U, info->start);
+  EXPECT_EQ(0x7b2f0000U, info->end);
+  EXPECT_EQ(0xc0000000U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_EXEC, info->flags);
+  EXPECT_EQ("", info->name);
+
+  ASSERT_TRUE(maps.Get(3) == nullptr);
 }
 
 // Verify that a file that crosses a buffer is parsed correctly.
@@ -435,10 +513,10 @@ TEST(MapsTest, large_file) {
   ASSERT_EQ(5000U, maps.Total());
   for (size_t i = 0; i < 5000; i++) {
     MapInfo* info = maps.Get(i);
-    ASSERT_EQ(start + i * 4096, info->start) << "Failed at map " + std::to_string(i);
-    ASSERT_EQ(start + (i + 1) * 4096, info->end) << "Failed at map " + std::to_string(i);
+    EXPECT_EQ(start + i * 4096, info->start) << "Failed at map " + std::to_string(i);
+    EXPECT_EQ(start + (i + 1) * 4096, info->end) << "Failed at map " + std::to_string(i);
     std::string name = "/fake" + std::to_string(i) + ".so";
-    ASSERT_EQ(name, info->name) << "Failed at map " + std::to_string(i);
+    EXPECT_EQ(name, info->name) << "Failed at map " + std::to_string(i);
   }
 }
 
@@ -452,52 +530,52 @@ TEST(MapsTest, find) {
   ASSERT_TRUE(maps.Parse());
   ASSERT_EQ(5U, maps.Total());
 
-  ASSERT_TRUE(maps.Find(0x500) == nullptr);
-  ASSERT_TRUE(maps.Find(0x2000) == nullptr);
-  ASSERT_TRUE(maps.Find(0x5010) == nullptr);
-  ASSERT_TRUE(maps.Find(0x9a00) == nullptr);
-  ASSERT_TRUE(maps.Find(0xf000) == nullptr);
-  ASSERT_TRUE(maps.Find(0xf010) == nullptr);
+  EXPECT_TRUE(maps.Find(0x500) == nullptr);
+  EXPECT_TRUE(maps.Find(0x2000) == nullptr);
+  EXPECT_TRUE(maps.Find(0x5010) == nullptr);
+  EXPECT_TRUE(maps.Find(0x9a00) == nullptr);
+  EXPECT_TRUE(maps.Find(0xf000) == nullptr);
+  EXPECT_TRUE(maps.Find(0xf010) == nullptr);
 
   MapInfo* info = maps.Find(0x1000);
   ASSERT_TRUE(info != nullptr);
-  ASSERT_EQ(0x1000U, info->start);
-  ASSERT_EQ(0x2000U, info->end);
-  ASSERT_EQ(0x10U, info->offset);
-  ASSERT_EQ(PROT_READ, info->flags);
-  ASSERT_EQ("/system/lib/fake1.so", info->name);
+  EXPECT_EQ(0x1000U, info->start);
+  EXPECT_EQ(0x2000U, info->end);
+  EXPECT_EQ(0x10U, info->offset);
+  EXPECT_EQ(PROT_READ, info->flags);
+  EXPECT_EQ("/system/lib/fake1.so", info->name);
 
   info = maps.Find(0x3020);
   ASSERT_TRUE(info != nullptr);
-  ASSERT_EQ(0x3000U, info->start);
-  ASSERT_EQ(0x4000U, info->end);
-  ASSERT_EQ(0x20U, info->offset);
-  ASSERT_EQ(PROT_WRITE, info->flags);
-  ASSERT_EQ("/system/lib/fake2.so", info->name);
+  EXPECT_EQ(0x3000U, info->start);
+  EXPECT_EQ(0x4000U, info->end);
+  EXPECT_EQ(0x20U, info->offset);
+  EXPECT_EQ(PROT_WRITE, info->flags);
+  EXPECT_EQ("/system/lib/fake2.so", info->name);
 
   info = maps.Find(0x6020);
   ASSERT_TRUE(info != nullptr);
-  ASSERT_EQ(0x6000U, info->start);
-  ASSERT_EQ(0x8000U, info->end);
-  ASSERT_EQ(0x30U, info->offset);
-  ASSERT_EQ(PROT_EXEC, info->flags);
-  ASSERT_EQ("/system/lib/fake3.so", info->name);
+  EXPECT_EQ(0x6000U, info->start);
+  EXPECT_EQ(0x8000U, info->end);
+  EXPECT_EQ(0x30U, info->offset);
+  EXPECT_EQ(PROT_EXEC, info->flags);
+  EXPECT_EQ("/system/lib/fake3.so", info->name);
 
   info = maps.Find(0xafff);
   ASSERT_TRUE(info != nullptr);
-  ASSERT_EQ(0xa000U, info->start);
-  ASSERT_EQ(0xb000U, info->end);
-  ASSERT_EQ(0x40U, info->offset);
-  ASSERT_EQ(PROT_READ | PROT_WRITE, info->flags);
-  ASSERT_EQ("/system/lib/fake4.so", info->name);
+  EXPECT_EQ(0xa000U, info->start);
+  EXPECT_EQ(0xb000U, info->end);
+  EXPECT_EQ(0x40U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, info->flags);
+  EXPECT_EQ("/system/lib/fake4.so", info->name);
 
   info = maps.Find(0xe500);
   ASSERT_TRUE(info != nullptr);
-  ASSERT_EQ(0xe000U, info->start);
-  ASSERT_EQ(0xf000U, info->end);
-  ASSERT_EQ(0x50U, info->offset);
-  ASSERT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info->flags);
-  ASSERT_EQ("/system/lib/fake5.so", info->name);
+  EXPECT_EQ(0xe000U, info->start);
+  EXPECT_EQ(0xf000U, info->end);
+  EXPECT_EQ(0x50U, info->offset);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, info->flags);
+  EXPECT_EQ("/system/lib/fake5.so", info->name);
 }
 
 }  // namespace unwindstack

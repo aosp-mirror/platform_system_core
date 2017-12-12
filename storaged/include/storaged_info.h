@@ -27,39 +27,46 @@ using namespace std;
 class storage_info_t {
 protected:
     FRIEND_TEST(storaged_test, storage_info_t);
+    // emmc lifetime
     uint16_t eol;                   // pre-eol (end of life) information
     uint16_t lifetime_a;            // device life time estimation (type A)
     uint16_t lifetime_b;            // device life time estimation (type B)
     string version;                 // version string
+    // free space
+    const string userdata_path = "/data";
+    uint64_t userdata_total_kb;
+    uint64_t userdata_free_kb;
+
+    storage_info_t() : eol(0), lifetime_a(0), lifetime_b(0),
+        userdata_total_kb(0), userdata_free_kb(0) {}
     void publish();
+    storage_info_t* s_info;
 public:
-    storage_info_t() : eol(0), lifetime_a(0), lifetime_b(0) {}
+    static storage_info_t* get_storage_info();
     virtual ~storage_info_t() {}
-    virtual bool report() = 0;
+    virtual void report() {};
+    void refresh();
 };
 
 class emmc_info_t : public storage_info_t {
 private:
-    const string emmc_sysfs = "/sys/bus/mmc/devices/mmc0:0001/";
-    const string emmc_debugfs = "/d/mmc0/mmc0:0001/ext_csd";
-    const char* emmc_ver_str[9] = {
-        "4.0", "4.1", "4.2", "4.3", "Obsolete", "4.41", "4.5", "5.0", "5.1"
-    };
-public:
-    virtual ~emmc_info_t() {}
-    bool report();
     bool report_sysfs();
     bool report_debugfs();
+public:
+    static const string emmc_sysfs;
+    static const string emmc_debugfs;
+    static const char* emmc_ver_str[];
+
+    virtual ~emmc_info_t() {}
+    virtual void report();
 };
 
 class ufs_info_t : public storage_info_t {
-private:
-    const string health_file = "/sys/devices/soc/624000.ufshc/health";
 public:
-    virtual ~ufs_info_t() {}
-    bool report();
-};
+    static const string health_file;
 
-void report_storage_health();
+    virtual ~ufs_info_t() {}
+    virtual void report();
+};
 
 #endif /* _STORAGED_INFO_H_ */

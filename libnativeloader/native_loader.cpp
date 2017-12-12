@@ -82,12 +82,22 @@ static constexpr const char* kPublicNativeLibrariesSystemConfigPathFromRoot =
                                   "/etc/public.libraries.txt";
 static constexpr const char* kPublicNativeLibrariesVendorConfig =
                                   "/vendor/etc/public.libraries.txt";
+static constexpr const char* kLlndkNativeLibrariesSystemConfigPathFromRoot =
+                                  "/etc/llndk.libraries.txt";
+static constexpr const char* kVndkspNativeLibrariesSystemConfigPathFromRoot =
+                                  "/etc/vndksp.libraries.txt";
+
 
 // The device may be configured to have the vendor libraries loaded to a separate namespace.
 // For historical reasons this namespace was named sphal but effectively it is intended
 // to use to load vendor libraries to separate namespace with controlled interface between
 // vendor and system namespaces.
 static constexpr const char* kVendorNamespaceName = "sphal";
+
+static constexpr const char* kVndkNamespaceName = "vndk";
+
+static constexpr const char* kClassloaderNamespaceName = "classloader-namespace";
+static constexpr const char* kVendorClassloaderNamespaceName = "vendor-classloader-namespace";
 
 // (http://b/27588281) This is a workaround for apps using custom classloaders and calling
 // System.load() with an absolute path which is outside of the classloader library search path.
@@ -108,6 +118,7 @@ class LibraryNamespaces {
               uint32_t target_sdk_version,
               jobject class_loader,
               bool is_shared,
+              bool is_for_vendor,
               jstring java_library_path,
               jstring java_permitted_path,
               NativeLoaderNamespace* ns,
@@ -163,9 +174,39 @@ class LibraryNamespaces {
       is_native_bridge = NativeBridgeIsPathSupported(library_path.c_str());
     }
 
+    std::string system_exposed_libraries = system_public_libraries_;
+    const char* namespace_name = kClassloaderNamespaceName;
+    android_namespace_t* vndk_ns = nullptr;
+    if (is_for_vendor && !is_shared) {
+      LOG_FATAL_IF(is_native_bridge, "Unbundled vendor apk must not use translated architecture");
+
+      // For vendor apks, give access to the vendor lib even though
+      // they are treated as unbundled; the libs and apks are still bundled
+      // together in the vendor partition.
+#if defined(__LP64__)
+      std::string vendor_lib_path = "/vendor/lib64";
+#else
+      std::string vendor_lib_path = "/vendor/lib";
+#endif
+      library_path = library_path + ":" + vendor_lib_path.c_str();
+      permitted_path = permitted_path + ":" + vendor_lib_path.c_str();
+
+      // Also give access to LLNDK libraries since they are available to vendors
+      system_exposed_libraries = system_exposed_libraries + ":" + system_llndk_libraries_.c_str();
+
+      // Give access to VNDK-SP libraries from the 'vndk' namespace.
+      vndk_ns = android_get_exported_namespace(kVndkNamespaceName);
+      LOG_ALWAYS_FATAL_IF(vndk_ns == nullptr,
+                          "Cannot find \"%s\" namespace for vendor apks", kVndkNamespaceName);
+
+      // Different name is useful for debugging
+      namespace_name = kVendorClassloaderNamespaceName;
+      ALOGD("classloader namespace configured for unbundled vendor apk. library_path=%s", library_path.c_str());
+    }
+
     NativeLoaderNamespace native_loader_ns;
     if (!is_native_bridge) {
-      android_namespace_t* ns = android_create_namespace("classloader-namespace",
+      android_namespace_t* ns = android_create_namespace(namespace_name,
                                                          nullptr,
                                                          library_path.c_str(),
                                                          namespace_type,
@@ -181,9 +222,17 @@ class LibraryNamespaces {
       // which is expected behavior in this case.
       android_namespace_t* vendor_ns = android_get_exported_namespace(kVendorNamespaceName);
 
-      if (!android_link_namespaces(ns, nullptr, system_public_libraries_.c_str())) {
+      if (!android_link_namespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = dlerror();
         return false;
+      }
+
+      if (vndk_ns != nullptr && !system_vndksp_libraries_.empty()) {
+        // vendor apks are allowed to use VNDK-SP libraries.
+        if (!android_link_namespaces(ns, vndk_ns, system_vndksp_libraries_.c_str())) {
+          *error_msg = dlerror();
+          return false;
+        }
       }
 
       if (!vendor_public_libraries_.empty()) {
@@ -195,7 +244,7 @@ class LibraryNamespaces {
 
       native_loader_ns = NativeLoaderNamespace(ns);
     } else {
-      native_bridge_namespace_t* ns = NativeBridgeCreateNamespace("classloader-namespace",
+      native_bridge_namespace_t* ns = NativeBridgeCreateNamespace(namespace_name,
                                                                   nullptr,
                                                                   library_path.c_str(),
                                                                   namespace_type,
@@ -209,7 +258,7 @@ class LibraryNamespaces {
 
       native_bridge_namespace_t* vendor_ns = NativeBridgeGetVendorNamespace();
 
-      if (!NativeBridgeLinkNamespaces(ns, nullptr, system_public_libraries_.c_str())) {
+      if (!NativeBridgeLinkNamespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = NativeBridgeGetError();
         return false;
       }
@@ -259,6 +308,10 @@ class LibraryNamespaces {
     std::string root_dir = android_root_env != nullptr ? android_root_env : "/system";
     std::string public_native_libraries_system_config =
             root_dir + kPublicNativeLibrariesSystemConfigPathFromRoot;
+    std::string llndk_native_libraries_system_config =
+            root_dir + kLlndkNativeLibrariesSystemConfigPathFromRoot;
+    std::string vndksp_native_libraries_system_config =
+            root_dir + kVndkspNativeLibrariesSystemConfigPathFromRoot;
 
     std::string error_msg;
     LOG_ALWAYS_FATAL_IF(!ReadConfig(public_native_libraries_system_config, &sonames, &error_msg),
@@ -292,6 +345,14 @@ class LibraryNamespaces {
     }
 
     system_public_libraries_ = base::Join(sonames, ':');
+
+    sonames.clear();
+    ReadConfig(kLlndkNativeLibrariesSystemConfigPathFromRoot, &sonames);
+    system_llndk_libraries_ = base::Join(sonames, ':');
+
+    sonames.clear();
+    ReadConfig(kVndkspNativeLibrariesSystemConfigPathFromRoot, &sonames);
+    system_vndksp_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
     // This file is optional, quietly ignore if the file does not exist.
@@ -404,6 +465,8 @@ class LibraryNamespaces {
   std::vector<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
   std::string system_public_libraries_;
   std::string vendor_public_libraries_;
+  std::string system_llndk_libraries_;
+  std::string system_vndksp_libraries_;
 
   DISALLOW_COPY_AND_ASSIGN(LibraryNamespaces);
 };
@@ -430,6 +493,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
                                    int32_t target_sdk_version,
                                    jobject class_loader,
                                    bool is_shared,
+                                   bool is_for_vendor,
                                    jstring library_path,
                                    jstring permitted_path) {
 #if defined(__ANDROID__)
@@ -441,6 +505,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
                                       target_sdk_version,
                                       class_loader,
                                       is_shared,
+                                      is_for_vendor,
                                       library_path,
                                       permitted_path,
                                       &ns,
@@ -449,7 +514,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
     return env->NewStringUTF(error_msg.c_str());
   }
 #else
-  UNUSED(env, target_sdk_version, class_loader, is_shared,
+  UNUSED(env, target_sdk_version, class_loader, is_shared, is_for_vendor,
          library_path, permitted_path);
 #endif
   return nullptr;
@@ -478,7 +543,8 @@ void* OpenNativeLibrary(JNIEnv* env,
     if (!g_namespaces->Create(env,
                               target_sdk_version,
                               class_loader,
-                              false,
+                              false /* is_shared */,
+                              false /* is_for_vendor */,
                               library_path,
                               nullptr,
                               &ns,

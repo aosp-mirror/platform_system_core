@@ -222,6 +222,7 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
     } else {
       num_ignore_frames--;
     }
+    is_debug_frame_used_ = false;
     ret = unw_step(&cursor);
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
 
@@ -318,9 +319,10 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
       }
     }
   }
-  if (debug_frame->has_debug_frame || debug_frame->has_gnu_debugdata) {
+  if (!is_debug_frame_used_ && (debug_frame->has_debug_frame || debug_frame->has_gnu_debugdata)) {
+    is_debug_frame_used_ = true;
     unw_dyn_info_t di;
-    unw_word_t segbase = map.start - map.offset;
+    unw_word_t segbase = map.start - debug_frame->min_vaddr;
     // TODO: http://b/32916571
     // TODO: Do it ourselves is more efficient than calling libunwind functions.
     int found = dwarf_find_debug_frame(0, &di, ip, segbase, filename.c_str(), map.start, map.end);

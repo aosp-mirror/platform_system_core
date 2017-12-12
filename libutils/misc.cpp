@@ -44,8 +44,8 @@ static pthread_mutex_t gSyspropMutex = PTHREAD_MUTEX_INITIALIZER;
 static Vector<sysprop_change_callback_info>* gSyspropList = NULL;
 #endif
 
-void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
 #if !defined(_WIN32)
+void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
     pthread_mutex_lock(&gSyspropMutex);
     if (gSyspropList == NULL) {
         gSyspropList = new Vector<sysprop_change_callback_info>();
@@ -65,8 +65,10 @@ void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
         gSyspropList->add(info);
     }
     pthread_mutex_unlock(&gSyspropMutex);
-#endif
 }
+#else
+void add_sysprop_change_callback(sysprop_change_callback, int) {}
+#endif
 
 #if defined(__ANDROID__)
 void (*get_report_sysprop_change_func())() {

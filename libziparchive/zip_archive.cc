@@ -100,6 +100,11 @@ static uint32_t RoundUpPower2(uint32_t val) {
 }
 
 static uint32_t ComputeHash(const ZipString& name) {
+#if !defined(_WIN32)
+  return std::hash<std::string_view>{}(
+      std::string_view(reinterpret_cast<const char*>(name.name), name.name_length));
+#else
+  // Remove this code path once the windows compiler knows how to compile the above statement.
   uint32_t hash = 0;
   uint16_t len = name.name_length;
   const uint8_t* str = name.name;
@@ -109,6 +114,7 @@ static uint32_t ComputeHash(const ZipString& name) {
   }
 
   return hash;
+#endif
 }
 
 /*
@@ -379,6 +385,22 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
       return -1;
     }
   }
+
+  uint32_t lfh_start_bytes;
+  if (!archive->mapped_zip.ReadAtOffset(reinterpret_cast<uint8_t*>(&lfh_start_bytes),
+                                        sizeof(uint32_t), 0)) {
+    ALOGW("Zip: Unable to read header for entry at offset == 0.");
+    return -1;
+  }
+
+  if (lfh_start_bytes != LocalFileHeader::kSignature) {
+    ALOGW("Zip: Entry at offset zero has invalid LFH signature %" PRIx32, lfh_start_bytes);
+#if defined(__ANDROID__)
+    android_errorWriteLog(0x534e4554, "64211847");
+#endif
+    return -1;
+  }
+
   ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
 
   return 0;

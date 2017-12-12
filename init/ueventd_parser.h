@@ -32,7 +32,7 @@ class SubsystemParser : public SectionParser {
     Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line) override;
     Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
-    void EndSection() override;
+    Result<Success> EndSection() override;
 
   private:
     Result<Success> ParseDevName(std::vector<std::string>&& args);

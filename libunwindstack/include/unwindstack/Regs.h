@@ -27,10 +27,8 @@ namespace unwindstack {
 
 // Forward declarations.
 class Elf;
-struct MapInfo;
+enum ArchEnum : uint8_t;
 class Memory;
-struct x86_ucontext_t;
-struct x86_64_ucontext_t;
 
 class Regs {
  public:
@@ -51,7 +49,9 @@ class Regs {
       : total_regs_(total_regs), sp_reg_(sp_reg), return_loc_(return_loc) {}
   virtual ~Regs() = default;
 
-  virtual uint32_t MachineType() = 0;
+  virtual ArchEnum Arch() = 0;
+
+  virtual bool Format32Bit() = 0;
 
   virtual void* RawData() = 0;
   virtual uint64_t pc() = 0;
@@ -70,9 +70,9 @@ class Regs {
   uint16_t sp_reg() { return sp_reg_; }
   uint16_t total_regs() { return total_regs_; }
 
-  static uint32_t CurrentMachineType();
+  static ArchEnum CurrentArch();
   static Regs* RemoteGet(pid_t pid);
-  static Regs* CreateFromUcontext(uint32_t machine_type, void* ucontext);
+  static Regs* CreateFromUcontext(ArchEnum arch, void* ucontext);
   static Regs* CreateFromLocal();
 
  protected:
@@ -94,6 +94,8 @@ class RegsImpl : public Regs {
   void set_pc(AddressType pc) { pc_ = pc; }
   void set_sp(AddressType sp) { sp_ = sp; }
 
+  bool Format32Bit() override { return sizeof(AddressType) == sizeof(uint32_t); }
+
   inline AddressType& operator[](size_t reg) { return regs_[reg]; }
 
   void* RawData() override { return regs_.data(); }
@@ -108,82 +110,6 @@ class RegsImpl : public Regs {
   AddressType pc_;
   AddressType sp_;
   std::vector<AddressType> regs_;
-};
-
-class RegsArm : public RegsImpl<uint32_t> {
- public:
-  RegsArm();
-  virtual ~RegsArm() = default;
-
-  virtual uint32_t MachineType() override final;
-
-  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
-
-  void SetFromRaw() override;
-
-  bool SetPcFromReturnAddress(Memory* process_memory) override;
-
-  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
-
-  virtual void IterateRegisters(std::function<void(const char*, uint64_t)>) override final;
-};
-
-class RegsArm64 : public RegsImpl<uint64_t> {
- public:
-  RegsArm64();
-  virtual ~RegsArm64() = default;
-
-  virtual uint32_t MachineType() override final;
-
-  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
-
-  void SetFromRaw() override;
-
-  bool SetPcFromReturnAddress(Memory* process_memory) override;
-
-  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
-
-  virtual void IterateRegisters(std::function<void(const char*, uint64_t)>) override final;
-};
-
-class RegsX86 : public RegsImpl<uint32_t> {
- public:
-  RegsX86();
-  virtual ~RegsX86() = default;
-
-  virtual uint32_t MachineType() override final;
-
-  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
-
-  void SetFromRaw() override;
-
-  bool SetPcFromReturnAddress(Memory* process_memory) override;
-
-  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
-
-  void SetFromUcontext(x86_ucontext_t* ucontext);
-
-  virtual void IterateRegisters(std::function<void(const char*, uint64_t)>) override final;
-};
-
-class RegsX86_64 : public RegsImpl<uint64_t> {
- public:
-  RegsX86_64();
-  virtual ~RegsX86_64() = default;
-
-  virtual uint32_t MachineType() override final;
-
-  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
-
-  void SetFromRaw() override;
-
-  bool SetPcFromReturnAddress(Memory* process_memory) override;
-
-  bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
-
-  void SetFromUcontext(x86_64_ucontext_t* ucontext);
-
-  virtual void IterateRegisters(std::function<void(const char*, uint64_t)>) override final;
 };
 
 }  // namespace unwindstack

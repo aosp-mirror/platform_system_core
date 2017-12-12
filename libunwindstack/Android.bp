@@ -60,6 +60,12 @@ cc_library {
         "Maps.cpp",
         "Memory.cpp",
         "Regs.cpp",
+        "RegsArm.cpp",
+        "RegsArm64.cpp",
+        "RegsX86.cpp",
+        "RegsX86_64.cpp",
+        "RegsMips.cpp",
+        "RegsMips64.cpp",
         "Unwinder.cpp",
         "Symbols.cpp",
     ],
@@ -81,6 +87,12 @@ cc_library {
         },
         x86_64: {
             srcs: ["AsmGetRegsX86_64.S"],
+        },
+        mips: {
+            srcs: ["AsmGetRegsMips.S"],
+        },
+        mips64: {
+            srcs: ["AsmGetRegsMips64.S"],
         },
     },
 
@@ -118,6 +130,7 @@ cc_test {
         "tests/ElfTestUtils.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoGetElfTest.cpp",
+        "tests/MapInfoGetLoadBiasTest.cpp",
         "tests/MapsTest.cpp",
         "tests/MemoryBufferTest.cpp",
         "tests/MemoryFake.cpp",
@@ -130,6 +143,7 @@ cc_test {
         "tests/RegsStepIfSignalHandlerTest.cpp",
         "tests/RegsTest.cpp",
         "tests/SymbolsTest.cpp",
+        "tests/UnwindOfflineTest.cpp",
         "tests/UnwindTest.cpp",
         "tests/UnwinderTest.cpp",
     ],
@@ -153,6 +167,8 @@ cc_test {
     data: [
         "tests/files/elf32.xz",
         "tests/files/elf64.xz",
+        "tests/files/offline/straddle_arm32/*",
+        "tests/files/offline/straddle_arm64/*",
     ],
 }
 

@@ -1,7 +1,6 @@
 #include "fs.h"
 
 #include "fastboot.h"
-#include "make_f2fs.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -23,13 +22,13 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
-#include <sparse/sparse.h>
 
+using android::base::GetExecutableDirectory;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
 #ifdef WIN32
-static int exec_e2fs_cmd(const char* path, char* const argv[]) {
+static int exec_cmd(const char* path, const char** argv, const char** envp) {
     std::string cmd;
     int i = 0;
     while (argv[i] != nullptr) {
@@ -46,7 +45,13 @@ static int exec_e2fs_cmd(const char* path, char* const argv[]) {
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
 
-    SetEnvironmentVariableA("MKE2FS_CONFIG", "");
+    std::string env_str;
+    if (envp != nullptr) {
+        while (*envp != nullptr) {
+            env_str += std::string(*envp) + std::string("\0", 1);
+            envp++;
+        }
+    }
 
     if (!CreateProcessA(nullptr,                         // No module name (use command line)
                         const_cast<char*>(cmd.c_str()),  // Command line
@@ -54,10 +59,10 @@ static int exec_e2fs_cmd(const char* path, char* const argv[]) {
                         nullptr,                         // Thread handle not inheritable
                         FALSE,                           // Set handle inheritance to FALSE
                         0,                               // No creation flags
-                        nullptr,                         // Use parent's environment block
-                        nullptr,                         // Use parent's starting directory
-                        &si,                             // Pointer to STARTUPINFO structure
-                        &pi)                             // Pointer to PROCESS_INFORMATION structure
+                        env_str.empty() ? nullptr : LPSTR(env_str.c_str()),
+                        nullptr,  // Use parent's starting directory
+                        &si,      // Pointer to STARTUPINFO structure
+                        &pi)      // Pointer to PROCESS_INFORMATION structure
     ) {
         fprintf(stderr, "CreateProcess failed: %s\n",
                 android::base::SystemErrorCodeToString(GetLastError()).c_str());
@@ -71,15 +76,18 @@ static int exec_e2fs_cmd(const char* path, char* const argv[]) {
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    return exit_code != 0;
+    if (exit_code != 0) {
+        fprintf(stderr, "%s failed: %lu\n", path, exit_code);
+        return -1;
+    }
+    return 0;
 }
 #else
-static int exec_e2fs_cmd(const char* path, char* const argv[]) {
+static int exec_cmd(const char* path, const char** argv, const char** envp) {
     int status;
     pid_t child;
     if ((child = fork()) == 0) {
-        setenv("MKE2FS_CONFIG", "", 1);
-        execvp(path, argv);
+        execve(path, const_cast<char**>(argv), const_cast<char**>(envp));
         _exit(EXIT_FAILURE);
     }
     if (child < 0) {
@@ -93,11 +101,13 @@ static int exec_e2fs_cmd(const char* path, char* const argv[]) {
     int ret = -1;
     if (WIFEXITED(status)) {
         ret = WEXITSTATUS(status);
-        if (ret != 0) {
-            fprintf(stderr, "%s failed with status %d\n", path, ret);
-        }
     }
-    return ret;
+
+    if (ret != 0) {
+        fprintf(stderr, "%s failed with status %d\n", path, ret);
+        return -1;
+    }
+    return 0;
 }
 #endif
 
@@ -133,9 +143,11 @@ static int generate_ext4_image(const char* fileName, long long partSize,
     mke2fs_args.push_back(size_str.c_str());
     mke2fs_args.push_back(nullptr);
 
-    int ret = exec_e2fs_cmd(mke2fs_args[0], const_cast<char**>(mke2fs_args.data()));
+    const std::string mke2fs_env = "MKE2FS_CONFIG=" + GetExecutableDirectory() + "/mke2fs.conf";
+    std::vector<const char*> mke2fs_envp = {mke2fs_env.c_str(), nullptr};
+
+    int ret = exec_cmd(mke2fs_args[0], mke2fs_args.data(), mke2fs_envp.data());
     if (ret != 0) {
-        fprintf(stderr, "mke2fs failed: %d\n", ret);
         return -1;
     }
 
@@ -147,31 +159,42 @@ static int generate_ext4_image(const char* fileName, long long partSize,
     std::vector<const char*> e2fsdroid_args = {e2fsdroid_path.c_str(), "-f", initial_dir.c_str(),
                                                fileName, nullptr};
 
-    ret = exec_e2fs_cmd(e2fsdroid_args[0], const_cast<char**>(e2fsdroid_args.data()));
-    if (ret != 0) {
-        fprintf(stderr, "e2fsdroid failed: %d\n", ret);
-        return -1;
-    }
-
-    return 0;
+    return exec_cmd(e2fsdroid_args[0], e2fsdroid_args.data(), nullptr);
 }
 
-#ifdef USE_F2FS
 static int generate_f2fs_image(const char* fileName, long long partSize, const std::string& initial_dir,
                                unsigned /* unused */, unsigned /* unused */)
 {
-    if (!initial_dir.empty()) {
-        fprintf(stderr, "Unable to set initial directory on F2FS filesystem: %s\n", strerror(errno));
+    const std::string exec_dir = android::base::GetExecutableDirectory();
+    const std::string mkf2fs_path = exec_dir + "/make_f2fs";
+    std::vector<const char*> mkf2fs_args = {mkf2fs_path.c_str()};
+
+    mkf2fs_args.push_back("-S");
+    std::string size_str = std::to_string(partSize);
+    mkf2fs_args.push_back(size_str.c_str());
+    mkf2fs_args.push_back("-f");
+    mkf2fs_args.push_back("-O");
+    mkf2fs_args.push_back("encrypt");
+    mkf2fs_args.push_back("-O");
+    mkf2fs_args.push_back("quota");
+    mkf2fs_args.push_back(fileName);
+    mkf2fs_args.push_back(nullptr);
+
+    int ret = exec_cmd(mkf2fs_args[0], mkf2fs_args.data(), nullptr);
+    if (ret != 0) {
         return -1;
     }
-    unique_fd fd(open(fileName, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR));
-    if (fd == -1) {
-        fprintf(stderr, "Unable to open output file for F2FS filesystem: %s\n", strerror(errno));
-        return -1;
+
+    if (initial_dir.empty()) {
+        return 0;
     }
-    return make_f2fs_sparse_fd(fd, partSize, NULL, NULL);
+
+    const std::string sload_path = exec_dir + "/sload_f2fs";
+    std::vector<const char*> sload_args = {sload_path.c_str(), "-S",
+                                       "-f", initial_dir.c_str(), fileName, nullptr};
+
+    return exec_cmd(sload_args[0], sload_args.data(), nullptr);
 }
-#endif
 
 static const struct fs_generator {
     const char* fs_type;  //must match what fastboot reports for partition type
@@ -182,9 +205,7 @@ static const struct fs_generator {
 
 } generators[] = {
     { "ext4", generate_ext4_image},
-#ifdef USE_F2FS
     { "f2fs", generate_f2fs_image},
-#endif
 };
 
 const struct fs_generator* fs_get_generator(const std::string& fs_type) {

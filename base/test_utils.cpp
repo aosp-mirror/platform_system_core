@@ -84,6 +84,10 @@ TemporaryFile::TemporaryFile() {
   init(GetSystemTempDir());
 }
 
+TemporaryFile::TemporaryFile(const std::string& tmp_dir) {
+  init(tmp_dir);
+}
+
 TemporaryFile::~TemporaryFile() {
   if (fd != -1) {
     close(fd);

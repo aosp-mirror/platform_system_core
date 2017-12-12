@@ -67,6 +67,7 @@ class FuseBridgeLoopTest : public ::testing::Test {
     memset(&request_, 0, sizeof(FuseRequest));
     request_.header.opcode = opcode;
     request_.header.len = sizeof(fuse_in_header);
+    request_.header.unique = 1;
     ASSERT_TRUE(request_.Write(dev_sockets_[0]));
 
     memset(&response_, 0, sizeof(FuseResponse));

@@ -35,9 +35,9 @@ LogReader::LogReader(LogBuffer* logbuf)
 }
 
 // When we are notified a new log entry is available, inform
-// all of our listening sockets.
-void LogReader::notifyNewLog() {
-    FlushCommand command(*this);
+// listening sockets who are watching this entry's log id.
+void LogReader::notifyNewLog(log_mask_t logMask) {
+    FlushCommand command(*this, logMask);
     runOnEachSocket(&command);
 }
 

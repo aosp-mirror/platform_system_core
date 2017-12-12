@@ -54,7 +54,7 @@ test_c_flags := \
     -Werror \
     -fno-builtin \
 
-test_src_files := \
+cts_src_files := \
     libc_test.cpp \
     liblog_test_default.cpp \
     liblog_test_local.cpp \
@@ -66,6 +66,9 @@ test_src_files := \
     log_system_test.cpp \
     log_time_test.cpp \
     log_wrap_test.cpp
+
+test_src_files := \
+    $(cts_src_files) \
 
 # Build tests for the device (with .so). Run with:
 #   adb shell /data/nativetest/liblog-unit-tests/liblog-unit-tests
@@ -82,15 +85,15 @@ cts_executable := CtsLiblogTestCases
 include $(CLEAR_VARS)
 LOCAL_MODULE := $(cts_executable)
 LOCAL_MODULE_TAGS := tests
-LOCAL_CFLAGS += $(test_c_flags)
-LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_CFLAGS += $(test_c_flags) -DNO_PSTORE
+LOCAL_SRC_FILES := $(cts_src_files)
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/nativetest
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
 LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 LOCAL_SHARED_LIBRARIES := liblog libcutils libbase
 LOCAL_STATIC_LIBRARIES := libgtest libgtest_main
-LOCAL_COMPATIBILITY_SUITE := cts
+LOCAL_COMPATIBILITY_SUITE := cts vts
 LOCAL_CTS_TEST_PACKAGE := android.core.liblog
 include $(BUILD_CTS_EXECUTABLE)
 

@@ -25,9 +25,19 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/MapInfo.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
+#include <unwindstack/RegsArm64.h>
+#include <unwindstack/RegsX86.h>
+#include <unwindstack/RegsX86_64.h>
+#include <unwindstack/RegsMips.h>
+#include <unwindstack/RegsMips64.h>
 
-#include "Machine.h"
+#include "MachineArm.h"
+#include "MachineArm64.h"
+#include "MachineX86.h"
+#include "MachineX86_64.h"
+#include "MachineMips.h"
+#include "MachineMips64.h"
 
 namespace unwindstack {
 
@@ -146,7 +156,87 @@ std::vector<Register> ExpectedRegisters<RegsX86_64>() {
   return result;
 }
 
-using RegTypes = ::testing::Types<RegsArm, RegsArm64, RegsX86, RegsX86_64>;
+template<>
+std::vector<Register> ExpectedRegisters<RegsMips>() {
+  std::vector<Register> result;
+  result.push_back({"r0", MIPS_REG_R0});
+  result.push_back({"r1", MIPS_REG_R1});
+  result.push_back({"r2", MIPS_REG_R2});
+  result.push_back({"r3", MIPS_REG_R3});
+  result.push_back({"r4", MIPS_REG_R4});
+  result.push_back({"r5", MIPS_REG_R5});
+  result.push_back({"r6", MIPS_REG_R6});
+  result.push_back({"r7", MIPS_REG_R7});
+  result.push_back({"r8", MIPS_REG_R8});
+  result.push_back({"r9", MIPS_REG_R9});
+  result.push_back({"r10", MIPS_REG_R10});
+  result.push_back({"r11", MIPS_REG_R11});
+  result.push_back({"r12", MIPS_REG_R12});
+  result.push_back({"r13", MIPS_REG_R13});
+  result.push_back({"r14", MIPS_REG_R14});
+  result.push_back({"r15", MIPS_REG_R15});
+  result.push_back({"r16", MIPS_REG_R16});
+  result.push_back({"r17", MIPS_REG_R17});
+  result.push_back({"r18", MIPS_REG_R18});
+  result.push_back({"r19", MIPS_REG_R19});
+  result.push_back({"r20", MIPS_REG_R20});
+  result.push_back({"r21", MIPS_REG_R21});
+  result.push_back({"r22", MIPS_REG_R22});
+  result.push_back({"r23", MIPS_REG_R23});
+  result.push_back({"r24", MIPS_REG_R24});
+  result.push_back({"r25", MIPS_REG_R25});
+  result.push_back({"r26", MIPS_REG_R26});
+  result.push_back({"r27", MIPS_REG_R27});
+  result.push_back({"r28", MIPS_REG_R28});
+  result.push_back({"sp", MIPS_REG_SP});
+  result.push_back({"r30", MIPS_REG_R30});
+  result.push_back({"ra", MIPS_REG_RA});
+  result.push_back({"pc", MIPS_REG_PC});
+
+  return result;
+}
+
+template<>
+std::vector<Register> ExpectedRegisters<RegsMips64>() {
+  std::vector<Register> result;
+  result.push_back({"r0", MIPS64_REG_R0});
+  result.push_back({"r1", MIPS64_REG_R1});
+  result.push_back({"r2", MIPS64_REG_R2});
+  result.push_back({"r3", MIPS64_REG_R3});
+  result.push_back({"r4", MIPS64_REG_R4});
+  result.push_back({"r5", MIPS64_REG_R5});
+  result.push_back({"r6", MIPS64_REG_R6});
+  result.push_back({"r7", MIPS64_REG_R7});
+  result.push_back({"r8", MIPS64_REG_R8});
+  result.push_back({"r9", MIPS64_REG_R9});
+  result.push_back({"r10", MIPS64_REG_R10});
+  result.push_back({"r11", MIPS64_REG_R11});
+  result.push_back({"r12", MIPS64_REG_R12});
+  result.push_back({"r13", MIPS64_REG_R13});
+  result.push_back({"r14", MIPS64_REG_R14});
+  result.push_back({"r15", MIPS64_REG_R15});
+  result.push_back({"r16", MIPS64_REG_R16});
+  result.push_back({"r17", MIPS64_REG_R17});
+  result.push_back({"r18", MIPS64_REG_R18});
+  result.push_back({"r19", MIPS64_REG_R19});
+  result.push_back({"r20", MIPS64_REG_R20});
+  result.push_back({"r21", MIPS64_REG_R21});
+  result.push_back({"r22", MIPS64_REG_R22});
+  result.push_back({"r23", MIPS64_REG_R23});
+  result.push_back({"r24", MIPS64_REG_R24});
+  result.push_back({"r25", MIPS64_REG_R25});
+  result.push_back({"r26", MIPS64_REG_R26});
+  result.push_back({"r27", MIPS64_REG_R27});
+  result.push_back({"r28", MIPS64_REG_R28});
+  result.push_back({"sp", MIPS64_REG_SP});
+  result.push_back({"r30", MIPS64_REG_R30});
+  result.push_back({"ra", MIPS64_REG_RA});
+  result.push_back({"pc", MIPS64_REG_PC});
+
+  return result;
+}
+
+using RegTypes = ::testing::Types<RegsArm, RegsArm64, RegsX86, RegsX86_64, RegsMips, RegsMips64>;
 TYPED_TEST_CASE(RegsIterateTest, RegTypes);
 
 TYPED_TEST(RegsIterateTest, iterate) {

@@ -26,24 +26,22 @@
 
 //  SectionParser is an interface that can parse a given 'section' in init.
 //
-//  You can implement up to 4 functions below, with ParseSection() being mandatory.
-//  The first two function return bool with false indicating a failure and has a std::string* err
-//  parameter into which an error string can be written.  It will be reported along with the
-//  filename and line number of where the error occurred.
+//  You can implement up to 4 functions below, with ParseSection being mandatory. The first two
+//  functions return Result<Success> indicating if they have an error. It will be reported along
+//  with the filename and line number of where the error occurred.
 //
-//  1) bool ParseSection(std::vector<std::string>&& args, const std::string& filename,
-//                       int line, std::string* err)
+//  1) ParseSection
 //    This function is called when a section is first encountered.
 //
-//  2) bool ParseLineSection(std::vector<std::string>&& args, int line, std::string* err)
+//  2) ParseLineSection
 //    This function is called on each subsequent line until the next section is encountered.
 //
-//  3) bool EndSection()
+//  3) EndSection
 //    This function is called either when a new section is found or at the end of the file.
 //    It indicates that parsing of the current section is complete and any relevant objects should
 //    be committed.
 //
-//  4) bool EndFile()
+//  4) EndFile
 //    This function is called at the end of the file.
 //    It indicates that the parsing has completed and any relevant objects should be committed.
 
@@ -56,7 +54,7 @@ class SectionParser {
     virtual Result<Success> ParseSection(std::vector<std::string>&& args,
                                          const std::string& filename, int line) = 0;
     virtual Result<Success> ParseLineSection(std::vector<std::string>&&, int) { return Success(); };
-    virtual void EndSection(){};
+    virtual Result<Success> EndSection() { return Success(); };
     virtual void EndFile(){};
 };
 
