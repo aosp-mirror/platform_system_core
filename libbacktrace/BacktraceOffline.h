@@ -48,7 +48,8 @@ class BacktraceOffline : public Backtrace {
                    bool cache_file)
       : Backtrace(pid, tid, map),
         cache_file_(cache_file),
-        context_(nullptr) {
+        context_(nullptr),
+        is_debug_frame_used_(false) {
     stack_space_.start = stack.start;
     stack_space_.end = stack.end;
     stack_space_.data = stack.data;
@@ -78,6 +79,14 @@ class BacktraceOffline : public Backtrace {
   Space arm_extab_space_;
   Space arm_exidx_space_;
   Space stack_space_;
+
+  // is_debug_frame_used_ is to make sure we can try both .debug_frame and .ARM.exidx in
+  // FindProcInfo() on ARM. One example is EsxContext::Clear() in
+  // vendor/lib/egl/libGLESv2_adreno.so. EsxContext::Clear() appears in both .debug_frame and
+  // .ARM.exidx. However, libunwind fails to execute debug_frame instruction
+  // "DW_CFA_offset_extended: r265 at cfa-48". So we need to try .ARM.exidx to unwind that
+  // function.
+  bool is_debug_frame_used_;
 };
 
 #endif  // _LIBBACKTRACE_BACKTRACE_OFFLINE_H

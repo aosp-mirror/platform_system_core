@@ -32,27 +32,20 @@
 
 namespace unwindstack {
 
-void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, bool adjust_pc) {
+void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc) {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
   frame->num = frame_num;
-  frame->pc = regs_->pc();
   frame->sp = regs_->sp();
-  frame->rel_pc = rel_pc;
+  frame->rel_pc = adjusted_rel_pc;
 
   if (map_info == nullptr) {
+    frame->pc = regs_->pc();
     return;
   }
 
-  if (adjust_pc) {
-    // Don't adjust the first frame pc.
-    frame->rel_pc = regs_->GetAdjustedPc(rel_pc, elf);
-
-    // Adjust the original pc.
-    frame->pc -= rel_pc - frame->rel_pc;
-  }
-
+  frame->pc = map_info->start + adjusted_rel_pc;
   frame->map_name = map_info->name;
   frame->map_offset = map_info->offset;
   frame->map_start = map_info->start;
@@ -92,21 +85,29 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
 
     MapInfo* map_info = maps_->Find(regs_->pc());
     uint64_t rel_pc;
+    uint64_t adjusted_rel_pc;
     Elf* elf;
     if (map_info == nullptr) {
       rel_pc = regs_->pc();
+      adjusted_rel_pc = rel_pc;
     } else {
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
       }
       elf = map_info->GetElf(process_memory_, true);
       rel_pc = elf->GetRelPc(regs_->pc(), map_info);
+      if (adjust_pc) {
+        adjusted_rel_pc = regs_->GetAdjustedPc(rel_pc, elf);
+      } else {
+        adjusted_rel_pc = rel_pc;
+      }
     }
 
     if (map_info == nullptr || initial_map_names_to_skip == nullptr ||
         std::find(initial_map_names_to_skip->begin(), initial_map_names_to_skip->end(),
                   basename(map_info->name.c_str())) == initial_map_names_to_skip->end()) {
-      FillInFrame(map_info, elf, rel_pc, adjust_pc);
+      FillInFrame(map_info, elf, adjusted_rel_pc);
+
       // Once a frame is added, stop skipping frames.
       initial_map_names_to_skip = nullptr;
     }
@@ -133,7 +134,8 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           in_device_map = true;
         } else {
           bool finished;
-          stepped = elf->Step(rel_pc, map_info->elf_offset, regs_, process_memory_.get(), &finished);
+          stepped = elf->Step(rel_pc, adjusted_rel_pc, map_info->elf_offset, regs_,
+                              process_memory_.get(), &finished);
           if (stepped && finished) {
             break;
           }
@@ -172,8 +174,7 @@ std::string Unwinder::FormatFrame(size_t frame_num) {
   if (frame_num >= frames_.size()) {
     return "";
   }
-  return FormatFrame(frames_[frame_num],
-                     regs_->MachineType() == EM_ARM || regs_->MachineType() == EM_386);
+  return FormatFrame(frames_[frame_num], regs_->Format32Bit());
 }
 
 std::string Unwinder::FormatFrame(const FrameData& frame, bool bits32) {

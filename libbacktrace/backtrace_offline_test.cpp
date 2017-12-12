@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -171,10 +172,12 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   testdata += android::base::StringPrintf("pid: %d tid: %d\n", getpid(), arg.tid);
   // 2. Dump maps
   for (auto it = map->begin(); it != map->end(); ++it) {
-    testdata += android::base::StringPrintf(
-        "map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR " load_bias: %" PRIxPTR
-        " flags: %d name: %s\n",
-        it->start, it->end, it->offset, it->load_bias, it->flags, it->name.c_str());
+    const backtrace_map_t* entry = *it;
+    testdata +=
+        android::base::StringPrintf("map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR
+                                    " load_bias: %" PRIxPTR " flags: %d name: %s\n",
+                                    entry->start, entry->end, entry->offset, entry->load_bias,
+                                    entry->flags, entry->name.c_str());
   }
   // 3. Dump registers
   testdata += android::base::StringPrintf("registers: %zu ", sizeof(arg.unw_context));
@@ -249,12 +252,21 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
         return false;
       }
       HexStringToRawData(&line[pos], &testdata->unw_context, size);
+#if defined(__arm__)
+    } else if (android::base::StartsWith(line, "regs:")) {
+      uint64_t pc;
+      uint64_t sp;
+      sscanf(line.c_str(), "regs: pc: %" SCNx64 " sp: %" SCNx64, &pc, &sp);
+      testdata->unw_context.regs[13] = sp;
+      testdata->unw_context.regs[15] = pc;
+#endif
     } else if (android::base::StartsWith(line, "stack:")) {
       size_t size;
       int pos;
       sscanf(line.c_str(),
              "stack: start: %" SCNx64 " end: %" SCNx64 " size: %zu %n",
              &testdata->stack_info.start, &testdata->stack_info.end, &size, &pos);
+      CHECK_EQ(testdata->stack_info.end - testdata->stack_info.start, size);
       testdata->stack.resize(size);
       HexStringToRawData(&line[pos], &testdata->stack[0], size);
       testdata->stack_info.data = testdata->stack.data();
@@ -345,26 +357,24 @@ TEST(libbacktrace, offline_arm_exidx) {
   BacktraceOfflineTest("arm", "libbacktrace_test_arm_exidx.so");
 }
 
-// This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
-// overlap with each other, which appears in /system/lib/libart.so.
-TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
-  // TODO: For now, only run on the given arch.
-  if (std::string(ABI_STRING) != "arm") {
+static void LibUnwindingTest(const std::string& arch, const std::string& testdata_name,
+                             const std::string& testlib_name) {
+  if (std::string(ABI_STRING) != arch) {
     GTEST_LOG_(INFO) << "Skipping test since offline for arm on " << ABI_STRING
                      << " isn't supported.";
     return;
   }
-  const std::string testlib_path(GetTestPath("libart.so"));
+  const std::string testlib_path(GetTestPath(testlib_name));
   struct stat st;
   ASSERT_EQ(0, stat(testlib_path.c_str(), &st)) << "can't find testlib " << testlib_path;
 
-  const std::string offline_testdata_path(GetTestPath("offline_testdata_for_libart"));
+  const std::string offline_testdata_path(GetTestPath(testdata_name));
   OfflineTestData testdata;
   ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
 
-  // Fix path of /system/lib/libart.so.
+  // Fix path of the testlib.
   for (auto& map : testdata.maps) {
-    if (map.name.find("libart.so") != std::string::npos) {
+    if (map.name.find(testlib_name) != std::string::npos) {
       map.name = testlib_path;
     }
   }
@@ -380,12 +390,25 @@ TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
   ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
   ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
 
-  // The last frame is outside of libart.so
-  ASSERT_EQ(testdata.symbols.size() + 1, backtrace->NumFrames());
-  for (size_t i = 0; i + 1 < backtrace->NumFrames(); ++i) {
+  ASSERT_EQ(testdata.symbols.size(), backtrace->NumFrames());
+  for (size_t i = 0; i < backtrace->NumFrames(); ++i) {
     uintptr_t vaddr_in_file =
         backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
   }
+}
+
+// This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
+// overlap with each other, which appears in /system/lib/libart.so.
+TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
+  LibUnwindingTest("arm", "offline_testdata_for_libart", "libart.so");
+}
+
+TEST(libbacktrace, offline_debug_frame_with_load_bias) {
+  LibUnwindingTest("arm", "offline_testdata_for_libandroid_runtime", "libandroid_runtime.so");
+}
+
+TEST(libbacktrace, offline_try_armexidx_after_debug_frame) {
+  LibUnwindingTest("arm", "offline_testdata_for_libGLESv2_adreno", "libGLESv2_adreno.so");
 }

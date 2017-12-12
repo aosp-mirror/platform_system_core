@@ -85,6 +85,6 @@ ssize_t socket_send_buffers(cutils_socket_t sock,
     return -1;
 }
 
-int android_get_control_socket(const char* name) {
+int android_get_control_socket(const char*) {
     return -1;
 }

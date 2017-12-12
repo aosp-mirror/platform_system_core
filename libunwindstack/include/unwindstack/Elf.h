@@ -20,6 +20,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include <unwindstack/ElfInterface.h>
@@ -34,6 +35,16 @@ namespace unwindstack {
 // Forward declaration.
 struct MapInfo;
 class Regs;
+
+enum ArchEnum : uint8_t {
+  ARCH_UNKNOWN = 0,
+  ARCH_ARM,
+  ARCH_ARM64,
+  ARCH_X86,
+  ARCH_X86_64,
+  ARCH_MIPS,
+  ARCH_MIPS64,
+};
 
 class Elf {
  public:
@@ -50,8 +61,8 @@ class Elf {
 
   uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
 
-  bool Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process_memory,
-            bool* finished);
+  bool Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
+            Memory* process_memory, bool* finished);
 
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
 
@@ -63,6 +74,8 @@ class Elf {
 
   uint8_t class_type() { return class_type_; }
 
+  ArchEnum arch() { return arch_; }
+
   Memory* memory() { return memory_.get(); }
 
   ElfInterface* interface() { return interface_.get(); }
@@ -73,6 +86,8 @@ class Elf {
 
   static void GetInfo(Memory* memory, bool* valid, uint64_t* size);
 
+  static uint64_t GetLoadBias(Memory* memory);
+
  protected:
   bool valid_ = false;
   uint64_t load_bias_ = 0;
@@ -80,6 +95,9 @@ class Elf {
   std::unique_ptr<Memory> memory_;
   uint32_t machine_type_;
   uint8_t class_type_;
+  ArchEnum arch_;
+  // Protect calls that can modify internal state of the interface object.
+  std::mutex lock_;
 
   std::unique_ptr<Memory> gnu_debugdata_memory_;
   std::unique_ptr<ElfInterface> gnu_debugdata_interface_;

@@ -23,7 +23,7 @@
 
 #define TAG "android_reboot"
 
-int android_reboot(int cmd, int flags __unused, const char* arg) {
+int android_reboot(int cmd, int /*flags*/, const char* arg) {
     int ret;
     const char* restart_cmd = NULL;
     char* prop_value;

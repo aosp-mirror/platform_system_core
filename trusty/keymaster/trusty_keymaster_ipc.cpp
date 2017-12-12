@@ -55,6 +55,11 @@ int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out
 
     size_t msg_size = in_size + sizeof(struct keymaster_message);
     struct keymaster_message* msg = reinterpret_cast<struct keymaster_message*>(malloc(msg_size));
+    if (!msg) {
+        ALOGE("failed to allocate msg buffer\n");
+        return -EINVAL;
+    }
+
     msg->cmd = cmd;
     memcpy(msg->payload, in, in_size);
 

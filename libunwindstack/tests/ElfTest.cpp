@@ -25,6 +25,7 @@
 
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
+#include <unwindstack/RegsArm.h>
 
 #include "ElfFake.h"
 #include "ElfTestUtils.h"
@@ -132,7 +133,7 @@ TEST_F(ElfTest, elf_invalid) {
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
   bool finished;
-  ASSERT_FALSE(elf.Step(0, 0, nullptr, nullptr, &finished));
+  ASSERT_FALSE(elf.Step(0, 0, 0, nullptr, nullptr, &finished));
 }
 
 TEST_F(ElfTest, elf32_invalid_machine) {
@@ -144,7 +145,7 @@ TEST_F(ElfTest, elf32_invalid_machine) {
   ASSERT_FALSE(elf.Init(false));
 
   ASSERT_EQ("", GetFakeLogBuf());
-  ASSERT_EQ("4 unwind 32 bit elf that is neither arm nor x86: e_machine = 20\n\n",
+  ASSERT_EQ("4 unwind 32 bit elf that is neither arm nor x86 nor mips: e_machine = 20\n\n",
             GetFakeLogPrint());
 }
 
@@ -157,7 +158,7 @@ TEST_F(ElfTest, elf64_invalid_machine) {
   ASSERT_FALSE(elf.Init(false));
 
   ASSERT_EQ("", GetFakeLogBuf());
-  ASSERT_EQ("4 unwind 64 bit elf that is neither aarch64 nor x86_64: e_machine = 21\n\n",
+  ASSERT_EQ("4 unwind 64 bit elf that is neither aarch64 nor x86_64 nor mips64: e_machine = 21\n\n",
             GetFakeLogPrint());
 }
 
@@ -169,6 +170,18 @@ TEST_F(ElfTest, elf_arm) {
   ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.valid());
   ASSERT_EQ(static_cast<uint32_t>(EM_ARM), elf.machine_type());
+  ASSERT_EQ(ELFCLASS32, elf.class_type());
+  ASSERT_TRUE(elf.interface() != nullptr);
+}
+
+TEST_F(ElfTest, elf_mips) {
+  Elf elf(memory_);
+
+  InitElf32(EM_MIPS);
+
+  ASSERT_TRUE(elf.Init(false));
+  ASSERT_TRUE(elf.valid());
+  ASSERT_EQ(static_cast<uint32_t>(EM_MIPS), elf.machine_type());
   ASSERT_EQ(ELFCLASS32, elf.class_type());
   ASSERT_TRUE(elf.interface() != nullptr);
 }
@@ -205,6 +218,18 @@ TEST_F(ElfTest, elf_x86_64) {
   ASSERT_TRUE(elf.Init(false));
   ASSERT_TRUE(elf.valid());
   ASSERT_EQ(static_cast<uint32_t>(EM_X86_64), elf.machine_type());
+  ASSERT_EQ(ELFCLASS64, elf.class_type());
+  ASSERT_TRUE(elf.interface() != nullptr);
+}
+
+TEST_F(ElfTest, elf_mips64) {
+  Elf elf(memory_);
+
+  InitElf64(EM_MIPS);
+
+  ASSERT_TRUE(elf.Init(false));
+  ASSERT_TRUE(elf.valid());
+  ASSERT_EQ(static_cast<uint32_t>(EM_MIPS), elf.machine_type());
   ASSERT_EQ(ELFCLASS64, elf.class_type());
   ASSERT_TRUE(elf.interface() != nullptr);
 }
@@ -273,7 +298,7 @@ TEST_F(ElfTest, rel_pc) {
 
   elf.FakeSetValid(true);
   elf.FakeSetLoadBias(0);
-  MapInfo map_info{.start = 0x1000, .end = 0x2000};
+  MapInfo map_info(0x1000, 0x2000);
 
   ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
 
@@ -306,7 +331,7 @@ TEST_F(ElfTest, step_in_signal_map) {
   elf.FakeSetValid(true);
   elf.FakeSetLoadBias(0);
   bool finished;
-  ASSERT_TRUE(elf.Step(0x1000, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x1000, 0x1000, 0x2000, &regs, &process_memory, &finished));
   EXPECT_FALSE(finished);
   EXPECT_EQ(15U, regs.pc());
   EXPECT_EQ(13U, regs.sp());
@@ -339,7 +364,7 @@ TEST_F(ElfTest, step_in_interface) {
   EXPECT_CALL(*interface, Step(0x1000, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(elf.Step(0x1000, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x1004, 0x1000, 0x2000, &regs, &process_memory, &finished));
 }
 
 TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
@@ -355,12 +380,12 @@ TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
 
   // Invalid relative pc given load_bias.
   bool finished;
-  ASSERT_FALSE(elf.Step(0x1000, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_FALSE(elf.Step(0x1004, 0x1000, 0x2000, &regs, &process_memory, &finished));
 
   EXPECT_CALL(*interface, Step(0x3300, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(elf.Step(0x7300, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x7304, 0x7300, 0x2000, &regs, &process_memory, &finished));
 }
 
 }  // namespace unwindstack

@@ -44,7 +44,7 @@ MapInfo* Maps::Find(uint64_t pc) {
   size_t last = maps_.size();
   while (first < last) {
     size_t index = (first + last) / 2;
-    MapInfo* cur = &maps_[index];
+    MapInfo* cur = maps_[index];
     if (pc >= cur->start && pc < cur->end) {
       return cur;
     } else if (pc < cur->start) {
@@ -57,22 +57,22 @@ MapInfo* Maps::Find(uint64_t pc) {
 }
 
 // Assumes that line does not end in '\n'.
-static bool InternalParseLine(const char* line, MapInfo* map_info) {
+static MapInfo* InternalParseLine(const char* line) {
   // Do not use a sscanf implementation since it is not performant.
 
   // Example linux /proc/<pid>/maps lines:
   // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
   char* str;
   const char* old_str = line;
-  map_info->start = strtoul(old_str, &str, 16);
+  uint64_t start = strtoull(old_str, &str, 16);
   if (old_str == str || *str++ != '-') {
-    return false;
+    return nullptr;
   }
 
   old_str = str;
-  map_info->end = strtoul(old_str, &str, 16);
+  uint64_t end = strtoull(old_str, &str, 16);
   if (old_str == str || !std::isspace(*str++)) {
-    return false;
+    return nullptr;
   }
 
   while (std::isspace(*str)) {
@@ -81,82 +81,81 @@ static bool InternalParseLine(const char* line, MapInfo* map_info) {
 
   // Parse permissions data.
   if (*str == '\0') {
-    return false;
+    return nullptr;
   }
-  map_info->flags = 0;
+  uint16_t flags = 0;
   if (*str == 'r') {
-    map_info->flags |= PROT_READ;
+    flags |= PROT_READ;
   } else if (*str != '-') {
-    return false;
+    return nullptr;
   }
   str++;
   if (*str == 'w') {
-    map_info->flags |= PROT_WRITE;
+    flags |= PROT_WRITE;
   } else if (*str != '-') {
-    return false;
+    return nullptr;
   }
   str++;
   if (*str == 'x') {
-    map_info->flags |= PROT_EXEC;
+    flags |= PROT_EXEC;
   } else if (*str != '-') {
-    return false;
+    return nullptr;
   }
   str++;
   if (*str != 'p' && *str != 's') {
-    return false;
+    return nullptr;
   }
   str++;
 
   if (!std::isspace(*str++)) {
-    return false;
+    return nullptr;
   }
 
   old_str = str;
-  map_info->offset = strtoul(old_str, &str, 16);
+  uint64_t offset = strtoull(old_str, &str, 16);
   if (old_str == str || !std::isspace(*str)) {
-    return false;
+    return nullptr;
   }
 
   // Ignore the 00:00 values.
   old_str = str;
-  (void)strtoul(old_str, &str, 16);
+  (void)strtoull(old_str, &str, 16);
   if (old_str == str || *str++ != ':') {
-    return false;
+    return nullptr;
   }
   if (std::isspace(*str)) {
-    return false;
+    return nullptr;
   }
 
   // Skip the inode.
   old_str = str;
-  (void)strtoul(str, &str, 16);
+  (void)strtoull(str, &str, 16);
   if (old_str == str || !std::isspace(*str++)) {
-    return false;
+    return nullptr;
   }
 
   // Skip decimal digit.
   old_str = str;
-  (void)strtoul(old_str, &str, 10);
+  (void)strtoull(old_str, &str, 10);
   if (old_str == str || (!std::isspace(*str) && *str != '\0')) {
-    return false;
+    return nullptr;
   }
 
   while (std::isspace(*str)) {
     str++;
   }
   if (*str == '\0') {
-    map_info->name = str;
-    return true;
+    return new MapInfo(start, end, offset, flags, "");
   }
 
   // Save the name data.
-  map_info->name = str;
+  std::string name(str);
 
   // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
-  if (map_info->name.substr(0, 5) == "/dev/" && map_info->name.substr(5, 7) != "ashmem/") {
-    map_info->flags |= MAPS_FLAGS_DEVICE_MAP;
+  if (name.substr(0, 5) == "/dev/" && name.substr(5, 7) != "ashmem/") {
+    flags |= MAPS_FLAGS_DEVICE_MAP;
   }
-  return true;
+  return new MapInfo(start, end, offset, flags, name);
 }
 
 bool Maps::Parse() {
@@ -187,8 +186,8 @@ bool Maps::Parse() {
       }
       *newline = '\0';
 
-      MapInfo map_info;
-      if (!InternalParseLine(line, &map_info)) {
+      MapInfo* map_info = InternalParseLine(line);
+      if (map_info == nullptr) {
         return_value = false;
         break;
       }
@@ -205,8 +204,7 @@ bool Maps::Parse() {
 
 Maps::~Maps() {
   for (auto& map : maps_) {
-    delete map.elf;
-    map.elf = nullptr;
+    delete map;
   }
 }
 
@@ -222,8 +220,8 @@ bool BufferMaps::Parse() {
       end_of_line++;
     }
 
-    MapInfo map_info;
-    if (!InternalParseLine(line.c_str(), &map_info)) {
+    MapInfo* map_info = InternalParseLine(line.c_str());
+    if (map_info == nullptr) {
       return false;
     }
     maps_.push_back(map_info);
@@ -252,24 +250,27 @@ bool OfflineMaps::Parse() {
 
   std::vector<char> name;
   while (true) {
-    MapInfo map_info;
-    ssize_t bytes = TEMP_FAILURE_RETRY(read(fd, &map_info.start, sizeof(map_info.start)));
+    uint64_t start;
+    ssize_t bytes = TEMP_FAILURE_RETRY(read(fd, &start, sizeof(start)));
     if (bytes == 0) {
       break;
     }
-    if (bytes == -1 || bytes != sizeof(map_info.start)) {
+    if (bytes == -1 || bytes != sizeof(start)) {
       return false;
     }
-    bytes = TEMP_FAILURE_RETRY(read(fd, &map_info.end, sizeof(map_info.end)));
-    if (bytes == -1 || bytes != sizeof(map_info.end)) {
+    uint64_t end;
+    bytes = TEMP_FAILURE_RETRY(read(fd, &end, sizeof(end)));
+    if (bytes == -1 || bytes != sizeof(end)) {
       return false;
     }
-    bytes = TEMP_FAILURE_RETRY(read(fd, &map_info.offset, sizeof(map_info.offset)));
-    if (bytes == -1 || bytes != sizeof(map_info.offset)) {
+    uint64_t offset;
+    bytes = TEMP_FAILURE_RETRY(read(fd, &offset, sizeof(offset)));
+    if (bytes == -1 || bytes != sizeof(offset)) {
       return false;
     }
-    bytes = TEMP_FAILURE_RETRY(read(fd, &map_info.flags, sizeof(map_info.flags)));
-    if (bytes == -1 || bytes != sizeof(map_info.flags)) {
+    uint16_t flags;
+    bytes = TEMP_FAILURE_RETRY(read(fd, &flags, sizeof(flags)));
+    if (bytes == -1 || bytes != sizeof(flags)) {
       return false;
     }
     uint16_t len;
@@ -283,9 +284,10 @@ bool OfflineMaps::Parse() {
       if (bytes == -1 || bytes != len) {
         return false;
       }
-      map_info.name = std::string(name.data(), len);
+      maps_.push_back(new MapInfo(start, end, offset, flags, std::string(name.data(), len)));
+    } else {
+      maps_.push_back(new MapInfo(start, end, offset, flags, ""));
     }
-    maps_.push_back(map_info);
   }
   return true;
 }

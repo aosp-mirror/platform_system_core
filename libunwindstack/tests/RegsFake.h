@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 
+#include <unwindstack/Elf.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 
@@ -30,7 +31,7 @@ class RegsFake : public Regs {
       : Regs(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
   virtual ~RegsFake() = default;
 
-  uint32_t MachineType() override { return fake_type_; }
+  ArchEnum Arch() override { return fake_arch_; }
   void* RawData() override { return nullptr; }
   uint64_t pc() override { return fake_pc_; }
   uint64_t sp() override { return fake_sp_; }
@@ -44,20 +45,22 @@ class RegsFake : public Regs {
 
   void IterateRegisters(std::function<void(const char*, uint64_t)>) override {}
 
+  bool Format32Bit() { return false; }
+
   uint64_t GetAdjustedPc(uint64_t rel_pc, Elf*) override { return rel_pc - 2; }
 
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 
   void SetFromRaw() override {}
 
-  void FakeSetMachineType(uint32_t type) { fake_type_ = type; }
+  void FakeSetArch(ArchEnum arch) { fake_arch_ = arch; }
   void FakeSetPc(uint64_t pc) { fake_pc_ = pc; }
   void FakeSetSp(uint64_t sp) { fake_sp_ = sp; }
   void FakeSetReturnAddress(uint64_t return_address) { fake_return_address_ = return_address; }
   void FakeSetReturnAddressValid(bool valid) { fake_return_address_valid_ = valid; }
 
  private:
-  uint32_t fake_type_ = 0;
+  ArchEnum fake_arch_ = ARCH_UNKNOWN;
   uint64_t fake_pc_ = 0;
   uint64_t fake_sp_ = 0;
   bool fake_return_address_valid_ = false;
@@ -71,7 +74,7 @@ class RegsImplFake : public RegsImpl<TypeParam> {
       : RegsImpl<TypeParam>(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
   virtual ~RegsImplFake() = default;
 
-  uint32_t MachineType() override { return 0; }
+  ArchEnum Arch() override { return ARCH_UNKNOWN; }
 
   uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}

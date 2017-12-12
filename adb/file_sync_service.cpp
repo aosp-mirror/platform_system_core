@@ -62,7 +62,7 @@ static bool update_capabilities(const char* path, uint64_t capabilities) {
     }
 
     vfs_cap_data cap_data = {};
-    cap_data.magic_etc = VFS_CAP_REVISION | VFS_CAP_FLAGS_EFFECTIVE;
+    cap_data.magic_etc = VFS_CAP_REVISION_2 | VFS_CAP_FLAGS_EFFECTIVE;
     cap_data.data[0].permitted = (capabilities & 0xffffffff);
     cap_data.data[0].inheritable = 0;
     cap_data.data[1].permitted = (capabilities >> 32);

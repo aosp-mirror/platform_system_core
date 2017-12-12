@@ -23,11 +23,11 @@
 
 #include <unwindstack/Log.h>
 #include <unwindstack/Memory.h>
-#include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
 
 #include "ArmExidx.h"
 #include "Check.h"
-#include "Machine.h"
+#include "MachineArm.h"
 
 namespace unwindstack {
 

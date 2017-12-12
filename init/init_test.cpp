@@ -25,6 +25,7 @@
 #include "import_parser.h"
 #include "keyword_map.h"
 #include "parser.h"
+#include "service.h"
 #include "test_function_map.h"
 #include "util.h"
 
@@ -34,12 +35,13 @@ namespace init {
 using ActionManagerCommand = std::function<void(ActionManager&)>;
 
 void TestInit(const std::string& init_script_file, const TestFunctionMap& test_function_map,
-              const std::vector<ActionManagerCommand>& commands) {
+              const std::vector<ActionManagerCommand>& commands, ServiceList* service_list) {
     ActionManager am;
 
     Action::set_function_map(&test_function_map);
 
     Parser parser;
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(service_list, nullptr));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
@@ -55,11 +57,11 @@ void TestInit(const std::string& init_script_file, const TestFunctionMap& test_f
 }
 
 void TestInitText(const std::string& init_script, const TestFunctionMap& test_function_map,
-                  const std::vector<ActionManagerCommand>& commands) {
+                  const std::vector<ActionManagerCommand>& commands, ServiceList* service_list) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     ASSERT_TRUE(android::base::WriteStringToFd(init_script, tf.fd));
-    TestInit(tf.path, test_function_map, commands);
+    TestInit(tf.path, test_function_map, commands, service_list);
 }
 
 TEST(init, SimpleEventTrigger) {
@@ -76,7 +78,8 @@ pass_test
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
 
-    TestInitText(init_script, test_function_map, commands);
+    ServiceList service_list;
+    TestInitText(init_script, test_function_map, commands, &service_list);
 
     EXPECT_TRUE(expect_true);
 }
@@ -104,7 +107,30 @@ execute_third
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
 
-    TestInitText(init_script, test_function_map, commands);
+    ServiceList service_list;
+    TestInitText(init_script, test_function_map, commands, &service_list);
+}
+
+TEST(init, OverrideService) {
+    std::string init_script = R"init(
+service A something
+    class first
+
+service A something
+    class second
+    override
+
+)init";
+
+    ServiceList service_list;
+    TestInitText(init_script, TestFunctionMap(), {}, &service_list);
+    ASSERT_EQ(1, std::distance(service_list.begin(), service_list.end()));
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(nullptr, service);
+    EXPECT_EQ(std::set<std::string>({"second"}), service->classnames());
+    EXPECT_EQ("A", service->name());
+    EXPECT_TRUE(service->is_override());
 }
 
 TEST(init, EventTriggerOrderMultipleFiles) {
@@ -162,7 +188,9 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
 
-    TestInit(start.path, test_function_map, commands);
+    ServiceList service_list;
+
+    TestInit(start.path, test_function_map, commands, &service_list);
 
     EXPECT_EQ(6, num_executed);
 }

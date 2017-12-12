@@ -345,8 +345,8 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetCieFde32) {
   ASSERT_TRUE(fde != nullptr);
   EXPECT_EQ(0x14010U, fde->cfa_instructions_offset);
   EXPECT_EQ(0x14024U, fde->cfa_instructions_end);
-  EXPECT_EQ(0x1d00cU, fde->pc_start);
-  EXPECT_EQ(0x1d10cU, fde->pc_end);
+  EXPECT_EQ(0x1d008U, fde->pc_start);
+  EXPECT_EQ(0x1d108U, fde->pc_end);
   EXPECT_EQ(0xf000U, fde->cie_offset);
   EXPECT_EQ(0U, fde->lsda_address);
 
@@ -387,8 +387,8 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetCieFde64) {
   ASSERT_TRUE(fde != nullptr);
   EXPECT_EQ(0x8024U, fde->cfa_instructions_offset);
   EXPECT_EQ(0x820cU, fde->cfa_instructions_end);
-  EXPECT_EQ(0xd01cU, fde->pc_start);
-  EXPECT_EQ(0xd31cU, fde->pc_end);
+  EXPECT_EQ(0xd018U, fde->pc_start);
+  EXPECT_EQ(0xd318U, fde->pc_end);
   EXPECT_EQ(0x6000U, fde->cie_offset);
   EXPECT_EQ(0U, fde->lsda_address);
 

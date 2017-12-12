@@ -305,6 +305,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         handle->devpath = devpath;
         usb_handle* handle_p = handle.get();
         VLOG(USB) << "Add usb device " << serial;
+        LOG(INFO) << "reported max packet size for " << serial << " is " << handle->max_packet_size;
         AddDevice(std::move(handle));
         register_usb_transport(reinterpret_cast<::usb_handle*>(handle_p), serial, devpath.c_str(),
                                1);

@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include <unwindstack/Elf.h>
@@ -101,10 +102,13 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   if (!(flags & PROT_READ)) {
     return nullptr;
   }
-  return new MemoryRange(process_memory, start, end);
+  return new MemoryRange(process_memory, start, end - start, 0);
 }
 
 Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {
+  // Make sure no other thread is trying to add the elf to this map.
+  std::lock_guard<std::mutex> guard(mutex_);
+
   if (elf) {
     return elf;
   }
@@ -115,6 +119,25 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
   return elf;
+}
+
+uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
+  {
+    // Make sure no other thread is trying to add the elf to this map.
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (elf != nullptr) {
+      if (elf->valid()) {
+        return elf->GetLoadBias();
+      } else {
+        return 0;
+      }
+    }
+  }
+
+  // Call lightweight static function that will only read enough of the
+  // elf data to get the load bias.
+  std::unique_ptr<Memory> memory(CreateMemory(process_memory));
+  return Elf::GetLoadBias(memory.get());
 }
 
 }  // namespace unwindstack

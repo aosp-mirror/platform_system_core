@@ -501,6 +501,8 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
         asprintf(&mParams[0], "INTERFACE=%s", ifname);
         asprintf(&mParams[1], "LIFETIME=%u", lifetime);
         mParams[2] = buf;
+    } else if (opthdr->nd_opt_type == ND_OPT_DNSSL) {
+        // TODO: support DNSSL.
     } else {
         SLOGD("Unknown ND option type %d\n", opthdr->nd_opt_type);
         return false;

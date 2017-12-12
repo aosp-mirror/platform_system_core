@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #define LOG_TAG "unwind"
@@ -30,7 +31,6 @@
 #include <unwindstack/Regs.h>
 
 #include "ElfInterfaceArm.h"
-#include "Machine.h"
 #include "Symbols.h"
 
 namespace unwindstack {
@@ -87,6 +87,7 @@ void Elf::InitGnuDebugdata() {
 }
 
 bool Elf::GetSoname(std::string* name) {
+  std::lock_guard<std::mutex> guard(lock_);
   return valid_ && interface_->GetSoname(name);
 }
 
@@ -95,14 +96,15 @@ uint64_t Elf::GetRelPc(uint64_t pc, const MapInfo* map_info) {
 }
 
 bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
+  std::lock_guard<std::mutex> guard(lock_);
   return valid_ && (interface_->GetFunctionName(addr, load_bias_, name, func_offset) ||
                     (gnu_debugdata_interface_ && gnu_debugdata_interface_->GetFunctionName(
                                                      addr, load_bias_, name, func_offset)));
 }
 
 // The relative pc is always relative to the start of the map from which it comes.
-bool Elf::Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process_memory,
-               bool* finished) {
+bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
+               Memory* process_memory, bool* finished) {
   if (!valid_) {
     return false;
   }
@@ -114,14 +116,16 @@ bool Elf::Step(uint64_t rel_pc, uint64_t elf_offset, Regs* regs, Memory* process
   }
 
   // Adjust the load bias to get the real relative pc.
-  if (rel_pc < load_bias_) {
+  if (adjusted_rel_pc < load_bias_) {
     return false;
   }
-  rel_pc -= load_bias_;
+  adjusted_rel_pc -= load_bias_;
 
-  return interface_->Step(rel_pc, regs, process_memory, finished) ||
+  // Lock during the step which can update information in the object.
+  std::lock_guard<std::mutex> guard(lock_);
+  return interface_->Step(adjusted_rel_pc, regs, process_memory, finished) ||
          (gnu_debugdata_interface_ &&
-          gnu_debugdata_interface_->Step(rel_pc, regs, process_memory, finished));
+          gnu_debugdata_interface_->Step(adjusted_rel_pc, regs, process_memory, finished));
 }
 
 bool Elf::IsValidElf(Memory* memory) {
@@ -131,7 +135,7 @@ bool Elf::IsValidElf(Memory* memory) {
 
   // Verify that this is a valid elf file.
   uint8_t e_ident[SELFMAG + 1];
-  if (!memory->Read(0, e_ident, SELFMAG)) {
+  if (!memory->ReadFully(0, e_ident, SELFMAG)) {
     return false;
   }
 
@@ -151,7 +155,7 @@ void Elf::GetInfo(Memory* memory, bool* valid, uint64_t* size) {
 
   // Now read the section header information.
   uint8_t class_type;
-  if (!memory->Read(EI_CLASS, &class_type, 1)) {
+  if (!memory->ReadFully(EI_CLASS, &class_type, 1)) {
     return;
   }
   if (class_type == ELFCLASS32) {
@@ -169,45 +173,71 @@ ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
   }
 
   std::unique_ptr<ElfInterface> interface;
-  if (!memory->Read(EI_CLASS, &class_type_, 1)) {
+  if (!memory->ReadFully(EI_CLASS, &class_type_, 1)) {
     return nullptr;
   }
   if (class_type_ == ELFCLASS32) {
     Elf32_Half e_machine;
-    if (!memory->Read(EI_NIDENT + sizeof(Elf32_Half), &e_machine, sizeof(e_machine))) {
-      return nullptr;
-    }
-
-    if (e_machine != EM_ARM && e_machine != EM_386) {
-      // Unsupported.
-      ALOGI("32 bit elf that is neither arm nor x86: e_machine = %d\n", e_machine);
+    if (!memory->ReadFully(EI_NIDENT + sizeof(Elf32_Half), &e_machine, sizeof(e_machine))) {
       return nullptr;
     }
 
     machine_type_ = e_machine;
     if (e_machine == EM_ARM) {
+      arch_ = ARCH_ARM;
       interface.reset(new ElfInterfaceArm(memory));
     } else if (e_machine == EM_386) {
+      arch_ = ARCH_X86;
+      interface.reset(new ElfInterface32(memory));
+    } else if (e_machine == EM_MIPS) {
+      arch_ = ARCH_MIPS;
       interface.reset(new ElfInterface32(memory));
     } else {
-      ALOGI("32 bit elf that is neither arm nor x86: e_machine = %d\n", e_machine);
+      // Unsupported.
+      ALOGI("32 bit elf that is neither arm nor x86 nor mips: e_machine = %d\n", e_machine);
       return nullptr;
     }
   } else if (class_type_ == ELFCLASS64) {
     Elf64_Half e_machine;
-    if (!memory->Read(EI_NIDENT + sizeof(Elf64_Half), &e_machine, sizeof(e_machine))) {
+    if (!memory->ReadFully(EI_NIDENT + sizeof(Elf64_Half), &e_machine, sizeof(e_machine))) {
       return nullptr;
     }
-    if (e_machine != EM_AARCH64 && e_machine != EM_X86_64) {
-      // Unsupported.
-      ALOGI("64 bit elf that is neither aarch64 nor x86_64: e_machine = %d\n", e_machine);
-      return nullptr;
-    }
+
     machine_type_ = e_machine;
+    if (e_machine == EM_AARCH64) {
+      arch_ = ARCH_ARM64;
+    } else if (e_machine == EM_X86_64) {
+      arch_ = ARCH_X86_64;
+    } else if (e_machine == EM_MIPS) {
+      arch_ = ARCH_MIPS64;
+    } else {
+      // Unsupported.
+      ALOGI("64 bit elf that is neither aarch64 nor x86_64 nor mips64: e_machine = %d\n",
+            e_machine);
+      return nullptr;
+    }
     interface.reset(new ElfInterface64(memory));
   }
 
   return interface.release();
+}
+
+uint64_t Elf::GetLoadBias(Memory* memory) {
+  if (!IsValidElf(memory)) {
+    return 0;
+  }
+
+  uint8_t class_type;
+  if (!memory->Read(EI_CLASS, &class_type, 1)) {
+    return 0;
+  }
+
+  if (class_type == ELFCLASS32) {
+    return ElfInterface::GetLoadBias<Elf32_Ehdr, Elf32_Phdr>(memory);
+  } else if (class_type == ELFCLASS64) {
+    return ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(memory);
+  }
+  return 0;
 }
 
 }  // namespace unwindstack
