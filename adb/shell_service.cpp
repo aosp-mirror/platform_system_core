@@ -262,6 +262,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
         env["HOSTNAME"] = GetHostName();
         env["LOGNAME"] = pw->pw_name;
         env["SHELL"] = pw->pw_shell;
+        env["TMPDIR"] = "/data/local/tmp";
         env["USER"] = pw->pw_name;
     }
 
