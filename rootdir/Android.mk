@@ -144,19 +144,19 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
 
-llndk_libraries := $(subst $(space),:,$(addsuffix .so,\
+llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
 $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
 
-private_llndk_libraries := $(subst $(space),:,$(addsuffix .so,\
+private_llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
 $(filter $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
 
-vndk_sameprocess_libraries := $(subst $(space),:,$(addsuffix .so,\
+vndk_sameprocess_libraries := $(call normalize-path-list,$(addsuffix .so,\
 $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_SAMEPROCESS_LIBRARIES))))
 
-vndk_core_libraries := $(subst $(space),:,$(addsuffix .so,\
+vndk_core_libraries := $(call normalize-path-list,$(addsuffix .so,\
 $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_CORE_LIBRARIES))))
 
-sanitizer_runtime_libraries := $(subst $(space),:,$(addsuffix .so,\
+sanitizer_runtime_libraries := $(call normalize-path-list,$(addsuffix .so,\
 $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
 $(UBSAN_RUNTIME_LIBRARY) \
 $(TSAN_RUNTIME_LIBRARY) \
