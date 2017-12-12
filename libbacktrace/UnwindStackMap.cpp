@@ -147,6 +147,43 @@ UnwindDexFile* UnwindStackMap::GetDexFile(uint64_t dex_file_offset, unwindstack:
 }
 #endif
 
+UnwindStackOfflineMap::UnwindStackOfflineMap(pid_t pid) : UnwindStackMap(pid) {}
+
+bool UnwindStackOfflineMap::Build() {
+  return false;
+}
+
+bool UnwindStackOfflineMap::Build(const std::vector<backtrace_map_t>& backtrace_maps,
+                                  const backtrace_stackinfo_t& stack) {
+  if (stack.start >= stack.end) {
+    return false;
+  }
+
+  for (const backtrace_map_t& map : backtrace_maps) {
+    maps_.push_back(map);
+  }
+
+  std::sort(maps_.begin(), maps_.end(),
+            [](const backtrace_map_t& a, const backtrace_map_t& b) { return a.start < b.start; });
+
+  unwindstack::Maps* maps = new unwindstack::Maps;
+  stack_maps_.reset(maps);
+  for (const backtrace_map_t& map : maps_) {
+    maps->Add(map.start, map.end, map.offset, map.flags, map.name, map.load_bias);
+  }
+
+  // Create the process memory from the stack data.
+  uint64_t size = stack.end - stack.start;
+  unwindstack::MemoryBuffer* memory = new unwindstack::MemoryBuffer;
+  memory->Resize(size);
+  memcpy(memory->GetPtr(0), stack.data, size);
+  std::shared_ptr<unwindstack::Memory> shared_memory(memory);
+
+  process_memory_.reset(new unwindstack::MemoryRange(shared_memory, 0, size, stack.start));
+
+  return true;
+}
+
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
 //-------------------------------------------------------------------------
@@ -162,6 +199,19 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
     map = new UnwindStackMap(pid);
   }
   if (!map->Build()) {
+    delete map;
+    return nullptr;
+  }
+  return map;
+}
+
+//-------------------------------------------------------------------------
+// BacktraceMap create offline function.
+//-------------------------------------------------------------------------
+BacktraceMap* BacktraceMap::CreateOffline(pid_t pid, const std::vector<backtrace_map_t>& maps,
+                                          const backtrace_stackinfo_t& stack) {
+  UnwindStackOfflineMap* map = new UnwindStackOfflineMap(pid);
+  if (!map->Build(maps, stack)) {
     delete map;
     return nullptr;
   }

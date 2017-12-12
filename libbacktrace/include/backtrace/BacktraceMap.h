@@ -34,6 +34,9 @@
 #include <string>
 #include <vector>
 
+// Forward declaration.
+struct backtrace_stackinfo_t;
+
 // Special flag to indicate a map is in /dev/. However, a map in
 // /dev/ashmem/... does not set this flag.
 static constexpr int PROT_DEVICE_MAP = 0x8000;
@@ -58,7 +61,8 @@ public:
   // is unsupported.
   static BacktraceMap* Create(pid_t pid, bool uncached = false);
 
-  static BacktraceMap* Create(pid_t pid, const std::vector<backtrace_map_t>& maps);
+  static BacktraceMap* CreateOffline(pid_t pid, const std::vector<backtrace_map_t>& maps,
+                                     const backtrace_stackinfo_t& stack);
 
   virtual ~BacktraceMap();
 
