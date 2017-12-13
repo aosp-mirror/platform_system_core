@@ -129,8 +129,8 @@ namespace.sphal.link.rs.shared_libs = libRS_internal.so
 namespace.rs.isolated = true
 namespace.rs.visible = true
 
-namespace.rs.search.paths  = /odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.rs.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.search.paths  = /odm/${LIB}/vndk-sp
+namespace.rs.search.paths += /vendor/${LIB}/vndk-sp
 namespace.rs.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
 namespace.rs.search.paths += /odm/${LIB}
 namespace.rs.search.paths += /vendor/${LIB}
@@ -139,10 +139,10 @@ namespace.rs.permitted.paths  = /odm/${LIB}
 namespace.rs.permitted.paths += /vendor/${LIB}
 namespace.rs.permitted.paths += /data
 
-namespace.rs.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.rs.asan.search.paths +=           /odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
-namespace.rs.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
+namespace.rs.asan.search.paths +=           /odm/${LIB}/vndk-sp
+namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
+namespace.rs.asan.search.paths +=           /vendor/${LIB}/vndk-sp
 namespace.rs.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
 namespace.rs.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
 namespace.rs.asan.search.paths += /data/asan/odm/${LIB}
@@ -174,8 +174,8 @@ namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 namespace.vndk.isolated = true
 namespace.vndk.visible = true
 
-namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp
+namespace.vndk.search.paths += /vendor/${LIB}/vndk-sp
 namespace.vndk.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
 
 namespace.vndk.permitted.paths  = /odm/${LIB}/hw
@@ -185,10 +185,10 @@ namespace.vndk.permitted.paths += /vendor/${LIB}/egl
 # This is exceptionally required since android.hidl.memory@1.0-impl.so is here
 namespace.vndk.permitted.paths += /system/${LIB}/vndk-sp${VNDK_VER}/hw
 
-namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
+namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp
+namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
+namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
 namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
 
@@ -234,11 +234,11 @@ namespace.default.isolated = true
 namespace.default.visible = true
 
 namespace.default.search.paths  = /odm/${LIB}
-namespace.default.search.paths += /odm/${LIB}/vndk${VNDK_VER}
-namespace.default.search.paths += /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.search.paths += /odm/${LIB}/vndk
+namespace.default.search.paths += /odm/${LIB}/vndk-sp
 namespace.default.search.paths += /vendor/${LIB}
-namespace.default.search.paths += /vendor/${LIB}/vndk${VNDK_VER}
-namespace.default.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.search.paths += /vendor/${LIB}/vndk
+namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 
 # TODO(b/70551668) remove this
 namespace.default.search.paths += /vendor/${LIB}/hw
@@ -248,16 +248,16 @@ namespace.default.permitted.paths += /vendor
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
-namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk${VNDK_VER}
-namespace.default.asan.search.paths +=           /odm/${LIB}/vndk${VNDK_VER}
-namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk-sp${VNDK_VER}
-namespace.default.asan.search.paths +=           /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk
+namespace.default.asan.search.paths +=           /odm/${LIB}/vndk
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk-sp
+namespace.default.asan.search.paths +=           /odm/${LIB}/vndk-sp
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
-namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk${VNDK_VER}
-namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk${VNDK_VER}
-namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
-namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk
+namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
+namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp
 
 # TODO(b/70551668) remove this
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/hw
