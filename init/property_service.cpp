@@ -50,17 +50,27 @@
 #include <android-base/strings.h>
 #include <bootimg.h>
 #include <fs_mgr.h>
+#include <property_info_parser/property_info_parser.h>
+#include <property_info_serializer/property_info_serializer.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
 #include "init.h"
 #include "persistent_properties.h"
+#include "space_tokenizer.h"
 #include "util.h"
 
+using android::base::ReadFileToString;
+using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::Timer;
+using android::base::Trim;
+using android::base::WriteStringToFile;
+using android::properties::BuildTrie;
+using android::properties::PropertyInfoAreaFile;
+using android::properties::PropertyInfoEntry;
 
 #define RECOVERY_MOUNT_POINT "/recovery"
 
@@ -71,27 +81,29 @@ static bool persistent_properties_loaded = false;
 
 static int property_set_fd = -1;
 
-static struct selabel_handle* sehandle_prop;
+static PropertyInfoAreaFile property_info_area;
+
+void CreateSerializedPropertyInfo();
 
 void property_init() {
+    mkdir("/dev/__properties__", S_IRWXU | S_IXGRP | S_IXOTH);
+    CreateSerializedPropertyInfo();
     if (__system_property_area_init()) {
         LOG(FATAL) << "Failed to initialize property area";
     }
+    if (!property_info_area.LoadDefaultPath()) {
+        LOG(FATAL) << "Failed to load serialized property info file";
+    }
 }
-
 static bool check_mac_perms(const std::string& name, char* sctx, struct ucred* cr) {
-
     if (!sctx) {
       return false;
     }
 
-    if (!sehandle_prop) {
-      return false;
-    }
-
-    char* tctx = nullptr;
-    if (selabel_lookup(sehandle_prop, &tctx, name.c_str(), 1) != 0) {
-      return false;
+    const char* target_context = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), &target_context, nullptr);
+    if (target_context == nullptr) {
+        return false;
     }
 
     property_audit_data audit_data;
@@ -99,9 +111,9 @@ static bool check_mac_perms(const std::string& name, char* sctx, struct ucred* c
     audit_data.name = name.c_str();
     audit_data.cr = cr;
 
-    bool has_access = (selinux_check_access(sctx, tctx, "property_service", "set", &audit_data) == 0);
+    bool has_access =
+        (selinux_check_access(sctx, target_context, "property_service", "set", &audit_data) == 0);
 
-    freecon(tctx);
     return has_access;
 }
 
@@ -433,7 +445,7 @@ static void handle_property_set(SocketConnection& socket,
         std::string cmdline_path = StringPrintf("proc/%d/cmdline", cr.pid);
         std::string process_cmdline;
         std::string process_log_string;
-        if (android::base::ReadFileToString(cmdline_path, &process_cmdline)) {
+        if (ReadFileToString(cmdline_path, &process_cmdline)) {
           // Since cmdline is null deliminated, .c_str() conveniently gives us just the process path.
           process_log_string = StringPrintf(" (%s)", process_cmdline.c_str());
         }
@@ -714,9 +726,80 @@ static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf,
     return 0;
 }
 
-void start_property_service() {
-    sehandle_prop = selinux_android_prop_context_handle();
+Result<PropertyInfoEntry> ParsePropertyInfoLine(const std::string& line) {
+    auto tokenizer = SpaceTokenizer(line);
 
+    auto property = tokenizer.GetNext();
+    if (property.empty()) return Error() << "Did not find a property entry in '" << line << "'";
+
+    auto context = tokenizer.GetNext();
+    if (context.empty()) return Error() << "Did not find a context entry in '" << line << "'";
+
+    // It is not an error to not find these, as older files will not contain them.
+    auto exact_match = tokenizer.GetNext();
+    auto schema = tokenizer.GetRemaining();
+
+    return {property, context, schema, exact_match == "exact"};
+}
+
+bool LoadPropertyInfoFromFile(const std::string& filename,
+                              std::vector<PropertyInfoEntry>* property_infos) {
+    auto file_contents = std::string();
+    if (!ReadFileToString(filename, &file_contents)) {
+        PLOG(ERROR) << "Could not read properties from '" << filename << "'";
+        return false;
+    }
+
+    for (const auto& line : Split(file_contents, "\n")) {
+        auto trimmed_line = Trim(line);
+        if (trimmed_line.empty() || StartsWith(trimmed_line, "#")) {
+            continue;
+        }
+
+        auto property_info = ParsePropertyInfoLine(line);
+        if (!property_info) {
+            LOG(ERROR) << "Could not read line from '" << filename << "': " << property_info.error();
+            continue;
+        }
+
+        property_infos->emplace_back(*property_info);
+    }
+    return true;
+}
+
+void CreateSerializedPropertyInfo() {
+    auto property_infos = std::vector<PropertyInfoEntry>();
+    if (access("/system/etc/selinux/plat_property_contexts", R_OK) != -1) {
+        if (!LoadPropertyInfoFromFile("/system/etc/selinux/plat_property_contexts",
+                                      &property_infos)) {
+            return;
+        }
+        // Don't check for failure here, so we always have a sane list of properties.
+        // E.g. In case of recovery, the vendor partition will not have mounted and we
+        // still need the system / platform properties to function.
+        LoadPropertyInfoFromFile("/vendor/etc/selinux/nonplat_property_contexts", &property_infos);
+    } else {
+        if (!LoadPropertyInfoFromFile("/plat_property_contexts", &property_infos)) {
+            return;
+        }
+        LoadPropertyInfoFromFile("/nonplat_property_contexts", &property_infos);
+    }
+    auto serialized_contexts = std::string();
+    auto error = std::string();
+    if (!BuildTrie(property_infos, "u:object_r:default_prop:s0", "\\s*", &serialized_contexts,
+                   &error)) {
+        LOG(ERROR) << "Unable to serialize property contexts: " << error;
+        return;
+    }
+
+    constexpr static const char kPropertyInfosPath[] = "/dev/__properties__/property_info";
+    if (!WriteStringToFile(serialized_contexts, kPropertyInfosPath, 0444, 0, 0, false)) {
+        PLOG(ERROR) << "Unable to write serialized property infos to file";
+    }
+    selinux_android_restorecon(kPropertyInfosPath, 0);
+}
+
+void start_property_service() {
     selinux_callback cb;
     cb.func_audit = SelinuxAuditCallback;
     selinux_set_callback(SELINUX_CB_AUDIT, cb);

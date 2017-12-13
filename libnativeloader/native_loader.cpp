@@ -35,6 +35,10 @@
 #include <android-base/macros.h>
 #include <android-base/strings.h>
 
+#ifdef __BIONIC__
+#include <android-base/properties.h>
+#endif
+
 #define CHECK(predicate) LOG_ALWAYS_FATAL_IF(!(predicate),\
                                              "%s:%d: %s CHECK '" #predicate "' failed.",\
                                              __FILE__, __LINE__, __FUNCTION__)
@@ -108,6 +112,25 @@ static bool is_debuggable() {
   char debuggable[PROP_VALUE_MAX];
   property_get("ro.debuggable", debuggable, "0");
   return std::string(debuggable) == "1";
+}
+
+static std::string vndk_version_str() {
+#ifdef __BIONIC__
+  std::string version = android::base::GetProperty("ro.vndk.version", "");
+  if (version != "" && version != "current") {
+    return "." + version;
+  }
+#endif
+  return "";
+}
+
+static void insert_vndk_version_str(std::string* file_name) {
+  CHECK(file_name != nullptr);
+  size_t insert_pos = file_name->find_last_of(".");
+  if (insert_pos == std::string::npos) {
+    insert_pos = file_name->length();
+  }
+  file_name->insert(insert_pos, vndk_version_str());
 }
 
 class LibraryNamespaces {
@@ -318,6 +341,10 @@ class LibraryNamespaces {
                         "Error reading public native library list from \"%s\": %s",
                         public_native_libraries_system_config.c_str(), error_msg.c_str());
 
+    // Insert VNDK version to llndk and vndksp config file names.
+    insert_vndk_version_str(&llndk_native_libraries_system_config);
+    insert_vndk_version_str(&vndksp_native_libraries_system_config);
+
     // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
     // variable to add libraries to the list. This is intended for platform tests only.
     if (is_debuggable()) {
@@ -347,11 +374,11 @@ class LibraryNamespaces {
     system_public_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
-    ReadConfig(kLlndkNativeLibrariesSystemConfigPathFromRoot, &sonames);
+    ReadConfig(llndk_native_libraries_system_config, &sonames);
     system_llndk_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
-    ReadConfig(kVndkspNativeLibrariesSystemConfigPathFromRoot, &sonames);
+    ReadConfig(vndksp_native_libraries_system_config, &sonames);
     system_vndksp_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
