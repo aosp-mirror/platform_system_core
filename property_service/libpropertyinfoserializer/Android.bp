@@ -1,0 +1,38 @@
+cc_defaults {
+    name: "propertyinfoserializer_defaults",
+    cpp_std: "experimental",
+    sanitize: {
+        misc_undefined: ["signed-integer-overflow"],
+    },
+    cppflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+    static_libs: [
+        "libpropertyinfoparser",
+        "libbase",
+    ],
+}
+
+cc_library_static {
+    name: "libpropertyinfoserializer",
+    defaults: ["propertyinfoserializer_defaults"],
+    srcs: [
+        "property_info_serializer.cpp",
+        "trie_builder.cpp",
+        "trie_serializer.cpp",
+    ],
+
+    export_include_dirs: ["include"],
+}
+
+cc_test {
+    name: "propertyinfoserializer_tests",
+    defaults: ["propertyinfoserializer_defaults"],
+    srcs: [
+        "trie_builder_test.cpp",
+        "property_info_serializer_test.cpp",
+    ],
+    static_libs: ["libpropertyinfoserializer"],
+}
