@@ -32,9 +32,7 @@ struct Space {
   uint64_t end;
   const uint8_t* data;
 
-  Space() {
-    Clear();
-  }
+  Space() { Clear(); }
 
   void Clear();
   size_t Read(uint64_t addr, uint8_t* buffer, size_t size);

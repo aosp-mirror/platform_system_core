@@ -34,7 +34,7 @@ typedef uint64_t word_t;
 typedef uint32_t word_t;
 #endif
 
-enum BacktraceUnwindError : uint32_t {
+enum BacktraceUnwindErrorCode : uint32_t {
   BACKTRACE_UNWIND_NO_ERROR,
   // Something failed while trying to perform the setup to begin the unwind.
   BACKTRACE_UNWIND_ERROR_SETUP_FAILED,
@@ -50,6 +50,29 @@ enum BacktraceUnwindError : uint32_t {
   BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION,
   // Attempt to do an offline unwind without a context.
   BACKTRACE_UNWIND_ERROR_NO_CONTEXT,
+  // The count of frames exceed MAX_BACKTRACE_FRAMES.
+  BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT,
+  // Failed to read memory.
+  BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED,
+  // Failed to read registers.
+  BACKTRACE_UNWIND_ERROR_ACCESS_REG_FAILED,
+  // Failed to find a function in debug sections.
+  BACKTRACE_UNWIND_ERROR_FIND_PROC_INFO_FAILED,
+  // Failed to execute dwarf instructions in debug sections.
+  BACKTRACE_UNWIND_ERROR_EXECUTE_DWARF_INSTRUCTION_FAILED,
+};
+
+struct BacktraceUnwindError {
+  enum BacktraceUnwindErrorCode error_code;
+
+  union {
+    // for BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED
+    uint64_t addr;
+    // for BACKTRACE_UNWIND_ERROR_ACCESS_REG_FAILED
+    uint64_t regno;
+  } error_info;
+
+  BacktraceUnwindError() : error_code(BACKTRACE_UNWIND_NO_ERROR) {}
 };
 
 struct backtrace_frame_data_t {

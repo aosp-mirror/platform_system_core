@@ -102,7 +102,7 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
     regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
   }
 
-  error_ = BACKTRACE_UNWIND_NO_ERROR;
+  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
   std::vector<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
   return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, &skip_names);
 }
@@ -122,7 +122,7 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
     regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), context));
   }
 
-  error_ = BACKTRACE_UNWIND_NO_ERROR;
+  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
   return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr);
 }
 

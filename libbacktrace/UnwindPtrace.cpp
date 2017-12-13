@@ -62,7 +62,7 @@ bool UnwindPtrace::Init() {
   addr_space_ = unw_create_addr_space(&_UPT_accessors, 0);
   if (!addr_space_) {
     BACK_LOGW("unw_create_addr_space failed.");
-    error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
 
@@ -72,7 +72,7 @@ bool UnwindPtrace::Init() {
   upt_info_ = reinterpret_cast<struct UPT_info*>(_UPT_create(Tid()));
   if (!upt_info_) {
     BACK_LOGW("Failed to create upt info.");
-    error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
 
@@ -82,15 +82,15 @@ bool UnwindPtrace::Init() {
 bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
   if (GetMap() == nullptr) {
     // Without a map object, we can't do anything.
-    error_ = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
     return false;
   }
 
-  error_ = BACKTRACE_UNWIND_NO_ERROR;
+  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
 
   if (ucontext) {
     BACK_LOGW("Unwinding from a specified context not supported yet.");
-    error_ = BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION;
     return false;
   }
 
@@ -102,7 +102,7 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
   int ret = unw_init_remote(&cursor, addr_space_, upt_info_);
   if (ret < 0) {
     BACK_LOGW("unw_init_remote failed %d", ret);
-    error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
 
