@@ -136,7 +136,8 @@ namespace.default.visible = true
 namespace.default.search.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/vendor/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}
 namespace.default.permitted.paths = /vendor
 
-namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk${VNDK_VER}:/data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor
+namespace.default.asan.search.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/vendor/${LIB}/vndk${VNDK_VER}:/vendor/${LIB}/vndk${VNDK_VER}:/data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.permitted.paths = /data/asan/vendor:/vendor
 
 namespace.default.links = system
 namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%:%VNDK_SAMEPROCESS_LIBRARIES%:%VNDK_CORE_LIBRARIES%
