@@ -1,0 +1,16 @@
+cc_library_static {
+    name: "libpropertyinfoparser",
+    srcs: ["property_info_parser.cpp"],
+
+    cpp_std: "experimental",
+    sanitize: {
+        misc_undefined: ["signed-integer-overflow"],
+    },
+    cppflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+    stl: "none",
+    export_include_dirs: ["include"],
+}
