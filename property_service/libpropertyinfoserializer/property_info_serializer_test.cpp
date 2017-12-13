@@ -129,6 +129,7 @@ TEST(propertyinfoserializer, GetPropertyInfo) {
       {"test.test2.", "6th", "6th", false}, {"test.test", "5th", "5th", true},
       {"test.test1", "3rd", "3rd", true},   {"test.test2", "7th", "7th", true},
       {"test.test3", "3rd", "3rd", true},   {"this.is.a.long.string", "4th", "4th", true},
+      {"testoneword", "8th", "8th", true},  {"testwordprefix", "9th", "9th", false},
   };
 
   auto serialized_trie = std::string();
@@ -229,6 +230,22 @@ TEST(propertyinfoserializer, GetPropertyInfo) {
   property_info_area->GetPropertyInfo("test.test2.a", &context, &schema);
   EXPECT_STREQ("6th", context);
   EXPECT_STREQ("6th", schema);
+
+  property_info_area->GetPropertyInfo("testoneword", &context, &schema);
+  EXPECT_STREQ("8th", context);
+  EXPECT_STREQ("8th", schema);
+
+  property_info_area->GetPropertyInfo("testwordprefix", &context, &schema);
+  EXPECT_STREQ("9th", context);
+  EXPECT_STREQ("9th", schema);
+
+  property_info_area->GetPropertyInfo("testwordprefixblah", &context, &schema);
+  EXPECT_STREQ("9th", context);
+  EXPECT_STREQ("9th", schema);
+
+  property_info_area->GetPropertyInfo("testwordprefix.blah", &context, &schema);
+  EXPECT_STREQ("9th", context);
+  EXPECT_STREQ("9th", schema);
 }
 
 TEST(propertyinfoserializer, RealProperties) {
