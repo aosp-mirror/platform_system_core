@@ -763,5 +763,86 @@ TEST(propertyinfoserializer, RealProperties) {
   }
 }
 
+TEST(propertyinfoserializer, GetPropertyInfo_prefix_without_dot) {
+  auto property_info = std::vector<PropertyInfoEntry>{
+      {"persist.radio", "1st", "1st", false},
+      {"persist.radio.something.else.here", "2nd", "2nd", false},
+  };
+
+  auto serialized_trie = std::string();
+  auto build_trie_error = std::string();
+  ASSERT_TRUE(BuildTrie(property_info, "default", "default", &serialized_trie, &build_trie_error))
+      << build_trie_error;
+
+  auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
+
+  const char* context;
+  const char* schema;
+  property_info_area->GetPropertyInfo("persist.radio", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+  property_info_area->GetPropertyInfo("persist.radio.subproperty", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+  property_info_area->GetPropertyInfo("persist.radiowords", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+  property_info_area->GetPropertyInfo("persist.radio.long.long.long.sub.property", &context,
+                                      &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.here", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.here2", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.here.after", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.nothere", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+  property_info_area->GetPropertyInfo("persist.radio.something.else", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+}
+
+TEST(propertyinfoserializer, GetPropertyInfo_prefix_with_dot_vs_without) {
+  auto property_info = std::vector<PropertyInfoEntry>{
+      {"persist.", "1st", "1st", false},
+      {"persist.radio", "2nd", "2nd", false},
+      {"persist.radio.long.property.exact.match", "3rd", "3rd", true},
+  };
+
+  auto serialized_trie = std::string();
+  auto build_trie_error = std::string();
+  ASSERT_TRUE(BuildTrie(property_info, "default", "default", &serialized_trie, &build_trie_error))
+      << build_trie_error;
+
+  auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
+
+  const char* context;
+  const char* schema;
+  property_info_area->GetPropertyInfo("persist.notradio", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("1st", schema);
+  property_info_area->GetPropertyInfo("persist.radio", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radio.subproperty", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radiowords", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radio.long.property.prefix.match", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("2nd", schema);
+  property_info_area->GetPropertyInfo("persist.radio.long.property.exact.match", &context, &schema);
+  EXPECT_STREQ("3rd", context);
+  EXPECT_STREQ("3rd", schema);
+}
+
 }  // namespace properties
 }  // namespace android
