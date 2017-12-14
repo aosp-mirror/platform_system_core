@@ -1944,7 +1944,8 @@ static int install_multiple_app(int argc, const char** argv) {
     for (int i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
 
-        if (android::base::EndsWithIgnoreCase(file, ".apk")) {
+        if (android::base::EndsWithIgnoreCase(file, ".apk") ||
+            android::base::EndsWithIgnoreCase(file, ".dm")) {
             struct stat sb;
             if (stat(file, &sb) != -1) total_size += sb.st_size;
             first_apk = i;
@@ -2005,9 +2006,8 @@ static int install_multiple_app(int argc, const char** argv) {
         }
 
         std::string cmd = android::base::StringPrintf(
-                "%s install-write -S %" PRIu64 " %d %d_%s -",
-                install_cmd.c_str(), static_cast<uint64_t>(sb.st_size), session_id, i,
-                android::base::Basename(file).c_str());
+            "%s install-write -S %" PRIu64 " %d %s -", install_cmd.c_str(),
+            static_cast<uint64_t>(sb.st_size), session_id, android::base::Basename(file).c_str());
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
