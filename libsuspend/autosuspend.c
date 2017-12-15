@@ -40,14 +40,14 @@ static int autosuspend_init(void)
     }
 
     if (!autosuspend_ops) {
-        ALOGE("failed to initialize autosuspend\n");
+        ALOGE("failed to initialize autosuspend");
         return -1;
     }
 
 out:
     autosuspend_inited = true;
 
-    ALOGV("autosuspend initialized\n");
+    ALOGV("autosuspend initialized");
     return 0;
 }
 
@@ -60,7 +60,7 @@ int autosuspend_enable(void)
         return ret;
     }
 
-    ALOGV("autosuspend_enable\n");
+    ALOGV("autosuspend_enable");
 
     if (autosuspend_enabled) {
         return 0;
@@ -84,7 +84,7 @@ int autosuspend_disable(void)
         return ret;
     }
 
-    ALOGV("autosuspend_disable\n");
+    ALOGV("autosuspend_disable");
 
     if (!autosuspend_enabled) {
         return 0;
