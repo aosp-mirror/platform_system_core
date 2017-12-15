@@ -75,6 +75,7 @@ public:
     void update_perf_history(uint32_t bw,
                              const time_point<system_clock>& tp);
     vector<int> get_perf_history();
+    uint32_t get_recent_perf();
 };
 
 class emmc_info_t : public storage_info_t {
