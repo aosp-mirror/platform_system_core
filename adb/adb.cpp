@@ -240,7 +240,10 @@ void send_connect(atransport* t) {
     D("Calling send_connect");
     apacket* cp = get_apacket();
     cp->msg.command = A_CNXN;
-    cp->msg.arg0 = t->get_protocol_version();
+    // Send the max supported version, but because the transport is
+    // initialized to A_VERSION_MIN, this will be compatible with every
+    // device.
+    cp->msg.arg0 = A_VERSION;
     cp->msg.arg1 = t->get_max_payload();
 
     std::string connection_str = get_connection_string();

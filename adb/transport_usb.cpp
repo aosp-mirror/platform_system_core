@@ -109,10 +109,6 @@ static int remote_read(apacket* p, atransport* t) {
             goto err_msg;
         }
     }
-    if (!check_data(p)) {
-        D("remote usb: check_data failed, skip it");
-        goto err_msg;
-    }
     return 0;
 
 err_msg:
@@ -141,11 +137,6 @@ static int remote_read(apacket *p, atransport *t)
             PLOG(ERROR) << "remote usb: terminated (data)";
             return -1;
         }
-    }
-
-    if (!check_data(p)) {
-        LOG(ERROR) << "remote usb: check_data failed";
-        return -1;
     }
 
     return 0;
