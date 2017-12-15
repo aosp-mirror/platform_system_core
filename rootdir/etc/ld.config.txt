@@ -3,9 +3,11 @@
 # Bionic loader config file.
 #
 
-# Don't change the order here.
+# Don't change the order here. The first pattern that matches with the
+# absolute path of an executable is selected.
 dir.system = /system/bin/
 dir.system = /system/xbin/
+
 dir.vendor = /odm/bin/
 dir.vendor = /vendor/bin/
 dir.vendor = /data/nativetest/odm
@@ -16,6 +18,7 @@ dir.vendor = /data/nativetest/vendor
 dir.vendor = /data/nativetest64/vendor
 dir.vendor = /data/benchmarktest/vendor
 dir.vendor = /data/benchmarktest64/vendor
+
 dir.system = /data/nativetest
 dir.system = /data/nativetest64
 dir.system = /data/benchmarktest
@@ -27,25 +30,21 @@ additional.namespaces = sphal,vndk,rs
 ###############################################################################
 # "default" namespace
 #
-# Framework-side code runs in this namespace. Anything from /vendor partition
-# can't be loaded in this namespace.
+# Framework-side code runs in this namespace. However, libs from other
+# partitions are also allowed temporarily.
 ###############################################################################
 namespace.default.isolated = false
-namespace.default.search.paths = /system/${LIB}:/odm/${LIB}:/vendor/${LIB}
-namespace.default.permitted.paths = /system/${LIB}:/odm/${LIB}:/vendor/${LIB}
 
-namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}
-namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}:/data/asan/vendor/${LIB}:/vendor/${LIB}
+namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /odm/${LIB}
+namespace.default.search.paths += /vendor/${LIB}
 
-# TODO(b/37013858): remove all dependencies to /vendor/lib from system processes
-# When this is done, comment out following three lines and remove the three
-# lines above
-#namespace.default.isolated = true
-#namespace.default.search.paths = /system/${LIB}
-#namespace.default.permitted.paths = /system/${LIB}
-#
-#namespace.default.asan.search.paths = /data/asan/system/${LIB}:/system/${LIB}
-#namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}
+namespace.default.asan.search.paths  = /data/asan/system/${LIB}
+namespace.default.asan.search.paths +=           /system/${LIB}
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}
+namespace.default.asan.search.paths +=           /odm/${LIB}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
+namespace.default.asan.search.paths +=           /vendor/${LIB}
 
 ###############################################################################
 # "sphal" namespace
@@ -62,21 +61,56 @@ namespace.default.asan.permitted.paths = /data/asan/system/${LIB}:/system/${LIB}
 ###############################################################################
 namespace.sphal.isolated = true
 namespace.sphal.visible = true
-namespace.sphal.search.paths = /vendor/${LIB}/egl:/vendor/${LIB}/hw:/vendor/${LIB}
-namespace.sphal.permitted.paths = /vendor/${LIB}:/system/${LIB}/vndk-sp${VNDK_VER}/hw
 
-namespace.sphal.asan.search.paths = /data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}:/vendor/${LIB}
-namespace.sphal.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}
+namespace.sphal.search.paths  = /odm/${LIB}
+namespace.sphal.search.paths += /vendor/${LIB}
+
+namespace.sphal.permitted.paths  = /odm/${LIB}
+namespace.sphal.permitted.paths += /vendor/${LIB}
+
+namespace.sphal.asan.search.paths  = /data/asan/odm/${LIB}
+namespace.sphal.asan.search.paths +=           /odm/${LIB}
+namespace.sphal.asan.search.paths += /data/asan/vendor/${LIB}
+namespace.sphal.asan.search.paths +=           /vendor/${LIB}
+
+namespace.sphal.asan.permitted.paths  = /data/asan/odm/${LIB}
+namespace.sphal.asan.permitted.paths +=           /odm/${LIB}
+namespace.sphal.asan.permitted.paths += /data/asan/vendor/${LIB}
+namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 
 # Once in this namespace, access to libraries in /system/lib is restricted. Only
 # libs listed here can be used.
 namespace.sphal.links = default,vndk,rs
 
 # WARNING: only NDK libs can be listed here.
-namespace.sphal.link.default.shared_libs = libc.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libGLESv1_CM.so:libGLESv2.so:libvndksupport.so:libz.so
+namespace.sphal.link.default.shared_libs  = libc.so
+namespace.sphal.link.default.shared_libs += libEGL.so
+namespace.sphal.link.default.shared_libs += libGLESv1_CM.so
+namespace.sphal.link.default.shared_libs += libGLESv2.so
+namespace.sphal.link.default.shared_libs += libdl.so
+namespace.sphal.link.default.shared_libs += liblog.so
+namespace.sphal.link.default.shared_libs += libm.so
+namespace.sphal.link.default.shared_libs += libnativewindow.so
+namespace.sphal.link.default.shared_libs += libstdc++.so
+namespace.sphal.link.default.shared_libs += libsync.so
+namespace.sphal.link.default.shared_libs += libvndksupport.so
+namespace.sphal.link.default.shared_libs += libz.so
 
 # WARNING: only VNDK-SP libs can be listed here. DO NOT EDIT this line.
-namespace.sphal.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.common@1.0.so:android.hidl.memory@1.0.so:libhwbinder.so:libbase.so:libcutils.so:libhardware.so:libhidlbase.so:libhidlmemory.so:libhidltransport.so:libion.so:libutils.so:libc++.so
+namespace.sphal.link.vndk.shared_libs  = android.hardware.renderscript@1.0.so
+namespace.sphal.link.vndk.shared_libs += android.hardware.graphics.common@1.0.so
+namespace.sphal.link.vndk.shared_libs += android.hardware.graphics.mapper@2.0.so
+namespace.sphal.link.vndk.shared_libs += android.hidl.memory@1.0.so
+namespace.sphal.link.vndk.shared_libs += libbase.so
+namespace.sphal.link.vndk.shared_libs += libc++.so
+namespace.sphal.link.vndk.shared_libs += libcutils.so
+namespace.sphal.link.vndk.shared_libs += libhardware.so
+namespace.sphal.link.vndk.shared_libs += libhidlbase.so
+namespace.sphal.link.vndk.shared_libs += libhidlmemory.so
+namespace.sphal.link.vndk.shared_libs += libhidltransport.so
+namespace.sphal.link.vndk.shared_libs += libhwbinder.so
+namespace.sphal.link.vndk.shared_libs += libion.so
+namespace.sphal.link.vndk.shared_libs += libutils.so
 
 # Renderscript gets separate namespace
 namespace.sphal.link.rs.shared_libs = libRS_internal.so
@@ -91,15 +125,68 @@ namespace.sphal.link.rs.shared_libs = libRS_internal.so
 ###############################################################################
 namespace.rs.isolated = true
 namespace.rs.visible = true
-namespace.rs.search.paths = /vendor/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}
-namespace.rs.permitted.paths = /vendor/${LIB}:/data
 
-namespace.rs.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:/data/asan/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}:/data/asan/vendor/${LIB}:/vendor/${LIB}
-namespace.rs.asan.permitted.paths = /data/asan/vendor/${LIB}:/vendor/${LIB}:/data
+namespace.rs.search.paths  = /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.search.paths += /odm/${LIB}
+namespace.rs.search.paths += /vendor/${LIB}
+
+namespace.rs.permitted.paths  = /odm/${LIB}
+namespace.rs.permitted.paths += /vendor/${LIB}
+namespace.rs.permitted.paths += /data
+
+namespace.rs.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths +=           /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths += /data/asan/odm/${LIB}
+namespace.rs.asan.search.paths +=           /odm/${LIB}
+namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}
+namespace.rs.asan.search.paths +=           /vendor/${LIB}
+
+namespace.rs.asan.permitted.paths  = /data/asan/odm/${LIB}
+namespace.rs.asan.permitted.paths +=           /odm/${LIB}
+namespace.rs.asan.permitted.paths += /data/asan/vendor/${LIB}
+namespace.rs.asan.permitted.paths +=           /vendor/${LIB}
+namespace.rs.asan.permitted.paths += /data
 
 namespace.rs.links = default,vndk
-namespace.rs.link.default.shared_libs = libc.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libGLESv1_CM.so:libGLESv2.so:libmediandk.so:libvndksupport.so:libz.so:libft2.so
-namespace.rs.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.common@1.0.so:android.hidl.memory@1.0.so:libhwbinder.so:libbase.so:libcutils.so:libhardware.so:libhidlbase.so:libhidlmemory.so:libhidltransport.so:libion.so:libutils.so:libc++.so
+
+namespace.rs.link.default.shared_libs  = libc.so
+namespace.rs.link.default.shared_libs += libEGL.so
+namespace.rs.link.default.shared_libs += libGLESv1_CM.so
+namespace.rs.link.default.shared_libs += libGLESv2.so
+namespace.rs.link.default.shared_libs += libdl.so
+namespace.rs.link.default.shared_libs += liblog.so
+namespace.rs.link.default.shared_libs += libm.so
+namespace.rs.link.default.shared_libs += libnativewindow.so
+namespace.rs.link.default.shared_libs += libstdc++.so
+namespace.rs.link.default.shared_libs += libsync.so
+namespace.rs.link.default.shared_libs += libvndksupport.so
+namespace.rs.link.default.shared_libs += libz.so
+# These two libs are private LLNDK libs but are exceptionally visible
+# in this 'rs' namespace because RenderScript framework libraries
+# which are loaded into this namespace are using them.
+namespace.rs.link.default.shared_libs += libft2.so
+namespace.rs.link.default.shared_libs += libmediandk.so
+
+namespace.rs.link.vndk.shared_libs  = android.hardware.renderscript@1.0.so
+namespace.rs.link.vndk.shared_libs += android.hardware.graphics.common@1.0.so
+namespace.rs.link.vndk.shared_libs += android.hardware.graphics.mapper@2.0.so
+namespace.rs.link.vndk.shared_libs += android.hidl.memory@1.0.so
+namespace.rs.link.vndk.shared_libs += libbase.so
+namespace.rs.link.vndk.shared_libs += libc++.so
+namespace.rs.link.vndk.shared_libs += libcutils.so
+namespace.rs.link.vndk.shared_libs += libhardware.so
+namespace.rs.link.vndk.shared_libs += libhidlbase.so
+namespace.rs.link.vndk.shared_libs += libhidlmemory.so
+namespace.rs.link.vndk.shared_libs += libhidltransport.so
+namespace.rs.link.vndk.shared_libs += libhwbinder.so
+namespace.rs.link.vndk.shared_libs += libion.so
+namespace.rs.link.vndk.shared_libs += libutils.so
 
 ###############################################################################
 # "vndk" namespace
@@ -108,17 +195,47 @@ namespace.rs.link.vndk.shared_libs = android.hardware.renderscript@1.0.so:androi
 ###############################################################################
 namespace.vndk.isolated = true
 namespace.vndk.visible = true
-namespace.vndk.search.paths = /vendor/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.permitted.paths = /vendor/${LIB}/hw:/vendor/${LIB}/egl
 
-namespace.vndk.asan.search.paths = /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:/data/asan/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.permitted.paths = /data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl
+namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+
+namespace.vndk.permitted.paths  = /odm/${LIB}/hw
+namespace.vndk.permitted.paths += /odm/${LIB}/egl
+namespace.vndk.permitted.paths += /vendor/${LIB}/hw
+namespace.vndk.permitted.paths += /vendor/${LIB}/egl
+
+namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+
+namespace.vndk.asan.permitted.paths  = /data/asan/odm/${LIB}/hw
+namespace.vndk.asan.permitted.paths +=           /odm/${LIB}/hw
+namespace.vndk.asan.permitted.paths += /data/asan/odm/${LIB}/egl
+namespace.vndk.asan.permitted.paths +=           /odm/${LIB}/egl
+namespace.vndk.asan.permitted.paths += /data/asan/vendor/${LIB}/hw
+namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/hw
+namespace.vndk.asan.permitted.paths += /data/asan/vendor/${LIB}/egl
+namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/egl
 
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.links = default
-namespace.vndk.link.default.shared_libs = android.hidl.memory@1.0-impl.so:libc.so:libm.so:libdl.so:libstdc++.so:liblog.so:libnativewindow.so:libEGL.so:libsync.so:libvndksupport.so:libz.so
+namespace.vndk.link.default.shared_libs  = android.hidl.memory@1.0-impl.so
+namespace.vndk.link.default.shared_libs += libEGL.so
+namespace.vndk.link.default.shared_libs += libc.so
+namespace.vndk.link.default.shared_libs += libdl.so
+namespace.vndk.link.default.shared_libs += liblog.so
+namespace.vndk.link.default.shared_libs += libm.so
+namespace.vndk.link.default.shared_libs += libnativewindow.so
+namespace.vndk.link.default.shared_libs += libstdc++.so
+namespace.vndk.link.default.shared_libs += libsync.so
+namespace.vndk.link.default.shared_libs += libvndksupport.so
+namespace.vndk.link.default.shared_libs += libz.so
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
@@ -128,6 +245,45 @@ namespace.vndk.link.default.shared_libs = android.hidl.memory@1.0-impl.so:libc.s
 ###############################################################################
 [vendor]
 namespace.default.isolated = false
-namespace.default.search.paths = /odm/${LIB}/hw:/odm/${LIB}/egl:/odm/${LIB}:/vendor/${LIB}/hw:/vendor/${LIB}/egl:/vendor/${LIB}:/system/${LIB}/vndk${VNDK_VER}:/odm/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}
 
-namespace.default.asan.search.paths = /data/asan/odm/${LIB}/hw:/odm/${LIB}/hw:/data/asan/odm/${LIB}/egl:/odm/${LIB}/egl:/data/asan/odm/${LIB}:/odm/${LIB}:/data/asan/vendor/${LIB}/hw:/vendor/${LIB}/hw:/data/asan/vendor/${LIB}/egl:/vendor/${LIB}/egl:/data/asan/vendor/${LIB}:/vendor/${LIB}:/data/asan/system/${LIB}/vndk${VNDK_VER}:/system/${LIB}/vndk${VNDK_VER}:/data/asan/odm/${LIB}/vndk-sp${VNDK_VER}:/odm/${LIB}/vndk-sp${VNDK_VER}:/data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}:/vendor/${LIB}/vndk-sp${VNDK_VER}:/data/asan/system/${LIB}/vndk-sp${VNDK_VER}:/system/${LIB}/vndk-sp${VNDK_VER}:/data/asan/system/${LIB}:/system/${LIB}
+namespace.default.search.paths  = /odm/${LIB}
+namespace.default.search.paths += /odm/${LIB}/vndk${VNDK_VER}
+namespace.default.search.paths += /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.search.paths += /vendor/${LIB}
+namespace.default.search.paths += /vendor/${LIB}/vndk${VNDK_VER}
+namespace.default.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
+
+# Access to system libraries are allowed
+namespace.default.search.paths += /system/${LIB}/vndk${VNDK_VER}
+namespace.default.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.search.paths += /system/${LIB}
+
+# TODO(b/70551668) Remove /vendor/${LIB}/hw from search paths.
+# Shared libraries in the directory should be dlopened with full file paths.
+# This is a workaround for some legacy prebuilt binaries.
+namespace.default.search.paths += /vendor/${LIB}/hw
+
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}
+namespace.default.asan.search.paths +=           /odm/${LIB}
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk${VNDK_VER}
+namespace.default.asan.search.paths +=           /odm/${LIB}/vndk${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths +=           /odm/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
+namespace.default.asan.search.paths +=           /vendor/${LIB}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk${VNDK_VER}
+namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk${VNDK_VER}
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/system/${LIB}
+namespace.default.asan.search.paths +=           /system/${LIB}
+
+# TODO(b/70551668) Remove /vendor/${LIB}/hw from search paths.
+# Shared libraries in the directory should be dlopened with full file paths.
+# This is a workaround for some legacy prebuilt binaries.
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/hw
+namespace.default.asan.search.paths +=           /vendor/${LIB}/hw
