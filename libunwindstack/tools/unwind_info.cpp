@@ -87,7 +87,7 @@ void DumpDwarfSection(ElfInterface* interface, DwarfSection* section, uint64_t l
   for (const DwarfFde* fde : *section) {
     // Sometimes there are entries that have empty length, skip those since
     // they don't contain any interesting information.
-    if (fde->pc_start == fde->pc_end) {
+    if (fde == nullptr || fde->pc_start == fde->pc_end) {
       continue;
     }
     printf("\n  PC 0x%" PRIx64, fde->pc_start + load_bias);

@@ -43,7 +43,7 @@ bool ElfInterfaceFake::GetFunctionName(uint64_t, uint64_t, std::string* name, ui
   return true;
 }
 
-bool ElfInterfaceFake::Step(uint64_t, Regs* regs, Memory*, bool* finished) {
+bool ElfInterfaceFake::Step(uint64_t, uint64_t, Regs* regs, Memory*, bool* finished) {
   if (steps_.empty()) {
     return false;
   }

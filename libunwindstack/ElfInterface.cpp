@@ -386,16 +386,29 @@ bool ElfInterface::GetFunctionNameWithTemplate(uint64_t addr, uint64_t load_bias
   return false;
 }
 
-bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterface::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
+                        bool* finished) {
+  // Adjust the load bias to get the real relative pc.
+  if (pc < load_bias) {
+    return false;
+  }
+  uint64_t adjusted_pc = pc - load_bias;
+
   // Try the eh_frame first.
   DwarfSection* eh_frame = eh_frame_.get();
-  if (eh_frame != nullptr && eh_frame->Step(pc, regs, process_memory, finished)) {
+  if (eh_frame != nullptr && eh_frame->Step(adjusted_pc, regs, process_memory, finished)) {
     return true;
   }
 
   // Try the debug_frame next.
   DwarfSection* debug_frame = debug_frame_.get();
-  if (debug_frame != nullptr && debug_frame->Step(pc, regs, process_memory, finished)) {
+  if (debug_frame != nullptr && debug_frame->Step(adjusted_pc, regs, process_memory, finished)) {
+    return true;
+  }
+
+  // Finally try the gnu_debugdata interface, but always use a zero load bias.
+  if (gnu_debugdata_interface_ != nullptr &&
+      gnu_debugdata_interface_->Step(pc, 0, regs, process_memory, finished)) {
     return true;
   }
   return false;

@@ -96,6 +96,54 @@ TEST(UnwindOfflineTest, pc_straddle_arm32) {
       frame_info);
 }
 
+TEST(UnwindOfflineTest, pc_in_gnu_debugdata_arm32) {
+  std::string dir(TestGetFileDirectory() + "offline/gnu_debugdata_arm32/");
+
+  MemoryOffline* memory = new MemoryOffline;
+  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
+
+  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
+  ASSERT_TRUE(fp != nullptr);
+  RegsArm regs;
+  uint64_t reg_value;
+  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
+  regs[ARM_REG_PC] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
+  regs[ARM_REG_SP] = reg_value;
+  regs.SetFromRaw();
+  fclose(fp);
+
+  fp = fopen((dir + "maps.txt").c_str(), "r");
+  ASSERT_TRUE(fp != nullptr);
+  // The file is guaranteed to be less than 4096 bytes.
+  std::vector<char> buffer(4096);
+  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
+  fclose(fp);
+
+  BufferMaps maps(buffer.data());
+  ASSERT_TRUE(maps.Parse());
+
+  ASSERT_EQ(ARCH_ARM, regs.Arch());
+
+  std::shared_ptr<Memory> process_memory(memory);
+
+  char* cwd = getcwd(nullptr, 0);
+  ASSERT_EQ(0, chdir(dir.c_str()));
+  Unwinder unwinder(128, &maps, &regs, process_memory);
+  unwinder.Unwind();
+  ASSERT_EQ(0, chdir(cwd));
+  free(cwd);
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(2U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0006dc49  libandroid_runtime.so "
+      "(_ZN7android14AndroidRuntime15javaThreadShellEPv+80)\n"
+      "  #01 pc 0006dce5  libandroid_runtime.so "
+      "(_ZN7android14AndroidRuntime19javaCreateThreadEtcEPFiPvES1_PKcijPS1_)\n",
+      frame_info);
+}
+
 TEST(UnwindOfflineTest, pc_straddle_arm64) {
   std::string dir(TestGetFileDirectory() + "offline/straddle_arm64/");
 

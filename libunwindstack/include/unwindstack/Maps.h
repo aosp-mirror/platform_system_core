@@ -42,6 +42,9 @@ class Maps {
 
   virtual const std::string GetMapsFile() const { return ""; }
 
+  void Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const std::string& name,
+           uint64_t load_bias);
+
   typedef std::vector<MapInfo*>::iterator iterator;
   iterator begin() { return maps_.begin(); }
   iterator end() { return maps_.end(); }
@@ -98,14 +101,6 @@ class FileMaps : public Maps {
 
  protected:
   const std::string file_;
-};
-
-class OfflineMaps : public FileMaps {
- public:
-  OfflineMaps(const std::string& file) : FileMaps(file) {}
-  virtual ~OfflineMaps() = default;
-
-  bool Parse() override;
 };
 
 }  // namespace unwindstack

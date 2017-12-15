@@ -68,12 +68,23 @@ TEST_F(MapInfoGetLoadBiasTest, no_elf_and_no_valid_elf_in_memory) {
   EXPECT_EQ(0U, info.GetLoadBias(process_memory_));
 }
 
+TEST_F(MapInfoGetLoadBiasTest, load_bias_cached_from_elf) {
+  map_info_->elf = elf_container_.release();
+
+  elf_->FakeSetLoadBias(0);
+  EXPECT_EQ(0U, map_info_->GetLoadBias(process_memory_));
+
+  elf_->FakeSetLoadBias(0x1000);
+  EXPECT_EQ(0U, map_info_->GetLoadBias(process_memory_));
+}
+
 TEST_F(MapInfoGetLoadBiasTest, elf_exists) {
   map_info_->elf = elf_container_.release();
 
   elf_->FakeSetLoadBias(0);
   EXPECT_EQ(0U, map_info_->GetLoadBias(process_memory_));
 
+  map_info_->load_bias = static_cast<uint64_t>(-1);
   elf_->FakeSetLoadBias(0x1000);
   EXPECT_EQ(0x1000U, map_info_->GetLoadBias(process_memory_));
 }
@@ -138,6 +149,15 @@ static void InitElfData(MemoryFake* memory, uint64_t offset) {
 TEST_F(MapInfoGetLoadBiasTest, elf_exists_in_memory) {
   InitElfData(memory_, map_info_->start);
 
+  EXPECT_EQ(0xe000U, map_info_->GetLoadBias(process_memory_));
+}
+
+TEST_F(MapInfoGetLoadBiasTest, elf_exists_in_memory_cached) {
+  InitElfData(memory_, map_info_->start);
+
+  EXPECT_EQ(0xe000U, map_info_->GetLoadBias(process_memory_));
+
+  memory_->Clear();
   EXPECT_EQ(0xe000U, map_info_->GetLoadBias(process_memory_));
 }
 

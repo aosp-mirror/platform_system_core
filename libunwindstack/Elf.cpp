@@ -79,6 +79,7 @@ void Elf::InitGnuDebugdata() {
   uint64_t load_bias;
   if (gnu->Init(&load_bias)) {
     gnu->InitHeaders();
+    interface_->SetGnuDebugdataInterface(gnu);
   } else {
     // Free all of the memory associated with the gnu_debugdata section.
     gnu_debugdata_memory_.reset(nullptr);
@@ -115,17 +116,9 @@ bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, R
     return true;
   }
 
-  // Adjust the load bias to get the real relative pc.
-  if (adjusted_rel_pc < load_bias_) {
-    return false;
-  }
-  adjusted_rel_pc -= load_bias_;
-
   // Lock during the step which can update information in the object.
   std::lock_guard<std::mutex> guard(lock_);
-  return interface_->Step(adjusted_rel_pc, regs, process_memory, finished) ||
-         (gnu_debugdata_interface_ &&
-          gnu_debugdata_interface_->Step(adjusted_rel_pc, regs, process_memory, finished));
+  return interface_->Step(adjusted_rel_pc, load_bias_, regs, process_memory, finished);
 }
 
 bool Elf::IsValidElf(Memory* memory) {
