@@ -218,7 +218,7 @@ namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = system
+additional.namespaces = system,vndk
 
 ###############################################################################
 # "default" namespace
@@ -268,10 +268,39 @@ namespace.default.asan.permitted.paths +=           /odm
 namespace.default.asan.permitted.paths += /data/asan/vendor
 namespace.default.asan.permitted.paths +=           /vendor
 
-namespace.default.links = system
-namespace.default.link.system.shared_libs  = %LLNDK_LIBRARIES%
-namespace.default.link.system.shared_libs += %VNDK_SAMEPROCESS_LIBRARIES%
-namespace.default.link.system.shared_libs += %VNDK_CORE_LIBRARIES%
+namespace.default.links = system,vndk
+namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
+namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
+namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
+
+###############################################################################
+# "vndk" namespace
+#
+# This namespace is where VNDK and VNDK-SP libraries are loaded for
+# a vendor process.
+###############################################################################
+namespace.vndk.isolated = false
+
+namespace.vndk.search.paths  = /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.search.paths += /system/${LIB}/vndk${VNDK_VER}
+
+# This is exceptionally required since android.hidl.memory@1.0-impl.so is here
+namespace.vndk.permitted.paths = /system/${LIB}/vndk-sp${VNDK_VER}/hw
+
+namespace.vndk.asan.permitted.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}/hw
+namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}/hw
+
+namespace.vndk.asan.search.paths  = /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk${VNDK_VER}
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk${VNDK_VER}
+
+# When these NDK libs are required inside this namespace, then it is redirected
+# to the system namespace. This is possible since their ABI is stable across
+# Android releases.
+namespace.vndk.links = system
+namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
+namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "system" namespace
@@ -281,13 +310,7 @@ namespace.default.link.system.shared_libs += %VNDK_CORE_LIBRARIES%
 ###############################################################################
 namespace.system.isolated = false
 
-namespace.system.search.paths  = /system/${LIB}/vndk-sp${VNDK_VER}
-namespace.system.search.paths += /system/${LIB}/vndk${VNDK_VER}
-namespace.system.search.paths += /system/${LIB}
+namespace.system.search.paths = /system/${LIB}
 
-namespace.system.asan.search.paths  = /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.system.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
-namespace.system.asan.search.paths += /data/asan/system/${LIB}/vndk${VNDK_VER}
-namespace.system.asan.search.paths +=           /system/${LIB}/vndk${VNDK_VER}
-namespace.system.asan.search.paths += /data/asan/system/${LIB}
+namespace.system.asan.search.paths  = /data/asan/system/${LIB}
 namespace.system.asan.search.paths +=           /system/${LIB}
