@@ -44,7 +44,12 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 #define A_AUTH 0x48545541
 
 // ADB protocol version.
-#define A_VERSION 0x01000000
+// Version revision:
+// 0x01000000: original
+// 0x01000001: skip checksum (Dec 2017)
+#define A_VERSION_MIN 0x01000000
+#define A_VERSION_SKIP_CHECKSUM 0x01000001
+#define A_VERSION 0x01000001
 
 // Used for help/version information.
 #define ADB_VERSION_MAJOR 1
@@ -53,7 +58,7 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 std::string adb_version();
 
 // Increment this when we want to force users to start a new adb server.
-#define ADB_SERVER_VERSION 39
+#define ADB_SERVER_VERSION 40
 
 using TransportId = uint64_t;
 class atransport;
