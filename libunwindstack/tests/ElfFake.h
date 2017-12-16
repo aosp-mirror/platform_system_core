@@ -68,8 +68,7 @@ class ElfInterfaceFake : public ElfInterface {
 
   bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override;
 
-  bool Step(uint64_t, Regs*, Memory*, bool*) override;
-
+  bool Step(uint64_t, uint64_t, Regs*, Memory*, bool*) override;
 
   static void FakePushFunctionData(const FunctionData data) { functions_.push_back(data); }
   static void FakePushStepData(const StepData data) { steps_.push_back(data); }
