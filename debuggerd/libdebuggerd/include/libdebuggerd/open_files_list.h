@@ -31,6 +31,6 @@ typedef std::vector<std::pair<int, std::string>> OpenFilesList;
 void populate_open_files_list(pid_t pid, OpenFilesList* list);
 
 /* Dumps the open files list to the log. */
-void dump_open_files_list_to_log(const OpenFilesList& files, log_t* log, const char* prefix);
+void dump_open_files_list(log_t* log, const OpenFilesList& files, const char* prefix);
 
 #endif // _DEBUGGERD_OPEN_FILES_LIST_H

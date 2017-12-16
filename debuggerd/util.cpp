@@ -18,8 +18,12 @@
 
 #include <sys/socket.h>
 
+#include <string>
 #include <utility>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include "protocol.h"
@@ -85,4 +89,16 @@ ssize_t recv_fd(int sockfd, void* _Nonnull data, size_t len, unique_fd* _Nullabl
   }
 
   return result;
+}
+
+std::string get_process_name(pid_t pid) {
+  std::string result = "<unknown>";
+  android::base::ReadFileToString(android::base::StringPrintf("/proc/%d/cmdline", pid), &result);
+  return result;
+}
+
+std::string get_thread_name(pid_t tid) {
+  std::string result = "<unknown>";
+  android::base::ReadFileToString(android::base::StringPrintf("/proc/%d/comm", tid), &result);
+  return android::base::Trim(result);
 }

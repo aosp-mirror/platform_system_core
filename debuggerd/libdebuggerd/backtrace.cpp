@@ -30,12 +30,15 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <map>
 #include <memory>
 #include <string>
 
+#include <android-base/unique_fd.h>
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
 
+#include "libdebuggerd/types.h"
 #include "libdebuggerd/utility.h"
 
 static void dump_process_header(log_t* log, pid_t pid, const char* process_name) {
@@ -56,62 +59,46 @@ static void dump_process_footer(log_t* log, pid_t pid) {
   _LOG(log, logtype::BACKTRACE, "\n----- end %d -----\n", pid);
 }
 
-static void log_thread_name(log_t* log, pid_t tid, const char* thread_name) {
-  _LOG(log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", thread_name, tid);
-}
-
-static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid,
-                        const std::string& thread_name) {
-  log_thread_name(log, tid, thread_name.c_str());
-
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
-  if (backtrace->Unwind(0)) {
-    dump_backtrace_to_log(backtrace.get(), log, "  ");
-  } else {
-    ALOGE("Unwind failed: tid = %d: %s", tid,
-          backtrace->GetErrorString(backtrace->GetError()).c_str());
-  }
-}
-
-void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid, const std::string& process_name,
-                    const std::map<pid_t, std::string>& threads, std::string* amfd_data) {
-  log_t log;
-  log.tfd = fd;
-  log.amfd_data = amfd_data;
-
-  dump_process_header(&log, pid, process_name.c_str());
-  dump_thread(&log, map, pid, tid, threads.find(tid)->second.c_str());
-
-  for (const auto& it : threads) {
-    pid_t thread_tid = it.first;
-    const std::string& thread_name = it.second;
-    if (thread_tid != tid) {
-      dump_thread(&log, map, pid, thread_tid, thread_name.c_str());
-    }
-  }
-
-  dump_process_footer(&log, pid);
-}
-
-void dump_backtrace_ucontext(int output_fd, ucontext_t* ucontext) {
-  pid_t pid = getpid();
-  pid_t tid = gettid();
-
+void dump_backtrace_thread(int output_fd, BacktraceMap* map, const ThreadInfo& thread) {
   log_t log;
   log.tfd = output_fd;
   log.amfd_data = nullptr;
 
-  char thread_name[16];
-  read_with_default("/proc/self/comm", thread_name, sizeof(thread_name), "<unknown>");
-  log_thread_name(&log, tid, thread_name);
+  _LOG(&log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", thread.thread_name.c_str(), thread.tid);
 
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid));
-  if (backtrace->Unwind(0, ucontext)) {
-    dump_backtrace_to_log(backtrace.get(), &log, "  ");
-  } else {
-    ALOGE("Unwind failed: tid = %d: %s", tid,
-          backtrace->GetErrorString(backtrace->GetError()).c_str());
+  std::vector<backtrace_frame_data_t> frames;
+  if (!Backtrace::Unwind(thread.registers.get(), map, &frames, 0, nullptr)) {
+    _LOG(&log, logtype::THREAD, "Unwind failed: tid = %d", thread.tid);
+    return;
   }
+
+  for (auto& frame : frames) {
+    _LOG(&log, logtype::BACKTRACE, "  %s\n", Backtrace::FormatFrameData(&frame).c_str());
+  }
+}
+
+void dump_backtrace(android::base::unique_fd output_fd, BacktraceMap* map,
+                    const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread) {
+  log_t log;
+  log.tfd = output_fd.get();
+  log.amfd_data = nullptr;
+
+  auto target = thread_info.find(target_thread);
+  if (target == thread_info.end()) {
+    ALOGE("failed to find target thread in thread info");
+    return;
+  }
+
+  dump_process_header(&log, target->second.pid, target->second.process_name.c_str());
+
+  dump_backtrace_thread(output_fd.get(), map, target->second);
+  for (const auto& [tid, info] : thread_info) {
+    if (tid != target_thread) {
+      dump_backtrace_thread(output_fd.get(), map, info);
+    }
+  }
+
+  dump_process_footer(&log, target->second.pid);
 }
 
 void dump_backtrace_header(int output_fd) {
@@ -130,10 +117,4 @@ void dump_backtrace_footer(int output_fd) {
   log.amfd_data = nullptr;
 
   dump_process_footer(&log, getpid());
-}
-
-void dump_backtrace_to_log(Backtrace* backtrace, log_t* log, const char* prefix) {
-  for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-    _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, backtrace->FormatFrameData(i).c_str());
-  }
 }
