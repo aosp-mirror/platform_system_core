@@ -174,11 +174,11 @@ static unw_accessors_t accessors = {
 bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   if (context == nullptr) {
     BACK_LOGW("The context is needed for offline backtracing.");
-    error_ = BACKTRACE_UNWIND_ERROR_NO_CONTEXT;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_NO_CONTEXT;
     return false;
   }
   context_ = context;
-  error_ = BACKTRACE_UNWIND_NO_ERROR;
+  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
 
   unw_addr_space_t addr_space = unw_create_addr_space(&accessors, 0);
   unw_cursor_t cursor;
@@ -186,11 +186,11 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   if (ret != 0) {
     BACK_LOGW("unw_init_remote failed %d", ret);
     unw_destroy_addr_space(addr_space);
-    error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
+    error_.error_code = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
   size_t num_frames = 0;
-  do {
+  while (true) {
     unw_word_t pc;
     ret = unw_get_reg(&cursor, UNW_REG_IP, &pc);
     if (ret < 0) {
@@ -224,7 +224,17 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
     }
     is_debug_frame_used_ = false;
     ret = unw_step(&cursor);
-  } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
+    if (ret <= 0) {
+      if (error_.error_code == BACKTRACE_UNWIND_NO_ERROR) {
+        error_.error_code = BACKTRACE_UNWIND_ERROR_EXECUTE_DWARF_INSTRUCTION_FAILED;
+      }
+      break;
+    }
+    if (num_frames == MAX_BACKTRACE_FRAMES) {
+      error_.error_code = BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT;
+      break;
+    }
+  }
 
   unw_destroy_addr_space(addr_space);
   context_ = nullptr;
@@ -259,7 +269,12 @@ size_t BacktraceOffline::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
     return read_size;
   }
   read_size = stack_space_.Read(addr, buffer, bytes);
-  return read_size;
+  if (read_size != 0) {
+    return read_size;
+  }
+  error_.error_code = BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED;
+  error_.error_info.addr = addr;
+  return 0;
 }
 
 bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
@@ -267,13 +282,17 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
   backtrace_map_t map;
   FillInMap(ip, &map);
   if (!BacktraceMap::IsValid(map)) {
+    error_.error_code = BACKTRACE_UNWIND_ERROR_FIND_PROC_INFO_FAILED;
     return false;
   }
   const std::string& filename = map.name;
   DebugFrameInfo* debug_frame = GetDebugFrameInFile(filename);
   if (debug_frame == nullptr) {
+    error_.error_code = BACKTRACE_UNWIND_ERROR_FIND_PROC_INFO_FAILED;
     return false;
   }
+  // Each FindProcInfo() is a new attempt to unwind, so reset the reason.
+  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
 
   eh_frame_hdr_space_.Clear();
   eh_frame_space_.Clear();
@@ -367,6 +386,7 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
       }
     }
   }
+  error_.error_code = BACKTRACE_UNWIND_ERROR_FIND_PROC_INFO_FAILED;
   return false;
 }
 
@@ -548,6 +568,10 @@ bool BacktraceOffline::ReadReg(size_t reg, uint64_t* value) {
   UNUSED(value);
   result = false;
 #endif
+  if (!result) {
+    error_.error_code = BACKTRACE_UNWIND_ERROR_ACCESS_REG_FAILED;
+    error_.error_info.regno = reg;
+  }
   return result;
 }
 
