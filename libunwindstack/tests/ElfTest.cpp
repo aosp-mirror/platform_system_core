@@ -346,7 +346,7 @@ class ElfInterfaceMock : public ElfInterface {
   void InitHeaders() override {}
   bool GetSoname(std::string*) override { return false; }
   bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override { return false; }
-  MOCK_METHOD4(Step, bool(uint64_t, Regs*, Memory*, bool*));
+  MOCK_METHOD5(Step, bool(uint64_t, uint64_t, Regs*, Memory*, bool*));
 };
 
 TEST_F(ElfTest, step_in_interface) {
@@ -361,7 +361,7 @@ TEST_F(ElfTest, step_in_interface) {
   MemoryFake process_memory;
 
   bool finished;
-  EXPECT_CALL(*interface, Step(0x1000, &regs, &process_memory, &finished))
+  EXPECT_CALL(*interface, Step(0x1000, 0, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
   ASSERT_TRUE(elf.Step(0x1004, 0x1000, 0x2000, &regs, &process_memory, &finished));
@@ -382,7 +382,7 @@ TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
   bool finished;
   ASSERT_FALSE(elf.Step(0x1004, 0x1000, 0x2000, &regs, &process_memory, &finished));
 
-  EXPECT_CALL(*interface, Step(0x3300, &regs, &process_memory, &finished))
+  EXPECT_CALL(*interface, Step(0x7300, 0x4000, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
   ASSERT_TRUE(elf.Step(0x7304, 0x7300, 0x2000, &regs, &process_memory, &finished));

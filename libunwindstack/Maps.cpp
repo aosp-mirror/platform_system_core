@@ -202,6 +202,13 @@ bool Maps::Parse() {
   return return_value;
 }
 
+void Maps::Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+               const std::string& name, uint64_t load_bias) {
+  MapInfo* map_info = new MapInfo(start, end, offset, flags, name);
+  map_info->load_bias = load_bias;
+  maps_.push_back(map_info);
+}
+
 Maps::~Maps() {
   for (auto& map : maps_) {
     delete map;
@@ -233,63 +240,6 @@ bool BufferMaps::Parse() {
 
 const std::string RemoteMaps::GetMapsFile() const {
   return "/proc/" + std::to_string(pid_) + "/maps";
-}
-
-bool OfflineMaps::Parse() {
-  // Format of maps information:
-  //   <uint64_t> StartOffset
-  //   <uint64_t> EndOffset
-  //   <uint64_t> offset
-  //   <uint16_t> flags
-  //   <uint16_t> MapNameLength
-  //   <VariableLengthValue> MapName
-  android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(file_.c_str(), O_RDONLY)));
-  if (fd == -1) {
-    return false;
-  }
-
-  std::vector<char> name;
-  while (true) {
-    uint64_t start;
-    ssize_t bytes = TEMP_FAILURE_RETRY(read(fd, &start, sizeof(start)));
-    if (bytes == 0) {
-      break;
-    }
-    if (bytes == -1 || bytes != sizeof(start)) {
-      return false;
-    }
-    uint64_t end;
-    bytes = TEMP_FAILURE_RETRY(read(fd, &end, sizeof(end)));
-    if (bytes == -1 || bytes != sizeof(end)) {
-      return false;
-    }
-    uint64_t offset;
-    bytes = TEMP_FAILURE_RETRY(read(fd, &offset, sizeof(offset)));
-    if (bytes == -1 || bytes != sizeof(offset)) {
-      return false;
-    }
-    uint16_t flags;
-    bytes = TEMP_FAILURE_RETRY(read(fd, &flags, sizeof(flags)));
-    if (bytes == -1 || bytes != sizeof(flags)) {
-      return false;
-    }
-    uint16_t len;
-    bytes = TEMP_FAILURE_RETRY(read(fd, &len, sizeof(len)));
-    if (bytes == -1 || bytes != sizeof(len)) {
-      return false;
-    }
-    if (len > 0) {
-      name.resize(len);
-      bytes = TEMP_FAILURE_RETRY(read(fd, name.data(), len));
-      if (bytes == -1 || bytes != len) {
-        return false;
-      }
-      maps_.push_back(new MapInfo(start, end, offset, flags, std::string(name.data(), len)));
-    } else {
-      maps_.push_back(new MapInfo(start, end, offset, flags, ""));
-    }
-  }
-  return true;
 }
 
 }  // namespace unwindstack

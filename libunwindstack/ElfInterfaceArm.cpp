@@ -92,16 +92,24 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type, uint64_t load_b
   return true;
 }
 
-bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterfaceArm::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
+                           bool* finished) {
   // Dwarf unwind information is precise about whether a pc is covered or not,
   // but arm unwind information only has ranges of pc. In order to avoid
   // incorrectly doing a bad unwind using arm unwind information for a
   // different function, always try and unwind with the dwarf information first.
-  return ElfInterface32::Step(pc, regs, process_memory, finished) ||
-         StepExidx(pc, regs, process_memory, finished);
+  return ElfInterface32::Step(pc, load_bias, regs, process_memory, finished) ||
+         StepExidx(pc, load_bias, regs, process_memory, finished);
 }
 
-bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
+                                bool* finished) {
+  // Adjust the load bias to get the real relative pc.
+  if (pc < load_bias) {
+    return false;
+  }
+  pc -= load_bias;
+
   RegsArm* regs_arm = reinterpret_cast<RegsArm*>(regs);
   uint64_t entry_offset;
   if (!FindEntry(pc, &entry_offset)) {
