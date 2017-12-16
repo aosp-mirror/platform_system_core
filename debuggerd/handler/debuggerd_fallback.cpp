@@ -36,10 +36,14 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <memory>
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
+#include <backtrace/BacktraceMap.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
 
 #include "debuggerd/handler.h"
 #include "tombstoned/tombstoned.h"
@@ -49,6 +53,7 @@
 #include "libdebuggerd/tombstone.h"
 
 using android::base::unique_fd;
+using unwindstack::Regs;
 
 extern "C" void __linker_enable_fallback_allocator();
 extern "C" void __linker_disable_fallback_allocator();
@@ -61,7 +66,19 @@ extern "C" void __linker_disable_fallback_allocator();
 // exhaustion.
 static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
   __linker_enable_fallback_allocator();
-  dump_backtrace_ucontext(output_fd, ucontext);
+  {
+    std::unique_ptr<Regs> regs;
+
+    ThreadInfo thread;
+    thread.pid = getpid();
+    thread.tid = gettid();
+    thread.thread_name = get_thread_name(gettid());
+    thread.registers.reset(Regs::CreateFromUcontext(Regs::CurrentArch(), ucontext));
+
+    // TODO: Create this once and store it in a global?
+    std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(getpid()));
+    dump_backtrace_thread(output_fd, map.get(), thread);
+  }
   __linker_disable_fallback_allocator();
 }
 
@@ -162,41 +179,41 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
 
   // Send a signal to all of our siblings, asking them to dump their stack.
   iterate_siblings(
-    [](pid_t tid, int output_fd) {
-      // Use a pipe, to be able to detect situations where the thread gracefully exits before
-      // receiving our signal.
-      unique_fd pipe_read, pipe_write;
-      if (!Pipe(&pipe_read, &pipe_write)) {
-        async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to create pipe: %s",
-                              strerror(errno));
-        return false;
-      }
+      [](pid_t tid, int output_fd) {
+        // Use a pipe, to be able to detect situations where the thread gracefully exits before
+        // receiving our signal.
+        unique_fd pipe_read, pipe_write;
+        if (!Pipe(&pipe_read, &pipe_write)) {
+          async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to create pipe: %s",
+                                strerror(errno));
+          return false;
+        }
 
-      trace_output_fd.store(pipe_write.get());
+        trace_output_fd.store(pipe_write.get());
 
-      siginfo_t siginfo = {};
-      siginfo.si_code = SI_QUEUE;
-      siginfo.si_value.sival_int = ~0;
-      siginfo.si_pid = getpid();
-      siginfo.si_uid = getuid();
+        siginfo_t siginfo = {};
+        siginfo.si_code = SI_QUEUE;
+        siginfo.si_value.sival_int = ~0;
+        siginfo.si_pid = getpid();
+        siginfo.si_uid = getuid();
 
-      if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, DEBUGGER_SIGNAL, &siginfo) != 0) {
-        async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to send trace signal to %d: %s",
-                              tid, strerror(errno));
-        return false;
-      }
+        if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, DEBUGGER_SIGNAL, &siginfo) != 0) {
+          async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to send trace signal to %d: %s",
+                                tid, strerror(errno));
+          return false;
+        }
 
-      bool success = forward_output(pipe_read.get(), output_fd);
-      if (success) {
-        // The signaled thread has closed trace_output_fd already.
-        (void)pipe_write.release();
-      } else {
-        trace_output_fd.store(-1);
-      }
+        bool success = forward_output(pipe_read.get(), output_fd);
+        if (success) {
+          // The signaled thread has closed trace_output_fd already.
+          (void)pipe_write.release();
+        } else {
+          trace_output_fd.store(-1);
+        }
 
-      return true;
-    },
-    output_fd.get());
+        return true;
+      },
+      output_fd.get());
 
   dump_backtrace_footer(output_fd.get());
   tombstoned_notify_completion(tombstone_socket.get());
@@ -206,7 +223,8 @@ exit:
 }
 
 static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_message) {
-  // Only allow one thread to handle a crash.
+  // Only allow one thread to handle a crash at a time (this can happen multiple times without
+  // exit, since tombstones can be requested without a real crash happening.)
   static pthread_mutex_t crash_mutex = PTHREAD_MUTEX_INITIALIZER;
   int ret = pthread_mutex_lock(&crash_mutex);
   if (ret != 0) {
@@ -221,11 +239,13 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
   if (tombstoned_connected) {
     tombstoned_notify_completion(tombstone_socket.get());
   }
+
+  pthread_mutex_unlock(&crash_mutex);
 }
 
 extern "C" void debuggerd_fallback_handler(siginfo_t* info, ucontext_t* ucontext,
                                            void* abort_message) {
-  if (info->si_signo == DEBUGGER_SIGNAL) {
+  if (info->si_signo == DEBUGGER_SIGNAL && info->si_value.sival_int != 0) {
     return trace_handler(info, ucontext);
   } else {
     return crash_handler(info, ucontext, abort_message);

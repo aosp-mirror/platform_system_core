@@ -19,12 +19,12 @@
 #include <memory>
 #include <string>
 
-#include <gtest/gtest.h>
 #include <android-base/file.h>
+#include <gtest/gtest.h>
+#include <unwindstack/Memory.h>
 
 #include "libdebuggerd/utility.h"
 
-#include "BacktraceMock.h"
 #include "log_fake.h"
 
 const char g_expected_full_dump[] =
@@ -103,11 +103,59 @@ const char g_expected_partial_dump[] = \
 "    123456d0 -------- -------- -------- --------  ................\n";
 #endif
 
+class MemoryMock : public unwindstack::Memory {
+ public:
+  virtual ~MemoryMock() = default;
+
+  virtual size_t Read(uint64_t addr, void* buffer, size_t bytes) override {
+    size_t offset = 0;
+    if (last_read_addr_ > 0) {
+      offset = addr - last_read_addr_;
+    }
+    size_t bytes_available = buffer_.size() - offset;
+
+    if (partial_read_) {
+      bytes = std::min(bytes, bytes_partial_read_);
+      bytes_partial_read_ -= bytes;
+      partial_read_ = bytes_partial_read_;
+    } else if (bytes > bytes_available) {
+      bytes = bytes_available;
+    }
+
+    if (bytes > 0) {
+      memcpy(buffer, buffer_.data() + offset, bytes);
+    }
+
+    last_read_addr_ = addr;
+    return bytes;
+  }
+
+  void SetReadData(uint8_t* buffer, size_t bytes) {
+    buffer_.resize(bytes);
+    memcpy(buffer_.data(), buffer, bytes);
+    bytes_partial_read_ = 0;
+    last_read_addr_ = 0;
+  }
+
+  void SetPartialReadAmount(size_t bytes) {
+    if (bytes > buffer_.size()) {
+      abort();
+    }
+    partial_read_ = true;
+    bytes_partial_read_ = bytes;
+  }
+
+ private:
+  std::vector<uint8_t> buffer_;
+  bool partial_read_ = false;
+  size_t bytes_partial_read_ = 0;
+  uintptr_t last_read_addr_ = 0;
+};
+
 class DumpMemoryTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    map_mock_.reset(new BacktraceMapMock());
-    backtrace_mock_.reset(new BacktraceMock(map_mock_.get()));
+    memory_mock_ = std::make_unique<MemoryMock>();
 
     char tmp_file[256];
     const char data_template[] = "/data/local/tmp/debuggerd_memory_testXXXXXX";
@@ -138,10 +186,10 @@ class DumpMemoryTest : public ::testing::Test {
     if (log_.tfd >= 0) {
       close(log_.tfd);
     }
+    memory_mock_.reset();
   }
 
-  std::unique_ptr<BacktraceMapMock> map_mock_;
-  std::unique_ptr<BacktraceMock> backtrace_mock_;
+  std::unique_ptr<MemoryMock> memory_mock_;
 
   log_t log_;
 };
@@ -151,9 +199,9 @@ TEST_F(DumpMemoryTest, aligned_addr) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x12345678, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x12345678, "memory near %.2s:", "r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -170,10 +218,10 @@ TEST_F(DumpMemoryTest, partial_read) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(96);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(96);
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x12345679, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x12345679, "memory near %.2s:", "r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -190,9 +238,9 @@ TEST_F(DumpMemoryTest, unaligned_addr) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x12345679, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x12345679, "memory near %.2s:", "r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -205,7 +253,7 @@ TEST_F(DumpMemoryTest, unaligned_addr) {
 }
 
 TEST_F(DumpMemoryTest, memory_unreadable) {
-  dump_memory(&log_, backtrace_mock_.get(), 0xa2345678, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0xa2345678, "memory near pc:");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -259,9 +307,9 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x12345600, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc:");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -278,10 +326,10 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_unaligned_return) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(102);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(102);
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x12345600, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc:");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -303,10 +351,10 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_two_unaligned_reads) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(45);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(45);
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x12345600, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc:");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -330,9 +378,9 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_two_unaligned_reads) {
 TEST_F(DumpMemoryTest, address_low_fence) {
   uint8_t buffer[256];
   memset(buffer, 0, sizeof(buffer));
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, backtrace_mock_.get(), 0x1000, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x1000, "memory near %.2s:", "r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -384,9 +432,9 @@ TEST_F(DumpMemoryTest, address_low_fence) {
 TEST_F(DumpMemoryTest, memory_address_too_low) {
   uint8_t buffer[256];
   memset(buffer, 0, sizeof(buffer));
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, backtrace_mock_.get(), 0, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0, "memory near %.2s:", "r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -401,16 +449,16 @@ TEST_F(DumpMemoryTest, memory_address_too_low) {
 TEST_F(DumpMemoryTest, memory_address_too_high) {
   uint8_t buffer[256];
   memset(buffer, 0, sizeof(buffer));
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, backtrace_mock_.get(), 0x4000000000000000UL, "memory near %.2s:", "r1");
-  dump_memory(&log_, backtrace_mock_.get(), 0x4000000000000000UL - 32, "memory near %.2s:", "r1");
-  dump_memory(&log_, backtrace_mock_.get(), 0x4000000000000000UL - 216, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 32, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 216, "memory near %.2s:", "r1");
 #else
-  dump_memory(&log_, backtrace_mock_.get(), 0xffff0000, "memory near %.2s:", "r1");
-  dump_memory(&log_, backtrace_mock_.get(), 0xffff0000 - 32, "memory near %.2s:", "r1");
-  dump_memory(&log_, backtrace_mock_.get(), 0xffff0000 - 220, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 32, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 220, "memory near %.2s:", "r1");
 #endif
 
   std::string tombstone_contents;
@@ -426,12 +474,12 @@ TEST_F(DumpMemoryTest, memory_address_too_high) {
 TEST_F(DumpMemoryTest, memory_address_would_overflow) {
   uint8_t buffer[256];
   memset(buffer, 0, sizeof(buffer));
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, backtrace_mock_.get(), 0xfffffffffffffff0, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xfffffffffffffff0, "memory near %.2s:", "r1");
 #else
-  dump_memory(&log_, backtrace_mock_.get(), 0xfffffff0, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xfffffff0, "memory near %.2s:", "r1");
 #endif
 
   std::string tombstone_contents;
@@ -449,12 +497,12 @@ TEST_F(DumpMemoryTest, memory_address_nearly_too_high) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, backtrace_mock_.get(), 0x4000000000000000UL - 224, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 224, "memory near %.2s:", "r4");
 #else
-  dump_memory(&log_, backtrace_mock_.get(), 0xffff0000 - 224, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 224, "memory near %.2s:", "r4");
 #endif
 
   std::string tombstone_contents;
@@ -509,12 +557,12 @@ TEST_F(DumpMemoryTest, first_read_empty) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(0);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(0);
 
   size_t page_size = sysconf(_SC_PAGE_SIZE);
   uintptr_t addr = 0x10000020 + page_size - 120;
-  dump_memory(&log_, backtrace_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -568,12 +616,12 @@ TEST_F(DumpMemoryTest, first_read_empty_second_read_stops) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(0);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(0);
 
   size_t page_size = sysconf(_SC_PAGE_SIZE);
   uintptr_t addr = 0x10000020 + page_size - 192;
-  dump_memory(&log_, backtrace_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -627,11 +675,11 @@ TEST_F(DumpMemoryTest, first_read_empty_next_page_out_of_range) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(0);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(0);
 
   uintptr_t addr = 0x10000020;
-  dump_memory(&log_, backtrace_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -685,13 +733,13 @@ TEST_F(DumpMemoryTest, first_read_empty_next_page_out_of_range_fence_post) {
   for (size_t i = 0; i < sizeof(buffer); i++) {
     buffer[i] = i;
   }
-  backtrace_mock_->SetReadData(buffer, sizeof(buffer));
-  backtrace_mock_->SetPartialReadAmount(0);
+  memory_mock_->SetReadData(buffer, sizeof(buffer));
+  memory_mock_->SetPartialReadAmount(0);
 
   size_t page_size = sysconf(_SC_PAGE_SIZE);
   uintptr_t addr = 0x10000020 + page_size - 256;
 
-  dump_memory(&log_, backtrace_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);

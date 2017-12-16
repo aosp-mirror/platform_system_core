@@ -18,11 +18,11 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <sys/capability.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <syscall.h>
 #include <unistd.h>
 
@@ -47,6 +47,8 @@
 #define ATRACE_TAG ATRACE_TAG_BIONIC
 #include <utils/Trace.h>
 
+#include <unwindstack/Regs.h>
+
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/tombstone.h"
 #include "libdebuggerd/utility.h"
@@ -58,21 +60,9 @@
 #include "util.h"
 
 using android::base::unique_fd;
-using android::base::ReadFileToString;
 using android::base::StringPrintf;
-using android::base::Trim;
 
-static std::string get_process_name(pid_t pid) {
-  std::string result = "<unknown>";
-  ReadFileToString(StringPrintf("/proc/%d/cmdline", pid), &result);
-  return result;
-}
-
-static std::string get_thread_name(pid_t tid) {
-  std::string result = "<unknown>";
-  ReadFileToString(StringPrintf("/proc/%d/comm", tid), &result);
-  return Trim(result);
-}
+using unwindstack::Regs;
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -90,8 +80,8 @@ static pid_t get_tracer(pid_t tracee) {
 }
 
 // Attach to a thread, and verify that it's still a member of the given process
-static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) {
-  if (ptrace(PTRACE_SEIZE, tid, 0, 0) != 0) {
+static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error, int flags = 0) {
+  if (ptrace(PTRACE_SEIZE, tid, 0, flags) != 0) {
     if (errno == EPERM) {
       pid_t tracer = get_tracer(tid);
       if (tracer != -1) {
@@ -108,18 +98,43 @@ static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error) 
   // Make sure that the task we attached to is actually part of the pid we're dumping.
   if (!pid_contains_tid(pid_proc_fd, tid)) {
     if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
-      PLOG(FATAL) << "failed to detach from thread " << tid;
+      PLOG(WARNING) << "failed to detach from thread " << tid;
     }
     *error = StringPrintf("thread %d is not in process", tid);
     return false;
   }
 
-  // Put the task into ptrace-stop state.
-  if (ptrace(PTRACE_INTERRUPT, tid, 0, 0) != 0) {
-    PLOG(FATAL) << "failed to interrupt thread " << tid;
+  return true;
+}
+
+static bool wait_for_stop(pid_t tid, int* received_signal) {
+  while (true) {
+    int status;
+    pid_t result = waitpid(tid, &status, __WALL);
+    if (result != tid) {
+      PLOG(ERROR) << "waitpid failed on " << tid << " while detaching";
+      return false;
+    }
+
+    if (WIFSTOPPED(status)) {
+      if (status >> 16 == PTRACE_EVENT_STOP) {
+        *received_signal = 0;
+      } else {
+        *received_signal = WSTOPSIG(status);
+      }
+      return true;
+    }
+  }
+}
+
+// Interrupt a process and wait for it to be interrupted.
+static bool ptrace_interrupt(pid_t tid, int* received_signal) {
+  if (ptrace(PTRACE_INTERRUPT, tid, 0, 0) == 0) {
+    return wait_for_stop(tid, received_signal);
   }
 
-  return true;
+  PLOG(ERROR) << "failed to interrupt " << tid << " to detach";
+  return false;
 }
 
 static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data) {
@@ -169,70 +184,39 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
   return true;
 }
 
-static void signal_handler(int) {
-  // We can't log easily, because the heap might be corrupt.
-  // Just die and let the surrounding log context explain things.
-  _exit(1);
-}
+// Globals used by the abort handler.
+static pid_t g_target_thread = -1;
+static bool g_tombstoned_connected = false;
+static unique_fd g_tombstoned_socket;
+static unique_fd g_output_fd;
 
-static void abort_handler(pid_t target, const bool tombstoned_connected,
-                          unique_fd& tombstoned_socket, unique_fd& output_fd,
-                          const char* abort_msg) {
-  // If we abort before we get an output fd, contact tombstoned to let any
-  // potential listeners know that we failed.
-  if (!tombstoned_connected) {
-    if (!tombstoned_connect(target, &tombstoned_socket, &output_fd, kDebuggerdAnyIntercept)) {
-      // We failed to connect, not much we can do.
-      LOG(ERROR) << "failed to connected to tombstoned to report failure";
-      _exit(1);
-    }
-  }
-
-  dprintf(output_fd.get(), "crash_dump failed to dump process");
-  if (target != 1) {
-    dprintf(output_fd.get(), " %d: %s\n", target, abort_msg);
-  } else {
-    dprintf(output_fd.get(), ": %s\n", abort_msg);
-  }
-
-  _exit(1);
-}
-
-static void drop_capabilities() {
-  ATRACE_CALL();
-  __user_cap_header_struct capheader;
-  memset(&capheader, 0, sizeof(capheader));
-  capheader.version = _LINUX_CAPABILITY_VERSION_3;
-  capheader.pid = 0;
-
-  __user_cap_data_struct capdata[2];
-  memset(&capdata, 0, sizeof(capdata));
-
-  if (capset(&capheader, &capdata[0]) == -1) {
-    PLOG(FATAL) << "failed to drop capabilities";
-  }
-
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-    PLOG(FATAL) << "failed to set PR_SET_NO_NEW_PRIVS";
-  }
-}
-
-int main(int argc, char** argv) {
-  atrace_begin(ATRACE_TAG, "before reparent");
-
-  pid_t target = getppid();
-  bool tombstoned_connected = false;
-  unique_fd tombstoned_socket;
-  unique_fd output_fd;
-
+static void Initialize(char** argv) {
   android::base::InitLogging(argv);
-  android::base::SetAborter([&](const char* abort_msg) {
-    abort_handler(target, tombstoned_connected, tombstoned_socket, output_fd, abort_msg);
+  android::base::SetAborter([](const char* abort_msg) {
+    // If we abort before we get an output fd, contact tombstoned to let any
+    // potential listeners know that we failed.
+    if (!g_tombstoned_connected) {
+      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
+                              kDebuggerdAnyIntercept)) {
+        // We failed to connect, not much we can do.
+        LOG(ERROR) << "failed to connected to tombstoned to report failure";
+        _exit(1);
+      }
+    }
+
+    dprintf(g_output_fd.get(), "crash_dump failed to dump process");
+    if (g_target_thread != 1) {
+      dprintf(g_output_fd.get(), " %d: %s\n", g_target_thread, abort_msg);
+    } else {
+      dprintf(g_output_fd.get(), ": %s\n", abort_msg);
+    }
+
+    _exit(1);
   });
 
   // Don't try to dump ourselves.
   struct sigaction action = {};
-  action.sa_handler = signal_handler;
+  action.sa_handler = SIG_DFL;
   debuggerd_register_handlers(&action);
 
   sigset_t mask;
@@ -240,216 +224,328 @@ int main(int argc, char** argv) {
   if (sigprocmask(SIG_SETMASK, &mask, nullptr) != 0) {
     PLOG(FATAL) << "failed to set signal mask";
   }
+}
 
+static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdDumpType* dump_type) {
   if (argc != 4) {
-    LOG(FATAL) << "Wrong number of args: " << argc << " (expected 4)";
+    LOG(FATAL) << "wrong number of args: " << argc << " (expected 4)";
   }
 
-  pid_t main_tid;
-  pid_t pseudothread_tid;
-  int dump_type;
-
-  if (!android::base::ParseInt(argv[1], &main_tid, 1, std::numeric_limits<pid_t>::max())) {
-    LOG(FATAL) << "invalid main tid: " << argv[1];
+  if (!android::base::ParseInt(argv[1], &g_target_thread, 1, std::numeric_limits<pid_t>::max())) {
+    LOG(FATAL) << "invalid target tid: " << argv[1];
   }
 
-  if (!android::base::ParseInt(argv[2], &pseudothread_tid, 1, std::numeric_limits<pid_t>::max())) {
+  if (!android::base::ParseInt(argv[2], pseudothread_tid, 1, std::numeric_limits<pid_t>::max())) {
     LOG(FATAL) << "invalid pseudothread tid: " << argv[2];
   }
 
-  if (!android::base::ParseInt(argv[3], &dump_type, 0, 1)) {
+  int dump_type_int;
+  if (!android::base::ParseInt(argv[3], &dump_type_int, 0, 1)) {
     LOG(FATAL) << "invalid requested dump type: " << argv[3];
   }
+  *dump_type = static_cast<DebuggerdDumpType>(dump_type_int);
+}
 
-  if (target == 1) {
-    LOG(FATAL) << "target died before we could attach (received main tid = " << main_tid << ")";
+static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
+                          std::unique_ptr<unwindstack::Regs>* regs, uintptr_t* abort_address) {
+  std::aligned_storage<sizeof(CrashInfo) + 1, alignof(CrashInfo)>::type buf;
+  ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &buf, sizeof(buf)));
+  if (rc == -1) {
+    PLOG(FATAL) << "failed to read target ucontext";
+  } else if (rc != sizeof(CrashInfo)) {
+    LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
+               << sizeof(CrashInfo);
   }
 
-  android::procinfo::ProcessInfo target_info;
-  if (!android::procinfo::GetProcessInfo(main_tid, &target_info)) {
-    LOG(FATAL) << "failed to fetch process info for target " << main_tid;
+  CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
+  if (crash_info->version != 1) {
+    LOG(FATAL) << "version mismatch, expected 1, received " << crash_info->version;
   }
 
-  if (main_tid != target_info.tid || target != target_info.pid) {
-    LOG(FATAL) << "target info mismatch, expected pid " << target << ", tid " << main_tid
-               << ", received pid " << target_info.pid << ", tid " << target_info.tid;
+  *siginfo = crash_info->siginfo;
+  regs->reset(Regs::CreateFromUcontext(Regs::CurrentArch(), &crash_info->ucontext));
+  *abort_address = crash_info->abort_msg_address;
+}
+
+// Wait for a process to clone and return the child's pid.
+// Note: this leaves the parent in PTRACE_EVENT_STOP.
+static pid_t wait_for_clone(pid_t pid, bool resume_child) {
+  int status;
+  pid_t result = TEMP_FAILURE_RETRY(waitpid(pid, &status, __WALL));
+  if (result == -1) {
+    PLOG(FATAL) << "failed to waitpid";
   }
 
-  // Open /proc/`getppid()` in the original process, and pass it down to the forked child.
-  std::string target_proc_path = "/proc/" + std::to_string(target);
+  if (WIFEXITED(status)) {
+    LOG(FATAL) << "traced process exited with status " << WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    LOG(FATAL) << "traced process exited with signal " << WTERMSIG(status);
+  } else if (!WIFSTOPPED(status)) {
+    LOG(FATAL) << "process didn't stop? (status = " << status << ")";
+  }
+
+  if (status >> 8 != (SIGTRAP | (PTRACE_EVENT_CLONE << 8))) {
+    LOG(FATAL) << "process didn't stop due to PTRACE_O_TRACECLONE (status = " << status << ")";
+  }
+
+  pid_t child;
+  if (ptrace(PTRACE_GETEVENTMSG, pid, 0, &child) != 0) {
+    PLOG(FATAL) << "failed to get child pid via PTRACE_GETEVENTMSG";
+  }
+
+  int stop_signal;
+  if (!wait_for_stop(child, &stop_signal)) {
+    PLOG(FATAL) << "failed to waitpid on child";
+  }
+
+  CHECK_EQ(0, stop_signal);
+
+  if (resume_child) {
+    if (ptrace(PTRACE_CONT, child, 0, 0) != 0) {
+      PLOG(FATAL) << "failed to resume child (pid = " << child << ")";
+    }
+  }
+
+  return child;
+}
+
+static pid_t wait_for_vm_process(pid_t pseudothread_tid) {
+  // The pseudothread will double-fork, we want its grandchild.
+  pid_t intermediate = wait_for_clone(pseudothread_tid, true);
+  pid_t vm_pid = wait_for_clone(intermediate, false);
+  if (ptrace(PTRACE_DETACH, intermediate, 0, 0) != 0) {
+    PLOG(FATAL) << "failed to detach from intermediate vm process";
+  }
+
+  return vm_pid;
+}
+
+int main(int argc, char** argv) {
+  atrace_begin(ATRACE_TAG, "before reparent");
+  pid_t target_process = getppid();
+
+  // Open /proc/`getppid()` before we daemonize.
+  std::string target_proc_path = "/proc/" + std::to_string(target_process);
   int target_proc_fd = open(target_proc_path.c_str(), O_DIRECTORY | O_RDONLY);
   if (target_proc_fd == -1) {
     PLOG(FATAL) << "failed to open " << target_proc_path;
   }
 
-  // Make sure our parent didn't die.
-  if (getppid() != target) {
-    PLOG(FATAL) << "parent died";
+  // Make sure getppid() hasn't changed.
+  if (getppid() != target_process) {
+    LOG(FATAL) << "parent died";
   }
-
   atrace_end(ATRACE_TAG);
 
   // Reparent ourselves to init, so that the signal handler can waitpid on the
   // original process to avoid leaving a zombie for non-fatal dumps.
+  // Move the input/output pipes off of stdout/stderr, out of paranoia.
+  unique_fd output_pipe(dup(STDOUT_FILENO));
+  unique_fd input_pipe(dup(STDIN_FILENO));
+
+  unique_fd fork_exit_read, fork_exit_write;
+  if (!Pipe(&fork_exit_read, &fork_exit_write)) {
+    PLOG(FATAL) << "failed to create pipe";
+  }
+
   pid_t forkpid = fork();
   if (forkpid == -1) {
     PLOG(FATAL) << "fork failed";
-  } else if (forkpid != 0) {
-    exit(0);
+  } else if (forkpid == 0) {
+    fork_exit_read.reset();
+  } else {
+    // We need the pseudothread to live until we get around to verifying the vm pid against it.
+    // The last thing it does is block on a waitpid on us, so wait until our child tells us to die.
+    fork_exit_write.reset();
+    char buf;
+    TEMP_FAILURE_RETRY(read(fork_exit_read.get(), &buf, sizeof(buf)));
+    _exit(0);
   }
 
   ATRACE_NAME("after reparent");
+  pid_t pseudothread_tid;
+  DebuggerdDumpType dump_type;
+  uintptr_t abort_address = 0;
+
+  Initialize(argv);
+  ParseArgs(argc, argv, &pseudothread_tid, &dump_type);
 
   // Die if we take too long.
   //
   // Note: processes with many threads and minidebug-info can take a bit to
   //       unwind, do not make this too small. b/62828735
-  alarm(5);
+  alarm(30);
 
-  std::string attach_error;
-
-  std::map<pid_t, std::string> threads;
-
-  {
-    ATRACE_NAME("ptrace");
-    // Seize the main thread.
-    if (!ptrace_seize_thread(target_proc_fd, main_tid, &attach_error)) {
-      LOG(FATAL) << attach_error;
-    }
-
-    // Seize the siblings.
-    {
-      std::set<pid_t> siblings;
-      if (!android::procinfo::GetProcessTids(target, &siblings)) {
-        PLOG(FATAL) << "failed to get process siblings";
-      }
-
-      // but not the already attached main thread.
-      siblings.erase(main_tid);
-      // or the handler pseudothread.
-      siblings.erase(pseudothread_tid);
-
-      for (pid_t sibling_tid : siblings) {
-        if (!ptrace_seize_thread(target_proc_fd, sibling_tid, &attach_error)) {
-          LOG(WARNING) << attach_error;
-        } else {
-          threads.emplace(sibling_tid, get_thread_name(sibling_tid));
-        }
-      }
-    }
-  }
-
-  // Collect the backtrace map, open files, and process/thread names, while we still have caps.
-  std::unique_ptr<BacktraceMap> backtrace_map;
-  {
-    ATRACE_NAME("backtrace map");
-    backtrace_map.reset(BacktraceMap::Create(main_tid));
-    if (!backtrace_map) {
-      LOG(FATAL) << "failed to create backtrace map";
-    }
-  }
+  // Get the process name (aka cmdline).
+  std::string process_name = get_process_name(g_target_thread);
 
   // Collect the list of open files.
   OpenFilesList open_files;
   {
     ATRACE_NAME("open files");
-    populate_open_files_list(target, &open_files);
+    populate_open_files_list(g_target_thread, &open_files);
   }
 
-  std::string process_name = get_process_name(main_tid);
-  threads.emplace(main_tid, get_thread_name(main_tid));
+  // In order to reduce the duration that we pause the process for, we ptrace
+  // the threads, fetch their registers and associated information, and then
+  // fork a separate process as a snapshot of the process's address space.
+  std::set<pid_t> threads;
+  if (!android::procinfo::GetProcessTids(g_target_thread, &threads)) {
+    PLOG(FATAL) << "failed to get process threads";
+  }
 
-  // Drop our capabilities now that we've attached to the threads we care about.
+  std::map<pid_t, ThreadInfo> thread_info;
+  siginfo_t siginfo;
+  std::string error;
+
+  {
+    ATRACE_NAME("ptrace");
+    for (pid_t thread : threads) {
+      // Trace the pseudothread separately, so we can use different options.
+      if (thread == pseudothread_tid) {
+        continue;
+      }
+
+      if (!ptrace_seize_thread(target_proc_fd, thread, &error)) {
+        bool fatal = thread == g_target_thread;
+        LOG(fatal ? FATAL : WARNING) << error;
+      }
+
+      ThreadInfo info;
+      info.pid = target_process;
+      info.tid = thread;
+      info.process_name = process_name;
+      info.thread_name = get_thread_name(thread);
+
+      if (!ptrace_interrupt(thread, &info.signo)) {
+        PLOG(WARNING) << "failed to ptrace interrupt thread " << thread;
+        ptrace(PTRACE_DETACH, thread, 0, 0);
+        continue;
+      }
+
+      if (thread == g_target_thread) {
+        // Read the thread's registers along with the rest of the crash info out of the pipe.
+        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &abort_address);
+        info.siginfo = &siginfo;
+        info.signo = info.siginfo->si_signo;
+      } else {
+        info.registers.reset(Regs::RemoteGet(thread));
+        if (!info.registers) {
+          PLOG(WARNING) << "failed to fetch registers for thread " << thread;
+          ptrace(PTRACE_DETACH, thread, 0, 0);
+          continue;
+        }
+      }
+
+      thread_info[thread] = std::move(info);
+    }
+  }
+
+  // Trace the pseudothread with PTRACE_O_TRACECLONE and tell it to fork.
+  if (!ptrace_seize_thread(target_proc_fd, pseudothread_tid, &error, PTRACE_O_TRACECLONE)) {
+    LOG(FATAL) << "failed to seize pseudothread: " << error;
+  }
+
+  if (TEMP_FAILURE_RETRY(write(output_pipe.get(), "\1", 1)) != 1) {
+    PLOG(FATAL) << "failed to write to pseudothread";
+  }
+
+  pid_t vm_pid = wait_for_vm_process(pseudothread_tid);
+  if (ptrace(PTRACE_DETACH, pseudothread_tid, 0, 0) != 0) {
+    PLOG(FATAL) << "failed to detach from pseudothread";
+  }
+
+  // The pseudothread can die now.
+  fork_exit_write.reset();
+
+  // Defer the message until later, for readability.
+  bool wait_for_gdb = android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false);
+  if (siginfo.si_signo == DEBUGGER_SIGNAL) {
+    wait_for_gdb = false;
+  }
+
+  // Detach from all of our attached threads before resuming.
+  for (const auto& [tid, thread] : thread_info) {
+    int resume_signal = thread.signo == DEBUGGER_SIGNAL ? 0 : thread.signo;
+    if (wait_for_gdb) {
+      resume_signal = 0;
+      if (tgkill(target_process, tid, SIGSTOP) != 0) {
+        PLOG(WARNING) << "failed to send SIGSTOP to " << tid;
+      }
+    }
+
+    LOG(DEBUG) << "detaching from thread " << tid;
+    if (ptrace(PTRACE_DETACH, tid, 0, resume_signal) != 0) {
+      PLOG(ERROR) << "failed to detach from thread " << tid;
+    }
+  }
+
+  // Drop our capabilities now that we've fetched all of the information we need.
   drop_capabilities();
 
   {
     ATRACE_NAME("tombstoned_connect");
-    const DebuggerdDumpType dump_type_enum = static_cast<DebuggerdDumpType>(dump_type);
-    LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type_enum;
-    tombstoned_connected = tombstoned_connect(target, &tombstoned_socket, &output_fd, dump_type_enum);
+    LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type;
+    g_tombstoned_connected =
+        tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, dump_type);
   }
 
-  // Write a '\1' to stdout to tell the crashing process to resume.
-  // It also restores the value of PR_SET_DUMPABLE at this point.
-  if (TEMP_FAILURE_RETRY(write(STDOUT_FILENO, "\1", 1)) == -1) {
-    PLOG(ERROR) << "failed to communicate to target process";
-  }
-
-  if (tombstoned_connected) {
-    if (TEMP_FAILURE_RETRY(dup2(output_fd.get(), STDOUT_FILENO)) == -1) {
-      PLOG(ERROR) << "failed to dup2 output fd (" << output_fd.get() << ") to STDOUT_FILENO";
+  if (g_tombstoned_connected) {
+    if (TEMP_FAILURE_RETRY(dup2(g_output_fd.get(), STDOUT_FILENO)) == -1) {
+      PLOG(ERROR) << "failed to dup2 output fd (" << g_output_fd.get() << ") to STDOUT_FILENO";
     }
   } else {
     unique_fd devnull(TEMP_FAILURE_RETRY(open("/dev/null", O_RDWR)));
     TEMP_FAILURE_RETRY(dup2(devnull.get(), STDOUT_FILENO));
-    output_fd = std::move(devnull);
+    g_output_fd = std::move(devnull);
   }
 
-  LOG(INFO) << "performing dump of process " << target << " (target tid = " << main_tid << ")";
-
-  // At this point, the thread that made the request has been attached and is
-  // in ptrace-stopped state. After resumption, the triggering signal that has
-  // been queued will be delivered.
-  if (ptrace(PTRACE_CONT, main_tid, 0, 0) != 0) {
-    PLOG(ERROR) << "PTRACE_CONT(" << main_tid << ") failed";
-    exit(1);
-  }
-
-  siginfo_t siginfo = {};
-  {
-    ATRACE_NAME("wait_for_signal");
-    if (!wait_for_signal(main_tid, &siginfo)) {
-      printf("failed to wait for signal in tid %d: %s\n", main_tid, strerror(errno));
-      exit(1);
-    }
-  }
+  LOG(INFO) << "performing dump of process " << target_process << " (target tid = " << g_target_thread
+            << ")";
 
   int signo = siginfo.si_signo;
   bool fatal_signal = signo != DEBUGGER_SIGNAL;
   bool backtrace = false;
-  uintptr_t abort_address = 0;
 
-  // si_value can represent three things:
+  // si_value is special when used with DEBUGGER_SIGNAL.
   //   0: dump tombstone
   //   1: dump backtrace
-  //   everything else: abort message address (implies dump tombstone)
-  if (siginfo.si_value.sival_int == 1) {
-    backtrace = true;
-  } else if (siginfo.si_value.sival_ptr != nullptr) {
-    abort_address = reinterpret_cast<uintptr_t>(siginfo.si_value.sival_ptr);
+  if (!fatal_signal) {
+    int si_val = siginfo.si_value.sival_int;
+    if (si_val == 0) {
+      backtrace = false;
+    } else if (si_val == 1) {
+      backtrace = true;
+    } else {
+      LOG(WARNING) << "unknown si_value value " << si_val;
+    }
   }
 
   // TODO: Use seccomp to lock ourselves down.
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(vm_pid, false));
+  if (!map) {
+    LOG(FATAL) << "failed to create backtrace map";
+  }
+
+  std::shared_ptr<unwindstack::Memory> process_memory = map->GetProcessMemory();
+  if (!process_memory) {
+    LOG(FATAL) << "failed to get unwindstack::Memory handle";
+  }
 
   std::string amfd_data;
   if (backtrace) {
     ATRACE_NAME("dump_backtrace");
-    dump_backtrace(output_fd.get(), backtrace_map.get(), target, main_tid, process_name, threads, 0);
+    dump_backtrace(std::move(g_output_fd), map.get(), thread_info, g_target_thread);
   } else {
     ATRACE_NAME("engrave_tombstone");
-    engrave_tombstone(output_fd.get(), backtrace_map.get(), &open_files, target, main_tid,
-                      process_name, threads, abort_address, fatal_signal ? &amfd_data : nullptr);
+    engrave_tombstone(std::move(g_output_fd), map.get(), process_memory.get(), thread_info,
+                      g_target_thread, abort_address, &open_files, &amfd_data);
   }
 
-  // We don't actually need to PTRACE_DETACH, as long as our tracees aren't in
-  // group-stop state, which is true as long as no stopping signals are sent.
-
-  bool wait_for_gdb = android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false);
-  if (!fatal_signal || siginfo.si_code == SI_USER) {
-    // Don't wait_for_gdb when the process didn't actually crash.
-    wait_for_gdb = false;
-  }
-
-  // If the process crashed or we need to send it SIGSTOP for wait_for_gdb,
-  // get it in a state where it can receive signals, and then send the relevant
-  // signal.
-  if (wait_for_gdb || fatal_signal) {
-    if (ptrace(PTRACE_INTERRUPT, main_tid, 0, 0) != 0) {
-      PLOG(ERROR) << "failed to use PTRACE_INTERRUPT on " << main_tid;
-    }
-
-    if (tgkill(target, main_tid, wait_for_gdb ? SIGSTOP : signo) != 0) {
-      PLOG(ERROR) << "failed to resend signal " << signo << " to " << main_tid;
+  if (fatal_signal) {
+    // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
+    if (thread_info[target_process].thread_name != "system_server") {
+      activity_manager_notify(target_process, signo, amfd_data);
     }
   }
 
@@ -463,19 +559,12 @@ int main(int argc, char** argv) {
         "*     gdbclient.py -p %d\n"
         "*\n"
         "***********************************************************",
-        target, target);
-  }
-
-  if (fatal_signal) {
-    // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
-    if (target_info.name != "system_server" || target_info.uid != AID_SYSTEM) {
-      activity_manager_notify(target, signo, amfd_data);
-    }
+        target_process, target_process);
   }
 
   // Close stdout before we notify tombstoned of completion.
   close(STDOUT_FILENO);
-  if (tombstoned_connected && !tombstoned_notify_completion(tombstoned_socket.get())) {
+  if (g_tombstoned_connected && !tombstoned_notify_completion(g_tombstoned_socket.get())) {
     LOG(ERROR) << "failed to notify tombstoned of completion";
   }
 

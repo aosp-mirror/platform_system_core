@@ -26,28 +26,28 @@
 #include <string>
 
 #include <android-base/stringprintf.h>
-#include <backtrace/Backtrace.h>
 #include <log/log.h>
+#include <unwindstack/Memory.h>
 
 #define NOTE_ALIGN(size)  (((size) + 3) & ~3)
 
 template <typename HdrType, typename PhdrType, typename NhdrType>
-static bool get_build_id(
-    Backtrace* backtrace, uintptr_t base_addr, uint8_t* e_ident, std::string* build_id) {
+static bool get_build_id(unwindstack::Memory* memory, uintptr_t base_addr, uint8_t* e_ident,
+                         std::string* build_id) {
   HdrType hdr;
 
   memcpy(&hdr.e_ident[0], e_ident, EI_NIDENT);
 
   // First read the rest of the header.
-  if (backtrace->Read(base_addr + EI_NIDENT, reinterpret_cast<uint8_t*>(&hdr) + EI_NIDENT,
-                      sizeof(HdrType) - EI_NIDENT) != sizeof(HdrType) - EI_NIDENT) {
+  if (memory->Read(base_addr + EI_NIDENT, reinterpret_cast<uint8_t*>(&hdr) + EI_NIDENT,
+                   sizeof(HdrType) - EI_NIDENT) != sizeof(HdrType) - EI_NIDENT) {
     return false;
   }
 
   for (size_t i = 0; i < hdr.e_phnum; i++) {
     PhdrType phdr;
-    if (backtrace->Read(base_addr + hdr.e_phoff + i * hdr.e_phentsize,
-                        reinterpret_cast<uint8_t*>(&phdr), sizeof(phdr)) != sizeof(phdr)) {
+    if (memory->Read(base_addr + hdr.e_phoff + i * hdr.e_phentsize,
+                     reinterpret_cast<uint8_t*>(&phdr), sizeof(phdr)) != sizeof(phdr)) {
       return false;
     }
     // Looking for the .note.gnu.build-id note.
@@ -56,7 +56,7 @@ static bool get_build_id(
       uintptr_t addr = base_addr + phdr.p_offset;
       while (hdr_size >= sizeof(NhdrType)) {
         NhdrType nhdr;
-        if (backtrace->Read(addr, reinterpret_cast<uint8_t*>(&nhdr), sizeof(nhdr)) != sizeof(nhdr)) {
+        if (memory->Read(addr, reinterpret_cast<uint8_t*>(&nhdr), sizeof(nhdr)) != sizeof(nhdr)) {
           return false;
         }
         addr += sizeof(nhdr);
@@ -69,7 +69,7 @@ static bool get_build_id(
                   nhdr.n_descsz);
             return false;
           }
-          if (backtrace->Read(addr, build_id_data, nhdr.n_descsz) != nhdr.n_descsz) {
+          if (memory->Read(addr, build_id_data, nhdr.n_descsz) != nhdr.n_descsz) {
             return false;
           }
 
@@ -95,10 +95,10 @@ static bool get_build_id(
   return false;
 }
 
-bool elf_get_build_id(Backtrace* backtrace, uintptr_t addr, std::string* build_id) {
+bool elf_get_build_id(unwindstack::Memory* memory, uintptr_t addr, std::string* build_id) {
   // Read and verify the elf magic number first.
   uint8_t e_ident[EI_NIDENT];
-  if (backtrace->Read(addr, e_ident, SELFMAG) != SELFMAG) {
+  if (memory->Read(addr, e_ident, SELFMAG) != SELFMAG) {
     return false;
   }
 
@@ -107,14 +107,14 @@ bool elf_get_build_id(Backtrace* backtrace, uintptr_t addr, std::string* build_i
   }
 
   // Read the rest of EI_NIDENT.
-  if (backtrace->Read(addr + SELFMAG, e_ident + SELFMAG, EI_NIDENT - SELFMAG) != EI_NIDENT - SELFMAG) {
+  if (memory->Read(addr + SELFMAG, e_ident + SELFMAG, EI_NIDENT - SELFMAG) != EI_NIDENT - SELFMAG) {
     return false;
   }
 
   if (e_ident[EI_CLASS] == ELFCLASS32) {
-    return get_build_id<Elf32_Ehdr, Elf32_Phdr, Elf32_Nhdr>(backtrace, addr, e_ident, build_id);
+    return get_build_id<Elf32_Ehdr, Elf32_Phdr, Elf32_Nhdr>(memory, addr, e_ident, build_id);
   } else if (e_ident[EI_CLASS] == ELFCLASS64) {
-    return get_build_id<Elf64_Ehdr, Elf64_Phdr, Elf64_Nhdr>(backtrace, addr, e_ident, build_id);
+    return get_build_id<Elf64_Ehdr, Elf64_Phdr, Elf64_Nhdr>(memory, addr, e_ident, build_id);
   }
 
   return false;
