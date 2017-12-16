@@ -397,6 +397,8 @@ static void LibUnwindingTest(const std::string& arch, const std::string& testdat
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
   }
+  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED, backtrace->GetError().error_code);
+  ASSERT_NE(0u, backtrace->GetError().error_info.addr);
 }
 
 // This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
