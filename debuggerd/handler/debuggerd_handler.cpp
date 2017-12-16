@@ -44,15 +44,21 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
+#include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
+#include <cutils/properties.h>
+
+#include <libdebuggerd/utility.h>
 
 #include "dump_type.h"
+#include "protocol.h"
 
+using android::base::Pipe;
 using android::base::unique_fd;
 
 // see man(2) prctl, specifically the section about PR_GET_NAME
@@ -114,7 +120,7 @@ static void __noreturn __printflike(1, 2) fatal_errno(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
 
-  char buf[4096];
+  char buf[256];
   async_safe_format_buffer_va_list(buf, sizeof(buf), fmt, args);
   fatal("%s: %s", buf, strerror(err));
 }
@@ -147,7 +153,7 @@ static bool get_main_thread_name(char* buf, size_t len) {
  * mutex is being held, so we don't want to use any libc functions that
  * could allocate memory or hold a lock.
  */
-static void log_signal_summary(int signum, const siginfo_t* info) {
+static void log_signal_summary(const siginfo_t* info) {
   char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
   if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
     strcpy(thread_name, "<name unknown>");
@@ -157,57 +163,19 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
     thread_name[MAX_TASK_NAME_LEN] = 0;
   }
 
-  if (signum == DEBUGGER_SIGNAL) {
+  if (info->si_signo == DEBUGGER_SIGNAL) {
     async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for tid %d (%s)", __gettid(),
                           thread_name);
     return;
   }
 
-  const char* signal_name = "???";
-  bool has_address = false;
-  switch (signum) {
-    case SIGABRT:
-      signal_name = "SIGABRT";
-      break;
-    case SIGBUS:
-      signal_name = "SIGBUS";
-      has_address = true;
-      break;
-    case SIGFPE:
-      signal_name = "SIGFPE";
-      has_address = true;
-      break;
-    case SIGILL:
-      signal_name = "SIGILL";
-      has_address = true;
-      break;
-    case SIGSEGV:
-      signal_name = "SIGSEGV";
-      has_address = true;
-      break;
-#if defined(SIGSTKFLT)
-    case SIGSTKFLT:
-      signal_name = "SIGSTKFLT";
-      break;
-#endif
-    case SIGSYS:
-      signal_name = "SIGSYS";
-      break;
-    case SIGTRAP:
-      signal_name = "SIGTRAP";
-      break;
-  }
+  const char* signal_name = get_signame(info->si_signo);
+  bool has_address = signal_has_si_addr(info->si_signo, info->si_code);
 
-  // "info" will be null if the siginfo_t information was not available.
-  // Many signals don't have an address or a code.
-  char code_desc[32];  // ", code -6"
-  char addr_desc[32];  // ", fault addr 0x1234"
-  addr_desc[0] = code_desc[0] = 0;
-  if (info != nullptr) {
-    async_safe_format_buffer(code_desc, sizeof(code_desc), ", code %d", info->si_code);
-    if (has_address) {
-      async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
-    }
+  // Many signals don't have an address.
+  char addr_desc[32] = "";  // ", fault addr 0x1234"
+  if (has_address) {
+    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
   }
 
   char main_thread_name[MAX_TASK_NAME_LEN + 1];
@@ -216,8 +184,9 @@ static void log_signal_summary(int signum, const siginfo_t* info) {
   }
 
   async_safe_format_log(
-      ANDROID_LOG_FATAL, "libc", "Fatal signal %d (%s)%s%s in tid %d (%s), pid %d (%s)", signum,
-      signal_name, code_desc, addr_desc, __gettid(), thread_name, __getpid(), main_thread_name);
+      ANDROID_LOG_FATAL, "libc", "Fatal signal %d (%s), code %d (%s)%s in tid %d (%s), pid %d (%s)",
+      info->si_signo, signal_name, info->si_code, get_sigcode(info->si_signo, info->si_code),
+      addr_desc, __gettid(), thread_name, __getpid(), main_thread_name);
 }
 
 /*
@@ -268,12 +237,44 @@ static void raise_caps() {
   }
 }
 
+static pid_t __fork() {
+  return clone(nullptr, nullptr, 0, nullptr);
+}
+
+// Double-clone, with CLONE_FILES to share the file descriptor table for kcmp validation.
+// Returns 0 in the orphaned child, the pid of the orphan in the original process, or -1 on failure.
+static void create_vm_process() {
+  pid_t first = clone(nullptr, nullptr, CLONE_FILES, nullptr);
+  if (first == -1) {
+    fatal_errno("failed to clone vm process");
+  } else if (first == 0) {
+    drop_capabilities();
+
+    if (clone(nullptr, nullptr, CLONE_FILES, nullptr) == -1) {
+      _exit(errno);
+    }
+
+    // Exit immediately on both sides of the fork.
+    // crash_dump is ptracing us, so it'll get to do whatever it wants in between.
+    _exit(0);
+  }
+
+  int status;
+  if (TEMP_FAILURE_RETRY(waitpid(first, &status, __WCLONE)) != first) {
+    fatal_errno("failed to waitpid in double fork");
+  } else if (!WIFEXITED(status)) {
+    fatal("intermediate process didn't exit cleanly in double fork (status = %d)", status);
+  } else if (WEXITSTATUS(status)) {
+    fatal("second clone failed: %s", strerror(WEXITSTATUS(status)));
+  }
+}
+
 struct debugger_thread_info {
-  bool crash_dump_started;
   pid_t crashing_tid;
   pid_t pseudothread_tid;
-  int signal_number;
-  siginfo_t* info;
+  siginfo_t* siginfo;
+  void* ucontext;
+  uintptr_t abort_msg;
 };
 
 // Logging and contacting debuggerd requires free file descriptors, which we might not have.
@@ -284,7 +285,8 @@ struct debugger_thread_info {
 static void* pseudothread_stack;
 
 static DebuggerdDumpType get_dump_type(const debugger_thread_info* thread_info) {
-  if (thread_info->signal_number == DEBUGGER_SIGNAL && thread_info->info->si_value.sival_int) {
+  if (thread_info->siginfo->si_signo == DEBUGGER_SIGNAL &&
+      thread_info->siginfo->si_value.sival_int) {
     return kDebuggerdNativeBacktrace;
   }
 
@@ -299,25 +301,58 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   }
 
   int devnull = TEMP_FAILURE_RETRY(open("/dev/null", O_RDWR));
+  if (devnull == -1) {
+    fatal_errno("failed to open /dev/null");
+  } else if (devnull != 0) {
+    fatal_errno("expected /dev/null fd to be 0, actually %d", devnull);
+  }
 
   // devnull will be 0.
-  TEMP_FAILURE_RETRY(dup2(devnull, STDOUT_FILENO));
-  TEMP_FAILURE_RETRY(dup2(devnull, STDERR_FILENO));
+  TEMP_FAILURE_RETRY(dup2(devnull, 1));
+  TEMP_FAILURE_RETRY(dup2(devnull, 2));
 
-  unique_fd pipe_read, pipe_write;
-  if (!android::base::Pipe(&pipe_read, &pipe_write)) {
+  unique_fd input_read, input_write;
+  unique_fd output_read, output_write;
+  if (!Pipe(&input_read, &input_write) != 0 || !Pipe(&output_read, &output_write)) {
     fatal_errno("failed to create pipe");
   }
 
+  // ucontext_t is absurdly large on AArch64, so piece it together manually with writev.
+  uint32_t version = 1;
+  constexpr size_t expected =
+      sizeof(version) + sizeof(siginfo_t) + sizeof(ucontext_t) + sizeof(uintptr_t);
+
+  errno = 0;
+  if (fcntl(output_write.get(), F_SETPIPE_SZ, expected) < static_cast<int>(expected)) {
+    fatal_errno("failed to set pipe bufer size");
+  }
+
+  struct iovec iovs[4] = {
+      {.iov_base = &version, .iov_len = sizeof(version)},
+      {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
+      {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
+      {.iov_base = &thread_info->abort_msg, .iov_len = sizeof(uintptr_t)},
+  };
+
+  ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, 4));
+  if (rc == -1) {
+    fatal_errno("failed to write crash info");
+  } else if (rc != expected) {
+    fatal("failed to write crash info, wrote %zd bytes, expected %zd", rc, expected);
+  }
+
   // Don't use fork(2) to avoid calling pthread_atfork handlers.
-  int forkpid = clone(nullptr, nullptr, 0, nullptr);
-  if (forkpid == -1) {
+  pid_t crash_dump_pid = __fork();
+  if (crash_dump_pid == -1) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc",
                           "failed to fork in debuggerd signal handler: %s", strerror(errno));
-  } else if (forkpid == 0) {
-    TEMP_FAILURE_RETRY(dup2(pipe_write.get(), STDOUT_FILENO));
-    pipe_write.reset();
-    pipe_read.reset();
+  } else if (crash_dump_pid == 0) {
+    TEMP_FAILURE_RETRY(dup2(input_write.get(), STDOUT_FILENO));
+    TEMP_FAILURE_RETRY(dup2(output_read.get(), STDIN_FILENO));
+    input_read.reset();
+    input_write.reset();
+    output_read.reset();
+    output_write.reset();
 
     raise_caps();
 
@@ -332,45 +367,49 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     execle(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, debuggerd_dump_type,
            nullptr, nullptr);
-
     fatal_errno("exec failed");
-  } else {
-    pipe_write.reset();
-    char buf[4];
-    ssize_t rc = TEMP_FAILURE_RETRY(read(pipe_read.get(), &buf, sizeof(buf)));
-    if (rc == -1) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s",
-                            strerror(errno));
-    } else if (rc == 0) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper failed to exec");
-    } else if (rc != 1) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc",
-                            "read of IPC pipe returned unexpected value: %zd", rc);
-    } else {
-      if (buf[0] != '\1') {
-        async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
-      } else {
-        thread_info->crash_dump_started = true;
-      }
-    }
-    pipe_read.reset();
-
-    // Don't leave a zombie child.
-    int status;
-    if (TEMP_FAILURE_RETRY(waitpid(forkpid, &status, 0)) == -1) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "failed to wait for crash_dump helper: %s",
-                            strerror(errno));
-    } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
-      thread_info->crash_dump_started = false;
-    }
   }
 
-  syscall(__NR_exit, 0);
+  input_write.reset();
+  output_read.reset();
+
+  // crash_dump will ptrace and pause all of our threads, and then write to the pipe to tell
+  // us to fork off a process to read memory from.
+  char buf[4];
+  rc = TEMP_FAILURE_RETRY(read(input_read.get(), &buf, sizeof(buf)));
+  if (rc == -1) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s", strerror(errno));
+    return 1;
+  } else if (rc == 0) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper failed to exec");
+    return 1;
+  } else if (rc != 1) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc",
+                          "read of IPC pipe returned unexpected value: %zd", rc);
+    return 1;
+  } else if (buf[0] != '\1') {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
+    return 1;
+  }
+
+  // crash_dump is ptracing us, fork off a copy of our address space for it to use.
+  create_vm_process();
+
+  input_read.reset();
+  input_write.reset();
+
+  // Don't leave a zombie child.
+  int status;
+  if (TEMP_FAILURE_RETRY(waitpid(crash_dump_pid, &status, 0)) == -1) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "failed to wait for crash_dump helper: %s",
+                          strerror(errno));
+  } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
+  }
   return 0;
 }
 
-static void resend_signal(siginfo_t* info, bool crash_dump_started) {
+static void resend_signal(siginfo_t* info) {
   // Signals can either be fatal or nonfatal.
   // For fatal signals, crash_dump will send us the signal we crashed with
   // before resuming us, so that processes using waitpid on us will see that we
@@ -379,16 +418,6 @@ static void resend_signal(siginfo_t* info, bool crash_dump_started) {
   // to deregister our signal handler for that signal before continuing.
   if (info->si_signo != DEBUGGER_SIGNAL) {
     signal(info->si_signo, SIG_DFL);
-  }
-
-  // We need to return from our signal handler so that crash_dump can see the
-  // signal via ptrace and dump the thread that crashed. However, returning
-  // does not guarantee that the signal will be thrown again, even for SIGSEGV
-  // and friends, since the signal could have been sent manually. We blocked
-  // all signals when registering the handler, so resending the signal (using
-  // rt_tgsigqueueinfo(2) to preserve SA_SIGINFO) will cause it to be delivered
-  // when our signal handler returns.
-  if (crash_dump_started || info->si_signo != DEBUGGER_SIGNAL) {
     int rc = syscall(SYS_rt_tgsigqueueinfo, __getpid(), __gettid(), info->si_signo, info);
     if (rc != 0) {
       fatal_errno("failed to resend signal during crash");
@@ -425,7 +454,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   void* abort_message = nullptr;
-  if (g_callbacks.get_abort_message) {
+  if (signal_number != DEBUGGER_SIGNAL && g_callbacks.get_abort_message) {
     abort_message = g_callbacks.get_abort_message();
   }
 
@@ -439,7 +468,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
     debuggerd_fallback_handler(info, static_cast<ucontext_t*>(context), abort_message);
-    resend_signal(info, false);
+    resend_signal(info);
     return;
   }
 
@@ -450,20 +479,14 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     return;
   }
 
-  log_signal_summary(signal_number, info);
-
-  // If this was a fatal crash, populate si_value with the abort message address if possible.
-  // Note that applications can set an abort message without aborting.
-  if (abort_message && signal_number != DEBUGGER_SIGNAL) {
-    info->si_value.sival_ptr = abort_message;
-  }
+  log_signal_summary(info);
 
   debugger_thread_info thread_info = {
-    .crash_dump_started = false,
-    .pseudothread_tid = -1,
-    .crashing_tid = __gettid(),
-    .signal_number = signal_number,
-    .info = info
+      .pseudothread_tid = -1,
+      .crashing_tid = __gettid(),
+      .siginfo = info,
+      .ucontext = context,
+      .abort_msg = reinterpret_cast<uintptr_t>(abort_message),
   };
 
   // Set PR_SET_DUMPABLE to 1, so that crash_dump can ptrace us.
@@ -472,7 +495,8 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     fatal_errno("failed to set dumpable");
   }
 
-  // Essentially pthread_create without CLONE_FILES (see debuggerd_dispatch_pseudothread).
+  // Essentially pthread_create without CLONE_FILES, so we still work during file descriptor
+  // exhaustion.
   pid_t child_pid =
     clone(debuggerd_dispatch_pseudothread, pseudothread_stack,
           CLONE_THREAD | CLONE_SIGHAND | CLONE_VM | CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID,
@@ -484,7 +508,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   // Wait for the child to start...
   futex_wait(&thread_info.pseudothread_tid, -1);
 
-  // and then wait for it to finish.
+  // and then wait for it to terminate.
   futex_wait(&thread_info.pseudothread_tid, child_pid);
 
   // Restore PR_SET_DUMPABLE to its original value.
@@ -492,21 +516,13 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     fatal_errno("failed to restore dumpable");
   }
 
-  // Signals can either be fatal or nonfatal.
-  // For fatal signals, crash_dump will PTRACE_CONT us with the signal we
-  // crashed with, so that processes using waitpid on us will see that we
-  // exited with the correct exit status (e.g. so that sh will report
-  // "Segmentation fault" instead of "Killed"). For this to work, we need
-  // to deregister our signal handler for that signal before continuing.
-  if (signal_number != DEBUGGER_SIGNAL) {
-    signal(signal_number, SIG_DFL);
-  }
-
-  resend_signal(info, thread_info.crash_dump_started);
   if (info->si_signo == DEBUGGER_SIGNAL) {
     // If the signal is fatal, don't unlock the mutex to prevent other crashing threads from
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
+  } else {
+    // Resend the signal, so that either gdb or the parent's waitpid sees it.
+    resend_signal(info);
   }
 }
 
