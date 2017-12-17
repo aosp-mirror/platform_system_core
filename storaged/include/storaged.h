@@ -36,6 +36,9 @@ friend class test_case_name##_##test_name##_Test
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof((x)[0]))
 
+#define IS_ALIGNED(x, align)   (!((x) & ((align) - 1)))
+#define ROUND_UP(x, align)     (((x) + ((align) - 1)) & ~((align) - 1))
+
 #define SECTOR_SIZE ( 512 )
 #define SEC_TO_MSEC ( 1000 )
 #define MSEC_TO_USEC ( 1000 )
@@ -83,12 +86,12 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
     time_t mStarttime;
     sp<android::hardware::health::V2_0::IHealth> health;
     unique_ptr<storage_info_t> storage_info;
-    static const uint32_t crc_init;
+    static const uint32_t current_version;
     unordered_map<userid_t, bool> proto_loaded;
     void load_proto(userid_t user_id);
-    void prepare_proto(userid_t user_id, StoragedProto* proto);
+    char* prepare_proto(userid_t user_id, StoragedProto* proto);
     void flush_proto(userid_t user_id, StoragedProto* proto);
-    void flush_proto_user_system(StoragedProto* proto);
+    void flush_proto_data(userid_t user_id, const char* data, ssize_t size);
     string proto_path(userid_t user_id) {
         return string("/data/misc_ce/") + to_string(user_id) +
                "/storaged/storaged.proto";

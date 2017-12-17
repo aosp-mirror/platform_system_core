@@ -38,6 +38,7 @@ namespace unwindstack {
 struct x86_64_stack_t {
   uint64_t ss_sp;    // void __user*
   int32_t ss_flags;  // int
+  int32_t pad;
   uint64_t ss_size;  // size_t
 };
 

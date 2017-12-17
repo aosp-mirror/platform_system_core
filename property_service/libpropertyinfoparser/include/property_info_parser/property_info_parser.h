@@ -172,6 +172,9 @@ class PropertyInfoArea : private SerializedData {
   TrieNode root_node() const { return trie(header()->root_offset); }
 
  private:
+  void CheckPrefixMatch(const char* remaining_name, const TrieNode& trie_node,
+                        uint32_t* context_index, uint32_t* schema_index) const;
+
   const PropertyInfoAreaHeader* header() const {
     return reinterpret_cast<const PropertyInfoAreaHeader*>(data_base());
   }

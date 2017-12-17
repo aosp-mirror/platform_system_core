@@ -77,11 +77,6 @@ static int remote_read(apacket *p, atransport *t)
         return -1;
     }
 
-    if (!check_data(p)) {
-        D("bad data: terminated (data)");
-        return -1;
-    }
-
     return 0;
 }
 

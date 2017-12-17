@@ -61,7 +61,7 @@ void populate_open_files_list(pid_t pid, OpenFilesList* list) {
   }
 }
 
-void dump_open_files_list_to_log(const OpenFilesList& files, log_t* log, const char* prefix) {
+void dump_open_files_list(log_t* log, const OpenFilesList& files, const char* prefix) {
   for (auto& file : files) {
     _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s\n", prefix, file.first, file.second.c_str());
   }

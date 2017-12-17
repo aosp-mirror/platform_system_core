@@ -60,13 +60,16 @@ class ElfInterface {
   virtual bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
                                uint64_t* offset) = 0;
 
-  virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
+  virtual bool Step(uint64_t rel_pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
+                    bool* finished);
 
   Memory* CreateGnuDebugdataMemory();
 
   Memory* memory() { return memory_; }
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads() { return pt_loads_; }
+
+  void SetGnuDebugdataInterface(ElfInterface* interface) { gnu_debugdata_interface_ = interface; }
 
   uint64_t dynamic_offset() { return dynamic_offset_; }
   uint64_t dynamic_size() { return dynamic_size_; }
@@ -134,6 +137,8 @@ class ElfInterface {
 
   std::unique_ptr<DwarfSection> eh_frame_;
   std::unique_ptr<DwarfSection> debug_frame_;
+  // The Elf object owns the gnu_debugdata interface object.
+  ElfInterface* gnu_debugdata_interface_ = nullptr;
 
   std::vector<Symbols*> symbols_;
 };

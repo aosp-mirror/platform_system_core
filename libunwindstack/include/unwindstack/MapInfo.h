@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 
+#include <atomic>
 #include <mutex>
 #include <string>
 
@@ -33,7 +34,12 @@ struct MapInfo {
   MapInfo() = default;
   MapInfo(uint64_t start, uint64_t end) : start(start), end(end) {}
   MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const std::string& name)
-      : start(start), end(end), offset(offset), flags(flags), name(name) {}
+      : start(start),
+        end(end),
+        offset(offset),
+        flags(flags),
+        name(name),
+        load_bias(static_cast<uint64_t>(-1)) {}
   ~MapInfo() { delete elf; }
 
   uint64_t start = 0;
@@ -47,6 +53,8 @@ struct MapInfo {
   // entire file is represented by the Memory object returned by CreateMemory,
   // instead of a portion of the file.
   uint64_t elf_offset = 0;
+
+  std::atomic_uint64_t load_bias;
 
   // This function guarantees it will never return nullptr.
   Elf* GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata = false);

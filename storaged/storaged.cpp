@@ -54,11 +54,13 @@ namespace {
  */
 constexpr int USER_SYSTEM = 0;
 
-constexpr uint32_t benchmark_unit_size = 16 * 1024;  // 16KB
+constexpr ssize_t benchmark_unit_size = 16 * 1024;  // 16KB
+
+constexpr ssize_t min_benchmark_size = 128 * 1024;  // 128KB
 
 }  // namespace
 
-const uint32_t storaged_t::crc_init = 0x5108A4ED; /* STORAGED */
+const uint32_t storaged_t::current_version = 4;
 
 using android::hardware::health::V1_0::BatteryStatus;
 using android::hardware::health::V1_0::toString;
@@ -186,14 +188,11 @@ void storaged_t::load_proto(userid_t user_id) {
     StoragedProto proto;
     proto.ParseFromString(ss.str());
 
-    uint32_t crc = proto.crc();
-    proto.set_crc(crc_init);
-    string proto_str = proto.SerializeAsString();
-    uint32_t computed_crc = crc32(crc_init,
-        reinterpret_cast<const Bytef*>(proto_str.c_str()),
-        proto_str.size());
-
-    if (crc != computed_crc) {
+    const UidIOUsage& uid_io_usage = proto.uid_io_usage();
+    uint32_t computed_crc = crc32(current_version,
+        reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
+        uid_io_usage.ByteSize());
+    if (proto.crc() != computed_crc) {
         LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << proto_file;
         return;
     }
@@ -205,88 +204,101 @@ void storaged_t::load_proto(userid_t user_id) {
     }
 }
 
-void storaged_t:: prepare_proto(userid_t user_id, StoragedProto* proto) {
-    proto->set_version(3);
-    proto->set_crc(crc_init);
+char* storaged_t:: prepare_proto(userid_t user_id, StoragedProto* proto) {
+    proto->set_version(current_version);
 
+    const UidIOUsage& uid_io_usage = proto->uid_io_usage();
+    proto->set_crc(crc32(current_version,
+        reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
+        uid_io_usage.ByteSize()));
+
+    uint32_t pagesize = sysconf(_SC_PAGESIZE);
     if (user_id == USER_SYSTEM) {
-        while (proto->ByteSize() < 128 * 1024) {
-            proto->add_padding(0xFEEDBABE);
+        proto->set_padding("", 1);
+        vector<char> padding;
+        ssize_t size = ROUND_UP(MAX(min_benchmark_size, proto->ByteSize()),
+                                pagesize);
+        padding = vector<char>(size - proto->ByteSize(), 0xFD);
+        proto->set_padding(padding.data(), padding.size());
+        while (!IS_ALIGNED(proto->ByteSize(), pagesize)) {
+            padding.push_back(0xFD);
+            proto->set_padding(padding.data(), padding.size());
         }
     }
 
-    string proto_str = proto->SerializeAsString();
-    proto->set_crc(crc32(crc_init,
-        reinterpret_cast<const Bytef*>(proto_str.c_str()),
-        proto_str.size()));
+    char* data = nullptr;
+    if (posix_memalign(reinterpret_cast<void**>(&data),
+                       pagesize, proto->ByteSize())) {
+        PLOG_TO(SYSTEM, ERROR) << "Faied to alloc aligned buffer (size: "
+                               << proto->ByteSize() << ")";
+        return data;
+    }
+
+    proto->SerializeToArray(data, proto->ByteSize());
+    return data;
 }
 
-void storaged_t::flush_proto_user_system(StoragedProto* proto) {
-    string proto_str = proto->SerializeAsString();
-    const char* data = proto_str.data();
-    uint32_t size = proto_str.size();
-    ssize_t ret;
-    time_point<steady_clock> start, end;
-
-    string proto_file = proto_path(USER_SYSTEM);
+void storaged_t::flush_proto_data(userid_t user_id,
+                                  const char* data, ssize_t size) {
+    string proto_file = proto_path(user_id);
     string tmp_file = proto_file + "_tmp";
     unique_fd fd(TEMP_FAILURE_RETRY(open(tmp_file.c_str(),
-                O_DIRECT | O_SYNC | O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC,
-                S_IRUSR | S_IWUSR)));
+                 O_SYNC | O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC |
+                    (user_id == USER_SYSTEM ? O_DIRECT : 0),
+                 S_IRUSR | S_IWUSR)));
     if (fd == -1) {
         PLOG_TO(SYSTEM, ERROR) << "Faied to open tmp file: " << tmp_file;
         return;
     }
 
-    uint32_t benchmark_size = 0;
-    uint64_t benchmark_time_ns = 0;
-    while (size > 0) {
-        start = steady_clock::now();
-        ret = write(fd, data, MIN(benchmark_unit_size, size));
-        if (ret <= 0) {
+    if (user_id == USER_SYSTEM) {
+        time_point<steady_clock> start, end;
+        uint32_t benchmark_size = 0;
+        uint64_t benchmark_time_ns = 0;
+        ssize_t ret;
+        bool first_write = true;
+
+        while (size > 0) {
+            start = steady_clock::now();
+            ret = write(fd, data, MIN(benchmark_unit_size, size));
+            if (ret <= 0) {
+                PLOG_TO(SYSTEM, ERROR) << "Faied to write tmp file: " << tmp_file;
+                return;
+            }
+            end = steady_clock::now();
+            /*
+            * compute bandwidth after the first write and if write returns
+            * exactly unit size.
+            */
+            if (!first_write && ret == benchmark_unit_size) {
+                benchmark_size += benchmark_unit_size;
+                benchmark_time_ns += duration_cast<nanoseconds>(end - start).count();
+            }
+            size -= ret;
+            data += ret;
+            first_write = false;
+        }
+
+        if (benchmark_size) {
+            int perf = benchmark_size * 1000000LLU / benchmark_time_ns;
+            storage_info->update_perf_history(perf, system_clock::now());
+        }
+    } else {
+        if (!WriteFully(fd, data, size)) {
             PLOG_TO(SYSTEM, ERROR) << "Faied to write tmp file: " << tmp_file;
             return;
         }
-        end = steady_clock::now();
-        /*
-         * compute bandwidth after the first write and if write returns
-         * exactly unit size.
-         */
-        if (size != proto_str.size() && ret == benchmark_unit_size) {
-            benchmark_size += benchmark_unit_size;
-            benchmark_time_ns += duration_cast<nanoseconds>(end - start).count();
-        }
-        size -= ret;
-        data += ret;
-    }
-
-    if (benchmark_size) {
-        int perf = benchmark_size * 1000000LLU / benchmark_time_ns;
-        storage_info->update_perf_history(perf, system_clock::now());
     }
 
     fd.reset(-1);
-    /* Atomically replace existing proto file to reduce chance of data loss. */
     rename(tmp_file.c_str(), proto_file.c_str());
 }
 
 void storaged_t::flush_proto(userid_t user_id, StoragedProto* proto) {
-    prepare_proto(user_id, proto);
+    unique_ptr<char> proto_data(prepare_proto(user_id, proto));
+    if (proto_data == nullptr) return;
 
-    if (user_id == USER_SYSTEM) {
-        flush_proto_user_system(proto);
-        return;
-    }
-
-    string proto_file = proto_path(user_id);
-    string tmp_file = proto_file + "_tmp";
-    if (!WriteStringToFile(proto->SerializeAsString(), tmp_file,
-                           S_IRUSR | S_IWUSR)) {
-        return;
-    }
-
-    /* Atomically replace existing proto file to reduce chance of data loss. */
-    rename(tmp_file.c_str(), proto_file.c_str());
+    flush_proto_data(user_id, proto_data.get(), proto->ByteSize());
 }
 
 void storaged_t::flush_protos(unordered_map<int, StoragedProto>* protos) {

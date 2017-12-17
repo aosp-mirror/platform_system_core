@@ -56,5 +56,5 @@ message StoragedProto {
   optional uint32 version = 2;
   optional UidIOUsage uid_io_usage = 3;
   optional IOPerfHistory perf_history = 4;
-  repeated uint32 padding = 5;
+  optional bytes padding = 5;
 }
