@@ -25,6 +25,6 @@
 // current thread of the specified pid.
 #define BACKTRACE_CURRENT_THREAD (-1)
 
-#define MAX_BACKTRACE_FRAMES 64
+#define MAX_BACKTRACE_FRAMES 256
 
 #endif // _BACKTRACE_BACKTRACE_CONSTANTS_H
