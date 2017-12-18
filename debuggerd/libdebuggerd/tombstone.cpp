@@ -635,7 +635,7 @@ void engrave_tombstone(unique_fd output_fd, BacktraceMap* map, Memory* process_m
   dump_thread(&log, map, process_memory, it->second, abort_msg_address, true);
 
   if (want_logs) {
-    dump_logs(&log, it->second.pid, 5);
+    dump_logs(&log, it->second.pid, 50);
   }
 
   for (auto& [tid, thread_info] : threads) {
