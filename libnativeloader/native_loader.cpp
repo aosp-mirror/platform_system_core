@@ -24,12 +24,15 @@
 #include "cutils/properties.h"
 #include "log/log.h"
 #endif
+#include <dirent.h>
+#include <sys/types.h>
 #include "nativebridge/native_bridge.h"
 
 #include <algorithm>
-#include <vector>
-#include <string>
+#include <memory>
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/macros.h>
@@ -82,15 +85,20 @@ class NativeLoaderNamespace {
   native_bridge_namespace_t* native_bridge_ns_;
 };
 
-static constexpr const char* kPublicNativeLibrariesSystemConfigPathFromRoot =
-                                  "/etc/public.libraries.txt";
-static constexpr const char* kPublicNativeLibrariesVendorConfig =
-                                  "/vendor/etc/public.libraries.txt";
-static constexpr const char* kLlndkNativeLibrariesSystemConfigPathFromRoot =
-                                  "/etc/llndk.libraries.txt";
-static constexpr const char* kVndkspNativeLibrariesSystemConfigPathFromRoot =
-                                  "/etc/vndksp.libraries.txt";
-
+static constexpr const char kPublicNativeLibrariesSystemConfigPathFromRoot[] =
+    "/etc/public.libraries.txt";
+static constexpr const char kPublicNativeLibrariesExtensionConfigPrefix[] = "public.libraries-";
+static constexpr const size_t kPublicNativeLibrariesExtensionConfigPrefixLen =
+    sizeof(kPublicNativeLibrariesExtensionConfigPrefix) - 1;
+static constexpr const char kPublicNativeLibrariesExtensionConfigSuffix[] = ".txt";
+static constexpr const size_t kPublicNativeLibrariesExtensionConfigSuffixLen =
+    sizeof(kPublicNativeLibrariesExtensionConfigSuffix) - 1;
+static constexpr const char kPublicNativeLibrariesVendorConfig[] =
+    "/vendor/etc/public.libraries.txt";
+static constexpr const char kLlndkNativeLibrariesSystemConfigPathFromRoot[] =
+    "/etc/llndk.libraries.txt";
+static constexpr const char kVndkspNativeLibrariesSystemConfigPathFromRoot[] =
+    "/etc/vndksp.libraries.txt";
 
 // The device may be configured to have the vendor libraries loaded to a separate namespace.
 // For historical reasons this namespace was named sphal but effectively it is intended
@@ -132,6 +140,9 @@ static void insert_vndk_version_str(std::string* file_name) {
   }
   file_name->insert(insert_pos, vndk_version_str());
 }
+
+static const std::function<bool(const std::string&, std::string*)> always_true =
+    [](const std::string&, std::string*) { return true; };
 
 class LibraryNamespaces {
  public:
@@ -337,9 +348,54 @@ class LibraryNamespaces {
             root_dir + kVndkspNativeLibrariesSystemConfigPathFromRoot;
 
     std::string error_msg;
-    LOG_ALWAYS_FATAL_IF(!ReadConfig(public_native_libraries_system_config, &sonames, &error_msg),
-                        "Error reading public native library list from \"%s\": %s",
-                        public_native_libraries_system_config.c_str(), error_msg.c_str());
+    LOG_ALWAYS_FATAL_IF(
+        !ReadConfig(public_native_libraries_system_config, &sonames, always_true, &error_msg),
+        "Error reading public native library list from \"%s\": %s",
+        public_native_libraries_system_config.c_str(), error_msg.c_str());
+
+    // read /system/etc/public.libraries-<companyname>.txt which contain partner defined
+    // system libs that are exposed to apps. The libs in the txt files must be
+    // named as lib<name>.<companyname>.so.
+    std::string dirname = base::Dirname(public_native_libraries_system_config);
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname.c_str()), closedir);
+    if (dir != nullptr) {
+      // Failing to opening the dir is not an error, which can happen in
+      // webview_zygote.
+      struct dirent* ent;
+      while ((ent = readdir(dir.get())) != nullptr) {
+        if (ent->d_type != DT_REG && ent->d_type != DT_LNK) {
+          continue;
+        }
+        const std::string filename(ent->d_name);
+        if (android::base::StartsWith(filename, kPublicNativeLibrariesExtensionConfigPrefix) &&
+            android::base::EndsWith(filename, kPublicNativeLibrariesExtensionConfigSuffix)) {
+          const size_t start = kPublicNativeLibrariesExtensionConfigPrefixLen;
+          const size_t end = filename.size() - kPublicNativeLibrariesExtensionConfigSuffixLen;
+          const std::string company_name = filename.substr(start, end - start);
+          const std::string config_file_path = dirname + "/" + filename;
+          LOG_ALWAYS_FATAL_IF(
+              company_name.empty(),
+              "Error extracting company name from public native library list file path \"%s\"",
+              config_file_path.c_str());
+          LOG_ALWAYS_FATAL_IF(
+              !ReadConfig(
+                  config_file_path, &sonames,
+                  [&company_name](const std::string& soname, std::string* error_msg) {
+                    if (android::base::StartsWith(soname, "lib") &&
+                        android::base::EndsWith(soname, ("." + company_name + ".so").c_str())) {
+                      return true;
+                    } else {
+                      *error_msg = "Library name \"" + soname +
+                                   "\" does not end with the company name: " + company_name + ".";
+                      return false;
+                    }
+                  },
+                  &error_msg),
+              "Error reading public native library list from \"%s\": %s", config_file_path.c_str(),
+              error_msg.c_str());
+        }
+      }
+    }
 
     // Insert VNDK version to llndk and vndksp config file names.
     insert_vndk_version_str(&llndk_native_libraries_system_config);
@@ -374,16 +430,16 @@ class LibraryNamespaces {
     system_public_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
-    ReadConfig(llndk_native_libraries_system_config, &sonames);
+    ReadConfig(llndk_native_libraries_system_config, &sonames, always_true);
     system_llndk_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
-    ReadConfig(vndksp_native_libraries_system_config, &sonames);
+    ReadConfig(vndksp_native_libraries_system_config, &sonames, always_true);
     system_vndksp_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
     // This file is optional, quietly ignore if the file does not exist.
-    ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames);
+    ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames, always_true, nullptr);
 
     vendor_public_libraries_ = base::Join(sonames, ':');
   }
@@ -394,6 +450,8 @@ class LibraryNamespaces {
 
  private:
   bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames,
+                  const std::function<bool(const std::string& /* soname */,
+                                           std::string* /* error_msg */)>& check_soname,
                   std::string* error_msg = nullptr) {
     // Read list of public native libraries from the config file.
     std::string file_content;
@@ -430,7 +488,11 @@ class LibraryNamespaces {
         trimmed_line.resize(space_pos);
       }
 
-      sonames->push_back(trimmed_line);
+      if (check_soname(trimmed_line, error_msg)) {
+        sonames->push_back(trimmed_line);
+      } else {
+        return false;
+      }
     }
 
     return true;
