@@ -42,7 +42,7 @@ static int state_fd;
 static int wakeup_count_fd;
 static pthread_t suspend_thread;
 static sem_t suspend_lockout;
-static const char *sleep_state = "mem";
+static const char* sleep_state = "mem";
 static void (*wakeup_func)(bool success) = NULL;
 static int sleep_time = BASE_SLEEP_TIME;
 
@@ -55,8 +55,7 @@ static void update_sleep_time(bool success) {
     sleep_time = MIN(sleep_time * 2, 60000000);
 }
 
-static void *suspend_thread_func(void *arg __attribute__((unused)))
-{
+static void* suspend_thread_func(void* arg __attribute__((unused))) {
     char buf[80];
     char wakeup_count[20];
     int wakeup_count_len;
@@ -117,8 +116,7 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
     return NULL;
 }
 
-static int autosuspend_wakeup_count_enable(void)
-{
+static int autosuspend_wakeup_count_enable(void) {
     char buf[80];
     int ret;
 
@@ -136,8 +134,7 @@ static int autosuspend_wakeup_count_enable(void)
     return ret;
 }
 
-static int autosuspend_wakeup_count_disable(void)
-{
+static int autosuspend_wakeup_count_disable(void) {
     char buf[80];
     int ret;
 
@@ -155,8 +152,7 @@ static int autosuspend_wakeup_count_disable(void)
     return ret;
 }
 
-void set_wakeup_callback(void (*func)(bool success))
-{
+static void autosuspend_set_wakeup_callback(void (*func)(bool success)) {
     if (wakeup_func != NULL) {
         ALOGE("Duplicate wakeup callback applied, keeping original");
         return;
@@ -165,12 +161,12 @@ void set_wakeup_callback(void (*func)(bool success))
 }
 
 struct autosuspend_ops autosuspend_wakeup_count_ops = {
-        .enable = autosuspend_wakeup_count_enable,
-        .disable = autosuspend_wakeup_count_disable,
+    .enable = autosuspend_wakeup_count_enable,
+    .disable = autosuspend_wakeup_count_disable,
+    .set_wakeup_callback = autosuspend_set_wakeup_callback,
 };
 
-struct autosuspend_ops *autosuspend_wakeup_count_init(void)
-{
+struct autosuspend_ops* autosuspend_wakeup_count_init(void) {
     int ret;
     char buf[80];
 
