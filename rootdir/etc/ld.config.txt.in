@@ -240,9 +240,6 @@ namespace.default.search.paths += /vendor/${LIB}
 namespace.default.search.paths += /vendor/${LIB}/vndk${VNDK_VER}
 namespace.default.search.paths += /vendor/${LIB}/vndk-sp${VNDK_VER}
 
-# TODO(b/70551668) remove this
-namespace.default.search.paths += /vendor/${LIB}/hw
-
 namespace.default.permitted.paths  = /odm
 namespace.default.permitted.paths += /vendor
 
@@ -258,10 +255,6 @@ namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk${VNDK_VER}
 namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk${VNDK_VER}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp${VNDK_VER}
 namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp${VNDK_VER}
-
-# TODO(b/70551668) remove this
-namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/hw
-namespace.default.asan.search.paths +=           /vendor/${LIB}/hw
 
 namespace.default.asan.permitted.paths  = /data/asan/odm
 namespace.default.asan.permitted.paths +=           /odm
