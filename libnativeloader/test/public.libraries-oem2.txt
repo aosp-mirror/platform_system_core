@@ -1,0 +1,2 @@
+libfoo.oem2.so
+libbar.oem2.so
