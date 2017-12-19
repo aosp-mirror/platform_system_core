@@ -39,6 +39,11 @@ namespace android {
 #pragma clang diagnostic ignored "-Wundefined-var-template"
 #endif
 
+// DO NOT USE: Please use scoped static initialization. For instance:
+//     MyClass& getInstance() {
+//         static MyClass gInstance(...);
+//         return gInstance;
+//     }
 template <typename TYPE>
 class ANDROID_API Singleton
 {
