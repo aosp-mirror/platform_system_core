@@ -49,6 +49,8 @@ class SortedVector;
  * The main templated vector class ensuring type safety
  * while making use of VectorImpl.
  * This is the class users want to use.
+ *
+ * DO NOT USE: please use std::vector
  */
 
 template <class TYPE>

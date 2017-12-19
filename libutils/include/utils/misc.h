@@ -22,7 +22,9 @@
 
 #include <utils/Endian.h>
 
-/* get #of elements in a static array */
+/* get #of elements in a static array
+ * DO NOT USE: please use std::vector/std::array instead
+ */
 #ifndef NELEM
 # define NELEM(x) ((int) (sizeof(x) / sizeof((x)[0])))
 #endif
