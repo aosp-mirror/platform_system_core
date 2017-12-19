@@ -252,13 +252,41 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
         return false;
       }
       HexStringToRawData(&line[pos], &testdata->unw_context, size);
-#if defined(__arm__)
     } else if (android::base::StartsWith(line, "regs:")) {
-      uint64_t pc;
-      uint64_t sp;
-      sscanf(line.c_str(), "regs: pc: %" SCNx64 " sp: %" SCNx64, &pc, &sp);
-      testdata->unw_context.regs[13] = sp;
-      testdata->unw_context.regs[15] = pc;
+      std::vector<std::string> strs = android::base::Split(line.substr(6), " ");
+      if (strs.size() % 2 != 0) {
+        return false;
+      }
+      std::vector<std::pair<std::string, uint64_t>> items;
+      for (size_t i = 0; i + 1 < strs.size(); i += 2) {
+        if (!android::base::EndsWith(strs[i], ":")) {
+          return false;
+        }
+        uint64_t value = std::stoul(strs[i + 1], nullptr, 16);
+        items.push_back(std::make_pair(strs[i].substr(0, strs[i].size() - 1), value));
+      }
+#if defined(__arm__)
+      for (auto& item : items) {
+        if (item.first == "sp") {
+          testdata->unw_context.regs[13] = item.second;
+        } else if (item.first == "pc") {
+          testdata->unw_context.regs[15] = item.second;
+        } else {
+          return false;
+        }
+      }
+#elif defined(__aarch64__)
+      for (auto& item : items) {
+        if (item.first == "pc") {
+          testdata->unw_context.uc_mcontext.pc = item.second;
+        } else if (item.first == "sp") {
+          testdata->unw_context.uc_mcontext.sp = item.second;
+        } else if (item.first == "x29") {
+          testdata->unw_context.uc_mcontext.regs[UNW_AARCH64_X29] = item.second;
+        } else {
+          return false;
+        }
+      }
 #endif
     } else if (android::base::StartsWith(line, "stack:")) {
       size_t size;
@@ -397,8 +425,8 @@ static void LibUnwindingTest(const std::string& arch, const std::string& testdat
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
   }
-  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED, backtrace->GetError().error_code);
-  ASSERT_NE(0u, backtrace->GetError().error_info.addr);
+  ASSERT_TRUE(backtrace->GetError().error_code == BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED ||
+              backtrace->GetError().error_code == BACKTRACE_UNWIND_ERROR_MAP_MISSING);
 }
 
 // This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
@@ -413,4 +441,22 @@ TEST(libbacktrace, offline_debug_frame_with_load_bias) {
 
 TEST(libbacktrace, offline_try_armexidx_after_debug_frame) {
   LibUnwindingTest("arm", "offline_testdata_for_libGLESv2_adreno", "libGLESv2_adreno.so");
+}
+
+TEST(libbacktrace, offline_cie_with_P_augmentation) {
+  // Make sure we can unwind through functions with CIE entry containing P augmentation, which
+  // makes unwinding library reading personality handler from memory. One example is
+  // /system/lib64/libskia.so.
+  LibUnwindingTest("arm64", "offline_testdata_for_libskia", "libskia.so");
+}
+
+TEST(libbacktrace, offline_empty_eh_frame_hdr) {
+  // Make sure we can unwind through libraries with empty .eh_frame_hdr section. One example is
+  // /vendor/lib64/egl/eglSubDriverAndroid.so.
+  LibUnwindingTest("arm64", "offline_testdata_for_eglSubDriverAndroid", "eglSubDriverAndroid.so");
+}
+
+TEST(libbacktrace, offline_max_frames_limit) {
+  // The length of callchain can reach 256 when recording an application.
+  ASSERT_GE(MAX_BACKTRACE_FRAMES, 256);
 }
