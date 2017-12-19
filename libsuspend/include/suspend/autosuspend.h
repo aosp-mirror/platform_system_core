@@ -51,7 +51,7 @@ int autosuspend_disable(void);
  * success is true if the suspend was sucessful and false if the suspend
  * aborted due to some reason.
  */
-void set_wakeup_callback(void (*func)(bool success));
+void autosuspend_set_wakeup_callback(void (*func)(bool success));
 
 __END_DECLS
 
