@@ -32,6 +32,8 @@ namespace android {
 
 class String16;
 
+// DO NOT USE: please use std::string
+
 //! This is a string holding UTF-8 characters. Does not allow the value more
 // than 0x10FFFF, which is not valid unicode codepoint.
 class String8
