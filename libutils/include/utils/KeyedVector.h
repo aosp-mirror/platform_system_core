@@ -30,6 +30,8 @@
 
 namespace android {
 
+// DO NOT USE: please use std::map
+
 template <typename KEY, typename VALUE>
 class KeyedVector
 {

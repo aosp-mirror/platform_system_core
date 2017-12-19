@@ -34,6 +34,8 @@
 namespace android {
 // ---------------------------------------------------------------------------
 
+// DO NOT USE: please use std::condition_variable instead.
+
 /*
  * Condition variable class.  The implementation is system-dependent.
  *
