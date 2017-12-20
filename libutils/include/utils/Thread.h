@@ -36,6 +36,8 @@
 namespace android {
 // ---------------------------------------------------------------------------
 
+// DO NOT USE: please use std::thread
+
 class Thread : virtual public RefBase
 {
 public:

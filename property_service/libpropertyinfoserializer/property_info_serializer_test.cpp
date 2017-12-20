@@ -844,5 +844,47 @@ TEST(propertyinfoserializer, GetPropertyInfo_prefix_with_dot_vs_without) {
   EXPECT_STREQ("3rd", schema);
 }
 
+TEST(propertyinfoserializer, GetPropertyInfo_empty_context_and_schema) {
+  auto property_info = std::vector<PropertyInfoEntry>{
+      {"persist.", "1st", "", false},
+      {"persist.dot_prefix.", "2nd", "", false},
+      {"persist.non_dot_prefix", "3rd", "", false},
+      {"persist.exact_match", "", "", true},
+      {"persist.dot_prefix2.", "", "4th", false},
+      {"persist.non_dot_prefix2", "", "5th", false},
+  };
+
+  auto serialized_trie = std::string();
+  auto build_trie_error = std::string();
+  ASSERT_TRUE(BuildTrie(property_info, "default", "default", &serialized_trie, &build_trie_error))
+      << build_trie_error;
+
+  auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
+
+  const char* context;
+  const char* schema;
+  property_info_area->GetPropertyInfo("notpersist.radio.something", &context, &schema);
+  EXPECT_STREQ("default", context);
+  EXPECT_STREQ("default", schema);
+  property_info_area->GetPropertyInfo("persist.nomatch", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("default", schema);
+  property_info_area->GetPropertyInfo("persist.dot_prefix.something", &context, &schema);
+  EXPECT_STREQ("2nd", context);
+  EXPECT_STREQ("default", schema);
+  property_info_area->GetPropertyInfo("persist.non_dot_prefix.something", &context, &schema);
+  EXPECT_STREQ("3rd", context);
+  EXPECT_STREQ("default", schema);
+  property_info_area->GetPropertyInfo("persist.exact_match", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("default", schema);
+  property_info_area->GetPropertyInfo("persist.dot_prefix2.something", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("4th", schema);
+  property_info_area->GetPropertyInfo("persist.non_dot_prefix2.something", &context, &schema);
+  EXPECT_STREQ("1st", context);
+  EXPECT_STREQ("5th", schema);
+}
+
 }  // namespace properties
 }  // namespace android
