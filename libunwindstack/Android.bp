@@ -215,6 +215,15 @@ cc_binary {
     ],
 }
 
+cc_binary {
+    name: "unwind_for_offline",
+    defaults: ["libunwindstack_tools"],
+
+    srcs: [
+        "tools/unwind_for_offline.cpp",
+    ],
+}
+
 // Generates the elf data for use in the tests for .gnu_debugdata frames.
 // Once these files are generated, use the xz command to compress the data.
 cc_binary_host {
