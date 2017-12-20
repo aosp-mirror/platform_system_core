@@ -81,7 +81,7 @@ static bool check_unique(std::vector<const char*>& paths, const std::string& con
         }
 
         // check if path is <partition>/
-        if (android::base::StartsWith(path, prefix.c_str())) {
+        if (android::base::StartsWith(path, prefix)) {
             // rebuild path to be system/<partition>/... to check for alias
             path = alternate + path.substr(prefix.size());
             for (second = 0; second < paths.size(); ++second) {
@@ -97,7 +97,7 @@ static bool check_unique(std::vector<const char*>& paths, const std::string& con
         }
 
         // check if path is system/<partition>/
-        if (android::base::StartsWith(path, alternate.c_str())) {
+        if (android::base::StartsWith(path, alternate)) {
             // rebuild path to be <partition>/... to check for alias
             path = prefix + path.substr(alternate.size());
             for (second = 0; second < paths.size(); ++second) {
