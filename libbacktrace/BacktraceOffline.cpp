@@ -195,16 +195,29 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
     ret = unw_get_reg(&cursor, UNW_REG_IP, &pc);
     if (ret < 0) {
       BACK_LOGW("Failed to read IP %d", ret);
+      error_.error_code = BACKTRACE_UNWIND_ERROR_ACCESS_REG_FAILED;
+      error_.error_info.regno = UNW_REG_IP;
       break;
     }
     unw_word_t sp;
     ret = unw_get_reg(&cursor, UNW_REG_SP, &sp);
     if (ret < 0) {
       BACK_LOGW("Failed to read SP %d", ret);
+      error_.error_code = BACKTRACE_UNWIND_ERROR_ACCESS_REG_FAILED;
+      error_.error_info.regno = UNW_REG_SP;
       break;
     }
 
     if (num_ignore_frames == 0) {
+      backtrace_map_t map;
+      FillInMap(pc, &map);
+      if (map.start == 0 || (map.flags & PROT_EXEC) == 0) {
+        // .eh_frame and .ARM.exidx doesn't know how to unwind from instructions setting up or
+        // destroying stack frames. It can lead to wrong callchains, which may contain pcs outside
+        // executable mapping areas. Stop unwinding once this is detected.
+        error_.error_code = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
+        break;
+      }
       frames_.resize(num_frames + 1);
       backtrace_frame_data_t* frame = &frames_[num_frames];
       frame->num = num_frames;
@@ -217,7 +230,7 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
         prev->stack_size = frame->sp - prev->sp;
       }
       frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
-      FillInMap(frame->pc, &frame->map);
+      frame->map = map;
       num_frames++;
     } else {
       num_ignore_frames--;
@@ -235,7 +248,6 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
       break;
     }
   }
-
   unw_destroy_addr_space(addr_space);
   context_ = nullptr;
   return true;
@@ -272,9 +284,14 @@ size_t BacktraceOffline::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
   if (read_size != 0) {
     return read_size;
   }
+  // In some libraries (like /system/lib64/libskia.so), some CIE entries in .eh_frame use
+  // augmentation "P", which makes libunwind/libunwindstack try to read personality routine in
+  // memory. However, that is not available in offline unwinding. Work around this by returning
+  // all zero data.
   error_.error_code = BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED;
   error_.error_info.addr = addr;
-  return 0;
+  memset(buffer, 0, bytes);
+  return bytes;
 }
 
 bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
@@ -309,6 +326,23 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
   // entry, it thinks that an ip address hits an entry when (entry.addr <= ip < next_entry.addr).
   // To prevent ip addresses hit in .eh_frame/.debug_frame being regarded as addresses hit in
   // .ARM.exidx, we need to check .eh_frame/.debug_frame first.
+
+  // Check .debug_frame/.gnu_debugdata before .eh_frame, because .debug_frame can unwind from
+  // instructions setting up or destroying stack frames, while .eh_frame can't.
+  if (!is_debug_frame_used_ && (debug_frame->has_debug_frame || debug_frame->has_gnu_debugdata)) {
+    is_debug_frame_used_ = true;
+    unw_dyn_info_t di;
+    unw_word_t segbase = map.start - debug_frame->min_vaddr;
+    // TODO: http://b/32916571
+    // TODO: Do it ourselves is more efficient than calling libunwind functions.
+    int found = dwarf_find_debug_frame(0, &di, ip, segbase, filename.c_str(), map.start, map.end);
+    if (found == 1) {
+      int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
+      if (ret == 0) {
+        return true;
+      }
+    }
+  }
   if (debug_frame->has_eh_frame) {
     if (ip_vaddr >= debug_frame->eh_frame.min_func_vaddr &&
         ip_vaddr < debug_frame->text_end_vaddr) {
@@ -332,20 +366,6 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
           eh_frame_hdr_space_.start + debug_frame->eh_frame.fde_table_offset;
       di.u.rti.table_len = (eh_frame_hdr_space_.end - di.u.rti.table_data) / sizeof(unw_word_t);
       // TODO: Do it ourselves is more efficient than calling this function.
-      int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
-      if (ret == 0) {
-        return true;
-      }
-    }
-  }
-  if (!is_debug_frame_used_ && (debug_frame->has_debug_frame || debug_frame->has_gnu_debugdata)) {
-    is_debug_frame_used_ = true;
-    unw_dyn_info_t di;
-    unw_word_t segbase = map.start - debug_frame->min_vaddr;
-    // TODO: http://b/32916571
-    // TODO: Do it ourselves is more efficient than calling libunwind functions.
-    int found = dwarf_find_debug_frame(0, &di, ip, segbase, filename.c_str(), map.start, map.end);
-    if (found == 1) {
       int ret = dwarf_search_unwind_table(addr_space, ip, &di, proc_info, need_unwind_info, this);
       if (ret == 0) {
         return true;
@@ -610,14 +630,14 @@ DebugFrameInfo* BacktraceOffline::GetDebugFrameInFile(const std::string& filenam
   return debug_frame;
 }
 
-static bool OmitEncodedValue(uint8_t encode, const uint8_t*& p) {
+static bool OmitEncodedValue(uint8_t encode, const uint8_t*& p, bool is_elf64) {
   if (encode == DW_EH_PE_omit) {
     return 0;
   }
   uint8_t format = encode & 0x0f;
   switch (format) {
     case DW_EH_PE_ptr:
-      p += sizeof(unw_word_t);
+      p += is_elf64 ? 8 : 4;
       break;
     case DW_EH_PE_uleb128:
     case DW_EH_PE_sleb128:
@@ -645,7 +665,7 @@ static bool OmitEncodedValue(uint8_t encode, const uint8_t*& p) {
 }
 
 static bool GetFdeTableOffsetInEhFrameHdr(const std::vector<uint8_t>& data,
-                                          uint64_t* table_offset_in_eh_frame_hdr) {
+                                          uint64_t* table_offset_in_eh_frame_hdr, bool is_elf64) {
   const uint8_t* p = data.data();
   const uint8_t* end = p + data.size();
   if (p + 4 > end) {
@@ -663,7 +683,8 @@ static bool GetFdeTableOffsetInEhFrameHdr(const std::vector<uint8_t>& data,
     return false;
   }
 
-  if (!OmitEncodedValue(eh_frame_ptr_encode, p) || !OmitEncodedValue(fde_count_encode, p)) {
+  if (!OmitEncodedValue(eh_frame_ptr_encode, p, is_elf64) ||
+      !OmitEncodedValue(fde_count_encode, p, is_elf64)) {
     return false;
   }
   if (p >= end) {
@@ -673,11 +694,214 @@ static bool GetFdeTableOffsetInEhFrameHdr(const std::vector<uint8_t>& data,
   return true;
 }
 
+static uint64_t ReadFromBuffer(const uint8_t*& p, size_t size) {
+  uint64_t result = 0;
+  int shift = 0;
+  while (size-- > 0) {
+    uint64_t tmp = *p++;
+    result |= tmp << shift;
+    shift += 8;
+  }
+  return result;
+}
+
+static uint64_t ReadSignValueFromBuffer(const uint8_t*& p, size_t size) {
+  uint64_t result = 0;
+  int shift = 0;
+  for (size_t i = 0; i < size; ++i) {
+    uint64_t tmp = *p++;
+    result |= tmp << shift;
+    shift += 8;
+  }
+  if (*(p - 1) & 0x80) {
+    result |= (-1ULL) << (size * 8);
+  }
+  return result;
+}
+
+static const char* ReadStrFromBuffer(const uint8_t*& p) {
+  const char* result = reinterpret_cast<const char*>(p);
+  p += strlen(result) + 1;
+  return result;
+}
+
+static int64_t ReadLEB128FromBuffer(const uint8_t*& p) {
+  int64_t result = 0;
+  int64_t tmp;
+  int shift = 0;
+  while (*p & 0x80) {
+    tmp = *p & 0x7f;
+    result |= tmp << shift;
+    shift += 7;
+    p++;
+  }
+  tmp = *p;
+  result |= tmp << shift;
+  if (*p & 0x40) {
+    result |= -((tmp & 0x40) << shift);
+  }
+  p++;
+  return result;
+}
+
+static uint64_t ReadULEB128FromBuffer(const uint8_t*& p) {
+  uint64_t result = 0;
+  uint64_t tmp;
+  int shift = 0;
+  while (*p & 0x80) {
+    tmp = *p & 0x7f;
+    result |= tmp << shift;
+    shift += 7;
+    p++;
+  }
+  tmp = *p;
+  result |= tmp << shift;
+  p++;
+  return result;
+}
+
+static uint64_t ReadEhEncoding(const uint8_t*& p, uint8_t encoding, bool is_elf64,
+                               uint64_t section_vaddr, const uint8_t* section_begin) {
+  const uint8_t* init_addr = p;
+  uint64_t result = 0;
+  switch (encoding & 0x0f) {
+    case DW_EH_PE_absptr:
+      result = ReadFromBuffer(p, is_elf64 ? 8 : 4);
+      break;
+    case DW_EH_PE_omit:
+      result = 0;
+      break;
+    case DW_EH_PE_uleb128:
+      result = ReadULEB128FromBuffer(p);
+      break;
+    case DW_EH_PE_udata2:
+      result = ReadFromBuffer(p, 2);
+      break;
+    case DW_EH_PE_udata4:
+      result = ReadFromBuffer(p, 4);
+      break;
+    case DW_EH_PE_udata8:
+      result = ReadFromBuffer(p, 8);
+      break;
+    case DW_EH_PE_sleb128:
+      result = ReadLEB128FromBuffer(p);
+      break;
+    case DW_EH_PE_sdata2:
+      result = ReadSignValueFromBuffer(p, 2);
+      break;
+    case DW_EH_PE_sdata4:
+      result = ReadSignValueFromBuffer(p, 4);
+      break;
+    case DW_EH_PE_sdata8:
+      result = ReadSignValueFromBuffer(p, 8);
+      break;
+  }
+  switch (encoding & 0xf0) {
+    case DW_EH_PE_pcrel:
+      result += init_addr - section_begin + section_vaddr;
+      break;
+    case DW_EH_PE_datarel:
+      result += section_vaddr;
+      break;
+  }
+  return result;
+}
+
+static bool BuildEhFrameHdr(DebugFrameInfo* info, bool is_elf64) {
+  // For each fde entry, collect its (func_vaddr, fde_vaddr) pair.
+  std::vector<std::pair<uint64_t, uint64_t>> index_table;
+  // Map form cie_offset to fde encoding.
+  std::unordered_map<size_t, uint8_t> cie_map;
+  const uint8_t* eh_frame_begin = info->eh_frame.data.data();
+  const uint8_t* eh_frame_end = eh_frame_begin + info->eh_frame.data.size();
+  const uint8_t* p = eh_frame_begin;
+  uint64_t eh_frame_vaddr = info->eh_frame.vaddr;
+  while (p < eh_frame_end) {
+    const uint8_t* unit_begin = p;
+    uint64_t unit_len = ReadFromBuffer(p, 4);
+    size_t secbytes = 4;
+    if (unit_len == 0xffffffff) {
+      unit_len = ReadFromBuffer(p, 8);
+      secbytes = 8;
+    }
+    const uint8_t* unit_end = p + unit_len;
+    uint64_t cie_id = ReadFromBuffer(p, secbytes);
+    if (cie_id == 0) {
+      // This is a CIE.
+      // Read version
+      uint8_t version = *p++;
+      // Read augmentation
+      const char* augmentation = ReadStrFromBuffer(p);
+      if (version >= 4) {
+        // Read address size and segment size
+        p += 2;
+      }
+      // Read code alignment factor
+      ReadULEB128FromBuffer(p);
+      // Read data alignment factor
+      ReadLEB128FromBuffer(p);
+      // Read return address register
+      if (version == 1) {
+        p++;
+      } else {
+        ReadULEB128FromBuffer(p);
+      }
+      uint8_t fde_pointer_encoding = 0;
+      if (augmentation[0] == 'z') {
+        // Read augmentation length.
+        ReadULEB128FromBuffer(p);
+        for (int i = 1; augmentation[i] != '\0'; ++i) {
+          char c = augmentation[i];
+          if (c == 'R') {
+            fde_pointer_encoding = *p++;
+          } else if (c == 'P') {
+            // Read personality handler
+            uint8_t encoding = *p++;
+            OmitEncodedValue(encoding, p, is_elf64);
+          } else if (c == 'L') {
+            // Read lsda encoding
+            p++;
+          }
+        }
+      }
+      cie_map[unit_begin - eh_frame_begin] = fde_pointer_encoding;
+    } else {
+      // This is an FDE.
+      size_t cie_offset = p - secbytes - eh_frame_begin - cie_id;
+      auto it = cie_map.find(cie_offset);
+      if (it != cie_map.end()) {
+        uint8_t fde_pointer_encoding = it->second;
+        uint64_t initial_location =
+            ReadEhEncoding(p, fde_pointer_encoding, is_elf64, eh_frame_vaddr, eh_frame_begin);
+        uint64_t fde_vaddr = unit_begin - eh_frame_begin + eh_frame_vaddr;
+        index_table.push_back(std::make_pair(initial_location, fde_vaddr));
+      }
+    }
+    p = unit_end;
+  }
+  if (index_table.empty()) {
+    return false;
+  }
+  std::sort(index_table.begin(), index_table.end());
+  info->eh_frame.hdr_vaddr = 0;
+  info->eh_frame.hdr_data.resize(index_table.size() * 8);
+  uint32_t* ptr = reinterpret_cast<uint32_t*>(info->eh_frame.hdr_data.data());
+  for (auto& pair : index_table) {
+    *ptr++ = static_cast<uint32_t>(pair.first - info->eh_frame.hdr_vaddr);
+    *ptr++ = static_cast<uint32_t>(pair.second - info->eh_frame.hdr_vaddr);
+  }
+  info->eh_frame.fde_table_offset = 0;
+  info->eh_frame.min_func_vaddr = index_table[0].first;
+  return true;
+}
+
 template <class ELFT>
 DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf) {
   DebugFrameInfo* result = new DebugFrameInfo;
+  result->eh_frame.hdr_vaddr = 0;
   result->text_end_vaddr = std::numeric_limits<uint64_t>::max();
 
+  bool is_elf64 = (elf->getHeader()->getFileClass() == llvm::ELF::ELFCLASS64);
   bool has_eh_frame_hdr = false;
   bool has_eh_frame = false;
 
@@ -697,8 +921,7 @@ DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf
               data->data(), data->data() + data->size());
 
           uint64_t fde_table_offset;
-          if (GetFdeTableOffsetInEhFrameHdr(result->eh_frame.hdr_data,
-                                             &fde_table_offset)) {
+          if (GetFdeTableOffsetInEhFrameHdr(result->eh_frame.hdr_data, &fde_table_offset, is_elf64)) {
             result->eh_frame.fde_table_offset = fde_table_offset;
             // Make sure we have at least one entry in fde_table.
             if (fde_table_offset + 2 * sizeof(int32_t) <= data->size()) {
@@ -755,6 +978,18 @@ DebugFrameInfo* ReadDebugFrameFromELFFile(const llvm::object::ELFFile<ELFT>* elf
     }
   }
 
+  if (has_eh_frame) {
+    if (!has_eh_frame_hdr) {
+      // Some libraries (like /vendor/lib64/egl/eglSubDriverAndroid.so) contain empty
+      // .eh_frame_hdr.
+      if (BuildEhFrameHdr(result, is_elf64)) {
+        has_eh_frame_hdr = true;
+      }
+    }
+    if (has_eh_frame_hdr) {
+      result->has_eh_frame = true;
+    }
+  }
   if (has_eh_frame_hdr && has_eh_frame) {
     result->has_eh_frame = true;
   }
