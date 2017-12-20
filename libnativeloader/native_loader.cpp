@@ -382,7 +382,7 @@ class LibraryNamespaces {
                   config_file_path, &sonames,
                   [&company_name](const std::string& soname, std::string* error_msg) {
                     if (android::base::StartsWith(soname, "lib") &&
-                        android::base::EndsWith(soname, ("." + company_name + ".so").c_str())) {
+                        android::base::EndsWith(soname, "." + company_name + ".so")) {
                       return true;
                     } else {
                       *error_msg = "Library name \"" + soname +

@@ -76,7 +76,7 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 // current section parsers.  This is meant for /sys/ and /dev/ line entries for
                 // uevent.
                 for (const auto& [prefix, callback] : line_callbacks_) {
-                    if (android::base::StartsWith(args[0], prefix.c_str())) {
+                    if (android::base::StartsWith(args[0], prefix)) {
                         end_section();
 
                         if (auto result = callback(std::move(args)); !result) {

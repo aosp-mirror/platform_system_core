@@ -118,7 +118,7 @@ static bool tcp_host_is_local(const std::string& hostname) {
 bool is_socket_spec(const std::string& spec) {
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix.c_str())) {
+        if (StartsWith(spec, prefix)) {
             return true;
         }
     }
@@ -128,7 +128,7 @@ bool is_socket_spec(const std::string& spec) {
 bool is_local_socket_spec(const std::string& spec) {
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix.c_str())) {
+        if (StartsWith(spec, prefix)) {
             return true;
         }
     }
@@ -170,7 +170,7 @@ int socket_spec_connect(const std::string& spec, std::string* error) {
 
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix.c_str())) {
+        if (StartsWith(spec, prefix)) {
             if (!it.second.available) {
                 *error = StringPrintf("socket type %s is unavailable on this platform",
                                       it.first.c_str());
@@ -213,7 +213,7 @@ int socket_spec_listen(const std::string& spec, std::string* error, int* resolve
 
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix.c_str())) {
+        if (StartsWith(spec, prefix)) {
             if (!it.second.available) {
                 *error = StringPrintf("attempted to listen on unavailable socket type: '%s'",
                                       spec.c_str());
