@@ -57,12 +57,18 @@ extern template std::string Join(const std::vector<std::string>&, const std::str
 extern template std::string Join(const std::vector<const char*>&, const std::string&);
 
 // Tests whether 's' starts with 'prefix'.
+// TODO: string_view
 bool StartsWith(const std::string& s, const char* prefix);
 bool StartsWithIgnoreCase(const std::string& s, const char* prefix);
+bool StartsWith(const std::string& s, const std::string& prefix);
+bool StartsWithIgnoreCase(const std::string& s, const std::string& prefix);
 
 // Tests whether 's' ends with 'suffix'.
+// TODO: string_view
 bool EndsWith(const std::string& s, const char* suffix);
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix);
+bool EndsWith(const std::string& s, const std::string& prefix);
+bool EndsWithIgnoreCase(const std::string& s, const std::string& prefix);
 
 // Tests whether 'lhs' equals 'rhs', ignoring case.
 bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs);

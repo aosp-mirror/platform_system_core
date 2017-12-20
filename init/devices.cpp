@@ -127,7 +127,7 @@ Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t 
 }
 
 bool Permissions::Match(const std::string& path) const {
-    if (prefix_) return StartsWith(path, name_.c_str());
+    if (prefix_) return StartsWith(path, name_);
     if (wildcard_) return fnmatch(name_.c_str(), path.c_str(), FNM_PATHNAME) == 0;
     return path == name_;
 }
@@ -300,9 +300,9 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         static const std::string devices_platform_prefix = "/devices/platform/";
         static const std::string devices_prefix = "/devices/";
 
-        if (StartsWith(device, devices_platform_prefix.c_str())) {
+        if (StartsWith(device, devices_platform_prefix)) {
             device = device.substr(devices_platform_prefix.length());
-        } else if (StartsWith(device, devices_prefix.c_str())) {
+        } else if (StartsWith(device, devices_prefix)) {
             device = device.substr(devices_prefix.length());
         }
 
