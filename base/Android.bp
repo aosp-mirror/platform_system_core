@@ -116,6 +116,7 @@ cc_test {
         "stringprintf_test.cpp",
         "strings_test.cpp",
         "test_main.cpp",
+        "test_utils_test.cpp",
     ],
     target: {
         android: {
