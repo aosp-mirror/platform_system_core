@@ -218,6 +218,16 @@ cc_test {
     },
 }
 
+cc_benchmark {
+    name: "debuggerd_benchmark",
+    defaults: ["debuggerd_defaults"],
+    srcs: ["debuggerd_benchmark.cpp"],
+    shared_libs: [
+        "libbase",
+        "libdebuggerd_client",
+    ],
+}
+
 cc_binary {
     name: "crash_dump",
     srcs: [
