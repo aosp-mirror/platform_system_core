@@ -315,8 +315,7 @@ bool isStrongRebootReason(const std::string& r) {
   for (auto& s : knownReasons) {
     if (s == "cold") break;
     // Prefix defined as terminated by a nul or comma (,).
-    if (android::base::StartsWith(r, s.c_str()) &&
-        ((r.length() == s.length()) || (r[s.length()] == ','))) {
+    if (android::base::StartsWith(r, s) && ((r.length() == s.length()) || (r[s.length()] == ','))) {
       return true;
     }
   }
@@ -328,8 +327,7 @@ bool isKernelRebootReason(const std::string& r) {
   for (auto& s : knownReasons) {
     if (s == "recovery") break;
     // Prefix defined as terminated by a nul or comma (,).
-    if (android::base::StartsWith(r, s.c_str()) &&
-        ((r.length() == s.length()) || (r[s.length()] == ','))) {
+    if (android::base::StartsWith(r, s) && ((r.length() == s.length()) || (r[s.length()] == ','))) {
       return true;
     }
   }
@@ -340,8 +338,7 @@ bool isKernelRebootReason(const std::string& r) {
 bool isKnownRebootReason(const std::string& r) {
   for (auto& s : knownReasons) {
     // Prefix defined as terminated by a nul or comma (,).
-    if (android::base::StartsWith(r, s.c_str()) &&
-        ((r.length() == s.length()) || (r[s.length()] == ','))) {
+    if (android::base::StartsWith(r, s) && ((r.length() == s.length()) || (r[s.length()] == ','))) {
       return true;
     }
   }

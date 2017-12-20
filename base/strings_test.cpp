@@ -253,6 +253,26 @@ TEST(strings, EndsWithIgnoreCase_contains_prefix) {
   ASSERT_FALSE(android::base::EndsWithIgnoreCase("foobar", "FOO"));
 }
 
+TEST(strings, StartsWith_std_string) {
+  ASSERT_TRUE(android::base::StartsWith("hello", std::string{"hell"}));
+  ASSERT_FALSE(android::base::StartsWith("goodbye", std::string{"hell"}));
+}
+
+TEST(strings, StartsWithIgnoreCase_std_string) {
+  ASSERT_TRUE(android::base::StartsWithIgnoreCase("HeLlO", std::string{"hell"}));
+  ASSERT_FALSE(android::base::StartsWithIgnoreCase("GoOdByE", std::string{"hell"}));
+}
+
+TEST(strings, EndsWith_std_string) {
+  ASSERT_TRUE(android::base::EndsWith("hello", std::string{"lo"}));
+  ASSERT_FALSE(android::base::EndsWith("goodbye", std::string{"lo"}));
+}
+
+TEST(strings, EndsWithIgnoreCase_std_string) {
+  ASSERT_TRUE(android::base::EndsWithIgnoreCase("HeLlO", std::string{"lo"}));
+  ASSERT_FALSE(android::base::EndsWithIgnoreCase("GoOdByE", std::string{"lo"}));
+}
+
 TEST(strings, EqualsIgnoreCase) {
   ASSERT_TRUE(android::base::EqualsIgnoreCase("foo", "FOO"));
   ASSERT_TRUE(android::base::EqualsIgnoreCase("FOO", "foo"));
