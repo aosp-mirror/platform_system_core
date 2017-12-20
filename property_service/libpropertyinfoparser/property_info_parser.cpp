@@ -96,8 +96,12 @@ void PropertyInfoArea::CheckPrefixMatch(const char* remaining_name, const TrieNo
     if (prefix_len > remaining_name_size) continue;
 
     if (!strncmp(c_string(trie_node.prefix(i)->name_offset), remaining_name, prefix_len)) {
-      *context_index = trie_node.prefix(i)->context_index;
-      *schema_index = trie_node.prefix(i)->schema_index;
+      if (trie_node.prefix(i)->context_index != ~0u) {
+        *context_index = trie_node.prefix(i)->context_index;
+      }
+      if (trie_node.prefix(i)->schema_index != ~0u) {
+        *schema_index = trie_node.prefix(i)->schema_index;
+      }
       return;
     }
   }
@@ -142,8 +146,20 @@ void PropertyInfoArea::GetPropertyInfoIndexes(const char* name, uint32_t* contex
   // Check exact matches
   for (uint32_t i = 0; i < trie_node.num_exact_matches(); ++i) {
     if (!strcmp(c_string(trie_node.exact_match(i)->name_offset), remaining_name)) {
-      if (context_index != nullptr) *context_index = trie_node.exact_match(i)->context_index;
-      if (schema_index != nullptr) *schema_index = trie_node.exact_match(i)->schema_index;
+      if (context_index != nullptr) {
+        if (trie_node.exact_match(i)->context_index != ~0u) {
+          *context_index = trie_node.exact_match(i)->context_index;
+        } else {
+          *context_index = return_context_index;
+        }
+      }
+      if (schema_index != nullptr) {
+        if (trie_node.exact_match(i)->schema_index != ~0u) {
+          *schema_index = trie_node.exact_match(i)->schema_index;
+        } else {
+          *schema_index = return_schema_index;
+        }
+      }
       return;
     }
   }
