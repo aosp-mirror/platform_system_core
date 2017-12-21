@@ -23,6 +23,8 @@ struct autosuspend_ops {
     void (*set_wakeup_callback)(void (*func)(bool success));
 };
 
+__BEGIN_DECLS
 struct autosuspend_ops *autosuspend_wakeup_count_init(void);
+__END_DECLS
 
 #endif
