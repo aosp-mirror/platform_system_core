@@ -21,8 +21,8 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -68,8 +68,8 @@ static void* suspend_thread_func(void* arg __attribute__((unused))) {
         success = false;
         ALOGV("%s: read wakeup_count", __func__);
         lseek(wakeup_count_fd, 0, SEEK_SET);
-        wakeup_count_len = TEMP_FAILURE_RETRY(read(wakeup_count_fd, wakeup_count,
-                sizeof(wakeup_count)));
+        wakeup_count_len =
+            TEMP_FAILURE_RETRY(read(wakeup_count_fd, wakeup_count, sizeof(wakeup_count)));
         if (wakeup_count_len < 0) {
             strerror_r(errno, buf, sizeof(buf));
             ALOGE("Error reading from %s: %s", SYS_POWER_WAKEUP_COUNT, buf);
