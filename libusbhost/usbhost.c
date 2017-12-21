@@ -464,17 +464,30 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
     return (struct usb_device_descriptor*)device->desc;
 }
 
-char* usb_device_get_string(struct usb_device *device, int id, int timeout)
-{
-    char string[256];
-    __u16 buffer[MAX_STRING_DESCRIPTOR_LENGTH / sizeof(__u16)];
+/* Returns a USB descriptor string for the given string ID.
+ * Return value: < 0 on error.  0 on success.
+ * The string is returned in ucs2_out in USB-native UCS-2 encoding.
+ *
+ * parameters:
+ *  id - the string descriptor index.
+ *  timeout - in milliseconds (see Documentation/driver-api/usb/usb.rst)
+ *  ucs2_out - Must point to null on call.
+ *             Will be filled in with a buffer on success.
+ *             If this is non-null on return, it must be free()d.
+ *  response_size - size, in bytes, of ucs-2 string in ucs2_out.
+ *                  The size isn't guaranteed to include null termination.
+ * Call free() to free the result when you are done with it.
+ */
+int usb_device_get_string_ucs2(struct usb_device* device, int id, int timeout, void** ucs2_out,
+                               size_t* response_size) {
     __u16 languages[MAX_STRING_DESCRIPTOR_LENGTH / sizeof(__u16)];
-    int i, result;
+    char response[MAX_STRING_DESCRIPTOR_LENGTH];
+    int result;
     int languageCount = 0;
 
-    if (id == 0) return NULL;
+    if (id == 0) return -1;
+    if (*ucs2_out != NULL) return -1;
 
-    string[0] = 0;
     memset(languages, 0, sizeof(languages));
 
     // read list of supported languages
@@ -485,25 +498,54 @@ char* usb_device_get_string(struct usb_device *device, int id, int timeout)
     if (result > 0)
         languageCount = (result - 2) / 2;
 
-    for (i = 1; i <= languageCount; i++) {
-        memset(buffer, 0, sizeof(buffer));
+    for (int i = 1; i <= languageCount; i++) {
+        memset(response, 0, sizeof(response));
 
-        result = usb_device_control_transfer(device,
-                USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-                (USB_DT_STRING << 8) | id, languages[i], buffer, sizeof(buffer),
-                timeout);
-        if (result > 0) {
-            int i;
-            // skip first word, and copy the rest to the string, changing shorts to bytes.
-            result /= 2;
-            for (i = 1; i < result; i++)
-                string[i - 1] = buffer[i];
-            string[i - 1] = 0;
-            return strdup(string);
+        result = usb_device_control_transfer(
+            device, USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
+            (USB_DT_STRING << 8) | id, languages[i], response, sizeof(response), timeout);
+        if (result >= 2) {  // string contents begin at offset 2.
+            int descriptor_len = result - 2;
+            char* out = malloc(descriptor_len + 3);
+            if (out == NULL) {
+                return -1;
+            }
+            memcpy(out, response + 2, descriptor_len);
+            // trail with three additional NULLs, so that there's guaranteed
+            // to be a UCS-2 NULL character beyond whatever USB returned.
+            // The returned string length is still just what USB returned.
+            memset(out + descriptor_len, '\0', 3);
+            *ucs2_out = (void*)out;
+            *response_size = descriptor_len;
+            return 0;
         }
     }
+    return -1;
+}
 
-    return NULL;
+/* Warning: previously this blindly returned the lower 8 bits of
+ * every UCS-2 character in a USB descriptor.  Now it will replace
+ * values > 127 with ascii '?'.
+ */
+char* usb_device_get_string(struct usb_device* device, int id, int timeout) {
+    char* ascii_string = NULL;
+    size_t raw_string_len = 0;
+    size_t i;
+    if (usb_device_get_string_ucs2(device, id, timeout, (void**)&ascii_string, &raw_string_len) < 0)
+        return NULL;
+    if (ascii_string == NULL) return NULL;
+    for (i = 0; i < raw_string_len / 2; ++i) {
+        // wire format for USB is always little-endian.
+        char lower = ascii_string[2 * i];
+        char upper = ascii_string[2 * i + 1];
+        if (upper || (lower & 0x80)) {
+            ascii_string[i] = '?';
+        } else {
+            ascii_string[i] = lower;
+        }
+    }
+    ascii_string[i] = '\0';
+    return ascii_string;
 }
 
 char* usb_device_get_manufacturer_name(struct usb_device *device, int timeout)
