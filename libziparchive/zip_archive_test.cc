@@ -64,11 +64,6 @@ static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* han
   return OpenArchive(abs_path.c_str(), handle);
 }
 
-static void AssertNameEquals(const std::string& name_str, const ZipString& name) {
-  ASSERT_EQ(name_str.size(), name.name_length);
-  ASSERT_EQ(0, memcmp(name_str.c_str(), name.name, name.name_length));
-}
-
 static void SetZipString(ZipString* zip_str, const std::string& str) {
   zip_str->name = reinterpret_cast<const uint8_t*>(str.c_str());
   zip_str->name_length = str.size();
@@ -117,132 +112,60 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   close(fd);
 }
 
-TEST(ziparchive, Iteration) {
+static void AssertIterationOrder(const ZipString* prefix, const ZipString* suffix,
+                                 const std::vector<std::string>& expected_names_sorted) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, nullptr, nullptr));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, prefix, suffix));
 
   ZipEntry data;
+  std::vector<std::string> names;
+
   ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // a.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("a.txt", name);
-
-  // b.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b.txt", name);
-
-  // b/
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/", name);
+  for (size_t i = 0; i < expected_names_sorted.size(); ++i) {
+    ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+    names.push_back(std::string(reinterpret_cast<const char*>(name.name), name.name_length));
+  }
 
   // End of iteration.
   ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
   CloseArchive(handle);
+
+  // Assert that the names are as expected.
+  std::sort(names.begin(), names.end());
+  ASSERT_EQ(expected_names_sorted, names);
+}
+
+TEST(ziparchive, Iteration) {
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/", "b/c.txt",
+                                                                  "b/d.txt"};
+
+  AssertIterationOrder(nullptr, nullptr, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefix) {
-  ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
-
-  void* iteration_cookie;
   ZipString prefix("b/");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, nullptr));
+  static const std::vector<std::string> kExpectedMatchesSorted = {"b/", "b/c.txt", "b/d.txt"};
 
-  ZipEntry data;
-  ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // b/
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/", name);
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
-  CloseArchive(handle);
+  AssertIterationOrder(&prefix, nullptr, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithSuffix) {
-  ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
-
-  void* iteration_cookie;
   ZipString suffix(".txt");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, nullptr, &suffix));
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/c.txt",
+                                                                  "b/d.txt"};
 
-  ZipEntry data;
-  ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // a.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("a.txt", name);
-
-  // b.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b.txt", name);
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
-  CloseArchive(handle);
+  AssertIterationOrder(nullptr, &suffix, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefixAndSuffix) {
-  ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
-
-  void* iteration_cookie;
   ZipString prefix("b");
   ZipString suffix(".txt");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
+  static const std::vector<std::string> kExpectedMatchesSorted = {"b.txt", "b/c.txt", "b/d.txt"};
 
-  ZipEntry data;
-  ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // b.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b.txt", name);
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
-  CloseArchive(handle);
+  AssertIterationOrder(&prefix, &suffix, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
