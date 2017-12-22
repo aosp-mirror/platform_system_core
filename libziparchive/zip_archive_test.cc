@@ -587,10 +587,11 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   // an entry whose name is "name" and whose size is 12 (contents =
   // "abdcdefghijk").
   ZipEntry entry;
-  ZipString empty_name;
-  SetZipString(&empty_name, "name");
+  ZipString name;
+  std::string name_str = "name";
+  SetZipString(&name, name_str);
 
-  ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, name, &entry));
   ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
 
   entry_out->resize(12);
@@ -610,7 +611,7 @@ TEST(ziparchive, ValidDataDescriptors) {
   ASSERT_EQ('k', entry[11]);
 }
 
-TEST(ziparchive, InvalidDataDescriptors) {
+TEST(ziparchive, InvalidDataDescriptors_csize) {
   std::vector<uint8_t> invalid_csize = kDataDescriptorZipFile;
   invalid_csize[kCSizeOffset] = 0xfe;
 
@@ -619,13 +620,15 @@ TEST(ziparchive, InvalidDataDescriptors) {
   ExtractEntryToMemory(invalid_csize, &entry, &error_code);
 
   ASSERT_EQ(kInconsistentInformation, error_code);
+}
 
+TEST(ziparchive, InvalidDataDescriptors_size) {
   std::vector<uint8_t> invalid_size = kDataDescriptorZipFile;
-  invalid_csize[kSizeOffset] = 0xfe;
+  invalid_size[kSizeOffset] = 0xfe;
 
-  error_code = 0;
-  entry.clear();
-  ExtractEntryToMemory(invalid_csize, &entry, &error_code);
+  std::vector<uint8_t> entry;
+  int32_t error_code = 0;
+  ExtractEntryToMemory(invalid_size, &entry, &error_code);
 
   ASSERT_EQ(kInconsistentInformation, error_code);
 }
