@@ -395,9 +395,6 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   // crash_dump is ptracing us, fork off a copy of our address space for it to use.
   create_vm_process();
 
-  input_read.reset();
-  input_write.reset();
-
   // Don't leave a zombie child.
   int status;
   if (TEMP_FAILURE_RETRY(waitpid(crash_dump_pid, &status, 0)) == -1) {
@@ -406,6 +403,14 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
   }
+
+  if (thread_info->siginfo->si_signo != DEBUGGER_SIGNAL) {
+    // For crashes, we don't need to minimize pause latency.
+    // Wait for the dump to complete before having the process exit, to avoid being murdered by
+    // ActivityManager or init.
+    TEMP_FAILURE_RETRY(read(input_read, &buf, sizeof(buf)));
+  }
+
   return 0;
 }
 
