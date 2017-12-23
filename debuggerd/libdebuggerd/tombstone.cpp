@@ -402,6 +402,10 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
     dump_signal_info(log, thread_info.siginfo);
   }
 
+  if (primary_thread) {
+    dump_abort_message(log, process_memory, abort_msg_address);
+  }
+
   dump_registers(log, thread_info.registers.get());
 
   std::vector<backtrace_frame_data_t> frames;
@@ -416,10 +420,6 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
 
     _LOG(log, logtype::STACK, "\nstack:\n");
     dump_stack(log, map, process_memory, frames);
-  }
-
-  if (primary_thread) {
-    dump_abort_message(log, process_memory, abort_msg_address);
   }
 
   if (primary_thread) {
