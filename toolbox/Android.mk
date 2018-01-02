@@ -13,17 +13,25 @@ OUR_TOOLS := \
     getevent \
     newfs_msdos \
 
-ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
+OUR_CPP_TOOLS := \
+    getprop \
+
+ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS) $(OUR_CPP_TOOLS)
 
 LOCAL_SRC_FILES := \
     toolbox.c \
     $(patsubst %,%.c,$(OUR_TOOLS)) \
+    $(patsubst %,%.cpp,$(OUR_CPP_TOOLS)) \
 
 LOCAL_CFLAGS += $(common_cflags)
+LOCAL_CPPFLAGS += -std=gnu++1z
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/upstream-netbsd/include/
 
 LOCAL_SHARED_LIBRARIES := \
+    libbase \
     libcutils \
+
+LOCAL_STATIC_LIBRARIES := libpropertyinfoparser
 
 LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
 
