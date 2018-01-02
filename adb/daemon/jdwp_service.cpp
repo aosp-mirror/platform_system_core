@@ -128,7 +128,7 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc);
 static void jdwp_process_list_updated(void);
 
 struct JdwpProcess;
-static std::list<std::unique_ptr<JdwpProcess>> _jdwp_list;
+static auto& _jdwp_list = *new std::list<std::unique_ptr<JdwpProcess>>();
 
 struct JdwpProcess {
     explicit JdwpProcess(int socket) {
@@ -511,7 +511,7 @@ struct JdwpTracker : public asocket {
     bool need_initial;
 };
 
-static std::vector<std::unique_ptr<JdwpTracker>> _jdwp_trackers;
+static auto& _jdwp_trackers = *new std::vector<std::unique_ptr<JdwpTracker>>();
 
 static void jdwp_process_list_updated(void) {
     std::string data;
