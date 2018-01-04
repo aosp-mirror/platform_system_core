@@ -41,6 +41,10 @@ bool BuildTrie(const std::vector<PropertyInfoEntry>& property_info,
                const std::string& default_context, const std::string& default_schema,
                std::string* serialized_trie, std::string* error);
 
+void ParsePropertyInfoFile(const std::string& file_contents,
+                           std::vector<PropertyInfoEntry>* property_infos,
+                           std::vector<std::string>* errors);
+
 }  // namespace properties
 }  // namespace android
 
