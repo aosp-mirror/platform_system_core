@@ -160,7 +160,8 @@ int audit_setup(int fd, pid_t pid) {
      * and the the mask set to AUDIT_STATUS_PID
      */
     status.pid = pid;
-    status.mask = AUDIT_STATUS_PID;
+    status.mask = AUDIT_STATUS_PID | AUDIT_STATUS_RATE_LIMIT;
+    status.rate_limit = AUDIT_RATE_LIMIT; /* audit entries per second */
 
     /* Let the kernel know this pid will be registering for audit events */
     rc = audit_send(fd, AUDIT_SET, &status, sizeof(status));
@@ -178,26 +179,6 @@ int audit_setup(int fd, pid_t pid) {
      * so I went to non-blocking and it seemed to fix the bug.
      * Need to investigate further.
      */
-    audit_get_reply(fd, &rep, GET_REPLY_NONBLOCKING, 0);
-
-    return 0;
-}
-
-int audit_rate_limit(int fd, unsigned rate_limit) {
-    int rc;
-    struct audit_message rep;
-    struct audit_status status;
-
-    memset(&status, 0, sizeof(status));
-
-    status.mask = AUDIT_STATUS_RATE_LIMIT;
-    status.rate_limit = rate_limit; /* audit entries per second */
-
-    rc = audit_send(fd, AUDIT_SET, &status, sizeof(status));
-    if (rc < 0) {
-        return rc;
-    }
-
     audit_get_reply(fd, &rep, GET_REPLY_NONBLOCKING, 0);
 
     return 0;
