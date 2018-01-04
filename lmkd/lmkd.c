@@ -860,6 +860,7 @@ static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
     }
     maxevents++;
     mpevfd[level] = evfd;
+    close(evctlfd);
     return true;
 
 err:
