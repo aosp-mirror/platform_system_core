@@ -14,37 +14,37 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SPACE_TOKENIZER_H
-#define _INIT_SPACE_TOKENIZER_H
+#ifndef PROPERTY_INFO_SERIALIZER_SPACE_TOKENIZER_H
+#define PROPERTY_INFO_SERIALIZER_SPACE_TOKENIZER_H
 
 namespace android {
-namespace init {
+namespace properties {
 
 class SpaceTokenizer {
-  public:
-    SpaceTokenizer(const std::string& string)
-        : string_(string), it_(string_.begin()), end_(string_.end()) {}
+ public:
+  SpaceTokenizer(const std::string& string)
+      : string_(string), it_(string_.begin()), end_(string_.end()) {}
 
-    std::string GetNext() {
-        auto next = std::string();
-        while (it_ != end_ && !isspace(*it_)) {
-            next.push_back(*it_++);
-        }
-        while (it_ != end_ && isspace(*it_)) {
-            it_++;
-        }
-        return next;
+  std::string GetNext() {
+    auto next = std::string();
+    while (it_ != end_ && !isspace(*it_)) {
+      next.push_back(*it_++);
     }
+    while (it_ != end_ && isspace(*it_)) {
+      it_++;
+    }
+    return next;
+  }
 
-    std::string GetRemaining() { return std::string(it_, end_); }
+  std::string GetRemaining() { return std::string(it_, end_); }
 
-  private:
-    std::string string_;
-    std::string::const_iterator it_;
-    std::string::const_iterator end_;
+ private:
+  std::string string_;
+  std::string::const_iterator it_;
+  std::string::const_iterator end_;
 };
 
-}  // namespace init
+}  // namespace properties
 }  // namespace android
 
 #endif

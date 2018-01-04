@@ -1,5 +1,6 @@
 cc_defaults {
     name: "propertyinfoserializer_defaults",
+    host_supported: true,
     cpp_std: "experimental",
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
@@ -19,6 +20,7 @@ cc_library_static {
     name: "libpropertyinfoserializer",
     defaults: ["propertyinfoserializer_defaults"],
     srcs: [
+        "property_info_file.cpp",
         "property_info_serializer.cpp",
         "trie_builder.cpp",
         "trie_serializer.cpp",
