@@ -379,7 +379,7 @@ int storage_file_read(struct storage_msg *msg,
     }
 
     if (req->size > MAX_READ_SIZE) {
-        ALOGW("%s: request is too large (%zd > %zd) - refusing\n",
+        ALOGW("%s: request is too large (%u > %d) - refusing\n",
               __func__, req->size, MAX_READ_SIZE);
         msg->result = STORAGE_ERR_NOT_VALID;
         goto err_response;
