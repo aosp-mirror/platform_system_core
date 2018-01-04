@@ -19,4 +19,8 @@ cc_library {
         "-fvisibility=hidden",
     ],
     export_include_dirs: ["include"],
+    required: [
+        "llndk.libraries.txt",
+        "vndksp.libraries.txt",
+    ],
 }
