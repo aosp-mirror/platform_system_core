@@ -1,5 +1,6 @@
 cc_library_static {
     name: "libpropertyinfoparser",
+    host_supported: true,
     srcs: ["property_info_parser.cpp"],
 
     cpp_std: "experimental",
