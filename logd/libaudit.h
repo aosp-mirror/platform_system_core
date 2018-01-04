@@ -89,22 +89,8 @@ extern int audit_get_reply(int fd, struct audit_message* rep, reply_t block,
  */
 extern int audit_setup(int fd, pid_t pid);
 
-/**
- * Sets the rate limit to receive audit netlink events from the kernel
- * @param fd
- *  The fd returned by a call to audit_open()
- * @param max_rate
- *  The cap of the maximum number of audit messages a second
- * @return
- *  This function returns 0 on success, -errno on error.
- */
-
-/* Guidelines to follow for dynamic rate_limit */
-#define AUDIT_RATE_LIMIT_DEFAULT 20        /* acceptable burst rate      */
-#define AUDIT_RATE_LIMIT_BURST_DURATION 10 /* number of seconds of burst */
-#define AUDIT_RATE_LIMIT_MAX 5             /* acceptable sustained rate  */
-
-extern int audit_rate_limit(int fd, unsigned rate_limit);
+/* Max audit messages per second  */
+#define AUDIT_RATE_LIMIT 5
 
 __END_DECLS
 
