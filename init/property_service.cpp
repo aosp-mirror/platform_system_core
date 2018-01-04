@@ -350,13 +350,15 @@ class SocketConnection {
     ufds[0].events = POLLIN;
     ufds[0].revents = 0;
     while (*timeout_ms > 0) {
-      Timer timer;
-      int nr = poll(ufds, 1, *timeout_ms);
-      uint64_t millis = timer.duration().count();
-      *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
+        auto start_time = std::chrono::steady_clock::now();
+        int nr = poll(ufds, 1, *timeout_ms);
+        auto now = std::chrono::steady_clock::now();
+        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+        uint64_t millis = time_elapsed.count();
+        *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
 
-      if (nr > 0) {
-        return true;
+        if (nr > 0) {
+            return true;
       }
 
       if (nr == 0) {
