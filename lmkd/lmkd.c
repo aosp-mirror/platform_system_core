@@ -29,13 +29,11 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
-#include <processgroup/processgroup.h>
 
 /*
  * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
