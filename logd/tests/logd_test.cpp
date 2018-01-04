@@ -1195,51 +1195,14 @@ TEST(logd, sepolicy_rate_limiter) {
                           << "fail as this device is in a bad state, "
                           << "but is not strictly a unit test failure.";
     }
-    // sepolicy_rate_limiter_maximum
-    {  // maximum precharch test block.
-        static constexpr int rate = AUDIT_RATE_LIMIT_MAX;
-        static constexpr int duration = 2;
-        // Two seconds of a liveable sustained rate
-        EXPECT_EQ(rate * duration,
-                  count_avc(sepolicy_rate(rate, rate * duration)));
-    }
-    // sepolicy_rate_limiter_sub_burst
-    {  // maximum period below half way between sustainable and burst rate
-        static constexpr int threshold =
-            ((AUDIT_RATE_LIMIT_BURST_DURATION *
-              (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-             1) /
-            2;
-        static constexpr int rate =
-            (threshold / AUDIT_RATE_LIMIT_BURST_DURATION) - 1;
-        static constexpr int duration = AUDIT_RATE_LIMIT_BURST_DURATION;
-        EXPECT_EQ(rate * duration,
-                  count_avc(sepolicy_rate(rate, rate * duration)));
-    }
-    // sepolicy_rate_limiter_spam
-    {  // hit avc: hard beyond reason block.
-        // maximum period of double the maximum burst rate
-        static constexpr int threshold =
-            ((AUDIT_RATE_LIMIT_BURST_DURATION *
-              (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-             1) /
-            2;
-        static constexpr int rate = AUDIT_RATE_LIMIT_DEFAULT * 2;
-        static constexpr int duration = threshold / AUDIT_RATE_LIMIT_DEFAULT;
-        EXPECT_GE(
-            ((AUDIT_RATE_LIMIT_DEFAULT * duration) * 115) / 100,  // +15% margin
-            count_avc(sepolicy_rate(rate, rate * duration)));
-        // give logd another 3 seconds to react to the burst before checking
-        sepolicy_rate(rate, rate * 3);
-        // maximum period at double maximum burst rate (spam filter kicked in)
-        EXPECT_GE(threshold * 2,
-                  count_avc(sepolicy_rate(
-                      rate, rate * AUDIT_RATE_LIMIT_BURST_DURATION)));
-        // cool down, and check unspammy rate still works
-        sleep(2);
-        EXPECT_LE(AUDIT_RATE_LIMIT_BURST_DURATION - 1,  // allow _one_ lost
-                  count_avc(sepolicy_rate(1, AUDIT_RATE_LIMIT_BURST_DURATION)));
-    }
+
+    static const int rate = AUDIT_RATE_LIMIT;
+    static const int duration = 2;
+    // Two seconds of sustained denials. Depending on the overlap in the time
+    // window that the kernel is considering vs what this test is considering,
+    // allow some additional denials to prevent a flaky test.
+    EXPECT_LE(count_avc(sepolicy_rate(rate, rate * duration)),
+              rate * duration + rate);
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
