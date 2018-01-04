@@ -37,6 +37,25 @@
 #include <log/log.h>
 #include <processgroup/processgroup.h>
 
+/*
+ * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
+ * to profile and correlate with OOM kills
+ */
+#ifdef LMKD_TRACE_KILLS
+
+#define ATRACE_TAG ATRACE_TAG_ALWAYS
+#include <cutils/trace.h>
+
+#define TRACE_KILL_START(pid) ATRACE_INT(__FUNCTION__, pid);
+#define TRACE_KILL_END()      ATRACE_INT(__FUNCTION__, 0);
+
+#else /* LMKD_TRACE_KILLS */
+
+#define TRACE_KILL_START(pid)
+#define TRACE_KILL_END()
+
+#endif /* LMKD_TRACE_KILLS */
+
 #ifndef __unused
 #define __unused __attribute__((__unused__))
 #endif
@@ -638,6 +657,8 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
         return -1;
     }
 
+    TRACE_KILL_START(pid);
+
     r = kill(pid, SIGKILL);
     ALOGI(
         "Killing '%s' (%d), uid %d, adj %d\n"
@@ -645,6 +666,8 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
         taskname, pid, uid, procp->oomadj, tasksize * page_k,
         level_name[level], min_score_adj);
     pid_remove(pid);
+
+    TRACE_KILL_END();
 
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);

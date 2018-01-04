@@ -10,4 +10,12 @@ cc_binary {
     cflags: ["-Werror"],
 
     init_rc: ["lmkd.rc"],
+
+    product_variables: {
+        debuggable: {
+            cflags: [
+                "-DLMKD_TRACE_KILLS"
+            ],
+        },
+    },
 }
