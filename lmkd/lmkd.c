@@ -102,7 +102,7 @@ static const char *level_name[] = {
 };
 
 static int level_oomadj[VMPRESS_LEVEL_COUNT];
-static int mpevfd[VMPRESS_LEVEL_COUNT];
+static int mpevfd[VMPRESS_LEVEL_COUNT] = { -1, -1, -1 };
 static bool debug_process_killing;
 static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
@@ -745,11 +745,20 @@ static void mp_event_common(enum vmpressure_level level) {
     unsigned long long evcount;
     int64_t mem_usage, memsw_usage;
     int64_t mem_pressure;
+    enum vmpressure_level lvl;
 
-    ret = read(mpevfd[level], &evcount, sizeof(evcount));
-    if (ret < 0)
-        ALOGE("Error reading memory pressure event fd; errno=%d",
-              errno);
+    /*
+     * Check all event counters from low to critical
+     * and upgrade to the highest priority one. By reading
+     * eventfd we also reset the event counters.
+     */
+    for (lvl = VMPRESS_LEVEL_LOW; lvl < VMPRESS_LEVEL_COUNT; lvl++) {
+        if (mpevfd[lvl] != -1 &&
+            read(mpevfd[lvl], &evcount, sizeof(evcount)) > 0 &&
+            evcount > 0 && lvl > level) {
+            level = lvl;
+        }
+    }
 
     mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
     memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
