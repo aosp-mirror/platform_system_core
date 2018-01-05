@@ -2,8 +2,12 @@ cc_binary {
     name: "property_info_checker",
     host_supported: true,
     cpp_std: "experimental",
-    sanitize: {
-        misc_undefined: ["signed-integer-overflow"],
+    target: {
+        linux: {
+            sanitize: {
+                misc_undefined: ["signed-integer-overflow"],
+            },
+        },
     },
     static_libs: [
         "libpropertyinfoserializer",
