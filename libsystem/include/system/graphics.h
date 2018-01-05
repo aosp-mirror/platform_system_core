@@ -257,6 +257,11 @@ struct android_smpte2086_metadata {
     float minLuminance;
 };
 
+struct android_cta861_3_metadata {
+    float maxContentLightLevel;
+    float maxFrameAverageLightLevel;
+};
+
 #ifdef __cplusplus
 }
 #endif
