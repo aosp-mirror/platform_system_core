@@ -28,6 +28,8 @@
 
 using android::hardware::IPCThreadState;
 using android::hardware::configureRpcThreadpool;
+using android::hardware::handleTransportPoll;
+using android::hardware::setupTransportPolling;
 using android::hardware::health::V1_0::HealthInfo;
 using android::hardware::health::V1_0::hal_conversion::convertToHealthInfo;
 using android::hardware::health::V2_0::IHealth;
@@ -35,21 +37,19 @@ using android::hardware::health::V2_0::implementation::Health;
 
 extern int healthd_main(void);
 
+static int gBinderFd = -1;
+
 static void binder_event(uint32_t /*epevents*/) {
-    IPCThreadState::self()->handlePolledCommands();
+    if (gBinderFd >= 0) handleTransportPoll(gBinderFd);
 }
 
 void healthd_mode_service_2_0_init(struct healthd_config* config) {
-    int binderFd;
-
     LOG(INFO) << LOG_TAG << " Hal is starting up...";
 
-    configureRpcThreadpool(1, false /* callerWillJoin */);
-    IPCThreadState::self()->disableBackgroundScheduling(true);
-    IPCThreadState::self()->setupPolling(&binderFd);
+    gBinderFd = setupTransportPolling();
 
-    if (binderFd >= 0) {
-        if (healthd_register_event(binderFd, binder_event))
+    if (gBinderFd >= 0) {
+        if (healthd_register_event(gBinderFd, binder_event))
             LOG(ERROR) << LOG_TAG << ": Register for binder events failed";
     }
 
