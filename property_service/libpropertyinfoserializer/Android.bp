@@ -2,8 +2,12 @@ cc_defaults {
     name: "propertyinfoserializer_defaults",
     host_supported: true,
     cpp_std: "experimental",
-    sanitize: {
-        misc_undefined: ["signed-integer-overflow"],
+    target: {
+        linux: {
+            sanitize: {
+                misc_undefined: ["signed-integer-overflow"],
+            },
+        },
     },
     cppflags: [
         "-Wall",
