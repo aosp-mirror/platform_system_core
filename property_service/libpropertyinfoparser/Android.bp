@@ -4,8 +4,12 @@ cc_library_static {
     srcs: ["property_info_parser.cpp"],
 
     cpp_std: "experimental",
-    sanitize: {
-        misc_undefined: ["signed-integer-overflow"],
+    target: {
+        linux: {
+            sanitize: {
+                misc_undefined: ["signed-integer-overflow"],
+            },
+        },
     },
     cppflags: [
         "-Wall",
