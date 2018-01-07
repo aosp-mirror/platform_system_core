@@ -395,9 +395,9 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
     }
 
     // Copy user permission bits to "group" and "other" permissions.
-    mode &= 0777;
-    mode |= ((mode >> 3) & 0070);
-    mode |= ((mode >> 3) & 0007);
+    // mode &= 0777;
+    // mode |= ((mode >> 3) & 0070);
+    // mode |= ((mode >> 3) & 0007);
 
     uid_t uid = -1;
     gid_t gid = -1;
