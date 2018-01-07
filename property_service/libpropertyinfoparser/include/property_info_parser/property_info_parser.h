@@ -18,6 +18,7 @@
 #define PROPERTY_INFO_PARSER_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 namespace android {
 namespace properties {

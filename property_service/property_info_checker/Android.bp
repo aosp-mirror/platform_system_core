@@ -1,0 +1,18 @@
+cc_binary {
+    name: "property_info_checker",
+    host_supported: true,
+    cpp_std: "experimental",
+    target: {
+        linux: {
+            sanitize: {
+                misc_undefined: ["signed-integer-overflow"],
+            },
+        },
+    },
+    static_libs: [
+        "libpropertyinfoserializer",
+        "libpropertyinfoparser",
+        "libbase",
+    ],
+    srcs: ["property_info_checker.cpp"],
+}

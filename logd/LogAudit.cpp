@@ -45,7 +45,7 @@
         '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, '>'
 
 LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg)
-    : SocketListener(mSock = getLogSocket(), false),
+    : SocketListener(getLogSocket(), false),
       logbuf(buf),
       reader(reader),
       fdDmesg(fdDmesg),
@@ -53,8 +53,7 @@ LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg)
                                               BOOL_DEFAULT_TRUE)),
       events(__android_logger_property_get_bool("ro.logd.auditd.events",
                                                 BOOL_DEFAULT_TRUE)),
-      initialized(false),
-      tooFast(false) {
+      initialized(false) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
                                            'l',
                                            'o',
@@ -78,53 +77,11 @@ LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg)
     write(fdDmesg, auditd_message, sizeof(auditd_message));
 }
 
-void LogAudit::checkRateLimit() {
-    // trim list for AUDIT_RATE_LIMIT_BURST_DURATION of history
-    log_time oldest(AUDIT_RATE_LIMIT_BURST_DURATION, 0);
-    bucket.emplace(android_log_clockid());
-    oldest = bucket.back() - oldest;
-    while (bucket.front() < oldest) bucket.pop();
-
-    static const size_t upperThreshold =
-        ((AUDIT_RATE_LIMIT_BURST_DURATION *
-          (AUDIT_RATE_LIMIT_DEFAULT + AUDIT_RATE_LIMIT_MAX)) +
-         1) /
-        2;
-    if (bucket.size() >= upperThreshold) {
-        // Hit peak, slow down source
-        if (!tooFast) {
-            tooFast = true;
-            audit_rate_limit(mSock, AUDIT_RATE_LIMIT_MAX);
-        }
-
-        // We do not need to hold on to the full set of timing data history,
-        // let's ensure it does not grow without bounds.  This also ensures
-        // that std::dequeue underneath behaves almost like a ring buffer.
-        do {
-            bucket.pop();
-        } while (bucket.size() >= upperThreshold);
-        return;
-    }
-
-    if (!tooFast) return;
-
-    static const size_t lowerThreshold =
-        AUDIT_RATE_LIMIT_BURST_DURATION * AUDIT_RATE_LIMIT_MAX;
-
-    if (bucket.size() >= lowerThreshold) return;
-
-    tooFast = false;
-    // Went below max sustained rate, allow source to speed up
-    audit_rate_limit(mSock, AUDIT_RATE_LIMIT_DEFAULT);
-}
-
 bool LogAudit::onDataAvailable(SocketClient* cli) {
     if (!initialized) {
         prctl(PR_SET_NAME, "logd.auditd");
         initialized = true;
     }
-
-    checkRateLimit();
 
     struct audit_message rep;
 
@@ -486,6 +443,5 @@ int LogAudit::getLogSocket() {
         audit_close(fd);
         fd = -1;
     }
-    (void)audit_rate_limit(fd, AUDIT_RATE_LIMIT_DEFAULT);
     return fd;
 }

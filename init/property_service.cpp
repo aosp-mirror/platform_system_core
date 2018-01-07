@@ -58,7 +58,6 @@
 
 #include "init.h"
 #include "persistent_properties.h"
-#include "space_tokenizer.h"
 #include "util.h"
 
 using android::base::ReadFileToString;
@@ -69,6 +68,7 @@ using android::base::Timer;
 using android::base::Trim;
 using android::base::WriteStringToFile;
 using android::properties::BuildTrie;
+using android::properties::ParsePropertyInfoFile;
 using android::properties::PropertyInfoAreaFile;
 using android::properties::PropertyInfoEntry;
 
@@ -350,13 +350,15 @@ class SocketConnection {
     ufds[0].events = POLLIN;
     ufds[0].revents = 0;
     while (*timeout_ms > 0) {
-      Timer timer;
-      int nr = poll(ufds, 1, *timeout_ms);
-      uint64_t millis = timer.duration().count();
-      *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
+        auto start_time = std::chrono::steady_clock::now();
+        int nr = poll(ufds, 1, *timeout_ms);
+        auto now = std::chrono::steady_clock::now();
+        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+        uint64_t millis = time_elapsed.count();
+        *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
 
-      if (nr > 0) {
-        return true;
+        if (nr > 0) {
+            return true;
       }
 
       if (nr == 0) {
@@ -726,22 +728,6 @@ static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf,
     return 0;
 }
 
-Result<PropertyInfoEntry> ParsePropertyInfoLine(const std::string& line) {
-    auto tokenizer = SpaceTokenizer(line);
-
-    auto property = tokenizer.GetNext();
-    if (property.empty()) return Error() << "Did not find a property entry in '" << line << "'";
-
-    auto context = tokenizer.GetNext();
-    if (context.empty()) return Error() << "Did not find a context entry in '" << line << "'";
-
-    // It is not an error to not find these, as older files will not contain them.
-    auto exact_match = tokenizer.GetNext();
-    auto schema = tokenizer.GetRemaining();
-
-    return {property, context, schema, exact_match == "exact"};
-}
-
 bool LoadPropertyInfoFromFile(const std::string& filename,
                               std::vector<PropertyInfoEntry>* property_infos) {
     auto file_contents = std::string();
@@ -750,20 +736,14 @@ bool LoadPropertyInfoFromFile(const std::string& filename,
         return false;
     }
 
-    for (const auto& line : Split(file_contents, "\n")) {
-        auto trimmed_line = Trim(line);
-        if (trimmed_line.empty() || StartsWith(trimmed_line, "#")) {
-            continue;
-        }
-
-        auto property_info = ParsePropertyInfoLine(line);
-        if (!property_info) {
-            LOG(ERROR) << "Could not read line from '" << filename << "': " << property_info.error();
-            continue;
-        }
-
-        property_infos->emplace_back(*property_info);
+    auto errors = std::vector<std::string>{};
+    ParsePropertyInfoFile(file_contents, property_infos, &errors);
+    // Individual parsing errors are reported but do not cause a failed boot, which is what
+    // returning false would do here.
+    for (const auto& error : errors) {
+        LOG(ERROR) << "Could not read line from '" << filename << "': " << error;
     }
+
     return true;
 }
 
