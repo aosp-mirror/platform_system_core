@@ -952,10 +952,18 @@ static void append_transport(const atransport* t, std::string* result, bool long
 }
 
 std::string list_transports(bool long_listing) {
-    std::string result;
-
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
-    for (const auto& t : transport_list) {
+
+    auto sorted_transport_list = transport_list;
+    sorted_transport_list.sort([](atransport*& x, atransport*& y) {
+        if (x->type != y->type) {
+            return x->type < y->type;
+        }
+        return strcmp(x->serial, y->serial) < 0;
+    });
+
+    std::string result;
+    for (const auto& t : sorted_transport_list) {
         append_transport(t, &result, long_listing);
     }
     return result;
