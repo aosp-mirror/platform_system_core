@@ -638,6 +638,7 @@ err:
  * frees up memory of the return value without touching a and b. */
 static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
 {
+    if (!a && !b) return nullptr;
     if (!a) return b;
     if (!b) return a;
 
@@ -755,15 +756,17 @@ struct fstab *fs_mgr_read_fstab_default()
         default_fstab = get_fstab_path();
     }
 
-    if (default_fstab.empty()) {
-        LWARNING << __FUNCTION__ << "(): failed to find device default fstab";
+    struct fstab* fstab = nullptr;
+    if (!default_fstab.empty()) {
+        fstab = fs_mgr_read_fstab(default_fstab.c_str());
+    } else {
+        LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
+
+    struct fstab* fstab_dt = fs_mgr_read_fstab_dt();
 
     // combines fstab entries passed in from device tree with
     // the ones found from default_fstab file
-    struct fstab *fstab_dt = fs_mgr_read_fstab_dt();
-    struct fstab *fstab = fs_mgr_read_fstab(default_fstab.c_str());
-
     return in_place_merge(fstab_dt, fstab);
 }
 
