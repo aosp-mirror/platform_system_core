@@ -654,12 +654,13 @@ static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
     }
 
     for (int i = a->num_entries, j = 0; i < total_entries; i++, j++) {
-        // copy the pointer directly *without* malloc and memcpy
+        // Copy the structs by assignment.
         a->recs[i] = b->recs[j];
     }
 
-    // Frees up b, but don't free b->recs[X] to make sure they are
-    // accessible through a->recs[X].
+    // We can't call fs_mgr_free_fstab because a->recs still references the
+    // memory allocated by strdup.
+    free(b->recs);
     free(b->fstab_filename);
     free(b);
 
