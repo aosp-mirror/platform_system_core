@@ -14,6 +14,7 @@ cc_library {
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
     shared_libs: [
+        "libbase",
         "liblog",
         "libcutils",
     ],
