@@ -38,6 +38,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
+#include <cutils/android_filesystem_config.h>
 #include <cutils/android_reboot.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
@@ -353,7 +354,7 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
         reserved_blocks = max_reserved_blocks;
     }
 
-    if (ext4_r_blocks_count(sb) == reserved_blocks) {
+    if ((ext4_r_blocks_count(sb) == reserved_blocks) && (sb->s_def_resgid == AID_RESERVED_DISK)) {
         return;
     }
 
@@ -363,11 +364,12 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
         return;
     }
 
-    char buf[32];
-    const char* argv[] = {TUNE2FS_BIN, "-r", buf, blk_device};
-
-    snprintf(buf, sizeof(buf), "%" PRIu64, reserved_blocks);
     LINFO << "Setting reserved block count on " << blk_device << " to " << reserved_blocks;
+
+    auto reserved_blocks_str = std::to_string(reserved_blocks);
+    auto reserved_gid_str = std::to_string(AID_RESERVED_DISK);
+    const char* argv[] = {
+        TUNE2FS_BIN, "-r", reserved_blocks_str.c_str(), "-g", reserved_gid_str.c_str(), blk_device};
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
         LERROR << "Failed to run " TUNE2FS_BIN " to set the number of reserved blocks on "
                << blk_device;
