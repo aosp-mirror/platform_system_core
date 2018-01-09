@@ -114,7 +114,7 @@ static Action *queue_action(unsigned op, const char *fmt, ...)
 
     if (cmdsize >= sizeof(a->cmd)) {
         free(a);
-        die("Command length (%d) exceeds maximum size (%d)", cmdsize, sizeof(a->cmd));
+        die("Command length (%zu) exceeds maximum size (%zu)", cmdsize, sizeof(a->cmd));
     }
 
     if (action_last) {
