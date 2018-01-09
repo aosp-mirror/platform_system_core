@@ -122,6 +122,7 @@
 #define AID_AUTOMOTIVE_EVS 1062  /* Automotive rear and surround view system */
 #define AID_LOWPAN 1063          /* LoWPAN subsystem */
 #define AID_HSM 1064             /* hardware security module subsystem */
+#define AID_RESERVED_DISK 1065   /* GID that has access to reserved disk space */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
