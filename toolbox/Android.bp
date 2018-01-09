@@ -34,7 +34,7 @@ cc_library_static {
 
 genrule {
     name: "toolbox_tools",
-    cmd: "echo '/* file generated automatically */' >$(out) && for t in toolbox dd getevent newfs_msdos getprop; do echo \"TOOL($$t)\" >>$(out); done",
+    cmd: "echo '/* file generated automatically */' >$(out) && for t in toolbox dd getevent newfs_msdos; do echo \"TOOL($$t)\" >>$(out); done",
     out: ["tools.h"],
 }
 
@@ -52,7 +52,6 @@ cc_binary {
     srcs: [
         "toolbox.c",
         "getevent.c",
-        "getprop.cpp",
         "newfs_msdos.c",
     ],
     generated_headers: [
@@ -61,18 +60,12 @@ cc_binary {
     ],
     whole_static_libs: ["libtoolbox_dd"],
     shared_libs: [
-        "libbase",
         "libcutils",
     ],
-    static_libs: [
-        "libpropertyinfoparser",
-    ],
-    cpp_std: "gnu++1z",
 
     symlinks: [
         "dd",
         "getevent",
-        "getprop",
         "newfs_msdos",
     ],
 }
