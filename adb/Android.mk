@@ -237,7 +237,7 @@ LOCAL_LDFLAGS_windows := -municode
 LOCAL_LDLIBS_linux := -lrt -ldl -lpthread
 LOCAL_LDLIBS_darwin := -framework CoreFoundation -framework IOKit -lobjc
 LOCAL_LDLIBS_windows := -lws2_32 -luserenv
-LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
+LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
 
 LOCAL_MULTILIB := first
 
@@ -254,8 +254,8 @@ LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -fra
 # Use wmain instead of main
 LOCAL_LDFLAGS_windows := -municode
 LOCAL_LDLIBS_windows := -lws2_32 -lgdi32
-LOCAL_STATIC_LIBRARIES_windows := AdbWinApi
-LOCAL_REQUIRED_MODULES_windows := AdbWinApi AdbWinUsbApi
+LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
+LOCAL_REQUIRED_MODULES_windows := AdbWinUsbApi
 
 LOCAL_SRC_FILES := \
     adb_client.cpp \
