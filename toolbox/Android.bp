@@ -13,6 +13,7 @@ cc_defaults {
 cc_library_static {
     name: "libtoolbox_dd",
     defaults: ["toolbox_defaults"],
+    vendor_available: true,
     srcs: [
         "upstream-netbsd/bin/dd/args.c",
         "upstream-netbsd/bin/dd/conv.c",
@@ -46,8 +47,8 @@ genrule {
     out: ["input.h-labels.h"],
 }
 
-cc_binary {
-    name: "toolbox",
+cc_defaults {
+    name: "toolbox_binary_defaults",
     defaults: ["toolbox_defaults"],
     srcs: [
         "toolbox.c",
@@ -68,6 +69,18 @@ cc_binary {
         "getevent",
         "newfs_msdos",
     ],
+}
+
+cc_binary {
+    name: "toolbox",
+    defaults: ["toolbox_binary_defaults"],
+}
+
+cc_binary {
+    name: "toolbox_vendor",
+    stem: "toolbox",
+    vendor: true,
+    defaults: ["toolbox_binary_defaults"],
 }
 
 // We only want 'r' on userdebug and eng builds.
