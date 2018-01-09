@@ -36,7 +36,7 @@ cc_library_headers {
     export_include_dirs: ["include"],
     target: {
         vendor: {
-            export_include_dirs: ["include_vndk"],
+            override_export_include_dirs: ["include_vndk"],
         },
         linux_bionic: {
             enabled: true,

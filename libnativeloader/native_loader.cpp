@@ -662,22 +662,51 @@ void* OpenNativeLibrary(JNIEnv* env,
     return handle;
   }
 #else
-  UNUSED(env, target_sdk_version, class_loader, library_path);
-  *needs_native_bridge = false;
-  void* handle = dlopen(path, RTLD_NOW);
-  if (handle == nullptr) {
-    if (NativeBridgeIsSupported(path)) {
-      *needs_native_bridge = true;
-      handle = NativeBridgeLoadLibrary(path, RTLD_NOW);
-      if (handle == nullptr) {
-        *error_msg = NativeBridgeGetError();
-      }
+  UNUSED(env, target_sdk_version, class_loader);
+
+  // Do some best effort to emulate library-path support. It will not
+  // work for dependencies.
+  //
+  // Note: null has a special meaning and must be preserved.
+  std::string c_library_path;  // Empty string by default.
+  if (library_path != nullptr && path != nullptr && path[0] != '/') {
+    ScopedUtfChars library_path_utf_chars(env, library_path);
+    c_library_path = library_path_utf_chars.c_str();
+  }
+
+  std::vector<std::string> library_paths = base::Split(c_library_path, ":");
+
+  for (const std::string& lib_path : library_paths) {
+    *needs_native_bridge = false;
+    const char* path_arg;
+    std::string complete_path;
+    if (path == nullptr) {
+      // Preserve null.
+      path_arg = nullptr;
     } else {
-      *needs_native_bridge = false;
+      complete_path = lib_path;
+      if (!complete_path.empty()) {
+        complete_path.append("/");
+      }
+      complete_path.append(path);
+      path_arg = complete_path.c_str();
+    }
+    void* handle = dlopen(path_arg, RTLD_NOW);
+    if (handle != nullptr) {
+      return handle;
+    }
+    if (NativeBridgeIsSupported(path_arg)) {
+      *needs_native_bridge = true;
+      handle = NativeBridgeLoadLibrary(path_arg, RTLD_NOW);
+      if (handle != nullptr) {
+        return handle;
+      }
+      *error_msg = NativeBridgeGetError();
+    } else {
       *error_msg = dlerror();
     }
   }
-  return handle;
+  return nullptr;
 #endif
 }
 

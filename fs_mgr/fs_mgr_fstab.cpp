@@ -638,6 +638,7 @@ err:
  * frees up memory of the return value without touching a and b. */
 static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
 {
+    if (!a && !b) return nullptr;
     if (!a) return b;
     if (!b) return a;
 
@@ -654,12 +655,13 @@ static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
     }
 
     for (int i = a->num_entries, j = 0; i < total_entries; i++, j++) {
-        // copy the pointer directly *without* malloc and memcpy
+        // Copy the structs by assignment.
         a->recs[i] = b->recs[j];
     }
 
-    // Frees up b, but don't free b->recs[X] to make sure they are
-    // accessible through a->recs[X].
+    // We can't call fs_mgr_free_fstab because a->recs still references the
+    // memory allocated by strdup.
+    free(b->recs);
     free(b->fstab_filename);
     free(b);
 
@@ -754,15 +756,17 @@ struct fstab *fs_mgr_read_fstab_default()
         default_fstab = get_fstab_path();
     }
 
-    if (default_fstab.empty()) {
-        LWARNING << __FUNCTION__ << "(): failed to find device default fstab";
+    struct fstab* fstab = nullptr;
+    if (!default_fstab.empty()) {
+        fstab = fs_mgr_read_fstab(default_fstab.c_str());
+    } else {
+        LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
+
+    struct fstab* fstab_dt = fs_mgr_read_fstab_dt();
 
     // combines fstab entries passed in from device tree with
     // the ones found from default_fstab file
-    struct fstab *fstab_dt = fs_mgr_read_fstab_dt();
-    struct fstab *fstab = fs_mgr_read_fstab(default_fstab.c_str());
-
     return in_place_merge(fstab_dt, fstab);
 }
 
