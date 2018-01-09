@@ -55,7 +55,7 @@ cc_library_headers {
             enabled: true,
         },
         vendor: {
-            export_include_dirs: ["include_vndk"],
+            override_export_include_dirs: ["include_vndk"],
         },
     },
 }
