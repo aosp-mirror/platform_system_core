@@ -27,54 +27,6 @@
 
 #include <linux/netlink.h>
 
-#include <fstream>
-
-#include <private/android_filesystem_config.h>
-
-namespace {
-
-// Returns the uid of root in the current user namespace.
-// Returns AID_OVERFLOWUID if the root user is not mapped in the current
-// namespace.
-// Returns 0 if the kernel is not user namespace-aware (for backwards
-// compatibility) or if AID_OVERFLOWUID could not be validated to match what the
-// kernel would return.
-uid_t GetRootUid() {
-    constexpr uid_t kParentRootUid = 0;
-
-    std::ifstream uid_map_file("/proc/self/uid_map");
-    if (!uid_map_file) {
-        // The kernel does not support user namespaces.
-        return kParentRootUid;
-    }
-
-    uid_t current_namespace_uid, parent_namespace_uid;
-    uint32_t length;
-    while (uid_map_file >> current_namespace_uid >> parent_namespace_uid >> length) {
-        // Since kParentRootUid is 0, it should be the first entry in the mapped
-        // range.
-        if (parent_namespace_uid != kParentRootUid || length < 1) continue;
-        return current_namespace_uid;
-    }
-
-    // Sanity check: verify that the overflow UID is the one to be returned by
-    // the kernel.
-    std::ifstream overflowuid_file("/proc/sys/kernel/overflowuid");
-    if (!overflowuid_file) {
-        // It's better to return 0 in case we cannot make sure that the overflow
-        // UID matches.
-        return kParentRootUid;
-    }
-    uid_t kernel_overflow_uid;
-    if (!(overflowuid_file >> kernel_overflow_uid) || kernel_overflow_uid != AID_OVERFLOWUID)
-        return kParentRootUid;
-
-    // root is unmapped, use the kernel "overflow" uid.
-    return AID_OVERFLOWUID;
-}
-
-}  // namespace
-
 extern "C" {
 
 /**
@@ -99,7 +51,6 @@ ssize_t uevent_kernel_multicast_uid_recv(int socket, void* buffer, size_t length
 }
 
 ssize_t uevent_kernel_recv(int socket, void* buffer, size_t length, bool require_group, uid_t* uid) {
-    static const uid_t root_uid = GetRootUid();
     struct iovec iov = {buffer, length};
     struct sockaddr_nl addr;
     char control[CMSG_SPACE(sizeof(struct ucred))];
@@ -122,10 +73,6 @@ ssize_t uevent_kernel_recv(int socket, void* buffer, size_t length, bool require
 
     cred = (struct ucred*)CMSG_DATA(cmsg);
     *uid = cred->uid;
-    if (cred->uid != root_uid) {
-        /* ignoring netlink message from non-root user */
-        goto out;
-    }
 
     if (addr.nl_pid != 0) {
         /* ignore non-kernel */
