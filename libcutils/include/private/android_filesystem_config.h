@@ -123,6 +123,8 @@
 #define AID_LOWPAN 1063          /* LoWPAN subsystem */
 #define AID_HSM 1064             /* hardware security module subsystem */
 #define AID_RESERVED_DISK 1065   /* GID that has access to reserved disk space */
+#define AID_STATSD 1066          /* statsd daemon */
+#define AID_INCIDENTD 1067       /* incidentd daemon */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
