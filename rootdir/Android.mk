@@ -125,14 +125,12 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in $(bcp_dep)
 bcp_md5 :=
 bcp_dep :=
 
-# If PLATFORM_VNDK_VERSION is defined and not "current", generate versioned
-# module names for ld.config.txt, llndk.libraries.txt and vndksp.libraries.txt
-# files.
-define versioned_module_name
+# If BOARD_VNDK_VERSION is defined, append PLATFORM_VNDK_VERSION to base name.
+define append_vndk_version
 $(strip \
-  $(if $(filter-out current,$(PLATFORM_VNDK_VERSION)), \
-    $(basename $(LOCAL_MODULE)).$(PLATFORM_VNDK_VERSION)$(suffix $(LOCAL_MODULE)), \
-    $(LOCAL_MODULE) \
+  $(if $(BOARD_VNDK_VERSION), \
+    $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)), \
+    $(1) \
   ) \
 )
 endef
@@ -153,7 +151,7 @@ ifeq ($(_enforce_vndk_at_runtime),true)
 LOCAL_MODULE := ld.config.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call versioned_module_name)
+LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
 
 llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
@@ -200,7 +198,7 @@ else # if _enforce_vndk_at_runtime is not true
 LOCAL_MODULE := ld.config.txt
 ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
   LOCAL_SRC_FILES := etc/ld.config.txt
-  LOCAL_MODULE_STEM := $(call versioned_module_name)
+  LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 else
   LOCAL_SRC_FILES := etc/ld.config.legacy.txt
   LOCAL_MODULE_STEM := $(LOCAL_MODULE)
@@ -216,7 +214,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := llndk.libraries.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call versioned_module_name)
+LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(LLNDK_LIBRARIES)
 $(LOCAL_BUILT_MODULE):
@@ -232,7 +230,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := vndksp.libraries.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call versioned_module_name)
+LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(VNDK_SAMEPROCESS_LIBRARIES)
 $(LOCAL_BUILT_MODULE):
