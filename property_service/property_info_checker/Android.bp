@@ -3,13 +3,6 @@ cc_binary {
     host_supported: true,
     static_executable: true,
     cpp_std: "experimental",
-    target: {
-        linux: {
-            sanitize: {
-                misc_undefined: ["signed-integer-overflow"],
-            },
-        },
-    },
     static_libs: [
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
