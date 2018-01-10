@@ -277,12 +277,6 @@ namespace.vndk.isolated = false
 namespace.vndk.search.paths  = /system/${LIB}/vndk-sp${VNDK_VER}
 namespace.vndk.search.paths += /system/${LIB}/vndk${VNDK_VER}
 
-# This is exceptionally required since android.hidl.memory@1.0-impl.so is here
-namespace.vndk.permitted.paths = /system/${LIB}/vndk-sp${VNDK_VER}/hw
-
-namespace.vndk.asan.permitted.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}/hw
-namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}/hw
-
 namespace.vndk.asan.search.paths  = /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
 namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
 namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk${VNDK_VER}
