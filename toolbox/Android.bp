@@ -33,12 +33,6 @@ cc_library_static {
 }
 
 genrule {
-    name: "toolbox_tools",
-    cmd: "echo '/* file generated automatically */' >$(out) && for t in toolbox dd getevent newfs_msdos; do echo \"TOOL($$t)\" >>$(out); done",
-    out: ["tools.h"],
-}
-
-genrule {
     name: "toolbox_input_labels",
     tool_files: ["generate-input.h-labels.py"],
     cmd: "$(location) $(in) >$(out)",
@@ -55,7 +49,6 @@ cc_binary {
         "newfs_msdos.c",
     ],
     generated_headers: [
-        "toolbox_tools",
         "toolbox_input_labels",
     ],
     whole_static_libs: ["libtoolbox_dd"],
