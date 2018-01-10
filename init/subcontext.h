@@ -25,6 +25,7 @@
 #include <android-base/unique_fd.h>
 
 #include "builtins.h"
+#include "system/core/init/subcontext.pb.h"
 
 namespace android {
 namespace init {
@@ -39,7 +40,8 @@ class Subcontext {
         Fork();
     }
 
-    Result<Success> Execute(const std::vector<std::string>& command);
+    Result<Success> Execute(const std::vector<std::string>& args);
+    Result<std::vector<std::string>> ExpandArgs(const std::vector<std::string>& args);
     void Restart();
 
     const std::string& path_prefix() const { return path_prefix_; }
@@ -48,6 +50,7 @@ class Subcontext {
 
   private:
     void Fork();
+    Result<SubcontextReply> TransmitMessage(const SubcontextCommand& subcontext_command);
 
     std::string path_prefix_;
     std::string context_;

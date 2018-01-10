@@ -143,6 +143,34 @@ TEST(subcontext, ContextString) {
     });
 }
 
+TEST(subcontext, ExpandArgs) {
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto args = std::vector<std::string>{
+            "first",
+            "${ro.hardware}",
+            "$$third",
+        };
+        auto result = subcontext.ExpandArgs(args);
+        ASSERT_TRUE(result) << result.error();
+        ASSERT_EQ(3U, result->size());
+        EXPECT_EQ(args[0], result->at(0));
+        EXPECT_EQ(GetProperty("ro.hardware", ""), result->at(1));
+        EXPECT_EQ("$third", result->at(2));
+    });
+}
+
+TEST(subcontext, ExpandArgsFailure) {
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto args = std::vector<std::string>{
+            "first",
+            "${",
+        };
+        auto result = subcontext.ExpandArgs(args);
+        ASSERT_FALSE(result);
+        EXPECT_EQ("Failed to expand '" + args[1] + "'", result.error_string());
+    });
+}
+
 TestFunctionMap BuildTestFunctionMap() {
     TestFunctionMap test_function_map;
     // For CheckDifferentPid

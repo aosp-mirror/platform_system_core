@@ -19,15 +19,23 @@ option optimize_for = LITE_RUNTIME;
 
 message SubcontextCommand {
     message ExecuteCommand { repeated string args = 1; }
-    oneof command { ExecuteCommand execute_command = 1; }
+    message ExpandArgsCommand { repeated string args = 1; }
+    oneof command {
+        ExecuteCommand execute_command = 1;
+        ExpandArgsCommand expand_args_command = 2;
+    }
 }
 
 message SubcontextReply {
-    message ResultMessage {
-        optional bool success = 1;
-        optional string error_string = 2;
-        optional int32 error_errno = 3;
+    message Failure {
+        optional string error_string = 1;
+        optional int32 error_errno = 2;
     }
+    message ExpandArgsReply { repeated string expanded_args = 1; }
 
-    oneof reply { ResultMessage result = 1; }
+    oneof reply {
+        bool success = 1;
+        Failure failure = 2;
+        ExpandArgsReply expand_args_reply = 3;
+    }
 }

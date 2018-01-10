@@ -50,12 +50,19 @@ Command::Command(BuiltinFunction f, bool execute_in_subcontext,
     : func_(std::move(f)), execute_in_subcontext_(execute_in_subcontext), args_(args), line_(line) {}
 
 Result<Success> Command::InvokeFunc(Subcontext* subcontext) const {
-    if (execute_in_subcontext_ && subcontext) {
-        return subcontext->Execute(args_);
-    } else {
-        const std::string& context = subcontext ? subcontext->context() : kInitContext;
-        return RunBuiltinFunction(func_, args_, context);
+    if (subcontext) {
+        if (execute_in_subcontext_) {
+            return subcontext->Execute(args_);
+        }
+
+        auto expanded_args = subcontext->ExpandArgs(args_);
+        if (!expanded_args) {
+            return expanded_args.error();
+        }
+        return RunBuiltinFunction(func_, *expanded_args, subcontext->context());
     }
+
+    return RunBuiltinFunction(func_, args_, kInitContext);
 }
 
 std::string Command::BuildCommandString() const {
