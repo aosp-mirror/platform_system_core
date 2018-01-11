@@ -12,6 +12,7 @@ phony {
         "sh",
         "sh_vendor",
         "toolbox",
+        "toolbox_vendor",
         "toybox",
         "toybox_vendor",
     ],
