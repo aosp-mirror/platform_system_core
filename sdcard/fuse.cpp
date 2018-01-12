@@ -323,7 +323,7 @@ static bool check_caller_access_to_name(struct fuse* fuse,
 
     /* Root always has access; access for any other UIDs should always
      * be controlled through packages.list. */
-    if (hdr->uid == 0) {
+    if (hdr->uid == AID_ROOT) {
         return true;
     }
 
