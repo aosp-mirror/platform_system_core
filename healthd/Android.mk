@@ -50,6 +50,7 @@ LOCAL_STATIC_LIBRARIES := \
     android.hardware.health@2.0 \
     android.hardware.health@2.0-impl \
     android.hardware.health@1.0 \
+    libhealthstoragedefault \
     libminui \
     libpng \
     libz \
@@ -98,6 +99,7 @@ CHARGER_STATIC_LIBRARIES := \
     libhidltransport \
     libhidlbase \
     libhwbinder \
+    libhealthstoragedefault \
     libvndksupport \
     libhealthd_charger \
     libhealthd_draw \

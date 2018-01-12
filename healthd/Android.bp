@@ -39,6 +39,7 @@ cc_binary {
     static_libs: [
         "android.hardware.health@2.0-impl",
         "android.hardware.health@1.0-convert",
+        "libhealthstoragedefault",
         "libbatterymonitor",
     ],
 
@@ -72,6 +73,7 @@ cc_binary {
         "android.hardware.health@2.0-impl",
         "android.hardware.health@1.0-convert",
         "libbatterymonitor",
+        "libhealthstoragedefault",
     ],
 
     shared_libs: [
