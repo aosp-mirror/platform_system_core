@@ -43,15 +43,15 @@ uint32_t TrieSerializer::WritePropertyEntry(const PropertyEntryBuilder& property
   uint32_t context_index = property_entry.context != nullptr && !property_entry.context->empty()
                                ? serialized_info()->FindContextIndex(property_entry.context->c_str())
                                : ~0u;
-  uint32_t schema_index = property_entry.schema != nullptr && !property_entry.schema->empty()
-                              ? serialized_info()->FindSchemaIndex(property_entry.schema->c_str())
-                              : ~0u;
+  uint32_t type_index = property_entry.type != nullptr && !property_entry.type->empty()
+                            ? serialized_info()->FindTypeIndex(property_entry.type->c_str())
+                            : ~0u;
   uint32_t offset;
   auto serialized_property_entry = arena_->AllocateObject<PropertyEntry>(&offset);
   serialized_property_entry->name_offset = arena_->AllocateAndWriteString(property_entry.name);
   serialized_property_entry->namelen = property_entry.name.size();
   serialized_property_entry->context_index = context_index;
-  serialized_property_entry->schema_index = schema_index;
+  serialized_property_entry->type_index = type_index;
   return offset;
 }
 
@@ -122,9 +122,9 @@ std::string TrieSerializer::SerializeTrie(const TrieBuilder& trie_builder) {
   header->contexts_offset = arena_->size();
   SerializeStrings(trie_builder.contexts());
 
-  // Store where we're about to write the schemas.
-  header->schemas_offset = arena_->size();
-  SerializeStrings(trie_builder.schemas());
+  // Store where we're about to write the types.
+  header->types_offset = arena_->size();
+  SerializeStrings(trie_builder.types());
 
   // We need to store size() up to this point now for Find*Offset() to work.
   header->size = arena_->size();
