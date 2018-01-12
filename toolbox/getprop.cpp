@@ -29,7 +29,13 @@ using android::properties::PropertyInfoAreaFile;
 
 PropertyInfoAreaFile property_info_file;
 
-void PrintAllProperties(bool print_property_context) {
+enum class ResultType {
+    Value,
+    Context,
+    Type,
+};
+
+void PrintAllProperties(ResultType result_type) {
     std::vector<std::pair<std::string, std::string>> properties;
     __system_property_foreach(
         [](const prop_info* pi, void* cookie) {
@@ -46,11 +52,16 @@ void PrintAllProperties(bool print_property_context) {
 
     std::sort(properties.begin(), properties.end());
 
-    if (print_property_context) {
+    if (result_type != ResultType::Value) {
         for (auto& [name, value] : properties) {
             const char* context = nullptr;
-            property_info_file->GetPropertyInfo(name.c_str(), &context, nullptr);
-            value = context;
+            const char* type = nullptr;
+            property_info_file->GetPropertyInfo(name.c_str(), &context, &type);
+            if (result_type == ResultType::Context) {
+                value = context;
+            } else {
+                value = type;
+            }
         }
     }
 
@@ -59,18 +70,28 @@ void PrintAllProperties(bool print_property_context) {
     }
 }
 
-void PrintProperty(const char* name, const char* default_value, bool print_property_context) {
-    if (print_property_context) {
-        const char* context = nullptr;
-        property_info_file->GetPropertyInfo(name, &context, nullptr);
-        std::cout << context << std::endl;
-    } else {
-        std::cout << GetProperty(name, default_value) << std::endl;
+void PrintProperty(const char* name, const char* default_value, ResultType result_type) {
+    switch (result_type) {
+        case ResultType::Value:
+            std::cout << GetProperty(name, default_value) << std::endl;
+            break;
+        case ResultType::Context: {
+            const char* context = nullptr;
+            property_info_file->GetPropertyInfo(name, &context, nullptr);
+            std::cout << context << std::endl;
+            break;
+        }
+        case ResultType::Type: {
+            const char* type = nullptr;
+            property_info_file->GetPropertyInfo(name, nullptr, &type);
+            std::cout << type << std::endl;
+            break;
+        }
     }
 }
 
 extern "C" int getprop_main(int argc, char** argv) {
-    bool print_property_context = false;
+    auto result_type = ResultType::Value;
 
     while (true) {
         static const struct option long_options[] = {
@@ -78,7 +99,7 @@ extern "C" int getprop_main(int argc, char** argv) {
             {nullptr, 0, nullptr, 0},
         };
 
-        int arg = getopt_long(argc, argv, "Z", long_options, nullptr);
+        int arg = getopt_long(argc, argv, "TZ", long_options, nullptr);
 
         if (arg == -1) {
             break;
@@ -86,13 +107,27 @@ extern "C" int getprop_main(int argc, char** argv) {
 
         switch (arg) {
             case 'h':
-                std::cout << "usage: getprop [-Z] [NAME [DEFAULT]]\n\n"
+                std::cout << "usage: getprop [-TZ] [NAME [DEFAULT]]\n"
+                             "\n"
                              "Gets an Android system property, or lists them all.\n"
-                             "Use -Z to return the property context instead of the property value\n"
+                             "\n"
+                             "-T\tShow property types instead of values\n"
+                             "-Z\tShow property contexts instead of values\n"
                           << std::endl;
                 return 0;
+            case 'T':
+                if (result_type != ResultType::Value) {
+                    std::cerr << "Only one of -T or -Z may be specified" << std::endl;
+                    return -1;
+                }
+                result_type = ResultType::Type;
+                break;
             case 'Z':
-                print_property_context = true;
+                if (result_type != ResultType::Value) {
+                    std::cerr << "Only one of -T or -Z may be specified" << std::endl;
+                    return -1;
+                }
+                result_type = ResultType::Context;
                 break;
             case '?':
                 return -1;
@@ -102,7 +137,7 @@ extern "C" int getprop_main(int argc, char** argv) {
         }
     }
 
-    if (print_property_context) {
+    if (result_type != ResultType::Value) {
         property_info_file.LoadDefaultPath();
         if (!property_info_file) {
             std::cerr << "Unable to load property info file" << std::endl;
@@ -111,7 +146,7 @@ extern "C" int getprop_main(int argc, char** argv) {
     }
 
     if (optind >= argc) {
-        PrintAllProperties(print_property_context);
+        PrintAllProperties(result_type);
         return 0;
     }
 
@@ -120,8 +155,7 @@ extern "C" int getprop_main(int argc, char** argv) {
         return -1;
     }
 
-    PrintProperty(argv[optind], (optind == argc - 1) ? "" : argv[optind + 1],
-                  print_property_context);
+    PrintProperty(argv[optind], (optind == argc - 1) ? "" : argv[optind + 1], result_type);
 
     return 0;
 }
