@@ -46,7 +46,7 @@ TEST(propertyinfoserializer, TrieNodeCheck) {
   auto root_node = property_info_area->root_node();
   EXPECT_STREQ("root", root_node.name());
   EXPECT_STREQ("default", property_info_area->context(root_node.context_index()));
-  EXPECT_STREQ("default", property_info_area->schema(root_node.schema_index()));
+  EXPECT_STREQ("default", property_info_area->type(root_node.type_index()));
 
   EXPECT_EQ(0U, root_node.num_prefixes());
   EXPECT_EQ(0U, root_node.num_exact_matches());
@@ -59,7 +59,7 @@ TEST(propertyinfoserializer, TrieNodeCheck) {
 
   EXPECT_STREQ("test", test_node.name());
   EXPECT_STREQ("1st", property_info_area->context(test_node.context_index()));
-  EXPECT_STREQ("1st", property_info_area->schema(test_node.schema_index()));
+  EXPECT_STREQ("1st", property_info_area->type(test_node.type_index()));
 
   EXPECT_EQ(0U, test_node.num_child_nodes());
 
@@ -69,7 +69,7 @@ TEST(propertyinfoserializer, TrieNodeCheck) {
     EXPECT_STREQ("test", serialized_trie.data() + prefix->name_offset);
     EXPECT_EQ(4U, prefix->namelen);
     EXPECT_STREQ("2nd", property_info_area->context(prefix->context_index));
-    EXPECT_STREQ("2nd", property_info_area->schema(prefix->schema_index));
+    EXPECT_STREQ("2nd", property_info_area->type(prefix->type_index));
   }
 
   EXPECT_EQ(3U, test_node.num_exact_matches());
@@ -85,9 +85,9 @@ TEST(propertyinfoserializer, TrieNodeCheck) {
     EXPECT_STREQ("3rd", property_info_area->context(match2->context_index));
     EXPECT_STREQ("3rd", property_info_area->context(match3->context_index));
 
-    EXPECT_STREQ("3rd", property_info_area->schema(match1->schema_index));
-    EXPECT_STREQ("3rd", property_info_area->schema(match2->schema_index));
-    EXPECT_STREQ("3rd", property_info_area->schema(match3->schema_index));
+    EXPECT_STREQ("3rd", property_info_area->type(match1->type_index));
+    EXPECT_STREQ("3rd", property_info_area->type(match2->type_index));
+    EXPECT_STREQ("3rd", property_info_area->type(match3->type_index));
   }
 
   // Check the long string node
@@ -120,7 +120,7 @@ TEST(propertyinfoserializer, TrieNodeCheck) {
   auto final_match = long_string_node.exact_match(0);
   EXPECT_STREQ("string", serialized_trie.data() + final_match->name_offset);
   EXPECT_STREQ("4th", property_info_area->context(final_match->context_index));
-  EXPECT_STREQ("4th", property_info_area->schema(final_match->schema_index));
+  EXPECT_STREQ("4th", property_info_area->type(final_match->type_index));
 }
 
 TEST(propertyinfoserializer, GetPropertyInfo) {
@@ -143,109 +143,109 @@ TEST(propertyinfoserializer, GetPropertyInfo) {
   auto root_node = property_info_area->root_node();
   EXPECT_STREQ("root", root_node.name());
   EXPECT_STREQ("default", property_info_area->context(root_node.context_index()));
-  EXPECT_STREQ("default", property_info_area->schema(root_node.schema_index()));
+  EXPECT_STREQ("default", property_info_area->type(root_node.type_index()));
 
   const char* context;
-  const char* schema;
-  property_info_area->GetPropertyInfo("abc", &context, &schema);
+  const char* type;
+  property_info_area->GetPropertyInfo("abc", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("abc.abc", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("abc.abc", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("123.abc", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("123.abc", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
+  EXPECT_STREQ("default", type);
 
-  property_info_area->GetPropertyInfo("test.a", &context, &schema);
+  property_info_area->GetPropertyInfo("test.a", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("test.b", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("test.b", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("test.c", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("test.c", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
+  EXPECT_STREQ("1st", type);
 
-  property_info_area->GetPropertyInfo("test.test", &context, &schema);
+  property_info_area->GetPropertyInfo("test.test", &context, &type);
   EXPECT_STREQ("5th", context);
-  EXPECT_STREQ("5th", schema);
-  property_info_area->GetPropertyInfo("test.testa", &context, &schema);
+  EXPECT_STREQ("5th", type);
+  property_info_area->GetPropertyInfo("test.testa", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("test.testb", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("test.testb", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("test.testc", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("test.testc", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
+  EXPECT_STREQ("2nd", type);
 
-  property_info_area->GetPropertyInfo("test.test.a", &context, &schema);
+  property_info_area->GetPropertyInfo("test.test.a", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("test.test.b", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("test.test.b", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("test.test.c", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("test.test.c", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
+  EXPECT_STREQ("2nd", type);
 
-  property_info_area->GetPropertyInfo("test.test1", &context, &schema);
+  property_info_area->GetPropertyInfo("test.test1", &context, &type);
   EXPECT_STREQ("3rd", context);
-  EXPECT_STREQ("3rd", schema);
-  property_info_area->GetPropertyInfo("test.test2", &context, &schema);
+  EXPECT_STREQ("3rd", type);
+  property_info_area->GetPropertyInfo("test.test2", &context, &type);
   EXPECT_STREQ("7th", context);
-  EXPECT_STREQ("7th", schema);
-  property_info_area->GetPropertyInfo("test.test3", &context, &schema);
+  EXPECT_STREQ("7th", type);
+  property_info_area->GetPropertyInfo("test.test3", &context, &type);
   EXPECT_STREQ("3rd", context);
-  EXPECT_STREQ("3rd", schema);
+  EXPECT_STREQ("3rd", type);
 
-  property_info_area->GetPropertyInfo("test.test11", &context, &schema);
+  property_info_area->GetPropertyInfo("test.test11", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("test.test22", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("test.test22", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("test.test33", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("test.test33", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
+  EXPECT_STREQ("2nd", type);
 
-  property_info_area->GetPropertyInfo("this.is.a.long.string", &context, &schema);
+  property_info_area->GetPropertyInfo("this.is.a.long.string", &context, &type);
   EXPECT_STREQ("4th", context);
-  EXPECT_STREQ("4th", schema);
+  EXPECT_STREQ("4th", type);
 
-  property_info_area->GetPropertyInfo("this.is.a.long", &context, &schema);
+  property_info_area->GetPropertyInfo("this.is.a.long", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("this.is.a", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("this.is.a", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("this.is", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("this.is", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("this", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("this", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
+  EXPECT_STREQ("default", type);
 
-  property_info_area->GetPropertyInfo("test.test2.a", &context, &schema);
+  property_info_area->GetPropertyInfo("test.test2.a", &context, &type);
   EXPECT_STREQ("6th", context);
-  EXPECT_STREQ("6th", schema);
+  EXPECT_STREQ("6th", type);
 
-  property_info_area->GetPropertyInfo("testoneword", &context, &schema);
+  property_info_area->GetPropertyInfo("testoneword", &context, &type);
   EXPECT_STREQ("8th", context);
-  EXPECT_STREQ("8th", schema);
+  EXPECT_STREQ("8th", type);
 
-  property_info_area->GetPropertyInfo("testwordprefix", &context, &schema);
+  property_info_area->GetPropertyInfo("testwordprefix", &context, &type);
   EXPECT_STREQ("9th", context);
-  EXPECT_STREQ("9th", schema);
+  EXPECT_STREQ("9th", type);
 
-  property_info_area->GetPropertyInfo("testwordprefixblah", &context, &schema);
+  property_info_area->GetPropertyInfo("testwordprefixblah", &context, &type);
   EXPECT_STREQ("9th", context);
-  EXPECT_STREQ("9th", schema);
+  EXPECT_STREQ("9th", type);
 
-  property_info_area->GetPropertyInfo("testwordprefix.blah", &context, &schema);
+  property_info_area->GetPropertyInfo("testwordprefix.blah", &context, &type);
   EXPECT_STREQ("9th", context);
-  EXPECT_STREQ("9th", schema);
+  EXPECT_STREQ("9th", type);
 }
 
 TEST(propertyinfoserializer, RealProperties) {
@@ -777,35 +777,34 @@ TEST(propertyinfoserializer, GetPropertyInfo_prefix_without_dot) {
   auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
 
   const char* context;
-  const char* schema;
-  property_info_area->GetPropertyInfo("persist.radio", &context, &schema);
+  const char* type;
+  property_info_area->GetPropertyInfo("persist.radio", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("persist.radio.subproperty", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("persist.radio.subproperty", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("persist.radiowords", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("persist.radiowords", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("persist.radio.long.long.long.sub.property", &context,
-                                      &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("persist.radio.long.long.long.sub.property", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("persist.radio.something.else.here", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.here", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radio.something.else.here2", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.here2", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radio.something.else.here.after", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.here.after", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radio.something.else.nothere", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radio.something.else.nothere", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("persist.radio.something.else", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("persist.radio.something.else", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
+  EXPECT_STREQ("1st", type);
 }
 
 TEST(propertyinfoserializer, GetPropertyInfo_prefix_with_dot_vs_without) {
@@ -823,28 +822,28 @@ TEST(propertyinfoserializer, GetPropertyInfo_prefix_with_dot_vs_without) {
   auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
 
   const char* context;
-  const char* schema;
-  property_info_area->GetPropertyInfo("persist.notradio", &context, &schema);
+  const char* type;
+  property_info_area->GetPropertyInfo("persist.notradio", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("1st", schema);
-  property_info_area->GetPropertyInfo("persist.radio", &context, &schema);
+  EXPECT_STREQ("1st", type);
+  property_info_area->GetPropertyInfo("persist.radio", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radio.subproperty", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radio.subproperty", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radiowords", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radiowords", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radio.long.property.prefix.match", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radio.long.property.prefix.match", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("2nd", schema);
-  property_info_area->GetPropertyInfo("persist.radio.long.property.exact.match", &context, &schema);
+  EXPECT_STREQ("2nd", type);
+  property_info_area->GetPropertyInfo("persist.radio.long.property.exact.match", &context, &type);
   EXPECT_STREQ("3rd", context);
-  EXPECT_STREQ("3rd", schema);
+  EXPECT_STREQ("3rd", type);
 }
 
-TEST(propertyinfoserializer, GetPropertyInfo_empty_context_and_schema) {
+TEST(propertyinfoserializer, GetPropertyInfo_empty_context_and_type) {
   auto property_info = std::vector<PropertyInfoEntry>{
       {"persist.", "1st", "", false},
       {"persist.dot_prefix.", "2nd", "", false},
@@ -862,28 +861,28 @@ TEST(propertyinfoserializer, GetPropertyInfo_empty_context_and_schema) {
   auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
 
   const char* context;
-  const char* schema;
-  property_info_area->GetPropertyInfo("notpersist.radio.something", &context, &schema);
+  const char* type;
+  property_info_area->GetPropertyInfo("notpersist.radio.something", &context, &type);
   EXPECT_STREQ("default", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("persist.nomatch", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("persist.nomatch", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("persist.dot_prefix.something", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("persist.dot_prefix.something", &context, &type);
   EXPECT_STREQ("2nd", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("persist.non_dot_prefix.something", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("persist.non_dot_prefix.something", &context, &type);
   EXPECT_STREQ("3rd", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("persist.exact_match", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("persist.exact_match", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("default", schema);
-  property_info_area->GetPropertyInfo("persist.dot_prefix2.something", &context, &schema);
+  EXPECT_STREQ("default", type);
+  property_info_area->GetPropertyInfo("persist.dot_prefix2.something", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("4th", schema);
-  property_info_area->GetPropertyInfo("persist.non_dot_prefix2.something", &context, &schema);
+  EXPECT_STREQ("4th", type);
+  property_info_area->GetPropertyInfo("persist.non_dot_prefix2.something", &context, &type);
   EXPECT_STREQ("1st", context);
-  EXPECT_STREQ("5th", schema);
+  EXPECT_STREQ("5th", type);
 }
 
 }  // namespace properties

@@ -56,12 +56,12 @@ int PropertyInfoArea::FindContextIndex(const char* context) const {
   });
 }
 
-// Binary search the list of schemas to find the index of a given schema string.
+// Binary search the list of types to find the index of a given type string.
 // Only should be used for TrieSerializer to construct the Trie.
-int PropertyInfoArea::FindSchemaIndex(const char* schema) const {
-  return Find(num_schemas(), [this, schema](auto array_offset) {
-    auto string_offset = uint32_array(schemas_array_offset())[array_offset];
-    return strcmp(c_string(string_offset), schema);
+int PropertyInfoArea::FindTypeIndex(const char* type) const {
+  return Find(num_types(), [this, type](auto array_offset) {
+    auto string_offset = uint32_array(types_array_offset())[array_offset];
+    return strcmp(c_string(string_offset), type);
   });
 }
 
@@ -89,7 +89,7 @@ bool TrieNode::FindChildForString(const char* name, uint32_t namelen, TrieNode* 
 }
 
 void PropertyInfoArea::CheckPrefixMatch(const char* remaining_name, const TrieNode& trie_node,
-                                        uint32_t* context_index, uint32_t* schema_index) const {
+                                        uint32_t* context_index, uint32_t* type_index) const {
   const uint32_t remaining_name_size = strlen(remaining_name);
   for (uint32_t i = 0; i < trie_node.num_prefixes(); ++i) {
     auto prefix_len = trie_node.prefix(i)->namelen;
@@ -99,8 +99,8 @@ void PropertyInfoArea::CheckPrefixMatch(const char* remaining_name, const TrieNo
       if (trie_node.prefix(i)->context_index != ~0u) {
         *context_index = trie_node.prefix(i)->context_index;
       }
-      if (trie_node.prefix(i)->schema_index != ~0u) {
-        *schema_index = trie_node.prefix(i)->schema_index;
+      if (trie_node.prefix(i)->type_index != ~0u) {
+        *type_index = trie_node.prefix(i)->type_index;
       }
       return;
     }
@@ -108,9 +108,9 @@ void PropertyInfoArea::CheckPrefixMatch(const char* remaining_name, const TrieNo
 }
 
 void PropertyInfoArea::GetPropertyInfoIndexes(const char* name, uint32_t* context_index,
-                                              uint32_t* schema_index) const {
+                                              uint32_t* type_index) const {
   uint32_t return_context_index = ~0u;
-  uint32_t return_schema_index = ~0u;
+  uint32_t return_type_index = ~0u;
   const char* remaining_name = name;
   auto trie_node = root_node();
   while (true) {
@@ -120,13 +120,13 @@ void PropertyInfoArea::GetPropertyInfoIndexes(const char* name, uint32_t* contex
     if (trie_node.context_index() != ~0u) {
       return_context_index = trie_node.context_index();
     }
-    if (trie_node.schema_index() != ~0u) {
-      return_schema_index = trie_node.schema_index();
+    if (trie_node.type_index() != ~0u) {
+      return_type_index = trie_node.type_index();
     }
 
     // Check prefixes at this node.  This comes after the node check since these prefixes are by
     // definition longer than the node itself.
-    CheckPrefixMatch(remaining_name, trie_node, &return_context_index, &return_schema_index);
+    CheckPrefixMatch(remaining_name, trie_node, &return_context_index, &return_type_index);
 
     if (sep == nullptr) {
       break;
@@ -153,29 +153,29 @@ void PropertyInfoArea::GetPropertyInfoIndexes(const char* name, uint32_t* contex
           *context_index = return_context_index;
         }
       }
-      if (schema_index != nullptr) {
-        if (trie_node.exact_match(i)->schema_index != ~0u) {
-          *schema_index = trie_node.exact_match(i)->schema_index;
+      if (type_index != nullptr) {
+        if (trie_node.exact_match(i)->type_index != ~0u) {
+          *type_index = trie_node.exact_match(i)->type_index;
         } else {
-          *schema_index = return_schema_index;
+          *type_index = return_type_index;
         }
       }
       return;
     }
   }
   // Check prefix matches for prefixes not deliminated with '.'
-  CheckPrefixMatch(remaining_name, trie_node, &return_context_index, &return_schema_index);
+  CheckPrefixMatch(remaining_name, trie_node, &return_context_index, &return_type_index);
   // Return previously found prefix match.
   if (context_index != nullptr) *context_index = return_context_index;
-  if (schema_index != nullptr) *schema_index = return_schema_index;
+  if (type_index != nullptr) *type_index = return_type_index;
   return;
 }
 
 void PropertyInfoArea::GetPropertyInfo(const char* property, const char** context,
-                                       const char** schema) const {
+                                       const char** type) const {
   uint32_t context_index;
-  uint32_t schema_index;
-  GetPropertyInfoIndexes(property, &context_index, &schema_index);
+  uint32_t type_index;
+  GetPropertyInfoIndexes(property, &context_index, &type_index);
   if (context != nullptr) {
     if (context_index == ~0u) {
       *context = nullptr;
@@ -183,11 +183,11 @@ void PropertyInfoArea::GetPropertyInfo(const char* property, const char** contex
       *context = this->context(context_index);
     }
   }
-  if (schema != nullptr) {
-    if (schema_index == ~0u) {
-      *schema = nullptr;
+  if (type != nullptr) {
+    if (type_index == ~0u) {
+      *type = nullptr;
     } else {
-      *schema = this->schema(schema_index);
+      *type = this->type(type_index);
     }
   }
 }

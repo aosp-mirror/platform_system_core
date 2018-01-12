@@ -22,19 +22,19 @@ namespace android {
 namespace properties {
 
 TEST(propertyinfoserializer, BuildTrie_Simple) {
-  auto trie_builder = TrieBuilder("default", "default_schema");
+  auto trie_builder = TrieBuilder("default", "default_type");
 
   // Add test data to tree
   auto error = std::string();
-  EXPECT_TRUE(trie_builder.AddToTrie("test.", "1st", "1st_schema", false, &error));
-  EXPECT_TRUE(trie_builder.AddToTrie("test.test", "2nd", "2nd_schema", false, &error));
-  EXPECT_TRUE(trie_builder.AddToTrie("test.test1", "3rd", "3rd_schema", true, &error));
-  EXPECT_TRUE(trie_builder.AddToTrie("test.test2", "3rd", "3rd_schema", true, &error));
-  EXPECT_TRUE(trie_builder.AddToTrie("test.test3", "3rd", "3rd_schema", true, &error));
-  EXPECT_TRUE(trie_builder.AddToTrie("this.is.a.long.string", "4th", "4th_schema", true, &error));
+  EXPECT_TRUE(trie_builder.AddToTrie("test.", "1st", "1st_type", false, &error));
+  EXPECT_TRUE(trie_builder.AddToTrie("test.test", "2nd", "2nd_type", false, &error));
+  EXPECT_TRUE(trie_builder.AddToTrie("test.test1", "3rd", "3rd_type", true, &error));
+  EXPECT_TRUE(trie_builder.AddToTrie("test.test2", "3rd", "3rd_type", true, &error));
+  EXPECT_TRUE(trie_builder.AddToTrie("test.test3", "3rd", "3rd_type", true, &error));
+  EXPECT_TRUE(trie_builder.AddToTrie("this.is.a.long.string", "4th", "4th_type", true, &error));
 
   ASSERT_EQ(5U, trie_builder.contexts().size());
-  ASSERT_EQ(5U, trie_builder.schemas().size());
+  ASSERT_EQ(5U, trie_builder.types().size());
 
   auto& builder_root = trie_builder.builder_root();
 
@@ -42,8 +42,8 @@ TEST(propertyinfoserializer, BuildTrie_Simple) {
   EXPECT_EQ("root", builder_root.name());
   ASSERT_NE(nullptr, builder_root.context());
   EXPECT_EQ("default", *builder_root.context());
-  ASSERT_NE(nullptr, builder_root.schema());
-  EXPECT_EQ("default_schema", *builder_root.schema());
+  ASSERT_NE(nullptr, builder_root.type());
+  EXPECT_EQ("default_type", *builder_root.type());
 
   EXPECT_EQ(0U, builder_root.prefixes().size());
   EXPECT_EQ(0U, builder_root.exact_matches().size());
@@ -55,8 +55,8 @@ TEST(propertyinfoserializer, BuildTrie_Simple) {
   EXPECT_EQ("test", test_node->name());
   ASSERT_NE(nullptr, test_node->context());
   EXPECT_EQ("1st", *test_node->context());
-  ASSERT_NE(nullptr, test_node->schema());
-  EXPECT_EQ("1st_schema", *test_node->schema());
+  ASSERT_NE(nullptr, test_node->type());
+  EXPECT_EQ("1st_type", *test_node->type());
 
   EXPECT_EQ(0U, test_node->children().size());
   EXPECT_EQ(1U, test_node->prefixes().size());
@@ -65,8 +65,8 @@ TEST(propertyinfoserializer, BuildTrie_Simple) {
     EXPECT_EQ("test", property_entry.name);
     ASSERT_NE(nullptr, property_entry.context);
     EXPECT_EQ("2nd", *property_entry.context);
-    ASSERT_NE(nullptr, property_entry.schema);
-    EXPECT_EQ("2nd_schema", *property_entry.schema);
+    ASSERT_NE(nullptr, property_entry.type);
+    EXPECT_EQ("2nd_type", *property_entry.type);
   }
   EXPECT_EQ(3U, test_node->exact_matches().size());
   EXPECT_EQ("test1", test_node->exact_matches()[0].name);
@@ -80,18 +80,18 @@ TEST(propertyinfoserializer, BuildTrie_Simple) {
   EXPECT_EQ("3rd", *test_node->exact_matches()[1].context);
   EXPECT_EQ("3rd", *test_node->exact_matches()[2].context);
 
-  ASSERT_NE(nullptr, test_node->exact_matches()[0].schema);
-  ASSERT_NE(nullptr, test_node->exact_matches()[1].schema);
-  ASSERT_NE(nullptr, test_node->exact_matches()[2].schema);
-  EXPECT_EQ("3rd_schema", *test_node->exact_matches()[0].schema);
-  EXPECT_EQ("3rd_schema", *test_node->exact_matches()[1].schema);
-  EXPECT_EQ("3rd_schema", *test_node->exact_matches()[2].schema);
+  ASSERT_NE(nullptr, test_node->exact_matches()[0].type);
+  ASSERT_NE(nullptr, test_node->exact_matches()[1].type);
+  ASSERT_NE(nullptr, test_node->exact_matches()[2].type);
+  EXPECT_EQ("3rd_type", *test_node->exact_matches()[0].type);
+  EXPECT_EQ("3rd_type", *test_node->exact_matches()[1].type);
+  EXPECT_EQ("3rd_type", *test_node->exact_matches()[2].type);
 
   // Check the long string node
   auto expect_empty_one_child = [](auto* node) {
     ASSERT_NE(nullptr, node);
     EXPECT_EQ(nullptr, node->context());
-    EXPECT_EQ(nullptr, node->schema());
+    EXPECT_EQ(nullptr, node->type());
     EXPECT_EQ(0U, node->prefixes().size());
     EXPECT_EQ(0U, node->exact_matches().size());
     EXPECT_EQ(1U, node->children().size());
@@ -120,8 +120,8 @@ TEST(propertyinfoserializer, BuildTrie_Simple) {
     EXPECT_EQ("string", property_entry.name);
     ASSERT_NE(nullptr, property_entry.context);
     EXPECT_EQ("4th", *property_entry.context);
-    ASSERT_NE(nullptr, property_entry.schema);
-    EXPECT_EQ("4th_schema", *property_entry.schema);
+    ASSERT_NE(nullptr, property_entry.type);
+    EXPECT_EQ("4th_type", *property_entry.type);
   }
 }
 
