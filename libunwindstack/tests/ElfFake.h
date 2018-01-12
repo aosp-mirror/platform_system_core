@@ -21,6 +21,7 @@
 
 #include <deque>
 #include <string>
+#include <unordered_map>
 
 #include <unwindstack/Elf.h>
 #include <unwindstack/ElfInterface.h>
@@ -55,6 +56,9 @@ class ElfFake : public Elf {
   void FakeSetLoadBias(uint64_t load_bias) { load_bias_ = load_bias; }
 
   void FakeSetInterface(ElfInterface* interface) { interface_.reset(interface); }
+  void FakeSetGnuDebugdataInterface(ElfInterface* interface) {
+    gnu_debugdata_interface_.reset(interface);
+  }
 };
 
 class ElfInterfaceFake : public ElfInterface {
@@ -67,8 +71,13 @@ class ElfInterfaceFake : public ElfInterface {
   bool GetSoname(std::string*) override { return false; }
 
   bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override;
+  bool GetGlobalVariable(const std::string&, uint64_t*) override;
 
   bool Step(uint64_t, uint64_t, Regs*, Memory*, bool*) override;
+
+  void FakeSetGlobalVariable(const std::string& global, uint64_t offset) {
+    globals_[global] = offset;
+  }
 
   static void FakePushFunctionData(const FunctionData data) { functions_.push_back(data); }
   static void FakePushStepData(const StepData data) { steps_.push_back(data); }
@@ -79,6 +88,8 @@ class ElfInterfaceFake : public ElfInterface {
   }
 
  private:
+  std::unordered_map<std::string, uint64_t> globals_;
+
   static std::deque<FunctionData> functions_;
   static std::deque<StepData> steps_;
 };

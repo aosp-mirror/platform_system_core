@@ -50,6 +50,7 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   auto process_memory = stack_map->process_memory();
   unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
                                  regs, stack_map->process_memory());
+  unwinder.SetJitDebug(stack_map->GetJitDebug(), regs->Arch());
   unwinder.Unwind(skip_names, &stack_map->GetSuffixesToIgnore());
 
   if (num_ignore_frames >= unwinder.NumFrames()) {

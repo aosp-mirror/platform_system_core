@@ -33,6 +33,7 @@
 #include <vector>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -191,7 +192,9 @@ int SaveData(pid_t pid) {
   // elf files are involved.
   uint64_t sp = regs->sp();
   auto process_memory = unwindstack::Memory::CreateProcessMemory(pid);
+  unwindstack::JitDebug jit_debug(process_memory);
   unwindstack::Unwinder unwinder(1024, &maps, regs, process_memory);
+  unwinder.SetJitDebug(&jit_debug, regs->Arch());
   unwinder.Unwind();
 
   std::unordered_map<uint64_t, map_info_t> maps_by_start;
@@ -212,6 +215,10 @@ int SaveData(pid_t pid) {
         }
       }
     }
+  }
+
+  for (size_t i = 0; i < unwinder.NumFrames(); i++) {
+    printf("%s\n", unwinder.FormatFrame(i).c_str());
   }
 
   if (!SaveStack(pid, sp, last_sp)) {

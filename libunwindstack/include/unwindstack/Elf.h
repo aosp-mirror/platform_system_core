@@ -59,6 +59,8 @@ class Elf {
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
 
+  bool GetGlobalVariable(const std::string& name, uint64_t* memory_address);
+
   uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
 
   bool Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
@@ -67,6 +69,8 @@ class Elf {
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
 
   uint64_t GetLoadBias() { return load_bias_; }
+
+  bool IsValidPc(uint64_t pc);
 
   bool valid() { return valid_; }
 
