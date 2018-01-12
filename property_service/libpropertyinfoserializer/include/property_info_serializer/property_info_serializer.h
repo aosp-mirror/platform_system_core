@@ -26,19 +26,19 @@ namespace properties {
 struct PropertyInfoEntry {
   PropertyInfoEntry() {}
   template <typename T, typename U, typename V>
-  PropertyInfoEntry(T&& name, U&& context, V&& schema, bool exact_match)
+  PropertyInfoEntry(T&& name, U&& context, V&& type, bool exact_match)
       : name(std::forward<T>(name)),
         context(std::forward<U>(context)),
-        schema(std::forward<V>(schema)),
+        type(std::forward<V>(type)),
         exact_match(exact_match) {}
   std::string name;
   std::string context;
-  std::string schema;
+  std::string type;
   bool exact_match;
 };
 
 bool BuildTrie(const std::vector<PropertyInfoEntry>& property_info,
-               const std::string& default_context, const std::string& default_schema,
+               const std::string& default_context, const std::string& default_type,
                std::string* serialized_trie, std::string* error);
 
 void ParsePropertyInfoFile(const std::string& file_contents,

@@ -23,23 +23,23 @@ using android::base::Split;
 namespace android {
 namespace properties {
 
-TrieBuilder::TrieBuilder(const std::string& default_context, const std::string& default_schema)
+TrieBuilder::TrieBuilder(const std::string& default_context, const std::string& default_type)
     : builder_root_("root") {
   auto* context_pointer = StringPointerFromContainer(default_context, &contexts_);
   builder_root_.set_context(context_pointer);
-  auto* schema_pointer = StringPointerFromContainer(default_schema, &schemas_);
-  builder_root_.set_schema(schema_pointer);
+  auto* type_pointer = StringPointerFromContainer(default_type, &types_);
+  builder_root_.set_type(type_pointer);
 }
 
 bool TrieBuilder::AddToTrie(const std::string& name, const std::string& context,
-                            const std::string& schema, bool exact, std::string* error) {
+                            const std::string& type, bool exact, std::string* error) {
   auto* context_pointer = StringPointerFromContainer(context, &contexts_);
-  auto* schema_pointer = StringPointerFromContainer(schema, &schemas_);
-  return AddToTrie(name, context_pointer, schema_pointer, exact, error);
+  auto* type_pointer = StringPointerFromContainer(type, &types_);
+  return AddToTrie(name, context_pointer, type_pointer, exact, error);
 }
 
 bool TrieBuilder::AddToTrie(const std::string& name, const std::string* context,
-                            const std::string* schema, bool exact, std::string* error) {
+                            const std::string* type, bool exact, std::string* error) {
   TrieBuilderNode* current_node = &builder_root_;
 
   auto name_pieces = Split(name, ".");
@@ -66,12 +66,12 @@ bool TrieBuilder::AddToTrie(const std::string& name, const std::string* context,
 
   // Store our context based on what type of match it is.
   if (exact) {
-    if (!current_node->AddExactMatchContext(name_pieces.front(), context, schema)) {
+    if (!current_node->AddExactMatchContext(name_pieces.front(), context, type)) {
       *error = "Duplicate exact match detected for '" + name + "'";
       return false;
     }
   } else if (!ends_with_dot) {
-    if (!current_node->AddPrefixContext(name_pieces.front(), context, schema)) {
+    if (!current_node->AddPrefixContext(name_pieces.front(), context, type)) {
       *error = "Duplicate prefix match detected for '" + name + "'";
       return false;
     }
@@ -84,12 +84,12 @@ bool TrieBuilder::AddToTrie(const std::string& name, const std::string* context,
       *error = "Unable to allocate Trie node";
       return false;
     }
-    if (child->context() != nullptr || child->schema() != nullptr) {
+    if (child->context() != nullptr || child->type() != nullptr) {
       *error = "Duplicate prefix match detected for '" + name + "'";
       return false;
     }
     child->set_context(context);
-    child->set_schema(schema);
+    child->set_type(type);
   }
   return true;
 }

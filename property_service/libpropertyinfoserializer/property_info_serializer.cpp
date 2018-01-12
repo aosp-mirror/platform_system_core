@@ -27,13 +27,13 @@ namespace android {
 namespace properties {
 
 bool BuildTrie(const std::vector<PropertyInfoEntry>& property_info,
-               const std::string& default_context, const std::string& default_schema,
+               const std::string& default_context, const std::string& default_type,
                std::string* serialized_trie, std::string* error) {
   // Check that names are legal first
-  auto trie_builder = TrieBuilder(default_context, default_schema);
+  auto trie_builder = TrieBuilder(default_context, default_type);
 
-  for (const auto& [name, context, schema, is_exact] : property_info) {
-    if (!trie_builder.AddToTrie(name, context, schema, is_exact, error)) {
+  for (const auto& [name, context, type, is_exact] : property_info) {
+    if (!trie_builder.AddToTrie(name, context, type, is_exact, error)) {
       return false;
     }
   }
