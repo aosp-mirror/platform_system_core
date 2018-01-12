@@ -108,8 +108,35 @@ bool Symbols::GetName(uint64_t addr, uint64_t load_bias, Memory* elf_memory, std
   return return_value;
 }
 
+template <typename SymType>
+bool Symbols::GetGlobal(Memory* elf_memory, const std::string& name, uint64_t* memory_address) {
+  uint64_t cur_offset = offset_;
+  while (cur_offset + entry_size_ <= end_) {
+    SymType entry;
+    if (!elf_memory->ReadFully(cur_offset, &entry, sizeof(entry))) {
+      return false;
+    }
+    cur_offset += entry_size_;
+
+    if (entry.st_shndx != SHN_UNDEF && ELF32_ST_TYPE(entry.st_info) == STT_OBJECT &&
+        ELF32_ST_BIND(entry.st_info) == STB_GLOBAL) {
+      uint64_t str_offset = str_offset_ + entry.st_name;
+      if (str_offset < str_end_) {
+        std::string symbol;
+        if (elf_memory->ReadString(str_offset, &symbol, str_end_ - str_offset) && symbol == name) {
+          *memory_address = entry.st_value;
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 // Instantiate all of the needed template functions.
 template bool Symbols::GetName<Elf32_Sym>(uint64_t, uint64_t, Memory*, std::string*, uint64_t*);
 template bool Symbols::GetName<Elf64_Sym>(uint64_t, uint64_t, Memory*, std::string*, uint64_t*);
 
+template bool Symbols::GetGlobal<Elf32_Sym>(Memory*, const std::string&, uint64_t*);
+template bool Symbols::GetGlobal<Elf64_Sym>(Memory*, const std::string&, uint64_t*);
 }  // namespace unwindstack

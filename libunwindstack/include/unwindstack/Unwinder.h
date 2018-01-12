@@ -32,6 +32,8 @@ namespace unwindstack {
 
 // Forward declarations.
 class Elf;
+class JitDebug;
+enum ArchEnum : uint8_t;
 
 struct FrameData {
   size_t num;
@@ -67,16 +69,19 @@ class Unwinder {
   const std::vector<FrameData>& frames() { return frames_; }
 
   std::string FormatFrame(size_t frame_num);
-  static std::string FormatFrame(const FrameData& frame, bool bits32);
+  static std::string FormatFrame(const FrameData& frame, bool is32bit);
+
+  void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
 
  private:
-  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc);
+  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc, uint64_t adjusted_pc);
 
   size_t max_frames_;
   Maps* maps_;
   Regs* regs_;
   std::vector<FrameData> frames_;
   std::shared_ptr<Memory> process_memory_;
+  JitDebug* jit_debug_ = nullptr;
 };
 
 }  // namespace unwindstack

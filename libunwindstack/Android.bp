@@ -55,6 +55,7 @@ cc_library {
         "Elf.cpp",
         "ElfInterface.cpp",
         "ElfInterfaceArm.cpp",
+        "JitDebug.cpp",
         "Log.cpp",
         "MapInfo.cpp",
         "Maps.cpp",
@@ -128,6 +129,7 @@ cc_test {
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
         "tests/ElfTestUtils.cpp",
+        "tests/JitDebugTest.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapInfoGetLoadBiasTest.cpp",
@@ -168,6 +170,7 @@ cc_test {
     data: [
         "tests/files/elf32.xz",
         "tests/files/elf64.xz",
+        "tests/files/offline/jit_debug_x86_32/*",
         "tests/files/offline/gnu_debugdata_arm32/*",
         "tests/files/offline/straddle_arm32/*",
         "tests/files/offline/straddle_arm64/*",
