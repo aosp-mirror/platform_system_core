@@ -18,6 +18,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <string>
+#include <vector>
+
 #include <backtrace/BacktraceMap.h>
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
@@ -38,6 +41,10 @@ bool UnwindStackMap::Build() {
 
   // Create the process memory object.
   process_memory_ = unwindstack::Memory::CreateProcessMemory(pid_);
+
+  // Create a JitDebug object for getting jit unwind information.
+  std::vector<std::string> search_libs_{"libart.so", "libartd.so"};
+  jit_debug_.reset(new unwindstack::JitDebug(process_memory_, search_libs_));
 
   if (!stack_maps_->Parse()) {
     return false;

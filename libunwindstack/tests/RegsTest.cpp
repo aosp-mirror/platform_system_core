@@ -188,7 +188,7 @@ TEST_F(RegsTest, elf_invalid) {
 
   regs_arm.set_pc(0x1500);
   EXPECT_EQ(0x500U, invalid_elf->GetRelPc(regs_arm.pc(), &map_info));
-  EXPECT_EQ(0x500U, regs_arm.GetAdjustedPc(0x500U, invalid_elf));
+  EXPECT_EQ(0x4fcU, regs_arm.GetAdjustedPc(0x500U, invalid_elf));
 
   regs_arm64.set_pc(0x1600);
   EXPECT_EQ(0x600U, invalid_elf->GetRelPc(regs_arm64.pc(), &map_info));

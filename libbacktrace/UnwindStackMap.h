@@ -23,6 +23,7 @@
 #include <memory>
 
 #include <backtrace/BacktraceMap.h>
+#include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 
 class UnwindStackMap : public BacktraceMap {
@@ -41,11 +42,14 @@ class UnwindStackMap : public BacktraceMap {
 
   const std::shared_ptr<unwindstack::Memory>& process_memory() { return process_memory_; }
 
+  unwindstack::JitDebug* GetJitDebug() { return jit_debug_.get(); }
+
  protected:
   uint64_t GetLoadBias(size_t index) override;
 
   std::unique_ptr<unwindstack::Maps> stack_maps_;
   std::shared_ptr<unwindstack::Memory> process_memory_;
+  std::unique_ptr<unwindstack::JitDebug> jit_debug_;
 };
 
 #endif  // _LIBBACKTRACE_UNWINDSTACK_MAP_H

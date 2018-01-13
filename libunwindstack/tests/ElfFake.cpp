@@ -43,6 +43,15 @@ bool ElfInterfaceFake::GetFunctionName(uint64_t, uint64_t, std::string* name, ui
   return true;
 }
 
+bool ElfInterfaceFake::GetGlobalVariable(const std::string& global, uint64_t* offset) {
+  auto entry = globals_.find(global);
+  if (entry == globals_.end()) {
+    return false;
+  }
+  *offset = entry->second;
+  return true;
+}
+
 bool ElfInterfaceFake::Step(uint64_t, uint64_t, Regs* regs, Memory*, bool* finished) {
   if (steps_.empty()) {
     return false;

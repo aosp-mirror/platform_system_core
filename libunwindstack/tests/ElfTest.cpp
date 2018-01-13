@@ -346,7 +346,14 @@ class ElfInterfaceMock : public ElfInterface {
   void InitHeaders() override {}
   bool GetSoname(std::string*) override { return false; }
   bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override { return false; }
+
   MOCK_METHOD5(Step, bool(uint64_t, uint64_t, Regs*, Memory*, bool*));
+  MOCK_METHOD2(GetGlobalVariable, bool(const std::string&, uint64_t*));
+  MOCK_METHOD1(IsValidPc, bool(uint64_t));
+
+  void MockSetDynamicOffset(uint64_t offset) { dynamic_offset_ = offset; }
+  void MockSetDynamicVaddr(uint64_t vaddr) { dynamic_vaddr_ = vaddr; }
+  void MockSetDynamicSize(uint64_t size) { dynamic_size_ = size; }
 };
 
 TEST_F(ElfTest, step_in_interface) {
@@ -378,14 +385,200 @@ TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
   elf.FakeSetInterface(interface);
   MemoryFake process_memory;
 
-  // Invalid relative pc given load_bias.
   bool finished;
-  ASSERT_FALSE(elf.Step(0x1004, 0x1000, 0x2000, &regs, &process_memory, &finished));
-
   EXPECT_CALL(*interface, Step(0x7300, 0x4000, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
   ASSERT_TRUE(elf.Step(0x7304, 0x7300, 0x2000, &regs, &process_memory, &finished));
+}
+
+TEST_F(ElfTest, get_global_invalid_elf) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(false);
+
+  std::string global("something");
+  uint64_t offset;
+  ASSERT_FALSE(elf.GetGlobalVariable(global, &offset));
+}
+
+TEST_F(ElfTest, get_global_valid_not_in_interface) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset)).WillOnce(::testing::Return(false));
+
+  ASSERT_FALSE(elf.GetGlobalVariable(global, &offset));
+}
+
+TEST_F(ElfTest, get_global_valid_below_load_bias) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0x1000);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset))
+      .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0x300), ::testing::Return(true)));
+
+  ASSERT_FALSE(elf.GetGlobalVariable(global, &offset));
+}
+
+TEST_F(ElfTest, get_global_valid_dynamic_zero) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  ElfInterfaceMock* gnu_interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetGnuDebugdataInterface(gnu_interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset)).WillOnce(::testing::Return(false));
+
+  EXPECT_CALL(*gnu_interface, GetGlobalVariable(global, &offset))
+      .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0x500), ::testing::Return(true)));
+
+  ASSERT_TRUE(elf.GetGlobalVariable(global, &offset));
+  EXPECT_EQ(0x500U, offset);
+}
+
+TEST_F(ElfTest, get_global_valid_in_gnu_debugdata_dynamic_zero) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset))
+      .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0x300), ::testing::Return(true)));
+
+  ASSERT_TRUE(elf.GetGlobalVariable(global, &offset));
+  EXPECT_EQ(0x300U, offset);
+}
+
+TEST_F(ElfTest, get_global_valid_dynamic_zero_non_zero_load_bias) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0x100);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset))
+      .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0x300), ::testing::Return(true)));
+
+  ASSERT_TRUE(elf.GetGlobalVariable(global, &offset));
+  EXPECT_EQ(0x200U, offset);
+}
+
+TEST_F(ElfTest, get_global_valid_dynamic_adjust_negative) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  interface->MockSetDynamicOffset(0x400);
+  interface->MockSetDynamicVaddr(0x800);
+  interface->MockSetDynamicSize(0x100);
+  elf.FakeSetInterface(interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset))
+      .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0x850), ::testing::Return(true)));
+
+  ASSERT_TRUE(elf.GetGlobalVariable(global, &offset));
+  EXPECT_EQ(0x450U, offset);
+}
+
+TEST_F(ElfTest, get_global_valid_dynamic_adjust_positive) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  interface->MockSetDynamicOffset(0x1000);
+  interface->MockSetDynamicVaddr(0x800);
+  interface->MockSetDynamicSize(0x100);
+  elf.FakeSetInterface(interface);
+
+  uint64_t offset;
+  std::string global("something");
+  EXPECT_CALL(*interface, GetGlobalVariable(global, &offset))
+      .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0x850), ::testing::Return(true)));
+
+  ASSERT_TRUE(elf.GetGlobalVariable(global, &offset));
+  EXPECT_EQ(0x1050U, offset);
+}
+
+TEST_F(ElfTest, is_valid_pc_elf_invalid) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(false);
+  elf.FakeSetLoadBias(0);
+
+  EXPECT_FALSE(elf.IsValidPc(0x100));
+  EXPECT_FALSE(elf.IsValidPc(0x200));
+}
+
+TEST_F(ElfTest, is_valid_pc_interface) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  EXPECT_CALL(*interface, IsValidPc(0x1500)).WillOnce(::testing::Return(true));
+
+  EXPECT_TRUE(elf.IsValidPc(0x1500));
+}
+
+TEST_F(ElfTest, is_valid_pc_non_zero_load_bias) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0x1000);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+
+  EXPECT_CALL(*interface, IsValidPc(0x500)).WillOnce(::testing::Return(true));
+
+  EXPECT_FALSE(elf.IsValidPc(0x100));
+  EXPECT_FALSE(elf.IsValidPc(0x200));
+  EXPECT_TRUE(elf.IsValidPc(0x1500));
+}
+
+TEST_F(ElfTest, is_valid_pc_from_gnu_debugdata) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  elf.FakeSetLoadBias(0);
+
+  ElfInterfaceMock* interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetInterface(interface);
+  ElfInterfaceMock* gnu_interface = new ElfInterfaceMock(memory_);
+  elf.FakeSetGnuDebugdataInterface(gnu_interface);
+
+  EXPECT_CALL(*interface, IsValidPc(0x1500)).WillOnce(::testing::Return(false));
+  EXPECT_CALL(*gnu_interface, IsValidPc(0x1500)).WillOnce(::testing::Return(true));
+
+  EXPECT_TRUE(elf.IsValidPc(0x1500));
 }
 
 }  // namespace unwindstack
