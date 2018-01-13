@@ -330,9 +330,69 @@ TYPED_TEST_P(SymbolsTest, symtab_read_cached) {
   ASSERT_EQ(3U, func_offset);
 }
 
+TYPED_TEST_P(SymbolsTest, get_global) {
+  uint64_t start_offset = 0x1000;
+  uint64_t str_offset = 0xa000;
+  Symbols symbols(start_offset, 4 * sizeof(TypeParam), sizeof(TypeParam), str_offset, 0x1000);
+
+  TypeParam sym;
+  memset(&sym, 0, sizeof(sym));
+  sym.st_shndx = SHN_COMMON;
+  sym.st_info = STT_OBJECT | (STB_GLOBAL << 4);
+  sym.st_name = 0x100;
+  this->memory_.SetMemory(start_offset, &sym, sizeof(sym));
+  this->memory_.SetMemory(str_offset + 0x100, "global_0");
+
+  start_offset += sizeof(sym);
+  memset(&sym, 0, sizeof(sym));
+  sym.st_shndx = SHN_COMMON;
+  sym.st_info = STT_FUNC;
+  sym.st_name = 0x200;
+  sym.st_value = 0x10000;
+  sym.st_size = 0x100;
+  this->memory_.SetMemory(start_offset, &sym, sizeof(sym));
+  this->memory_.SetMemory(str_offset + 0x200, "function_0");
+
+  start_offset += sizeof(sym);
+  memset(&sym, 0, sizeof(sym));
+  sym.st_shndx = SHN_COMMON;
+  sym.st_info = STT_OBJECT | (STB_GLOBAL << 4);
+  sym.st_name = 0x300;
+  this->memory_.SetMemory(start_offset, &sym, sizeof(sym));
+  this->memory_.SetMemory(str_offset + 0x300, "global_1");
+
+  start_offset += sizeof(sym);
+  memset(&sym, 0, sizeof(sym));
+  sym.st_shndx = SHN_COMMON;
+  sym.st_info = STT_FUNC;
+  sym.st_name = 0x400;
+  sym.st_value = 0x12000;
+  sym.st_size = 0x100;
+  this->memory_.SetMemory(start_offset, &sym, sizeof(sym));
+  this->memory_.SetMemory(str_offset + 0x400, "function_1");
+
+  uint64_t offset;
+  EXPECT_TRUE(symbols.GetGlobal<TypeParam>(&this->memory_, "global_0", &offset));
+  EXPECT_TRUE(symbols.GetGlobal<TypeParam>(&this->memory_, "global_1", &offset));
+  EXPECT_TRUE(symbols.GetGlobal<TypeParam>(&this->memory_, "global_0", &offset));
+  EXPECT_TRUE(symbols.GetGlobal<TypeParam>(&this->memory_, "global_1", &offset));
+
+  EXPECT_FALSE(symbols.GetGlobal<TypeParam>(&this->memory_, "function_0", &offset));
+  EXPECT_FALSE(symbols.GetGlobal<TypeParam>(&this->memory_, "function_1", &offset));
+
+  std::string name;
+  EXPECT_TRUE(symbols.GetName<TypeParam>(0x10002, 0, &this->memory_, &name, &offset));
+  EXPECT_EQ("function_0", name);
+  EXPECT_EQ(2U, offset);
+
+  EXPECT_TRUE(symbols.GetName<TypeParam>(0x12004, 0, &this->memory_, &name, &offset));
+  EXPECT_EQ("function_1", name);
+  EXPECT_EQ(4U, offset);
+}
+
 REGISTER_TYPED_TEST_CASE_P(SymbolsTest, function_bounds_check, no_symbol, multiple_entries,
                            multiple_entries_nonstandard_size, load_bias, symtab_value_out_of_bounds,
-                           symtab_read_cached);
+                           symtab_read_cached, get_global);
 
 typedef ::testing::Types<Elf32_Sym, Elf64_Sym> SymbolsTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, SymbolsTest, SymbolsTestTypes);

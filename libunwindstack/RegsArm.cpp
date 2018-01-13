@@ -37,10 +37,6 @@ ArchEnum RegsArm::Arch() {
 }
 
 uint64_t RegsArm::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
-  if (!elf->valid()) {
-    return rel_pc;
-  }
-
   uint64_t load_bias = elf->GetLoadBias();
   if (rel_pc < load_bias) {
     return rel_pc;

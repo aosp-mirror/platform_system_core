@@ -345,4 +345,26 @@ size_t MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
   return memory_->Read(addr, dst, size);
 }
 
+MemoryOfflineParts::~MemoryOfflineParts() {
+  for (auto memory : memories_) {
+    delete memory;
+  }
+}
+
+size_t MemoryOfflineParts::Read(uint64_t addr, void* dst, size_t size) {
+  if (memories_.empty()) {
+    return 0;
+  }
+
+  // Do a read on each memory object, no support for reading across the
+  // different memory objects.
+  for (MemoryOffline* memory : memories_) {
+    size_t bytes = memory->Read(addr, dst, size);
+    if (bytes != 0) {
+      return bytes;
+    }
+  }
+  return 0;
+}
+
 }  // namespace unwindstack

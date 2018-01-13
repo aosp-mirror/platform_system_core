@@ -43,6 +43,30 @@ ElfInterface::~ElfInterface() {
   }
 }
 
+bool ElfInterface::IsValidPc(uint64_t pc) {
+  if (!pt_loads_.empty()) {
+    for (auto& entry : pt_loads_) {
+      uint64_t start = entry.second.table_offset;
+      uint64_t end = start + entry.second.table_size;
+      if (pc >= start && pc < end) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // No PT_LOAD data, look for a fde for this pc in the section data.
+  if (debug_frame_ != nullptr && debug_frame_->GetFdeFromPc(pc) != nullptr) {
+    return true;
+  }
+
+  if (eh_frame_ != nullptr && eh_frame_->GetFdeFromPc(pc) != nullptr) {
+    return true;
+  }
+
+  return false;
+}
+
 Memory* ElfInterface::CreateGnuDebugdataMemory() {
   if (gnu_debugdata_offset_ == 0 || gnu_debugdata_size_ == 0) {
     return nullptr;
@@ -225,6 +249,10 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
         return false;
       }
       dynamic_offset_ = phdr.p_offset;
+      if (!memory_->ReadField(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
+        return false;
+      }
+      dynamic_vaddr_ = phdr.p_vaddr;
       if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
         return false;
       }
@@ -386,6 +414,20 @@ bool ElfInterface::GetFunctionNameWithTemplate(uint64_t addr, uint64_t load_bias
   return false;
 }
 
+template <typename SymType>
+bool ElfInterface::GetGlobalVariableWithTemplate(const std::string& name, uint64_t* memory_address) {
+  if (symbols_.empty()) {
+    return false;
+  }
+
+  for (const auto symbol : symbols_) {
+    if (symbol->GetGlobal<SymType>(memory_, name, memory_address)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ElfInterface::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
                         bool* finished) {
   // Adjust the load bias to get the real relative pc.
@@ -450,6 +492,9 @@ template bool ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(uint64_t, uin
                                                                    uint64_t*);
 template bool ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(uint64_t, uint64_t, std::string*,
                                                                    uint64_t*);
+
+template bool ElfInterface::GetGlobalVariableWithTemplate<Elf32_Sym>(const std::string&, uint64_t*);
+template bool ElfInterface::GetGlobalVariableWithTemplate<Elf64_Sym>(const std::string&, uint64_t*);
 
 template void ElfInterface::GetMaxSizeWithTemplate<Elf32_Ehdr>(Memory*, uint64_t*);
 template void ElfInterface::GetMaxSizeWithTemplate<Elf64_Ehdr>(Memory*, uint64_t*);

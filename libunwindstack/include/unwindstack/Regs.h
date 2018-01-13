@@ -51,7 +51,7 @@ class Regs {
 
   virtual ArchEnum Arch() = 0;
 
-  virtual bool Format32Bit() = 0;
+  virtual bool Is32Bit() = 0;
 
   virtual void* RawData() = 0;
   virtual uint64_t pc() = 0;
@@ -94,7 +94,7 @@ class RegsImpl : public Regs {
   void set_pc(AddressType pc) { pc_ = pc; }
   void set_sp(AddressType sp) { sp_ = sp; }
 
-  bool Format32Bit() override { return sizeof(AddressType) == sizeof(uint32_t); }
+  bool Is32Bit() override { return sizeof(AddressType) == sizeof(uint32_t); }
 
   inline AddressType& operator[](size_t reg) { return regs_[reg]; }
 
