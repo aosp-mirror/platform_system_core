@@ -103,6 +103,37 @@ bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offse
                                                      addr, load_bias_, name, func_offset)));
 }
 
+bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
+  if (!valid_) {
+    return false;
+  }
+
+  if (!interface_->GetGlobalVariable(name, memory_address) &&
+      (gnu_debugdata_interface_ == nullptr ||
+       !gnu_debugdata_interface_->GetGlobalVariable(name, memory_address))) {
+    return false;
+  }
+
+  // Adjust by the load bias.
+  if (*memory_address < load_bias_) {
+    return false;
+  }
+
+  *memory_address -= load_bias_;
+
+  // If this winds up in the dynamic section, then we might need to adjust
+  // the address.
+  uint64_t dynamic_end = interface_->dynamic_vaddr() + interface_->dynamic_size();
+  if (*memory_address >= interface_->dynamic_vaddr() && *memory_address < dynamic_end) {
+    if (interface_->dynamic_vaddr() > interface_->dynamic_offset()) {
+      *memory_address -= interface_->dynamic_vaddr() - interface_->dynamic_offset();
+    } else {
+      *memory_address += interface_->dynamic_offset() - interface_->dynamic_vaddr();
+    }
+  }
+  return true;
+}
+
 // The relative pc is always relative to the start of the map from which it comes.
 bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
                Memory* process_memory, bool* finished) {
@@ -158,6 +189,23 @@ void Elf::GetInfo(Memory* memory, bool* valid, uint64_t* size) {
   } else {
     *valid = false;
   }
+}
+
+bool Elf::IsValidPc(uint64_t pc) {
+  if (!valid_ || pc < load_bias_) {
+    return false;
+  }
+  pc -= load_bias_;
+
+  if (interface_->IsValidPc(pc)) {
+    return true;
+  }
+
+  if (gnu_debugdata_interface_ != nullptr && gnu_debugdata_interface_->IsValidPc(pc)) {
+    return true;
+  }
+
+  return false;
 }
 
 ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {

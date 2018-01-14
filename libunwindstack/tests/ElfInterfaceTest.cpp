@@ -958,4 +958,189 @@ TEST_F(ElfInterfaceTest, init_section_headers_offsets64) {
   InitSectionHeadersOffsets<Elf64_Ehdr, Elf64_Shdr, ElfInterface64>();
 }
 
+TEST_F(ElfInterfaceTest, is_valid_pc_from_pt_load) {
+  std::unique_ptr<ElfInterface> elf(new ElfInterface32(&memory_));
+
+  Elf32_Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_phoff = 0x100;
+  ehdr.e_phnum = 1;
+  ehdr.e_phentsize = sizeof(Elf32_Phdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Elf32_Phdr phdr;
+  memset(&phdr, 0, sizeof(phdr));
+  phdr.p_type = PT_LOAD;
+  phdr.p_vaddr = 0;
+  phdr.p_memsz = 0x10000;
+  phdr.p_flags = PF_R | PF_X;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x100, &phdr, sizeof(phdr));
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+  EXPECT_TRUE(elf->IsValidPc(0));
+  EXPECT_TRUE(elf->IsValidPc(0x5000));
+  EXPECT_TRUE(elf->IsValidPc(0xffff));
+  EXPECT_FALSE(elf->IsValidPc(0x10000));
+}
+
+TEST_F(ElfInterfaceTest, is_valid_pc_from_pt_load_non_zero_load_bias) {
+  std::unique_ptr<ElfInterface> elf(new ElfInterface32(&memory_));
+
+  Elf32_Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_phoff = 0x100;
+  ehdr.e_phnum = 1;
+  ehdr.e_phentsize = sizeof(Elf32_Phdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Elf32_Phdr phdr;
+  memset(&phdr, 0, sizeof(phdr));
+  phdr.p_type = PT_LOAD;
+  phdr.p_vaddr = 0x2000;
+  phdr.p_memsz = 0x10000;
+  phdr.p_flags = PF_R | PF_X;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x100, &phdr, sizeof(phdr));
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0x2000U, load_bias);
+  EXPECT_FALSE(elf->IsValidPc(0));
+  EXPECT_FALSE(elf->IsValidPc(0x1000));
+  EXPECT_FALSE(elf->IsValidPc(0x1fff));
+  EXPECT_TRUE(elf->IsValidPc(0x2000));
+  EXPECT_TRUE(elf->IsValidPc(0x5000));
+  EXPECT_TRUE(elf->IsValidPc(0x11fff));
+  EXPECT_FALSE(elf->IsValidPc(0x12000));
+}
+
+TEST_F(ElfInterfaceTest, is_valid_pc_from_debug_frame) {
+  std::unique_ptr<ElfInterface> elf(new ElfInterface32(&memory_));
+
+  uint64_t sh_offset = 0x100;
+
+  Elf32_Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_shstrndx = 1;
+  ehdr.e_shoff = sh_offset;
+  ehdr.e_shentsize = sizeof(Elf32_Shdr);
+  ehdr.e_shnum = 3;
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Elf32_Shdr shdr;
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_NULL;
+  memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
+
+  sh_offset += sizeof(shdr);
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  shdr.sh_name = 1;
+  shdr.sh_offset = 0x500;
+  shdr.sh_size = 0x100;
+  memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
+  memory_.SetMemory(0x500, ".debug_frame");
+
+  sh_offset += sizeof(shdr);
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_name = 0;
+  shdr.sh_addr = 0x600;
+  shdr.sh_offset = 0x600;
+  shdr.sh_size = 0x200;
+  memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
+
+  // CIE 32.
+  memory_.SetData32(0x600, 0xfc);
+  memory_.SetData32(0x604, 0xffffffff);
+  memory_.SetData8(0x608, 1);
+  memory_.SetData8(0x609, '\0');
+  memory_.SetData8(0x60a, 0x4);
+  memory_.SetData8(0x60b, 0x4);
+  memory_.SetData8(0x60c, 0x1);
+
+  // FDE 32.
+  memory_.SetData32(0x700, 0xfc);
+  memory_.SetData32(0x704, 0);
+  memory_.SetData32(0x708, 0x2100);
+  memory_.SetData32(0x70c, 0x200);
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  elf->InitHeaders();
+  EXPECT_EQ(0U, load_bias);
+  EXPECT_FALSE(elf->IsValidPc(0));
+  EXPECT_FALSE(elf->IsValidPc(0x20ff));
+  EXPECT_TRUE(elf->IsValidPc(0x2100));
+  EXPECT_TRUE(elf->IsValidPc(0x2200));
+  EXPECT_TRUE(elf->IsValidPc(0x22ff));
+  EXPECT_FALSE(elf->IsValidPc(0x2300));
+}
+
+TEST_F(ElfInterfaceTest, is_valid_pc_from_eh_frame) {
+  std::unique_ptr<ElfInterface> elf(new ElfInterface32(&memory_));
+
+  uint64_t sh_offset = 0x100;
+
+  Elf32_Ehdr ehdr;
+  memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_shstrndx = 1;
+  ehdr.e_shoff = sh_offset;
+  ehdr.e_shentsize = sizeof(Elf32_Shdr);
+  ehdr.e_shnum = 3;
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Elf32_Shdr shdr;
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_NULL;
+  memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
+
+  sh_offset += sizeof(shdr);
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  shdr.sh_name = 1;
+  shdr.sh_offset = 0x500;
+  shdr.sh_size = 0x100;
+  memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
+  memory_.SetMemory(0x500, ".eh_frame");
+
+  sh_offset += sizeof(shdr);
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_PROGBITS;
+  shdr.sh_name = 0;
+  shdr.sh_addr = 0x600;
+  shdr.sh_offset = 0x600;
+  shdr.sh_size = 0x200;
+  memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
+
+  // CIE 32.
+  memory_.SetData32(0x600, 0xfc);
+  memory_.SetData32(0x604, 0);
+  memory_.SetData8(0x608, 1);
+  memory_.SetData8(0x609, '\0');
+  memory_.SetData8(0x60a, 0x4);
+  memory_.SetData8(0x60b, 0x4);
+  memory_.SetData8(0x60c, 0x1);
+
+  // FDE 32.
+  memory_.SetData32(0x700, 0xfc);
+  memory_.SetData32(0x704, 0x104);
+  memory_.SetData32(0x708, 0x20f8);
+  memory_.SetData32(0x70c, 0x200);
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  elf->InitHeaders();
+  EXPECT_EQ(0U, load_bias);
+  EXPECT_FALSE(elf->IsValidPc(0));
+  EXPECT_FALSE(elf->IsValidPc(0x27ff));
+  EXPECT_TRUE(elf->IsValidPc(0x2800));
+  EXPECT_TRUE(elf->IsValidPc(0x2900));
+  EXPECT_TRUE(elf->IsValidPc(0x29ff));
+  EXPECT_FALSE(elf->IsValidPc(0x2a00));
+}
+
 }  // namespace unwindstack

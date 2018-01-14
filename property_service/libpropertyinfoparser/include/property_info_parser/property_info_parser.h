@@ -32,8 +32,8 @@ struct PropertyEntry {
 
   // This is the context match for this node_; ~0u if it doesn't correspond to any.
   uint32_t context_index;
-  // This is the schema for this node_; ~0u if it doesn't correspond to any.
-  uint32_t schema_index;
+  // This is the type for this node_; ~0u if it doesn't correspond to any.
+  uint32_t type_index;
 };
 
 struct TrieNodeInternal {
@@ -61,7 +61,7 @@ struct PropertyInfoAreaHeader {
   uint32_t minimum_supported_version;
   uint32_t size;
   uint32_t contexts_offset;
-  uint32_t schemas_offset;
+  uint32_t types_offset;
   uint32_t root_offset;
 };
 
@@ -103,7 +103,7 @@ class TrieNode {
   }
 
   uint32_t context_index() const { return node_property_entry()->context_index; }
-  uint32_t schema_index() const { return node_property_entry()->schema_index; }
+  uint32_t type_index() const { return node_property_entry()->type_index; }
 
   uint32_t num_child_nodes() const { return trie_node_base_->num_child_nodes; }
   TrieNode child_node(int n) const {
@@ -143,12 +143,11 @@ class TrieNode {
 
 class PropertyInfoArea : private SerializedData {
  public:
-  void GetPropertyInfoIndexes(const char* name, uint32_t* context_index,
-                              uint32_t* schema_index) const;
-  void GetPropertyInfo(const char* property, const char** context, const char** schema) const;
+  void GetPropertyInfoIndexes(const char* name, uint32_t* context_index, uint32_t* type_index) const;
+  void GetPropertyInfo(const char* property, const char** context, const char** type) const;
 
   int FindContextIndex(const char* context) const;
-  int FindSchemaIndex(const char* schema) const;
+  int FindTypeIndex(const char* type) const;
 
   const char* context(uint32_t index) const {
     uint32_t context_array_size_offset = contexts_offset();
@@ -156,10 +155,10 @@ class PropertyInfoArea : private SerializedData {
     return data_base() + context_array[index];
   }
 
-  const char* schema(uint32_t index) const {
-    uint32_t schema_array_size_offset = schemas_offset();
-    const uint32_t* schema_array = uint32_array(schema_array_size_offset + sizeof(uint32_t));
-    return data_base() + schema_array[index];
+  const char* type(uint32_t index) const {
+    uint32_t type_array_size_offset = types_offset();
+    const uint32_t* type_array = uint32_array(type_array_size_offset + sizeof(uint32_t));
+    return data_base() + type_array[index];
   }
 
   uint32_t current_version() const { return header()->current_version; }
@@ -168,21 +167,21 @@ class PropertyInfoArea : private SerializedData {
   uint32_t size() const { return SerializedData::size(); }
 
   uint32_t num_contexts() const { return uint32_array(contexts_offset())[0]; }
-  uint32_t num_schemas() const { return uint32_array(schemas_offset())[0]; }
+  uint32_t num_types() const { return uint32_array(types_offset())[0]; }
 
   TrieNode root_node() const { return trie(header()->root_offset); }
 
  private:
   void CheckPrefixMatch(const char* remaining_name, const TrieNode& trie_node,
-                        uint32_t* context_index, uint32_t* schema_index) const;
+                        uint32_t* context_index, uint32_t* type_index) const;
 
   const PropertyInfoAreaHeader* header() const {
     return reinterpret_cast<const PropertyInfoAreaHeader*>(data_base());
   }
   uint32_t contexts_offset() const { return header()->contexts_offset; }
   uint32_t contexts_array_offset() const { return contexts_offset() + sizeof(uint32_t); }
-  uint32_t schemas_offset() const { return header()->schemas_offset; }
-  uint32_t schemas_array_offset() const { return schemas_offset() + sizeof(uint32_t); }
+  uint32_t types_offset() const { return header()->types_offset; }
+  uint32_t types_array_offset() const { return types_offset() + sizeof(uint32_t); }
 
   TrieNode trie(uint32_t offset) const {
     if (offset != 0 && offset > size()) return TrieNode();

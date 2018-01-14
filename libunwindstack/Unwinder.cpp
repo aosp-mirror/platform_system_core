@@ -27,12 +27,13 @@
 #include <android-base/stringprintf.h>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/JitDebug.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Unwinder.h>
 
 namespace unwindstack {
 
-void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc) {
+void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc, uint64_t func_pc) {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
@@ -53,7 +54,7 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc
   frame->map_flags = map_info->flags;
   frame->map_load_bias = elf->GetLoadBias();
 
-  if (!elf->GetFunctionName(frame->rel_pc, &frame->function_name, &frame->function_offset)) {
+  if (!elf->GetFunctionName(func_pc, &frame->function_name, &frame->function_offset)) {
     frame->function_name = "";
     frame->function_offset = 0;
   }
@@ -79,17 +80,20 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
 
   bool return_address_attempt = false;
   bool adjust_pc = false;
+  std::unique_ptr<JitDebug> jit_debug;
   for (; frames_.size() < max_frames_;) {
     uint64_t cur_pc = regs_->pc();
     uint64_t cur_sp = regs_->sp();
 
     MapInfo* map_info = maps_->Find(regs_->pc());
     uint64_t rel_pc;
+    uint64_t adjusted_pc;
     uint64_t adjusted_rel_pc;
     Elf* elf;
     if (map_info == nullptr) {
       rel_pc = regs_->pc();
       adjusted_rel_pc = rel_pc;
+      adjusted_pc = rel_pc;
     } else {
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
@@ -97,16 +101,30 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       elf = map_info->GetElf(process_memory_, true);
       rel_pc = elf->GetRelPc(regs_->pc(), map_info);
       if (adjust_pc) {
-        adjusted_rel_pc = regs_->GetAdjustedPc(rel_pc, elf);
+        adjusted_pc = regs_->GetAdjustedPc(rel_pc, elf);
       } else {
-        adjusted_rel_pc = rel_pc;
+        adjusted_pc = rel_pc;
+      }
+      adjusted_rel_pc = adjusted_pc;
+
+      // If the pc is in an invalid elf file, try and get an Elf object
+      // using the jit debug information.
+      if (!elf->valid() && jit_debug_ != nullptr) {
+        uint64_t adjusted_jit_pc = regs_->pc() - (rel_pc - adjusted_pc);
+        Elf* jit_elf = jit_debug_->GetElf(maps_, adjusted_jit_pc);
+        if (jit_elf != nullptr) {
+          // The jit debug information requires a non relative adjusted pc.
+          adjusted_pc = adjusted_jit_pc;
+          adjusted_rel_pc = adjusted_pc - map_info->start;
+          elf = jit_elf;
+        }
       }
     }
 
     if (map_info == nullptr || initial_map_names_to_skip == nullptr ||
         std::find(initial_map_names_to_skip->begin(), initial_map_names_to_skip->end(),
                   basename(map_info->name.c_str())) == initial_map_names_to_skip->end()) {
-      FillInFrame(map_info, elf, adjusted_rel_pc);
+      FillInFrame(map_info, elf, adjusted_rel_pc, adjusted_pc);
 
       // Once a frame is added, stop skipping frames.
       initial_map_names_to_skip = nullptr;
@@ -134,7 +152,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           in_device_map = true;
         } else {
           bool finished;
-          stepped = elf->Step(rel_pc, adjusted_rel_pc, map_info->elf_offset, regs_,
+          stepped = elf->Step(rel_pc, adjusted_pc, map_info->elf_offset, regs_,
                               process_memory_.get(), &finished);
           if (stepped && finished) {
             break;
@@ -174,13 +192,13 @@ std::string Unwinder::FormatFrame(size_t frame_num) {
   if (frame_num >= frames_.size()) {
     return "";
   }
-  return FormatFrame(frames_[frame_num], regs_->Format32Bit());
+  return FormatFrame(frames_[frame_num], regs_->Is32Bit());
 }
 
-std::string Unwinder::FormatFrame(const FrameData& frame, bool bits32) {
+std::string Unwinder::FormatFrame(const FrameData& frame, bool is32bit) {
   std::string data;
 
-  if (bits32) {
+  if (is32bit) {
     data += android::base::StringPrintf("  #%02zu pc %08" PRIx64, frame.num, frame.rel_pc);
   } else {
     data += android::base::StringPrintf("  #%02zu pc %016" PRIx64, frame.num, frame.rel_pc);
@@ -206,6 +224,11 @@ std::string Unwinder::FormatFrame(const FrameData& frame, bool bits32) {
     data += ')';
   }
   return data;
+}
+
+void Unwinder::SetJitDebug(JitDebug* jit_debug, ArchEnum arch) {
+  jit_debug->SetArch(arch);
+  jit_debug_ = jit_debug;
 }
 
 }  // namespace unwindstack

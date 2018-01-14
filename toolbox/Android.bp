@@ -44,9 +44,11 @@ genrule {
 cc_defaults {
     name: "toolbox_binary_defaults",
     defaults: ["toolbox_defaults"],
+    cpp_std: "experimental",
     srcs: [
         "toolbox.c",
         "getevent.c",
+        "getprop.cpp",
         "newfs_msdos.c",
     ],
     generated_headers: [
@@ -54,12 +56,15 @@ cc_defaults {
     ],
     whole_static_libs: ["libtoolbox_dd"],
     shared_libs: [
+        "libbase",
         "libcutils",
     ],
+    static_libs: ["libpropertyinfoparser"],
 
     symlinks: [
         "dd",
         "getevent",
+        "getprop",
         "newfs_msdos",
     ],
 }

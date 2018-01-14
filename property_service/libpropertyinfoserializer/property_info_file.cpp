@@ -28,9 +28,9 @@ bool ParsePropertyInfoLine(const std::string& line, PropertyInfoEntry* out, std:
 
   // It is not an error to not find these, as older files will not contain them.
   auto exact_match = tokenizer.GetNext();
-  auto schema = tokenizer.GetRemaining();
+  auto type = tokenizer.GetRemaining();
 
-  *out = {property, context, schema, exact_match == "exact"};
+  *out = {property, context, type, exact_match == "exact"};
   return true;
 }
 

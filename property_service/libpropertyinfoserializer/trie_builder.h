@@ -26,13 +26,12 @@ namespace android {
 namespace properties {
 
 struct PropertyEntryBuilder {
-  PropertyEntryBuilder() : context(nullptr), schema(nullptr) {}
-  PropertyEntryBuilder(const std::string& name, const std::string* context,
-                       const std::string* schema)
-      : name(name), context(context), schema(schema) {}
+  PropertyEntryBuilder() : context(nullptr), type(nullptr) {}
+  PropertyEntryBuilder(const std::string& name, const std::string* context, const std::string* type)
+      : name(name), context(context), type(type) {}
   std::string name;
   const std::string* context;
-  const std::string* schema;
+  const std::string* type;
 };
 
 class TrieBuilderNode {
@@ -56,33 +55,33 @@ class TrieBuilderNode {
   TrieBuilderNode* AddChild(const std::string& name) { return &children_.emplace_back(name); }
 
   bool AddPrefixContext(const std::string& prefix, const std::string* context,
-                        const std::string* schema) {
+                        const std::string* type) {
     if (std::find_if(prefixes_.begin(), prefixes_.end(),
                      [&prefix](const auto& t) { return t.name == prefix; }) != prefixes_.end()) {
       return false;
     }
 
-    prefixes_.emplace_back(prefix, context, schema);
+    prefixes_.emplace_back(prefix, context, type);
     return true;
   }
 
   bool AddExactMatchContext(const std::string& exact_match, const std::string* context,
-                            const std::string* schema) {
+                            const std::string* type) {
     if (std::find_if(exact_matches_.begin(), exact_matches_.end(), [&exact_match](const auto& t) {
           return t.name == exact_match;
         }) != exact_matches_.end()) {
       return false;
     }
 
-    exact_matches_.emplace_back(exact_match, context, schema);
+    exact_matches_.emplace_back(exact_match, context, type);
     return true;
   }
 
   const std::string& name() const { return property_entry_.name; }
   const std::string* context() const { return property_entry_.context; }
   void set_context(const std::string* context) { property_entry_.context = context; }
-  const std::string* schema() const { return property_entry_.schema; }
-  void set_schema(const std::string* schema) { property_entry_.schema = schema; }
+  const std::string* type() const { return property_entry_.type; }
+  void set_type(const std::string* type) { property_entry_.type = type; }
 
   const PropertyEntryBuilder property_entry() const { return property_entry_; }
 
@@ -99,23 +98,23 @@ class TrieBuilderNode {
 
 class TrieBuilder {
  public:
-  TrieBuilder(const std::string& default_context, const std::string& default_schema);
-  bool AddToTrie(const std::string& name, const std::string& context, const std::string& schema,
+  TrieBuilder(const std::string& default_context, const std::string& default_type);
+  bool AddToTrie(const std::string& name, const std::string& context, const std::string& type,
                  bool exact, std::string* error);
 
   const TrieBuilderNode builder_root() const { return builder_root_; }
   const std::set<std::string>& contexts() const { return contexts_; }
-  const std::set<std::string>& schemas() const { return schemas_; }
+  const std::set<std::string>& types() const { return types_; }
 
  private:
-  bool AddToTrie(const std::string& name, const std::string* context, const std::string* schema,
+  bool AddToTrie(const std::string& name, const std::string* context, const std::string* type,
                  bool exact, std::string* error);
   const std::string* StringPointerFromContainer(const std::string& string,
                                                 std::set<std::string>* container);
 
   TrieBuilderNode builder_root_;
   std::set<std::string> contexts_;
-  std::set<std::string> schemas_;
+  std::set<std::string> types_;
 };
 
 }  // namespace properties
