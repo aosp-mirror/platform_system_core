@@ -81,7 +81,7 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
   private:
     time_t mTimer;
     storaged_config mConfig;
-    disk_stats_monitor mDsm;
+    unique_ptr<disk_stats_monitor> mDsm;
     uid_monitor mUidm;
     time_t mStarttime;
     sp<android::hardware::health::V2_0::IHealth> health;

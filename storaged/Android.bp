@@ -103,7 +103,10 @@ cc_test {
 
     srcs: ["tests/storaged_test.cpp"],
 
-    static_libs: ["libstoraged"],
+    static_libs: [
+        "libhealthhalutils",
+        "libstoraged",
+    ],
 }
 
 // AIDL interface between storaged and framework.jar

@@ -86,6 +86,7 @@ Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
 
 void storaged_t::init() {
     init_health_service();
+    mDsm = std::make_unique<disk_stats_monitor>(health);
 }
 
 void storaged_t::init_health_service() {
@@ -311,10 +312,10 @@ void storaged_t::flush_protos(unordered_map<int, StoragedProto>* protos) {
 void storaged_t::event(void) {
     unordered_map<int, StoragedProto> protos;
 
-    if (mDsm.enabled()) {
-        mDsm.update();
+    if (mDsm->enabled()) {
+        mDsm->update();
         if (!(mTimer % mConfig.periodic_chores_interval_disk_stats_publish)) {
-            mDsm.publish();
+            mDsm->publish();
         }
     }
 
