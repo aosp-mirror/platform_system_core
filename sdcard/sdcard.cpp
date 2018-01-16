@@ -38,163 +38,17 @@
 #include <cutils/multiuser.h>
 #include <cutils/properties.h>
 
-#include <packagelistparser/packagelistparser.h>
-
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
 #include <private/android_filesystem_config.h>
 
-// README
-//
-// What is this?
-//
-// sdcard is a program that uses FUSE to emulate FAT-on-sdcard style
-// directory permissions (all files are given fixed owner, group, and
-// permissions at creation, owner, group, and permissions are not
-// changeable, symlinks and hardlinks are not createable, etc.
-//
-// See usage() for command line options.
-//
-// It must be run as root, but will drop to requested UID/GID as soon as it
-// mounts a filesystem.  It will refuse to run if requested UID/GID are zero.
-//
-// Things I believe to be true:
-//
-// - ops that return a fuse_entry (LOOKUP, MKNOD, MKDIR, LINK, SYMLINK,
-// CREAT) must bump that node's refcount
-// - don't forget that FORGET can forget multiple references (req->nlookup)
-// - if an op that returns a fuse_entry fails writing the reply to the
-// kernel, you must rollback the refcount to reflect the reference the
-// kernel did not actually acquire
-//
-// This daemon can also derive custom filesystem permissions based on directory
-// structure when requested. These custom permissions support several features:
-//
-// - Apps can access their own files in /Android/data/com.example/ without
-// requiring any additional GIDs.
-// - Separate permissions for protecting directories like Pictures and Music.
-// - Multi-user separation on the same physical device.
-
-#include "fuse.h"
-
-#define PROP_SDCARDFS_DEVICE "ro.sys.sdcardfs"
-#define PROP_SDCARDFS_USER "persist.sys.sdcardfs"
+// NOTE: This is a vestigial program that simply exists to mount the in-kernel
+// sdcardfs filesystem.  The older FUSE-based design that used to live here has
+// been completely removed to avoid confusion.
 
 /* Supplementary groups to execute with. */
 static const gid_t kGroups[1] = { AID_PACKAGE_INFO };
-
-static bool package_parse_callback(pkg_info *info, void *userdata) {
-    struct fuse_global *global = (struct fuse_global *)userdata;
-    bool res = global->package_to_appid->emplace(info->name, info->uid).second;
-    packagelist_free(info);
-    return res;
-}
-
-static bool read_package_list(struct fuse_global* global) {
-    pthread_mutex_lock(&global->lock);
-
-    global->package_to_appid->clear();
-    bool rc = packagelist_parse(package_parse_callback, global);
-    DLOG(INFO) << "read_package_list: found " << global->package_to_appid->size() << " packages";
-
-    // Regenerate ownership details using newly loaded mapping.
-    derive_permissions_recursive_locked(global->fuse_default, &global->root);
-
-    pthread_mutex_unlock(&global->lock);
-
-    return rc;
-}
-
-static void watch_package_list(struct fuse_global* global) {
-    struct inotify_event *event;
-    char event_buf[512];
-
-    int nfd = inotify_init();
-    if (nfd == -1) {
-        PLOG(ERROR) << "inotify_init failed";
-        return;
-    }
-
-    bool active = false;
-    while (1) {
-        if (!active) {
-            int res = inotify_add_watch(nfd, PACKAGES_LIST_FILE, IN_DELETE_SELF);
-            if (res == -1) {
-                if (errno == ENOENT || errno == EACCES) {
-                    /* Framework may not have created the file yet, sleep and retry. */
-                    LOG(ERROR) << "missing \"" << PACKAGES_LIST_FILE << "\"; retrying...";
-                    sleep(3);
-                    continue;
-                } else {
-                    PLOG(ERROR) << "inotify_add_watch failed";
-                    return;
-                }
-            }
-
-            /* Watch above will tell us about any future changes, so
-             * read the current state. */
-            if (read_package_list(global) == false) {
-                LOG(ERROR) << "read_package_list failed";
-                return;
-            }
-            active = true;
-        }
-
-        int event_pos = 0;
-        ssize_t res = TEMP_FAILURE_RETRY(read(nfd, event_buf, sizeof(event_buf)));
-        if (res == -1) {
-            PLOG(ERROR) << "failed to read inotify event";
-            return;
-        } else if (static_cast<size_t>(res) < sizeof(*event)) {
-            LOG(ERROR) << "failed to read inotify event: read " << res << " expected "
-                       << sizeof(event_buf);
-            return;
-        }
-
-        while (res >= static_cast<ssize_t>(sizeof(*event))) {
-            int event_size;
-            event = reinterpret_cast<struct inotify_event*>(event_buf + event_pos);
-
-            DLOG(INFO) << "inotify event: " << std::hex << event->mask << std::dec;
-            if ((event->mask & IN_IGNORED) == IN_IGNORED) {
-                /* Previously watched file was deleted, probably due to move
-                 * that swapped in new data; re-arm the watch and read. */
-                active = false;
-            }
-
-            event_size = sizeof(*event) + event->len;
-            res -= event_size;
-            event_pos += event_size;
-        }
-    }
-}
-
-static int fuse_setup(struct fuse* fuse, gid_t gid, mode_t mask) {
-    char opts[256];
-
-    fuse->fd = TEMP_FAILURE_RETRY(open("/dev/fuse", O_RDWR | O_CLOEXEC));
-    if (fuse->fd == -1) {
-        PLOG(ERROR) << "failed to open fuse device";
-        return -1;
-    }
-
-    umount2(fuse->dest_path, MNT_DETACH);
-
-    snprintf(opts, sizeof(opts),
-            "fd=%i,rootmode=40000,default_permissions,allow_other,user_id=%d,group_id=%d",
-            fuse->fd, fuse->global->uid, fuse->global->gid);
-    if (mount("/dev/fuse", fuse->dest_path, "fuse", MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_NOATIME,
-              opts) == -1) {
-        PLOG(ERROR) << "failed to mount fuse filesystem";
-        return -1;
-    }
-
-    fuse->gid = gid;
-    fuse->mask = mask;
-
-    return 0;
-}
 
 static void drop_privs(uid_t uid, gid_t gid) {
     ScopedMinijail j(minijail_new());
@@ -203,120 +57,6 @@ static void drop_privs(uid_t uid, gid_t gid) {
     minijail_change_uid(j.get(), uid);
     /* minijail_enter() will abort if priv-dropping fails. */
     minijail_enter(j.get());
-}
-
-static void* start_handler(void* data) {
-    struct fuse_handler* handler = static_cast<fuse_handler*>(data);
-    handle_fuse_requests(handler);
-    return NULL;
-}
-
-static void run(const char* source_path, const char* label, uid_t uid,
-        gid_t gid, userid_t userid, bool multi_user, bool full_write) {
-    struct fuse_global global;
-    struct fuse fuse_default;
-    struct fuse fuse_read;
-    struct fuse fuse_write;
-    struct fuse_handler handler_default;
-    struct fuse_handler handler_read;
-    struct fuse_handler handler_write;
-    pthread_t thread_default;
-    pthread_t thread_read;
-    pthread_t thread_write;
-
-    memset(&global, 0, sizeof(global));
-    memset(&fuse_default, 0, sizeof(fuse_default));
-    memset(&fuse_read, 0, sizeof(fuse_read));
-    memset(&fuse_write, 0, sizeof(fuse_write));
-    memset(&handler_default, 0, sizeof(handler_default));
-    memset(&handler_read, 0, sizeof(handler_read));
-    memset(&handler_write, 0, sizeof(handler_write));
-
-    pthread_mutex_init(&global.lock, NULL);
-    global.package_to_appid = new AppIdMap;
-    global.uid = uid;
-    global.gid = gid;
-    global.multi_user = multi_user;
-    global.next_generation = 0;
-    global.inode_ctr = 1;
-
-    memset(&global.root, 0, sizeof(global.root));
-    global.root.nid = FUSE_ROOT_ID; /* 1 */
-    global.root.refcount = 2;
-    global.root.namelen = strlen(source_path);
-    global.root.name = strdup(source_path);
-    global.root.userid = userid;
-    global.root.uid = AID_ROOT;
-    global.root.under_android = false;
-
-    // Clang static analyzer think strcpy potentially overwrites other fields
-    // in global. Use snprintf() to mute the false warning.
-    snprintf(global.source_path, sizeof(global.source_path), "%s", source_path);
-
-    if (multi_user) {
-        global.root.perm = PERM_PRE_ROOT;
-        snprintf(global.obb_path, sizeof(global.obb_path), "%s/obb", source_path);
-    } else {
-        global.root.perm = PERM_ROOT;
-        snprintf(global.obb_path, sizeof(global.obb_path), "%s/Android/obb", source_path);
-    }
-
-    fuse_default.global = &global;
-    fuse_read.global = &global;
-    fuse_write.global = &global;
-
-    global.fuse_default = &fuse_default;
-    global.fuse_read = &fuse_read;
-    global.fuse_write = &fuse_write;
-
-    snprintf(fuse_default.dest_path, PATH_MAX, "/mnt/runtime/default/%s", label);
-    snprintf(fuse_read.dest_path, PATH_MAX, "/mnt/runtime/read/%s", label);
-    snprintf(fuse_write.dest_path, PATH_MAX, "/mnt/runtime/write/%s", label);
-
-    handler_default.fuse = &fuse_default;
-    handler_read.fuse = &fuse_read;
-    handler_write.fuse = &fuse_write;
-
-    handler_default.token = 0;
-    handler_read.token = 1;
-    handler_write.token = 2;
-
-    umask(0);
-
-    if (multi_user) {
-        /* Multi-user storage is fully isolated per user, so "other"
-         * permissions are completely masked off. */
-        if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
-                || fuse_setup(&fuse_read, AID_EVERYBODY, 0027)
-                || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0027)) {
-            PLOG(FATAL) << "failed to fuse_setup";
-        }
-    } else {
-        /* Physical storage is readable by all users on device, but
-         * the Android directories are masked off to a single user
-         * deep inside attr_from_stat(). */
-        if (fuse_setup(&fuse_default, AID_SDCARD_RW, 0006)
-                || fuse_setup(&fuse_read, AID_EVERYBODY, full_write ? 0027 : 0022)
-                || fuse_setup(&fuse_write, AID_EVERYBODY, full_write ? 0007 : 0022)) {
-            PLOG(FATAL) << "failed to fuse_setup";
-        }
-    }
-
-    // Will abort if priv-dropping fails.
-    drop_privs(uid, gid);
-
-    if (multi_user) {
-        fs_prepare_dir(global.obb_path, 0775, uid, gid);
-    }
-
-    if (pthread_create(&thread_default, NULL, start_handler, &handler_default)
-            || pthread_create(&thread_read, NULL, start_handler, &handler_read)
-            || pthread_create(&thread_write, NULL, start_handler, &handler_write)) {
-        LOG(FATAL) << "failed to pthread_create";
-    }
-
-    watch_package_list(&global);
-    LOG(FATAL) << "terminated prematurely";
 }
 
 static bool sdcardfs_setup(const std::string& source_path, const std::string& dest_path,
@@ -405,41 +145,6 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
     }
 
     exit(0);
-}
-
-static bool supports_sdcardfs(void) {
-    std::string filesystems;
-    if (!android::base::ReadFileToString("/proc/filesystems", &filesystems)) {
-        PLOG(ERROR) << "Could not read /proc/filesystems";
-        return false;
-    }
-    for (const auto& fs : android::base::Split(filesystems, "\n")) {
-        if (fs.find("sdcardfs") != std::string::npos) return true;
-    }
-    return false;
-}
-
-static bool should_use_sdcardfs(void) {
-    char property[PROPERTY_VALUE_MAX];
-
-    // Allow user to have a strong opinion about state
-    property_get(PROP_SDCARDFS_USER, property, "");
-    if (!strcmp(property, "force_on")) {
-        LOG(WARNING) << "User explicitly enabled sdcardfs";
-        return supports_sdcardfs();
-    } else if (!strcmp(property, "force_off")) {
-        LOG(WARNING) << "User explicitly disabled sdcardfs";
-        return false;
-    }
-
-    // Fall back to device opinion about state
-    if (property_get_bool(PROP_SDCARDFS_DEVICE, true)) {
-        LOG(WARNING) << "Device explicitly enabled sdcardfs";
-        return supports_sdcardfs();
-    } else {
-        LOG(WARNING) << "Device explicitly disabled sdcardfs";
-        return false;
-    }
 }
 
 static int usage() {
@@ -536,11 +241,7 @@ int main(int argc, char **argv) {
         sleep(1);
     }
 
-    if (should_use_sdcardfs()) {
-        run_sdcardfs(source_path, label, uid, gid, userid, multi_user, full_write, derive_gid,
-                     default_normal);
-    } else {
-        run(source_path, label, uid, gid, userid, multi_user, full_write);
-    }
+    run_sdcardfs(source_path, label, uid, gid, userid, multi_user, full_write, derive_gid,
+                 default_normal);
     return 1;
 }
