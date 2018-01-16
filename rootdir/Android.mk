@@ -135,12 +135,71 @@ $(strip \
 )
 endef
 
+# Update namespace configuration file with library lists and VNDK version
+#
+# $(1): Input source file (ld.config.txt)
+# $(2): Output built module
+# $(3): VNDK version suffix
+define update_and_install_ld_config
+llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
+  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
+private_llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
+  $(filter $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
+vndk_sameprocess_libraries := $(call normalize-path-list,$(addsuffix .so,\
+  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_SAMEPROCESS_LIBRARIES))))
+vndk_core_libraries := $(call normalize-path-list,$(addsuffix .so,\
+  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_CORE_LIBRARIES))))
+sanitizer_runtime_libraries := $(call normalize-path-list,$(addsuffix .so,\
+  $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+  $(UBSAN_RUNTIME_LIBRARY) \
+  $(TSAN_RUNTIME_LIBRARY) \
+  $(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+  $(2ND_UBSAN_RUNTIME_LIBRARY) \
+  $(2ND_TSAN_RUNTIME_LIBRARY)))
+# If BOARD_VNDK_VERSION is not defined, VNDK version suffix will not be used.
+vndk_version_suffix := $(if $(strip $(3)),-$(strip $(3)))
+
+$(2): PRIVATE_LLNDK_LIBRARIES := $$(llndk_libraries)
+$(2): PRIVATE_PRIVATE_LLNDK_LIBRARIES := $$(private_llndk_libraries)
+$(2): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $$(vndk_sameprocess_libraries)
+$(2): PRIVATE_VNDK_CORE_LIBRARIES := $$(vndk_core_libraries)
+$(2): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := $$(sanitizer_runtime_libraries)
+$(2): PRIVATE_VNDK_VERSION := $$(vndk_version_suffix)
+$(2): $(1)
+	@echo "Generate: $$< -> $$@"
+	@mkdir -p $$(dir $$@)
+	$$(hide) sed -e 's?%LLNDK_LIBRARIES%?$$(PRIVATE_LLNDK_LIBRARIES)?g' $$< >$$@
+	$$(hide) sed -i -e 's?%PRIVATE_LLNDK_LIBRARIES%?$$(PRIVATE_PRIVATE_LLNDK_LIBRARIES)?g' $$@
+	$$(hide) sed -i -e 's?%VNDK_SAMEPROCESS_LIBRARIES%?$$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES)?g' $$@
+	$$(hide) sed -i -e 's?%VNDK_CORE_LIBRARIES%?$$(PRIVATE_VNDK_CORE_LIBRARIES)?g' $$@
+	$$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $$@
+	$$(hide) sed -i -e 's?%VNDK_VER%?$$(PRIVATE_VNDK_VERSION)?g' $$@
+
+llndk_libraries :=
+private_llndk_libraries :=
+vndk_sameprocess_libraries :=
+vndk_core_libraries :=
+sanitizer_runtime_libraries :=
+vndk_version_suffix :=
+endef # update_and_install_ld_config
+
 #######################################
 # ld.config.txt
+#
+# For VNDK enforced devices that have defined BOARD_VNDK_VERSION, use
+# "ld.config.txt.in" as a source file. This configuration includes strict VNDK
+# run-time restrictions for vendor process.
+# Other treblized devices, that have not defined BOARD_VNDK_VERSION or that
+# have set BOARD_VNDK_RUNTIME_DISABLE to true, use "ld.config.txt" as a source
+# file. This configuration does not have strict VNDK run-time restrictions.
+# If the device is not treblized, use "ld.config.legacy.txt" for legacy
+# namespace configuration.
 include $(CLEAR_VARS)
+LOCAL_MODULE := ld.config.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 
 _enforce_vndk_at_runtime := false
-
 ifdef BOARD_VNDK_VERSION
 ifneq ($(BOARD_VNDK_RUNTIME_DISABLE),true)
   _enforce_vndk_at_runtime := true
@@ -148,65 +207,52 @@ endif
 endif
 
 ifeq ($(_enforce_vndk_at_runtime),true)
-LOCAL_MODULE := ld.config.txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+# for VNDK enforced devices
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
+$(eval $(call update_and_install_ld_config,\
+  $(LOCAL_PATH)/etc/ld.config.txt.in,\
+  $(LOCAL_BUILT_MODULE),\
+  $(PLATFORM_VNDK_VERSION)))
 
-llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
-$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
+else ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
+# for treblized but VNDK non-enforced devices
+LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
+include $(BUILD_SYSTEM)/base_rules.mk
+$(eval $(call update_and_install_ld_config,\
+  $(LOCAL_PATH)/etc/ld.config.txt,\
+  $(LOCAL_BUILT_MODULE),\
+  $(if $(BOARD_VNDK_VERSION),$(PLATFORM_VNDK_VERSION))))
 
-private_llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
-$(filter $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
-
-vndk_sameprocess_libraries := $(call normalize-path-list,$(addsuffix .so,\
-$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_SAMEPROCESS_LIBRARIES))))
-
-vndk_core_libraries := $(call normalize-path-list,$(addsuffix .so,\
-$(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_CORE_LIBRARIES))))
-
-sanitizer_runtime_libraries := $(call normalize-path-list,$(addsuffix .so,\
-$(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
-$(UBSAN_RUNTIME_LIBRARY) \
-$(TSAN_RUNTIME_LIBRARY) \
-$(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
-$(2ND_UBSAN_RUNTIME_LIBRARY) \
-$(2ND_TSAN_RUNTIME_LIBRARY)))
-
-$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(llndk_libraries)
-$(LOCAL_BUILT_MODULE): PRIVATE_PRIVATE_LLNDK_LIBRARIES := $(private_llndk_libraries)
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(vndk_sameprocess_libraries)
-$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_PRIVATE_LIBRARIES := $(llndk_private_libraries)
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(vndk_core_libraries)
-$(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := $(sanitizer_runtime_libraries)
-$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/etc/ld.config.txt.in
-	@echo "Generate: $< -> $@"
-	@mkdir -p $(dir $@)
-	$(hide) sed -e 's?%LLNDK_LIBRARIES%?$(PRIVATE_LLNDK_LIBRARIES)?g' $< >$@
-	$(hide) sed -i -e 's?%PRIVATE_LLNDK_LIBRARIES%?$(PRIVATE_PRIVATE_LLNDK_LIBRARIES)?g' $@
-	$(hide) sed -i -e 's?%VNDK_SAMEPROCESS_LIBRARIES%?$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES)?g' $@
-	$(hide) sed -i -e 's?%VNDK_CORE_LIBRARIES%?$(PRIVATE_VNDK_CORE_LIBRARIES)?g' $@
-	$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
-
-llndk_libraries :=
-vndk_sameprocess_libraries :=
-vndk_core_libraries :=
-sanitizer_runtime_libraries :=
-else # if _enforce_vndk_at_runtime is not true
-
-LOCAL_MODULE := ld.config.txt
-ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
-  LOCAL_SRC_FILES := etc/ld.config.txt
-  LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 else
-  LOCAL_SRC_FILES := etc/ld.config.legacy.txt
-  LOCAL_MODULE_STEM := $(LOCAL_MODULE)
-endif
+# for legacy non-treblized devices
+LOCAL_SRC_FILES := etc/ld.config.legacy.txt
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_PREBUILT)
+
+endif # if _enforce_vndk_at_runtime is true
+
+_enforce_vndk_at_runtime :=
+
+#######################################
+# ld.config.noenforce.txt
+#
+# This file is a temporary configuration file only for GSI. Originally GSI has
+# BOARD_VNDK_VERSION defined and has strict VNDK enforcing rule based on
+# "ld.config.txt.in". However for the devices, that have not defined
+# BOARD_VNDK_VERSION, GSI provides this configuration file which is based on
+# "ld.config.txt".
+# Do not install this file for the devices other than GSI.
+include $(CLEAR_VARS)
+LOCAL_MODULE := ld.config.noenforce.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-include $(BUILD_PREBUILT)
-endif
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+include $(BUILD_SYSTEM)/base_rules.mk
+$(eval $(call update_and_install_ld_config,\
+  $(LOCAL_PATH)/etc/ld.config.txt,\
+  $(LOCAL_BUILT_MODULE),\
+  $(PLATFORM_VNDK_VERSION)))
 
 #######################################
 # llndk.libraries.txt
