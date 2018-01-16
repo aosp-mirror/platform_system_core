@@ -438,8 +438,8 @@ int main(int argc, char* argv[]) {
 
     int fdPmesg = -1;
     bool klogd = __android_logger_property_get_bool(
-        "logd.kernel", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
-                           BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
+        "ro.logd.kernel",
+        BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
     if (klogd) {
         static const char proc_kmsg[] = "/proc/kmsg";
         fdPmesg = android_get_control_file(proc_kmsg);
