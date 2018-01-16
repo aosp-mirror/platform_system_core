@@ -195,6 +195,7 @@ cc_test {
         "libcutils",
         "libdebuggerd_client",
         "liblog",
+        "libminijail",
         "libnativehelper"
     ],
 
