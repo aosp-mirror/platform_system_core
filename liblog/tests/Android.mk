@@ -24,13 +24,12 @@ test_module_prefix := liblog-
 test_tags := tests
 
 benchmark_c_flags := \
-    -Ibionic/tests \
-    -Wall -Wextra \
+    -Wall \
+    -Wextra \
     -Werror \
     -fno-builtin \
 
 benchmark_src_files := \
-    benchmark_main.cpp \
     liblog_benchmark.cpp
 
 # Build benchmarks for the device. Run with:
@@ -41,7 +40,7 @@ LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_CFLAGS += $(benchmark_c_flags)
 LOCAL_SHARED_LIBRARIES += liblog libm libbase
 LOCAL_SRC_FILES := $(benchmark_src_files)
-include $(BUILD_NATIVE_TEST)
+include $(BUILD_NATIVE_BENCHMARK)
 
 # -----------------------------------------------------------------------------
 # Unit tests.
