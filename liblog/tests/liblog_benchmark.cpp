@@ -19,6 +19,7 @@
 #include <poll.h>
 #include <sys/endian.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -106,6 +107,65 @@ static void BM_clock_overhead(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_clock_overhead);
+
+static void do_clock_overhead(benchmark::State& state, clockid_t clk_id) {
+  timespec t;
+  while (state.KeepRunning()) {
+    clock_gettime(clk_id, &t);
+  }
+}
+
+static void BM_time_clock_gettime_REALTIME(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_REALTIME);
+}
+BENCHMARK(BM_time_clock_gettime_REALTIME);
+
+static void BM_time_clock_gettime_MONOTONIC(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_MONOTONIC);
+}
+BENCHMARK(BM_time_clock_gettime_MONOTONIC);
+
+static void BM_time_clock_gettime_MONOTONIC_syscall(benchmark::State& state) {
+  timespec t;
+  while (state.KeepRunning()) {
+    syscall(__NR_clock_gettime, CLOCK_MONOTONIC, &t);
+  }
+}
+BENCHMARK(BM_time_clock_gettime_MONOTONIC_syscall);
+
+static void BM_time_clock_gettime_MONOTONIC_RAW(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_MONOTONIC_RAW);
+}
+BENCHMARK(BM_time_clock_gettime_MONOTONIC_RAW);
+
+static void BM_time_clock_gettime_BOOTTIME(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_BOOTTIME);
+}
+BENCHMARK(BM_time_clock_gettime_BOOTTIME);
+
+static void BM_time_clock_getres_MONOTONIC(benchmark::State& state) {
+  timespec t;
+  while (state.KeepRunning()) {
+    clock_getres(CLOCK_MONOTONIC, &t);
+  }
+}
+BENCHMARK(BM_time_clock_getres_MONOTONIC);
+
+static void BM_time_clock_getres_MONOTONIC_syscall(benchmark::State& state) {
+  timespec t;
+  while (state.KeepRunning()) {
+    syscall(__NR_clock_getres, CLOCK_MONOTONIC, &t);
+  }
+}
+BENCHMARK(BM_time_clock_getres_MONOTONIC_syscall);
+
+static void BM_time_time(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    time_t now;
+    now = time(&now);
+  }
+}
+BENCHMARK(BM_time_time);
 
 /*
  * Measure the time it takes to submit the android logging data to pstore
