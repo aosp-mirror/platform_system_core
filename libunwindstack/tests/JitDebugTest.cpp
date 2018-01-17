@@ -49,6 +49,7 @@ class JitDebugTest : public ::testing::Test {
                        "a000-c000 --xp 00000000 00:00 0\n"
                        "c000-f000 rwxp 00000000 00:00 0\n"
                        "f000-11000 r-xp 00000000 00:00 0\n"
+                       "12000-14000 r-xp 00000000 00:00 0\n"
                        "100000-110000 rw-p 0000000 00:00 0\n"
                        "200000-210000 rw-p 0000000 00:00 0\n"));
     ASSERT_TRUE(maps_->Parse());
@@ -64,6 +65,16 @@ class JitDebugTest : public ::testing::Test {
     map_info->elf = elf;
 
     map_info = maps_->Get(5);
+    ASSERT_TRUE(map_info != nullptr);
+    elf_memories_.push_back(new MemoryFake);
+    elf = new ElfFake(elf_memories_.back());
+    elf->FakeSetValid(true);
+    interface = new ElfInterfaceFake(elf_memories_.back());
+    elf->FakeSetInterface(interface);
+    interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
+    map_info->elf = elf;
+
+    map_info = maps_->Get(6);
     ASSERT_TRUE(map_info != nullptr);
     elf_memories_.push_back(new MemoryFake);
     elf = new ElfFake(elf_memories_.back());
@@ -291,6 +302,27 @@ TEST_F(JitDebugTest, get_elf_32) {
   Elf* elf2 = jit_debug_->GetElf(maps_.get(), 0x1500);
   ASSERT_TRUE(elf2 != nullptr);
   EXPECT_EQ(elf, elf2);
+}
+
+TEST_F(JitDebugTest, get_multiple_jit_debug_descriptors_valid) {
+  CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
+  CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x5000, ELFCLASS32, EM_ARM, 0x2000, 0x300);
+
+  WriteDescriptor32(0xf800, 0x200000);
+  WriteEntry32Pad(0x200000, 0, 0, 0x4000, 0x1000);
+  WriteDescriptor32(0x12800, 0x201000);
+  WriteEntry32Pad(0x201000, 0, 0, 0x5000, 0x1000);
+
+  ASSERT_TRUE(jit_debug_->GetElf(maps_.get(), 0x1500) != nullptr);
+  ASSERT_TRUE(jit_debug_->GetElf(maps_.get(), 0x2000) == nullptr);
+
+  // Now clear the descriptor entry for the first one.
+  WriteDescriptor32(0xf800, 0);
+  jit_debug_.reset(new JitDebug(process_memory_));
+  jit_debug_->SetArch(ARCH_ARM);
+
+  ASSERT_TRUE(jit_debug_->GetElf(maps_.get(), 0x1500) == nullptr);
+  ASSERT_TRUE(jit_debug_->GetElf(maps_.get(), 0x2000) != nullptr);
 }
 
 TEST_F(JitDebugTest, get_elf_x86) {
