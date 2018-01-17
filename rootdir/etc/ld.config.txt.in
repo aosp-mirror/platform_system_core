@@ -131,7 +131,7 @@ namespace.rs.visible = true
 
 namespace.rs.search.paths  = /odm/${LIB}/vndk-sp
 namespace.rs.search.paths += /vendor/${LIB}/vndk-sp
-namespace.rs.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.rs.search.paths += /odm/${LIB}
 namespace.rs.search.paths += /vendor/${LIB}
 
@@ -143,8 +143,8 @@ namespace.rs.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
 namespace.rs.asan.search.paths +=           /odm/${LIB}/vndk-sp
 namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
 namespace.rs.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.rs.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.rs.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.rs.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.rs.asan.search.paths += /data/asan/odm/${LIB}
 namespace.rs.asan.search.paths +=           /odm/${LIB}
 namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}
@@ -176,21 +176,21 @@ namespace.vndk.visible = true
 
 namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp
 namespace.vndk.search.paths += /vendor/${LIB}/vndk-sp
-namespace.vndk.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 
 namespace.vndk.permitted.paths  = /odm/${LIB}/hw
 namespace.vndk.permitted.paths += /odm/${LIB}/egl
 namespace.vndk.permitted.paths += /vendor/${LIB}/hw
 namespace.vndk.permitted.paths += /vendor/${LIB}/egl
 # This is exceptionally required since android.hidl.memory@1.0-impl.so is here
-namespace.vndk.permitted.paths += /system/${LIB}/vndk-sp${VNDK_VER}/hw
+namespace.vndk.permitted.paths += /system/${LIB}/vndk-sp%VNDK_VER%/hw
 
 namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 
 namespace.vndk.asan.permitted.paths  = /data/asan/odm/${LIB}/hw
 namespace.vndk.asan.permitted.paths +=           /odm/${LIB}/hw
@@ -201,8 +201,8 @@ namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/hw
 namespace.vndk.asan.permitted.paths += /data/asan/vendor/${LIB}/egl
 namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/egl
 
-namespace.vndk.asan.permitted.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}/hw
-namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}/hw
+namespace.vndk.asan.permitted.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%/hw
+namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%/hw
 
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
@@ -274,13 +274,13 @@ namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
 ###############################################################################
 namespace.vndk.isolated = false
 
-namespace.vndk.search.paths  = /system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.search.paths += /system/${LIB}/vndk${VNDK_VER}
+namespace.vndk.search.paths  = /system/${LIB}/vndk-sp%VNDK_VER%
+namespace.vndk.search.paths += /system/${LIB}/vndk%VNDK_VER%
 
-namespace.vndk.asan.search.paths  = /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk${VNDK_VER}
-namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk${VNDK_VER}
+namespace.vndk.asan.search.paths  = /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
+namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the system namespace. This is possible since their ABI is stable across

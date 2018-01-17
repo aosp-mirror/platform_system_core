@@ -128,7 +128,7 @@ namespace.rs.visible = true
 
 namespace.rs.search.paths  = /odm/${LIB}/vndk-sp
 namespace.rs.search.paths += /vendor/${LIB}/vndk-sp
-namespace.rs.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.rs.search.paths += /odm/${LIB}
 namespace.rs.search.paths += /vendor/${LIB}
 
@@ -140,8 +140,8 @@ namespace.rs.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
 namespace.rs.asan.search.paths +=           /odm/${LIB}/vndk-sp
 namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
 namespace.rs.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.rs.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.rs.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.rs.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.rs.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.rs.asan.search.paths += /data/asan/odm/${LIB}
 namespace.rs.asan.search.paths +=           /odm/${LIB}
 namespace.rs.asan.search.paths += /data/asan/vendor/${LIB}
@@ -198,7 +198,7 @@ namespace.vndk.visible = true
 
 namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp
 namespace.vndk.search.paths += /vendor/${LIB}/vndk-sp
-namespace.vndk.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 
 namespace.vndk.permitted.paths  = /odm/${LIB}/hw
 namespace.vndk.permitted.paths += /odm/${LIB}/egl
@@ -209,8 +209,8 @@ namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 
 namespace.vndk.asan.permitted.paths  = /data/asan/odm/${LIB}/hw
 namespace.vndk.asan.permitted.paths +=           /odm/${LIB}/hw
@@ -254,8 +254,8 @@ namespace.default.search.paths += /vendor/${LIB}/vndk
 namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 
 # Access to system libraries are allowed
-namespace.default.search.paths += /system/${LIB}/vndk${VNDK_VER}
-namespace.default.search.paths += /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
+namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
@@ -270,9 +270,9 @@ namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk
 namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
 namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk${VNDK_VER}
-namespace.default.asan.search.paths +=           /system/${LIB}/vndk${VNDK_VER}
-namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp${VNDK_VER}
-namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp${VNDK_VER}
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
