@@ -28,11 +28,12 @@
 #include <sstream>
 #include <string>
 
-#include <android/hidl/manager/1.0/IServiceManager.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android/hidl/manager/1.0/IServiceManager.h>
 #include <batteryservice/BatteryServiceConstants.h>
 #include <cutils/properties.h>
+#include <healthhalutils/HealthHalUtils.h>
 #include <hidl/HidlTransportSupport.h>
 #include <hwbinder/IPCThreadState.h>
 #include <log/log.h>
@@ -62,25 +63,16 @@ constexpr ssize_t min_benchmark_size = 128 * 1024;  // 128KB
 
 const uint32_t storaged_t::current_version = 4;
 
-using android::hardware::health::V1_0::BatteryStatus;
-using android::hardware::health::V1_0::toString;
-using android::hardware::health::V1_0::HealthInfo;
-using android::hardware::health::V2_0::IHealth;
-using android::hardware::health::V2_0::Result;
 using android::hardware::interfacesEqual;
 using android::hardware::Return;
+using android::hardware::health::V1_0::BatteryStatus;
+using android::hardware::health::V1_0::HealthInfo;
+using android::hardware::health::V1_0::toString;
+using android::hardware::health::V2_0::get_health_service;
+using android::hardware::health::V2_0::IHealth;
+using android::hardware::health::V2_0::Result;
 using android::hidl::manager::V1_0::IServiceManager;
 
-static sp<IHealth> get_health_service() {
-    for (auto&& instanceName : {"default", "backup"}) {
-        auto ret = IHealth::getService(instanceName);
-        if (ret != nullptr) {
-            return ret;
-        }
-        LOG_TO(SYSTEM, INFO) << "health: storaged: cannot get " << instanceName << " service";
-    }
-    return nullptr;
-}
 
 inline charger_stat_t is_charger_on(BatteryStatus prop) {
     return (prop == BatteryStatus::CHARGING || prop == BatteryStatus::FULL) ?

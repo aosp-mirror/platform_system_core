@@ -65,6 +65,8 @@ cc_library_static {
         "binder/android/os/storaged/IStoragedPrivate.aidl",
     ],
 
+    static_libs: ["libhealthhalutils"],
+
     logtags: ["EventLogTags.logtags"],
 
     proto: {
@@ -84,7 +86,10 @@ cc_binary {
 
     srcs: ["main.cpp"],
 
-    static_libs: ["libstoraged"],
+    static_libs: [
+        "libhealthhalutils",
+        "libstoraged",
+    ],
 }
 
 /*
