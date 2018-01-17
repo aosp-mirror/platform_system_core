@@ -87,6 +87,7 @@ Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
 void storaged_t::init() {
     init_health_service();
     mDsm = std::make_unique<disk_stats_monitor>(health);
+    storage_info.reset(storage_info_t::get_storage_info(health));
 }
 
 void storaged_t::init_health_service() {
@@ -156,8 +157,6 @@ storaged_t::storaged_t(void) {
     mConfig.periodic_chores_interval_flush_proto =
         property_get_int32("ro.storaged.flush_proto.interval",
                            DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO);
-
-    storage_info.reset(storage_info_t::get_storage_info());
 
     mStarttime = time(NULL);
     mTimer = 0;
