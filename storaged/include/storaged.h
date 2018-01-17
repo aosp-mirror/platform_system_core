@@ -96,8 +96,11 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
         return string("/data/misc_ce/") + to_string(user_id) +
                "/storaged/storaged.proto";
     }
-public:
+    void init_health_service();
+
+  public:
     storaged_t(void);
+    void init(void);
     void event(void);
     void event_checked(void);
     void pause(void) {
@@ -130,7 +133,6 @@ public:
     void add_user_ce(userid_t user_id);
     void remove_user_ce(userid_t user_id);
 
-    void init_health_service();
     virtual ::android::hardware::Return<void> healthInfoChanged(
         const ::android::hardware::health::V1_0::HealthInfo& info);
     void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);

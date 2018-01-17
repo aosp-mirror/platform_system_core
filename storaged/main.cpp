@@ -51,7 +51,7 @@ sp<storaged_t> storaged_sp;
 void* storaged_main(void* /* unused */) {
     storaged_sp = new storaged_t();
 
-    storaged_sp->init_health_service();
+    storaged_sp->init();
     storaged_sp->report_storage_info();
 
     LOG_TO(SYSTEM, INFO) << "storaged: Start";

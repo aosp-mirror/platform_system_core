@@ -84,6 +84,10 @@ Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
     return android::hardware::Void();
 }
 
+void storaged_t::init() {
+    init_health_service();
+}
+
 void storaged_t::init_health_service() {
     if (!mUidm.enabled())
         return;
