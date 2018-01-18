@@ -96,8 +96,13 @@ void DoUnwind(pid_t pid) {
   unwinder.Unwind();
 
   // Print the frames.
+  const std::vector<unwindstack::FrameData>& frames = unwinder.frames();
   for (size_t i = 0; i < unwinder.NumFrames(); i++) {
     printf("%s\n", unwinder.FormatFrame(i).c_str());
+    const unwindstack::FrameData* frame = &frames[i];
+    if (frame->dex_pc != 0) {
+      printf("      dex pc %" PRIx64 "\n", frame->dex_pc);
+    }
   }
 }
 
