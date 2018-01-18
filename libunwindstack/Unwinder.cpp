@@ -40,6 +40,7 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc
   frame->num = frame_num;
   frame->sp = regs_->sp();
   frame->rel_pc = adjusted_rel_pc;
+  frame->dex_pc = regs_->dex_pc();
 
   if (map_info == nullptr) {
     frame->pc = regs_->pc();

@@ -38,7 +38,7 @@ struct DwarfLocation {
   uint64_t values[2];
 };
 
-typedef std::unordered_map<uint16_t, DwarfLocation> dwarf_loc_regs_t;
+typedef std::unordered_map<uint32_t, DwarfLocation> dwarf_loc_regs_t;
 
 }  // namespace unwindstack
 
