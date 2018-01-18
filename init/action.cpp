@@ -21,6 +21,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 
+#include "stable_properties.h"
 #include "util.h"
 
 using android::base::Join;
@@ -134,6 +135,25 @@ void Action::ExecuteCommand(const Command& command) const {
     }
 }
 
+static bool IsActionableProperty(Subcontext* subcontext, const std::string& prop_name) {
+    static bool enabled =
+        android::base::GetBoolProperty("ro.actionable_compatible_property.enabled", false);
+
+    if (subcontext == nullptr || !enabled) {
+        return true;
+    }
+
+    if (kExportedActionableProperties.count(prop_name) == 1) {
+        return true;
+    }
+    for (const auto& prefix : kPartnerPrefixes) {
+        if (android::base::StartsWith(prop_name, prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Result<Success> Action::ParsePropertyTrigger(const std::string& trigger) {
     const static std::string prop_str("property:");
     std::string prop_name(trigger.substr(prop_str.length()));
@@ -144,6 +164,10 @@ Result<Success> Action::ParsePropertyTrigger(const std::string& trigger) {
 
     std::string prop_value(prop_name.substr(equal_pos + 1));
     prop_name.erase(equal_pos);
+
+    if (!IsActionableProperty(subcontext_, prop_name)) {
+        return Error() << "unexported property tigger found: " << prop_name;
+    }
 
     if (auto [it, inserted] = property_triggers_.emplace(prop_name, prop_value); !inserted) {
         return Error() << "multiple property triggers found for same property";
