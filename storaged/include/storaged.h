@@ -119,6 +119,8 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
         return storage_info->get_perf_history();
     }
 
+    uint32_t get_recent_perf(void) { return storage_info->get_recent_perf(); }
+
     map<uint64_t, struct uid_records> get_uid_records(
             double hours, uint64_t threshold, bool force_report) {
         return mUidm.dump(hours, threshold, force_report);

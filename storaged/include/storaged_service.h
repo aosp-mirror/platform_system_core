@@ -39,6 +39,7 @@ public:
 
     binder::Status onUserStarted(int32_t userId);
     binder::Status onUserStopped(int32_t userId);
+    binder::Status getRecentPerf(int32_t* _aidl_return);
 };
 
 class StoragedPrivateService : public BinderService<StoragedPrivateService>, public BnStoragedPrivate {

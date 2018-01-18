@@ -219,6 +219,13 @@ vector<int> storage_info_t::get_perf_history()
     return ret;
 }
 
+uint32_t storage_info_t::get_recent_perf() {
+    Mutex::Autolock _l(si_mutex);
+    if (recent_perf.size() == 0) return 0;
+    return accumulate(recent_perf.begin(), recent_perf.end(), recent_perf.size() / 2) /
+           recent_perf.size();
+}
+
 void emmc_info_t::report()
 {
     if (!report_sysfs() && !report_debugfs())
