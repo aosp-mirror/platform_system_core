@@ -57,7 +57,7 @@ struct EhFrame {
   uint64_t hdr_vaddr;
   uint64_t vaddr;
   uint64_t fde_table_offset;
-  uintptr_t min_func_vaddr;
+  uint64_t min_func_vaddr;
   std::vector<uint8_t> hdr_data;
   std::vector<uint8_t> data;
 };
@@ -221,8 +221,8 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
       frames_.resize(num_frames + 1);
       backtrace_frame_data_t* frame = &frames_[num_frames];
       frame->num = num_frames;
-      frame->pc = static_cast<uintptr_t>(pc);
-      frame->sp = static_cast<uintptr_t>(sp);
+      frame->pc = static_cast<uint64_t>(pc);
+      frame->sp = static_cast<uint64_t>(sp);
       frame->stack_size = 0;
 
       if (num_frames > 0) {
@@ -253,12 +253,12 @@ bool BacktraceOffline::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   return true;
 }
 
-bool BacktraceOffline::ReadWord(uintptr_t ptr, word_t* out_value) {
+bool BacktraceOffline::ReadWord(uint64_t ptr, word_t* out_value) {
   size_t bytes_read = Read(ptr, reinterpret_cast<uint8_t*>(out_value), sizeof(word_t));
   return bytes_read == sizeof(word_t);
 }
 
-size_t BacktraceOffline::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+size_t BacktraceOffline::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
   // Normally, libunwind needs stack information and call frame information to do remote unwinding.
   // If call frame information is stored in .debug_frame, libunwind can read it from file
   // by itself. If call frame information is stored in .eh_frame, we need to provide data in
@@ -386,9 +386,8 @@ bool BacktraceOffline::FindProcInfo(unw_addr_space_t addr_space, uint64_t ip,
         proc_info->start_ip = *it;
         proc_info->format = UNW_INFO_FORMAT_ARM_EXIDX;
         proc_info->unwind_info = reinterpret_cast<void*>(
-            static_cast<uintptr_t>(index * sizeof(ArmIdxEntry) +
-                                   debug_frame->arm_exidx.exidx_vaddr +
-                                   debug_frame->min_vaddr));
+            static_cast<uint64_t>(index * sizeof(ArmIdxEntry) + debug_frame->arm_exidx.exidx_vaddr +
+                                  debug_frame->min_vaddr));
         eh_frame_hdr_space_.Clear();
         eh_frame_space_.Clear();
         // Prepare arm_exidx space and arm_extab space.
@@ -595,7 +594,7 @@ bool BacktraceOffline::ReadReg(size_t reg, uint64_t* value) {
   return result;
 }
 
-std::string BacktraceOffline::GetFunctionNameRaw(uintptr_t, uintptr_t* offset) {
+std::string BacktraceOffline::GetFunctionNameRaw(uint64_t, uint64_t* offset) {
   // We don't have enough information to support this. And it is expensive.
   *offset = 0;
   return "";

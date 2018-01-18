@@ -31,7 +31,7 @@
 #include "thread_utils.h"
 
 #if !defined(__APPLE__)
-static bool PtraceRead(pid_t tid, uintptr_t addr, word_t* out_value) {
+static bool PtraceRead(pid_t tid, uint64_t addr, word_t* out_value) {
   // ptrace() returns -1 and sets errno when the operation fails.
   // To disambiguate -1 from a valid result, we clear errno beforehand.
   errno = 0;
@@ -43,7 +43,7 @@ static bool PtraceRead(pid_t tid, uintptr_t addr, word_t* out_value) {
 }
 #endif
 
-bool BacktracePtrace::ReadWord(uintptr_t ptr, word_t* out_value) {
+bool BacktracePtrace::ReadWord(uint64_t ptr, word_t* out_value) {
 #if defined(__APPLE__)
   BACK_LOGW("MacOS does not support reading from another pid.");
   return false;
@@ -62,7 +62,7 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, word_t* out_value) {
 #endif
 }
 
-size_t BacktracePtrace::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+size_t BacktracePtrace::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
 #if defined(__APPLE__)
   BACK_LOGW("MacOS does not support reading from another pid.");
   return 0;

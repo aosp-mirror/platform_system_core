@@ -40,16 +40,16 @@ int open_tombstone(std::string* path);
 /* Creates a tombstone file and writes the crash dump to it. */
 void engrave_tombstone(int tombstone_fd, BacktraceMap* map, const OpenFilesList* open_files,
                        pid_t pid, pid_t tid, const std::string& process_name,
-                       const std::map<pid_t, std::string>& threads, uintptr_t abort_msg_address,
+                       const std::map<pid_t, std::string>& threads, uint64_t abort_msg_address,
                        std::string* amfd_data);
 
-void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,
+void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, siginfo_t* siginfo,
                                 ucontext_t* ucontext);
 
 void engrave_tombstone(android::base::unique_fd output_fd, BacktraceMap* map,
                        unwindstack::Memory* process_memory,
                        const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread,
-                       uintptr_t abort_msg_address, OpenFilesList* open_files,
+                       uint64_t abort_msg_address, OpenFilesList* open_files,
                        std::string* amfd_data);
 
 #endif  // _DEBUGGERD_TOMBSTONE_H
