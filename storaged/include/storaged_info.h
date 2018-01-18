@@ -21,6 +21,7 @@
 
 #include <chrono>
 
+#include <android/hardware/health/2.0/IHealth.h>
 #include <utils/Mutex.h>
 
 #include "storaged.h"
@@ -35,7 +36,7 @@ using namespace chrono;
 using namespace storaged_proto;
 
 class storage_info_t {
-protected:
+  protected:
     FRIEND_TEST(storaged_test, storage_info_t);
     // emmc lifetime
     uint16_t eol;                   // pre-eol (end of life) information
@@ -66,8 +67,10 @@ protected:
     }
     void publish();
     storage_info_t* s_info;
-public:
-    static storage_info_t* get_storage_info();
+
+  public:
+    static storage_info_t* get_storage_info(
+        const sp<android::hardware::health::V2_0::IHealth>& healthService);
     virtual ~storage_info_t() {};
     virtual void report() {};
     void load_perf_history_proto(const IOPerfHistory& perf_history);
@@ -75,6 +78,7 @@ public:
     void update_perf_history(uint32_t bw,
                              const time_point<system_clock>& tp);
     vector<int> get_perf_history();
+    uint32_t get_recent_perf();
 };
 
 class emmc_info_t : public storage_info_t {
@@ -95,6 +99,20 @@ public:
     static const string health_file;
 
     virtual ~ufs_info_t() {}
+    virtual void report();
+};
+
+class health_storage_info_t : public storage_info_t {
+  private:
+    using IHealth = hardware::health::V2_0::IHealth;
+    using StorageInfo = hardware::health::V2_0::StorageInfo;
+
+    sp<IHealth> mHealth;
+    void set_values_from_hal_storage_info(const StorageInfo& halInfo);
+
+  public:
+    health_storage_info_t(const sp<IHealth>& service) : mHealth(service){};
+    virtual ~health_storage_info_t() {}
     virtual void report();
 };
 

@@ -29,13 +29,30 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
-#include <processgroup/processgroup.h>
+
+/*
+ * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
+ * to profile and correlate with OOM kills
+ */
+#ifdef LMKD_TRACE_KILLS
+
+#define ATRACE_TAG ATRACE_TAG_ALWAYS
+#include <cutils/trace.h>
+
+#define TRACE_KILL_START(pid) ATRACE_INT(__FUNCTION__, pid);
+#define TRACE_KILL_END()      ATRACE_INT(__FUNCTION__, 0);
+
+#else /* LMKD_TRACE_KILLS */
+
+#define TRACE_KILL_START(pid)
+#define TRACE_KILL_END()
+
+#endif /* LMKD_TRACE_KILLS */
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))
@@ -91,6 +108,7 @@ static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
 static int64_t downgrade_pressure;
 static bool is_go_device;
+static bool kill_heaviest_task;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -593,6 +611,29 @@ static struct proc *proc_adj_lru(int oomadj) {
     return (struct proc *)adjslot_tail(&procadjslot_list[ADJTOSLOT(oomadj)]);
 }
 
+static struct proc *proc_get_heaviest(int oomadj) {
+    struct adjslot_list *head = &procadjslot_list[ADJTOSLOT(oomadj)];
+    struct adjslot_list *curr = head->next;
+    struct proc *maxprocp = NULL;
+    int maxsize = 0;
+    while (curr != head) {
+        int pid = ((struct proc *)curr)->pid;
+        int tasksize = proc_get_size(pid);
+        if (tasksize <= 0) {
+            struct adjslot_list *next = curr->next;
+            pid_remove(pid);
+            curr = next;
+        } else {
+            if (tasksize > maxsize) {
+                maxsize = tasksize;
+                maxprocp = (struct proc *)curr;
+            }
+            curr = curr->next;
+        }
+    }
+    return maxprocp;
+}
+
 /* Kill one process specified by procp.  Returns the size of the process killed */
 static int kill_one_process(struct proc* procp, int min_score_adj,
                             enum vmpressure_level level) {
@@ -614,6 +655,8 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
         return -1;
     }
 
+    TRACE_KILL_START(pid);
+
     r = kill(pid, SIGKILL);
     ALOGI(
         "Killing '%s' (%d), uid %d, adj %d\n"
@@ -621,6 +664,8 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
         taskname, pid, uid, procp->oomadj, tasksize * page_k,
         level_name[level], min_score_adj);
     pid_remove(pid);
+
+    TRACE_KILL_END();
 
     if (r) {
         ALOGE("kill(%d): errno=%d", procp->pid, errno);
@@ -643,7 +688,10 @@ static int find_and_kill_process(enum vmpressure_level level) {
         struct proc *procp;
 
 retry:
-        procp = proc_adj_lru(i);
+        if (kill_heaviest_task)
+            procp = proc_get_heaviest(i);
+        else
+            procp = proc_adj_lru(i);
 
         if (procp) {
             killed_size = kill_one_process(procp, min_score_adj, level);
@@ -921,9 +969,16 @@ int main(int argc __unused, char **argv __unused) {
     level_oomadj[VMPRESS_LEVEL_CRITICAL] =
         property_get_int32("ro.lmk.critical", 0);
     debug_process_killing = property_get_bool("ro.lmk.debug", false);
-    enable_pressure_upgrade = property_get_bool("ro.lmk.critical_upgrade", false);
-    upgrade_pressure = (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 50);
-    downgrade_pressure = (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 60);
+
+    /* By default disable upgrade/downgrade logic */
+    enable_pressure_upgrade =
+        property_get_bool("ro.lmk.critical_upgrade", false);
+    upgrade_pressure =
+        (int64_t)property_get_int32("ro.lmk.upgrade_pressure", 100);
+    downgrade_pressure =
+        (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 100);
+    kill_heaviest_task =
+        property_get_bool("ro.lmk.kill_heaviest_task", true);
     is_go_device = property_get_bool("ro.config.low_ram", false);
 
     if (mlockall(MCL_CURRENT | MCL_FUTURE))

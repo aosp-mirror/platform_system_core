@@ -81,7 +81,7 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
   private:
     time_t mTimer;
     storaged_config mConfig;
-    disk_stats_monitor mDsm;
+    unique_ptr<disk_stats_monitor> mDsm;
     uid_monitor mUidm;
     time_t mStarttime;
     sp<android::hardware::health::V2_0::IHealth> health;
@@ -96,8 +96,11 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
         return string("/data/misc_ce/") + to_string(user_id) +
                "/storaged/storaged.proto";
     }
-public:
+    void init_health_service();
+
+  public:
     storaged_t(void);
+    void init(void);
     void event(void);
     void event_checked(void);
     void pause(void) {
@@ -116,6 +119,8 @@ public:
         return storage_info->get_perf_history();
     }
 
+    uint32_t get_recent_perf(void) { return storage_info->get_recent_perf(); }
+
     map<uint64_t, struct uid_records> get_uid_records(
             double hours, uint64_t threshold, bool force_report) {
         return mUidm.dump(hours, threshold, force_report);
@@ -130,7 +135,6 @@ public:
     void add_user_ce(userid_t user_id);
     void remove_user_ce(userid_t user_id);
 
-    void init_health_service();
     virtual ::android::hardware::Return<void> healthInfoChanged(
         const ::android::hardware::health::V1_0::HealthInfo& info);
     void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);

@@ -58,6 +58,7 @@
 
 #include "init.h"
 #include "persistent_properties.h"
+#include "property_type.h"
 #include "util.h"
 
 using android::base::ReadFileToString;
@@ -95,14 +96,9 @@ void property_init() {
         LOG(FATAL) << "Failed to load serialized property info file";
     }
 }
-static bool check_mac_perms(const std::string& name, char* sctx, struct ucred* cr) {
-    if (!sctx) {
-      return false;
-    }
-
-    const char* target_context = nullptr;
-    property_info_area->GetPropertyInfo(name.c_str(), &target_context, nullptr);
-    if (target_context == nullptr) {
+static bool CheckMacPerms(const std::string& name, const char* target_context,
+                          const char* source_context, struct ucred* cr) {
+    if (!target_context || !source_context) {
         return false;
     }
 
@@ -111,27 +107,10 @@ static bool check_mac_perms(const std::string& name, char* sctx, struct ucred* c
     audit_data.name = name.c_str();
     audit_data.cr = cr;
 
-    bool has_access =
-        (selinux_check_access(sctx, target_context, "property_service", "set", &audit_data) == 0);
+    bool has_access = (selinux_check_access(source_context, target_context, "property_service",
+                                            "set", &audit_data) == 0);
 
     return has_access;
-}
-
-static int check_control_mac_perms(const char *name, char *sctx, struct ucred *cr)
-{
-    /*
-     *  Create a name prefix out of ctl.<service name>
-     *  The new prefix allows the use of the existing
-     *  property service backend labeling while avoiding
-     *  mislabels based on true property prefixes.
-     */
-    char ctl_name[PROP_VALUE_MAX+4];
-    int ret = snprintf(ctl_name, sizeof(ctl_name), "ctl.%s", name);
-
-    if (ret < 0 || (size_t) ret >= sizeof(ctl_name))
-        return 0;
-
-    return check_mac_perms(ctl_name, sctx, cr);
 }
 
 bool is_legal_property_name(const std::string& name) {
@@ -422,52 +401,70 @@ static void handle_property_set(SocketConnection& socket,
   struct ucred cr = socket.cred();
   char* source_ctx = nullptr;
   getpeercon(socket.socket(), &source_ctx);
+  std::string source_context = source_ctx;
+  freecon(source_ctx);
 
   if (StartsWith(name, "ctl.")) {
-    if (check_control_mac_perms(value.c_str(), source_ctx, &cr)) {
+      // ctl. properties have their name ctl.<action> and their value is the name of the service to
+      // apply that action to.  Permissions for these actions are based on the service, so we must
+      // create a fake name of ctl.<service> to check permissions.
+      auto control_string = "ctl." + value;
+      const char* target_context = nullptr;
+      const char* type = nullptr;
+      property_info_area->GetPropertyInfo(control_string.c_str(), &target_context, &type);
+      if (!CheckMacPerms(control_string, target_context, source_context.c_str(), &cr)) {
+          LOG(ERROR) << "sys_prop(" << cmd_name << "): Unable to " << (name.c_str() + 4)
+                     << " service ctl [" << value << "]"
+                     << " uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid;
+          if (!legacy_protocol) {
+              socket.SendUint32(PROP_ERROR_HANDLE_CONTROL_MESSAGE);
+          }
+          return;
+      }
+
       handle_control_message(name.c_str() + 4, value.c_str());
       if (!legacy_protocol) {
-        socket.SendUint32(PROP_SUCCESS);
+          socket.SendUint32(PROP_SUCCESS);
       }
-    } else {
-      LOG(ERROR) << "sys_prop(" << cmd_name << "): Unable to " << (name.c_str() + 4)
-                 << " service ctl [" << value << "]"
-                 << " uid:" << cr.uid
-                 << " gid:" << cr.gid
-                 << " pid:" << cr.pid;
-      if (!legacy_protocol) {
-        socket.SendUint32(PROP_ERROR_HANDLE_CONTROL_MESSAGE);
-      }
-    }
   } else {
-    if (check_mac_perms(name, source_ctx, &cr)) {
+      const char* target_context = nullptr;
+      const char* type = nullptr;
+      property_info_area->GetPropertyInfo(name.c_str(), &target_context, &type);
+      if (!CheckMacPerms(name, target_context, source_context.c_str(), &cr)) {
+          LOG(ERROR) << "sys_prop(" << cmd_name << "): permission denied uid:" << cr.uid
+                     << " name:" << name;
+          if (!legacy_protocol) {
+              socket.SendUint32(PROP_ERROR_PERMISSION_DENIED);
+          }
+          return;
+      }
+      if (type == nullptr || !CheckType(type, value)) {
+          LOG(ERROR) << "sys_prop(" << cmd_name << "): type check failed, type: '"
+                     << (type ?: "(null)") << "' value: '" << value << "'";
+          if (!legacy_protocol) {
+              socket.SendUint32(PROP_ERROR_INVALID_VALUE);
+          }
+          return;
+      }
       // sys.powerctl is a special property that is used to make the device reboot.  We want to log
       // any process that sets this property to be able to accurately blame the cause of a shutdown.
       if (name == "sys.powerctl") {
-        std::string cmdline_path = StringPrintf("proc/%d/cmdline", cr.pid);
-        std::string process_cmdline;
-        std::string process_log_string;
-        if (ReadFileToString(cmdline_path, &process_cmdline)) {
-          // Since cmdline is null deliminated, .c_str() conveniently gives us just the process path.
-          process_log_string = StringPrintf(" (%s)", process_cmdline.c_str());
-        }
-        LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
-                  << process_log_string;
+          std::string cmdline_path = StringPrintf("proc/%d/cmdline", cr.pid);
+          std::string process_cmdline;
+          std::string process_log_string;
+          if (ReadFileToString(cmdline_path, &process_cmdline)) {
+              // Since cmdline is null deliminated, .c_str() conveniently gives us just the process path.
+              process_log_string = StringPrintf(" (%s)", process_cmdline.c_str());
+          }
+          LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
+                    << process_log_string;
       }
 
       uint32_t result = property_set(name, value);
       if (!legacy_protocol) {
-        socket.SendUint32(result);
+          socket.SendUint32(result);
       }
-    } else {
-      LOG(ERROR) << "sys_prop(" << cmd_name << "): permission denied uid:" << cr.uid << " name:" << name;
-      if (!legacy_protocol) {
-        socket.SendUint32(PROP_ERROR_PERMISSION_DENIED);
-      }
-    }
   }
-
-  freecon(source_ctx);
 }
 
 static void handle_property_set_fd() {
@@ -764,9 +761,10 @@ void CreateSerializedPropertyInfo() {
         }
         LoadPropertyInfoFromFile("/nonplat_property_contexts", &property_infos);
     }
+
     auto serialized_contexts = std::string();
     auto error = std::string();
-    if (!BuildTrie(property_infos, "u:object_r:default_prop:s0", "\\s*", &serialized_contexts,
+    if (!BuildTrie(property_infos, "u:object_r:default_prop:s0", "string", &serialized_contexts,
                    &error)) {
         LOG(ERROR) << "Unable to serialize property contexts: " << error;
         return;

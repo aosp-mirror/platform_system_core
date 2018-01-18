@@ -30,6 +30,12 @@
 
 namespace {
 
+using android::sp;
+using android::hardware::health::V2_0::DiskStats;
+using android::hardware::health::V2_0::IHealth;
+using android::hardware::health::V2_0::Result;
+using android::hardware::health::V2_0::toString;
+
 #ifdef DEBUG
 void log_debug_disk_perf(struct disk_perf* perf, const char* type) {
     // skip if the input structure are all zeros
@@ -60,15 +66,28 @@ void log_event_disk_stats(struct disk_stats* stats, const char* type) {
 
 } // namespace
 
-bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats)
-{
-    // Get time
-    struct timespec ts;
+bool get_time(struct timespec* ts) {
     // Use monotonic to exclude suspend time so that we measure IO bytes/sec
     // when system is running.
-    int ret = clock_gettime(CLOCK_MONOTONIC, &ts);
+    int ret = clock_gettime(CLOCK_MONOTONIC, ts);
     if (ret < 0) {
         PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+        return false;
+    }
+    return true;
+}
+
+void init_disk_stats_other(const struct timespec& ts, struct disk_stats* stats) {
+    stats->start_time = 0;
+    stats->end_time = (uint64_t)ts.tv_sec * SEC_TO_MSEC + ts.tv_nsec / (MSEC_TO_USEC * USEC_TO_NSEC);
+    stats->counter = 1;
+    stats->io_avg = (double)stats->io_in_flight;
+}
+
+bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats) {
+    // Get time
+    struct timespec ts;
+    if (!get_time(&ts)) {
         return false;
     }
 
@@ -84,11 +103,52 @@ bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats)
         ss >> *((uint64_t*)stats + i);
     }
     // Other entries
-    stats->start_time = 0;
-    stats->end_time = (uint64_t)ts.tv_sec * SEC_TO_MSEC +
-        ts.tv_nsec / (MSEC_TO_USEC * USEC_TO_NSEC);
-    stats->counter = 1;
-    stats->io_avg = (double)stats->io_in_flight;
+    init_disk_stats_other(ts, stats);
+    return true;
+}
+
+void convert_hal_disk_stats(struct disk_stats* dst, const DiskStats& src) {
+    dst->read_ios = src.reads;
+    dst->read_merges = src.readMerges;
+    dst->read_sectors = src.readSectors;
+    dst->read_ticks = src.readTicks;
+    dst->write_ios = src.writes;
+    dst->write_merges = src.writeMerges;
+    dst->write_sectors = src.writeSectors;
+    dst->write_ticks = src.writeTicks;
+    dst->io_in_flight = src.ioInFlight;
+    dst->io_ticks = src.ioTicks;
+    dst->io_in_queue = src.ioInQueue;
+}
+
+bool get_disk_stats_from_health_hal(const sp<IHealth>& service, struct disk_stats* stats) {
+    struct timespec ts;
+    if (!get_time(&ts)) {
+        return false;
+    }
+
+    bool success = false;
+    auto ret = service->getDiskStats([&success, stats](auto result, const auto& halStats) {
+        if (result != Result::SUCCESS || halStats.size() == 0) {
+            LOG_TO(SYSTEM, ERROR) << "getDiskStats failed with result " << toString(result)
+                                  << " and size " << halStats.size();
+            return;
+        }
+
+        convert_hal_disk_stats(stats, halStats[0]);
+        success = true;
+    });
+
+    if (!ret.isOk()) {
+        LOG_TO(SYSTEM, ERROR) << "getDiskStats failed with " << ret.description();
+        return false;
+    }
+
+    if (!success) {
+        return false;
+    }
+
+    init_disk_stats_other(ts, stats);
     return true;
 }
 
@@ -243,8 +303,14 @@ void disk_stats_monitor::update(struct disk_stats* curr)
 
 void disk_stats_monitor::update() {
     disk_stats curr;
-    if (!parse_disk_stats(DISK_STATS_PATH, &curr)) {
-        return;
+    if (mHealth != nullptr) {
+        if (!get_disk_stats_from_health_hal(mHealth, &curr)) {
+            return;
+        }
+    } else {
+        if (!parse_disk_stats(DISK_STATS_PATH, &curr)) {
+            return;
+        }
     }
 
     update(&curr);

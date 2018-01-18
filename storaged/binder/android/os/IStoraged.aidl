@@ -20,4 +20,5 @@ package android.os;
 interface IStoraged {
     void onUserStarted(int userId);
     void onUserStopped(int userId);
+    int getRecentPerf();
 }

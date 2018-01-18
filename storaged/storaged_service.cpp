@@ -174,6 +174,16 @@ binder::Status StoragedService::onUserStopped(int32_t userId) {
     return binder::Status::ok();
 }
 
+binder::Status StoragedService::getRecentPerf(int32_t* _aidl_return) {
+    uint32_t recent_perf = storaged_sp->get_recent_perf();
+    if (recent_perf > INT32_MAX) {
+        *_aidl_return = INT32_MAX;
+    } else {
+        *_aidl_return = static_cast<int32_t>(recent_perf);
+    }
+    return binder::Status::ok();
+}
+
 status_t StoragedPrivateService::start() {
     return BinderService<StoragedPrivateService>::publish();
 }

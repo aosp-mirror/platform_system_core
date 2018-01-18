@@ -36,6 +36,10 @@ using namespace chrono;
 using namespace android::base;
 using namespace storaged_proto;
 
+using android::hardware::health::V2_0::IHealth;
+using android::hardware::health::V2_0::Result;
+using android::hardware::health::V2_0::StorageInfo;
+
 const string emmc_info_t::emmc_sysfs = "/sys/bus/mmc/devices/mmc0:0001/";
 const string emmc_info_t::emmc_debugfs = "/d/mmc0/mmc0:0001/ext_csd";
 const char* emmc_info_t::emmc_ver_str[9] = {
@@ -54,8 +58,10 @@ bool FileExists(const std::string& filename)
 
 } // namespace
 
-storage_info_t* storage_info_t::get_storage_info()
-{
+storage_info_t* storage_info_t::get_storage_info(const sp<IHealth>& healthService) {
+    if (healthService != nullptr) {
+        return new health_storage_info_t(healthService);
+    }
     if (FileExists(emmc_info_t::emmc_sysfs) ||
         FileExists(emmc_info_t::emmc_debugfs)) {
         return new emmc_info_t;
@@ -213,6 +219,13 @@ vector<int> storage_info_t::get_perf_history()
     return ret;
 }
 
+uint32_t storage_info_t::get_recent_perf() {
+    Mutex::Autolock _l(si_mutex);
+    if (recent_perf.size() == 0) return 0;
+    return accumulate(recent_perf.begin(), recent_perf.end(), recent_perf.size() / 2) /
+           recent_perf.size();
+}
+
 void emmc_info_t::report()
 {
     if (!report_sysfs() && !report_debugfs())
@@ -351,3 +364,25 @@ void ufs_info_t::report()
     publish();
 }
 
+void health_storage_info_t::report() {
+    auto ret = mHealth->getStorageInfo([this](auto result, const auto& halInfos) {
+        if (result != Result::SUCCESS || halInfos.size() == 0) {
+            LOG_TO(SYSTEM, DEBUG) << "getStorageInfo failed with result " << toString(result)
+                                  << " and size " << halInfos.size();
+            return;
+        }
+        set_values_from_hal_storage_info(halInfos[0]);
+        publish();
+    });
+
+    if (!ret.isOk()) {
+        LOG_TO(SYSTEM, DEBUG) << "getStorageInfo failed with " << ret.description();
+    }
+}
+
+void health_storage_info_t::set_values_from_hal_storage_info(const StorageInfo& halInfo) {
+    eol = halInfo.eol;
+    lifetime_a = halInfo.lifetimeA;
+    lifetime_b = halInfo.lifetimeB;
+    version = halInfo.version;
+}

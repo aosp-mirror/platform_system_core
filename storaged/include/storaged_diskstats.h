@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+#include <android/hardware/health/2.0/IHealth.h>
+
 // number of attributes diskstats has
 #define DISK_STATS_SIZE ( 11 )
 
@@ -160,6 +162,7 @@ private:
     const double mSigma;
     struct disk_perf mMean;
     struct disk_perf mStd;
+    android::sp<android::hardware::health::V2_0::IHealth> mHealth;
 
     void update_mean();
     void update_std();
@@ -170,21 +173,27 @@ private:
     void update(struct disk_stats* stats);
 
 public:
-    disk_stats_monitor(uint32_t window_size = 5, double sigma = 1.0) :
-        DISK_STATS_PATH(access(MMC_DISK_STATS_PATH, R_OK) ?
-                            (access(SDA_DISK_STATS_PATH, R_OK) ?
-                                nullptr :
-                                SDA_DISK_STATS_PATH) :
-                            MMC_DISK_STATS_PATH),
-        mPrevious(), mAccumulate(), mAccumulate_pub(),
-        mStall(false), mValid(false),
-        mWindow(window_size), mSigma(sigma),
-        mMean(), mStd() {}
-    bool enabled() {
-        return DISK_STATS_PATH != nullptr;
-    }
-    void update(void);
-    void publish(void);
+  disk_stats_monitor(const android::sp<android::hardware::health::V2_0::IHealth>& healthService,
+                     uint32_t window_size = 5, double sigma = 1.0)
+      : DISK_STATS_PATH(
+            healthService != nullptr
+                ? nullptr
+                : (access(MMC_DISK_STATS_PATH, R_OK) == 0
+                       ? MMC_DISK_STATS_PATH
+                       : (access(SDA_DISK_STATS_PATH, R_OK) == 0 ? SDA_DISK_STATS_PATH : nullptr))),
+        mPrevious(),
+        mAccumulate(),
+        mAccumulate_pub(),
+        mStall(false),
+        mValid(false),
+        mWindow(window_size),
+        mSigma(sigma),
+        mMean(),
+        mStd(),
+        mHealth(healthService) {}
+  bool enabled() { return mHealth != nullptr || DISK_STATS_PATH != nullptr; }
+  void update(void);
+  void publish(void);
 };
 
 #endif /* _STORAGED_DISKSTATS_H_ */

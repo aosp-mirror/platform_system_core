@@ -25,6 +25,7 @@
 
 #include <gtest/gtest.h>
 
+#include <healthhalutils/HealthHalUtils.h>
 #include <storaged.h>               // data structures
 #include <storaged_utils.h>         // functions to test
 
@@ -234,10 +235,17 @@ void expect_increasing(struct disk_stats stats1, struct disk_stats stats2) {
 }
 
 TEST(storaged_test, disk_stats_monitor) {
+    using android::hardware::health::V2_0::get_health_service;
+
+    auto healthService = get_health_service();
+
     // asserting that there is one file for diskstats
-    ASSERT_TRUE(access(MMC_DISK_STATS_PATH, R_OK) >= 0 || access(SDA_DISK_STATS_PATH, R_OK) >= 0);
+    ASSERT_TRUE(healthService != nullptr || access(MMC_DISK_STATS_PATH, R_OK) >= 0 ||
+                access(SDA_DISK_STATS_PATH, R_OK) >= 0);
+
     // testing if detect() will return the right value
-    disk_stats_monitor dsm_detect;
+    disk_stats_monitor dsm_detect{healthService};
+    ASSERT_TRUE(dsm_detect.enabled());
     // feed monitor with constant perf data for io perf baseline
     // using constant perf is reasonable since the functionality of stream_stats
     // has already been tested
@@ -280,7 +288,7 @@ TEST(storaged_test, disk_stats_monitor) {
     }
 
     // testing if stalled disk_stats can be correctly accumulated in the monitor
-    disk_stats_monitor dsm_acc;
+    disk_stats_monitor dsm_acc{healthService};
     struct disk_stats norm_inc = {
         .read_ios = 200,
         .read_merges = 0,
