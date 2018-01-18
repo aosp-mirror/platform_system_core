@@ -43,37 +43,14 @@ cc_library_headers {
     },
 }
 
-cc_library {
-    name: "libutils",
+cc_defaults {
+    name: "libutils_defaults",
     vendor_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
     },
     host_supported: true,
-
-    srcs: [
-        "CallStack.cpp",
-        "FileMap.cpp",
-        "JenkinsHash.cpp",
-        "NativeHandle.cpp",
-        "Printer.cpp",
-        "PropertyMap.cpp",
-        "RefBase.cpp",
-        "SharedBuffer.cpp",
-        "Static.cpp",
-        "StopWatch.cpp",
-        "String8.cpp",
-        "String16.cpp",
-        "StrongPointer.cpp",
-        "SystemClock.cpp",
-        "Threads.cpp",
-        "Timers.cpp",
-        "Tokenizer.cpp",
-        "Unicode.cpp",
-        "VectorImpl.cpp",
-        "misc.cpp",
-    ],
 
     cflags: ["-Wall", "-Werror"],
     include_dirs: ["external/safe-iop/include"],
@@ -96,14 +73,9 @@ cc_library {
 
     target: {
         android: {
-            srcs: [
-                "Trace.cpp",
-            ],
-
             cflags: ["-fvisibility=protected"],
 
             shared_libs: [
-                "libbacktrace",
                 "libcutils",
                 "libdl",
                 "libvndksupport",
@@ -112,12 +84,6 @@ cc_library {
             sanitize: {
                 misc_undefined: ["integer"],
             },
-        },
-        linux: {
-            srcs: [
-                "Looper.cpp",
-                "ProcessCallStack.cpp",
-            ],
         },
 
         host: {
@@ -144,6 +110,75 @@ cc_library {
             ],
 
             enabled: true,
+        },
+    },
+}
+
+cc_library {
+    name: "libutils",
+    defaults: ["libutils_defaults"],
+
+    srcs: [
+        "FileMap.cpp",
+        "JenkinsHash.cpp",
+        "NativeHandle.cpp",
+        "Printer.cpp",
+        "PropertyMap.cpp",
+        "RefBase.cpp",
+        "SharedBuffer.cpp",
+        "Static.cpp",
+        "StopWatch.cpp",
+        "String8.cpp",
+        "String16.cpp",
+        "StrongPointer.cpp",
+        "SystemClock.cpp",
+        "Threads.cpp",
+        "Timers.cpp",
+        "Tokenizer.cpp",
+        "Unicode.cpp",
+        "VectorImpl.cpp",
+        "misc.cpp",
+    ],
+
+    target: {
+        android: {
+            srcs: [
+                "Trace.cpp",
+            ],
+        },
+        linux: {
+            srcs: [
+                "Looper.cpp",
+            ],
+        },
+    },
+}
+
+cc_library {
+    name: "libutilscallstack",
+    defaults: ["libutils_defaults"],
+
+    srcs: [
+        "CallStack.cpp",
+    ],
+
+    arch: {
+        mips: {
+            cflags: ["-DALIGN_DOUBLE"],
+        },
+    },
+
+    target: {
+        android: {
+            shared_libs: [
+                "libutils",
+                "libbacktrace",
+            ],
+        },
+        linux: {
+            srcs: [
+                "ProcessCallStack.cpp",
+            ],
         },
     },
 }
