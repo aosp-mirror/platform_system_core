@@ -34,6 +34,8 @@
 
 namespace unwindstack {
 
+constexpr uint64_t DEX_PC_REG = 0x20444558;
+
 DwarfSection::DwarfSection(Memory* memory) : memory_(memory), last_error_(DWARF_ERROR_NONE) {}
 
 const DwarfFde* DwarfSection::GetFdeFromPc(uint64_t pc) {
@@ -98,6 +100,84 @@ bool DwarfSectionImpl<AddressType>::EvalExpression(const DwarfLocation& loc, uin
 }
 
 template <typename AddressType>
+struct EvalInfo {
+  const dwarf_loc_regs_t* loc_regs;
+  const DwarfCie* cie;
+  RegsImpl<AddressType>* cur_regs;
+  Memory* regular_memory;
+  AddressType cfa;
+  bool return_address_undefined = false;
+  uint64_t reg_map = 0;
+  AddressType reg_values[64];
+};
+
+template <typename AddressType>
+bool DwarfSectionImpl<AddressType>::EvalRegister(const DwarfLocation* loc, uint32_t reg,
+                                                 AddressType* reg_ptr, void* info) {
+  EvalInfo<AddressType>* eval_info = reinterpret_cast<EvalInfo<AddressType>*>(info);
+  Memory* regular_memory = eval_info->regular_memory;
+  switch (loc->type) {
+    case DWARF_LOCATION_OFFSET:
+      if (!regular_memory->ReadFully(eval_info->cfa + loc->values[0], reg_ptr, sizeof(AddressType))) {
+        last_error_ = DWARF_ERROR_MEMORY_INVALID;
+        return false;
+      }
+      break;
+    case DWARF_LOCATION_VAL_OFFSET:
+      *reg_ptr = eval_info->cfa + loc->values[0];
+      break;
+    case DWARF_LOCATION_REGISTER: {
+      uint32_t cur_reg = loc->values[0];
+      if (cur_reg >= eval_info->cur_regs->total_regs()) {
+        last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+        return false;
+      }
+      AddressType* cur_reg_ptr = &(*eval_info->cur_regs)[cur_reg];
+      const auto& entry = eval_info->loc_regs->find(cur_reg);
+      if (entry != eval_info->loc_regs->end()) {
+        if (!(eval_info->reg_map & (1 << cur_reg))) {
+          eval_info->reg_map |= 1 << cur_reg;
+          eval_info->reg_values[cur_reg] = *cur_reg_ptr;
+          if (!EvalRegister(&entry->second, cur_reg, cur_reg_ptr, eval_info)) {
+            return false;
+          }
+        }
+
+        // Use the register value from before any evaluations.
+        *reg_ptr = eval_info->reg_values[cur_reg] + loc->values[1];
+      } else {
+        *reg_ptr = *cur_reg_ptr + loc->values[1];
+      }
+      break;
+    }
+    case DWARF_LOCATION_EXPRESSION:
+    case DWARF_LOCATION_VAL_EXPRESSION: {
+      AddressType value;
+      if (!EvalExpression(*loc, eval_info->cie->version, regular_memory, &value)) {
+        return false;
+      }
+      if (loc->type == DWARF_LOCATION_EXPRESSION) {
+        if (!regular_memory->ReadFully(value, reg_ptr, sizeof(AddressType))) {
+          last_error_ = DWARF_ERROR_MEMORY_INVALID;
+          return false;
+        }
+      } else {
+        *reg_ptr = value;
+      }
+      break;
+    }
+    case DWARF_LOCATION_UNDEFINED:
+      if (reg == eval_info->cie->return_address_register) {
+        eval_info->return_address_undefined = true;
+      }
+    default:
+      break;
+  }
+
+  return true;
+}
+
+template <typename AddressType>
 bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_memory,
                                          const dwarf_loc_regs_t& loc_regs, Regs* regs,
                                          bool* finished) {
@@ -114,9 +194,13 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
     return false;
   }
 
+  // Always set the dex pc to zero when evaluating.
+  cur_regs->set_dex_pc(0);
+
   AddressType prev_cfa = regs->sp();
 
-  AddressType cfa;
+  EvalInfo<AddressType> eval_info{
+      .loc_regs = &loc_regs, .cie = cie, .regular_memory = regular_memory, .cur_regs = cur_regs};
   const DwarfLocation* loc = &cfa_entry->second;
   // Only a few location types are valid for the cfa.
   switch (loc->type) {
@@ -129,11 +213,11 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
       // pointer register does not have any associated location
       // information, use the current cfa value.
       if (regs->sp_reg() == loc->values[0] && loc_regs.count(regs->sp_reg()) == 0) {
-        cfa = prev_cfa;
+        eval_info.cfa = prev_cfa;
       } else {
-        cfa = (*cur_regs)[loc->values[0]];
+        eval_info.cfa = (*cur_regs)[loc->values[0]];
       }
-      cfa += loc->values[1];
+      eval_info.cfa += loc->values[1];
       break;
     case DWARF_LOCATION_EXPRESSION:
     case DWARF_LOCATION_VAL_EXPRESSION: {
@@ -142,12 +226,12 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
         return false;
       }
       if (loc->type == DWARF_LOCATION_EXPRESSION) {
-        if (!regular_memory->ReadFully(value, &cfa, sizeof(AddressType))) {
+        if (!regular_memory->ReadFully(value, &eval_info.cfa, sizeof(AddressType))) {
           last_error_ = DWARF_ERROR_MEMORY_INVALID;
           return false;
         }
       } else {
-        cfa = value;
+        eval_info.cfa = value;
       }
       break;
     }
@@ -156,81 +240,38 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
       return false;
   }
 
-  // This code is not guaranteed to work in cases where a register location
-  // is a double indirection to the actual value. For example, if r3 is set
-  // to r5 + 4, and r5 is set to CFA + 4, then this won't necessarily work
-  // because it does not guarantee that r5 is evaluated before r3.
-  // Check that this case does not exist, and error if it does.
-  bool return_address_undefined = false;
   for (const auto& entry : loc_regs) {
-    uint16_t reg = entry.first;
+    uint32_t reg = entry.first;
     // Already handled the CFA register.
     if (reg == CFA_REG) continue;
 
-    if (reg >= cur_regs->total_regs()) {
-      // Skip this unknown register.
+    AddressType* reg_ptr;
+    AddressType dex_pc = 0;
+    if (reg == DEX_PC_REG) {
+      // Special register that indicates this is a dex pc.
+      dex_pc = 0;
+      reg_ptr = &dex_pc;
+    } else if (reg >= cur_regs->total_regs() || eval_info.reg_map & (1 << reg)) {
+      // Skip this unknown register, or a register that has already been
+      // processed.
       continue;
+    } else {
+      reg_ptr = &(*cur_regs)[reg];
+      eval_info.reg_map |= 1 << reg;
+      eval_info.reg_values[reg] = *reg_ptr;
     }
 
-    const DwarfLocation* loc = &entry.second;
-    switch (loc->type) {
-      case DWARF_LOCATION_OFFSET:
-        if (!regular_memory->ReadFully(cfa + loc->values[0], &(*cur_regs)[reg],
-                                       sizeof(AddressType))) {
-          last_error_ = DWARF_ERROR_MEMORY_INVALID;
-          return false;
-        }
-        break;
-      case DWARF_LOCATION_VAL_OFFSET:
-        (*cur_regs)[reg] = cfa + loc->values[0];
-        break;
-      case DWARF_LOCATION_REGISTER: {
-        uint16_t cur_reg = loc->values[0];
-        if (cur_reg >= cur_regs->total_regs()) {
-          last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
-          return false;
-        }
-        if (loc_regs.find(cur_reg) != loc_regs.end()) {
-          // This is a double indirection, a register definition references
-          // another register which is also defined as something other
-          // than a register.
-          log(0,
-              "Invalid indirection: register %d references register %d which is "
-              "not a plain register.\n",
-              reg, cur_reg);
-          last_error_ = DWARF_ERROR_ILLEGAL_STATE;
-          return false;
-        }
-        (*cur_regs)[reg] = (*cur_regs)[cur_reg] + loc->values[1];
-        break;
-      }
-      case DWARF_LOCATION_EXPRESSION:
-      case DWARF_LOCATION_VAL_EXPRESSION: {
-        AddressType value;
-        if (!EvalExpression(*loc, cie->version, regular_memory, &value)) {
-          return false;
-        }
-        if (loc->type == DWARF_LOCATION_EXPRESSION) {
-          if (!regular_memory->ReadFully(value, &(*cur_regs)[reg], sizeof(AddressType))) {
-            last_error_ = DWARF_ERROR_MEMORY_INVALID;
-            return false;
-          }
-        } else {
-          (*cur_regs)[reg] = value;
-        }
-        break;
-      }
-      case DWARF_LOCATION_UNDEFINED:
-        if (reg == cie->return_address_register) {
-          return_address_undefined = true;
-        }
-      default:
-        break;
+    if (!EvalRegister(&entry.second, reg, reg_ptr, &eval_info)) {
+      return false;
+    }
+
+    if (reg == DEX_PC_REG) {
+      cur_regs->set_dex_pc(dex_pc);
     }
   }
 
   // Find the return address location.
-  if (return_address_undefined) {
+  if (eval_info.return_address_undefined) {
     cur_regs->set_pc(0);
   } else {
     cur_regs->set_pc((*cur_regs)[cie->return_address_register]);
@@ -239,7 +280,7 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
   // If the pc was set to zero, consider this the final frame.
   *finished = (cur_regs->pc() == 0) ? true : false;
 
-  cur_regs->set_sp(cfa);
+  cur_regs->set_sp(eval_info.cfa);
 
   return true;
 }
