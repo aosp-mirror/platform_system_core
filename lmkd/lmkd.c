@@ -29,6 +29,7 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
@@ -100,6 +101,16 @@ static const char *level_name[] = {
     "medium",
     "critical"
 };
+
+struct mem_size {
+    int free_mem;
+    int free_swap;
+};
+
+struct {
+    int min_free; /* recorded but not used yet */
+    int max_free;
+} low_pressure_mem = { -1, -1 };
 
 static int level_oomadj[VMPRESS_LEVEL_COUNT];
 static int mpevfd[VMPRESS_LEVEL_COUNT] = { -1, -1, -1 };
@@ -559,6 +570,18 @@ static int zoneinfo_parse(struct sysmeminfo *mip) {
     return 0;
 }
 
+static int get_free_memory(struct mem_size *ms) {
+    struct sysinfo si;
+
+    if (sysinfo(&si) < 0)
+        return -1;
+
+    ms->free_mem = (int)(si.freeram * si.mem_unit / PAGE_SIZE);
+    ms->free_swap = (int)(si.freeswap * si.mem_unit / PAGE_SIZE);
+
+    return 0;
+}
+
 static int proc_get_size(int pid) {
     char path[PATH_MAX];
     char line[LINE_MAX];
@@ -676,34 +699,40 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
 }
 
 /*
- * Find a process to kill based on the current (possibly estimated) free memory
- * and cached memory sizes.  Returns the size of the killed processes.
+ * Find processes to kill to free required number of pages.
+ * If pages_to_free is set to 0 only one process will be killed.
+ * Returns the size of the killed processes.
  */
-static int find_and_kill_process(enum vmpressure_level level) {
+static int find_and_kill_processes(enum vmpressure_level level,
+                                   int pages_to_free) {
     int i;
-    int killed_size = 0;
+    int killed_size;
+    int pages_freed = 0;
     int min_score_adj = level_oomadj[level];
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
 
-retry:
-        if (kill_heaviest_task)
-            procp = proc_get_heaviest(i);
-        else
-            procp = proc_adj_lru(i);
+        while (true) {
+            if (is_go_device)
+                procp = proc_adj_lru(i);
+            else
+                procp = proc_get_heaviest(i);
 
-        if (procp) {
+            if (!procp)
+                break;
+
             killed_size = kill_one_process(procp, min_score_adj, level);
-            if (killed_size < 0) {
-                goto retry;
-            } else {
-                return killed_size;
+            if (killed_size >= 0) {
+                pages_freed += killed_size;
+                if (pages_freed >= pages_to_free) {
+                    return pages_freed;
+                }
             }
         }
     }
 
-    return 0;
+    return pages_freed;
 }
 
 static int64_t get_memory_usage(const char* path) {
@@ -730,6 +759,32 @@ static int64_t get_memory_usage(const char* path) {
     return mem_usage;
 }
 
+void record_low_pressure_levels(struct mem_size *free_mem) {
+    if (low_pressure_mem.min_free == -1 ||
+        low_pressure_mem.min_free > free_mem->free_mem) {
+        if (debug_process_killing) {
+            ALOGI("Low pressure min memory update from %d to %d",
+                low_pressure_mem.min_free, free_mem->free_mem);
+        }
+        low_pressure_mem.min_free = free_mem->free_mem;
+    }
+    /*
+     * Free memory at low vmpressure events occasionally gets spikes,
+     * possibly a stale low vmpressure event with memory already
+     * freed up (no memory pressure should have been reported).
+     * Ignore large jumps in max_free that would mess up our stats.
+     */
+    if (low_pressure_mem.max_free == -1 ||
+        (low_pressure_mem.max_free < free_mem->free_mem &&
+         free_mem->free_mem - low_pressure_mem.max_free < low_pressure_mem.max_free * 0.1)) {
+        if (debug_process_killing) {
+            ALOGI("Low pressure max memory update from %d to %d",
+                low_pressure_mem.max_free, free_mem->free_mem);
+        }
+        low_pressure_mem.max_free = free_mem->free_mem;
+    }
+}
+
 enum vmpressure_level upgrade_level(enum vmpressure_level level) {
     return (enum vmpressure_level)((level < VMPRESS_LEVEL_CRITICAL) ?
         level + 1 : level);
@@ -746,6 +801,7 @@ static void mp_event_common(enum vmpressure_level level) {
     int64_t mem_usage, memsw_usage;
     int64_t mem_pressure;
     enum vmpressure_level lvl;
+    struct mem_size free_mem;
 
     /*
      * Check all event counters from low to critical
@@ -758,6 +814,20 @@ static void mp_event_common(enum vmpressure_level level) {
             evcount > 0 && lvl > level) {
             level = lvl;
         }
+    }
+
+    if (get_free_memory(&free_mem) == 0) {
+        if (level == VMPRESS_LEVEL_LOW) {
+            record_low_pressure_levels(&free_mem);
+        }
+    } else {
+        ALOGE("Failed to get free memory!");
+        return;
+    }
+
+    if (level_oomadj[level] > OOM_SCORE_ADJ_MAX) {
+        /* Do not monitor this pressure level */
+        return;
     }
 
     mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
@@ -796,9 +866,35 @@ static void mp_event_common(enum vmpressure_level level) {
     }
 
 do_kill:
-    if (find_and_kill_process(level) == 0) {
-        if (debug_process_killing) {
-            ALOGI("Nothing to kill");
+    if (is_go_device) {
+        /* For Go devices kill only one task */
+        if (find_and_kill_processes(level, 0) == 0) {
+            if (debug_process_killing) {
+                ALOGI("Nothing to kill");
+            }
+        }
+    } else {
+        /* If pressure level is less than critical and enough free swap then ignore */
+        if (level < VMPRESS_LEVEL_CRITICAL && free_mem.free_swap > low_pressure_mem.max_free) {
+            if (debug_process_killing) {
+                ALOGI("Ignoring pressure since %d swap pages are available ", free_mem.free_swap);
+            }
+            return;
+        }
+
+        /* Free up enough memory to downgrate the memory pressure to low level */
+        if (free_mem.free_mem < low_pressure_mem.max_free) {
+            int pages_to_free = low_pressure_mem.max_free - free_mem.free_mem;
+            if (debug_process_killing) {
+                ALOGI("Trying to free %d pages", pages_to_free);
+            }
+            int pages_freed = find_and_kill_processes(level, pages_to_free);
+            if (pages_freed < pages_to_free) {
+                if (debug_process_killing) {
+                    ALOGI("Unable to free enough memory (pages freed=%d)",
+                        pages_freed);
+                }
+            }
         }
     }
 }
@@ -823,11 +919,6 @@ static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
     struct epoll_event epev;
     int ret;
     const char *levelstr = level_name[level];
-
-    if (level_oomadj[level] > OOM_SCORE_ADJ_MAX) {
-        ALOGI("%s pressure events are disabled", levelstr);
-        return true;
-    }
 
     mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
     if (mpfd < 0) {
