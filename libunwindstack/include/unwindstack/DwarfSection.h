@@ -132,6 +132,8 @@ class DwarfSectionImpl : public DwarfSection {
 
   const DwarfFde* GetFdeFromIndex(size_t index) override;
 
+  bool EvalRegister(const DwarfLocation* loc, uint32_t reg, AddressType* reg_ptr, void* info);
+
   bool Eval(const DwarfCie* cie, Memory* regular_memory, const dwarf_loc_regs_t& loc_regs,
             Regs* regs, bool* finished) override;
 
