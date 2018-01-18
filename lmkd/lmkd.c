@@ -120,6 +120,7 @@ static int64_t upgrade_pressure;
 static int64_t downgrade_pressure;
 static bool is_go_device;
 static bool kill_heaviest_task;
+static unsigned long kill_timeout_ms;
 
 /* control socket listen and data */
 static int ctrl_lfd;
@@ -795,6 +796,12 @@ enum vmpressure_level downgrade_level(enum vmpressure_level level) {
         level - 1 : level);
 }
 
+static inline unsigned long get_time_diff_ms(struct timeval *from,
+                                             struct timeval *to) {
+    return (to->tv_sec - from->tv_sec) * 1000 +
+           (to->tv_usec - from->tv_usec) / 1000;
+}
+
 static void mp_event_common(enum vmpressure_level level) {
     int ret;
     unsigned long long evcount;
@@ -802,6 +809,8 @@ static void mp_event_common(enum vmpressure_level level) {
     int64_t mem_pressure;
     enum vmpressure_level lvl;
     struct mem_size free_mem;
+    static struct timeval last_report_tm;
+    static unsigned long skip_count = 0;
 
     /*
      * Check all event counters from low to critical
@@ -814,6 +823,23 @@ static void mp_event_common(enum vmpressure_level level) {
             evcount > 0 && lvl > level) {
             level = lvl;
         }
+    }
+
+    if (kill_timeout_ms) {
+        struct timeval curr_tm;
+        gettimeofday(&curr_tm, NULL);
+        if (get_time_diff_ms(&last_report_tm, &curr_tm) < kill_timeout_ms) {
+            skip_count++;
+            return;
+        }
+    }
+
+    if (skip_count > 0) {
+        if (debug_process_killing) {
+            ALOGI("%lu memory pressure events were skipped after a kill!",
+                skip_count);
+        }
+        skip_count = 0;
     }
 
     if (get_free_memory(&free_mem) == 0) {
@@ -894,6 +920,8 @@ do_kill:
                     ALOGI("Unable to free enough memory (pages freed=%d)",
                         pages_freed);
                 }
+            } else {
+                gettimeofday(&last_report_tm, NULL);
             }
         }
     }
@@ -1081,6 +1109,8 @@ int main(int argc __unused, char **argv __unused) {
     kill_heaviest_task =
         property_get_bool("ro.lmk.kill_heaviest_task", true);
     is_go_device = property_get_bool("ro.config.low_ram", false);
+    kill_timeout_ms =
+        (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
 
     // MCL_ONFAULT pins pages as they fault instead of loading
     // everything immediately all at once. (Which would be bad,
