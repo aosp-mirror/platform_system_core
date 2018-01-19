@@ -447,8 +447,11 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
     if (kdata == nullptr) die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
 
     // Is this actually a boot image?
+    if (ksize < static_cast<int64_t>(sizeof(boot_img_hdr))) {
+        die("cannot load '%s': too short", kernel.c_str());
+    }
     if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
-        if (cmdline) bootimg_set_cmdline((boot_img_hdr*) kdata, cmdline);
+        if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr*>(kdata), cmdline);
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
 
