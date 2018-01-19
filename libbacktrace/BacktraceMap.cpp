@@ -38,7 +38,7 @@ BacktraceMap::BacktraceMap(pid_t pid) : pid_(pid) {
 BacktraceMap::~BacktraceMap() {
 }
 
-void BacktraceMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
+void BacktraceMap::FillIn(uint64_t addr, backtrace_map_t* map) {
   ScopedBacktraceMapIteratorLock lock(this);
   for (auto it = begin(); it != end(); ++it) {
     const backtrace_map_t* entry = *it;
