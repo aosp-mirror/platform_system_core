@@ -114,6 +114,7 @@ cc_library_static {
         "libbacktrace",
         "libunwind",
         "libunwindstack",
+        "libdexfile",
         "liblzma",
         "libcutils",
     ],

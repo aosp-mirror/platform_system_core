@@ -26,10 +26,19 @@
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
 
+#include "UnwindDexFile.h"
 #include "UnwindStackMap.h"
 
 //-------------------------------------------------------------------------
 UnwindStackMap::UnwindStackMap(pid_t pid) : BacktraceMap(pid) {}
+
+UnwindStackMap::~UnwindStackMap() {
+#ifndef NO_LIBDEXFILE
+  for (auto& entry : dex_files_) {
+    delete entry.second;
+  }
+#endif
+}
 
 bool UnwindStackMap::Build() {
   if (pid_ == 0) {
@@ -117,6 +126,26 @@ std::string UnwindStackMap::GetFunctionName(uint64_t pc, uint64_t* offset) {
 std::shared_ptr<unwindstack::Memory> UnwindStackMap::GetProcessMemory() {
   return process_memory_;
 }
+
+#ifdef NO_LIBDEXFILE
+UnwindDexFile* UnwindStackMap::GetDexFile(uint64_t, unwindstack::MapInfo*) {
+  return nullptr;
+}
+#else
+UnwindDexFile* UnwindStackMap::GetDexFile(uint64_t dex_file_offset, unwindstack::MapInfo* info) {
+  // Lock while we get the data.
+  std::lock_guard<std::mutex> guard(dex_lock_);
+  UnwindDexFile* dex_file;
+  auto entry = dex_files_.find(dex_file_offset);
+  if (entry == dex_files_.end()) {
+    dex_file = UnwindDexFile::Create(dex_file_offset, process_memory_.get(), info);
+    dex_files_[dex_file_offset] = dex_file;
+  } else {
+    dex_file = entry->second;
+  }
+  return dex_file;
+}
+#endif
 
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
