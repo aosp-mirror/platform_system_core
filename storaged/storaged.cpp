@@ -66,9 +66,9 @@ const uint32_t storaged_t::current_version = 4;
 using android::hardware::interfacesEqual;
 using android::hardware::Return;
 using android::hardware::health::V1_0::BatteryStatus;
-using android::hardware::health::V1_0::HealthInfo;
 using android::hardware::health::V1_0::toString;
 using android::hardware::health::V2_0::get_health_service;
+using android::hardware::health::V2_0::HealthInfo;
 using android::hardware::health::V2_0::IHealth;
 using android::hardware::health::V2_0::Result;
 using android::hidl::manager::V1_0::IServiceManager;
@@ -80,7 +80,7 @@ inline charger_stat_t is_charger_on(BatteryStatus prop) {
 }
 
 Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
-    mUidm.set_charger_state(is_charger_on(props.batteryStatus));
+    mUidm.set_charger_state(is_charger_on(props.legacy.batteryStatus));
     return android::hardware::Void();
 }
 

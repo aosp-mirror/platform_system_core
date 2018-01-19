@@ -30,7 +30,7 @@ using android::hardware::IPCThreadState;
 using android::hardware::configureRpcThreadpool;
 using android::hardware::handleTransportPoll;
 using android::hardware::setupTransportPolling;
-using android::hardware::health::V1_0::HealthInfo;
+using android::hardware::health::V2_0::HealthInfo;
 using android::hardware::health::V1_0::hal_conversion::convertToHealthInfo;
 using android::hardware::health::V2_0::IHealth;
 using android::hardware::health::V2_0::implementation::Health;
@@ -71,8 +71,8 @@ void healthd_mode_service_2_0_heartbeat(void) {
 
 void healthd_mode_service_2_0_battery_update(struct android::BatteryProperties* prop) {
     HealthInfo info;
-    convertToHealthInfo(prop, info);
-    Health::getImplementation()->notifyListeners(info);
+    convertToHealthInfo(prop, info.legacy);
+    Health::getImplementation()->notifyListeners(&info);
 }
 
 static struct healthd_mode_ops healthd_mode_service_2_0_ops = {
