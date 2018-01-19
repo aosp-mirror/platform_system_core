@@ -20,6 +20,7 @@
 #include <android/hardware/health/1.0/IHealth.h>
 #include <android/hardware/health/1.0/types.h>
 #include <hal_conversion.h>
+#include <health2/service.h>
 #include <healthd/healthd.h>
 #include <hidl/HidlTransportSupport.h>
 
@@ -85,4 +86,8 @@ int healthd_board_battery_update(struct android::BatteryProperties* props) {
     });
 
     return logthis;
+}
+
+int main() {
+    return health_service_main("backup");
 }
