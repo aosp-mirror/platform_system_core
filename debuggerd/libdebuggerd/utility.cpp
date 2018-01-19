@@ -124,7 +124,7 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
 #define MEMORY_BYTES_TO_DUMP 256
 #define MEMORY_BYTES_PER_LINE 16
 
-void dump_memory(log_t* log, unwindstack::Memory* memory, uintptr_t addr, const char* fmt, ...) {
+void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const char* fmt, ...) {
   std::string log_msg;
   va_list ap;
   va_start(ap, fmt);
@@ -159,7 +159,7 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uintptr_t addr, const 
     bytes &= ~(sizeof(uintptr_t) - 1);
   }
 
-  uintptr_t start = 0;
+  uint64_t start = 0;
   bool skip_2nd_read = false;
   if (bytes == 0) {
     // In this case, we might want to try another read at the beginning of
@@ -206,7 +206,7 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uintptr_t addr, const 
     std::string ascii;
     for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++) {
       if (current >= start && current + sizeof(uintptr_t) <= total_bytes) {
-        android::base::StringAppendF(&logline, " %" PRIPTR, *data_ptr);
+        android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
 
         // Fill out the ascii string from the data.
         uint8_t* ptr = reinterpret_cast<uint8_t*>(data_ptr);

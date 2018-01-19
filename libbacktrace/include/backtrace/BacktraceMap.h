@@ -39,10 +39,10 @@
 static constexpr int PROT_DEVICE_MAP = 0x8000;
 
 struct backtrace_map_t {
-  uintptr_t start = 0;
-  uintptr_t end = 0;
-  uintptr_t offset = 0;
-  uintptr_t load_bias = 0;
+  uint64_t start = 0;
+  uint64_t end = 0;
+  uint64_t offset = 0;
+  uint64_t load_bias = 0;
   int flags = 0;
   std::string name;
 };
@@ -91,7 +91,7 @@ public:
         return nullptr;
       }
       backtrace_map_t* map = &map_->maps_[index_];
-      if (map->load_bias == static_cast<uintptr_t>(-1)) {
+      if (map->load_bias == static_cast<uint64_t>(-1)) {
         map->load_bias = map_->GetLoadBias(index_);
       }
       return map;
@@ -106,15 +106,15 @@ public:
   iterator end() { return iterator(this, maps_.size()); }
 
   // Fill in the map data structure for the given address.
-  virtual void FillIn(uintptr_t addr, backtrace_map_t* map);
+  virtual void FillIn(uint64_t addr, backtrace_map_t* map);
 
   // Only supported with the new unwinder.
-  virtual std::string GetFunctionName(uintptr_t /*pc*/, uintptr_t* /*offset*/) { return ""; }
+  virtual std::string GetFunctionName(uint64_t /*pc*/, uint64_t* /*offset*/) { return ""; }
   virtual std::shared_ptr<unwindstack::Memory> GetProcessMemory() { return nullptr; }
 
   // The flags returned are the same flags as used by the mmap call.
   // The values are PROT_*.
-  int GetFlags(uintptr_t pc) {
+  int GetFlags(uint64_t pc) {
     backtrace_map_t map;
     FillIn(pc, &map);
     if (IsValid(map)) {
@@ -123,9 +123,9 @@ public:
     return PROT_NONE;
   }
 
-  bool IsReadable(uintptr_t pc) { return GetFlags(pc) & PROT_READ; }
-  bool IsWritable(uintptr_t pc) { return GetFlags(pc) & PROT_WRITE; }
-  bool IsExecutable(uintptr_t pc) { return GetFlags(pc) & PROT_EXEC; }
+  bool IsReadable(uint64_t pc) { return GetFlags(pc) & PROT_READ; }
+  bool IsWritable(uint64_t pc) { return GetFlags(pc) & PROT_WRITE; }
+  bool IsExecutable(uint64_t pc) { return GetFlags(pc) & PROT_EXEC; }
 
   // In order to use the iterators on this object, a caller must
   // call the LockIterator and UnlockIterator function to guarantee

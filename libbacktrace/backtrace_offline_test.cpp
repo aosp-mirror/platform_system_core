@@ -75,20 +75,20 @@ static ucontext_t GetUContextFromUnwContext(const unw_context_t& unw_context) {
 
 struct FunctionSymbol {
   std::string name;
-  uintptr_t start;
-  uintptr_t end;
+  uint64_t start;
+  uint64_t end;
 };
 
 static std::vector<FunctionSymbol> GetFunctionSymbols() {
   std::vector<FunctionSymbol> symbols = {
       {"unknown_start", 0, 0},
-      {"test_level_one", reinterpret_cast<uintptr_t>(&test_level_one), 0},
-      {"test_level_two", reinterpret_cast<uintptr_t>(&test_level_two), 0},
-      {"test_level_three", reinterpret_cast<uintptr_t>(&test_level_three), 0},
-      {"test_level_four", reinterpret_cast<uintptr_t>(&test_level_four), 0},
-      {"test_recursive_call", reinterpret_cast<uintptr_t>(&test_recursive_call), 0},
-      {"test_get_context_and_wait", reinterpret_cast<uintptr_t>(&test_get_context_and_wait), 0},
-      {"unknown_end", static_cast<uintptr_t>(-1), static_cast<uintptr_t>(-1)},
+      {"test_level_one", reinterpret_cast<uint64_t>(&test_level_one), 0},
+      {"test_level_two", reinterpret_cast<uint64_t>(&test_level_two), 0},
+      {"test_level_three", reinterpret_cast<uint64_t>(&test_level_three), 0},
+      {"test_level_four", reinterpret_cast<uint64_t>(&test_level_four), 0},
+      {"test_recursive_call", reinterpret_cast<uint64_t>(&test_recursive_call), 0},
+      {"test_get_context_and_wait", reinterpret_cast<uint64_t>(&test_get_context_and_wait), 0},
+      {"unknown_end", static_cast<uint64_t>(-1), static_cast<uint64_t>(-1)},
   };
   std::sort(
       symbols.begin(), symbols.end(),
@@ -141,7 +141,7 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   const size_t stack_size = 16 * 1024;
   void* stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   ASSERT_NE(MAP_FAILED, stack);
-  uintptr_t stack_addr = reinterpret_cast<uintptr_t>(stack);
+  uint64_t stack_addr = reinterpret_cast<uint64_t>(stack);
   pthread_attr_t attr;
   ASSERT_EQ(0, pthread_attr_init(&attr));
   ASSERT_EQ(0, pthread_attr_setstack(&attr, reinterpret_cast<void*>(stack), stack_size));
@@ -174,8 +174,8 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   for (auto it = map->begin(); it != map->end(); ++it) {
     const backtrace_map_t* entry = *it;
     testdata +=
-        android::base::StringPrintf("map: start: %" PRIxPTR " end: %" PRIxPTR " offset: %" PRIxPTR
-                                    " load_bias: %" PRIxPTR " flags: %d name: %s\n",
+        android::base::StringPrintf("map: start: %" PRIx64 " end: %" PRIx64 " offset: %" PRIx64
+                                    " load_bias: %" PRIx64 " flags: %d name: %s\n",
                                     entry->start, entry->end, entry->offset, entry->load_bias,
                                     entry->flags, entry->name.c_str());
   }
@@ -194,9 +194,9 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   // 5. Dump function symbols
   std::vector<FunctionSymbol> function_symbols = GetFunctionSymbols();
   for (const auto& symbol : function_symbols) {
-    testdata += android::base::StringPrintf(
-        "function: start: %" PRIxPTR " end: %" PRIxPTR" name: %s\n",
-        symbol.start, symbol.end, symbol.name.c_str());
+    testdata +=
+        android::base::StringPrintf("function: start: %" PRIx64 " end: %" PRIx64 " name: %s\n",
+                                    symbol.start, symbol.end, symbol.name.c_str());
   }
 
   ASSERT_TRUE(android::base::WriteStringToFile(testdata, "offline_testdata"));
@@ -204,7 +204,7 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
 
 // Return the name of the function which matches the address. Although we don't know the
 // exact end of each function, it is accurate enough for the tests.
-static std::string FunctionNameForAddress(uintptr_t addr,
+static std::string FunctionNameForAddress(uint64_t addr,
                                           const std::vector<FunctionSymbol>& symbols) {
   for (auto& symbol : symbols) {
     if (addr >= symbol.start && addr < symbol.end) {
@@ -240,7 +240,7 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
       backtrace_map_t& map = testdata->maps.back();
       int pos;
       sscanf(line.c_str(),
-             "map: start: %" SCNxPTR " end: %" SCNxPTR " offset: %" SCNxPTR " load_bias: %" SCNxPTR
+             "map: start: %" SCNx64 " end: %" SCNx64 " offset: %" SCNx64 " load_bias: %" SCNx64
              " flags: %d name: %n",
              &map.start, &map.end, &map.offset, &map.load_bias, &map.flags, &pos);
       map.name = android::base::Trim(line.substr(pos));
@@ -302,9 +302,8 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
       testdata->symbols.resize(testdata->symbols.size() + 1);
       FunctionSymbol& symbol = testdata->symbols.back();
       int pos;
-      sscanf(line.c_str(),
-             "function: start: %" SCNxPTR " end: %" SCNxPTR " name: %n",
-             &symbol.start, &symbol.end, &pos);
+      sscanf(line.c_str(), "function: start: %" SCNx64 " end: %" SCNx64 " name: %n", &symbol.start,
+             &symbol.end, &pos);
       symbol.name = line.substr(pos);
     }
   }
@@ -342,7 +341,7 @@ static void BacktraceOfflineTest(const char* arch, const std::string& testlib_na
   ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
 
   // Collect pc values of the call stack frames.
-  std::vector<uintptr_t> pc_values;
+  std::vector<uint64_t> pc_values;
   for (size_t i = 0; i < backtrace->NumFrames(); ++i) {
     pc_values.push_back(backtrace->GetFrame(i)->pc);
   }
@@ -420,7 +419,7 @@ static void LibUnwindingTest(const std::string& arch, const std::string& testdat
 
   ASSERT_EQ(testdata.symbols.size(), backtrace->NumFrames());
   for (size_t i = 0; i < backtrace->NumFrames(); ++i) {
-    uintptr_t vaddr_in_file =
+    uint64_t vaddr_in_file =
         backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
     std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
