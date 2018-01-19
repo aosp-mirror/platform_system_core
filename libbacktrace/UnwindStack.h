@@ -32,7 +32,7 @@ class UnwindStackCurrent : public BacktraceCurrent {
   UnwindStackCurrent(pid_t pid, pid_t tid, BacktraceMap* map);
   virtual ~UnwindStackCurrent() = default;
 
-  std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) override;
+  std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset) override;
 
   bool UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) override;
 };
@@ -44,9 +44,9 @@ class UnwindStackPtrace : public BacktracePtrace {
 
   bool Unwind(size_t num_ignore_frames, ucontext_t* context) override;
 
-  std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
+  std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset);
 
-  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) override;
+  size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) override;
 
  private:
   unwindstack::MemoryRemote memory_;

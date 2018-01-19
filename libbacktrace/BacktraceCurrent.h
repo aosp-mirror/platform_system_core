@@ -40,9 +40,9 @@ class BacktraceCurrent : public Backtrace {
   BacktraceCurrent(pid_t pid, pid_t tid, BacktraceMap* map) : Backtrace(pid, tid, map) {}
   virtual ~BacktraceCurrent() {}
 
-  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) override;
+  size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) override;
 
-  bool ReadWord(uintptr_t ptr, word_t* out_value) override;
+  bool ReadWord(uint64_t ptr, word_t* out_value) override;
 
   bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext) override;
 
