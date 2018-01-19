@@ -1038,7 +1038,7 @@ static int init(void) {
     maxevents++;
 
     has_inkernel_module = !access(INKERNEL_MINFREE_PATH, W_OK);
-    use_inkernel_interface = has_inkernel_module && !is_go_device;
+    use_inkernel_interface = has_inkernel_module;
 
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
