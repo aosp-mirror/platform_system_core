@@ -36,7 +36,7 @@
 #include "ThreadEntry.h"
 #include "thread_utils.h"
 
-bool BacktraceCurrent::ReadWord(uintptr_t ptr, word_t* out_value) {
+bool BacktraceCurrent::ReadWord(uint64_t ptr, word_t* out_value) {
   if (!VerifyReadWordArgs(ptr, out_value)) {
     return false;
   }
@@ -53,7 +53,7 @@ bool BacktraceCurrent::ReadWord(uintptr_t ptr, word_t* out_value) {
   }
 }
 
-size_t BacktraceCurrent::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+size_t BacktraceCurrent::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
   backtrace_map_t map;
   FillInMap(addr, &map);
   if (!BacktraceMap::IsValid(map) || !(map.flags & PROT_READ)) {

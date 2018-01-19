@@ -57,9 +57,9 @@ class BacktraceOffline : public Backtrace {
 
   bool Unwind(size_t num_ignore_frames, ucontext_t* context) override;
 
-  bool ReadWord(uintptr_t ptr, word_t* out_value) override;
+  bool ReadWord(uint64_t ptr, word_t* out_value) override;
 
-  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) override;
+  size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) override;
 
   bool FindProcInfo(unw_addr_space_t addr_space, uint64_t ip, unw_proc_info_t* proc_info,
                     int need_unwind_info);
@@ -67,7 +67,7 @@ class BacktraceOffline : public Backtrace {
   bool ReadReg(size_t reg_index, uint64_t* value);
 
  protected:
-  std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) override;
+  std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset) override;
   DebugFrameInfo* GetDebugFrameInFile(const std::string& filename);
 
   bool cache_file_;

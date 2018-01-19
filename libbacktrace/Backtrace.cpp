@@ -30,8 +30,6 @@
 #include <demangle.h>
 
 #include "BacktraceLog.h"
-#include "UnwindCurrent.h"
-#include "UnwindPtrace.h"
 #include "UnwindStack.h"
 #include "thread_utils.h"
 
@@ -55,7 +53,7 @@ Backtrace::~Backtrace() {
   }
 }
 
-std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const backtrace_map_t* map) {
+std::string Backtrace::GetFunctionName(uint64_t pc, uint64_t* offset, const backtrace_map_t* map) {
   backtrace_map_t map_value;
   if (map == nullptr) {
     FillInMap(pc, &map_value);
@@ -68,7 +66,7 @@ std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const ba
   return demangle(GetFunctionNameRaw(pc, offset).c_str());
 }
 
-bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, word_t* out_value) {
+bool Backtrace::VerifyReadWordArgs(uint64_t ptr, word_t* out_value) {
   if (ptr & (sizeof(word_t)-1)) {
     BACK_LOGW("invalid pointer %p", reinterpret_cast<void*>(ptr));
     *out_value = static_cast<word_t>(-1);
@@ -105,12 +103,12 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   // Special handling for non-zero offset maps, we need to print that
   // information.
   if (frame->map.offset != 0) {
-    line += " (offset " + StringPrintf("0x%" PRIxPTR, frame->map.offset) + ")";
+    line += " (offset " + StringPrintf("0x%" PRIx64, frame->map.offset) + ")";
   }
   if (!frame->func_name.empty()) {
     line += " (" + frame->func_name;
     if (frame->func_offset) {
-      line += StringPrintf("+%" PRIuPTR, frame->func_offset);
+      line += StringPrintf("+%" PRIu64, frame->func_offset);
     }
     line += ')';
   }
@@ -118,7 +116,7 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   return line;
 }
 
-void Backtrace::FillInMap(uintptr_t pc, backtrace_map_t* map) {
+void Backtrace::FillInMap(uint64_t pc, backtrace_map_t* map) {
   if (map_ != nullptr) {
     map_->FillIn(pc, map);
   }

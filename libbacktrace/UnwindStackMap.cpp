@@ -57,7 +57,7 @@ bool UnwindStackMap::Build() {
     map.end = map_info->end;
     map.offset = map_info->offset;
     // Set to -1 so that it is demand loaded.
-    map.load_bias = static_cast<uintptr_t>(-1);
+    map.load_bias = static_cast<uint64_t>(-1);
     map.flags = map_info->flags;
     map.name = map_info->name;
 
@@ -67,9 +67,9 @@ bool UnwindStackMap::Build() {
   return true;
 }
 
-void UnwindStackMap::FillIn(uintptr_t addr, backtrace_map_t* map) {
+void UnwindStackMap::FillIn(uint64_t addr, backtrace_map_t* map) {
   BacktraceMap::FillIn(addr, map);
-  if (map->load_bias != static_cast<uintptr_t>(-1)) {
+  if (map->load_bias != static_cast<uint64_t>(-1)) {
     return;
   }
 
@@ -93,7 +93,7 @@ uint64_t UnwindStackMap::GetLoadBias(size_t index) {
   return map_info->GetLoadBias(process_memory_);
 }
 
-std::string UnwindStackMap::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
+std::string UnwindStackMap::GetFunctionName(uint64_t pc, uint64_t* offset) {
   *offset = 0;
   unwindstack::Maps* maps = stack_maps();
 
