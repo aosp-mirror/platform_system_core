@@ -84,6 +84,10 @@ static int property_set_fd = -1;
 
 static PropertyInfoAreaFile property_info_area;
 
+uint32_t InitPropertySet(const std::string& name, const std::string& value);
+
+uint32_t (*property_set)(const std::string& name, const std::string& value) = InitPropertySet;
+
 void CreateSerializedPropertyInfo();
 
 void property_init() {
@@ -97,7 +101,7 @@ void property_init() {
     }
 }
 static bool CheckMacPerms(const std::string& name, const char* target_context,
-                          const char* source_context, struct ucred* cr) {
+                          const char* source_context, const ucred& cr) {
     if (!target_context || !source_context) {
         return false;
     }
@@ -105,7 +109,7 @@ static bool CheckMacPerms(const std::string& name, const char* target_context,
     property_audit_data audit_data;
 
     audit_data.name = name.c_str();
-    audit_data.cr = cr;
+    audit_data.cr = &cr;
 
     bool has_access = (selinux_check_access(source_context, target_context, "property_service",
                                             "set", &audit_data) == 0);
@@ -257,7 +261,7 @@ static int RestoreconRecursiveAsync(const std::string& name, const std::string& 
     return selinux_android_restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
 }
 
-uint32_t property_set(const std::string& name, const std::string& value) {
+uint32_t PropertySet(const std::string& name, const std::string& value) {
     if (name == "selinux.restorecon_recursive") {
         return PropertySetAsync(name, value, RestoreconRecursiveAsync);
     }
@@ -265,206 +269,208 @@ uint32_t property_set(const std::string& name, const std::string& value) {
     return PropertySetImpl(name, value);
 }
 
+uint32_t InitPropertySet(const std::string& name, const std::string& value) {
+    if (StartsWith(name, "ctl.")) {
+        LOG(ERROR) << "Do not set ctl. properties from init; call the Service functions directly";
+        return PROP_ERROR_INVALID_NAME;
+    }
+
+    const char* type = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), nullptr, &type);
+
+    if (type == nullptr || !CheckType(type, value)) {
+        LOG(ERROR) << "property_set: name: '" << name << "' type check failed, type: '"
+                   << (type ?: "(null)") << "' value: '" << value << "'";
+        return PROP_ERROR_INVALID_VALUE;
+    }
+
+    return PropertySet(name, value);
+}
+
 class SocketConnection {
- public:
-  SocketConnection(int socket, const struct ucred& cred)
-      : socket_(socket), cred_(cred) {}
+  public:
+    SocketConnection(int socket, const ucred& cred) : socket_(socket), cred_(cred) {}
 
-  ~SocketConnection() {
-    close(socket_);
-  }
+    ~SocketConnection() { close(socket_); }
 
-  bool RecvUint32(uint32_t* value, uint32_t* timeout_ms) {
-    return RecvFully(value, sizeof(*value), timeout_ms);
-  }
-
-  bool RecvChars(char* chars, size_t size, uint32_t* timeout_ms) {
-    return RecvFully(chars, size, timeout_ms);
-  }
-
-  bool RecvString(std::string* value, uint32_t* timeout_ms) {
-    uint32_t len = 0;
-    if (!RecvUint32(&len, timeout_ms)) {
-      return false;
+    bool RecvUint32(uint32_t* value, uint32_t* timeout_ms) {
+        return RecvFully(value, sizeof(*value), timeout_ms);
     }
 
-    if (len == 0) {
-      *value = "";
-      return true;
+    bool RecvChars(char* chars, size_t size, uint32_t* timeout_ms) {
+        return RecvFully(chars, size, timeout_ms);
     }
 
-    // http://b/35166374: don't allow init to make arbitrarily large allocations.
-    if (len > 0xffff) {
-      LOG(ERROR) << "sys_prop: RecvString asked to read huge string: " << len;
-      errno = ENOMEM;
-      return false;
-    }
-
-    std::vector<char> chars(len);
-    if (!RecvChars(&chars[0], len, timeout_ms)) {
-      return false;
-    }
-
-    *value = std::string(&chars[0], len);
-    return true;
-  }
-
-  bool SendUint32(uint32_t value) {
-    int result = TEMP_FAILURE_RETRY(send(socket_, &value, sizeof(value), 0));
-    return result == sizeof(value);
-  }
-
-  int socket() {
-    return socket_;
-  }
-
-  const struct ucred& cred() {
-    return cred_;
-  }
-
- private:
-  bool PollIn(uint32_t* timeout_ms) {
-    struct pollfd ufds[1];
-    ufds[0].fd = socket_;
-    ufds[0].events = POLLIN;
-    ufds[0].revents = 0;
-    while (*timeout_ms > 0) {
-        auto start_time = std::chrono::steady_clock::now();
-        int nr = poll(ufds, 1, *timeout_ms);
-        auto now = std::chrono::steady_clock::now();
-        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
-        uint64_t millis = time_elapsed.count();
-        *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
-
-        if (nr > 0) {
-            return true;
-      }
-
-      if (nr == 0) {
-        // Timeout
-        break;
-      }
-
-      if (nr < 0 && errno != EINTR) {
-        PLOG(ERROR) << "sys_prop: error waiting for uid " << cred_.uid << " to send property message";
-        return false;
-      } else { // errno == EINTR
-        // Timer rounds milliseconds down in case of EINTR we want it to be rounded up
-        // to avoid slowing init down by causing EINTR with under millisecond timeout.
-        if (*timeout_ms > 0) {
-          --(*timeout_ms);
+    bool RecvString(std::string* value, uint32_t* timeout_ms) {
+        uint32_t len = 0;
+        if (!RecvUint32(&len, timeout_ms)) {
+            return false;
         }
-      }
+
+        if (len == 0) {
+            *value = "";
+            return true;
+        }
+
+        // http://b/35166374: don't allow init to make arbitrarily large allocations.
+        if (len > 0xffff) {
+            LOG(ERROR) << "sys_prop: RecvString asked to read huge string: " << len;
+            errno = ENOMEM;
+            return false;
+        }
+
+        std::vector<char> chars(len);
+        if (!RecvChars(&chars[0], len, timeout_ms)) {
+            return false;
+        }
+
+        *value = std::string(&chars[0], len);
+        return true;
     }
 
-    LOG(ERROR) << "sys_prop: timeout waiting for uid " << cred_.uid << " to send property message.";
-    return false;
-  }
-
-  bool RecvFully(void* data_ptr, size_t size, uint32_t* timeout_ms) {
-    size_t bytes_left = size;
-    char* data = static_cast<char*>(data_ptr);
-    while (*timeout_ms > 0 && bytes_left > 0) {
-      if (!PollIn(timeout_ms)) {
-        return false;
-      }
-
-      int result = TEMP_FAILURE_RETRY(recv(socket_, data, bytes_left, MSG_DONTWAIT));
-      if (result <= 0) {
-        return false;
-      }
-
-      bytes_left -= result;
-      data += result;
+    bool SendUint32(uint32_t value) {
+        int result = TEMP_FAILURE_RETRY(send(socket_, &value, sizeof(value), 0));
+        return result == sizeof(value);
     }
 
-    return bytes_left == 0;
-  }
+    int socket() { return socket_; }
 
-  int socket_;
-  struct ucred cred_;
+    const ucred& cred() { return cred_; }
 
-  DISALLOW_IMPLICIT_CONSTRUCTORS(SocketConnection);
+    std::string source_context() const {
+        char* source_context = nullptr;
+        getpeercon(socket_, &source_context);
+        std::string result = source_context;
+        freecon(source_context);
+        return result;
+    }
+
+  private:
+    bool PollIn(uint32_t* timeout_ms) {
+        struct pollfd ufds[1];
+        ufds[0].fd = socket_;
+        ufds[0].events = POLLIN;
+        ufds[0].revents = 0;
+        while (*timeout_ms > 0) {
+            auto start_time = std::chrono::steady_clock::now();
+            int nr = poll(ufds, 1, *timeout_ms);
+            auto now = std::chrono::steady_clock::now();
+            auto time_elapsed =
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+            uint64_t millis = time_elapsed.count();
+            *timeout_ms = (millis > *timeout_ms) ? 0 : *timeout_ms - millis;
+
+            if (nr > 0) {
+                return true;
+            }
+
+            if (nr == 0) {
+                // Timeout
+                break;
+            }
+
+            if (nr < 0 && errno != EINTR) {
+                PLOG(ERROR) << "sys_prop: error waiting for uid " << cred_.uid
+                            << " to send property message";
+                return false;
+            } else {  // errno == EINTR
+                // Timer rounds milliseconds down in case of EINTR we want it to be rounded up
+                // to avoid slowing init down by causing EINTR with under millisecond timeout.
+                if (*timeout_ms > 0) {
+                    --(*timeout_ms);
+                }
+            }
+        }
+
+        LOG(ERROR) << "sys_prop: timeout waiting for uid " << cred_.uid
+                   << " to send property message.";
+        return false;
+    }
+
+    bool RecvFully(void* data_ptr, size_t size, uint32_t* timeout_ms) {
+        size_t bytes_left = size;
+        char* data = static_cast<char*>(data_ptr);
+        while (*timeout_ms > 0 && bytes_left > 0) {
+            if (!PollIn(timeout_ms)) {
+                return false;
+            }
+
+            int result = TEMP_FAILURE_RETRY(recv(socket_, data, bytes_left, MSG_DONTWAIT));
+            if (result <= 0) {
+                return false;
+            }
+
+            bytes_left -= result;
+            data += result;
+        }
+
+        return bytes_left == 0;
+    }
+
+    int socket_;
+    ucred cred_;
+
+    DISALLOW_IMPLICIT_CONSTRUCTORS(SocketConnection);
 };
 
-static void handle_property_set(SocketConnection& socket,
-                                const std::string& name,
-                                const std::string& value,
-                                bool legacy_protocol) {
-  const char* cmd_name = legacy_protocol ? "PROP_MSG_SETPROP" : "PROP_MSG_SETPROP2";
-  if (!is_legal_property_name(name)) {
-    LOG(ERROR) << "sys_prop(" << cmd_name << "): illegal property name \"" << name << "\"";
-    socket.SendUint32(PROP_ERROR_INVALID_NAME);
-    return;
-  }
+// This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
+uint32_t HandlePropertySet(const std::string& name, const std::string& value,
+                           const std::string& source_context, const ucred& cr) {
+    if (!is_legal_property_name(name)) {
+        LOG(ERROR) << "PropertySet: illegal property name \"" << name << "\"";
+        return PROP_ERROR_INVALID_NAME;
+    }
 
-  struct ucred cr = socket.cred();
-  char* source_ctx = nullptr;
-  getpeercon(socket.socket(), &source_ctx);
-  std::string source_context = source_ctx;
-  freecon(source_ctx);
+    if (StartsWith(name, "ctl.")) {
+        // ctl. properties have their name ctl.<action> and their value is the name of the service
+        // to apply that action to.  Permissions for these actions are based on the service, so we
+        // must create a fake name of ctl.<service> to check permissions.
+        auto control_string = "ctl." + value;
+        const char* target_context = nullptr;
+        const char* type = nullptr;
+        property_info_area->GetPropertyInfo(control_string.c_str(), &target_context, &type);
+        if (!CheckMacPerms(control_string, target_context, source_context.c_str(), cr)) {
+            LOG(ERROR) << "PropertySet: Unable to " << (name.c_str() + 4) << " service ctl ["
+                       << value << "]"
+                       << " uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid;
+            return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
+        }
 
-  if (StartsWith(name, "ctl.")) {
-      // ctl. properties have their name ctl.<action> and their value is the name of the service to
-      // apply that action to.  Permissions for these actions are based on the service, so we must
-      // create a fake name of ctl.<service> to check permissions.
-      auto control_string = "ctl." + value;
-      const char* target_context = nullptr;
-      const char* type = nullptr;
-      property_info_area->GetPropertyInfo(control_string.c_str(), &target_context, &type);
-      if (!CheckMacPerms(control_string, target_context, source_context.c_str(), &cr)) {
-          LOG(ERROR) << "sys_prop(" << cmd_name << "): Unable to " << (name.c_str() + 4)
-                     << " service ctl [" << value << "]"
-                     << " uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid;
-          if (!legacy_protocol) {
-              socket.SendUint32(PROP_ERROR_HANDLE_CONTROL_MESSAGE);
-          }
-          return;
-      }
+        handle_control_message(name.c_str() + 4, value.c_str());
+        return PROP_SUCCESS;
+    }
 
-      handle_control_message(name.c_str() + 4, value.c_str());
-      if (!legacy_protocol) {
-          socket.SendUint32(PROP_SUCCESS);
-      }
-  } else {
-      const char* target_context = nullptr;
-      const char* type = nullptr;
-      property_info_area->GetPropertyInfo(name.c_str(), &target_context, &type);
-      if (!CheckMacPerms(name, target_context, source_context.c_str(), &cr)) {
-          LOG(ERROR) << "sys_prop(" << cmd_name << "): permission denied uid:" << cr.uid
-                     << " name:" << name;
-          if (!legacy_protocol) {
-              socket.SendUint32(PROP_ERROR_PERMISSION_DENIED);
-          }
-          return;
-      }
-      if (type == nullptr || !CheckType(type, value)) {
-          LOG(ERROR) << "sys_prop(" << cmd_name << "): type check failed, type: '"
-                     << (type ?: "(null)") << "' value: '" << value << "'";
-          if (!legacy_protocol) {
-              socket.SendUint32(PROP_ERROR_INVALID_VALUE);
-          }
-          return;
-      }
-      // sys.powerctl is a special property that is used to make the device reboot.  We want to log
-      // any process that sets this property to be able to accurately blame the cause of a shutdown.
-      if (name == "sys.powerctl") {
-          std::string cmdline_path = StringPrintf("proc/%d/cmdline", cr.pid);
-          std::string process_cmdline;
-          std::string process_log_string;
-          if (ReadFileToString(cmdline_path, &process_cmdline)) {
-              // Since cmdline is null deliminated, .c_str() conveniently gives us just the process path.
-              process_log_string = StringPrintf(" (%s)", process_cmdline.c_str());
-          }
-          LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
-                    << process_log_string;
-      }
+    const char* target_context = nullptr;
+    const char* type = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), &target_context, &type);
 
-      uint32_t result = property_set(name, value);
-      if (!legacy_protocol) {
-          socket.SendUint32(result);
-      }
-  }
+    if (!CheckMacPerms(name, target_context, source_context.c_str(), cr)) {
+        LOG(ERROR) << "PropertySet: permission denied uid:" << cr.uid << " name:" << name;
+        return PROP_ERROR_PERMISSION_DENIED;
+    }
+
+    if (type == nullptr || !CheckType(type, value)) {
+        LOG(ERROR) << "PropertySet: name: '" << name << "' type check failed, type: '"
+                   << (type ?: "(null)") << "' value: '" << value << "'";
+        return PROP_ERROR_INVALID_VALUE;
+    }
+
+    // sys.powerctl is a special property that is used to make the device reboot.  We want to log
+    // any process that sets this property to be able to accurately blame the cause of a shutdown.
+    if (name == "sys.powerctl") {
+        std::string cmdline_path = StringPrintf("proc/%d/cmdline", cr.pid);
+        std::string process_cmdline;
+        std::string process_log_string;
+        if (ReadFileToString(cmdline_path, &process_cmdline)) {
+            // Since cmdline is null deliminated, .c_str() conveniently gives us just the process
+            // path.
+            process_log_string = StringPrintf(" (%s)", process_cmdline.c_str());
+        }
+        LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
+                  << process_log_string;
+    }
+
+    return PropertySet(name, value);
 }
 
 static void handle_property_set_fd() {
@@ -475,7 +481,7 @@ static void handle_property_set_fd() {
         return;
     }
 
-    struct ucred cr;
+    ucred cr;
     socklen_t cr_size = sizeof(cr);
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
@@ -507,7 +513,7 @@ static void handle_property_set_fd() {
         prop_name[PROP_NAME_MAX-1] = 0;
         prop_value[PROP_VALUE_MAX-1] = 0;
 
-        handle_property_set(socket, prop_value, prop_value, true);
+        HandlePropertySet(prop_value, prop_value, socket.source_context(), socket.cred());
         break;
       }
 
@@ -521,7 +527,8 @@ static void handle_property_set_fd() {
           return;
         }
 
-        handle_property_set(socket, name, value, false);
+        auto result = HandlePropertySet(name, value, socket.source_context(), socket.cred());
+        socket.SendUint32(result);
         break;
       }
 
