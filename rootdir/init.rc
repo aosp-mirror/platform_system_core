@@ -86,7 +86,7 @@ on init
     restorecon_recursive /mnt
 
     mount configfs none /config
-    chmod 0775 /config/sdcardfs
+    chmod 0770 /config/sdcardfs
     chown system package_info /config/sdcardfs
 
     mkdir /mnt/secure 0700 root root
