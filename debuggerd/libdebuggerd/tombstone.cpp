@@ -144,7 +144,7 @@ static void dump_stack_segment(log_t* log, BacktraceMap* backtrace_map, Memory* 
     } else {
       line += "     ";
     }
-    line += StringPrintf("%" PRIPTR "  %" PRIxPTR, *sp, stack_data[i]);
+    line += StringPrintf("%" PRIPTR "  %" PRIPTR, *sp, static_cast<uint64_t>(stack_data[i]));
 
     backtrace_map_t map;
     backtrace_map->FillIn(stack_data[i], &map);
