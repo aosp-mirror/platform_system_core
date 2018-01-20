@@ -1,0 +1,64 @@
+// SECCOMP_MODE_STRICT
+read: 1
+write: 1
+exit: 1
+rt_sigreturn: 1
+#if !defined(__LP64__)
+sigreturn: 1
+#endif
+
+exit_group: 1
+clock_gettime: 1
+gettimeofday: 1
+futex: 1
+getrandom: 1
+getpid: 1
+gettid: 1
+
+ppoll: 1
+pipe2: 1
+openat: 1
+dup: 1
+close: 1
+lseek: 1
+getdents64: 1
+faccessat: 1
+recvmsg: 1
+
+process_vm_readv: 1
+
+tgkill: 1
+rt_sigprocmask: 1
+rt_tgsigqueueinfo: 1
+
+#define PR_SET_VMA 0x53564d41
+prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA
+
+madvise: 1
+mprotect: arg2 in PROT_READ|PROT_WRITE
+munmap: 1
+
+#if defined(__LP64__)
+getuid: 1
+fstat: 1
+mmap: arg2 in PROT_READ|PROT_WRITE
+rt_sigaction: 1
+#else
+getuid32: 1
+fstat64: 1
+mmap2: arg2 in PROT_READ|PROT_WRITE
+sigaction: 1
+#endif
+
+// Needed for logging.
+#if defined(__LP64__)
+geteuid: 1
+getgid: 1
+getegid: 1
+getgroups: 1
+#else
+geteuid32: 1
+getgid32: 1
+getegid32: 1
+getgroups32: 1
+#endif

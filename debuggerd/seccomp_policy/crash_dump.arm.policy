@@ -1,0 +1,37 @@
+read: 1
+write: 1
+exit: 1
+rt_sigreturn: 1
+sigreturn: 1
+exit_group: 1
+clock_gettime: 1
+gettimeofday: 1
+futex: 1
+getrandom: 1
+getpid: 1
+gettid: 1
+ppoll: 1
+pipe2: 1
+openat: 1
+dup: 1
+close: 1
+lseek: 1
+getdents64: 1
+faccessat: 1
+recvmsg: 1
+process_vm_readv: 1
+tgkill: 1
+rt_sigprocmask: 1
+rt_tgsigqueueinfo: 1
+prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == 0x53564d41
+madvise: 1
+mprotect: arg2 in PROT_READ|PROT_WRITE
+munmap: 1
+getuid32: 1
+fstat64: 1
+mmap2: arg2 in PROT_READ|PROT_WRITE
+sigaction: 1
+geteuid32: 1
+getgid32: 1
+getegid32: 1
+getgroups32: 1
