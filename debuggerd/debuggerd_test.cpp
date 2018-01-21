@@ -41,6 +41,9 @@
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
 
+#include <libminijail.h>
+#include <scoped_minijail.h>
+
 #include "debuggerd/handler.h"
 #include "protocol.h"
 #include "tombstoned/tombstoned.h"
@@ -76,9 +79,8 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
     return value;                                                  \
   }()
 
-#define ASSERT_BACKTRACE_FRAME(result, frame_name)                        \
-  ASSERT_MATCH(result, R"(#\d\d pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX \
-                       R"(/libc.so \()" frame_name R"(\+)")
+#define ASSERT_BACKTRACE_FRAME(result, frame_name) \
+  ASSERT_MATCH(result, R"(#\d\d pc [0-9a-f]+\s+ \S+ \()" frame_name R"(\+)");
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
                                  InterceptStatus* status, DebuggerdDumpType intercept_type) {
@@ -563,6 +565,141 @@ TEST_F(CrasherTest, fake_pid) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "tgkill");
+}
+
+static const char* const kDebuggerdSeccompPolicy =
+    "/system/etc/seccomp_policy/crash_dump." ABI_STRING ".policy";
+
+pid_t seccomp_fork() {
+  unique_fd policy_fd(open(kDebuggerdSeccompPolicy, O_RDONLY | O_CLOEXEC));
+  if (policy_fd == -1) {
+    LOG(FATAL) << "failed to open policy " << kDebuggerdSeccompPolicy;
+  }
+
+  ScopedMinijail jail{minijail_new()};
+  if (!jail) {
+    LOG(FATAL) << "failed to create minijail";
+  }
+
+  minijail_no_new_privs(jail.get());
+  minijail_log_seccomp_filter_failures(jail.get());
+  minijail_use_seccomp_filter(jail.get());
+  minijail_parse_seccomp_filters_from_fd(jail.get(), policy_fd.release());
+
+  pid_t result = fork();
+  if (result == -1) {
+    return result;
+  } else if (result != 0) {
+    return result;
+  }
+
+  // Spawn and detach a thread that spins forever.
+  std::atomic<bool> thread_ready(false);
+  std::thread thread([&jail, &thread_ready]() {
+    minijail_enter(jail.get());
+    thread_ready = true;
+    for (;;)
+      ;
+  });
+  thread.detach();
+
+  while (!thread_ready) {
+    continue;
+  }
+
+  minijail_enter(jail.get());
+  return result;
+}
+
+TEST_F(CrasherTest, seccomp_crash) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  StartProcess([]() { abort(); }, &seccomp_fork);
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "abort");
+}
+
+__attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
+  siginfo_t siginfo;
+  siginfo.si_code = SI_QUEUE;
+  siginfo.si_pid = getpid();
+  siginfo.si_uid = getuid();
+
+  if (dump_type != kDebuggerdNativeBacktrace && dump_type != kDebuggerdTombstone) {
+    PLOG(FATAL) << "invalid dump type";
+  }
+
+  siginfo.si_value.sival_int = dump_type == kDebuggerdNativeBacktrace;
+
+  if (syscall(__NR_rt_tgsigqueueinfo, getpid(), gettid(), DEBUGGER_SIGNAL, &siginfo) != 0) {
+    PLOG(ERROR) << "libdebuggerd_client: failed to send signal to self";
+    return false;
+  }
+
+  return true;
+}
+
+TEST_F(CrasherTest, seccomp_tombstone) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdTombstone;
+  StartProcess(
+      []() {
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+}
+
+TEST_F(CrasherTest, seccomp_backtrace) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdNativeBacktrace;
+  StartProcess(
+      []() {
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+}
+
+TEST_F(CrasherTest, seccomp_crash_logcat) {
+  StartProcess([]() { abort(); }, &seccomp_fork);
+  FinishCrasher();
+
+  // Make sure we don't get SIGSYS when trying to dump a crash to logcat.
+  AssertDeath(SIGABRT);
 }
 
 TEST_F(CrasherTest, competing_tracer) {

@@ -127,7 +127,7 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
 }
 
 static void dump_stack_segment(log_t* log, BacktraceMap* backtrace_map, Memory* process_memory,
-                               uintptr_t* sp, size_t words, int label) {
+                               uint64_t* sp, size_t words, int label) {
   // Read the data all at once.
   word_t stack_data[words];
 
@@ -144,18 +144,18 @@ static void dump_stack_segment(log_t* log, BacktraceMap* backtrace_map, Memory* 
     } else {
       line += "     ";
     }
-    line += StringPrintf("%" PRIPTR "  %" PRIPTR, *sp, stack_data[i]);
+    line += StringPrintf("%" PRIPTR "  %" PRIPTR, *sp, static_cast<uint64_t>(stack_data[i]));
 
     backtrace_map_t map;
     backtrace_map->FillIn(stack_data[i], &map);
     if (BacktraceMap::IsValid(map) && !map.name.empty()) {
       line += "  " + map.name;
-      uintptr_t offset = 0;
+      uint64_t offset = 0;
       std::string func_name = backtrace_map->GetFunctionName(stack_data[i], &offset);
       if (!func_name.empty()) {
         line += " (" + func_name;
         if (offset) {
-          line += StringPrintf("+%" PRIuPTR, offset);
+          line += StringPrintf("+%" PRIu64, offset);
         }
         line += ')';
       }
@@ -185,7 +185,7 @@ static void dump_stack(log_t* log, BacktraceMap* backtrace_map, Memory* process_
   first--;
 
   // Dump a few words before the first frame.
-  word_t sp = frames[first].sp - STACK_WORDS * sizeof(word_t);
+  uint64_t sp = frames[first].sp - STACK_WORDS * sizeof(word_t);
   dump_stack_segment(log, backtrace_map, process_memory, &sp, STACK_WORDS, -1);
 
   // Dump a few words from all successive frames.
@@ -213,19 +213,19 @@ static void dump_stack(log_t* log, BacktraceMap* backtrace_map, Memory* process_
   }
 }
 
-static std::string get_addr_string(uintptr_t addr) {
+static std::string get_addr_string(uint64_t addr) {
   std::string addr_str;
 #if defined(__LP64__)
   addr_str = StringPrintf("%08x'%08x",
                           static_cast<uint32_t>(addr >> 32),
                           static_cast<uint32_t>(addr & 0xffffffff));
 #else
-  addr_str = StringPrintf("%08x", addr);
+  addr_str = StringPrintf("%08x", static_cast<uint32_t>(addr));
 #endif
   return addr_str;
 }
 
-static void dump_abort_message(log_t* log, Memory* process_memory, uintptr_t address) {
+static void dump_abort_message(log_t* log, Memory* process_memory, uint64_t address) {
   if (address == 0) {
     return;
   }
@@ -251,7 +251,7 @@ static void dump_abort_message(log_t* log, Memory* process_memory, uintptr_t add
   _LOG(log, logtype::HEADER, "Abort message: '%s'\n", msg);
 }
 
-static void dump_all_maps(log_t* log, BacktraceMap* map, Memory* process_memory, uintptr_t addr) {
+static void dump_all_maps(log_t* log, BacktraceMap* map, Memory* process_memory, uint64_t addr) {
   bool print_fault_address_marker = addr;
 
   ScopedBacktraceMapIteratorLock lock(map);
@@ -301,7 +301,7 @@ static void dump_all_maps(log_t* log, BacktraceMap* map, Memory* process_memory,
     } else {
       line += '-';
     }
-    line += StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR, entry->offset, entry->end - entry->start);
+    line += StringPrintf("  %8" PRIx64 "  %8" PRIx64, entry->offset, entry->end - entry->start);
     bool space_needed = true;
     if (entry->name.length() > 0) {
       space_needed = false;
@@ -315,7 +315,7 @@ static void dump_all_maps(log_t* log, BacktraceMap* map, Memory* process_memory,
       if (space_needed) {
         line += ' ';
       }
-      line += StringPrintf(" (load bias 0x%" PRIxPTR ")", entry->load_bias);
+      line += StringPrintf(" (load bias 0x%" PRIx64 ")", entry->load_bias);
     }
     _LOG(log, logtype::MAPS, "%s\n", line.c_str());
   }
@@ -335,9 +335,9 @@ static void print_register_row(log_t* log,
                                const std::vector<std::pair<std::string, uint64_t>>& registers) {
   std::string output;
   for (auto& [name, value] : registers) {
-    output += android::base::StringPrintf("  %-3s %0*" PRIxPTR, name.c_str(),
+    output += android::base::StringPrintf("  %-3s %0*" PRIx64, name.c_str(),
                                           static_cast<int>(2 * sizeof(void*)),
-                                          static_cast<uintptr_t>(value));
+                                          static_cast<uint64_t>(value));
   }
 
   _LOG(log, logtype::REGISTERS, "  %s\n", output.c_str());
@@ -389,7 +389,7 @@ void dump_memory_and_code(log_t* log, Memory* memory, Regs* regs) {
 }
 
 static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
-                        const ThreadInfo& thread_info, uintptr_t abort_msg_address,
+                        const ThreadInfo& thread_info, uint64_t abort_msg_address,
                         bool primary_thread) {
   UNUSED(process_memory);
   log->current_tid = thread_info.tid;
@@ -425,10 +425,10 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
   if (primary_thread) {
     dump_memory_and_code(log, process_memory, thread_info.registers.get());
     if (map) {
-      uintptr_t addr = 0;
+      uint64_t addr = 0;
       siginfo_t* si = thread_info.siginfo;
       if (signal_has_si_addr(si->si_signo, si->si_code)) {
-        addr = reinterpret_cast<uintptr_t>(si->si_addr);
+        addr = reinterpret_cast<uint64_t>(si->si_addr);
       }
       dump_all_maps(log, map, process_memory, addr);
     }
@@ -572,7 +572,7 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
   dump_log_file(log, pid, "main", tail);
 }
 
-void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, siginfo_t* siginfo,
+void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, siginfo_t* siginfo,
                                 ucontext_t* ucontext) {
   pid_t pid = getpid();
   pid_t tid = gettid();
@@ -614,7 +614,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, uintptr_t abort_msg_address, s
 
 void engrave_tombstone(unique_fd output_fd, BacktraceMap* map, Memory* process_memory,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
-                       uintptr_t abort_msg_address, OpenFilesList* open_files,
+                       uint64_t abort_msg_address, OpenFilesList* open_files,
                        std::string* amfd_data) {
   // don't copy log messages to tombstone unless this is a dev device
   bool want_logs = android::base::GetBoolProperty("ro.debuggable", false);

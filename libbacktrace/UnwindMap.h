@@ -55,7 +55,7 @@ class UnwindMapLocal : public UnwindMap {
 
   bool Build() override;
 
-  void FillIn(uintptr_t addr, backtrace_map_t* map) override;
+  void FillIn(uint64_t addr, backtrace_map_t* map) override;
 
   void LockIterator() override { pthread_rwlock_rdlock(&map_lock_); }
   void UnlockIterator() override { pthread_rwlock_unlock(&map_lock_); }

@@ -266,13 +266,67 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_double_indirection) {
 
   regs.set_pc(0x100);
   regs.set_sp(0x2000);
+  regs[1] = 0x100;
+  regs[3] = 0x300;
   regs[8] = 0x10;
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
-  loc_regs[1] = DwarfLocation{DWARF_LOCATION_REGISTER, {3, 0}};
-  loc_regs[9] = DwarfLocation{DWARF_LOCATION_REGISTER, {1, 0}};
+  loc_regs[1] = DwarfLocation{DWARF_LOCATION_REGISTER, {3, 1}};
+  loc_regs[9] = DwarfLocation{DWARF_LOCATION_REGISTER, {1, 2}};
   bool finished;
-  ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->section_->last_error());
+  ASSERT_TRUE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_EQ(0x301U, regs[1]);
+  EXPECT_EQ(0x300U, regs[3]);
+  EXPECT_EQ(0x10U, regs[8]);
+  EXPECT_EQ(0x102U, regs[9]);
+}
+
+TYPED_TEST_P(DwarfSectionImplTest, Eval_register_reference_chain) {
+  DwarfCie cie{.return_address_register = 5};
+  RegsImplFake<TypeParam> regs(10, 9);
+  dwarf_loc_regs_t loc_regs;
+
+  regs.set_pc(0x100);
+  regs.set_sp(0x2000);
+  regs[0] = 0x10;
+  regs[1] = 0x20;
+  regs[2] = 0x30;
+  regs[3] = 0x40;
+  regs[4] = 0x50;
+  regs[5] = 0x60;
+  regs[8] = 0x20;
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
+  loc_regs[1] = DwarfLocation{DWARF_LOCATION_REGISTER, {0, 1}};
+  loc_regs[2] = DwarfLocation{DWARF_LOCATION_REGISTER, {1, 2}};
+  loc_regs[3] = DwarfLocation{DWARF_LOCATION_REGISTER, {2, 3}};
+  loc_regs[4] = DwarfLocation{DWARF_LOCATION_REGISTER, {3, 4}};
+  loc_regs[5] = DwarfLocation{DWARF_LOCATION_REGISTER, {4, 5}};
+  bool finished;
+  ASSERT_TRUE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_EQ(0x10U, regs[0]);
+  EXPECT_EQ(0x11U, regs[1]);
+  EXPECT_EQ(0x22U, regs[2]);
+  EXPECT_EQ(0x33U, regs[3]);
+  EXPECT_EQ(0x44U, regs[4]);
+  EXPECT_EQ(0x55U, regs[5]);
+  EXPECT_EQ(0x20U, regs[8]);
+}
+
+TYPED_TEST_P(DwarfSectionImplTest, Eval_dex_pc) {
+  DwarfCie cie{.return_address_register = 5};
+  RegsImplFake<TypeParam> regs(10, 9);
+  dwarf_loc_regs_t loc_regs;
+
+  regs.set_pc(0x100);
+  regs.set_sp(0x2000);
+  regs[0] = 0x10;
+  regs[8] = 0x20;
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
+  loc_regs[0x20444558] = DwarfLocation{DWARF_LOCATION_REGISTER, {0, 1}};
+  bool finished;
+  ASSERT_TRUE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_EQ(0x10U, regs[0]);
+  EXPECT_EQ(0x20U, regs[8]);
+  EXPECT_EQ(0x11U, regs.dex_pc());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_invalid_register) {
@@ -840,11 +894,11 @@ REGISTER_TYPED_TEST_CASE_P(
     DwarfSectionImplTest, Eval_cfa_expr_eval_fail, Eval_cfa_expr_no_stack,
     Eval_cfa_expr_is_register, Eval_cfa_expr, Eval_cfa_val_expr, Eval_bad_regs, Eval_no_cfa,
     Eval_cfa_bad, Eval_cfa_register_prev, Eval_cfa_register_from_value, Eval_double_indirection,
-    Eval_invalid_register, Eval_different_reg_locations, Eval_return_address_undefined,
-    Eval_pc_zero, Eval_return_address, Eval_ignore_large_reg_loc, Eval_reg_expr, Eval_reg_val_expr,
-    GetCie_fail_should_not_cache, GetCie_32_version_check, GetCie_negative_data_alignment_factor,
-    GetCie_64_no_augment, GetCie_augment, GetCie_version_3, GetCie_version_4,
-    GetFdeFromOffset_fail_should_not_cache, GetFdeFromOffset_32_no_augment,
+    Eval_register_reference_chain, Eval_dex_pc, Eval_invalid_register, Eval_different_reg_locations,
+    Eval_return_address_undefined, Eval_pc_zero, Eval_return_address, Eval_ignore_large_reg_loc,
+    Eval_reg_expr, Eval_reg_val_expr, GetCie_fail_should_not_cache, GetCie_32_version_check,
+    GetCie_negative_data_alignment_factor, GetCie_64_no_augment, GetCie_augment, GetCie_version_3,
+    GetCie_version_4, GetFdeFromOffset_fail_should_not_cache, GetFdeFromOffset_32_no_augment,
     GetFdeFromOffset_32_no_augment_non_zero_segment_size, GetFdeFromOffset_32_augment,
     GetFdeFromOffset_64_no_augment, GetFdeFromOffset_cached, GetCfaLocationInfo_cie_not_cached,
     GetCfaLocationInfo_cie_cached, Log);

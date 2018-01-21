@@ -86,6 +86,10 @@ BatteryMonitor::BatteryMonitor() : mHealthdConfig(nullptr), mBatteryDevicePresen
     initBatteryProperties(&props);
 }
 
+struct BatteryProperties getBatteryProperties(BatteryMonitor* batteryMonitor) {
+    return batteryMonitor->props;
+}
+
 int BatteryMonitor::getBatteryStatus(const char* status) {
     int ret;
     struct sysfsStringEnumMap batteryStatusMap[] = {

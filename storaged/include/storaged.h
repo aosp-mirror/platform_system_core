@@ -136,7 +136,7 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
     void remove_user_ce(userid_t user_id);
 
     virtual ::android::hardware::Return<void> healthInfoChanged(
-        const ::android::hardware::health::V1_0::HealthInfo& info);
+        const ::android::hardware::health::V2_0::HealthInfo& info);
     void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);
 
     void report_storage_info();

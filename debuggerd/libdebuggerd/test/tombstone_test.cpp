@@ -437,9 +437,9 @@ TEST_F(TombstoneTest, multiple_maps_fault_address_after) {
   map_mock_->AddMap(map);
 
 #if defined(__LP64__)
-  uintptr_t addr = 0x12345a534040UL;
+  uint64_t addr = 0x12345a534040UL;
 #else
-  uintptr_t addr = 0xf534040UL;
+  uint64_t addr = 0xf534040UL;
 #endif
   dump_all_maps(&log_, map_mock_.get(), nullptr, addr);
 

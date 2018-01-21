@@ -28,13 +28,15 @@
 
 #include "bootimg_utils.h"
 
+#include "fastboot.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void bootimg_set_cmdline(boot_img_hdr* h, const char* cmdline)
-{
-    strcpy((char*) h->cmdline, cmdline);
+void bootimg_set_cmdline(boot_img_hdr* h, const char* cmdline) {
+    if (strlen(cmdline) >= sizeof(h->cmdline)) die("command line too large: %zu", strlen(cmdline));
+    strcpy(reinterpret_cast<char*>(h->cmdline), cmdline);
 }
 
 boot_img_hdr* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset,

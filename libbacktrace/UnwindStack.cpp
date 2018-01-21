@@ -70,6 +70,7 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     back_frame->rel_pc = frame->rel_pc;
     back_frame->pc = frame->pc;
     back_frame->sp = frame->sp;
+    back_frame->dex_pc = frame->dex_pc;
 
     back_frame->func_name = demangle(frame->function_name.c_str());
     back_frame->func_offset = frame->function_offset;
@@ -88,7 +89,7 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
 UnwindStackCurrent::UnwindStackCurrent(pid_t pid, pid_t tid, BacktraceMap* map)
     : BacktraceCurrent(pid, tid, map) {}
 
-std::string UnwindStackCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
+std::string UnwindStackCurrent::GetFunctionNameRaw(uint64_t pc, uint64_t* offset) {
   return GetMap()->GetFunctionName(pc, offset);
 }
 
@@ -111,7 +112,7 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
 UnwindStackPtrace::UnwindStackPtrace(pid_t pid, pid_t tid, BacktraceMap* map)
     : BacktracePtrace(pid, tid, map), memory_(pid) {}
 
-std::string UnwindStackPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
+std::string UnwindStackPtrace::GetFunctionNameRaw(uint64_t pc, uint64_t* offset) {
   return GetMap()->GetFunctionName(pc, offset);
 }
 
@@ -127,6 +128,6 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
   return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr);
 }
 
-size_t UnwindStackPtrace::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+size_t UnwindStackPtrace::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
   return memory_.Read(addr, buffer, bytes);
 }

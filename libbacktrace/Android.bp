@@ -50,9 +50,6 @@ libbacktrace_sources = [
     "BacktracePtrace.cpp",
     "thread_utils.c",
     "ThreadEntry.cpp",
-    "UnwindCurrent.cpp",
-    "UnwindMap.cpp",
-    "UnwindPtrace.cpp",
     "UnwindStack.cpp",
     "UnwindStackMap.cpp",
 ]

@@ -57,6 +57,9 @@ class Regs {
   virtual uint64_t pc() = 0;
   virtual uint64_t sp() = 0;
 
+  uint64_t dex_pc() { return dex_pc_; }
+  void set_dex_pc(uint64_t dex_pc) { dex_pc_ = dex_pc; }
+
   virtual uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) = 0;
 
   virtual bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) = 0;
@@ -79,6 +82,7 @@ class Regs {
   uint16_t total_regs_;
   uint16_t sp_reg_;
   Location return_loc_;
+  uint64_t dex_pc_ = 0;
 };
 
 template <typename AddressType>

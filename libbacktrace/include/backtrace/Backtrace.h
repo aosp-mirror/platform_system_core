@@ -26,11 +26,11 @@
 #include <backtrace/backtrace_constants.h>
 #include <backtrace/BacktraceMap.h>
 
-#if __LP64__
-#define PRIPTR "016" PRIxPTR
+#if defined(__LP64__)
+#define PRIPTR "016" PRIx64
 typedef uint64_t word_t;
 #else
-#define PRIPTR "08" PRIxPTR
+#define PRIPTR "08" PRIx64
 typedef uint32_t word_t;
 #endif
 
@@ -77,13 +77,15 @@ struct BacktraceUnwindError {
 
 struct backtrace_frame_data_t {
   size_t num;             // The current fame number.
-  uintptr_t pc;           // The absolute pc.
-  uintptr_t rel_pc;       // The relative pc.
-  uintptr_t sp;           // The top of the stack.
+  uint64_t pc;            // The absolute pc.
+  uint64_t rel_pc;        // The relative pc.
+  uint64_t sp;            // The top of the stack.
   size_t stack_size;      // The size of the stack, zero indicate an unknown stack size.
+  uint64_t dex_pc;        // If non-zero, the Dex PC for the ART interpreter.
   backtrace_map_t map;    // The map associated with the given pc.
   std::string func_name;  // The function name associated with this pc, NULL if not found.
-  uintptr_t func_offset;  // pc relative to the start of the function, only valid if func_name is not NULL.
+  uint64_t func_offset;  // pc relative to the start of the function, only valid if func_name is not
+                         // NULL.
 };
 
 #if defined(__APPLE__)
@@ -138,20 +140,20 @@ public:
   // Get the function name and offset into the function given the pc.
   // If the string is empty, then no valid function name was found,
   // or the pc is not in any valid map.
-  virtual std::string GetFunctionName(uintptr_t pc, uintptr_t* offset,
+  virtual std::string GetFunctionName(uint64_t pc, uint64_t* offset,
                                       const backtrace_map_t* map = NULL);
 
   // Fill in the map data associated with the given pc.
-  virtual void FillInMap(uintptr_t pc, backtrace_map_t* map);
+  virtual void FillInMap(uint64_t pc, backtrace_map_t* map);
 
   // Read the data at a specific address.
-  virtual bool ReadWord(uintptr_t ptr, word_t* out_value) = 0;
+  virtual bool ReadWord(uint64_t ptr, word_t* out_value) = 0;
 
   // Read arbitrary data from a specific address. If a read request would
   // span from one map to another, this call only reads up until the end
   // of the current map.
   // Returns the total number of bytes actually read.
-  virtual size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) = 0;
+  virtual size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) = 0;
 
   // Create a string representing the formatted line of backtrace information
   // for a single frame.
@@ -188,9 +190,9 @@ protected:
 
   // The name returned is not demangled, GetFunctionName() takes care of
   // demangling the name.
-  virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) = 0;
+  virtual std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset) = 0;
 
-  virtual bool VerifyReadWordArgs(uintptr_t ptr, word_t* out_value);
+  virtual bool VerifyReadWordArgs(uint64_t ptr, word_t* out_value);
 
   bool BuildMap();
 
