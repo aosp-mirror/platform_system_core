@@ -25,6 +25,7 @@
 #include <android-base/unique_fd.h>
 
 #include "builtins.h"
+#include "result.h"
 #include "system/core/init/subcontext.pb.h"
 
 namespace android {
