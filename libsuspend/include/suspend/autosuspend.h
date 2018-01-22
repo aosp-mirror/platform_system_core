@@ -45,6 +45,17 @@ int autosuspend_enable(void);
 int autosuspend_disable(void);
 
 /*
+ * force_suspend
+ *
+ * Forces suspend to happen.  timeout_ms is used to give system a chance to suspend gracefully.
+ * When timeout expires, suspend will be forced via mem --> /sys/power/state.  timeout_ms of 0
+ * will force suspend immediately.
+ *
+ * Returns 0 if system suspended, -1 if suspend did not occur.
+ */
+int autosuspend_force_suspend(int timeout_ms);
+
+/*
  * set_wakeup_callback
  *
  * Set a function to be called each time the device returns from suspend.
