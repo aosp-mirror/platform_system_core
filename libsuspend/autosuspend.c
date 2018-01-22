@@ -24,27 +24,19 @@
 
 #include "autosuspend_ops.h"
 
-static struct autosuspend_ops *autosuspend_ops;
+static struct autosuspend_ops* autosuspend_ops = NULL;
 static bool autosuspend_enabled;
-static bool autosuspend_inited;
 
 static int autosuspend_init(void) {
-    if (autosuspend_inited) {
+    if (autosuspend_ops != NULL) {
         return 0;
     }
 
     autosuspend_ops = autosuspend_wakeup_count_init();
-    if (autosuspend_ops) {
-        goto out;
-    }
-
-    if (!autosuspend_ops) {
+    if (autosuspend_ops == NULL) {
         ALOGE("failed to initialize autosuspend");
         return -1;
     }
-
-out:
-    autosuspend_inited = true;
 
     ALOGV("autosuspend initialized");
     return 0;
@@ -94,6 +86,19 @@ int autosuspend_disable(void) {
 
     autosuspend_enabled = false;
     return 0;
+}
+
+int autosuspend_force_suspend(int timeout_ms) {
+    int ret;
+
+    ret = autosuspend_init();
+    if (ret) {
+        return ret;
+    }
+
+    ALOGV("autosuspend_force_suspend");
+
+    return autosuspend_ops->force_suspend(timeout_ms);
 }
 
 void autosuspend_set_wakeup_callback(void (*func)(bool success)) {
