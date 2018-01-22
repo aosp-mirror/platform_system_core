@@ -746,7 +746,3 @@ int main(int argc, char** argv) {
 
 }  // namespace init
 }  // namespace android
-
-int main(int argc, char** argv) {
-    android::init::main(argc, argv);
-}
