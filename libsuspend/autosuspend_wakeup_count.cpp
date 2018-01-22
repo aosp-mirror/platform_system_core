@@ -37,7 +37,7 @@
 #define BASE_SLEEP_TIME 100000
 #define MAX_SLEEP_TIME 60000000
 
-static int state_fd;
+static int state_fd = -1;
 static int wakeup_count_fd;
 
 using android::base::ReadFdToString;
@@ -46,11 +46,12 @@ using android::base::WriteStringToFd;
 
 static pthread_t suspend_thread;
 static sem_t suspend_lockout;
-static const char* sleep_state = "mem";
+static constexpr char sleep_state[] = "mem";
 static void (*wakeup_func)(bool success) = NULL;
 static int sleep_time = BASE_SLEEP_TIME;
 static constexpr char sys_power_state[] = "/sys/power/state";
 static constexpr char sys_power_wakeup_count[] = "/sys/power/wakeup_count";
+static bool autosuspend_is_init = false;
 
 static void update_sleep_time(bool success) {
     if (success) {
@@ -62,10 +63,9 @@ static void update_sleep_time(bool success) {
 }
 
 static void* suspend_thread_func(void* arg __attribute__((unused))) {
-    int ret;
     bool success = true;
 
-    while (1) {
+    while (true) {
         update_sleep_time(success);
         usleep(sleep_time);
         success = false;
@@ -84,7 +84,7 @@ static void* suspend_thread_func(void* arg __attribute__((unused))) {
         }
 
         LOG(VERBOSE) << "wait";
-        ret = sem_wait(&suspend_lockout);
+        int ret = sem_wait(&suspend_lockout);
         if (ret < 0) {
             PLOG(ERROR) << "error waiting on semaphore";
             continue;
@@ -112,13 +112,72 @@ static void* suspend_thread_func(void* arg __attribute__((unused))) {
     return NULL;
 }
 
-static int autosuspend_wakeup_count_enable(void) {
-    int ret;
+static int init_state_fd(void) {
+    if (state_fd >= 0) {
+        return 0;
+    }
 
+    int fd = TEMP_FAILURE_RETRY(open(sys_power_state, O_CLOEXEC | O_RDWR));
+    if (fd < 0) {
+        PLOG(ERROR) << "error opening " << sys_power_state;
+        return -1;
+    }
+
+    state_fd = fd;
+    LOG(INFO) << "init_state_fd success";
+    return 0;
+}
+
+static int autosuspend_init(void) {
+    if (autosuspend_is_init) {
+        return 0;
+    }
+
+    int ret = init_state_fd();
+    if (ret < 0) {
+        return -1;
+    }
+
+    wakeup_count_fd = TEMP_FAILURE_RETRY(open(sys_power_wakeup_count, O_CLOEXEC | O_RDWR));
+    if (wakeup_count_fd < 0) {
+        PLOG(ERROR) << "error opening " << sys_power_wakeup_count;
+        goto err_open_wakeup_count;
+    }
+
+    ret = sem_init(&suspend_lockout, 0, 0);
+    if (ret < 0) {
+        PLOG(ERROR) << "error creating suspend_lockout semaphore";
+        goto err_sem_init;
+    }
+
+    ret = pthread_create(&suspend_thread, NULL, suspend_thread_func, NULL);
+    if (ret) {
+        LOG(ERROR) << "error creating thread: " << strerror(ret);
+        goto err_pthread_create;
+    }
+
+    LOG(VERBOSE) << "autosuspend_init success";
+    autosuspend_is_init = true;
+    return 0;
+
+err_pthread_create:
+    sem_destroy(&suspend_lockout);
+err_sem_init:
+    close(wakeup_count_fd);
+err_open_wakeup_count:
+    return -1;
+}
+
+static int autosuspend_wakeup_count_enable(void) {
     LOG(VERBOSE) << "autosuspend_wakeup_count_enable";
 
-    ret = sem_post(&suspend_lockout);
+    int ret = autosuspend_init();
+    if (ret < 0) {
+        LOG(ERROR) << "autosuspend_init failed";
+        return ret;
+    }
 
+    ret = sem_post(&suspend_lockout);
     if (ret < 0) {
         PLOG(ERROR) << "error changing semaphore";
     }
@@ -129,11 +188,13 @@ static int autosuspend_wakeup_count_enable(void) {
 }
 
 static int autosuspend_wakeup_count_disable(void) {
-    int ret;
-
     LOG(VERBOSE) << "autosuspend_wakeup_count_disable";
 
-    ret = sem_wait(&suspend_lockout);
+    if (!autosuspend_is_init) {
+        return 0;  // always successful if no thread is running yet
+    }
+
+    int ret = sem_wait(&suspend_lockout);
 
     if (ret < 0) {
         PLOG(ERROR) << "error changing semaphore";
@@ -142,6 +203,17 @@ static int autosuspend_wakeup_count_disable(void) {
     LOG(VERBOSE) << "autosuspend_wakeup_count_disable done";
 
     return ret;
+}
+
+static int force_suspend(int timeout_ms) {
+    LOG(VERBOSE) << "force_suspend called with timeout: " << timeout_ms;
+
+    int ret = init_state_fd();
+    if (ret < 0) {
+        return ret;
+    }
+
+    return WriteStringToFd(sleep_state, state_fd) ? 0 : -1;
 }
 
 static void autosuspend_set_wakeup_callback(void (*func)(bool success)) {
@@ -155,44 +227,10 @@ static void autosuspend_set_wakeup_callback(void (*func)(bool success)) {
 struct autosuspend_ops autosuspend_wakeup_count_ops = {
     .enable = autosuspend_wakeup_count_enable,
     .disable = autosuspend_wakeup_count_disable,
+    .force_suspend = force_suspend,
     .set_wakeup_callback = autosuspend_set_wakeup_callback,
 };
 
 struct autosuspend_ops* autosuspend_wakeup_count_init(void) {
-    int ret;
-
-    state_fd = TEMP_FAILURE_RETRY(open(sys_power_state, O_RDWR));
-    if (state_fd < 0) {
-        PLOG(ERROR) << "error opening " << sys_power_state;
-        goto err_open_state;
-    }
-
-    wakeup_count_fd = TEMP_FAILURE_RETRY(open(sys_power_wakeup_count, O_RDWR));
-    if (wakeup_count_fd < 0) {
-        PLOG(ERROR) << "error opening " << sys_power_wakeup_count;
-        goto err_open_wakeup_count;
-    }
-
-    ret = sem_init(&suspend_lockout, 0, 0);
-    if (ret < 0) {
-        PLOG(ERROR) << "error creating semaphore";
-        goto err_sem_init;
-    }
-    ret = pthread_create(&suspend_thread, NULL, suspend_thread_func, NULL);
-    if (ret) {
-        LOG(ERROR) << "error creating thread: " << strerror(ret);
-        goto err_pthread_create;
-    }
-
-    LOG(INFO) << "selected wakeup count";
     return &autosuspend_wakeup_count_ops;
-
-err_pthread_create:
-    sem_destroy(&suspend_lockout);
-err_sem_init:
-    close(wakeup_count_fd);
-err_open_wakeup_count:
-    close(state_fd);
-err_open_state:
-    return NULL;
 }
