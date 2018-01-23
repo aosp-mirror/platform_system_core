@@ -6,6 +6,7 @@ cc_defaults {
         "-Wno-unused-parameter",
         "-Wno-unused-const-variable",
         "-include bsd-compatibility.h",
+        "-D_FILE_OFFSET_BITS=64",
     ],
     local_include_dirs: ["upstream-netbsd/include/"],
 }
