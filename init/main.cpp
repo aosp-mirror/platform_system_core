@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _LIBSUSPEND_AUTOSUSPEND_OPS_H_
-#define _LIBSUSPEND_AUTOSUSPEND_OPS_H_
+#include "init.h"
 
-struct autosuspend_ops {
-    int (*enable)(void);
-    int (*disable)(void);
-    int (*force_suspend)(int timeout_ms);
-    void (*set_wakeup_callback)(void (*func)(bool success));
-};
-
-__BEGIN_DECLS
-struct autosuspend_ops *autosuspend_wakeup_count_init(void);
-__END_DECLS
-
-#endif
+int main(int argc, char** argv) {
+    android::init::main(argc, argv);
+}
