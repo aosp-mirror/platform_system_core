@@ -27,8 +27,12 @@
 #include <selinux/android.h>
 
 #include "action.h"
+#include "property_service.h"
 #include "selinux.h"
 #include "util.h"
+
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
 
 using android::base::GetExecutablePath;
 using android::base::Join;
@@ -75,6 +79,13 @@ Result<Success> SendMessage(int socket, const T& message) {
     return Success();
 }
 
+std::vector<std::pair<std::string, std::string>> properties_to_set;
+
+uint32_t SubcontextPropertySet(const std::string& name, const std::string& value) {
+    properties_to_set.emplace_back(name, value);
+    return PROP_SUCCESS;
+}
+
 class SubcontextProcess {
   public:
     SubcontextProcess(const KeywordFunctionMap* function_map, std::string context, int init_fd)
@@ -107,6 +118,14 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
     } else {
         result = RunBuiltinFunction(map_result->second, args, context_);
     }
+
+    for (const auto& [name, value] : properties_to_set) {
+        auto property = reply->add_properties_to_set();
+        property->set_name(name);
+        property->set_value(value);
+    }
+
+    properties_to_set.clear();
 
     if (result) {
         reply->set_success(true);
@@ -186,6 +205,9 @@ int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map
     auto init_fd = std::atoi(argv[3]);
 
     SelabelInitialize();
+
+    property_set = SubcontextPropertySet;
+
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
     subcontext_process.MainLoop();
     return 0;
@@ -257,10 +279,6 @@ Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& sub
         Restart();
         return Error() << "Unable to parse message from subcontext";
     }
-    if (subcontext_reply.reply_case() == SubcontextReply::kFailure) {
-        auto& failure = subcontext_reply.failure();
-        return ResultError(failure.error_string(), failure.error_errno());
-    }
     return subcontext_reply;
 }
 
@@ -273,6 +291,16 @@ Result<Success> Subcontext::Execute(const std::vector<std::string>& args) {
     auto subcontext_reply = TransmitMessage(subcontext_command);
     if (!subcontext_reply) {
         return subcontext_reply.error();
+    }
+
+    for (const auto& property : subcontext_reply->properties_to_set()) {
+        ucred cr = {.pid = pid_, .uid = 0, .gid = 0};
+        HandlePropertySet(property.name(), property.value(), context_, cr);
+    }
+
+    if (subcontext_reply->reply_case() == SubcontextReply::kFailure) {
+        auto& failure = subcontext_reply->failure();
+        return ResultError(failure.error_string(), failure.error_errno());
     }
 
     if (subcontext_reply->reply_case() != SubcontextReply::kSuccess) {
@@ -292,6 +320,11 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
     auto subcontext_reply = TransmitMessage(subcontext_command);
     if (!subcontext_reply) {
         return subcontext_reply.error();
+    }
+
+    if (subcontext_reply->reply_case() == SubcontextReply::kFailure) {
+        auto& failure = subcontext_reply->failure();
+        return ResultError(failure.error_string(), failure.error_errno());
     }
 
     if (subcontext_reply->reply_case() != SubcontextReply::kExpandArgsReply) {
