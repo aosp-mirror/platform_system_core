@@ -420,6 +420,7 @@ void SelinuxRestoreContext() {
 
     selinux_android_restorecon("/plat_file_contexts", 0);
     selinux_android_restorecon("/nonplat_file_contexts", 0);
+    selinux_android_restorecon("/vendor_file_contexts", 0);
     selinux_android_restorecon("/plat_property_contexts", 0);
     selinux_android_restorecon("/nonplat_property_contexts", 0);
     selinux_android_restorecon("/plat_seapp_contexts", 0);
