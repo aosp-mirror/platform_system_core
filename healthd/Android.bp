@@ -26,12 +26,10 @@ cc_binary {
     vendor: true,
     relative_install_path: "hw",
     srcs: [
-        "HealthServiceCommon.cpp",
         "HealthServiceDefault.cpp",
     ],
 
     cflags: [
-        "-DHEALTH_INSTANCE_NAME=\"default\"",
         "-Wall",
         "-Werror",
     ],
@@ -39,6 +37,7 @@ cc_binary {
     static_libs: [
         "android.hardware.health@2.0-impl",
         "android.hardware.health@1.0-convert",
+        "libhealthservice",
         "libhealthstoragedefault",
         "libbatterymonitor",
     ],
@@ -58,13 +57,11 @@ cc_binary {
 cc_binary {
     name: "healthd",
     srcs: [
-        "HealthServiceCommon.cpp",
         "HealthServiceHealthd.cpp",
     ],
     local_include_dirs: ["include"],
 
     cflags: [
-        "-DHEALTH_INSTANCE_NAME=\"backup\"",
         "-Wall",
         "-Werror",
     ],
@@ -72,6 +69,7 @@ cc_binary {
     static_libs: [
         "android.hardware.health@2.0-impl",
         "android.hardware.health@1.0-convert",
+        "libhealthservice",
         "libbatterymonitor",
         "libhealthstoragedefault",
     ],
