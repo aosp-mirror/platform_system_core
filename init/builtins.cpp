@@ -1039,9 +1039,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"restorecon_recursive",    {1,     kMax, {true,   do_restorecon_recursive}}},
         {"rm",                      {1,     1,    {true,   do_rm}}},
         {"rmdir",                   {1,     1,    {true,   do_rmdir}}},
-        //  TODO: setprop should be run in the subcontext, but property service needs to be split
-        //        out from init before that is possible.
-        {"setprop",                 {2,     2,    {false,  do_setprop}}},
+        {"setprop",                 {2,     2,    {true,   do_setprop}}},
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
