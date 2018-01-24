@@ -835,9 +835,8 @@ bool DwarfSectionImpl<AddressType>::CreateSortedFdeList() {
     }
 
     if (next_entry_offset < memory_.cur_offset()) {
-      // This indicates some kind of corruption, or malformed section data.
-      last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
-      return false;
+      // Simply consider the processing done in this case.
+      break;
     }
     memory_.set_cur_offset(next_entry_offset);
   }

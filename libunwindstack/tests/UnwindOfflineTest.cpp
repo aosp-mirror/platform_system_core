@@ -625,4 +625,127 @@ TEST(UnwindOfflineTest, jit_debug_arm32) {
       frame_info);
 }
 
+// The eh_frame_hdr data is present but set to zero fdes. This should
+// fallback to iterating over the cies/fdes and ignore the eh_frame_hdr.
+// No .gnu_debugdata section in the elf file, so no symbols.
+TEST(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
+  std::string dir(TestGetFileDirectory() + "offline/bad_eh_frame_hdr_arm64/");
+
+  MemoryOffline* memory = new MemoryOffline;
+  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
+
+  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
+  ASSERT_TRUE(fp != nullptr);
+  RegsArm64 regs;
+  uint64_t reg_value;
+  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
+  regs[ARM64_REG_PC] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
+  regs[ARM64_REG_SP] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "lr: %" SCNx64 "\n", &reg_value));
+  regs[ARM64_REG_LR] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "x29: %" SCNx64 "\n", &reg_value));
+  regs[ARM64_REG_R29] = reg_value;
+  regs.SetFromRaw();
+  fclose(fp);
+
+  fp = fopen((dir + "maps.txt").c_str(), "r");
+  ASSERT_TRUE(fp != nullptr);
+  // The file is guaranteed to be less than 4096 bytes.
+  std::vector<char> buffer(4096);
+  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
+  fclose(fp);
+
+  BufferMaps maps(buffer.data());
+  ASSERT_TRUE(maps.Parse());
+
+  ASSERT_EQ(ARCH_ARM64, regs.Arch());
+
+  std::shared_ptr<Memory> process_memory(memory);
+
+  char* cwd = getcwd(nullptr, 0);
+  ASSERT_EQ(0, chdir(dir.c_str()));
+  Unwinder unwinder(128, &maps, &regs, process_memory);
+  unwinder.Unwind();
+  ASSERT_EQ(0, chdir(cwd));
+  free(cwd);
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(5U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0000000000000550  waiter64\n"
+      "  #01 pc 0000000000000568  waiter64\n"
+      "  #02 pc 000000000000057c  waiter64\n"
+      "  #03 pc 0000000000000590  waiter64\n"
+      "  #04 pc 00000000000a8e98  libc.so (__libc_init+88)\n",
+      frame_info);
+}
+
+// The elf has bad eh_frame unwind information for the pcs. If eh_frame
+// is used first, the unwind will not match the expected output.
+TEST(UnwindOfflineTest, debug_frame_first_x86) {
+  std::string dir(TestGetFileDirectory() + "offline/debug_frame_first_x86/");
+
+  MemoryOffline* memory = new MemoryOffline;
+  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
+
+  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
+  ASSERT_TRUE(fp != nullptr);
+  RegsX86 regs;
+  uint64_t reg_value;
+  ASSERT_EQ(1, fscanf(fp, "eax: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_EAX] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "ebx: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_EBX] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "ecx: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_ECX] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "edx: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_EDX] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "ebp: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_EBP] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "edi: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_EDI] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "esi: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_ESI] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "esp: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_ESP] = reg_value;
+  ASSERT_EQ(1, fscanf(fp, "eip: %" SCNx64 "\n", &reg_value));
+  regs[X86_REG_EIP] = reg_value;
+  regs.SetFromRaw();
+  fclose(fp);
+
+  fp = fopen((dir + "maps.txt").c_str(), "r");
+  ASSERT_TRUE(fp != nullptr);
+  // The file is guaranteed to be less than 4096 bytes.
+  std::vector<char> buffer(4096);
+  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
+  fclose(fp);
+
+  BufferMaps maps(buffer.data());
+  ASSERT_TRUE(maps.Parse());
+
+  ASSERT_EQ(ARCH_X86, regs.Arch());
+
+  std::shared_ptr<Memory> process_memory(memory);
+
+  char* cwd = getcwd(nullptr, 0);
+  ASSERT_EQ(0, chdir(dir.c_str()));
+  JitDebug jit_debug(process_memory);
+  Unwinder unwinder(128, &maps, &regs, process_memory);
+  unwinder.SetJitDebug(&jit_debug, regs.Arch());
+  unwinder.Unwind();
+  ASSERT_EQ(0, chdir(cwd));
+  free(cwd);
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(5U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000685  waiter (call_level3+53)\n"
+      "  #01 pc 000006b7  waiter (call_level2+23)\n"
+      "  #02 pc 000006d7  waiter (call_level1+23)\n"
+      "  #03 pc 000006f7  waiter (main+23)\n"
+      "  #04 pc 00018275  libc.so\n",
+      frame_info);
+}
+
 }  // namespace unwindstack
