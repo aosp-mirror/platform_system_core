@@ -18,3 +18,15 @@ cc_binary {
         },
     },
 }
+
+cc_library_shared {
+    name: "libstatslogc",
+    srcs: ["statslog.c"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "liblog",
+    ],
+}
