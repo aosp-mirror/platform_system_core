@@ -1112,7 +1112,16 @@ int main(int argc __unused, char **argv __unused) {
     kill_timeout_ms =
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
 
-    if (mlockall(MCL_CURRENT | MCL_FUTURE))
+    // MCL_ONFAULT pins pages as they fault instead of loading
+    // everything immediately all at once. (Which would be bad,
+    // because as of this writing, we have a lot of mapped pages we
+    // never use.) Old kernels will see MCL_ONFAULT and fail with
+    // EINVAL; we ignore this failure.
+    //
+    // N.B. read the man page for mlockall. MCL_CURRENT | MCL_ONFAULT
+    // pins ⊆ MCL_CURRENT, converging to just MCL_CURRENT as we fault
+    // in pages.
+    if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) && errno != EINVAL)
         ALOGW("mlockall failed: errno=%d", errno);
 
     sched_setscheduler(0, SCHED_FIFO, &param);
