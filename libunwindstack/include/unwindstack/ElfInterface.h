@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <unwindstack/DwarfSection.h>
+#include <unwindstack/Error.h>
 
 namespace unwindstack {
 
@@ -90,6 +91,10 @@ class ElfInterface {
   DwarfSection* eh_frame() { return eh_frame_.get(); }
   DwarfSection* debug_frame() { return debug_frame_.get(); }
 
+  const ErrorData& last_error() { return last_error_; }
+  ErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
+
   template <typename EhdrType, typename PhdrType>
   static uint64_t GetLoadBias(Memory* memory);
 
@@ -143,6 +148,8 @@ class ElfInterface {
 
   uint8_t soname_type_ = SONAME_UNKNOWN;
   std::string soname_;
+
+  ErrorData last_error_{ERROR_NONE, 0};
 
   std::unique_ptr<DwarfSection> eh_frame_;
   std::unique_ptr<DwarfSection> debug_frame_;
