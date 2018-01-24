@@ -21,15 +21,20 @@
 #include <sys/types.h>
 
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include <backtrace/BacktraceMap.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 
+// Forward declarations.
+class UnwindDexFile;
+
 class UnwindStackMap : public BacktraceMap {
  public:
   explicit UnwindStackMap(pid_t pid);
-  ~UnwindStackMap() = default;
+  ~UnwindStackMap();
 
   bool Build() override;
 
@@ -44,12 +49,18 @@ class UnwindStackMap : public BacktraceMap {
 
   unwindstack::JitDebug* GetJitDebug() { return jit_debug_.get(); }
 
+  UnwindDexFile* GetDexFile(uint64_t dex_file_offset, unwindstack::MapInfo* info);
+
  protected:
   uint64_t GetLoadBias(size_t index) override;
 
   std::unique_ptr<unwindstack::Maps> stack_maps_;
   std::shared_ptr<unwindstack::Memory> process_memory_;
   std::unique_ptr<unwindstack::JitDebug> jit_debug_;
+#ifndef NO_LIBDEXFILE
+  std::mutex dex_lock_;
+  std::unordered_map<uint64_t, UnwindDexFile*> dex_files_;
+#endif
 };
 
 #endif  // _LIBBACKTRACE_UNWINDSTACK_MAP_H
