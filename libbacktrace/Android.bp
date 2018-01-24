@@ -50,6 +50,7 @@ libbacktrace_sources = [
     "BacktracePtrace.cpp",
     "thread_utils.c",
     "ThreadEntry.cpp",
+    "UnwindDexFile.cpp",
     "UnwindStack.cpp",
     "UnwindStackMap.cpp",
 ]
@@ -92,12 +93,26 @@ cc_library {
                 "liblog",
                 "libunwind",
                 "libunwindstack",
+                "libdexfile",
             ],
 
             static_libs: ["libcutils"],
+
+            // libdexfile will eventually properly export headers, for now
+            // include these directly.
+            include_dirs: [
+                "art/runtime",
+            ],
+
+            header_libs: [ "jni_headers", ],
         },
         android: {
             static_libs: ["libasync_safe"],
+        },
+        vendor: {
+            cflags: ["-DNO_LIBDEXFILE"],
+            exclude_srcs: ["UnwindDexFile.cpp"],
+            exclude_shared_libs: ["libdexfile"],
         },
     },
     whole_static_libs: ["libdemangle"],
@@ -161,6 +176,8 @@ cc_test {
         "backtrace_test.cpp",
         "GetPss.cpp",
         "thread_utils.c",
+
+        "unwind_dex_test.cpp",
     ],
 
     cflags: [
@@ -172,6 +189,7 @@ cc_test {
     shared_libs: [
         "libbacktrace_test",
         "libbacktrace",
+        "libdexfile",
         "libbase",
         "libcutils",
         "liblog",
@@ -211,6 +229,12 @@ cc_test {
             static_libs: ["libutils"],
         },
     },
+
+    // libdexfile will eventually properly export headers, for now
+    // include these directly.
+    include_dirs: [
+        "art/runtime",
+    ],
 
     data: [
         "testdata/arm/*",
