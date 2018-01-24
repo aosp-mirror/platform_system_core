@@ -40,8 +40,66 @@
 #include <unwindstack/Unwinder.h>
 
 #include "BacktraceLog.h"
+#ifndef NO_LIBDEXFILE
+#include "UnwindDexFile.h"
+#endif
 #include "UnwindStack.h"
 #include "UnwindStackMap.h"
+
+static void FillInDexFrame(UnwindStackMap* stack_map, uint64_t dex_pc,
+                           backtrace_frame_data_t* frame) {
+  // The DEX PC points into the .dex section within an ELF file.
+  // However, this is a BBS section manually mmaped to a .vdex file,
+  // so we need to get the following map to find the ELF data.
+  unwindstack::Maps* maps = stack_map->stack_maps();
+  auto it = maps->begin();
+  uint64_t rel_dex_pc;
+  unwindstack::MapInfo* info;
+  for (; it != maps->end(); ++it) {
+    auto entry = *it;
+    if (dex_pc >= entry->start && dex_pc < entry->end) {
+      info = entry;
+      rel_dex_pc = dex_pc - entry->start;
+      frame->map.start = entry->start;
+      frame->map.end = entry->end;
+      frame->map.offset = entry->offset;
+      frame->map.load_bias = entry->load_bias;
+      frame->map.flags = entry->flags;
+      frame->map.name = entry->name;
+      frame->rel_pc = rel_dex_pc;
+      break;
+    }
+  }
+  if (it == maps->end() || ++it == maps->end()) {
+    return;
+  }
+
+  auto entry = *it;
+  auto process_memory = stack_map->process_memory();
+  unwindstack::Elf* elf = entry->GetElf(process_memory, true);
+  if (!elf->valid()) {
+    return;
+  }
+
+  // Adjust the relative dex by the offset.
+  rel_dex_pc += entry->elf_offset;
+
+  uint64_t dex_offset;
+  if (!elf->GetFunctionName(rel_dex_pc, &frame->func_name, &dex_offset)) {
+    return;
+  }
+  frame->func_offset = dex_offset;
+  if (frame->func_name != "$dexfile") {
+    return;
+  }
+
+#ifndef NO_LIBDEXFILE
+  UnwindDexFile* dex_file = stack_map->GetDexFile(dex_pc - dex_offset, info);
+  if (dex_file != nullptr) {
+    dex_file->GetMethodInformation(dex_offset, &frame->func_name, &frame->func_offset);
+  }
+#endif
+}
 
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                        std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
@@ -50,7 +108,9 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   auto process_memory = stack_map->process_memory();
   unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
                                  regs, stack_map->process_memory());
-  unwinder.SetJitDebug(stack_map->GetJitDebug(), regs->Arch());
+  if (stack_map->GetJitDebug() != nullptr) {
+    unwinder.SetJitDebug(stack_map->GetJitDebug(), regs->Arch());
+  }
   unwinder.Unwind(skip_names, &stack_map->GetSuffixesToIgnore());
 
   if (num_ignore_frames >= unwinder.NumFrames()) {
@@ -58,19 +118,25 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     return true;
   }
 
-  frames->resize(unwinder.NumFrames() - num_ignore_frames);
   auto unwinder_frames = unwinder.frames();
+  // Get the real number of frames we'll need.
+  size_t total_frames = 0;
+  for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++, total_frames++) {
+    if (unwinder_frames[i].dex_pc != 0) {
+      total_frames++;
+    }
+  }
+  frames->resize(total_frames);
   size_t cur_frame = 0;
   for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++, cur_frame++) {
     auto frame = &unwinder_frames[i];
     backtrace_frame_data_t* back_frame = &frames->at(cur_frame);
 
-    back_frame->num = frame->num - num_ignore_frames;
+    back_frame->num = cur_frame;
 
     back_frame->rel_pc = frame->rel_pc;
     back_frame->pc = frame->pc;
     back_frame->sp = frame->sp;
-    back_frame->dex_pc = frame->dex_pc;
 
     back_frame->func_name = demangle(frame->function_name.c_str());
     back_frame->func_offset = frame->function_offset;
@@ -81,6 +147,19 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     back_frame->map.offset = frame->map_offset;
     back_frame->map.load_bias = frame->map_load_bias;
     back_frame->map.flags = frame->map_flags;
+
+    // Inject a frame that represents the dex pc data.
+    if (frame->dex_pc != 0) {
+      cur_frame++;
+      backtrace_frame_data_t* dex_frame = &frames->at(cur_frame);
+      dex_frame->num = cur_frame;
+      dex_frame->pc = frame->dex_pc;
+      dex_frame->rel_pc = frame->dex_pc;
+      dex_frame->sp = back_frame->sp;
+      dex_frame->stack_size = 0;
+      dex_frame->func_offset = 0;
+      FillInDexFrame(stack_map, frame->dex_pc, dex_frame);
+    }
   }
 
   return true;

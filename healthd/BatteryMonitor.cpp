@@ -42,7 +42,6 @@
 #define POWER_SUPPLY_SYSFS_PATH "/sys/class/" POWER_SUPPLY_SUBSYSTEM
 #define FAKE_BATTERY_CAPACITY 42
 #define FAKE_BATTERY_TEMPERATURE 424
-#define ALWAYS_PLUGGED_CAPACITY 100
 #define MILLION 1.0e6
 #define DEFAULT_VBUS_VOLTAGE 5000000
 
@@ -81,8 +80,11 @@ static void initBatteryProperties(BatteryProperties* props) {
     props->batteryTechnology.clear();
 }
 
-BatteryMonitor::BatteryMonitor() : mHealthdConfig(nullptr), mBatteryDevicePresent(false),
-    mAlwaysPluggedDevice(false), mBatteryFixedCapacity(0), mBatteryFixedTemperature(0) {
+BatteryMonitor::BatteryMonitor()
+    : mHealthdConfig(nullptr),
+      mBatteryDevicePresent(false),
+      mBatteryFixedCapacity(0),
+      mBatteryFixedTemperature(0) {
     initBatteryProperties(&props);
 }
 
@@ -226,15 +228,6 @@ bool BatteryMonitor::update(void) {
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
         getIntField(mHealthdConfig->batteryTemperaturePath);
-
-    // For devices which do not have battery and are always plugged
-    // into power souce.
-    if (mAlwaysPluggedDevice) {
-        props.chargerAcOnline = true;
-        props.batteryPresent = true;
-        props.batteryStatus = BATTERY_STATUS_CHARGING;
-        props.batteryHealth = BATTERY_HEALTH_GOOD;
-    }
 
     std::string buf;
 
@@ -409,11 +402,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         break;
 
     case BATTERY_PROP_BATTERY_STATUS:
-        if (mAlwaysPluggedDevice) {
-            val->valueInt64 = BATTERY_STATUS_CHARGING;
-        } else {
-            val->valueInt64 = getChargeStatus();
-        }
+        val->valueInt64 = getChargeStatus();
         ret = NO_ERROR;
         break;
 
@@ -632,9 +621,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
         KLOG_WARNING(LOG_TAG, "No battery devices found\n");
         hc->periodic_chores_interval_fast = -1;
         hc->periodic_chores_interval_slow = -1;
-        mBatteryFixedCapacity = ALWAYS_PLUGGED_CAPACITY;
-        mBatteryFixedTemperature = FAKE_BATTERY_TEMPERATURE;
-        mAlwaysPluggedDevice = true;
     } else {
         if (mHealthdConfig->batteryStatusPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "BatteryStatusPath not found\n");
