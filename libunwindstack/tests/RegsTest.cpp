@@ -184,7 +184,7 @@ TEST_F(RegsTest, elf_invalid) {
   RegsMips64 regs_mips64;
   MapInfo map_info(0x1000, 0x2000);
   Elf* invalid_elf = new Elf(new MemoryFake);
-  map_info.elf = invalid_elf;
+  map_info.elf.reset(invalid_elf);
 
   regs_arm.set_pc(0x1500);
   EXPECT_EQ(0x500U, invalid_elf->GetRelPc(regs_arm.pc(), &map_info));
