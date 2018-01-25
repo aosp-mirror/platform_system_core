@@ -16,7 +16,6 @@
 
 #define LOG_TAG "lowmemorykiller"
 
-#include <arpa/inet.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <sched.h>
@@ -34,6 +33,7 @@
 
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
+#include <lmkd.h>
 #include <log/log.h>
 
 /*
@@ -70,19 +70,6 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define EIGHT_MEGA (1 << 23)
-
-enum lmk_cmd {
-    LMK_TARGET,
-    LMK_PROCPRIO,
-    LMK_PROCREMOVE,
-};
-
-#define MAX_TARGETS 6
-/*
- * longest is LMK_TARGET followed by MAX_TARGETS each minfree and minkillprio
- * values
- */
-#define CTRL_PACKET_MAX (sizeof(int) * (MAX_TARGETS * 2 + 1))
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
@@ -300,45 +287,49 @@ static void writefilestring(const char *path, char *s) {
     close(fd);
 }
 
-static void cmd_procprio(int pid, int uid, int oomadj) {
+static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
     char path[80];
     char val[20];
     int soft_limit_mult;
+    struct lmk_procprio params;
 
-    if (oomadj < OOM_SCORE_ADJ_MIN || oomadj > OOM_SCORE_ADJ_MAX) {
-        ALOGE("Invalid PROCPRIO oomadj argument %d", oomadj);
+    lmkd_pack_get_procprio(packet, &params);
+
+    if (params.oomadj < OOM_SCORE_ADJ_MIN ||
+        params.oomadj > OOM_SCORE_ADJ_MAX) {
+        ALOGE("Invalid PROCPRIO oomadj argument %d", params.oomadj);
         return;
     }
 
-    snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", pid);
-    snprintf(val, sizeof(val), "%d", oomadj);
+    snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", params.pid);
+    snprintf(val, sizeof(val), "%d", params.oomadj);
     writefilestring(path, val);
 
     if (use_inkernel_interface)
         return;
 
-    if (oomadj >= 900) {
+    if (params.oomadj >= 900) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 800) {
+    } else if (params.oomadj >= 800) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 700) {
+    } else if (params.oomadj >= 700) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 600) {
+    } else if (params.oomadj >= 600) {
         // Launcher should be perceptible, don't kill it.
-        oomadj = 200;
+        params.oomadj = 200;
         soft_limit_mult = 1;
-    } else if (oomadj >= 500) {
+    } else if (params.oomadj >= 500) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 400) {
+    } else if (params.oomadj >= 400) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 300) {
+    } else if (params.oomadj >= 300) {
         soft_limit_mult = 1;
-    } else if (oomadj >= 200) {
+    } else if (params.oomadj >= 200) {
         soft_limit_mult = 2;
-    } else if (oomadj >= 100) {
+    } else if (params.oomadj >= 100) {
         soft_limit_mult = 10;
-    } else if (oomadj >=   0) {
+    } else if (params.oomadj >=   0) {
         soft_limit_mult = 20;
     } else {
         // Persistent processes will have a large
@@ -346,11 +337,13 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
         soft_limit_mult = 64;
     }
 
-    snprintf(path, sizeof(path), "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes", uid, pid);
+    snprintf(path, sizeof(path),
+             "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
+             params.uid, params.pid);
     snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
     writefilestring(path, val);
 
-    procp = pid_lookup(pid);
+    procp = pid_lookup(params.pid);
     if (!procp) {
             procp = malloc(sizeof(struct proc));
             if (!procp) {
@@ -358,33 +351,38 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
                 return;
             }
 
-            procp->pid = pid;
-            procp->uid = uid;
-            procp->oomadj = oomadj;
+            procp->pid = params.pid;
+            procp->uid = params.uid;
+            procp->oomadj = params.oomadj;
             proc_insert(procp);
     } else {
         proc_unslot(procp);
-        procp->oomadj = oomadj;
+        procp->oomadj = params.oomadj;
         proc_slot(procp);
     }
 }
 
-static void cmd_procremove(int pid) {
+static void cmd_procremove(LMKD_CTRL_PACKET packet) {
+    struct lmk_procremove params;
+
     if (use_inkernel_interface)
         return;
 
-    pid_remove(pid);
+    lmkd_pack_get_procremove(packet, &params);
+    pid_remove(params.pid);
 }
 
-static void cmd_target(int ntargets, int *params) {
+static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
     int i;
+    struct lmk_target target;
 
     if (ntargets > (int)ARRAY_SIZE(lowmem_adj))
         return;
 
     for (i = 0; i < ntargets; i++) {
-        lowmem_minfree[i] = ntohl(*params++);
-        lowmem_adj[i] = ntohl(*params++);
+        lmkd_pack_get_target(packet, i, &target);
+        lowmem_minfree[i] = target.minfree;
+        lowmem_adj[i] = target.oom_adj_score;
     }
 
     lowmem_targets_size = ntargets;
@@ -445,38 +443,42 @@ static int ctrl_data_read(int dsock_idx, char *buf, size_t bufsz) {
 }
 
 static void ctrl_command_handler(int dsock_idx) {
-    int ibuf[CTRL_PACKET_MAX / sizeof(int)];
+    LMKD_CTRL_PACKET packet;
     int len;
-    int cmd = -1;
+    enum lmk_cmd cmd;
     int nargs;
     int targets;
 
-    len = ctrl_data_read(dsock_idx, (char *)ibuf, CTRL_PACKET_MAX);
+    len = ctrl_data_read(dsock_idx, (char *)packet, CTRL_PACKET_MAX_SIZE);
     if (len <= 0)
         return;
 
+    if (len < (int)sizeof(int)) {
+        ALOGE("Wrong control socket read length len=%d", len);
+        return;
+    }
+
+    cmd = lmkd_pack_get_cmd(packet);
     nargs = len / sizeof(int) - 1;
     if (nargs < 0)
         goto wronglen;
-
-    cmd = ntohl(ibuf[0]);
 
     switch(cmd) {
     case LMK_TARGET:
         targets = nargs / 2;
         if (nargs & 0x1 || targets > (int)ARRAY_SIZE(lowmem_adj))
             goto wronglen;
-        cmd_target(targets, &ibuf[1]);
+        cmd_target(targets, packet);
         break;
     case LMK_PROCPRIO:
         if (nargs != 3)
             goto wronglen;
-        cmd_procprio(ntohl(ibuf[1]), ntohl(ibuf[2]), ntohl(ibuf[3]));
+        cmd_procprio(packet);
         break;
     case LMK_PROCREMOVE:
         if (nargs != 1)
             goto wronglen;
-        cmd_procremove(ntohl(ibuf[1]));
+        cmd_procremove(packet);
         break;
     default:
         ALOGE("Received unknown command code %d", cmd);
