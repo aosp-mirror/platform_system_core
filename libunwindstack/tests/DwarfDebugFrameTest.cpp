@@ -145,6 +145,45 @@ TYPED_TEST_P(DwarfDebugFrameTest, Init32_fde_not_following_cie) {
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->debug_frame_->last_error());
 }
 
+TYPED_TEST_P(DwarfDebugFrameTest, Init32_do_not_fail_on_bad_next_entry) {
+  // CIE 32 information.
+  this->memory_.SetData32(0x5000, 0xfc);
+  this->memory_.SetData32(0x5004, 0xffffffff);
+  this->memory_.SetData8(0x5008, 1);
+  this->memory_.SetData8(0x5009, '\0');
+
+  // FDE 32 information.
+  this->memory_.SetData32(0x5100, 0xfc);
+  this->memory_.SetData32(0x5104, 0);
+  this->memory_.SetData32(0x5108, 0x1500);
+  this->memory_.SetData32(0x510c, 0x200);
+
+  this->memory_.SetData32(0x5200, 0xfc);
+  this->memory_.SetData32(0x5204, 0);
+  this->memory_.SetData32(0x5208, 0x2500);
+  this->memory_.SetData32(0x520c, 0x300);
+
+  // CIE 32 information.
+  this->memory_.SetData32(0x5300, 0);
+  this->memory_.SetData32(0x5304, 0xffffffff);
+  this->memory_.SetData8(0x5308, 1);
+  this->memory_.SetData8(0x5309, '\0');
+
+  // FDE 32 information.
+  this->memory_.SetData32(0x5400, 0xfc);
+  this->memory_.SetData32(0x5404, 0x300);
+  this->memory_.SetData32(0x5408, 0x3500);
+  this->memory_.SetData32(0x540c, 0x400);
+
+  this->memory_.SetData32(0x5500, 0xfc);
+  this->memory_.SetData32(0x5504, 0x300);
+  this->memory_.SetData32(0x5508, 0x4500);
+  this->memory_.SetData32(0x550c, 0x500);
+
+  ASSERT_TRUE(this->debug_frame_->Init(0x5000, 0x600));
+  ASSERT_EQ(2U, this->debug_frame_->TestGetFdeCount());
+}
+
 TYPED_TEST_P(DwarfDebugFrameTest, Init64) {
   // CIE 64 information.
   this->memory_.SetData32(0x5000, 0xffffffff);
@@ -229,6 +268,51 @@ TYPED_TEST_P(DwarfDebugFrameTest, Init64_fde_not_following_cie) {
 
   ASSERT_FALSE(this->debug_frame_->Init(0x5000, 0x600));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->debug_frame_->last_error());
+}
+
+TYPED_TEST_P(DwarfDebugFrameTest, Init64_do_not_fail_on_bad_next_entry) {
+  // CIE 64 information.
+  this->memory_.SetData32(0x5000, 0xffffffff);
+  this->memory_.SetData64(0x5004, 0xf4);
+  this->memory_.SetData64(0x500c, 0xffffffffffffffffULL);
+  this->memory_.SetData8(0x5014, 1);
+  this->memory_.SetData8(0x5015, '\0');
+
+  // FDE 64 information.
+  this->memory_.SetData32(0x5100, 0xffffffff);
+  this->memory_.SetData64(0x5104, 0xf4);
+  this->memory_.SetData64(0x510c, 0);
+  this->memory_.SetData64(0x5114, 0x1500);
+  this->memory_.SetData64(0x511c, 0x200);
+
+  this->memory_.SetData32(0x5200, 0xffffffff);
+  this->memory_.SetData64(0x5204, 0xf4);
+  this->memory_.SetData64(0x520c, 0);
+  this->memory_.SetData64(0x5214, 0x2500);
+  this->memory_.SetData64(0x521c, 0x300);
+
+  // CIE 64 information.
+  this->memory_.SetData32(0x5300, 0xffffffff);
+  this->memory_.SetData64(0x5304, 0);
+  this->memory_.SetData64(0x530c, 0xffffffffffffffffULL);
+  this->memory_.SetData8(0x5314, 1);
+  this->memory_.SetData8(0x5315, '\0');
+
+  // FDE 64 information.
+  this->memory_.SetData32(0x5400, 0xffffffff);
+  this->memory_.SetData64(0x5404, 0xf4);
+  this->memory_.SetData64(0x540c, 0x300);
+  this->memory_.SetData64(0x5414, 0x3500);
+  this->memory_.SetData64(0x541c, 0x400);
+
+  this->memory_.SetData32(0x5500, 0xffffffff);
+  this->memory_.SetData64(0x5504, 0xf4);
+  this->memory_.SetData64(0x550c, 0x300);
+  this->memory_.SetData64(0x5514, 0x4500);
+  this->memory_.SetData64(0x551c, 0x500);
+
+  ASSERT_TRUE(this->debug_frame_->Init(0x5000, 0x600));
+  ASSERT_EQ(2U, this->debug_frame_->TestGetFdeCount());
 }
 
 TYPED_TEST_P(DwarfDebugFrameTest, Init_version1) {
@@ -450,9 +534,11 @@ TYPED_TEST_P(DwarfDebugFrameTest, GetCieFde64) {
   EXPECT_EQ(0x20U, fde->cie->return_address_register);
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfDebugFrameTest, Init32, Init32_fde_not_following_cie, Init64,
-                           Init64_fde_not_following_cie, Init_version1, Init_version4,
-                           GetFdeOffsetFromPc, GetCieFde32, GetCieFde64);
+REGISTER_TYPED_TEST_CASE_P(DwarfDebugFrameTest, Init32, Init32_fde_not_following_cie,
+                           Init32_do_not_fail_on_bad_next_entry, Init64,
+                           Init64_do_not_fail_on_bad_next_entry, Init64_fde_not_following_cie,
+                           Init_version1, Init_version4, GetFdeOffsetFromPc, GetCieFde32,
+                           GetCieFde64);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfDebugFrameTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
