@@ -64,6 +64,11 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size) {
     return false;
   }
 
+  if (fde_count_ == 0) {
+    last_error_ = DWARF_ERROR_NO_FDES;
+    return false;
+  }
+
   entries_offset_ = memory_.cur_offset();
   entries_end_ = offset + size;
   entries_data_offset_ = offset;

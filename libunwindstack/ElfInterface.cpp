@@ -126,20 +126,24 @@ void ElfInterface::InitHeadersWithTemplate() {
   if (eh_frame_hdr_offset_ != 0) {
     eh_frame_.reset(new DwarfEhFrameWithHdr<AddressType>(memory_));
     if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_)) {
-      // Even if the eh_frame_offset_ is non-zero, do not bother
-      // trying to read that since something has gone wrong.
       eh_frame_.reset(nullptr);
-      eh_frame_hdr_offset_ = 0;
-      eh_frame_hdr_size_ = static_cast<uint64_t>(-1);
     }
-  } else if (eh_frame_offset_ != 0) {
-    // If there is a eh_frame section without a eh_frame_hdr section.
+  }
+
+  if (eh_frame_.get() == nullptr && eh_frame_offset_ != 0) {
+    // If there is an eh_frame section without an eh_frame_hdr section,
+    // or using the frame hdr object failed to init.
     eh_frame_.reset(new DwarfEhFrame<AddressType>(memory_));
     if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_)) {
       eh_frame_.reset(nullptr);
-      eh_frame_offset_ = 0;
-      eh_frame_size_ = static_cast<uint64_t>(-1);
     }
+  }
+
+  if (eh_frame_.get() == nullptr) {
+    eh_frame_hdr_offset_ = 0;
+    eh_frame_hdr_size_ = static_cast<uint64_t>(-1);
+    eh_frame_offset_ = 0;
+    eh_frame_size_ = static_cast<uint64_t>(-1);
   }
 
   if (debug_frame_offset_ != 0) {
@@ -436,15 +440,16 @@ bool ElfInterface::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* pro
   }
   uint64_t adjusted_pc = pc - load_bias;
 
-  // Try the eh_frame first.
-  DwarfSection* eh_frame = eh_frame_.get();
-  if (eh_frame != nullptr && eh_frame->Step(adjusted_pc, regs, process_memory, finished)) {
+  // Try the debug_frame first since it contains the most specific unwind
+  // information.
+  DwarfSection* debug_frame = debug_frame_.get();
+  if (debug_frame != nullptr && debug_frame->Step(adjusted_pc, regs, process_memory, finished)) {
     return true;
   }
 
-  // Try the debug_frame next.
-  DwarfSection* debug_frame = debug_frame_.get();
-  if (debug_frame != nullptr && debug_frame->Step(adjusted_pc, regs, process_memory, finished)) {
+  // Try the eh_frame next.
+  DwarfSection* eh_frame = eh_frame_.get();
+  if (eh_frame != nullptr && eh_frame->Step(adjusted_pc, regs, process_memory, finished)) {
     return true;
   }
 
