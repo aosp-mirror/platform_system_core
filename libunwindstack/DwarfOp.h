@@ -24,8 +24,9 @@
 #include <type_traits>
 #include <vector>
 
+#include <unwindstack/DwarfError.h>
+
 #include "DwarfEncoding.h"
-#include "DwarfError.h"
 
 namespace unwindstack {
 
@@ -72,7 +73,9 @@ class DwarfOp {
 
   void set_regs(RegsImpl<AddressType>* regs) { regs_ = regs; }
 
-  DwarfError last_error() { return last_error_; }
+  const DwarfErrorData& last_error() { return last_error_; }
+  DwarfErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
 
   bool is_register() { return is_register_; }
 
@@ -96,7 +99,7 @@ class DwarfOp {
 
   RegsImpl<AddressType>* regs_;
   bool is_register_ = false;
-  DwarfError last_error_ = DWARF_ERROR_NONE;
+  DwarfErrorData last_error_{DWARF_ERROR_NONE, 0};
   uint8_t cur_op_;
   std::vector<AddressType> operands_;
   std::deque<AddressType> stack_;

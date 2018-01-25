@@ -72,6 +72,10 @@ class Elf {
 
   bool IsValidPc(uint64_t pc);
 
+  void GetLastError(ErrorData* data);
+  ErrorCode GetLastErrorCode();
+  uint64_t GetLastErrorAddress();
+
   bool valid() { return valid_; }
 
   uint32_t machine_type() { return machine_type_; }

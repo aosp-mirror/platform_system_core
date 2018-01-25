@@ -303,6 +303,7 @@ TEST_F(ElfInterfaceArmTest, StepExidx) {
   // FindEntry fails.
   bool finished;
   ASSERT_FALSE(interface.StepExidx(0x7000, 0, nullptr, nullptr, &finished));
+  EXPECT_EQ(ERROR_UNWIND_INFO, interface.LastErrorCode());
 
   // ExtractEntry should fail.
   interface.FakeSetStartOffset(0x1000);
@@ -316,14 +317,18 @@ TEST_F(ElfInterfaceArmTest, StepExidx) {
   regs.set_sp(regs[ARM_REG_SP]);
   regs.set_pc(0x1234);
   ASSERT_FALSE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_MEMORY_INVALID, interface.LastErrorCode());
+  EXPECT_EQ(0x1004U, interface.LastErrorAddress());
 
   // Eval should fail.
   memory_.SetData32(0x1004, 0x81000000);
   ASSERT_FALSE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_UNWIND_INFO, interface.LastErrorCode());
 
   // Everything should pass.
   memory_.SetData32(0x1004, 0x80b0b0b0);
   ASSERT_TRUE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_UNWIND_INFO, interface.LastErrorCode());
   ASSERT_FALSE(finished);
   ASSERT_EQ(0x1000U, regs.sp());
   ASSERT_EQ(0x1000U, regs[ARM_REG_SP]);
@@ -332,9 +337,11 @@ TEST_F(ElfInterfaceArmTest, StepExidx) {
 
   // Load bias is non-zero.
   ASSERT_TRUE(interface.StepExidx(0x8000, 0x1000, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_UNWIND_INFO, interface.LastErrorCode());
 
   // Pc too small.
   ASSERT_FALSE(interface.StepExidx(0x8000, 0x9000, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_UNWIND_INFO, interface.LastErrorCode());
 }
 
 TEST_F(ElfInterfaceArmTest, StepExidx_pc_set) {
@@ -356,6 +363,7 @@ TEST_F(ElfInterfaceArmTest, StepExidx_pc_set) {
   // Everything should pass.
   bool finished;
   ASSERT_TRUE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_NONE, interface.LastErrorCode());
   ASSERT_FALSE(finished);
   ASSERT_EQ(0x10004U, regs.sp());
   ASSERT_EQ(0x10004U, regs[ARM_REG_SP]);
@@ -379,6 +387,7 @@ TEST_F(ElfInterfaceArmTest, StepExidx_cant_unwind) {
 
   bool finished;
   ASSERT_TRUE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_NONE, interface.LastErrorCode());
   ASSERT_TRUE(finished);
   ASSERT_EQ(0x10000U, regs.sp());
   ASSERT_EQ(0x10000U, regs[ARM_REG_SP]);
@@ -401,6 +410,7 @@ TEST_F(ElfInterfaceArmTest, StepExidx_refuse_unwind) {
 
   bool finished;
   ASSERT_TRUE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_NONE, interface.LastErrorCode());
   ASSERT_TRUE(finished);
   ASSERT_EQ(0x10000U, regs.sp());
   ASSERT_EQ(0x10000U, regs[ARM_REG_SP]);
@@ -427,6 +437,7 @@ TEST_F(ElfInterfaceArmTest, StepExidx_pc_zero) {
 
   bool finished;
   ASSERT_TRUE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_NONE, interface.LastErrorCode());
   ASSERT_TRUE(finished);
   ASSERT_EQ(0U, regs.pc());
 
@@ -439,6 +450,7 @@ TEST_F(ElfInterfaceArmTest, StepExidx_pc_zero) {
   regs.set_pc(0x1234);
 
   ASSERT_TRUE(interface.StepExidx(0x7000, 0, &regs, &process_memory_, &finished));
+  EXPECT_EQ(ERROR_NONE, interface.LastErrorCode());
   ASSERT_TRUE(finished);
   ASSERT_EQ(0U, regs.pc());
 }

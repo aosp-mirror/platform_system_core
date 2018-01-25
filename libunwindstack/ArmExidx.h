@@ -61,6 +61,7 @@ class ArmExidx {
   std::deque<uint8_t>* data() { return &data_; }
 
   ArmStatus status() { return status_; }
+  uint64_t status_address() { return status_address_; }
 
   RegsArm* regs() { return regs_; }
 
@@ -97,6 +98,7 @@ class ArmExidx {
   uint32_t cfa_ = 0;
   std::deque<uint8_t> data_;
   ArmStatus status_ = ARM_STATUS_NONE;
+  uint64_t status_address_ = 0;
 
   Memory* elf_memory_;
   Memory* process_memory_;

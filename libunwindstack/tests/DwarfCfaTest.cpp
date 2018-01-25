@@ -21,13 +21,13 @@
 
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfLocation.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/DwarfStructs.h>
 #include <unwindstack/Log.h>
 
 #include "DwarfCfa.h"
-#include "DwarfError.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
@@ -78,7 +78,7 @@ TYPED_TEST_P(DwarfCfaTest, cfa_illegal) {
     dwarf_loc_regs_t loc_regs;
 
     ASSERT_FALSE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x2000, 0x2001, &loc_regs));
-    ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->cfa_->last_error());
+    ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->cfa_->LastErrorCode());
     ASSERT_EQ(0x2001U, this->dmem_->cur_offset());
 
     ASSERT_EQ("", GetFakeLogPrint());
@@ -198,7 +198,7 @@ TYPED_TEST_P(DwarfCfaTest, cfa_restore) {
   dwarf_loc_regs_t loc_regs;
 
   ASSERT_FALSE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x2000, 0x2001, &loc_regs));
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->LastErrorCode());
   ASSERT_EQ(0x2001U, this->dmem_->cur_offset());
   ASSERT_EQ(0U, loc_regs.size());
 
@@ -227,7 +227,7 @@ TYPED_TEST_P(DwarfCfaTest, cfa_restore_extended) {
   dwarf_loc_regs_t loc_regs;
 
   ASSERT_FALSE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x4000, 0x4002, &loc_regs));
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->LastErrorCode());
   ASSERT_EQ(0x4002U, this->dmem_->cur_offset());
   ASSERT_EQ(0U, loc_regs.size());
 
@@ -594,7 +594,7 @@ TYPED_TEST_P(DwarfCfaTest, cfa_def_cfa_register) {
   // This fails because the cfa is not defined as a register.
   ASSERT_FALSE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x100, 0x102, &loc_regs));
   ASSERT_EQ(0U, loc_regs.size());
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->LastErrorCode());
 
   ASSERT_EQ("4 unwind Attempt to set new register, but cfa is not already set to a register.\n",
             GetFakeLogPrint());
@@ -637,7 +637,7 @@ TYPED_TEST_P(DwarfCfaTest, cfa_def_cfa_offset) {
   // This fails because the cfa is not defined as a register.
   ASSERT_FALSE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x100, 0x102, &loc_regs));
   ASSERT_EQ(0U, loc_regs.size());
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->LastErrorCode());
 
   ASSERT_EQ("4 unwind Attempt to set offset, but cfa is not set to a register.\n",
             GetFakeLogPrint());
@@ -679,7 +679,7 @@ TYPED_TEST_P(DwarfCfaTest, cfa_def_cfa_offset_sf) {
 
   // This fails because the cfa is not defined as a register.
   ASSERT_FALSE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x100, 0x102, &loc_regs));
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->cfa_->LastErrorCode());
 
   ASSERT_EQ("4 unwind Attempt to set offset, but cfa is not set to a register.\n",
             GetFakeLogPrint());

@@ -28,6 +28,7 @@ namespace unwindstack {
 
 bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
   if (start_offset_ == 0 || total_entries_ == 0) {
+    last_error_.code = ERROR_UNWIND_INFO;
     return false;
   }
 
@@ -56,12 +57,15 @@ bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
     *entry_offset = start_offset_ + (last - 1) * 8;
     return true;
   }
+  last_error_.code = ERROR_UNWIND_INFO;
   return false;
 }
 
 bool ElfInterfaceArm::GetPrel31Addr(uint32_t offset, uint32_t* addr) {
   uint32_t data;
   if (!memory_->Read32(offset, &data)) {
+    last_error_.code = ERROR_MEMORY_INVALID;
+    last_error_.address = offset;
     return false;
   }
 
@@ -106,6 +110,7 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Mem
                                 bool* finished) {
   // Adjust the load bias to get the real relative pc.
   if (pc < load_bias) {
+    last_error_.code = ERROR_UNWIND_INFO;
     return false;
   }
   pc -= load_bias;
@@ -138,6 +143,30 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Mem
   if (arm.status() == ARM_STATUS_NO_UNWIND) {
     *finished = true;
     return true;
+  }
+
+  if (!return_value) {
+    switch (arm.status()) {
+      case ARM_STATUS_NONE:
+      case ARM_STATUS_NO_UNWIND:
+      case ARM_STATUS_FINISH:
+        last_error_.code = ERROR_NONE;
+        break;
+
+      case ARM_STATUS_RESERVED:
+      case ARM_STATUS_SPARE:
+      case ARM_STATUS_TRUNCATED:
+      case ARM_STATUS_MALFORMED:
+      case ARM_STATUS_INVALID_ALIGNMENT:
+      case ARM_STATUS_INVALID_PERSONALITY:
+        last_error_.code = ERROR_UNWIND_INFO;
+        break;
+
+      case ARM_STATUS_READ_FAILED:
+        last_error_.code = ERROR_MEMORY_INVALID;
+        last_error_.address = arm.status_address();
+        break;
+    }
   }
   return return_value;
 }
