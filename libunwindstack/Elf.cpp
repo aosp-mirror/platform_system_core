@@ -134,6 +134,26 @@ bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
   return true;
 }
 
+void Elf::GetLastError(ErrorData* data) {
+  if (valid_) {
+    *data = interface_->last_error();
+  }
+}
+
+ErrorCode Elf::GetLastErrorCode() {
+  if (valid_) {
+    return interface_->LastErrorCode();
+  }
+  return ERROR_NONE;
+}
+
+uint64_t Elf::GetLastErrorAddress() {
+  if (valid_) {
+    return interface_->LastErrorAddress();
+  }
+  return 0;
+}
+
 // The relative pc is always relative to the start of the map from which it comes.
 bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
                Memory* process_memory, bool* finished) {

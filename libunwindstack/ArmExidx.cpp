@@ -57,6 +57,7 @@ bool ArmExidx::ExtractEntryData(uint32_t entry_offset) {
   uint32_t data;
   if (!elf_memory_->Read32(entry_offset + 4, &data)) {
     status_ = ARM_STATUS_READ_FAILED;
+    status_address_ = entry_offset + 4;
     return false;
   }
   if (data == 1) {
@@ -97,6 +98,7 @@ bool ArmExidx::ExtractEntryData(uint32_t entry_offset) {
   uint32_t addr = (entry_offset + 4) + signed_data;
   if (!elf_memory_->Read32(addr, &data)) {
     status_ = ARM_STATUS_READ_FAILED;
+    status_address_ = addr;
     return false;
   }
 
@@ -128,6 +130,7 @@ bool ArmExidx::ExtractEntryData(uint32_t entry_offset) {
     addr += 4;
     if (!elf_memory_->Read32(addr, &data)) {
       status_ = ARM_STATUS_READ_FAILED;
+      status_address_ = addr;
       return false;
     }
     num_table_words = (data >> 24) & 0xff;
@@ -145,6 +148,7 @@ bool ArmExidx::ExtractEntryData(uint32_t entry_offset) {
   for (size_t i = 0; i < num_table_words; i++) {
     if (!elf_memory_->Read32(addr, &data)) {
       status_ = ARM_STATUS_READ_FAILED;
+      status_address_ = addr;
       return false;
     }
     data_.push_back((data >> 24) & 0xff);
@@ -216,6 +220,7 @@ inline bool ArmExidx::DecodePrefix_10_00(uint8_t byte) {
     if (registers & (1 << reg)) {
       if (!process_memory_->Read32(cfa_, &(*regs_)[reg])) {
         status_ = ARM_STATUS_READ_FAILED;
+        status_address_ = cfa_;
         return false;
       }
       cfa_ += 4;
@@ -284,6 +289,7 @@ inline bool ArmExidx::DecodePrefix_10_10(uint8_t byte) {
   for (size_t i = 4; i <= 4 + (byte & 0x7); i++) {
     if (!process_memory_->Read32(cfa_, &(*regs_)[i])) {
       status_ = ARM_STATUS_READ_FAILED;
+      status_address_ = cfa_;
       return false;
     }
     cfa_ += 4;
@@ -291,6 +297,7 @@ inline bool ArmExidx::DecodePrefix_10_10(uint8_t byte) {
   if (byte & 0x8) {
     if (!process_memory_->Read32(cfa_, &(*regs_)[ARM_REG_R14])) {
       status_ = ARM_STATUS_READ_FAILED;
+      status_address_ = cfa_;
       return false;
     }
     cfa_ += 4;
@@ -357,6 +364,7 @@ inline bool ArmExidx::DecodePrefix_10_11_0001() {
     if (byte & (1 << reg)) {
       if (!process_memory_->Read32(cfa_, &(*regs_)[reg])) {
         status_ = ARM_STATUS_READ_FAILED;
+        status_address_ = cfa_;
         return false;
       }
       cfa_ += 4;

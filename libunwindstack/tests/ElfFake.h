@@ -87,6 +87,10 @@ class ElfInterfaceFake : public ElfInterface {
     steps_.clear();
   }
 
+  void FakeSetErrorCode(ErrorCode code) { last_error_.code = code; }
+
+  void FakeSetErrorAddress(uint64_t address) { last_error_.address = address; }
+
  private:
   std::unordered_map<std::string, uint64_t> globals_;
 
