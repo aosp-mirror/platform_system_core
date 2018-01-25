@@ -55,6 +55,9 @@ namespace.default.permitted.paths += /vendor/framework
 namespace.default.permitted.paths += /vendor/app
 namespace.default.permitted.paths += /vendor/priv-app
 namespace.default.permitted.paths += /oem/app
+namespace.default.permitted.paths += /product/framework
+namespace.default.permitted.paths += /product/app
+namespace.default.permitted.paths += /product/priv-app
 namespace.default.permitted.paths += /data
 namespace.default.permitted.paths += /mnt/expand
 
@@ -72,6 +75,9 @@ namespace.default.asan.permitted.paths += /vendor/framework
 namespace.default.asan.permitted.paths += /vendor/app
 namespace.default.asan.permitted.paths += /vendor/priv-app
 namespace.default.asan.permitted.paths += /oem/app
+namespace.default.asan.permitted.paths += /product/framework
+namespace.default.asan.permitted.paths += /product/app
+namespace.default.asan.permitted.paths += /product/priv-app
 namespace.default.asan.permitted.paths += /mnt/expand
 
 ###############################################################################
