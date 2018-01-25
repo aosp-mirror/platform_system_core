@@ -24,11 +24,10 @@
 #include <type_traits>
 #include <vector>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfLocation.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/DwarfStructs.h>
-
-#include "DwarfError.h"
 
 namespace unwindstack {
 
@@ -75,7 +74,9 @@ class DwarfCfa {
   bool Log(uint32_t indent, uint64_t pc, uint64_t load_bias, uint64_t start_offset,
            uint64_t end_offset);
 
-  DwarfError last_error() { return last_error_; }
+  const DwarfErrorData& last_error() { return last_error_; }
+  DwarfErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
 
   AddressType cur_pc() { return cur_pc_; }
 
@@ -89,7 +90,7 @@ class DwarfCfa {
   bool LogInstruction(uint32_t indent, uint64_t cfa_offset, uint8_t op, uint64_t* cur_pc);
 
  private:
-  DwarfError last_error_;
+  DwarfErrorData last_error_;
   DwarfMemory* memory_;
   const DwarfFde* fde_;
 

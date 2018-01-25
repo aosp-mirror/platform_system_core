@@ -22,12 +22,12 @@
 
 #include <android-base/stringprintf.h>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/Log.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 
-#include "DwarfError.h"
 #include "DwarfOp.h"
 
 namespace unwindstack {
@@ -48,7 +48,7 @@ bool DwarfOp<AddressType>::Eval(uint64_t start, uint64_t end, uint8_t dwarf_vers
     // To protect against a branch that creates an infinite loop,
     // terminate if the number of iterations gets too high.
     if (iterations++ == 1000) {
-      last_error_ = DWARF_ERROR_TOO_MANY_ITERATIONS;
+      last_error_.code = DWARF_ERROR_TOO_MANY_ITERATIONS;
       return false;
     }
   }
@@ -57,28 +57,29 @@ bool DwarfOp<AddressType>::Eval(uint64_t start, uint64_t end, uint8_t dwarf_vers
 
 template <typename AddressType>
 bool DwarfOp<AddressType>::Decode(uint8_t dwarf_version) {
-  last_error_ = DWARF_ERROR_NONE;
+  last_error_.code = DWARF_ERROR_NONE;
   if (!memory_->ReadBytes(&cur_op_, 1)) {
-    last_error_ = DWARF_ERROR_MEMORY_INVALID;
+    last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+    last_error_.address = memory_->cur_offset();
     return false;
   }
 
   const auto* op = &kCallbackTable[cur_op_];
   const auto handle_func = op->handle_func;
   if (handle_func == nullptr) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
 
   // Check for an unsupported opcode.
   if (dwarf_version < op->supported_version) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
 
   // Make sure that the required number of stack elements is available.
   if (stack_.size() < op->num_required_stack_values) {
-    last_error_ = DWARF_ERROR_STACK_INDEX_NOT_VALID;
+    last_error_.code = DWARF_ERROR_STACK_INDEX_NOT_VALID;
     return false;
   }
 
@@ -86,7 +87,8 @@ bool DwarfOp<AddressType>::Decode(uint8_t dwarf_version) {
   for (size_t i = 0; i < op->num_operands; i++) {
     uint64_t value;
     if (!memory_->ReadEncodedValue<AddressType>(op->operands[i], &value)) {
-      last_error_ = DWARF_ERROR_MEMORY_INVALID;
+      last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+      last_error_.address = memory_->cur_offset();
       return false;
     }
     operands_.push_back(value);
@@ -142,7 +144,8 @@ bool DwarfOp<AddressType>::op_deref() {
   AddressType addr = StackPop();
   AddressType value;
   if (!regular_memory()->ReadFully(addr, &value, sizeof(value))) {
-    last_error_ = DWARF_ERROR_MEMORY_INVALID;
+    last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+    last_error_.address = addr;
     return false;
   }
   stack_.push_front(value);
@@ -153,14 +156,15 @@ template <typename AddressType>
 bool DwarfOp<AddressType>::op_deref_size() {
   AddressType bytes_to_read = OperandAt(0);
   if (bytes_to_read > sizeof(AddressType) || bytes_to_read == 0) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
   // Read the address and dereference it.
   AddressType addr = StackPop();
   AddressType value = 0;
   if (!regular_memory()->ReadFully(addr, &value, bytes_to_read)) {
-    last_error_ = DWARF_ERROR_MEMORY_INVALID;
+    last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+    last_error_.address = addr;
     return false;
   }
   stack_.push_front(value);
@@ -198,7 +202,7 @@ template <typename AddressType>
 bool DwarfOp<AddressType>::op_pick() {
   AddressType index = OperandAt(0);
   if (index > StackSize()) {
-    last_error_ = DWARF_ERROR_STACK_INDEX_NOT_VALID;
+    last_error_.code = DWARF_ERROR_STACK_INDEX_NOT_VALID;
     return false;
   }
   stack_.push_front(StackAt(index));
@@ -243,7 +247,7 @@ template <typename AddressType>
 bool DwarfOp<AddressType>::op_div() {
   AddressType top = StackPop();
   if (top == 0) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
   SignedType signed_divisor = static_cast<SignedType>(top);
@@ -263,7 +267,7 @@ template <typename AddressType>
 bool DwarfOp<AddressType>::op_mod() {
   AddressType top = StackPop();
   if (top == 0) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
   stack_[0] %= top;
@@ -431,7 +435,7 @@ template <typename AddressType>
 bool DwarfOp<AddressType>::op_breg() {
   uint16_t reg = cur_op() - 0x70;
   if (reg >= regs_->total_regs()) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
   stack_.push_front((*regs_)[reg] + OperandAt(0));
@@ -442,7 +446,7 @@ template <typename AddressType>
 bool DwarfOp<AddressType>::op_bregx() {
   AddressType reg = OperandAt(0);
   if (reg >= regs_->total_regs()) {
-    last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
     return false;
   }
   stack_.push_front((*regs_)[reg] + OperandAt(1));
@@ -456,7 +460,7 @@ bool DwarfOp<AddressType>::op_nop() {
 
 template <typename AddressType>
 bool DwarfOp<AddressType>::op_not_implemented() {
-  last_error_ = DWARF_ERROR_NOT_IMPLEMENTED;
+  last_error_.code = DWARF_ERROR_NOT_IMPLEMENTED;
   return false;
 }
 
