@@ -31,6 +31,7 @@ enum DwarfError : uint8_t {
   DWARF_ERROR_TOO_MANY_ITERATIONS,
   DWARF_ERROR_CFA_NOT_DEFINED,
   DWARF_ERROR_UNSUPPORTED_VERSION,
+  DWARF_ERROR_NO_FDES,
 };
 
 }  // namespace unwindstack

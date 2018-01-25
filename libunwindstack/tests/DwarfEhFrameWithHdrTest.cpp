@@ -94,7 +94,13 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, Init) {
   EXPECT_EQ(0x1000U, this->eh_frame_->TestGetEntriesDataOffset());
   EXPECT_EQ(0x100aU, this->eh_frame_->TestGetCurEntriesOffset());
 
+  // Verify a zero fde count fails to init.
+  this->memory_.SetData32(0x1006, 0);
+  ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
+  ASSERT_EQ(DWARF_ERROR_NO_FDES, this->eh_frame_->last_error());
+
   // Verify an unexpected version will cause a fail.
+  this->memory_.SetData32(0x1006, 126);
   this->memory_.SetData8(0x1000, 0);
   ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
   ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->last_error());
