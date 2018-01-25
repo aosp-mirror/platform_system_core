@@ -50,12 +50,12 @@ AsmGetRegs:
   movl (%esp), %ecx
   movl %ecx, 32(%eax)
 
-  movl %cs, 36(%eax)
-  movl %ss, 40(%eax)
-  movl %ds, 44(%eax)
-  movl %es, 48(%eax)
-  movl %fs, 52(%eax)
-  movl %gs, 56(%eax)
+  mov  %cs, 36(%eax)
+  mov  %ss, 40(%eax)
+  mov  %ds, 44(%eax)
+  mov  %es, 48(%eax)
+  mov  %fs, 52(%eax)
+  mov  %gs, 56(%eax)
   ret
 
   .cfi_endproc
