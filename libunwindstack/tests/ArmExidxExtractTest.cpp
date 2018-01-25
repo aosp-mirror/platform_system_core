@@ -257,22 +257,27 @@ TEST_F(ArmExidxExtractTest, second_read_not_compact) {
 TEST_F(ArmExidxExtractTest, read_failures) {
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
+  EXPECT_EQ(0x5004U, exidx_->status_address());
 
   elf_memory_.SetData32(0x5000, 0x100);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
+  EXPECT_EQ(0x5004U, exidx_->status_address());
 
   elf_memory_.SetData32(0x5004, 0x100);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
+  EXPECT_EQ(0x5104U, exidx_->status_address());
 
   elf_memory_.SetData32(0x5104, 0x1);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
+  EXPECT_EQ(0x5108U, exidx_->status_address());
 
   elf_memory_.SetData32(0x5108, 0x01010203);
   ASSERT_FALSE(exidx_->ExtractEntryData(0x5000));
   ASSERT_EQ(ARM_STATUS_READ_FAILED, exidx_->status());
+  EXPECT_EQ(0x510cU, exidx_->status_address());
 }
 
 TEST_F(ArmExidxExtractTest, malformed) {

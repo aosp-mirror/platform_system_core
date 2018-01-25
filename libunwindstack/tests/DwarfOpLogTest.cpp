@@ -21,11 +21,11 @@
 
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/Log.h>
 #include <unwindstack/Regs.h>
 
-#include "DwarfError.h"
 #include "DwarfOp.h"
 
 #include "MemoryFake.h"

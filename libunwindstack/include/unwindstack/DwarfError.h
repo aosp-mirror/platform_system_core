@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,31 @@
  * limitations under the License.
  */
 
-#ifndef _LIBUNWINDSTACK_CHECK_H
-#define _LIBUNWINDSTACK_CHECK_H
+#ifndef _LIBUNWINDSTACK_DWARF_ERROR_H
+#define _LIBUNWINDSTACK_DWARF_ERROR_H
 
-#include <stdlib.h>
-
-#include <unwindstack/Log.h>
+#include <stdint.h>
 
 namespace unwindstack {
 
-#define CHECK(assertion)                                   \
-  if (__builtin_expect(!(assertion), false)) {             \
-    log(0, "%s:%d: %s\n", __FILE__, __LINE__, #assertion); \
-    abort();                                               \
-  }
+enum DwarfErrorCode : uint8_t {
+  DWARF_ERROR_NONE,
+  DWARF_ERROR_MEMORY_INVALID,
+  DWARF_ERROR_ILLEGAL_VALUE,
+  DWARF_ERROR_ILLEGAL_STATE,
+  DWARF_ERROR_STACK_INDEX_NOT_VALID,
+  DWARF_ERROR_NOT_IMPLEMENTED,
+  DWARF_ERROR_TOO_MANY_ITERATIONS,
+  DWARF_ERROR_CFA_NOT_DEFINED,
+  DWARF_ERROR_UNSUPPORTED_VERSION,
+  DWARF_ERROR_NO_FDES,
+};
+
+struct DwarfErrorData {
+  DwarfErrorCode code;
+  uint64_t address;
+};
 
 }  // namespace unwindstack
 
-#endif  // _LIBUNWINDSTACK_CHECK_H
+#endif  // _LIBUNWINDSTACK_DWARF_ERROR_H

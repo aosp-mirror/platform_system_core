@@ -23,12 +23,12 @@
 
 #include <android-base/stringprintf.h>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfLocation.h>
 #include <unwindstack/Log.h>
 
 #include "DwarfCfa.h"
 #include "DwarfEncoding.h"
-#include "DwarfError.h"
 #include "DwarfOp.h"
 
 namespace unwindstack {
@@ -44,7 +44,8 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
       (*loc_regs)[entry.first] = entry.second;
     }
   }
-  last_error_ = DWARF_ERROR_NONE;
+  last_error_.code = DWARF_ERROR_NONE;
+  last_error_.address = 0;
 
   memory_->set_cur_offset(start_offset);
   uint64_t cfa_offset;
@@ -54,7 +55,8 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
     // Read the cfa information.
     uint8_t cfa_value;
     if (!memory_->ReadBytes(&cfa_value, 1)) {
-      last_error_ = DWARF_ERROR_MEMORY_INVALID;
+      last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+      last_error_.address = memory_->cur_offset();
       return false;
     }
     uint8_t cfa_low = cfa_value & 0x3f;
@@ -66,7 +68,8 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
       case 2: {
         uint64_t offset;
         if (!memory_->ReadULEB128(&offset)) {
-          last_error_ = DWARF_ERROR_MEMORY_INVALID;
+          last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+          last_error_.address = memory_->cur_offset();
           return false;
         }
         SignedType signed_offset =
@@ -78,7 +81,7 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
       case 3: {
         if (cie_loc_regs_ == nullptr) {
           log(0, "restore while processing cie");
-          last_error_ = DWARF_ERROR_ILLEGAL_STATE;
+          last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
           return false;
         }
 
@@ -93,7 +96,7 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
       case 0: {
         const auto handle_func = DwarfCfa<AddressType>::kCallbackTable[cfa_low];
         if (handle_func == nullptr) {
-          last_error_ = DWARF_ERROR_ILLEGAL_VALUE;
+          last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
           return false;
         }
 
@@ -102,7 +105,8 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
           if (cfa->operands[i] == DW_EH_PE_block) {
             uint64_t block_length;
             if (!memory_->ReadULEB128(&block_length)) {
-              last_error_ = DWARF_ERROR_MEMORY_INVALID;
+              last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+              last_error_.address = memory_->cur_offset();
               return false;
             }
             operands_.push_back(block_length);
@@ -111,7 +115,8 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
           }
           uint64_t value;
           if (!memory_->ReadEncodedValue<AddressType>(cfa->operands[i], &value)) {
-            last_error_ = DWARF_ERROR_MEMORY_INVALID;
+            last_error_.code = DWARF_ERROR_MEMORY_INVALID;
+            last_error_.address = memory_->cur_offset();
             return false;
           }
           operands_.push_back(value);
@@ -334,7 +339,7 @@ bool DwarfCfa<AddressType>::cfa_restore(dwarf_loc_regs_t* loc_regs) {
   AddressType reg = operands_[0];
   if (cie_loc_regs_ == nullptr) {
     log(0, "restore while processing cie");
-    last_error_ = DWARF_ERROR_ILLEGAL_STATE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
     return false;
   }
   auto reg_entry = cie_loc_regs_->find(reg);
@@ -396,7 +401,7 @@ bool DwarfCfa<AddressType>::cfa_def_cfa_register(dwarf_loc_regs_t* loc_regs) {
   auto cfa_location = loc_regs->find(CFA_REG);
   if (cfa_location == loc_regs->end() || cfa_location->second.type != DWARF_LOCATION_REGISTER) {
     log(0, "Attempt to set new register, but cfa is not already set to a register.");
-    last_error_ = DWARF_ERROR_ILLEGAL_STATE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
     return false;
   }
 
@@ -410,7 +415,7 @@ bool DwarfCfa<AddressType>::cfa_def_cfa_offset(dwarf_loc_regs_t* loc_regs) {
   auto cfa_location = loc_regs->find(CFA_REG);
   if (cfa_location == loc_regs->end() || cfa_location->second.type != DWARF_LOCATION_REGISTER) {
     log(0, "Attempt to set offset, but cfa is not set to a register.");
-    last_error_ = DWARF_ERROR_ILLEGAL_STATE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
     return false;
   }
   cfa_location->second.values[1] = operands_[0];
@@ -454,7 +459,7 @@ bool DwarfCfa<AddressType>::cfa_def_cfa_offset_sf(dwarf_loc_regs_t* loc_regs) {
   auto cfa_location = loc_regs->find(CFA_REG);
   if (cfa_location == loc_regs->end() || cfa_location->second.type != DWARF_LOCATION_REGISTER) {
     log(0, "Attempt to set offset, but cfa is not set to a register.");
-    last_error_ = DWARF_ERROR_ILLEGAL_STATE;
+    last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
     return false;
   }
   SignedType offset = static_cast<SignedType>(operands_[0]) * fde_->cie->data_alignment_factor;
