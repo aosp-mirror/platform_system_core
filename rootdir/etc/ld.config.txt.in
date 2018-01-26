@@ -291,9 +291,11 @@ namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the system namespace. This is possible since their ABI is stable across
 # Android releases.
-namespace.vndk.links = system
+namespace.vndk.links = system,default
 namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+namespace.vndk.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "system" namespace
