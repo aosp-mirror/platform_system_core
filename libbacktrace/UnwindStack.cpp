@@ -139,8 +139,8 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     //   #8 pc 0015fa20 core.vdex   java.util.Arrays.binarySearch+8
     //   #9 pc 0039a1ef libartd.so  art::interpreter::Execute+719
     if (frame->dex_pc != 0) {
-      backtrace_frame_data_t* dex_frame = &frames->at(cur_frame++);
-      dex_frame->num = cur_frame;
+      backtrace_frame_data_t* dex_frame = &frames->at(cur_frame);
+      dex_frame->num = cur_frame++;
       dex_frame->pc = frame->dex_pc;
       dex_frame->rel_pc = frame->dex_pc;
       dex_frame->sp = frame->sp;
@@ -149,9 +149,9 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
       FillInDexFrame(stack_map, frame->dex_pc, dex_frame);
     }
 
-    backtrace_frame_data_t* back_frame = &frames->at(cur_frame++);
+    backtrace_frame_data_t* back_frame = &frames->at(cur_frame);
 
-    back_frame->num = cur_frame;
+    back_frame->num = cur_frame++;
 
     back_frame->rel_pc = frame->rel_pc;
     back_frame->pc = frame->pc;
