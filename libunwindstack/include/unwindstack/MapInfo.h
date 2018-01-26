@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -40,14 +41,14 @@ struct MapInfo {
         flags(flags),
         name(name),
         load_bias(static_cast<uint64_t>(-1)) {}
-  ~MapInfo() { delete elf; }
+  ~MapInfo() = default;
 
   uint64_t start = 0;
   uint64_t end = 0;
   uint64_t offset = 0;
   uint16_t flags = 0;
   std::string name;
-  Elf* elf = nullptr;
+  std::shared_ptr<Elf> elf;
   // This value is only non-zero if the offset is non-zero but there is
   // no elf signature found at that offset. This indicates that the
   // entire file is represented by the Memory object returned by CreateMemory,

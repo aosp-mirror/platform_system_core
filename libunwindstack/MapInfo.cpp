@@ -109,16 +109,46 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   // Make sure no other thread is trying to add the elf to this map.
   std::lock_guard<std::mutex> guard(mutex_);
 
-  if (elf) {
-    return elf;
+  if (elf.get() != nullptr) {
+    return elf.get();
   }
 
-  elf = new Elf(CreateMemory(process_memory));
-  elf->Init(init_gnu_debugdata);
+  bool locked = false;
+  if (Elf::CachingEnabled() && !name.empty()) {
+    Elf::CacheLock();
+    locked = true;
+    if (offset != 0) {
+      std::string hash(name + ':' + std::to_string(offset));
+      if (Elf::CacheGet(hash, &elf)) {
+        Elf::CacheUnlock();
+        return elf.get();
+      }
+    } else if (Elf::CacheGet(name, &elf)) {
+      Elf::CacheUnlock();
+      return elf.get();
+    }
+  }
 
+  Memory* memory = CreateMemory(process_memory);
+  if (locked && offset != 0 && elf_offset != 0) {
+    // In this case, the whole file is the elf, need to see if the elf
+    // data was cached.
+    if (Elf::CacheGet(name, &elf)) {
+      delete memory;
+      Elf::CacheUnlock();
+      return elf.get();
+    }
+  }
+  elf.reset(new Elf(memory));
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
-  return elf;
+  elf->Init(init_gnu_debugdata);
+
+  if (locked) {
+    Elf::CacheAdd(this);
+    Elf::CacheUnlock();
+  }
+  return elf.get();
 }
 
 uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {

@@ -124,6 +124,7 @@ cc_test {
         "tests/DwarfOpTest.cpp",
         "tests/DwarfSectionTest.cpp",
         "tests/DwarfSectionImplTest.cpp",
+        "tests/ElfCacheTest.cpp",
         "tests/ElfFake.cpp",
         "tests/ElfInterfaceArmTest.cpp",
         "tests/ElfInterfaceTest.cpp",
