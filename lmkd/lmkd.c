@@ -122,13 +122,30 @@ static bool is_go_device;
 static bool kill_heaviest_task;
 static unsigned long kill_timeout_ms;
 
-/* control socket listen and data */
-static int ctrl_lfd;
-static int ctrl_dfd = -1;
-static int ctrl_dfd_reopened; /* did we reopen ctrl conn on this loop? */
+/* data required to handle events */
+struct event_handler_info {
+    int data;
+    void (*handler)(int data, uint32_t events);
+};
 
-/* 3 memory pressure levels, 1 ctrl listen socket, 1 ctrl data socket */
-#define MAX_EPOLL_EVENTS 5
+/* data required to handle socket events */
+struct sock_event_handler_info {
+    int sock;
+    struct event_handler_info handler_info;
+};
+
+/* max supported number of data connections */
+#define MAX_DATA_CONN 2
+
+/* socket event handler data */
+static struct sock_event_handler_info ctrl_sock;
+static struct sock_event_handler_info data_sock[MAX_DATA_CONN];
+
+/* vmpressure event handler data */
+static struct event_handler_info vmpressure_hinfo[VMPRESS_LEVEL_COUNT];
+
+/* 3 memory pressure levels, 1 ctrl listen socket, 2 ctrl data socket */
+#define MAX_EPOLL_EVENTS (1 + MAX_DATA_CONN + VMPRESS_LEVEL_COUNT)
 static int epollfd;
 static int maxevents;
 
@@ -398,17 +415,24 @@ static void cmd_target(int ntargets, int *params) {
     }
 }
 
-static void ctrl_data_close(void) {
-    ALOGI("Closing Activity Manager data connection");
-    close(ctrl_dfd);
-    ctrl_dfd = -1;
+static void ctrl_data_close(int dsock_idx) {
+    struct epoll_event epev;
+
+    ALOGI("closing lmkd data connection");
+    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, data_sock[dsock_idx].sock, &epev) == -1) {
+        // Log a warning and keep going
+        ALOGW("epoll_ctl for data connection socket failed; errno=%d", errno);
+    }
     maxevents--;
+
+    close(data_sock[dsock_idx].sock);
+    data_sock[dsock_idx].sock = -1;
 }
 
-static int ctrl_data_read(char *buf, size_t bufsz) {
+static int ctrl_data_read(int dsock_idx, char *buf, size_t bufsz) {
     int ret = 0;
 
-    ret = read(ctrl_dfd, buf, bufsz);
+    ret = read(data_sock[dsock_idx].sock, buf, bufsz);
 
     if (ret == -1) {
         ALOGE("control data socket read failed; errno=%d", errno);
@@ -420,14 +444,14 @@ static int ctrl_data_read(char *buf, size_t bufsz) {
     return ret;
 }
 
-static void ctrl_command_handler(void) {
+static void ctrl_command_handler(int dsock_idx) {
     int ibuf[CTRL_PACKET_MAX / sizeof(int)];
     int len;
     int cmd = -1;
     int nargs;
     int targets;
 
-    len = ctrl_data_read((char *)ibuf, CTRL_PACKET_MAX);
+    len = ctrl_data_read(dsock_idx, (char *)ibuf, CTRL_PACKET_MAX);
     if (len <= 0)
         return;
 
@@ -465,40 +489,57 @@ wronglen:
     ALOGE("Wrong control socket read length cmd=%d len=%d", cmd, len);
 }
 
-static void ctrl_data_handler(uint32_t events) {
-    if (events & EPOLLHUP) {
-        ALOGI("ActivityManager disconnected");
-        if (!ctrl_dfd_reopened)
-            ctrl_data_close();
-    } else if (events & EPOLLIN) {
-        ctrl_command_handler();
+static void ctrl_data_handler(int data, uint32_t events) {
+    if (events & EPOLLIN) {
+        ctrl_command_handler(data);
     }
 }
 
-static void ctrl_connect_handler(uint32_t events __unused) {
-    struct epoll_event epev;
+static int get_free_dsock() {
+    for (int i = 0; i < MAX_DATA_CONN; i++) {
+        if (data_sock[i].sock < 0) {
+            return i;
+        }
+    }
+    return -1;
+}
 
-    if (ctrl_dfd >= 0) {
-        ctrl_data_close();
-        ctrl_dfd_reopened = 1;
+static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
+    struct epoll_event epev;
+    int free_dscock_idx = get_free_dsock();
+
+    if (free_dscock_idx < 0) {
+        /*
+         * Number of data connections exceeded max supported. This should not
+         * happen but if it does we drop all existing connections and accept
+         * the new one. This prevents inactive connections from monopolizing
+         * data socket and if we drop ActivityManager connection it will
+         * immediately reconnect.
+         */
+        for (int i = 0; i < MAX_DATA_CONN; i++) {
+            ctrl_data_close(i);
+        }
+        free_dscock_idx = 0;
     }
 
-    ctrl_dfd = accept(ctrl_lfd, NULL, NULL);
-
-    if (ctrl_dfd < 0) {
+    data_sock[free_dscock_idx].sock = accept(ctrl_sock.sock, NULL, NULL);
+    if (data_sock[free_dscock_idx].sock < 0) {
         ALOGE("lmkd control socket accept failed; errno=%d", errno);
         return;
     }
 
-    ALOGI("ActivityManager connected");
-    maxevents++;
+    ALOGI("lmkd data connection established");
+    /* use data to store data connection idx */
+    data_sock[free_dscock_idx].handler_info.data = free_dscock_idx;
+    data_sock[free_dscock_idx].handler_info.handler = ctrl_data_handler;
     epev.events = EPOLLIN;
-    epev.data.ptr = (void *)ctrl_data_handler;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ctrl_dfd, &epev) == -1) {
+    epev.data.ptr = (void *)&(data_sock[free_dscock_idx].handler_info);
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, data_sock[free_dscock_idx].sock, &epev) == -1) {
         ALOGE("epoll_ctl for data connection socket failed; errno=%d", errno);
-        ctrl_data_close();
+        ctrl_data_close(free_dscock_idx);
         return;
     }
+    maxevents++;
 }
 
 static int zoneinfo_parse_protection(char *cp) {
@@ -802,7 +843,7 @@ static inline unsigned long get_time_diff_ms(struct timeval *from,
            (to->tv_usec - from->tv_usec) / 1000;
 }
 
-static void mp_event_common(enum vmpressure_level level) {
+static void mp_event_common(int data, uint32_t events __unused) {
     int ret;
     unsigned long long evcount;
     int64_t mem_usage, memsw_usage;
@@ -811,6 +852,7 @@ static void mp_event_common(enum vmpressure_level level) {
     struct mem_size free_mem;
     static struct timeval last_report_tm;
     static unsigned long skip_count = 0;
+    enum vmpressure_level level = (enum vmpressure_level)data;
 
     /*
      * Check all event counters from low to critical
@@ -927,26 +969,15 @@ do_kill:
     }
 }
 
-static void mp_event_low(uint32_t events __unused) {
-    mp_event_common(VMPRESS_LEVEL_LOW);
-}
-
-static void mp_event_medium(uint32_t events __unused) {
-    mp_event_common(VMPRESS_LEVEL_MEDIUM);
-}
-
-static void mp_event_critical(uint32_t events __unused) {
-    mp_event_common(VMPRESS_LEVEL_CRITICAL);
-}
-
-static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
+static bool init_mp_common(enum vmpressure_level level) {
     int mpfd;
     int evfd;
     int evctlfd;
     char buf[256];
     struct epoll_event epev;
     int ret;
-    const char *levelstr = level_name[level];
+    int level_idx = (int)level;
+    const char *levelstr = level_name[level_idx];
 
     mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
     if (mpfd < 0) {
@@ -972,7 +1003,7 @@ static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
         goto err;
     }
 
-    ret = write(evctlfd, buf, strlen(buf) + 1);
+    ret = TEMP_FAILURE_RETRY(write(evctlfd, buf, strlen(buf) + 1));
     if (ret == -1) {
         ALOGE("cgroup.event_control write failed for level %s; errno=%d",
               levelstr, errno);
@@ -980,7 +1011,10 @@ static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
     }
 
     epev.events = EPOLLIN;
-    epev.data.ptr = event_handler;
+    /* use data to store event level */
+    vmpressure_hinfo[level_idx].data = level_idx;
+    vmpressure_hinfo[level_idx].handler = mp_event_common;
+    epev.data.ptr = (void *)&vmpressure_hinfo[level_idx];
     ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, evfd, &epev);
     if (ret == -1) {
         ALOGE("epoll_ctl for level %s failed; errno=%d", levelstr, errno);
@@ -1017,21 +1051,27 @@ static int init(void) {
         return -1;
     }
 
-    ctrl_lfd = android_get_control_socket("lmkd");
-    if (ctrl_lfd < 0) {
+    // mark data connections as not connected
+    for (int i = 0; i < MAX_DATA_CONN; i++) {
+        data_sock[i].sock = -1;
+    }
+
+    ctrl_sock.sock = android_get_control_socket("lmkd");
+    if (ctrl_sock.sock < 0) {
         ALOGE("get lmkd control socket failed");
         return -1;
     }
 
-    ret = listen(ctrl_lfd, 1);
+    ret = listen(ctrl_sock.sock, MAX_DATA_CONN);
     if (ret < 0) {
         ALOGE("lmkd control socket listen failed (errno=%d)", errno);
         return -1;
     }
 
     epev.events = EPOLLIN;
-    epev.data.ptr = (void *)ctrl_connect_handler;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ctrl_lfd, &epev) == -1) {
+    ctrl_sock.handler_info.handler = ctrl_connect_handler;
+    epev.data.ptr = (void *)&(ctrl_sock.handler_info);
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ctrl_sock.sock, &epev) == -1) {
         ALOGE("epoll_ctl for lmkd control socket failed (errno=%d)", errno);
         return -1;
     }
@@ -1043,10 +1083,9 @@ static int init(void) {
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
     } else {
-        if (!init_mp_common((void *)&mp_event_low, VMPRESS_LEVEL_LOW) ||
-            !init_mp_common((void *)&mp_event_medium, VMPRESS_LEVEL_MEDIUM) ||
-            !init_mp_common((void *)&mp_event_critical,
-                            VMPRESS_LEVEL_CRITICAL)) {
+        if (!init_mp_common(VMPRESS_LEVEL_LOW) ||
+            !init_mp_common(VMPRESS_LEVEL_MEDIUM) ||
+            !init_mp_common(VMPRESS_LEVEL_CRITICAL)) {
             ALOGE("Kernel does not support memory pressure events or in-kernel low memory killer");
             return -1;
         }
@@ -1061,12 +1100,14 @@ static int init(void) {
 }
 
 static void mainloop(void) {
+    struct event_handler_info* handler_info;
+    struct epoll_event *evt;
+
     while (1) {
         struct epoll_event events[maxevents];
         int nevents;
         int i;
 
-        ctrl_dfd_reopened = 0;
         nevents = epoll_wait(epollfd, events, maxevents, -1);
 
         if (nevents == -1) {
@@ -1076,11 +1117,33 @@ static void mainloop(void) {
             continue;
         }
 
-        for (i = 0; i < nevents; ++i) {
-            if (events[i].events & EPOLLERR)
+        /*
+         * First pass to see if any data socket connections were dropped.
+         * Dropped connection should be handled before any other events
+         * to deallocate data connection and correctly handle cases when
+         * connection gets dropped and reestablished in the same epoll cycle.
+         * In such cases it's essential to handle connection closures first.
+         */
+        for (i = 0, evt = &events[0]; i < nevents; ++i, evt++) {
+            if ((evt->events & EPOLLHUP) && evt->data.ptr) {
+                ALOGI("lmkd data connection dropped");
+                handler_info = (struct event_handler_info*)evt->data.ptr;
+                ctrl_data_close(handler_info->data);
+            }
+        }
+
+        /* Second pass to handle all other events */
+        for (i = 0, evt = &events[0]; i < nevents; ++i, evt++) {
+            if (evt->events & EPOLLERR)
                 ALOGD("EPOLLERR on event #%d", i);
-            if (events[i].data.ptr)
-                (*(void (*)(uint32_t))events[i].data.ptr)(events[i].events);
+            if (evt->events & EPOLLHUP) {
+                /* This case was handled in the first pass */
+                continue;
+            }
+            if (evt->data.ptr) {
+                handler_info = (struct event_handler_info*)evt->data.ptr;
+                handler_info->handler(handler_info->data, evt->events);
+            }
         }
     }
 }
