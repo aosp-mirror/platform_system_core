@@ -35,6 +35,10 @@
 
 namespace unwindstack {
 
+bool Elf::cache_enabled_;
+std::unordered_map<std::string, std::shared_ptr<Elf>>* Elf::cache_;
+std::mutex* Elf::cache_lock_;
+
 bool Elf::Init(bool init_gnu_debugdata) {
   load_bias_ = 0;
   if (!memory_) {
@@ -299,6 +303,44 @@ uint64_t Elf::GetLoadBias(Memory* memory) {
     return ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(memory);
   }
   return 0;
+}
+
+void Elf::SetCachingEnabled(bool enable) {
+  if (!cache_enabled_ && enable) {
+    cache_enabled_ = true;
+    cache_ = new std::unordered_map<std::string, std::shared_ptr<Elf>>;
+    cache_lock_ = new std::mutex;
+  } else if (cache_enabled_ && !enable) {
+    cache_enabled_ = false;
+    delete cache_;
+    delete cache_lock_;
+  }
+}
+
+void Elf::CacheLock() {
+  cache_lock_->lock();
+}
+
+void Elf::CacheUnlock() {
+  cache_lock_->unlock();
+}
+
+void Elf::CacheAdd(MapInfo* info) {
+  if (info->offset == 0) {
+    (*cache_)[info->name] = info->elf;
+  } else {
+    std::string name(info->name + ':' + std::to_string(info->offset));
+    (*cache_)[name] = info->elf;
+  }
+}
+
+bool Elf::CacheGet(const std::string& name, std::shared_ptr<Elf>* elf) {
+  auto entry = cache_->find(name);
+  if (entry != cache_->end()) {
+    *elf = entry->second;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace unwindstack
