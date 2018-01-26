@@ -28,3 +28,23 @@ LOCAL_SRC_FILES:= $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_PACKAGE_NAME := oemlibrarytest-system
+LOCAL_MODULE_TAGS := tests
+LOCAL_MANIFEST_FILE := system/AndroidManifest.xml
+LOCAL_SRC_FILES := $(call all-java-files-under, src)
+LOCAL_SDK_VERSION := current
+LOCAL_PROGUARD_ENABLED := disabled
+LOCAL_MODULE_PATH := $(TARGET_OUT_APPS)
+include $(BUILD_PACKAGE)
+
+include $(CLEAR_VARS)
+LOCAL_PACKAGE_NAME := oemlibrarytest-vendor
+LOCAL_MODULE_TAGS := tests
+LOCAL_MANIFEST_FILE := vendor/AndroidManifest.xml
+LOCAL_SRC_FILES := $(call all-java-files-under, src)
+LOCAL_SDK_VERSION := current
+LOCAL_PROGUARD_ENABLED := disabled
+LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR_APPS)
+include $(BUILD_PACKAGE)

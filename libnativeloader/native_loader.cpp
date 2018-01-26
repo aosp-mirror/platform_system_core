@@ -236,6 +236,10 @@ class LibraryNamespaces {
       // Different name is useful for debugging
       namespace_name = kVendorClassloaderNamespaceName;
       ALOGD("classloader namespace configured for unbundled vendor apk. library_path=%s", library_path.c_str());
+    } else if (!oem_public_libraries_.empty()) {
+      // oem_public_libraries are NOT available to vendor apks, otherwise it
+      // would be system->vendor violation.
+      system_exposed_libraries = system_exposed_libraries + ":" + oem_public_libraries_.c_str();
     }
 
     NativeLoaderNamespace native_loader_ns;
@@ -353,9 +357,36 @@ class LibraryNamespaces {
         "Error reading public native library list from \"%s\": %s",
         public_native_libraries_system_config.c_str(), error_msg.c_str());
 
+    // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
+    // variable to add libraries to the list. This is intended for platform tests only.
+    if (is_debuggable()) {
+      const char* additional_libs = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
+      if (additional_libs != nullptr && additional_libs[0] != '\0') {
+        std::vector<std::string> additional_libs_vector = base::Split(additional_libs, ":");
+        std::copy(additional_libs_vector.begin(), additional_libs_vector.end(),
+                  std::back_inserter(sonames));
+      }
+    }
+
+    // android_init_namespaces() expects all the public libraries
+    // to be loaded so that they can be found by soname alone.
+    //
+    // TODO(dimitry): this is a bit misleading since we do not know
+    // if the vendor public library is going to be opened from /vendor/lib
+    // we might as well end up loading them from /system/lib
+    // For now we rely on CTS test to catch things like this but
+    // it should probably be addressed in the future.
+    for (const auto& soname : sonames) {
+      LOG_ALWAYS_FATAL_IF(dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE) == nullptr,
+                          "Error preloading public library %s: %s", soname.c_str(), dlerror());
+    }
+
+    system_public_libraries_ = base::Join(sonames, ':');
+
     // read /system/etc/public.libraries-<companyname>.txt which contain partner defined
     // system libs that are exposed to apps. The libs in the txt files must be
     // named as lib<name>.<companyname>.so.
+    sonames.clear();
     std::string dirname = base::Dirname(public_native_libraries_system_config);
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname.c_str()), closedir);
     if (dir != nullptr) {
@@ -396,38 +427,11 @@ class LibraryNamespaces {
         }
       }
     }
+    oem_public_libraries_ = base::Join(sonames, ':');
 
     // Insert VNDK version to llndk and vndksp config file names.
     insert_vndk_version_str(&llndk_native_libraries_system_config);
     insert_vndk_version_str(&vndksp_native_libraries_system_config);
-
-    // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
-    // variable to add libraries to the list. This is intended for platform tests only.
-    if (is_debuggable()) {
-      const char* additional_libs = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
-      if (additional_libs != nullptr && additional_libs[0] != '\0') {
-        std::vector<std::string> additional_libs_vector = base::Split(additional_libs, ":");
-        std::copy(additional_libs_vector.begin(),
-                  additional_libs_vector.end(),
-                  std::back_inserter(sonames));
-      }
-    }
-
-    // android_init_namespaces() expects all the public libraries
-    // to be loaded so that they can be found by soname alone.
-    //
-    // TODO(dimitry): this is a bit misleading since we do not know
-    // if the vendor public library is going to be opened from /vendor/lib
-    // we might as well end up loading them from /system/lib
-    // For now we rely on CTS test to catch things like this but
-    // it should probably be addressed in the future.
-    for (const auto& soname : sonames) {
-      LOG_ALWAYS_FATAL_IF(dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE) == nullptr,
-                          "Error preloading public library %s: %s",
-                          soname.c_str(), dlerror());
-    }
-
-    system_public_libraries_ = base::Join(sonames, ':');
 
     sonames.clear();
     ReadConfig(llndk_native_libraries_system_config, &sonames, always_true);
@@ -554,6 +558,7 @@ class LibraryNamespaces {
   std::vector<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
   std::string system_public_libraries_;
   std::string vendor_public_libraries_;
+  std::string oem_public_libraries_;
   std::string system_llndk_libraries_;
   std::string system_vndksp_libraries_;
 
