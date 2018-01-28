@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include <unwindstack/Error.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -74,6 +75,9 @@ class Unwinder {
 
   void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
 
+  ErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
+
  private:
   void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc, uint64_t adjusted_pc);
 
@@ -83,6 +87,7 @@ class Unwinder {
   std::vector<FrameData> frames_;
   std::shared_ptr<Memory> process_memory_;
   JitDebug* jit_debug_ = nullptr;
+  ErrorData last_error_;
 };
 
 }  // namespace unwindstack

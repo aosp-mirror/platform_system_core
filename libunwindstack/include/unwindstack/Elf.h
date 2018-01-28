@@ -22,6 +22,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/Memory.h>
@@ -72,6 +73,10 @@ class Elf {
 
   bool IsValidPc(uint64_t pc);
 
+  void GetLastError(ErrorData* data);
+  ErrorCode GetLastErrorCode();
+  uint64_t GetLastErrorAddress();
+
   bool valid() { return valid_; }
 
   uint32_t machine_type() { return machine_type_; }
@@ -92,6 +97,14 @@ class Elf {
 
   static uint64_t GetLoadBias(Memory* memory);
 
+  static void SetCachingEnabled(bool enable);
+  static bool CachingEnabled() { return cache_enabled_; }
+
+  static void CacheLock();
+  static void CacheUnlock();
+  static void CacheAdd(MapInfo* info);
+  static bool CacheGet(const std::string& name, std::shared_ptr<Elf>* elf);
+
  protected:
   bool valid_ = false;
   uint64_t load_bias_ = 0;
@@ -105,6 +118,10 @@ class Elf {
 
   std::unique_ptr<Memory> gnu_debugdata_memory_;
   std::unique_ptr<ElfInterface> gnu_debugdata_interface_;
+
+  static bool cache_enabled_;
+  static std::unordered_map<std::string, std::shared_ptr<Elf>>* cache_;
+  static std::mutex* cache_lock_;
 };
 
 }  // namespace unwindstack

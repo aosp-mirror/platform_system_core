@@ -22,6 +22,7 @@
 #include <iterator>
 #include <unordered_map>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfLocation.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/DwarfStructs.h>
@@ -29,7 +30,6 @@
 namespace unwindstack {
 
 // Forward declarations.
-enum DwarfError : uint8_t;
 class Memory;
 class Regs;
 
@@ -72,7 +72,8 @@ class DwarfSection {
   iterator begin() { return iterator(this, 0); }
   iterator end() { return iterator(this, fde_count_); }
 
-  DwarfError last_error() { return last_error_; }
+  DwarfErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
 
   virtual bool Init(uint64_t offset, uint64_t size) = 0;
 
@@ -100,7 +101,7 @@ class DwarfSection {
 
  protected:
   DwarfMemory memory_;
-  DwarfError last_error_;
+  DwarfErrorData last_error_{DWARF_ERROR_NONE, 0};
 
   uint32_t cie32_value_ = 0;
   uint64_t cie64_value_ = 0;

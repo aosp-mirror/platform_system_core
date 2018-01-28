@@ -62,7 +62,7 @@ class JitDebugTest : public ::testing::Test {
     ElfInterfaceFake* interface = new ElfInterfaceFake(elf_memories_.back());
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
-    map_info->elf = elf;
+    map_info->elf.reset(elf);
 
     map_info = maps_->Get(5);
     ASSERT_TRUE(map_info != nullptr);
@@ -72,7 +72,7 @@ class JitDebugTest : public ::testing::Test {
     interface = new ElfInterfaceFake(elf_memories_.back());
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
-    map_info->elf = elf;
+    map_info->elf.reset(elf);
 
     map_info = maps_->Get(6);
     ASSERT_TRUE(map_info != nullptr);
@@ -82,7 +82,7 @@ class JitDebugTest : public ::testing::Test {
     interface = new ElfInterfaceFake(elf_memories_.back());
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
-    map_info->elf = elf;
+    map_info->elf.reset(elf);
   }
 
   template <typename EhdrType, typename ShdrType>

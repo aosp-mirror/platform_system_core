@@ -19,9 +19,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfError.h>
+
 #include "DwarfEhFrameWithHdr.h"
 #include "DwarfEncoding.h"
-#include "DwarfError.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
@@ -97,25 +98,29 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, Init) {
   // Verify a zero fde count fails to init.
   this->memory_.SetData32(0x1006, 0);
   ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
-  ASSERT_EQ(DWARF_ERROR_NO_FDES, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_NO_FDES, this->eh_frame_->LastErrorCode());
 
   // Verify an unexpected version will cause a fail.
   this->memory_.SetData32(0x1006, 126);
   this->memory_.SetData8(0x1000, 0);
   ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
-  ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->LastErrorCode());
   this->memory_.SetData8(0x1000, 2);
   ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100));
-  ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->eh_frame_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_expect_cache_fail) {
   this->eh_frame_->TestSetTableEntrySize(0x10);
   this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
+  this->eh_frame_->TestSetEntriesOffset(0x1000);
+
   ASSERT_TRUE(this->eh_frame_->GetFdeInfoFromIndex(0) == nullptr);
-  ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->eh_frame_->LastErrorCode());
+  EXPECT_EQ(0x1000U, this->eh_frame_->LastErrorAddress());
   ASSERT_TRUE(this->eh_frame_->GetFdeInfoFromIndex(0) == nullptr);
-  ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->eh_frame_->LastErrorCode());
+  EXPECT_EQ(0x1000U, this->eh_frame_->LastErrorAddress());
 }
 
 TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_read_pcrel) {
@@ -184,7 +189,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetBinary_verify) {
   uint64_t fde_offset;
   EXPECT_FALSE(this->eh_frame_->GetFdeOffsetBinary(0x100, &fde_offset, 10));
   // Not an error, just not found.
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
   // Even number of elements.
   for (size_t i = 0; i < 10; i++) {
     TypeParam pc = 0x1000 * (i + 1);
@@ -280,7 +285,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetSequential_end_check) {
 
   uint64_t fde_offset;
   ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x540, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_fail_fde_count) {
@@ -288,7 +293,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_fail_fde_count) {
 
   uint64_t fde_offset;
   ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x100, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_binary_search) {

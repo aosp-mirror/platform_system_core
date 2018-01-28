@@ -281,6 +281,10 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"warm_reset_0x80", 141},
     {"pon_reason_0xb0", 142},
     {"reboot_download", 143},
+    {"reboot_recovery_mode", 144},
+    {"oem_sdi_err_fatal", 145},
+    {"pmic_watchdog", 146},
+    {"software_master", 147},
 };
 
 // Converts a string value representing the reason the system booted to an

@@ -60,7 +60,7 @@ class UnwinderTest : public ::testing::Test {
     maps_.FakeClear();
     MapInfo* info = new MapInfo(0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so");
     ElfFake* elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
@@ -73,25 +73,25 @@ class UnwinderTest : public ::testing::Test {
 
     info = new MapInfo(0x20000, 0x22000, 0, PROT_READ | PROT_WRITE, "/system/fake/libunwind.so");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x23000, 0x24000, 0, PROT_READ | PROT_WRITE, "/fake/libanother.so");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
@@ -129,6 +129,7 @@ TEST_F(UnwinderTest, multiple_frames) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -184,6 +185,7 @@ TEST_F(UnwinderTest, non_zero_map_offset) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -218,6 +220,7 @@ TEST_F(UnwinderTest, no_frames_after_finished) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -248,6 +251,7 @@ TEST_F(UnwinderTest, max_frames) {
 
   Unwinder unwinder(20, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_MAX_FRAMES_EXCEEDED, unwinder.LastErrorCode());
 
   ASSERT_EQ(20U, unwinder.NumFrames());
 
@@ -288,6 +292,7 @@ TEST_F(UnwinderTest, verify_frames_skipped) {
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   std::vector<std::string> skip_libs{"libunwind.so", "libanother.so"};
   unwinder.Unwind(&skip_libs);
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -346,6 +351,7 @@ TEST_F(UnwinderTest, sp_not_in_map) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(2U, unwinder.NumFrames());
 
@@ -392,6 +398,7 @@ TEST_F(UnwinderTest, pc_in_device_stops_unwind) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 }
@@ -410,6 +417,7 @@ TEST_F(UnwinderTest, sp_in_device_stops_unwind) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 }
@@ -423,6 +431,7 @@ TEST_F(UnwinderTest, pc_without_map) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_INVALID_MAP, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -457,6 +466,7 @@ TEST_F(UnwinderTest, speculative_frame) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -517,6 +527,7 @@ TEST_F(UnwinderTest, speculative_frame_removed) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -552,6 +563,7 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   std::vector<std::string> suffixes{"oat"};
   unwinder.Unwind(nullptr, &suffixes);
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(2U, unwinder.NumFrames());
   // Make sure the elf was not initialized.
@@ -607,6 +619,7 @@ TEST_F(UnwinderTest, sp_pc_do_not_change) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_REPEATED_FRAME, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 

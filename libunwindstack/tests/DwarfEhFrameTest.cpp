@@ -19,9 +19,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfError.h>
+
 #include "DwarfEhFrame.h"
 #include "DwarfEncoding.h"
-#include "DwarfError.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
@@ -142,7 +143,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init32_fde_not_following_cie) {
   this->memory_.SetData32(0x510c, 0x200);
 
   ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600));
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, Init64) {
@@ -228,7 +229,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init64_fde_not_following_cie) {
   this->memory_.SetData64(0x511c, 0x200);
 
   ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600));
-  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, Init_version1) {
@@ -320,11 +321,11 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc) {
   this->eh_frame_->TestSetFdeCount(0);
   uint64_t fde_offset;
   ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x1000, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
 
   this->eh_frame_->TestSetFdeCount(9);
   ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x100, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
   // Odd number of elements.
   for (size_t i = 0; i < 9; i++) {
     TypeParam pc = 0x1000 * (i + 1);
@@ -337,7 +338,7 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc) {
     EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
     ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xfff, &fde_offset))
         << "Failed at index " << i;
-    ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+    ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
   }
 
   // Even number of elements.
@@ -358,7 +359,7 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeOffsetFromPc) {
     EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
     ASSERT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xfff, &fde_offset))
         << "Failed at index " << i;
-    ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->last_error());
+    ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
   }
 }
 

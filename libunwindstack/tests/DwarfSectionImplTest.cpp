@@ -19,10 +19,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfSection.h>
 
 #include "DwarfEncoding.h"
-#include "DwarfError.h"
 
 #include "LogFake.h"
 #include "MemoryFake.h"
@@ -67,7 +67,7 @@ class MockDwarfSectionImpl : public DwarfSectionImpl<TypeParam> {
   }
   void TestClearCachedCieLocRegs() { this->cie_loc_regs_.clear(); }
 
-  void TestClearError() { this->last_error_ = DWARF_ERROR_NONE; }
+  void TestClearError() { this->last_error_.code = DWARF_ERROR_NONE; }
 };
 
 template <typename TypeParam>
@@ -102,7 +102,8 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_eval_fail) {
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x2, 0x5000}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->LastErrorCode());
+  EXPECT_EQ(0x5000U, this->section_->LastErrorAddress());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_no_stack) {
@@ -118,7 +119,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_no_stack) {
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x2, 0x5000}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr) {
@@ -172,7 +173,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_is_register) {
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x2, 0x5000}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_NOT_IMPLEMENTED, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_NOT_IMPLEMENTED, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_bad_regs) {
@@ -182,7 +183,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_bad_regs) {
 
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_no_cfa) {
@@ -192,7 +193,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_no_cfa) {
 
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_CFA_NOT_DEFINED, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_CFA_NOT_DEFINED, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_bad) {
@@ -203,25 +204,25 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_bad) {
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {20, 0}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 
   this->section_->TestClearError();
   loc_regs.erase(CFA_REG);
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_INVALID, {0, 0}};
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 
   this->section_->TestClearError();
   loc_regs.erase(CFA_REG);
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_OFFSET, {0, 0}};
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 
   this->section_->TestClearError();
   loc_regs.erase(CFA_REG);
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_VAL_OFFSET, {0, 0}};
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_register_prev) {
@@ -341,7 +342,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_invalid_register) {
   loc_regs[1] = DwarfLocation{DWARF_LOCATION_REGISTER, {10, 0}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_different_reg_locations) {
@@ -489,10 +490,12 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_reg_val_expr) {
 
 TYPED_TEST_P(DwarfSectionImplTest, GetCie_fail_should_not_cache) {
   ASSERT_TRUE(this->section_->GetCie(0x4000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->LastErrorCode());
+  EXPECT_EQ(0x4000U, this->section_->LastErrorAddress());
   this->section_->TestClearError();
   ASSERT_TRUE(this->section_->GetCie(0x4000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->LastErrorCode());
+  EXPECT_EQ(0x4000U, this->section_->LastErrorAddress());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, GetCie_32_version_check) {
@@ -518,24 +521,24 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_32_version_check) {
   EXPECT_EQ(4U, cie->code_alignment_factor);
   EXPECT_EQ(8, cie->data_alignment_factor);
   EXPECT_EQ(0x20U, cie->return_address_register);
-  EXPECT_EQ(DWARF_ERROR_NONE, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_NONE, this->section_->LastErrorCode());
 
   this->section_->TestClearCachedCieEntry();
   // Set version to 0, 2, 5 and verify we fail.
   this->memory_.SetData8(0x5008, 0x0);
   this->section_->TestClearError();
   ASSERT_TRUE(this->section_->GetCie(0x5000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->section_->LastErrorCode());
 
   this->memory_.SetData8(0x5008, 0x2);
   this->section_->TestClearError();
   ASSERT_TRUE(this->section_->GetCie(0x5000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->section_->LastErrorCode());
 
   this->memory_.SetData8(0x5008, 0x5);
   this->section_->TestClearError();
   ASSERT_TRUE(this->section_->GetCie(0x5000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_UNSUPPORTED_VERSION, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, GetCie_negative_data_alignment_factor) {
@@ -681,10 +684,12 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCie_version_4) {
 
 TYPED_TEST_P(DwarfSectionImplTest, GetFdeFromOffset_fail_should_not_cache) {
   ASSERT_TRUE(this->section_->GetFdeFromOffset(0x4000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->LastErrorCode());
+  EXPECT_EQ(0x4000U, this->section_->LastErrorAddress());
   this->section_->TestClearError();
   ASSERT_TRUE(this->section_->GetFdeFromOffset(0x4000) == nullptr);
-  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->last_error());
+  EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->LastErrorCode());
+  EXPECT_EQ(0x4000U, this->section_->LastErrorAddress());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, GetFdeFromOffset_32_no_augment) {

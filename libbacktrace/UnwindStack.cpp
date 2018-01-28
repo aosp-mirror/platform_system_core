@@ -128,11 +128,30 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   }
   frames->resize(total_frames);
   size_t cur_frame = 0;
-  for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++, cur_frame++) {
+  for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++) {
     auto frame = &unwinder_frames[i];
+
+    // Inject extra 'virtual' frame that represents the dex pc data.
+    // The dex pc is magic register defined in the Mterp interpreter,
+    // and thus it will be restored/observed in the frame after it.
+    // Adding the dex frame first here will create something like:
+    //   #7 pc 006b1ba1 libartd.so  ExecuteMterpImpl+14625
+    //   #8 pc 0015fa20 core.vdex   java.util.Arrays.binarySearch+8
+    //   #9 pc 0039a1ef libartd.so  art::interpreter::Execute+719
+    if (frame->dex_pc != 0) {
+      backtrace_frame_data_t* dex_frame = &frames->at(cur_frame);
+      dex_frame->num = cur_frame++;
+      dex_frame->pc = frame->dex_pc;
+      dex_frame->rel_pc = frame->dex_pc;
+      dex_frame->sp = frame->sp;
+      dex_frame->stack_size = 0;
+      dex_frame->func_offset = 0;
+      FillInDexFrame(stack_map, frame->dex_pc, dex_frame);
+    }
+
     backtrace_frame_data_t* back_frame = &frames->at(cur_frame);
 
-    back_frame->num = cur_frame;
+    back_frame->num = cur_frame++;
 
     back_frame->rel_pc = frame->rel_pc;
     back_frame->pc = frame->pc;
@@ -147,19 +166,6 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     back_frame->map.offset = frame->map_offset;
     back_frame->map.load_bias = frame->map_load_bias;
     back_frame->map.flags = frame->map_flags;
-
-    // Inject a frame that represents the dex pc data.
-    if (frame->dex_pc != 0) {
-      cur_frame++;
-      backtrace_frame_data_t* dex_frame = &frames->at(cur_frame);
-      dex_frame->num = cur_frame;
-      dex_frame->pc = frame->dex_pc;
-      dex_frame->rel_pc = frame->dex_pc;
-      dex_frame->sp = back_frame->sp;
-      dex_frame->stack_size = 0;
-      dex_frame->func_offset = 0;
-      FillInDexFrame(stack_map, frame->dex_pc, dex_frame);
-    }
   }
 
   return true;

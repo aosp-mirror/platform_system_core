@@ -21,7 +21,7 @@
 
 namespace unwindstack {
 
-enum DwarfError : uint8_t {
+enum DwarfErrorCode : uint8_t {
   DWARF_ERROR_NONE,
   DWARF_ERROR_MEMORY_INVALID,
   DWARF_ERROR_ILLEGAL_VALUE,
@@ -32,6 +32,11 @@ enum DwarfError : uint8_t {
   DWARF_ERROR_CFA_NOT_DEFINED,
   DWARF_ERROR_UNSUPPORTED_VERSION,
   DWARF_ERROR_NO_FDES,
+};
+
+struct DwarfErrorData {
+  DwarfErrorCode code;
+  uint64_t address;
 };
 
 }  // namespace unwindstack

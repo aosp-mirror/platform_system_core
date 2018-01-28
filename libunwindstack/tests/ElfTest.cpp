@@ -581,4 +581,30 @@ TEST_F(ElfTest, is_valid_pc_from_gnu_debugdata) {
   EXPECT_TRUE(elf.IsValidPc(0x1500));
 }
 
+TEST_F(ElfTest, error_code_not_valid) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(false);
+
+  ErrorData error{ERROR_MEMORY_INVALID, 0x100};
+  elf.GetLastError(&error);
+  EXPECT_EQ(ERROR_MEMORY_INVALID, error.code);
+  EXPECT_EQ(0x100U, error.address);
+}
+
+TEST_F(ElfTest, error_code_valid) {
+  ElfFake elf(memory_);
+  elf.FakeSetValid(true);
+  ElfInterfaceFake* interface = new ElfInterfaceFake(memory_);
+  elf.FakeSetInterface(interface);
+  interface->FakeSetErrorCode(ERROR_MEMORY_INVALID);
+  interface->FakeSetErrorAddress(0x1000);
+
+  ErrorData error{ERROR_NONE, 0};
+  elf.GetLastError(&error);
+  EXPECT_EQ(ERROR_MEMORY_INVALID, error.code);
+  EXPECT_EQ(0x1000U, error.address);
+  EXPECT_EQ(ERROR_MEMORY_INVALID, elf.GetLastErrorCode());
+  EXPECT_EQ(0x1000U, elf.GetLastErrorAddress());
+}
+
 }  // namespace unwindstack
