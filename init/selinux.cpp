@@ -423,12 +423,16 @@ void SelinuxRestoreContext() {
     selinux_android_restorecon("/vendor_file_contexts", 0);
     selinux_android_restorecon("/plat_property_contexts", 0);
     selinux_android_restorecon("/nonplat_property_contexts", 0);
+    selinux_android_restorecon("/vendor_property_contexts", 0);
     selinux_android_restorecon("/plat_seapp_contexts", 0);
     selinux_android_restorecon("/nonplat_seapp_contexts", 0);
+    selinux_android_restorecon("/vendor_seapp_contexts", 0);
     selinux_android_restorecon("/plat_service_contexts", 0);
     selinux_android_restorecon("/nonplat_service_contexts", 0);
+    selinux_android_restorecon("/vendor_service_contexts", 0);
     selinux_android_restorecon("/plat_hwservice_contexts", 0);
     selinux_android_restorecon("/nonplat_hwservice_contexts", 0);
+    selinux_android_restorecon("/vendor_hwservice_contexts", 0);
     selinux_android_restorecon("/sepolicy", 0);
     selinux_android_restorecon("/vndservice_contexts", 0);
 
