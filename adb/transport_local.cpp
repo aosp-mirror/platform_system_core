@@ -28,10 +28,12 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
+#include <android-base/thread_annotations.h>
 #include <cutils/sockets.h>
 
 #if !ADB_HOST
@@ -40,6 +42,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "sysdeps/chrono.h"
 
@@ -53,48 +56,15 @@
 
 static std::mutex& local_transports_lock = *new std::mutex();
 
-/* we keep a list of opened transports. The atransport struct knows to which
- * local transport it is connected. The list is used to detect when we're
- * trying to connect twice to a given local transport.
- */
-static atransport*  local_transports[ ADB_LOCAL_TRANSPORT_MAX ];
+// We keep a map from emulator port to transport.
+// TODO: weak_ptr?
+static auto& local_transports GUARDED_BY(local_transports_lock) =
+    *new std::unordered_map<int, atransport*>();
 #endif /* ADB_HOST */
-
-static int remote_read(apacket *p, atransport *t)
-{
-    if (!ReadFdExactly(t->sfd, &p->msg, sizeof(amessage))) {
-        D("remote local: read terminated (message)");
-        return -1;
-    }
-
-    if (!check_header(p, t)) {
-        D("bad header: terminated (data)");
-        return -1;
-    }
-
-    if (!ReadFdExactly(t->sfd, p->data, p->msg.data_length)) {
-        D("remote local: terminated (data)");
-        return -1;
-    }
-
-    return 0;
-}
-
-static int remote_write(apacket *p, atransport *t)
-{
-    int   length = p->msg.data_length;
-
-    if(!WriteFdExactly(t->sfd, &p->msg, sizeof(amessage) + length)) {
-        D("remote local: write terminated");
-        return -1;
-    }
-
-    return 0;
-}
 
 bool local_connect(int port) {
     std::string dummy;
-    return local_connect_arbitrary_ports(port-1, port, &dummy) == 0;
+    return local_connect_arbitrary_ports(port - 1, port, &dummy) == 0;
 }
 
 void connect_device(const std::string& address, std::string* response) {
@@ -423,130 +393,83 @@ void local_init(int port)
     std::thread(func, port).detach();
 }
 
-static void remote_kick(atransport *t)
-{
-    int fd = t->sfd;
-    t->sfd = -1;
-    adb_shutdown(fd);
-    adb_close(fd);
-
 #if ADB_HOST
-    int  nn;
-    std::lock_guard<std::mutex> lock(local_transports_lock);
-    for (nn = 0; nn < ADB_LOCAL_TRANSPORT_MAX; nn++) {
-        if (local_transports[nn] == t) {
-            local_transports[nn] = NULL;
-            break;
-        }
-    }
-#endif
-}
+struct EmulatorConnection : public FdConnection {
+    EmulatorConnection(unique_fd fd, int local_port)
+        : FdConnection(std::move(fd)), local_port_(local_port) {}
 
-static void remote_close(atransport *t)
-{
-    int fd = t->sfd;
-    if (fd != -1) {
-        t->sfd = -1;
-        adb_close(fd);
-    }
-#if ADB_HOST
-    int local_port;
-    if (t->GetLocalPortForEmulator(&local_port)) {
-        VLOG(TRANSPORT) << "remote_close, local_port = " << local_port;
+    ~EmulatorConnection() {
+        VLOG(TRANSPORT) << "remote_close, local_port = " << local_port_;
         std::unique_lock<std::mutex> lock(retry_ports_lock);
         RetryPort port;
-        port.port = local_port;
+        port.port = local_port_;
         port.retry_count = LOCAL_PORT_RETRY_COUNT;
         retry_ports.push_back(port);
         retry_ports_cond.notify_one();
     }
-#endif
-}
 
+    void Close() override {
+        std::lock_guard<std::mutex> lock(local_transports_lock);
+        local_transports.erase(local_port_);
+        FdConnection::Close();
+    }
 
-#if ADB_HOST
+    int local_port_;
+};
+
 /* Only call this function if you already hold local_transports_lock. */
 static atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
-{
-    int i;
-    for (i = 0; i < ADB_LOCAL_TRANSPORT_MAX; i++) {
-        int local_port;
-        if (local_transports[i] && local_transports[i]->GetLocalPortForEmulator(&local_port)) {
-            if (local_port == adb_port) {
-                return local_transports[i];
-            }
-        }
+    REQUIRES(local_transports_lock) {
+    auto it = local_transports.find(adb_port);
+    if (it == local_transports.end()) {
+        return nullptr;
     }
-    return NULL;
+    return it->second;
 }
 
-std::string getEmulatorSerialString(int console_port)
-{
+std::string getEmulatorSerialString(int console_port) {
     return android::base::StringPrintf("emulator-%d", console_port);
 }
 
-atransport* find_emulator_transport_by_adb_port(int adb_port)
-{
+atransport* find_emulator_transport_by_adb_port(int adb_port) {
     std::lock_guard<std::mutex> lock(local_transports_lock);
-    atransport* result = find_emulator_transport_by_adb_port_locked(adb_port);
-    return result;
+    return find_emulator_transport_by_adb_port_locked(adb_port);
 }
 
-atransport* find_emulator_transport_by_console_port(int console_port)
-{
+atransport* find_emulator_transport_by_console_port(int console_port) {
     return find_transport(getEmulatorSerialString(console_port).c_str());
-}
-
-
-/* Only call this function if you already hold local_transports_lock. */
-int get_available_local_transport_index_locked()
-{
-    int i;
-    for (i = 0; i < ADB_LOCAL_TRANSPORT_MAX; i++) {
-        if (local_transports[i] == NULL) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-int get_available_local_transport_index()
-{
-    std::lock_guard<std::mutex> lock(local_transports_lock);
-    int result = get_available_local_transport_index_locked();
-    return result;
 }
 #endif
 
-int init_socket_transport(atransport *t, int s, int adb_port, int local)
-{
-    int  fail = 0;
+int init_socket_transport(atransport* t, int s, int adb_port, int local) {
+    int fail = 0;
 
-    t->SetKickFunction(remote_kick);
-    t->SetWriteFunction(remote_write);
-    t->close = remote_close;
-    t->read_from_remote = remote_read;
-    t->sfd = s;
+    unique_fd fd(s);
     t->sync_token = 1;
     t->type = kTransportLocal;
 
 #if ADB_HOST
+    // Emulator connection.
     if (local) {
+        t->connection.reset(new EmulatorConnection(std::move(fd), adb_port));
         std::lock_guard<std::mutex> lock(local_transports_lock);
-        t->SetLocalPortForEmulator(adb_port);
         atransport* existing_transport = find_emulator_transport_by_adb_port_locked(adb_port);
-        int index = get_available_local_transport_index_locked();
         if (existing_transport != NULL) {
             D("local transport for port %d already registered (%p)?", adb_port, existing_transport);
             fail = -1;
-        } else if (index < 0) {
+        } else if (local_transports.size() >= ADB_LOCAL_TRANSPORT_MAX) {
             // Too many emulators.
             D("cannot register more emulators. Maximum is %d", ADB_LOCAL_TRANSPORT_MAX);
             fail = -1;
         } else {
-            local_transports[index] = t;
+            local_transports[adb_port] = t;
         }
+
+        return fail;
     }
 #endif
+
+    // Regular tcp connection.
+    t->connection.reset(new FdConnection(std::move(fd)));
     return fail;
 }
