@@ -322,7 +322,7 @@ public:
                 std::vector<uint8_t> auth_token_vector(*auth_token,
                                                        (*auth_token) + *auth_token_length);
                 int result = 0;
-                auto binder_result = service->addAuthToken(auth_token_vector, uid, &result);
+                auto binder_result = service->addAuthToken(auth_token_vector, &result);
                 if (!binder_result.isOk() || !keystore::KeyStoreServiceReturnCode(result).isOk()) {
                     ALOGE("Failure sending auth token to KeyStore: %" PRId32, result);
                 }
