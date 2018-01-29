@@ -138,6 +138,8 @@ cc_library_host_static {
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
         "client/transport_mdns.cpp",
+        "client/fastdeploy.cpp",
+        "client/fastdeploycallbacks.cpp",
     ],
 
     target: {
@@ -170,6 +172,12 @@ cc_library_host_static {
         "libdiagnose_usb",
         "libmdnssd",
         "libusb",
+        "libandroidfw",
+        "libziparchive",
+        "libz",
+        "libutils",
+        "liblog",
+        "libcutils",
     ],
 }
 
@@ -237,6 +245,7 @@ cc_binary_host {
         "client/file_sync_client.cpp",
         "client/main.cpp",
         "client/console.cpp",
+        "client/adb_install.cpp",
         "client/line_printer.cpp",
         "shell_service_protocol.cpp",
     ],
@@ -251,6 +260,12 @@ cc_binary_host {
         "liblog",
         "libmdnssd",
         "libusb",
+        "libandroidfw",
+        "libziparchive",
+        "libz",
+        "libutils",
+        "liblog",
+        "libcutils",
     ],
 
     stl: "libc++_static",

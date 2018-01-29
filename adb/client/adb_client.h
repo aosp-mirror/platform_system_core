@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _ADB_CLIENT_H_
-#define _ADB_CLIENT_H_
+#pragma once
 
 #include "adb.h"
 #include "sysdeps.h"
@@ -63,5 +62,3 @@ std::string format_host_command(const char* _Nonnull command);
 
 // Get the feature set of the current preferred transport.
 bool adb_get_feature_set(FeatureSet* _Nonnull feature_set, std::string* _Nonnull error);
-
-#endif
