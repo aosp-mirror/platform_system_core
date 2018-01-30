@@ -168,5 +168,9 @@ std::string Backtrace::GetErrorString(BacktraceUnwindError error) {
       return "Failed to find a function in debug sections";
     case BACKTRACE_UNWIND_ERROR_EXECUTE_DWARF_INSTRUCTION_FAILED:
       return "Failed to execute dwarf instructions in debug sections";
+    case BACKTRACE_UNWIND_ERROR_UNWIND_INFO:
+      return "Failed to unwind due to invalid unwind information";
+    case BACKTRACE_UNWIND_ERROR_REPEATED_FRAME:
+      return "Failed to unwind due to same sp/pc repeating";
   }
 }
