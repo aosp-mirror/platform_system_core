@@ -19,8 +19,6 @@
 
 #include <sys/cdefs.h>
 
-#include <libunwind.h>
-
 __BEGIN_DECLS
 
 void test_loop_forever();
@@ -31,7 +29,7 @@ int test_level_three(int, int, int, int, void (*)(void*), void*);
 int test_level_two(int, int, int, int, void (*)(void*), void*);
 int test_level_one(int, int, int, int, void (*)(void*), void*);
 int test_recursive_call(int, void (*)(void*), void*);
-void test_get_context_and_wait(unw_context_t*, volatile int*);
+void test_get_context_and_wait(void*, volatile int*);
 
 __END_DECLS
 

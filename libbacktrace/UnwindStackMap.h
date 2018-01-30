@@ -23,7 +23,9 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
+#include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
@@ -61,6 +63,16 @@ class UnwindStackMap : public BacktraceMap {
   std::mutex dex_lock_;
   std::unordered_map<uint64_t, UnwindDexFile*> dex_files_;
 #endif
+};
+
+class UnwindStackOfflineMap : public UnwindStackMap {
+ public:
+  UnwindStackOfflineMap(pid_t pid);
+  ~UnwindStackOfflineMap() = default;
+
+  bool Build() override;
+
+  bool Build(const std::vector<backtrace_map_t>& maps, const backtrace_stackinfo_t& stack);
 };
 
 #endif  // _LIBBACKTRACE_UNWINDSTACK_MAP_H

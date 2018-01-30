@@ -146,13 +146,3 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool /*uncached*/) {
   return map;
 }
 #endif
-
-BacktraceMap* BacktraceMap::Create(pid_t pid, const std::vector<backtrace_map_t>& maps) {
-    BacktraceMap* backtrace_map = new BacktraceMap(pid);
-    backtrace_map->maps_.insert(backtrace_map->maps_.begin(), maps.begin(), maps.end());
-    std::sort(backtrace_map->maps_.begin(), backtrace_map->maps_.end(),
-            [](const backtrace_map_t& map1, const backtrace_map_t& map2) {
-              return map1.start < map2.start;
-            });
-    return backtrace_map;
-}
