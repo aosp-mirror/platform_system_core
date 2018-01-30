@@ -15,9 +15,9 @@
  */
 
 #include <inttypes.h>
-#include <libunwind.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <functional>
@@ -44,33 +44,7 @@ int test_level_two(int, int, int, int, void (*)(void*), void*);
 int test_level_three(int, int, int, int, void (*)(void*), void*);
 int test_level_four(int, int, int, int, void (*)(void*), void*);
 int test_recursive_call(int, void (*)(void*), void*);
-void test_get_context_and_wait(unw_context_t* unw_context, volatile int* exit_flag);
-}
-
-static ucontext_t GetUContextFromUnwContext(const unw_context_t& unw_context) {
-  ucontext_t ucontext;
-  memset(&ucontext, 0, sizeof(ucontext));
-#if defined(__arm__)
-  ucontext.uc_mcontext.arm_r0 = unw_context.regs[0];
-  ucontext.uc_mcontext.arm_r1 = unw_context.regs[1];
-  ucontext.uc_mcontext.arm_r2 = unw_context.regs[2];
-  ucontext.uc_mcontext.arm_r3 = unw_context.regs[3];
-  ucontext.uc_mcontext.arm_r4 = unw_context.regs[4];
-  ucontext.uc_mcontext.arm_r5 = unw_context.regs[5];
-  ucontext.uc_mcontext.arm_r6 = unw_context.regs[6];
-  ucontext.uc_mcontext.arm_r7 = unw_context.regs[7];
-  ucontext.uc_mcontext.arm_r8 = unw_context.regs[8];
-  ucontext.uc_mcontext.arm_r9 = unw_context.regs[9];
-  ucontext.uc_mcontext.arm_r10 = unw_context.regs[10];
-  ucontext.uc_mcontext.arm_fp = unw_context.regs[11];
-  ucontext.uc_mcontext.arm_ip = unw_context.regs[12];
-  ucontext.uc_mcontext.arm_sp = unw_context.regs[13];
-  ucontext.uc_mcontext.arm_lr = unw_context.regs[14];
-  ucontext.uc_mcontext.arm_pc = unw_context.regs[15];
-#else
-  ucontext.uc_mcontext = unw_context.uc_mcontext;
-#endif
-  return ucontext;
+void test_get_context_and_wait(void* context, volatile int* exit_flag);
 }
 
 struct FunctionSymbol {
@@ -108,18 +82,17 @@ static std::string RawDataToHexString(const void* data, size_t size) {
   return s;
 }
 
-static void HexStringToRawData(const char* s, void* data, size_t size) {
-  uint8_t* p = static_cast<uint8_t*>(data);
+static void HexStringToRawData(const char* s, std::vector<uint8_t>* data, size_t size) {
   for (size_t i = 0; i < size; ++i) {
     int value;
     sscanf(s, "%02x", &value);
-    *p++ = static_cast<uint8_t>(value);
+    data->push_back(value);
     s += 2;
   }
 }
 
 struct OfflineThreadArg {
-  unw_context_t unw_context;
+  std::vector<uint8_t> ucontext;
   pid_t tid;
   volatile int exit_flag;
 };
@@ -127,12 +100,12 @@ struct OfflineThreadArg {
 static void* OfflineThreadFunc(void* arg) {
   OfflineThreadArg* fn_arg = reinterpret_cast<OfflineThreadArg*>(arg);
   fn_arg->tid = gettid();
-  test_get_context_and_wait(&fn_arg->unw_context, &fn_arg->exit_flag);
+  test_get_context_and_wait(&fn_arg->ucontext, &fn_arg->exit_flag);
   return nullptr;
 }
 
-std::string GetTestPath(std::string path) {
-  return android::base::GetExecutableDirectory() + "/testdata/" + ABI_STRING + '/' + path;
+std::string GetTestPath(const std::string& arch, const std::string& path) {
+  return android::base::GetExecutableDirectory() + "/testdata/" + arch + '/' + path;
 }
 
 // This test is disable because it is for generating test data.
@@ -149,7 +122,7 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
   OfflineThreadArg arg;
   arg.exit_flag = 0;
   ASSERT_EQ(0, pthread_create(&thread, &attr, OfflineThreadFunc, &arg));
-  // Wait for the offline thread to generate the stack and unw_context information.
+  // Wait for the offline thread to generate the stack and context information.
   sleep(1);
   // Copy the stack information.
   std::vector<uint8_t> stack_data(reinterpret_cast<uint8_t*>(stack),
@@ -179,9 +152,9 @@ TEST(libbacktrace, DISABLED_generate_offline_testdata) {
                                     entry->start, entry->end, entry->offset, entry->load_bias,
                                     entry->flags, entry->name.c_str());
   }
-  // 3. Dump registers
-  testdata += android::base::StringPrintf("registers: %zu ", sizeof(arg.unw_context));
-  testdata += RawDataToHexString(&arg.unw_context, sizeof(arg.unw_context));
+  // 3. Dump ucontext
+  testdata += android::base::StringPrintf("ucontext: %zu ", arg.ucontext.size());
+  testdata += RawDataToHexString(arg.ucontext.data(), arg.ucontext.size());
   testdata.push_back('\n');
 
   // 4. Dump stack
@@ -218,7 +191,7 @@ struct OfflineTestData {
   int pid;
   int tid;
   std::vector<backtrace_map_t> maps;
-  unw_context_t unw_context;
+  std::vector<uint8_t> ucontext;
   backtrace_stackinfo_t stack_info;
   std::vector<uint8_t> stack;
   std::vector<FunctionSymbol> symbols;
@@ -231,7 +204,6 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
   }
   // Parse offline_testdata.
   std::vector<std::string> lines = android::base::Split(s, "\n");
-  memset(&testdata->unw_context, 0, sizeof(testdata->unw_context));
   for (const auto& line : lines) {
     if (android::base::StartsWith(line, "pid:")) {
       sscanf(line.c_str(), "pid: %d tid: %d", &testdata->pid, &testdata->tid);
@@ -244,50 +216,12 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
              " flags: %d name: %n",
              &map.start, &map.end, &map.offset, &map.load_bias, &map.flags, &pos);
       map.name = android::base::Trim(line.substr(pos));
-    } else if (android::base::StartsWith(line, "registers:")) {
+    } else if (android::base::StartsWith(line, "ucontext:")) {
       size_t size;
       int pos;
-      sscanf(line.c_str(), "registers: %zu %n", &size, &pos);
-      if (sizeof(testdata->unw_context) != size) {
-        return false;
-      }
-      HexStringToRawData(&line[pos], &testdata->unw_context, size);
-    } else if (android::base::StartsWith(line, "regs:")) {
-      std::vector<std::string> strs = android::base::Split(line.substr(6), " ");
-      if (strs.size() % 2 != 0) {
-        return false;
-      }
-      std::vector<std::pair<std::string, uint64_t>> items;
-      for (size_t i = 0; i + 1 < strs.size(); i += 2) {
-        if (!android::base::EndsWith(strs[i], ":")) {
-          return false;
-        }
-        uint64_t value = std::stoul(strs[i + 1], nullptr, 16);
-        items.push_back(std::make_pair(strs[i].substr(0, strs[i].size() - 1), value));
-      }
-#if defined(__arm__)
-      for (auto& item : items) {
-        if (item.first == "sp") {
-          testdata->unw_context.regs[13] = item.second;
-        } else if (item.first == "pc") {
-          testdata->unw_context.regs[15] = item.second;
-        } else {
-          return false;
-        }
-      }
-#elif defined(__aarch64__)
-      for (auto& item : items) {
-        if (item.first == "pc") {
-          testdata->unw_context.uc_mcontext.pc = item.second;
-        } else if (item.first == "sp") {
-          testdata->unw_context.uc_mcontext.sp = item.second;
-        } else if (item.first == "x29") {
-          testdata->unw_context.uc_mcontext.regs[UNW_AARCH64_X29] = item.second;
-        } else {
-          return false;
-        }
-      }
-#endif
+      testdata->ucontext.clear();
+      sscanf(line.c_str(), "ucontext: %zu %n", &size, &pos);
+      HexStringToRawData(&line[pos], &testdata->ucontext, size);
     } else if (android::base::StartsWith(line, "stack:")) {
       size_t size;
       int pos;
@@ -295,8 +229,8 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
              "stack: start: %" SCNx64 " end: %" SCNx64 " size: %zu %n",
              &testdata->stack_info.start, &testdata->stack_info.end, &size, &pos);
       CHECK_EQ(testdata->stack_info.end - testdata->stack_info.start, size);
-      testdata->stack.resize(size);
-      HexStringToRawData(&line[pos], &testdata->stack[0], size);
+      testdata->stack.clear();
+      HexStringToRawData(&line[pos], &testdata->stack, size);
       testdata->stack_info.data = testdata->stack.data();
     } else if (android::base::StartsWith(line, "function:")) {
       testdata->symbols.resize(testdata->symbols.size() + 1);
@@ -310,17 +244,11 @@ bool ReadOfflineTestData(const std::string offline_testdata_path, OfflineTestDat
   return true;
 }
 
-static void BacktraceOfflineTest(const char* arch, const std::string& testlib_name) {
-  // TODO: For now, we can only run this on the same arch as the library arch.
-  if (std::string(ABI_STRING) != arch) {
-    GTEST_LOG_(INFO) << "Ignoring arch " << arch << " for lib " << testlib_name;
-    return;
-  }
-
-  const std::string testlib_path(GetTestPath(testlib_name));
-  const std::string offline_testdata_path(GetTestPath("offline_testdata"));
+static void BacktraceOfflineTest(std::string arch_str, const std::string& testlib_name) {
+  const std::string testlib_path(GetTestPath(arch_str, testlib_name));
+  const std::string offline_testdata_path(GetTestPath(arch_str, "offline_testdata"));
   OfflineTestData testdata;
-  ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
+  ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata)) << "Failed " << arch_str;
 
   // Fix path of libbacktrace_testlib.so.
   for (auto& map : testdata.maps) {
@@ -329,16 +257,24 @@ static void BacktraceOfflineTest(const char* arch, const std::string& testlib_na
     }
   }
 
-  // Do offline backtrace.
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(testdata.pid, testdata.maps));
-  ASSERT_TRUE(map != nullptr);
+  Backtrace::ArchEnum arch;
+  if (arch_str == "arm") {
+    arch = Backtrace::ARCH_ARM;
+  } else if (arch_str == "arm64") {
+    arch = Backtrace::ARCH_ARM64;
+  } else if (arch_str == "x86") {
+    arch = Backtrace::ARCH_X86;
+  } else if (arch_str == "x86_64") {
+    arch = Backtrace::ARCH_X86_64;
+  } else {
+    abort();
+  }
 
-  std::unique_ptr<Backtrace> backtrace(
-      Backtrace::CreateOffline(testdata.pid, testdata.tid, map.get(), testdata.stack_info));
-  ASSERT_TRUE(backtrace != nullptr);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::CreateOffline(
+      arch, testdata.pid, testdata.tid, testdata.maps, testdata.stack_info));
+  ASSERT_TRUE(backtrace != nullptr) << "Failed " << arch_str;
 
-  ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
-  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
+  ASSERT_TRUE(backtrace->Unwind(0, testdata.ucontext.data())) << "Failed " << arch_str;
 
   // Collect pc values of the call stack frames.
   std::vector<uint64_t> pc_values;
@@ -354,14 +290,17 @@ static void BacktraceOfflineTest(const char* arch, const std::string& testlib_na
     }
   }
 
-  ASSERT_GE(test_one_index, 3u);
-  ASSERT_EQ("test_level_one", FunctionNameForAddress(pc_values[test_one_index], testdata.symbols));
-  ASSERT_EQ("test_level_two", FunctionNameForAddress(pc_values[test_one_index - 1],
-                                                     testdata.symbols));
-  ASSERT_EQ("test_level_three", FunctionNameForAddress(pc_values[test_one_index - 2],
-                                                       testdata.symbols));
-  ASSERT_EQ("test_level_four", FunctionNameForAddress(pc_values[test_one_index - 3],
-                                                      testdata.symbols));
+  ASSERT_GE(test_one_index, 3u) << "Failed " << arch_str;
+  ASSERT_EQ("test_level_one", FunctionNameForAddress(pc_values[test_one_index], testdata.symbols))
+      << "Failed " << arch_str;
+  ASSERT_EQ("test_level_two", FunctionNameForAddress(pc_values[test_one_index - 1], testdata.symbols))
+      << "Failed " << arch_str;
+  ASSERT_EQ("test_level_three",
+            FunctionNameForAddress(pc_values[test_one_index - 2], testdata.symbols))
+      << "Failed " << arch_str;
+  ASSERT_EQ("test_level_four",
+            FunctionNameForAddress(pc_values[test_one_index - 3], testdata.symbols))
+      << "Failed " << arch_str;
 }
 
 // For now, these tests can only run on the given architectures.
@@ -384,18 +323,13 @@ TEST(libbacktrace, offline_arm_exidx) {
   BacktraceOfflineTest("arm", "libbacktrace_test_arm_exidx.so");
 }
 
-static void LibUnwindingTest(const std::string& arch, const std::string& testdata_name,
+static void LibUnwindingTest(const std::string& arch_str, const std::string& testdata_name,
                              const std::string& testlib_name) {
-  if (std::string(ABI_STRING) != arch) {
-    GTEST_LOG_(INFO) << "Skipping test since offline for arm on " << ABI_STRING
-                     << " isn't supported.";
-    return;
-  }
-  const std::string testlib_path(GetTestPath(testlib_name));
+  const std::string testlib_path(GetTestPath(arch_str, testlib_name));
   struct stat st;
   ASSERT_EQ(0, stat(testlib_path.c_str(), &st)) << "can't find testlib " << testlib_path;
 
-  const std::string offline_testdata_path(GetTestPath(testdata_name));
+  const std::string offline_testdata_path(GetTestPath(arch_str, testdata_name));
   OfflineTestData testdata;
   ASSERT_TRUE(ReadOfflineTestData(offline_testdata_path, &testdata));
 
@@ -406,26 +340,35 @@ static void LibUnwindingTest(const std::string& arch, const std::string& testdat
     }
   }
 
-  // Do offline backtrace.
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(testdata.pid, testdata.maps));
-  ASSERT_TRUE(map != nullptr);
+  Backtrace::ArchEnum arch;
+  if (arch_str == "arm") {
+    arch = Backtrace::ARCH_ARM;
+  } else if (arch_str == "arm64") {
+    arch = Backtrace::ARCH_ARM64;
+  } else if (arch_str == "x86") {
+    arch = Backtrace::ARCH_X86;
+  } else if (arch_str == "x86_64") {
+    arch = Backtrace::ARCH_X86_64;
+  } else {
+    ASSERT_TRUE(false) << "Unsupported arch " << arch_str;
+    abort();
+  }
 
-  std::unique_ptr<Backtrace> backtrace(
-      Backtrace::CreateOffline(testdata.pid, testdata.tid, map.get(), testdata.stack_info));
+  // Do offline backtrace.
+  std::unique_ptr<Backtrace> backtrace(Backtrace::CreateOffline(
+      arch, testdata.pid, testdata.tid, testdata.maps, testdata.stack_info));
   ASSERT_TRUE(backtrace != nullptr);
 
-  ucontext_t ucontext = GetUContextFromUnwContext(testdata.unw_context);
-  ASSERT_TRUE(backtrace->Unwind(0, &ucontext));
+  ASSERT_TRUE(backtrace->Unwind(0, testdata.ucontext.data()));
 
   ASSERT_EQ(testdata.symbols.size(), backtrace->NumFrames());
   for (size_t i = 0; i < backtrace->NumFrames(); ++i) {
-    uint64_t vaddr_in_file =
-        backtrace->GetFrame(i)->pc - testdata.maps[0].start + testdata.maps[0].load_bias;
-    std::string name = FunctionNameForAddress(vaddr_in_file, testdata.symbols);
+    std::string name = FunctionNameForAddress(backtrace->GetFrame(i)->rel_pc, testdata.symbols);
     ASSERT_EQ(name, testdata.symbols[i].name);
   }
   ASSERT_TRUE(backtrace->GetError().error_code == BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED ||
-              backtrace->GetError().error_code == BACKTRACE_UNWIND_ERROR_MAP_MISSING);
+              backtrace->GetError().error_code == BACKTRACE_UNWIND_ERROR_MAP_MISSING ||
+              backtrace->GetError().error_code == BACKTRACE_UNWIND_ERROR_REPEATED_FRAME);
 }
 
 // This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx

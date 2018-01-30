@@ -18,7 +18,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ucontext.h>
 
 #include <memory>
 #include <set>
@@ -103,7 +102,7 @@ static void FillInDexFrame(UnwindStackMap* stack_map, uint64_t dex_pc,
 
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                        std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
-                       std::vector<std::string>* skip_names) {
+                       std::vector<std::string>* skip_names, BacktraceUnwindError* error) {
   UnwindStackMap* stack_map = reinterpret_cast<UnwindStackMap*>(back_map);
   auto process_memory = stack_map->process_memory();
   unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
@@ -112,6 +111,38 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     unwinder.SetJitDebug(stack_map->GetJitDebug(), regs->Arch());
   }
   unwinder.Unwind(skip_names, &stack_map->GetSuffixesToIgnore());
+  if (error != nullptr) {
+    switch (unwinder.LastErrorCode()) {
+      case unwindstack::ERROR_NONE:
+        error->error_code = BACKTRACE_UNWIND_NO_ERROR;
+        break;
+
+      case unwindstack::ERROR_MEMORY_INVALID:
+        error->error_code = BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED;
+        error->error_info.addr = unwinder.LastErrorAddress();
+        break;
+
+      case unwindstack::ERROR_UNWIND_INFO:
+        error->error_code = BACKTRACE_UNWIND_ERROR_UNWIND_INFO;
+        break;
+
+      case unwindstack::ERROR_UNSUPPORTED:
+        error->error_code = BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION;
+        break;
+
+      case unwindstack::ERROR_INVALID_MAP:
+        error->error_code = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
+        break;
+
+      case unwindstack::ERROR_MAX_FRAMES_EXCEEDED:
+        error->error_code = BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT;
+        break;
+
+      case unwindstack::ERROR_REPEATED_FRAME:
+        error->error_code = BACKTRACE_UNWIND_ERROR_REPEATED_FRAME;
+        break;
+    }
+  }
 
   if (num_ignore_frames >= unwinder.NumFrames()) {
     frames->resize(0);
@@ -178,7 +209,7 @@ std::string UnwindStackCurrent::GetFunctionNameRaw(uint64_t pc, uint64_t* offset
   return GetMap()->GetFunctionName(pc, offset);
 }
 
-bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) {
+bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, void* ucontext) {
   std::unique_ptr<unwindstack::Regs> regs;
   if (ucontext == nullptr) {
     regs.reset(unwindstack::Regs::CreateFromLocal());
@@ -189,9 +220,8 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t*
     regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
   }
 
-  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
   std::vector<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
-  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, &skip_names);
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, &skip_names, &error_);
 }
 
 UnwindStackPtrace::UnwindStackPtrace(pid_t pid, pid_t tid, BacktraceMap* map)
@@ -201,7 +231,7 @@ std::string UnwindStackPtrace::GetFunctionNameRaw(uint64_t pc, uint64_t* offset)
   return GetMap()->GetFunctionName(pc, offset);
 }
 
-bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
+bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, void* context) {
   std::unique_ptr<unwindstack::Regs> regs;
   if (context == nullptr) {
     regs.reset(unwindstack::Regs::RemoteGet(Tid()));
@@ -209,10 +239,77 @@ bool UnwindStackPtrace::Unwind(size_t num_ignore_frames, ucontext_t* context) {
     regs.reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), context));
   }
 
-  error_.error_code = BACKTRACE_UNWIND_NO_ERROR;
-  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr);
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr, &error_);
 }
 
 size_t UnwindStackPtrace::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
   return memory_.Read(addr, buffer, bytes);
+}
+
+UnwindStackOffline::UnwindStackOffline(ArchEnum arch, pid_t pid, pid_t tid, BacktraceMap* map,
+                                       bool map_shared)
+    : Backtrace(pid, tid, map), arch_(arch) {
+  map_shared_ = map_shared;
+}
+
+bool UnwindStackOffline::Unwind(size_t num_ignore_frames, void* ucontext) {
+  if (ucontext == nullptr) {
+    return false;
+  }
+
+  unwindstack::ArchEnum arch;
+  switch (arch_) {
+    case ARCH_ARM:
+      arch = unwindstack::ARCH_ARM;
+      break;
+    case ARCH_ARM64:
+      arch = unwindstack::ARCH_ARM64;
+      break;
+    case ARCH_X86:
+      arch = unwindstack::ARCH_X86;
+      break;
+    case ARCH_X86_64:
+      arch = unwindstack::ARCH_X86_64;
+      break;
+    default:
+      return false;
+  }
+
+  std::unique_ptr<unwindstack::Regs> regs(unwindstack::Regs::CreateFromUcontext(arch, ucontext));
+
+  return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, nullptr, &error_);
+}
+
+std::string UnwindStackOffline::GetFunctionNameRaw(uint64_t, uint64_t*) {
+  return "";
+}
+
+size_t UnwindStackOffline::Read(uint64_t, uint8_t*, size_t) {
+  return 0;
+}
+
+bool UnwindStackOffline::ReadWord(uint64_t, word_t*) {
+  return false;
+}
+
+Backtrace* Backtrace::CreateOffline(ArchEnum arch, pid_t pid, pid_t tid,
+                                    const std::vector<backtrace_map_t>& maps,
+                                    const backtrace_stackinfo_t& stack) {
+  BacktraceMap* map = BacktraceMap::CreateOffline(pid, maps, stack);
+  if (map == nullptr) {
+    return nullptr;
+  }
+
+  return new UnwindStackOffline(arch, pid, tid, map, false);
+}
+
+Backtrace* Backtrace::CreateOffline(ArchEnum arch, pid_t pid, pid_t tid, BacktraceMap* map) {
+  if (map == nullptr) {
+    return nullptr;
+  }
+  return new UnwindStackOffline(arch, pid, tid, map, true);
+}
+
+void Backtrace::SetGlobalElfCache(bool enable) {
+  unwindstack::Elf::SetCachingEnabled(enable);
 }
