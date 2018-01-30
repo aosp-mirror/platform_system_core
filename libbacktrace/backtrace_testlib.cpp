@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
-#include <libunwind.h>
 #include <signal.h>
 #include <stdio.h>
+#include <unistd.h>
+
+#include <memory>
+#include <vector>
+
+#include <unwindstack/Regs.h>
+#include <unwindstack/RegsGetLocal.h>
 
 #include "backtrace_testlib.h"
 
@@ -66,21 +72,70 @@ int test_recursive_call(int level, void (*callback_func)(void*), void* data) {
 }
 
 typedef struct {
-  unw_context_t* unw_context;
+  std::vector<uint8_t>* ucontext;
   volatile int* exit_flag;
 } GetContextArg;
 
 static void GetContextAndExit(void* data) {
-  GetContextArg* arg = (GetContextArg*)data;
-  unw_getcontext(arg->unw_context);
+  GetContextArg* arg = reinterpret_cast<GetContextArg*>(data);
+
+  std::unique_ptr<unwindstack::Regs> regs(unwindstack::Regs::CreateFromLocal());
+  unwindstack::RegsGetLocal(regs.get());
+
+  ucontext_t ucontext;
+  memset(&ucontext, 0, sizeof(ucontext));
+#if defined(__arm__)
+  memcpy(&ucontext.uc_mcontext, regs->RawData(), sizeof(uint32_t) * 16);
+#elif defined(__aarch64__)
+  memcpy(&ucontext.uc_mcontext, regs->RawData(), sizeof(uint64_t) * 33);
+#elif defined(__i386__)
+  uint32_t* reg_data = reinterpret_cast<uint32_t*>(regs->RawData());
+  ucontext.uc_mcontext.gregs[0] = reg_data[15];
+  ucontext.uc_mcontext.gregs[1] = reg_data[14];
+  ucontext.uc_mcontext.gregs[2] = reg_data[13];
+  ucontext.uc_mcontext.gregs[3] = reg_data[12];
+  ucontext.uc_mcontext.gregs[4] = reg_data[7];
+  ucontext.uc_mcontext.gregs[5] = reg_data[6];
+  ucontext.uc_mcontext.gregs[6] = reg_data[5];
+  ucontext.uc_mcontext.gregs[7] = reg_data[4];
+  ucontext.uc_mcontext.gregs[8] = reg_data[3];
+  ucontext.uc_mcontext.gregs[9] = reg_data[2];
+  ucontext.uc_mcontext.gregs[10] = reg_data[1];
+  ucontext.uc_mcontext.gregs[11] = reg_data[0];
+  ucontext.uc_mcontext.gregs[14] = reg_data[8];
+  ucontext.uc_mcontext.gregs[15] = reg_data[10];
+#elif defined(__x86_64__)
+  uint64_t* reg_data = reinterpret_cast<uint64_t*>(regs->RawData());
+  ucontext.uc_mcontext.gregs[0] = reg_data[8];
+  ucontext.uc_mcontext.gregs[1] = reg_data[9];
+  ucontext.uc_mcontext.gregs[2] = reg_data[10];
+  ucontext.uc_mcontext.gregs[3] = reg_data[11];
+  ucontext.uc_mcontext.gregs[4] = reg_data[12];
+  ucontext.uc_mcontext.gregs[5] = reg_data[13];
+  ucontext.uc_mcontext.gregs[6] = reg_data[14];
+  ucontext.uc_mcontext.gregs[7] = reg_data[15];
+  ucontext.uc_mcontext.gregs[8] = reg_data[5];
+  ucontext.uc_mcontext.gregs[9] = reg_data[4];
+  ucontext.uc_mcontext.gregs[10] = reg_data[6];
+  ucontext.uc_mcontext.gregs[11] = reg_data[3];
+  ucontext.uc_mcontext.gregs[12] = reg_data[1];
+  ucontext.uc_mcontext.gregs[13] = reg_data[0];
+  ucontext.uc_mcontext.gregs[14] = reg_data[2];
+  ucontext.uc_mcontext.gregs[15] = reg_data[7];
+  ucontext.uc_mcontext.gregs[16] = reg_data[16];
+#endif
+
+  arg->ucontext->resize(sizeof(ucontext));
+  memcpy(arg->ucontext->data(), &ucontext, sizeof(ucontext));
+
   // Don't touch the stack anymore.
   while (*arg->exit_flag == 0) {
   }
 }
 
-void test_get_context_and_wait(unw_context_t* unw_context, volatile int* exit_flag) {
+void test_get_context_and_wait(void* ucontext, volatile int* exit_flag) {
   GetContextArg arg;
-  arg.unw_context = unw_context;
+  arg.ucontext = reinterpret_cast<std::vector<uint8_t>*>(ucontext);
   arg.exit_flag = exit_flag;
   test_level_one(1, 2, 3, 4, GetContextAndExit, &arg);
 }
