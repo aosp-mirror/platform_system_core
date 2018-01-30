@@ -227,6 +227,7 @@ static void read_transport_thread(void* _t) {
             }
 #if ADB_HOST
             if (p->msg.command == 0) {
+                put_apacket(p);
                 continue;
             }
 #endif
