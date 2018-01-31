@@ -41,6 +41,7 @@
 
 #include "adb.h"
 #include "adb_auth.h"
+#include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
 #include "diagnose_usb.h"
@@ -63,6 +64,36 @@ const char* const kFeaturePushSync = "push_sync";
 TransportId NextTransportId() {
     static std::atomic<TransportId> next(1);
     return next++;
+}
+
+bool FdConnection::Read(apacket* packet) {
+    if (!ReadFdExactly(fd_.get(), &packet->msg, sizeof(amessage))) {
+        D("remote local: read terminated (message)");
+        return false;
+    }
+
+    if (!ReadFdExactly(fd_.get(), &packet->data, packet->msg.data_length)) {
+        D("remote local: terminated (data)");
+        return false;
+    }
+
+    return true;
+}
+
+bool FdConnection::Write(apacket* packet) {
+    uint32_t length = packet->msg.data_length;
+
+    if (!WriteFdExactly(fd_.get(), &packet->msg, sizeof(amessage) + length)) {
+        D("remote local: write terminated");
+        return false;
+    }
+
+    return true;
+}
+
+void FdConnection::Close() {
+    adb_shutdown(fd_.get());
+    fd_.reset();
 }
 
 static std::string dump_packet(const char* name, const char* func, apacket* p) {
@@ -220,13 +251,21 @@ static void read_transport_thread(void* _t) {
 
         {
             ATRACE_NAME("read_transport read_remote");
-            if (t->read_from_remote(p, t) != 0) {
+            if (!t->connection->Read(p)) {
                 D("%s: remote read failed for transport", t->serial);
                 put_apacket(p);
                 break;
             }
+
+            if (!check_header(p, t)) {
+                D("%s: remote read: bad header", t->serial);
+                put_apacket(p);
+                break;
+            }
+
 #if ADB_HOST
             if (p->msg.command == 0) {
+                put_apacket(p);
                 continue;
             }
 #endif
@@ -625,7 +664,7 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
-        t->close(t);
+        t->connection->Close();
         remove_transport(t);
     } else {
         D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
@@ -753,14 +792,14 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
 }
 
 int atransport::Write(apacket* p) {
-    return write_func_(p, this);
+    return this->connection->Write(p) ? 0 : -1;
 }
 
 void atransport::Kick() {
     if (!kicked_) {
+        D("kicking transport %s", this->serial);
         kicked_ = true;
-        CHECK(kick_func_ != nullptr);
-        kick_func_(this);
+        this->connection->Close();
     }
 }
 
@@ -1082,8 +1121,12 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle* usb) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
-    transport_list.remove_if(
-        [usb](atransport* t) { return t->usb == usb && t->GetConnectionState() == kCsNoPerm; });
+    transport_list.remove_if([usb](atransport* t) {
+        if (auto connection = dynamic_cast<UsbConnection*>(t->connection.get())) {
+            return connection->handle_ == usb && t->GetConnectionState() == kCsNoPerm;
+        }
+        return false;
+    });
 }
 
 bool check_header(apacket* p, atransport* t) {
