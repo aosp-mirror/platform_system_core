@@ -33,26 +33,27 @@
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 
-#include "UnwindDexFile.h"
+#include "DexFile.h"
 
-UnwindDexFile* UnwindDexFile::Create(uint64_t dex_file_offset_in_memory,
-                                     unwindstack::Memory* memory, unwindstack::MapInfo* info) {
+namespace unwindstack {
+
+DexFile* DexFile::Create(uint64_t dex_file_offset_in_memory, Memory* memory, MapInfo* info) {
   if (!info->name.empty()) {
-    std::unique_ptr<UnwindDexFileFromFile> dex_file(new UnwindDexFileFromFile);
+    std::unique_ptr<DexFileFromFile> dex_file(new DexFileFromFile);
     if (dex_file->Open(dex_file_offset_in_memory - info->start + info->offset, info->name)) {
       return dex_file.release();
     }
   }
 
-  std::unique_ptr<UnwindDexFileFromMemory> dex_file(new UnwindDexFileFromMemory);
+  std::unique_ptr<DexFileFromMemory> dex_file(new DexFileFromMemory);
   if (dex_file->Open(dex_file_offset_in_memory, memory)) {
     return dex_file.release();
   }
   return nullptr;
 }
 
-void UnwindDexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name,
-                                         uint64_t* method_offset) {
+void DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name,
+                                   uint64_t* method_offset) {
   if (dex_file_ == nullptr) {
     return;
   }
@@ -87,13 +88,13 @@ void UnwindDexFile::GetMethodInformation(uint64_t dex_offset, std::string* metho
   }
 }
 
-UnwindDexFileFromFile::~UnwindDexFileFromFile() {
+DexFileFromFile::~DexFileFromFile() {
   if (size_ != 0) {
     munmap(mapped_memory_, size_);
   }
 }
 
-bool UnwindDexFileFromFile::Open(uint64_t dex_file_offset_in_file, const std::string& file) {
+bool DexFileFromFile::Open(uint64_t dex_file_offset_in_file, const std::string& file) {
   android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(file.c_str(), O_RDONLY | O_CLOEXEC)));
   if (fd == -1) {
     return false;
@@ -137,7 +138,7 @@ bool UnwindDexFileFromFile::Open(uint64_t dex_file_offset_in_file, const std::st
   return dex_file_ != nullptr;
 }
 
-bool UnwindDexFileFromMemory::Open(uint64_t dex_file_offset_in_memory, unwindstack::Memory* memory) {
+bool DexFileFromMemory::Open(uint64_t dex_file_offset_in_memory, Memory* memory) {
   art::DexFile::Header header;
   if (!memory->ReadFully(dex_file_offset_in_memory, &header, sizeof(header))) {
     return false;
@@ -160,3 +161,5 @@ bool UnwindDexFileFromMemory::Open(uint64_t dex_file_offset_in_memory, unwindsta
   dex_file_.reset(dex.release());
   return dex_file_ != nullptr;
 }
+
+}  // namespace unwindstack
