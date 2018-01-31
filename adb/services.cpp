@@ -407,14 +407,6 @@ void connect_emulator(const std::string& port_spec, std::string* response) {
         return;
     }
 
-    // Check if more emulators can be registered. Similar unproblematic
-    // race condition as above.
-    int candidate_slot = get_available_local_transport_index();
-    if (candidate_slot < 0) {
-        *response = "Cannot accept more emulators";
-        return;
-    }
-
     // Preconditions met, try to connect to the emulator.
     std::string error;
     if (!local_connect_arbitrary_ports(console_port, adb_port, &error)) {
