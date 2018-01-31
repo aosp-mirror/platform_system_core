@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 #include <sys/types.h>
-#include <ucontext.h>
 
 #include <backtrace/Backtrace.h>
 
@@ -44,7 +43,7 @@ class BacktraceCurrent : public Backtrace {
 
   bool ReadWord(uint64_t ptr, word_t* out_value) override;
 
-  bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext) override;
+  bool Unwind(size_t num_ignore_frames, void* ucontext) override;
 
  protected:
   bool DiscardFrame(const backtrace_frame_data_t& frame);
@@ -52,7 +51,7 @@ class BacktraceCurrent : public Backtrace {
  private:
   bool UnwindThread(size_t num_ignore_frames);
 
-  virtual bool UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) = 0;
+  virtual bool UnwindFromContext(size_t num_ignore_frames, void* ucontext) = 0;
 };
 
 #endif // _LIBBACKTRACE_BACKTRACE_CURRENT_H

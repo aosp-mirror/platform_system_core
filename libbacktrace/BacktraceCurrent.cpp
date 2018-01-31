@@ -64,7 +64,7 @@ size_t BacktraceCurrent::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
   return bytes;
 }
 
-bool BacktraceCurrent::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+bool BacktraceCurrent::Unwind(size_t num_ignore_frames, void* ucontext) {
   if (GetMap() == nullptr) {
     // Without a map object, we can't do anything.
     error_.error_code = BACKTRACE_UNWIND_ERROR_MAP_MISSING;
