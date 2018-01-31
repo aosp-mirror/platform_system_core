@@ -11,6 +11,7 @@ adb_host_sanitize :=
 adb_target_sanitize :=
 
 ADB_COMMON_CFLAGS := \
+    -frtti \
     -Wall -Wextra -Werror \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \

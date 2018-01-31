@@ -28,9 +28,10 @@
 #include <string>
 #include <unordered_set>
 
-#include "adb.h"
-
 #include <openssl/rsa.h>
+
+#include "adb.h"
+#include "adb_unique_fd.h"
 
 typedef std::unordered_set<std::string> FeatureSet;
 
@@ -56,6 +57,50 @@ extern const char* const kFeaturePushSync;
 
 TransportId NextTransportId();
 
+// Abstraction for a blocking packet transport.
+struct Connection {
+    Connection() = default;
+    Connection(const Connection& copy) = delete;
+    Connection(Connection&& move) = delete;
+
+    // Destroy a Connection. Formerly known as 'Close' in atransport.
+    virtual ~Connection() = default;
+
+    // Read/Write a packet. These functions are concurrently called from a transport's reader/writer
+    // threads.
+    virtual bool Read(apacket* packet) = 0;
+    virtual bool Write(apacket* packet) = 0;
+
+    // Terminate a connection.
+    // This method must be thread-safe, and must cause concurrent Reads/Writes to terminate.
+    // Formerly known as 'Kick' in atransport.
+    virtual void Close() = 0;
+};
+
+struct FdConnection : public Connection {
+    explicit FdConnection(unique_fd fd) : fd_(std::move(fd)) {}
+
+    bool Read(apacket* packet) override final;
+    bool Write(apacket* packet) override final;
+
+    void Close() override;
+
+  private:
+    unique_fd fd_;
+};
+
+struct UsbConnection : public Connection {
+    explicit UsbConnection(usb_handle* handle) : handle_(handle) {}
+    ~UsbConnection();
+
+    bool Read(apacket* packet) override final;
+    bool Write(apacket* packet) override final;
+
+    void Close() override final;
+
+    usb_handle* handle_;
+};
+
 class atransport {
   public:
     // TODO(danalbert): We expose waaaaaaay too much stuff because this was
@@ -73,12 +118,6 @@ class atransport {
     }
     virtual ~atransport() {}
 
-    int (*read_from_remote)(apacket* p, atransport* t) = nullptr;
-    void (*close)(atransport* t) = nullptr;
-
-    void SetWriteFunction(int (*write_func)(apacket*, atransport*)) { write_func_ = write_func; }
-    void SetKickFunction(void (*kick_func)(atransport*)) { kick_func_ = kick_func; }
-    bool IsKicked() { return kicked_; }
     int Write(apacket* p);
     void Kick();
 
@@ -95,9 +134,7 @@ class atransport {
     bool online = false;
     TransportType type = kTransportAny;
 
-    // USB handle or socket fd as needed.
-    usb_handle* usb = nullptr;
-    int sfd = -1;
+    std::unique_ptr<Connection> connection;
 
     // Used to identify transports for clients.
     char* serial = nullptr;
@@ -105,22 +142,8 @@ class atransport {
     char* model = nullptr;
     char* device = nullptr;
     char* devpath = nullptr;
-    void SetLocalPortForEmulator(int port) {
-        CHECK_EQ(local_port_for_emulator_, -1);
-        local_port_for_emulator_ = port;
-    }
 
-    bool GetLocalPortForEmulator(int* port) const {
-        if (type == kTransportLocal && local_port_for_emulator_ != -1) {
-            *port = local_port_for_emulator_;
-            return true;
-        }
-        return false;
-    }
-
-    bool IsTcpDevice() const {
-        return type == kTransportLocal && local_port_for_emulator_ == -1;
-    }
+    bool IsTcpDevice() const { return type == kTransportLocal; }
 
 #if ADB_HOST
     std::shared_ptr<RSA> NextKey();
@@ -165,10 +188,7 @@ class atransport {
     bool MatchesTarget(const std::string& target) const;
 
 private:
-    int local_port_for_emulator_ = -1;
     bool kicked_ = false;
-    void (*kick_func_)(atransport*) = nullptr;
-    int (*write_func_)(apacket*, atransport*) = nullptr;
 
     // A set of features transmitted in the banner with the initial connection.
     // This is stored in the banner as 'features=feature0,feature1,etc'.
