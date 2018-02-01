@@ -37,7 +37,6 @@
 #include <log/log.h>
 
 #ifdef LMKD_LOG_STATS
-#include <log/log_event_list.h>
 #include <statslog.h>
 #endif
 
@@ -75,18 +74,6 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define EIGHT_MEGA (1 << 23)
-
-#ifdef LMKD_LOG_STATS
-#define MEMCG_PROCESS_MEMORY_STAT_PATH "/dev/memcg/apps/uid_%d/pid_%d/memory.stat"
-/*
- * These are defined in
- * http://cs/android/frameworks/base/cmds/statsd/src/atoms.proto
- */
-#define LMK_KILL_OCCURRED 51
-#define LMK_STATE_CHANGED 54
-#define LMK_STATE_CHANGE_START 1
-#define LMK_STATE_CHANGE_STOP 2
-#endif
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
@@ -182,13 +169,6 @@ struct proc {
 };
 
 #ifdef LMKD_LOG_STATS
-struct memory_stat {
-   int64_t pgfault;
-   int64_t pgmajfault;
-   int64_t rss_in_bytes;
-   int64_t cache_in_bytes;
-   int64_t swap_in_bytes;
-};
 static bool enable_stats_log;
 static android_log_context log_ctx;
 #endif
@@ -1221,11 +1201,7 @@ int main(int argc __unused, char **argv __unused) {
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
 
 #ifdef LMKD_LOG_STATS
-    enable_stats_log = property_get_bool("ro.lmk.log_stats", false);
-
-    if (enable_stats_log) {
-        log_ctx = create_android_logger(kStatsEventTag);
-    }
+    statlog_init();
 #endif
 
     // MCL_ONFAULT pins pages as they fault instead of loading
@@ -1245,9 +1221,7 @@ int main(int argc __unused, char **argv __unused) {
         mainloop();
 
 #ifdef LMKD_LOG_STATS
-    if (log_ctx) {
-        android_log_destroy(&log_ctx);
-    }
+    statslog_destroy();
 #endif
 
     ALOGI("exiting");
