@@ -62,7 +62,6 @@
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
 #define MEMCG_MEMORY_USAGE "/dev/memcg/memory.usage_in_bytes"
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
-#define ZONEINFO_PATH "/proc/zoneinfo"
 #define LINE_MAX 128
 
 #define INKERNEL_MINFREE_PATH "/sys/module/lowmemorykiller/parameters/minfree"
@@ -542,76 +541,6 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
         return;
     }
     maxevents++;
-}
-
-static int zoneinfo_parse_protection(char *cp) {
-    int max = 0;
-    int zoneval;
-    char *save_ptr;
-
-    for (cp = strtok_r(cp, "(), ", &save_ptr); cp; cp = strtok_r(NULL, "), ", &save_ptr)) {
-        zoneval = strtol(cp, &cp, 0);
-        if (zoneval > max)
-            max = zoneval;
-    }
-
-    return max;
-}
-
-static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
-    char *cp = line;
-    char *ap;
-    char *save_ptr;
-
-    cp = strtok_r(line, " ", &save_ptr);
-    if (!cp)
-        return;
-
-    ap = strtok_r(NULL, " ", &save_ptr);
-    if (!ap)
-        return;
-
-    if (!strcmp(cp, "nr_free_pages"))
-        mip->nr_free_pages += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "nr_file_pages"))
-        mip->nr_file_pages += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "nr_shmem"))
-        mip->nr_shmem += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "high"))
-        mip->totalreserve_pages += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "protection:"))
-        mip->totalreserve_pages += zoneinfo_parse_protection(ap);
-}
-
-static int zoneinfo_parse(struct sysmeminfo *mip) {
-    int fd;
-    ssize_t size;
-    char buf[PAGE_SIZE];
-    char *save_ptr;
-    char *line;
-
-    memset(mip, 0, sizeof(struct sysmeminfo));
-
-    fd = open(ZONEINFO_PATH, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        ALOGE("%s open: errno=%d", ZONEINFO_PATH, errno);
-        return -1;
-    }
-
-    size = read_all(fd, buf, sizeof(buf) - 1);
-    if (size < 0) {
-        ALOGE("%s read: errno=%d", ZONEINFO_PATH, errno);
-        close(fd);
-        return -1;
-    }
-    ALOG_ASSERT((size_t)size < sizeof(buf) - 1, "/proc/zoneinfo too large");
-    buf[size] = 0;
-
-    for (line = strtok_r(buf, "\n", &save_ptr); line; line = strtok_r(NULL, "\n", &save_ptr))
-            zoneinfo_parse_line(line, mip);
-
-    close(fd);
-    return 0;
 }
 
 static int get_free_memory(struct mem_size *ms) {
