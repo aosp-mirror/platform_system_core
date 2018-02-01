@@ -36,6 +36,11 @@
 #include <lmkd.h>
 #include <log/log.h>
 
+#ifdef LMKD_LOG_STATS
+#include <log/log_event_list.h>
+#include <statslog.h>
+#endif
+
 /*
  * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
  * to profile and correlate with OOM kills
@@ -62,6 +67,7 @@
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
 #define MEMCG_MEMORY_USAGE "/dev/memcg/memory.usage_in_bytes"
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
+
 #define LINE_MAX 128
 
 #define INKERNEL_MINFREE_PATH "/sys/module/lowmemorykiller/parameters/minfree"
@@ -69,6 +75,18 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define EIGHT_MEGA (1 << 23)
+
+#ifdef LMKD_LOG_STATS
+#define MEMCG_PROCESS_MEMORY_STAT_PATH "/dev/memcg/apps/uid_%d/pid_%d/memory.stat"
+/*
+ * These are defined in
+ * http://cs/android/frameworks/base/cmds/statsd/src/atoms.proto
+ */
+#define LMK_KILL_OCCURRED 51
+#define LMK_STATE_CHANGED 54
+#define LMK_STATE_CHANGE_START 1
+#define LMK_STATE_CHANGE_STOP 2
+#endif
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
@@ -162,6 +180,18 @@ struct proc {
     int oomadj;
     struct proc *pidhash_next;
 };
+
+#ifdef LMKD_LOG_STATS
+struct memory_stat {
+   int64_t pgfault;
+   int64_t pgmajfault;
+   int64_t rss_in_bytes;
+   int64_t cache_in_bytes;
+   int64_t swap_in_bytes;
+};
+static bool enable_stats_log;
+static android_log_context log_ctx;
+#endif
 
 #define PIDHASH_SZ 1024
 static struct proc *pidhash[PIDHASH_SZ];
@@ -543,6 +573,51 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
     maxevents++;
 }
 
+#ifdef LMKD_LOG_STATS
+static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
+    char key[LINE_MAX];
+    int64_t value;
+
+    sscanf(line,"%s  %" SCNd64 "", key, &value);
+
+    if (strcmp(key, "total_") < 0) {
+        return;
+    }
+
+    if (!strcmp(key, "total_pgfault"))
+        mem_st->pgfault = value;
+    else if (!strcmp(key, "total_pgmajfault"))
+        mem_st->pgmajfault = value;
+    else if (!strcmp(key, "total_rss"))
+        mem_st->rss_in_bytes = value;
+    else if (!strcmp(key, "total_cache"))
+        mem_st->cache_in_bytes = value;
+    else if (!strcmp(key, "total_swap"))
+        mem_st->swap_in_bytes = value;
+}
+
+static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
+   FILE *fp;
+   char buf[PATH_MAX];
+
+   snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
+
+   fp = fopen(buf, "r");
+
+   if (fp == NULL) {
+       ALOGE("%s open failed: %s", path, strerror(errno));
+       return -1;
+   }
+
+   while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
+       memory_stat_parse_line(buf, mem_st);
+   }
+   fclose(fp);
+
+   return 0;
+}
+#endif
+
 static int get_free_memory(struct mem_size *ms) {
     struct sysinfo si;
 
@@ -639,6 +714,11 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     int tasksize;
     int r;
 
+#ifdef LMKD_LOG_STATS
+    struct memory_stat mem_st;
+    int memory_stat_parse_result = -1;
+#endif
+
     taskname = proc_get_name(pid);
     if (!taskname) {
         pid_remove(pid);
@@ -650,6 +730,12 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
         pid_remove(pid);
         return -1;
     }
+
+#ifdef LMKD_LOG_STATS
+    if (enable_stats_log) {
+        memory_stat_parse_result = memory_stat_parse(&mem_st, pid, uid);
+    }
+#endif
 
     TRACE_KILL_START(pid);
 
@@ -666,6 +752,15 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
         return -1;
+    } else {
+#ifdef LMKD_LOG_STATS
+        if (memory_stat_parse_result == 0) {
+            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
+                    procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
+                    mem_st.cache_in_bytes, mem_st.swap_in_bytes);
+        }
+#endif
+        return tasksize;
     }
 
     return tasksize;
@@ -683,6 +778,12 @@ static int find_and_kill_processes(enum vmpressure_level level,
     int pages_freed = 0;
     int min_score_adj = level_oomadj[level];
 
+#ifdef LMKD_LOG_STATS
+    if (enable_stats_log) {
+        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_START);
+    }
+#endif
+
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
 
@@ -699,11 +800,24 @@ static int find_and_kill_processes(enum vmpressure_level level,
             if (killed_size >= 0) {
                 pages_freed += killed_size;
                 if (pages_freed >= pages_to_free) {
+
+#ifdef LMKD_LOG_STATS
+                    if (enable_stats_log) {
+                        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
+                                LMK_STATE_CHANGE_STOP);
+                    }
+#endif
                     return pages_freed;
                 }
             }
         }
     }
+
+#ifdef LMKD_LOG_STATS
+    if (enable_stats_log) {
+        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
+    }
+#endif
 
     return pages_freed;
 }
@@ -1106,6 +1220,14 @@ int main(int argc __unused, char **argv __unused) {
     kill_timeout_ms =
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
 
+#ifdef LMKD_LOG_STATS
+    enable_stats_log = property_get_bool("ro.lmk.log_stats", false);
+
+    if (enable_stats_log) {
+        log_ctx = create_android_logger(kStatsEventTag);
+    }
+#endif
+
     // MCL_ONFAULT pins pages as they fault instead of loading
     // everything immediately all at once. (Which would be bad,
     // because as of this writing, we have a lot of mapped pages we
@@ -1121,6 +1243,12 @@ int main(int argc __unused, char **argv __unused) {
     sched_setscheduler(0, SCHED_FIFO, &param);
     if (!init())
         mainloop();
+
+#ifdef LMKD_LOG_STATS
+    if (log_ctx) {
+        android_log_destroy(&log_ctx);
+    }
+#endif
 
     ALOGI("exiting");
     return 0;
