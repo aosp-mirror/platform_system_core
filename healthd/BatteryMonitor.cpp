@@ -535,12 +535,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                                       POWER_SUPPLY_SYSFS_PATH, name);
                     if (access(path, R_OK) == 0) {
                         mHealthdConfig->batteryVoltagePath = path;
-                    } else {
-                        path.clear();
-                        path.appendFormat("%s/%s/batt_vol",
-                                          POWER_SUPPLY_SYSFS_PATH, name);
-                        if (access(path, R_OK) == 0)
-                            mHealthdConfig->batteryVoltagePath = path;
                     }
                 }
 
@@ -590,12 +584,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                                       name);
                     if (access(path, R_OK) == 0) {
                         mHealthdConfig->batteryTemperaturePath = path;
-                    } else {
-                        path.clear();
-                        path.appendFormat("%s/%s/batt_temp",
-                                          POWER_SUPPLY_SYSFS_PATH, name);
-                        if (access(path, R_OK) == 0)
-                            mHealthdConfig->batteryTemperaturePath = path;
                     }
                 }
 
