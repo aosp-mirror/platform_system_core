@@ -24,19 +24,27 @@ namespace android {
 namespace init {
 
 static constexpr const char* kPartnerPrefixes[] = {
-    "init.svc.vendor.", "ro.vendor.", "persist.vendor.", "vendor.",
-    "init.svc.odm.",    "ro.odm.",    "persist.odm.",    "odm.",
+    "init.svc.vendor.", "ro.vendor.", "persist.vendor.", "vendor.", "init.svc.odm.", "ro.odm.",
+    "persist.odm.",     "odm.",       "ro.boot.",
 };
 
 static const std::set<std::string> kExportedActionableProperties = {
-    "init.svc.zygote",         "persist.bluetooth.btsnoopenable",
-    "persist.sys.crash_rcu",   "persist.sys.zram_enabled",
-    "ro.boot.revision",        "ro.bootmode",
-    "ro.build.type",           "sys.boot_completed",
-    "sys.retaildemo.enabled",  "sys.shutdown.requested",
-    "sys.usb.config",          "sys.usb.configfs",
-    "sys.usb.ffs.mtp.ready",   "sys.usb.ffs.ready",
-    "sys.user.0.ce_available", "sys.vdso",
+    "init.svc.mediadrm",
+    "init.svc.zygote",
+    "persist.bluetooth.btsnoopenable",
+    "persist.sys.crash_rcu",
+    "persist.sys.zram_enabled",
+    "ro.bootmode",
+    "ro.build.type",
+    "sys.boot_completed",
+    "sys.retaildemo.enabled",
+    "sys.shutdown.requested",
+    "sys.usb.config",
+    "sys.usb.configfs",
+    "sys.usb.ffs.mtp.ready",
+    "sys.usb.ffs.ready",
+    "sys.user.0.ce_available",
+    "sys.vdso",
     "vts.native_server.on",
 };
 
