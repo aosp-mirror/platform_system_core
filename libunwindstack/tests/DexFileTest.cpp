@@ -30,46 +30,11 @@
 
 #include <gtest/gtest.h>
 
-#include "UnwindDexFile.h"
+#include "DexFile.h"
 
-class MemoryFake : public unwindstack::Memory {
- public:
-  MemoryFake() = default;
-  virtual ~MemoryFake() = default;
+#include "MemoryFake.h"
 
-  size_t Read(uint64_t addr, void* buffer, size_t size) override;
-
-  void SetMemory(uint64_t addr, const void* memory, size_t length);
-
-  void Clear() { data_.clear(); }
-
- private:
-  std::unordered_map<uint64_t, uint8_t> data_;
-};
-
-void MemoryFake::SetMemory(uint64_t addr, const void* memory, size_t length) {
-  const uint8_t* src = reinterpret_cast<const uint8_t*>(memory);
-  for (size_t i = 0; i < length; i++, addr++) {
-    auto value = data_.find(addr);
-    if (value != data_.end()) {
-      value->second = src[i];
-    } else {
-      data_.insert({addr, src[i]});
-    }
-  }
-}
-
-size_t MemoryFake::Read(uint64_t addr, void* memory, size_t size) {
-  uint8_t* dst = reinterpret_cast<uint8_t*>(memory);
-  for (size_t i = 0; i < size; i++, addr++) {
-    auto value = data_.find(addr);
-    if (value == data_.end()) {
-      return i;
-    }
-    dst[i] = value->second;
-  }
-  return size;
-}
+namespace unwindstack {
 
 // Borrowed from art/dex/dex_file_test.cc.
 static constexpr uint32_t kDexData[] = {
@@ -92,12 +57,12 @@ static constexpr uint32_t kDexData[] = {
     0x00000002, 0x00000173, 0x00002000, 0x00000001, 0x0000017e, 0x00001000, 0x00000001, 0x0000018c,
 };
 
-TEST(UnwindDexTest, from_file_open_non_exist) {
-  UnwindDexFileFromFile dex_file;
+TEST(DexFileTest, from_file_open_non_exist) {
+  DexFileFromFile dex_file;
   ASSERT_FALSE(dex_file.Open(0, "/file/does/not/exist"));
 }
 
-TEST(UnwindDexTest, from_file_open_too_small) {
+TEST(DexFileTest, from_file_open_too_small) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
@@ -106,7 +71,7 @@ TEST(UnwindDexTest, from_file_open_too_small) {
                 TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(art::DexFile::Header)) - 2)));
 
   // Header too small.
-  UnwindDexFileFromFile dex_file;
+  DexFileFromFile dex_file;
   ASSERT_FALSE(dex_file.Open(0, tf.path));
 
   // Header correct, file too small.
@@ -116,18 +81,18 @@ TEST(UnwindDexTest, from_file_open_too_small) {
   ASSERT_FALSE(dex_file.Open(0, tf.path));
 }
 
-TEST(UnwindDexTest, from_file_open) {
+TEST(DexFileTest, from_file_open) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
   ASSERT_EQ(sizeof(kDexData),
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
-  UnwindDexFileFromFile dex_file;
+  DexFileFromFile dex_file;
   ASSERT_TRUE(dex_file.Open(0, tf.path));
 }
 
-TEST(UnwindDexTest, from_file_open_non_zero_offset) {
+TEST(DexFileTest, from_file_open_non_zero_offset) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
@@ -135,38 +100,38 @@ TEST(UnwindDexTest, from_file_open_non_zero_offset) {
   ASSERT_EQ(sizeof(kDexData),
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
-  UnwindDexFileFromFile dex_file;
+  DexFileFromFile dex_file;
   ASSERT_TRUE(dex_file.Open(0x100, tf.path));
 }
 
-TEST(UnwindDexTest, from_memory_fail_too_small_for_header) {
+TEST(DexFileTest, from_memory_fail_too_small_for_header) {
   MemoryFake memory;
 
   memory.SetMemory(0x1000, kDexData, sizeof(art::DexFile::Header) - 1);
-  UnwindDexFileFromMemory dex_file;
+  DexFileFromMemory dex_file;
 
   ASSERT_FALSE(dex_file.Open(0x1000, &memory));
 }
 
-TEST(UnwindDexTest, from_memory_fail_too_small_for_data) {
+TEST(DexFileTest, from_memory_fail_too_small_for_data) {
   MemoryFake memory;
 
   memory.SetMemory(0x1000, kDexData, sizeof(kDexData) - 2);
-  UnwindDexFileFromMemory dex_file;
+  DexFileFromMemory dex_file;
 
   ASSERT_FALSE(dex_file.Open(0x1000, &memory));
 }
 
-TEST(UnwindDexTest, from_memory_open) {
+TEST(DexFileTest, from_memory_open) {
   MemoryFake memory;
 
   memory.SetMemory(0x1000, kDexData, sizeof(kDexData));
-  UnwindDexFileFromMemory dex_file;
+  DexFileFromMemory dex_file;
 
   ASSERT_TRUE(dex_file.Open(0x1000, &memory));
 }
 
-TEST(UnwindDexTest, create_using_file) {
+TEST(DexFileTest, create_using_file) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
@@ -175,12 +140,12 @@ TEST(UnwindDexTest, create_using_file) {
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
   MemoryFake memory;
-  unwindstack::MapInfo info(0, 0x10000, 0, 0x5, tf.path);
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x500, &memory, &info));
+  MapInfo info(0, 0x10000, 0, 0x5, tf.path);
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x500, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 }
 
-TEST(UnwindDexTest, create_using_file_non_zero_start) {
+TEST(DexFileTest, create_using_file_non_zero_start) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
@@ -189,12 +154,12 @@ TEST(UnwindDexTest, create_using_file_non_zero_start) {
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
   MemoryFake memory;
-  unwindstack::MapInfo info(0x100, 0x10000, 0, 0x5, tf.path);
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x600, &memory, &info));
+  MapInfo info(0x100, 0x10000, 0, 0x5, tf.path);
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x600, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 }
 
-TEST(UnwindDexTest, create_using_file_non_zero_offset) {
+TEST(DexFileTest, create_using_file_non_zero_offset) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
@@ -203,28 +168,28 @@ TEST(UnwindDexTest, create_using_file_non_zero_offset) {
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
   MemoryFake memory;
-  unwindstack::MapInfo info(0x100, 0x10000, 0x200, 0x5, tf.path);
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x400, &memory, &info));
+  MapInfo info(0x100, 0x10000, 0x200, 0x5, tf.path);
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x400, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 }
 
-TEST(UnwindDexTest, create_using_memory_empty_file) {
+TEST(DexFileTest, create_using_memory_empty_file) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  unwindstack::MapInfo info(0x100, 0x10000, 0x200, 0x5, "");
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x4000, &memory, &info));
+  MapInfo info(0x100, 0x10000, 0x200, 0x5, "");
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 }
 
-TEST(UnwindDexTest, create_using_memory_file_does_not_exist) {
+TEST(DexFileTest, create_using_memory_file_does_not_exist) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  unwindstack::MapInfo info(0x100, 0x10000, 0x200, 0x5, "/does/not/exist");
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x4000, &memory, &info));
+  MapInfo info(0x100, 0x10000, 0x200, 0x5, "/does/not/exist");
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 }
 
-TEST(UnwindDexTest, create_using_memory_file_is_malformed) {
+TEST(DexFileTest, create_using_memory_file_is_malformed) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
@@ -233,30 +198,30 @@ TEST(UnwindDexTest, create_using_memory_file_is_malformed) {
 
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  unwindstack::MapInfo info(0x4000, 0x10000, 0x200, 0x5, "/does/not/exist");
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x4000, &memory, &info));
+  MapInfo info(0x4000, 0x10000, 0x200, 0x5, "/does/not/exist");
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 
   // Check it came from memory by clearing memory and verifying it fails.
   memory.Clear();
-  dex_file.reset(UnwindDexFile::Create(0x4000, &memory, &info));
+  dex_file.reset(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file == nullptr);
 }
 
-TEST(UnwindDexTest, get_method_not_opened) {
+TEST(DexFileTest, get_method_not_opened) {
   std::string method("something");
   uint64_t method_offset = 100;
-  UnwindDexFile dex_file;
+  DexFile dex_file;
   dex_file.GetMethodInformation(0x100, &method, &method_offset);
   EXPECT_EQ("something", method);
   EXPECT_EQ(100U, method_offset);
 }
 
-TEST(UnwindDexTest, get_method) {
+TEST(DexFileTest, get_method) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  unwindstack::MapInfo info(0x100, 0x10000, 0x200, 0x5, "");
-  std::unique_ptr<UnwindDexFile> dex_file(UnwindDexFile::Create(0x4000, &memory, &info));
+  MapInfo info(0x100, 0x10000, 0x200, 0x5, "");
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 
   std::string method;
@@ -271,3 +236,5 @@ TEST(UnwindDexTest, get_method) {
   EXPECT_EQ("not_in_a_method", method);
   EXPECT_EQ(0x123U, method_offset);
 }
+
+}  // namespace unwindstack
