@@ -95,7 +95,8 @@ void Unwinder::FillInDexFrame() {
   }
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
-  dex_files_->GetMethodInformation(dex_offset, info, &frame->function_name, &frame->function_offset);
+  dex_files_->GetMethodInformation(dex_pc - dex_offset, dex_offset, info, &frame->function_name,
+                                   &frame->function_offset);
 #endif
 }
 

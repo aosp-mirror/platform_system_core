@@ -38,10 +38,10 @@ class DexFiles {
   explicit DexFiles(std::shared_ptr<Memory>& memory);
   ~DexFiles();
 
-  DexFile* GetDexFile(uint64_t dex_offset, MapInfo* info);
+  DexFile* GetDexFile(uint64_t dex_file_offset, MapInfo* info);
 
-  void GetMethodInformation(uint64_t dex_offset, MapInfo* info, std::string* method_name,
-                            uint64_t* method_offset);
+  void GetMethodInformation(uint64_t dex_file_offset, uint64_t dex_offset, MapInfo* info,
+                            std::string* method_name, uint64_t* method_offset);
 
   void SetArch(ArchEnum arch);
 
