@@ -36,69 +36,14 @@
 #include <unwindstack/Regs.h>
 #include <unwindstack/RegsGetLocal.h>
 
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+#include <unwindstack/DexFiles.h>
+#endif
 #include <unwindstack/Unwinder.h>
 
 #include "BacktraceLog.h"
-#ifndef NO_LIBDEXFILE
-#include "UnwindDexFile.h"
-#endif
 #include "UnwindStack.h"
 #include "UnwindStackMap.h"
-
-static void FillInDexFrame(UnwindStackMap* stack_map, uint64_t dex_pc,
-                           backtrace_frame_data_t* frame) {
-  // The DEX PC points into the .dex section within an ELF file.
-  // However, this is a BBS section manually mmaped to a .vdex file,
-  // so we need to get the following map to find the ELF data.
-  unwindstack::Maps* maps = stack_map->stack_maps();
-  auto it = maps->begin();
-  uint64_t rel_dex_pc;
-  unwindstack::MapInfo* info;
-  for (; it != maps->end(); ++it) {
-    auto entry = *it;
-    if (dex_pc >= entry->start && dex_pc < entry->end) {
-      info = entry;
-      rel_dex_pc = dex_pc - entry->start;
-      frame->map.start = entry->start;
-      frame->map.end = entry->end;
-      frame->map.offset = entry->offset;
-      frame->map.load_bias = entry->load_bias;
-      frame->map.flags = entry->flags;
-      frame->map.name = entry->name;
-      frame->rel_pc = rel_dex_pc;
-      break;
-    }
-  }
-  if (it == maps->end() || ++it == maps->end()) {
-    return;
-  }
-
-  auto entry = *it;
-  auto process_memory = stack_map->process_memory();
-  unwindstack::Elf* elf = entry->GetElf(process_memory, true);
-  if (!elf->valid()) {
-    return;
-  }
-
-  // Adjust the relative dex by the offset.
-  rel_dex_pc += entry->elf_offset;
-
-  uint64_t dex_offset;
-  if (!elf->GetFunctionName(rel_dex_pc, &frame->func_name, &dex_offset)) {
-    return;
-  }
-  frame->func_offset = dex_offset;
-  if (frame->func_name != "$dexfile") {
-    return;
-  }
-
-#ifndef NO_LIBDEXFILE
-  UnwindDexFile* dex_file = stack_map->GetDexFile(dex_pc - dex_offset, info);
-  if (dex_file != nullptr) {
-    dex_file->GetMethodInformation(dex_offset, &frame->func_name, &frame->func_offset);
-  }
-#endif
-}
 
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                        std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
@@ -110,6 +55,11 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   if (stack_map->GetJitDebug() != nullptr) {
     unwinder.SetJitDebug(stack_map->GetJitDebug(), regs->Arch());
   }
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+  if (stack_map->GetDexFiles() != nullptr) {
+    unwinder.SetDexFiles(stack_map->GetDexFiles(), regs->Arch());
+  }
+#endif
   unwinder.Unwind(skip_names, &stack_map->GetSuffixesToIgnore());
   if (error != nullptr) {
     switch (unwinder.LastErrorCode()) {
@@ -150,35 +100,10 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   }
 
   auto unwinder_frames = unwinder.frames();
-  // Get the real number of frames we'll need.
-  size_t total_frames = 0;
-  for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++, total_frames++) {
-    if (unwinder_frames[i].dex_pc != 0) {
-      total_frames++;
-    }
-  }
-  frames->resize(total_frames);
+  frames->resize(unwinder.NumFrames() - num_ignore_frames);
   size_t cur_frame = 0;
   for (size_t i = num_ignore_frames; i < unwinder.NumFrames(); i++) {
     auto frame = &unwinder_frames[i];
-
-    // Inject extra 'virtual' frame that represents the dex pc data.
-    // The dex pc is magic register defined in the Mterp interpreter,
-    // and thus it will be restored/observed in the frame after it.
-    // Adding the dex frame first here will create something like:
-    //   #7 pc 006b1ba1 libartd.so  ExecuteMterpImpl+14625
-    //   #8 pc 0015fa20 core.vdex   java.util.Arrays.binarySearch+8
-    //   #9 pc 0039a1ef libartd.so  art::interpreter::Execute+719
-    if (frame->dex_pc != 0) {
-      backtrace_frame_data_t* dex_frame = &frames->at(cur_frame);
-      dex_frame->num = cur_frame++;
-      dex_frame->pc = frame->dex_pc;
-      dex_frame->rel_pc = frame->dex_pc;
-      dex_frame->sp = frame->sp;
-      dex_frame->stack_size = 0;
-      dex_frame->func_offset = 0;
-      FillInDexFrame(stack_map, frame->dex_pc, dex_frame);
-    }
 
     backtrace_frame_data_t* back_frame = &frames->at(cur_frame);
 

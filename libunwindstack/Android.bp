@@ -80,7 +80,13 @@ cc_library {
         host: {
             cflags: ["-O0", "-g"],
         },
+        vendor: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            exclude_static_libs: ["libunwindstack_dex"],
+            exclude_shared_libs: ["libdexfile"],
+        },
     },
+    whole_static_libs: ["libunwindstack_dex"],
 
     arch: {
         x86: {
@@ -99,14 +105,70 @@ cc_library {
 
     shared_libs: [
         "libbase",
+        "libdexfile",
         "liblog",
         "liblzma",
+    ],
+}
+
+// Isolate the dex file processing into a separate library. Currently,
+// it is necessary to add art include directories directly, which also
+// adds the art elf.h file in the include path, overriding the system one.
+// Work to isolate libdexfile is b/72216369.
+cc_library_static {
+    name: "libunwindstack_dex",
+    vendor_available: false,
+    defaults: ["libunwindstack_flags"],
+
+    cflags: [
+        "-Wexit-time-destructors",
+    ],
+
+    srcs: [
+        "DexFile.cpp",
+        "DexFiles.cpp",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libdexfile",
+    ],
+    local_include_dirs: ["include"],
+    allow_undefined_symbols: true,
+
+    // libdexfile will eventually properly export headers, for now include
+    // these directly.
+    include_dirs: [
+        "art/runtime",
     ],
 }
 
 //-------------------------------------------------------------------------
 // Unit Tests
 //-------------------------------------------------------------------------
+cc_test_library {
+    name: "libunwindstack_dex_test",
+    vendor_available: false,
+    defaults: ["libunwindstack_flags"],
+
+    srcs: [
+        "tests/DexFileTest.cpp",
+    ],
+    local_include_dirs: ["include"],
+    allow_undefined_symbols: true,
+
+    shared_libs: [
+        "libbase",
+        "libunwindstack",
+    ],
+
+    // libdexfile will eventually properly export headers, for now include
+    // these directly.
+    include_dirs: [
+        "art/runtime",
+    ],
+}
+
 cc_test {
     name: "libunwindstack_test",
     defaults: ["libunwindstack_flags"],
@@ -167,6 +229,8 @@ cc_test {
     static_libs: [
         "libgmock",
     ],
+
+    whole_static_libs: ["libunwindstack_dex_test"],
 
     data: [
         "tests/files/elf32.xz",
