@@ -32,11 +32,14 @@
 #include <unistd.h>
 
 #include <memory>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_filesystem_config.h>
 #include <cutils/android_reboot.h>
@@ -775,6 +778,22 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+static bool call_vdc(const std::vector<std::string>& args) {
+    std::vector<char const*> argv;
+    argv.emplace_back("/system/bin/vdc");
+    for (auto& arg : args) {
+        argv.emplace_back(arg.c_str());
+    }
+    LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
+    int ret = android_fork_execvp(4, const_cast<char**>(argv.data()), nullptr, false, true);
+    if (ret != 0) {
+        LOG(ERROR) << "vdc returned error code: " << ret;
+        return false;
+    }
+    LOG(DEBUG) << "vdc finished successfully";
+    return true;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -881,6 +900,13 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                     LERROR << "Only one encryptable/encrypted partition supported";
                 }
                 encryptable = status;
+                if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+                    if (!call_vdc(
+                            {"cryptfs", "encryptFstab", fstab->recs[attempted_idx].mount_point})) {
+                        LERROR << "Encryption failed";
+                        return FS_MGR_MNTALL_FAIL;
+                    }
+                }
             }
 
             /* Success!  Go get the next one */
@@ -955,7 +981,11 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
         } else if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
                    should_use_metadata_encryption(&fstab->recs[attempted_idx])) {
+            if (!call_vdc({"cryptfs", "mountFstab", fstab->recs[attempted_idx].mount_point})) {
+                ++error_count;
+            }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
+            continue;
         } else {
             // fs_options might be null so we cannot use PERROR << directly.
             // Use StringPrintf to output "(null)" instead.
