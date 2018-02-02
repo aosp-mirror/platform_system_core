@@ -82,35 +82,10 @@ namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 # libs listed here can be used.
 namespace.sphal.links = default,vndk,rs
 
-# WARNING: only NDK libs can be listed here.
-namespace.sphal.link.default.shared_libs  = libc.so
-namespace.sphal.link.default.shared_libs += libEGL.so
-namespace.sphal.link.default.shared_libs += libGLESv1_CM.so
-namespace.sphal.link.default.shared_libs += libGLESv2.so
-namespace.sphal.link.default.shared_libs += libdl.so
-namespace.sphal.link.default.shared_libs += liblog.so
-namespace.sphal.link.default.shared_libs += libm.so
-namespace.sphal.link.default.shared_libs += libnativewindow.so
-namespace.sphal.link.default.shared_libs += libstdc++.so
-namespace.sphal.link.default.shared_libs += libsync.so
-namespace.sphal.link.default.shared_libs += libvndksupport.so
-namespace.sphal.link.default.shared_libs += libz.so
+namespace.sphal.link.default.shared_libs  = %LLNDK_LIBRARIES%
+namespace.sphal.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
-# WARNING: only VNDK-SP libs can be listed here. DO NOT EDIT this line.
-namespace.sphal.link.vndk.shared_libs  = android.hardware.renderscript@1.0.so
-namespace.sphal.link.vndk.shared_libs += android.hardware.graphics.common@1.0.so
-namespace.sphal.link.vndk.shared_libs += android.hardware.graphics.mapper@2.0.so
-namespace.sphal.link.vndk.shared_libs += android.hidl.memory@1.0.so
-namespace.sphal.link.vndk.shared_libs += libbase.so
-namespace.sphal.link.vndk.shared_libs += libc++.so
-namespace.sphal.link.vndk.shared_libs += libcutils.so
-namespace.sphal.link.vndk.shared_libs += libhardware.so
-namespace.sphal.link.vndk.shared_libs += libhidlbase.so
-namespace.sphal.link.vndk.shared_libs += libhidlmemory.so
-namespace.sphal.link.vndk.shared_libs += libhidltransport.so
-namespace.sphal.link.vndk.shared_libs += libhwbinder.so
-namespace.sphal.link.vndk.shared_libs += libion.so
-namespace.sphal.link.vndk.shared_libs += libutils.so
+namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 
 # Renderscript gets separate namespace
 namespace.sphal.link.rs.shared_libs = libRS_internal.so
@@ -155,38 +130,13 @@ namespace.rs.asan.permitted.paths += /data
 
 namespace.rs.links = default,vndk
 
-namespace.rs.link.default.shared_libs  = libc.so
-namespace.rs.link.default.shared_libs += libEGL.so
-namespace.rs.link.default.shared_libs += libGLESv1_CM.so
-namespace.rs.link.default.shared_libs += libGLESv2.so
-namespace.rs.link.default.shared_libs += libdl.so
-namespace.rs.link.default.shared_libs += liblog.so
-namespace.rs.link.default.shared_libs += libm.so
-namespace.rs.link.default.shared_libs += libnativewindow.so
-namespace.rs.link.default.shared_libs += libstdc++.so
-namespace.rs.link.default.shared_libs += libsync.so
-namespace.rs.link.default.shared_libs += libvndksupport.so
-namespace.rs.link.default.shared_libs += libz.so
-# These two libs are private LLNDK libs but are exceptionally visible
-# in this 'rs' namespace because RenderScript framework libraries
-# which are loaded into this namespace are using them.
-namespace.rs.link.default.shared_libs += libft2.so
-namespace.rs.link.default.shared_libs += libmediandk.so
+namespace.rs.link.default.shared_libs  =  %LLNDK_LIBRARIES%
+namespace.rs.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+# Private LLNDK libs (e.g. libft2.so) are exceptionally allowed to this
+# namespace because RS framework libs are using them.
+namespace.rs.link.default.shared_libs += %PRIVATE_LLNDK_LIBRARIES%
 
-namespace.rs.link.vndk.shared_libs  = android.hardware.renderscript@1.0.so
-namespace.rs.link.vndk.shared_libs += android.hardware.graphics.common@1.0.so
-namespace.rs.link.vndk.shared_libs += android.hardware.graphics.mapper@2.0.so
-namespace.rs.link.vndk.shared_libs += android.hidl.memory@1.0.so
-namespace.rs.link.vndk.shared_libs += libbase.so
-namespace.rs.link.vndk.shared_libs += libc++.so
-namespace.rs.link.vndk.shared_libs += libcutils.so
-namespace.rs.link.vndk.shared_libs += libhardware.so
-namespace.rs.link.vndk.shared_libs += libhidlbase.so
-namespace.rs.link.vndk.shared_libs += libhidlmemory.so
-namespace.rs.link.vndk.shared_libs += libhidltransport.so
-namespace.rs.link.vndk.shared_libs += libhwbinder.so
-namespace.rs.link.vndk.shared_libs += libion.so
-namespace.rs.link.vndk.shared_libs += libutils.so
+namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 
 ###############################################################################
 # "vndk" namespace
@@ -204,6 +154,8 @@ namespace.vndk.permitted.paths  = /odm/${LIB}/hw
 namespace.vndk.permitted.paths += /odm/${LIB}/egl
 namespace.vndk.permitted.paths += /vendor/${LIB}/hw
 namespace.vndk.permitted.paths += /vendor/${LIB}/egl
+# This is exceptionally required since android.hidl.memory@1.0-impl.so is here
+namespace.vndk.permitted.paths += /system/${LIB}/vndk-sp%VNDK_VER%/hw
 
 namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
 namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp
@@ -221,21 +173,15 @@ namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/hw
 namespace.vndk.asan.permitted.paths += /data/asan/vendor/${LIB}/egl
 namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/egl
 
+namespace.vndk.asan.permitted.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%/hw
+namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%/hw
+
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.links = default
-namespace.vndk.link.default.shared_libs  = android.hidl.memory@1.0-impl.so
-namespace.vndk.link.default.shared_libs += libEGL.so
-namespace.vndk.link.default.shared_libs += libc.so
-namespace.vndk.link.default.shared_libs += libdl.so
-namespace.vndk.link.default.shared_libs += liblog.so
-namespace.vndk.link.default.shared_libs += libm.so
-namespace.vndk.link.default.shared_libs += libnativewindow.so
-namespace.vndk.link.default.shared_libs += libstdc++.so
-namespace.vndk.link.default.shared_libs += libsync.so
-namespace.vndk.link.default.shared_libs += libvndksupport.so
-namespace.vndk.link.default.shared_libs += libz.so
+namespace.vndk.link.default.shared_libs  = %LLNDK_LIBRARIES%
+namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
