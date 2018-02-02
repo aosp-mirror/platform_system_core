@@ -72,6 +72,11 @@ bool FdConnection::Read(apacket* packet) {
         return false;
     }
 
+    if (packet->msg.data_length > sizeof(packet->data)) {
+        D("remote local: read overflow (data length = %" PRIu32 ")", packet->msg.data_length);
+        return false;
+    }
+
     if (!ReadFdExactly(fd_.get(), &packet->data, packet->msg.data_length)) {
         D("remote local: terminated (data)");
         return false;
