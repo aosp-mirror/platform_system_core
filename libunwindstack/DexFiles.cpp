@@ -52,9 +52,9 @@ DexFile* DexFiles::GetDexFile(uint64_t dex_file_offset, MapInfo* info) {
   return dex_file;
 }
 
-void DexFiles::GetMethodInformation(uint64_t dex_offset, MapInfo* info, std::string* method_name,
-                                    uint64_t* method_offset) {
-  DexFile* dex_file = GetDexFile(dex_offset, info);
+void DexFiles::GetMethodInformation(uint64_t dex_file_offset, uint64_t dex_offset, MapInfo* info,
+                                    std::string* method_name, uint64_t* method_offset) {
+  DexFile* dex_file = GetDexFile(dex_file_offset, info);
   if (dex_file != nullptr) {
     dex_file->GetMethodInformation(dex_offset, method_name, method_offset);
   }
