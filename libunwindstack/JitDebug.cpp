@@ -172,7 +172,7 @@ void JitDebug::Init(Maps* maps) {
   // Regardless of what happens below, consider the init finished.
   initialized_ = true;
 
-  std::string descriptor_name("__jit_debug_descriptor");
+  const std::string descriptor_name("__jit_debug_descriptor");
   for (MapInfo* info : *maps) {
     if (!(info->flags & PROT_EXEC) || !(info->flags & PROT_READ) || info->offset != 0) {
       continue;

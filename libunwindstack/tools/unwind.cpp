@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <unwindstack/DexFiles.h>
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
@@ -91,8 +92,13 @@ void DoUnwind(pid_t pid) {
 
   auto process_memory = unwindstack::Memory::CreateProcessMemory(pid);
   unwindstack::Unwinder unwinder(128, &remote_maps, regs, process_memory);
+
   unwindstack::JitDebug jit_debug(process_memory);
   unwinder.SetJitDebug(&jit_debug, regs->Arch());
+
+  unwindstack::DexFiles dex_files(process_memory);
+  unwinder.SetDexFiles(&dex_files, regs->Arch());
+
   unwinder.Unwind();
 
   // Print the frames.

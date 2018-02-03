@@ -52,10 +52,20 @@ DexFile* DexFile::Create(uint64_t dex_file_offset_in_memory, Memory* memory, Map
   return nullptr;
 }
 
-void DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name,
+DexFileFromFile::~DexFileFromFile() {
+  if (size_ != 0) {
+    munmap(mapped_memory_, size_);
+  }
+}
+
+bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name,
                                    uint64_t* method_offset) {
   if (dex_file_ == nullptr) {
-    return;
+    return false;
+  }
+
+  if (!dex_file_->IsInDataSection(dex_file_->Begin() + dex_offset)) {
+    return false;  // The DEX offset is not within the bytecode of this dex file.
   }
 
   for (uint32_t i = 0; i < dex_file_->NumClassDefs(); ++i) {
@@ -82,16 +92,11 @@ void DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name
       if (offset <= dex_offset && dex_offset < offset + size) {
         *method_name = dex_file_->PrettyMethod(it.GetMemberIndex(), false);
         *method_offset = dex_offset - offset;
-        return;
+        return true;
       }
     }
   }
-}
-
-DexFileFromFile::~DexFileFromFile() {
-  if (size_ != 0) {
-    munmap(mapped_memory_, size_);
-  }
+  return false;
 }
 
 bool DexFileFromFile::Open(uint64_t dex_file_offset_in_file, const std::string& file) {
@@ -139,25 +144,41 @@ bool DexFileFromFile::Open(uint64_t dex_file_offset_in_file, const std::string& 
 }
 
 bool DexFileFromMemory::Open(uint64_t dex_file_offset_in_memory, Memory* memory) {
-  art::DexFile::Header header;
-  if (!memory->ReadFully(dex_file_offset_in_memory, &header, sizeof(header))) {
+  memory_.resize(sizeof(art::DexFile::Header));
+  if (!memory->ReadFully(dex_file_offset_in_memory, memory_.data(), memory_.size())) {
     return false;
   }
 
-  if (!art::StandardDexFile::IsMagicValid(header.magic_) &&
-      !art::CompactDexFile::IsMagicValid(header.magic_)) {
+  art::DexFile::Header* header = reinterpret_cast<art::DexFile::Header*>(memory_.data());
+  bool modify_data_off = false;
+  uint32_t file_size = header->file_size_;
+  if (art::CompactDexFile::IsMagicValid(header->magic_)) {
+    uint32_t computed_file_size;
+    if (__builtin_add_overflow(header->data_off_, header->data_size_, &computed_file_size)) {
+      return false;
+    }
+    if (computed_file_size > file_size) {
+      file_size = computed_file_size;
+      modify_data_off = true;
+    }
+  } else if (!art::StandardDexFile::IsMagicValid(header->magic_)) {
     return false;
   }
 
-  memory_.resize(header.file_size_);
-  if (!memory->ReadFully(dex_file_offset_in_memory, memory_.data(), header.file_size_)) {
+  memory_.resize(file_size);
+  if (!memory->ReadFully(dex_file_offset_in_memory, memory_.data(), memory_.size())) {
     return false;
+  }
+
+  header = reinterpret_cast<art::DexFile::Header*>(memory_.data());
+  if (modify_data_off) {
+    header->data_off_ = header->file_size_;
   }
 
   art::DexFileLoader loader;
   std::string error_msg;
   auto dex =
-      loader.Open(memory_.data(), header.file_size_, "", 0, nullptr, false, false, &error_msg);
+      loader.Open(memory_.data(), header->file_size_, "", 0, nullptr, false, false, &error_msg);
   dex_file_.reset(dex.release());
   return dex_file_ != nullptr;
 }
