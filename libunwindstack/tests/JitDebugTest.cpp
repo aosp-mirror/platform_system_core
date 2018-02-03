@@ -56,30 +56,30 @@ class JitDebugTest : public ::testing::Test {
 
     MapInfo* map_info = maps_->Get(3);
     ASSERT_TRUE(map_info != nullptr);
-    elf_memories_.push_back(new MemoryFake);
-    ElfFake* elf = new ElfFake(elf_memories_.back());
+    MemoryFake* memory = new MemoryFake;
+    ElfFake* elf = new ElfFake(memory);
     elf->FakeSetValid(true);
-    ElfInterfaceFake* interface = new ElfInterfaceFake(elf_memories_.back());
+    ElfInterfaceFake* interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
 
     map_info = maps_->Get(5);
     ASSERT_TRUE(map_info != nullptr);
-    elf_memories_.push_back(new MemoryFake);
-    elf = new ElfFake(elf_memories_.back());
+    memory = new MemoryFake;
+    elf = new ElfFake(memory);
     elf->FakeSetValid(true);
-    interface = new ElfInterfaceFake(elf_memories_.back());
+    interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
 
     map_info = maps_->Get(6);
     ASSERT_TRUE(map_info != nullptr);
-    elf_memories_.push_back(new MemoryFake);
-    elf = new ElfFake(elf_memories_.back());
+    memory = new MemoryFake;
+    elf = new ElfFake(memory);
     elf->FakeSetValid(true);
-    interface = new ElfInterfaceFake(elf_memories_.back());
+    interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
@@ -171,7 +171,6 @@ class JitDebugTest : public ::testing::Test {
 
   std::shared_ptr<Memory> process_memory_;
   MemoryFake* memory_;
-  std::vector<MemoryFake*> elf_memories_;
   std::unique_ptr<JitDebug> jit_debug_;
   std::unique_ptr<BufferMaps> maps_;
 };

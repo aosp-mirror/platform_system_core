@@ -32,7 +32,7 @@ class DexFile {
   DexFile() = default;
   virtual ~DexFile() = default;
 
-  void GetMethodInformation(uint64_t dex_offset, std::string* method_name, uint64_t* method_offset);
+  bool GetMethodInformation(uint64_t dex_offset, std::string* method_name, uint64_t* method_offset);
 
   static DexFile* Create(uint64_t dex_file_offset_in_memory, Memory* memory, MapInfo* info);
 
