@@ -17,6 +17,7 @@
 #include "init_first_stage.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <memory>
@@ -47,6 +48,7 @@ class FirstStageMount {
     bool InitDevices();
 
   protected:
+    coldboot_action_t HandleBlockDevice(const char* name, const uevent*);
     void InitRequiredDevices();
     void InitVerityDevice(const std::string& verity_device);
     bool MountPartitions();
@@ -177,6 +179,23 @@ void FirstStageMount::InitRequiredDevices() {
     device_close();
 }
 
+coldboot_action_t FirstStageMount::HandleBlockDevice(const char* name, const uevent* uevent) {
+    // Matches partition name to create device nodes.
+    // Both required_devices_partition_names_ and uevent->partition_name have A/B
+    // suffix when A/B is used.
+    auto iter = required_devices_partition_names_.find(name);
+    if (iter != required_devices_partition_names_.end()) {
+        LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
+        required_devices_partition_names_.erase(iter);
+        if (required_devices_partition_names_.empty()) {
+            return COLDBOOT_STOP;
+        } else {
+            return COLDBOOT_CREATE;
+        }
+    }
+    return COLDBOOT_CONTINUE;
+}
+
 coldboot_action_t FirstStageMount::ColdbootCallback(uevent* uevent) {
     // We need platform devices to create symlinks.
     if (!strncmp(uevent->subsystem, "platform", 8)) {
@@ -189,18 +208,11 @@ coldboot_action_t FirstStageMount::ColdbootCallback(uevent* uevent) {
     }
 
     if (uevent->partition_name) {
-        // Matches partition name to create device nodes.
-        // Both required_devices_partition_names_ and uevent->partition_name have A/B
-        // suffix when A/B is used.
-        auto iter = required_devices_partition_names_.find(uevent->partition_name);
-        if (iter != required_devices_partition_names_.end()) {
-            LOG(VERBOSE) << __FUNCTION__ << "(): found partition: " << *iter;
-            required_devices_partition_names_.erase(iter);
-            if (required_devices_partition_names_.empty()) {
-                return COLDBOOT_STOP;  // Found all partitions, stop coldboot.
-            } else {
-                return COLDBOOT_CREATE;  // Creates this device and continue to find others.
-            }
+        return HandleBlockDevice(uevent->partition_name, uevent);
+    } else {
+        const char* basename = strrchr(uevent->path, '/');
+        if (basename) {
+            return HandleBlockDevice(basename + 1, uevent);
         }
     }
     // Not found a partition or find an unneeded partition, continue to find others.
