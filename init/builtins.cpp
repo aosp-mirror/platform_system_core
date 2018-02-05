@@ -514,8 +514,9 @@ static Result<Success> queue_fs_event(int code) {
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
 
-        // defaultcrypto detects file/block encryption. init flow is same for each.
-        ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
+        // Although encrypted, vold has already set the device up, so we do not need to
+        // do anything different from the nonencrypted case.
+        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
         if (e4crypt_install_keyring()) {
@@ -523,8 +524,9 @@ static Result<Success> queue_fs_event(int code) {
         }
         property_set("ro.crypto.type", "file");
 
-        // encrypt detects file/block encryption. init flow is same for each.
-        ActionManager::GetInstance().QueueEventTrigger("encrypt");
+        // Although encrypted, vold has already set the device up, so we do not need to
+        // do anything different from the nonencrypted case.
+        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code > 0) {
         Error() << "fs_mgr_mount_all() returned unexpected error " << code;

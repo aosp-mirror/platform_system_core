@@ -23,6 +23,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace unwindstack {
 
@@ -36,19 +37,40 @@ enum ArchEnum : uint8_t;
 class DexFiles {
  public:
   explicit DexFiles(std::shared_ptr<Memory>& memory);
+  DexFiles(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs);
   ~DexFiles();
 
-  DexFile* GetDexFile(uint64_t dex_offset, MapInfo* info);
+  DexFile* GetDexFile(uint64_t dex_file_offset, MapInfo* info);
 
-  void GetMethodInformation(uint64_t dex_offset, MapInfo* info, std::string* method_name,
+  void GetMethodInformation(Maps* maps, MapInfo* info, uint64_t dex_pc, std::string* method_name,
                             uint64_t* method_offset);
 
   void SetArch(ArchEnum arch);
 
  private:
+  void Init(Maps* maps);
+
+  bool GetAddr(size_t index, uint64_t* addr);
+
+  uint64_t ReadEntryPtr32(uint64_t addr);
+
+  uint64_t ReadEntryPtr64(uint64_t addr);
+
+  bool ReadEntry32();
+
+  bool ReadEntry64();
+
   std::shared_ptr<Memory> memory_;
-  std::mutex files_lock_;
+  std::vector<std::string> search_libs_;
+
+  std::mutex lock_;
+  bool initialized_ = false;
   std::unordered_map<uint64_t, DexFile*> files_;
+
+  uint64_t entry_addr_ = 0;
+  uint64_t (DexFiles::*read_entry_ptr_func_)(uint64_t) = nullptr;
+  bool (DexFiles::*read_entry_func_)() = nullptr;
+  std::vector<uint64_t> addrs_;
 };
 
 }  // namespace unwindstack

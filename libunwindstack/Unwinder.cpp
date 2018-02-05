@@ -53,49 +53,23 @@ void Unwinder::FillInDexFrame() {
   frame->pc = dex_pc;
   frame->sp = regs_->sp();
 
-  auto it = maps_->begin();
-  uint64_t rel_dex_pc;
-  MapInfo* info;
-  for (; it != maps_->end(); ++it) {
-    auto entry = *it;
-    if (dex_pc >= entry->start && dex_pc < entry->end) {
-      info = entry;
-      rel_dex_pc = dex_pc - entry->start;
-      frame->map_start = entry->start;
-      frame->map_end = entry->end;
-      frame->map_offset = entry->offset;
-      frame->map_load_bias = entry->load_bias;
-      frame->map_flags = entry->flags;
-      frame->map_name = entry->name;
-      frame->rel_pc = rel_dex_pc;
-      break;
-    }
-  }
-
-  if (it == maps_->end() || ++it == maps_->end()) {
-    return;
-  }
-
-  auto entry = *it;
-  unwindstack::Elf* elf = entry->GetElf(process_memory_, true);
-  if (!elf->valid()) {
-    return;
-  }
-
-  // Adjust the relative dex by the offset.
-  rel_dex_pc += entry->elf_offset;
-
-  uint64_t dex_offset;
-  if (!elf->GetFunctionName(rel_dex_pc, &frame->function_name, &dex_offset)) {
-    return;
-  }
-  frame->function_offset = dex_offset;
-  if (frame->function_name != "$dexfile") {
-    return;
-  }
+  MapInfo* info = maps_->Find(dex_pc);
+  frame->map_start = info->start;
+  frame->map_end = info->end;
+  frame->map_offset = info->offset;
+  frame->map_load_bias = info->load_bias;
+  frame->map_flags = info->flags;
+  frame->map_name = info->name;
+  frame->rel_pc = dex_pc - info->start;
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
-  dex_files_->GetMethodInformation(dex_offset, info, &frame->function_name, &frame->function_offset);
+  if (dex_files_ == nullptr) {
+    return;
+  }
+
+  // dex_files_->GetMethodInformation(dex_pc - dex_offset, dex_offset, info, &frame->function_name,
+  dex_files_->GetMethodInformation(maps_, info, dex_pc, &frame->function_name,
+                                   &frame->function_offset);
 #endif
 }
 

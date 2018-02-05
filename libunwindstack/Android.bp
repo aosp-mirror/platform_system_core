@@ -128,6 +128,12 @@ cc_library_static {
         "DexFile.cpp",
         "DexFiles.cpp",
     ],
+    target: {
+        // Always disable optimizations for host to make it easier to debug.
+        host: {
+            cflags: ["-O0", "-g"],
+        },
+    },
 
     shared_libs: [
         "libbase",
@@ -151,8 +157,13 @@ cc_test_library {
     vendor_available: false,
     defaults: ["libunwindstack_flags"],
 
+    shared: {
+        enabled: false,
+    },
+
     srcs: [
         "tests/DexFileTest.cpp",
+        "tests/DexFilesTest.cpp",
     ],
     local_include_dirs: ["include"],
     allow_undefined_symbols: true,
