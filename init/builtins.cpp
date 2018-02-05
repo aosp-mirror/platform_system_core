@@ -1032,6 +1032,10 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
         {"mkdir",                   {1,     4,    {true,   do_mkdir}}},
+        // TODO: Do mount operations in vendor_init.
+        // mount_all is currently too complex to run in vendor_init as it queues action triggers,
+        // imports rc scripts, etc.  It should be simplified and run in vendor_init context.
+        // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
