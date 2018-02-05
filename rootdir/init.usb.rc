@@ -18,10 +18,6 @@ service adbd /system/bin/adbd --root_seclabel=u:r:su:s0
     disabled
     seclabel u:r:adbd:s0
 
-# adbd on at boot in emulator
-on property:ro.kernel.qemu=1
-    start adbd
-
 on boot
     setprop sys.usb.configfs 0
 
