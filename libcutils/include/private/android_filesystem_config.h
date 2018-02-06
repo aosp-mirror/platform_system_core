@@ -55,6 +55,9 @@
  */
 
 #define AID_ROOT 0 /* traditional unix root user */
+/* The following are for LTP and should only be used for testing */
+#define AID_DAEMON 1 /* traditional unix daemon owner */
+#define AID_BIN 2    /* traditional unix binaries owner */
 
 #define AID_SYSTEM 1000 /* system server */
 
