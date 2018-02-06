@@ -943,11 +943,18 @@ void LogBootInfoToStatsd(std::chrono::milliseconds end_time,
     return;
   }
 
-  const std::string system_reason(BootReasonStrToReason(reason));
+  const std::string system_reason(GetProperty(system_reboot_reason_property));
   android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, reason.c_str(),
                              system_reason.c_str(), end_time.count(), total_duration.count(),
                              (int64_t)bootloader_duration_ms,
                              (int64_t)time_since_last_boot_sec * 1000);
+}
+
+void SetSystemBootReason() {
+  const std::string bootloader_boot_reason(GetProperty(bootloader_reboot_reason_property));
+  const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
+  // Record the scrubbed system_boot_reason to the property
+  SetProperty(system_reboot_reason_property, system_boot_reason);
 }
 
 // Records several metrics related to the time it takes to boot the device,
@@ -1037,12 +1044,10 @@ void RecordBootReason() {
   boot_event_store.AddBootEventWithValue("boot_reason", boot_reason);
 
   // Log the scrubbed system_boot_reason.
-  const std::string system_reason(BootReasonStrToReason(reason));
+  const std::string system_reason(GetProperty(system_reboot_reason_property));
   int32_t system_boot_reason = BootReasonStrToEnum(system_reason);
   boot_event_store.AddBootEventWithValue("system_boot_reason", system_boot_reason);
 
-  // Record the scrubbed system_boot_reason to the property
-  SetProperty(system_reboot_reason_property, system_reason);
   if (reason == "") {
     SetProperty(bootloader_reboot_reason_property, system_reason);
   }
@@ -1108,20 +1113,22 @@ int main(int argc, char** argv) {
 
   int option_index = 0;
   static const char value_str[] = "value";
+  static const char system_boot_reason_str[] = "set_system_boot_reason";
   static const char boot_complete_str[] = "record_boot_complete";
   static const char boot_reason_str[] = "record_boot_reason";
   static const char factory_reset_str[] = "record_time_since_factory_reset";
   static const struct option long_options[] = {
       // clang-format off
-      { "help",            no_argument,       NULL,   'h' },
-      { "log",             no_argument,       NULL,   'l' },
-      { "print",           no_argument,       NULL,   'p' },
-      { "record",          required_argument, NULL,   'r' },
-      { value_str,         required_argument, NULL,   0 },
-      { boot_complete_str, no_argument,       NULL,   0 },
-      { boot_reason_str,   no_argument,       NULL,   0 },
-      { factory_reset_str, no_argument,       NULL,   0 },
-      { NULL,              0,                 NULL,   0 }
+      { "help",                 no_argument,       NULL,   'h' },
+      { "log",                  no_argument,       NULL,   'l' },
+      { "print",                no_argument,       NULL,   'p' },
+      { "record",               required_argument, NULL,   'r' },
+      { value_str,              required_argument, NULL,   0 },
+      { system_boot_reason_str, no_argument,       NULL,   0 },
+      { boot_complete_str,      no_argument,       NULL,   0 },
+      { boot_reason_str,        no_argument,       NULL,   0 },
+      { factory_reset_str,      no_argument,       NULL,   0 },
+      { NULL,                   0,                 NULL,   0 }
       // clang-format on
   };
 
@@ -1137,6 +1144,8 @@ int main(int argc, char** argv) {
           // |optarg| is an external variable set by getopt representing
           // the option argument.
           value = optarg;
+        } else if (option_name == system_boot_reason_str) {
+          SetSystemBootReason();
         } else if (option_name == boot_complete_str) {
           RecordBootComplete();
         } else if (option_name == boot_reason_str) {
