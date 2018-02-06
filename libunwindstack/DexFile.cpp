@@ -150,16 +150,18 @@ bool DexFileFromMemory::Open(uint64_t dex_file_offset_in_memory, Memory* memory)
   }
 
   art::DexFile::Header* header = reinterpret_cast<art::DexFile::Header*>(memory_.data());
-  bool modify_data_off = false;
   uint32_t file_size = header->file_size_;
   if (art::CompactDexFile::IsMagicValid(header->magic_)) {
+    // Compact dex file store data section separately so that it can be shared.
+    // Therefore we need to extend the read memory range to include it.
+    // TODO: This might be wasteful as we might read data in between as well.
+    //       In practice, this should be fine, as such sharing only happens on disk.
     uint32_t computed_file_size;
     if (__builtin_add_overflow(header->data_off_, header->data_size_, &computed_file_size)) {
       return false;
     }
     if (computed_file_size > file_size) {
       file_size = computed_file_size;
-      modify_data_off = true;
     }
   } else if (!art::StandardDexFile::IsMagicValid(header->magic_)) {
     return false;
@@ -171,9 +173,6 @@ bool DexFileFromMemory::Open(uint64_t dex_file_offset_in_memory, Memory* memory)
   }
 
   header = reinterpret_cast<art::DexFile::Header*>(memory_.data());
-  if (modify_data_off) {
-    header->data_off_ = header->file_size_;
-  }
 
   art::DexFileLoader loader;
   std::string error_msg;
