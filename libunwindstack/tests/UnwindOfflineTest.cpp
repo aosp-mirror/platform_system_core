@@ -49,8 +49,8 @@ static std::string DumpFrames(Unwinder& unwinder) {
   return str;
 }
 
-TEST(UnwindOfflineTest, pc_straddle_arm32) {
-  std::string dir(TestGetFileDirectory() + "offline/straddle_arm32/");
+TEST(UnwindOfflineTest, pc_straddle_arm) {
+  std::string dir(TestGetFileDirectory() + "offline/straddle_arm/");
 
   MemoryOffline* memory = new MemoryOffline;
   ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
@@ -99,8 +99,8 @@ TEST(UnwindOfflineTest, pc_straddle_arm32) {
       frame_info);
 }
 
-TEST(UnwindOfflineTest, pc_in_gnu_debugdata_arm32) {
-  std::string dir(TestGetFileDirectory() + "offline/gnu_debugdata_arm32/");
+TEST(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
+  std::string dir(TestGetFileDirectory() + "offline/gnu_debugdata_arm/");
 
   MemoryOffline* memory = new MemoryOffline;
   ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
@@ -209,8 +209,8 @@ static void AddMemory(std::string file_name, MemoryOfflineParts* parts) {
   parts->Add(memory);
 }
 
-TEST(UnwindOfflineTest, jit_debug_x86_32) {
-  std::string dir(TestGetFileDirectory() + "offline/jit_debug_x86_32/");
+TEST(UnwindOfflineTest, jit_debug_x86) {
+  std::string dir(TestGetFileDirectory() + "offline/jit_debug_x86/");
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
   AddMemory(dir + "descriptor.data", memory);
@@ -406,8 +406,8 @@ TEST(UnwindOfflineTest, jit_debug_x86_32) {
       frame_info);
 }
 
-TEST(UnwindOfflineTest, jit_debug_arm32) {
-  std::string dir(TestGetFileDirectory() + "offline/jit_debug_arm32/");
+TEST(UnwindOfflineTest, jit_debug_arm) {
+  std::string dir(TestGetFileDirectory() + "offline/jit_debug_arm/");
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
   AddMemory(dir + "descriptor.data", memory);
