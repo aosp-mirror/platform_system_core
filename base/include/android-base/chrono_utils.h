@@ -20,7 +20,9 @@
 #include <chrono>
 #include <sstream>
 
+#if __cplusplus > 201103L  // C++14
 using namespace std::chrono_literals;
+#endif
 
 namespace android {
 namespace base {
