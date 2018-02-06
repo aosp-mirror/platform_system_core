@@ -46,7 +46,7 @@ static bool needs_retry = false;
 
 bool auth_required = true;
 
-bool adbd_auth_verify(const char* token, size_t token_size, const char* sig, int sig_len) {
+bool adbd_auth_verify(const char* token, size_t token_size, const std::string& sig) {
     static constexpr const char* key_paths[] = { "/adb_keys", "/data/misc/adb/adb_keys", nullptr };
 
     for (const auto& path : key_paths) {
@@ -80,7 +80,8 @@ bool adbd_auth_verify(const char* token, size_t token_size, const char* sig, int
 
                 bool verified =
                     (RSA_verify(NID_sha1, reinterpret_cast<const uint8_t*>(token), token_size,
-                                reinterpret_cast<const uint8_t*>(sig), sig_len, key) == 1);
+                                reinterpret_cast<const uint8_t*>(sig.c_str()), sig.size(),
+                                key) == 1);
                 RSA_free(key);
                 if (verified) return true;
             }
@@ -210,10 +211,10 @@ void send_auth_request(atransport* t) {
     }
 
     apacket* p = get_apacket();
-    memcpy(p->data, t->token, sizeof(t->token));
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_TOKEN;
     p->msg.data_length = sizeof(t->token);
+    p->payload.assign(t->token, t->token + sizeof(t->token));
     send_packet(p, t);
 }
 
