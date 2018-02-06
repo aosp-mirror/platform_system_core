@@ -45,6 +45,7 @@ cc_library {
         support_system_process: true,
     },
     srcs: [
+        "chrono_utils.cpp",
         "file.cpp",
         "logging.cpp",
         "parsenetaddress.cpp",
@@ -72,14 +73,12 @@ cc_library {
         },
         linux: {
             srcs: [
-                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
         },
         darwin: {
             srcs: [
-                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
