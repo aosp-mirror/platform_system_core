@@ -45,14 +45,14 @@ struct FrameData {
   uint64_t sp;
 
   std::string function_name;
-  uint64_t function_offset;
+  uint64_t function_offset = 0;
 
   std::string map_name;
-  uint64_t map_offset;
-  uint64_t map_start;
-  uint64_t map_end;
-  uint64_t map_load_bias;
-  int map_flags;
+  uint64_t map_offset = 0;
+  uint64_t map_start = 0;
+  uint64_t map_end = 0;
+  uint64_t map_load_bias = 0;
+  int map_flags = 0;
 };
 
 class Unwinder {

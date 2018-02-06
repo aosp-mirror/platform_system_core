@@ -56,6 +56,7 @@ class RegsFake : public Regs {
   void FakeSetArch(ArchEnum arch) { fake_arch_ = arch; }
   void FakeSetPc(uint64_t pc) { fake_pc_ = pc; }
   void FakeSetSp(uint64_t sp) { fake_sp_ = sp; }
+  void FakeSetDexPc(uint64_t dex_pc) { dex_pc_ = dex_pc; }
   void FakeSetReturnAddress(uint64_t return_address) { fake_return_address_ = return_address; }
   void FakeSetReturnAddressValid(bool valid) { fake_return_address_valid_ = valid; }
 
