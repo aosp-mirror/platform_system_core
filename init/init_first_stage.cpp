@@ -56,6 +56,7 @@ class FirstStageMount {
     bool InitDevices();
 
   protected:
+    ListenerAction HandleBlockDevice(const std::string& name, const Uevent&);
     bool InitRequiredDevices();
     bool InitVerityDevice(const std::string& verity_device);
     bool MountPartitions();
@@ -209,6 +210,24 @@ bool FirstStageMount::InitRequiredDevices() {
     return true;
 }
 
+ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const Uevent& uevent) {
+    // Matches partition name to create device nodes.
+    // Both required_devices_partition_names_ and uevent->partition_name have A/B
+    // suffix when A/B is used.
+    auto iter = required_devices_partition_names_.find(name);
+    if (iter != required_devices_partition_names_.end()) {
+        LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
+        required_devices_partition_names_.erase(iter);
+        device_handler_.HandleDeviceEvent(uevent);
+        if (required_devices_partition_names_.empty()) {
+            return ListenerAction::kStop;
+        } else {
+            return ListenerAction::kContinue;
+        }
+    }
+    return ListenerAction::kContinue;
+}
+
 ListenerAction FirstStageMount::UeventCallback(const Uevent& uevent) {
     // Ignores everything that is not a block device.
     if (uevent.subsystem != "block") {
@@ -216,19 +235,11 @@ ListenerAction FirstStageMount::UeventCallback(const Uevent& uevent) {
     }
 
     if (!uevent.partition_name.empty()) {
-        // Matches partition name to create device nodes.
-        // Both required_devices_partition_names_ and uevent->partition_name have A/B
-        // suffix when A/B is used.
-        auto iter = required_devices_partition_names_.find(uevent.partition_name);
-        if (iter != required_devices_partition_names_.end()) {
-            LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
-            required_devices_partition_names_.erase(iter);
-            device_handler_.HandleDeviceEvent(uevent);
-            if (required_devices_partition_names_.empty()) {
-                return ListenerAction::kStop;
-            } else {
-                return ListenerAction::kContinue;
-            }
+        return HandleBlockDevice(uevent.partition_name, uevent);
+    } else {
+        size_t base_idx = uevent.path.rfind('/');
+        if (base_idx != std::string::npos) {
+            return HandleBlockDevice(uevent.path.substr(base_idx + 1), uevent);
         }
     }
     // Not found a partition or find an unneeded partition, continue to find others.
