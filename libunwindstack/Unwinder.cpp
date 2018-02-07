@@ -54,13 +54,18 @@ void Unwinder::FillInDexFrame() {
   frame->sp = regs_->sp();
 
   MapInfo* info = maps_->Find(dex_pc);
-  frame->map_start = info->start;
-  frame->map_end = info->end;
-  frame->map_offset = info->offset;
-  frame->map_load_bias = info->load_bias;
-  frame->map_flags = info->flags;
-  frame->map_name = info->name;
-  frame->rel_pc = dex_pc - info->start;
+  if (info != nullptr) {
+    frame->map_start = info->start;
+    frame->map_end = info->end;
+    frame->map_offset = info->offset;
+    frame->map_load_bias = info->load_bias;
+    frame->map_flags = info->flags;
+    frame->map_name = info->name;
+    frame->rel_pc = dex_pc - info->start;
+  } else {
+    frame->rel_pc = dex_pc;
+    return;
+  }
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
   if (dex_files_ == nullptr) {
