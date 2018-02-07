@@ -664,11 +664,11 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     TRACE_KILL_END();
 
     if (r) {
-        ALOGE("kill(%d): errno=%d", procp->pid, errno);
+        ALOGE("kill(%d): errno=%d", pid, errno);
         return -1;
-    } else {
-        return tasksize;
     }
+
+    return tasksize;
 }
 
 /*
