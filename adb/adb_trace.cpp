@@ -42,7 +42,11 @@ void AdbLogger(android::base::LogId id, android::base::LogSeverity severity,
                const char* message) {
     android::base::StderrLogger(id, severity, tag, file, line, message);
 #if !ADB_HOST
-    gLogdLogger(id, severity, tag, file, line, message);
+    // Only print logs of INFO or higher to logcat, so that `adb logcat` with adbd tracing on
+    // doesn't result in exponential logging.
+    if (severity >= android::base::INFO) {
+        gLogdLogger(id, severity, tag, file, line, message);
+    }
 #endif
 }
 
@@ -137,10 +141,14 @@ static void setup_trace_mask() {
             // -1 is used for the special values "1" and "all" that enable all
             // tracing.
             adb_trace_mask = ~0;
-            return;
+            break;
         } else {
             adb_trace_mask |= 1 << flag->second;
         }
+    }
+
+    if (adb_trace_mask != 0) {
+        android::base::SetMinimumLogSeverity(android::base::VERBOSE);
     }
 }
 
