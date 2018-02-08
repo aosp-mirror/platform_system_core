@@ -42,27 +42,22 @@
 static std::recursive_mutex& local_socket_list_lock = *new std::recursive_mutex();
 static unsigned local_socket_next_id = 1;
 
-static asocket local_socket_list = {
-    .next = &local_socket_list, .prev = &local_socket_list,
-};
+static auto& local_socket_list = *new std::vector<asocket*>();
 
 /* the the list of currently closing local sockets.
 ** these have no peer anymore, but still packets to
 ** write to their fd.
 */
-static asocket local_socket_closing_list = {
-    .next = &local_socket_closing_list, .prev = &local_socket_closing_list,
-};
+static auto& local_socket_closing_list = *new std::vector<asocket*>();
 
 // Parse the global list of sockets to find one with id |local_id|.
 // If |peer_id| is not 0, also check that it is connected to a peer
 // with id |peer_id|. Returns an asocket handle on success, NULL on failure.
 asocket* find_local_socket(unsigned local_id, unsigned peer_id) {
-    asocket* s;
-    asocket* result = NULL;
+    asocket* result = nullptr;
 
     std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
-    for (s = local_socket_list.next; s != &local_socket_list; s = s->next) {
+    for (asocket* s : local_socket_list) {
         if (s->id != local_id) {
             continue;
         }
@@ -75,13 +70,6 @@ asocket* find_local_socket(unsigned local_id, unsigned peer_id) {
     return result;
 }
 
-static void insert_local_socket(asocket* s, asocket* list) {
-    s->next = list;
-    s->prev = s->next->prev;
-    s->prev->next = s;
-    s->next->prev = s;
-}
-
 void install_local_socket(asocket* s) {
     std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
 
@@ -92,29 +80,24 @@ void install_local_socket(asocket* s) {
         fatal("local socket id overflow");
     }
 
-    insert_local_socket(s, &local_socket_list);
+    local_socket_list.push_back(s);
 }
 
 void remove_socket(asocket* s) {
     std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
-    if (s->prev && s->next) {
-        s->prev->next = s->next;
-        s->next->prev = s->prev;
-        s->next = 0;
-        s->prev = 0;
-        s->id = 0;
+    for (auto list : { &local_socket_list, &local_socket_closing_list }) {
+        list->erase(std::remove_if(list->begin(), list->end(), [s](asocket* x) { return x == s; }),
+                    list->end());
     }
 }
 
 void close_all_sockets(atransport* t) {
-    asocket* s;
-
     /* this is a little gross, but since s->close() *will* modify
     ** the list out from under you, your options are limited.
     */
     std::lock_guard<std::recursive_mutex> lock(local_socket_list_lock);
 restart:
-    for (s = local_socket_list.next; s != &local_socket_list; s = s->next) {
+    for (asocket* s : local_socket_list) {
         if (s->transport == t || (s->peer && s->peer->transport == t)) {
             s->close(s);
             goto restart;
@@ -243,7 +226,7 @@ static void local_socket_close(asocket* s) {
     fdevent_del(&s->fde, FDE_READ);
     remove_socket(s);
     D("LS(%d): put on socket_closing_list fd=%d", s->id, s->fd);
-    insert_local_socket(s, &local_socket_closing_list);
+    local_socket_closing_list.push_back(s);
     CHECK_EQ(FDE_WRITE, s->fde.state & FDE_WRITE);
 }
 
