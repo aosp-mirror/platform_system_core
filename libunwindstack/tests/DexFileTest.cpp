@@ -25,7 +25,7 @@
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 
-#include <dex/code_item_accessors-no_art-inl.h>
+#include <dex/code_item_accessors-inl.h>
 #include <dex/standard_dex_file.h>
 
 #include <gtest/gtest.h>
