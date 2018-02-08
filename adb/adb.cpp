@@ -474,13 +474,14 @@ void handle_packet(apacket *p, atransport *t)
             asocket* s = find_local_socket(p->msg.arg1, p->msg.arg0);
             if (s) {
                 unsigned rid = p->msg.arg0;
-                p->len = p->msg.data_length;
 
-                if (s->enqueue(s, p) == 0) {
+                // TODO: Convert apacket::data to a type that we can move out of.
+                std::string copy(p->data, p->data + p->msg.data_length);
+
+                if (s->enqueue(s, std::move(copy)) == 0) {
                     D("Enqueue the socket");
                     send_ready(s->id, rid, t);
                 }
-                return;
             }
         }
         break;

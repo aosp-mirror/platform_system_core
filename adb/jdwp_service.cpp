@@ -470,10 +470,9 @@ static void jdwp_socket_close(asocket* s) {
     free(s);
 }
 
-static int jdwp_socket_enqueue(asocket* s, apacket* p) {
+static int jdwp_socket_enqueue(asocket* s, std::string) {
     /* you can't write to this asocket */
     D("LS(%d): JDWP socket received data?", s->id);
-    put_apacket(p);
     s->peer->close(s->peer);
     return -1;
 }
@@ -486,9 +485,11 @@ static void jdwp_socket_ready(asocket* s) {
      * on the second one, close the connection
      */
     if (!jdwp->pass) {
-        apacket* p = get_apacket();
-        p->len = jdwp_process_list((char*)p->data, s->get_max_payload());
-        peer->enqueue(peer, p);
+        std::string data;
+        data.resize(s->get_max_payload());
+        size_t len = jdwp_process_list(&data[0], data.size());
+        data.resize(len);
+        peer->enqueue(peer, std::move(data));
         jdwp->pass = true;
     } else {
         peer->close(peer);
@@ -524,17 +525,14 @@ struct JdwpTracker : public asocket {
 static std::vector<std::unique_ptr<JdwpTracker>> _jdwp_trackers;
 
 static void jdwp_process_list_updated(void) {
-    char buffer[1024];
-    int len = jdwp_process_list_msg(buffer, sizeof(buffer));
+    std::string data;
+    data.resize(1024);
+    data.resize(jdwp_process_list_msg(&data[0], data.size()));
 
     for (auto& t : _jdwp_trackers) {
-        apacket* p = get_apacket();
-        memcpy(p->data, buffer, len);
-        p->len = len;
-
         if (t->peer) {
             // The tracker might not have been connected yet.
-            t->peer->enqueue(t->peer, p);
+            t->peer->enqueue(t->peer, data);
         }
     }
 }
@@ -560,17 +558,17 @@ static void jdwp_tracker_ready(asocket* s) {
     JdwpTracker* t = (JdwpTracker*)s;
 
     if (t->need_initial) {
-        apacket* p = get_apacket();
+        std::string data;
+        data.resize(s->get_max_payload());
+        data.resize(jdwp_process_list_msg(&data[0], data.size()));
         t->need_initial = false;
-        p->len = jdwp_process_list_msg((char*)p->data, s->get_max_payload());
-        s->peer->enqueue(s->peer, p);
+        s->peer->enqueue(s->peer, std::move(data));
     }
 }
 
-static int jdwp_tracker_enqueue(asocket* s, apacket* p) {
+static int jdwp_tracker_enqueue(asocket* s, std::string) {
     /* you can't write to this socket */
     D("LS(%d): JDWP tracker received data?", s->id);
-    put_apacket(p);
     s->peer->close(s->peer);
     return -1;
 }
