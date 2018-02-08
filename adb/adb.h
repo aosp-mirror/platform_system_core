@@ -73,11 +73,6 @@ struct amessage {
 };
 
 struct apacket {
-    apacket* next;
-
-    size_t len;
-    char* ptr;
-
     amessage msg;
     char data[MAX_PAYLOAD];
 };
