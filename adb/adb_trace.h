@@ -43,11 +43,11 @@ enum AdbTrace {
 #define VLOG_IS_ON(TAG) \
     ((adb_trace_mask & (1 << (TAG))) != 0)
 
-#define VLOG(TAG)         \
+#define VLOG(TAG)                 \
     if (LIKELY(!VLOG_IS_ON(TAG))) \
-        ;                 \
-    else                  \
-        LOG(INFO)
+        ;                         \
+    else                          \
+        LOG(DEBUG)
 
 // You must define TRACE_TAG before using this macro.
 #define D(...) \

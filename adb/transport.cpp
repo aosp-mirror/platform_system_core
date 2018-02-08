@@ -72,6 +72,11 @@ bool FdConnection::Read(apacket* packet) {
         return false;
     }
 
+    if (packet->msg.data_length > sizeof(packet->data)) {
+        D("remote local: read overflow (data length = %" PRIu32 ")", packet->msg.data_length);
+        return false;
+    }
+
     if (!ReadFdExactly(fd_.get(), &packet->data, packet->msg.data_length)) {
         D("remote local: terminated (data)");
         return false;
@@ -409,21 +414,22 @@ static void device_tracker_close(asocket* socket) {
     free(tracker);
 }
 
-static int device_tracker_enqueue(asocket* socket, apacket* p) {
+static int device_tracker_enqueue(asocket* socket, std::string) {
     /* you can't read from a device tracker, close immediately */
-    put_apacket(p);
     device_tracker_close(socket);
     return -1;
 }
 
 static int device_tracker_send(device_tracker* tracker, const std::string& string) {
-    apacket* p = get_apacket();
     asocket* peer = tracker->socket.peer;
 
-    snprintf(reinterpret_cast<char*>(p->data), 5, "%04x", static_cast<int>(string.size()));
-    memcpy(&p->data[4], string.data(), string.size());
-    p->len = 4 + string.size();
-    return peer->enqueue(peer, p);
+    std::string data;
+    data.resize(4 + string.size());
+    char buf[5];
+    snprintf(buf, sizeof(buf), "%04x", static_cast<int>(string.size()));
+    memcpy(&data[0], buf, 4);
+    memcpy(&data[4], string.data(), string.size());
+    return peer->enqueue(peer, std::move(data));
 }
 
 static void device_tracker_ready(asocket* socket) {

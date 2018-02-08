@@ -19,9 +19,12 @@
 
 #include <stddef.h>
 
+#include <deque>
 #include <memory>
+#include <string>
 
 #include "fdevent.h"
+#include "range.h"
 
 struct apacket;
 class atransport;
@@ -31,12 +34,6 @@ class atransport;
  * remote asocket is bound to the protocol engine.
  */
 struct asocket {
-    /* chain pointers for the local/remote list of
-     * asockets that this asocket lives in
-     */
-    asocket* next;
-    asocket* prev;
-
     /* the unique identifier for this asocket
      */
     unsigned id;
@@ -65,9 +62,10 @@ struct asocket {
     fdevent fde;
     int fd;
 
-    // queue of apackets waiting to be written
-    apacket* pkt_first;
-    apacket* pkt_last;
+    // queue of data waiting to be written
+    std::deque<Range> packet_queue;
+
+    std::string smart_socket_data;
 
     /* enqueue is called by our peer when it has data
      * for us.  It should return 0 if we can accept more
@@ -75,7 +73,7 @@ struct asocket {
      * peer->ready() when we once again are ready to
      * receive data.
      */
-    int (*enqueue)(asocket* s, apacket* pkt);
+    int (*enqueue)(asocket* s, std::string data);
 
     /* ready is called by the peer when it is ready for
      * us to send data via enqueue again
