@@ -114,10 +114,10 @@ static void CloseWithPacketThreadFunc(CloseWithPacketArg* arg) {
     ASSERT_TRUE(s != nullptr);
     arg->bytes_written = 0;
     while (true) {
-        apacket* p = get_apacket();
-        p->len = sizeof(p->data);
-        arg->bytes_written += p->len;
-        int ret = s->enqueue(s, p);
+        std::string data;
+        data.resize(MAX_PAYLOAD);
+        arg->bytes_written += data.size();
+        int ret = s->enqueue(s, std::move(data));
         if (ret == 1) {
             // The writer has one packet waiting to send.
             break;
