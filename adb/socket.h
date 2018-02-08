@@ -31,12 +31,6 @@ class atransport;
  * remote asocket is bound to the protocol engine.
  */
 struct asocket {
-    /* chain pointers for the local/remote list of
-     * asockets that this asocket lives in
-     */
-    asocket* next;
-    asocket* prev;
-
     /* the unique identifier for this asocket
      */
     unsigned id;
