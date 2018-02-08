@@ -30,55 +30,21 @@ additional.namespaces = sphal,vndk,rs
 ###############################################################################
 # "default" namespace
 #
-# Framework-side code runs in this namespace. Libs from /vendor partition
-# can't be loaded in this namespace.
+# Framework-side code runs in this namespace. However, libs from other
+# partitions are also allowed temporarily.
 ###############################################################################
-namespace.default.isolated = true
+namespace.default.isolated = false
 
-namespace.default.search.paths = /system/${LIB}
-
-# We can't have entire /system/${LIB} as permitted paths because doing so
-# makes it possible to load libs in /system/${LIB}/vndk* directories by
-# their absolute paths (e.g. dlopen("/system/lib/vndk/libbase.so");).
-# VNDK libs are built with previous versions of Android and thus must not be
-# loaded into this namespace where libs built with the current version of
-# Android are loaded. Mixing the two types of libs in the same namespace can
-# cause unexpected problem.
-namespace.default.permitted.paths  = /system/${LIB}/drm
-namespace.default.permitted.paths += /system/${LIB}/extractors
-namespace.default.permitted.paths += /system/${LIB}/hw
-# These are where odex files are located. libart has to be able to dlopen the files
-namespace.default.permitted.paths += /system/framework
-namespace.default.permitted.paths += /system/app
-namespace.default.permitted.paths += /system/priv-app
-namespace.default.permitted.paths += /vendor/framework
-namespace.default.permitted.paths += /vendor/app
-namespace.default.permitted.paths += /vendor/priv-app
-namespace.default.permitted.paths += /oem/app
-namespace.default.permitted.paths += /product/framework
-namespace.default.permitted.paths += /product/app
-namespace.default.permitted.paths += /product/priv-app
-namespace.default.permitted.paths += /data
-namespace.default.permitted.paths += /mnt/expand
+namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /odm/${LIB}
+namespace.default.search.paths += /vendor/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
-
-namespace.default.asan.permitted.paths  = /data
-namespace.default.asan.permitted.paths += /system/${LIB}/drm
-namespace.default.asan.permitted.paths += /system/${LIB}/extractors
-namespace.default.asan.permitted.paths += /system/${LIB}/hw
-namespace.default.asan.permitted.paths += /system/framework
-namespace.default.asan.permitted.paths += /system/app
-namespace.default.asan.permitted.paths += /system/priv-app
-namespace.default.asan.permitted.paths += /vendor/framework
-namespace.default.asan.permitted.paths += /vendor/app
-namespace.default.asan.permitted.paths += /vendor/priv-app
-namespace.default.asan.permitted.paths += /oem/app
-namespace.default.asan.permitted.paths += /product/framework
-namespace.default.asan.permitted.paths += /product/app
-namespace.default.asan.permitted.paths += /product/priv-app
-namespace.default.asan.permitted.paths += /mnt/expand
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}
+namespace.default.asan.search.paths +=           /odm/${LIB}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
+namespace.default.asan.search.paths +=           /vendor/${LIB}
 
 ###############################################################################
 # "sphal" namespace
@@ -224,88 +190,35 @@ namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = system,vndk
-
-###############################################################################
-# "default" namespace
-#
-# This is the default linker namespace for a vendor process (a process started
-# from /vendor/bin/*). The main executable and the libs under /vendor/lib[64]
-# are loaded directly into this namespace. However, other libs under the system
-# partition (VNDK and LLNDK libraries) are not loaded here but from the
-# separate namespace 'system'. The delegation to the system namespace is done
-# via the 'namespace.default.link.system.shared_libs' property below.
-###############################################################################
-namespace.default.isolated = true
-namespace.default.visible = true
+namespace.default.isolated = false
 
 namespace.default.search.paths  = /odm/${LIB}
+namespace.default.search.paths += /odm/${LIB}/vndk
+namespace.default.search.paths += /odm/${LIB}/vndk-sp
 namespace.default.search.paths += /vendor/${LIB}
+namespace.default.search.paths += /vendor/${LIB}/vndk
+namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 
-namespace.default.permitted.paths  = /odm
-namespace.default.permitted.paths += /vendor
+# Access to system libraries are allowed
+namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
+namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
+namespace.default.search.paths += /system/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk
+namespace.default.asan.search.paths +=           /odm/${LIB}/vndk
+namespace.default.asan.search.paths += /data/asan/odm/${LIB}/vndk-sp
+namespace.default.asan.search.paths +=           /odm/${LIB}/vndk-sp
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
-
-namespace.default.asan.permitted.paths  = /data/asan/odm
-namespace.default.asan.permitted.paths +=           /odm
-namespace.default.asan.permitted.paths += /data/asan/vendor
-namespace.default.asan.permitted.paths +=           /vendor
-
-namespace.default.links = system,vndk
-namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
-namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
-namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
-
-###############################################################################
-# "vndk" namespace
-#
-# This namespace is where VNDK and VNDK-SP libraries are loaded for
-# a vendor process.
-###############################################################################
-namespace.vndk.isolated = false
-
-namespace.vndk.search.paths  = /odm/${LIB}/vndk
-namespace.vndk.search.paths += /odm/${LIB}/vndk-sp
-namespace.vndk.search.paths += /vendor/${LIB}/vndk
-namespace.vndk.search.paths += /vendor/${LIB}/vndk-sp
-namespace.vndk.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
-namespace.vndk.search.paths += /system/${LIB}/vndk%VNDK_VER%
-
-namespace.vndk.asan.search.paths  = /data/asan/odm/${LIB}/vndk
-namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk
-namespace.vndk.asan.search.paths += /data/asan/odm/${LIB}/vndk-sp
-namespace.vndk.asan.search.paths +=           /odm/${LIB}/vndk-sp
-namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk
-namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk
-namespace.vndk.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
-namespace.vndk.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
-namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
-namespace.vndk.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
-namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
-
-# When these NDK libs are required inside this namespace, then it is redirected
-# to the system namespace. This is possible since their ABI is stable across
-# Android releases.
-namespace.vndk.links = system,default
-namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
-namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
-
-namespace.vndk.link.default.allow_all_shared_libs = true
-
-###############################################################################
-# "system" namespace
-#
-# This namespace is where system libs (VNDK and LLNDK libs) are loaded for
-# a vendor process.
-###############################################################################
-namespace.system.isolated = false
-
-namespace.system.search.paths = /system/${LIB}
-
-namespace.system.asan.search.paths  = /data/asan/system/${LIB}
-namespace.system.asan.search.paths +=           /system/${LIB}
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk
+namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk
+namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
+namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
+namespace.default.asan.search.paths += /data/asan/system/${LIB}
+namespace.default.asan.search.paths +=           /system/${LIB}
