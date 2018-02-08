@@ -192,11 +192,12 @@ endef # update_and_install_ld_config
 # ld.config.txt
 #
 # For VNDK enforced devices that have defined BOARD_VNDK_VERSION, use
-# "ld.config.txt.in" as a source file. This configuration includes strict VNDK
-# run-time restrictions for vendor process.
+# "ld.config.vndk.txt" as a source file. This configuration includes
+# strict VNDK run-time restrictions for vendor process.
 # Other treblized devices, that have not defined BOARD_VNDK_VERSION or that
-# have set BOARD_VNDK_RUNTIME_DISABLE to true, use "ld.config.txt" as a source
-# file. This configuration does not have strict VNDK run-time restrictions.
+# have set BOARD_VNDK_RUNTIME_DISABLE to true, use "ld.config.vndk_light.txt"
+# as a source file. This configuration does not have strict VNDK run-time
+# restrictions.
 # If the device is not treblized, use "ld.config.legacy.txt" for legacy
 # namespace configuration.
 include $(CLEAR_VARS)
@@ -216,7 +217,7 @@ ifeq ($(_enforce_vndk_at_runtime),true)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
 $(eval $(call update_and_install_ld_config,\
-  $(LOCAL_PATH)/etc/ld.config.txt.in,\
+  $(LOCAL_PATH)/etc/ld.config.vndk.txt,\
   $(LOCAL_BUILT_MODULE),\
   $(PLATFORM_VNDK_VERSION)))
 
@@ -225,7 +226,7 @@ else ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
 $(eval $(call update_and_install_ld_config,\
-  $(LOCAL_PATH)/etc/ld.config.txt,\
+  $(LOCAL_PATH)/etc/ld.config.vndk_light.txt,\
   $(LOCAL_BUILT_MODULE),\
   $(if $(BOARD_VNDK_VERSION),$(PLATFORM_VNDK_VERSION))))
 
@@ -244,9 +245,9 @@ _enforce_vndk_at_runtime :=
 #
 # This file is a temporary configuration file only for GSI. Originally GSI has
 # BOARD_VNDK_VERSION defined and has strict VNDK enforcing rule based on
-# "ld.config.txt.in". However for the devices, that have not defined
+# "ld.config.vndk.txt". However for the devices, that have not defined
 # BOARD_VNDK_VERSION, GSI provides this configuration file which is based on
-# "ld.config.txt".
+# "ld.config.vndk_light.txt".
 # Do not install this file for the devices other than GSI.
 include $(CLEAR_VARS)
 LOCAL_MODULE := ld.config.noenforce.txt
@@ -255,7 +256,7 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
 $(eval $(call update_and_install_ld_config,\
-  $(LOCAL_PATH)/etc/ld.config.txt,\
+  $(LOCAL_PATH)/etc/ld.config.vndk_light.txt,\
   $(LOCAL_BUILT_MODULE),\
   $(PLATFORM_VNDK_VERSION)))
 
