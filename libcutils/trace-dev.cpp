@@ -25,7 +25,6 @@ static pthread_once_t atrace_once_control = PTHREAD_ONCE_INIT;
 void atrace_set_tracing_enabled(bool enabled)
 {
     atomic_store_explicit(&atrace_is_enabled, enabled, memory_order_release);
-    atomic_store_explicit(&atrace_is_ready, false, memory_order_release);
     atrace_update_tags();
 }
 
@@ -35,17 +34,18 @@ static void atrace_init_once()
     if (atrace_marker_fd == -1) {
         ALOGE("Error opening trace file: %s (%d)", strerror(errno), errno);
         atrace_enabled_tags = 0;
-        return;
+        goto done;
     }
+
     atrace_enabled_tags = atrace_get_property();
+
+done:
+    atomic_store_explicit(&atrace_is_ready, true, memory_order_release);
 }
 
 void atrace_setup()
 {
-    if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
-        pthread_once(&atrace_once_control, atrace_init_once);
-    }
-    atomic_store_explicit(&atrace_is_ready, true, memory_order_release);
+    pthread_once(&atrace_once_control, atrace_init_once);
 }
 
 void atrace_begin_body(const char* name)
