@@ -61,6 +61,10 @@ static int UsbReadMessage(usb_handle* h, amessage* msg) {
 static int UsbReadPayload(usb_handle* h, apacket* p) {
     D("UsbReadPayload(%d)", p->msg.data_length);
 
+    if (p->msg.data_length > sizeof(p->data)) {
+        return -1;
+    }
+
 #if CHECK_PACKET_OVERFLOW
     size_t usb_packet_size = usb_get_max_packet_size(h);
     CHECK_EQ(0ULL, sizeof(p->data) % usb_packet_size);
@@ -116,6 +120,11 @@ static int remote_read(apacket* p, usb_handle* usb) {
     }
 
     if (p->msg.data_length) {
+        if (p->msg.data_length > sizeof(p->data)) {
+            PLOG(ERROR) << "remote usb: read overflow (data length = " << p->msg.data_length << ")";
+            return -1;
+        }
+
         if (usb_read(usb, p->data, p->msg.data_length)) {
             PLOG(ERROR) << "remote usb: terminated (data)";
             return -1;
