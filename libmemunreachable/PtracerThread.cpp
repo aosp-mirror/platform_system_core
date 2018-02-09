@@ -98,6 +98,7 @@ bool PtracerThread::Start() {
     return (*reinterpret_cast<std::function<int()>*>(arg))();
   };
 
+  // See README.md for why we create the child process this way
   child_pid_ = clone(proxy, stack_->top(), CLONE_VM | CLONE_FS | CLONE_FILES /*|CLONE_UNTRACED*/,
                      reinterpret_cast<void*>(&func_));
   if (child_pid_ < 0) {
