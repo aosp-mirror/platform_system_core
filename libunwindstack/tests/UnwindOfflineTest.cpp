@@ -26,16 +26,15 @@
 #include <vector>
 
 #include <unwindstack/JitDebug.h>
+#include <unwindstack/MachineArm.h>
+#include <unwindstack/MachineArm64.h>
+#include <unwindstack/MachineX86.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm.h>
 #include <unwindstack/RegsArm64.h>
 #include <unwindstack/RegsX86.h>
 #include <unwindstack/Unwinder.h>
-
-#include "MachineArm.h"
-#include "MachineArm64.h"
-#include "MachineX86.h"
 
 #include "ElfTestUtils.h"
 

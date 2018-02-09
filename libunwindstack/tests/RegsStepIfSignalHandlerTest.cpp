@@ -19,19 +19,18 @@
 #include <gtest/gtest.h>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/MachineArm.h>
+#include <unwindstack/MachineArm64.h>
+#include <unwindstack/MachineMips.h>
+#include <unwindstack/MachineMips64.h>
+#include <unwindstack/MachineX86.h>
+#include <unwindstack/MachineX86_64.h>
 #include <unwindstack/RegsArm.h>
 #include <unwindstack/RegsArm64.h>
-#include <unwindstack/RegsX86.h>
-#include <unwindstack/RegsX86_64.h>
 #include <unwindstack/RegsMips.h>
 #include <unwindstack/RegsMips64.h>
-
-#include "MachineArm.h"
-#include "MachineArm64.h"
-#include "MachineX86.h"
-#include "MachineX86_64.h"
-#include "MachineMips.h"
-#include "MachineMips64.h"
+#include <unwindstack/RegsX86.h>
+#include <unwindstack/RegsX86_64.h>
 
 #include "MemoryFake.h"
 

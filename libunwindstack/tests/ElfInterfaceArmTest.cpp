@@ -20,10 +20,10 @@
 
 #include <vector>
 
+#include <unwindstack/MachineArm.h>
 #include <unwindstack/RegsArm.h>
 
 #include "ElfInterfaceArm.h"
-#include "MachineArm.h"
 
 #include "ElfFake.h"
 #include "MemoryFake.h"
