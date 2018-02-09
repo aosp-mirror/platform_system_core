@@ -36,7 +36,7 @@ The sequence of steps required to perform a leak detection pass is divided into 
 
  1. *Original process*: Leak detection is requested by calling `GetUnreachableMemory()`
  2. Allocations are disabled using `malloc_disable()`
- 3. The collection process is spawned.  The collection process is similar to a normal `fork()` child process, except that it shares the address space of the parent - any writes by the original process are visible to the collection process, and vice-versa.
+ 3. The collection process is spawned.  The collection process, created using clone, is similar to a normal `fork()` child process, except that it shares the address space of the parent - any writes by the original process are visible to the collection process, and vice-versa. If we forked instead of using clone, the address space might get out of sync with observed post-ptrace thread state, since it takes some time to pause the parent.
  4. *Collection process*: All threads in the original process are paused with `ptrace()`.
  5. Registers contents, active stack areas, and memory mapping information are collected.
  6. *Original process*: Allocations are re-enabled using `malloc_enable()`, but all threads are still paused with `ptrace()`.
