@@ -21,6 +21,7 @@ recvmsg: 1
 process_vm_readv: 1
 tgkill: 1
 rt_sigprocmask: 1
+rt_sigaction: 1
 rt_tgsigqueueinfo: 1
 prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == 0x53564d41
 madvise: 1
@@ -29,7 +30,6 @@ munmap: 1
 getuid: 1
 fstat: 1
 mmap: arg2 in PROT_READ|PROT_WRITE
-rt_sigaction: 1
 geteuid: 1
 getgid: 1
 getegid: 1
