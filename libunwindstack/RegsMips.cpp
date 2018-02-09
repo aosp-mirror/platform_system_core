@@ -19,13 +19,12 @@
 #include <functional>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/MachineMips.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsMips.h>
-
-#include "MachineMips.h"
-#include "UcontextMips.h"
-#include "UserMips.h"
+#include <unwindstack/UcontextMips.h>
+#include <unwindstack/UserMips.h>
 
 namespace unwindstack {
 

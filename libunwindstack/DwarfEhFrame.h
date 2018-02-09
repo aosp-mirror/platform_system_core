@@ -46,4 +46,4 @@ class DwarfEhFrame : public DwarfSectionImpl<AddressType> {
 
 }  // namespace unwindstack
 
-#endif  // _LIBUNWINDSTACK_DWARF_EH_FRAME_WITH_HDR_H
+#endif  // _LIBUNWINDSTACK_DWARF_EH_FRAME_H

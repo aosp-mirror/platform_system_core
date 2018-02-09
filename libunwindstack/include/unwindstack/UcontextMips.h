@@ -31,7 +31,7 @@
 
 #include <stdint.h>
 
-#include "MachineMips.h"
+#include <unwindstack/MachineMips.h>
 
 namespace unwindstack {
 

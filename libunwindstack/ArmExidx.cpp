@@ -22,12 +22,12 @@
 #include <android-base/stringprintf.h>
 
 #include <unwindstack/Log.h>
+#include <unwindstack/MachineArm.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm.h>
 
 #include "ArmExidx.h"
 #include "Check.h"
-#include "MachineArm.h"
 
 namespace unwindstack {
 

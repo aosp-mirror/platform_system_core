@@ -17,12 +17,12 @@
 #include <elf.h>
 #include <stdint.h>
 
+#include <unwindstack/MachineArm.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm.h>
 
 #include "ArmExidx.h"
 #include "ElfInterfaceArm.h"
-#include "MachineArm.h"
 
 namespace unwindstack {
 
