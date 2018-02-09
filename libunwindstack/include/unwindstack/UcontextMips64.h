@@ -31,7 +31,7 @@
 
 #include <stdint.h>
 
-#include "MachineMips64.h"
+#include <unwindstack/MachineMips64.h>
 
 namespace unwindstack {
 
@@ -66,4 +66,4 @@ struct mips64_ucontext_t {
 
 }  // namespace unwindstack
 
-#endif  // _LIBUNWINDSTACK_UCONTEXT_MIPS6464_H
+#endif  // _LIBUNWINDSTACK_UCONTEXT_MIPS64_H

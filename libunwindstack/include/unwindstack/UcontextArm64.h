@@ -26,38 +26,44 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _LIBUNWINDSTACK_UCONTEXT_ARM_H
-#define _LIBUNWINDSTACK_UCONTEXT_ARM_H
+#ifndef _LIBUNWINDSTACK_UCONTEXT_ARM64_H
+#define _LIBUNWINDSTACK_UCONTEXT_ARM64_H
 
 #include <stdint.h>
 
-#include "MachineArm.h"
+#include <unwindstack/MachineArm64.h>
 
 namespace unwindstack {
 
-struct arm_stack_t {
-  uint32_t ss_sp;    // void __user*
+struct arm64_stack_t {
+  uint64_t ss_sp;    // void __user*
   int32_t ss_flags;  // int
-  uint32_t ss_size;  // size_t
+  uint64_t ss_size;  // size_t
 };
 
-struct arm_mcontext_t {
-  uint32_t trap_no;             // unsigned long
-  uint32_t error_code;          // unsigned long
-  uint32_t oldmask;             // unsigned long
-  uint32_t regs[ARM_REG_LAST];  // unsigned long
-  uint32_t cpsr;                // unsigned long
-  uint32_t fault_address;       // unsigned long
+struct arm64_sigset_t {
+  uint64_t sig;  // unsigned long
 };
 
-struct arm_ucontext_t {
-  uint32_t uc_flags;  // unsigned long
-  uint32_t uc_link;   // struct ucontext*
-  arm_stack_t uc_stack;
-  arm_mcontext_t uc_mcontext;
+struct arm64_mcontext_t {
+  uint64_t fault_address;         // __u64
+  uint64_t regs[ARM64_REG_LAST];  // __u64
+  uint64_t pstate;                // __u64
   // Nothing else is used, so don't define it.
+};
+
+struct arm64_ucontext_t {
+  uint64_t uc_flags;  // unsigned long
+  uint64_t uc_link;   // struct ucontext*
+  arm64_stack_t uc_stack;
+  arm64_sigset_t uc_sigmask;
+  // The kernel adds extra padding after uc_sigmask to match glibc sigset_t on ARM64.
+  char __padding[128 - sizeof(arm64_sigset_t)];
+  // The full structure requires 16 byte alignment, but our partial structure
+  // doesn't, so force the alignment.
+  arm64_mcontext_t uc_mcontext __attribute__((aligned(16)));
 };
 
 }  // namespace unwindstack
 
-#endif  // _LIBUNWINDSTACK_UCONTEXT_ARM_H
+#endif  // _LIBUNWINDSTACK_UCONTEXT_ARM64_H
