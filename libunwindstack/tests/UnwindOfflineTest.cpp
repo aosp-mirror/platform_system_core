@@ -23,22 +23,153 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include <android-base/file.h>
 
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/MachineArm.h>
 #include <unwindstack/MachineArm64.h>
 #include <unwindstack/MachineX86.h>
+#include <unwindstack/MachineX86_64.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm.h>
 #include <unwindstack/RegsArm64.h>
 #include <unwindstack/RegsX86.h>
+#include <unwindstack/RegsX86_64.h>
 #include <unwindstack/Unwinder.h>
 
 #include "ElfTestUtils.h"
 
 namespace unwindstack {
+
+class UnwindOfflineTest : public ::testing::Test {
+ protected:
+  void TearDown() override {
+    if (cwd_ != nullptr) {
+      ASSERT_EQ(0, chdir(cwd_));
+    }
+    free(cwd_);
+  }
+
+  void Init(const char* file_dir, ArchEnum arch) {
+    dir_ = TestGetFileDirectory() + "offline/" + file_dir;
+
+    std::string data;
+    ASSERT_TRUE(android::base::ReadFileToString((dir_ + "maps.txt"), &data));
+
+    maps_.reset(new BufferMaps(data.c_str()));
+    ASSERT_TRUE(maps_->Parse());
+
+    std::unique_ptr<MemoryOffline> stack_memory(new MemoryOffline);
+    ASSERT_TRUE(stack_memory->Init((dir_ + "stack.data").c_str(), 0));
+    process_memory_.reset(stack_memory.release());
+
+    switch (arch) {
+      case ARCH_ARM: {
+        RegsArm* regs = new RegsArm;
+        regs_.reset(regs);
+        ReadRegs<uint32_t>(regs, arm_regs_);
+        break;
+      }
+      case ARCH_ARM64: {
+        RegsArm64* regs = new RegsArm64;
+        regs_.reset(regs);
+        ReadRegs<uint64_t>(regs, arm64_regs_);
+        break;
+      }
+      case ARCH_X86: {
+        RegsX86* regs = new RegsX86;
+        regs_.reset(regs);
+        ReadRegs<uint32_t>(regs, x86_regs_);
+        break;
+      }
+      case ARCH_X86_64: {
+        RegsX86_64* regs = new RegsX86_64;
+        regs_.reset(regs);
+        ReadRegs<uint64_t>(regs, x86_64_regs_);
+        break;
+      }
+      default:
+        ASSERT_TRUE(false) << "Unknown arch " << std::to_string(arch);
+    }
+    cwd_ = getcwd(nullptr, 0);
+    // Make dir_ an absolute directory.
+    if (dir_.empty() || dir_[0] != '/') {
+      dir_ = std::string(cwd_) + '/' + dir_;
+    }
+    ASSERT_EQ(0, chdir(dir_.c_str()));
+  }
+
+  template <typename AddressType>
+  void ReadRegs(RegsImpl<AddressType>* regs,
+                const std::unordered_map<std::string, uint32_t>& name_to_reg) {
+    FILE* fp = fopen((dir_ + "regs.txt").c_str(), "r");
+    ASSERT_TRUE(fp != nullptr);
+    while (!feof(fp)) {
+      uint64_t value;
+      char reg_name[100];
+      ASSERT_EQ(2, fscanf(fp, "%s %" SCNx64 "\n", reg_name, &value));
+      std::string name(reg_name);
+      if (!name.empty()) {
+        // Remove the : from the end.
+        name.resize(name.size() - 1);
+      }
+      auto entry = name_to_reg.find(name);
+      ASSERT_TRUE(entry != name_to_reg.end()) << "Unknown register named " << name;
+      (*regs)[entry->second] = value;
+    }
+    fclose(fp);
+    regs->SetFromRaw();
+  }
+
+  static std::unordered_map<std::string, uint32_t> arm_regs_;
+  static std::unordered_map<std::string, uint32_t> arm64_regs_;
+  static std::unordered_map<std::string, uint32_t> x86_regs_;
+  static std::unordered_map<std::string, uint32_t> x86_64_regs_;
+
+  char* cwd_ = nullptr;
+  std::string dir_;
+  std::unique_ptr<Regs> regs_;
+  std::unique_ptr<Maps> maps_;
+  std::shared_ptr<Memory> process_memory_;
+};
+
+std::unordered_map<std::string, uint32_t> UnwindOfflineTest::arm_regs_ = {
+    {"r0", ARM_REG_R0},  {"r1", ARM_REG_R1}, {"r2", ARM_REG_R2},   {"r3", ARM_REG_R3},
+    {"r4", ARM_REG_R4},  {"r5", ARM_REG_R5}, {"r6", ARM_REG_R6},   {"r7", ARM_REG_R7},
+    {"r8", ARM_REG_R8},  {"r9", ARM_REG_R9}, {"r10", ARM_REG_R10}, {"r11", ARM_REG_R11},
+    {"ip", ARM_REG_R12}, {"sp", ARM_REG_SP}, {"lr", ARM_REG_LR},   {"pc", ARM_REG_PC},
+};
+
+std::unordered_map<std::string, uint32_t> UnwindOfflineTest::arm64_regs_ = {
+    {"x0", ARM64_REG_R0},   {"x1", ARM64_REG_R1},   {"x2", ARM64_REG_R2},   {"x3", ARM64_REG_R3},
+    {"x4", ARM64_REG_R4},   {"x5", ARM64_REG_R5},   {"x6", ARM64_REG_R6},   {"x7", ARM64_REG_R7},
+    {"x8", ARM64_REG_R8},   {"x9", ARM64_REG_R9},   {"x10", ARM64_REG_R10}, {"x11", ARM64_REG_R11},
+    {"x12", ARM64_REG_R12}, {"x13", ARM64_REG_R13}, {"x14", ARM64_REG_R14}, {"x15", ARM64_REG_R15},
+    {"x16", ARM64_REG_R16}, {"x17", ARM64_REG_R17}, {"x18", ARM64_REG_R18}, {"x19", ARM64_REG_R19},
+    {"x20", ARM64_REG_R20}, {"x21", ARM64_REG_R21}, {"x22", ARM64_REG_R22}, {"x23", ARM64_REG_R23},
+    {"x24", ARM64_REG_R24}, {"x25", ARM64_REG_R25}, {"x26", ARM64_REG_R26}, {"x27", ARM64_REG_R27},
+    {"x28", ARM64_REG_R28}, {"x29", ARM64_REG_R29}, {"sp", ARM64_REG_SP},   {"lr", ARM64_REG_LR},
+    {"pc", ARM64_REG_PC},
+};
+
+std::unordered_map<std::string, uint32_t> UnwindOfflineTest::x86_regs_ = {
+    {"eax", X86_REG_EAX}, {"ebx", X86_REG_EBX}, {"ecx", X86_REG_ECX},
+    {"edx", X86_REG_EDX}, {"ebp", X86_REG_EBP}, {"edi", X86_REG_EDI},
+    {"esi", X86_REG_ESI}, {"esp", X86_REG_ESP}, {"eip", X86_REG_EIP},
+};
+
+std::unordered_map<std::string, uint32_t> UnwindOfflineTest::x86_64_regs_ = {
+    {"rax", X86_64_REG_RAX}, {"rbx", X86_64_REG_RBX}, {"rcx", X86_64_REG_RCX},
+    {"rdx", X86_64_REG_RDX}, {"r8", X86_64_REG_R8},   {"r9", X86_64_REG_R9},
+    {"r10", X86_64_REG_R10}, {"r11", X86_64_REG_R11}, {"r12", X86_64_REG_R12},
+    {"r13", X86_64_REG_R13}, {"r14", X86_64_REG_R14}, {"r15", X86_64_REG_R15},
+    {"rdi", X86_64_REG_RDI}, {"rsi", X86_64_REG_RSI}, {"rbp", X86_64_REG_RBP},
+    {"rsp", X86_64_REG_RSP}, {"rip", X86_64_REG_RIP},
+};
 
 static std::string DumpFrames(Unwinder& unwinder) {
   std::string str;
@@ -48,45 +179,11 @@ static std::string DumpFrames(Unwinder& unwinder) {
   return str;
 }
 
-TEST(UnwindOfflineTest, pc_straddle_arm) {
-  std::string dir(TestGetFileDirectory() + "offline/straddle_arm/");
+TEST_F(UnwindOfflineTest, pc_straddle_arm) {
+  Init("straddle_arm/", ARCH_ARM);
 
-  MemoryOffline* memory = new MemoryOffline;
-  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
-
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsArm regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_PC] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_SP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "lr: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_LR] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_ARM, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  Unwinder unwinder(128, &maps, &regs, process_memory);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(4U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -98,43 +195,11 @@ TEST(UnwindOfflineTest, pc_straddle_arm) {
       frame_info);
 }
 
-TEST(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
-  std::string dir(TestGetFileDirectory() + "offline/gnu_debugdata_arm/");
+TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
+  Init("gnu_debugdata_arm/", ARCH_ARM);
 
-  MemoryOffline* memory = new MemoryOffline;
-  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
-
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsArm regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_PC] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_SP] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_ARM, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  Unwinder unwinder(128, &maps, &regs, process_memory);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(2U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -146,47 +211,11 @@ TEST(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
       frame_info);
 }
 
-TEST(UnwindOfflineTest, pc_straddle_arm64) {
-  std::string dir(TestGetFileDirectory() + "offline/straddle_arm64/");
+TEST_F(UnwindOfflineTest, pc_straddle_arm64) {
+  Init("straddle_arm64/", ARCH_ARM64);
 
-  MemoryOffline* memory = new MemoryOffline;
-  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
-
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsArm64 regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_PC] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_SP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "lr: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_LR] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "x29: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_R29] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_ARM64, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  Unwinder unwinder(128, &maps, &regs, process_memory);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(6U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -208,64 +237,22 @@ static void AddMemory(std::string file_name, MemoryOfflineParts* parts) {
   parts->Add(memory);
 }
 
-TEST(UnwindOfflineTest, jit_debug_x86) {
-  std::string dir(TestGetFileDirectory() + "offline/jit_debug_x86/");
+TEST_F(UnwindOfflineTest, jit_debug_x86) {
+  Init("jit_debug_x86/", ARCH_X86);
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
-  AddMemory(dir + "descriptor.data", memory);
-  AddMemory(dir + "stack.data", memory);
+  AddMemory(dir_ + "descriptor.data", memory);
+  AddMemory(dir_ + "stack.data", memory);
   for (size_t i = 0; i < 7; i++) {
-    AddMemory(dir + "entry" + std::to_string(i) + ".data", memory);
-    AddMemory(dir + "jit" + std::to_string(i) + ".data", memory);
+    AddMemory(dir_ + "entry" + std::to_string(i) + ".data", memory);
+    AddMemory(dir_ + "jit" + std::to_string(i) + ".data", memory);
   }
+  process_memory_.reset(memory);
 
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsX86 regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "eax: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EAX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ebx: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EBX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ecx: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_ECX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "edx: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EDX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ebp: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EBP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "edi: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EDI] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "esi: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_ESI] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "esp: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_ESP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "eip: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EIP] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_X86, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  JitDebug jit_debug(process_memory);
-  Unwinder unwinder(128, &maps, &regs, process_memory);
-  unwinder.SetJitDebug(&jit_debug, regs.Arch());
+  JitDebug jit_debug(process_memory_);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.SetJitDebug(&jit_debug, regs_->Arch());
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(69U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -405,79 +392,23 @@ TEST(UnwindOfflineTest, jit_debug_x86) {
       frame_info);
 }
 
-TEST(UnwindOfflineTest, jit_debug_arm) {
-  std::string dir(TestGetFileDirectory() + "offline/jit_debug_arm/");
+TEST_F(UnwindOfflineTest, jit_debug_arm) {
+  Init("jit_debug_arm/", ARCH_ARM);
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
-  AddMemory(dir + "descriptor.data", memory);
-  AddMemory(dir + "descriptor1.data", memory);
-  AddMemory(dir + "stack.data", memory);
+  AddMemory(dir_ + "descriptor.data", memory);
+  AddMemory(dir_ + "descriptor1.data", memory);
+  AddMemory(dir_ + "stack.data", memory);
   for (size_t i = 0; i < 7; i++) {
-    AddMemory(dir + "entry" + std::to_string(i) + ".data", memory);
-    AddMemory(dir + "jit" + std::to_string(i) + ".data", memory);
+    AddMemory(dir_ + "entry" + std::to_string(i) + ".data", memory);
+    AddMemory(dir_ + "jit" + std::to_string(i) + ".data", memory);
   }
+  process_memory_.reset(memory);
 
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsArm regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r0: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R0] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r1: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R1] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r2: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R2] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r3: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R3] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r4: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R4] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r5: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R5] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r6: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R6] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r7: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R7] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r8: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R8] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r9: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R9] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r10: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R10] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "r11: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R11] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ip: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_R12] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_SP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "lr: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_LR] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
-  regs[ARM_REG_PC] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_ARM, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  JitDebug jit_debug(process_memory);
-  Unwinder unwinder(128, &maps, &regs, process_memory);
-  unwinder.SetJitDebug(&jit_debug, regs.Arch());
+  JitDebug jit_debug(process_memory_);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.SetJitDebug(&jit_debug, regs_->Arch());
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(76U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -627,47 +558,11 @@ TEST(UnwindOfflineTest, jit_debug_arm) {
 // The eh_frame_hdr data is present but set to zero fdes. This should
 // fallback to iterating over the cies/fdes and ignore the eh_frame_hdr.
 // No .gnu_debugdata section in the elf file, so no symbols.
-TEST(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
-  std::string dir(TestGetFileDirectory() + "offline/bad_eh_frame_hdr_arm64/");
+TEST_F(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
+  Init("bad_eh_frame_hdr_arm64/", ARCH_ARM64);
 
-  MemoryOffline* memory = new MemoryOffline;
-  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
-
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsArm64 regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "pc: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_PC] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "sp: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_SP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "lr: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_LR] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "x29: %" SCNx64 "\n", &reg_value));
-  regs[ARM64_REG_R29] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_ARM64, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  Unwinder unwinder(128, &maps, &regs, process_memory);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(5U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -682,59 +577,11 @@ TEST(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
 
 // The elf has bad eh_frame unwind information for the pcs. If eh_frame
 // is used first, the unwind will not match the expected output.
-TEST(UnwindOfflineTest, debug_frame_first_x86) {
-  std::string dir(TestGetFileDirectory() + "offline/debug_frame_first_x86/");
+TEST_F(UnwindOfflineTest, debug_frame_first_x86) {
+  Init("debug_frame_first_x86/", ARCH_X86);
 
-  MemoryOffline* memory = new MemoryOffline;
-  ASSERT_TRUE(memory->Init((dir + "stack.data").c_str(), 0));
-
-  FILE* fp = fopen((dir + "regs.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  RegsX86 regs;
-  uint64_t reg_value;
-  ASSERT_EQ(1, fscanf(fp, "eax: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EAX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ebx: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EBX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ecx: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_ECX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "edx: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EDX] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "ebp: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EBP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "edi: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EDI] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "esi: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_ESI] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "esp: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_ESP] = reg_value;
-  ASSERT_EQ(1, fscanf(fp, "eip: %" SCNx64 "\n", &reg_value));
-  regs[X86_REG_EIP] = reg_value;
-  regs.SetFromRaw();
-  fclose(fp);
-
-  fp = fopen((dir + "maps.txt").c_str(), "r");
-  ASSERT_TRUE(fp != nullptr);
-  // The file is guaranteed to be less than 4096 bytes.
-  std::vector<char> buffer(4096);
-  ASSERT_NE(0U, fread(buffer.data(), 1, buffer.size(), fp));
-  fclose(fp);
-
-  BufferMaps maps(buffer.data());
-  ASSERT_TRUE(maps.Parse());
-
-  ASSERT_EQ(ARCH_X86, regs.Arch());
-
-  std::shared_ptr<Memory> process_memory(memory);
-
-  char* cwd = getcwd(nullptr, 0);
-  ASSERT_EQ(0, chdir(dir.c_str()));
-  JitDebug jit_debug(process_memory);
-  Unwinder unwinder(128, &maps, &regs, process_memory);
-  unwinder.SetJitDebug(&jit_debug, regs.Arch());
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
-  ASSERT_EQ(0, chdir(cwd));
-  free(cwd);
 
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(5U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
@@ -744,6 +591,24 @@ TEST(UnwindOfflineTest, debug_frame_first_x86) {
       "  #02 pc 000006d7  waiter (call_level1+23)\n"
       "  #03 pc 000006f7  waiter (main+23)\n"
       "  #04 pc 00018275  libc.so\n",
+      frame_info);
+}
+
+// Make sure that a pc that is at the beginning of an fde unwinds correctly.
+TEST_F(UnwindOfflineTest, eh_frame_hdr_begin_x86_64) {
+  Init("eh_frame_hdr_begin_x86_64/", ARCH_X86_64);
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(5U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0000000000000a80  unwind_test64 (calling3)\n"
+      "  #01 pc 0000000000000dd9  unwind_test64 (calling2+633)\n"
+      "  #02 pc 000000000000121e  unwind_test64 (calling1+638)\n"
+      "  #03 pc 00000000000013ed  unwind_test64 (main+13)\n"
+      "  #04 pc 00000000000202b0  libc.so\n",
       frame_info);
 }
 

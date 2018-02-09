@@ -109,7 +109,7 @@ DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
     fde_info_.erase(index);
     return nullptr;
   }
-  info->pc = value + 4;
+  info->pc = value;
   return info;
 }
 
