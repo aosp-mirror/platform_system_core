@@ -29,6 +29,7 @@ process_vm_readv: 1
 
 tgkill: 1
 rt_sigprocmask: 1
+rt_sigaction: 1
 rt_tgsigqueueinfo: 1
 
 #define PR_SET_VMA 0x53564d41
@@ -42,12 +43,10 @@ munmap: 1
 getuid: 1
 fstat: 1
 mmap: arg2 in PROT_READ|PROT_WRITE
-rt_sigaction: 1
 #else
 getuid32: 1
 fstat64: 1
 mmap2: arg2 in PROT_READ|PROT_WRITE
-sigaction: 1
 #endif
 
 // Needed for logging.
