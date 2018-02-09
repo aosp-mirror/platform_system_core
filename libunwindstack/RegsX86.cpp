@@ -19,13 +19,12 @@
 #include <functional>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/MachineX86.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsX86.h>
-
-#include "MachineX86.h"
-#include "UcontextX86.h"
-#include "UserX86.h"
+#include <unwindstack/UcontextX86.h>
+#include <unwindstack/UserX86.h>
 
 namespace unwindstack {
 

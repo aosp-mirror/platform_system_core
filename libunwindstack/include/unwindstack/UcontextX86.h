@@ -31,7 +31,7 @@
 
 #include <stdint.h>
 
-#include "MachineX86.h"
+#include <unwindstack/MachineX86.h>
 
 namespace unwindstack {
 

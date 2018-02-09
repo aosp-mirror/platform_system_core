@@ -19,13 +19,12 @@
 #include <functional>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/MachineArm64.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm64.h>
-
-#include "MachineArm64.h"
-#include "UcontextArm64.h"
-#include "UserArm64.h"
+#include <unwindstack/UcontextArm64.h>
+#include <unwindstack/UserArm64.h>
 
 namespace unwindstack {
 
