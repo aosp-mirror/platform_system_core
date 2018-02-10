@@ -19,6 +19,12 @@
 #include <sys/cdefs.h>
 __BEGIN_DECLS
 
+/*
+ * The single event tag id for all stats logs.
+ * Keep this in sync with system/core/logcat/event.logtags
+ */
+const static int kStatsEventTag = 1937006964;
+
 /**
  * Logs the change in LMKD state which is used as start/stop boundaries for logging
  * LMK_KILL_OCCURRED event.
