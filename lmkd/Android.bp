@@ -6,6 +6,9 @@ cc_binary {
         "liblog",
         "libcutils",
     ],
+    static_libs: [
+        "libstatslogc",
+    ],
     local_include_dirs: ["include"],
     cflags: ["-Werror"],
 
@@ -20,7 +23,7 @@ cc_binary {
     },
 }
 
-cc_library_shared {
+cc_library_static {
     name: "libstatslogc",
     srcs: ["statslog.c"],
     cflags: [
