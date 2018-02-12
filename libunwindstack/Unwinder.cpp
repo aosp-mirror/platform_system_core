@@ -175,6 +175,8 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       if (regs_->dex_pc() != 0) {
         // Add a frame to represent the dex file.
         FillInDexFrame();
+        // Clear the dex pc so that we don't repeat this frame later.
+        regs_->set_dex_pc(0);
       }
 
       FillInFrame(map_info, elf, adjusted_rel_pc, adjusted_pc);
