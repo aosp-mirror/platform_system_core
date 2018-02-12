@@ -509,6 +509,29 @@ TEST(DemangleTest, non_virtual_thunk) {
   ASSERT_EQ("_ZTH_N3oneE", demangler.Parse("_ZTH_N3oneE"));
 }
 
+TEST(DemangleTest, r_value_reference) {
+  Demangler demangler;
+  ASSERT_EQ(
+      "android::SurfaceComposerClient::Transaction::merge(android::SurfaceComposerClient::"
+      "Transaction&&)",
+      demangler.Parse("_ZN7android21SurfaceComposerClient11Transaction5mergeEOS1_"));
+}
+
+TEST(DemangleTest, initial_St) {
+  Demangler demangler;
+  EXPECT_EQ("std::state", demangler.Parse("_ZSt5state"));
+  EXPECT_EQ("std::_In::ward", demangler.Parse("_ZNSt3_In4wardE"));
+  EXPECT_EQ("std::__terminate(void (*)())", demangler.Parse("_ZSt11__terminatePFvvE"));
+}
+
+TEST(DemangleTest, cfi) {
+  Demangler demangler;
+  EXPECT_EQ("nfa_sys_ptim_timer_update(tPTIM_CB*)",
+            demangler.Parse("_Z25nfa_sys_ptim_timer_updateP8tPTIM_CB"));
+  EXPECT_EQ("nfa_sys_ptim_timer_update(tPTIM_CB*) [clone .cfi]",
+            demangler.Parse("_Z25nfa_sys_ptim_timer_updateP8tPTIM_CB.cfi"));
+}
+
 TEST(DemangleTest, demangle) {
   std::string str;
 
