@@ -134,7 +134,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_read_pcrel) {
 
   auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x1384U, info->pc);
+  EXPECT_EQ(0x1380U, info->pc);
   EXPECT_EQ(0x1540U, info->offset);
 }
 
@@ -149,7 +149,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_read_datarel) {
 
   auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x3344U, info->pc);
+  EXPECT_EQ(0x3340U, info->pc);
   EXPECT_EQ(0x3500U, info->offset);
 }
 
@@ -163,7 +163,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_cached) {
 
   auto info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x344U, info->pc);
+  EXPECT_EQ(0x340U, info->pc);
   EXPECT_EQ(0x500U, info->offset);
 
   // Clear the memory so that this will fail if it doesn't read cached data.
@@ -171,7 +171,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_cached) {
 
   info = this->eh_frame_->GetFdeInfoFromIndex(2);
   ASSERT_TRUE(info != nullptr);
-  EXPECT_EQ(0x344U, info->pc);
+  EXPECT_EQ(0x340U, info->pc);
   EXPECT_EQ(0x500U, info->offset);
 }
 
