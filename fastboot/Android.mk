@@ -39,13 +39,15 @@ LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
-LOCAL_REQUIRED_MODULES := mke2fs e2fsdroid mke2fs.conf make_f2fs sload_f2fs
+LOCAL_REQUIRED_MODULES := mke2fs make_f2fs
 
 LOCAL_SRC_FILES_linux := usb_linux.cpp
 LOCAL_STATIC_LIBRARIES_linux := libselinux
+LOCAL_REQUIRED_MODULES_linux := e2fsdroid mke2fs.conf sload_f2fs
 
 LOCAL_SRC_FILES_darwin := usb_osx.cpp
 LOCAL_STATIC_LIBRARIES_darwin := libselinux
+LOCAL_REQUIRED_MODULES_darwin := e2fsdroid mke2fs.conf sload_f2fs
 LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 LOCAL_CFLAGS_darwin := -Wno-unused-parameter
 
