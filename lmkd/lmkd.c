@@ -55,8 +55,8 @@
 
 #else /* LMKD_TRACE_KILLS */
 
-#define TRACE_KILL_START(pid)
-#define TRACE_KILL_END()
+#define TRACE_KILL_START(pid) ((void)(pid))
+#define TRACE_KILL_END() ((void)0)
 
 #endif /* LMKD_TRACE_KILLS */
 
