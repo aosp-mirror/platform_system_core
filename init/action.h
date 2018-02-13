@@ -25,7 +25,6 @@
 
 #include "builtins.h"
 #include "keyword_map.h"
-#include "parser.h"
 #include "result.h"
 #include "subcontext.h"
 
@@ -121,21 +120,6 @@ class ActionManager {
     std::queue<std::variant<EventTrigger, PropertyChange, BuiltinAction>> event_queue_;
     std::queue<const Action*> current_executing_actions_;
     std::size_t current_command_;
-};
-
-class ActionParser : public SectionParser {
-  public:
-    ActionParser(ActionManager* action_manager, std::vector<Subcontext>* subcontexts)
-        : action_manager_(action_manager), subcontexts_(subcontexts), action_(nullptr) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
-    Result<Success> EndSection() override;
-
-  private:
-    ActionManager* action_manager_;
-    std::vector<Subcontext>* subcontexts_;
-    std::unique_ptr<Action> action_;
 };
 
 }  // namespace init

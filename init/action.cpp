@@ -379,44 +379,5 @@ void ActionManager::ClearQueue() {
     current_command_ = 0;
 }
 
-Result<Success> ActionParser::ParseSection(std::vector<std::string>&& args,
-                                           const std::string& filename, int line) {
-    std::vector<std::string> triggers(args.begin() + 1, args.end());
-    if (triggers.size() < 1) {
-        return Error() << "Actions must have a trigger";
-    }
-
-    Subcontext* action_subcontext = nullptr;
-    if (subcontexts_) {
-        for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix())) {
-                action_subcontext = &subcontext;
-                break;
-            }
-        }
-    }
-
-    auto action = std::make_unique<Action>(false, action_subcontext, filename, line);
-
-    if (auto result = action->InitTriggers(triggers); !result) {
-        return Error() << "InitTriggers() failed: " << result.error();
-    }
-
-    action_ = std::move(action);
-    return Success();
-}
-
-Result<Success> ActionParser::ParseLineSection(std::vector<std::string>&& args, int line) {
-    return action_ ? action_->AddCommand(std::move(args), line) : Success();
-}
-
-Result<Success> ActionParser::EndSection() {
-    if (action_ && action_->NumCommands() > 0) {
-        action_manager_->AddAction(std::move(action_));
-    }
-
-    return Success();
-}
-
 }  // namespace init
 }  // namespace android
