@@ -102,6 +102,22 @@ class UnwinderTest : public ::testing::Test {
     info->load_bias = 0;
     maps_.FakeAddMapInfo(info);
 
+    info = new MapInfo(0xa5000, 0xa6000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       "/fake/fake_load_bias.so");
+    elf = new ElfFake(new MemoryFake);
+    info->elf.reset(elf);
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    elf->FakeSetLoadBias(0x5000);
+    maps_.FakeAddMapInfo(info);
+
+    info = new MapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       "/fake/fake_offset.oat");
+    elf = new ElfFake(new MemoryFake);
+    info->elf.reset(elf);
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    info->elf_offset = 0x8000;
+    maps_.FakeAddMapInfo(info);
+
     process_memory_.reset(new MemoryFake);
   }
 
@@ -178,6 +194,62 @@ TEST_F(UnwinderTest, multiple_frames) {
   EXPECT_EQ(0x8000U, frame->map_end);
   EXPECT_EQ(0U, frame->map_load_bias);
   EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, non_zero_load_bias) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.FakeSetPc(0xa5500);
+  regs_.FakeSetSp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x5500U, frame->rel_pc);
+  EXPECT_EQ(0xa5500U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake_load_bias.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa5000U, frame->map_start);
+  EXPECT_EQ(0xa6000U, frame->map_end);
+  EXPECT_EQ(0x5000U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, non_zero_elf_offset) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.FakeSetPc(0xa7500);
+  regs_.FakeSetSp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x8500U, frame->rel_pc);
+  EXPECT_EQ(0xa7500U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake_offset.oat", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa7000U, frame->map_start);
+  EXPECT_EQ(0xa8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
 }
 
 TEST_F(UnwinderTest, non_zero_map_offset) {
