@@ -453,7 +453,7 @@ static void jdwp_control_event(int s, unsigned events, void* _control) {
  **/
 
 struct JdwpSocket : public asocket {
-    bool pass;
+    bool pass = false;
 };
 
 static void jdwp_socket_close(asocket* s) {
@@ -467,7 +467,7 @@ static void jdwp_socket_close(asocket* s) {
     }
 
     remove_socket(s);
-    free(s);
+    delete s;
 }
 
 static int jdwp_socket_enqueue(asocket* s, std::string) {
@@ -497,7 +497,7 @@ static void jdwp_socket_ready(asocket* s) {
 }
 
 asocket* create_jdwp_service_socket(void) {
-    JdwpSocket* s = reinterpret_cast<JdwpSocket*>(calloc(sizeof(*s), 1));
+    JdwpSocket* s = new JdwpSocket();
 
     if (!s) {
         fatal("failed to allocate JdwpSocket");
