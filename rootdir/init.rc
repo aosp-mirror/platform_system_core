@@ -28,12 +28,12 @@ on early-init
     restorecon /postinstall
 
     # Mount cgroup mount point for cpu accounting
-    mount cgroup none /acct cpuacct
+    mount cgroup none /acct nodev noexec nosuid cpuacct
     mkdir /acct/uid
 
     # root memory control cgroup, used by lmkd
     mkdir /dev/memcg 0700 root system
-    mount cgroup none /dev/memcg memory
+    mount cgroup none /dev/memcg nodev noexec nosuid memory
     # app mem cgroups, used by activity manager, lmkd and zygote
     mkdir /dev/memcg/apps/ 0755 system system
     # cgroup for system_server and surfaceflinger
@@ -59,7 +59,7 @@ on init
 
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune
-    mount cgroup none /dev/stune schedtune
+    mount cgroup none /dev/stune nodev noexec nosuid schedtune
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
     mkdir /dev/stune/top-app
@@ -155,7 +155,7 @@ on init
 
     # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
-    mount cgroup none /dev/cpuctl cpu
+    mount cgroup none /dev/cpuctl nodev noexec nosuid cpu
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/tasks
     chmod 0666 /dev/cpuctl/tasks
@@ -164,7 +164,7 @@ on init
 
     # sets up initial cpusets for ActivityManager
     mkdir /dev/cpuset
-    mount cpuset none /dev/cpuset
+    mount cpuset none /dev/cpuset nodev noexec nosuid
 
     # this ensures that the cpusets are present and usable, but the device's
     # init.rc must actually set the correct cpus
@@ -219,17 +219,17 @@ on init
     chmod 0644 /dev/xt_qtaguid
 
     mkdir /dev/cg2_bpf
-    mount cgroup2 cg2_bpf /dev/cg2_bpf
+    mount cgroup2 cg2_bpf /dev/cg2_bpf nodev noexec nosuid
     chown root root /dev/cg2_bpf
     chmod 0600 /dev/cg2_bpf
-    mount bpf bpf /sys/fs/bpf
+    mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
     # Create location for fs_mgr to store abbreviated output from filesystem
     # checker programs.
     mkdir /dev/fscklogs 0770 root system
 
     # pstore/ramoops previous console log
-    mount pstore pstore /sys/fs/pstore
+    mount pstore pstore /sys/fs/pstore nodev noexec nosuid
     chown system log /sys/fs/pstore/console-ramoops
     chmod 0440 /sys/fs/pstore/console-ramoops
     chown system log /sys/fs/pstore/console-ramoops-0
