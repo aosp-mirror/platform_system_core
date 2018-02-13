@@ -378,9 +378,9 @@ static fdevent transport_registration_fde;
  */
 struct device_tracker {
     asocket socket;
-    bool update_needed;
-    bool long_output;
-    device_tracker* next;
+    bool update_needed = false;
+    bool long_output = false;
+    device_tracker* next = nullptr;
 };
 
 /* linked list of all device trackers */
@@ -411,7 +411,7 @@ static void device_tracker_close(asocket* socket) {
         peer->close(peer);
     }
     device_tracker_remove(tracker);
-    free(tracker);
+    delete tracker;
 }
 
 static int device_tracker_enqueue(asocket* socket, std::string) {
@@ -446,7 +446,7 @@ static void device_tracker_ready(asocket* socket) {
 }
 
 asocket* create_device_tracker(bool long_output) {
-    device_tracker* tracker = reinterpret_cast<device_tracker*>(calloc(1, sizeof(*tracker)));
+    device_tracker* tracker = new device_tracker();
     if (tracker == nullptr) fatal("cannot allocate device tracker");
 
     D("device tracker %p created", tracker);
