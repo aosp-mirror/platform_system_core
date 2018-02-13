@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "action.h"
+#include "action_manager.h"
 #include "parser.h"
 #include "subcontext.h"
 

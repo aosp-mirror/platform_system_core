@@ -95,33 +95,6 @@ class Action {
     static const KeywordFunctionMap* function_map_;
 };
 
-class ActionManager {
-  public:
-    static ActionManager& GetInstance();
-
-    // Exposed for testing
-    ActionManager();
-
-    void AddAction(std::unique_ptr<Action> action);
-    void QueueEventTrigger(const std::string& trigger);
-    void QueuePropertyChange(const std::string& name, const std::string& value);
-    void QueueAllPropertyActions();
-    void QueueBuiltinAction(BuiltinFunction func, const std::string& name);
-    void ExecuteOneCommand();
-    bool HasMoreCommands() const;
-    void DumpState() const;
-    void ClearQueue();
-
-  private:
-    ActionManager(ActionManager const&) = delete;
-    void operator=(ActionManager const&) = delete;
-
-    std::vector<std::unique_ptr<Action>> actions_;
-    std::queue<std::variant<EventTrigger, PropertyChange, BuiltinAction>> event_queue_;
-    std::queue<const Action*> current_executing_actions_;
-    std::size_t current_command_;
-};
-
 }  // namespace init
 }  // namespace android
 
