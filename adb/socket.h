@@ -59,7 +59,7 @@ struct asocket {
      * us to our fd event system.  For remote asockets
      * these fields are not used.
      */
-    fdevent fde = {0};
+    fdevent fde = {};
     int fd = 0;
 
     // queue of data waiting to be written
