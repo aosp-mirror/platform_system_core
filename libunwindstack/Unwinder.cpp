@@ -91,7 +91,7 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc
     return;
   }
 
-  frame->pc = map_info->start + adjusted_rel_pc;
+  frame->pc = map_info->start + adjusted_rel_pc - elf->GetLoadBias() - map_info->elf_offset;
   frame->map_name = map_info->name;
   frame->map_offset = map_info->offset;
   frame->map_start = map_info->start;
