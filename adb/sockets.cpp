@@ -170,7 +170,7 @@ static void local_socket_destroy(asocket* s) {
     fdevent_remove(&s->fde);
 
     remove_socket(s);
-    free(s);
+    delete s;
 
     if (exit_on_close) {
         D("local_socket_destroy: exiting");
@@ -347,10 +347,7 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s) {
 }
 
 asocket* create_local_socket(int fd) {
-    asocket* s = reinterpret_cast<asocket*>(calloc(1, sizeof(asocket)));
-    if (s == NULL) {
-        fatal("cannot allocate socket");
-    }
+    asocket* s = new asocket();
     s->fd = fd;
     s->enqueue = local_socket_enqueue;
     s->ready = local_socket_ready;
@@ -459,7 +456,7 @@ static void remote_socket_close(asocket* s) {
     D("entered remote_socket_close RS(%d) CLOSE fd=%d peer->fd=%d", s->id, s->fd,
       s->peer ? s->peer->fd : -1);
     D("RS(%d): closed", s->id);
-    free(s);
+    delete s;
 }
 
 // Create a remote socket to exchange packets with a remote service through transport
@@ -470,11 +467,7 @@ asocket* create_remote_socket(unsigned id, atransport* t) {
     if (id == 0) {
         fatal("invalid remote socket id (0)");
     }
-    asocket* s = reinterpret_cast<asocket*>(calloc(1, sizeof(asocket)));
-
-    if (s == NULL) {
-        fatal("cannot allocate socket");
-    }
+    asocket* s = new asocket();
     s->id = id;
     s->enqueue = remote_socket_enqueue;
     s->ready = remote_socket_ready;
@@ -811,13 +804,12 @@ static void smart_socket_close(asocket* s) {
         s->peer->close(s->peer);
         s->peer = 0;
     }
-    free(s);
+    delete s;
 }
 
 static asocket* create_smart_socket(void) {
     D("Creating smart socket");
-    asocket* s = reinterpret_cast<asocket*>(calloc(1, sizeof(asocket)));
-    if (s == NULL) fatal("cannot allocate socket");
+    asocket* s = new asocket();
     s->enqueue = smart_socket_enqueue;
     s->ready = smart_socket_ready;
     s->shutdown = NULL;
