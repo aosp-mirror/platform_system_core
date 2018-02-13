@@ -248,6 +248,7 @@ cc_test {
         "tests/files/elf64.xz",
         "tests/files/offline/bad_eh_frame_hdr_arm64/*",
         "tests/files/offline/debug_frame_first_x86/*",
+        "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",
         "tests/files/offline/gnu_debugdata_arm/*",
@@ -303,6 +304,15 @@ cc_binary {
 
     srcs: [
         "tools/unwind_for_offline.cpp",
+    ],
+}
+
+cc_binary {
+    name: "unwind_reg_info",
+    defaults: ["libunwindstack_tools"],
+
+    srcs: [
+        "tools/unwind_reg_info.cpp",
     ],
 }
 
