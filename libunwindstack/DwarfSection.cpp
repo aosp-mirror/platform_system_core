@@ -26,15 +26,13 @@
 #include <unwindstack/Regs.h>
 
 #include "DwarfCfa.h"
-#include "DwarfEncoding.h"
-#include "DwarfOp.h"
-
 #include "DwarfDebugFrame.h"
 #include "DwarfEhFrame.h"
+#include "DwarfEncoding.h"
+#include "DwarfOp.h"
+#include "RegsInfo.h"
 
 namespace unwindstack {
-
-constexpr uint64_t DEX_PC_REG = 0x20444558;
 
 DwarfSection::DwarfSection(Memory* memory) : memory_(memory) {}
 
@@ -75,14 +73,17 @@ bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* f
 }
 
 template <typename AddressType>
-bool DwarfSectionImpl<AddressType>::EvalExpression(const DwarfLocation& loc, uint8_t version,
-                                                   Memory* regular_memory, AddressType* value) {
+bool DwarfSectionImpl<AddressType>::EvalExpression(const DwarfLocation& loc, Memory* regular_memory,
+                                                   AddressType* value,
+                                                   RegsInfo<AddressType>* regs_info,
+                                                   bool* is_dex_pc) {
   DwarfOp<AddressType> op(&memory_, regular_memory);
+  op.set_regs_info(regs_info);
 
   // Need to evaluate the op data.
-  uint64_t start = loc.values[1];
-  uint64_t end = start + loc.values[0];
-  if (!op.Eval(start, end, version)) {
+  uint64_t end = loc.values[1];
+  uint64_t start = end - loc.values[0];
+  if (!op.Eval(start, end)) {
     last_error_ = op.last_error();
     return false;
   }
@@ -96,6 +97,9 @@ bool DwarfSectionImpl<AddressType>::EvalExpression(const DwarfLocation& loc, uin
     return false;
   }
   *value = op.StackAt(0);
+  if (is_dex_pc != nullptr && op.dex_pc_set()) {
+    *is_dex_pc = true;
+  }
   return true;
 }
 
@@ -103,12 +107,10 @@ template <typename AddressType>
 struct EvalInfo {
   const dwarf_loc_regs_t* loc_regs;
   const DwarfCie* cie;
-  RegsImpl<AddressType>* cur_regs;
   Memory* regular_memory;
   AddressType cfa;
   bool return_address_undefined = false;
-  uint64_t reg_map = 0;
-  AddressType reg_values[64];
+  RegsInfo<AddressType> regs_info;
 };
 
 template <typename AddressType>
@@ -129,32 +131,18 @@ bool DwarfSectionImpl<AddressType>::EvalRegister(const DwarfLocation* loc, uint3
       break;
     case DWARF_LOCATION_REGISTER: {
       uint32_t cur_reg = loc->values[0];
-      if (cur_reg >= eval_info->cur_regs->total_regs()) {
+      if (cur_reg >= eval_info->regs_info.Total()) {
         last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
         return false;
       }
-      AddressType* cur_reg_ptr = &(*eval_info->cur_regs)[cur_reg];
-      const auto& entry = eval_info->loc_regs->find(cur_reg);
-      if (entry != eval_info->loc_regs->end()) {
-        if (!(eval_info->reg_map & (1 << cur_reg))) {
-          eval_info->reg_map |= 1 << cur_reg;
-          eval_info->reg_values[cur_reg] = *cur_reg_ptr;
-          if (!EvalRegister(&entry->second, cur_reg, cur_reg_ptr, eval_info)) {
-            return false;
-          }
-        }
-
-        // Use the register value from before any evaluations.
-        *reg_ptr = eval_info->reg_values[cur_reg] + loc->values[1];
-      } else {
-        *reg_ptr = *cur_reg_ptr + loc->values[1];
-      }
+      *reg_ptr = eval_info->regs_info.Get(cur_reg) + loc->values[1];
       break;
     }
     case DWARF_LOCATION_EXPRESSION:
     case DWARF_LOCATION_VAL_EXPRESSION: {
       AddressType value;
-      if (!EvalExpression(*loc, eval_info->cie->version, regular_memory, &value)) {
+      bool is_dex_pc = false;
+      if (!EvalExpression(*loc, regular_memory, &value, &eval_info->regs_info, &is_dex_pc)) {
         return false;
       }
       if (loc->type == DWARF_LOCATION_EXPRESSION) {
@@ -165,6 +153,9 @@ bool DwarfSectionImpl<AddressType>::EvalRegister(const DwarfLocation* loc, uint3
         }
       } else {
         *reg_ptr = value;
+        if (is_dex_pc) {
+          eval_info->regs_info.regs->set_dex_pc(value);
+        }
       }
       break;
     }
@@ -201,8 +192,10 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
 
   AddressType prev_cfa = regs->sp();
 
-  EvalInfo<AddressType> eval_info{
-      .loc_regs = &loc_regs, .cie = cie, .regular_memory = regular_memory, .cur_regs = cur_regs};
+  EvalInfo<AddressType> eval_info{.loc_regs = &loc_regs,
+                                  .cie = cie,
+                                  .regular_memory = regular_memory,
+                                  .regs_info = RegsInfo<AddressType>(cur_regs)};
   const DwarfLocation* loc = &cfa_entry->second;
   // Only a few location types are valid for the cfa.
   switch (loc->type) {
@@ -224,7 +217,7 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
     case DWARF_LOCATION_EXPRESSION:
     case DWARF_LOCATION_VAL_EXPRESSION: {
       AddressType value;
-      if (!EvalExpression(*loc, cie->version, regular_memory, &value)) {
+      if (!EvalExpression(*loc, regular_memory, &value, &eval_info.regs_info, nullptr)) {
         return false;
       }
       if (loc->type == DWARF_LOCATION_EXPRESSION) {
@@ -249,27 +242,14 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
     if (reg == CFA_REG) continue;
 
     AddressType* reg_ptr;
-    AddressType dex_pc = 0;
-    if (reg == DEX_PC_REG) {
-      // Special register that indicates this is a dex pc.
-      dex_pc = 0;
-      reg_ptr = &dex_pc;
-    } else if (reg >= cur_regs->total_regs() || eval_info.reg_map & (1 << reg)) {
-      // Skip this unknown register, or a register that has already been
-      // processed.
+    if (reg >= cur_regs->total_regs()) {
+      // Skip this unknown register.
       continue;
-    } else {
-      reg_ptr = &(*cur_regs)[reg];
-      eval_info.reg_map |= 1 << reg;
-      eval_info.reg_values[reg] = *reg_ptr;
     }
 
+    reg_ptr = eval_info.regs_info.Save(reg);
     if (!EvalRegister(&entry.second, reg, reg_ptr, &eval_info)) {
       return false;
-    }
-
-    if (reg == DEX_PC_REG) {
-      cur_regs->set_dex_pc(dex_pc);
     }
   }
 

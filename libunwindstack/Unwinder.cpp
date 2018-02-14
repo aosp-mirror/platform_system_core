@@ -48,6 +48,7 @@ void Unwinder::FillInDexFrame() {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
+  frame->num = frame_num;
 
   uint64_t dex_pc = regs_->dex_pc();
   frame->pc = dex_pc;
