@@ -45,13 +45,9 @@ void ActionManager::QueueAllPropertyActions() {
 }
 
 void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
-    auto action = std::make_unique<Action>(true, nullptr, "<Builtin Action>", 0);
+    auto action = std::make_unique<Action>(true, nullptr, "<Builtin Action>", 0, name,
+                                           std::map<std::string, std::string>{});
     std::vector<std::string> name_vector{name};
-
-    if (auto result = action->InitSingleTrigger(name); !result) {
-        LOG(ERROR) << "Cannot queue BuiltinAction for " << name << ": " << result.error();
-        return;
-    }
 
     action->AddCommand(func, name_vector, 0);
 

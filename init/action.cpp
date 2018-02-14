@@ -21,11 +21,9 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 
-#include "stable_properties.h"
 #include "util.h"
 
 using android::base::Join;
-using android::base::StartsWith;
 
 namespace android {
 namespace init {
@@ -70,8 +68,15 @@ std::string Command::BuildCommandString() const {
     return Join(args_, ' ');
 }
 
-Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line)
-    : oneshot_(oneshot), subcontext_(subcontext), filename_(filename), line_(line) {}
+Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line,
+               const std::string& event_trigger,
+               const std::map<std::string, std::string>& property_triggers)
+    : property_triggers_(property_triggers),
+      event_trigger_(event_trigger),
+      oneshot_(oneshot),
+      subcontext_(subcontext),
+      filename_(filename),
+      line_(line) {}
 
 const KeywordFunctionMap* Action::function_map_ = nullptr;
 
@@ -133,85 +138,6 @@ void Action::ExecuteCommand(const Command& command) const {
                   << ":" << command.line() << ") took " << duration.count() << "ms and "
                   << (result ? "succeeded" : "failed: " + result.error_string());
     }
-}
-
-static bool IsActionableProperty(Subcontext* subcontext, const std::string& prop_name) {
-    static bool enabled =
-        android::base::GetBoolProperty("ro.actionable_compatible_property.enabled", false);
-
-    if (subcontext == nullptr || !enabled) {
-        return true;
-    }
-
-    if (kExportedActionableProperties.count(prop_name) == 1) {
-        return true;
-    }
-    for (const auto& prefix : kPartnerPrefixes) {
-        if (android::base::StartsWith(prop_name, prefix)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-Result<Success> Action::ParsePropertyTrigger(const std::string& trigger) {
-    const static std::string prop_str("property:");
-    std::string prop_name(trigger.substr(prop_str.length()));
-    size_t equal_pos = prop_name.find('=');
-    if (equal_pos == std::string::npos) {
-        return Error() << "property trigger found without matching '='";
-    }
-
-    std::string prop_value(prop_name.substr(equal_pos + 1));
-    prop_name.erase(equal_pos);
-
-    if (!IsActionableProperty(subcontext_, prop_name)) {
-        return Error() << "unexported property tigger found: " << prop_name;
-    }
-
-    if (auto [it, inserted] = property_triggers_.emplace(prop_name, prop_value); !inserted) {
-        return Error() << "multiple property triggers found for same property";
-    }
-    return Success();
-}
-
-Result<Success> Action::InitTriggers(const std::vector<std::string>& args) {
-    const static std::string prop_str("property:");
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        if (args[i].empty()) {
-            return Error() << "empty trigger is not valid";
-        }
-
-        if (i % 2) {
-            if (args[i] != "&&") {
-                return Error() << "&& is the only symbol allowed to concatenate actions";
-            } else {
-                continue;
-            }
-        }
-
-        if (!args[i].compare(0, prop_str.length(), prop_str)) {
-            if (auto result = ParsePropertyTrigger(args[i]); !result) {
-                return result;
-            }
-        } else {
-            if (!event_trigger_.empty()) {
-                return Error() << "multiple event triggers are not allowed";
-            }
-
-            event_trigger_ = args[i];
-        }
-    }
-
-    return Success();
-}
-
-Result<Success> Action::InitSingleTrigger(const std::string& trigger) {
-    std::vector<std::string> name_vector{trigger};
-    if (auto result = InitTriggers(name_vector); !result) {
-        return Error() << "InitTriggers() failed: " << result.error();
-    }
-    return Success();
 }
 
 // This function checks that all property triggers are satisfied, that is

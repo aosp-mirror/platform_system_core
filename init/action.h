@@ -57,12 +57,12 @@ using BuiltinAction = class Action*;
 
 class Action {
   public:
-    Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line);
+    Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line,
+           const std::string& event_trigger,
+           const std::map<std::string, std::string>& property_triggers);
 
     Result<Success> AddCommand(const std::vector<std::string>& args, int line);
     void AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line);
-    Result<Success> InitTriggers(const std::vector<std::string>& args);
-    Result<Success> InitSingleTrigger(const std::string& trigger);
     std::size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
@@ -83,7 +83,6 @@ class Action {
     void ExecuteCommand(const Command& command) const;
     bool CheckPropertyTriggers(const std::string& name = "",
                                const std::string& value = "") const;
-    Result<Success> ParsePropertyTrigger(const std::string& trigger);
 
     std::map<std::string, std::string> property_triggers_;
     std::string event_trigger_;
