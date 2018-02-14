@@ -124,9 +124,6 @@
  ** for each JDWP process, we record its pid and its connected socket
  **/
 
-// PIDs are transmitted as 4 hex digits in ascii.
-static constexpr size_t PID_LEN = 4;
-
 static void jdwp_process_event(int socket, unsigned events, void* _proc);
 static void jdwp_process_list_updated(void);
 
@@ -174,7 +171,7 @@ struct JdwpProcess {
         _jdwp_list.remove_if(pred);
     }
 
-    int pid = -1;
+    int32_t pid = -1;
     int socket = -1;
     fdevent* fde = nullptr;
 
@@ -221,17 +218,9 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
 
     if (events & FDE_READ) {
         if (proc->pid < 0) {
-            /* read the PID as a 4-hexchar string */
-            char buf[PID_LEN + 1];
-            ssize_t rc = TEMP_FAILURE_RETRY(recv(socket, buf, PID_LEN, 0));
-            if (rc != PID_LEN) {
-                D("failed to read jdwp pid: %s", strerror(errno));
-                goto CloseProcess;
-            }
-            buf[PID_LEN] = '\0';
-
-            if (sscanf(buf, "%04x", &proc->pid) != 1) {
-                D("could not decode JDWP %p PID number: '%s'", proc, buf);
+            ssize_t rc = TEMP_FAILURE_RETRY(recv(socket, &proc->pid, sizeof(proc->pid), 0));
+            if (rc != sizeof(proc->pid)) {
+                D("failed to read jdwp pid: rc = %zd, errno = %s", rc, strerror(errno));
                 goto CloseProcess;
             }
 
@@ -453,7 +442,7 @@ static void jdwp_control_event(int s, unsigned events, void* _control) {
  **/
 
 struct JdwpSocket : public asocket {
-    bool pass;
+    bool pass = false;
 };
 
 static void jdwp_socket_close(asocket* s) {
@@ -467,7 +456,7 @@ static void jdwp_socket_close(asocket* s) {
     }
 
     remove_socket(s);
-    free(s);
+    delete s;
 }
 
 static int jdwp_socket_enqueue(asocket* s, std::string) {
@@ -497,7 +486,7 @@ static void jdwp_socket_ready(asocket* s) {
 }
 
 asocket* create_jdwp_service_socket(void) {
-    JdwpSocket* s = reinterpret_cast<JdwpSocket*>(calloc(sizeof(*s), 1));
+    JdwpSocket* s = new JdwpSocket();
 
     if (!s) {
         fatal("failed to allocate JdwpSocket");
