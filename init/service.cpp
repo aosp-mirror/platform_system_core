@@ -24,7 +24,6 @@
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/system_properties.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -33,8 +32,6 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
-#include <android-base/properties.h>
-#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <hidl-util/FQName.h>
@@ -42,15 +39,23 @@
 #include <selinux/selinux.h>
 #include <system/thread_defs.h>
 
-#include "init.h"
-#include "property_service.h"
 #include "rlimit_parser.h"
 #include "util.h"
+
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>
+
+#include <android-base/properties.h>
+
+#include "init.h"
+#include "property_service.h"
+#else
+#include "host_init_stubs.h"
+#endif
 
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
-using android::base::make_scope_guard;
 using android::base::ParseInt;
 using android::base::StartsWith;
 using android::base::StringPrintf;
@@ -1168,7 +1173,7 @@ bool ServiceParser::IsValidName(const std::string& name) const {
     // Property values can contain any characters, but may only be a certain length.
     // (The latter restriction is needed because `start` and `stop` work by writing
     // the service name to the "ctl.start" and "ctl.stop" properties.)
-    return is_legal_property_name("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
+    return IsLegalPropertyName("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
 }
 
 }  // namespace init
