@@ -85,7 +85,7 @@ on init
     mount tmpfs tmpfs /mnt mode=0755,uid=0,gid=1000
     restorecon_recursive /mnt
 
-    mount configfs none /config
+    mount configfs none /config nodev noexec nosuid
     chmod 0770 /config/sdcardfs
     chown system package_info /config/sdcardfs
 
