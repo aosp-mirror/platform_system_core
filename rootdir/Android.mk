@@ -145,13 +145,21 @@ endef
 # $(1): Input source file (ld.config.txt)
 # $(2): Output built module
 # $(3): VNDK version suffix
+# $(4): true if libz must be included in llndk not in vndk-sp
 define update_and_install_ld_config
+# If $(4) is true, move libz to llndk from vndk-sp.
+$(if $(filter true,$(4)),\
+  $(eval llndk_libraries_list := $(LLNDK_LIBRARIES) libz) \
+  $(eval vndksp_libraries_list := $(filter-out libz,$(VNDK_SAMEPROCESS_LIBRARIES))),\
+  $(eval llndk_libraries_list := $(LLNDK_LIBRARIES)) \
+  $(eval vndksp_libraries_list := $(VNDK_SAMEPROCESS_LIBRARIES)))
+
 llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
-  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
+  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(llndk_libraries_list))))
 private_llndk_libraries := $(call normalize-path-list,$(addsuffix .so,\
-  $(filter $(VNDK_PRIVATE_LIBRARIES),$(LLNDK_LIBRARIES))))
+  $(filter $(VNDK_PRIVATE_LIBRARIES),$(llndk_libraries_list))))
 vndk_sameprocess_libraries := $(call normalize-path-list,$(addsuffix .so,\
-  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_SAMEPROCESS_LIBRARIES))))
+  $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(vndksp_libraries_list))))
 vndk_core_libraries := $(call normalize-path-list,$(addsuffix .so,\
   $(filter-out $(VNDK_PRIVATE_LIBRARIES),$(VNDK_CORE_LIBRARIES))))
 sanitizer_runtime_libraries := $(call normalize-path-list,$(addsuffix .so,\
@@ -180,6 +188,8 @@ $(2): $(1)
 	$$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $$@
 	$$(hide) sed -i -e 's?%VNDK_VER%?$$(PRIVATE_VNDK_VERSION)?g' $$@
 
+llndk_libraries_list :=
+vndksp_libraries_list :=
 llndk_libraries :=
 private_llndk_libraries :=
 vndk_sameprocess_libraries :=
@@ -228,7 +238,8 @@ include $(BUILD_SYSTEM)/base_rules.mk
 $(eval $(call update_and_install_ld_config,\
   $(LOCAL_PATH)/etc/ld.config.vndk_lite.txt,\
   $(LOCAL_BUILT_MODULE),\
-  $(if $(BOARD_VNDK_VERSION),$(PLATFORM_VNDK_VERSION))))
+  $(if $(BOARD_VNDK_VERSION),$(PLATFORM_VNDK_VERSION)),\
+  true))
 
 else
 # for legacy non-treblized devices
@@ -258,7 +269,8 @@ include $(BUILD_SYSTEM)/base_rules.mk
 $(eval $(call update_and_install_ld_config,\
   $(LOCAL_PATH)/etc/ld.config.vndk_lite.txt,\
   $(LOCAL_BUILT_MODULE),\
-  $(PLATFORM_VNDK_VERSION)))
+  $(PLATFORM_VNDK_VERSION),\
+  true))
 
 #######################################
 # llndk.libraries.txt
