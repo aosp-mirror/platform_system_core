@@ -52,14 +52,14 @@ TYPED_TEST_CASE_P(DwarfOpTest);
 
 TYPED_TEST_P(DwarfOpTest, decode) {
   // Memory error.
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->op_->LastErrorCode());
   EXPECT_EQ(0U, this->op_->LastErrorAddress());
 
   // No error.
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x96});
   this->mem_->set_cur_offset(0);
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_NONE, this->op_->LastErrorCode());
   ASSERT_EQ(0x96U, this->op_->cur_op());
   ASSERT_EQ(1U, this->mem_->cur_offset());
@@ -67,14 +67,14 @@ TYPED_TEST_P(DwarfOpTest, decode) {
 
 TYPED_TEST_P(DwarfOpTest, eval) {
   // Memory error.
-  ASSERT_FALSE(this->op_->Eval(0, 2, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(0, 2));
   ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->op_->LastErrorCode());
   EXPECT_EQ(0U, this->op_->LastErrorAddress());
 
   // Register set.
   // Do this first, to verify that subsequent calls reset the value.
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x50});
-  ASSERT_TRUE(this->op_->Eval(0, 1, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(0, 1));
   ASSERT_TRUE(this->op_->is_register());
   ASSERT_EQ(1U, this->mem_->cur_offset());
   ASSERT_EQ(1U, this->op_->StackSize());
@@ -85,7 +85,7 @@ TYPED_TEST_P(DwarfOpTest, eval) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Eval(0, 8, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(0, 8));
   ASSERT_EQ(DWARF_ERROR_NONE, this->op_->LastErrorCode());
   ASSERT_FALSE(this->op_->is_register());
   ASSERT_EQ(8U, this->mem_->cur_offset());
@@ -97,7 +97,7 @@ TYPED_TEST_P(DwarfOpTest, eval) {
 
   // Infinite loop.
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x2f, 0xfd, 0xff});
-  ASSERT_FALSE(this->op_->Eval(0, 4, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(0, 4));
   ASSERT_EQ(DWARF_ERROR_TOO_MANY_ITERATIONS, this->op_->LastErrorCode());
   ASSERT_FALSE(this->op_->is_register());
   ASSERT_EQ(0U, this->op_->StackSize());
@@ -112,29 +112,7 @@ TYPED_TEST_P(DwarfOpTest, illegal_opcode) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   for (size_t i = 0; i < opcode_buffer.size(); i++) {
-    ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
-    ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
-    ASSERT_EQ(opcode_buffer[i], this->op_->cur_op());
-  }
-}
-
-TYPED_TEST_P(DwarfOpTest, illegal_in_version3) {
-  std::vector<uint8_t> opcode_buffer = {0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d};
-  this->op_memory_.SetMemory(0, opcode_buffer);
-
-  for (size_t i = 0; i < opcode_buffer.size(); i++) {
-    ASSERT_FALSE(this->op_->Decode(2));
-    ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
-    ASSERT_EQ(opcode_buffer[i], this->op_->cur_op());
-  }
-}
-
-TYPED_TEST_P(DwarfOpTest, illegal_in_version4) {
-  std::vector<uint8_t> opcode_buffer = {0x9e, 0x9f};
-  this->op_memory_.SetMemory(0, opcode_buffer);
-
-  for (size_t i = 0; i < opcode_buffer.size(); i++) {
-    ASSERT_FALSE(this->op_->Decode(3));
+    ASSERT_FALSE(this->op_->Decode());
     ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
     ASSERT_EQ(opcode_buffer[i], this->op_->cur_op());
   }
@@ -174,12 +152,12 @@ TYPED_TEST_P(DwarfOpTest, not_implemented) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   // Push the stack values.
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
+  ASSERT_TRUE(this->op_->Decode());
+  ASSERT_TRUE(this->op_->Decode());
 
   while (this->mem_->cur_offset() < opcode_buffer.size()) {
-    ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+    ASSERT_FALSE(this->op_->Decode());
     ASSERT_EQ(DWARF_ERROR_NOT_IMPLEMENTED, this->op_->LastErrorCode());
   }
 }
@@ -194,7 +172,7 @@ TYPED_TEST_P(DwarfOpTest, op_addr) {
   }
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x03, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -217,17 +195,17 @@ TYPED_TEST_P(DwarfOpTest, op_deref) {
   TypeParam value = 0x12345678;
   this->regular_memory_.SetMemory(0x2010, &value, sizeof(value));
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x06, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(value, this->op_->StackAt(0));
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->op_->LastErrorCode());
   ASSERT_EQ(0x12345678U, this->op_->LastErrorAddress());
 }
@@ -237,14 +215,14 @@ TYPED_TEST_P(DwarfOpTest, op_deref_size) {
   TypeParam value = 0x12345678;
   this->regular_memory_.SetMemory(0x2010, &value, sizeof(value));
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
   // Read all byte sizes up to the sizeof the type.
   for (size_t i = 1; i < sizeof(TypeParam); i++) {
     this->op_memory_.SetMemory(
         0, std::vector<uint8_t>{0x0a, 0x10, 0x20, 0x94, static_cast<uint8_t>(i)});
-    ASSERT_TRUE(this->op_->Eval(0, 5, DWARF_VERSION_MAX)) << "Failed at size " << i;
+    ASSERT_TRUE(this->op_->Eval(0, 5)) << "Failed at size " << i;
     ASSERT_EQ(1U, this->op_->StackSize()) << "Failed at size " << i;
     ASSERT_EQ(0x94, this->op_->cur_op()) << "Failed at size " << i;
     TypeParam expected_value = 0;
@@ -254,17 +232,17 @@ TYPED_TEST_P(DwarfOpTest, op_deref_size) {
 
   // Zero byte read.
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x0a, 0x10, 0x20, 0x94, 0x00});
-  ASSERT_FALSE(this->op_->Eval(0, 5, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(0, 5));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
 
   // Read too many bytes.
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x0a, 0x10, 0x20, 0x94, sizeof(TypeParam) + 1});
-  ASSERT_FALSE(this->op_->Eval(0, 5, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(0, 5));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
 
   // Force bad memory read.
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x0a, 0x10, 0x40, 0x94, 0x01});
-  ASSERT_FALSE(this->op_->Eval(0, 5, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(0, 5));
   ASSERT_EQ(DWARF_ERROR_MEMORY_INVALID, this->op_->LastErrorCode());
   EXPECT_EQ(0x4010U, this->op_->LastErrorAddress());
 }
@@ -284,40 +262,40 @@ TYPED_TEST_P(DwarfOpTest, const_unsigned) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   // const1u
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x08, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x12U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x08, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0xffU, this->op_->StackAt(0));
 
   // const2u
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0a, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x1245U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0a, this->op_->cur_op());
   ASSERT_EQ(4U, this->op_->StackSize());
   ASSERT_EQ(0xff00U, this->op_->StackAt(0));
 
   // const4u
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0c, this->op_->cur_op());
   ASSERT_EQ(5U, this->op_->StackSize());
   ASSERT_EQ(0x45342312U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0c, this->op_->cur_op());
   ASSERT_EQ(6U, this->op_->StackSize());
   ASSERT_EQ(0xff010203U, this->op_->StackAt(0));
 
   // const8u
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0e, this->op_->cur_op());
   ASSERT_EQ(7U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -326,7 +304,7 @@ TYPED_TEST_P(DwarfOpTest, const_unsigned) {
     ASSERT_EQ(0x0102030405060708ULL, this->op_->StackAt(0));
   }
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0e, this->op_->cur_op());
   ASSERT_EQ(8U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -351,40 +329,40 @@ TYPED_TEST_P(DwarfOpTest, const_signed) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   // const1s
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x09, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x12U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x09, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-1), this->op_->StackAt(0));
 
   // const2s
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0b, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x3221U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0b, this->op_->cur_op());
   ASSERT_EQ(4U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-248), this->op_->StackAt(0));
 
   // const4s
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0d, this->op_->cur_op());
   ASSERT_EQ(5U, this->op_->StackSize());
   ASSERT_EQ(0x12233445U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0d, this->op_->cur_op());
   ASSERT_EQ(6U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-16580095), this->op_->StackAt(0));
 
   // const8s
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0f, this->op_->cur_op());
   ASSERT_EQ(7U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -393,7 +371,7 @@ TYPED_TEST_P(DwarfOpTest, const_signed) {
     ASSERT_EQ(0x1223344556677889ULL, this->op_->StackAt(0));
   }
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x0f, this->op_->cur_op());
   ASSERT_EQ(8U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -414,28 +392,28 @@ TYPED_TEST_P(DwarfOpTest, const_uleb) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   // Single byte ULEB128
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x10, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x22U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x10, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x7fU, this->op_->StackAt(0));
 
   // Multi byte ULEB128
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x10, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x1122U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x10, this->op_->cur_op());
   ASSERT_EQ(4U, this->op_->StackSize());
   ASSERT_EQ(0x3a22U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x10, this->op_->cur_op());
   ASSERT_EQ(5U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -444,7 +422,7 @@ TYPED_TEST_P(DwarfOpTest, const_uleb) {
     ASSERT_EQ(0x9101c305080c101ULL, this->op_->StackAt(0));
   }
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x10, this->op_->cur_op());
   ASSERT_EQ(6U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -480,28 +458,28 @@ TYPED_TEST_P(DwarfOpTest, const_sleb) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   // Single byte SLEB128
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x11, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x22U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x11, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-1), this->op_->StackAt(0));
 
   // Multi byte SLEB128
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x11, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x1122U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x11, this->op_->cur_op());
   ASSERT_EQ(4U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-1502), this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x11, this->op_->cur_op());
   ASSERT_EQ(5U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -510,7 +488,7 @@ TYPED_TEST_P(DwarfOpTest, const_sleb) {
     ASSERT_EQ(0x9101c305080c101ULL, this->op_->StackAt(0));
   }
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x11, this->op_->cur_op());
   ASSERT_EQ(6U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -531,21 +509,21 @@ TYPED_TEST_P(DwarfOpTest, op_dup) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(0x12, this->op_->cur_op());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x12, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x15U, this->op_->StackAt(0));
   ASSERT_EQ(0x15U, this->op_->StackAt(1));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x12, this->op_->cur_op());
   ASSERT_EQ(4U, this->op_->StackSize());
   ASSERT_EQ(0x23U, this->op_->StackAt(0));
@@ -565,21 +543,21 @@ TYPED_TEST_P(DwarfOpTest, op_drop) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x13, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x10U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x13, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(0x13, this->op_->cur_op());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 }
@@ -597,24 +575,24 @@ TYPED_TEST_P(DwarfOpTest, op_over) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x14, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x1aU, this->op_->StackAt(0));
   ASSERT_EQ(0xedU, this->op_->StackAt(1));
   ASSERT_EQ(0x1aU, this->op_->StackAt(2));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(0x14, this->op_->cur_op());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 }
@@ -632,14 +610,14 @@ TYPED_TEST_P(DwarfOpTest, op_pick) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x15, this->op_->cur_op());
   ASSERT_EQ(4U, this->op_->StackSize());
   ASSERT_EQ(0xedU, this->op_->StackAt(0));
@@ -647,7 +625,7 @@ TYPED_TEST_P(DwarfOpTest, op_pick) {
   ASSERT_EQ(0xedU, this->op_->StackAt(2));
   ASSERT_EQ(0x1aU, this->op_->StackAt(3));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x15, this->op_->cur_op());
   ASSERT_EQ(5U, this->op_->StackSize());
   ASSERT_EQ(0x1aU, this->op_->StackAt(0));
@@ -656,7 +634,7 @@ TYPED_TEST_P(DwarfOpTest, op_pick) {
   ASSERT_EQ(0xedU, this->op_->StackAt(3));
   ASSERT_EQ(0x1aU, this->op_->StackAt(4));
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(0x15, this->op_->cur_op());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 }
@@ -672,23 +650,23 @@ TYPED_TEST_P(DwarfOpTest, op_swap) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0xabU, this->op_->StackAt(0));
   ASSERT_EQ(0x26U, this->op_->StackAt(1));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x16, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x26U, this->op_->StackAt(0));
   ASSERT_EQ(0xabU, this->op_->StackAt(1));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(0x16, this->op_->cur_op());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 }
@@ -706,28 +684,28 @@ TYPED_TEST_P(DwarfOpTest, op_rot) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x30U, this->op_->StackAt(0));
   ASSERT_EQ(0x20U, this->op_->StackAt(1));
   ASSERT_EQ(0x10U, this->op_->StackAt(2));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x17, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(0x20U, this->op_->StackAt(0));
@@ -756,30 +734,30 @@ TYPED_TEST_P(DwarfOpTest, op_abs) {
   opcode_buffer.push_back(0x19);
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x10U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x19, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x10U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x19, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x1U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x19, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -808,56 +786,56 @@ TYPED_TEST_P(DwarfOpTest, op_and) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
   // Two positive values.
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1b, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x10U, this->op_->StackAt(0));
 
   // Two negative values.
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1b, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x04U, this->op_->StackAt(0));
 
   // One negative value, one positive value.
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(4U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1b, this->op_->cur_op());
   ASSERT_EQ(3U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-4), this->op_->StackAt(0));
 
   // Divide by zero.
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(4U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(5U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
 }
 
@@ -874,19 +852,19 @@ TYPED_TEST_P(DwarfOpTest, op_div) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1a, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x40U, this->op_->StackAt(0));
@@ -905,19 +883,19 @@ TYPED_TEST_P(DwarfOpTest, op_minus) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1c, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x44U, this->op_->StackAt(0));
@@ -938,29 +916,29 @@ TYPED_TEST_P(DwarfOpTest, op_mod) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1d, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x03U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(3U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
 }
 
@@ -977,19 +955,19 @@ TYPED_TEST_P(DwarfOpTest, op_mul) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1e, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x120U, this->op_->StackAt(0));
@@ -1006,21 +984,21 @@ TYPED_TEST_P(DwarfOpTest, op_neg) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1f, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-72), this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x1f, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x01U, this->op_->StackAt(0));
@@ -1037,21 +1015,21 @@ TYPED_TEST_P(DwarfOpTest, op_not) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x20, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-5), this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x20, this->op_->cur_op());
   ASSERT_EQ(2U, this->op_->StackSize());
   ASSERT_EQ(0x03U, this->op_->StackAt(0));
@@ -1070,19 +1048,19 @@ TYPED_TEST_P(DwarfOpTest, op_or) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x21, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0xfcU, this->op_->StackAt(0));
@@ -1101,19 +1079,19 @@ TYPED_TEST_P(DwarfOpTest, op_plus) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x22, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x1f1U, this->op_->StackAt(0));
@@ -1128,13 +1106,13 @@ TYPED_TEST_P(DwarfOpTest, op_plus_uconst) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x23, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x28d0U, this->op_->StackAt(0));
@@ -1153,19 +1131,19 @@ TYPED_TEST_P(DwarfOpTest, op_shl) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x24, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x338U, this->op_->StackAt(0));
@@ -1184,19 +1162,19 @@ TYPED_TEST_P(DwarfOpTest, op_shr) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x25, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   if (sizeof(TypeParam) == 4) {
@@ -1219,19 +1197,19 @@ TYPED_TEST_P(DwarfOpTest, op_shra) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x26, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(static_cast<TypeParam>(-2), this->op_->StackAt(0));
@@ -1250,19 +1228,19 @@ TYPED_TEST_P(DwarfOpTest, op_xor) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(2U, this->op_->StackSize());
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x27, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x50U, this->op_->StackAt(0));
@@ -1283,48 +1261,48 @@ TYPED_TEST_P(DwarfOpTest, op_bra) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_FALSE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Decode());
   ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
   // Push on a non-zero value with a positive branch.
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
   uint64_t offset = this->mem_->cur_offset() + 3;
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x28, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
   ASSERT_EQ(offset + 0x102, this->mem_->cur_offset());
 
   // Push on a zero value with a positive branch.
   this->mem_->set_cur_offset(offset);
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
   offset = this->mem_->cur_offset() + 3;
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x28, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
   ASSERT_EQ(offset - 5, this->mem_->cur_offset());
 
   // Push on a non-zero value with a negative branch.
   this->mem_->set_cur_offset(offset);
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
   offset = this->mem_->cur_offset() + 3;
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x28, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
   ASSERT_EQ(offset - 4, this->mem_->cur_offset());
 
   // Push on a zero value with a negative branch.
   this->mem_->set_cur_offset(offset);
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(1U, this->op_->StackSize());
 
   offset = this->mem_->cur_offset() + 3;
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x28, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
   ASSERT_EQ(offset + 16, this->mem_->cur_offset());
@@ -1344,11 +1322,11 @@ TYPED_TEST_P(DwarfOpTest, compare_opcode_stack_error) {
     opcode_buffer[3] = opcode;
     this->op_memory_.SetMemory(0, opcode_buffer);
 
-    ASSERT_FALSE(this->op_->Eval(0, 1, DWARF_VERSION_MAX));
+    ASSERT_FALSE(this->op_->Eval(0, 1));
     ASSERT_EQ(opcode, this->op_->cur_op());
     ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
 
-    ASSERT_FALSE(this->op_->Eval(1, 4, DWARF_VERSION_MAX));
+    ASSERT_FALSE(this->op_->Eval(1, 4));
     ASSERT_EQ(opcode, this->op_->cur_op());
     ASSERT_EQ(1U, this->op_->StackSize());
     ASSERT_EQ(DWARF_ERROR_STACK_INDEX_NOT_VALID, this->op_->LastErrorCode());
@@ -1387,7 +1365,7 @@ TYPED_TEST_P(DwarfOpTest, compare_opcodes) {
     opcode_buffer[14] = expected[i];
     this->op_memory_.SetMemory(0, opcode_buffer);
 
-    ASSERT_TRUE(this->op_->Eval(0, 15, DWARF_VERSION_MAX))
+    ASSERT_TRUE(this->op_->Eval(0, 15))
         << "Op: 0x" << std::hex << static_cast<uint32_t>(expected[i]) << " failed";
 
     ASSERT_EQ(3U, this->op_->StackSize());
@@ -1407,14 +1385,14 @@ TYPED_TEST_P(DwarfOpTest, op_skip) {
   this->op_memory_.SetMemory(0, opcode_buffer);
 
   uint64_t offset = this->mem_->cur_offset() + 3;
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x2f, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
   ASSERT_EQ(offset + 0x2010, this->mem_->cur_offset());
 
   this->mem_->set_cur_offset(offset);
   offset = this->mem_->cur_offset() + 3;
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x2f, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
   ASSERT_EQ(offset - 3, this->mem_->cur_offset());
@@ -1431,7 +1409,7 @@ TYPED_TEST_P(DwarfOpTest, op_lit) {
 
   for (size_t i = 0; i < opcode_buffer.size(); i++) {
     uint32_t op = opcode_buffer[i];
-    ASSERT_TRUE(this->op_->Eval(i, i + 1, DWARF_VERSION_MAX)) << "Failed op: 0x" << std::hex << op;
+    ASSERT_TRUE(this->op_->Eval(i, i + 1)) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op, this->op_->cur_op());
     ASSERT_EQ(1U, this->op_->StackSize()) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op - 0x30U, this->op_->StackAt(0)) << "Failed op: 0x" << std::hex << op;
@@ -1449,7 +1427,7 @@ TYPED_TEST_P(DwarfOpTest, op_reg) {
 
   for (size_t i = 0; i < opcode_buffer.size(); i++) {
     uint32_t op = opcode_buffer[i];
-    ASSERT_TRUE(this->op_->Eval(i, i + 1, DWARF_VERSION_MAX)) << "Failed op: 0x" << std::hex << op;
+    ASSERT_TRUE(this->op_->Eval(i, i + 1)) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op, this->op_->cur_op());
     ASSERT_TRUE(this->op_->is_register()) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(1U, this->op_->StackSize()) << "Failed op: 0x" << std::hex << op;
@@ -1463,13 +1441,13 @@ TYPED_TEST_P(DwarfOpTest, op_regx) {
   };
   this->op_memory_.SetMemory(0, opcode_buffer);
 
-  ASSERT_TRUE(this->op_->Eval(0, 2, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(0, 2));
   ASSERT_EQ(0x90, this->op_->cur_op());
   ASSERT_TRUE(this->op_->is_register());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x02U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Eval(2, 5, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(2, 5));
   ASSERT_EQ(0x90, this->op_->cur_op());
   ASSERT_TRUE(this->op_->is_register());
   ASSERT_EQ(1U, this->op_->StackSize());
@@ -1494,21 +1472,20 @@ TYPED_TEST_P(DwarfOpTest, op_breg) {
   for (size_t i = 0; i < 32; i++) {
     regs[i] = i + 10;
   }
-  this->op_->set_regs(&regs);
+  RegsInfo<TypeParam> regs_info(&regs);
+  this->op_->set_regs_info(&regs_info);
 
   uint64_t offset = 0;
   for (uint32_t op = 0x70; op <= 0x8f; op++) {
     // Positive value added to register.
-    ASSERT_TRUE(this->op_->Eval(offset, offset + 2, DWARF_VERSION_MAX)) << "Failed op: 0x"
-                                                                        << std::hex << op;
+    ASSERT_TRUE(this->op_->Eval(offset, offset + 2)) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op, this->op_->cur_op());
     ASSERT_EQ(1U, this->op_->StackSize()) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op - 0x70 + 10 + 0x12, this->op_->StackAt(0)) << "Failed op: 0x" << std::hex << op;
     offset += 2;
 
     // Negative value added to register.
-    ASSERT_TRUE(this->op_->Eval(offset, offset + 2, DWARF_VERSION_MAX)) << "Failed op: 0x"
-                                                                        << std::hex << op;
+    ASSERT_TRUE(this->op_->Eval(offset, offset + 2)) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op, this->op_->cur_op());
     ASSERT_EQ(1U, this->op_->StackSize()) << "Failed op: 0x" << std::hex << op;
     ASSERT_EQ(op - 0x70 + 10 - 2, this->op_->StackAt(0)) << "Failed op: 0x" << std::hex << op;
@@ -1526,16 +1503,17 @@ TYPED_TEST_P(DwarfOpTest, op_breg_invalid_register) {
   for (size_t i = 0; i < 16; i++) {
     regs[i] = i + 10;
   }
-  this->op_->set_regs(&regs);
+  RegsInfo<TypeParam> regs_info(&regs);
+  this->op_->set_regs_info(&regs_info);
 
   // Should pass since this references the last regsister.
-  ASSERT_TRUE(this->op_->Eval(0, 2, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(0, 2));
   ASSERT_EQ(0x7fU, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x2bU, this->op_->StackAt(0));
 
   // Should fail since this references a non-existent register.
-  ASSERT_FALSE(this->op_->Eval(2, 4, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(2, 4));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
 }
 
@@ -1551,38 +1529,55 @@ TYPED_TEST_P(DwarfOpTest, op_bregx) {
   RegsImplFake<TypeParam> regs(10, 10);
   regs[5] = 0x45;
   regs[6] = 0x190;
-  this->op_->set_regs(&regs);
+  RegsInfo<TypeParam> regs_info(&regs);
+  this->op_->set_regs_info(&regs_info);
 
-  ASSERT_TRUE(this->op_->Eval(0, 3, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(0, 3));
   ASSERT_EQ(0x92, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x65U, this->op_->StackAt(0));
 
-  ASSERT_TRUE(this->op_->Eval(3, 7, DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Eval(3, 7));
   ASSERT_EQ(0x92, this->op_->cur_op());
   ASSERT_EQ(1U, this->op_->StackSize());
   ASSERT_EQ(0x90U, this->op_->StackAt(0));
 
-  ASSERT_FALSE(this->op_->Eval(7, 12, DWARF_VERSION_MAX));
+  ASSERT_FALSE(this->op_->Eval(7, 12));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->op_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfOpTest, op_nop) {
   this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x96});
 
-  ASSERT_TRUE(this->op_->Decode(DWARF_VERSION_MAX));
+  ASSERT_TRUE(this->op_->Decode());
   ASSERT_EQ(0x96, this->op_->cur_op());
   ASSERT_EQ(0U, this->op_->StackSize());
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfOpTest, decode, eval, illegal_opcode, illegal_in_version3,
-                           illegal_in_version4, not_implemented, op_addr, op_deref, op_deref_size,
-                           const_unsigned, const_signed, const_uleb, const_sleb, op_dup, op_drop,
-                           op_over, op_pick, op_swap, op_rot, op_abs, op_and, op_div, op_minus,
-                           op_mod, op_mul, op_neg, op_not, op_or, op_plus, op_plus_uconst, op_shl,
-                           op_shr, op_shra, op_xor, op_bra, compare_opcode_stack_error,
-                           compare_opcodes, op_skip, op_lit, op_reg, op_regx, op_breg,
-                           op_breg_invalid_register, op_bregx, op_nop);
+TYPED_TEST_P(DwarfOpTest, is_dex_pc) {
+  // Special sequence that indicates this is a dex pc.
+  this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x0c, 'D', 'E', 'X', '1', 0x13});
+
+  ASSERT_TRUE(this->op_->Eval(0, 6));
+  EXPECT_TRUE(this->op_->dex_pc_set());
+
+  // Try without the last op.
+  ASSERT_TRUE(this->op_->Eval(0, 5));
+  EXPECT_FALSE(this->op_->dex_pc_set());
+
+  // Change the constant.
+  this->op_memory_.SetMemory(0, std::vector<uint8_t>{0x0c, 'D', 'E', 'X', '2', 0x13});
+  ASSERT_TRUE(this->op_->Eval(0, 6));
+  EXPECT_FALSE(this->op_->dex_pc_set());
+}
+
+REGISTER_TYPED_TEST_CASE_P(DwarfOpTest, decode, eval, illegal_opcode, not_implemented, op_addr,
+                           op_deref, op_deref_size, const_unsigned, const_signed, const_uleb,
+                           const_sleb, op_dup, op_drop, op_over, op_pick, op_swap, op_rot, op_abs,
+                           op_and, op_div, op_minus, op_mod, op_mul, op_neg, op_not, op_or, op_plus,
+                           op_plus_uconst, op_shl, op_shr, op_shra, op_xor, op_bra,
+                           compare_opcode_stack_error, compare_opcodes, op_skip, op_lit, op_reg,
+                           op_regx, op_breg, op_breg_invalid_register, op_bregx, op_nop, is_dex_pc);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfOpTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfOpTest, DwarfOpTestTypes);
