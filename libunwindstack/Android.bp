@@ -171,6 +171,7 @@ cc_test_library {
     shared_libs: [
         "libbase",
         "libunwindstack",
+        "libdexfile",
     ],
 
     // libdexfile will eventually properly export headers, for now include
