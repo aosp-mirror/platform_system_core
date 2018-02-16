@@ -157,6 +157,7 @@ class ElfInterface {
   ElfInterface* gnu_debugdata_interface_ = nullptr;
 
   std::vector<Symbols*> symbols_;
+  std::vector<std::pair<uint64_t, uint64_t>> strtabs_;
 };
 
 class ElfInterface32 : public ElfInterface {
