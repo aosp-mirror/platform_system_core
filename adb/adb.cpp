@@ -136,8 +136,16 @@ void handle_online(atransport *t)
 
 void handle_offline(atransport *t)
 {
-    D("adb: offline");
-    //Close the associated usb
+    if (t->GetConnectionState() == kCsOffline) {
+        LOG(INFO) << t->serial_name() << ": already offline";
+        return;
+    }
+
+    LOG(INFO) << t->serial_name() << ": offline";
+
+    t->SetConnectionState(kCsOffline);
+
+    // Close the associated usb
     t->online = 0;
 
     // This is necessary to avoid a race condition that occurred when a transport closes
@@ -318,10 +326,7 @@ void parse_banner(const std::string& banner, atransport* t) {
 }
 
 static void handle_new_connection(atransport* t, apacket* p) {
-    if (t->GetConnectionState() != kCsOffline) {
-        t->SetConnectionState(kCsOffline);
-        handle_offline(t);
-    }
+    handle_offline(t);
 
     t->update_version(p->msg.arg0, p->msg.arg1);
     parse_banner(p->payload, t);
@@ -350,19 +355,6 @@ void handle_packet(apacket *p, atransport *t)
     CHECK_EQ(p->payload.size(), p->msg.data_length);
 
     switch(p->msg.command){
-    case A_SYNC:
-        if (p->msg.arg0){
-            send_packet(p, t);
-#if ADB_HOST
-            send_connect(t);
-#endif
-        } else {
-            t->SetConnectionState(kCsOffline);
-            handle_offline(t);
-            send_packet(p, t);
-        }
-        return;
-
     case A_CNXN:  // CONNECT(version, maxdata, "system-id-string")
         handle_new_connection(t, p);
         break;
