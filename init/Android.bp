@@ -93,6 +93,8 @@ cc_library_static {
     defaults: ["init_defaults"],
     srcs: [
         "action.cpp",
+        "action_manager.cpp",
+        "action_parser.cpp",
         "bootchart.cpp",
         "builtins.cpp",
         "capabilities.cpp",
