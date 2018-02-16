@@ -68,7 +68,7 @@ namespace unwindstack {
 class Memory;
 }
 
-void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const char* fmt, ...);
+void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const std::string&);
 
 void read_with_default(const char* path, char* buf, size_t len, const char* default_value);
 
