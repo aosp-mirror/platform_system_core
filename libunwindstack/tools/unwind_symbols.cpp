@@ -71,6 +71,11 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  std::string soname;
+  if (elf.GetSoname(&soname)) {
+    printf("Soname: %s\n\n", soname.c_str());
+  }
+
   switch (elf.machine_type()) {
     case EM_ARM:
       printf("ABI: arm\n");

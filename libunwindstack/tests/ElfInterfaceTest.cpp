@@ -63,14 +63,27 @@ class ElfInterfaceTest : public ::testing::Test {
   template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
   void ManyPhdrs();
 
-  template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
+  enum SonameTestEnum : uint8_t {
+    SONAME_NORMAL,
+    SONAME_DTNULL_AFTER,
+    SONAME_DTSIZE_SMALL,
+    SONAME_MISSING_MAP,
+  };
+
+  template <typename Ehdr, typename Phdr, typename Shdr, typename Dyn>
+  void SonameInit(SonameTestEnum test_type = SONAME_NORMAL);
+
+  template <typename ElfInterfaceType>
   void Soname();
 
-  template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
+  template <typename ElfInterfaceType>
   void SonameAfterDtNull();
 
-  template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
+  template <typename ElfInterfaceType>
   void SonameSize();
+
+  template <typename ElfInterfaceType>
+  void SonameMissingMap();
 
   template <typename ElfType>
   void InitHeadersEhFrameTest();
@@ -465,16 +478,28 @@ TEST_F(ElfInterfaceTest, elf32_arm) {
   ASSERT_EQ(2U, elf_arm.total_entries());
 }
 
-template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
-void ElfInterfaceTest::Soname() {
-  std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
-
+template <typename Ehdr, typename Phdr, typename Shdr, typename Dyn>
+void ElfInterfaceTest::SonameInit(SonameTestEnum test_type) {
   Ehdr ehdr;
   memset(&ehdr, 0, sizeof(ehdr));
+  ehdr.e_shoff = 0x200;
+  ehdr.e_shnum = 2;
+  ehdr.e_shentsize = sizeof(Shdr);
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 1;
   ehdr.e_phentsize = sizeof(Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Shdr shdr;
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  if (test_type == SONAME_MISSING_MAP) {
+    shdr.sh_addr = 0x20100;
+  } else {
+    shdr.sh_addr = 0x10100;
+  }
+  shdr.sh_offset = 0x10000;
+  memory_.SetMemory(0x200 + sizeof(shdr), &shdr, sizeof(shdr));
 
   Phdr phdr;
   memset(&phdr, 0, sizeof(phdr));
@@ -487,14 +512,24 @@ void ElfInterfaceTest::Soname() {
   Dyn dyn;
 
   dyn.d_tag = DT_STRTAB;
-  dyn.d_un.d_ptr = 0x10000;
+  dyn.d_un.d_ptr = 0x10100;
   memory_.SetMemory(offset, &dyn, sizeof(dyn));
   offset += sizeof(dyn);
 
   dyn.d_tag = DT_STRSZ;
-  dyn.d_un.d_val = 0x1000;
+  if (test_type == SONAME_DTSIZE_SMALL) {
+    dyn.d_un.d_val = 0x10;
+  } else {
+    dyn.d_un.d_val = 0x1000;
+  }
   memory_.SetMemory(offset, &dyn, sizeof(dyn));
   offset += sizeof(dyn);
+
+  if (test_type == SONAME_DTNULL_AFTER) {
+    dyn.d_tag = DT_NULL;
+    memory_.SetMemory(offset, &dyn, sizeof(dyn));
+    offset += sizeof(dyn);
+  }
 
   dyn.d_tag = DT_SONAME;
   dyn.d_un.d_val = 0x10;
@@ -505,6 +540,11 @@ void ElfInterfaceTest::Soname() {
   memory_.SetMemory(offset, &dyn, sizeof(dyn));
 
   SetStringMemory(0x10010, "fake_soname.so");
+}
+
+template <typename ElfInterfaceType>
+void ElfInterfaceTest::Soname() {
+  std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
@@ -516,54 +556,18 @@ void ElfInterfaceTest::Soname() {
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname) {
-  Soname<Elf32_Ehdr, Elf32_Phdr, Elf32_Dyn, ElfInterface32>();
+  SonameInit<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Dyn>();
+  Soname<ElfInterface32>();
 }
 
 TEST_F(ElfInterfaceTest, elf64_soname) {
-  Soname<Elf64_Ehdr, Elf64_Phdr, Elf64_Dyn, ElfInterface64>();
+  SonameInit<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Dyn>();
+  Soname<ElfInterface64>();
 }
 
-template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
+template <typename ElfInterfaceType>
 void ElfInterfaceTest::SonameAfterDtNull() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
-
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
-  ehdr.e_phoff = 0x100;
-  ehdr.e_phnum = 1;
-  ehdr.e_phentsize = sizeof(Phdr);
-  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
-
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
-  phdr.p_type = PT_DYNAMIC;
-  phdr.p_offset = 0x2000;
-  phdr.p_memsz = sizeof(Dyn) * 3;
-  memory_.SetMemory(0x100, &phdr, sizeof(phdr));
-
-  Dyn dyn;
-  uint64_t offset = 0x2000;
-
-  dyn.d_tag = DT_STRTAB;
-  dyn.d_un.d_ptr = 0x10000;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  dyn.d_tag = DT_STRSZ;
-  dyn.d_un.d_val = 0x1000;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  dyn.d_tag = DT_NULL;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  dyn.d_tag = DT_SONAME;
-  dyn.d_un.d_val = 0x10;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  SetStringMemory(0x10010, "fake_soname.so");
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
@@ -574,53 +578,18 @@ void ElfInterfaceTest::SonameAfterDtNull() {
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname_after_dt_null) {
-  SonameAfterDtNull<Elf32_Ehdr, Elf32_Phdr, Elf32_Dyn, ElfInterface32>();
+  SonameInit<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Dyn>(SONAME_DTNULL_AFTER);
+  SonameAfterDtNull<ElfInterface32>();
 }
 
 TEST_F(ElfInterfaceTest, elf64_soname_after_dt_null) {
-  SonameAfterDtNull<Elf64_Ehdr, Elf64_Phdr, Elf64_Dyn, ElfInterface64>();
+  SonameInit<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Dyn>(SONAME_DTNULL_AFTER);
+  SonameAfterDtNull<ElfInterface64>();
 }
 
-template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
+template <typename ElfInterfaceType>
 void ElfInterfaceTest::SonameSize() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
-
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
-  ehdr.e_phoff = 0x100;
-  ehdr.e_phnum = 1;
-  ehdr.e_phentsize = sizeof(Phdr);
-  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
-
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
-  phdr.p_type = PT_DYNAMIC;
-  phdr.p_offset = 0x2000;
-  phdr.p_memsz = sizeof(Dyn);
-  memory_.SetMemory(0x100, &phdr, sizeof(phdr));
-
-  Dyn dyn;
-  uint64_t offset = 0x2000;
-
-  dyn.d_tag = DT_STRTAB;
-  dyn.d_un.d_ptr = 0x10000;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  dyn.d_tag = DT_STRSZ;
-  dyn.d_un.d_val = 0x10;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  dyn.d_tag = DT_SONAME;
-  dyn.d_un.d_val = 0x10;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-  offset += sizeof(dyn);
-
-  dyn.d_tag = DT_NULL;
-  memory_.SetMemory(offset, &dyn, sizeof(dyn));
-
-  SetStringMemory(0x10010, "fake_soname.so");
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
@@ -631,11 +600,37 @@ void ElfInterfaceTest::SonameSize() {
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname_size) {
-  SonameSize<Elf32_Ehdr, Elf32_Phdr, Elf32_Dyn, ElfInterface32>();
+  SonameInit<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Dyn>(SONAME_DTSIZE_SMALL);
+  SonameSize<ElfInterface32>();
 }
 
 TEST_F(ElfInterfaceTest, elf64_soname_size) {
-  SonameSize<Elf64_Ehdr, Elf64_Phdr, Elf64_Dyn, ElfInterface64>();
+  SonameInit<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Dyn>(SONAME_DTSIZE_SMALL);
+  SonameSize<ElfInterface64>();
+}
+
+// Verify that there is no map from STRTAB in the dynamic section to a
+// STRTAB entry in the section headers.
+template <typename ElfInterfaceType>
+void ElfInterfaceTest::SonameMissingMap() {
+  std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+
+  std::string name;
+  ASSERT_FALSE(elf->GetSoname(&name));
+}
+
+TEST_F(ElfInterfaceTest, elf32_soname_missing_map) {
+  SonameInit<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Dyn>(SONAME_MISSING_MAP);
+  SonameMissingMap<ElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, elf64_soname_missing_map) {
+  SonameInit<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Dyn>(SONAME_MISSING_MAP);
+  SonameMissingMap<ElfInterface64>();
 }
 
 template <typename ElfType>
