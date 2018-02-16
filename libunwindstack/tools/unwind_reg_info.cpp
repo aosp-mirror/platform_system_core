@@ -157,6 +157,11 @@ int GetInfo(const char* file, uint64_t pc) {
     return 1;
   }
 
+  std::string soname;
+  if (elf.GetSoname(&soname)) {
+    printf("Soname: %s\n\n", soname.c_str());
+  }
+
   printf("PC 0x%" PRIx64 ":\n", pc);
 
   DwarfSection* section = interface->eh_frame();
