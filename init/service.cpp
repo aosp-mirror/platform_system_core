@@ -298,7 +298,7 @@ void Service::SetProcessAttributes() {
     }
 }
 
-void Service::Reap() {
+void Service::Reap(const siginfo_t& siginfo) {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
         KillProcessGroup(SIGKILL);
     }
@@ -306,6 +306,10 @@ void Service::Reap() {
     // Remove any descriptor resources we may have created.
     std::for_each(descriptors_.begin(), descriptors_.end(),
                   std::bind(&DescriptorInfo::Clean, std::placeholders::_1));
+
+    for (const auto& f : reap_callbacks_) {
+        f(siginfo);
+    }
 
     if (flags_ & SVC_EXEC) UnSetExec();
 
