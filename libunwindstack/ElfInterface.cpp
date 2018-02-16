@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <7zCrc.h>
 #include <Xz.h>
@@ -322,19 +323,13 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
   // Skip the first header, it's always going to be NULL.
   offset += ehdr.e_shentsize;
   for (size_t i = 1; i < ehdr.e_shnum; i++, offset += ehdr.e_shentsize) {
-    if (!memory_->ReadField(offset, &shdr, &shdr.sh_type, sizeof(shdr.sh_type))) {
+    if (!memory_->Read(offset, &shdr, sizeof(shdr))) {
       last_error_.code = ERROR_MEMORY_INVALID;
-      last_error_.address =
-          offset + reinterpret_cast<uintptr_t>(&shdr.sh_type) - reinterpret_cast<uintptr_t>(&shdr);
+      last_error_.address = offset;
       return false;
     }
 
     if (shdr.sh_type == SHT_SYMTAB || shdr.sh_type == SHT_DYNSYM) {
-      if (!memory_->ReadFully(offset, &shdr, sizeof(shdr))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset;
-        return false;
-      }
       // Need to go get the information about the section that contains
       // the string terminated names.
       ShdrType str_shdr;
@@ -343,39 +338,19 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
         return false;
       }
       uint64_t str_offset = ehdr.e_shoff + shdr.sh_link * ehdr.e_shentsize;
-      if (!memory_->ReadField(str_offset, &str_shdr, &str_shdr.sh_type, sizeof(str_shdr.sh_type))) {
+      if (!memory_->Read(str_offset, &str_shdr, sizeof(str_shdr))) {
         last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = str_offset + reinterpret_cast<uintptr_t>(&str_shdr.sh_type) -
-                              reinterpret_cast<uintptr_t>(&str_shdr);
+        last_error_.address = str_offset;
         return false;
       }
       if (str_shdr.sh_type != SHT_STRTAB) {
         last_error_.code = ERROR_UNWIND_INFO;
         return false;
       }
-      if (!memory_->ReadField(str_offset, &str_shdr, &str_shdr.sh_offset,
-                              sizeof(str_shdr.sh_offset))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = str_offset + reinterpret_cast<uintptr_t>(&str_shdr.sh_offset) -
-                              reinterpret_cast<uintptr_t>(&str_shdr);
-        return false;
-      }
-      if (!memory_->ReadField(str_offset, &str_shdr, &str_shdr.sh_size, sizeof(str_shdr.sh_size))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = str_offset + reinterpret_cast<uintptr_t>(&str_shdr.sh_size) -
-                              reinterpret_cast<uintptr_t>(&str_shdr);
-        return false;
-      }
       symbols_.push_back(new Symbols(shdr.sh_offset, shdr.sh_size, shdr.sh_entsize,
                                      str_shdr.sh_offset, str_shdr.sh_size));
     } else if (shdr.sh_type == SHT_PROGBITS && sec_size != 0) {
       // Look for the .debug_frame and .gnu_debugdata.
-      if (!memory_->ReadField(offset, &shdr, &shdr.sh_name, sizeof(shdr.sh_name))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&shdr.sh_name) -
-                              reinterpret_cast<uintptr_t>(&shdr);
-        return false;
-      }
       if (shdr.sh_name < sec_size) {
         std::string name;
         if (memory_->ReadString(sec_offset + shdr.sh_name, &name)) {
@@ -394,14 +369,16 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
             offset_ptr = &eh_frame_hdr_offset_;
             size_ptr = &eh_frame_hdr_size_;
           }
-          if (offset_ptr != nullptr &&
-              memory_->ReadField(offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset)) &&
-              memory_->ReadField(offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
+          if (offset_ptr != nullptr) {
             *offset_ptr = shdr.sh_offset;
             *size_ptr = shdr.sh_size;
           }
         }
       }
+    } else if (shdr.sh_type == SHT_STRTAB) {
+      // In order to read soname, keep track of address to offset mapping.
+      strtabs_.push_back(std::make_pair<uint64_t, uint64_t>(static_cast<uint64_t>(shdr.sh_addr),
+                                                            static_cast<uint64_t>(shdr.sh_offset)));
     }
   }
   return true;
@@ -420,7 +397,7 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
   soname_type_ = SONAME_INVALID;
 
   uint64_t soname_offset = 0;
-  uint64_t strtab_offset = 0;
+  uint64_t strtab_addr = 0;
   uint64_t strtab_size = 0;
 
   // Find the soname location from the dynamic headers section.
@@ -435,7 +412,7 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
     }
 
     if (dyn.d_tag == DT_STRTAB) {
-      strtab_offset = dyn.d_un.d_ptr;
+      strtab_addr = dyn.d_un.d_ptr;
     } else if (dyn.d_tag == DT_STRSZ) {
       strtab_size = dyn.d_un.d_val;
     } else if (dyn.d_tag == DT_SONAME) {
@@ -445,16 +422,22 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
     }
   }
 
-  soname_offset += strtab_offset;
-  if (soname_offset >= strtab_offset + strtab_size) {
-    return false;
+  // Need to map the strtab address to the real offset.
+  for (const auto& entry : strtabs_) {
+    if (entry.first == strtab_addr) {
+      soname_offset = entry.second + soname_offset;
+      if (soname_offset >= entry.second + strtab_size) {
+        return false;
+      }
+      if (!memory_->ReadString(soname_offset, &soname_)) {
+        return false;
+      }
+      soname_type_ = SONAME_VALID;
+      *soname = soname_;
+      return true;
+    }
   }
-  if (!memory_->ReadString(soname_offset, &soname_)) {
-    return false;
-  }
-  soname_type_ = SONAME_VALID;
-  *soname = soname_;
-  return true;
+  return false;
 }
 
 template <typename SymType>
