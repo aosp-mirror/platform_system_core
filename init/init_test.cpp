@@ -21,6 +21,8 @@
 #include <gtest/gtest.h>
 
 #include "action.h"
+#include "action_manager.h"
+#include "action_parser.h"
 #include "builtins.h"
 #include "import_parser.h"
 #include "keyword_map.h"

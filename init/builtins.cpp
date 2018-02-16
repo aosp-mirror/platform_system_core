@@ -58,7 +58,7 @@
 #include <selinux/selinux.h>
 #include <system/thread_defs.h>
 
-#include "action.h"
+#include "action_manager.h"
 #include "bootchart.h"
 #include "init.h"
 #include "parser.h"
