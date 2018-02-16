@@ -120,6 +120,11 @@ int GetElfInfo(const char* file, uint64_t offset) {
     return 1;
   }
 
+  std::string soname;
+  if (elf.GetSoname(&soname)) {
+    printf("Soname: %s\n", soname.c_str());
+  }
+
   ElfInterface* interface = elf.interface();
   if (elf.machine_type() == EM_ARM) {
     DumpArm(reinterpret_cast<ElfInterfaceArm*>(interface));
