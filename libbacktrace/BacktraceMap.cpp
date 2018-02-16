@@ -24,10 +24,20 @@
 
 #include <log/log.h>
 
-#include <backtrace/backtrace_constants.h>
+#include <android-base/stringprintf.h>
+#include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
+#include <backtrace/backtrace_constants.h>
 
 #include "thread_utils.h"
+
+using android::base::StringPrintf;
+
+std::string backtrace_map_t::Name() const {
+  if (!name.empty()) return name;
+  if (start == 0 && end == 0) return "";
+  return StringPrintf("<anonymous:%" PRIPTR ">", start);
+}
 
 BacktraceMap::BacktraceMap(pid_t pid) : pid_(pid) {
   if (pid_ < 0) {
