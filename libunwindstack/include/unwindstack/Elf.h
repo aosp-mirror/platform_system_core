@@ -23,6 +23,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/Memory.h>
@@ -103,7 +104,8 @@ class Elf {
   static void CacheLock();
   static void CacheUnlock();
   static void CacheAdd(MapInfo* info);
-  static bool CacheGet(const std::string& name, std::shared_ptr<Elf>* elf);
+  static bool CacheGet(MapInfo* info);
+  static bool CacheAfterCreateMemory(MapInfo* info);
 
  protected:
   bool valid_ = false;
@@ -120,7 +122,7 @@ class Elf {
   std::unique_ptr<ElfInterface> gnu_debugdata_interface_;
 
   static bool cache_enabled_;
-  static std::unordered_map<std::string, std::shared_ptr<Elf>>* cache_;
+  static std::unordered_map<std::string, std::pair<std::shared_ptr<Elf>, bool>>* cache_;
   static std::mutex* cache_lock_;
 };
 
