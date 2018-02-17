@@ -83,6 +83,9 @@ cc_library {
     target: {
         darwin: {
             enabled: true,
+            shared_libs: [
+               "libbase",
+             ],
         },
         linux: {
             srcs: libbacktrace_sources,
