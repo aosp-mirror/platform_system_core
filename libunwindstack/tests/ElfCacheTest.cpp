@@ -60,6 +60,7 @@ class ElfCacheTest : public ::testing::Test {
 
   void VerifyWithinSameMap(bool cache_enabled);
   void VerifySameMap(bool cache_enabled);
+  void VerifyWithinSameMapNeverReadAtZero(bool cache_enabled);
 
   static std::shared_ptr<Memory> memory_;
 };
@@ -196,6 +197,68 @@ TEST_F(ElfCacheTest, no_caching_valid_elf_offset_non_zero) {
 
 TEST_F(ElfCacheTest, caching_valid_elf_offset_non_zero) {
   VerifyWithinSameMap(true);
+}
+
+// Verify that when reading from multiple non-zero offsets in the same map
+// that when cached, all of the elf objects are the same.
+void ElfCacheTest::VerifyWithinSameMapNeverReadAtZero(bool cache_enabled) {
+  if (!cache_enabled) {
+    Elf::SetCachingEnabled(false);
+  }
+
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+  WriteElfFile(0, &tf, EM_ARM);
+  lseek(tf.fd, 0x500, SEEK_SET);
+  uint8_t value = 0;
+  write(tf.fd, &value, 1);
+  close(tf.fd);
+
+  uint64_t start = 0x1000;
+  uint64_t end = 0x20000;
+  // Multiple info sections at different offsets will have non-zero elf offsets.
+  MapInfo info300_1(start, end, 0x300, 0x5, tf.path);
+  MapInfo info300_2(start, end, 0x300, 0x5, tf.path);
+  MapInfo info400_1(start, end, 0x400, 0x5, tf.path);
+  MapInfo info400_2(start, end, 0x400, 0x5, tf.path);
+
+  Elf* elf300_1 = info300_1.GetElf(memory_, true);
+  ASSERT_TRUE(elf300_1->valid());
+  EXPECT_EQ(ARCH_ARM, elf300_1->arch());
+  Elf* elf300_2 = info300_2.GetElf(memory_, true);
+  ASSERT_TRUE(elf300_2->valid());
+  EXPECT_EQ(ARCH_ARM, elf300_2->arch());
+  EXPECT_EQ(0x300U, info300_1.elf_offset);
+  EXPECT_EQ(0x300U, info300_2.elf_offset);
+  if (cache_enabled) {
+    EXPECT_EQ(elf300_1, elf300_2);
+  } else {
+    EXPECT_NE(elf300_1, elf300_2);
+  }
+
+  Elf* elf400_1 = info400_1.GetElf(memory_, true);
+  ASSERT_TRUE(elf400_1->valid());
+  EXPECT_EQ(ARCH_ARM, elf400_1->arch());
+  Elf* elf400_2 = info400_2.GetElf(memory_, true);
+  ASSERT_TRUE(elf400_2->valid());
+  EXPECT_EQ(ARCH_ARM, elf400_2->arch());
+  EXPECT_EQ(0x400U, info400_1.elf_offset);
+  EXPECT_EQ(0x400U, info400_2.elf_offset);
+  if (cache_enabled) {
+    EXPECT_EQ(elf400_1, elf400_2);
+    EXPECT_EQ(elf300_1, elf400_1);
+  } else {
+    EXPECT_NE(elf400_1, elf400_2);
+    EXPECT_NE(elf300_1, elf400_1);
+  }
+}
+
+TEST_F(ElfCacheTest, no_caching_valid_elf_offset_non_zero_never_read_at_zero) {
+  VerifyWithinSameMapNeverReadAtZero(false);
+}
+
+TEST_F(ElfCacheTest, caching_valid_elf_offset_non_zero_never_read_at_zero) {
+  VerifyWithinSameMapNeverReadAtZero(true);
 }
 
 }  // namespace unwindstack
