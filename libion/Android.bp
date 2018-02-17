@@ -1,4 +1,3 @@
-
 cc_library {
     name: "libion",
     vendor_available: true,
