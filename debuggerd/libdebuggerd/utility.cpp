@@ -124,13 +124,7 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
 #define MEMORY_BYTES_TO_DUMP 256
 #define MEMORY_BYTES_PER_LINE 16
 
-void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const char* fmt, ...) {
-  std::string log_msg;
-  va_list ap;
-  va_start(ap, fmt);
-  android::base::StringAppendV(&log_msg, fmt, ap);
-  va_end(ap);
-
+void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
   // Align the address to sizeof(long) and start 32 bytes before the address.
   addr &= ~(sizeof(long) - 1);
   if (addr >= 4128) {
@@ -147,7 +141,7 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const c
     return;
   }
 
-  _LOG(log, logtype::MEMORY, "\n%s\n", log_msg.c_str());
+  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
 
   // Dump 256 bytes
   uintptr_t data[MEMORY_BYTES_TO_DUMP/sizeof(uintptr_t)];

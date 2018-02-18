@@ -189,7 +189,8 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       capabilities_(capabilities),
       namespace_flags_(namespace_flags),
       seclabel_(seclabel),
-      onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0),
+      onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
+                 "onrestart", {}),
       keychord_id_(0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
@@ -199,9 +200,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       soft_limit_in_bytes_(-1),
       limit_in_bytes_(-1),
       start_order_(0),
-      args_(args) {
-    onrestart_.InitSingleTrigger("onrestart");
-}
+      args_(args) {}
 
 void Service::NotifyStateChange(const std::string& new_state) const {
     if ((flags_ & SVC_TEMPORARY) != 0) {

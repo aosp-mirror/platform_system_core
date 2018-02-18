@@ -45,6 +45,7 @@
 #include <memory>
 #include <optional>
 
+#include "action_parser.h"
 #include "import_parser.h"
 #include "init_first_stage.h"
 #include "keychords.h"

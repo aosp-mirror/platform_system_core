@@ -82,7 +82,7 @@ on init
 
     # Mount staging areas for devices managed by vold
     # See storage config details at http://source.android.com/tech/storage/
-    mount tmpfs tmpfs /mnt mode=0755,uid=0,gid=1000
+    mount tmpfs tmpfs /mnt nodev noexec nosuid mode=0755,uid=0,gid=1000
     restorecon_recursive /mnt
 
     mount configfs none /config nodev noexec nosuid
@@ -318,8 +318,9 @@ on post-fs
     start hwservicemanager
     start vndservicemanager
 
-    # once everything is setup, no need to modify /
-    mount rootfs rootfs / ro remount
+    # Once everything is setup, no need to modify /.
+    # The bind+ro combination avoids modifying any other mount flags.
+    mount rootfs rootfs / remount bind ro
     # Mount shared so changes propagate into child namespaces
     mount rootfs rootfs / shared rec
     # Mount default storage into root namespace

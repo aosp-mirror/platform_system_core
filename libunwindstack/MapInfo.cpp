@@ -117,23 +117,15 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   if (Elf::CachingEnabled() && !name.empty()) {
     Elf::CacheLock();
     locked = true;
-    if (offset != 0) {
-      std::string hash(name + ':' + std::to_string(offset));
-      if (Elf::CacheGet(hash, &elf)) {
-        Elf::CacheUnlock();
-        return elf.get();
-      }
-    } else if (Elf::CacheGet(name, &elf)) {
+    if (Elf::CacheGet(this)) {
       Elf::CacheUnlock();
       return elf.get();
     }
   }
 
   Memory* memory = CreateMemory(process_memory);
-  if (locked && offset != 0 && elf_offset != 0) {
-    // In this case, the whole file is the elf, need to see if the elf
-    // data was cached.
-    if (Elf::CacheGet(name, &elf)) {
+  if (locked) {
+    if (Elf::CacheAfterCreateMemory(this)) {
       delete memory;
       Elf::CacheUnlock();
       return elf.get();

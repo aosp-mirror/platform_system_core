@@ -85,14 +85,12 @@ std::string Backtrace::FormatFrameData(size_t frame_num) {
 std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   std::string map_name;
   if (BacktraceMap::IsValid(frame->map)) {
+    map_name = frame->map.Name();
     if (!frame->map.name.empty()) {
-      map_name = frame->map.name.c_str();
       if (map_name[0] == '[' && map_name[map_name.size() - 1] == ']') {
         map_name.resize(map_name.size() - 1);
         map_name += StringPrintf(":%" PRIPTR "]", frame->map.start);
       }
-    } else {
-      map_name = StringPrintf("<anonymous:%" PRIPTR ">", frame->map.start);
     }
   } else {
     map_name = "<unknown>";

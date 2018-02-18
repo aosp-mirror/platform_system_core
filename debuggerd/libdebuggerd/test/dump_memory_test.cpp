@@ -201,7 +201,7 @@ TEST_F(DumpMemoryTest, aligned_addr) {
   }
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, memory_mock_.get(), 0x12345678, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x12345678, "memory near r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -221,7 +221,7 @@ TEST_F(DumpMemoryTest, partial_read) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
   memory_mock_->SetPartialReadAmount(96);
 
-  dump_memory(&log_, memory_mock_.get(), 0x12345679, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x12345679, "memory near r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -240,7 +240,7 @@ TEST_F(DumpMemoryTest, unaligned_addr) {
   }
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, memory_mock_.get(), 0x12345679, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x12345679, "memory near r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -253,7 +253,7 @@ TEST_F(DumpMemoryTest, unaligned_addr) {
 }
 
 TEST_F(DumpMemoryTest, memory_unreadable) {
-  dump_memory(&log_, memory_mock_.get(), 0xa2345678, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0xa2345678, "memory near pc");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -309,7 +309,7 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable) {
   }
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -329,7 +329,7 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_unaligned_return) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
   memory_mock_->SetPartialReadAmount(102);
 
-  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -354,7 +354,7 @@ TEST_F(DumpMemoryTest, memory_partially_unreadable_two_unaligned_reads) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
   memory_mock_->SetPartialReadAmount(45);
 
-  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc:");
+  dump_memory(&log_, memory_mock_.get(), 0x12345600, "memory near pc");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -380,7 +380,7 @@ TEST_F(DumpMemoryTest, address_low_fence) {
   memset(buffer, 0, sizeof(buffer));
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, memory_mock_.get(), 0x1000, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x1000, "memory near r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -434,7 +434,7 @@ TEST_F(DumpMemoryTest, memory_address_too_low) {
   memset(buffer, 0, sizeof(buffer));
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
-  dump_memory(&log_, memory_mock_.get(), 0, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0, "memory near r1");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -452,13 +452,13 @@ TEST_F(DumpMemoryTest, memory_address_too_high) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL, "memory near %.2s:", "r1");
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 32, "memory near %.2s:", "r1");
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 216, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 32, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 216, "memory near r1");
 #else
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000, "memory near %.2s:", "r1");
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 32, "memory near %.2s:", "r1");
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 220, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 32, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 220, "memory near r1");
 #endif
 
   std::string tombstone_contents;
@@ -477,9 +477,9 @@ TEST_F(DumpMemoryTest, memory_address_would_overflow) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, memory_mock_.get(), 0xfffffffffffffff0, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xfffffffffffffff0, "memory near r1");
 #else
-  dump_memory(&log_, memory_mock_.get(), 0xfffffff0, "memory near %.2s:", "r1");
+  dump_memory(&log_, memory_mock_.get(), 0xfffffff0, "memory near r1");
 #endif
 
   std::string tombstone_contents;
@@ -500,9 +500,9 @@ TEST_F(DumpMemoryTest, memory_address_nearly_too_high) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 224, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 224, "memory near r4");
 #else
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 224, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 224, "memory near r4");
 #endif
 
   std::string tombstone_contents;
@@ -562,7 +562,7 @@ TEST_F(DumpMemoryTest, first_read_empty) {
 
   size_t page_size = sysconf(_SC_PAGE_SIZE);
   uintptr_t addr = 0x10000020 + page_size - 120;
-  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -621,7 +621,7 @@ TEST_F(DumpMemoryTest, first_read_empty_second_read_stops) {
 
   size_t page_size = sysconf(_SC_PAGE_SIZE);
   uintptr_t addr = 0x10000020 + page_size - 192;
-  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -679,7 +679,7 @@ TEST_F(DumpMemoryTest, first_read_empty_next_page_out_of_range) {
   memory_mock_->SetPartialReadAmount(0);
 
   uintptr_t addr = 0x10000020;
-  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
@@ -739,7 +739,7 @@ TEST_F(DumpMemoryTest, first_read_empty_next_page_out_of_range_fence_post) {
   size_t page_size = sysconf(_SC_PAGE_SIZE);
   uintptr_t addr = 0x10000020 + page_size - 256;
 
-  dump_memory(&log_, memory_mock_.get(), addr, "memory near %.2s:", "r4");
+  dump_memory(&log_, memory_mock_.get(), addr, "memory near r4");
 
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);

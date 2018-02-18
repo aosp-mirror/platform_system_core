@@ -50,6 +50,7 @@
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 
+#include "action_manager.h"
 #include "capabilities.h"
 #include "init.h"
 #include "property_service.h"

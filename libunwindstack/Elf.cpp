@@ -20,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 #define LOG_TAG "unwind"
 #include <log/log.h>
@@ -36,7 +37,7 @@
 namespace unwindstack {
 
 bool Elf::cache_enabled_;
-std::unordered_map<std::string, std::shared_ptr<Elf>>* Elf::cache_;
+std::unordered_map<std::string, std::pair<std::shared_ptr<Elf>, bool>>* Elf::cache_;
 std::mutex* Elf::cache_lock_;
 
 bool Elf::Init(bool init_gnu_debugdata) {
@@ -308,7 +309,7 @@ uint64_t Elf::GetLoadBias(Memory* memory) {
 void Elf::SetCachingEnabled(bool enable) {
   if (!cache_enabled_ && enable) {
     cache_enabled_ = true;
-    cache_ = new std::unordered_map<std::string, std::shared_ptr<Elf>>;
+    cache_ = new std::unordered_map<std::string, std::pair<std::shared_ptr<Elf>, bool>>;
     cache_lock_ = new std::mutex;
   } else if (cache_enabled_ && !enable) {
     cache_enabled_ = false;
@@ -326,18 +327,54 @@ void Elf::CacheUnlock() {
 }
 
 void Elf::CacheAdd(MapInfo* info) {
-  if (info->offset == 0) {
-    (*cache_)[info->name] = info->elf;
-  } else {
-    std::string name(info->name + ':' + std::to_string(info->offset));
-    (*cache_)[name] = info->elf;
+  // If elf_offset != 0, then cache both name:offset and name.
+  // The cached name is used to do lookups if multiple maps for the same
+  // named elf file exist.
+  // For example, if there are two maps boot.odex:1000 and boot.odex:2000
+  // where each reference the entire boot.odex, the cache will properly
+  // use the same cached elf object.
+
+  if (info->offset == 0 || info->elf_offset != 0) {
+    (*cache_)[info->name] = std::make_pair(info->elf, true);
+  }
+
+  if (info->offset != 0) {
+    // The second element in the pair indicates whether elf_offset should
+    // be set to offset when getting out of the cache.
+    (*cache_)[info->name + ':' + std::to_string(info->offset)] =
+        std::make_pair(info->elf, info->elf_offset != 0);
   }
 }
 
-bool Elf::CacheGet(const std::string& name, std::shared_ptr<Elf>* elf) {
+bool Elf::CacheAfterCreateMemory(MapInfo* info) {
+  if (info->name.empty() || info->offset == 0 || info->elf_offset == 0) {
+    return false;
+  }
+
+  auto entry = cache_->find(info->name);
+  if (entry == cache_->end()) {
+    return false;
+  }
+
+  // In this case, the whole file is the elf, and the name has already
+  // been cached. Add an entry at name:offset to get this directly out
+  // of the cache next time.
+  info->elf = entry->second.first;
+  (*cache_)[info->name + ':' + std::to_string(info->offset)] = std::make_pair(info->elf, true);
+  return true;
+}
+
+bool Elf::CacheGet(MapInfo* info) {
+  std::string name(info->name);
+  if (info->offset != 0) {
+    name += ':' + std::to_string(info->offset);
+  }
   auto entry = cache_->find(name);
   if (entry != cache_->end()) {
-    *elf = entry->second;
+    info->elf = entry->second.first;
+    if (entry->second.second) {
+      info->elf_offset = info->offset;
+    }
     return true;
   }
   return false;

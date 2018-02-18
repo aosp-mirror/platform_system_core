@@ -250,7 +250,7 @@ int main(int argc, char* argv[]) {
         case 'p':
             prot = 0;
             prot |= strstr(optarg, "MAP_PRIVATE") ? MAP_PRIVATE : 0;
-            prot |= strstr(optarg, "MAP_SHARED") ? MAP_PRIVATE : 0;
+            prot |= strstr(optarg, "MAP_SHARED") ? MAP_SHARED : 0;
             break;
         case 'f':
             alloc_flags = atol(optarg);
