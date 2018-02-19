@@ -296,6 +296,7 @@ int service_to_fd(const char* name, const atransport* transport) {
         void* arg = strdup(name + 7);
         if (arg == NULL) return -1;
         ret = create_service_thread("reboot", reboot_service, arg);
+        if (ret < 0) free(arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread("root", restart_root_service, nullptr);
     } else if(!strncmp(name, "unroot:", 7)) {
