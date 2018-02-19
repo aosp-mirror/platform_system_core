@@ -33,6 +33,8 @@ rt_sigaction: 1
 rt_tgsigqueueinfo: 1
 
 #define PR_SET_VMA 0x53564d41
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
 prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA
 
 madvise: 1
