@@ -31,7 +31,10 @@ cc_binary {
         "trusty_keymaster_ipc.cpp",
         "trusty_keymaster_main.cpp",
     ],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     shared_libs: [
         "libcrypto",
         "libcutils",

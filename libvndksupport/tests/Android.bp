@@ -17,11 +17,14 @@ cc_test {
     srcs: [
         "linker_test.cpp",
     ],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 
     host_supported: false,
     shared_libs: [
         "libvndksupport",
         "libbase",
-    ]
+    ],
 }
