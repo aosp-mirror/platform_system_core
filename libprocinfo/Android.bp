@@ -16,7 +16,11 @@
 
 cc_defaults {
     name: "libprocinfo_defaults",
-    cflags: ["-Wall", "-Werror", "-Wextra"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+    ],
 }
 
 cc_library {
@@ -65,7 +69,10 @@ cc_test {
         },
     },
 
-    shared_libs: ["libbase", "libprocinfo"],
+    shared_libs: [
+        "libbase",
+        "libprocinfo",
+    ],
 
     compile_multilib: "both",
     multilib: {

@@ -78,7 +78,10 @@ cc_library {
     target: {
         // Always disable optimizations for host to make it easier to debug.
         host: {
-            cflags: ["-O0", "-g"],
+            cflags: [
+                "-O0",
+                "-g",
+            ],
         },
         vendor: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
@@ -131,7 +134,10 @@ cc_library_static {
     target: {
         // Always disable optimizations for host to make it easier to debug.
         host: {
-            cflags: ["-O0", "-g"],
+            cflags: [
+                "-O0",
+                "-g",
+            ],
         },
     },
 

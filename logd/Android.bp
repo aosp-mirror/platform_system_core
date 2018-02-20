@@ -25,7 +25,7 @@ event_flag = [
     "-DAUDITD_LOG_TAG=1003",
     "-DCHATTY_LOG_TAG=1004",
     "-DTAG_DEF_LOG_TAG=1005",
-    "-DLIBLOG_LOG_TAG=1006"
+    "-DLIBLOG_LOG_TAG=1006",
 ]
 
 cc_library_static {

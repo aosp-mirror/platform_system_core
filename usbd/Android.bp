@@ -13,4 +13,3 @@ cc_binary {
         "libcutils",
     ],
 }
-

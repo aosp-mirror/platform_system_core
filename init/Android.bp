@@ -56,7 +56,7 @@ cc_defaults {
         },
         uml: {
             cppflags: ["-DUSER_MODE_LINUX"],
-        }
+        },
     },
     static_libs: [
         "libbootloader_message",
