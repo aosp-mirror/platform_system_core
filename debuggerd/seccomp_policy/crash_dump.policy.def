@@ -35,6 +35,14 @@ rt_tgsigqueueinfo: 1
 #define PR_SET_VMA 0x53564d41
 prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA
 
+#if 0
+libminijail on vendor partitions older than P does not have constants from <sys/mman.h>.
+Define the values of PROT_READ and PROT_WRITE ourselves to maintain backwards compatibility.
+#else
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#endif
+
 madvise: 1
 mprotect: arg2 in PROT_READ|PROT_WRITE
 munmap: 1

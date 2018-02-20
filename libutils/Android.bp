@@ -20,12 +20,12 @@ cc_library_headers {
     header_libs: [
         "liblog_headers",
         "libsystem_headers",
-        "libcutils_headers"
+        "libcutils_headers",
     ],
     export_header_lib_headers: [
         "liblog_headers",
         "libsystem_headers",
-        "libcutils_headers"
+        "libcutils_headers",
     ],
     export_include_dirs: ["include"],
 
@@ -52,7 +52,10 @@ cc_defaults {
     },
     host_supported: true,
 
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     include_dirs: ["external/safe-iop/include"],
     header_libs: [
         "libutils_headers",
@@ -193,7 +196,10 @@ cc_test {
     static_libs: ["libutils"],
     shared_libs: ["liblog"],
     srcs: ["SharedBufferTest.cpp"],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 }
 
 subdirs = ["tests"]

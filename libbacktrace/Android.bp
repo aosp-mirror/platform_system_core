@@ -27,7 +27,6 @@ cc_defaults {
 
     include_dirs: ["external/libunwind/include/tdep"],
 
-
     target: {
         darwin: {
             enabled: false,
@@ -41,7 +40,7 @@ cc_defaults {
         lib64: {
             suffix: "64",
         },
-    }
+    },
 }
 
 libbacktrace_sources = [
@@ -84,8 +83,8 @@ cc_library {
         darwin: {
             enabled: true,
             shared_libs: [
-               "libbase",
-             ],
+                "libbase",
+            ],
         },
         linux: {
             srcs: libbacktrace_sources,
@@ -106,7 +105,7 @@ cc_library {
                 "art/runtime",
             ],
 
-            header_libs: [ "jni_headers", ],
+            header_libs: ["jni_headers"],
         },
         android: {
             static_libs: ["libasync_safe"],
@@ -114,7 +113,7 @@ cc_library {
         vendor: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_shared_libs: ["libdexfile"],
-        }
+        },
     },
     whole_static_libs: ["libdemangle"],
 }
@@ -130,7 +129,7 @@ cc_library_shared {
     srcs: ["backtrace_testlib.cpp"],
 
     shared_libs: [
-      "libunwindstack",
+        "libunwindstack",
     ],
 }
 

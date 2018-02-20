@@ -13,39 +13,39 @@
 // limitations under the License.
 
 python_binary_host {
-  name: "adb_integration_test_adb",
-  main: "test_adb.py",
-  srcs: [
-    "test_adb.py",
-  ],
-  libs: [
-    "adb_py",
-  ],
-  version: {
-    py2: {
-      enabled: true,
+    name: "adb_integration_test_adb",
+    main: "test_adb.py",
+    srcs: [
+        "test_adb.py",
+    ],
+    libs: [
+        "adb_py",
+    ],
+    version: {
+        py2: {
+            enabled: true,
+        },
+        py3: {
+            enabled: false,
+        },
     },
-    py3: {
-      enabled: false,
-    },
-  },
 }
 
 python_binary_host {
-  name: "adb_integration_test_device",
-  main: "test_device.py",
-  srcs: [
-    "test_device.py",
-  ],
-  libs: [
-    "adb_py",
-  ],
-  version: {
-    py2: {
-      enabled: true,
+    name: "adb_integration_test_device",
+    main: "test_device.py",
+    srcs: [
+        "test_device.py",
+    ],
+    libs: [
+        "adb_py",
+    ],
+    version: {
+        py2: {
+            enabled: true,
+        },
+        py3: {
+            enabled: false,
+        },
     },
-    py3: {
-      enabled: false,
-    },
-  },
 }
