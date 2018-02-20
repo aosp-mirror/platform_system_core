@@ -1,0 +1,18 @@
+# Configure [khungtaskd]
+on property:ro.khungtask.enable=true
+    write /proc/sys/kernel/hung_task_timeout_secs ${ro.khungtask.timeout:-720}
+    write /proc/sys/kernel/hung_task_warnings 65535
+    write /proc/sys/kernel/hung_task_check_count 65535
+    write /proc/sys/kernel/hung_task_panic 1
+
+on property:ro.llk.enable=true
+    start llkd
+
+service llkd /system/bin/llkd
+    class late_start
+    disabled
+    user llkd
+    group llkd readproc
+    capabilities KILL IPC_LOCK
+    file /proc/sysrq-trigger w
+    writepid /dev/cpuset/system-background/tasks
