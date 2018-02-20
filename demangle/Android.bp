@@ -42,11 +42,11 @@ cc_library {
     ],
 
     local_include_dirs: [
-       "include",
+        "include",
     ],
 
     export_include_dirs: [
-       "include",
+        "include",
     ],
 }
 
