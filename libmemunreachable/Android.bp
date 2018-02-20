@@ -16,7 +16,7 @@ cc_defaults {
         },
         host: {
             shared_libs: ["liblog"],
-        }
+        },
     },
 }
 

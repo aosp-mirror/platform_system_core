@@ -16,7 +16,7 @@ cc_defaults {
 
 cc_library_headers {
     name: "libdebuggerd_common_headers",
-    export_include_dirs: ["common/include"]
+    export_include_dirs: ["common/include"],
 }
 
 cc_library_shared {
@@ -39,7 +39,7 @@ cc_library_shared {
     ],
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
-    export_include_dirs: ["tombstoned/include"]
+    export_include_dirs: ["tombstoned/include"],
 }
 
 // Utility library to tombstoned and get an output fd.
@@ -60,7 +60,7 @@ cc_library_static {
     ],
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
-    export_include_dirs: ["tombstoned/include"]
+    export_include_dirs: ["tombstoned/include"],
 }
 
 // Core implementation, linked into libdebuggerd_handler and the dynamic linker.
@@ -186,7 +186,10 @@ cc_test {
                 "client/debuggerd_client_test.cpp",
                 "debuggerd_test.cpp",
             ],
-            static_libs: ["libasync_safe", "libtombstoned_client_static"],
+            static_libs: [
+                "libasync_safe",
+                "libtombstoned_client_static",
+            ],
         },
     },
 
@@ -197,7 +200,7 @@ cc_test {
         "libdebuggerd_client",
         "liblog",
         "libminijail",
-        "libnativehelper"
+        "libnativehelper",
     ],
 
     static_libs: [
@@ -298,7 +301,7 @@ cc_binary {
         "liblog",
     ],
 
-    init_rc: ["tombstoned/tombstoned.rc"]
+    init_rc: ["tombstoned/tombstoned.rc"],
 }
 
 subdirs = [

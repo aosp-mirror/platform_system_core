@@ -17,31 +17,34 @@
 cc_library {
     name: "libfoo.oem1",
     srcs: ["test.cpp"],
-    cflags : ["-DLIBNAME=\"libfoo.oem1.so\""],
+    cflags: ["-DLIBNAME=\"libfoo.oem1.so\""],
     shared_libs: [
         "libbase",
     ],
 }
+
 cc_library {
     name: "libbar.oem1",
     srcs: ["test.cpp"],
-    cflags : ["-DLIBNAME=\"libbar.oem1.so\""],
+    cflags: ["-DLIBNAME=\"libbar.oem1.so\""],
     shared_libs: [
         "libbase",
     ],
 }
+
 cc_library {
     name: "libfoo.oem2",
     srcs: ["test.cpp"],
-    cflags : ["-DLIBNAME=\"libfoo.oem2.so\""],
+    cflags: ["-DLIBNAME=\"libfoo.oem2.so\""],
     shared_libs: [
         "libbase",
     ],
 }
+
 cc_library {
     name: "libbar.oem2",
     srcs: ["test.cpp"],
-    cflags : ["-DLIBNAME=\"libbar.oem2.so\""],
+    cflags: ["-DLIBNAME=\"libbar.oem2.so\""],
     shared_libs: [
         "libbase",
     ],

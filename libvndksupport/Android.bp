@@ -3,7 +3,10 @@ subdirs = ["tests"]
 cc_library {
     name: "libvndksupport",
     srcs: ["linker.c"],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     local_include_dirs: ["include/vndksupport"],
     export_include_dirs: ["include"],
     shared_libs: ["liblog"],
