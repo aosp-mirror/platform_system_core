@@ -3,8 +3,8 @@ LIBLOG {
     android_name_to_log_id; # vndk
     android_log_id_to_name; # vndk
     __android_log_assert;
-    __android_log_buf_print; # vndk
-    __android_log_buf_write; # vndk
+    __android_log_buf_print;
+    __android_log_buf_write;
     __android_log_print;
     __android_log_vprint;
     __android_log_write;
