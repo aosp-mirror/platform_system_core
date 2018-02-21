@@ -10,17 +10,8 @@ cc_binary {
         "libstatslogc",
     ],
     local_include_dirs: ["include"],
-    cflags: ["-Werror"],
-
+    cflags: ["-Werror", "-DLMKD_TRACE_KILLS"],
     init_rc: ["lmkd.rc"],
-
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-DLMKD_TRACE_KILLS"
-            ],
-        },
-    },
 }
 
 cc_library_static {
