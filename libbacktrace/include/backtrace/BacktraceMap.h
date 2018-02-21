@@ -154,6 +154,13 @@ public:
 
   const std::vector<std::string>& GetSuffixesToIgnore() { return suffixes_to_ignore_; }
 
+  // Disabling the resolving of names results in the function name being
+  // set to an empty string and the function offset being set to zero
+  // in the frame data when unwinding.
+  void SetResolveNames(bool resolve) { resolve_names_ = resolve; }
+
+  bool ResolveNames() { return resolve_names_; }
+
  protected:
   BacktraceMap(pid_t pid);
 
@@ -164,6 +171,7 @@ public:
   pid_t pid_;
   std::deque<backtrace_map_t> maps_;
   std::vector<std::string> suffixes_to_ignore_;
+  bool resolve_names_ = true;
 };
 
 class ScopedBacktraceMapIteratorLock {
