@@ -17,6 +17,8 @@
 #ifndef _INIT_INIT_H
 #define _INIT_INIT_H
 
+#include <sys/types.h>
+
 #include <string>
 #include <vector>
 
@@ -36,7 +38,7 @@ extern std::vector<std::string> late_import_paths;
 
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 
-void handle_control_message(const std::string& msg, const std::string& arg);
+void HandleControlMessage(const std::string& msg, const std::string& arg, pid_t pid);
 
 void property_changed(const std::string& name, const std::string& value);
 

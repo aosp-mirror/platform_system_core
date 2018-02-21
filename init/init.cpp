@@ -35,6 +35,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/android_reboot.h>
 #include <keyutils.h>
@@ -63,7 +64,10 @@ using namespace std::string_literals;
 
 using android::base::boot_clock;
 using android::base::GetProperty;
+using android::base::ReadFileToString;
+using android::base::StringPrintf;
 using android::base::Timer;
+using android::base::Trim;
 
 namespace android {
 namespace init {
@@ -246,7 +250,7 @@ static const std::map<std::string, ControlMessageFunction>& get_control_message_
     return control_message_functions;
 }
 
-void handle_control_message(const std::string& msg, const std::string& name) {
+void HandleControlMessage(const std::string& msg, const std::string& name, pid_t pid) {
     const auto& map = get_control_message_map();
     const auto it = map.find(msg);
 
@@ -254,6 +258,18 @@ void handle_control_message(const std::string& msg, const std::string& name) {
         LOG(ERROR) << "Unknown control msg '" << msg << "'";
         return;
     }
+
+    std::string cmdline_path = StringPrintf("proc/%d/cmdline", pid);
+    std::string process_cmdline;
+    if (ReadFileToString(cmdline_path, &process_cmdline)) {
+        std::replace(process_cmdline.begin(), process_cmdline.end(), '\0', ' ');
+        process_cmdline = Trim(process_cmdline);
+    } else {
+        process_cmdline = "unknown process";
+    }
+
+    LOG(INFO) << "Received control message '" << msg << "' for '" << name << "' from pid: " << pid
+              << " (" << process_cmdline << ")";
 
     const ControlMessageFunction& function = it->second;
 
