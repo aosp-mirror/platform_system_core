@@ -68,6 +68,10 @@ void Unwinder::FillInDexFrame() {
     return;
   }
 
+  if (!resolve_names_) {
+    return;
+  }
+
 #if !defined(NO_LIBDEXFILE_SUPPORT)
   if (dex_files_ == nullptr) {
     return;
@@ -100,7 +104,8 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc
   frame->map_flags = map_info->flags;
   frame->map_load_bias = elf->GetLoadBias();
 
-  if (!elf->GetFunctionName(func_pc, &frame->function_name, &frame->function_offset)) {
+  if (!resolve_names_ ||
+      !elf->GetFunctionName(func_pc, &frame->function_name, &frame->function_offset)) {
     frame->function_name = "";
     frame->function_offset = 0;
   }
