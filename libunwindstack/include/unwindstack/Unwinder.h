@@ -75,6 +75,10 @@ class Unwinder {
 
   void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
 
+  // Disabling the resolving of names results in the function name being
+  // set to an empty string and the function offset being set to zero.
+  void SetResolveNames(bool resolve) { resolve_names_ = resolve; }
+
 #if !defined(NO_LIBDEXFILE_SUPPORT)
   void SetDexFiles(DexFiles* dex_files, ArchEnum arch);
 #endif
@@ -95,6 +99,7 @@ class Unwinder {
 #if !defined(NO_LIBDEXFILE_SUPPORT)
   DexFiles* dex_files_ = nullptr;
 #endif
+  bool resolve_names_ = true;
   ErrorData last_error_;
 };
 
