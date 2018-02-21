@@ -45,7 +45,7 @@
 
 // Headers for LogMessage::LogLine.
 #ifdef __ANDROID__
-#include <log/log.h>
+#include <android/log.h>
 #include <android/set_abort_message.h>
 #else
 #include <sys/types.h>

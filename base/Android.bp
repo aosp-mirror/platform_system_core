@@ -15,7 +15,7 @@
 //
 
 cc_defaults {
-    name: "libbase_defaults",
+    name: "libbase_cflags_defaults",
     cflags: [
         "-Wall",
         "-Werror",
@@ -39,15 +39,9 @@ cc_library_headers {
     },
 }
 
-cc_library {
-    name: "libbase",
-    defaults: ["libbase_defaults"],
-    vendor_available: true,
-    host_supported: true,
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+cc_defaults {
+    name: "libbase_defaults",
+    defaults: ["libbase_cflags_defaults"],
     srcs: [
         "chrono_utils.cpp",
         "file.cpp",
@@ -58,11 +52,6 @@ cc_library {
         "strings.cpp",
         "test_utils.cpp",
     ],
-
-    header_libs: [
-        "libbase_headers",
-    ],
-    export_header_lib_headers: ["libbase_headers"],
 
     shared_libs: ["liblog"],
     target: {
@@ -100,11 +89,34 @@ cc_library {
     },
 }
 
+cc_library {
+    name: "libbase",
+    defaults: ["libbase_defaults"],
+    vendor_available: true,
+    host_supported: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
+    header_libs: [
+        "libbase_headers",
+    ],
+    export_header_lib_headers: ["libbase_headers"],
+}
+
+cc_library_static {
+    name: "libbase_ndk",
+    defaults: ["libbase_defaults"],
+    sdk_version: "current",
+    stl: "c++_static",
+    export_include_dirs: ["include"],
+}
+
 // Tests
 // ------------------------------------------------------------------------------
 cc_test {
     name: "libbase_test",
-    defaults: ["libbase_defaults"],
+    defaults: ["libbase_cflags_defaults"],
     host_supported: true,
     srcs: [
         "endian_test.cpp",
