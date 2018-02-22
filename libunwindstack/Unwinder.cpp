@@ -83,20 +83,20 @@ void Unwinder::FillInDexFrame() {
 #endif
 }
 
-void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc, uint64_t func_pc) {
+void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t func_pc,
+                           uint64_t pc_adjustment) {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
   frame->num = frame_num;
   frame->sp = regs_->sp();
-  frame->rel_pc = adjusted_rel_pc;
+  frame->rel_pc = rel_pc - pc_adjustment;
+  frame->pc = regs_->pc() - pc_adjustment;
 
   if (map_info == nullptr) {
-    frame->pc = regs_->pc();
     return;
   }
 
-  frame->pc = map_info->start + adjusted_rel_pc - elf->GetLoadBias() - map_info->elf_offset;
   frame->map_name = map_info->name;
   frame->map_offset = map_info->offset;
   frame->map_start = map_info->start;
@@ -140,13 +140,12 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
 
     MapInfo* map_info = maps_->Find(regs_->pc());
     uint64_t rel_pc;
-    uint64_t adjusted_pc;
-    uint64_t adjusted_rel_pc;
+    uint64_t pc_adjustment = 0;
+    uint64_t step_pc;
     Elf* elf;
     if (map_info == nullptr) {
       rel_pc = regs_->pc();
-      adjusted_rel_pc = rel_pc;
-      adjusted_pc = rel_pc;
+      step_pc = rel_pc;
       last_error_.code = ERROR_INVALID_MAP;
     } else {
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
@@ -155,21 +154,20 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       elf = map_info->GetElf(process_memory_, true);
       rel_pc = elf->GetRelPc(regs_->pc(), map_info);
       if (adjust_pc) {
-        adjusted_pc = regs_->GetAdjustedPc(rel_pc, elf);
+        pc_adjustment = regs_->GetPcAdjustment(rel_pc, elf);
       } else {
-        adjusted_pc = rel_pc;
+        pc_adjustment = 0;
       }
-      adjusted_rel_pc = adjusted_pc;
+      step_pc = rel_pc - pc_adjustment;
 
       // If the pc is in an invalid elf file, try and get an Elf object
       // using the jit debug information.
       if (!elf->valid() && jit_debug_ != nullptr) {
-        uint64_t adjusted_jit_pc = regs_->pc() - (rel_pc - adjusted_pc);
+        uint64_t adjusted_jit_pc = regs_->pc() - pc_adjustment;
         Elf* jit_elf = jit_debug_->GetElf(maps_, adjusted_jit_pc);
         if (jit_elf != nullptr) {
           // The jit debug information requires a non relative adjusted pc.
-          adjusted_pc = adjusted_jit_pc;
-          adjusted_rel_pc = adjusted_pc - map_info->start;
+          step_pc = adjusted_jit_pc;
           elf = jit_elf;
         }
       }
@@ -185,7 +183,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         regs_->set_dex_pc(0);
       }
 
-      FillInFrame(map_info, elf, adjusted_rel_pc, adjusted_pc);
+      FillInFrame(map_info, elf, rel_pc, step_pc, pc_adjustment);
 
       // Once a frame is added, stop skipping frames.
       initial_map_names_to_skip = nullptr;
@@ -213,8 +211,8 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           in_device_map = true;
         } else {
           bool finished;
-          stepped = elf->Step(rel_pc, adjusted_pc, map_info->elf_offset, regs_,
-                              process_memory_.get(), &finished);
+          stepped = elf->Step(rel_pc, step_pc, map_info->elf_offset, regs_, process_memory_.get(),
+                              &finished);
           elf->GetLastError(&last_error_);
           if (stepped && finished) {
             break;
