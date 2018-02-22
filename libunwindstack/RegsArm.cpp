@@ -35,26 +35,25 @@ ArchEnum RegsArm::Arch() {
   return ARCH_ARM;
 }
 
-uint64_t RegsArm::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
+uint64_t RegsArm::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
   uint64_t load_bias = elf->GetLoadBias();
   if (rel_pc < load_bias) {
-    return rel_pc;
+    return 0;
   }
   uint64_t adjusted_rel_pc = rel_pc - load_bias;
-
   if (adjusted_rel_pc < 5) {
-    return rel_pc;
+    return 0;
   }
 
   if (adjusted_rel_pc & 1) {
     // This is a thumb instruction, it could be 2 or 4 bytes.
     uint32_t value;
-    if (rel_pc < 5 || !elf->memory()->ReadFully(adjusted_rel_pc - 5, &value, sizeof(value)) ||
+    if (!elf->memory()->ReadFully(adjusted_rel_pc - 5, &value, sizeof(value)) ||
         (value & 0xe000f000) != 0xe000f000) {
-      return rel_pc - 2;
+      return 2;
     }
   }
-  return rel_pc - 4;
+  return 4;
 }
 
 void RegsArm::SetFromRaw() {

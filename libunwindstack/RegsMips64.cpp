@@ -36,16 +36,12 @@ ArchEnum RegsMips64::Arch() {
   return ARCH_MIPS64;
 }
 
-uint64_t RegsMips64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
-  if (!elf->valid()) {
-    return rel_pc;
+uint64_t RegsMips64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
+  if (!elf->valid() || rel_pc < 8) {
+    return 0;
   }
-
-  // For now, just assuming no compact branches
-  if (rel_pc < 8) {
-    return rel_pc;
-  }
-  return rel_pc - 8;
+  // For now, just assume no compact branches
+  return 8;
 }
 
 void RegsMips64::SetFromRaw() {
