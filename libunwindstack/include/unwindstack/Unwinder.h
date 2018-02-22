@@ -88,7 +88,8 @@ class Unwinder {
 
  private:
   void FillInDexFrame();
-  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc, uint64_t adjusted_pc);
+  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t func_pc,
+                   uint64_t pc_adjustment);
 
   size_t max_frames_;
   Maps* maps_;

@@ -193,6 +193,14 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm) {
       "  #02 pc 00007441  libbase.so (_ZN7android4base10LogMessageD2Ev+748)\n"
       "  #03 pc 00015147  /does/not/exist/libhidlbase.so\n",
       frame_info);
+  EXPECT_EQ(0xf31ea9f8U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xe9c866f8U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xf2da0a1bU, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xe9c86728U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xf2da1441U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xe9c86730U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xf3367147U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xe9c86778U, unwinder.frames()[3].sp);
 }
 
 TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
@@ -209,6 +217,10 @@ TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
       "  #01 pc 0006dce5  libandroid_runtime.so "
       "(_ZN7android14AndroidRuntime19javaCreateThreadEtcEPFiPvES1_PKcijPS1_)\n",
       frame_info);
+  EXPECT_EQ(0xf1f6dc49U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xd8fe6930U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xf1f6dce5U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xd8fe6958U, unwinder.frames()[1].sp);
 }
 
 TEST_F(UnwindOfflineTest, pc_straddle_arm64) {
@@ -229,6 +241,18 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm64) {
       "(_ZN11unwindstack37UnwindTest_remote_through_signal_Test8TestBodyEv+32)\n"
       "  #05 pc 0000000000455d70  libunwindstack_test (_ZN7testing4Test3RunEv+392)\n",
       frame_info);
+  EXPECT_EQ(0x64d09d4fd8U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7fe0d84040U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x64d09d5078U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7fe0d84070U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x64d09d508cU, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7fe0d84080U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x64d09d88fcU, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7fe0d84090U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x64d09d88d8U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7fe0d840f0U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x64d0a00d70U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7fe0d84110U, unwinder.frames()[5].sp);
 }
 
 static void AddMemory(std::string file_name, MemoryOfflineParts* parts) {
@@ -390,6 +414,144 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "  #67 pc 00001a80  dalvikvm32 (main+1312)\n"
       "  #68 pc 00018275  libc.so\n",
       frame_info);
+  EXPECT_EQ(0xeb89bfb8U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xffeb5280U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xeb89af00U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xffeb52a0U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xec6061a8U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xffeb5ce0U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xee75be81U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xffeb5d30U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xf728e4d2U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xffeb5d60U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0xf6d27ab5U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xffeb5d80U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xffeb5e20U, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xffeb5ec0U, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xffeb5f40U, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xffeb5fb0U, unwinder.frames()[9].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xffeb6110U, unwinder.frames()[10].sp);
+  EXPECT_EQ(0xee75be04U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xffeb6160U, unwinder.frames()[11].sp);
+  EXPECT_EQ(0xf728e4d2U, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xffeb6180U, unwinder.frames()[12].sp);
+  EXPECT_EQ(0xf6d27ab5U, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xffeb61b0U, unwinder.frames()[13].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xffeb6250U, unwinder.frames()[14].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xffeb62f0U, unwinder.frames()[15].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xffeb6370U, unwinder.frames()[16].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[17].pc);
+  EXPECT_EQ(0xffeb63e0U, unwinder.frames()[17].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[18].pc);
+  EXPECT_EQ(0xffeb6530U, unwinder.frames()[18].sp);
+  EXPECT_EQ(0xee75bd3cU, unwinder.frames()[19].pc);
+  EXPECT_EQ(0xffeb6580U, unwinder.frames()[19].sp);
+  EXPECT_EQ(0xf728e4d2U, unwinder.frames()[20].pc);
+  EXPECT_EQ(0xffeb65b0U, unwinder.frames()[20].sp);
+  EXPECT_EQ(0xf6d27ab5U, unwinder.frames()[21].pc);
+  EXPECT_EQ(0xffeb65e0U, unwinder.frames()[21].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[22].pc);
+  EXPECT_EQ(0xffeb6680U, unwinder.frames()[22].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[23].pc);
+  EXPECT_EQ(0xffeb6720U, unwinder.frames()[23].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[24].pc);
+  EXPECT_EQ(0xffeb67a0U, unwinder.frames()[24].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[25].pc);
+  EXPECT_EQ(0xffeb6810U, unwinder.frames()[25].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[26].pc);
+  EXPECT_EQ(0xffeb6960U, unwinder.frames()[26].sp);
+  EXPECT_EQ(0xee75bbdcU, unwinder.frames()[27].pc);
+  EXPECT_EQ(0xffeb69b0U, unwinder.frames()[27].sp);
+  EXPECT_EQ(0xf728e6a2U, unwinder.frames()[28].pc);
+  EXPECT_EQ(0xffeb69f0U, unwinder.frames()[28].sp);
+  EXPECT_EQ(0xf6d27acbU, unwinder.frames()[29].pc);
+  EXPECT_EQ(0xffeb6a20U, unwinder.frames()[29].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[30].pc);
+  EXPECT_EQ(0xffeb6ac0U, unwinder.frames()[30].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[31].pc);
+  EXPECT_EQ(0xffeb6b60U, unwinder.frames()[31].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[32].pc);
+  EXPECT_EQ(0xffeb6be0U, unwinder.frames()[32].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[33].pc);
+  EXPECT_EQ(0xffeb6c50U, unwinder.frames()[33].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[34].pc);
+  EXPECT_EQ(0xffeb6dd0U, unwinder.frames()[34].sp);
+  EXPECT_EQ(0xee75b625U, unwinder.frames()[35].pc);
+  EXPECT_EQ(0xffeb6e20U, unwinder.frames()[35].sp);
+  EXPECT_EQ(0xf728e4d2U, unwinder.frames()[36].pc);
+  EXPECT_EQ(0xffeb6e50U, unwinder.frames()[36].sp);
+  EXPECT_EQ(0xf6d27ab5U, unwinder.frames()[37].pc);
+  EXPECT_EQ(0xffeb6e70U, unwinder.frames()[37].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[38].pc);
+  EXPECT_EQ(0xffeb6f10U, unwinder.frames()[38].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[39].pc);
+  EXPECT_EQ(0xffeb6fb0U, unwinder.frames()[39].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[40].pc);
+  EXPECT_EQ(0xffeb7030U, unwinder.frames()[40].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[41].pc);
+  EXPECT_EQ(0xffeb70a0U, unwinder.frames()[41].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[42].pc);
+  EXPECT_EQ(0xffeb71f0U, unwinder.frames()[42].sp);
+  EXPECT_EQ(0xee75aedcU, unwinder.frames()[43].pc);
+  EXPECT_EQ(0xffeb7240U, unwinder.frames()[43].sp);
+  EXPECT_EQ(0xf728e4d2U, unwinder.frames()[44].pc);
+  EXPECT_EQ(0xffeb72a0U, unwinder.frames()[44].sp);
+  EXPECT_EQ(0xf6d27ab5U, unwinder.frames()[45].pc);
+  EXPECT_EQ(0xffeb72c0U, unwinder.frames()[45].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[46].pc);
+  EXPECT_EQ(0xffeb7360U, unwinder.frames()[46].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[47].pc);
+  EXPECT_EQ(0xffeb7400U, unwinder.frames()[47].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[48].pc);
+  EXPECT_EQ(0xffeb7480U, unwinder.frames()[48].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[49].pc);
+  EXPECT_EQ(0xffeb74f0U, unwinder.frames()[49].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[50].pc);
+  EXPECT_EQ(0xffeb7680U, unwinder.frames()[50].sp);
+  EXPECT_EQ(0xee756c22U, unwinder.frames()[51].pc);
+  EXPECT_EQ(0xffeb76d0U, unwinder.frames()[51].sp);
+  EXPECT_EQ(0xf728e6a2U, unwinder.frames()[52].pc);
+  EXPECT_EQ(0xffeb76f0U, unwinder.frames()[52].sp);
+  EXPECT_EQ(0xf6d27acbU, unwinder.frames()[53].pc);
+  EXPECT_EQ(0xffeb7710U, unwinder.frames()[53].sp);
+  EXPECT_EQ(0xf6f7df0dU, unwinder.frames()[54].pc);
+  EXPECT_EQ(0xffeb77b0U, unwinder.frames()[54].sp);
+  EXPECT_EQ(0xf6f73552U, unwinder.frames()[55].pc);
+  EXPECT_EQ(0xffeb7850U, unwinder.frames()[55].sp);
+  EXPECT_EQ(0xf6f7499aU, unwinder.frames()[56].pc);
+  EXPECT_EQ(0xffeb78d0U, unwinder.frames()[56].sp);
+  EXPECT_EQ(0xf7265362U, unwinder.frames()[57].pc);
+  EXPECT_EQ(0xffeb7940U, unwinder.frames()[57].sp);
+  EXPECT_EQ(0xf72945bdU, unwinder.frames()[58].pc);
+  EXPECT_EQ(0xffeb7a80U, unwinder.frames()[58].sp);
+  EXPECT_EQ(0xf728e6a2U, unwinder.frames()[59].pc);
+  EXPECT_EQ(0xffeb7ad0U, unwinder.frames()[59].sp);
+  EXPECT_EQ(0xf6d27acbU, unwinder.frames()[60].pc);
+  EXPECT_EQ(0xffeb7af0U, unwinder.frames()[60].sp);
+  EXPECT_EQ(0xf718bc95U, unwinder.frames()[61].pc);
+  EXPECT_EQ(0xffeb7b90U, unwinder.frames()[61].sp);
+  EXPECT_EQ(0xf718bb5aU, unwinder.frames()[62].pc);
+  EXPECT_EQ(0xffeb7c50U, unwinder.frames()[62].sp);
+  EXPECT_EQ(0xf706b3ddU, unwinder.frames()[63].pc);
+  EXPECT_EQ(0xffeb7d10U, unwinder.frames()[63].sp);
+  EXPECT_EQ(0xf6d6548cU, unwinder.frames()[64].pc);
+  EXPECT_EQ(0xffeb7d70U, unwinder.frames()[64].sp);
+  EXPECT_EQ(0xf6d5df06U, unwinder.frames()[65].pc);
+  EXPECT_EQ(0xffeb7df0U, unwinder.frames()[65].sp);
+  EXPECT_EQ(0x56574d8cU, unwinder.frames()[66].pc);
+  EXPECT_EQ(0xffeb7e40U, unwinder.frames()[66].sp);
+  EXPECT_EQ(0x56574a80U, unwinder.frames()[67].pc);
+  EXPECT_EQ(0xffeb7e70U, unwinder.frames()[67].sp);
+  EXPECT_EQ(0xf7363275U, unwinder.frames()[68].pc);
+  EXPECT_EQ(0xffeb7ef0U, unwinder.frames()[68].sp);
 }
 
 TEST_F(UnwindOfflineTest, jit_debug_arm) {
@@ -553,6 +715,158 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
       "  #74 pc 00001349  dalvikvm32 (main+896)\n"
       "  #75 pc 000850c9  libc.so\n",
       frame_info);
+  EXPECT_EQ(0xdfe66a5eU, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xff85d180U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xe044712dU, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xff85d200U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xe27a7cb1U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xff85d290U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xff85d2b0U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xed761129U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xff85d2e8U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0xed3b97a9U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xff85d370U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xff85d3d8U, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xff85d428U, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xff85d470U, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xff85d4b0U, unwinder.frames()[9].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xff85d5d0U, unwinder.frames()[10].sp);
+  EXPECT_EQ(0xe27a7c31U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xff85d640U, unwinder.frames()[11].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xff85d660U, unwinder.frames()[12].sp);
+  EXPECT_EQ(0xed761129U, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xff85d698U, unwinder.frames()[13].sp);
+  EXPECT_EQ(0xed3b97a9U, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xff85d720U, unwinder.frames()[14].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xff85d788U, unwinder.frames()[15].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xff85d7d8U, unwinder.frames()[16].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[17].pc);
+  EXPECT_EQ(0xff85d820U, unwinder.frames()[17].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[18].pc);
+  EXPECT_EQ(0xff85d860U, unwinder.frames()[18].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[19].pc);
+  EXPECT_EQ(0xff85d970U, unwinder.frames()[19].sp);
+  EXPECT_EQ(0xe27a7b77U, unwinder.frames()[20].pc);
+  EXPECT_EQ(0xff85d9e0U, unwinder.frames()[20].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[21].pc);
+  EXPECT_EQ(0xff85da10U, unwinder.frames()[21].sp);
+  EXPECT_EQ(0xed761129U, unwinder.frames()[22].pc);
+  EXPECT_EQ(0xff85da48U, unwinder.frames()[22].sp);
+  EXPECT_EQ(0xed3b97a9U, unwinder.frames()[23].pc);
+  EXPECT_EQ(0xff85dad0U, unwinder.frames()[23].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[24].pc);
+  EXPECT_EQ(0xff85db38U, unwinder.frames()[24].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[25].pc);
+  EXPECT_EQ(0xff85db88U, unwinder.frames()[25].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[26].pc);
+  EXPECT_EQ(0xff85dbd0U, unwinder.frames()[26].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[27].pc);
+  EXPECT_EQ(0xff85dc10U, unwinder.frames()[27].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[28].pc);
+  EXPECT_EQ(0xff85dd20U, unwinder.frames()[28].sp);
+  EXPECT_EQ(0xe27a7a29U, unwinder.frames()[29].pc);
+  EXPECT_EQ(0xff85dd90U, unwinder.frames()[29].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[30].pc);
+  EXPECT_EQ(0xff85ddc0U, unwinder.frames()[30].sp);
+  EXPECT_EQ(0xed76122fU, unwinder.frames()[31].pc);
+  EXPECT_EQ(0xff85de08U, unwinder.frames()[31].sp);
+  EXPECT_EQ(0xed3b97bbU, unwinder.frames()[32].pc);
+  EXPECT_EQ(0xff85de90U, unwinder.frames()[32].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[33].pc);
+  EXPECT_EQ(0xff85def8U, unwinder.frames()[33].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[34].pc);
+  EXPECT_EQ(0xff85df48U, unwinder.frames()[34].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[35].pc);
+  EXPECT_EQ(0xff85df90U, unwinder.frames()[35].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[36].pc);
+  EXPECT_EQ(0xff85dfd0U, unwinder.frames()[36].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[37].pc);
+  EXPECT_EQ(0xff85e110U, unwinder.frames()[37].sp);
+  EXPECT_EQ(0xe27a739bU, unwinder.frames()[38].pc);
+  EXPECT_EQ(0xff85e180U, unwinder.frames()[38].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[39].pc);
+  EXPECT_EQ(0xff85e1b0U, unwinder.frames()[39].sp);
+  EXPECT_EQ(0xed761129U, unwinder.frames()[40].pc);
+  EXPECT_EQ(0xff85e1e0U, unwinder.frames()[40].sp);
+  EXPECT_EQ(0xed3b97a9U, unwinder.frames()[41].pc);
+  EXPECT_EQ(0xff85e268U, unwinder.frames()[41].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[42].pc);
+  EXPECT_EQ(0xff85e2d0U, unwinder.frames()[42].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[43].pc);
+  EXPECT_EQ(0xff85e320U, unwinder.frames()[43].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[44].pc);
+  EXPECT_EQ(0xff85e368U, unwinder.frames()[44].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[45].pc);
+  EXPECT_EQ(0xff85e3a8U, unwinder.frames()[45].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[46].pc);
+  EXPECT_EQ(0xff85e4c0U, unwinder.frames()[46].sp);
+  EXPECT_EQ(0xe27a6aa7U, unwinder.frames()[47].pc);
+  EXPECT_EQ(0xff85e530U, unwinder.frames()[47].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[48].pc);
+  EXPECT_EQ(0xff85e5a0U, unwinder.frames()[48].sp);
+  EXPECT_EQ(0xed761129U, unwinder.frames()[49].pc);
+  EXPECT_EQ(0xff85e5d8U, unwinder.frames()[49].sp);
+  EXPECT_EQ(0xed3b97a9U, unwinder.frames()[50].pc);
+  EXPECT_EQ(0xff85e660U, unwinder.frames()[50].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[51].pc);
+  EXPECT_EQ(0xff85e6c8U, unwinder.frames()[51].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[52].pc);
+  EXPECT_EQ(0xff85e718U, unwinder.frames()[52].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[53].pc);
+  EXPECT_EQ(0xff85e760U, unwinder.frames()[53].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[54].pc);
+  EXPECT_EQ(0xff85e7a0U, unwinder.frames()[54].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[55].pc);
+  EXPECT_EQ(0xff85e8f0U, unwinder.frames()[55].sp);
+  EXPECT_EQ(0xe27a1a99U, unwinder.frames()[56].pc);
+  EXPECT_EQ(0xff85e960U, unwinder.frames()[56].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[57].pc);
+  EXPECT_EQ(0xff85e990U, unwinder.frames()[57].sp);
+  EXPECT_EQ(0xed76122fU, unwinder.frames()[58].pc);
+  EXPECT_EQ(0xff85e9c8U, unwinder.frames()[58].sp);
+  EXPECT_EQ(0xed3b97bbU, unwinder.frames()[59].pc);
+  EXPECT_EQ(0xff85ea50U, unwinder.frames()[59].sp);
+  EXPECT_EQ(0xed541833U, unwinder.frames()[60].pc);
+  EXPECT_EQ(0xff85eab8U, unwinder.frames()[60].sp);
+  EXPECT_EQ(0xed528935U, unwinder.frames()[61].pc);
+  EXPECT_EQ(0xff85eb08U, unwinder.frames()[61].sp);
+  EXPECT_EQ(0xed52971dU, unwinder.frames()[62].pc);
+  EXPECT_EQ(0xff85eb50U, unwinder.frames()[62].sp);
+  EXPECT_EQ(0xed73c865U, unwinder.frames()[63].pc);
+  EXPECT_EQ(0xff85eb90U, unwinder.frames()[63].sp);
+  EXPECT_EQ(0xed7606ffU, unwinder.frames()[64].pc);
+  EXPECT_EQ(0xff85ec90U, unwinder.frames()[64].sp);
+  EXPECT_EQ(0xed75c175U, unwinder.frames()[65].pc);
+  EXPECT_EQ(0xff85ed00U, unwinder.frames()[65].sp);
+  EXPECT_EQ(0xed76122fU, unwinder.frames()[66].pc);
+  EXPECT_EQ(0xff85ed38U, unwinder.frames()[66].sp);
+  EXPECT_EQ(0xed3b97bbU, unwinder.frames()[67].pc);
+  EXPECT_EQ(0xff85edc0U, unwinder.frames()[67].sp);
+  EXPECT_EQ(0xed6ac92dU, unwinder.frames()[68].pc);
+  EXPECT_EQ(0xff85ee28U, unwinder.frames()[68].sp);
+  EXPECT_EQ(0xed6ac6c3U, unwinder.frames()[69].pc);
+  EXPECT_EQ(0xff85eeb8U, unwinder.frames()[69].sp);
+  EXPECT_EQ(0xed602411U, unwinder.frames()[70].pc);
+  EXPECT_EQ(0xff85ef48U, unwinder.frames()[70].sp);
+  EXPECT_EQ(0xed3e0a9fU, unwinder.frames()[71].pc);
+  EXPECT_EQ(0xff85ef90U, unwinder.frames()[71].sp);
+  EXPECT_EQ(0xed3db9b9U, unwinder.frames()[72].pc);
+  EXPECT_EQ(0xff85f008U, unwinder.frames()[72].sp);
+  EXPECT_EQ(0xab0d459fU, unwinder.frames()[73].pc);
+  EXPECT_EQ(0xff85f038U, unwinder.frames()[73].sp);
+  EXPECT_EQ(0xab0d4349U, unwinder.frames()[74].pc);
+  EXPECT_EQ(0xff85f050U, unwinder.frames()[74].sp);
+  EXPECT_EQ(0xedb0d0c9U, unwinder.frames()[75].pc);
+  EXPECT_EQ(0xff85f0c0U, unwinder.frames()[75].sp);
 }
 
 // The eh_frame_hdr data is present but set to zero fdes. This should
@@ -573,6 +887,16 @@ TEST_F(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
       "  #03 pc 0000000000000590  waiter64\n"
       "  #04 pc 00000000000a8e98  libc.so (__libc_init+88)\n",
       frame_info);
+  EXPECT_EQ(0x60a9fdf550U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7fdd141990U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x60a9fdf568U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7fdd1419a0U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x60a9fdf57cU, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7fdd1419b0U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x60a9fdf590U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7fdd1419c0U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x7542d68e98U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7fdd1419d0U, unwinder.frames()[4].sp);
 }
 
 // The elf has bad eh_frame unwind information for the pcs. If eh_frame
@@ -592,6 +916,16 @@ TEST_F(UnwindOfflineTest, debug_frame_first_x86) {
       "  #03 pc 000006f7  waiter (main+23)\n"
       "  #04 pc 00018275  libc.so\n",
       frame_info);
+  EXPECT_EQ(0x56598685U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xffcf9e38U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x565986b7U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xffcf9e50U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x565986d7U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xffcf9e60U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x565986f7U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xffcf9e70U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xf744a275U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xffcf9e80U, unwinder.frames()[4].sp);
 }
 
 // Make sure that a pc that is at the beginning of an fde unwinds correctly.
@@ -610,6 +944,16 @@ TEST_F(UnwindOfflineTest, eh_frame_hdr_begin_x86_64) {
       "  #03 pc 00000000000013ed  unwind_test64 (main+13)\n"
       "  #04 pc 00000000000202b0  libc.so\n",
       frame_info);
+  EXPECT_EQ(0x561550b17a80U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7ffcc8596ce8U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x561550b17dd9U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7ffcc8596cf0U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x561550b1821eU, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7ffcc8596f40U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x561550b183edU, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7ffcc8597190U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x7f4de62162b0U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7ffcc85971a0U, unwinder.frames()[4].sp);
 }
 
 }  // namespace unwindstack
