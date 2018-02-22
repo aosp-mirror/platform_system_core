@@ -436,7 +436,7 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
             return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
         }
 
-        handle_control_message(name.c_str() + 4, value.c_str());
+        HandleControlMessage(name.c_str() + 4, value, cr.pid);
         return PROP_SUCCESS;
     }
 
