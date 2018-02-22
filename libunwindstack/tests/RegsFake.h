@@ -47,7 +47,7 @@ class RegsFake : public Regs {
 
   bool Is32Bit() { return false; }
 
-  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf*) override { return rel_pc - 2; }
+  uint64_t GetPcAdjustment(uint64_t, Elf*) override { return 2; }
 
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 
@@ -77,7 +77,7 @@ class RegsImplFake : public RegsImpl<TypeParam> {
 
   ArchEnum Arch() override { return ARCH_UNKNOWN; }
 
-  uint64_t GetAdjustedPc(uint64_t, Elf*) override { return 0; }
+  uint64_t GetPcAdjustment(uint64_t, Elf*) override { return 0; }
   void SetFromRaw() override {}
   bool SetPcFromReturnAddress(Memory*) override { return false; }
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
