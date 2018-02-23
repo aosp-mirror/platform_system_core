@@ -10,7 +10,11 @@ whitespace into a token.  Double quotes may also be used to prevent
 whitespace from breaking text into multiple tokens.  The backslash,
 when it is the last character on a line, may be used for line-folding.
 
-Lines which start with a # (leading whitespace allowed) are comments.
+Lines which start with a `#` (leading whitespace allowed) are comments.
+
+System properties can be expanded using the syntax
+`${property.name}`. This also works in contexts where concatenation is
+required, such as `import /init.recovery.${ro.hardware}.rc`.
 
 Actions and Services implicitly declare a new section.  All commands
 or options belong to the section most recently declared.  Commands
