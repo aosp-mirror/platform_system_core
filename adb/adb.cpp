@@ -42,7 +42,6 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parsenetaddress.h>
-#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
@@ -1059,7 +1058,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         SendOkay(reply_fd);
 
         // Rely on process exit to close the socket for us.
-        android::base::quick_exit(0);
+        exit(0);
     }
 
     // "transport:" is used for switching transport with a specified serial number
