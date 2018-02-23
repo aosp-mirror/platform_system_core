@@ -128,6 +128,22 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   return true;
 }
 
+bool Backtrace::UnwindOffline(unwindstack::Regs* regs, BacktraceMap* back_map,
+                              const backtrace_stackinfo_t& stack,
+                              std::vector<backtrace_frame_data_t>* frames,
+                              BacktraceUnwindError* error) {
+  UnwindStackOfflineMap* offline_map = reinterpret_cast<UnwindStackOfflineMap*>(back_map);
+  // Create the process memory from the stack data since this will almost
+  // always be different each unwind.
+  if (!offline_map->CreateProcessMemory(stack)) {
+    if (error != nullptr) {
+      error->error_code = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
+    }
+    return false;
+  }
+  return Backtrace::Unwind(regs, back_map, frames, 0U, nullptr, error);
+}
+
 UnwindStackCurrent::UnwindStackCurrent(pid_t pid, pid_t tid, BacktraceMap* map)
     : BacktraceCurrent(pid, tid, map) {}
 
@@ -221,12 +237,12 @@ bool UnwindStackOffline::ReadWord(uint64_t, word_t*) {
 Backtrace* Backtrace::CreateOffline(ArchEnum arch, pid_t pid, pid_t tid,
                                     const std::vector<backtrace_map_t>& maps,
                                     const backtrace_stackinfo_t& stack) {
-  BacktraceMap* map = BacktraceMap::CreateOffline(pid, maps, stack);
-  if (map == nullptr) {
+  std::unique_ptr<UnwindStackOfflineMap> map(
+      reinterpret_cast<UnwindStackOfflineMap*>(BacktraceMap::CreateOffline(pid, maps)));
+  if (map.get() == nullptr || !map->CreateProcessMemory(stack)) {
     return nullptr;
   }
-
-  return new UnwindStackOffline(arch, pid, tid, map, false);
+  return new UnwindStackOffline(arch, pid, tid, map.release(), false);
 }
 
 Backtrace* Backtrace::CreateOffline(ArchEnum arch, pid_t pid, pid_t tid, BacktraceMap* map) {
