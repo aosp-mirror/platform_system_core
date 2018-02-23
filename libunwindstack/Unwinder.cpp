@@ -36,10 +36,37 @@
 #include <unwindstack/Unwinder.h>
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
-#include <unwindstack/DexFiles.h>
+#include <DexFile.h>
 #endif
 
 namespace unwindstack {
+
+Unwinder::Unwinder(size_t max_frames, Maps* maps, Regs* regs,
+                   std::shared_ptr<Memory> process_memory)
+    : max_frames_(max_frames), maps_(maps), regs_(regs), process_memory_(process_memory) {
+  frames_.reserve(max_frames);
+  if (regs != nullptr) {
+    ArchEnum arch = regs_->Arch();
+
+    jit_debug_ = JitDebug<Elf>::Create(arch, process_memory_);
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+    dex_files_ = JitDebug<DexFile>::Create(arch, process_memory_);
+#endif
+  }
+}
+
+void Unwinder::SetRegs(Regs* regs) {
+  regs_ = regs;
+
+  if (jit_debug_ == nullptr) {
+    ArchEnum arch = regs_->Arch();
+
+    jit_debug_ = JitDebug<Elf>::Create(arch, process_memory_);
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+    dex_files_ = JitDebug<DexFile>::Create(arch, process_memory_);
+#endif
+  }
+}
 
 // Inject extra 'virtual' frame that represents the dex pc data.
 // The dex pc is a magic register defined in the Mterp interpreter,
@@ -84,8 +111,7 @@ void Unwinder::FillInDexFrame() {
     return;
   }
 
-  dex_files_->GetMethodInformation(maps_, info, dex_pc, &frame->function_name,
-                                   &frame->function_offset);
+  dex_files_->GetFunctionName(maps_, dex_pc, &frame->function_name, &frame->function_offset);
 #endif
 }
 
@@ -185,7 +211,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       // using the jit debug information.
       if (!elf->valid() && jit_debug_ != nullptr) {
         uint64_t adjusted_jit_pc = regs_->pc() - pc_adjustment;
-        Elf* jit_elf = jit_debug_->GetElf(maps_, adjusted_jit_pc);
+        Elf* jit_elf = jit_debug_->Get(maps_, adjusted_jit_pc);
         if (jit_elf != nullptr) {
           // The jit debug information requires a non relative adjusted pc.
           step_pc = adjusted_jit_pc;
@@ -330,19 +356,7 @@ std::string Unwinder::FormatFrame(size_t frame_num) {
   return FormatFrame(frames_[frame_num]);
 }
 
-void Unwinder::SetJitDebug(JitDebug* jit_debug, ArchEnum arch) {
-  jit_debug->SetArch(arch);
-  jit_debug_ = jit_debug;
-}
-
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-void Unwinder::SetDexFiles(DexFiles* dex_files, ArchEnum arch) {
-  dex_files->SetArch(arch);
-  dex_files_ = dex_files;
-}
-#endif
-
-bool UnwinderFromPid::Init(ArchEnum arch) {
+bool UnwinderFromPid::Init() {
   if (pid_ == getpid()) {
     maps_ptr_.reset(new LocalMaps());
   } else {
@@ -354,15 +368,6 @@ bool UnwinderFromPid::Init(ArchEnum arch) {
   maps_ = maps_ptr_.get();
 
   process_memory_ = Memory::CreateProcessMemoryCached(pid_);
-
-  jit_debug_ptr_.reset(new JitDebug(process_memory_));
-  jit_debug_ = jit_debug_ptr_.get();
-  SetJitDebug(jit_debug_, arch);
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-  dex_files_ptr_.reset(new DexFiles(process_memory_));
-  dex_files_ = dex_files_ptr_.get();
-  SetDexFiles(dex_files_, arch);
-#endif
 
   return true;
 }
