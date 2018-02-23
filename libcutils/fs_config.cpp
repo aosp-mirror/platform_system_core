@@ -208,16 +208,6 @@ static const struct fs_path_config android_files[] = {
                                            CAP_MASK_LONG(CAP_SYS_MODULE),
                                            "vendor/bin/hw/android.hardware.wifi@1.0-service" },
 
-    // A non-privileged zygote that spawns isolated processes for web rendering.
-    { 0750,  AID_ROOT,      AID_ROOT,      CAP_MASK_LONG(CAP_SETUID) |
-                                           CAP_MASK_LONG(CAP_SETGID) |
-                                           CAP_MASK_LONG(CAP_SETPCAP),
-                                              "system/bin/webview_zygote32" },
-    { 0750,  AID_ROOT,      AID_ROOT,      CAP_MASK_LONG(CAP_SETUID) |
-                                           CAP_MASK_LONG(CAP_SETGID) |
-                                           CAP_MASK_LONG(CAP_SETPCAP),
-                                              "system/bin/webview_zygote64" },
-
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
