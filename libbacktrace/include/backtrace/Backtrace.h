@@ -151,6 +151,11 @@ class Backtrace {
                      std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
                      std::vector<std::string>* skip_names, BacktraceUnwindError* error = nullptr);
 
+  static bool UnwindOffline(unwindstack::Regs* regs, BacktraceMap* back_map,
+                            const backtrace_stackinfo_t& stack_info,
+                            std::vector<backtrace_frame_data_t>* frames,
+                            BacktraceUnwindError* error = nullptr);
+
   // Get the function name and offset into the function given the pc.
   // If the string is empty, then no valid function name was found,
   // or the pc is not in any valid map.
