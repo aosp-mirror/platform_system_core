@@ -37,6 +37,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
@@ -298,11 +299,13 @@ exit:
 static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_message) {
   // Only allow one thread to handle a crash at a time (this can happen multiple times without
   // exit, since tombstones can be requested without a real crash happening.)
-  static pthread_mutex_t crash_mutex = PTHREAD_MUTEX_INITIALIZER;
-  int ret = pthread_mutex_lock(&crash_mutex);
-  if (ret != 0) {
-    async_safe_format_log(ANDROID_LOG_INFO, "libc", "pthread_mutex_lock failed: %s", strerror(ret));
-    return;
+  static std::recursive_mutex crash_mutex;
+  static int lock_count;
+
+  crash_mutex.lock();
+  if (lock_count++ > 0) {
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "recursed signal handler call, exiting");
+    _exit(1);
   }
 
   unique_fd tombstone_socket, output_fd;
@@ -313,7 +316,8 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
     tombstoned_notify_completion(tombstone_socket.get());
   }
 
-  pthread_mutex_unlock(&crash_mutex);
+  --lock_count;
+  crash_mutex.unlock();
 }
 
 extern "C" void debuggerd_fallback_handler(siginfo_t* info, ucontext_t* ucontext,

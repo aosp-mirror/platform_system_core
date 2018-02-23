@@ -20,6 +20,7 @@
 #include <sys/capability.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -570,7 +571,7 @@ TEST_F(CrasherTest, fake_pid) {
 static const char* const kDebuggerdSeccompPolicy =
     "/system/etc/seccomp_policy/crash_dump." ABI_STRING ".policy";
 
-pid_t seccomp_fork() {
+static pid_t seccomp_fork_impl(void (*prejail)()) {
   unique_fd policy_fd(open(kDebuggerdSeccompPolicy, O_RDONLY | O_CLOEXEC));
   if (policy_fd == -1) {
     LOG(FATAL) << "failed to open policy " << kDebuggerdSeccompPolicy;
@@ -607,8 +608,16 @@ pid_t seccomp_fork() {
     continue;
   }
 
+  if (prejail) {
+    prejail();
+  }
+
   minijail_enter(jail.get());
   return result;
+}
+
+static pid_t seccomp_fork() {
+  return seccomp_fork_impl(nullptr);
 }
 
 TEST_F(CrasherTest, seccomp_crash) {
@@ -626,6 +635,46 @@ TEST_F(CrasherTest, seccomp_crash) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "abort");
+}
+
+static pid_t seccomp_fork_rlimit() {
+  return seccomp_fork_impl([]() {
+    struct rlimit rlim = {
+        .rlim_cur = 512 * 1024 * 1024,
+        .rlim_max = 512 * 1024 * 1024,
+    };
+
+    if (setrlimit(RLIMIT_AS, &rlim) != 0) {
+      raise(SIGINT);
+    }
+  });
+}
+
+TEST_F(CrasherTest, seccomp_crash_oom) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  StartProcess(
+      []() {
+        std::vector<void*> vec;
+        for (int i = 0; i < 512; ++i) {
+          char* buf = static_cast<char*>(malloc(1024 * 1024));
+          if (!buf) {
+            abort();
+          }
+          memset(buf, 0xff, 1024 * 1024);
+          vec.push_back(buf);
+        }
+      },
+      &seccomp_fork_rlimit);
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  // We can't actually generate a backtrace, just make sure that the process terminates.
 }
 
 __attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
