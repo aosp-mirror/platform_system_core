@@ -77,7 +77,8 @@ void DexFiles::SetArch(ArchEnum arch) {
 
 uint64_t DexFiles::ReadEntryPtr32(uint64_t addr) {
   uint32_t entry;
-  if (!memory_->ReadFully(addr, &entry, sizeof(entry))) {
+  const uint32_t field_offset = 12;  // offset of first_entry_ in the descriptor struct.
+  if (!memory_->ReadFully(addr + field_offset, &entry, sizeof(entry))) {
     return 0;
   }
   return entry;
@@ -85,7 +86,8 @@ uint64_t DexFiles::ReadEntryPtr32(uint64_t addr) {
 
 uint64_t DexFiles::ReadEntryPtr64(uint64_t addr) {
   uint64_t entry;
-  if (!memory_->ReadFully(addr, &entry, sizeof(entry))) {
+  const uint32_t field_offset = 16;  // offset of first_entry_ in the descriptor struct.
+  if (!memory_->ReadFully(addr + field_offset, &entry, sizeof(entry))) {
     return 0;
   }
   return entry;
@@ -122,7 +124,7 @@ void DexFiles::Init(Maps* maps) {
   initialized_ = true;
   entry_addr_ = 0;
 
-  const std::string dex_debug_name("__art_debug_dexfiles");
+  const std::string dex_debug_name("__dex_debug_descriptor");
   for (MapInfo* info : *maps) {
     if (!(info->flags & PROT_EXEC) || !(info->flags & PROT_READ) || info->offset != 0) {
       continue;
