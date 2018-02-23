@@ -63,7 +63,7 @@ class DexFilesTest : public ::testing::Test {
     elf->FakeSetValid(true);
     ElfInterfaceFake* interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__art_debug_dexfiles", 0x800);
+    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
 
     // Global variable not set by default.
@@ -74,7 +74,7 @@ class DexFilesTest : public ::testing::Test {
     elf->FakeSetValid(true);
     interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__art_debug_dexfiles", 0x800);
+    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
 
     // Global variable set in this map.
@@ -85,10 +85,12 @@ class DexFilesTest : public ::testing::Test {
     elf->FakeSetValid(true);
     interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__art_debug_dexfiles", 0x800);
+    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
   }
 
+  void WriteDescriptor32(uint64_t addr, uint32_t head);
+  void WriteDescriptor64(uint64_t addr, uint64_t head);
   void WriteEntry32(uint64_t entry_addr, uint32_t next, uint32_t prev, uint32_t dex_file);
   void WriteEntry64(uint64_t entry_addr, uint64_t next, uint64_t prev, uint64_t dex_file);
   void WriteDex(uint64_t dex_file);
@@ -104,6 +106,16 @@ class DexFilesTest : public ::testing::Test {
   std::unique_ptr<DexFiles> dex_files_;
   std::unique_ptr<BufferMaps> maps_;
 };
+
+void DexFilesTest::WriteDescriptor32(uint64_t addr, uint32_t head) {
+  //   void* first_entry_
+  memory_->SetData32(addr + 12, head);
+}
+
+void DexFilesTest::WriteDescriptor64(uint64_t addr, uint64_t head) {
+  //   void* first_entry_
+  memory_->SetData64(addr + 16, head);
+}
 
 void DexFilesTest::WriteEntry32(uint64_t entry_addr, uint32_t next, uint32_t prev,
                                 uint32_t dex_file) {
@@ -146,7 +158,7 @@ TEST_F(DexFilesTest, get_method_information_32) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  memory_->SetData32(0xf800, 0x200000);
+  WriteDescriptor32(0xf800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -161,7 +173,7 @@ TEST_F(DexFilesTest, get_method_information_64) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   dex_files_->SetArch(ARCH_ARM64);
-  memory_->SetData64(0xf800, 0x200000);
+  WriteDescriptor64(0xf800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x301000);
   WriteDex(0x301000);
 
@@ -175,7 +187,7 @@ TEST_F(DexFilesTest, get_method_information_not_first_entry_32) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  memory_->SetData32(0xf800, 0x200000);
+  WriteDescriptor32(0xf800, 0x200000);
   WriteEntry32(0x200000, 0x200100, 0, 0x100000);
   WriteEntry32(0x200100, 0, 0x200000, 0x300000);
   WriteDex(0x300000);
@@ -191,7 +203,7 @@ TEST_F(DexFilesTest, get_method_information_not_first_entry_64) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   dex_files_->SetArch(ARCH_ARM64);
-  memory_->SetData64(0xf800, 0x200000);
+  WriteDescriptor64(0xf800, 0x200000);
   WriteEntry64(0x200000, 0x200100, 0, 0x100000);
   WriteEntry64(0x200100, 0, 0x200000, 0x300000);
   WriteDex(0x300000);
@@ -206,7 +218,7 @@ TEST_F(DexFilesTest, get_method_information_cached) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  memory_->SetData32(0xf800, 0x200000);
+  WriteDescriptor32(0xf800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -226,7 +238,7 @@ TEST_F(DexFilesTest, get_method_information_search_libs) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  memory_->SetData32(0xf800, 0x200000);
+  WriteDescriptor32(0xf800, 0x200000);
   WriteEntry32(0x200000, 0x200100, 0, 0x100000);
   WriteEntry32(0x200100, 0, 0x200000, 0x300000);
   WriteDex(0x300000);
@@ -259,9 +271,9 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   // First global variable found, but value is zero.
-  memory_->SetData32(0xc800, 0);
+  WriteDescriptor32(0xc800, 0);
 
-  memory_->SetData32(0xf800, 0x200000);
+  WriteDescriptor32(0xf800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -274,7 +286,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
   dex_files_->SetArch(ARCH_ARM);
   method_name = "fail";
   method_offset = 0x123;
-  memory_->SetData32(0xc800, 0x100000);
+  WriteDescriptor32(0xc800, 0x100000);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);
@@ -286,9 +298,9 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   // First global variable found, but value is zero.
-  memory_->SetData64(0xc800, 0);
+  WriteDescriptor64(0xc800, 0);
 
-  memory_->SetData64(0xf800, 0x200000);
+  WriteDescriptor64(0xf800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -302,7 +314,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   dex_files_->SetArch(ARCH_ARM64);
   method_name = "fail";
   method_offset = 0x123;
-  memory_->SetData32(0xc800, 0x100000);
+  WriteDescriptor64(0xc800, 0x100000);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);
