@@ -61,13 +61,12 @@ static int UsbReadMessage(usb_handle* h, amessage* msg) {
 static int UsbReadPayload(usb_handle* h, apacket* p) {
     D("UsbReadPayload(%d)", p->msg.data_length);
 
-    if (p->msg.data_length > sizeof(p->data)) {
+    if (p->msg.data_length > MAX_PAYLOAD) {
         return -1;
     }
 
 #if CHECK_PACKET_OVERFLOW
     size_t usb_packet_size = usb_get_max_packet_size(h);
-    CHECK_EQ(0ULL, sizeof(p->data) % usb_packet_size);
 
     // Round the data length up to the nearest packet size boundary.
     // The device won't send a zero packet for packet size aligned payloads,
@@ -77,10 +76,18 @@ static int UsbReadPayload(usb_handle* h, apacket* p) {
     if (rem_size) {
         len += usb_packet_size - rem_size;
     }
-    CHECK_LE(len, sizeof(p->data));
-    return usb_read(h, &p->data, len);
+
+    p->payload.resize(len);
+    int rc = usb_read(h, &p->payload[0], p->payload.size());
+    if (rc != static_cast<int>(p->msg.data_length)) {
+        return -1;
+    }
+
+    p->payload.resize(rc);
+    return rc;
 #else
-    return usb_read(h, &p->data, p->msg.data_length);
+    p->payload.resize(p->msg.data_length);
+    return usb_read(h, &p->payload[0], p->payload.size());
 #endif
 }
 
@@ -120,12 +127,13 @@ static int remote_read(apacket* p, usb_handle* usb) {
     }
 
     if (p->msg.data_length) {
-        if (p->msg.data_length > sizeof(p->data)) {
+        if (p->msg.data_length > MAX_PAYLOAD) {
             PLOG(ERROR) << "remote usb: read overflow (data length = " << p->msg.data_length << ")";
             return -1;
         }
 
-        if (usb_read(usb, p->data, p->msg.data_length)) {
+        p->payload.resize(p->msg.data_length);
+        if (usb_read(usb, &p->payload[0], p->payload.size())) {
             PLOG(ERROR) << "remote usb: terminated (data)";
             return -1;
         }
@@ -152,7 +160,7 @@ bool UsbConnection::Write(apacket* packet) {
         return false;
     }
 
-    if (packet->msg.data_length != 0 && usb_write(handle_, &packet->data, size) != 0) {
+    if (packet->msg.data_length != 0 && usb_write(handle_, packet->payload.data(), size) != 0) {
         PLOG(ERROR) << "remote usb: 2 - write terminated";
         return false;
     }

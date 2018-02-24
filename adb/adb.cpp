@@ -105,31 +105,27 @@ void fatal_errno(const char* fmt, ...) {
 }
 
 uint32_t calculate_apacket_checksum(const apacket* p) {
-    const unsigned char* x = reinterpret_cast<const unsigned char*>(p->data);
     uint32_t sum = 0;
-    size_t count = p->msg.data_length;
-
-    while (count-- > 0) {
-        sum += *x++;
+    for (size_t i = 0; i < p->msg.data_length; ++i) {
+        sum += static_cast<uint8_t>(p->payload[i]);
     }
-
     return sum;
 }
 
 apacket* get_apacket(void)
 {
-    apacket* p = reinterpret_cast<apacket*>(malloc(sizeof(apacket)));
+    apacket* p = new apacket();
     if (p == nullptr) {
       fatal("failed to allocate an apacket");
     }
 
-    memset(p, 0, sizeof(apacket) - MAX_PAYLOAD);
+    memset(&p->msg, 0, sizeof(p->msg));
     return p;
 }
 
 void put_apacket(apacket *p)
 {
-    free(p);
+    delete p;
 }
 
 void handle_online(atransport *t)
@@ -155,8 +151,7 @@ void handle_offline(atransport *t)
 #define DUMPMAX 32
 void print_packet(const char *label, apacket *p)
 {
-    char *tag;
-    char *x;
+    const char* tag;
     unsigned count;
 
     switch(p->msg.command){
@@ -173,15 +168,15 @@ void print_packet(const char *label, apacket *p)
     fprintf(stderr, "%s: %s %08x %08x %04x \"",
             label, tag, p->msg.arg0, p->msg.arg1, p->msg.data_length);
     count = p->msg.data_length;
-    x = (char*) p->data;
-    if(count > DUMPMAX) {
+    const char* x = p->payload.data();
+    if (count > DUMPMAX) {
         count = DUMPMAX;
         tag = "\n";
     } else {
         tag = "\"\n";
     }
-    while(count-- > 0){
-        if((*x >= ' ') && (*x < 127)) {
+    while (count-- > 0) {
+        if ((*x >= ' ') && (*x < 127)) {
             fputc(*x, stderr);
         } else {
             fputc('.', stderr);
@@ -254,8 +249,8 @@ void send_connect(atransport* t) {
                    << connection_str.length() << ")";
     }
 
-    memcpy(cp->data, connection_str.c_str(), connection_str.length());
-    cp->msg.data_length = connection_str.length();
+    cp->payload = std::move(connection_str);
+    cp->msg.data_length = cp->payload.size();
 
     send_packet(cp, t);
 }
@@ -329,9 +324,7 @@ static void handle_new_connection(atransport* t, apacket* p) {
     }
 
     t->update_version(p->msg.arg0, p->msg.arg1);
-    std::string banner(reinterpret_cast<const char*>(p->data),
-                       p->msg.data_length);
-    parse_banner(banner, t);
+    parse_banner(p->payload, t);
 
 #if ADB_HOST
     handle_online(t);
@@ -354,6 +347,7 @@ void handle_packet(apacket *p, atransport *t)
             ((char*) (&(p->msg.command)))[2],
             ((char*) (&(p->msg.command)))[3]);
     print_packet("recv", p);
+    CHECK_EQ(p->payload.size(), p->msg.data_length);
 
     switch(p->msg.command){
     case A_SYNC:
@@ -380,11 +374,11 @@ void handle_packet(apacket *p, atransport *t)
                 if (t->GetConnectionState() == kCsOffline) {
                     t->SetConnectionState(kCsUnauthorized);
                 }
-                send_auth_response(p->data, p->msg.data_length, t);
+                send_auth_response(p->payload.data(), p->msg.data_length, t);
                 break;
 #else
             case ADB_AUTH_SIGNATURE:
-                if (adbd_auth_verify(t->token, sizeof(t->token), p->data, p->msg.data_length)) {
+                if (adbd_auth_verify(t->token, sizeof(t->token), p->payload)) {
                     adbd_auth_verified(t);
                     t->failed_auth_attempts = 0;
                 } else {
@@ -394,7 +388,7 @@ void handle_packet(apacket *p, atransport *t)
                 break;
 
             case ADB_AUTH_RSAPUBLICKEY:
-                adbd_auth_confirm_key(p->data, p->msg.data_length, t);
+                adbd_auth_confirm_key(p->payload.data(), p->msg.data_length, t);
                 break;
 #endif
             default:
@@ -406,9 +400,7 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_OPEN: /* OPEN(local-id, 0, "destination") */
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
-            char *name = (char*) p->data;
-            name[p->msg.data_length > 0 ? p->msg.data_length - 1 : 0] = 0;
-            asocket* s = create_local_service_socket(name, t);
+            asocket* s = create_local_service_socket(p->payload.c_str(), t);
             if (s == nullptr) {
                 send_close(0, p->msg.arg0, t);
             } else {
@@ -474,11 +466,7 @@ void handle_packet(apacket *p, atransport *t)
             asocket* s = find_local_socket(p->msg.arg1, p->msg.arg0);
             if (s) {
                 unsigned rid = p->msg.arg0;
-
-                // TODO: Convert apacket::data to a type that we can move out of.
-                std::string copy(p->data, p->data + p->msg.data_length);
-
-                if (s->enqueue(s, std::move(copy)) == 0) {
+                if (s->enqueue(s, std::move(p->payload)) == 0) {
                     D("Enqueue the socket");
                     send_ready(s->id, rid, t);
                 }
