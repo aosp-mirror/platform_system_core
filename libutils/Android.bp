@@ -201,5 +201,3 @@ cc_test {
         "-Werror",
     ],
 }
-
-subdirs = ["tests"]
