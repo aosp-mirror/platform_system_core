@@ -299,20 +299,25 @@ std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys() {
     return result;
 }
 
-static int adb_auth_sign(RSA* key, const char* token, size_t token_size, char* sig) {
+static std::string adb_auth_sign(RSA* key, const char* token, size_t token_size) {
     if (token_size != TOKEN_SIZE) {
         D("Unexpected token size %zd", token_size);
         return 0;
     }
 
+    std::string result;
+    result.resize(MAX_PAYLOAD);
+
     unsigned int len;
     if (!RSA_sign(NID_sha1, reinterpret_cast<const uint8_t*>(token), token_size,
-                  reinterpret_cast<uint8_t*>(sig), &len, key)) {
-        return 0;
+                  reinterpret_cast<uint8_t*>(&result[0]), &len, key)) {
+        return std::string();
     }
 
+    result.resize(len);
+
     D("adb_auth_sign len=%d", len);
-    return (int)len;
+    return result;
 }
 
 std::string adb_auth_get_userkey() {
@@ -446,13 +451,14 @@ static void send_auth_publickey(atransport* t) {
     }
 
     apacket* p = get_apacket();
-    memcpy(p->data, key.c_str(), key.size() + 1);
-
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
 
+    p->payload = std::move(key);
+
     // adbd expects a null-terminated string.
-    p->msg.data_length = key.size() + 1;
+    p->payload.push_back('\0');
+    p->msg.data_length = p->payload.size();
     send_packet(p, t);
 }
 
@@ -467,8 +473,8 @@ void send_auth_response(const char* token, size_t token_size, atransport* t) {
     LOG(INFO) << "Calling send_auth_response";
     apacket* p = get_apacket();
 
-    int ret = adb_auth_sign(key.get(), token, token_size, p->data);
-    if (!ret) {
+    std::string result = adb_auth_sign(key.get(), token, token_size);
+    if (result.empty()) {
         D("Error signing the token");
         put_apacket(p);
         return;
@@ -476,6 +482,7 @@ void send_auth_response(const char* token, size_t token_size, atransport* t) {
 
     p->msg.command = A_AUTH;
     p->msg.arg0 = ADB_AUTH_SIGNATURE;
-    p->msg.data_length = ret;
+    p->payload = std::move(result);
+    p->msg.data_length = p->payload.size();
     send_packet(p, t);
 }

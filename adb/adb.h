@@ -74,7 +74,7 @@ struct amessage {
 
 struct apacket {
     amessage msg;
-    char data[MAX_PAYLOAD];
+    std::string payload;
 };
 
 uint32_t calculate_apacket_checksum(const apacket* packet);

@@ -413,15 +413,15 @@ static int remote_socket_enqueue(asocket* s, std::string data) {
     p->msg.command = A_WRTE;
     p->msg.arg0 = s->peer->id;
     p->msg.arg1 = s->id;
-    p->msg.data_length = data.size();
 
-    if (data.size() > sizeof(p->data)) {
+    if (data.size() > MAX_PAYLOAD) {
         put_apacket(p);
         return -1;
     }
 
-    // TODO: Convert apacket::data to a type that we can move into.
-    memcpy(p->data, data.data(), data.size());
+    p->payload = std::move(data);
+    p->msg.data_length = p->payload.size();
+
     send_packet(p, s->transport);
     return 1;
 }
@@ -482,17 +482,20 @@ asocket* create_remote_socket(unsigned id, atransport* t) {
 void connect_to_remote(asocket* s, const char* destination) {
     D("Connect_to_remote call RS(%d) fd=%d", s->id, s->fd);
     apacket* p = get_apacket();
-    size_t len = strlen(destination) + 1;
-
-    if (len > (s->get_max_payload() - 1)) {
-        fatal("destination oversized");
-    }
 
     D("LS(%d): connect('%s')", s->id, destination);
     p->msg.command = A_OPEN;
     p->msg.arg0 = s->id;
-    p->msg.data_length = len;
-    strcpy((char*)p->data, destination);
+
+    // adbd expects a null-terminated string.
+    p->payload = destination;
+    p->payload.push_back('\0');
+    p->msg.data_length = p->payload.size();
+
+    if (p->msg.data_length > s->get_max_payload()) {
+        fatal("destination oversized");
+    }
+
     send_packet(p, s->transport);
 }
 
