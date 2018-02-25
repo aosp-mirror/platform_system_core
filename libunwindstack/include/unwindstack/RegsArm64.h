@@ -36,7 +36,7 @@ class RegsArm64 : public RegsImpl<uint64_t> {
 
   virtual ArchEnum Arch() override final;
 
-  uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) override;
+  uint64_t GetPcAdjustment(uint64_t rel_pc, Elf* elf) override;
 
   void SetFromRaw() override;
 

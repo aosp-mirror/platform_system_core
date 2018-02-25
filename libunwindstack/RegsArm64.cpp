@@ -35,15 +35,11 @@ ArchEnum RegsArm64::Arch() {
   return ARCH_ARM64;
 }
 
-uint64_t RegsArm64::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
-  if (!elf->valid()) {
-    return rel_pc;
+uint64_t RegsArm64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
+  if (!elf->valid() || rel_pc < 4) {
+    return 0;
   }
-
-  if (rel_pc < 4) {
-    return rel_pc;
-  }
-  return rel_pc - 4;
+  return 4;
 }
 
 void RegsArm64::SetFromRaw() {

@@ -60,7 +60,7 @@ class Regs {
   uint64_t dex_pc() { return dex_pc_; }
   void set_dex_pc(uint64_t dex_pc) { dex_pc_ = dex_pc; }
 
-  virtual uint64_t GetAdjustedPc(uint64_t rel_pc, Elf* elf) = 0;
+  virtual uint64_t GetPcAdjustment(uint64_t rel_pc, Elf* elf) = 0;
 
   virtual bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) = 0;
 
