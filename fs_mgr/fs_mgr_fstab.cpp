@@ -39,6 +39,7 @@ struct fs_mgr_flag_values {
     char *key_loc;
     char* key_dir;
     char *verity_loc;
+    char *sysfs_path;
     long long part_length;
     char *label;
     int partnum;
@@ -104,6 +105,7 @@ static struct flag_list fs_mgr_flags[] = {
     {"quota", MF_QUOTA},
     {"eraseblk=", MF_ERASEBLKSIZE},
     {"logicalblk=", MF_LOGICALBLKSIZE},
+    {"sysfs_path=", MF_SYSFS},
     {"defaults", 0},
     {0, 0},
 };
@@ -341,6 +343,9 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     unsigned int val = strtoul(strchr(p, '=') + 1, NULL, 0);
                     if (val >= 4096 && (val & (val - 1)) == 0)
                         flag_vals->logical_blk_size = val;
+                } else if ((fl[i].flag == MF_SYSFS) && flag_vals) {
+                    /* The path to trigger device gc by idle-maint of vold. */
+                    flag_vals->sysfs_path = strdup(strchr(p, '=') + 1);
                 }
                 break;
             }
@@ -615,6 +620,7 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].file_names_mode = flag_vals.file_names_mode;
         fstab->recs[cnt].erase_blk_size = flag_vals.erase_blk_size;
         fstab->recs[cnt].logical_blk_size = flag_vals.logical_blk_size;
+        fstab->recs[cnt].sysfs_path = flag_vals.sysfs_path;
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
@@ -787,6 +793,7 @@ void fs_mgr_free_fstab(struct fstab *fstab)
         free(fstab->recs[i].key_loc);
         free(fstab->recs[i].key_dir);
         free(fstab->recs[i].label);
+        free(fstab->recs[i].sysfs_path);
     }
 
     /* Free the fstab_recs array created by calloc(3) */
@@ -921,4 +928,9 @@ int fs_mgr_is_latemount(const struct fstab_rec* fstab) {
 
 int fs_mgr_is_quota(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_QUOTA;
+}
+
+int fs_mgr_has_sysfs_path(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_SYSFS;
 }
