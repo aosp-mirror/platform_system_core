@@ -30,6 +30,8 @@ cc_defaults {
         "-Wthread-safety",
     ],
 
+    use_version_lib: true,
+
     compile_multilib: "first",
     product_variables: {
         debuggable: {

@@ -44,6 +44,7 @@
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <build/version.h>
 
 #include "adb_auth.h"
 #include "adb_io.h"
@@ -64,10 +65,10 @@ std::string adb_version() {
     // Don't change the format of this --- it's parsed by ddmlib.
     return android::base::StringPrintf(
         "Android Debug Bridge version %d.%d.%d\n"
-        "Version TODO: b/71719137\n"
+        "Version %s\n"
         "Installed as %s\n",
         ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
-        android::base::GetExecutablePath().c_str());
+        android::build::GetBuildNumber().c_str(), android::base::GetExecutablePath().c_str());
 }
 
 void fatal(const char *fmt, ...) {
