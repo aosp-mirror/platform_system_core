@@ -20,4 +20,5 @@ LOCAL_SRC_FILES_arm := seccomp_policy/crash_dump.arm.policy
 LOCAL_SRC_FILES_arm64 := seccomp_policy/crash_dump.arm64.policy
 LOCAL_SRC_FILES_x86 := seccomp_policy/crash_dump.x86.policy
 LOCAL_SRC_FILES_x86_64 := seccomp_policy/crash_dump.x86_64.policy
+LOCAL_MODULE_TARGET_ARCH := arm arm64 x86 x86_64
 include $(BUILD_PREBUILT)
