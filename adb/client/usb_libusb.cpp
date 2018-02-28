@@ -19,6 +19,7 @@
 #include "sysdeps.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <atomic>
 #include <chrono>
@@ -33,7 +34,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
