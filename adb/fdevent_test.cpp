@@ -194,3 +194,31 @@ TEST_F(FdeventTest, run_on_main_thread) {
         ASSERT_EQ(i, vec[i]);
     }
 }
+
+static std::function<void()> make_appender(std::vector<int>* vec, int value) {
+    return [vec, value]() {
+        check_main_thread();
+        if (value == 100) {
+            return;
+        }
+
+        vec->push_back(value);
+        fdevent_run_on_main_thread(make_appender(vec, value + 1));
+    };
+}
+
+TEST_F(FdeventTest, run_on_main_thread_reentrant) {
+    std::vector<int> vec;
+
+    PrepareThread();
+    std::thread thread(fdevent_loop);
+
+    fdevent_run_on_main_thread(make_appender(&vec, 0));
+
+    TerminateThread(thread);
+
+    ASSERT_EQ(100u, vec.size());
+    for (int i = 0; i < 100; ++i) {
+        ASSERT_EQ(i, vec[i]);
+    }
+}
