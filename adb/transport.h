@@ -204,8 +204,8 @@ class atransport {
     char token[TOKEN_SIZE] = {};
     size_t failed_auth_attempts = 0;
 
-    const std::string serial_name() const { return serial ? serial : "<unknown>"; }
-    const std::string connection_state_name() const;
+    std::string serial_name() const { return serial ? serial : "<unknown>"; }
+    std::string connection_state_name() const;
 
     void update_version(int version, size_t payload);
     int get_protocol_version() const;

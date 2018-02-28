@@ -709,7 +709,7 @@ void atransport::SetConnectionState(ConnectionState state) {
     connection_state_ = state;
 }
 
-const std::string atransport::connection_state_name() const {
+std::string atransport::connection_state_name() const {
     ConnectionState state = GetConnectionState();
     switch (state) {
         case kCsOffline:
