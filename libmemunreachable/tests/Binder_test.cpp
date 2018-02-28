@@ -33,6 +33,9 @@ namespace android {
 
 static const String16 service_name("test.libmemunreachable_binder");
 
+// Provides a service that will hold a strong reference to any remote binder
+// object, so that the test can verify that a remote strong reference is
+// visible to libmemunreachable.
 class BinderService : public BBinder {
  public:
   BinderService() = default;
@@ -55,6 +58,8 @@ class BinderObject : public BBinder {
   ~BinderObject() = default;
 };
 
+// Forks a subprocess that registers a BinderService with the global binder
+// servicemanager.  Requires root permissions.
 class ServiceProcess {
  public:
   ServiceProcess() : child_(0) {}
@@ -97,6 +102,7 @@ class ServiceProcess {
       fprintf(stderr, "Failed to get service manager\n");
       return 1;
     }
+    // This step requires root permissions
     if (sm->addService(service_name, new BinderService()) != OK) {
       fprintf(stderr, "Failed to add test service\n");
       return 1;
@@ -110,12 +116,18 @@ class ServiceProcess {
   pid_t child_;
 };
 
-class BinderTest : public ::testing::Test {
+class MemunreachableBinderTest : public ::testing::Test {
  protected:
   ServiceProcess service_process_;
 };
 
-TEST_F(BinderTest, binder) {
+// Tests that a local binder object with a remote strong reference is visible
+// through the libmemunreachable BinderReferences interface, which uses the
+// getBinderKernelReferences method in libbinder.  Starts a BinderService
+// through ServiceProcess as a remote service to hold the strong reference.
+TEST_F(MemunreachableBinderTest, binder) {
+  ASSERT_EQ(static_cast<uid_t>(0), getuid()) << "This test must be run as root.";
+
   ServiceProcess service_process;
   ASSERT_TRUE(service_process.Run());
 
