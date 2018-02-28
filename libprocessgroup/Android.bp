@@ -1,7 +1,7 @@
 cc_library {
     srcs: ["processgroup.cpp"],
     name: "libprocessgroup",
-    defaults: ["linux_bionic_supported"],
+    host_supported: true,
     shared_libs: ["libbase"],
     export_include_dirs: ["include"],
     cflags: [
