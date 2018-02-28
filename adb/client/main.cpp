@@ -75,6 +75,11 @@ void adb_server_cleanup() {
     usb_cleanup();
 }
 
+static void intentionally_leak() {
+    void* p = ::operator new(1);
+    LOG(INFO) << "leaking pointer " << p;
+}
+
 int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd) {
 #if defined(_WIN32)
     // adb start-server starts us up with stdout and stderr hooked up to
@@ -97,6 +102,11 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         fdevent_run_on_main_thread([]() { exit(0); });
     });
 #endif
+
+    char* leak = getenv("ADB_LEAK");
+    if (leak && strcmp(leak, "1") == 0) {
+        intentionally_leak();
+    }
 
     if (is_daemon) {
         close_stdin();
