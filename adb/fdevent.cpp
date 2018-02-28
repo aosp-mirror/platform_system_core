@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <list>
 #include <mutex>
@@ -81,7 +82,7 @@ static unsigned long main_thread_id;
 
 static auto& run_queue_notify_fd = *new unique_fd();
 static auto& run_queue_mutex = *new std::mutex();
-static auto& run_queue GUARDED_BY(run_queue_mutex) = *new std::vector<std::function<void()>>();
+static auto& run_queue GUARDED_BY(run_queue_mutex) = *new std::deque<std::function<void()>>();
 
 void check_main_thread() {
     if (main_thread_valid) {
@@ -359,11 +360,21 @@ static void fdevent_subproc_setup() {
 }
 #endif // !ADB_HOST
 
-static void fdevent_run_flush() REQUIRES(run_queue_mutex) {
-    for (auto& f : run_queue) {
-        f();
+static void fdevent_run_flush() EXCLUDES(run_queue_mutex) {
+    // We need to be careful around reentrancy here, since a function we call can queue up another
+    // function.
+    while (true) {
+        std::function<void()> fn;
+        {
+            std::lock_guard<std::mutex> lock(run_queue_mutex);
+            if (run_queue.empty()) {
+                break;
+            }
+            fn = run_queue.front();
+            run_queue.pop_front();
+        }
+        fn();
     }
-    run_queue.clear();
 }
 
 static void fdevent_run_func(int fd, unsigned ev, void* /* userdata */) {
@@ -377,22 +388,23 @@ static void fdevent_run_func(int fd, unsigned ev, void* /* userdata */) {
         PLOG(FATAL) << "failed to empty run queue notify fd";
     }
 
-    std::lock_guard<std::mutex> lock(run_queue_mutex);
     fdevent_run_flush();
 }
 
 static void fdevent_run_setup() {
-    std::lock_guard<std::mutex> lock(run_queue_mutex);
-    CHECK(run_queue_notify_fd.get() == -1);
-    int s[2];
-    if (adb_socketpair(s) != 0) {
-        PLOG(FATAL) << "failed to create run queue notify socketpair";
-    }
+    {
+        std::lock_guard<std::mutex> lock(run_queue_mutex);
+        CHECK(run_queue_notify_fd.get() == -1);
+        int s[2];
+        if (adb_socketpair(s) != 0) {
+            PLOG(FATAL) << "failed to create run queue notify socketpair";
+        }
 
-    run_queue_notify_fd.reset(s[0]);
-    fdevent* fde = fdevent_create(s[1], fdevent_run_func, nullptr);
-    CHECK(fde != nullptr);
-    fdevent_add(fde, FDE_READ);
+        run_queue_notify_fd.reset(s[0]);
+        fdevent* fde = fdevent_create(s[1], fdevent_run_func, nullptr);
+        CHECK(fde != nullptr);
+        fdevent_add(fde, FDE_READ);
+    }
 
     fdevent_run_flush();
 }

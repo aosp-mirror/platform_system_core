@@ -67,8 +67,8 @@ bool StartsWithIgnoreCase(const std::string& s, const std::string& prefix);
 // TODO: string_view
 bool EndsWith(const std::string& s, const char* suffix);
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix);
-bool EndsWith(const std::string& s, const std::string& prefix);
-bool EndsWithIgnoreCase(const std::string& s, const std::string& prefix);
+bool EndsWith(const std::string& s, const std::string& suffix);
+bool EndsWithIgnoreCase(const std::string& s, const std::string& suffix);
 
 // Tests whether 'lhs' equals 'rhs', ignoring case.
 bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs);
