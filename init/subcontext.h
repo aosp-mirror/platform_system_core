@@ -33,6 +33,7 @@ namespace init {
 
 extern const std::string kInitContext;
 extern const std::string kVendorContext;
+extern const char* const paths_and_secontexts[2][2];
 
 class Subcontext {
   public:

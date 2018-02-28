@@ -59,7 +59,10 @@
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
+#include "subcontext.h"
 #include "util.h"
+
+using namespace std::literals;
 
 using android::base::ReadFileToString;
 using android::base::Split;
@@ -533,10 +536,16 @@ static bool load_properties_from_file(const char *, const char *);
  * Filter is used to decide which properties to load: NULL loads all keys,
  * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
  */
-static void load_properties(char *data, const char *filter)
-{
+static void LoadProperties(char* data, const char* filter, const char* filename) {
     char *key, *value, *eol, *sol, *tmp, *fn;
     size_t flen = 0;
+
+    const char* context = kInitContext.c_str();
+    for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
+        if (StartsWith(filename, path_prefix)) {
+            context = secontext;
+        }
+    }
 
     if (filter) {
         flen = strlen(filter);
@@ -584,7 +593,21 @@ static void load_properties(char *data, const char *filter)
                 }
             }
 
-            property_set(key, value);
+            if (StartsWith(key, "ctl.") || key == "sys.powerctl"s ||
+                key == "selinux.restorecon_recursive"s) {
+                LOG(ERROR) << "Ignoring disallowed property '" << key
+                           << "' with special meaning in prop file '" << filename << "'";
+                continue;
+            }
+
+            uint32_t result = 0;
+            ucred cr = {.pid = 1, .uid = 0, .gid = 0};
+            std::string error;
+            result = HandlePropertySet(key, value, context, cr, &error);
+            if (result != PROP_SUCCESS) {
+                LOG(ERROR) << "Unable to set property '" << key << "' to '" << value
+                           << "' in property file '" << filename << "': " << error;
+            }
         }
     }
 }
@@ -600,7 +623,8 @@ static bool load_properties_from_file(const char* filename, const char* filter) 
         return false;
     }
     file_contents->push_back('\n');
-    load_properties(file_contents->data(), filter);
+
+    LoadProperties(file_contents->data(), filter, filename);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
     return true;
 }
