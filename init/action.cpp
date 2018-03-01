@@ -18,10 +18,15 @@
 
 #include <android-base/chrono_utils.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/strings.h>
 
 #include "util.h"
+
+#if defined(__ANDROID__)
+#include <android-base/properties.h>
+#else
+#include "host_init_stubs.h"
+#endif
 
 using android::base::Join;
 
