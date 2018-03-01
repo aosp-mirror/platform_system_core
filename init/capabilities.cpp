@@ -14,7 +14,6 @@
 
 #include "capabilities.h"
 
-#include <sys/capability.h>
 #include <sys/prctl.h>
 
 #include <map>
@@ -72,10 +71,15 @@ static const std::map<std::string, int> cap_map = {
 static_assert(CAP_LAST_CAP == CAP_AUDIT_READ, "CAP_LAST_CAP is not CAP_AUDIT_READ");
 
 static bool ComputeCapAmbientSupported() {
+#if defined(__ANDROID__)
     return prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_IS_SET, CAP_CHOWN, 0, 0) >= 0;
+#else
+    return true;
+#endif
 }
 
 static unsigned int ComputeLastValidCap() {
+#if defined(__ANDROID__)
     // Android does not support kernels < 3.8. 'CAP_WAKE_ALARM' has been present since 3.0, see
     // http://lxr.free-electrons.com/source/include/linux/capability.h?v=3.0#L360.
     unsigned int last_valid_cap = CAP_WAKE_ALARM;
@@ -83,6 +87,9 @@ static unsigned int ComputeLastValidCap() {
 
     // |last_valid_cap| will be the first failing value.
     return last_valid_cap - 1;
+#else
+    return CAP_LAST_CAP;
+#endif
 }
 
 static bool DropBoundingSet(const CapSet& to_keep) {
@@ -139,6 +146,7 @@ static bool SetProcCaps(const CapSet& to_keep, bool add_setpcap) {
 }
 
 static bool SetAmbientCaps(const CapSet& to_raise) {
+#if defined(__ANDROID__)
     for (size_t cap = 0; cap < to_raise.size(); ++cap) {
         if (to_raise.test(cap)) {
             if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap, 0, 0) != 0) {
@@ -147,6 +155,7 @@ static bool SetAmbientCaps(const CapSet& to_raise) {
             }
         }
     }
+#endif
     return true;
 }
 

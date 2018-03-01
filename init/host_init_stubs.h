@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,35 +14,47 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_PROPERTY_H
-#define _INIT_PROPERTY_H
+#ifndef _INIT_HOST_INIT_STUBS_H
+#define _INIT_HOST_INIT_STUBS_H
 
+#include <stddef.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 #include <string>
+
+// sys/system_properties.h
+#define PROP_VALUE_MAX 92
+
+// unistd.h
+int setgroups(size_t __size, const gid_t* __list);
+
+// android-base/properties.h
+namespace android {
+namespace base {
+
+std::string GetProperty(const std::string& key, const std::string& default_value);
+bool GetBoolProperty(const std::string& key, bool default_value);
+
+}  // namespace base
+}  // namespace android
 
 namespace android {
 namespace init {
 
-struct property_audit_data {
-    const ucred* cr;
-    const char* name;
-};
+// init.h
+extern std::string default_console;
 
+// property_service.h
 extern uint32_t (*property_set)(const std::string& name, const std::string& value);
-
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                            const std::string& source_context, const ucred& cr);
 
-extern bool PropertyChildReap(pid_t pid);
-
-void property_init(void);
-void property_load_boot_defaults(void);
-void load_persist_props(void);
-void load_system_props(void);
-void start_property_service(void);
+// selinux.h
+void SelabelInitialize();
+bool SelabelLookupFileContext(const std::string& key, int type, std::string* result);
 
 }  // namespace init
 }  // namespace android
 
-#endif  /* _INIT_PROPERTY_H */
+#endif
