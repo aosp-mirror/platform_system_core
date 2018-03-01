@@ -43,8 +43,8 @@ std::string default_console = "/dev/console";
 
 // property_service.h
 uint32_t (*property_set)(const std::string& name, const std::string& value) = nullptr;
-uint32_t HandlePropertySet(const std::string&, const std::string&, const std::string&,
-                           const ucred&) {
+uint32_t HandlePropertySet(const std::string&, const std::string&, const std::string&, const ucred&,
+                           std::string*) {
     return 0;
 }
 
