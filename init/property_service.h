@@ -32,7 +32,7 @@ struct property_audit_data {
 extern uint32_t (*property_set)(const std::string& name, const std::string& value);
 
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr);
+                           const std::string& source_context, const ucred& cr, std::string* error);
 
 extern bool PropertyChildReap(pid_t pid);
 
