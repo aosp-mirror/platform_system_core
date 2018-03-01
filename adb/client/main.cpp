@@ -77,6 +77,7 @@ void adb_server_cleanup() {
 
 static void intentionally_leak() {
     void* p = ::operator new(1);
+    // The analyzer is upset about this leaking. NOLINTNEXTLINE
     LOG(INFO) << "leaking pointer " << p;
 }
 
