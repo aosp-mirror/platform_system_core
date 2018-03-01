@@ -247,6 +247,11 @@ cc_binary {
         type: "lite",
     },
     generated_headers: ["generated_stub_builtin_function_map"],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
 
 subdirs = ["*"]
