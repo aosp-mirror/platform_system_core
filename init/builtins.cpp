@@ -968,8 +968,8 @@ static Result<Success> do_wait_for_prop(const BuiltinArguments& args) {
     const char* value = args[2].c_str();
     size_t value_len = strlen(value);
 
-    if (!is_legal_property_name(name)) {
-        return Error() << "is_legal_property_name(" << name << ") failed";
+    if (!IsLegalPropertyName(name)) {
+        return Error() << "IsLegalPropertyName(" << name << ") failed";
     }
     if (value_len >= PROP_VALUE_MAX) {
         return Error() << "value too long";
@@ -1018,6 +1018,7 @@ static Result<Success> do_init_user0(const BuiltinArguments& args) {
                                    {"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"});
 }
 
+// Builtin-function-map start
 const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
@@ -1075,6 +1076,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     // clang-format on
     return builtin_functions;
 }
+// Builtin-function-map end
 
 }  // namespace init
 }  // namespace android
