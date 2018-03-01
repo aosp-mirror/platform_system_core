@@ -201,7 +201,7 @@ genrule {
     name: "generated_stub_builtin_function_map",
     out: ["generated_stub_builtin_function_map.h"],
     srcs: ["builtins.cpp"],
-    cmd: "sed -n '/Builtin-function-map start/{:a;n;/Builtin-function-map end/q;p;ba}' $(in) | sed -e 's/do_[^}]*/do_stub/g' > $(out)"
+    cmd: "sed -n '/Builtin-function-map start/{:a;n;/Builtin-function-map end/q;p;ba}' $(in) | sed -e 's/do_[^}]*/do_stub/g' > $(out)",
 }
 
 cc_binary {
@@ -248,6 +248,9 @@ cc_binary {
     },
     generated_headers: ["generated_stub_builtin_function_map"],
     target: {
+        android: {
+            enabled: false,
+        },
         darwin: {
             enabled: false,
         },
