@@ -14,10 +14,49 @@
  *  limitations under the License.
  */
 
-#pragma once
+#ifndef _STATSLOG_H_
+#define _STATSLOG_H_
 
+#include <stdbool.h>
 #include <sys/cdefs.h>
+
+#include <cutils/properties.h>
+#include <log/log_event_list.h>
+
 __BEGIN_DECLS
+
+/*
+ * These are defined in
+ * http://cs/android/frameworks/base/cmds/statsd/src/atoms.proto
+ */
+#define LMK_KILL_OCCURRED 51
+#define LMK_STATE_CHANGED 54
+#define LMK_STATE_CHANGE_START 1
+#define LMK_STATE_CHANGE_STOP 2
+
+static inline void statslog_init() {
+    enable_stats_log = property_get_bool("ro.lmk.log_stats", false);
+
+    if (enable_stats_log) {
+        log_ctx = create_android_logger(kStatsEventTag);
+    }
+}
+
+static inline void statslog_destroy() {
+    if (log_ctx) {
+        android_log_destroy(&log_ctx);
+    }
+}
+
+struct memory_stat {
+    int64_t pgfault;
+    int64_t pgmajfault;
+    int64_t rss_in_bytes;
+    int64_t cache_in_bytes;
+    int64_t swap_in_bytes;
+};
+
+#define MEMCG_PROCESS_MEMORY_STAT_PATH "/dev/memcg/apps/uid_%u/pid_%u/memory.stat"
 
 /*
  * The single event tag id for all stats logs.
@@ -42,4 +81,7 @@ stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid
                               char const* process_name, int32_t oom_score, int64_t pgfault,
                               int64_t pgmajfault, int64_t rss_in_bytes, int64_t cache_in_bytes,
                               int64_t swap_in_bytes);
+
 __END_DECLS
+
+#endif /* _STATSLOG_H_ */

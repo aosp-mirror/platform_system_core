@@ -62,6 +62,8 @@ const std::string& get_android_dt_dir();
 bool read_android_dt_file(const std::string& sub_path, std::string* dt_content);
 bool is_android_dt_value_expected(const std::string& sub_path, const std::string& expected_content);
 
+bool IsLegalPropertyName(const std::string& name);
+
 }  // namespace init
 }  // namespace android
 

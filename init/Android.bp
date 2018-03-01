@@ -194,4 +194,67 @@ cc_benchmark {
     static_libs: ["libinit"],
 }
 
+// Host Verifier
+// ------------------------------------------------------------------------------
+
+genrule {
+    name: "generated_stub_builtin_function_map",
+    out: ["generated_stub_builtin_function_map.h"],
+    srcs: ["builtins.cpp"],
+    cmd: "sed -n '/Builtin-function-map start/{:a;n;/Builtin-function-map end/q;p;ba}' $(in) | sed -e 's/do_[^}]*/do_stub/g' > $(out)",
+}
+
+cc_binary {
+    name: "host_init_verifier",
+    host_supported: true,
+    cpp_std: "experimental",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libselinux",
+    ],
+    whole_static_libs: ["libcap"],
+    shared_libs: [
+        "libprotobuf-cpp-lite",
+        "libhidl-gen-utils",
+        "libprocessgroup",
+        "liblog",
+        "libcutils",
+    ],
+    srcs: [
+        "action.cpp",
+        "action_manager.cpp",
+        "action_parser.cpp",
+        "capabilities.cpp",
+        "descriptors.cpp",
+        "import_parser.cpp",
+        "host_init_parser.cpp",
+        "host_init_stubs.cpp",
+        "parser.cpp",
+        "rlimit_parser.cpp",
+        "tokenizer.cpp",
+        "service.cpp",
+        "subcontext.cpp",
+        "subcontext.proto",
+        "util.cpp",
+    ],
+    proto: {
+        type: "lite",
+    },
+    generated_headers: ["generated_stub_builtin_function_map"],
+    target: {
+        android: {
+            enabled: false,
+        },
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
 subdirs = ["*"]

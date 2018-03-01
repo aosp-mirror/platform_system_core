@@ -20,7 +20,7 @@ cc_defaults {
     },
 }
 
-cc_library_shared {
+cc_library {
     name: "libmemunreachable",
     defaults: ["libmemunreachable_defaults"],
     srcs: [
@@ -88,14 +88,14 @@ cc_test {
 cc_test {
     name: "memunreachable_binder_test",
     defaults: ["libmemunreachable_defaults"],
+    test_suites: ["vts"],
     srcs: [
         "tests/Binder_test.cpp",
-        "tests/MemUnreachable_test.cpp",
     ],
+    static_libs: ["libmemunreachable"],
     shared_libs: [
         "libbinder",
         "libhwbinder",
-        "libmemunreachable",
         "libutils",
     ],
 }

@@ -117,35 +117,10 @@ static bool CheckMacPerms(const std::string& name, const char* target_context,
     return has_access;
 }
 
-bool is_legal_property_name(const std::string& name) {
-    size_t namelen = name.size();
-
-    if (namelen < 1) return false;
-    if (name[0] == '.') return false;
-    if (name[namelen - 1] == '.') return false;
-
-    /* Only allow alphanumeric, plus '.', '-', '@', ':', or '_' */
-    /* Don't allow ".." to appear in a property name */
-    for (size_t i = 0; i < namelen; i++) {
-        if (name[i] == '.') {
-            // i=0 is guaranteed to never have a dot. See above.
-            if (name[i-1] == '.') return false;
-            continue;
-        }
-        if (name[i] == '_' || name[i] == '-' || name[i] == '@' || name[i] == ':') continue;
-        if (name[i] >= 'a' && name[i] <= 'z') continue;
-        if (name[i] >= 'A' && name[i] <= 'Z') continue;
-        if (name[i] >= '0' && name[i] <= '9') continue;
-        return false;
-    }
-
-    return true;
-}
-
 static uint32_t PropertySetImpl(const std::string& name, const std::string& value) {
     size_t valuelen = value.size();
 
-    if (!is_legal_property_name(name)) {
+    if (!IsLegalPropertyName(name)) {
         LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: bad name";
         return PROP_ERROR_INVALID_NAME;
     }
@@ -416,7 +391,7 @@ class SocketConnection {
 // This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                            const std::string& source_context, const ucred& cr) {
-    if (!is_legal_property_name(name)) {
+    if (!IsLegalPropertyName(name)) {
         LOG(ERROR) << "PropertySet: illegal property name \"" << name << "\"";
         return PROP_ERROR_INVALID_NAME;
     }
