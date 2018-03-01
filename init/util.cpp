@@ -33,7 +33,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -42,7 +41,14 @@
 #include <selinux/android.h>
 
 #include "reboot.h"
+
+#if defined(__ANDROID__)
+#include <android-base/properties.h>
+
 #include "selinux.h"
+#else
+#include "host_init_stubs.h"
+#endif
 
 #ifdef _INIT_INIT_H
 #error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
@@ -407,6 +413,31 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
         }
     }
     return false;
+}
+
+bool IsLegalPropertyName(const std::string& name) {
+    size_t namelen = name.size();
+
+    if (namelen < 1) return false;
+    if (name[0] == '.') return false;
+    if (name[namelen - 1] == '.') return false;
+
+    /* Only allow alphanumeric, plus '.', '-', '@', ':', or '_' */
+    /* Don't allow ".." to appear in a property name */
+    for (size_t i = 0; i < namelen; i++) {
+        if (name[i] == '.') {
+            // i=0 is guaranteed to never have a dot. See above.
+            if (name[i - 1] == '.') return false;
+            continue;
+        }
+        if (name[i] == '_' || name[i] == '-' || name[i] == '@' || name[i] == ':') continue;
+        if (name[i] >= 'a' && name[i] <= 'z') continue;
+        if (name[i] >= 'A' && name[i] <= 'Z') continue;
+        if (name[i] >= '0' && name[i] <= '9') continue;
+        return false;
+    }
+
+    return true;
 }
 
 }  // namespace init

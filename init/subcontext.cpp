@@ -27,12 +27,14 @@
 #include <selinux/android.h>
 
 #include "action.h"
-#include "property_service.h"
-#include "selinux.h"
 #include "util.h"
 
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
+#if defined(__ANDROID__)
+#include "property_service.h"
+#include "selinux.h"
+#else
+#include "host_init_stubs.h"
+#endif
 
 using android::base::GetExecutablePath;
 using android::base::Join;
@@ -83,7 +85,7 @@ std::vector<std::pair<std::string, std::string>> properties_to_set;
 
 uint32_t SubcontextPropertySet(const std::string& name, const std::string& value) {
     properties_to_set.emplace_back(name, value);
-    return PROP_SUCCESS;
+    return 0;
 }
 
 class SubcontextProcess {
