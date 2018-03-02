@@ -49,6 +49,11 @@ namespace init {
 const std::string kInitContext = "u:r:init:s0";
 const std::string kVendorContext = "u:r:vendor_init:s0";
 
+const char* const paths_and_secontexts[2][2] = {
+    {"/vendor", kVendorContext.c_str()},
+    {"/odm", kVendorContext.c_str()},
+};
+
 namespace {
 
 constexpr size_t kBufferSize = 4096;
@@ -349,9 +354,6 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 static std::vector<Subcontext> subcontexts;
 
 std::vector<Subcontext>* InitializeSubcontexts() {
-    static const char* const paths_and_secontexts[][2] = {
-        {"/vendor", kVendorContext.c_str()},
-    };
     for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
         subcontexts.emplace_back(path_prefix, secontext);
     }
