@@ -224,7 +224,9 @@ static int32_t MapCentralDirectory0(const char* debug_file_name, ZipArchive* arc
     return kInvalidOffset;
   }
   if (eocd->num_records == 0) {
+#if defined(__ANDROID__)
     ALOGW("Zip: empty archive?");
+#endif
     return kEmptyArchive;
   }
 
