@@ -198,7 +198,7 @@ static enum match_type identical(LogBufferElement* elem,
 
 int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                    pid_t tid, const char* msg, unsigned short len) {
-    if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
+    if (log_id >= LOG_ID_MAX) {
         return -EINVAL;
     }
 
