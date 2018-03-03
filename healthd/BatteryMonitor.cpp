@@ -143,7 +143,7 @@ int BatteryMonitor::readFromFile(const String8& path, std::string* buf) {
 
 BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String8& path) {
     std::string buf;
-    BatteryMonitor::PowerSupplyType ret;
+    int ret;
     struct sysfsStringEnumMap supplyTypeMap[] = {
             { "Unknown", ANDROID_POWER_SUPPLY_TYPE_UNKNOWN },
             { "Battery", ANDROID_POWER_SUPPLY_TYPE_BATTERY },
@@ -164,13 +164,13 @@ BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String
     if (readFromFile(path, &buf) <= 0)
         return ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
 
-    ret = (BatteryMonitor::PowerSupplyType)mapSysfsString(buf.c_str(), supplyTypeMap);
+    ret = mapSysfsString(buf.c_str(), supplyTypeMap);
     if (ret < 0) {
         KLOG_WARNING(LOG_TAG, "Unknown power supply type '%s'\n", buf.c_str());
         ret = ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
     }
 
-    return ret;
+    return static_cast<BatteryMonitor::PowerSupplyType>(ret);
 }
 
 bool BatteryMonitor::getBooleanField(const String8& path) {
