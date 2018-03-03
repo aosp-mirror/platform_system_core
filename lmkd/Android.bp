@@ -4,10 +4,17 @@ cc_binary {
     srcs: ["lmkd.c"],
     shared_libs: [
         "liblog",
-        "libprocessgroup",
         "libcutils",
     ],
     cflags: ["-Werror"],
 
     init_rc: ["lmkd.rc"],
+
+    product_variables: {
+        debuggable: {
+            cflags: [
+                "-DLMKD_TRACE_KILLS"
+            ],
+        },
+    },
 }
