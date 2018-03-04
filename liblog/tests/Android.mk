@@ -55,7 +55,6 @@ test_c_flags := \
     -fno-builtin \
 
 cts_src_files := \
-    libc_test.cpp \
     liblog_test_default.cpp \
     liblog_test_local.cpp \
     liblog_test_stderr.cpp \
@@ -68,6 +67,7 @@ cts_src_files := \
     log_wrap_test.cpp
 
 test_src_files := \
+    libc_test.cpp \
     $(cts_src_files) \
 
 # Build tests for the device (with .so). Run with:
