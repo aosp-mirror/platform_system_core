@@ -59,7 +59,10 @@
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
+#include "subcontext.h"
 #include "util.h"
+
+using namespace std::literals;
 
 using android::base::ReadFileToString;
 using android::base::Split;
@@ -117,23 +120,21 @@ static bool CheckMacPerms(const std::string& name, const char* target_context,
     return has_access;
 }
 
-static uint32_t PropertySetImpl(const std::string& name, const std::string& value) {
+static uint32_t PropertySet(const std::string& name, const std::string& value, std::string* error) {
     size_t valuelen = value.size();
 
     if (!IsLegalPropertyName(name)) {
-        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: bad name";
+        *error = "Illegal property name";
         return PROP_ERROR_INVALID_NAME;
     }
 
     if (valuelen >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
-        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
-                   << "value too long";
+        *error = "Property value too long";
         return PROP_ERROR_INVALID_VALUE;
     }
 
     if (mbstowcs(nullptr, value.data(), 0) == static_cast<std::size_t>(-1)) {
-        LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
-                   << "value not a UTF8 encoded string";
+        *error = "Value is not a UTF8 encoded string";
         return PROP_ERROR_INVALID_VALUE;
     }
 
@@ -141,8 +142,7 @@ static uint32_t PropertySetImpl(const std::string& name, const std::string& valu
     if (pi != nullptr) {
         // ro.* properties are actually "write-once".
         if (StartsWith(name, "ro.")) {
-            LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
-                       << "property already set";
+            *error = "Read-only property was already set";
             return PROP_ERROR_READ_ONLY_PROPERTY;
         }
 
@@ -150,8 +150,7 @@ static uint32_t PropertySetImpl(const std::string& name, const std::string& valu
     } else {
         int rc = __system_property_add(name.c_str(), name.size(), value.c_str(), valuelen);
         if (rc < 0) {
-            LOG(ERROR) << "property_set(\"" << name << "\", \"" << value << "\") failed: "
-                       << "__system_property_add failed";
+            *error = "__system_property_add failed";
             return PROP_ERROR_SET_FAILED;
         }
     }
@@ -205,8 +204,10 @@ bool PropertyChildReap(pid_t pid) {
     if (info.pid != pid) {
         return false;
     }
-    if (PropertySetImpl(info.name, info.value) != PROP_SUCCESS) {
-        LOG(ERROR) << "Failed to set async property " << info.name;
+    std::string error;
+    if (PropertySet(info.name, info.value, &error) != PROP_SUCCESS) {
+        LOG(ERROR) << "Failed to set async property " << info.name << " to " << info.value << ": "
+                   << error;
     }
     property_children.pop();
     if (!property_children.empty()) {
@@ -216,9 +217,9 @@ bool PropertyChildReap(pid_t pid) {
 }
 
 static uint32_t PropertySetAsync(const std::string& name, const std::string& value,
-                                 PropertyAsyncFunc func) {
+                                 PropertyAsyncFunc func, std::string* error) {
     if (value.empty()) {
-        return PropertySetImpl(name, value);
+        return PropertySet(name, value, error);
     }
 
     PropertyChildInfo info;
@@ -236,30 +237,27 @@ static int RestoreconRecursiveAsync(const std::string& name, const std::string& 
     return selinux_android_restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
 }
 
-uint32_t PropertySet(const std::string& name, const std::string& value) {
-    if (name == "selinux.restorecon_recursive") {
-        return PropertySetAsync(name, value, RestoreconRecursiveAsync);
-    }
-
-    return PropertySetImpl(name, value);
-}
-
 uint32_t InitPropertySet(const std::string& name, const std::string& value) {
     if (StartsWith(name, "ctl.")) {
-        LOG(ERROR) << "Do not set ctl. properties from init; call the Service functions directly";
+        LOG(ERROR) << "InitPropertySet: Do not set ctl. properties from init; call the Service "
+                      "functions directly";
+        return PROP_ERROR_INVALID_NAME;
+    }
+    if (name == "selinux.restorecon_recursive") {
+        LOG(ERROR) << "InitPropertySet: Do not set selinux.restorecon_recursive from init; use the "
+                      "restorecon builtin directly";
         return PROP_ERROR_INVALID_NAME;
     }
 
-    const char* type = nullptr;
-    property_info_area->GetPropertyInfo(name.c_str(), nullptr, &type);
-
-    if (type == nullptr || !CheckType(type, value)) {
-        LOG(ERROR) << "property_set: name: '" << name << "' type check failed, type: '"
-                   << (type ?: "(null)") << "' value: '" << value << "'";
-        return PROP_ERROR_INVALID_VALUE;
+    uint32_t result = 0;
+    ucred cr = {.pid = 1, .uid = 0, .gid = 0};
+    std::string error;
+    result = HandlePropertySet(name, value, kInitContext.c_str(), cr, &error);
+    if (result != PROP_SUCCESS) {
+        LOG(ERROR) << "Init cannot set '" << name << "' to '" << value << "': " << error;
     }
 
-    return PropertySet(name, value);
+    return result;
 }
 
 class SocketConnection {
@@ -390,9 +388,9 @@ class SocketConnection {
 
 // This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr) {
+                           const std::string& source_context, const ucred& cr, std::string* error) {
     if (!IsLegalPropertyName(name)) {
-        LOG(ERROR) << "PropertySet: illegal property name \"" << name << "\"";
+        *error = "Illegal property name";
         return PROP_ERROR_INVALID_NAME;
     }
 
@@ -405,9 +403,7 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
         const char* type = nullptr;
         property_info_area->GetPropertyInfo(control_string.c_str(), &target_context, &type);
         if (!CheckMacPerms(control_string, target_context, source_context.c_str(), cr)) {
-            LOG(ERROR) << "PropertySet: Unable to " << (name.c_str() + 4) << " service ctl ["
-                       << value << "]"
-                       << " uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid;
+            *error = StringPrintf("Unable to '%s' service %s", name.c_str() + 4, value.c_str());
             return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
         }
 
@@ -420,13 +416,13 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
     property_info_area->GetPropertyInfo(name.c_str(), &target_context, &type);
 
     if (!CheckMacPerms(name, target_context, source_context.c_str(), cr)) {
-        LOG(ERROR) << "PropertySet: permission denied uid:" << cr.uid << " name:" << name;
+        *error = "SELinux permission check failed";
         return PROP_ERROR_PERMISSION_DENIED;
     }
 
     if (type == nullptr || !CheckType(type, value)) {
-        LOG(ERROR) << "PropertySet: name: '" << name << "' type check failed, type: '"
-                   << (type ?: "(null)") << "' value: '" << value << "'";
+        *error = StringPrintf("Property type check failed, value doesn't match expected type '%s'",
+                              (type ?: "(null)"));
         return PROP_ERROR_INVALID_VALUE;
     }
 
@@ -445,7 +441,11 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                   << process_log_string;
     }
 
-    return PropertySet(name, value);
+    if (name == "selinux.restorecon_recursive") {
+        return PropertySetAsync(name, value, RestoreconRecursiveAsync, error);
+    }
+
+    return PropertySet(name, value, error);
 }
 
 static void handle_property_set_fd() {
@@ -488,7 +488,16 @@ static void handle_property_set_fd() {
         prop_name[PROP_NAME_MAX-1] = 0;
         prop_value[PROP_VALUE_MAX-1] = 0;
 
-        HandlePropertySet(prop_value, prop_value, socket.source_context(), socket.cred());
+        const auto& cr = socket.cred();
+        std::string error;
+        uint32_t result =
+            HandlePropertySet(prop_name, prop_value, socket.source_context(), cr, &error);
+        if (result != PROP_SUCCESS) {
+            LOG(ERROR) << "Unable to set property '" << prop_name << "' to '" << prop_value
+                       << "' from uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid << ": "
+                       << error;
+        }
+
         break;
       }
 
@@ -502,7 +511,14 @@ static void handle_property_set_fd() {
           return;
         }
 
-        auto result = HandlePropertySet(name, value, socket.source_context(), socket.cred());
+        const auto& cr = socket.cred();
+        std::string error;
+        uint32_t result = HandlePropertySet(name, value, socket.source_context(), cr, &error);
+        if (result != PROP_SUCCESS) {
+            LOG(ERROR) << "Unable to set property '" << name << "' to '" << value
+                       << "' from uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid << ": "
+                       << error;
+        }
         socket.SendUint32(result);
         break;
       }
@@ -520,10 +536,16 @@ static bool load_properties_from_file(const char *, const char *);
  * Filter is used to decide which properties to load: NULL loads all keys,
  * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
  */
-static void load_properties(char *data, const char *filter)
-{
+static void LoadProperties(char* data, const char* filter, const char* filename) {
     char *key, *value, *eol, *sol, *tmp, *fn;
     size_t flen = 0;
+
+    const char* context = kInitContext.c_str();
+    for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
+        if (StartsWith(filename, path_prefix)) {
+            context = secontext;
+        }
+    }
 
     if (filter) {
         flen = strlen(filter);
@@ -571,7 +593,21 @@ static void load_properties(char *data, const char *filter)
                 }
             }
 
-            property_set(key, value);
+            if (StartsWith(key, "ctl.") || key == "sys.powerctl"s ||
+                key == "selinux.restorecon_recursive"s) {
+                LOG(ERROR) << "Ignoring disallowed property '" << key
+                           << "' with special meaning in prop file '" << filename << "'";
+                continue;
+            }
+
+            uint32_t result = 0;
+            ucred cr = {.pid = 1, .uid = 0, .gid = 0};
+            std::string error;
+            result = HandlePropertySet(key, value, context, cr, &error);
+            if (result != PROP_SUCCESS) {
+                LOG(ERROR) << "Unable to set property '" << key << "' to '" << value
+                           << "' in property file '" << filename << "': " << error;
+            }
         }
     }
 }
@@ -587,7 +623,8 @@ static bool load_properties_from_file(const char* filename, const char* filter) 
         return false;
     }
     file_contents->push_back('\n');
-    load_properties(file_contents->data(), filter);
+
+    LoadProperties(file_contents->data(), filter, filename);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
     return true;
 }

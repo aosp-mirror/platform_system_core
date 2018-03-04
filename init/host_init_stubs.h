@@ -48,7 +48,7 @@ extern std::string default_console;
 // property_service.h
 extern uint32_t (*property_set)(const std::string& name, const std::string& value);
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr);
+                           const std::string& source_context, const ucred& cr, std::string* error);
 
 // selinux.h
 void SelabelInitialize();
