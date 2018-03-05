@@ -105,6 +105,9 @@ void StderrLogger(LogId, LogSeverity, const char*, const char*, unsigned int, co
 
 void DefaultAborter(const char* abort_message);
 
+std::string GetDefaultTag();
+void SetDefaultTag(const std::string& tag);
+
 #ifdef __ANDROID__
 // We expose this even though it is the default because a user that wants to
 // override the default log buffer will have to construct this themselves.
