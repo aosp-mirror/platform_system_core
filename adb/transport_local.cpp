@@ -445,13 +445,14 @@ int init_socket_transport(atransport* t, int s, int adb_port, int local) {
     int fail = 0;
 
     unique_fd fd(s);
-    t->sync_token = 1;
     t->type = kTransportLocal;
 
 #if ADB_HOST
     // Emulator connection.
     if (local) {
-        t->connection.reset(new EmulatorConnection(std::move(fd), adb_port));
+        std::unique_ptr<BlockingConnection> emulator_connection(
+            new EmulatorConnection(std::move(fd), adb_port));
+        t->connection.reset(new BlockingConnectionAdapter(std::move(emulator_connection)));
         std::lock_guard<std::mutex> lock(local_transports_lock);
         atransport* existing_transport = find_emulator_transport_by_adb_port_locked(adb_port);
         if (existing_transport != NULL) {
@@ -470,6 +471,7 @@ int init_socket_transport(atransport* t, int s, int adb_port, int local) {
 #endif
 
     // Regular tcp connection.
-    t->connection.reset(new FdConnection(std::move(fd)));
+    std::unique_ptr<BlockingConnection> fd_connection(new FdConnection(std::move(fd)));
+    t->connection.reset(new BlockingConnectionAdapter(std::move(fd_connection)));
     return fail;
 }

@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <deque>
 #include <list>
 #include <mutex>
 #include <thread>
@@ -38,12 +39,13 @@
 #include <android-base/strings.h>
 #include <android-base/thread_annotations.h>
 
+#include <diagnose_usb.h>
+
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
-#include "diagnose_usb.h"
 #include "fdevent.h"
 
 static void transport_unref(atransport *t);
@@ -63,6 +65,82 @@ const char* const kFeaturePushSync = "push_sync";
 TransportId NextTransportId() {
     static std::atomic<TransportId> next(1);
     return next++;
+}
+
+BlockingConnectionAdapter::BlockingConnectionAdapter(std::unique_ptr<BlockingConnection> connection)
+    : underlying_(std::move(connection)) {}
+
+BlockingConnectionAdapter::~BlockingConnectionAdapter() {
+    LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): destructing";
+    Stop();
+}
+
+void BlockingConnectionAdapter::Start() {
+    read_thread_ = std::thread([this]() {
+        LOG(INFO) << this->transport_name_ << ": read thread spawning";
+        while (true) {
+            std::unique_ptr<apacket> packet(new apacket());
+            if (!underlying_->Read(packet.get())) {
+                PLOG(INFO) << this->transport_name_ << ": read failed";
+                break;
+            }
+            read_callback_(this, std::move(packet));
+        }
+        std::call_once(this->error_flag_, [this]() { this->error_callback_(this, "read failed"); });
+    });
+
+    write_thread_ = std::thread([this]() {
+        LOG(INFO) << this->transport_name_ << ": write thread spawning";
+        while (true) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cv_.wait(lock, [this]() { return this->stopped_ || !this->write_queue_.empty(); });
+
+            if (this->stopped_) {
+                return;
+            }
+
+            std::unique_ptr<apacket> packet = std::move(this->write_queue_.front());
+            this->write_queue_.pop_front();
+            lock.unlock();
+
+            if (!this->underlying_->Write(packet.get())) {
+                break;
+            }
+        }
+        std::call_once(this->error_flag_, [this]() { this->error_callback_(this, "write failed"); });
+    });
+}
+
+void BlockingConnectionAdapter::Stop() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (stopped_) {
+        LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): already stopped";
+        return;
+    }
+
+    stopped_ = true;
+    lock.unlock();
+
+    LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): stopping";
+
+    this->underlying_->Close();
+
+    this->cv_.notify_one();
+    read_thread_.join();
+    write_thread_.join();
+
+    LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): stopped";
+    std::call_once(this->error_flag_, [this]() { this->error_callback_(this, "requested stop"); });
+}
+
+bool BlockingConnectionAdapter::Write(std::unique_ptr<apacket> packet) {
+    {
+        std::unique_lock<std::mutex> lock(this->mutex_);
+        write_queue_.emplace_back(std::move(packet));
+    }
+
+    cv_.notify_one();
+    return true;
 }
 
 bool FdConnection::Read(apacket* packet) {
@@ -143,67 +221,6 @@ static std::string dump_packet(const char* name, const char* func, apacket* p) {
     return result;
 }
 
-static int read_packet(int fd, const char* name, apacket** ppacket) {
-    ATRACE_NAME("read_packet");
-    char buff[8];
-    if (!name) {
-        snprintf(buff, sizeof buff, "fd=%d", fd);
-        name = buff;
-    }
-    char* p = reinterpret_cast<char*>(ppacket); /* really read a packet address */
-    int len = sizeof(apacket*);
-    while (len > 0) {
-        int r = adb_read(fd, p, len);
-        if (r > 0) {
-            len -= r;
-            p += r;
-        } else {
-            D("%s: read_packet (fd=%d), error ret=%d: %s", name, fd, r, strerror(errno));
-            return -1;
-        }
-    }
-
-    VLOG(TRANSPORT) << dump_packet(name, "from remote", *ppacket);
-    return 0;
-}
-
-static int write_packet(int fd, const char* name, apacket** ppacket) {
-    ATRACE_NAME("write_packet");
-    char buff[8];
-    if (!name) {
-        snprintf(buff, sizeof buff, "fd=%d", fd);
-        name = buff;
-    }
-    VLOG(TRANSPORT) << dump_packet(name, "to remote", *ppacket);
-    char* p = reinterpret_cast<char*>(ppacket); /* we really write the packet address */
-    int len = sizeof(apacket*);
-    while (len > 0) {
-        int r = adb_write(fd, p, len);
-        if (r > 0) {
-            len -= r;
-            p += r;
-        } else {
-            D("%s: write_packet (fd=%d) error ret=%d: %s", name, fd, r, strerror(errno));
-            return -1;
-        }
-    }
-    return 0;
-}
-
-static void transport_socket_events(int fd, unsigned events, void* _t) {
-    atransport* t = reinterpret_cast<atransport*>(_t);
-    D("transport_socket_events(fd=%d, events=%04x,...)", fd, events);
-    if (events & FDE_READ) {
-        apacket* p = 0;
-        if (read_packet(fd, t->serial, &p)) {
-            D("%s: failed to read packet from transport socket on fd %d", t->serial, fd);
-            return;
-        }
-
-        handle_packet(p, (atransport*)_t);
-    }
-}
-
 void send_packet(apacket* p, atransport* t) {
     p->msg.magic = p->msg.command ^ 0xffffffff;
     // compute a checksum for connection/auth packets for compatibility reasons
@@ -213,160 +230,16 @@ void send_packet(apacket* p, atransport* t) {
         p->msg.data_check = calculate_apacket_checksum(p);
     }
 
-    print_packet("send", p);
+    VLOG(TRANSPORT) << dump_packet(t->serial, "to remote", p);
 
     if (t == NULL) {
         fatal("Transport is null");
     }
 
-    if (write_packet(t->transport_socket, t->serial, &p)) {
-        fatal_errno("cannot enqueue packet on transport socket");
+    if (t->Write(p) != 0) {
+        D("%s: failed to enqueue packet, closing transport", t->serial);
+        t->Kick();
     }
-}
-
-// The transport is opened by transport_register_func before
-// the read_transport and write_transport threads are started.
-//
-// The read_transport thread issues a SYNC(1, token) message to let
-// the write_transport thread know to start things up.  In the event
-// of transport IO failure, the read_transport thread will post a
-// SYNC(0,0) message to ensure shutdown.
-//
-// The transport will not actually be closed until both threads exit, but the threads
-// will kick the transport on their way out to disconnect the underlying device.
-//
-// read_transport thread reads data from a transport (representing a usb/tcp connection),
-// and makes the main thread call handle_packet().
-static void read_transport_thread(void* _t) {
-    atransport* t = reinterpret_cast<atransport*>(_t);
-    apacket* p;
-
-    adb_thread_setname(
-        android::base::StringPrintf("<-%s", (t->serial != nullptr ? t->serial : "transport")));
-    D("%s: starting read_transport thread on fd %d, SYNC online (%d)", t->serial, t->fd,
-      t->sync_token + 1);
-    p = get_apacket();
-    p->msg.command = A_SYNC;
-    p->msg.arg0 = 1;
-    p->msg.arg1 = ++(t->sync_token);
-    p->msg.magic = A_SYNC ^ 0xffffffff;
-    D("sending SYNC packet (len = %u, payload.size() = %zu)", p->msg.data_length, p->payload.size());
-    if (write_packet(t->fd, t->serial, &p)) {
-        put_apacket(p);
-        D("%s: failed to write SYNC packet", t->serial);
-        goto oops;
-    }
-
-    D("%s: data pump started", t->serial);
-    for (;;) {
-        ATRACE_NAME("read_transport loop");
-        p = get_apacket();
-
-        {
-            ATRACE_NAME("read_transport read_remote");
-            if (!t->connection->Read(p)) {
-                D("%s: remote read failed for transport", t->serial);
-                put_apacket(p);
-                break;
-            }
-
-            if (!check_header(p, t)) {
-                D("%s: remote read: bad header", t->serial);
-                put_apacket(p);
-                break;
-            }
-
-#if ADB_HOST
-            if (p->msg.command == 0) {
-                put_apacket(p);
-                continue;
-            }
-#endif
-        }
-
-        D("%s: received remote packet, sending to transport", t->serial);
-        if (write_packet(t->fd, t->serial, &p)) {
-            put_apacket(p);
-            D("%s: failed to write apacket to transport", t->serial);
-            goto oops;
-        }
-    }
-
-    D("%s: SYNC offline for transport", t->serial);
-    p = get_apacket();
-    p->msg.command = A_SYNC;
-    p->msg.arg0 = 0;
-    p->msg.arg1 = 0;
-    p->msg.magic = A_SYNC ^ 0xffffffff;
-    if (write_packet(t->fd, t->serial, &p)) {
-        put_apacket(p);
-        D("%s: failed to write SYNC apacket to transport", t->serial);
-    }
-
-oops:
-    D("%s: read_transport thread is exiting", t->serial);
-    kick_transport(t);
-    transport_unref(t);
-}
-
-// write_transport thread gets packets sent by the main thread (through send_packet()),
-// and writes to a transport (representing a usb/tcp connection).
-static void write_transport_thread(void* _t) {
-    atransport* t = reinterpret_cast<atransport*>(_t);
-    apacket* p;
-    int active = 0;
-
-    adb_thread_setname(
-        android::base::StringPrintf("->%s", (t->serial != nullptr ? t->serial : "transport")));
-    D("%s: starting write_transport thread, reading from fd %d", t->serial, t->fd);
-
-    for (;;) {
-        ATRACE_NAME("write_transport loop");
-        if (read_packet(t->fd, t->serial, &p)) {
-            D("%s: failed to read apacket from transport on fd %d", t->serial, t->fd);
-            break;
-        }
-
-        if (p->msg.command == A_SYNC) {
-            if (p->msg.arg0 == 0) {
-                D("%s: transport SYNC offline", t->serial);
-                put_apacket(p);
-                break;
-            } else {
-                if (p->msg.arg1 == t->sync_token) {
-                    D("%s: transport SYNC online", t->serial);
-                    active = 1;
-                } else {
-                    D("%s: transport ignoring SYNC %d != %d", t->serial, p->msg.arg1, t->sync_token);
-                }
-            }
-        } else {
-            if (active) {
-                D("%s: transport got packet, sending to remote", t->serial);
-                ATRACE_NAME("write_transport write_remote");
-
-                // Allow sending the payload's implicit null terminator.
-                if (p->msg.data_length != p->payload.size()) {
-                    LOG(FATAL) << "packet data length doesn't match payload: msg.data_length = "
-                               << p->msg.data_length << ", payload.size() = " << p->payload.size();
-                }
-
-                if (t->Write(p) != 0) {
-                    D("%s: remote write failed for transport", t->serial);
-                    put_apacket(p);
-                    break;
-                }
-            } else {
-                D("%s: transport ignoring packet while offline", t->serial);
-            }
-        }
-
-        put_apacket(p);
-    }
-
-    D("%s: write_transport thread is exiting, fd %d", t->serial, t->fd);
-    kick_transport(t);
-    transport_unref(t);
 }
 
 void kick_transport(atransport* t) {
@@ -559,9 +432,10 @@ static int transport_write_action(int fd, struct tmsg* m) {
     return 0;
 }
 
-static void transport_registration_func(int _fd, unsigned ev, void* data) {
+static void remove_transport(atransport*);
+
+static void transport_registration_func(int _fd, unsigned ev, void*) {
     tmsg m;
-    int s[2];
     atransport* t;
 
     if (!(ev & FDE_READ)) {
@@ -575,13 +449,7 @@ static void transport_registration_func(int _fd, unsigned ev, void* data) {
     t = m.transport;
 
     if (m.action == 0) {
-        D("transport: %s removing and free'ing %d", t->serial, t->transport_socket);
-
-        /* IMPORTANT: the remove closes one half of the
-        ** socket pair.  The close closes the other half.
-        */
-        fdevent_remove(&(t->transport_fde));
-        adb_close(t->fd);
+        D("transport: %s deleting", t->serial);
 
         {
             std::lock_guard<std::recursive_mutex> lock(transport_lock);
@@ -603,23 +471,33 @@ static void transport_registration_func(int _fd, unsigned ev, void* data) {
     /* don't create transport threads for inaccessible devices */
     if (t->GetConnectionState() != kCsNoPerm) {
         /* initial references are the two threads */
-        t->ref_count = 2;
+        t->ref_count = 1;
+        t->connection->SetTransportName(t->serial_name());
+        t->connection->SetReadCallback([t](Connection*, std::unique_ptr<apacket> p) {
+            if (!check_header(p.get(), t)) {
+                D("%s: remote read: bad header", t->serial);
+                return false;
+            }
 
-        if (adb_socketpair(s)) {
-            fatal_errno("cannot open transport socketpair");
-        }
+            VLOG(TRANSPORT) << dump_packet(t->serial, "from remote", p.get());
+            apacket* packet = p.release();
 
-        D("transport: %s socketpair: (%d,%d) starting", t->serial, s[0], s[1]);
+            // TODO: Does this need to run on the main thread?
+            fdevent_run_on_main_thread([packet, t]() { handle_packet(packet, t); });
+            return true;
+        });
+        t->connection->SetErrorCallback([t](Connection*, const std::string& error) {
+            D("%s: connection terminated: %s", t->serial, error.c_str());
+            fdevent_run_on_main_thread([t]() {
+                handle_offline(t);
+                transport_unref(t);
+            });
+        });
 
-        t->transport_socket = s[0];
-        t->fd = s[1];
-
-        fdevent_install(&(t->transport_fde), t->transport_socket, transport_socket_events, t);
-
-        fdevent_set(&(t->transport_fde), FDE_READ);
-
-        std::thread(write_transport_thread, t).detach();
-        std::thread(read_transport_thread, t).detach();
+        t->connection->Start();
+#if ADB_HOST
+        send_connect(t);
+#endif
     }
 
     {
@@ -685,7 +563,7 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
-        t->connection->Close();
+        t->connection->Stop();
         remove_transport(t);
     } else {
         D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
@@ -736,9 +614,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
     std::unique_lock<std::recursive_mutex> lock(transport_lock);
     for (const auto& t : transport_list) {
         if (t->GetConnectionState() == kCsNoPerm) {
-#if ADB_HOST
             *error_out = UsbNoPermissionsLongHelpText();
-#endif
             continue;
         }
 
@@ -813,14 +689,14 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
 }
 
 int atransport::Write(apacket* p) {
-    return this->connection->Write(p) ? 0 : -1;
+    return this->connection->Write(std::unique_ptr<apacket>(p)) ? 0 : -1;
 }
 
 void atransport::Kick() {
     if (!kicked_) {
         D("kicking transport %s", this->serial);
         kicked_ = true;
-        this->connection->Close();
+        this->connection->Stop();
     }
 }
 
@@ -833,7 +709,7 @@ void atransport::SetConnectionState(ConnectionState state) {
     connection_state_ = state;
 }
 
-const std::string atransport::connection_state_name() const {
+std::string atransport::connection_state_name() const {
     ConnectionState state = GetConnectionState();
     switch (state) {
         case kCsOffline:

@@ -33,7 +33,7 @@ static const char kPermissionsHelpUrl[] = "http://developer.android.com/tools/de
 // Returns a message describing any potential problems we find with udev, or an empty string if we
 // can't find plugdev information (i.e. udev is not installed).
 static std::string GetUdevProblem() {
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__BIONIC__)
     errno = 0;
     group* plugdev_group = getgrnam("plugdev");
 
