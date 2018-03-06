@@ -17,9 +17,10 @@
 #include <asyncio/AsyncIO.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <cstdint>
+#include <cstring>
 
 int io_setup(unsigned nr, aio_context_t* ctxp) {
-    memset(ctxp, 0, sizeof(*ctxp));
     return syscall(__NR_io_setup, nr, ctxp);
 }
 
@@ -47,4 +48,12 @@ void io_prep(iocb* iocb, int fd, const void* buf, uint64_t count, int64_t offset
     iocb->aio_buf = reinterpret_cast<uint64_t>(buf);
     iocb->aio_nbytes = count;
     iocb->aio_offset = offset;
+}
+
+void io_prep_pread(struct iocb* iocb, int fd, void* buf, size_t count, long long offset) {
+    io_prep(iocb, fd, buf, count, offset, true);
+}
+
+void io_prep_pwrite(struct iocb* iocb, int fd, void* buf, size_t count, long long offset) {
+    io_prep(iocb, fd, buf, count, offset, false);
 }
