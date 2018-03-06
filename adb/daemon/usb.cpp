@@ -317,6 +317,8 @@ bool init_functionfs(struct usb_handle* h) {
         goto err;
     }
 
+    memset(&h->read_aiob.ctx, 0, sizeof(h->read_aiob.ctx));
+    memset(&h->write_aiob.ctx, 0, sizeof(h->write_aiob.ctx));
     if (io_setup(USB_FFS_NUM_BUFS, &h->read_aiob.ctx) ||
         io_setup(USB_FFS_NUM_BUFS, &h->write_aiob.ctx)) {
         D("[ aio: got error on io_setup (%d) ]", errno);
