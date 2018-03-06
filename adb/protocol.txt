@@ -183,9 +183,11 @@ requirement, since they will be ignored.
 
 Command constant: A_SYNC
 
-The SYNC message is used by the io pump to make sure that stale
+*** obsolete, no longer used ***
+
+The SYNC message was used by the io pump to make sure that stale
 outbound messages are discarded when the connection to the remote side
-is broken.  It is only used internally to the bridge and never valid
+is broken.  It was only used internally to the bridge and never valid
 to send across the wire.
 
 * when the connection to the remote side goes offline, the io pump
