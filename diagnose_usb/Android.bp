@@ -1,0 +1,13 @@
+cc_library_static {
+    name: "libdiagnose_usb",
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+    host_supported: true,
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
+    srcs: ["diagnose_usb.cpp"],
+    export_include_dirs: ["include"],
+    static_libs: ["libbase"],
+}
