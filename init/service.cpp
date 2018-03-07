@@ -446,8 +446,8 @@ Result<Success> Service::ParseInterface(const std::vector<std::string>& args) {
     const std::string& interface_name = args[1];
     const std::string& instance_name = args[2];
 
-    const FQName fq_name = FQName(interface_name);
-    if (!fq_name.isValid()) {
+    FQName fq_name;
+    if (!FQName::parse(interface_name, &fq_name)) {
         return Error() << "Invalid fully-qualified name for interface '" << interface_name << "'";
     }
 
