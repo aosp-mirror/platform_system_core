@@ -243,7 +243,7 @@ static inline uint32_t get4LE(const uint8_t* src) {
 
 static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) {
   struct android_log_transport_write* node;
-  int ret;
+  int ret, save_errno;
   struct timespec ts;
   size_t len, i;
 
@@ -254,20 +254,24 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
     return -EINVAL;
   }
 
+  save_errno = errno;
 #if defined(__ANDROID__)
   clock_gettime(android_log_clockid(), &ts);
 
   if (log_id == LOG_ID_SECURITY) {
     if (vec[0].iov_len < 4) {
+      errno = save_errno;
       return -EINVAL;
     }
 
     ret = check_log_uid_permissions();
     if (ret < 0) {
+      errno = save_errno;
       return ret;
     }
     if (!__android_log_security()) {
       /* If only we could reset downstream logd counter */
+      errno = save_errno;
       return -EPERM;
     }
   } else if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
@@ -276,6 +280,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
     EventTagMap *m, *f;
 
     if (vec[0].iov_len < 4) {
+      errno = save_errno;
       return -EINVAL;
     }
 
@@ -311,6 +316,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
       android_closeEventTagMap(f);
     }
     if (!ret) {
+      errno = save_errno;
       return -EPERM;
     }
   } else {
@@ -340,6 +346,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
     }
 
     if (!__android_log_is_loggable_len(prio, tag, len - 1, ANDROID_LOG_VERBOSE)) {
+      errno = save_errno;
       return -EPERM;
     }
   }
@@ -371,21 +378,23 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
     }
   }
 
+  errno = save_errno;
   return ret;
 }
 
 static int __write_to_log_init(log_id_t log_id, struct iovec* vec, size_t nr) {
+  int ret, save_errno = errno;
+
   __android_log_lock();
 
   if (write_to_log == __write_to_log_init) {
-    int ret;
-
     ret = __write_to_log_initialize();
     if (ret < 0) {
       __android_log_unlock();
       if (!list_empty(&__android_log_persist_write)) {
         __write_to_log_daemon(log_id, vec, nr);
       }
+      errno = save_errno;
       return ret;
     }
 
@@ -394,7 +403,9 @@ static int __write_to_log_init(log_id_t log_id, struct iovec* vec, size_t nr) {
 
   __android_log_unlock();
 
-  return write_to_log(log_id, vec, nr);
+  ret = write_to_log(log_id, vec, nr);
+  errno = save_errno;
+  return ret;
 }
 
 LIBLOG_ABI_PUBLIC int __android_log_write(int prio, const char* tag,
