@@ -6,6 +6,7 @@ cc_binary {
         "liblog",
         "libcutils",
     ],
+    local_include_dirs: ["include"],
     cflags: ["-Werror"],
 
     init_rc: ["lmkd.rc"],
@@ -17,4 +18,18 @@ cc_binary {
             ],
         },
     },
+}
+
+cc_library_static {
+    name: "liblmkd_utils",
+    srcs: ["liblmkd_utils.c"],
+    shared_libs: [
+        "libcutils",
+    ],
+    export_include_dirs: ["include"],
+    cppflags: [
+        "-g",
+        "-Wall",
+        "-Werror",
+    ]
 }
