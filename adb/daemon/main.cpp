@@ -159,7 +159,8 @@ int adbd_main(int server_port) {
     adbd_cloexec_auth_socket();
 
 #if defined(ALLOW_ADBD_NO_AUTH)
-    auth_required = android::base::GetBoolProperty("ro.adb.secure", true);
+    // If ro.adb.secure is unset, default to no authentication required.
+    auth_required = android::base::GetBoolProperty("ro.adb.secure", false);
 #endif
 
     adbd_auth_init();
