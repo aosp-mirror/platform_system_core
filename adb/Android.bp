@@ -260,6 +260,9 @@ cc_binary {
     name: "adbd",
     defaults: ["adb_defaults"],
 
+    // adbd must be static, as it is copied into the recovery image.
+    static_executable: true,
+
     srcs: [
         "daemon/main.cpp",
         "daemon/mdns.cpp",
