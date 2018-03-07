@@ -77,7 +77,6 @@ void Unwinder::FillInDexFrame() {
     return;
   }
 
-  // dex_files_->GetMethodInformation(dex_pc - dex_offset, dex_offset, info, &frame->function_name,
   dex_files_->GetMethodInformation(maps_, info, dex_pc, &frame->function_name,
                                    &frame->function_offset);
 #endif
