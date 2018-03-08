@@ -40,40 +40,16 @@ namespace android {
 // to OS_PATH_SEPARATOR.
 #define RES_PATH_SEPARATOR '/'
 
-static SharedBuffer* gEmptyStringBuf = NULL;
-static char* gEmptyString = NULL;
+static inline char* getEmptyString() {
+    static SharedBuffer* gEmptyStringBuf = [] {
+        SharedBuffer* buf = SharedBuffer::alloc(1);
+        char* str = static_cast<char*>(buf->data());
+        *str = 0;
+        return buf;
+    }();
 
-extern int gDarwinCantLoadAllObjects;
-int gDarwinIsReallyAnnoying;
-
-void initialize_string8();
-
-static inline char* getEmptyString()
-{
     gEmptyStringBuf->acquire();
-    return gEmptyString;
-}
-
-void initialize_string8()
-{
-    // HACK: This dummy dependency forces linking libutils Static.cpp,
-    // which is needed to initialize String8/String16 classes.
-    // These variables are named for Darwin, but are needed elsewhere too,
-    // including static linking on any platform.
-    gDarwinIsReallyAnnoying = gDarwinCantLoadAllObjects;
-
-    SharedBuffer* buf = SharedBuffer::alloc(1);
-    char* str = (char*)buf->data();
-    *str = 0;
-    gEmptyStringBuf = buf;
-    gEmptyString = str;
-}
-
-void terminate_string8()
-{
-    SharedBuffer::bufferFromData(gEmptyString)->release();
-    gEmptyStringBuf = NULL;
-    gEmptyString = NULL;
+    return static_cast<char*>(gEmptyStringBuf->data());
 }
 
 // ---------------------------------------------------------------------------
