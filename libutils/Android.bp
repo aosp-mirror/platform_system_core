@@ -129,7 +129,6 @@ cc_library {
         "PropertyMap.cpp",
         "RefBase.cpp",
         "SharedBuffer.cpp",
-        "Static.cpp",
         "StopWatch.cpp",
         "String8.cpp",
         "String16.cpp",
