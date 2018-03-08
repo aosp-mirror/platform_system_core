@@ -17,6 +17,8 @@
 #define TRACE_TAG TRANSPORT
 
 #include "sysdeps.h"
+#include "sysdeps/memory.h"
+
 #include "transport.h"
 
 #include <ctype.h>
@@ -79,7 +81,7 @@ void BlockingConnectionAdapter::Start() {
     read_thread_ = std::thread([this]() {
         LOG(INFO) << this->transport_name_ << ": read thread spawning";
         while (true) {
-            std::unique_ptr<apacket> packet(new apacket());
+            auto packet = std::make_unique<apacket>();
             if (!underlying_->Read(packet.get())) {
                 PLOG(INFO) << this->transport_name_ << ": read failed";
                 break;

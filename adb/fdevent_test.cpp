@@ -99,7 +99,7 @@ static void FdEventThreadFunc(ThreadArg* arg) {
 
     std::vector<std::unique_ptr<FdHandler>> fd_handlers;
     for (size_t i = 0; i < read_fds.size(); ++i) {
-        fd_handlers.push_back(std::unique_ptr<FdHandler>(new FdHandler(read_fds[i], write_fds[i])));
+        fd_handlers.push_back(std::make_unique<FdHandler>(read_fds[i], write_fds[i]));
     }
 
     fdevent_loop();
