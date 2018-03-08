@@ -24,29 +24,16 @@
 
 namespace android {
 
-static SharedBuffer* gEmptyStringBuf = NULL;
-static char16_t* gEmptyString = NULL;
+static inline char16_t* getEmptyString() {
+    static SharedBuffer* gEmptyStringBuf = [] {
+        SharedBuffer* buf = SharedBuffer::alloc(sizeof(char16_t));
+        char16_t* str = static_cast<char16_t*>(buf->data());
+        *str = 0;
+        return buf;
+    }();
 
-static inline char16_t* getEmptyString()
-{
     gEmptyStringBuf->acquire();
-   return gEmptyString;
-}
-
-void initialize_string16()
-{
-    SharedBuffer* buf = SharedBuffer::alloc(sizeof(char16_t));
-    char16_t* str = (char16_t*)buf->data();
-    *str = 0;
-    gEmptyStringBuf = buf;
-    gEmptyString = str;
-}
-
-void terminate_string16()
-{
-    SharedBuffer::bufferFromData(gEmptyString)->release();
-    gEmptyStringBuf = NULL;
-    gEmptyString = NULL;
+    return static_cast<char16_t*>(gEmptyStringBuf->data());
 }
 
 // ---------------------------------------------------------------------------
