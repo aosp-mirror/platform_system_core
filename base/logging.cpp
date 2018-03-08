@@ -139,9 +139,27 @@ static AbortFunction& Aborter() {
   return aborter;
 }
 
-static std::string& ProgramInvocationName() {
-  static auto& programInvocationName = *new std::string(getprogname());
-  return programInvocationName;
+static std::recursive_mutex& TagLock() {
+  static auto& tag_lock = *new std::recursive_mutex();
+  return tag_lock;
+}
+static std::string* gDefaultTag;
+std::string GetDefaultTag() {
+  std::lock_guard<std::recursive_mutex> lock(TagLock());
+  if (gDefaultTag == nullptr) {
+    return "";
+  }
+  return *gDefaultTag;
+}
+void SetDefaultTag(const std::string& tag) {
+  std::lock_guard<std::recursive_mutex> lock(TagLock());
+  if (gDefaultTag != nullptr) {
+    delete gDefaultTag;
+    gDefaultTag = nullptr;
+  }
+  if (!tag.empty()) {
+    gDefaultTag = new std::string(tag);
+  }
 }
 
 static bool gInitialized = false;
@@ -269,8 +287,7 @@ void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
   // Linux to recover this, but we don't have that luxury on the Mac/Windows,
   // and there are a couple of argv[0] variants that are commonly used.
   if (argv != nullptr) {
-    std::lock_guard<std::mutex> lock(LoggingLock());
-    ProgramInvocationName() = basename(argv[0]);
+    SetDefaultTag(basename(argv[0]));
   }
 
   const char* tags = getenv("ANDROID_LOG_TAGS");
@@ -448,8 +465,15 @@ std::ostream& LogMessage::stream() {
 
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id, LogSeverity severity,
                          const char* tag, const char* message) {
-  if (tag == nullptr) tag = ProgramInvocationName().c_str();
-  Logger()(id, severity, tag, file, line, message);
+  if (tag == nullptr) {
+    std::lock_guard<std::recursive_mutex> lock(TagLock());
+    if (gDefaultTag == nullptr) {
+      gDefaultTag = new std::string(getprogname());
+    }
+    Logger()(id, severity, gDefaultTag->c_str(), file, line, message);
+  } else {
+    Logger()(id, severity, tag, file, line, message);
+  }
 }
 
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id, LogSeverity severity,
