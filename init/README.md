@@ -161,6 +161,25 @@ Options
 Options are modifiers to services.  They affect how and when init
 runs the service.
 
+`capabilities <capability> [ <capability>\* ]`
+> Set capabilities when exec'ing this service. 'capability' should be a Linux
+  capability without the "CAP\_" prefix, like "NET\_ADMIN" or "SETPCAP". See
+  http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
+  capabilities.
+
+`class <name> [ <name>\* ]`
+> Specify class names for the service.  All services in a
+  named class may be started or stopped together.  A service
+  is in the class "default" if one is not specified via the
+  class option. Additional classnames beyond the (required) first
+  one are used to group services.
+  The `animation` class should include all services necessary for both
+  boot animation and shutdown animation. As these services can be
+  launched very early during bootup and can run until the last stage
+  of shutdown, access to /data partition is not guaranteed. These
+  services can check files under /data but it should not keep files opened
+  and should work when /data is not available.
+
 `console [<console>]`
 > This service needs a console. The optional second parameter chooses a
   specific console instead of the default. The default "/dev/console" can
@@ -176,8 +195,69 @@ runs the service.
 > This service will not automatically start with its class.
   It must be explicitly started by name.
 
+`file <path> <type>`
+> Open a file path and pass its fd to the launched process. _type_ must be
+  "r", "w" or "rw".  For native executables see libcutils
+  android\_get\_control\_file().
+
+`group <groupname> [ <groupname>\* ]`
+> Change to 'groupname' before exec'ing this service.  Additional
+  groupnames beyond the (required) first one are used to set the
+  supplemental groups of the process (via setgroups()).
+  Currently defaults to root.  (??? probably should default to nobody)
+
+`memcg.limit_in_bytes <value>`
+> Sets the child's memory.limit_in_bytes to the specified value (only if memcg is mounted),
+  which must be equal or greater than 0.
+
+`memcg.soft_limit_in_bytes <value>`
+> Sets the child's memory.soft_limit_in_bytes to the specified value (only if memcg is mounted),
+  which must be equal or greater than 0.
+
+`memcg.swappiness <value>`
+> Sets the child's memory.swappiness to the specified value (only if memcg is mounted),
+  which must be equal or greater than 0.
+
+`namespace <pid|mnt>`
+> Enter a new PID or mount namespace when forking the service.
+
+`oneshot`
+> Do not restart the service when it exits.
+
+`onrestart`
+> Execute a Command (see below) when service restarts.
+
+`oom_score_adjust <value>`
+> Sets the child's /proc/self/oom\_score\_adj to the specified value,
+  which must range from -1000 to 1000.
+
+`priority <priority>`
+> Scheduling priority of the service process. This value has to be in range
+  -20 to 19. Default priority is 0. Priority is set via setpriority().
+
+`rlimit <resource> <cur> <max>`
+> This applies the given rlimit to the service. rlimits are inherited by child
+  processes, so this effectively applies the given rlimit to the process tree
+  started by this service.
+  It is parsed similarly to the setrlimit command specified below.
+
+`seclabel <seclabel>`
+> Change to 'seclabel' before exec'ing this service.
+  Primarily for use by services run from the rootfs, e.g. ueventd, adbd.
+  Services on the system partition can instead use policy-defined transitions
+  based on their file security context.
+  If not specified and no transition is defined in policy, defaults to the init context.
+
 `setenv <name> <value>`
 > Set the environment variable _name_ to _value_ in the launched process.
+
+`shutdown <shutdown_behavior>`
+> Set shutdown behavior of the service process. When this is not specified,
+  the service is killed during shutdown process by using SIGTERM and SIGKILL.
+  The service with shutdown_behavior of "critical" is not killed during shutdown
+  until shutdown times out. When shutdown times out, even services tagged with
+  "shutdown critical" will be killed. When the service tagged with "shutdown critical"
+  is not running when shut down starts, it will be started.
 
 `socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]`
 > Create a unix domain socket named /dev/socket/_name_ and pass its fd to the
@@ -186,11 +266,6 @@ runs the service.
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
-
-`file <path> <type>`
-> Open a file path and pass its fd to the launched process. _type_ must be
-  "r", "w" or "rw".  For native executables see libcutils
-  android\_get\_control\_file().
 
 `user <username>`
 > Change to 'username' before exec'ing this service.
@@ -208,87 +283,11 @@ runs the service.
   As of Android O, processes can also request capabilities directly in their .rc
   files. See the "capabilities" option below.
 
-`group <groupname> [ <groupname>\* ]`
-> Change to 'groupname' before exec'ing this service.  Additional
-  groupnames beyond the (required) first one are used to set the
-  supplemental groups of the process (via setgroups()).
-  Currently defaults to root.  (??? probably should default to nobody)
-
-`capabilities <capability> [ <capability>\* ]`
-> Set capabilities when exec'ing this service. 'capability' should be a Linux
-  capability without the "CAP\_" prefix, like "NET\_ADMIN" or "SETPCAP". See
-  http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
-  capabilities.
-
-`setrlimit <resource> <cur> <max>`
-> This applies the given rlimit to the service. rlimits are inherited by child
-  processes, so this effectively applies the given rlimit to the process tree
-  started by this service.
-  It is parsed similarly to the setrlimit command specified below.
-
-`seclabel <seclabel>`
-> Change to 'seclabel' before exec'ing this service.
-  Primarily for use by services run from the rootfs, e.g. ueventd, adbd.
-  Services on the system partition can instead use policy-defined transitions
-  based on their file security context.
-  If not specified and no transition is defined in policy, defaults to the init context.
-
-`oneshot`
-> Do not restart the service when it exits.
-
-`class <name> [ <name>\* ]`
-> Specify class names for the service.  All services in a
-  named class may be started or stopped together.  A service
-  is in the class "default" if one is not specified via the
-  class option. Additional classnames beyond the (required) first
-  one are used to group services.
-`animation class`
-> 'animation' class should include all services necessary for both
-  boot animation and shutdown animation. As these services can be
-  launched very early during bootup and can run until the last stage
-  of shutdown, access to /data partition is not guaranteed. These
-  services can check files under /data but it should not keep files opened
-  and should work when /data is not available.
-
-`onrestart`
-> Execute a Command (see below) when service restarts.
-
 `writepid <file> [ <file>\* ]`
 > Write the child's pid to the given files when it forks. Meant for
   cgroup/cpuset usage. If no files under /dev/cpuset/ are specified, but the
   system property 'ro.cpuset.default' is set to a non-empty cpuset name (e.g.
   '/foreground'), then the pid is written to file /dev/cpuset/_cpuset\_name_/tasks.
-
-`priority <priority>`
-> Scheduling priority of the service process. This value has to be in range
-  -20 to 19. Default priority is 0. Priority is set via setpriority().
-
-`namespace <pid|mnt>`
-> Enter a new PID or mount namespace when forking the service.
-
-`oom_score_adjust <value>`
-> Sets the child's /proc/self/oom\_score\_adj to the specified value,
-  which must range from -1000 to 1000.
-
-`memcg.swappiness <value>`
-> Sets the child's memory.swappiness to the specified value (only if memcg is mounted),
-  which must be equal or greater than 0.
-
-`memcg.soft_limit_in_bytes <value>`
-> Sets the child's memory.soft_limit_in_bytes to the specified value (only if memcg is mounted),
-  which must be equal or greater than 0.
-
-`memcg.limit_in_bytes <value>`
-> Sets the child's memory.limit_in_bytes to the specified value (only if memcg is mounted),
-  which must be equal or greater than 0.
-
-`shutdown <shutdown_behavior>`
-> Set shutdown behavior of the service process. When this is not specified,
-  the service is killed during shutdown process by using SIGTERM and SIGKILL.
-  The service with shutdown_behavior of "critical" is not killed during shutdown
-  until shutdown times out. When shutdown times out, even services tagged with
-  "shutdown critical" will be killed. When the service tagged with "shutdown critical"
-  is not running when shut down starts, it will be started.
 
 
 Triggers
