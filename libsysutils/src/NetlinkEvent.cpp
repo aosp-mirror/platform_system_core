@@ -137,6 +137,12 @@ bool NetlinkEvent::parseIfInfoMessage(const struct nlmsghdr *nh) {
         switch(rta->rta_type) {
             case IFLA_IFNAME:
                 asprintf(&mParams[0], "INTERFACE=%s", (char *) RTA_DATA(rta));
+                // We can get the interface change information from sysfs update
+                // already. But in case we missed those message when devices start.
+                // We do a update again when received a kLinkUp event. To make
+                // the message consistent, use IFINDEX here as well since sysfs
+                // uses IFINDEX.
+                asprintf(&mParams[1], "IFINDEX=%d", ifi->ifi_index);
                 mAction = (ifi->ifi_flags & IFF_LOWER_UP) ? Action::kLinkUp :
                                                             Action::kLinkDown;
                 mSubsystem = strdup("net");
