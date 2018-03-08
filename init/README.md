@@ -206,6 +206,21 @@ runs the service.
   supplemental groups of the process (via setgroups()).
   Currently defaults to root.  (??? probably should default to nobody)
 
+`interface <interface name> <instance name>`
+> Associates this service with a list of the HIDL services that it provides. The interface name
+  must be a fully-qualified name and not a value name. This is used to allow hwservicemanager to
+  lazily start services.
+  For example: interface vendor.foo.bar@1.0::IBaz default
+
+`ioprio <class> <priority>`
+> Sets the IO priority and IO priority class for this service via the SYS_ioprio_set syscall.
+  _class_ must be one of "rt", "be", or "idle". _priority_ must be an integer in the range 0 - 7.
+
+`keycodes <keycode> [ <keycode>\* ]`
+> Sets the keycodes that will trigger this service. If all of the keys corresponding to the passed
+  keycodes are pressed at once, the service will start. This is typically used to start the
+  bugreport service.
+
 `memcg.limit_in_bytes <value>`
 > Sets the child's memory.limit_in_bytes to the specified value (only if memcg is mounted),
   which must be equal or greater than 0.
@@ -230,6 +245,14 @@ runs the service.
 `oom_score_adjust <value>`
 > Sets the child's /proc/self/oom\_score\_adj to the specified value,
   which must range from -1000 to 1000.
+
+`override`
+> Indicates that this service definition is meant to override a previous definition for a service
+  with the same name. This is typically meant for services on /odm to override those defined on
+  /vendor. The last service definition that init parses with this keyword is the service definition
+  will use for this service. Pay close attention to the order in which init.rc files are parsed,
+  since it has some peculiarities for backwards compatibility reasons. The 'imports' section of
+  this file has more details on the order.
 
 `priority <priority>`
 > Scheduling priority of the service process. This value has to be in range
