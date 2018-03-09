@@ -31,12 +31,16 @@ class TemporaryFile {
   // Release the ownership of fd, caller is reponsible for closing the
   // fd or stream properly.
   int release();
+  // Don't remove the temporary file in the destructor.
+  void DoNotRemove() { remove_file_ = false; }
 
   int fd;
   char path[1024];
 
  private:
   void init(const std::string& tmp_dir);
+
+  bool remove_file_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(TemporaryFile);
 };
