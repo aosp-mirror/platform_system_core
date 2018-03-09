@@ -274,7 +274,7 @@ bool init_functionfs(struct usb_handle* h) {
 
     if (h->control < 0) { // might have already done this before
         LOG(INFO) << "opening control endpoint " << USB_FFS_ADB_EP0;
-        h->control = adb_open(USB_FFS_ADB_EP0, O_RDWR);
+        h->control = adb_open(USB_FFS_ADB_EP0, O_WRONLY);
         if (h->control < 0) {
             PLOG(ERROR) << "cannot open control endpoint " << USB_FFS_ADB_EP0;
             goto err;
@@ -305,13 +305,13 @@ bool init_functionfs(struct usb_handle* h) {
         android::base::SetProperty("sys.usb.ffs.ready", "1");
     }
 
-    h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDWR);
+    h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDONLY);
     if (h->bulk_out < 0) {
         PLOG(ERROR) << "cannot open bulk-out endpoint " << USB_FFS_ADB_OUT;
         goto err;
     }
 
-    h->bulk_in = adb_open(USB_FFS_ADB_IN, O_RDWR);
+    h->bulk_in = adb_open(USB_FFS_ADB_IN, O_WRONLY);
     if (h->bulk_in < 0) {
         PLOG(ERROR) << "cannot open bulk-in endpoint " << USB_FFS_ADB_IN;
         goto err;
