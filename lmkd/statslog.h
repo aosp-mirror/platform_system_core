@@ -17,6 +17,7 @@
 #ifndef _STATSLOG_H_
 #define _STATSLOG_H_
 
+#include <assert.h>
 #include <stdbool.h>
 #include <sys/cdefs.h>
 
@@ -34,17 +35,26 @@ __BEGIN_DECLS
 #define LMK_STATE_CHANGE_START 1
 #define LMK_STATE_CHANGE_STOP 2
 
-static inline void statslog_init() {
-    enable_stats_log = property_get_bool("ro.lmk.log_stats", false);
+/*
+ * The single event tag id for all stats logs.
+ * Keep this in sync with system/core/logcat/event.logtags
+ */
+const static int kStatsEventTag = 1937006964;
 
-    if (enable_stats_log) {
-        log_ctx = create_android_logger(kStatsEventTag);
+static inline void statslog_init(android_log_context* log_ctx, bool* enable_stats_log) {
+    assert(log_ctx != NULL);
+    assert(enable_stats_log != NULL);
+    *enable_stats_log = property_get_bool("ro.lmk.log_stats", false);
+
+    if (*enable_stats_log) {
+        *log_ctx = create_android_logger(kStatsEventTag);
     }
 }
 
-static inline void statslog_destroy() {
-    if (log_ctx) {
-        android_log_destroy(&log_ctx);
+static inline void statslog_destroy(android_log_context* log_ctx) {
+    assert(log_ctx != NULL);
+    if (*log_ctx) {
+        android_log_destroy(log_ctx);
     }
 }
 
@@ -57,12 +67,6 @@ struct memory_stat {
 };
 
 #define MEMCG_PROCESS_MEMORY_STAT_PATH "/dev/memcg/apps/uid_%u/pid_%u/memory.stat"
-
-/*
- * The single event tag id for all stats logs.
- * Keep this in sync with system/core/logcat/event.logtags
- */
-const static int kStatsEventTag = 1937006964;
 
 /**
  * Logs the change in LMKD state which is used as start/stop boundaries for logging
