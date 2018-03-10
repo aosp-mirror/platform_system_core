@@ -12,6 +12,13 @@ cc_binary {
     local_include_dirs: ["include"],
     cflags: ["-Werror", "-DLMKD_TRACE_KILLS"],
     init_rc: ["lmkd.rc"],
+    product_variables: {
+        use_lmkd_stats_log: {
+            cflags: [
+                "-DLMKD_LOG_STATS"
+            ],
+        },
+    },
 }
 
 cc_library_static {
