@@ -110,14 +110,9 @@ std::string getTextAround(const std::string& text, size_t pos,
 }
 
 bool getExecPath(std::string &path) {
-    char buf[PATH_MAX + 1];
-    int ret = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (ret < 0) {
-        return false;
-    }
-    buf[ret] = '\0';
-    path = buf;
-    return true;
+    // exec path as utf8z c_str().
+    // std::string contains _all_ nul terminated argv[] strings.
+    return android::base::ReadFileToString("/proc/self/cmdline", &path);
 }
 
 /* Child synchronization primitives */
@@ -314,8 +309,8 @@ TEST(lmkd, check_for_oom) {
     if (getuid() != static_cast<unsigned>(AID_ROOT)) {
         // if not root respawn itself as root and capture output
         std::string command = StringPrintf(
-            "%s=true su root %s 2>&1", LMKDTEST_RESPAWN_FLAG,
-            test_path.c_str());
+            "%s=true su root %s --gtest_filter=lmkd.check_for_oom 2>&1",
+            LMKDTEST_RESPAWN_FLAG, test_path.c_str());
         std::string test_output = readCommand(command);
         GTEST_LOG_(INFO) << test_output;
     } else {
