@@ -74,9 +74,6 @@ include $(CLEAR_VARS)
 ifeq ($(strip $(BOARD_CHARGER_NO_UI)),true)
 LOCAL_CHARGER_NO_UI := true
 endif
-ifdef BRILLO
-LOCAL_CHARGER_NO_UI := true
-endif
 
 LOCAL_SRC_FILES := \
     charger.cpp \
