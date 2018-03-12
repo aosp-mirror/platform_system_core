@@ -424,7 +424,10 @@ bool DwarfCfa<AddressType>::cfa_def_cfa_offset(dwarf_loc_regs_t* loc_regs) {
 
 template <typename AddressType>
 bool DwarfCfa<AddressType>::cfa_def_cfa_expression(dwarf_loc_regs_t* loc_regs) {
-  (*loc_regs)[CFA_REG] = {.type = DWARF_LOCATION_EXPRESSION,
+  // There is only one type of expression for CFA evaluation and the DWARF
+  // specification is unclear whether it returns the address or the
+  // dereferenced value. GDB expects the value, so will we.
+  (*loc_regs)[CFA_REG] = {.type = DWARF_LOCATION_VAL_EXPRESSION,
                           .values = {operands_[0], memory_->cur_offset()}};
   return true;
 }
