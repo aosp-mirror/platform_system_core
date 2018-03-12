@@ -99,7 +99,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_eval_fail) {
   regs.set_sp(0x2000);
   regs[5] = 0x20;
   regs[9] = 0x3000;
-  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x2, 0x5002}};
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_VAL_EXPRESSION, {0x2, 0x5002}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
   EXPECT_EQ(DWARF_ERROR_MEMORY_INVALID, this->section_->LastErrorCode());
@@ -116,7 +116,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_no_stack) {
   regs[5] = 0x20;
   regs[9] = 0x3000;
   this->memory_.SetMemory(0x5000, std::vector<uint8_t>{0x96, 0x96, 0x96});
-  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x2, 0x5002}};
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_VAL_EXPRESSION, {0x2, 0x5002}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
   EXPECT_EQ(DWARF_ERROR_ILLEGAL_STATE, this->section_->LastErrorCode());
@@ -136,10 +136,8 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr) {
   this->memory_.SetMemory(0x80000000, &cfa_value, sizeof(cfa_value));
   loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x4, 0x5004}};
   bool finished;
-  ASSERT_TRUE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
-  EXPECT_FALSE(finished);
-  EXPECT_EQ(0x12345U, regs.sp());
-  EXPECT_EQ(0x20U, regs.pc());
+  ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
 }
 
 TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_val_expr) {
@@ -170,7 +168,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_cfa_expr_is_register) {
   regs[5] = 0x20;
   regs[9] = 0x3000;
   this->memory_.SetMemory(0x5000, std::vector<uint8_t>{0x50, 0x96, 0x96});
-  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_EXPRESSION, {0x2, 0x5002}};
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_VAL_EXPRESSION, {0x2, 0x5002}};
   bool finished;
   ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
   EXPECT_EQ(DWARF_ERROR_NOT_IMPLEMENTED, this->section_->LastErrorCode());
