@@ -29,6 +29,7 @@ static constexpr const char* kPartnerPrefixes[] = {
 };
 
 static const std::set<std::string> kExportedActionableProperties = {
+    "init.svc.console",
     "init.svc.mediadrm",
     "init.svc.zygote",
     "persist.bluetooth.btsnoopenable",
