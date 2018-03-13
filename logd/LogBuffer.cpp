@@ -171,7 +171,9 @@ static enum match_type identical(LogBufferElement* elem,
     }
 
     // audit message (except sequence number) identical?
-    if (last->isBinary()) {
+    if (last->isBinary() &&
+        (lenl > static_cast<ssize_t>(sizeof(android_log_event_string_t))) &&
+        (lenr > static_cast<ssize_t>(sizeof(android_log_event_string_t)))) {
         if (fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_string_t) -
                                             sizeof(int32_t))) {
             return DIFFERENT;
