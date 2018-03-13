@@ -25,6 +25,7 @@
  * generated.
  */
 #include "graphics-base.h"
+#include "graphics-sw.h"
 
 #ifdef __cplusplus
 extern "C" {
