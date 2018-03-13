@@ -573,6 +573,9 @@ on boot
     hostname localhost
     domainname localdomain
 
+    # IPsec SA default expiration length
+    write /proc/sys/net/core/xfrm_acq_expires 3600
+
     # Memory management.  Basic kernel parameters, and allow the high
     # level system server to be able to adjust the kernel OOM driver
     # parameters to match how it is managing things.
