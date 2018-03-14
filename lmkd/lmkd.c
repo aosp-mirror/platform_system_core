@@ -16,7 +16,6 @@
 
 #define LOG_TAG "lowmemorykiller"
 
-#include <arpa/inet.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <sched.h>
@@ -34,6 +33,7 @@
 
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
+#include <lmkd.h>
 #include <log/log.h>
 
 /*
@@ -70,19 +70,6 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define EIGHT_MEGA (1 << 23)
-
-enum lmk_cmd {
-    LMK_TARGET,
-    LMK_PROCPRIO,
-    LMK_PROCREMOVE,
-};
-
-#define MAX_TARGETS 6
-/*
- * longest is LMK_TARGET followed by MAX_TARGETS each minfree and minkillprio
- * values
- */
-#define CTRL_PACKET_MAX (sizeof(int) * (MAX_TARGETS * 2 + 1))
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
@@ -122,13 +109,30 @@ static bool is_go_device;
 static bool kill_heaviest_task;
 static unsigned long kill_timeout_ms;
 
-/* control socket listen and data */
-static int ctrl_lfd;
-static int ctrl_dfd = -1;
-static int ctrl_dfd_reopened; /* did we reopen ctrl conn on this loop? */
+/* data required to handle events */
+struct event_handler_info {
+    int data;
+    void (*handler)(int data, uint32_t events);
+};
 
-/* 3 memory pressure levels, 1 ctrl listen socket, 1 ctrl data socket */
-#define MAX_EPOLL_EVENTS 5
+/* data required to handle socket events */
+struct sock_event_handler_info {
+    int sock;
+    struct event_handler_info handler_info;
+};
+
+/* max supported number of data connections */
+#define MAX_DATA_CONN 2
+
+/* socket event handler data */
+static struct sock_event_handler_info ctrl_sock;
+static struct sock_event_handler_info data_sock[MAX_DATA_CONN];
+
+/* vmpressure event handler data */
+static struct event_handler_info vmpressure_hinfo[VMPRESS_LEVEL_COUNT];
+
+/* 3 memory pressure levels, 1 ctrl listen socket, 2 ctrl data socket */
+#define MAX_EPOLL_EVENTS (1 + MAX_DATA_CONN + VMPRESS_LEVEL_COUNT)
 static int epollfd;
 static int maxevents;
 
@@ -283,45 +287,49 @@ static void writefilestring(const char *path, char *s) {
     close(fd);
 }
 
-static void cmd_procprio(int pid, int uid, int oomadj) {
+static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
     char path[80];
     char val[20];
     int soft_limit_mult;
+    struct lmk_procprio params;
 
-    if (oomadj < OOM_SCORE_ADJ_MIN || oomadj > OOM_SCORE_ADJ_MAX) {
-        ALOGE("Invalid PROCPRIO oomadj argument %d", oomadj);
+    lmkd_pack_get_procprio(packet, &params);
+
+    if (params.oomadj < OOM_SCORE_ADJ_MIN ||
+        params.oomadj > OOM_SCORE_ADJ_MAX) {
+        ALOGE("Invalid PROCPRIO oomadj argument %d", params.oomadj);
         return;
     }
 
-    snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", pid);
-    snprintf(val, sizeof(val), "%d", oomadj);
+    snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", params.pid);
+    snprintf(val, sizeof(val), "%d", params.oomadj);
     writefilestring(path, val);
 
     if (use_inkernel_interface)
         return;
 
-    if (oomadj >= 900) {
+    if (params.oomadj >= 900) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 800) {
+    } else if (params.oomadj >= 800) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 700) {
+    } else if (params.oomadj >= 700) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 600) {
+    } else if (params.oomadj >= 600) {
         // Launcher should be perceptible, don't kill it.
-        oomadj = 200;
+        params.oomadj = 200;
         soft_limit_mult = 1;
-    } else if (oomadj >= 500) {
+    } else if (params.oomadj >= 500) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 400) {
+    } else if (params.oomadj >= 400) {
         soft_limit_mult = 0;
-    } else if (oomadj >= 300) {
+    } else if (params.oomadj >= 300) {
         soft_limit_mult = 1;
-    } else if (oomadj >= 200) {
+    } else if (params.oomadj >= 200) {
         soft_limit_mult = 2;
-    } else if (oomadj >= 100) {
+    } else if (params.oomadj >= 100) {
         soft_limit_mult = 10;
-    } else if (oomadj >=   0) {
+    } else if (params.oomadj >=   0) {
         soft_limit_mult = 20;
     } else {
         // Persistent processes will have a large
@@ -329,11 +337,13 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
         soft_limit_mult = 64;
     }
 
-    snprintf(path, sizeof(path), "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes", uid, pid);
+    snprintf(path, sizeof(path),
+             "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
+             params.uid, params.pid);
     snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
     writefilestring(path, val);
 
-    procp = pid_lookup(pid);
+    procp = pid_lookup(params.pid);
     if (!procp) {
             procp = malloc(sizeof(struct proc));
             if (!procp) {
@@ -341,33 +351,38 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
                 return;
             }
 
-            procp->pid = pid;
-            procp->uid = uid;
-            procp->oomadj = oomadj;
+            procp->pid = params.pid;
+            procp->uid = params.uid;
+            procp->oomadj = params.oomadj;
             proc_insert(procp);
     } else {
         proc_unslot(procp);
-        procp->oomadj = oomadj;
+        procp->oomadj = params.oomadj;
         proc_slot(procp);
     }
 }
 
-static void cmd_procremove(int pid) {
+static void cmd_procremove(LMKD_CTRL_PACKET packet) {
+    struct lmk_procremove params;
+
     if (use_inkernel_interface)
         return;
 
-    pid_remove(pid);
+    lmkd_pack_get_procremove(packet, &params);
+    pid_remove(params.pid);
 }
 
-static void cmd_target(int ntargets, int *params) {
+static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
     int i;
+    struct lmk_target target;
 
     if (ntargets > (int)ARRAY_SIZE(lowmem_adj))
         return;
 
     for (i = 0; i < ntargets; i++) {
-        lowmem_minfree[i] = ntohl(*params++);
-        lowmem_adj[i] = ntohl(*params++);
+        lmkd_pack_get_target(packet, i, &target);
+        lowmem_minfree[i] = target.minfree;
+        lowmem_adj[i] = target.oom_adj_score;
     }
 
     lowmem_targets_size = ntargets;
@@ -398,17 +413,24 @@ static void cmd_target(int ntargets, int *params) {
     }
 }
 
-static void ctrl_data_close(void) {
-    ALOGI("Closing Activity Manager data connection");
-    close(ctrl_dfd);
-    ctrl_dfd = -1;
+static void ctrl_data_close(int dsock_idx) {
+    struct epoll_event epev;
+
+    ALOGI("closing lmkd data connection");
+    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, data_sock[dsock_idx].sock, &epev) == -1) {
+        // Log a warning and keep going
+        ALOGW("epoll_ctl for data connection socket failed; errno=%d", errno);
+    }
     maxevents--;
+
+    close(data_sock[dsock_idx].sock);
+    data_sock[dsock_idx].sock = -1;
 }
 
-static int ctrl_data_read(char *buf, size_t bufsz) {
+static int ctrl_data_read(int dsock_idx, char *buf, size_t bufsz) {
     int ret = 0;
 
-    ret = read(ctrl_dfd, buf, bufsz);
+    ret = read(data_sock[dsock_idx].sock, buf, bufsz);
 
     if (ret == -1) {
         ALOGE("control data socket read failed; errno=%d", errno);
@@ -420,39 +442,43 @@ static int ctrl_data_read(char *buf, size_t bufsz) {
     return ret;
 }
 
-static void ctrl_command_handler(void) {
-    int ibuf[CTRL_PACKET_MAX / sizeof(int)];
+static void ctrl_command_handler(int dsock_idx) {
+    LMKD_CTRL_PACKET packet;
     int len;
-    int cmd = -1;
+    enum lmk_cmd cmd;
     int nargs;
     int targets;
 
-    len = ctrl_data_read((char *)ibuf, CTRL_PACKET_MAX);
+    len = ctrl_data_read(dsock_idx, (char *)packet, CTRL_PACKET_MAX_SIZE);
     if (len <= 0)
         return;
 
+    if (len < (int)sizeof(int)) {
+        ALOGE("Wrong control socket read length len=%d", len);
+        return;
+    }
+
+    cmd = lmkd_pack_get_cmd(packet);
     nargs = len / sizeof(int) - 1;
     if (nargs < 0)
         goto wronglen;
-
-    cmd = ntohl(ibuf[0]);
 
     switch(cmd) {
     case LMK_TARGET:
         targets = nargs / 2;
         if (nargs & 0x1 || targets > (int)ARRAY_SIZE(lowmem_adj))
             goto wronglen;
-        cmd_target(targets, &ibuf[1]);
+        cmd_target(targets, packet);
         break;
     case LMK_PROCPRIO:
         if (nargs != 3)
             goto wronglen;
-        cmd_procprio(ntohl(ibuf[1]), ntohl(ibuf[2]), ntohl(ibuf[3]));
+        cmd_procprio(packet);
         break;
     case LMK_PROCREMOVE:
         if (nargs != 1)
             goto wronglen;
-        cmd_procremove(ntohl(ibuf[1]));
+        cmd_procremove(packet);
         break;
     default:
         ALOGE("Received unknown command code %d", cmd);
@@ -465,40 +491,57 @@ wronglen:
     ALOGE("Wrong control socket read length cmd=%d len=%d", cmd, len);
 }
 
-static void ctrl_data_handler(uint32_t events) {
-    if (events & EPOLLHUP) {
-        ALOGI("ActivityManager disconnected");
-        if (!ctrl_dfd_reopened)
-            ctrl_data_close();
-    } else if (events & EPOLLIN) {
-        ctrl_command_handler();
+static void ctrl_data_handler(int data, uint32_t events) {
+    if (events & EPOLLIN) {
+        ctrl_command_handler(data);
     }
 }
 
-static void ctrl_connect_handler(uint32_t events __unused) {
-    struct epoll_event epev;
+static int get_free_dsock() {
+    for (int i = 0; i < MAX_DATA_CONN; i++) {
+        if (data_sock[i].sock < 0) {
+            return i;
+        }
+    }
+    return -1;
+}
 
-    if (ctrl_dfd >= 0) {
-        ctrl_data_close();
-        ctrl_dfd_reopened = 1;
+static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
+    struct epoll_event epev;
+    int free_dscock_idx = get_free_dsock();
+
+    if (free_dscock_idx < 0) {
+        /*
+         * Number of data connections exceeded max supported. This should not
+         * happen but if it does we drop all existing connections and accept
+         * the new one. This prevents inactive connections from monopolizing
+         * data socket and if we drop ActivityManager connection it will
+         * immediately reconnect.
+         */
+        for (int i = 0; i < MAX_DATA_CONN; i++) {
+            ctrl_data_close(i);
+        }
+        free_dscock_idx = 0;
     }
 
-    ctrl_dfd = accept(ctrl_lfd, NULL, NULL);
-
-    if (ctrl_dfd < 0) {
+    data_sock[free_dscock_idx].sock = accept(ctrl_sock.sock, NULL, NULL);
+    if (data_sock[free_dscock_idx].sock < 0) {
         ALOGE("lmkd control socket accept failed; errno=%d", errno);
         return;
     }
 
-    ALOGI("ActivityManager connected");
-    maxevents++;
+    ALOGI("lmkd data connection established");
+    /* use data to store data connection idx */
+    data_sock[free_dscock_idx].handler_info.data = free_dscock_idx;
+    data_sock[free_dscock_idx].handler_info.handler = ctrl_data_handler;
     epev.events = EPOLLIN;
-    epev.data.ptr = (void *)ctrl_data_handler;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ctrl_dfd, &epev) == -1) {
+    epev.data.ptr = (void *)&(data_sock[free_dscock_idx].handler_info);
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, data_sock[free_dscock_idx].sock, &epev) == -1) {
         ALOGE("epoll_ctl for data connection socket failed; errno=%d", errno);
-        ctrl_data_close();
+        ctrl_data_close(free_dscock_idx);
         return;
     }
+    maxevents++;
 }
 
 static int zoneinfo_parse_protection(char *cp) {
@@ -802,7 +845,7 @@ static inline unsigned long get_time_diff_ms(struct timeval *from,
            (to->tv_usec - from->tv_usec) / 1000;
 }
 
-static void mp_event_common(enum vmpressure_level level) {
+static void mp_event_common(int data, uint32_t events __unused) {
     int ret;
     unsigned long long evcount;
     int64_t mem_usage, memsw_usage;
@@ -811,6 +854,7 @@ static void mp_event_common(enum vmpressure_level level) {
     struct mem_size free_mem;
     static struct timeval last_report_tm;
     static unsigned long skip_count = 0;
+    enum vmpressure_level level = (enum vmpressure_level)data;
 
     /*
      * Check all event counters from low to critical
@@ -927,26 +971,15 @@ do_kill:
     }
 }
 
-static void mp_event_low(uint32_t events __unused) {
-    mp_event_common(VMPRESS_LEVEL_LOW);
-}
-
-static void mp_event_medium(uint32_t events __unused) {
-    mp_event_common(VMPRESS_LEVEL_MEDIUM);
-}
-
-static void mp_event_critical(uint32_t events __unused) {
-    mp_event_common(VMPRESS_LEVEL_CRITICAL);
-}
-
-static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
+static bool init_mp_common(enum vmpressure_level level) {
     int mpfd;
     int evfd;
     int evctlfd;
     char buf[256];
     struct epoll_event epev;
     int ret;
-    const char *levelstr = level_name[level];
+    int level_idx = (int)level;
+    const char *levelstr = level_name[level_idx];
 
     mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
     if (mpfd < 0) {
@@ -972,7 +1005,7 @@ static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
         goto err;
     }
 
-    ret = write(evctlfd, buf, strlen(buf) + 1);
+    ret = TEMP_FAILURE_RETRY(write(evctlfd, buf, strlen(buf) + 1));
     if (ret == -1) {
         ALOGE("cgroup.event_control write failed for level %s; errno=%d",
               levelstr, errno);
@@ -980,7 +1013,10 @@ static bool init_mp_common(void *event_handler, enum vmpressure_level level) {
     }
 
     epev.events = EPOLLIN;
-    epev.data.ptr = event_handler;
+    /* use data to store event level */
+    vmpressure_hinfo[level_idx].data = level_idx;
+    vmpressure_hinfo[level_idx].handler = mp_event_common;
+    epev.data.ptr = (void *)&vmpressure_hinfo[level_idx];
     ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, evfd, &epev);
     if (ret == -1) {
         ALOGE("epoll_ctl for level %s failed; errno=%d", levelstr, errno);
@@ -1017,21 +1053,27 @@ static int init(void) {
         return -1;
     }
 
-    ctrl_lfd = android_get_control_socket("lmkd");
-    if (ctrl_lfd < 0) {
+    // mark data connections as not connected
+    for (int i = 0; i < MAX_DATA_CONN; i++) {
+        data_sock[i].sock = -1;
+    }
+
+    ctrl_sock.sock = android_get_control_socket("lmkd");
+    if (ctrl_sock.sock < 0) {
         ALOGE("get lmkd control socket failed");
         return -1;
     }
 
-    ret = listen(ctrl_lfd, 1);
+    ret = listen(ctrl_sock.sock, MAX_DATA_CONN);
     if (ret < 0) {
         ALOGE("lmkd control socket listen failed (errno=%d)", errno);
         return -1;
     }
 
     epev.events = EPOLLIN;
-    epev.data.ptr = (void *)ctrl_connect_handler;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ctrl_lfd, &epev) == -1) {
+    ctrl_sock.handler_info.handler = ctrl_connect_handler;
+    epev.data.ptr = (void *)&(ctrl_sock.handler_info);
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ctrl_sock.sock, &epev) == -1) {
         ALOGE("epoll_ctl for lmkd control socket failed (errno=%d)", errno);
         return -1;
     }
@@ -1043,10 +1085,9 @@ static int init(void) {
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
     } else {
-        if (!init_mp_common((void *)&mp_event_low, VMPRESS_LEVEL_LOW) ||
-            !init_mp_common((void *)&mp_event_medium, VMPRESS_LEVEL_MEDIUM) ||
-            !init_mp_common((void *)&mp_event_critical,
-                            VMPRESS_LEVEL_CRITICAL)) {
+        if (!init_mp_common(VMPRESS_LEVEL_LOW) ||
+            !init_mp_common(VMPRESS_LEVEL_MEDIUM) ||
+            !init_mp_common(VMPRESS_LEVEL_CRITICAL)) {
             ALOGE("Kernel does not support memory pressure events or in-kernel low memory killer");
             return -1;
         }
@@ -1061,12 +1102,14 @@ static int init(void) {
 }
 
 static void mainloop(void) {
+    struct event_handler_info* handler_info;
+    struct epoll_event *evt;
+
     while (1) {
         struct epoll_event events[maxevents];
         int nevents;
         int i;
 
-        ctrl_dfd_reopened = 0;
         nevents = epoll_wait(epollfd, events, maxevents, -1);
 
         if (nevents == -1) {
@@ -1076,11 +1119,33 @@ static void mainloop(void) {
             continue;
         }
 
-        for (i = 0; i < nevents; ++i) {
-            if (events[i].events & EPOLLERR)
+        /*
+         * First pass to see if any data socket connections were dropped.
+         * Dropped connection should be handled before any other events
+         * to deallocate data connection and correctly handle cases when
+         * connection gets dropped and reestablished in the same epoll cycle.
+         * In such cases it's essential to handle connection closures first.
+         */
+        for (i = 0, evt = &events[0]; i < nevents; ++i, evt++) {
+            if ((evt->events & EPOLLHUP) && evt->data.ptr) {
+                ALOGI("lmkd data connection dropped");
+                handler_info = (struct event_handler_info*)evt->data.ptr;
+                ctrl_data_close(handler_info->data);
+            }
+        }
+
+        /* Second pass to handle all other events */
+        for (i = 0, evt = &events[0]; i < nevents; ++i, evt++) {
+            if (evt->events & EPOLLERR)
                 ALOGD("EPOLLERR on event #%d", i);
-            if (events[i].data.ptr)
-                (*(void (*)(uint32_t))events[i].data.ptr)(events[i].events);
+            if (evt->events & EPOLLHUP) {
+                /* This case was handled in the first pass */
+                continue;
+            }
+            if (evt->data.ptr) {
+                handler_info = (struct event_handler_info*)evt->data.ptr;
+                handler_info->handler(handler_info->data, evt->events);
+            }
         }
     }
 }
