@@ -25,6 +25,7 @@
  * generated.
  */
 #include "graphics-base.h"
+#include "graphics-sw.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,8 +33,6 @@ extern "C" {
 
 /* for compatibility */
 #define HAL_PIXEL_FORMAT_YCbCr_420_888 HAL_PIXEL_FORMAT_YCBCR_420_888
-#define HAL_PIXEL_FORMAT_YCbCr_422_888 HAL_PIXEL_FORMAT_YCBCR_422_888
-#define HAL_PIXEL_FORMAT_YCbCr_444_888 HAL_PIXEL_FORMAT_YCBCR_444_888
 #define HAL_PIXEL_FORMAT_YCbCr_422_SP HAL_PIXEL_FORMAT_YCBCR_422_SP
 #define HAL_PIXEL_FORMAT_YCrCb_420_SP HAL_PIXEL_FORMAT_YCRCB_420_SP
 #define HAL_PIXEL_FORMAT_YCbCr_422_I HAL_PIXEL_FORMAT_YCBCR_422_I

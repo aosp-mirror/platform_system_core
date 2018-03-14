@@ -737,6 +737,8 @@ TYPED_TEST_P(DwarfCfaTest, cfa_def_cfa_expression) {
   ASSERT_TRUE(this->cfa_->GetLocationInfo(this->fde_.pc_start, 0x200, 0x284, &loc_regs));
   ASSERT_EQ(0x284U, this->dmem_->cur_offset());
   ASSERT_EQ(1U, loc_regs.size());
+  ASSERT_EQ(DWARF_LOCATION_VAL_EXPRESSION, loc_regs[CFA_REG].type);
+  ASSERT_EQ(0x81U, loc_regs[CFA_REG].values[0]);
 
   ASSERT_EQ("", GetFakeLogPrint());
   ASSERT_EQ("", GetFakeLogBuf());
