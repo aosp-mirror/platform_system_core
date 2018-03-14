@@ -55,21 +55,29 @@ const DwarfFde* DwarfSection::GetFdeFromPc(uint64_t pc) {
 }
 
 bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
-  last_error_.code = DWARF_ERROR_NONE;
-  const DwarfFde* fde = GetFdeFromPc(pc);
-  if (fde == nullptr || fde->cie == nullptr) {
-    last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
-    return false;
-  }
+  // Lookup the pc in the cache.
+  auto it = loc_regs_.upper_bound(pc);
+  if (it == loc_regs_.end() || pc < it->second.pc_start) {
+    last_error_.code = DWARF_ERROR_NONE;
+    const DwarfFde* fde = GetFdeFromPc(pc);
+    if (fde == nullptr || fde->cie == nullptr) {
+      last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
+      return false;
+    }
 
-  // Now get the location information for this pc.
-  dwarf_loc_regs_t loc_regs;
-  if (!GetCfaLocationInfo(pc, fde, &loc_regs)) {
-    return false;
+    // Now get the location information for this pc.
+    dwarf_loc_regs_t loc_regs;
+    if (!GetCfaLocationInfo(pc, fde, &loc_regs)) {
+      return false;
+    }
+    loc_regs.cie = fde->cie;
+
+    // Store it in the cache.
+    it = loc_regs_.emplace(loc_regs.pc_end, std::move(loc_regs)).first;
   }
 
   // Now eval the actual registers.
-  return Eval(fde->cie, process_memory, loc_regs, regs, finished);
+  return Eval(it->second.cie, process_memory, it->second, regs, finished);
 }
 
 template <typename AddressType>
