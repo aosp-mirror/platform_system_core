@@ -23,6 +23,8 @@
 
 namespace unwindstack {
 
+struct DwarfCie;
+
 enum DwarfLocationEnum : uint8_t {
   DWARF_LOCATION_INVALID = 0,
   DWARF_LOCATION_UNDEFINED,
@@ -38,7 +40,13 @@ struct DwarfLocation {
   uint64_t values[2];
 };
 
-typedef std::unordered_map<uint32_t, DwarfLocation> dwarf_loc_regs_t;
+struct DwarfLocations : public std::unordered_map<uint32_t, DwarfLocation> {
+  const DwarfCie* cie;
+  // The range of PCs where the locations are valid (end is exclusive).
+  uint64_t pc_start = 0;
+  uint64_t pc_end = 0;
+};
+typedef DwarfLocations dwarf_loc_regs_t;
 
 }  // namespace unwindstack
 
