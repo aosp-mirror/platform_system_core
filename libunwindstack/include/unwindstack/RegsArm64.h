@@ -34,17 +34,21 @@ class RegsArm64 : public RegsImpl<uint64_t> {
   RegsArm64();
   virtual ~RegsArm64() = default;
 
-  virtual ArchEnum Arch() override final;
+  ArchEnum Arch() override final;
 
   uint64_t GetPcAdjustment(uint64_t rel_pc, Elf* elf) override;
-
-  void SetFromRaw() override;
 
   bool SetPcFromReturnAddress(Memory* process_memory) override;
 
   bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) override;
 
-  virtual void IterateRegisters(std::function<void(const char*, uint64_t)>) override final;
+  void IterateRegisters(std::function<void(const char*, uint64_t)>) override final;
+
+  uint64_t pc() override;
+  uint64_t sp() override;
+
+  void set_pc(uint64_t pc) override;
+  void set_sp(uint64_t sp) override;
 
   static Regs* Read(void* data);
 
