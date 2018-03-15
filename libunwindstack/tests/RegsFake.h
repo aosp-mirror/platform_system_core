@@ -27,14 +27,16 @@ namespace unwindstack {
 
 class RegsFake : public Regs {
  public:
-  RegsFake(uint16_t total_regs, uint16_t sp_reg)
-      : Regs(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
+  RegsFake(uint16_t total_regs) : Regs(total_regs, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
   virtual ~RegsFake() = default;
 
   ArchEnum Arch() override { return fake_arch_; }
   void* RawData() override { return nullptr; }
   uint64_t pc() override { return fake_pc_; }
   uint64_t sp() override { return fake_sp_; }
+  void set_pc(uint64_t pc) override { fake_pc_ = pc; }
+  void set_sp(uint64_t sp) override { fake_sp_ = sp; }
+
   bool SetPcFromReturnAddress(Memory*) override {
     if (!fake_return_address_valid_) {
       return false;
@@ -51,11 +53,7 @@ class RegsFake : public Regs {
 
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 
-  void SetFromRaw() override {}
-
   void FakeSetArch(ArchEnum arch) { fake_arch_ = arch; }
-  void FakeSetPc(uint64_t pc) { fake_pc_ = pc; }
-  void FakeSetSp(uint64_t sp) { fake_sp_ = sp; }
   void FakeSetDexPc(uint64_t dex_pc) { dex_pc_ = dex_pc; }
   void FakeSetReturnAddress(uint64_t return_address) { fake_return_address_ = return_address; }
   void FakeSetReturnAddressValid(bool valid) { fake_return_address_valid_ = valid; }
@@ -71,19 +69,23 @@ class RegsFake : public Regs {
 template <typename TypeParam>
 class RegsImplFake : public RegsImpl<TypeParam> {
  public:
-  RegsImplFake(uint16_t total_regs, uint16_t sp_reg)
-      : RegsImpl<TypeParam>(total_regs, sp_reg, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
+  RegsImplFake(uint16_t total_regs)
+      : RegsImpl<TypeParam>(total_regs, Regs::Location(Regs::LOCATION_UNKNOWN, 0)) {}
   virtual ~RegsImplFake() = default;
 
   ArchEnum Arch() override { return ARCH_UNKNOWN; }
+  uint64_t pc() override { return fake_pc_; }
+  uint64_t sp() override { return fake_sp_; }
+  void set_pc(uint64_t pc) override { fake_pc_ = pc; }
+  void set_sp(uint64_t sp) override { fake_sp_ = sp; }
 
   uint64_t GetPcAdjustment(uint64_t, Elf*) override { return 0; }
-  void SetFromRaw() override {}
   bool SetPcFromReturnAddress(Memory*) override { return false; }
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
 
-  void FakeSetPc(uint64_t pc) { this->pc_ = pc; }
-  void FakeSetSp(uint64_t sp) { this->sp_ = sp; }
+ private:
+  uint64_t fake_pc_ = 0;
+  uint64_t fake_sp_ = 0;
 };
 
 }  // namespace unwindstack

@@ -316,7 +316,6 @@ TEST_F(ElfTest, step_in_signal_map) {
   RegsArm regs;
   regs[13] = 0x50000;
   regs[15] = 0x8000;
-  regs.SetFromRaw();
 
   ElfInterfaceFake* interface = new ElfInterfaceFake(memory_);
   elf.FakeSetInterface(interface);

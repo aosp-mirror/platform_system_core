@@ -29,10 +29,26 @@
 namespace unwindstack {
 
 RegsMips::RegsMips()
-    : RegsImpl<uint32_t>(MIPS_REG_LAST, MIPS_REG_SP, Location(LOCATION_REGISTER, MIPS_REG_RA)) {}
+    : RegsImpl<uint32_t>(MIPS_REG_LAST, Location(LOCATION_REGISTER, MIPS_REG_RA)) {}
 
 ArchEnum RegsMips::Arch() {
   return ARCH_MIPS;
+}
+
+uint64_t RegsMips::pc() {
+  return regs_[MIPS_REG_PC];
+}
+
+uint64_t RegsMips::sp() {
+  return regs_[MIPS_REG_SP];
+}
+
+void RegsMips::set_pc(uint64_t pc) {
+  regs_[MIPS_REG_PC] = static_cast<uint32_t>(pc);
+}
+
+void RegsMips::set_sp(uint64_t sp) {
+  regs_[MIPS_REG_SP] = static_cast<uint32_t>(sp);
 }
 
 uint64_t RegsMips::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
@@ -43,17 +59,13 @@ uint64_t RegsMips::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
   return 8;
 }
 
-void RegsMips::SetFromRaw() {
-  set_pc(regs_[MIPS_REG_PC]);
-  set_sp(regs_[MIPS_REG_SP]);
-}
-
 bool RegsMips::SetPcFromReturnAddress(Memory*) {
-  if (pc() == regs_[MIPS_REG_RA]) {
+  uint32_t ra = regs_[MIPS_REG_RA];
+  if (regs_[MIPS_REG_PC] == ra) {
     return false;
   }
 
-  set_pc(regs_[MIPS_REG_RA]);
+  regs_[MIPS_REG_PC] = ra;
   return true;
 }
 
@@ -101,7 +113,6 @@ Regs* RegsMips::Read(void* remote_data) {
   memcpy(regs->RawData(), &user->regs[MIPS32_EF_R0], (MIPS_REG_R31 + 1) * sizeof(uint32_t));
 
   reg_data[MIPS_REG_PC] = user->regs[MIPS32_EF_CP0_EPC];
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -114,7 +125,6 @@ Regs* RegsMips::CreateFromUcontext(void* ucontext) {
       (*regs)[MIPS_REG_R0 + i] = mips_ucontext->uc_mcontext.sc_regs[i];
   }
   (*regs)[MIPS_REG_PC] = mips_ucontext->uc_mcontext.sc_pc;
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -149,7 +159,7 @@ bool RegsMips::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_me
 
   // read sc_pc and sc_regs[32] from stack
   uint64_t values[MIPS_REG_LAST];
-  if (!process_memory->Read(sp() + offset, values, sizeof(values))) {
+  if (!process_memory->Read(regs_[MIPS_REG_SP] + offset, values, sizeof(values))) {
     return false;
   }
 
@@ -160,8 +170,6 @@ bool RegsMips::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_me
   for (int i = 0; i < 32; i++) {
       regs_[MIPS_REG_R0 + i] = values[1 + i];
   }
-
-  SetFromRaw();
   return true;
 }
 
