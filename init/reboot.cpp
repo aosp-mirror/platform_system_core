@@ -429,10 +429,20 @@ void RebootThread(unsigned int cmd, std::chrono::milliseconds shutdown_timeout, 
         if (kill_after_apps.count(s->name())) s->Stop();
     }
     // 4. sync, try umount, and optionally run fsck for user shutdown
-    sync();
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() before umount...";
+        sync();
+        LOG(INFO) << "sync() before umount took" << sync_timer;
+    }
     UmountStat stat = TryUmountAndFsck(runFsck, shutdown_timeout - t.duration());
     // Follow what linux shutdown is doing: one more sync with little bit delay
-    sync();
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() after umount...";
+        sync();
+        LOG(INFO) << "sync() after umount took" << sync_timer;
+    }
     if (cmd != ANDROID_RB_THERMOFF) std::this_thread::sleep_for(100ms);
     LogShutdownTime(stat, &t);
 
