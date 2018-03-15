@@ -287,6 +287,7 @@ bootstat: Failed to parse boot time record: /data/misc/bootstat/post_decrypt_tim
 bootstat: Service started: /system/bin/bootstat --record_boot_reason
 bootstat: Service started: /system/bin/bootstat --record_time_since_factory_reset
 bootstat: Service started: /system/bin/bootstat -l
+bootstat: Service started: /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l
 bootstat: Battery level at shutdown 100%
 bootstat: Battery level at startup 100%
 init    : Parsing file /system/etc/init/bootstat.rc...
