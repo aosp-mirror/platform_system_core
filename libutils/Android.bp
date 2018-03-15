@@ -159,7 +159,6 @@ cc_library {
 cc_library {
     name: "libutilscallstack",
     defaults: ["libutils_defaults"],
-    vendor_available: false,
 
     srcs: [
         "CallStack.cpp",
