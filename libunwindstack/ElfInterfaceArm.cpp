@@ -171,4 +171,17 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Mem
   return return_value;
 }
 
+bool ElfInterfaceArm::GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
+                                      uint64_t* offset) {
+  // For ARM, thumb function symbols have bit 0 set, but the address passed
+  // in here might not have this bit set and result in a failure to find
+  // the thumb function names. Adjust the address and offset to account
+  // for this possible case.
+  if (ElfInterface32::GetFunctionName(addr | 1, load_bias, name, offset)) {
+    *offset &= ~1;
+    return true;
+  }
+  return false;
+}
+
 }  // namespace unwindstack
