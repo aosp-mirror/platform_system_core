@@ -429,6 +429,8 @@ validate_reason() {
     *thermal* )                             var="shutdown,thermal" ;;
     *s3_wakeup* )                           var="warm,s3_wakeup" ;;
     *hw_reset* )                            var="hard,hw_reset" ;;
+    *usb* )                                 var="cold,charger" ;;
+    *rtc* )                                 var="cold,rtc" ;;
     *bootloader* )                          var="bootloader" ;;
     * )                                     var="reboot" ;;
   esac

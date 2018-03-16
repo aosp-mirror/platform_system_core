@@ -289,6 +289,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"oem_sdi_err_fatal", 145},
     {"pmic_watchdog", 146},
     {"software_master", 147},
+    {"cold,charger", 148},
+    {"cold,rtc", 149},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -591,6 +593,8 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"shutdown,thermal", "thermal"},
         {"warm,s3_wakeup", "s3_wakeup"},
         {"hard,hw_reset", "hw_reset"},
+        {"cold,charger", "usb"},
+        {"cold,rtc", "rtc"},
         {"reboot,2sec", "2sec_reboot"},
         {"bootloader", ""},
     };
