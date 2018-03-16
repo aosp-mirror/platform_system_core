@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
@@ -192,7 +193,9 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"s3_wakeup", 51},
     {"kernel_panic,sysrq", 52},
     {"kernel_panic,NULL", 53},
+    {"kernel_panic,null", 53},
     {"kernel_panic,BUG", 54},
+    {"kernel_panic,bug", 54},
     {"bootloader", 55},
     {"cold", 56},
     {"hard", 57},
@@ -486,18 +489,19 @@ bool correctForBer(std::string& reason, const std::string& needle) {
 
 bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
   // Check for kernel panic types to refine information
-  if (console.rfind("SysRq : Trigger a crash") != std::string::npos) {
+  if ((console.rfind("SysRq : Trigger a crash") != std::string::npos) ||
+      (console.rfind("PC is at sysrq_handle_crash+") != std::string::npos)) {
     // Can not happen, except on userdebug, during testing/debugging.
     ret = "kernel_panic,sysrq";
     return true;
   }
   if (console.rfind("Unable to handle kernel NULL pointer dereference at virtual address") !=
       std::string::npos) {
-    ret = "kernel_panic,NULL";
+    ret = "kernel_panic,null";
     return true;
   }
   if (console.rfind("Kernel BUG at ") != std::string::npos) {
-    ret = "kernel_panic,BUG";
+    ret = "kernel_panic,bug";
     return true;
   }
   return false;
