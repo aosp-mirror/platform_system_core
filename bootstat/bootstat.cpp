@@ -584,7 +584,9 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // first member is the output
     // second member is an unanchored regex for an alias
     //
-    // We match a needle on output. This helps keep the scale of the
+    // If output has a prefix of <bang> '!', we do not use it as a
+    // match needle (and drop the <bang> prefix when landing in output),
+    // otherwise look for it as well. This helps keep the scale of the
     // following table smaller.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
         {"watchdog", "wdog"},
@@ -600,12 +602,13 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     };
 
     for (auto& s : aliasReasons) {
-      if (reason.find(s.first) != std::string::npos) {
+      size_t firstHasNot = s.first[0] == '!';
+      if (!firstHasNot && (reason.find(s.first) != std::string::npos)) {
         ret = s.first;
         break;
       }
       if (s.second.size() && std::regex_search(reason, std::regex(s.second))) {
-        ret = s.first;
+        ret = s.first.substr(firstHasNot);
         break;
       }
     }
