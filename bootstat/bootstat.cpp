@@ -469,7 +469,7 @@ class pstoreConsole {
 
 // If bit error match to needle, correct it.
 // Return true if any corrections were discovered and applied.
-bool correctForBer(std::string& reason, const std::string& needle) {
+bool correctForBitError(std::string& reason, const std::string& needle) {
   bool corrected = false;
   if (reason.length() < needle.length()) return corrected;
   const pstoreConsole console(reason);
@@ -483,6 +483,20 @@ bool correctForBer(std::string& reason, const std::string& needle) {
 
     corrected = true;
     reason = reason.substr(0, pos) + needle + reason.substr(pos + needle.length());
+  }
+  return corrected;
+}
+
+// If bit error match to needle, correct it.
+// Return true if any corrections were discovered and applied.
+// Try again if we can replace underline with spaces.
+bool correctForBitErrorOrUnderline(std::string& reason, const std::string& needle) {
+  bool corrected = correctForBitError(reason, needle);
+  std::string _needle(needle);
+  std::transform(_needle.begin(), _needle.end(), _needle.begin(),
+                 [](char c) { return (c == '_') ? ' ' : c; });
+  if (needle != _needle) {
+    corrected |= correctForBitError(reason, _needle);
   }
   return corrected;
 }
@@ -511,22 +525,14 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
   return addKernelPanicSubReason(pstoreConsole(content), ret);
 }
 
-// std::transform Helper callback functions:
 // Converts a string value representing the reason the system booted to a
 // string complying with Android system standard reason.
-char tounderline(char c) {
-  return ::isblank(c) ? '_' : c;
-}
-
-char toprintable(char c) {
-  return ::isprint(c) ? c : '?';
-}
-
-// Cleanup boot_reason regarding acceptable character set
 void transformReason(std::string& reason) {
   std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
-  std::transform(reason.begin(), reason.end(), reason.begin(), tounderline);
-  std::transform(reason.begin(), reason.end(), reason.begin(), toprintable);
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isblank(c) ? '_' : c; });
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isprint(c) ? c : '?'; });
 }
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
@@ -633,14 +639,14 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         std::string subReason(content.substr(pos, max_reason_length));
         // Correct against any known strings that Bit Error Match
         for (const auto& s : knownReasons) {
-          correctForBer(subReason, s);
+          correctForBitErrorOrUnderline(subReason, s);
         }
         for (const auto& m : kBootReasonMap) {
           if (m.first.length() <= strlen("cold")) continue;  // too short?
-          if (correctForBer(subReason, m.first + "'")) continue;
+          if (correctForBitErrorOrUnderline(subReason, m.first + "'")) continue;
           if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
           if (!android::base::StartsWith(m.first, "reboot,")) continue;
-          correctForBer(subReason, m.first.substr(strlen("reboot,")) + "'");
+          correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("reboot,")) + "'");
         }
         for (pos = 0; pos < subReason.length(); ++pos) {
           char c = subReason[pos];
@@ -688,7 +694,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       if (pos != std::string::npos) {
         digits = content.substr(pos + strlen(battery), strlen("100 "));
         // correct common errors
-        correctForBer(digits, "100 ");
+        correctForBitError(digits, "100 ");
         if (digits[0] == '!') digits[0] = '1';
         if (digits[1] == '!') digits[1] = '1';
       }
