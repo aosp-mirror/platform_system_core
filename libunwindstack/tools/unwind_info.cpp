@@ -53,8 +53,7 @@ void DumpArm(ElfInterfaceArm* interface) {
       printf("  PC 0x%" PRIx64, addr + load_bias);
       uint64_t func_offset;
       uint64_t pc = addr + load_bias;
-      // This might be a thumb function, so set the low bit.
-      if (interface->GetFunctionName(pc | 1, load_bias, &name, &func_offset) && !name.empty()) {
+      if (interface->GetFunctionName(pc, load_bias, &name, &func_offset) && !name.empty()) {
         printf(" <%s>", name.c_str());
       }
       printf("\n");

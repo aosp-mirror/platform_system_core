@@ -188,7 +188,7 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm) {
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(4U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
-      "  #00 pc 0001a9f8  libc.so (abort+63)\n"
+      "  #00 pc 0001a9f8  libc.so (abort+64)\n"
       "  #01 pc 00006a1b  libbase.so (_ZN7android4base14DefaultAborterEPKc+6)\n"
       "  #02 pc 00007441  libbase.so (_ZN7android4base10LogMessageD2Ev+748)\n"
       "  #03 pc 00015147  /does/not/exist/libhidlbase.so\n",
@@ -575,7 +575,7 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(76U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
-      "  #00 pc 00018a5e  libarttestd.so (Java_Main_unwindInProcess+865)\n"
+      "  #00 pc 00018a5e  libarttestd.so (Java_Main_unwindInProcess+866)\n"
       "  #01 pc 0000212d (offset 0x2000)  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+92)\n"
       "  #02 pc 00011cb1  anonymous:e2796000 (boolean Main.bar(boolean)+72)\n"
