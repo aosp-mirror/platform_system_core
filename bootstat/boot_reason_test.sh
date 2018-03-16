@@ -408,29 +408,29 @@ validate_reason() {
        tr ' \f\t\r\n' '_____'`
   case ${var} in
     watchdog | watchdog,?* ) ;;
-    kernel_panic | kernel_panic,?*) ;;
-    recovery | recovery,?*) ;;
-    bootloader | bootloader,?*) ;;
-    cold | cold,?*) ;;
-    hard | hard,?*) ;;
-    warm | warm,?*) ;;
-    shutdown | shutdown,?*) ;;
+    kernel_panic | kernel_panic,?* ) ;;
+    recovery | recovery,?* ) ;;
+    bootloader | bootloader,?* ) ;;
+    cold | cold,?* ) ;;
+    hard | hard,?* ) ;;
+    warm | warm,?* ) ;;
+    shutdown | shutdown,?* ) ;;
     reboot,reboot | reboot,reboot,* )     var=${var#reboot,} ; var=${var%,} ;;
     reboot,cold | reboot,cold,* )         var=${var#reboot,} ; var=${var%,} ;;
     reboot,hard | reboot,hard,* )         var=${var#reboot,} ; var=${var%,} ;;
     reboot,warm | reboot,warm,* )         var=${var#reboot,} ; var=${var%,} ;;
     reboot,recovery | reboot,recovery,* ) var=${var#reboot,} ; var=${var%,} ;;
     reboot,bootloader | reboot,bootloader,* ) var=${var#reboot,} ; var=${var%,} ;;
-    reboot | reboot,?*) ;;
+    reboot | reboot,?* ) ;;
     # Aliases and Heuristics
-    *wdog* | *watchdog* )     var="watchdog" ;;
-    *powerkey* )              var="cold,powerkey" ;;
-    *panic* | *kernel_panic*) var="kernel_panic" ;;
-    *thermal*)                var="shutdown,thermal" ;;
-    *s3_wakeup*)              var="warm,s3_wakeup" ;;
-    *hw_reset*)               var="hard,hw_reset" ;;
-    *bootloader*)             var="bootloader" ;;
-    *)                        var="reboot" ;;
+    *wdog* | *watchdog* )                   var="watchdog" ;;
+    *powerkey* | *power_key* | *PowerKey* ) var="cold,powerkey" ;;
+    *panic* | *kernel_panic* )              var="kernel_panic" ;;
+    *thermal* )                             var="shutdown,thermal" ;;
+    *s3_wakeup* )                           var="warm,s3_wakeup" ;;
+    *hw_reset* )                            var="hard,hw_reset" ;;
+    *bootloader* )                          var="bootloader" ;;
+    * )                                     var="reboot" ;;
   esac
   echo ${var}
 }
