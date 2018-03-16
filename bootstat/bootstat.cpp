@@ -201,7 +201,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"cold", 56},
     {"hard", 57},
     {"warm", 58},
-    // {"recovery", 59},  // Duplicate of enum 3 above. Immediate reuse possible.
+    {"reboot,kernel_power_off_charging__reboot_system", 59},  // Can not happen
     {"thermal-shutdown", 60},
     {"shutdown,thermal", 61},
     {"shutdown,battery", 62},
@@ -849,6 +849,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
           } else {
             ret = "reboot," + subReason;  // legitimize unknown reasons
           }
+        }
+        // Some bootloaders shutdown results record in last kernel message.
+        if (!strcmp(ret.c_str(), "reboot,kernel_power_off_charging__reboot_system")) {
+          ret = "shutdown";
         }
       }
 
