@@ -177,9 +177,16 @@ const char* fs_mgr_mount_point(const fstab* fstab, const char* mount_point) {
     return "/system";
 }
 
+bool fs_mgr_access(const std::string& path) {
+    auto save_errno = errno;
+    auto ret = access(path.c_str(), F_OK) == 0;
+    errno = save_errno;
+    return ret;
+}
+
 // return true if system supports overlayfs
 bool fs_mgr_wants_overlayfs() {
-    // This will return empty on init first_stage_mount, so speculative
+    // Properties will return empty on init first_stage_mount, so speculative
     // determination, empty (unset) _or_ "1" is true which differs from the
     // official ro.debuggable policy.  ALLOW_ADBD_DISABLE_VERITY == 0 should
     // protect us from false in any case, so this is insurance.
@@ -187,13 +194,7 @@ bool fs_mgr_wants_overlayfs() {
     if (debuggable != "1") return false;
 
     // Overlayfs available in the kernel, and patched for override_creds?
-    static signed char overlayfs_in_kernel = -1;  // cache for constant condition
-    if (overlayfs_in_kernel == -1) {
-        auto save_errno = errno;
-        overlayfs_in_kernel = !access("/sys/module/overlay/parameters/override_creds", F_OK);
-        errno = save_errno;
-    }
-    return overlayfs_in_kernel;
+    return fs_mgr_access("/sys/module/overlay/parameters/override_creds");
 }
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
@@ -373,15 +374,14 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
 bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string& mount_point,
                                    bool* change) {
     const auto top = overlay + kOverlayTopDir;
-    auto save_errno = errno;
-    auto missing = access(top.c_str(), F_OK);
-    errno = save_errno;
-    if (missing) return false;
 
-    const auto oldpath = top + (mount_point.empty() ? "" : ("/"s + mount_point));
+    if (!fs_mgr_access(top)) return false;
+
+    auto cleanup_all = mount_point.empty();
+    const auto oldpath = top + (cleanup_all ? "" : ("/"s + mount_point));
     const auto newpath = oldpath + ".teardown";
     auto ret = fs_mgr_rm_all(newpath);
-    save_errno = errno;
+    auto save_errno = errno;
     if (!rename(oldpath.c_str(), newpath.c_str())) {
         if (change) *change = true;
     } else if (errno != ENOENT) {
@@ -400,7 +400,7 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
     } else {
         errno = save_errno;
     }
-    if (!mount_point.empty()) {
+    if (!cleanup_all) {
         save_errno = errno;
         if (!rmdir(top.c_str())) {
             if (change) *change = true;
