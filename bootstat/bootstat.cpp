@@ -228,7 +228,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"2sec_reboot", 83},
     {"reboot,by_key", 84},
     {"reboot,longkey", 85},
-    {"reboot,2sec", 86},
+    {"reboot,2sec", 86},  // Deprecate in two years, replaced with cold,rtc,2sec
     {"shutdown,thermal,battery", 87},
     {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
     {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
@@ -790,7 +790,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"hard,hw_reset", "hw_reset"},
         {"cold,charger", "usb"},
         {"cold,rtc", "rtc"},
-        {"reboot,2sec", "2sec_reboot"},
+        {"cold,rtc,2sec", "2sec_reboot"},
+        {"!warm", "wdt_by_pass_pwk"},  // change flavour of blunt
+        {"!reboot", "^wdt$"},          // change flavour of blunt
+        {"reboot,tool", "tool_by_pass_pwk"},
         {"bootloader", ""},
     };
 
