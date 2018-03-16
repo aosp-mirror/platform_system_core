@@ -289,6 +289,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"oem_sdi_err_fatal", 145},
     {"pmic_watchdog", 146},
     {"software_master", 147},
+    {"cold,charger", 148},
+    {"cold,rtc", 149},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -582,7 +584,9 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // first member is the output
     // second member is an unanchored regex for an alias
     //
-    // We match a needle on output. This helps keep the scale of the
+    // If output has a prefix of <bang> '!', we do not use it as a
+    // match needle (and drop the <bang> prefix when landing in output),
+    // otherwise look for it as well. This helps keep the scale of the
     // following table smaller.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
         {"watchdog", "wdog"},
@@ -591,17 +595,20 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"shutdown,thermal", "thermal"},
         {"warm,s3_wakeup", "s3_wakeup"},
         {"hard,hw_reset", "hw_reset"},
+        {"cold,charger", "usb"},
+        {"cold,rtc", "rtc"},
         {"reboot,2sec", "2sec_reboot"},
         {"bootloader", ""},
     };
 
     for (auto& s : aliasReasons) {
-      if (reason.find(s.first) != std::string::npos) {
+      size_t firstHasNot = s.first[0] == '!';
+      if (!firstHasNot && (reason.find(s.first) != std::string::npos)) {
         ret = s.first;
         break;
       }
       if (s.second.size() && std::regex_search(reason, std::regex(s.second))) {
-        ret = s.first;
+        ret = s.first.substr(firstHasNot);
         break;
       }
     }
