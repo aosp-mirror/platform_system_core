@@ -54,7 +54,5 @@ struct usb_handle {
     // read and write threads.
     struct aio_block read_aiob;
     struct aio_block write_aiob;
-
-    int max_rw;
 };
 
