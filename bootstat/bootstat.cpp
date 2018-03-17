@@ -29,6 +29,7 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <regex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -577,10 +578,16 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // A series of checks to take some officially unsupported reasons
     // reported by the bootloader and find some logical and canonical
     // sense.  In an ideal world, we would require those bootloaders
-    // to behave and follow our standards.
+    // to behave and follow our CTS standards.
+    //
+    // first member is the output
+    // second member is an unanchored regex for an alias
+    //
+    // We match a needle on output. This helps keep the scale of the
+    // following table smaller.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
         {"watchdog", "wdog"},
-        {"cold,powerkey", "powerkey"},
+        {"cold,powerkey", "powerkey|power_key|PowerKey"},
         {"kernel_panic", "panic"},
         {"shutdown,thermal", "thermal"},
         {"warm,s3_wakeup", "s3_wakeup"},
@@ -589,13 +596,12 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"bootloader", ""},
     };
 
-    // Either the primary or alias is found _somewhere_ in the reason string.
     for (auto& s : aliasReasons) {
       if (reason.find(s.first) != std::string::npos) {
         ret = s.first;
         break;
       }
-      if (s.second.size() && (reason.find(s.second) != std::string::npos)) {
+      if (s.second.size() && std::regex_search(reason, std::regex(s.second))) {
         ret = s.first;
         break;
       }
