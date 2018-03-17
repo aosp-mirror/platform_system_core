@@ -213,6 +213,46 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     TerminateThread(thread);
 }
 
+#if 0
+// Ensure that if we fail to write output to an fd, we will still flush data coming from it.
+TEST_F(LocalSocketTest, flush_after_shutdown) {
+    int head_fd[2];
+    int tail_fd[2];
+    ASSERT_EQ(0, adb_socketpair(head_fd));
+    ASSERT_EQ(0, adb_socketpair(tail_fd));
+
+    asocket* head = create_local_socket(head_fd[1]);
+    asocket* tail = create_local_socket(tail_fd[1]);
+
+    head->peer = tail;
+    head->ready(head);
+
+    tail->peer = head;
+    tail->ready(tail);
+
+    PrepareThread();
+    std::thread thread(fdevent_loop);
+
+    ASSERT_TRUE(WriteFdExactly(head_fd[0], "foo", 3));
+    ASSERT_EQ(0, adb_shutdown(head_fd[0], SHUT_RD));
+    const char* str = "write succeeds, but local_socket will fail to write";
+    ASSERT_TRUE(WriteFdExactly(tail_fd[0], str, strlen(str)));
+    ASSERT_TRUE(WriteFdExactly(head_fd[0], "bar", 3));
+    char buf[6];
+    ASSERT_TRUE(ReadFdExactly(tail_fd[0], buf, 6));
+
+    ASSERT_EQ(0, memcmp(buf, "foobar", 6));
+
+    adb_close(head_fd[0]);
+    adb_close(tail_fd[0]);
+
+    // Wait until the local sockets are closed.
+    std::this_thread::sleep_for(SLEEP_FOR_FDEVENT);
+    ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
+    TerminateThread(thread);
+}
+#endif
+
 #if defined(__linux__)
 
 static void ClientThreadFunc() {

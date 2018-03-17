@@ -29,7 +29,9 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <regex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
@@ -139,7 +141,7 @@ constexpr int32_t kUnknownBootReason = 1;
 // values.
 const std::map<std::string, int32_t> kBootReasonMap = {
     {"empty", kEmptyBootReason},
-    {"unknown", kUnknownBootReason},
+    {"__BOOTSTAT_UNKNOWN__", kUnknownBootReason},
     {"normal", 2},
     {"recovery", 3},
     {"reboot", 4},
@@ -192,12 +194,14 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"s3_wakeup", 51},
     {"kernel_panic,sysrq", 52},
     {"kernel_panic,NULL", 53},
+    {"kernel_panic,null", 53},
     {"kernel_panic,BUG", 54},
+    {"kernel_panic,bug", 54},
     {"bootloader", 55},
     {"cold", 56},
     {"hard", 57},
     {"warm", 58},
-    {"recovery", 59},
+    // {"recovery", 59},  // Duplicate of enum 3 above. Immediate reuse possible.
     {"thermal-shutdown", 60},
     {"shutdown,thermal", 61},
     {"shutdown,battery", 62},
@@ -228,7 +232,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"shutdown,thermal,battery", 87},
     {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
     {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
-    {"usb", 90},
+    // {"usb", 90},  // Duplicate of enum 80 above. Immediate reuse possible.
     {"charge", 91},
     {"oem_tz_crash", 92},
     {"uvlo", 93},
@@ -286,6 +290,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"oem_sdi_err_fatal", 145},
     {"pmic_watchdog", 146},
     {"software_master", 147},
+    {"cold,charger", 148},
+    {"cold,rtc", 149},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -466,7 +472,7 @@ class pstoreConsole {
 
 // If bit error match to needle, correct it.
 // Return true if any corrections were discovered and applied.
-bool correctForBer(std::string& reason, const std::string& needle) {
+bool correctForBitError(std::string& reason, const std::string& needle) {
   bool corrected = false;
   if (reason.length() < needle.length()) return corrected;
   const pstoreConsole console(reason);
@@ -484,20 +490,35 @@ bool correctForBer(std::string& reason, const std::string& needle) {
   return corrected;
 }
 
+// If bit error match to needle, correct it.
+// Return true if any corrections were discovered and applied.
+// Try again if we can replace underline with spaces.
+bool correctForBitErrorOrUnderline(std::string& reason, const std::string& needle) {
+  bool corrected = correctForBitError(reason, needle);
+  std::string _needle(needle);
+  std::transform(_needle.begin(), _needle.end(), _needle.begin(),
+                 [](char c) { return (c == '_') ? ' ' : c; });
+  if (needle != _needle) {
+    corrected |= correctForBitError(reason, _needle);
+  }
+  return corrected;
+}
+
 bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
   // Check for kernel panic types to refine information
-  if (console.rfind("SysRq : Trigger a crash") != std::string::npos) {
+  if ((console.rfind("SysRq : Trigger a crash") != std::string::npos) ||
+      (console.rfind("PC is at sysrq_handle_crash+") != std::string::npos)) {
     // Can not happen, except on userdebug, during testing/debugging.
     ret = "kernel_panic,sysrq";
     return true;
   }
   if (console.rfind("Unable to handle kernel NULL pointer dereference at virtual address") !=
       std::string::npos) {
-    ret = "kernel_panic,NULL";
+    ret = "kernel_panic,null";
     return true;
   }
   if (console.rfind("Kernel BUG at ") != std::string::npos) {
-    ret = "kernel_panic,BUG";
+    ret = "kernel_panic,bug";
     return true;
   }
   return false;
@@ -507,22 +528,14 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
   return addKernelPanicSubReason(pstoreConsole(content), ret);
 }
 
-// std::transform Helper callback functions:
 // Converts a string value representing the reason the system booted to a
 // string complying with Android system standard reason.
-char tounderline(char c) {
-  return ::isblank(c) ? '_' : c;
-}
-
-char toprintable(char c) {
-  return ::isprint(c) ? c : '?';
-}
-
-// Cleanup boot_reason regarding acceptable character set
 void transformReason(std::string& reason) {
   std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
-  std::transform(reason.begin(), reason.end(), reason.begin(), tounderline);
-  std::transform(reason.begin(), reason.end(), reason.begin(), toprintable);
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isblank(c) ? '_' : c; });
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isprint(c) ? c : '?'; });
 }
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
@@ -567,26 +580,36 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // A series of checks to take some officially unsupported reasons
     // reported by the bootloader and find some logical and canonical
     // sense.  In an ideal world, we would require those bootloaders
-    // to behave and follow our standards.
+    // to behave and follow our CTS standards.
+    //
+    // first member is the output
+    // second member is an unanchored regex for an alias
+    //
+    // If output has a prefix of <bang> '!', we do not use it as a
+    // match needle (and drop the <bang> prefix when landing in output),
+    // otherwise look for it as well. This helps keep the scale of the
+    // following table smaller.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
         {"watchdog", "wdog"},
-        {"cold,powerkey", "powerkey"},
+        {"cold,powerkey", "powerkey|power_key|PowerKey"},
         {"kernel_panic", "panic"},
         {"shutdown,thermal", "thermal"},
         {"warm,s3_wakeup", "s3_wakeup"},
         {"hard,hw_reset", "hw_reset"},
+        {"cold,charger", "usb"},
+        {"cold,rtc", "rtc"},
         {"reboot,2sec", "2sec_reboot"},
         {"bootloader", ""},
     };
 
-    // Either the primary or alias is found _somewhere_ in the reason string.
     for (auto& s : aliasReasons) {
-      if (reason.find(s.first) != std::string::npos) {
+      size_t firstHasNot = s.first[0] == '!';
+      if (!firstHasNot && (reason.find(s.first) != std::string::npos)) {
         ret = s.first;
         break;
       }
-      if (s.second.size() && (reason.find(s.second) != std::string::npos)) {
-        ret = s.first;
+      if (s.second.size() && std::regex_search(reason, std::regex(s.second))) {
+        ret = s.first.substr(firstHasNot);
         break;
       }
     }
@@ -629,14 +652,14 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         std::string subReason(content.substr(pos, max_reason_length));
         // Correct against any known strings that Bit Error Match
         for (const auto& s : knownReasons) {
-          correctForBer(subReason, s);
+          correctForBitErrorOrUnderline(subReason, s);
         }
         for (const auto& m : kBootReasonMap) {
           if (m.first.length() <= strlen("cold")) continue;  // too short?
-          if (correctForBer(subReason, m.first + "'")) continue;
+          if (correctForBitErrorOrUnderline(subReason, m.first + "'")) continue;
           if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
           if (!android::base::StartsWith(m.first, "reboot,")) continue;
-          correctForBer(subReason, m.first.substr(strlen("reboot,")) + "'");
+          correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("reboot,")) + "'");
         }
         for (pos = 0; pos < subReason.length(); ++pos) {
           char c = subReason[pos];
@@ -684,7 +707,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       if (pos != std::string::npos) {
         digits = content.substr(pos + strlen(battery), strlen("100 "));
         // correct common errors
-        correctForBer(digits, "100 ");
+        correctForBitError(digits, "100 ");
         if (digits[0] == '!') digits[0] = '1';
         if (digits[1] == '!') digits[1] = '1';
       }
