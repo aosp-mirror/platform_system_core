@@ -303,6 +303,9 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"kernel_panic,init", 158},
     {"kernel_panic,oom", 159},
     {"kernel_panic,stack", 160},
+    {"kernel_panic,sysrq,livelock,alarm", 161},   // llkd
+    {"kernel_panic,sysrq,livelock,driver", 162},  // llkd
+    {"kernel_panic,sysrq,livelock,zombie", 163},  // llkd
 };
 
 // Converts a string value representing the reason the system booted to an

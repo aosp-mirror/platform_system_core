@@ -154,6 +154,27 @@ inline void waitForPid(pid_t child_pid) {
     ASSERT_EQ(WTERMSIG(wstatus), SIGKILL);
 }
 
+bool checkKill(const char* reason) {
+    if (android::base::GetBoolProperty(LLK_KILLTEST_PROPERTY, LLK_KILLTEST_DEFAULT)) {
+        return false;
+    }
+    auto bootreason = android::base::GetProperty("sys.boot.reason", "nothing");
+    if (bootreason == reason) {
+        GTEST_LOG_INFO << "Expected test result confirmed " << reason << "\n";
+        return true;
+    }
+    GTEST_LOG_WARNING << "Expected test result is " << reason << "\n";
+
+    // apct adjustment if needed (set LLK_KILLTEST_PROPERTY to "off" to allow test)
+    //
+    // if (android::base::GetProperty(LLK_KILLTEST_PROPERTY, "") == "false") {
+    //     GTEST_LOG_WARNING << "Bypassing test\n";
+    //     return true;
+    // }
+
+    return false;
+}
+
 }  // namespace
 
 // The tests that use this helper are to simulate processes stuck in 'D'
@@ -221,6 +242,10 @@ TEST(llkd, driver_ABA_glacial) {
 // is that llkd will perform kill mitigation and not progress to kernel_panic.
 
 TEST(llkd, zombie) {
+    if (checkKill("kernel_panic,sysrq,livelock,zombie")) {
+        return;
+    }
+
     const auto period = llkdSleepPeriod('Z');
 
     /* Create a Persistent Zombie Process */
@@ -241,6 +266,10 @@ TEST(llkd, zombie) {
 }
 
 TEST(llkd, driver) {
+    if (checkKill("kernel_panic,sysrq,livelock,driver")) {
+        return;
+    }
+
     const auto period = llkdSleepPeriod('D');
 
     /* Create a Persistent Device Process */

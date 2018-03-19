@@ -44,5 +44,6 @@ service llkd /system/bin/llkd
     user llkd
     group llkd readproc
     capabilities KILL IPC_LOCK
+    file /dev/kmsg w
     file /proc/sysrq-trigger w
     writepid /dev/cpuset/system-background/tasks
