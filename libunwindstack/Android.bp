@@ -188,6 +188,7 @@ cc_test {
     data: [
         "tests/files/elf32.xz",
         "tests/files/elf64.xz",
+        "tests/files/offline/art_quick_osr_stub_arm/*",
         "tests/files/offline/bad_eh_frame_hdr_arm64/*",
         "tests/files/offline/debug_frame_first_x86/*",
         "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
