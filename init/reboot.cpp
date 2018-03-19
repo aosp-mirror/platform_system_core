@@ -20,7 +20,6 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <mntent.h>
-#include <semaphore.h>
 #include <sys/capability.h>
 #include <sys/cdefs.h>
 #include <sys/ioctl.h>
@@ -330,9 +329,39 @@ static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeo
     return stat;
 }
 
-void RebootThread(unsigned int cmd, std::chrono::milliseconds shutdown_timeout, bool runFsck,
-                  sem_t* reboot_semaphore) {
+void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
+              bool runFsck) {
     Timer t;
+    LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
+
+    // Ensure last reboot reason is reduced to canonical
+    // alias reported in bootloader or system boot reason.
+    size_t skip = 0;
+    std::vector<std::string> reasons = Split(reason, ",");
+    if (reasons.size() >= 2 && reasons[0] == "reboot" &&
+        (reasons[1] == "recovery" || reasons[1] == "bootloader" || reasons[1] == "cold" ||
+         reasons[1] == "hard" || reasons[1] == "warm")) {
+        skip = strlen("reboot,");
+    }
+    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
+    sync();
+
+    bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
+
+    auto shutdown_timeout = 0ms;
+    if (!SHUTDOWN_ZERO_TIMEOUT) {
+        if (is_thermal_shutdown) {
+            constexpr unsigned int thermal_shutdown_timeout = 1;
+            shutdown_timeout = std::chrono::seconds(thermal_shutdown_timeout);
+        } else {
+            constexpr unsigned int shutdown_timeout_default = 6;
+            auto shutdown_timeout_property = android::base::GetUintProperty(
+                "ro.build.shutdown_timeout", shutdown_timeout_default);
+            shutdown_timeout = std::chrono::seconds(shutdown_timeout_property);
+        }
+    }
+    LOG(INFO) << "Shutdown timeout: " << shutdown_timeout.count() << " ms";
+
     // keep debugging tools until non critical ones are all gone.
     const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
@@ -356,7 +385,7 @@ void RebootThread(unsigned int cmd, std::chrono::milliseconds shutdown_timeout, 
     }
 
     // remaining operations (specifically fsck) may take a substantial duration
-    if (cmd == ANDROID_RB_POWEROFF || cmd == ANDROID_RB_THERMOFF) {
+    if (cmd == ANDROID_RB_POWEROFF || is_thermal_shutdown) {
         TurnOffBacklight();
     }
 
@@ -443,77 +472,8 @@ void RebootThread(unsigned int cmd, std::chrono::milliseconds shutdown_timeout, 
         sync();
         LOG(INFO) << "sync() after umount took" << sync_timer;
     }
-    if (cmd != ANDROID_RB_THERMOFF) std::this_thread::sleep_for(100ms);
+    if (!is_thermal_shutdown) std::this_thread::sleep_for(100ms);
     LogShutdownTime(stat, &t);
-
-    if (reboot_semaphore != nullptr) {
-        sem_post(reboot_semaphore);
-    }
-}
-
-void RunRebootThread(unsigned int cmd, std::chrono::milliseconds shutdown_timeout) {
-    sem_t reboot_semaphore;
-    timespec shutdown_timeout_timespec;
-
-    if (sem_init(&reboot_semaphore, false, 0) == -1 ||
-        clock_gettime(CLOCK_REALTIME, &shutdown_timeout_timespec) == -1) {
-        // These should never fail, but if they do, skip the graceful reboot and reboot immediately.
-        return;
-    }
-
-    std::thread reboot_thread(&RebootThread, cmd, shutdown_timeout, false, &reboot_semaphore);
-    reboot_thread.detach();
-
-    // One extra second than the timeout passed to the thread as there is a final Umount pass
-    // after the timeout is reached.
-    shutdown_timeout_timespec.tv_sec += 1 + shutdown_timeout.count() / 1000;
-
-    int sem_return = 0;
-    while ((sem_return = sem_timedwait(&reboot_semaphore, &shutdown_timeout_timespec)) == -1 &&
-           errno == EINTR) {
-    }
-
-    if (sem_return == -1) {
-        LOG(ERROR) << "Reboot thread timed out";
-    }
-}
-
-void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
-              bool runFsck) {
-    LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
-
-    // Ensure last reboot reason is reduced to canonical
-    // alias reported in bootloader or system boot reason.
-    size_t skip = 0;
-    std::vector<std::string> reasons = Split(reason, ",");
-    if (reasons.size() >= 2 && reasons[0] == "reboot" &&
-        (reasons[1] == "recovery" || reasons[1] == "bootloader" || reasons[1] == "cold" ||
-         reasons[1] == "hard" || reasons[1] == "warm")) {
-        skip = strlen("reboot,");
-    }
-    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
-    sync();
-
-    auto shutdown_timeout = 0ms;
-    if (!SHUTDOWN_ZERO_TIMEOUT) {
-        if (cmd == ANDROID_RB_THERMOFF) {
-            constexpr auto kThermalShutdownTimeout = 1s;
-            shutdown_timeout = kThermalShutdownTimeout;
-        } else {
-            constexpr unsigned int kShutdownTimeoutDefault = 6;
-            auto shutdown_timeout_property = android::base::GetUintProperty(
-                "ro.build.shutdown_timeout", kShutdownTimeoutDefault);
-            shutdown_timeout = std::chrono::seconds(shutdown_timeout_property);
-        }
-    }
-    LOG(INFO) << "Shutdown timeout: " << shutdown_timeout.count() << " ms";
-
-    if (runFsck) {
-        RebootThread(cmd, shutdown_timeout, true, nullptr);
-    } else {
-        RunRebootThread(cmd, shutdown_timeout);
-    }
-
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.
     RebootSystem(cmd, rebootTarget);
     abort();
