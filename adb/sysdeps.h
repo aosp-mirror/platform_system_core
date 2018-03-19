@@ -92,11 +92,6 @@ static __inline__ int adb_thread_setname(const std::string& name) {
     return 0;
 }
 
-static __inline__  unsigned long adb_thread_id()
-{
-    return GetCurrentThreadId();
-}
-
 static __inline__ void  close_on_exec(int  fd)
 {
     /* nothing really */
@@ -623,11 +618,6 @@ static __inline__ int  adb_mkdir(const std::string& path, int mode)
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
-}
-
-static __inline__ unsigned long adb_thread_id()
-{
-    return (unsigned long)gettid();
 }
 
 #endif /* !_WIN32 */
