@@ -127,13 +127,9 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Mem
   if (arm.ExtractEntryData(entry_offset) && arm.Eval()) {
     // If the pc was not set, then use the LR registers for the PC.
     if (!arm.pc_set()) {
-      regs_arm->set_pc((*regs_arm)[ARM_REG_LR]);
-      (*regs_arm)[ARM_REG_PC] = regs_arm->pc();
-    } else {
-      regs_arm->set_pc((*regs_arm)[ARM_REG_PC]);
+      (*regs_arm)[ARM_REG_PC] = (*regs_arm)[ARM_REG_LR];
     }
-    regs_arm->set_sp(arm.cfa());
-    (*regs_arm)[ARM_REG_SP] = regs_arm->sp();
+    (*regs_arm)[ARM_REG_SP] = arm.cfa();
     return_value = true;
 
     // If the pc was set to zero, consider this the final frame.

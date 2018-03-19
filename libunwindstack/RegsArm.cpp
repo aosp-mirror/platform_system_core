@@ -28,11 +28,26 @@
 
 namespace unwindstack {
 
-RegsArm::RegsArm()
-    : RegsImpl<uint32_t>(ARM_REG_LAST, ARM_REG_SP, Location(LOCATION_REGISTER, ARM_REG_LR)) {}
+RegsArm::RegsArm() : RegsImpl<uint32_t>(ARM_REG_LAST, Location(LOCATION_REGISTER, ARM_REG_LR)) {}
 
 ArchEnum RegsArm::Arch() {
   return ARCH_ARM;
+}
+
+uint64_t RegsArm::pc() {
+  return regs_[ARM_REG_PC];
+}
+
+uint64_t RegsArm::sp() {
+  return regs_[ARM_REG_SP];
+}
+
+void RegsArm::set_pc(uint64_t pc) {
+  regs_[ARM_REG_PC] = pc;
+}
+
+void RegsArm::set_sp(uint64_t sp) {
+  regs_[ARM_REG_SP] = sp;
 }
 
 uint64_t RegsArm::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
@@ -56,17 +71,13 @@ uint64_t RegsArm::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
   return 4;
 }
 
-void RegsArm::SetFromRaw() {
-  set_pc(regs_[ARM_REG_PC]);
-  set_sp(regs_[ARM_REG_SP]);
-}
-
 bool RegsArm::SetPcFromReturnAddress(Memory*) {
-  if (pc() == regs_[ARM_REG_LR]) {
+  uint32_t lr = regs_[ARM_REG_LR];
+  if (regs_[ARM_REG_PC] == lr) {
     return false;
   }
 
-  set_pc(regs_[ARM_REG_LR]);
+  regs_[ARM_REG_PC] = lr;
   return true;
 }
 
@@ -94,7 +105,6 @@ Regs* RegsArm::Read(void* remote_data) {
 
   RegsArm* regs = new RegsArm();
   memcpy(regs->RawData(), &user->regs[0], ARM_REG_LAST * sizeof(uint32_t));
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -103,7 +113,6 @@ Regs* RegsArm::CreateFromUcontext(void* ucontext) {
 
   RegsArm* regs = new RegsArm();
   memcpy(regs->RawData(), &arm_ucontext->uc_mcontext.regs[0], ARM_REG_LAST * sizeof(uint32_t));
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -118,6 +127,7 @@ bool RegsArm::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
 
   uint64_t offset = 0;
   if (data == 0xe3a07077 || data == 0xef900077 || data == 0xdf002777) {
+    uint64_t sp = regs_[ARM_REG_SP];
     // non-RT sigreturn call.
     // __restore:
     //
@@ -131,17 +141,18 @@ bool RegsArm::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
     // Form 3 (thumb):
     // 0x77 0x27              movs r7, #77
     // 0x00 0xdf              svc 0
-    if (!process_memory->ReadFully(sp(), &data, sizeof(data))) {
+    if (!process_memory->ReadFully(sp, &data, sizeof(data))) {
       return false;
     }
     if (data == 0x5ac3c35a) {
       // SP + uc_mcontext offset + r0 offset.
-      offset = sp() + 0x14 + 0xc;
+      offset = sp + 0x14 + 0xc;
     } else {
       // SP + r0 offset
-      offset = sp() + 0xc;
+      offset = sp + 0xc;
     }
   } else if (data == 0xe3a070ad || data == 0xef9000ad || data == 0xdf0027ad) {
+    uint64_t sp = regs_[ARM_REG_SP];
     // RT sigreturn call.
     // __restore_rt:
     //
@@ -155,15 +166,15 @@ bool RegsArm::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
     // Form 3 (thumb):
     // 0xad 0x27              movs r7, #ad
     // 0x00 0xdf              svc 0
-    if (!process_memory->ReadFully(sp(), &data, sizeof(data))) {
+    if (!process_memory->ReadFully(sp, &data, sizeof(data))) {
       return false;
     }
-    if (data == sp() + 8) {
+    if (data == sp + 8) {
       // SP + 8 + sizeof(siginfo_t) + uc_mcontext_offset + r0 offset
-      offset = sp() + 8 + 0x80 + 0x14 + 0xc;
+      offset = sp + 8 + 0x80 + 0x14 + 0xc;
     } else {
       // SP + sizeof(siginfo_t) + uc_mcontext_offset + r0 offset
-      offset = sp() + 0x80 + 0x14 + 0xc;
+      offset = sp + 0x80 + 0x14 + 0xc;
     }
   }
   if (offset == 0) {
@@ -173,7 +184,6 @@ bool RegsArm::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
   if (!process_memory->ReadFully(offset, regs_.data(), sizeof(uint32_t) * ARM_REG_LAST)) {
     return false;
   }
-  SetFromRaw();
   return true;
 }
 

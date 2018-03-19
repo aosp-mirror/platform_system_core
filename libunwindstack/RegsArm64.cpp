@@ -29,10 +29,26 @@
 namespace unwindstack {
 
 RegsArm64::RegsArm64()
-    : RegsImpl<uint64_t>(ARM64_REG_LAST, ARM64_REG_SP, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
+    : RegsImpl<uint64_t>(ARM64_REG_LAST, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
 
 ArchEnum RegsArm64::Arch() {
   return ARCH_ARM64;
+}
+
+uint64_t RegsArm64::pc() {
+  return regs_[ARM64_REG_PC];
+}
+
+uint64_t RegsArm64::sp() {
+  return regs_[ARM64_REG_SP];
+}
+
+void RegsArm64::set_pc(uint64_t pc) {
+  regs_[ARM64_REG_PC] = pc;
+}
+
+void RegsArm64::set_sp(uint64_t sp) {
+  regs_[ARM64_REG_SP] = sp;
 }
 
 uint64_t RegsArm64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
@@ -42,17 +58,13 @@ uint64_t RegsArm64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
   return 4;
 }
 
-void RegsArm64::SetFromRaw() {
-  set_pc(regs_[ARM64_REG_PC]);
-  set_sp(regs_[ARM64_REG_SP]);
-}
-
 bool RegsArm64::SetPcFromReturnAddress(Memory*) {
-  if (pc() == regs_[ARM64_REG_LR]) {
+  uint64_t lr = regs_[ARM64_REG_LR];
+  if (regs_[ARM64_REG_PC] == lr) {
     return false;
   }
 
-  set_pc(regs_[ARM64_REG_LR]);
+  regs_[ARM64_REG_PC] = lr;
   return true;
 }
 
@@ -100,7 +112,6 @@ Regs* RegsArm64::Read(void* remote_data) {
   uint64_t* reg_data = reinterpret_cast<uint64_t*>(regs->RawData());
   reg_data[ARM64_REG_PC] = user->pc;
   reg_data[ARM64_REG_SP] = user->sp;
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -109,7 +120,6 @@ Regs* RegsArm64::CreateFromUcontext(void* ucontext) {
 
   RegsArm64* regs = new RegsArm64();
   memcpy(regs->RawData(), &arm64_ucontext->uc_mcontext.regs[0], ARM64_REG_LAST * sizeof(uint64_t));
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -131,12 +141,10 @@ bool RegsArm64::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_m
   }
 
   // SP + sizeof(siginfo_t) + uc_mcontext offset + X0 offset.
-  if (!process_memory->ReadFully(sp() + 0x80 + 0xb0 + 0x08, regs_.data(),
+  if (!process_memory->ReadFully(regs_[ARM64_REG_SP] + 0x80 + 0xb0 + 0x08, regs_.data(),
                                  sizeof(uint64_t) * ARM64_REG_LAST)) {
     return false;
   }
-
-  SetFromRaw();
   return true;
 }
 
