@@ -1187,7 +1187,7 @@ class FileOperationsTest(DeviceTest):
         # Verify that the device ended up with the expected UTF-8 path
         output = self.device.shell(
                 ['ls', '/data/local/tmp/adb-test-*'])[0].strip()
-        self.assertEqual(remote_path.encode('utf-8'), output)
+        self.assertEqual(remote_path, output)
 
         # pull.
         self.device.pull(remote_path, tf.name)
