@@ -402,6 +402,10 @@ static void fdevent_run_setup() {
             PLOG(FATAL) << "failed to create run queue notify socketpair";
         }
 
+        if (!set_file_block_mode(s[0], false) || !set_file_block_mode(s[1], false)) {
+            PLOG(FATAL) << "failed to make run queue notify socket nonblocking";
+        }
+
         run_queue_notify_fd.reset(s[0]);
         fdevent* fde = fdevent_create(s[1], fdevent_run_func, nullptr);
         CHECK(fde != nullptr);
@@ -418,7 +422,12 @@ void fdevent_run_on_main_thread(std::function<void()> fn) {
     // run_queue_notify_fd could still be -1 if we're called before fdevent has finished setting up.
     // In that case, rely on the setup code to flush the queue without a notification being needed.
     if (run_queue_notify_fd != -1) {
-        if (adb_write(run_queue_notify_fd.get(), "", 1) != 1) {
+        int rc = adb_write(run_queue_notify_fd.get(), "", 1);
+
+        // It's possible that we get EAGAIN here, if lots of notifications came in while handling.
+        if (rc == 0) {
+            PLOG(FATAL) << "run queue notify fd was closed?";
+        } else if (rc == -1 && errno != EAGAIN) {
             PLOG(FATAL) << "failed to write to run queue notify fd";
         }
     }
