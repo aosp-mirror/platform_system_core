@@ -65,8 +65,8 @@ bool ElfInterfaceFake::Step(uint64_t, uint64_t, Regs* regs, Memory*, bool* finis
   }
 
   RegsFake* fake_regs = reinterpret_cast<RegsFake*>(regs);
-  fake_regs->FakeSetPc(entry.pc);
-  fake_regs->FakeSetSp(entry.sp);
+  fake_regs->set_pc(entry.pc);
+  fake_regs->set_sp(entry.sp);
   *finished = entry.finished;
   return true;
 }

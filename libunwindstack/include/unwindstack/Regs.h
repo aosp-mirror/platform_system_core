@@ -45,8 +45,8 @@ class Regs {
     int16_t value;
   };
 
-  Regs(uint16_t total_regs, uint16_t sp_reg, const Location& return_loc)
-      : total_regs_(total_regs), sp_reg_(sp_reg), return_loc_(return_loc) {}
+  Regs(uint16_t total_regs, const Location& return_loc)
+      : total_regs_(total_regs), return_loc_(return_loc) {}
   virtual ~Regs() = default;
 
   virtual ArchEnum Arch() = 0;
@@ -57,6 +57,9 @@ class Regs {
   virtual uint64_t pc() = 0;
   virtual uint64_t sp() = 0;
 
+  virtual void set_pc(uint64_t pc) = 0;
+  virtual void set_sp(uint64_t sp) = 0;
+
   uint64_t dex_pc() { return dex_pc_; }
   void set_dex_pc(uint64_t dex_pc) { dex_pc_ = dex_pc; }
 
@@ -64,13 +67,10 @@ class Regs {
 
   virtual bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) = 0;
 
-  virtual void SetFromRaw() = 0;
-
   virtual bool SetPcFromReturnAddress(Memory* process_memory) = 0;
 
   virtual void IterateRegisters(std::function<void(const char*, uint64_t)>) = 0;
 
-  uint16_t sp_reg() { return sp_reg_; }
   uint16_t total_regs() { return total_regs_; }
 
   static ArchEnum CurrentArch();
@@ -80,7 +80,6 @@ class Regs {
 
  protected:
   uint16_t total_regs_;
-  uint16_t sp_reg_;
   Location return_loc_;
   uint64_t dex_pc_ = 0;
 };
@@ -88,15 +87,9 @@ class Regs {
 template <typename AddressType>
 class RegsImpl : public Regs {
  public:
-  RegsImpl(uint16_t total_regs, uint16_t sp_reg, Location return_loc)
-      : Regs(total_regs, sp_reg, return_loc), regs_(total_regs) {}
+  RegsImpl(uint16_t total_regs, Location return_loc)
+      : Regs(total_regs, return_loc), regs_(total_regs) {}
   virtual ~RegsImpl() = default;
-
-  uint64_t pc() override { return pc_; }
-  uint64_t sp() override { return sp_; }
-
-  void set_pc(AddressType pc) { pc_ = pc; }
-  void set_sp(AddressType sp) { sp_ = sp; }
 
   bool Is32Bit() override { return sizeof(AddressType) == sizeof(uint32_t); }
 
@@ -111,8 +104,6 @@ class RegsImpl : public Regs {
   }
 
  protected:
-  AddressType pc_;
-  AddressType sp_;
   std::vector<AddressType> regs_;
 };
 

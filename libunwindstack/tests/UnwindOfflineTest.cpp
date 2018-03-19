@@ -122,7 +122,6 @@ class UnwindOfflineTest : public ::testing::Test {
       (*regs)[entry->second] = value;
     }
     fclose(fp);
-    regs->SetFromRaw();
   }
 
   static std::unordered_map<std::string, uint32_t> arm_regs_;
@@ -954,6 +953,121 @@ TEST_F(UnwindOfflineTest, eh_frame_hdr_begin_x86_64) {
   EXPECT_EQ(0x7ffcc8597190U, unwinder.frames()[3].sp);
   EXPECT_EQ(0x7f4de62162b0U, unwinder.frames()[4].pc);
   EXPECT_EQ(0x7ffcc85971a0U, unwinder.frames()[4].sp);
+}
+
+TEST_F(UnwindOfflineTest, art_quick_osr_stub_arm) {
+  Init("art_quick_osr_stub_arm/", ARCH_ARM);
+
+  MemoryOfflineParts* memory = new MemoryOfflineParts;
+  AddMemory(dir_ + "descriptor.data", memory);
+  AddMemory(dir_ + "stack.data", memory);
+  for (size_t i = 0; i < 2; i++) {
+    AddMemory(dir_ + "entry" + std::to_string(i) + ".data", memory);
+    AddMemory(dir_ + "jit" + std::to_string(i) + ".data", memory);
+  }
+  process_memory_.reset(memory);
+
+  JitDebug jit_debug(process_memory_);
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.SetJitDebug(&jit_debug, regs_->Arch());
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(25U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0000c788  <anonymous:d0250000> "
+      "(com.example.simpleperf.simpleperfexamplewithnative.MixActivity.access$000)\n"
+      "  #01 pc 0000cdd5  <anonymous:d0250000> "
+      "(com.example.simpleperf.simpleperfexamplewithnative.MixActivity$1.run+60)\n"
+      "  #02 pc 004135bb  libart.so (art_quick_osr_stub+42)\n"
+      "  #03 pc 002657a5  libart.so "
+      "(_ZN3art3jit3Jit25MaybeDoOnStackReplacementEPNS_6ThreadEPNS_9ArtMethodEjiPNS_6JValueE+876)\n"
+      "  #04 pc 004021a7  libart.so (MterpMaybeDoOnStackReplacement+86)\n"
+      "  #05 pc 00412474  libart.so (ExecuteMterpImpl+66164)\n"
+      "  #06 pc cd8365b0  <unknown>\n"  // symbol in dex file
+      "  #07 pc 001d7f1b  libart.so "
+      "(_ZN3art11interpreterL7ExecuteEPNS_6ThreadERKNS_20CodeItemDataAccessorERNS_11ShadowFrameENS_"
+      "6JValueEb+374)\n"
+      "  #08 pc 001dc593  libart.so "
+      "(_ZN3art11interpreter33ArtInterpreterToInterpreterBridgeEPNS_6ThreadERKNS_"
+      "20CodeItemDataAccessorEPNS_11ShadowFrameEPNS_6JValueE+154)\n"
+      "  #09 pc 001f4d01  libart.so "
+      "(_ZN3art11interpreter6DoCallILb0ELb0EEEbPNS_9ArtMethodEPNS_6ThreadERNS_11ShadowFrameEPKNS_"
+      "11InstructionEtPNS_6JValueE+732)\n"
+      "  #10 pc 003fe427  libart.so (MterpInvokeInterface+1354)\n"
+      "  #11 pc 00405b94  libart.so (ExecuteMterpImpl+14740)\n"
+      "  #12 pc 7004873e  <unknown>\n"  // symbol in dex file
+      "  #13 pc 001d7f1b  libart.so "
+      "(_ZN3art11interpreterL7ExecuteEPNS_6ThreadERKNS_20CodeItemDataAccessorERNS_11ShadowFrameENS_"
+      "6JValueEb+374)\n"
+      "  #14 pc 001dc4d5  libart.so "
+      "(_ZN3art11interpreter30EnterInterpreterFromEntryPointEPNS_6ThreadERKNS_"
+      "20CodeItemDataAccessorEPNS_11ShadowFrameE+92)\n"
+      "  #15 pc 003f25ab  libart.so (artQuickToInterpreterBridge+970)\n"
+      "  #16 pc 00417aff  libart.so (art_quick_to_interpreter_bridge+30)\n"
+      "  #17 pc 00413575  libart.so (art_quick_invoke_stub_internal+68)\n"
+      "  #18 pc 00418531  libart.so (art_quick_invoke_stub+236)\n"
+      "  #19 pc 000b468d  libart.so (_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+136)\n"
+      "  #20 pc 00362f49  libart.so "
+      "(_ZN3art12_GLOBAL__N_118InvokeWithArgArrayERKNS_33ScopedObjectAccessAlreadyRunnableEPNS_"
+      "9ArtMethodEPNS0_8ArgArrayEPNS_6JValueEPKc+52)\n"
+      "  #21 pc 00363cd9  libart.so "
+      "(_ZN3art35InvokeVirtualOrInterfaceWithJValuesERKNS_33ScopedObjectAccessAlreadyRunnableEP8_"
+      "jobjectP10_jmethodIDP6jvalue+332)\n"
+      "  #22 pc 003851dd  libart.so (_ZN3art6Thread14CreateCallbackEPv+868)\n"
+      "  #23 pc 00062925  libc.so (_ZL15__pthread_startPv+22)\n"
+      "  #24 pc 0001de39  libc.so (__start_thread+24)\n",
+      frame_info);
+  EXPECT_EQ(0xd025c788U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xcd4ff140U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xd025cdd5U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xcd4ff140U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xe4a755bbU, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xcd4ff160U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xe48c77a5U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xcd4ff190U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xe4a641a7U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xcd4ff298U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0xe4a74474U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xcd4ff2b8U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0xcd8365b0U, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xcd4ff2e0U, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xe4839f1bU, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xcd4ff2e0U, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xe483e593U, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xcd4ff330U, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xe4856d01U, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xcd4ff380U, unwinder.frames()[9].sp);
+  EXPECT_EQ(0xe4a60427U, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xcd4ff430U, unwinder.frames()[10].sp);
+  EXPECT_EQ(0xe4a67b94U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xcd4ff498U, unwinder.frames()[11].sp);
+  EXPECT_EQ(0x7004873eU, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xcd4ff4c0U, unwinder.frames()[12].sp);
+  EXPECT_EQ(0xe4839f1bU, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xcd4ff4c0U, unwinder.frames()[13].sp);
+  EXPECT_EQ(0xe483e4d5U, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xcd4ff510U, unwinder.frames()[14].sp);
+  EXPECT_EQ(0xe4a545abU, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xcd4ff538U, unwinder.frames()[15].sp);
+  EXPECT_EQ(0xe4a79affU, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xcd4ff640U, unwinder.frames()[16].sp);
+  EXPECT_EQ(0xe4a75575U, unwinder.frames()[17].pc);
+  EXPECT_EQ(0xcd4ff6b0U, unwinder.frames()[17].sp);
+  EXPECT_EQ(0xe4a7a531U, unwinder.frames()[18].pc);
+  EXPECT_EQ(0xcd4ff6e8U, unwinder.frames()[18].sp);
+  EXPECT_EQ(0xe471668dU, unwinder.frames()[19].pc);
+  EXPECT_EQ(0xcd4ff770U, unwinder.frames()[19].sp);
+  EXPECT_EQ(0xe49c4f49U, unwinder.frames()[20].pc);
+  EXPECT_EQ(0xcd4ff7c8U, unwinder.frames()[20].sp);
+  EXPECT_EQ(0xe49c5cd9U, unwinder.frames()[21].pc);
+  EXPECT_EQ(0xcd4ff850U, unwinder.frames()[21].sp);
+  EXPECT_EQ(0xe49e71ddU, unwinder.frames()[22].pc);
+  EXPECT_EQ(0xcd4ff8e8U, unwinder.frames()[22].sp);
+  EXPECT_EQ(0xe7df3925U, unwinder.frames()[23].pc);
+  EXPECT_EQ(0xcd4ff958U, unwinder.frames()[23].sp);
+  EXPECT_EQ(0xe7daee39U, unwinder.frames()[24].pc);
+  EXPECT_EQ(0xcd4ff960U, unwinder.frames()[24].sp);
 }
 
 }  // namespace unwindstack
