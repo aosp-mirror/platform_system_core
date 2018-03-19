@@ -221,7 +221,7 @@ TEST_F(UnwinderTest, multiple_frames_dont_resolve_names) {
   EXPECT_EQ(0x10000U, frame->sp);
   EXPECT_EQ("", frame->function_name);
   EXPECT_EQ(0U, frame->function_offset);
-  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ("", frame->map_name);
   EXPECT_EQ(0U, frame->map_offset);
   EXPECT_EQ(0x1000U, frame->map_start);
   EXPECT_EQ(0x8000U, frame->map_end);
@@ -235,7 +235,7 @@ TEST_F(UnwinderTest, multiple_frames_dont_resolve_names) {
   EXPECT_EQ(0x10010U, frame->sp);
   EXPECT_EQ("", frame->function_name);
   EXPECT_EQ(0U, frame->function_offset);
-  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ("", frame->map_name);
   EXPECT_EQ(0U, frame->map_offset);
   EXPECT_EQ(0x1000U, frame->map_start);
   EXPECT_EQ(0x8000U, frame->map_end);
@@ -249,7 +249,7 @@ TEST_F(UnwinderTest, multiple_frames_dont_resolve_names) {
   EXPECT_EQ(0x10020U, frame->sp);
   EXPECT_EQ("", frame->function_name);
   EXPECT_EQ(0U, frame->function_offset);
-  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ("", frame->map_name);
   EXPECT_EQ(0U, frame->map_offset);
   EXPECT_EQ(0x1000U, frame->map_start);
   EXPECT_EQ(0x8000U, frame->map_end);
