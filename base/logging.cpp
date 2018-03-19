@@ -21,6 +21,7 @@
 #include "android-base/logging.h"
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <time.h>
 
@@ -54,41 +55,7 @@
 
 #include <android-base/macros.h>
 #include <android-base/strings.h>
-
-// For gettid.
-#if defined(__APPLE__)
-#include "AvailabilityMacros.h"  // For MAC_OS_X_VERSION_MAX_ALLOWED
-#include <stdint.h>
-#include <stdlib.h>
-#include <sys/syscall.h>
-#include <sys/time.h>
-#include <unistd.h>
-#elif defined(__linux__) && !defined(__ANDROID__)
-#include <syscall.h>
-#include <unistd.h>
-#elif defined(_WIN32)
-#include <windows.h>
-#endif
-
-#if defined(_WIN32)
-typedef uint32_t thread_id;
-#else
-typedef pid_t thread_id;
-#endif
-
-static thread_id GetThreadId() {
-#if defined(__BIONIC__)
-  return gettid();
-#elif defined(__APPLE__)
-  uint64_t tid;
-  pthread_threadid_np(NULL, &tid);
-  return tid;
-#elif defined(__linux__)
-  return syscall(__NR_gettid);
-#elif defined(_WIN32)
-  return GetCurrentThreadId();
-#endif
-}
+#include <android-base/threads.h>
 
 namespace {
 #if defined(__GLIBC__)
@@ -223,8 +190,8 @@ void StderrLogger(LogId, LogSeverity severity, const char* tag, const char* file
   static_assert(arraysize(log_characters) - 1 == FATAL + 1,
                 "Mismatch in size of log_characters and values in LogSeverity");
   char severity_char = log_characters[severity];
-  fprintf(stderr, "%s %c %s %5d %5d %s:%u] %s\n", tag ? tag : "nullptr", severity_char, timestamp,
-          getpid(), GetThreadId(), file, line, message);
+  fprintf(stderr, "%s %c %s %5d %5" PRIu64 " %s:%u] %s\n", tag ? tag : "nullptr", severity_char,
+          timestamp, getpid(), GetThreadId(), file, line, message);
 }
 
 void DefaultAborter(const char* abort_message) {
