@@ -21,6 +21,7 @@
 #include "fdevent.h"
 
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -36,6 +37,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/thread_annotations.h>
+#include <android-base/threads.h>
 
 #include "adb_io.h"
 #include "adb_trace.h"
@@ -78,7 +80,7 @@ static auto& g_poll_node_map = *new std::unordered_map<int, PollNode>();
 static auto& g_pending_list = *new std::list<fdevent*>();
 static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
-static unsigned long main_thread_id;
+static uint64_t main_thread_id;
 
 static auto& run_queue_notify_fd = *new unique_fd();
 static auto& run_queue_mutex = *new std::mutex();
@@ -86,13 +88,13 @@ static auto& run_queue GUARDED_BY(run_queue_mutex) = *new std::deque<std::functi
 
 void check_main_thread() {
     if (main_thread_valid) {
-        CHECK_EQ(main_thread_id, adb_thread_id());
+        CHECK_EQ(main_thread_id, android::base::GetThreadId());
     }
 }
 
 void set_main_thread() {
     main_thread_valid = true;
-    main_thread_id = adb_thread_id();
+    main_thread_id = android::base::GetThreadId();
 }
 
 static std::string dump_fde(const fdevent* fde) {

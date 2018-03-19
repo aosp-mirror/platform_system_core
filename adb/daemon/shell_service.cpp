@@ -372,8 +372,8 @@ bool Subprocess::ForkAndExec(std::string* error) {
         }
         D("protocol FD = %d", protocol_sfd_.get());
 
-        input_.reset(new ShellProtocol(protocol_sfd_));
-        output_.reset(new ShellProtocol(protocol_sfd_));
+        input_ = std::make_unique<ShellProtocol>(protocol_sfd_);
+        output_ = std::make_unique<ShellProtocol>(protocol_sfd_);
         if (!input_ || !output_) {
             *error = "failed to allocate shell protocol objects";
             kill(pid_, SIGKILL);

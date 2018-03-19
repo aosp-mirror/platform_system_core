@@ -61,6 +61,7 @@
 #include "services.h"
 #include "shell_service.h"
 #include "sysdeps/chrono.h"
+#include "sysdeps/memory.h"
 
 static int install_app(int argc, const char** argv);
 static int install_multiple_app(int argc, const char** argv);
@@ -263,7 +264,7 @@ int read_and_dump(int fd, bool use_shell_protocol = false,
     char raw_buffer[BUFSIZ];
     char* buffer_ptr = raw_buffer;
     if (use_shell_protocol) {
-        protocol.reset(new ShellProtocol(fd));
+        protocol = std::make_unique<ShellProtocol>(fd);
         if (!protocol) {
             LOG(ERROR) << "failed to allocate memory for ShellProtocol object";
             return 1;
@@ -630,7 +631,7 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg,
     args->raw_stdin = raw_stdin;
     args->escape_char = escape_char;
     if (use_shell_protocol) {
-        args->protocol.reset(new ShellProtocol(args->write_fd));
+        args->protocol = std::make_unique<ShellProtocol>(args->write_fd);
     }
 
     if (raw_stdin) stdin_raw_init();
