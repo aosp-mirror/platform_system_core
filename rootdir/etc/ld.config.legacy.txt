@@ -10,6 +10,9 @@ dir.legacy = /vendor
 dir.legacy = /odm
 dir.legacy = /sbin
 
+# Except for /postinstall, where only /system is searched
+dir.postinstall = /postinstall
+
 [legacy]
 namespace.default.isolated = false
 
@@ -23,3 +26,15 @@ namespace.default.asan.search.paths += /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
+
+###############################################################################
+# Namespace config for binaries under /postinstall.
+# Only one default namespace is defined and it has no directories other than
+# /system/lib in the search paths. This is because linker calls realpath on the
+# search paths and this causes selinux denial if the paths (/vendor, /odm) are
+# not allowed to the poinstall binaries. There is no reason to allow the
+# binaries to access the paths.
+###############################################################################
+[postinstall]
+namespace.default.isolated = false
+namespace.default.search.paths = /system/${LIB}
