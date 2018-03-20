@@ -31,6 +31,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -492,6 +493,29 @@ class ShellTest(DeviceTest):
 
         stdout, _ = self.device.shell(["cat", log_path])
         self.assertEqual(stdout.strip(), "SIGHUP")
+
+    def test_exit_stress(self):
+        """Hammer `adb shell exit 42` with multiple threads."""
+        thread_count = 48
+        result = dict()
+        def hammer(thread_idx, thread_count, result):
+            success = True
+            for i in range(thread_idx, 240, thread_count):
+                ret = subprocess.call(['adb', 'shell', 'exit {}'.format(i)])
+                if ret != i % 256:
+                    success = False
+                    break
+            result[thread_idx] = success
+
+        threads = []
+        for i in range(thread_count):
+            thread = threading.Thread(target=hammer, args=(i, thread_count, result))
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+        for i, success in result.iteritems():
+            self.assertTrue(success)
 
 
 class ArgumentEscapingTest(DeviceTest):
