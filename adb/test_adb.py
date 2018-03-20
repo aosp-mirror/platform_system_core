@@ -217,8 +217,12 @@ class NonApiTest(unittest.TestCase):
         ipv4.listen(1)
 
         ipv6 = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        ipv6.bind(('::1', ipv4.getsockname()[1] + 1))
-        ipv6.listen(1)
+        try:
+            ipv6.bind(('::1', ipv4.getsockname()[1] + 1))
+            ipv6.listen(1)
+        except socket.error:
+            print("IPv6 not available, skipping")
+            return
 
         for s in (ipv4, ipv6):
             port = s.getsockname()[1]
