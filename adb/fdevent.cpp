@@ -44,13 +44,6 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 
-#if !ADB_HOST
-// This socket is used when a subproc shell service exists.
-// It wakes up the fdevent_loop() and cause the correct handling
-// of the shell's pseudo-tty master. I.e. force close it.
-int SHELL_EXIT_NOTIFY_FD = -1;
-#endif // !ADB_HOST
-
 #define FDE_EVENTMASK  0x00ff
 #define FDE_STATEMASK  0xff00
 
@@ -296,72 +289,6 @@ static void fdevent_call_fdfunc(fdevent* fde) {
     fde->func(fde->fd, events, fde->arg);
 }
 
-#if !ADB_HOST
-
-#include <sys/ioctl.h>
-
-static void fdevent_subproc_event_func(int fd, unsigned ev, void* /* userdata */) {
-    D("subproc handling on fd = %d, ev = %x", fd, ev);
-
-    CHECK_GE(fd, 0);
-
-    if (ev & FDE_READ) {
-        int subproc_fd;
-
-        if(!ReadFdExactly(fd, &subproc_fd, sizeof(subproc_fd))) {
-            LOG(FATAL) << "Failed to read the subproc's fd from " << fd;
-        }
-        auto it = g_poll_node_map.find(subproc_fd);
-        if (it == g_poll_node_map.end()) {
-            D("subproc_fd %d cleared from fd_table", subproc_fd);
-            adb_close(subproc_fd);
-            return;
-        }
-        fdevent* subproc_fde = it->second.fde;
-        if(subproc_fde->fd != subproc_fd) {
-            // Already reallocated?
-            LOG(FATAL) << "subproc_fd(" << subproc_fd << ") != subproc_fde->fd(" << subproc_fde->fd
-                       << ")";
-            return;
-        }
-
-        subproc_fde->force_eof = 1;
-
-        int rcount = 0;
-        ioctl(subproc_fd, FIONREAD, &rcount);
-        D("subproc with fd %d has rcount=%d, err=%d", subproc_fd, rcount, errno);
-        if (rcount != 0) {
-            // If there is data left, it will show up in the select().
-            // This works because there is no other thread reading that
-            // data when in this fd_func().
-            return;
-        }
-
-        D("subproc_fde %s", dump_fde(subproc_fde).c_str());
-        subproc_fde->events |= FDE_READ;
-        if(subproc_fde->state & FDE_PENDING) {
-            return;
-        }
-        subproc_fde->state |= FDE_PENDING;
-        fdevent_call_fdfunc(subproc_fde);
-    }
-}
-
-static void fdevent_subproc_setup() {
-    int s[2];
-
-    if(adb_socketpair(s)) {
-        PLOG(FATAL) << "cannot create shell-exit socket-pair";
-    }
-    D("fdevent_subproc: socket pair (%d, %d)", s[0], s[1]);
-
-    SHELL_EXIT_NOTIFY_FD = s[0];
-    fdevent *fde = fdevent_create(s[1], fdevent_subproc_event_func, NULL);
-    CHECK(fde != nullptr) << "cannot create fdevent for shell-exit handler";
-    fdevent_add(fde, FDE_READ);
-}
-#endif // !ADB_HOST
-
 static void fdevent_run_flush() EXCLUDES(run_queue_mutex) {
     // We need to be careful around reentrancy here, since a function we call can queue up another
     // function.
@@ -435,9 +362,6 @@ void fdevent_run_on_main_thread(std::function<void()> fn) {
 
 void fdevent_loop() {
     set_main_thread();
-#if !ADB_HOST
-    fdevent_subproc_setup();
-#endif // !ADB_HOST
     fdevent_run_setup();
 
     while (true) {
