@@ -239,6 +239,8 @@ EXPECT_EQ() {
   return 0
 }
 
+BAD_BOOTLOADER_REASON=
+
 [ "USAGE: EXPECT_PROPERTY <prop> <value> [--allow_failure]
 
 Returns true (0) if current return (regex) value is true and the result matches
@@ -249,9 +251,20 @@ EXPECT_PROPERTY() {
   value="${2}"
   shift 2
   val=`adb shell getprop ${property} 2>&1`
-  EXPECT_EQ "${value}" "${val}" for Android property ${property} ||
-    [ -n "${1}" ] ||
-    save_ret=${?}
+  EXPECT_EQ "${value}" "${val}" for Android property ${property}
+  local_ret=${?}
+  if [ 0 != ${local_ret} -a "ro.boot.bootreason" = "${property}" ]; then
+    if [ -z "${BAD_BOOTLOADER_REASON}" ]; then
+      BAD_BOOTLOADER_REASON=${val}
+    elif [ X"${BAD_BOOTLOADER_REASON}" = X"${val}" ]; then
+      local_ret=0
+    fi
+  fi
+  if [ 0 != ${local_ret} ]; then
+    if [ -z "${1}" ] ; then
+      save_ret=${local_ret}
+    fi
+  fi
   return ${save_ret}
 }
 
