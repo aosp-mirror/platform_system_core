@@ -747,8 +747,6 @@ int network_loopback_client(int port, int type, std::string* error) {
     return fd;
 }
 
-#define LISTEN_BACKLOG 4
-
 // interface_address is INADDR_LOOPBACK or INADDR_ANY.
 static int _network_server(int port, int type, u_long interface_address, std::string* error) {
     struct sockaddr_in addr;
@@ -805,7 +803,7 @@ static int _network_server(int port, int type, u_long interface_address, std::st
         return -1;
     }
     if (type == SOCK_STREAM) {
-        if (listen(s, LISTEN_BACKLOG) == SOCKET_ERROR) {
+        if (listen(s, SOMAXCONN) == SOCKET_ERROR) {
             const DWORD err = WSAGetLastError();
             *error = android::base::StringPrintf(
                 "cannot listen on socket: %s", android::base::SystemErrorCodeToString(err).c_str());
