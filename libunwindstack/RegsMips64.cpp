@@ -29,11 +29,26 @@
 namespace unwindstack {
 
 RegsMips64::RegsMips64()
-    : RegsImpl<uint64_t>(MIPS64_REG_LAST, MIPS64_REG_SP,
-                         Location(LOCATION_REGISTER, MIPS64_REG_RA)) {}
+    : RegsImpl<uint64_t>(MIPS64_REG_LAST, Location(LOCATION_REGISTER, MIPS64_REG_RA)) {}
 
 ArchEnum RegsMips64::Arch() {
   return ARCH_MIPS64;
+}
+
+uint64_t RegsMips64::pc() {
+  return regs_[MIPS64_REG_PC];
+}
+
+uint64_t RegsMips64::sp() {
+  return regs_[MIPS64_REG_SP];
+}
+
+void RegsMips64::set_pc(uint64_t pc) {
+  regs_[MIPS64_REG_PC] = pc;
+}
+
+void RegsMips64::set_sp(uint64_t sp) {
+  regs_[MIPS64_REG_SP] = sp;
 }
 
 uint64_t RegsMips64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
@@ -44,17 +59,13 @@ uint64_t RegsMips64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
   return 8;
 }
 
-void RegsMips64::SetFromRaw() {
-  set_pc(regs_[MIPS64_REG_PC]);
-  set_sp(regs_[MIPS64_REG_SP]);
-}
-
 bool RegsMips64::SetPcFromReturnAddress(Memory*) {
-  if (pc() == regs_[MIPS64_REG_RA]) {
+  uint64_t ra = regs_[MIPS64_REG_RA];
+  if (regs_[MIPS64_REG_PC] == ra) {
     return false;
   }
 
-  set_pc(regs_[MIPS64_REG_RA]);
+  regs_[MIPS64_REG_PC] = ra;
   return true;
 }
 
@@ -102,7 +113,6 @@ Regs* RegsMips64::Read(void* remote_data) {
   memcpy(regs->RawData(), &user->regs[MIPS64_EF_R0], (MIPS64_REG_R31 + 1) * sizeof(uint64_t));
 
   reg_data[MIPS64_REG_PC] = user->regs[MIPS64_EF_CP0_EPC];
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -113,7 +123,6 @@ Regs* RegsMips64::CreateFromUcontext(void* ucontext) {
   // Copy 64 bit sc_regs over to 64 bit regs
   memcpy(regs->RawData(), &mips64_ucontext->uc_mcontext.sc_regs[0], 32 * sizeof(uint64_t));
   (*regs)[MIPS64_REG_PC] = mips64_ucontext->uc_mcontext.sc_pc;
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -137,19 +146,17 @@ bool RegsMips64::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_
   // vdso_rt_sigreturn => read rt_sigframe
   // offset = siginfo offset + sizeof(siginfo) + uc_mcontext offset
   // read 64 bit sc_regs[32] from stack into 64 bit regs_
-  if (!process_memory->Read(sp() + 24 + 128 + 40, regs_.data(),
+  uint64_t sp = regs_[MIPS64_REG_SP];
+  if (!process_memory->Read(sp + 24 + 128 + 40, regs_.data(),
                             sizeof(uint64_t) * (MIPS64_REG_LAST - 1))) {
     return false;
   }
 
   // offset = siginfo offset + sizeof(siginfo) + uc_mcontext offset + sc_pc offset
   // read 64 bit sc_pc from stack into 64 bit regs_[MIPS64_REG_PC]
-  if (!process_memory->Read(sp() + 24 + 128 + 40 + 576, &regs_[MIPS64_REG_PC],
-                            sizeof(uint64_t))) {
+  if (!process_memory->Read(sp + 24 + 128 + 40 + 576, &regs_[MIPS64_REG_PC], sizeof(uint64_t))) {
     return false;
   }
-
-  SetFromRaw();
   return true;
 }
 

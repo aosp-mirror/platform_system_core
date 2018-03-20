@@ -34,6 +34,7 @@ static const std::set<std::string> kExportedActionableProperties = {
     "init.svc.zygote",
     "persist.bluetooth.btsnoopenable",
     "persist.sys.crash_rcu",
+    "persist.sys.usb.usbradio.config",
     "persist.sys.zram_enabled",
     "ro.bootmode",
     "ro.build.type",
