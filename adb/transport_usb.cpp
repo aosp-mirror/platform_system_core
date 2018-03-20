@@ -17,6 +17,7 @@
 #define TRACE_TAG TRANSPORT
 
 #include "sysdeps.h"
+#include "sysdeps/memory.h"
 #include "transport.h"
 
 #include <stdio.h>
@@ -174,8 +175,8 @@ void UsbConnection::Close() {
 
 void init_usb_transport(atransport* t, usb_handle* h) {
     D("transport: usb");
-    std::unique_ptr<BlockingConnection> connection(new UsbConnection(h));
-    t->connection.reset(new BlockingConnectionAdapter(std::move(connection)));
+    auto connection = std::make_unique<UsbConnection>(h);
+    t->connection = std::make_unique<BlockingConnectionAdapter>(std::move(connection));
     t->type = kTransportUsb;
 }
 

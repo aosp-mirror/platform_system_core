@@ -49,9 +49,8 @@ class RegsTest : public ::testing::Test {
 };
 
 TEST_F(RegsTest, regs32) {
-  RegsImplFake<uint32_t> regs32(50, 10);
+  RegsImplFake<uint32_t> regs32(50);
   ASSERT_EQ(50U, regs32.total_regs());
-  ASSERT_EQ(10U, regs32.sp_reg());
 
   uint32_t* raw = reinterpret_cast<uint32_t*>(regs32.RawData());
   for (size_t i = 0; i < 50; i++) {
@@ -72,9 +71,8 @@ TEST_F(RegsTest, regs32) {
 }
 
 TEST_F(RegsTest, regs64) {
-  RegsImplFake<uint64_t> regs64(30, 12);
+  RegsImplFake<uint64_t> regs64(30);
   ASSERT_EQ(30U, regs64.total_regs());
-  ASSERT_EQ(12U, regs64.sp_reg());
 
   uint64_t* raw = reinterpret_cast<uint64_t*>(regs64.RawData());
   for (size_t i = 0; i < 30; i++) {
@@ -211,62 +209,56 @@ TEST_F(RegsTest, elf_invalid) {
   EXPECT_EQ(0U, regs_mips64.GetPcAdjustment(0xa00U, invalid_elf));
 }
 
-TEST_F(RegsTest, arm_set_from_raw) {
+TEST_F(RegsTest, arm_verify_sp_pc) {
   RegsArm arm;
   uint32_t* regs = reinterpret_cast<uint32_t*>(arm.RawData());
   regs[13] = 0x100;
   regs[15] = 0x200;
-  arm.SetFromRaw();
   EXPECT_EQ(0x100U, arm.sp());
   EXPECT_EQ(0x200U, arm.pc());
 }
 
-TEST_F(RegsTest, arm64_set_from_raw) {
+TEST_F(RegsTest, arm64_verify_sp_pc) {
   RegsArm64 arm64;
   uint64_t* regs = reinterpret_cast<uint64_t*>(arm64.RawData());
   regs[31] = 0xb100000000ULL;
   regs[32] = 0xc200000000ULL;
-  arm64.SetFromRaw();
   EXPECT_EQ(0xb100000000U, arm64.sp());
   EXPECT_EQ(0xc200000000U, arm64.pc());
 }
 
-TEST_F(RegsTest, x86_set_from_raw) {
+TEST_F(RegsTest, x86_verify_sp_pc) {
   RegsX86 x86;
   uint32_t* regs = reinterpret_cast<uint32_t*>(x86.RawData());
   regs[4] = 0x23450000;
   regs[8] = 0xabcd0000;
-  x86.SetFromRaw();
   EXPECT_EQ(0x23450000U, x86.sp());
   EXPECT_EQ(0xabcd0000U, x86.pc());
 }
 
-TEST_F(RegsTest, x86_64_set_from_raw) {
+TEST_F(RegsTest, x86_64_verify_sp_pc) {
   RegsX86_64 x86_64;
   uint64_t* regs = reinterpret_cast<uint64_t*>(x86_64.RawData());
   regs[7] = 0x1200000000ULL;
   regs[16] = 0x4900000000ULL;
-  x86_64.SetFromRaw();
   EXPECT_EQ(0x1200000000U, x86_64.sp());
   EXPECT_EQ(0x4900000000U, x86_64.pc());
 }
 
-TEST_F(RegsTest, mips_set_from_raw) {
+TEST_F(RegsTest, mips_verify_sp_pc) {
   RegsMips mips;
   uint32_t* regs = reinterpret_cast<uint32_t*>(mips.RawData());
   regs[29] = 0x100;
   regs[32] = 0x200;
-  mips.SetFromRaw();
   EXPECT_EQ(0x100U, mips.sp());
   EXPECT_EQ(0x200U, mips.pc());
 }
 
-TEST_F(RegsTest, mips64_set_from_raw) {
+TEST_F(RegsTest, mips64_verify_sp_pc) {
   RegsMips64 mips64;
   uint64_t* regs = reinterpret_cast<uint64_t*>(mips64.RawData());
   regs[29] = 0xb100000000ULL;
   regs[32] = 0xc200000000ULL;
-  mips64.SetFromRaw();
   EXPECT_EQ(0xb100000000U, mips64.sp());
   EXPECT_EQ(0xc200000000U, mips64.pc());
 }

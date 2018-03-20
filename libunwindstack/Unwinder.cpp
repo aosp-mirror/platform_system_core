@@ -61,7 +61,9 @@ void Unwinder::FillInDexFrame() {
     frame->map_offset = info->offset;
     frame->map_load_bias = info->load_bias;
     frame->map_flags = info->flags;
-    frame->map_name = info->name;
+    if (resolve_names_) {
+      frame->map_name = info->name;
+    }
     frame->rel_pc = dex_pc - info->start;
   } else {
     frame->rel_pc = dex_pc;
@@ -96,7 +98,9 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
     return;
   }
 
-  frame->map_name = map_info->name;
+  if (resolve_names_) {
+    frame->map_name = map_info->name;
+  }
   frame->map_offset = map_info->offset;
   frame->map_start = map_info->start;
   frame->map_end = map_info->end;

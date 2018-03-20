@@ -28,11 +28,26 @@
 
 namespace unwindstack {
 
-RegsX86_64::RegsX86_64()
-    : RegsImpl<uint64_t>(X86_64_REG_LAST, X86_64_REG_SP, Location(LOCATION_SP_OFFSET, -8)) {}
+RegsX86_64::RegsX86_64() : RegsImpl<uint64_t>(X86_64_REG_LAST, Location(LOCATION_SP_OFFSET, -8)) {}
 
 ArchEnum RegsX86_64::Arch() {
   return ARCH_X86_64;
+}
+
+uint64_t RegsX86_64::pc() {
+  return regs_[X86_64_REG_PC];
+}
+
+uint64_t RegsX86_64::sp() {
+  return regs_[X86_64_REG_SP];
+}
+
+void RegsX86_64::set_pc(uint64_t pc) {
+  regs_[X86_64_REG_PC] = pc;
+}
+
+void RegsX86_64::set_sp(uint64_t sp) {
+  regs_[X86_64_REG_SP] = sp;
 }
 
 uint64_t RegsX86_64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
@@ -42,19 +57,15 @@ uint64_t RegsX86_64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
   return 1;
 }
 
-void RegsX86_64::SetFromRaw() {
-  set_pc(regs_[X86_64_REG_PC]);
-  set_sp(regs_[X86_64_REG_SP]);
-}
-
 bool RegsX86_64::SetPcFromReturnAddress(Memory* process_memory) {
   // Attempt to get the return address from the top of the stack.
   uint64_t new_pc;
-  if (!process_memory->ReadFully(sp_, &new_pc, sizeof(new_pc)) || new_pc == pc()) {
+  if (!process_memory->ReadFully(regs_[X86_64_REG_SP], &new_pc, sizeof(new_pc)) ||
+      new_pc == regs_[X86_64_REG_PC]) {
     return false;
   }
 
-  set_pc(new_pc);
+  regs_[X86_64_REG_PC] = new_pc;
   return true;
 }
 
@@ -100,7 +111,6 @@ Regs* RegsX86_64::Read(void* remote_data) {
   (*regs)[X86_64_REG_RSP] = user->rsp;
   (*regs)[X86_64_REG_RIP] = user->rip;
 
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -118,8 +128,6 @@ void RegsX86_64::SetFromUcontext(x86_64_ucontext_t* ucontext) {
   regs_[X86_64_REG_RCX] = ucontext->uc_mcontext.rcx;
   regs_[X86_64_REG_RSP] = ucontext->uc_mcontext.rsp;
   regs_[X86_64_REG_RIP] = ucontext->uc_mcontext.rip;
-
-  SetFromRaw();
 }
 
 Regs* RegsX86_64::CreateFromUcontext(void* ucontext) {
@@ -152,7 +160,7 @@ bool RegsX86_64::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_
   // Read the mcontext data from the stack.
   // sp points to the ucontext data structure, read only the mcontext part.
   x86_64_ucontext_t x86_64_ucontext;
-  if (!process_memory->ReadFully(sp() + 0x28, &x86_64_ucontext.uc_mcontext,
+  if (!process_memory->ReadFully(regs_[X86_64_REG_SP] + 0x28, &x86_64_ucontext.uc_mcontext,
                                  sizeof(x86_64_mcontext_t))) {
     return false;
   }
