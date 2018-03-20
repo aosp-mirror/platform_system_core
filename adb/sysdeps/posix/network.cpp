@@ -105,8 +105,7 @@ static int _network_loopback_server(bool ipv6, int port, int type, std::string* 
     }
 
     if (type == SOCK_STREAM || type == SOCK_SEQPACKET) {
-        // Arbitrarily selected value, ported from libcutils.
-        if (listen(s, 4) != 0) {
+        if (listen(s, SOMAXCONN) != 0) {
             set_error(error);
             return -1;
         }
