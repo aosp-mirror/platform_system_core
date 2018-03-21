@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <pwd.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -75,6 +76,9 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define EIGHT_MEGA (1 << 23)
+
+/* Defined as ProcessList.SYSTEM_ADJ in ProcessList.java */
+#define SYSTEM_ADJ (-900)
 
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
@@ -311,6 +315,8 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     char val[20];
     int soft_limit_mult;
     struct lmk_procprio params;
+    bool is_system_server;
+    struct passwd *pwdrec;
 
     lmkd_pack_get_procprio(packet, &params);
 
@@ -364,7 +370,15 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
              "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
              params.uid, params.pid);
     snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
-    writefilestring(path, val, true);
+
+    /*
+     * system_server process has no memcg under /dev/memcg/apps but should be
+     * registered with lmkd. This is the best way so far to identify it.
+     */
+    is_system_server = (params.oomadj == SYSTEM_ADJ &&
+                        (pwdrec = getpwnam("system")) != NULL &&
+                        params.uid == pwdrec->pw_uid);
+    writefilestring(path, val, !is_system_server);
 
     procp = pid_lookup(params.pid);
     if (!procp) {
