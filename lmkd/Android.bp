@@ -3,8 +3,8 @@ cc_binary {
 
     srcs: ["lmkd.c"],
     shared_libs: [
-        "liblog",
         "libcutils",
+        "liblog",
     ],
     local_include_dirs: ["include"],
     cflags: ["-Werror"],
