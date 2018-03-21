@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
@@ -267,24 +268,32 @@ static int pid_remove(int pid) {
     return 0;
 }
 
-static void writefilestring(const char *path, char *s) {
+/*
+ * Write a string to a file.
+ * Returns false if the file does not exist.
+ */
+static bool writefilestring(const char *path, const char *s,
+                            bool err_if_missing) {
     int fd = open(path, O_WRONLY | O_CLOEXEC);
-    int len = strlen(s);
-    int ret;
+    ssize_t len = strlen(s);
+    ssize_t ret;
 
     if (fd < 0) {
-        ALOGE("Error opening %s; errno=%d", path, errno);
-        return;
+        if (err_if_missing) {
+            ALOGE("Error opening %s; errno=%d", path, errno);
+        }
+        return false;
     }
 
-    ret = write(fd, s, len);
+    ret = TEMP_FAILURE_RETRY(write(fd, s, len));
     if (ret < 0) {
         ALOGE("Error writing %s; errno=%d", path, errno);
     } else if (ret < len) {
-        ALOGE("Short write on %s; length=%d", path, ret);
+        ALOGE("Short write on %s; length=%zd", path, ret);
     }
 
     close(fd);
+    return true;
 }
 
 static void cmd_procprio(LMKD_CTRL_PACKET packet) {
@@ -304,7 +313,12 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
 
     snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", params.pid);
     snprintf(val, sizeof(val), "%d", params.oomadj);
-    writefilestring(path, val);
+    if (!writefilestring(path, val, false)) {
+        ALOGW("Failed to open %s; errno=%d: process %d might have been killed",
+              path, errno, params.pid);
+        /* If this file does not exist the process is dead. */
+        return;
+    }
 
     if (use_inkernel_interface)
         return;
@@ -341,7 +355,7 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
              "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
              params.uid, params.pid);
     snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
-    writefilestring(path, val);
+    writefilestring(path, val, true);
 
     procp = pid_lookup(params.pid);
     if (!procp) {
@@ -408,8 +422,8 @@ static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
             strlcat(killpriostr, val, sizeof(killpriostr));
         }
 
-        writefilestring(INKERNEL_MINFREE_PATH, minfreestr);
-        writefilestring(INKERNEL_ADJ_PATH, killpriostr);
+        writefilestring(INKERNEL_MINFREE_PATH, minfreestr, true);
+        writefilestring(INKERNEL_ADJ_PATH, killpriostr, true);
     }
 }
 
