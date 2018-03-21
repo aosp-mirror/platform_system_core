@@ -292,6 +292,10 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"software_master", 147},
     {"cold,charger", 148},
     {"cold,rtc", 149},
+    {"cold,rtc,2sec", 150},
+    {"reboot,tool", 151},
+    {"reboot,wdt", 152},
+    {"reboot,unknown", 153},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -468,6 +472,8 @@ class pstoreConsole {
     }
     return std::string::npos;
   }
+
+  operator const std::string&() const { return console; }
 };
 
 // If bit error match to needle, correct it.
@@ -504,12 +510,60 @@ bool correctForBitErrorOrUnderline(std::string& reason, const std::string& needl
   return corrected;
 }
 
+// Converts a string value representing the reason the system booted to a
+// string complying with Android system standard reason.
+void transformReason(std::string& reason) {
+  std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isblank(c) ? '_' : c; });
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isprint(c) ? c : '?'; });
+}
+
+// Pull out and correct quoted (') subreason, pos just beyond first quote.
+// Check subreasons for reboot,<subreason> and kernel_panic,sysrq,<subreason>
+std::string getSubreason(const std::string& content, size_t pos) {
+  static constexpr size_t max_reason_length = 256;
+
+  std::string subReason(content.substr(pos, max_reason_length));
+  // Correct against any known strings that Bit Error Match
+  for (const auto& s : knownReasons) {
+    correctForBitErrorOrUnderline(subReason, s);
+  }
+  for (const auto& m : kBootReasonMap) {
+    if (m.first.length() <= strlen("cold")) continue;  // too short?
+    if (correctForBitErrorOrUnderline(subReason, m.first + "'")) continue;
+    if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
+    if (android::base::StartsWith(m.first, "reboot,")) {
+      correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("reboot,")) + "'");
+    } else if (android::base::StartsWith(m.first, "kernel_panic,sysrq,")) {
+      correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("kernel_panic,sysrq,")) + "'");
+    }
+  }
+  for (pos = 0; pos < subReason.length(); ++pos) {
+    char c = subReason[pos];
+    // #, &, %, / are common single bit error for ' that we can block
+    if (!::isprint(c) || (c == '\'') || (c == '#') || (c == '&') || (c == '%') || (c == '/')) {
+      subReason.erase(pos);
+      break;
+    }
+  }
+  transformReason(subReason);
+  return subReason;
+}
+
 bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
   // Check for kernel panic types to refine information
   if ((console.rfind("SysRq : Trigger a crash") != std::string::npos) ||
       (console.rfind("PC is at sysrq_handle_crash+") != std::string::npos)) {
-    // Can not happen, except on userdebug, during testing/debugging.
     ret = "kernel_panic,sysrq";
+    // Invented for Android to allow daemons that specifically trigger sysrq
+    // to communicate more accurate boot subreasons via last console messages.
+    static constexpr char sysrqSubreason[] = "SysRq : Trigger a crash : '";
+    auto pos = console.rfind(sysrqSubreason);
+    if (pos != std::string::npos) {
+      ret += "," + getSubreason(console, pos + strlen(sysrqSubreason));
+    }
     return true;
   }
   if (console.rfind("Unable to handle kernel NULL pointer dereference at virtual address") !=
@@ -528,24 +582,12 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
   return addKernelPanicSubReason(pstoreConsole(content), ret);
 }
 
-// Converts a string value representing the reason the system booted to a
-// string complying with Android system standard reason.
-void transformReason(std::string& reason) {
-  std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
-  std::transform(reason.begin(), reason.end(), reason.begin(),
-                 [](char c) { return ::isblank(c) ? '_' : c; });
-  std::transform(reason.begin(), reason.end(), reason.begin(),
-                 [](char c) { return ::isprint(c) ? c : '?'; });
-}
-
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
 const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
 std::string BootReasonStrToReason(const std::string& boot_reason) {
-  static const size_t max_reason_length = 256;
-
   std::string ret(GetProperty(system_reboot_reason_property));
   std::string reason(boot_reason);
   // If sys.boot.reason == ro.boot.bootreason, let's re-evaluate
@@ -648,28 +690,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       static const char cmd[] = "reboot: Restarting system with command '";
       size_t pos = console.rfind(cmd);
       if (pos != std::string::npos) {
-        pos += strlen(cmd);
-        std::string subReason(content.substr(pos, max_reason_length));
-        // Correct against any known strings that Bit Error Match
-        for (const auto& s : knownReasons) {
-          correctForBitErrorOrUnderline(subReason, s);
-        }
-        for (const auto& m : kBootReasonMap) {
-          if (m.first.length() <= strlen("cold")) continue;  // too short?
-          if (correctForBitErrorOrUnderline(subReason, m.first + "'")) continue;
-          if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
-          if (!android::base::StartsWith(m.first, "reboot,")) continue;
-          correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("reboot,")) + "'");
-        }
-        for (pos = 0; pos < subReason.length(); ++pos) {
-          char c = subReason[pos];
-          // #, &, %, / are common single bit error for ' that we can block
-          if (!::isprint(c) || (c == '\'') || (c == '#') || (c == '&') || (c == '%') || (c == '/')) {
-            subReason.erase(pos);
-            break;
-          }
-        }
-        transformReason(subReason);
+        std::string subReason(getSubreason(content, pos + strlen(cmd)));
         if (subReason != "") {  // Will not land "reboot" as that is too blunt.
           if (isKernelRebootReason(subReason)) {
             ret = "reboot," + subReason;  // User space can't talk kernel reasons.
