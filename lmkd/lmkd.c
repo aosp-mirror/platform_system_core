@@ -750,7 +750,7 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     r = kill(pid, SIGKILL);
     ALOGI(
         "Killing '%s' (%d), uid %d, adj %d\n"
-        "   to free %ldkB because system is under %s memory pressure oom_adj %d\n",
+        "   to free %ldkB because system is under %s memory pressure (min_oom_adj=%d)\n",
         taskname, pid, uid, procp->oomadj, tasksize * page_k,
         level_name[level], min_score_adj);
     pid_remove(pid);
