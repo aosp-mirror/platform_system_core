@@ -209,7 +209,6 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     TerminateThread(thread);
 }
 
-#if 0
 // Ensure that if we fail to write output to an fd, we will still flush data coming from it.
 TEST_F(LocalSocketTest, flush_after_shutdown) {
     int head_fd[2];
@@ -248,7 +247,6 @@ TEST_F(LocalSocketTest, flush_after_shutdown) {
     ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
-#endif
 
 #if defined(__linux__)
 
