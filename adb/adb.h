@@ -196,10 +196,6 @@ ConnectionState connection_state(atransport* t);
 
 extern const char* adb_device_banner;
 
-#if !ADB_HOST
-extern int SHELL_EXIT_NOTIFY_FD;
-#endif  // !ADB_HOST
-
 #define CHUNK_SIZE (64 * 1024)
 
 #if !ADB_HOST

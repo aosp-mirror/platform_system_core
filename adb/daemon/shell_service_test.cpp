@@ -55,40 +55,20 @@ class ShellServiceTest : public ::testing::Test {
     static sighandler_t saved_sigpipe_handler_;
 
     int subprocess_fd_ = -1;
-    int shell_exit_receiver_fd_ = -1, saved_shell_exit_fd_;
 };
 
 sighandler_t ShellServiceTest::saved_sigpipe_handler_ = nullptr;
 
 void ShellServiceTest::StartTestSubprocess(
         const char* command, SubprocessType type, SubprocessProtocol protocol) {
-    // We want to intercept the shell exit message to make sure it's sent.
-    saved_shell_exit_fd_ = SHELL_EXIT_NOTIFY_FD;
-    int fd[2];
-    ASSERT_TRUE(adb_socketpair(fd) >= 0);
-    SHELL_EXIT_NOTIFY_FD = fd[0];
-    shell_exit_receiver_fd_ = fd[1];
-
     subprocess_fd_ = StartSubprocess(command, nullptr, type, protocol);
     ASSERT_TRUE(subprocess_fd_ >= 0);
 }
 
 void ShellServiceTest::CleanupTestSubprocess() {
     if (subprocess_fd_ >= 0) {
-        // Subprocess should send its FD to SHELL_EXIT_NOTIFY_FD for cleanup.
-        int notified_fd = -1;
-        ASSERT_TRUE(ReadFdExactly(shell_exit_receiver_fd_, &notified_fd,
-                                  sizeof(notified_fd)));
-        ASSERT_EQ(notified_fd, subprocess_fd_);
-
         adb_close(subprocess_fd_);
         subprocess_fd_ = -1;
-
-        // Restore SHELL_EXIT_NOTIFY_FD.
-        adb_close(SHELL_EXIT_NOTIFY_FD);
-        adb_close(shell_exit_receiver_fd_);
-        shell_exit_receiver_fd_ = -1;
-        SHELL_EXIT_NOTIFY_FD = saved_shell_exit_fd_;
     }
 }
 
