@@ -335,7 +335,8 @@ bool Subprocess::ForkAndExec(std::string* error) {
         signal(SIGPIPE, SIG_DFL);
 
         if (command_.empty()) {
-            execle(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr, cenv.data());
+            // Spawn a login shell if we don't have a command.
+            execle(_PATH_BSHELL, "-" _PATH_BSHELL, nullptr, cenv.data());
         } else {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-c", command_.c_str(), nullptr, cenv.data());
         }
