@@ -24,6 +24,8 @@ dir.system = /data/nativetest64
 dir.system = /data/benchmarktest
 dir.system = /data/benchmarktest64
 
+dir.postinstall = /postinstall
+
 [system]
 additional.namespaces = sphal,vndk,rs
 
@@ -315,3 +317,15 @@ namespace.system.search.paths = /system/${LIB}
 
 namespace.system.asan.search.paths  = /data/asan/system/${LIB}
 namespace.system.asan.search.paths +=           /system/${LIB}
+
+###############################################################################
+# Namespace config for binaries under /postinstall.
+# Only one default namespace is defined and it has no directories other than
+# /system/lib in the search paths. This is because linker calls realpath on the
+# search paths and this causes selinux denial if the paths (/vendor, /odm) are
+# not allowed to the poinstall binaries. There is no reason to allow the
+# binaries to access the paths.
+###############################################################################
+[postinstall]
+namespace.default.isolated = false
+namespace.default.search.paths = /system/${LIB}

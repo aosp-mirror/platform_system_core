@@ -113,16 +113,12 @@ static void CloseWithPacketThreadFunc(CloseWithPacketArg* arg) {
     asocket* s = create_local_socket(arg->socket_fd);
     ASSERT_TRUE(s != nullptr);
     arg->bytes_written = 0;
-    while (true) {
-        std::string data;
-        data.resize(MAX_PAYLOAD);
-        arg->bytes_written += data.size();
-        int ret = s->enqueue(s, std::move(data));
-        if (ret == 1) {
-            // The writer has one packet waiting to send.
-            break;
-        }
-    }
+
+    std::string data;
+    data.resize(MAX_PAYLOAD);
+    arg->bytes_written += data.size();
+    int ret = s->enqueue(s, std::move(data));
+    ASSERT_EQ(1, ret);
 
     asocket* cause_close_s = create_local_socket(arg->cause_close_fd);
     ASSERT_TRUE(cause_close_s != nullptr);
@@ -213,7 +209,6 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     TerminateThread(thread);
 }
 
-#if 0
 // Ensure that if we fail to write output to an fd, we will still flush data coming from it.
 TEST_F(LocalSocketTest, flush_after_shutdown) {
     int head_fd[2];
@@ -233,15 +228,16 @@ TEST_F(LocalSocketTest, flush_after_shutdown) {
     PrepareThread();
     std::thread thread(fdevent_loop);
 
-    ASSERT_TRUE(WriteFdExactly(head_fd[0], "foo", 3));
-    ASSERT_EQ(0, adb_shutdown(head_fd[0], SHUT_RD));
-    const char* str = "write succeeds, but local_socket will fail to write";
-    ASSERT_TRUE(WriteFdExactly(tail_fd[0], str, strlen(str)));
-    ASSERT_TRUE(WriteFdExactly(head_fd[0], "bar", 3));
-    char buf[6];
-    ASSERT_TRUE(ReadFdExactly(tail_fd[0], buf, 6));
+    EXPECT_TRUE(WriteFdExactly(head_fd[0], "foo", 3));
 
-    ASSERT_EQ(0, memcmp(buf, "foobar", 6));
+    EXPECT_EQ(0, adb_shutdown(head_fd[0], SHUT_RD));
+    const char* str = "write succeeds, but local_socket will fail to write";
+    EXPECT_TRUE(WriteFdExactly(tail_fd[0], str, strlen(str)));
+    EXPECT_TRUE(WriteFdExactly(head_fd[0], "bar", 3));
+
+    char buf[6];
+    EXPECT_TRUE(ReadFdExactly(tail_fd[0], buf, 6));
+    EXPECT_EQ(0, memcmp(buf, "foobar", 6));
 
     adb_close(head_fd[0]);
     adb_close(tail_fd[0]);
@@ -251,7 +247,6 @@ TEST_F(LocalSocketTest, flush_after_shutdown) {
     ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread(thread);
 }
-#endif
 
 #if defined(__linux__)
 

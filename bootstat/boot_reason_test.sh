@@ -239,6 +239,8 @@ EXPECT_EQ() {
   return 0
 }
 
+BAD_BOOTLOADER_REASON=
+
 [ "USAGE: EXPECT_PROPERTY <prop> <value> [--allow_failure]
 
 Returns true (0) if current return (regex) value is true and the result matches
@@ -249,9 +251,20 @@ EXPECT_PROPERTY() {
   value="${2}"
   shift 2
   val=`adb shell getprop ${property} 2>&1`
-  EXPECT_EQ "${value}" "${val}" for Android property ${property} ||
-    [ -n "${1}" ] ||
-    save_ret=${?}
+  EXPECT_EQ "${value}" "${val}" for Android property ${property}
+  local_ret=${?}
+  if [ 0 != ${local_ret} -a "ro.boot.bootreason" = "${property}" ]; then
+    if [ -z "${BAD_BOOTLOADER_REASON}" ]; then
+      BAD_BOOTLOADER_REASON=${val}
+    elif [ X"${BAD_BOOTLOADER_REASON}" = X"${val}" ]; then
+      local_ret=0
+    fi
+  fi
+  if [ 0 != ${local_ret} ]; then
+    if [ -z "${1}" ] ; then
+      save_ret=${local_ret}
+    fi
+  fi
   return ${save_ret}
 }
 
@@ -795,6 +808,63 @@ test_kernel_panic() {
   exitPstore
 }
 
+[ "USAGE: test_kernel_panic_subreason
+
+kernel_panic_subreason test:
+- echo SysRq : Trigger a crash : 'test' | adb shell su root tee /dev/kmsg
+- echo c | adb shell su root tee /proc/sysrq-trigger
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report kernel_panic,sysrq,test" ]
+test_kernel_panic_subreason() {
+  checkDebugBuild || return
+  duration_test ">90"
+  panic_msg="kernel_panic,sysrq,test"
+  enterPstore
+  if [ ${?} != 0 ]; then
+    echo "         or functional bootloader" >&2
+    panic_msg="\(kernel_panic,sysrq,test\|kernel_panic\)"
+    pstore_ok=true
+  fi
+  echo "SysRq : Trigger a crash : 'test'" | adb shell su root tee /dev/kmsg
+  echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  report_bootstat_logs kernel_panic,sysrq,test \
+    "-bootstat: Unknown boot reason: kernel_panic,sysrq,test"
+  exitPstore
+}
+
+[ "USAGE: test_kernel_panic_hung
+
+kernel_panic_hung test:
+- echo Kernel panic - not synching: hung_task: blocked tasks |
+  adb shell su root tee /dev/kmsg
+- adb reboot warm
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report kernel_panic,hung" ]
+test_kernel_panic_hung() {
+  checkDebugBuild || return
+  duration_test
+  panic_msg="kernel_panic,hung"
+  enterPstore
+  if [ ${?} != 0 ]; then
+    echo "         or functional bootloader" >&2
+    panic_msg="\(kernel_panic,hung\|reboot,hung\)"
+    pstore_ok=true
+  fi
+  echo "Kernel panic - not syncing: hung_task: blocked tasks" |
+    adb shell su root tee /dev/kmsg
+  adb reboot warm
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  report_bootstat_logs kernel_panic,hung
+  exitPstore
+}
+
 [ "USAGE: test_warm
 
 warm test
@@ -1054,12 +1124,12 @@ if [ -z "$*" ]; then
   if [ -z "${2}" ]; then
     # Hard coded should shell fail to find them above (search/permission issues)
     eval set properties ota cold factory_reset hard battery unknown \
-             kernel_panic warm thermal_shutdown userrequested_shutdown \
-             shell_reboot adb_reboot Its_Just_So_Hard_reboot \
-             bootloader_normal bootloader_watchdog bootloader_kernel_panic \
-             bootloader_oem_powerkey bootloader_wdog_reset \
-             bootloader_wdog_reset bootloader_wdog_reset bootloader_hard \
-             bootloader_recovery
+             kernel_panic kernel_panic_subreason kernel_panic_hung warm \
+             thermal_shutdown userrequested_shutdown shell_reboot adb_reboot \
+             Its_Just_So_Hard_reboot bootloader_normal bootloader_watchdog \
+             bootloader_kernel_panic bootloader_oem_powerkey \
+             bootloader_wdog_reset bootloader_wdog_reset bootloader_wdog_reset \
+             bootloader_hard bootloader_recovery
   fi
   if [ X"nothing" = X"${1}" ]; then
     shift 1
