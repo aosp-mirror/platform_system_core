@@ -72,8 +72,11 @@ cc_defaults {
                 "-DUNICODE=1",
                 "-D_UNICODE=1",
 
-                // -std=gnu++14 doesn't set _GNU_SOURCE on Windows.
+                // -std=gnu++11 doesn't set _GNU_SOURCE on Windows.
                 "-D_GNU_SOURCE",
+
+                // MinGW hides some things behind _POSIX_SOURCE.
+                "-D_POSIX_SOURCE",
             ],
         },
     },
