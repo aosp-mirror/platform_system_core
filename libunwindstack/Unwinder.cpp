@@ -29,6 +29,7 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/MapInfo.h>
+#include <unwindstack/Maps.h>
 #include <unwindstack/Unwinder.h>
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
@@ -142,26 +143,31 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
     uint64_t cur_sp = regs_->sp();
 
     MapInfo* map_info = maps_->Find(regs_->pc());
-    uint64_t rel_pc;
     uint64_t pc_adjustment = 0;
     uint64_t step_pc;
+    uint64_t rel_pc;
     Elf* elf;
     if (map_info == nullptr) {
-      rel_pc = regs_->pc();
-      step_pc = rel_pc;
+      step_pc = regs_->pc();
+      rel_pc = step_pc;
       last_error_.code = ERROR_INVALID_MAP;
     } else {
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
       }
       elf = map_info->GetElf(process_memory_, true);
-      rel_pc = elf->GetRelPc(regs_->pc(), map_info);
+      step_pc = regs_->pc();
+      rel_pc = elf->GetRelPc(step_pc, map_info);
+      // Everyone except elf data in gdb jit debug maps uses the relative pc.
+      if (!(map_info->flags & MAPS_FLAGS_JIT_SYMFILE_MAP)) {
+        step_pc = rel_pc;
+      }
       if (adjust_pc) {
         pc_adjustment = regs_->GetPcAdjustment(rel_pc, elf);
       } else {
         pc_adjustment = 0;
       }
-      step_pc = rel_pc - pc_adjustment;
+      step_pc -= pc_adjustment;
 
       // If the pc is in an invalid elf file, try and get an Elf object
       // using the jit debug information.
