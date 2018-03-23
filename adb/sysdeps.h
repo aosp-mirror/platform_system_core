@@ -111,14 +111,14 @@ extern int adb_mkdir(const std::string& path, int mode);
 #define  mkdir  ___xxx_mkdir
 
 // See the comments for the !defined(_WIN32) versions of adb_*().
-extern int  adb_open(const char*  path, int  options);
-extern int  adb_creat(const char*  path, int  mode);
-extern int  adb_read(int  fd, void* buf, int len);
-extern int  adb_write(int  fd, const void*  buf, int  len);
-extern int  adb_lseek(int  fd, int  pos, int  where);
-extern int  adb_shutdown(int  fd);
-extern int  adb_close(int  fd);
-extern int  adb_register_socket(SOCKET s);
+extern int adb_open(const char* path, int options);
+extern int adb_creat(const char* path, int mode);
+extern int adb_read(int fd, void* buf, int len);
+extern int adb_write(int fd, const void* buf, int len);
+extern int adb_lseek(int fd, int pos, int where);
+extern int adb_shutdown(int fd, int direction = SHUT_RDWR);
+extern int adb_close(int fd);
+extern int adb_register_socket(SOCKET s);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
 static __inline__ int  unix_close(int fd)
@@ -419,14 +419,10 @@ static __inline__ int  adb_open( const char*  pathname, int  options )
 #undef   open
 #define  open    ___xxx_open
 
-static __inline__ int  adb_shutdown(int fd)
-{
-    return shutdown(fd, SHUT_RDWR);
-}
-static __inline__ int  adb_shutdown(int fd, int direction)
-{
+static __inline__ int adb_shutdown(int fd, int direction = SHUT_RDWR) {
     return shutdown(fd, direction);
 }
+
 #undef   shutdown
 #define  shutdown   ____xxx_shutdown
 

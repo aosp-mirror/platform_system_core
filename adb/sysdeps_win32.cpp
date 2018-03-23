@@ -1011,9 +1011,8 @@ int adb_socket_get_local_port(int fd) {
     return ntohs(reinterpret_cast<sockaddr_in*>(&addr_storage)->sin_port);
 }
 
-int  adb_shutdown(int  fd)
-{
-    FH   f = _fh_from_int(fd, __func__);
+int adb_shutdown(int fd, int direction) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (!f || f->clazz != &_fh_socket_class) {
         D("adb_shutdown: invalid fd %d", fd);
@@ -1021,8 +1020,8 @@ int  adb_shutdown(int  fd)
         return -1;
     }
 
-    D( "adb_shutdown: %s", f->name);
-    if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
+    D("adb_shutdown: %s", f->name);
+    if (shutdown(f->fh_socket, direction) == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
         D("socket shutdown fd %d failed: %s", fd,
           android::base::SystemErrorCodeToString(err).c_str());
