@@ -194,6 +194,7 @@ cc_test {
         "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",
+        "tests/files/offline/jit_map_arm/*",
         "tests/files/offline/gnu_debugdata_arm/*",
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
