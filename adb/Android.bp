@@ -78,6 +78,12 @@ cc_defaults {
                 // MinGW hides some things behind _POSIX_SOURCE.
                 "-D_POSIX_SOURCE",
             ],
+
+            host_ldlibs: [
+                "-lws2_32",
+                "-lgdi32",
+                "-luserenv",
+            ],
         },
     },
 }
@@ -176,6 +182,13 @@ cc_test_host {
         "libdiagnose_usb",
         "libusb",
     ],
+
+    target: {
+        windows: {
+            enabled: true,
+            shared_libs: ["AdbWinApi"],
+        },
+    },
 }
 
 cc_binary_host {
@@ -223,11 +236,6 @@ cc_binary_host {
         windows: {
             enabled: true,
             ldflags: ["-municode"],
-            host_ldlibs: [
-                "-lws2_32",
-                "-lgdi32",
-            ],
-
             shared_libs: ["AdbWinApi"],
             required: [
                 "AdbWinUsbApi",
