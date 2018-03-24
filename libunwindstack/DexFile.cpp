@@ -68,17 +68,51 @@ bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name
     return false;  // The DEX offset is not within the bytecode of this dex file.
   }
 
-  for (uint32_t i = 0; i < dex_file_->NumClassDefs(); ++i) {
-    const art::DexFile::ClassDef& class_def = dex_file_->GetClassDef(i);
+  if (dex_file_->IsCompactDexFile()) {
+    // The data section of compact dex files might be shared.
+    // Check the subrange unique to this compact dex.
+    const auto& cdex_header = dex_file_->AsCompactDexFile()->GetHeader();
+    uint32_t begin = cdex_header.data_off_ + cdex_header.OwnedDataBegin();
+    uint32_t end = cdex_header.data_off_ + cdex_header.OwnedDataEnd();
+    if (dex_offset < begin || dex_offset >= end) {
+      return false;  // The DEX offset is not within the bytecode of this dex file.
+    }
+  }
+
+  // The method data is cached in a std::map indexed by method end offset and
+  // contains the start offset and the method member index.
+  // Only cache the method data as it is searched. Do not read the entire
+  // set of method data into the cache at once.
+  // This is done because many unwinds only find a single frame with dex file
+  // info, so reading the entire method data is wasteful. However, still cache
+  // the data so that anything doing multiple unwinds will have this data
+  // cached for future use.
+
+  // First look in the method cache.
+  auto entry = method_cache_.upper_bound(dex_offset);
+  if (entry != method_cache_.end() && dex_offset >= entry->second.first) {
+    *method_name = dex_file_->PrettyMethod(entry->second.second, false);
+    *method_offset = dex_offset - entry->second.first;
+    return true;
+  }
+
+  // Check the methods we haven't cached.
+  for (; class_def_index_ < dex_file_->NumClassDefs(); class_def_index_++) {
+    const art::DexFile::ClassDef& class_def = dex_file_->GetClassDef(class_def_index_);
     const uint8_t* class_data = dex_file_->GetClassData(class_def);
     if (class_data == nullptr) {
       continue;
     }
-    for (art::ClassDataItemIterator it(*dex_file_.get(), class_data); it.HasNext(); it.Next()) {
-      if (!it.IsAtMethod()) {
+
+    if (class_it_.get() == nullptr || !class_it_->HasNext()) {
+      class_it_.reset(new art::ClassDataItemIterator(*dex_file_.get(), class_data));
+    }
+
+    for (; class_it_->HasNext(); class_it_->Next()) {
+      if (!class_it_->IsAtMethod()) {
         continue;
       }
-      const art::DexFile::CodeItem* code_item = it.GetMethodCodeItem();
+      const art::DexFile::CodeItem* code_item = class_it_->GetMethodCodeItem();
       if (code_item == nullptr) {
         continue;
       }
@@ -87,11 +121,15 @@ bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name
         continue;
       }
 
-      uint64_t offset = reinterpret_cast<const uint8_t*>(code.Insns()) - dex_file_->Begin();
-      size_t size = code.InsnsSizeInCodeUnits() * sizeof(uint16_t);
-      if (offset <= dex_offset && dex_offset < offset + size) {
-        *method_name = dex_file_->PrettyMethod(it.GetMemberIndex(), false);
+      uint32_t offset = reinterpret_cast<const uint8_t*>(code.Insns()) - dex_file_->Begin();
+      uint32_t offset_end = offset + code.InsnsSizeInCodeUnits() * sizeof(uint16_t);
+      uint32_t member_index = class_it_->GetMemberIndex();
+      method_cache_[offset_end] = std::make_pair(offset, member_index);
+      if (offset <= dex_offset && dex_offset < offset_end) {
+        *method_name = dex_file_->PrettyMethod(member_index, false);
         *method_offset = dex_offset - offset;
+        // Move past this element.
+        class_it_->Next();
         return true;
       }
     }
