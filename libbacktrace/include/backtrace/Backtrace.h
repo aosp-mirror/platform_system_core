@@ -204,6 +204,9 @@ class Backtrace {
 
   std::string GetErrorString(BacktraceUnwindError error);
 
+  // Set whether to skip frames in libbacktrace/libunwindstack when doing a local unwind.
+  void SetSkipFrames(bool skip_frames) { skip_frames_ = skip_frames; }
+
  protected:
   Backtrace(pid_t pid, pid_t tid, BacktraceMap* map);
 
@@ -222,6 +225,9 @@ class Backtrace {
   bool map_shared_;
 
   std::vector<backtrace_frame_data_t> frames_;
+
+  // Skip frames in libbacktrace/libunwindstack when doing a local unwind.
+  bool skip_frames_ = true;
 
   BacktraceUnwindError error_;
 };

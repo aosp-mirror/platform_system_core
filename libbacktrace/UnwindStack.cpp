@@ -163,6 +163,9 @@ bool UnwindStackCurrent::UnwindFromContext(size_t num_ignore_frames, void* ucont
   }
 
   std::vector<std::string> skip_names{"libunwindstack.so", "libbacktrace.so"};
+  if (!skip_frames_) {
+    skip_names.clear();
+  }
   return Backtrace::Unwind(regs.get(), GetMap(), &frames_, num_ignore_frames, &skip_names, &error_);
 }
 
