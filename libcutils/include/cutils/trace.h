@@ -73,7 +73,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_NETWORK          (1<<21)
 #define ATRACE_TAG_ADB              (1<<22)
 #define ATRACE_TAG_VIBRATOR         (1<<23)
-#define ATRACE_TAG_LAST             ATRACE_TAG_VIBRATOR
+#define ATRACE_TAG_AIDL             (1<<24)
+#define ATRACE_TAG_LAST             ATRACE_TAG_AIDL
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1ULL<<63)
