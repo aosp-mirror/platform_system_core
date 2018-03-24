@@ -69,6 +69,9 @@
 // Number of simultaneous threads running in our forked process.
 #define NUM_PTRACE_THREADS 5
 
+// The list of shared libaries that make up the backtrace library.
+static std::vector<std::string> kBacktraceLibs{"libunwindstack.so", "libbacktrace.so"};
+
 struct thread_t {
   pid_t tid;
   int32_t state;
@@ -256,14 +259,47 @@ TEST(libbacktrace, local_no_unwind_frames) {
   VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
   ASSERT_TRUE(backtrace->NumFrames() != 0);
+  // None of the frames should be in the backtrace libraries.
   for (const auto& frame : *backtrace ) {
     if (BacktraceMap::IsValid(frame.map)) {
       const std::string name = basename(frame.map.name.c_str());
-      ASSERT_TRUE(name != "libunwind.so" && name != "libbacktrace.so")
-        << DumpFrames(backtrace.get());
+      for (const auto& lib : kBacktraceLibs) {
+        ASSERT_TRUE(name != lib) << DumpFrames(backtrace.get());
+      }
     }
-    break;
   }
+}
+
+TEST(libbacktrace, local_unwind_frames) {
+  // Verify that a local unwind with the skip frames disabled does include
+  // frames within the backtrace libraries.
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), getpid()));
+  ASSERT_TRUE(backtrace.get() != nullptr);
+  backtrace->SetSkipFrames(false);
+  ASSERT_TRUE(backtrace->Unwind(0));
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
+
+  ASSERT_TRUE(backtrace->NumFrames() != 0);
+  size_t first_frame_non_backtrace_lib = 0;
+  for (const auto& frame : *backtrace) {
+    if (BacktraceMap::IsValid(frame.map)) {
+      const std::string name = basename(frame.map.name.c_str());
+      bool found = false;
+      for (const auto& lib : kBacktraceLibs) {
+        if (name == lib) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        first_frame_non_backtrace_lib = frame.num;
+        break;
+      }
+    }
+  }
+
+  ASSERT_NE(0U, first_frame_non_backtrace_lib) << "No frames found in backtrace libraries:\n"
+                                               << DumpFrames(backtrace.get());
 }
 
 TEST(libbacktrace, local_trace) {
