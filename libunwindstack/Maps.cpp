@@ -25,6 +25,7 @@
 
 #include <android-base/unique_fd.h>
 
+#include <algorithm>
 #include <cctype>
 #include <memory>
 #include <string>
@@ -207,6 +208,11 @@ void Maps::Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
   MapInfo* map_info = new MapInfo(start, end, offset, flags, name);
   map_info->load_bias = load_bias;
   maps_.push_back(map_info);
+}
+
+void Maps::Sort() {
+  std::sort(maps_.begin(), maps_.end(),
+            [](const MapInfo* a, const MapInfo* b) { return a->start < b->start; });
 }
 
 Maps::~Maps() {
