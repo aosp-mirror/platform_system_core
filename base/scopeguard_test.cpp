@@ -17,6 +17,7 @@
 #include "android-base/scopeguard.h"
 
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -43,4 +44,16 @@ TEST(scopeguard, moved) {
   { decltype(scopeguard) new_guard(std::move(scopeguard)); }
   EXPECT_FALSE(scopeguard.active());
   ASSERT_FALSE(guarded_var);
+}
+
+TEST(scopeguard, vector) {
+  int guarded_var = 0;
+  {
+    std::vector<android::base::ScopeGuard<std::function<void()>>> scopeguards;
+    scopeguards.emplace_back(android::base::make_scope_guard(
+        std::bind([](int& guarded_var) { guarded_var++; }, std::ref(guarded_var))));
+    scopeguards.emplace_back(android::base::make_scope_guard(
+        std::bind([](int& guarded_var) { guarded_var++; }, std::ref(guarded_var))));
+  }
+  ASSERT_EQ(guarded_var, 2);
 }
