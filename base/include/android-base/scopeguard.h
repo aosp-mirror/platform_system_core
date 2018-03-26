@@ -17,17 +17,24 @@
 #ifndef ANDROID_BASE_SCOPEGUARD_H
 #define ANDROID_BASE_SCOPEGUARD_H
 
-#include <utility>  // for std::move
+#include <utility>  // for std::move, std::forward
 
 namespace android {
 namespace base {
 
+// ScopeGuard ensures that the specified functor is executed no matter how the
+// current scope exits.
 template <typename F>
 class ScopeGuard {
  public:
-  ScopeGuard(F f) : f_(f), active_(true) {}
+  ScopeGuard(F&& f) : f_(std::forward<F>(f)), active_(true) {}
 
   ScopeGuard(ScopeGuard&& that) : f_(std::move(that.f_)), active_(that.active_) {
+    that.active_ = false;
+  }
+
+  template <typename Functor>
+  ScopeGuard(ScopeGuard<Functor>&& that) : f_(std::move(that.f_)), active_(that.active_) {
     that.active_ = false;
   }
 
@@ -45,13 +52,16 @@ class ScopeGuard {
   bool active() const { return active_; }
 
  private:
+  template <typename Functor>
+  friend class ScopeGuard;
+
   F f_;
   bool active_;
 };
 
-template <typename T>
-ScopeGuard<T> make_scope_guard(T f) {
-  return ScopeGuard<T>(f);
+template <typename F>
+ScopeGuard<F> make_scope_guard(F&& f) {
+  return ScopeGuard<F>(std::forward<F>(f));
 }
 
 }  // namespace base
