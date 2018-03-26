@@ -30,9 +30,11 @@ bool llkInit(const char* threadname); /* threadname NULL, not spawned */
 unsigned llkCheckMilliseconds(void);
 
 /* clang-format off */
-#define LLK_ENABLE_PROPERTY            "ro.llk.enable"
-#define LLK_ENABLE_DEFAULT             false
-#define KHT_ENABLE_PROPERTY            "ro.khungtask.enable"
+#define LLK_ENABLE_WRITEABLE_PROPERTY  "llk.enable"
+#define LLK_ENABLE_PROPERTY            "ro." LLK_ENABLE_WRITEABLE_PROPERTY
+#define LLK_ENABLE_DEFAULT             false /* "eng" and userdebug true */
+#define KHT_ENABLE_WRITEABLE_PROPERTY  "khungtask.enable"
+#define KHT_ENABLE_PROPERTY            "ro." KHT_ENABLE_WRITEABLE_PROPERTY
 #define LLK_MLOCKALL_PROPERTY          "ro.llk.mlockall"
 #define LLK_MLOCKALL_DEFAULT           true
 #define LLK_TIMEOUT_MS_PROPERTY        "ro.llk.timeout_ms"
