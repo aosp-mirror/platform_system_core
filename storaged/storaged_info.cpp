@@ -157,11 +157,14 @@ void storage_info_t::update_perf_history(uint32_t bw,
         return;
     }
 
-    recent_perf.erase(recent_perf.begin() + nr_samples,
-                      recent_perf.end());
+    if (nr_samples < recent_perf.size()) {
+        recent_perf.erase(recent_perf.begin() + nr_samples, recent_perf.end());
+    }
 
-    uint32_t daily_avg_bw = accumulate(recent_perf.begin(),
-        recent_perf.begin() + nr_samples, 0) / nr_samples;
+    uint32_t daily_avg_bw = 0;
+    if (!recent_perf.empty()) {
+        daily_avg_bw = accumulate(recent_perf.begin(), recent_perf.end(), 0) / recent_perf.size();
+    }
 
     day_start_tp = tp - chrono::seconds(duration_cast<chrono::seconds>(
         tp.time_since_epoch()).count() % DAY_TO_SEC);
@@ -176,6 +179,7 @@ void storage_info_t::update_perf_history(uint32_t bw,
         return;
     }
 
+    DCHECK(nr_days > 0);
     uint32_t week_avg_bw = accumulate(daily_perf.begin(),
         daily_perf.begin() + nr_days, 0) / nr_days;
 
