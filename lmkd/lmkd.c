@@ -1201,7 +1201,7 @@ int main(int argc __unused, char **argv __unused) {
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
 
 #ifdef LMKD_LOG_STATS
-    statlog_init();
+    statslog_init(&log_ctx, &enable_stats_log);
 #endif
 
     // MCL_ONFAULT pins pages as they fault instead of loading
@@ -1221,7 +1221,7 @@ int main(int argc __unused, char **argv __unused) {
         mainloop();
 
 #ifdef LMKD_LOG_STATS
-    statslog_destroy();
+    statslog_destroy(&log_ctx);
 #endif
 
     ALOGI("exiting");
