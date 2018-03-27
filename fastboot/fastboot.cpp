@@ -123,6 +123,7 @@ static struct {
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  true  },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
     { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false },
+    { "product",  "product.img",      "product.sig",  "product",  true,  false },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
     { "system",   "system.img",       "system.sig",   "system",   false, false },
     { nullptr,    "system_other.img", "system.sig",   "system",   true,  true  },
