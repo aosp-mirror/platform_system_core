@@ -334,6 +334,15 @@ bool Subprocess::ForkAndExec(std::string* error) {
         // processes, so we need to manually reset back to SIG_DFL here (http://b/35209888).
         signal(SIGPIPE, SIG_DFL);
 
+        // Increase oom_score_adj from -1000, so that the child is visible to the OOM-killer.
+        // Don't treat failure as an error, because old Android kernels explicitly disabled this.
+        int oom_score_adj_fd = adb_open("/proc/self/oom_score_adj", O_WRONLY | O_CLOEXEC);
+        if (oom_score_adj_fd != -1) {
+            const char* oom_score_adj_value = "-950";
+            TEMP_FAILURE_RETRY(
+                adb_write(oom_score_adj_fd, oom_score_adj_value, strlen(oom_score_adj_value)));
+        }
+
         if (command_.empty()) {
             execle(_PATH_BSHELL, _PATH_BSHELL, "-", nullptr, cenv.data());
         } else {
