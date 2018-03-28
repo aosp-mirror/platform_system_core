@@ -37,6 +37,7 @@ static const std::set<std::string> kExportedActionableProperties = {
     "persist.sys.zram_enabled",
     "ro.bootmode",
     "ro.build.type",
+    "ro.debuggable",
     "sys.boot_completed",
     "sys.retaildemo.enabled",
     "sys.shutdown.requested",
