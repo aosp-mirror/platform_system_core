@@ -35,35 +35,24 @@
 
 #include "fastboot.h"
 
-double now()
-{
+double now() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
 }
 
-char *mkmsg(const char *fmt, ...)
-{
-    char buf[256];
-    char *s;
-    va_list ap;
-
-    va_start(ap, fmt);
-    vsprintf(buf, fmt, ap);
-    va_end(ap);
-
-    s = strdup(buf);
-    if (s == 0) die("out of memory");
-    return s;
-}
-
-void die(const char *fmt, ...)
-{
+void die(const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     fprintf(stderr,"error: ");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr,"\n");
     va_end(ap);
-    exit(1);
+    exit(EXIT_FAILURE);
+}
+
+char* xstrdup(const char* s) {
+    char* result = strdup(s);
+    if (!result) die("out of memory");
+    return result;
 }
