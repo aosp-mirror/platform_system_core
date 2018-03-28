@@ -51,13 +51,23 @@ void RegsArm::set_sp(uint64_t sp) {
 }
 
 uint64_t RegsArm::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
+  if (!elf->valid()) {
+    return 2;
+  }
+
   uint64_t load_bias = elf->GetLoadBias();
   if (rel_pc < load_bias) {
-    return 0;
+    if (rel_pc < 2) {
+      return 0;
+    }
+    return 2;
   }
   uint64_t adjusted_rel_pc = rel_pc - load_bias;
   if (adjusted_rel_pc < 5) {
-    return 0;
+    if (adjusted_rel_pc < 2) {
+      return 0;
+    }
+    return 2;
   }
 
   if (adjusted_rel_pc & 1) {
