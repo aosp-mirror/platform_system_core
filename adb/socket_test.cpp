@@ -42,10 +42,6 @@ struct ThreadArg {
 
 class LocalSocketTest : public FdeventTest {};
 
-static void WaitForFdeventLoop() {
-    std::this_thread::sleep_for(100ms);
-}
-
 TEST_F(LocalSocketTest, smoke) {
     // Join two socketpairs with a chain of intermediate socketpairs.
     int first[2];
