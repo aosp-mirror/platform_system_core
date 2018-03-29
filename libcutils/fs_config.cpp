@@ -199,8 +199,9 @@ static const struct fs_path_config android_files[] = {
 
     // Support wifi_hal_legacy administering a network interface.
     { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_NET_RAW),
-                                              "vendor/bin/hw/android.hardware.wifi@1.0-service" },
+                                           CAP_MASK_LONG(CAP_NET_RAW) |
+                                           CAP_MASK_LONG(CAP_SYS_MODULE),
+                                           "vendor/bin/hw/android.hardware.wifi@1.0-service" },
 
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
