@@ -16,10 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 
 #include "socket.h"
 #include "sysdeps.h"
+#include "sysdeps/chrono.h"
 
 static void WaitForFdeventLoop() {
     // Sleep for a bit to make sure that network events have propagated.
@@ -67,6 +70,9 @@ class FdeventTest : public ::testing::Test {
         }
         dummy_socket->ready(dummy_socket);
         dummy = dummy_fds[0];
+
+        thread_ = std::thread([]() { fdevent_loop(); });
+        WaitForFdeventLoop();
     }
 
     size_t GetAdditionalLocalSocketCount() {
@@ -74,10 +80,12 @@ class FdeventTest : public ::testing::Test {
         return 2;
     }
 
-    void TerminateThread(std::thread& thread) {
+    void TerminateThread() {
         fdevent_terminate_loop();
         ASSERT_TRUE(WriteFdExactly(dummy, "", 1));
-        thread.join();
+        thread_.join();
         ASSERT_EQ(0, adb_close(dummy));
     }
+
+    std::thread thread_;
 };
