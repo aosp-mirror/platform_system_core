@@ -26,6 +26,7 @@
 
 #include "adb_io.h"
 #include "fdevent_test.h"
+#include "sysdeps/memory.h"
 
 class FdHandler {
   public:
