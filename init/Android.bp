@@ -127,9 +127,7 @@ cc_library_static {
         "watchdogd.cpp",
     ],
     whole_static_libs: ["libcap"],
-    include_dirs: [
-        "system/core/mkbootimg",
-    ],
+    header_libs: ["bootimg_headers"],
     proto: {
         type: "lite",
         export_proto_headers: true,
