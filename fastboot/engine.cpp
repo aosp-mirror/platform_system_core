@@ -27,7 +27,6 @@
  */
 
 #include "fastboot.h"
-#include "fs.h"
 
 #include <errno.h>
 #include <stdarg.h>
@@ -38,150 +37,117 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define OP_DOWNLOAD   1
-#define OP_COMMAND    2
-#define OP_QUERY      3
-#define OP_NOTICE     4
-#define OP_DOWNLOAD_SPARSE 5
-#define OP_WAIT_FOR_DISCONNECT 6
-#define OP_DOWNLOAD_FD 7
-#define OP_UPLOAD 8
+#include <memory>
+#include <vector>
 
-typedef struct Action Action;
+#include <android-base/stringprintf.h>
 
-#define CMD_SIZE 64
-
-struct Action {
-    unsigned op;
-    Action* next;
-
-    char cmd[CMD_SIZE];
-    const char* prod;
-    void* data;
-    int fd;
-
-    // The protocol only supports 32-bit sizes, so you'll have to break
-    // anything larger into chunks.
-    uint32_t size;
-
-    const char *msg;
-    int (*func)(Action* a, int status, const char* resp);
-
-    double start;
+enum Op {
+    OP_DOWNLOAD,
+    OP_COMMAND,
+    OP_QUERY,
+    OP_NOTICE,
+    OP_DOWNLOAD_SPARSE,
+    OP_WAIT_FOR_DISCONNECT,
+    OP_DOWNLOAD_FD,
+    OP_UPLOAD,
 };
 
-static Action *action_list = 0;
-static Action *action_last = 0;
+struct Action {
+    Action(Op op, const std::string& cmd) : op(op), cmd(cmd) {}
 
+    Op op;
+    std::string cmd;
+    std::string msg;
 
+    std::string product;
 
+    void* data = nullptr;
+    // The protocol only supports 32-bit sizes, so you'll have to break
+    // anything larger into multiple chunks.
+    uint32_t size = 0;
+
+    int fd = -1;
+
+    int (*func)(Action& a, int status, const char* resp) = nullptr;
+
+    double start = -1;
+};
+
+static std::vector<std::unique_ptr<Action>> action_list;
 
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value) {
-    std::string cmd = "getvar:";
-    cmd += key;
+    std::string cmd = "getvar:" + key;
 
     char buf[FB_RESPONSE_SZ + 1];
     memset(buf, 0, sizeof(buf));
-    if (fb_command_response(transport, cmd.c_str(), buf)) {
-      return false;
+    if (fb_command_response(transport, cmd, buf)) {
+        return false;
     }
     *value = buf;
     return true;
 }
 
-static int cb_default(Action* a, int status, const char* resp) {
+static int cb_default(Action& a, int status, const char* resp) {
     if (status) {
         fprintf(stderr,"FAILED (%s)\n", resp);
     } else {
         double split = now();
-        fprintf(stderr,"OKAY [%7.3fs]\n", (split - a->start));
-        a->start = split;
+        fprintf(stderr, "OKAY [%7.3fs]\n", (split - a.start));
+        a.start = split;
     }
     return status;
 }
 
-static Action *queue_action(unsigned op, const char *fmt, ...)
-{
-    va_list ap;
-    size_t cmdsize;
-
-    Action* a = reinterpret_cast<Action*>(calloc(1, sizeof(Action)));
-    if (a == nullptr) die("out of memory");
-
-    va_start(ap, fmt);
-    cmdsize = vsnprintf(a->cmd, sizeof(a->cmd), fmt, ap);
-    va_end(ap);
-
-    if (cmdsize >= sizeof(a->cmd)) {
-        free(a);
-        die("Command length (%zu) exceeds maximum size (%zu)", cmdsize, sizeof(a->cmd));
-    }
-
-    if (action_last) {
-        action_last->next = a;
-    } else {
-        action_list = a;
-    }
-    action_last = a;
-    a->op = op;
+static Action& queue_action(Op op, const std::string& cmd) {
+    std::unique_ptr<Action> a{new Action(op, cmd)};
     a->func = cb_default;
 
-    a->start = -1;
-
-    return a;
+    action_list.push_back(std::move(a));
+    return *action_list.back();
 }
 
-void fb_set_active(const char *slot)
-{
-    Action *a;
-    a = queue_action(OP_COMMAND, "set_active:%s", slot);
-    a->msg = mkmsg("Setting current slot to '%s'", slot);
+void fb_set_active(const std::string& slot) {
+    Action& a = queue_action(OP_COMMAND, "set_active:" + slot);
+    a.msg = "Setting current slot to '" + slot + "'...";
 }
 
-void fb_queue_erase(const char *ptn)
-{
-    Action *a;
-    a = queue_action(OP_COMMAND, "erase:%s", ptn);
-    a->msg = mkmsg("erasing '%s'", ptn);
+void fb_queue_erase(const std::string& partition) {
+    Action& a = queue_action(OP_COMMAND, "erase:" + partition);
+    a.msg = "Erasing '" + partition + "'...";
 }
 
-void fb_queue_flash_fd(const char *ptn, int fd, uint32_t sz)
-{
-    Action *a;
+void fb_queue_flash_fd(const std::string& partition, int fd, uint32_t sz) {
+    Action& a = queue_action(OP_DOWNLOAD_FD, "");
+    a.fd = fd;
+    a.size = sz;
+    a.msg = android::base::StringPrintf("Sending '%s' (%d KB)...", partition.c_str(), sz / 1024);
 
-    a = queue_action(OP_DOWNLOAD_FD, "");
-    a->fd = fd;
-    a->size = sz;
-    a->msg = mkmsg("sending '%s' (%d KB)", ptn, sz / 1024);
-
-    a = queue_action(OP_COMMAND, "flash:%s", ptn);
-    a->msg = mkmsg("writing '%s'", ptn);
+    Action& b = queue_action(OP_COMMAND, "flash:" + partition);
+    b.msg = "Writing '" + partition + "'...";
 }
 
-void fb_queue_flash(const char *ptn, void *data, uint32_t sz)
-{
-    Action *a;
+void fb_queue_flash(const std::string& partition, void* data, uint32_t sz) {
+    Action& a = queue_action(OP_DOWNLOAD, "");
+    a.data = data;
+    a.size = sz;
+    a.msg = android::base::StringPrintf("Sending '%s' (%d KB)...", partition.c_str(), sz / 1024);
 
-    a = queue_action(OP_DOWNLOAD, "");
-    a->data = data;
-    a->size = sz;
-    a->msg = mkmsg("sending '%s' (%d KB)", ptn, sz / 1024);
-
-    a = queue_action(OP_COMMAND, "flash:%s", ptn);
-    a->msg = mkmsg("writing '%s'", ptn);
+    Action& b = queue_action(OP_COMMAND, "flash:" + partition);
+    b.msg = "Writing '" + partition + "'...";
 }
 
-void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, uint32_t sz, size_t current,
-                           size_t total) {
-    Action *a;
+void fb_queue_flash_sparse(const std::string& partition, struct sparse_file* s, uint32_t sz,
+                           size_t current, size_t total) {
+    Action& a = queue_action(OP_DOWNLOAD_SPARSE, "");
+    a.data = s;
+    a.size = 0;
+    a.msg = android::base::StringPrintf("Sending sparse '%s' %zu/%zu (%d KB)...", partition.c_str(),
+                                        current, total, sz / 1024);
 
-    a = queue_action(OP_DOWNLOAD_SPARSE, "");
-    a->data = s;
-    a->size = 0;
-    a->msg = mkmsg("sending sparse '%s' %zu/%zu (%d KB)", ptn, current, total, sz / 1024);
-
-    a = queue_action(OP_COMMAND, "flash:%s", ptn);
-    a->msg = mkmsg("writing '%s' %zu/%zu", ptn, current, total);
+    Action& b = queue_action(OP_COMMAND, "flash:" + partition);
+    b.msg =
+        android::base::StringPrintf("Writing '%s' %zu/%zu...", partition.c_str(), current, total);
 }
 
 static int match(const char* str, const char** value, unsigned count) {
@@ -205,212 +171,181 @@ static int match(const char* str, const char** value, unsigned count) {
     return 0;
 }
 
-
-
-static int cb_check(Action* a, int status, const char* resp, int invert)
-{
-    const char** value = reinterpret_cast<const char**>(a->data);
-    unsigned count = a->size;
+static int cb_check(Action& a, int status, const char* resp, int invert) {
+    const char** value = reinterpret_cast<const char**>(a.data);
+    unsigned count = a.size;
     unsigned n;
-    int yes;
 
     if (status) {
         fprintf(stderr,"FAILED (%s)\n", resp);
         return status;
     }
 
-    if (a->prod) {
-        if (strcmp(a->prod, cur_product) != 0) {
+    if (!a.product.empty()) {
+        if (a.product != cur_product) {
             double split = now();
-            fprintf(stderr,"IGNORE, product is %s required only for %s [%7.3fs]\n",
-                    cur_product, a->prod, (split - a->start));
-            a->start = split;
+            fprintf(stderr, "IGNORE, product is %s required only for %s [%7.3fs]\n", cur_product,
+                    a.product.c_str(), (split - a.start));
+            a.start = split;
             return 0;
         }
     }
 
-    yes = match(resp, value, count);
+    int yes = match(resp, value, count);
     if (invert) yes = !yes;
 
     if (yes) {
         double split = now();
-        fprintf(stderr,"OKAY [%7.3fs]\n", (split - a->start));
-        a->start = split;
+        fprintf(stderr, "OKAY [%7.3fs]\n", (split - a.start));
+        a.start = split;
         return 0;
     }
 
-    fprintf(stderr,"FAILED\n\n");
-    fprintf(stderr,"Device %s is '%s'.\n", a->cmd + 7, resp);
-    fprintf(stderr,"Update %s '%s'",
-            invert ? "rejects" : "requires", value[0]);
+    fprintf(stderr, "FAILED\n\n");
+    fprintf(stderr, "Device %s is '%s'.\n", a.cmd.c_str() + 7, resp);
+    fprintf(stderr, "Update %s '%s'", invert ? "rejects" : "requires", value[0]);
     for (n = 1; n < count; n++) {
-        fprintf(stderr," or '%s'", value[n]);
+        fprintf(stderr, " or '%s'", value[n]);
     }
-    fprintf(stderr,".\n\n");
+    fprintf(stderr, ".\n\n");
     return -1;
 }
 
-static int cb_require(Action*a, int status, const char* resp) {
+static int cb_require(Action& a, int status, const char* resp) {
     return cb_check(a, status, resp, 0);
 }
 
-static int cb_reject(Action* a, int status, const char* resp) {
+static int cb_reject(Action& a, int status, const char* resp) {
     return cb_check(a, status, resp, 1);
 }
 
-static char* xstrdup(const char* s) {
-    char* result = strdup(s);
-    if (!result) die("out of memory");
-    return result;
+void fb_queue_require(const std::string& product, const std::string& var, bool invert,
+                      size_t nvalues, const char** values) {
+    Action& a = queue_action(OP_QUERY, "getvar:" + var);
+    a.product = product;
+    a.data = values;
+    a.size = nvalues;
+    a.msg = "Checking " + var;
+    a.func = invert ? cb_reject : cb_require;
+    if (a.data == nullptr) die("out of memory");
 }
 
-void fb_queue_require(const char *prod, const char *var,
-                      bool invert, size_t nvalues, const char **value)
-{
-    Action *a;
-    a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->prod = prod;
-    a->data = value;
-    a->size = nvalues;
-    a->msg = mkmsg("checking %s", var);
-    a->func = invert ? cb_reject : cb_require;
-    if (a->data == nullptr) die("out of memory");
-}
-
-static int cb_display(Action* a, int status, const char* resp) {
+static int cb_display(Action& a, int status, const char* resp) {
     if (status) {
-        fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
+        fprintf(stderr, "%s FAILED (%s)\n", a.cmd.c_str(), resp);
         return status;
     }
-    fprintf(stderr, "%s: %s\n", static_cast<const char*>(a->data), resp);
-    free(static_cast<char*>(a->data));
+    fprintf(stderr, "%s: %s\n", static_cast<const char*>(a.data), resp);
+    free(static_cast<char*>(a.data));
     return 0;
 }
 
-void fb_queue_display(const char* var, const char* prettyname) {
-    Action* a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->data = xstrdup(prettyname);
-    a->func = cb_display;
+void fb_queue_display(const std::string& label, const std::string& var) {
+    Action& a = queue_action(OP_QUERY, "getvar:" + var);
+    a.data = xstrdup(label.c_str());
+    a.func = cb_display;
 }
 
-static int cb_save(Action* a, int status, const char* resp) {
+static int cb_save(Action& a, int status, const char* resp) {
     if (status) {
-        fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
+        fprintf(stderr, "%s FAILED (%s)\n", a.cmd.c_str(), resp);
         return status;
     }
-    strncpy(reinterpret_cast<char*>(a->data), resp, a->size);
+    strncpy(reinterpret_cast<char*>(a.data), resp, a.size);
     return 0;
 }
 
-void fb_queue_query_save(const char* var, char* dest, uint32_t dest_size) {
-    Action* a = queue_action(OP_QUERY, "getvar:%s", var);
-    a->data = dest;
-    a->size = dest_size;
-    a->func = cb_save;
+void fb_queue_query_save(const std::string& var, char* dest, uint32_t dest_size) {
+    Action& a = queue_action(OP_QUERY, "getvar:" + var);
+    a.data = dest;
+    a.size = dest_size;
+    a.func = cb_save;
 }
 
-static int cb_do_nothing(Action*, int , const char*) {
-    fprintf(stderr,"\n");
+static int cb_do_nothing(Action&, int, const char*) {
+    fprintf(stderr, "\n");
     return 0;
 }
 
-void fb_queue_reboot(void)
-{
-    Action *a = queue_action(OP_COMMAND, "reboot");
-    a->func = cb_do_nothing;
-    a->msg = "rebooting";
+void fb_queue_reboot() {
+    Action& a = queue_action(OP_COMMAND, "reboot");
+    a.func = cb_do_nothing;
+    a.msg = "Rebooting...";
 }
 
-void fb_queue_command(const char *cmd, const char *msg)
-{
-    Action *a = queue_action(OP_COMMAND, cmd);
-    a->msg = msg;
+void fb_queue_command(const std::string& cmd, const std::string& msg) {
+    Action& a = queue_action(OP_COMMAND, cmd);
+    a.msg = msg;
 }
 
-void fb_queue_download(const char *name, void *data, uint32_t size)
-{
-    Action *a = queue_action(OP_DOWNLOAD, "");
-    a->data = data;
-    a->size = size;
-    a->msg = mkmsg("downloading '%s'", name);
+void fb_queue_download(const std::string& name, void* data, uint32_t size) {
+    Action& a = queue_action(OP_DOWNLOAD, "");
+    a.data = data;
+    a.size = size;
+    a.msg = "Downloading '" + name + "'";
 }
 
-void fb_queue_download_fd(const char *name, int fd, uint32_t sz)
-{
-    Action *a;
-    a = queue_action(OP_DOWNLOAD_FD, "");
-    a->fd = fd;
-    a->size = sz;
-    a->msg = mkmsg("sending '%s' (%d KB)", name, sz / 1024);
+void fb_queue_download_fd(const std::string& name, int fd, uint32_t sz) {
+    Action& a = queue_action(OP_DOWNLOAD_FD, "");
+    a.fd = fd;
+    a.size = sz;
+    a.msg = android::base::StringPrintf("Sending '%s' (%d KB)", name.c_str(), sz / 1024);
 }
 
-void fb_queue_upload(const char* outfile) {
-    Action* a = queue_action(OP_UPLOAD, "");
-    a->data = xstrdup(outfile);
-    a->msg = mkmsg("uploading '%s'", outfile);
+void fb_queue_upload(const std::string& outfile) {
+    Action& a = queue_action(OP_UPLOAD, "");
+    a.data = xstrdup(outfile.c_str());
+    a.msg = "Uploading '" + outfile + "'";
 }
 
-void fb_queue_notice(const char* notice) {
-    Action *a = queue_action(OP_NOTICE, "");
-    a->data = (void*) notice;
+void fb_queue_notice(const std::string& notice) {
+    Action& a = queue_action(OP_NOTICE, "");
+    a.msg = notice;
 }
 
-void fb_queue_wait_for_disconnect(void)
-{
+void fb_queue_wait_for_disconnect() {
     queue_action(OP_WAIT_FOR_DISCONNECT, "");
 }
 
-int64_t fb_execute_queue(Transport* transport)
-{
-    Action *a;
-    char resp[FB_RESPONSE_SZ+1];
+int64_t fb_execute_queue(Transport* transport) {
     int64_t status = 0;
-
-    a = action_list;
-    if (!a)
-        return status;
-    resp[FB_RESPONSE_SZ] = 0;
-
-    double start = -1;
-    for (a = action_list; a; a = a->next) {
+    for (auto& a : action_list) {
         a->start = now();
-        if (start < 0) start = a->start;
-        if (a->msg) {
-            // fprintf(stderr,"%30s... ",a->msg);
-            fprintf(stderr,"%s...\n",a->msg);
+        if (!a->msg.empty()) {
+            fprintf(stderr, "%s\n", a->msg.c_str());
         }
         if (a->op == OP_DOWNLOAD) {
             status = fb_download_data(transport, a->data, a->size);
-            status = a->func(a, status, status ? fb_get_error().c_str() : "");
+            status = a->func(*a, status, status ? fb_get_error().c_str() : "");
             if (status) break;
         } else if (a->op == OP_DOWNLOAD_FD) {
             status = fb_download_data_fd(transport, a->fd, a->size);
-            status = a->func(a, status, status ? fb_get_error().c_str() : "");
+            status = a->func(*a, status, status ? fb_get_error().c_str() : "");
             if (status) break;
         } else if (a->op == OP_COMMAND) {
             status = fb_command(transport, a->cmd);
-            status = a->func(a, status, status ? fb_get_error().c_str() : "");
+            status = a->func(*a, status, status ? fb_get_error().c_str() : "");
             if (status) break;
         } else if (a->op == OP_QUERY) {
+            char resp[FB_RESPONSE_SZ + 1] = {};
             status = fb_command_response(transport, a->cmd, resp);
-            status = a->func(a, status, status ? fb_get_error().c_str() : resp);
+            status = a->func(*a, status, status ? fb_get_error().c_str() : resp);
             if (status) break;
         } else if (a->op == OP_NOTICE) {
-            fprintf(stderr,"%s\n",(char*)a->data);
+            // We already showed the notice because it's in `Action::msg`.
         } else if (a->op == OP_DOWNLOAD_SPARSE) {
             status = fb_download_data_sparse(transport, reinterpret_cast<sparse_file*>(a->data));
-            status = a->func(a, status, status ? fb_get_error().c_str() : "");
+            status = a->func(*a, status, status ? fb_get_error().c_str() : "");
             if (status) break;
         } else if (a->op == OP_WAIT_FOR_DISCONNECT) {
             transport->WaitForDisconnect();
         } else if (a->op == OP_UPLOAD) {
             status = fb_upload_data(transport, reinterpret_cast<char*>(a->data));
-            status = a->func(a, status, status ? fb_get_error().c_str() : "");
+            status = a->func(*a, status, status ? fb_get_error().c_str() : "");
         } else {
-            die("bogus action");
+            die("unknown action: %d", a->op);
         }
     }
-
-    fprintf(stderr,"finished. total time: %.3fs\n", (now() - start));
+    action_list.clear();
     return status;
 }
