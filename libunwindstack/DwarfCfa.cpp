@@ -50,7 +50,17 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
   memory_->set_cur_offset(start_offset);
   uint64_t cfa_offset;
   cur_pc_ = fde_->pc_start;
-  while ((cfa_offset = memory_->cur_offset()) < end_offset && cur_pc_ <= pc) {
+  loc_regs->pc_start = cur_pc_;
+  while (true) {
+    if (cur_pc_ > pc) {
+      loc_regs->pc_end = cur_pc_;
+      return true;
+    }
+    if ((cfa_offset = memory_->cur_offset()) >= end_offset) {
+      loc_regs->pc_end = fde_->pc_end;
+      return true;
+    }
+    loc_regs->pc_start = cur_pc_;
     operands_.clear();
     // Read the cfa information.
     uint8_t cfa_value;
@@ -129,7 +139,6 @@ bool DwarfCfa<AddressType>::GetLocationInfo(uint64_t pc, uint64_t start_offset, 
       }
     }
   }
-  return true;
 }
 
 template <typename AddressType>

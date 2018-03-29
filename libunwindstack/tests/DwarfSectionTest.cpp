@@ -165,4 +165,72 @@ TEST_F(DwarfSectionTest, Step_pass) {
   ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process, &finished));
 }
 
+static bool MockGetCfaLocationInfo(::testing::Unused, const DwarfFde* fde,
+                                   dwarf_loc_regs_t* loc_regs) {
+  loc_regs->pc_start = fde->pc_start;
+  loc_regs->pc_end = fde->pc_end;
+  return true;
+}
+
+TEST_F(DwarfSectionTest, Step_cache) {
+  MockDwarfSection mock_section(&memory_);
+
+  DwarfCie cie{};
+  DwarfFde fde{};
+  fde.pc_start = 0x500;
+  fde.pc_end = 0x2000;
+  fde.cie = &cie;
+
+  EXPECT_CALL(mock_section, GetFdeOffsetFromPc(0x1000, ::testing::_))
+      .WillOnce(::testing::Return(true));
+  EXPECT_CALL(mock_section, GetFdeFromOffset(::testing::_)).WillOnce(::testing::Return(&fde));
+
+  EXPECT_CALL(mock_section, GetCfaLocationInfo(0x1000, &fde, ::testing::_))
+      .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
+
+  MemoryFake process;
+  EXPECT_CALL(mock_section, Eval(&cie, &process, ::testing::_, nullptr, ::testing::_))
+      .WillRepeatedly(::testing::Return(true));
+
+  bool finished;
+  ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process, &finished));
+  ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process, &finished));
+  ASSERT_TRUE(mock_section.Step(0x1500, nullptr, &process, &finished));
+}
+
+TEST_F(DwarfSectionTest, Step_cache_not_in_pc) {
+  MockDwarfSection mock_section(&memory_);
+
+  DwarfCie cie{};
+  DwarfFde fde0{};
+  fde0.pc_start = 0x1000;
+  fde0.pc_end = 0x2000;
+  fde0.cie = &cie;
+  EXPECT_CALL(mock_section, GetFdeOffsetFromPc(0x1000, ::testing::_))
+      .WillOnce(::testing::Return(true));
+  EXPECT_CALL(mock_section, GetFdeFromOffset(::testing::_)).WillOnce(::testing::Return(&fde0));
+  EXPECT_CALL(mock_section, GetCfaLocationInfo(0x1000, &fde0, ::testing::_))
+      .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
+
+  MemoryFake process;
+  EXPECT_CALL(mock_section, Eval(&cie, &process, ::testing::_, nullptr, ::testing::_))
+      .WillRepeatedly(::testing::Return(true));
+
+  bool finished;
+  ASSERT_TRUE(mock_section.Step(0x1000, nullptr, &process, &finished));
+
+  DwarfFde fde1{};
+  fde1.pc_start = 0x500;
+  fde1.pc_end = 0x800;
+  fde1.cie = &cie;
+  EXPECT_CALL(mock_section, GetFdeOffsetFromPc(0x600, ::testing::_))
+      .WillOnce(::testing::Return(true));
+  EXPECT_CALL(mock_section, GetFdeFromOffset(::testing::_)).WillOnce(::testing::Return(&fde1));
+  EXPECT_CALL(mock_section, GetCfaLocationInfo(0x600, &fde1, ::testing::_))
+      .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
+
+  ASSERT_TRUE(mock_section.Step(0x600, nullptr, &process, &finished));
+  ASSERT_TRUE(mock_section.Step(0x700, nullptr, &process, &finished));
+}
+
 }  // namespace unwindstack
