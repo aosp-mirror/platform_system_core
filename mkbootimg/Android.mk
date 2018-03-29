@@ -9,3 +9,12 @@ LOCAL_IS_HOST_MODULE := true
 LOCAL_MODULE := mkbootimg
 
 include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := unpack_bootimg
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_IS_HOST_MODULE := true
+
+LOCAL_MODULE := unpack_bootimg
+
+include $(BUILD_PREBUILT)
