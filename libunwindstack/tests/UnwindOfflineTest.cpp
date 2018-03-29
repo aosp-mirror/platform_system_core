@@ -284,7 +284,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "  #01 pc 00067f00  libarttestd.so (Java_Main_unwindInProcess+10032)\n"
       "  #02 pc 000021a8 (offset 0x2000)  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+136)\n"
-      "  #03 pc 0000fe81  anonymous:ee74c000 (boolean Main.bar(boolean)+65)\n"
+      "  #03 pc 0000fe80  anonymous:ee74c000 (boolean Main.bar(boolean)+64)\n"
       "  #04 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
       "  #05 pc 00146ab5  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+885)\n"
@@ -299,7 +299,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "20CodeItemDataAccessorEPNS_11ShadowFrameE+234)\n"
       "  #09 pc 00684362  libartd.so (artQuickToInterpreterBridge+1058)\n"
       "  #10 pc 006b35bd  libartd.so (art_quick_to_interpreter_bridge+77)\n"
-      "  #11 pc 0000fe04  anonymous:ee74c000 (int Main.compare(Main, Main)+52)\n"
+      "  #11 pc 0000fe03  anonymous:ee74c000 (int Main.compare(Main, Main)+51)\n"
       "  #12 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
       "  #13 pc 00146ab5  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+885)\n"
@@ -314,8 +314,8 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "20CodeItemDataAccessorEPNS_11ShadowFrameE+234)\n"
       "  #17 pc 00684362  libartd.so (artQuickToInterpreterBridge+1058)\n"
       "  #18 pc 006b35bd  libartd.so (art_quick_to_interpreter_bridge+77)\n"
-      "  #19 pc 0000fd3c  anonymous:ee74c000 (int Main.compare(java.lang.Object, "
-      "java.lang.Object)+108)\n"
+      "  #19 pc 0000fd3b  anonymous:ee74c000 (int Main.compare(java.lang.Object, "
+      "java.lang.Object)+107)\n"
       "  #20 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
       "  #21 pc 00146ab5  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+885)\n"
@@ -330,9 +330,9 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "20CodeItemDataAccessorEPNS_11ShadowFrameE+234)\n"
       "  #25 pc 00684362  libartd.so (artQuickToInterpreterBridge+1058)\n"
       "  #26 pc 006b35bd  libartd.so (art_quick_to_interpreter_bridge+77)\n"
-      "  #27 pc 0000fbdc  anonymous:ee74c000 (int "
+      "  #27 pc 0000fbdb  anonymous:ee74c000 (int "
       "java.util.Arrays.binarySearch0(java.lang.Object[], int, int, java.lang.Object, "
-      "java.util.Comparator)+332)\n"
+      "java.util.Comparator)+331)\n"
       "  #28 pc 006ad6a2  libartd.so (art_quick_invoke_static_stub+418)\n"
       "  #29 pc 00146acb  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+907)\n"
@@ -347,7 +347,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "20CodeItemDataAccessorEPNS_11ShadowFrameE+234)\n"
       "  #33 pc 00684362  libartd.so (artQuickToInterpreterBridge+1058)\n"
       "  #34 pc 006b35bd  libartd.so (art_quick_to_interpreter_bridge+77)\n"
-      "  #35 pc 0000f625  anonymous:ee74c000 (boolean Main.foo()+165)\n"
+      "  #35 pc 0000f624  anonymous:ee74c000 (boolean Main.foo()+164)\n"
       "  #36 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
       "  #37 pc 00146ab5  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+885)\n"
@@ -362,7 +362,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "20CodeItemDataAccessorEPNS_11ShadowFrameE+234)\n"
       "  #41 pc 00684362  libartd.so (artQuickToInterpreterBridge+1058)\n"
       "  #42 pc 006b35bd  libartd.so (art_quick_to_interpreter_bridge+77)\n"
-      "  #43 pc 0000eedc  anonymous:ee74c000 (void Main.runPrimary()+60)\n"
+      "  #43 pc 0000eedb  anonymous:ee74c000 (void Main.runPrimary()+59)\n"
       "  #44 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
       "  #45 pc 00146ab5  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+885)\n"
@@ -377,7 +377,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
       "20CodeItemDataAccessorEPNS_11ShadowFrameE+234)\n"
       "  #49 pc 00684362  libartd.so (artQuickToInterpreterBridge+1058)\n"
       "  #50 pc 006b35bd  libartd.so (art_quick_to_interpreter_bridge+77)\n"
-      "  #51 pc 0000ac22  anonymous:ee74c000 (void Main.main(java.lang.String[])+98)\n"
+      "  #51 pc 0000ac21  anonymous:ee74c000 (void Main.main(java.lang.String[])+97)\n"
       "  #52 pc 006ad6a2  libartd.so (art_quick_invoke_static_stub+418)\n"
       "  #53 pc 00146acb  libartd.so "
       "(_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc+907)\n"
@@ -419,7 +419,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb52a0U, unwinder.frames()[1].sp);
   EXPECT_EQ(0xec6061a8U, unwinder.frames()[2].pc);
   EXPECT_EQ(0xffeb5ce0U, unwinder.frames()[2].sp);
-  EXPECT_EQ(0xee75be81U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xee75be80U, unwinder.frames()[3].pc);
   EXPECT_EQ(0xffeb5d30U, unwinder.frames()[3].sp);
   EXPECT_EQ(0xf728e4d2U, unwinder.frames()[4].pc);
   EXPECT_EQ(0xffeb5d60U, unwinder.frames()[4].sp);
@@ -435,7 +435,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb5fb0U, unwinder.frames()[9].sp);
   EXPECT_EQ(0xf72945bdU, unwinder.frames()[10].pc);
   EXPECT_EQ(0xffeb6110U, unwinder.frames()[10].sp);
-  EXPECT_EQ(0xee75be04U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xee75be03U, unwinder.frames()[11].pc);
   EXPECT_EQ(0xffeb6160U, unwinder.frames()[11].sp);
   EXPECT_EQ(0xf728e4d2U, unwinder.frames()[12].pc);
   EXPECT_EQ(0xffeb6180U, unwinder.frames()[12].sp);
@@ -451,7 +451,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb63e0U, unwinder.frames()[17].sp);
   EXPECT_EQ(0xf72945bdU, unwinder.frames()[18].pc);
   EXPECT_EQ(0xffeb6530U, unwinder.frames()[18].sp);
-  EXPECT_EQ(0xee75bd3cU, unwinder.frames()[19].pc);
+  EXPECT_EQ(0xee75bd3bU, unwinder.frames()[19].pc);
   EXPECT_EQ(0xffeb6580U, unwinder.frames()[19].sp);
   EXPECT_EQ(0xf728e4d2U, unwinder.frames()[20].pc);
   EXPECT_EQ(0xffeb65b0U, unwinder.frames()[20].sp);
@@ -467,7 +467,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb6810U, unwinder.frames()[25].sp);
   EXPECT_EQ(0xf72945bdU, unwinder.frames()[26].pc);
   EXPECT_EQ(0xffeb6960U, unwinder.frames()[26].sp);
-  EXPECT_EQ(0xee75bbdcU, unwinder.frames()[27].pc);
+  EXPECT_EQ(0xee75bbdbU, unwinder.frames()[27].pc);
   EXPECT_EQ(0xffeb69b0U, unwinder.frames()[27].sp);
   EXPECT_EQ(0xf728e6a2U, unwinder.frames()[28].pc);
   EXPECT_EQ(0xffeb69f0U, unwinder.frames()[28].sp);
@@ -483,7 +483,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb6c50U, unwinder.frames()[33].sp);
   EXPECT_EQ(0xf72945bdU, unwinder.frames()[34].pc);
   EXPECT_EQ(0xffeb6dd0U, unwinder.frames()[34].sp);
-  EXPECT_EQ(0xee75b625U, unwinder.frames()[35].pc);
+  EXPECT_EQ(0xee75b624U, unwinder.frames()[35].pc);
   EXPECT_EQ(0xffeb6e20U, unwinder.frames()[35].sp);
   EXPECT_EQ(0xf728e4d2U, unwinder.frames()[36].pc);
   EXPECT_EQ(0xffeb6e50U, unwinder.frames()[36].sp);
@@ -499,7 +499,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb70a0U, unwinder.frames()[41].sp);
   EXPECT_EQ(0xf72945bdU, unwinder.frames()[42].pc);
   EXPECT_EQ(0xffeb71f0U, unwinder.frames()[42].sp);
-  EXPECT_EQ(0xee75aedcU, unwinder.frames()[43].pc);
+  EXPECT_EQ(0xee75aedbU, unwinder.frames()[43].pc);
   EXPECT_EQ(0xffeb7240U, unwinder.frames()[43].sp);
   EXPECT_EQ(0xf728e4d2U, unwinder.frames()[44].pc);
   EXPECT_EQ(0xffeb72a0U, unwinder.frames()[44].sp);
@@ -515,7 +515,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(0xffeb74f0U, unwinder.frames()[49].sp);
   EXPECT_EQ(0xf72945bdU, unwinder.frames()[50].pc);
   EXPECT_EQ(0xffeb7680U, unwinder.frames()[50].sp);
-  EXPECT_EQ(0xee756c22U, unwinder.frames()[51].pc);
+  EXPECT_EQ(0xee756c21U, unwinder.frames()[51].pc);
   EXPECT_EQ(0xffeb76d0U, unwinder.frames()[51].sp);
   EXPECT_EQ(0xf728e6a2U, unwinder.frames()[52].pc);
   EXPECT_EQ(0xffeb76f0U, unwinder.frames()[52].sp);
