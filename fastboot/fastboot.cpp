@@ -123,6 +123,7 @@ static struct {
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  true  },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
     { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false },
+    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false },
     { "product",  "product.img",      "product.sig",  "product",  true,  false },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
     { "system",   "system.img",       "system.sig",   "system",   false, false },
@@ -634,27 +635,31 @@ static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     return fd.release();
 }
 
-static char *strip(char *s)
-{
-    int n;
-    while(*s && isspace(*s)) s++;
-    n = strlen(s);
-    while(n-- > 0) {
-        if(!isspace(s[n])) break;
+static char* strip(char* s) {
+    while (*s && isspace(*s)) s++;
+
+    int n = strlen(s);
+    while (n-- > 0) {
+        if (!isspace(s[n])) break;
         s[n] = 0;
     }
     return s;
 }
 
 #define MAX_OPTIONS 32
-static int setup_requirement_line(char *name)
-{
+static void check_requirement(Transport* transport, char* line) {
     char *val[MAX_OPTIONS];
-    char *prod = nullptr;
-    unsigned n, count;
+    unsigned count;
     char *x;
     int invert = 0;
 
+    // "require product=alpha|beta|gamma"
+    // "require version-bootloader=1234"
+    // "require-for-product:gamma version-bootloader=istanbul|constantinople"
+    // "require partition-exists=vendor"
+
+    char* name = line;
+    const char* product = "";
     if (!strncmp(name, "reject ", 7)) {
         name += 7;
         invert = 1;
@@ -663,18 +668,45 @@ static int setup_requirement_line(char *name)
         invert = 0;
     } else if (!strncmp(name, "require-for-product:", 20)) {
         // Get the product and point name past it
-        prod = name + 20;
+        product = name + 20;
         name = strchr(name, ' ');
-        if (!name) return -1;
+        if (!name) die("android-info.txt syntax error: %s", line);
         *name = 0;
         name += 1;
         invert = 0;
     }
 
     x = strchr(name, '=');
-    if (x == 0) return 0;
+    if (x == 0) return;
     *x = 0;
     val[0] = x + 1;
+
+    name = strip(name);
+
+    // "require partition-exists=x" is a special case, added because of the trouble we had when
+    // Pixel 2 shipped with new partitions and users used old versions of fastboot to flash them,
+    // missing out new partitions. A device with new partitions can use "partition-exists" to
+    // override the `is_optional` field in the `images` array.
+    if (!strcmp(name, "partition-exists")) {
+        const char* partition_name = val[0];
+        std::string has_slot;
+        if (!fb_getvar(transport, std::string("has-slot:") + partition_name, &has_slot) ||
+            (has_slot != "yes" && has_slot != "no")) {
+            die("device doesn't have required partition %s!", partition_name);
+        }
+        bool known_partition = false;
+        for (size_t i = 0; i < arraysize(images); ++i) {
+            if (images[i].nickname && !strcmp(images[i].nickname, partition_name)) {
+                images[i].is_optional = false;
+                known_partition = true;
+            }
+        }
+        if (!known_partition) {
+            die("device requires partition %s which is not known to this version of fastboot",
+                partition_name);
+        }
+        return;
+    }
 
     for(count = 1; count < MAX_OPTIONS; count++) {
         x = strchr(val[count - 1],'|');
@@ -683,54 +715,39 @@ static int setup_requirement_line(char *name)
         val[count] = x + 1;
     }
 
-    name = strip(name);
-    for(n = 0; n < count; n++) val[n] = strip(val[n]);
-
-    name = strip(name);
-    if (name == 0) return -1;
-
-    const char* var = name;
     // Work around an unfortunate name mismatch.
-    if (!strcmp(name,"board")) var = "product";
+    const char* var = name;
+    if (!strcmp(name, "board")) var = "product";
 
     const char** out = reinterpret_cast<const char**>(malloc(sizeof(char*) * count));
-    if (out == 0) return -1;
+    if (out == nullptr) die("out of memory");
 
-    for(n = 0; n < count; n++) {
-        out[n] = strdup(strip(val[n]));
-        if (out[n] == 0) {
-            for(size_t i = 0; i < n; ++i) {
-                free((char*) out[i]);
-            }
-            free(out);
-            return -1;
-        }
+    for (size_t i = 0; i < count; ++i) {
+        out[i] = xstrdup(strip(val[i]));
     }
 
-    fb_queue_require(prod, var, invert, n, out);
-    return 0;
+    fb_queue_require(product, var, invert, count, out);
 }
 
-static void setup_requirements(char* data, int64_t sz) {
+static void check_requirements(Transport* transport, char* data, int64_t sz) {
     char* s = data;
     while (sz-- > 0) {
         if (*s == '\n') {
             *s++ = 0;
-            if (setup_requirement_line(data)) {
-                die("out of memory");
-            }
+            check_requirement(transport, data);
             data = s;
         } else {
             s++;
         }
     }
+    if (fb_execute_queue(transport)) die("requirements not met!");
 }
 
 static void queue_info_dump() {
     fb_queue_notice("--------------------------------------------");
-    fb_queue_display("version-bootloader", "Bootloader Version...");
-    fb_queue_display("version-baseband",   "Baseband Version.....");
-    fb_queue_display("serialno",           "Serial Number........");
+    fb_queue_display("Bootloader Version...", "version-bootloader");
+    fb_queue_display("Baseband Version.....", "version-baseband");
+    fb_queue_display("Serial Number........", "serialno");
     fb_queue_notice("--------------------------------------------");
 }
 
@@ -890,14 +907,13 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf) {
     lseek(fd, 0, SEEK_SET);
 }
 
-static void flash_buf(const char *pname, struct fastboot_buffer *buf)
+static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
 {
     sparse_file** s;
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if ((g_disable_verity || g_disable_verification) &&
-        (strcmp(pname, "vbmeta") == 0 || strcmp(pname, "vbmeta_a") == 0 ||
-         strcmp(pname, "vbmeta_b") == 0)) {
+        (partition == "vbmeta" || partition == "vbmeta_a" || partition == "vbmeta_b")) {
         rewrite_vbmeta_buffer(buf);
     }
 
@@ -913,12 +929,12 @@ static void flash_buf(const char *pname, struct fastboot_buffer *buf)
 
             for (size_t i = 0; i < sparse_files.size(); ++i) {
                 const auto& pair = sparse_files[i];
-                fb_queue_flash_sparse(pname, pair.first, pair.second, i + 1, sparse_files.size());
+                fb_queue_flash_sparse(partition, pair.first, pair.second, i + 1, sparse_files.size());
             }
             break;
         }
         case FB_BUFFER_FD:
-            fb_queue_flash_fd(pname, buf->fd, buf->sz);
+            fb_queue_flash_fd(partition, buf->fd, buf->sz);
             break;
         default:
             die("unknown buffer type: %d", buf->type);
@@ -1116,11 +1132,11 @@ static void set_active(Transport* transport, const std::string& slot_override) {
         }
     }
     if (slot_override != "") {
-        fb_set_active((separator + slot_override).c_str());
+        fb_set_active(separator + slot_override);
     } else {
         std::string current_slot = get_current_slot(transport);
         if (current_slot != "") {
-            fb_set_active((separator + current_slot).c_str());
+            fb_set_active(separator + current_slot);
         }
     }
 }
@@ -1142,7 +1158,7 @@ static void do_update(Transport* transport, const char* filename, const std::str
         die("update package '%s' has no android-info.txt", filename);
     }
 
-    setup_requirements(reinterpret_cast<char*>(data), sz);
+    check_requirements(transport, reinterpret_cast<char*>(data), sz);
 
     std::string secondary;
     if (!skip_secondary) {
@@ -1184,7 +1200,7 @@ static void do_update(Transport* transport, const char* filename, const std::str
         auto update = [&](const std::string& partition) {
             do_update_signature(zip, images[i].sig_name);
             if (erase_first && needs_erase(transport, partition.c_str())) {
-                fb_queue_erase(partition.c_str());
+                fb_queue_erase(partition);
             }
             flash_buf(partition.c_str(), &buf);
             /* not closing the fd here since the sparse code keeps the fd around
@@ -1231,7 +1247,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
     void* data = load_file(fname.c_str(), &sz);
     if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
 
-    setup_requirements(reinterpret_cast<char*>(data), sz);
+    check_requirements(transport, reinterpret_cast<char*>(data), sz);
 
     std::string secondary;
     if (!skip_secondary) {
@@ -1266,7 +1282,7 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname.c_str());
             if (erase_first && needs_erase(transport, partition.c_str())) {
-                fb_queue_erase(partition.c_str());
+                fb_queue_erase(partition);
             }
             flash_buf(partition.c_str(), &buf);
         };
@@ -1306,7 +1322,7 @@ static void do_oem_command(const std::string& cmd, std::vector<std::string>* arg
     while (!args->empty()) {
         command += " " + next_arg(args);
     }
-    fb_queue_command(command.c_str(), "");
+    fb_queue_command(command, "");
 }
 
 static int64_t parse_num(const char *arg)
@@ -1361,8 +1377,8 @@ static std::string fb_fix_numeric_var(std::string var) {
 
 static unsigned fb_get_flash_block_size(Transport* transport, std::string name) {
     std::string sizeString;
-    if (!fb_getvar(transport, name.c_str(), &sizeString) || sizeString.empty()) {
-        /* This device does not report flash block sizes, so return 0 */
+    if (!fb_getvar(transport, name, &sizeString) || sizeString.empty()) {
+        // This device does not report flash block sizes, so return 0.
         return 0;
     }
     sizeString = fb_fix_numeric_var(sizeString);
@@ -1380,7 +1396,7 @@ static unsigned fb_get_flash_block_size(Transport* transport, std::string name) 
 }
 
 static void fb_perform_format(Transport* transport,
-                              const char* partition, int skip_if_not_supported,
+                              const std::string& partition, int skip_if_not_supported,
                               const std::string& type_override, const std::string& size_override,
                               const std::string& initial_dir) {
     std::string partition_type, partition_size;
@@ -1399,26 +1415,26 @@ static void fb_perform_format(Transport* transport,
         limit = sparse_limit;
     }
 
-    if (!fb_getvar(transport, std::string("partition-type:") + partition, &partition_type)) {
+    if (!fb_getvar(transport, "partition-type:" + partition, &partition_type)) {
         errMsg = "Can't determine partition type.\n";
         goto failed;
     }
     if (!type_override.empty()) {
         if (partition_type != type_override) {
             fprintf(stderr, "Warning: %s type is %s, but %s was requested for formatting.\n",
-                    partition, partition_type.c_str(), type_override.c_str());
+                    partition.c_str(), partition_type.c_str(), type_override.c_str());
         }
         partition_type = type_override;
     }
 
-    if (!fb_getvar(transport, std::string("partition-size:") + partition, &partition_size)) {
+    if (!fb_getvar(transport, "partition-size:" + partition, &partition_size)) {
         errMsg = "Unable to get partition size\n";
         goto failed;
     }
     if (!size_override.empty()) {
         if (partition_size != size_override) {
             fprintf(stderr, "Warning: %s size is %s, but %s was requested for formatting.\n",
-                    partition, partition_size.c_str(), size_override.c_str());
+                    partition.c_str(), partition_size.c_str(), size_override.c_str());
         }
         partition_size = size_override;
     }
@@ -1448,7 +1464,7 @@ static void fb_perform_format(Transport* transport,
 
     if (fs_generator_generate(gen, output.path, size, initial_dir,
             eraseBlkSize, logicalBlkSize)) {
-        die("Cannot generate image for %s", partition);
+        die("Cannot generate image for %s", partition.c_str());
         return;
     }
 
@@ -1631,6 +1647,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    const double start = now();
+
     if (!supports_AB(transport) && supports_AB_obsolete(transport)) {
         fprintf(stderr, "Warning: Device A/B support is outdated. Bootloader update required.\n");
     }
@@ -1658,7 +1676,7 @@ int main(int argc, char **argv)
 
         if (command == "getvar") {
             std::string variable = next_arg(&args);
-            fb_queue_display(variable.c_str(), variable.c_str());
+            fb_queue_display(variable, variable);
         } else if (command == "erase") {
             std::string partition = next_arg(&args);
             auto erase = [&](const std::string& partition) {
@@ -1670,7 +1688,7 @@ int main(int argc, char **argv)
                             partition_type.c_str());
                 }
 
-                fb_queue_erase(partition.c_str());
+                fb_queue_erase(partition);
             };
             do_for_partitions(transport, partition, slot_override, erase, true);
         } else if (android::base::StartsWith(command, "format")) {
@@ -1691,10 +1709,9 @@ int main(int argc, char **argv)
 
             auto format = [&](const std::string& partition) {
                 if (erase_first && needs_erase(transport, partition.c_str())) {
-                    fb_queue_erase(partition.c_str());
+                    fb_queue_erase(partition);
                 }
-                fb_perform_format(transport, partition.c_str(), 0, type_override, size_override,
-                                  "");
+                fb_perform_format(transport, partition, 0, type_override, size_override, "");
             };
             do_for_partitions(transport, partition.c_str(), slot_override, format, true);
         } else if (command == "signature") {
@@ -1748,7 +1765,7 @@ int main(int argc, char **argv)
 
             auto flash = [&](const std::string &partition) {
                 if (erase_first && needs_erase(transport, partition.c_str())) {
-                    fb_queue_erase(partition.c_str());
+                    fb_queue_erase(partition);
                 }
                 do_flash(transport, partition.c_str(), fname.c_str());
             };
@@ -1763,7 +1780,7 @@ int main(int argc, char **argv)
 
             data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline);
             auto flashraw = [&](const std::string& partition) {
-                fb_queue_flash(partition.c_str(), data, sz);
+                fb_queue_flash(partition, data, sz);
             };
             do_for_partitions(transport, partition, slot_override, flashraw, true);
         } else if (command == "flashall") {
@@ -1797,7 +1814,7 @@ int main(int argc, char **argv)
                     fb_getvar(transport, "slot-suffixes", &var)) {
                 slot = "_" + slot;
             }
-            fb_set_active(slot.c_str());
+            fb_set_active(slot);
         } else if (command == "stage") {
             std::string filename = next_arg(&args);
 
@@ -1805,10 +1822,10 @@ int main(int argc, char **argv)
             if (!load_buf(transport, filename.c_str(), &buf) || buf.type != FB_BUFFER_FD) {
                 die("cannot load '%s'", filename.c_str());
             }
-            fb_queue_download_fd(filename.c_str(), buf.fd, buf.sz);
+            fb_queue_download_fd(filename, buf.fd, buf.sz);
         } else if (command == "get_staged") {
             std::string filename = next_arg(&args);
-            fb_queue_upload(filename.c_str());
+            fb_queue_upload(filename);
         } else if (command == "oem") {
             do_oem_command("oem", &args);
         } else if (command == "flashing") {
@@ -1854,7 +1871,7 @@ int main(int argc, char **argv)
         }
     }
     if (wants_set_active) {
-        fb_set_active(next_active.c_str());
+        fb_set_active(next_active);
     }
     if (wants_reboot && !skip_reboot) {
         fb_queue_reboot();
@@ -1867,5 +1884,7 @@ int main(int argc, char **argv)
         fb_queue_wait_for_disconnect();
     }
 
-    return fb_execute_queue(transport) ? EXIT_FAILURE : EXIT_SUCCESS;
+    int status = fb_execute_queue(transport) ? EXIT_FAILURE : EXIT_SUCCESS;
+    fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
+    return status;
 }

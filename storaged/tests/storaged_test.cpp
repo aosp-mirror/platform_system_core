@@ -416,6 +416,31 @@ TEST(storaged_test, storage_info_t) {
     }
 }
 
+TEST(storaged_test, storage_info_t_proto) {
+    storage_info_t si;
+    si.day_start_tp = {};
+
+    IOPerfHistory proto;
+    proto.set_nr_samples(10);
+    proto.set_day_start_sec(0);
+    si.load_perf_history_proto(proto);
+
+    // Skip ahead > 1 day, with no data points in the previous day.
+    time_point<system_clock> stp;
+    stp += hours(36);
+    si.update_perf_history(100, stp);
+
+    vector<int> history = si.get_perf_history();
+    EXPECT_EQ(history.size(), 63UL);
+    EXPECT_EQ(history[0], 1);
+    EXPECT_EQ(history[1], 7);
+    EXPECT_EQ(history[2], 52);
+    EXPECT_EQ(history[3], 100);
+    for (size_t i = 4; i < history.size(); i++) {
+        EXPECT_EQ(history[i], 0);
+    }
+}
+
 TEST(storaged_test, uid_monitor) {
     uid_monitor uidm;
 

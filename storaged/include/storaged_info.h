@@ -38,6 +38,7 @@ using namespace storaged_proto;
 class storage_info_t {
   protected:
     FRIEND_TEST(storaged_test, storage_info_t);
+    FRIEND_TEST(storaged_test, storage_info_t_proto);
     // emmc lifetime
     uint16_t eol;                   // pre-eol (end of life) information
     uint16_t lifetime_a;            // device life time estimation (type A)
