@@ -529,6 +529,7 @@ extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
     int skipped = 0;
     std::vector<WSAPOLLFD> sockets;
     std::vector<adb_pollfd*> original;
+
     for (size_t i = 0; i < nfds; ++i) {
         FH fh = _fh_from_int(fds[i].fd, __func__);
         if (!fh || !fh->used || fh->clazz != &_fh_socket_class) {
@@ -549,6 +550,11 @@ extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
         return skipped;
     }
 
+    // If we have any invalid FDs in our FD set, make sure to return immediately.
+    if (skipped > 0) {
+        timeout = 0;
+    }
+
     int result = WSAPoll(sockets.data(), sockets.size(), timeout);
     if (result == SOCKET_ERROR) {
         _socket_set_errno(WSAGetLastError());
@@ -560,7 +566,7 @@ extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
         original[i]->revents = sockets[i].revents;
     }
 
-    // WSAPoll appears to return the number of unique FDs with avaiable events, instead of how many
+    // WSAPoll appears to return the number of unique FDs with available events, instead of how many
     // of the pollfd elements have a non-zero revents field, which is what it and poll are specified
     // to do. Ignore its result and calculate the proper return value.
     result = 0;
