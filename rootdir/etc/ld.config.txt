@@ -218,12 +218,19 @@ namespace.vndk.asan.permitted.paths +=           /vendor/${LIB}/egl
 namespace.vndk.asan.permitted.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%/hw
 namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%/hw
 
+# The "vndk" namespace links to "default" namespace for LLNDK libs and links to
+# "sphal" namespace for vendor libs.  The ordering matters.  The "default"
+# namespace has higher priority than the "sphal" namespace.
+namespace.vndk.links = default,sphal
+
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
-namespace.vndk.links = default
 namespace.vndk.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+# Allow VNDK-SP extensions to use vendor libraries
+namespace.vndk.link.sphal.allow_all_shared_libs = true
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
