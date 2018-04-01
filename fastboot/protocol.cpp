@@ -113,10 +113,10 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
     return -1;
 }
 
-static int64_t _command_start(Transport* transport, const char* cmd, uint32_t size, char* response) {
-    size_t cmdsize = strlen(cmd);
-    if (cmdsize > 64) {
-        g_error = android::base::StringPrintf("command too large (%zu)", cmdsize);
+static int64_t _command_start(Transport* transport, const std::string& cmd, uint32_t size,
+                              char* response) {
+    if (cmd.size() > 64) {
+        g_error = android::base::StringPrintf("command too large (%zu)", cmd.size());
         return -1;
     }
 
@@ -124,7 +124,7 @@ static int64_t _command_start(Transport* transport, const char* cmd, uint32_t si
         response[0] = 0;
     }
 
-    if (transport->Write(cmd, cmdsize) != static_cast<int>(cmdsize)) {
+    if (transport->Write(cmd.c_str(), cmd.size()) != static_cast<int>(cmd.size())) {
         g_error = android::base::StringPrintf("command write failed (%s)", strerror(errno));
         transport->Close();
         return -1;
@@ -167,8 +167,8 @@ static int64_t _command_end(Transport* transport) {
     return check_response(transport, 0, 0) < 0 ? -1 : 0;
 }
 
-static int64_t _command_send(Transport* transport, const char* cmd, const void* data, uint32_t size,
-                         char* response) {
+static int64_t _command_send(Transport* transport, const std::string& cmd, const void* data,
+                             uint32_t size, char* response) {
     if (size == 0) {
         return -1;
     }
@@ -190,7 +190,7 @@ static int64_t _command_send(Transport* transport, const char* cmd, const void* 
     return size;
 }
 
-static int64_t _command_send_fd(Transport* transport, const char* cmd, int fd, uint32_t size,
+static int64_t _command_send_fd(Transport* transport, const std::string& cmd, int fd, uint32_t size,
                                 char* response) {
     static constexpr uint32_t MAX_MAP_SIZE = 512 * 1024 * 1024;
     off64_t offset = 0;
@@ -223,15 +223,15 @@ static int64_t _command_send_fd(Transport* transport, const char* cmd, int fd, u
     return size;
 }
 
-static int _command_send_no_data(Transport* transport, const char* cmd, char* response) {
+static int _command_send_no_data(Transport* transport, const std::string& cmd, char* response) {
     return _command_start(transport, cmd, 0, response);
 }
 
-int fb_command(Transport* transport, const char* cmd) {
+int fb_command(Transport* transport, const std::string& cmd) {
     return _command_send_no_data(transport, cmd, 0);
 }
 
-int fb_command_response(Transport* transport, const char* cmd, char* response) {
+int fb_command_response(Transport* transport, const std::string& cmd, char* response) {
     return _command_send_no_data(transport, cmd, response);
 }
 
@@ -339,7 +339,7 @@ int fb_download_data_sparse(Transport* transport, struct sparse_file* s) {
     }
 
     std::string cmd(android::base::StringPrintf("download:%08x", size));
-    int r = _command_start(transport, cmd.c_str(), size, 0);
+    int r = _command_start(transport, cmd, size, 0);
     if (r < 0) {
         return -1;
     }

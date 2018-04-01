@@ -36,6 +36,7 @@ ADB_COMMON_darwin_CFLAGS := \
 #   CreateFileW(path_wide.c_str());
 ADB_COMMON_windows_CFLAGS := \
     -DUNICODE=1 -D_UNICODE=1 \
+    -D_POSIX_SOURCE
 
 # libadb
 # =========================================================

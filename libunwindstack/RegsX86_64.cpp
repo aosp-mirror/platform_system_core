@@ -50,8 +50,8 @@ void RegsX86_64::set_sp(uint64_t sp) {
   regs_[X86_64_REG_SP] = sp;
 }
 
-uint64_t RegsX86_64::GetPcAdjustment(uint64_t rel_pc, Elf* elf) {
-  if (!elf->valid() || rel_pc == 0) {
+uint64_t RegsX86_64::GetPcAdjustment(uint64_t rel_pc, Elf*) {
+  if (rel_pc == 0) {
     return 0;
   }
   return 1;

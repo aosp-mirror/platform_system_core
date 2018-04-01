@@ -29,6 +29,7 @@
 
 #include "socket_spec.h"
 #include "sysdeps.h"
+#include "sysdeps/memory.h"
 #include "transport.h"
 
 // A listener is an entity which binds to a local port and, upon receiving a connection on that
@@ -203,7 +204,7 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
         }
     }
 
-    std::unique_ptr<alistener> listener(new alistener(local_name, connect_to));
+    auto listener = std::make_unique<alistener>(local_name, connect_to);
 
     int resolved = 0;
     listener->fd = socket_spec_listen(listener->local_name, error, &resolved);
