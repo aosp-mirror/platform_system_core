@@ -155,6 +155,7 @@ cc_test {
         "tests/MemoryFake.cpp",
         "tests/MemoryFileTest.cpp",
         "tests/MemoryLocalTest.cpp",
+        "tests/MemoryOfflineBufferTest.cpp",
         "tests/MemoryOfflineTest.cpp",
         "tests/MemoryRangeTest.cpp",
         "tests/MemoryRemoteTest.cpp",

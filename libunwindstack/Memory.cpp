@@ -345,6 +345,25 @@ size_t MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
   return memory_->Read(addr, dst, size);
 }
 
+MemoryOfflineBuffer::MemoryOfflineBuffer(const uint8_t* data, uint64_t start, uint64_t end)
+    : data_(data), start_(start), end_(end) {}
+
+void MemoryOfflineBuffer::Reset(const uint8_t* data, uint64_t start, uint64_t end) {
+  data_ = data;
+  start_ = start;
+  end_ = end;
+}
+
+size_t MemoryOfflineBuffer::Read(uint64_t addr, void* dst, size_t size) {
+  if (addr < start_ || addr >= end_) {
+    return 0;
+  }
+
+  size_t read_length = std::min(size, static_cast<size_t>(end_ - addr));
+  memcpy(dst, &data_[addr - start_], read_length);
+  return read_length;
+}
+
 MemoryOfflineParts::~MemoryOfflineParts() {
   for (auto memory : memories_) {
     delete memory;
