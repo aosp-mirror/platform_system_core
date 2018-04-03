@@ -109,32 +109,32 @@ static Action& queue_action(Op op, const std::string& cmd) {
 
 void fb_set_active(const std::string& slot) {
     Action& a = queue_action(OP_COMMAND, "set_active:" + slot);
-    a.msg = "Setting current slot to '" + slot + "'...";
+    a.msg = "Setting current slot to '" + slot + "'";
 }
 
 void fb_queue_erase(const std::string& partition) {
     Action& a = queue_action(OP_COMMAND, "erase:" + partition);
-    a.msg = "Erasing '" + partition + "'...";
+    a.msg = "Erasing '" + partition + "'";
 }
 
 void fb_queue_flash_fd(const std::string& partition, int fd, uint32_t sz) {
     Action& a = queue_action(OP_DOWNLOAD_FD, "");
     a.fd = fd;
     a.size = sz;
-    a.msg = android::base::StringPrintf("Sending '%s' (%d KB)...", partition.c_str(), sz / 1024);
+    a.msg = android::base::StringPrintf("Sending '%s' (%u KB)", partition.c_str(), sz / 1024);
 
     Action& b = queue_action(OP_COMMAND, "flash:" + partition);
-    b.msg = "Writing '" + partition + "'...";
+    b.msg = "Writing '" + partition + "'";
 }
 
 void fb_queue_flash(const std::string& partition, void* data, uint32_t sz) {
     Action& a = queue_action(OP_DOWNLOAD, "");
     a.data = data;
     a.size = sz;
-    a.msg = android::base::StringPrintf("Sending '%s' (%d KB)...", partition.c_str(), sz / 1024);
+    a.msg = android::base::StringPrintf("Sending '%s' (%u KB)", partition.c_str(), sz / 1024);
 
     Action& b = queue_action(OP_COMMAND, "flash:" + partition);
-    b.msg = "Writing '" + partition + "'...";
+    b.msg = "Writing '" + partition + "'";
 }
 
 void fb_queue_flash_sparse(const std::string& partition, struct sparse_file* s, uint32_t sz,
@@ -142,12 +142,12 @@ void fb_queue_flash_sparse(const std::string& partition, struct sparse_file* s, 
     Action& a = queue_action(OP_DOWNLOAD_SPARSE, "");
     a.data = s;
     a.size = 0;
-    a.msg = android::base::StringPrintf("Sending sparse '%s' %zu/%zu (%d KB)...", partition.c_str(),
+    a.msg = android::base::StringPrintf("Sending sparse '%s' %zu/%zu (%u KB)", partition.c_str(),
                                         current, total, sz / 1024);
 
     Action& b = queue_action(OP_COMMAND, "flash:" + partition);
-    b.msg =
-        android::base::StringPrintf("Writing '%s' %zu/%zu...", partition.c_str(), current, total);
+    b.msg = android::base::StringPrintf("Writing sparse '%s' %zu/%zu", partition.c_str(), current,
+                                        total);
 }
 
 static int match(const char* str, const char** value, unsigned count) {
@@ -270,7 +270,7 @@ static int cb_do_nothing(Action&, int, const char*) {
 void fb_queue_reboot() {
     Action& a = queue_action(OP_COMMAND, "reboot");
     a.func = cb_do_nothing;
-    a.msg = "Rebooting...";
+    a.msg = "Rebooting";
 }
 
 void fb_queue_command(const std::string& cmd, const std::string& msg) {
@@ -289,7 +289,7 @@ void fb_queue_download_fd(const std::string& name, int fd, uint32_t sz) {
     Action& a = queue_action(OP_DOWNLOAD_FD, "");
     a.fd = fd;
     a.size = sz;
-    a.msg = android::base::StringPrintf("Sending '%s' (%d KB)", name.c_str(), sz / 1024);
+    a.msg = android::base::StringPrintf("Sending '%s' (%u KB)", name.c_str(), sz / 1024);
 }
 
 void fb_queue_upload(const std::string& outfile) {
@@ -312,7 +312,8 @@ int64_t fb_execute_queue(Transport* transport) {
     for (auto& a : action_list) {
         a->start = now();
         if (!a->msg.empty()) {
-            fprintf(stderr, "%s\n", a->msg.c_str());
+            fprintf(stderr, "%-50s ", a->msg.c_str());
+            verbose("\n");
         }
         if (a->op == OP_DOWNLOAD) {
             status = fb_download_data(transport, a->data, a->size);
@@ -333,6 +334,7 @@ int64_t fb_execute_queue(Transport* transport) {
             if (status) break;
         } else if (a->op == OP_NOTICE) {
             // We already showed the notice because it's in `Action::msg`.
+            fprintf(stderr, "\n");
         } else if (a->op == OP_DOWNLOAD_SPARSE) {
             status = fb_download_data_sparse(transport, reinterpret_cast<sparse_file*>(a->data));
             status = a->func(*a, status, status ? fb_get_error().c_str() : "");

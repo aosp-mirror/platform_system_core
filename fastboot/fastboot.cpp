@@ -238,7 +238,7 @@ static int list_devices_callback(usb_ifc_info* info) {
 // Opens a new Transport connected to a device. If |serial| is non-null it will be used to identify
 // a specific device, otherwise the first USB device found will be used.
 //
-// If |serial| is non-null but invalid, this prints an error message to stderr and returns nullptr.
+// If |serial| is non-null but invalid, this exits.
 // Otherwise it blocks until the target is available.
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
@@ -270,9 +270,7 @@ static Transport* open_device() {
         if (net_address != nullptr) {
             std::string error;
             if (!android::base::ParseNetAddress(net_address, &host, &port, nullptr, &error)) {
-                fprintf(stderr, "error: Invalid network address '%s': %s\n", net_address,
-                        error.c_str());
-                return nullptr;
+                die("invalid network address '%s': %s\n", net_address, error.c_str());
             }
         }
     }
@@ -426,7 +424,7 @@ static int show_help() {
             "                                           trigger a reboot.\n"
             "  --disable-verity                         Set the disable-verity flag in the\n"
             "                                           the vbmeta image being flashed.\n"
-            "  --disable-verification                   Set the disable-verification flag in"
+            "  --disable-verification                   Set the disable-verification flag in\n"
             "                                           the vbmeta image being flashed.\n"
 #if !defined(_WIN32)
             "  --wipe-and-use-fbe                       On devices which support it,\n"
@@ -434,7 +432,11 @@ static int show_help() {
             "                                           enable file-based encryption\n"
 #endif
             "  --unbuffered                             Do not buffer input or output.\n"
+            "  -v, --verbose                            Verbose output.\n"
             "  --version                                Display version.\n"
+            "  --header-version                         Set boot image header version while\n"
+            "                                           using flash:raw and boot commands to \n"
+            "                                           to create a boot image.\n"
             "  -h, --help                               show this message.\n"
         );
     // clang-format off
@@ -443,17 +445,23 @@ static int show_help() {
 
 static void* load_bootable_image(const std::string& kernel, const std::string& ramdisk,
                                  const std::string& second_stage, int64_t* sz,
-                                 const char* cmdline) {
+                                 const char* cmdline, uint32_t header_version) {
     int64_t ksize;
     void* kdata = load_file(kernel.c_str(), &ksize);
     if (kdata == nullptr) die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
 
     // Is this actually a boot image?
-    if (ksize < static_cast<int64_t>(sizeof(boot_img_hdr))) {
+    if (ksize < static_cast<int64_t>(sizeof(boot_img_hdr_v1))) {
         die("cannot load '%s': too short", kernel.c_str());
     }
     if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
-        if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr*>(kdata), cmdline);
+        if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kdata), cmdline);
+        uint32_t header_version_existing =
+                reinterpret_cast<boot_img_hdr_v1*>(kdata)->header_version;
+        if (header_version != header_version_existing) {
+            die("header version mismatch, expected: %" PRIu32 " found %" PRIu32 "",
+                header_version, header_version_existing);
+        }
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
 
@@ -477,13 +485,13 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
 
     fprintf(stderr,"creating boot image...\n");
     int64_t bsize = 0;
-    void* bdata = mkbootimg(kdata, ksize, kernel_offset,
+    boot_img_hdr_v1* bdata = mkbootimg(kdata, ksize, kernel_offset,
                       rdata, rsize, ramdisk_offset,
                       sdata, ssize, second_offset,
-                      page_size, base_addr, tags_offset, &bsize);
+                      page_size, base_addr, tags_offset, header_version, &bsize);
     if (bdata == nullptr) die("failed to create boot.img");
 
-    if (cmdline) bootimg_set_cmdline((boot_img_hdr*) bdata, cmdline);
+    if (cmdline) bootimg_set_cmdline(bdata, cmdline);
     fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", bsize);
     *sz = bsize;
 
@@ -539,7 +547,7 @@ static std::string make_temporary_directory() {
     die("make_temporary_directory not supported under Windows, sorry!");
 }
 
-static int make_temporary_fd() {
+static int make_temporary_fd(const char* /*what*/) {
     // TODO: reimplement to avoid leaking a FILE*.
     return fileno(tmpfile());
 }
@@ -555,18 +563,16 @@ static std::string make_temporary_template() {
 static std::string make_temporary_directory() {
     std::string result(make_temporary_template());
     if (mkdtemp(&result[0]) == nullptr) {
-        fprintf(stderr, "Unable to create temporary directory: %s\n", strerror(errno));
-        return "";
+        die("unable to create temporary directory: %s", strerror(errno));
     }
     return result;
 }
 
-static int make_temporary_fd() {
+static int make_temporary_fd(const char* what) {
     std::string path_template(make_temporary_template());
     int fd = mkstemp(&path_template[0]);
     if (fd == -1) {
-        fprintf(stderr, "Unable to create temporary file: %s\n", strerror(errno));
-        return -1;
+        die("failed to create temporary file for %s: %s\n", what, strerror(errno));
     }
     unlink(path_template.c_str());
     return fd;
@@ -576,16 +582,11 @@ static int make_temporary_fd() {
 
 static std::string create_fbemarker_tmpdir() {
     std::string dir = make_temporary_directory();
-    if (dir.empty()) {
-        fprintf(stderr, "Unable to create local temp directory for FBE marker\n");
-        return "";
-    }
     std::string marker_file = dir + "/" + convert_fbe_marker_filename;
     int fd = open(marker_file.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
     if (fd == -1) {
-        fprintf(stderr, "Unable to create FBE marker file %s locally: %d, %s\n",
-            marker_file.c_str(), errno, strerror(errno));
-        return "";
+        die("unable to create FBE marker file %s locally: %s",
+            marker_file.c_str(), strerror(errno));
     }
     close(fd);
     return dir;
@@ -606,10 +607,7 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
 }
 
 static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
-    unique_fd fd(make_temporary_fd());
-    if (fd == -1) {
-        die("failed to create temporary file for '%s': %s", entry_name, strerror(errno));
-    }
+    unique_fd fd(make_temporary_fd(entry_name));
 
     ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
@@ -770,8 +768,8 @@ static struct sparse_file** load_sparse_files(int fd, int max_size) {
 static int64_t get_target_sparse_limit(Transport* transport) {
     std::string max_download_size;
     if (!fb_getvar(transport, "max-download-size", &max_download_size) ||
-            max_download_size.empty()) {
-        fprintf(stderr, "target didn't report max-download-size\n");
+        max_download_size.empty()) {
+        verbose("target didn't report max-download-size");
         return 0;
     }
 
@@ -783,9 +781,7 @@ static int64_t get_target_sparse_limit(Transport* transport) {
         fprintf(stderr, "couldn't parse max-download-size '%s'\n", max_download_size.c_str());
         return 0;
     }
-    if (limit > 0) {
-        fprintf(stderr, "target reported max download size of %" PRId64 " bytes\n", limit);
-    }
+    if (limit > 0) verbose("target reported max download size of %" PRId64 " bytes", limit);
     return limit;
 }
 
@@ -876,10 +872,7 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf) {
         return;
     }
 
-    int fd = make_temporary_fd();
-    if (fd == -1) {
-        die("Failed to create temporary file for vbmeta rewriting");
-    }
+    int fd = make_temporary_fd("vbmeta rewriting");
 
     std::string data;
     if (!android::base::ReadFdToString(buf->fd, &data)) {
@@ -1500,6 +1493,7 @@ int main(int argc, char **argv)
     bool erase_first = true;
     bool set_fbe_marker = false;
     void *data;
+    uint32_t header_version = 0;
     int64_t sz;
     int longindex;
     std::string slot_override;
@@ -1517,14 +1511,16 @@ int main(int argc, char **argv)
         {"tags-offset", required_argument, 0, 't'},
         {"help", no_argument, 0, 'h'},
         {"unbuffered", no_argument, 0, 0},
-        {"version", no_argument, 0, 0},
         {"slot", required_argument, 0, 0},
         {"set_active", optional_argument, 0, 'a'},
         {"set-active", optional_argument, 0, 'a'},
         {"skip-secondary", no_argument, 0, 0},
         {"skip-reboot", no_argument, 0, 0},
+        {"verbose", no_argument, 0, 'v'},
+        {"version", no_argument, 0, 0},
         {"disable-verity", no_argument, 0, 0},
         {"disable-verification", no_argument, 0, 0},
+        {"header-version", required_argument, 0, 0},
 #if !defined(_WIN32)
         {"wipe-and-use-fbe", no_argument, 0, 0},
 #endif
@@ -1534,7 +1530,7 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
+        int c = getopt_long(argc, argv, "vwub:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
         if (c < 0) {
             break;
         }
@@ -1589,6 +1585,9 @@ int main(int argc, char **argv)
         case 'u':
             erase_first = false;
             break;
+        case 'v':
+            set_verbose();
+            break;
         case 'w':
             wants_wipe = true;
             break;
@@ -1617,10 +1616,10 @@ int main(int argc, char **argv)
                 wants_wipe = true;
                 set_fbe_marker = true;
 #endif
+            } else if (strcmp("header-version", longopts[longindex].name) == 0) {
+                header_version = strtoul(optarg, nullptr, 0);
             } else {
-                fprintf(stderr, "Internal error in options processing for %s\n",
-                    longopts[longindex].name);
-                return 1;
+                die("unknown option %s", longopts[longindex].name);
             }
             break;
         default:
@@ -1749,7 +1748,7 @@ int main(int argc, char **argv)
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline);
+            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline, header_version);
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
         } else if (command == "flash") {
@@ -1778,7 +1777,7 @@ int main(int argc, char **argv)
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline);
+            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline, header_version);
             auto flashraw = [&](const std::string& partition) {
                 fb_queue_flash(partition, data, sz);
             };
@@ -1849,14 +1848,10 @@ int main(int argc, char **argv)
     }
 
     if (wants_wipe) {
-        fprintf(stderr, "wiping userdata...\n");
         fb_queue_erase("userdata");
         if (set_fbe_marker) {
-            fprintf(stderr, "setting FBE marker...\n");
+            fprintf(stderr, "setting FBE marker on initial userdata...\n");
             std::string initial_userdata_dir = create_fbemarker_tmpdir();
-            if (initial_userdata_dir.empty()) {
-                return 1;
-            }
             fb_perform_format(transport, "userdata", 1, "", "", initial_userdata_dir);
             delete_fbemarker_tmpdir(initial_userdata_dir);
         } else {
@@ -1865,7 +1860,6 @@ int main(int argc, char **argv)
 
         std::string cache_type;
         if (fb_getvar(transport, "partition-type:cache", &cache_type) && !cache_type.empty()) {
-            fprintf(stderr, "wiping cache...\n");
             fb_queue_erase("cache");
             fb_perform_format(transport, "cache", 1, "", "", "");
         }
