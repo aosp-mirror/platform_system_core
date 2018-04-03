@@ -95,7 +95,6 @@ static unsigned tags_offset    = 0x00000100;
 
 static bool g_disable_verity = false;
 static bool g_disable_verification = false;
-static bool g_verbose = false;
 
 static const std::string convert_fbe_marker_filename("convert_fbe");
 
@@ -239,7 +238,7 @@ static int list_devices_callback(usb_ifc_info* info) {
 // Opens a new Transport connected to a device. If |serial| is non-null it will be used to identify
 // a specific device, otherwise the first USB device found will be used.
 //
-// If |serial| is non-null but invalid, this prints an error message to stderr and returns nullptr.
+// If |serial| is non-null but invalid, this exits.
 // Otherwise it blocks until the target is available.
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
@@ -271,9 +270,7 @@ static Transport* open_device() {
         if (net_address != nullptr) {
             std::string error;
             if (!android::base::ParseNetAddress(net_address, &host, &port, nullptr, &error)) {
-                fprintf(stderr, "error: Invalid network address '%s': %s\n", net_address,
-                        error.c_str());
-                return nullptr;
+                die("invalid network address '%s': %s\n", net_address, error.c_str());
             }
         }
     }
@@ -550,7 +547,7 @@ static std::string make_temporary_directory() {
     die("make_temporary_directory not supported under Windows, sorry!");
 }
 
-static int make_temporary_fd() {
+static int make_temporary_fd(const char* /*what*/) {
     // TODO: reimplement to avoid leaking a FILE*.
     return fileno(tmpfile());
 }
@@ -566,18 +563,16 @@ static std::string make_temporary_template() {
 static std::string make_temporary_directory() {
     std::string result(make_temporary_template());
     if (mkdtemp(&result[0]) == nullptr) {
-        fprintf(stderr, "Unable to create temporary directory: %s\n", strerror(errno));
-        return "";
+        die("unable to create temporary directory: %s", strerror(errno));
     }
     return result;
 }
 
-static int make_temporary_fd() {
+static int make_temporary_fd(const char* what) {
     std::string path_template(make_temporary_template());
     int fd = mkstemp(&path_template[0]);
     if (fd == -1) {
-        fprintf(stderr, "Unable to create temporary file: %s\n", strerror(errno));
-        return -1;
+        die("failed to create temporary file for %s: %s\n", what, strerror(errno));
     }
     unlink(path_template.c_str());
     return fd;
@@ -587,16 +582,11 @@ static int make_temporary_fd() {
 
 static std::string create_fbemarker_tmpdir() {
     std::string dir = make_temporary_directory();
-    if (dir.empty()) {
-        fprintf(stderr, "Unable to create local temp directory for FBE marker\n");
-        return "";
-    }
     std::string marker_file = dir + "/" + convert_fbe_marker_filename;
     int fd = open(marker_file.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
     if (fd == -1) {
-        fprintf(stderr, "Unable to create FBE marker file %s locally: %d, %s\n",
-            marker_file.c_str(), errno, strerror(errno));
-        return "";
+        die("unable to create FBE marker file %s locally: %s",
+            marker_file.c_str(), strerror(errno));
     }
     close(fd);
     return dir;
@@ -617,10 +607,7 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
 }
 
 static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
-    unique_fd fd(make_temporary_fd());
-    if (fd == -1) {
-        die("failed to create temporary file for '%s': %s", entry_name, strerror(errno));
-    }
+    unique_fd fd(make_temporary_fd(entry_name));
 
     ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
@@ -781,8 +768,8 @@ static struct sparse_file** load_sparse_files(int fd, int max_size) {
 static int64_t get_target_sparse_limit(Transport* transport) {
     std::string max_download_size;
     if (!fb_getvar(transport, "max-download-size", &max_download_size) ||
-            max_download_size.empty()) {
-        fprintf(stderr, "target didn't report max-download-size\n");
+        max_download_size.empty()) {
+        verbose("target didn't report max-download-size");
         return 0;
     }
 
@@ -794,9 +781,7 @@ static int64_t get_target_sparse_limit(Transport* transport) {
         fprintf(stderr, "couldn't parse max-download-size '%s'\n", max_download_size.c_str());
         return 0;
     }
-    if (g_verbose && limit > 0) {
-        fprintf(stderr, "Target reported max download size of %" PRId64 " bytes\n", limit);
-    }
+    if (limit > 0) verbose("target reported max download size of %" PRId64 " bytes", limit);
     return limit;
 }
 
@@ -887,10 +872,7 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf) {
         return;
     }
 
-    int fd = make_temporary_fd();
-    if (fd == -1) {
-        die("Failed to create temporary file for vbmeta rewriting");
-    }
+    int fd = make_temporary_fd("vbmeta rewriting");
 
     std::string data;
     if (!android::base::ReadFdToString(buf->fd, &data)) {
@@ -1604,7 +1586,7 @@ int main(int argc, char **argv)
             erase_first = false;
             break;
         case 'v':
-            g_verbose = true;
+            set_verbose();
             break;
         case 'w':
             wants_wipe = true;
@@ -1637,9 +1619,7 @@ int main(int argc, char **argv)
             } else if (strcmp("header-version", longopts[longindex].name) == 0) {
                 header_version = strtoul(optarg, nullptr, 0);
             } else {
-                fprintf(stderr, "Internal error in options processing for %s\n",
-                    longopts[longindex].name);
-                return 1;
+                die("unknown option %s", longopts[longindex].name);
             }
             break;
         default:
@@ -1868,14 +1848,10 @@ int main(int argc, char **argv)
     }
 
     if (wants_wipe) {
-        fprintf(stderr, "wiping userdata...\n");
         fb_queue_erase("userdata");
         if (set_fbe_marker) {
-            fprintf(stderr, "setting FBE marker...\n");
+            fprintf(stderr, "setting FBE marker on initial userdata...\n");
             std::string initial_userdata_dir = create_fbemarker_tmpdir();
-            if (initial_userdata_dir.empty()) {
-                return 1;
-            }
             fb_perform_format(transport, "userdata", 1, "", "", initial_userdata_dir);
             delete_fbemarker_tmpdir(initial_userdata_dir);
         } else {
@@ -1884,7 +1860,6 @@ int main(int argc, char **argv)
 
         std::string cache_type;
         if (fb_getvar(transport, "partition-type:cache", &cache_type) && !cache_type.empty()) {
-            fprintf(stderr, "wiping cache...\n");
             fb_queue_erase("cache");
             fb_perform_format(transport, "cache", 1, "", "", "");
         }

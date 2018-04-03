@@ -75,18 +75,21 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
 
         if (!memcmp(status, "INFO", 4)) {
-            fprintf(stderr,"(bootloader) %s\n", status + 4);
+            verbose("received INFO %s", status + 4);
+            fprintf(stderr, "(bootloader) %s\n", status + 4);
             continue;
         }
 
         if (!memcmp(status, "OKAY", 4)) {
+            verbose("received OKAY %s", status + 4);
             if (response) {
-                strcpy(response, (char*) status + 4);
+                strcpy(response, status + 4);
             }
             return 0;
         }
 
         if (!memcmp(status, "FAIL", 4)) {
+            verbose("received FAIL %s", status + 4);
             if (r > 4) {
                 g_error = android::base::StringPrintf("remote: %s", status + 4);
             } else {
@@ -96,6 +99,7 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
 
         if (!memcmp(status, "DATA", 4) && size > 0){
+            verbose("received DATA %s", status + 4);
             uint32_t dsize = strtol(status + 4, 0, 16);
             if (dsize > size) {
                 g_error = android::base::StringPrintf("data size too large (%d)", dsize);
@@ -105,6 +109,7 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
             return dsize;
         }
 
+        verbose("received unknown status code \"%4.4s\"", status);
         g_error = "unknown status code";
         transport->Close();
         break;
@@ -124,6 +129,8 @@ static int64_t _command_start(Transport* transport, const std::string& cmd, uint
         response[0] = 0;
     }
 
+    verbose("sending command \"%s\"", cmd.c_str());
+
     if (transport->Write(cmd.c_str(), cmd.size()) != static_cast<int>(cmd.size())) {
         g_error = android::base::StringPrintf("command write failed (%s)", strerror(errno));
         transport->Close();
@@ -134,6 +141,8 @@ static int64_t _command_start(Transport* transport, const std::string& cmd, uint
 }
 
 static int64_t _command_write_data(Transport* transport, const void* data, uint32_t size) {
+    verbose("sending data (%" PRIu32 " bytes)", size);
+
     int64_t r = transport->Write(data, size);
     if (r < 0) {
         g_error = android::base::StringPrintf("data write failure (%s)", strerror(errno));
@@ -149,6 +158,8 @@ static int64_t _command_write_data(Transport* transport, const void* data, uint3
 }
 
 static int64_t _command_read_data(Transport* transport, void* data, uint32_t size) {
+    verbose("reading data (%" PRIu32 " bytes)", size);
+
     int64_t r = transport->Read(data, size);
     if (r < 0) {
         g_error = android::base::StringPrintf("data read failure (%s)", strerror(errno));
