@@ -75,6 +75,7 @@ static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
 static uint64_t main_thread_id;
 
+static bool run_needs_flush = false;
 static auto& run_queue_notify_fd = *new unique_fd();
 static auto& run_queue_mutex = *new std::mutex();
 static auto& run_queue GUARDED_BY(run_queue_mutex) = *new std::deque<std::function<void()>>();
@@ -317,7 +318,8 @@ static void fdevent_run_func(int fd, unsigned ev, void* /* userdata */) {
         PLOG(FATAL) << "failed to empty run queue notify fd";
     }
 
-    fdevent_run_flush();
+    // Mark that we need to flush, and then run it at the end of fdevent_loop.
+    run_needs_flush = true;
 }
 
 static void fdevent_run_setup() {
@@ -377,6 +379,11 @@ void fdevent_loop() {
             fdevent* fde = g_pending_list.front();
             g_pending_list.pop_front();
             fdevent_call_fdfunc(fde);
+        }
+
+        if (run_needs_flush) {
+            fdevent_run_flush();
+            run_needs_flush = false;
         }
     }
 }

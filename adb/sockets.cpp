@@ -126,12 +126,12 @@ static SocketFlushResult local_socket_flush_incoming(asocket* s) {
         } else if (rc == -1 && errno == EAGAIN) {
             fdevent_add(&s->fde, FDE_WRITE);
             return SocketFlushResult::TryAgain;
+        } else {
+            // We failed to write, but it's possible that we can still read from the socket.
+            // Give that a try before giving up.
+            s->has_write_error = true;
+            break;
         }
-
-        // We failed to write, but it's possible that we can still read from the socket.
-        // Give that a try before giving up.
-        s->has_write_error = true;
-        break;
     }
 
     // If we sent the last packet of a closing socket, we can now destroy it.
