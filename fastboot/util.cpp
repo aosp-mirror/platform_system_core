@@ -44,7 +44,7 @@ double now() {
 void die(const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr,"error: ");
+    fprintf(stderr, "fastboot: error: ");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr,"\n");
     va_end(ap);
