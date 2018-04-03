@@ -313,6 +313,7 @@ int64_t fb_execute_queue(Transport* transport) {
         a->start = now();
         if (!a->msg.empty()) {
             fprintf(stderr, "%-50s ", a->msg.c_str());
+            verbose("\n");
         }
         if (a->op == OP_DOWNLOAD) {
             status = fb_download_data(transport, a->data, a->size);

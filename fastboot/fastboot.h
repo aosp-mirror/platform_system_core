@@ -75,6 +75,7 @@ void fb_set_active(const std::string& slot);
 /* util stuff */
 double now();
 char* xstrdup(const char*);
+void set_verbose();
 
 // These printf-like functions are implemented in terms of vsnprintf, so they
 // use the same attribute for compile-time format string checking. On Windows,
@@ -90,6 +91,7 @@ char* xstrdup(const char*);
 #endif
 void die(const char* fmt, ...) __attribute__((__noreturn__))
 __attribute__((__format__(FASTBOOT_FORMAT_ARCHETYPE, 1, 2)));
+void verbose(const char* fmt, ...) __attribute__((__format__(FASTBOOT_FORMAT_ARCHETYPE, 1, 2)));
 #undef FASTBOOT_FORMAT_ARCHETYPE
 
 /* Current product */
