@@ -435,6 +435,9 @@ static int show_help() {
 #endif
             "  --unbuffered                             Do not buffer input or output.\n"
             "  --version                                Display version.\n"
+            "  --header-version                         Set boot image header version while\n"
+            "                                           using flash:raw and boot commands to \n"
+            "                                           to create a boot image.\n"
             "  -h, --help                               show this message.\n"
         );
     // clang-format off
@@ -443,17 +446,23 @@ static int show_help() {
 
 static void* load_bootable_image(const std::string& kernel, const std::string& ramdisk,
                                  const std::string& second_stage, int64_t* sz,
-                                 const char* cmdline) {
+                                 const char* cmdline, uint32_t header_version) {
     int64_t ksize;
     void* kdata = load_file(kernel.c_str(), &ksize);
     if (kdata == nullptr) die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
 
     // Is this actually a boot image?
-    if (ksize < static_cast<int64_t>(sizeof(boot_img_hdr))) {
+    if (ksize < static_cast<int64_t>(sizeof(boot_img_hdr_v1))) {
         die("cannot load '%s': too short", kernel.c_str());
     }
     if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
-        if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr*>(kdata), cmdline);
+        if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kdata), cmdline);
+        uint32_t header_version_existing =
+                reinterpret_cast<boot_img_hdr_v1*>(kdata)->header_version;
+        if (header_version != header_version_existing) {
+            die("header version mismatch, expected: %" PRIu32 " found %" PRIu32 "",
+                header_version, header_version_existing);
+        }
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
 
@@ -477,13 +486,13 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
 
     fprintf(stderr,"creating boot image...\n");
     int64_t bsize = 0;
-    void* bdata = mkbootimg(kdata, ksize, kernel_offset,
+    boot_img_hdr_v1* bdata = mkbootimg(kdata, ksize, kernel_offset,
                       rdata, rsize, ramdisk_offset,
                       sdata, ssize, second_offset,
-                      page_size, base_addr, tags_offset, &bsize);
+                      page_size, base_addr, tags_offset, header_version, &bsize);
     if (bdata == nullptr) die("failed to create boot.img");
 
-    if (cmdline) bootimg_set_cmdline((boot_img_hdr*) bdata, cmdline);
+    if (cmdline) bootimg_set_cmdline(bdata, cmdline);
     fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", bsize);
     *sz = bsize;
 
@@ -1500,6 +1509,7 @@ int main(int argc, char **argv)
     bool erase_first = true;
     bool set_fbe_marker = false;
     void *data;
+    uint32_t header_version = 0;
     int64_t sz;
     int longindex;
     std::string slot_override;
@@ -1525,6 +1535,7 @@ int main(int argc, char **argv)
         {"skip-reboot", no_argument, 0, 0},
         {"disable-verity", no_argument, 0, 0},
         {"disable-verification", no_argument, 0, 0},
+        {"header-version", required_argument, 0, 0},
 #if !defined(_WIN32)
         {"wipe-and-use-fbe", no_argument, 0, 0},
 #endif
@@ -1617,6 +1628,8 @@ int main(int argc, char **argv)
                 wants_wipe = true;
                 set_fbe_marker = true;
 #endif
+            } else if (strcmp("header-version", longopts[longindex].name) == 0) {
+                header_version = strtoul(optarg, nullptr, 0);
             } else {
                 fprintf(stderr, "Internal error in options processing for %s\n",
                     longopts[longindex].name);
@@ -1749,7 +1762,7 @@ int main(int argc, char **argv)
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline);
+            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline, header_version);
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
         } else if (command == "flash") {
@@ -1778,7 +1791,7 @@ int main(int argc, char **argv)
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline);
+            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline, header_version);
             auto flashraw = [&](const std::string& partition) {
                 fb_queue_flash(partition, data, sz);
             };
