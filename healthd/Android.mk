@@ -100,7 +100,7 @@ CHARGER_STATIC_LIBRARIES := \
     android.hardware.health@1.0-convert \
     libhidltransport \
     libhidlbase \
-    libhwbinder \
+    libhwbinder_nolto \
     libhealthstoragedefault \
     libvndksupport \
     libhealthd_charger \
