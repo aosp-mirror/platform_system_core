@@ -34,26 +34,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-void bootimg_set_cmdline(boot_img_hdr* h, const char* cmdline) {
+void bootimg_set_cmdline(boot_img_hdr_v1* h, const char* cmdline) {
     if (strlen(cmdline) >= sizeof(h->cmdline)) die("command line too large: %zu", strlen(cmdline));
     strcpy(reinterpret_cast<char*>(h->cmdline), cmdline);
 }
 
-boot_img_hdr* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset,
-                        void* ramdisk, int64_t ramdisk_size, off_t ramdisk_offset,
-                        void* second, int64_t second_size, off_t second_offset,
-                        size_t page_size, size_t base, off_t tags_offset,
-                        int64_t* bootimg_size)
-{
+boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset, void* ramdisk,
+                           int64_t ramdisk_size, off_t ramdisk_offset, void* second,
+                           int64_t second_size, off_t second_offset, size_t page_size, size_t base,
+                           off_t tags_offset, uint32_t header_version, int64_t* bootimg_size) {
     size_t page_mask = page_size - 1;
 
+    int64_t header_actual = sizeof(boot_img_hdr_v1) & (~page_mask);
     int64_t kernel_actual = (kernel_size + page_mask) & (~page_mask);
     int64_t ramdisk_actual = (ramdisk_size + page_mask) & (~page_mask);
     int64_t second_actual = (second_size + page_mask) & (~page_mask);
 
-    *bootimg_size = page_size + kernel_actual + ramdisk_actual + second_actual;
+    *bootimg_size = header_actual + kernel_actual + ramdisk_actual + second_actual;
 
-    boot_img_hdr* hdr = reinterpret_cast<boot_img_hdr*>(calloc(*bootimg_size, 1));
+    boot_img_hdr_v1* hdr = reinterpret_cast<boot_img_hdr_v1*>(calloc(*bootimg_size, 1));
     if (hdr == nullptr) {
         return hdr;
     }
@@ -71,9 +70,13 @@ boot_img_hdr* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset,
 
     hdr->page_size =    page_size;
 
+    if (header_version) {
+        hdr->header_version = header_version;
+        hdr->header_size = sizeof(boot_img_hdr_v1);
+    }
+
     memcpy(hdr->magic + page_size, kernel, kernel_size);
     memcpy(hdr->magic + page_size + kernel_actual, ramdisk, ramdisk_size);
     memcpy(hdr->magic + page_size + kernel_actual + ramdisk_actual, second, second_size);
-
     return hdr;
 }
