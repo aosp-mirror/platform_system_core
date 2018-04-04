@@ -59,7 +59,7 @@ _fastboot() {
         where=OPTIONS
     fi
 
-    OPTIONS="-a -c --disable-verification --disable-verity -h --help -s --set_active --skip-secondary --skip-reboot --slot -u --version -w"
+    OPTIONS="-a -c --disable-verification --disable-verity -h --help -s --set-active --skip-secondary --skip-reboot --slot -u --version -w"
     COMMAND="continue devices erase flash flashall flashing format getvar get_staged help oem reboot stage update"
 
     case $where in
