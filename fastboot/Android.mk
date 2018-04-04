@@ -22,7 +22,8 @@ LOCAL_CFLAGS += -DFASTBOOT_VERSION="\"$(tool_version)\""
 
 LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../adb \
-  $(LOCAL_PATH)/../mkbootimg \
+
+LOCAL_HEADER_LIBRARIES := bootimg_headers
 
 LOCAL_SRC_FILES := \
     bootimg_utils.cpp \
