@@ -20,8 +20,8 @@ cc_library_static {
     export_header_lib_headers: ["libhealthd_headers"],
 }
 
-cc_binary {
-    name: "android.hardware.health@2.0-service",
+cc_defaults {
+    name: "android.hardware.health@2.0-service_defaults",
     init_rc: ["android.hardware.health@2.0-service.rc"],
     vendor: true,
     relative_install_path: "hw",
@@ -51,6 +51,20 @@ cc_binary {
         "liblog",
         "libutils",
         "android.hardware.health@2.0",
+    ],
+}
+
+cc_binary {
+    name: "android.hardware.health@2.0-service",
+    defaults: ["android.hardware.health@2.0-service_defaults"],
+}
+
+cc_binary {
+    name: "android.hardware.health@2.0-service.override",
+    defaults: ["android.hardware.health@2.0-service_defaults"],
+
+    overrides: [
+        "healthd",
     ],
 }
 
