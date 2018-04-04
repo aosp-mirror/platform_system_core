@@ -56,6 +56,7 @@ cc_binary {
 
 cc_binary {
     name: "healthd",
+    init_rc: ["healthd.rc"],
     srcs: [
         "HealthServiceHealthd.cpp",
     ],
