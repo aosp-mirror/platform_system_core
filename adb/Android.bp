@@ -191,36 +191,6 @@ cc_test_host {
     },
 }
 
-cc_benchmark {
-    name: "adb_benchmark",
-    defaults: ["adb_defaults"],
-
-    srcs: ["transport_benchmark.cpp"],
-    host_supported: true,
-    target: {
-        android: {
-            static_libs: [
-                "libadbd",
-            ],
-        },
-        host: {
-            static_libs: [
-                "libadb_host",
-            ],
-        },
-    },
-
-    static_libs: [
-        "libbase",
-        "libcutils",
-        "libcrypto_utils",
-        "libcrypto",
-        "libdiagnose_usb",
-        "liblog",
-        "libusb",
-    ],
-}
-
 cc_binary_host {
     name: "adb",
     tags: ["debug"],
