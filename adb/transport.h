@@ -30,6 +30,7 @@
 #include <thread>
 #include <unordered_set>
 
+#include <android-base/thread_annotations.h>
 #include <openssl/rsa.h>
 
 #include "adb.h"
@@ -121,13 +122,14 @@ struct BlockingConnectionAdapter : public Connection {
     virtual void Start() override final;
     virtual void Stop() override final;
 
-    bool stopped_ = false;
+    bool started_ GUARDED_BY(mutex_) = false;
+    bool stopped_ GUARDED_BY(mutex_) = false;
 
     std::unique_ptr<BlockingConnection> underlying_;
-    std::thread read_thread_;
-    std::thread write_thread_;
+    std::thread read_thread_ GUARDED_BY(mutex_);
+    std::thread write_thread_ GUARDED_BY(mutex_);
 
-    std::deque<std::unique_ptr<apacket>> write_queue_;
+    std::deque<std::unique_ptr<apacket>> write_queue_ GUARDED_BY(mutex_);
     std::mutex mutex_;
     std::condition_variable cv_;
 

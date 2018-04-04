@@ -162,15 +162,14 @@ class NonApiTest(unittest.TestCase):
 
         Bug: https://code.google.com/p/android/issues/detail?id=21021
         """
-        port = 12345
-
         with contextlib.closing(
                 socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as listener:
             # Use SO_REUSEADDR so subsequent runs of the test can grab the port
             # even if it is in TIME_WAIT.
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            listener.bind(('127.0.0.1', port))
+            listener.bind(('127.0.0.1', 0))
             listener.listen(4)
+            port = listener.getsockname()[1]
 
             # Now that listening has started, start adb emu kill, telling it to
             # connect to our mock emulator.
@@ -233,6 +232,24 @@ class NonApiTest(unittest.TestCase):
                 output.strip(), 'connected to localhost:{}'.format(port))
             s.close()
 
+    def test_already_connected(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('127.0.0.1', 0))
+        s.listen(2)
+
+        port = s.getsockname()[1]
+        output = subprocess.check_output(
+            ['adb', 'connect', 'localhost:{}'.format(port)])
+
+        self.assertEqual(
+            output.strip(), 'connected to localhost:{}'.format(port))
+
+        # b/31250450: this always returns 0 but probably shouldn't.
+        output = subprocess.check_output(
+            ['adb', 'connect', 'localhost:{}'.format(port)])
+
+        self.assertEqual(
+            output.strip(), 'already connected to localhost:{}'.format(port))
 
 def main():
     random.seed(0)
