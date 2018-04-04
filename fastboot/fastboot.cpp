@@ -369,11 +369,7 @@ static int show_help() {
             " --page-size BYTES          Set flash page size (default: 2048).\n"
             " --header-version VERSION   Set boot image header version.\n"
             "\n"
-            // TODO: what device(s) used these? is there any documentation?
-            //" flashing unlock_bootloader REQUEST\n"
-            //"     unlock bootloader using request.\n"
-            //" flashing lock_bootloader\n"
-            //"     lock bootloader to prevent bootloader version rollback.\n"
+            // TODO: what device(s) used this? is there any documentation?
             //" continue                               Continue with autoboot.\n"
             //"\n"
             "Android Things:\n"
@@ -1261,18 +1257,6 @@ static std::string next_arg(std::vector<std::string>* args) {
     return result;
 }
 
-static void do_bypass_unlock_command(std::vector<std::string>* args) {
-    if (args->empty()) syntax_error("missing unlock_bootloader request");
-
-    std::string filename = next_arg(args);
-
-    int64_t sz;
-    void* data = load_file(filename.c_str(), &sz);
-    if (data == nullptr) die("could not load '%s': %s", filename.c_str(), strerror(errno));
-    fb_queue_download("unlock_message", data, sz);
-    fb_queue_command("flashing unlock_bootloader", "unlocking bootloader");
-}
-
 static void do_oem_command(const std::string& cmd, std::vector<std::string>* args) {
     if (args->empty()) syntax_error("empty oem command");
 
@@ -1794,11 +1778,8 @@ int main(int argc, char **argv)
             } else if (args.size() == 1 && (args[0] == "unlock" || args[0] == "lock" ||
                                             args[0] == "unlock_critical" ||
                                             args[0] == "lock_critical" ||
-                                            args[0] == "get_unlock_ability" ||
-                                            args[0] == "lock_bootloader")) {
+                                            args[0] == "get_unlock_ability")) {
                 do_oem_command("flashing", &args);
-            } else if (args.size() == 2 && args[0] == "unlock_bootloader") {
-                do_bypass_unlock_command(&args);
             } else {
                 syntax_error("unknown 'flashing' command %s", args[0].c_str());
             }
