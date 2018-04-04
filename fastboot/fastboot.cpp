@@ -1451,7 +1451,6 @@ int main(int argc, char **argv)
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
-    bool wants_reboot_emergency = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
@@ -1693,9 +1692,6 @@ int main(int argc, char **argv)
                 if (what == "bootloader") {
                     wants_reboot = false;
                     wants_reboot_bootloader = true;
-                } else if (what == "emergency") {
-                    wants_reboot = false;
-                    wants_reboot_emergency = true;
                 } else {
                     syntax_error("unknown reboot target %s", what.c_str());
                 }
@@ -1836,9 +1832,6 @@ int main(int argc, char **argv)
         fb_queue_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
-        fb_queue_wait_for_disconnect();
-    } else if (wants_reboot_emergency) {
-        fb_queue_command("reboot-emergency", "rebooting into emergency download (EDL) mode");
         fb_queue_wait_for_disconnect();
     }
 
