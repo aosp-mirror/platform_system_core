@@ -149,13 +149,12 @@ bool UnwindStackOfflineMap::CreateProcessMemory(const backtrace_stackinfo_t& sta
   }
 
   // Create the process memory from the stack data.
-  uint64_t size = stack.end - stack.start;
-  unwindstack::MemoryBuffer* memory = new unwindstack::MemoryBuffer;
-  memory->Resize(size);
-  memcpy(memory->GetPtr(0), stack.data, size);
-  std::shared_ptr<unwindstack::Memory> shared_memory(memory);
-
-  process_memory_.reset(new unwindstack::MemoryRange(shared_memory, 0, size, stack.start));
+  if (memory_ == nullptr) {
+    memory_ = new unwindstack::MemoryOfflineBuffer(stack.data, stack.start, stack.end);
+    process_memory_.reset(memory_);
+  } else {
+    memory_->Reset(stack.data, stack.start, stack.end);
+  }
   return true;
 }
 
