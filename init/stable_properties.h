@@ -31,6 +31,7 @@ static constexpr const char* kPartnerPrefixes[] = {
 static const std::set<std::string> kExportedActionableProperties = {
     "init.svc.console",
     "init.svc.mediadrm",
+    "init.svc.surfaceflinger",
     "init.svc.zygote",
     "persist.bluetooth.btsnoopenable",
     "persist.sys.crash_rcu",
@@ -50,6 +51,7 @@ static const std::set<std::string> kExportedActionableProperties = {
     "sys.user.0.ce_available",
     "sys.vdso",
     "vts.native_server.on",
+    "wlan.driver.status",
 };
 
 }  // namespace init
