@@ -19,10 +19,11 @@
 #include "sysdeps.h"
 
 #include <errno.h>
+#include <getopt.h>
+#include <malloc.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
 #include <sys/prctl.h>
 
 #include <memory>
@@ -213,6 +214,9 @@ int adbd_main(int server_port) {
 }
 
 int main(int argc, char** argv) {
+    // Set M_DECAY_TIME so that our allocations aren't immediately purged on free.
+    mallopt(M_DECAY_TIME, 1);
+
     while (true) {
         static struct option opts[] = {
             {"root_seclabel", required_argument, nullptr, 's'},
