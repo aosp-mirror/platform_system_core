@@ -378,7 +378,6 @@ static int show_help() {
             "\n"
             "options:\n"
             " -w                         Wipe userdata.\n"
-            " -u                         Do not erase partition first when formatting.\n"
             " -s SERIAL                  Specify a USB device.\n"
             " -s tcp|udp:HOST[:PORT]     Specify a network device.\n"
             // TODO: remove -i?
@@ -771,17 +770,6 @@ static int64_t get_sparse_limit(Transport* transport, int64_t size) {
     return 0;
 }
 
-// Until we get lazy inode table init working in make_ext4fs, we need to
-// erase partitions of type ext4 before flashing a filesystem so no stale
-// inodes are left lying around.  Otherwise, e2fsck gets very upset.
-static bool needs_erase(Transport* transport, const char* partition) {
-    std::string partition_type;
-    if (!fb_getvar(transport, std::string("partition-type:") + partition, &partition_type)) {
-        return false;
-    }
-    return partition_type == "ext4";
-}
-
 static bool load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf) {
     int64_t sz = get_file_size(fd);
     if (sz == -1) {
@@ -1095,7 +1083,7 @@ static void set_active(Transport* transport, const std::string& slot_override) {
     }
 }
 
-static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool erase_first, bool skip_secondary) {
+static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool skip_secondary) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -1153,9 +1141,6 @@ static void do_update(Transport* transport, const char* filename, const std::str
 
         auto update = [&](const std::string& partition) {
             do_update_signature(zip, images[i].sig_name);
-            if (erase_first && needs_erase(transport, partition.c_str())) {
-                fb_queue_erase(partition);
-            }
             flash_buf(partition.c_str(), &buf);
             /* not closing the fd here since the sparse code keeps the fd around
              * but hasn't mmaped data yet. The temporary file will get cleaned up when the
@@ -1188,7 +1173,7 @@ static void do_send_signature(const std::string& fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(Transport* transport, const std::string& slot_override, int erase_first, bool skip_secondary) {
+static void do_flashall(Transport* transport, const std::string& slot_override, bool skip_secondary) {
     std::string fname;
     queue_info_dump();
 
@@ -1235,9 +1220,6 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
 
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname.c_str());
-            if (erase_first && needs_erase(transport, partition.c_str())) {
-                fb_queue_erase(partition);
-            }
             flash_buf(partition.c_str(), &buf);
         };
         do_for_partitions(transport, images[i].part_name, slot, flashall, false);
@@ -1438,7 +1420,6 @@ int main(int argc, char **argv)
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
-    bool erase_first = true;
     bool set_fbe_marker = false;
     void *data;
     uint32_t header_version = 0;
@@ -1478,7 +1459,7 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int c = getopt_long(argc, argv, "vwub:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
+        int c = getopt_long(argc, argv, "vwb:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
         if (c < 0) {
             break;
         }
@@ -1529,9 +1510,6 @@ int main(int argc, char **argv)
         case 'S':
             sparse_limit = parse_num(optarg);
             if (sparse_limit < 0) die("invalid sparse limit");
-            break;
-        case 'u':
-            erase_first = false;
             break;
         case 'v':
             set_verbose();
@@ -1655,9 +1633,6 @@ int main(int argc, char **argv)
             std::string partition = next_arg(&args);
 
             auto format = [&](const std::string& partition) {
-                if (erase_first && needs_erase(transport, partition.c_str())) {
-                    fb_queue_erase(partition);
-                }
                 fb_perform_format(transport, partition, 0, type_override, size_override, "");
             };
             do_for_partitions(transport, partition.c_str(), slot_override, format, true);
@@ -1708,9 +1683,6 @@ int main(int argc, char **argv)
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
 
             auto flash = [&](const std::string &partition) {
-                if (erase_first && needs_erase(transport, partition.c_str())) {
-                    fb_queue_erase(partition);
-                }
                 do_flash(transport, partition.c_str(), fname.c_str());
             };
             do_for_partitions(transport, pname.c_str(), slot_override, flash, true);
@@ -1730,9 +1702,9 @@ int main(int argc, char **argv)
         } else if (command == "flashall") {
             if (slot_override == "all") {
                 fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
-                do_flashall(transport, slot_override, erase_first, true);
+                do_flashall(transport, slot_override, true);
             } else {
-                do_flashall(transport, slot_override, erase_first, skip_secondary);
+                do_flashall(transport, slot_override, skip_secondary);
             }
             wants_reboot = true;
         } else if (command == "update") {
@@ -1744,8 +1716,7 @@ int main(int argc, char **argv)
             if (!args.empty()) {
                 filename = next_arg(&args);
             }
-            do_update(transport, filename.c_str(), slot_override, erase_first,
-                      skip_secondary || slot_all);
+            do_update(transport, filename.c_str(), slot_override, skip_secondary || slot_all);
             wants_reboot = true;
         } else if (command == "set_active") {
             std::string slot = verify_slot(transport, next_arg(&args), false);
