@@ -85,7 +85,7 @@ _fastboot() {
                         ;;
                     reboot)
                         if [[ $COMP_CWORD == $i ]]; then
-                            args="bootloader emergency"
+                            args="bootloader"
                             COMPREPLY=( $(compgen -W "${args}" -- "${COMP_WORDS[i]}") )
                         fi
                         ;;
