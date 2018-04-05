@@ -106,15 +106,12 @@ static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
   Unwinder unwinder(512, maps, regs, process_memory);
   unwinder.Unwind();
 
-  std::string expected_function = expected_function_names.back();
-  expected_function_names.pop_back();
   for (auto& frame : unwinder.frames()) {
-    if (frame.function_name == expected_function) {
+    if (frame.function_name == expected_function_names.back()) {
+      expected_function_names.pop_back();
       if (expected_function_names.empty()) {
         break;
       }
-      expected_function = expected_function_names.back();
-      expected_function_names.pop_back();
     }
   }
 
