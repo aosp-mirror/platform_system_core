@@ -104,6 +104,7 @@ libadb_srcs = [
     "socket_spec.cpp",
     "sysdeps/errno.cpp",
     "transport.cpp",
+    "transport_fd.cpp",
     "transport_local.cpp",
     "transport_usb.cpp",
 ]
