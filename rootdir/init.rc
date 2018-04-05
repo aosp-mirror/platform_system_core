@@ -736,11 +736,6 @@ service ueventd /sbin/ueventd
     seclabel u:r:ueventd:s0
     shutdown critical
 
-service healthd /system/bin/healthd
-    class hal
-    critical
-    group root system wakelock
-
 service console /system/bin/sh
     class core
     console
