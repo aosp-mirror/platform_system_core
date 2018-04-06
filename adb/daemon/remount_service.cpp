@@ -145,8 +145,10 @@ void remount_service(int fd, void* cookie) {
     } else {
         success &= remount_partition(fd, "/system");
     }
-    success &= remount_partition(fd, "/vendor");
+    success &= remount_partition(fd, "/odm");
     success &= remount_partition(fd, "/oem");
+    success &= remount_partition(fd, "/product");
+    success &= remount_partition(fd, "/vendor");
 
     WriteFdExactly(fd, success ? "remount succeeded\n" : "remount failed\n");
 

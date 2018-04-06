@@ -73,13 +73,13 @@ extern int gListenAll;
 
 DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK(nullptr, nullptr);
 
-static std::string product_file(const char* file) {
+static std::string product_file(const std::string& file) {
     const char* ANDROID_PRODUCT_OUT = getenv("ANDROID_PRODUCT_OUT");
     if (ANDROID_PRODUCT_OUT == nullptr) {
         fprintf(stderr, "adb: product directory not specified; set $ANDROID_PRODUCT_OUT\n");
         exit(1);
     }
-    return android::base::StringPrintf("%s%s%s", ANDROID_PRODUCT_OUT, OS_PATH_SEPARATOR_STR, file);
+    return std::string{ANDROID_PRODUCT_OUT} + OS_PATH_SEPARATOR_STR + file;
 }
 
 static void help() {
@@ -134,7 +134,7 @@ static void help() {
         " pull [-a] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        " sync [system|vendor|oem|data|all]\n"
+        " sync [all|data|odm|oem|product|system|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
         "     -l: list but don't copy\n"
         "\n"
@@ -189,8 +189,7 @@ static void help() {
         " get-state                print offline | bootloader | device\n"
         " get-serialno             print <serial-number>\n"
         " get-devpath              print <device-path>\n"
-        " remount\n"
-        "     remount /system, /vendor, and /oem partitions read-write\n"
+        " remount                  remount partitions read-write\n"
         " reboot [bootloader|recovery|sideload|sideload-auto-reboot]\n"
         "     reboot the device; defaults to booting system image but\n"
         "     supports bootloader and recovery too. sideload reboots\n"
@@ -1731,48 +1730,28 @@ int adb_commandline(int argc, const char** argv) {
         std::string src;
         bool list_only = false;
         if (argc < 2) {
-            // No local path was specified.
-            src = "";
+            // No partition specified: sync all of them.
         } else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
             list_only = true;
-            if (argc == 3) {
-                src = argv[2];
-            } else {
-                src = "";
-            }
+            if (argc == 3) src = argv[2];
         } else if (argc == 2) {
-            // A local path or "android"/"data" arg was specified.
             src = argv[1];
         } else {
             return syntax_error("adb sync [-l] [PARTITION]");
         }
 
-        if (src == "all") src = "";
-
-        if (src != "" &&
-            src != "system" && src != "data" && src != "vendor" && src != "oem") {
-            return syntax_error("don't know how to sync %s partition", src.c_str());
+        if (src.empty()) src = "all";
+        std::vector<std::string> partitions{"data", "odm", "oem", "product", "system", "vendor"};
+        bool found = false;
+        for (const auto& partition : partitions) {
+            if (src == "all" || src == partition) {
+                std::string src_dir{product_file(partition)};
+                if (!directory_exists(src_dir)) continue;
+                found = true;
+                if (!do_sync_sync(src_dir, "/" + partition, list_only)) return 1;
+            }
         }
-
-        std::string system_src_path = product_file("system");
-        std::string data_src_path = product_file("data");
-        std::string vendor_src_path = product_file("vendor");
-        std::string oem_src_path = product_file("oem");
-
-        bool okay = true;
-        if (okay && (src.empty() || src == "system")) {
-            okay = do_sync_sync(system_src_path, "/system", list_only);
-        }
-        if (okay && (src.empty() || src == "vendor") && directory_exists(vendor_src_path)) {
-            okay = do_sync_sync(vendor_src_path, "/vendor", list_only);
-        }
-        if (okay && (src.empty() || src == "oem") && directory_exists(oem_src_path)) {
-            okay = do_sync_sync(oem_src_path, "/oem", list_only);
-        }
-        if (okay && (src.empty() || src == "data")) {
-            okay = do_sync_sync(data_src_path, "/data", list_only);
-        }
-        return okay ? 0 : 1;
+        return found ? 0 : syntax_error("don't know how to sync %s partition", src.c_str());
     }
     /* passthrough commands */
     else if (!strcmp(argv[0],"get-state") ||
