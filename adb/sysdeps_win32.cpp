@@ -462,6 +462,7 @@ int adb_read(int fd, void* buf, int len) {
     FH f = _fh_from_int(fd, __func__);
 
     if (f == NULL) {
+        errno = EBADF;
         return -1;
     }
 
@@ -472,6 +473,7 @@ int adb_write(int fd, const void* buf, int len) {
     FH f = _fh_from_int(fd, __func__);
 
     if (f == NULL) {
+        errno = EBADF;
         return -1;
     }
 
@@ -493,6 +495,7 @@ int adb_lseek(int fd, int pos, int where) {
     FH f = _fh_from_int(fd, __func__);
 
     if (!f) {
+        errno = EBADF;
         return -1;
     }
 
@@ -503,6 +506,7 @@ int adb_close(int fd) {
     FH f = _fh_from_int(fd, __func__);
 
     if (!f) {
+        errno = EBADF;
         return -1;
     }
 
