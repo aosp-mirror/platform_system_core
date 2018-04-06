@@ -29,8 +29,8 @@
 #include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/sysinfo.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
@@ -81,7 +81,7 @@
 #define SYSTEM_ADJ (-900)
 
 /* default to old in-kernel interface if no memory pressure events */
-static int use_inkernel_interface = 1;
+static bool use_inkernel_interface = true;
 static bool has_inkernel_module;
 
 /* memory pressure levels */
@@ -335,8 +335,9 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
         return;
     }
 
-    if (use_inkernel_interface)
+    if (use_inkernel_interface) {
         return;
+    }
 
     if (params.oomadj >= 900) {
         soft_limit_mult = 0;
@@ -402,8 +403,9 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
 static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     struct lmk_procremove params;
 
-    if (use_inkernel_interface)
+    if (use_inkernel_interface) {
         return;
+    }
 
     lmkd_pack_get_procremove(packet, &params);
     pid_remove(params.pid);
@@ -1232,21 +1234,28 @@ int main(int argc __unused, char **argv __unused) {
     statslog_init(&log_ctx, &enable_stats_log);
 #endif
 
-    // MCL_ONFAULT pins pages as they fault instead of loading
-    // everything immediately all at once. (Which would be bad,
-    // because as of this writing, we have a lot of mapped pages we
-    // never use.) Old kernels will see MCL_ONFAULT and fail with
-    // EINVAL; we ignore this failure.
-    //
-    // N.B. read the man page for mlockall. MCL_CURRENT | MCL_ONFAULT
-    // pins ⊆ MCL_CURRENT, converging to just MCL_CURRENT as we fault
-    // in pages.
-    if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) && errno != EINVAL)
-        ALOGW("mlockall failed: errno=%d", errno);
+    if (!init()) {
+        if (!use_inkernel_interface) {
+            /*
+             * MCL_ONFAULT pins pages as they fault instead of loading
+             * everything immediately all at once. (Which would be bad,
+             * because as of this writing, we have a lot of mapped pages we
+             * never use.) Old kernels will see MCL_ONFAULT and fail with
+             * EINVAL; we ignore this failure.
+             *
+             * N.B. read the man page for mlockall. MCL_CURRENT | MCL_ONFAULT
+             * pins ⊆ MCL_CURRENT, converging to just MCL_CURRENT as we fault
+             * in pages.
+             */
+            if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) && (errno != EINVAL)) {
+                ALOGW("mlockall failed %s", strerror(errno));
+            }
 
-    sched_setscheduler(0, SCHED_FIFO, &param);
-    if (!init())
+            sched_setscheduler(0, SCHED_FIFO, &param);
+        }
+
         mainloop();
+    }
 
 #ifdef LMKD_LOG_STATS
     statslog_destroy(&log_ctx);
