@@ -726,23 +726,15 @@ static int _fh_socket_writev(FH f, const adb_iovec* iov, int iovcnt) {
 /**************************************************************************/
 /**************************************************************************/
 
-#include <winsock2.h>
-
-static int  _winsock_init;
-
-static void
-_init_winsock( void )
-{
-    // TODO: Multiple threads calling this may potentially cause multiple calls
-    // to WSAStartup() which offers no real benefit.
-    if (!_winsock_init) {
-        WSADATA  wsaData;
-        int      rc = WSAStartup( MAKEWORD(2,2), &wsaData);
+static int _init_winsock(void) {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        WSADATA wsaData;
+        int rc = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (rc != 0) {
             fatal("adb: could not initialize Winsock: %s",
                   android::base::SystemErrorCodeToString(rc).c_str());
         }
-        _winsock_init = 1;
 
         // Note that we do not call atexit() to register WSACleanup to be called
         // at normal process termination because:
@@ -757,8 +749,11 @@ _init_winsock( void )
         //    setupapi.dll which tries to load wintrust.dll which tries to load
         //    crypt32.dll which calls atexit() which tries to acquire the C
         //    Runtime lock that the other thread holds.
-    }
+    });
+    return 0;
 }
+
+static int _winsock_init = _init_winsock();
 
 // Map a socket type to an explicit socket protocol instead of using the socket
 // protocol of 0. Explicit socket protocols are used by most apps and we should
@@ -786,8 +781,6 @@ int network_loopback_client(int port, int type, std::string* error) {
         *error = strerror(errno);
         return -1;
     }
-
-    if (!_winsock_init) _init_winsock();
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -836,8 +829,6 @@ static int _network_server(int port, int type, u_long interface_address, std::st
         *error = strerror(errno);
         return -1;
     }
-
-    if (!_winsock_init) _init_winsock();
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -914,8 +905,6 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
         *error = strerror(errno);
         return -1;
     }
-
-    if (!_winsock_init) _init_winsock();
 
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
