@@ -355,12 +355,11 @@ static int _fh_file_lseek(FH f, int pos, int origin) {
 /**************************************************************************/
 /**************************************************************************/
 
-int  adb_open(const char*  path, int  options)
-{
-    FH  f;
+int adb_open(const char* path, int options) {
+    FH f;
 
-    DWORD  desiredAccess       = 0;
-    DWORD  shareMode           = FILE_SHARE_READ | FILE_SHARE_WRITE;
+    DWORD desiredAccess = 0;
+    DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
 
     switch (options) {
         case O_RDONLY:
@@ -378,8 +377,8 @@ int  adb_open(const char*  path, int  options)
             return -1;
     }
 
-    f = _fh_alloc( &_fh_file_class );
-    if ( !f ) {
+    f = _fh_alloc(&_fh_file_class);
+    if (!f) {
         return -1;
     }
 
@@ -387,21 +386,21 @@ int  adb_open(const char*  path, int  options)
     if (!android::base::UTF8ToWide(path, &path_wide)) {
         return -1;
     }
-    f->fh_handle = CreateFileW( path_wide.c_str(), desiredAccess, shareMode,
-                                NULL, OPEN_EXISTING, 0, NULL );
+    f->fh_handle =
+        CreateFileW(path_wide.c_str(), desiredAccess, shareMode, NULL, OPEN_EXISTING, 0, NULL);
 
-    if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
+    if (f->fh_handle == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
         _fh_close(f);
-        D( "adb_open: could not open '%s': ", path );
+        D("adb_open: could not open '%s': ", path);
         switch (err) {
             case ERROR_FILE_NOT_FOUND:
-                D( "file not found" );
+                D("file not found");
                 errno = ENOENT;
                 return -1;
 
             case ERROR_PATH_NOT_FOUND:
-                D( "path not found" );
+                D("path not found");
                 errno = ENOTDIR;
                 return -1;
 
@@ -412,18 +411,17 @@ int  adb_open(const char*  path, int  options)
         }
     }
 
-    snprintf( f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path );
-    D( "adb_open: '%s' => fd %d", path, _fh_to_int(f) );
+    snprintf(f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path);
+    D("adb_open: '%s' => fd %d", path, _fh_to_int(f));
     return _fh_to_int(f);
 }
 
 /* ignore mode on Win32 */
-int  adb_creat(const char*  path, int  mode)
-{
-    FH  f;
+int adb_creat(const char* path, int mode) {
+    FH f;
 
-    f = _fh_alloc( &_fh_file_class );
-    if ( !f ) {
+    f = _fh_alloc(&_fh_file_class);
+    if (!f) {
         return -1;
     }
 
@@ -431,23 +429,21 @@ int  adb_creat(const char*  path, int  mode)
     if (!android::base::UTF8ToWide(path, &path_wide)) {
         return -1;
     }
-    f->fh_handle = CreateFileW( path_wide.c_str(), GENERIC_WRITE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                                NULL );
+    f->fh_handle = CreateFileW(path_wide.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
+    if (f->fh_handle == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
         _fh_close(f);
-        D( "adb_creat: could not open '%s': ", path );
+        D("adb_creat: could not open '%s': ", path);
         switch (err) {
             case ERROR_FILE_NOT_FOUND:
-                D( "file not found" );
+                D("file not found");
                 errno = ENOENT;
                 return -1;
 
             case ERROR_PATH_NOT_FOUND:
-                D( "path not found" );
+                D("path not found");
                 errno = ENOTDIR;
                 return -1;
 
@@ -457,8 +453,8 @@ int  adb_creat(const char*  path, int  mode)
                 return -1;
         }
     }
-    snprintf( f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path );
-    D( "adb_creat: '%s' => fd %d", path, _fh_to_int(f) );
+    snprintf(f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path);
+    D("adb_creat: '%s' => fd %d", path, _fh_to_int(f));
     return _fh_to_int(f);
 }
 
@@ -493,9 +489,8 @@ ssize_t adb_writev(int fd, const adb_iovec* iov, int iovcnt) {
     return f->clazz->_fh_writev(f, iov, iovcnt);
 }
 
-int  adb_lseek(int  fd, int  pos, int  where)
-{
-    FH     f = _fh_from_int(fd, __func__);
+int adb_lseek(int fd, int pos, int where) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (!f) {
         return -1;
@@ -504,16 +499,14 @@ int  adb_lseek(int  fd, int  pos, int  where)
     return f->clazz->_fh_lseek(f, pos, where);
 }
 
-
-int  adb_close(int  fd)
-{
-    FH   f = _fh_from_int(fd, __func__);
+int adb_close(int fd) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (!f) {
         return -1;
     }
 
-    D( "adb_close: %s", f->name);
+    D("adb_close: %s", f->name);
     _fh_close(f);
     return 0;
 }
@@ -987,52 +980,49 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     return fd;
 }
 
-int  adb_register_socket(SOCKET s) {
-    FH f = _fh_alloc( &_fh_socket_class );
+int adb_register_socket(SOCKET s) {
+    FH f = _fh_alloc(&_fh_socket_class);
     f->fh_socket = s;
     return _fh_to_int(f);
 }
 
 #undef accept
-int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
-{
-    FH   serverfh = _fh_from_int(serverfd, __func__);
+int adb_socket_accept(int serverfd, struct sockaddr* addr, socklen_t* addrlen) {
+    FH serverfh = _fh_from_int(serverfd, __func__);
 
-    if ( !serverfh || serverfh->clazz != &_fh_socket_class ) {
+    if (!serverfh || serverfh->clazz != &_fh_socket_class) {
         D("adb_socket_accept: invalid fd %d", serverfd);
         errno = EBADF;
         return -1;
     }
 
-    unique_fh fh(_fh_alloc( &_fh_socket_class ));
+    unique_fh fh(_fh_alloc(&_fh_socket_class));
     if (!fh) {
         PLOG(ERROR) << "adb_socket_accept: failed to allocate accepted socket "
                        "descriptor";
         return -1;
     }
 
-    fh->fh_socket = accept( serverfh->fh_socket, addr, addrlen );
+    fh->fh_socket = accept(serverfh->fh_socket, addr, addrlen);
     if (fh->fh_socket == INVALID_SOCKET) {
         const DWORD err = WSAGetLastError();
-        LOG(ERROR) << "adb_socket_accept: accept on fd " << serverfd <<
-                      " failed: " + android::base::SystemErrorCodeToString(err);
-        _socket_set_errno( err );
+        LOG(ERROR) << "adb_socket_accept: accept on fd " << serverfd
+                   << " failed: " + android::base::SystemErrorCodeToString(err);
+        _socket_set_errno(err);
         return -1;
     }
 
     const int fd = _fh_to_int(fh.get());
-    snprintf( fh->name, sizeof(fh->name), "%d(accept:%s)", fd, serverfh->name );
-    D( "adb_socket_accept on fd %d returns fd %d", serverfd, fd );
+    snprintf(fh->name, sizeof(fh->name), "%d(accept:%s)", fd, serverfh->name);
+    D("adb_socket_accept on fd %d returns fd %d", serverfd, fd);
     fh.release();
-    return  fd;
+    return fd;
 }
 
+int adb_setsockopt(int fd, int level, int optname, const void* optval, socklen_t optlen) {
+    FH fh = _fh_from_int(fd, __func__);
 
-int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
-{
-    FH   fh = _fh_from_int(fd, __func__);
-
-    if ( !fh || fh->clazz != &_fh_socket_class ) {
+    if (!fh || fh->clazz != &_fh_socket_class) {
         D("adb_setsockopt: invalid fd %d", fd);
         errno = EBADF;
         return -1;
@@ -1042,13 +1032,13 @@ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, soc
     // to set SOL_SOCKET, SO_SNDBUF/SO_RCVBUF, ignore it since the OS has
     // auto-tuning.
 
-    int result = setsockopt( fh->fh_socket, level, optname,
-                             reinterpret_cast<const char*>(optval), optlen );
-    if ( result == SOCKET_ERROR ) {
+    int result =
+        setsockopt(fh->fh_socket, level, optname, reinterpret_cast<const char*>(optval), optlen);
+    if (result == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
-        D("adb_setsockopt: setsockopt on fd %d level %d optname %d failed: %s\n",
-          fd, level, optname, android::base::SystemErrorCodeToString(err).c_str());
-        _socket_set_errno( err );
+        D("adb_setsockopt: setsockopt on fd %d level %d optname %d failed: %s\n", fd, level,
+          optname, android::base::SystemErrorCodeToString(err).c_str());
+        _socket_set_errno(err);
         result = -1;
     }
     return result;
