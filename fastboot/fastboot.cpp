@@ -326,118 +326,78 @@ static int show_help() {
     // clang-format off
     fprintf(stdout,
 /*           1234567890123456789012345678901234567890123456789012345678901234567890123456 */
-            "usage: fastboot [ <option> ] <command>\n"
+            "usage: fastboot [OPTION...] COMMAND...\n"
             "\n"
-            "commands:\n"
-            "  update <filename>                        Reflash device from update.zip.\n"
-            "                                           Sets the flashed slot as active.\n"
-            "  flashall                                 Flash boot, system, vendor, and --\n"
-            "                                           if found -- recovery. If the device\n"
-            "                                           supports slots, the slot that has\n"
-            "                                           been flashed to is set as active.\n"
-            "                                           Secondary images may be flashed to\n"
-            "                                           an inactive slot.\n"
-            "  flash <partition> [ <filename> ]         Write a file to a flash partition.\n"
-            "  flashing lock                            Locks the device. Prevents flashing.\n"
-            "  flashing unlock                          Unlocks the device. Allows flashing\n"
-            "                                           any partition except\n"
-            "                                           bootloader-related partitions.\n"
-            "  flashing lock_critical                   Prevents flashing bootloader-related\n"
-            "                                           partitions.\n"
-            "  flashing unlock_critical                 Enables flashing bootloader-related\n"
-            "                                           partitions.\n"
-            "  flashing get_unlock_ability              Queries bootloader to see if the\n"
-            "                                           device is unlocked.\n"
-            "  flashing get_unlock_bootloader_nonce     Queries the bootloader to get the\n"
-            "                                           unlock nonce.\n"
-            "  flashing unlock_bootloader <request>     Issue unlock bootloader using request.\n"
-            "  flashing lock_bootloader                 Locks the bootloader to prevent\n"
-            "                                           bootloader version rollback.\n"
-            "  erase <partition>                        Erase a flash partition.\n"
-            "  format[:[<fs type>][:[<size>]] <partition>\n"
-            "                                           Format a flash partition. Can\n"
-            "                                           override the fs type and/or size\n"
-            "                                           the bootloader reports.\n"
-            "  getvar <variable>                        Display a bootloader variable.\n"
-            "  set_active <slot>                        Sets the active slot. If slots are\n"
-            "                                           not supported, this does nothing.\n"
-            "  boot <kernel> [ <ramdisk> [ <second> ] ] Download and boot kernel.\n"
-            "  flash:raw <bootable-partition> <kernel> [ <ramdisk> [ <second> ] ]\n"
-            "                                           Create bootimage and flash it.\n"
-            "  devices [-l]                             List all connected devices [with\n"
-            "                                           device paths].\n"
-            "  continue                                 Continue with autoboot.\n"
-            "  reboot [bootloader|emergency]            Reboot device [into bootloader or emergency mode].\n"
-            "  reboot-bootloader                        Reboot device into bootloader.\n"
-            "  oem <parameter1> ... <parameterN>        Executes oem specific command.\n"
-            "  stage <infile>                           Sends contents of <infile> to stage for\n"
-            "                                           the next command. Supported only on\n"
-            "                                           Android Things devices.\n"
-            "  get_staged <outfile>                     Receives data to <outfile> staged by the\n"
-            "                                           last command. Supported only on Android\n"
-            "                                           Things devices.\n"
-            "  help                                     Show this help message.\n"
+            "flashing:\n"
+            " update ZIP                 Flash all partitions from an update.zip package.\n"
+            " flashall                   Flash all partitions from $ANDROID_PRODUCT_OUT.\n"
+            "                            On A/B devices, flashed slot is set as active.\n"
+            "                            Secondary images may be flashed to inactive slot.\n"
+            " flash PARTITION [FILENAME]\n"
+            "                            Flash given partition only.\n"
+            "\n"
+            "basics:\n"
+            " devices [-l]               List devices in bootloader (-l: with device paths).\n"
+            " getvar NAME                Display given bootloader variable.\n"
+            " reboot [bootloader]        Reboot device.\n"
+            "\n"
+            "locking/unlocking:\n"
+            " flashing lock|unlock       Lock/unlock partitions for flashing\n"
+            " flashing lock_critical|unlock_critical\n"
+            "                            Lock/unlock 'critical' bootloader partitions.\n"
+            " flashing get_unlock_ability\n"
+            "                            Check whether unlocking is allowed (1) or not(0).\n"
+            "\n"
+            "advanced:\n"
+            " erase PARTITION            Erase a flash partition.\n"
+            " format[:FS_TYPE[:SIZE]] PARTITION\n"
+            "                            Format a flash partition.\n"
+            " set_active SLOT            Set the active slot.\n"
+            " oem [COMMAND...]           Execute OEM-specific command.\n"
+            "\n"
+            "boot image:\n"
+            " boot KERNEL [RAMDISK [SECOND]]\n"
+            "                            Download and boot kernel from RAM.\n"
+            " flash:raw PARTITION KERNEL [RAMDISK [SECOND]]\n"
+            "                            Create boot image and flash it.\n"
+            // TODO: give -c a long option, and remove the short options for this group?
+            " -c CMDLINE                 Override kernel command line.\n"
+            " --base ADDRESS             Set kernel base address (default: 0x10000000).\n"
+            " --kernel-offset            Set kernel offset (default: 0x00008000).\n"
+            " --ramdisk-offset           Set ramdisk offset (default: 0x01000000).\n"
+            " --tags-offset              Set tags offset (default: 0x00000100).\n"
+            " --page-size BYTES          Set flash page size (default: 2048).\n"
+            " --header-version VERSION   Set boot image header version.\n"
+            "\n"
+            // TODO: what device(s) used this? is there any documentation?
+            //" continue                               Continue with autoboot.\n"
+            //"\n"
+            "Android Things:\n"
+            " stage IN_FILE              Sends given file to stage for the next command.\n"
+            " get_staged OUT_FILE        Writes data staged by the last command to a file.\n"
             "\n"
             "options:\n"
-            "  -w                                       Erase userdata and cache (and format\n"
-            "                                           if supported by partition type).\n"
-            "  -u                                       Do not erase partition before\n"
-            "                                           formatting.\n"
-            "  -s <specific device>                     Specify a device. For USB, provide either\n"
-            "                                           a serial number or path to device port.\n"
-            "                                           For ethernet, provide an address in the\n"
-            "                                           form <protocol>:<hostname>[:port] where\n"
-            "                                           <protocol> is either tcp or udp.\n"
-            "  -c <cmdline>                             Override kernel commandline.\n"
-            "  -i <vendor id>                           Specify a custom USB vendor id.\n"
-            "  -b, --base <base_addr>                   Specify a custom kernel base\n"
-            "                                           address (default: 0x10000000).\n"
-            "  --kernel-offset                          Specify a custom kernel offset.\n"
-            "                                           (default: 0x00008000)\n"
-            "  --ramdisk-offset                         Specify a custom ramdisk offset.\n"
-            "                                           (default: 0x01000000)\n"
-            "  --tags-offset                            Specify a custom tags offset.\n"
-            "                                           (default: 0x00000100)\n"
-            "  -n, --page-size <page size>              Specify the nand page size\n"
-            "                                           (default: 2048).\n"
-            "  -S <size>[K|M|G]                         Automatically sparse files greater\n"
-            "                                           than 'size'. 0 to disable.\n"
-            "  --slot <slot>                            Specify slot name to be used if the\n"
-            "                                           device supports slots. All operations\n"
-            "                                           on partitions that support slots will\n"
-            "                                           be done on the slot specified.\n"
-            "                                           'all' can be given to refer to all slots.\n"
-            "                                           'other' can be given to refer to a\n"
-            "                                           non-current slot. If this flag is not\n"
-            "                                           used, slotted partitions will default\n"
-            "                                           to the current active slot.\n"
-            "  -a, --set-active[=<slot>]                Sets the active slot. If no slot is\n"
-            "                                           provided, this will default to the value\n"
-            "                                           given by --slot. If slots are not\n"
-            "                                           supported, this does nothing. This will\n"
-            "                                           run after all non-reboot commands.\n"
-            "  --skip-secondary                         Will not flash secondary slots when\n"
-            "                                           performing a flashall or update. This\n"
-            "                                           will preserve data on other slots.\n"
-            "  --skip-reboot                            Will not reboot the device when\n"
-            "                                           performing commands that normally\n"
-            "                                           trigger a reboot.\n"
-            "  --disable-verity                         Set the disable-verity flag in the\n"
-            "                                           the vbmeta image being flashed.\n"
-            "  --disable-verification                   Set the disable-verification flag in\n"
-            "                                           the vbmeta image being flashed.\n"
+            " -w                         Wipe userdata.\n"
+            " -s SERIAL                  Specify a USB device.\n"
+            " -s tcp|udp:HOST[:PORT]     Specify a network device.\n"
+            // TODO: remove -i?
+            " -i VENDOR_ID               Filter devices by USB vendor id.\n"
+            " -S SIZE[K|M|G]             Use sparse files above this limit (0 to disable).\n"
+            " --slot SLOT                Use SLOT; 'all' for both slots, 'other' for\n"
+            "                            non-current slot (default: current active slot).\n"
+            " --set-active[=SLOT]        Sets the active slot before rebooting.\n"
+            " --skip-secondary           Don't flash secondary slots in flashall/update.\n"
+            " --skip-reboot              Don't reboot device after flashing.\n"
+            " --disable-verity           Sets disable-verity when flashing vbmeta.\n"
+            " --disable-verification     Sets disable-verification when flashing vbmeta.\n"
 #if !defined(_WIN32)
-            "  --wipe-and-use-fbe                       On devices which support it,\n"
-            "                                           erase userdata and cache, and\n"
-            "                                           enable file-based encryption\n"
+            " --wipe-and-use-fbe         Enable file-based encryption, wiping userdata.\n"
 #endif
-            "  --unbuffered                             Do not buffer input or output.\n"
-            "  -v, --verbose                            Verbose output.\n"
-            "  --version                                Display version.\n"
-            "  --header-version                         Set boot image header version while\n"
-            "                                           using flash:raw and boot commands to \n"
-            "                                           to create a boot image.\n"
-            "  -h, --help                               show this message.\n"
+            // TODO: remove --unbuffered?
+            " --unbuffered               Don't buffer input or output.\n"
+            " --verbose, -v              Verbose output.\n"
+            " --version                  Display version.\n"
+            " --help, -h                 Show this message.\n"
         );
     // clang-format off
     return 0;
@@ -810,17 +770,6 @@ static int64_t get_sparse_limit(Transport* transport, int64_t size) {
     return 0;
 }
 
-// Until we get lazy inode table init working in make_ext4fs, we need to
-// erase partitions of type ext4 before flashing a filesystem so no stale
-// inodes are left lying around.  Otherwise, e2fsck gets very upset.
-static bool needs_erase(Transport* transport, const char* partition) {
-    std::string partition_type;
-    if (!fb_getvar(transport, std::string("partition-type:") + partition, &partition_type)) {
-        return false;
-    }
-    return partition_type == "ext4";
-}
-
 static bool load_buf_fd(Transport* transport, int fd, struct fastboot_buffer* buf) {
     int64_t sz = get_file_size(fd);
     if (sz == -1) {
@@ -1134,7 +1083,7 @@ static void set_active(Transport* transport, const std::string& slot_override) {
     }
 }
 
-static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool erase_first, bool skip_secondary) {
+static void do_update(Transport* transport, const char* filename, const std::string& slot_override, bool skip_secondary) {
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
@@ -1192,9 +1141,6 @@ static void do_update(Transport* transport, const char* filename, const std::str
 
         auto update = [&](const std::string& partition) {
             do_update_signature(zip, images[i].sig_name);
-            if (erase_first && needs_erase(transport, partition.c_str())) {
-                fb_queue_erase(partition);
-            }
             flash_buf(partition.c_str(), &buf);
             /* not closing the fd here since the sparse code keeps the fd around
              * but hasn't mmaped data yet. The temporary file will get cleaned up when the
@@ -1227,7 +1173,7 @@ static void do_send_signature(const std::string& fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(Transport* transport, const std::string& slot_override, int erase_first, bool skip_secondary) {
+static void do_flashall(Transport* transport, const std::string& slot_override, bool skip_secondary) {
     std::string fname;
     queue_info_dump();
 
@@ -1274,9 +1220,6 @@ static void do_flashall(Transport* transport, const std::string& slot_override, 
 
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname.c_str());
-            if (erase_first && needs_erase(transport, partition.c_str())) {
-                fb_queue_erase(partition);
-            }
             flash_buf(partition.c_str(), &buf);
         };
         do_for_partitions(transport, images[i].part_name, slot, flashall, false);
@@ -1294,18 +1237,6 @@ static std::string next_arg(std::vector<std::string>* args) {
     std::string result = args->front();
     args->erase(args->begin());
     return result;
-}
-
-static void do_bypass_unlock_command(std::vector<std::string>* args) {
-    if (args->empty()) syntax_error("missing unlock_bootloader request");
-
-    std::string filename = next_arg(args);
-
-    int64_t sz;
-    void* data = load_file(filename.c_str(), &sz);
-    if (data == nullptr) die("could not load '%s': %s", filename.c_str(), strerror(errno));
-    fb_queue_download("unlock_message", data, sz);
-    fb_queue_command("flashing unlock_bootloader", "unlocking bootloader");
 }
 
 static void do_oem_command(const std::string& cmd, std::vector<std::string>* args) {
@@ -1486,11 +1417,9 @@ int main(int argc, char **argv)
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
-    bool wants_reboot_emergency = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
-    bool erase_first = true;
     bool set_fbe_marker = false;
     void *data;
     uint32_t header_version = 0;
@@ -1530,7 +1459,7 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int c = getopt_long(argc, argv, "vwub:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
+        int c = getopt_long(argc, argv, "vwb:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
         if (c < 0) {
             break;
         }
@@ -1581,9 +1510,6 @@ int main(int argc, char **argv)
         case 'S':
             sparse_limit = parse_num(optarg);
             if (sparse_limit < 0) die("invalid sparse limit");
-            break;
-        case 'u':
-            erase_first = false;
             break;
         case 'v':
             set_verbose();
@@ -1707,9 +1633,6 @@ int main(int argc, char **argv)
             std::string partition = next_arg(&args);
 
             auto format = [&](const std::string& partition) {
-                if (erase_first && needs_erase(transport, partition.c_str())) {
-                    fb_queue_erase(partition);
-                }
                 fb_perform_format(transport, partition, 0, type_override, size_override, "");
             };
             do_for_partitions(transport, partition.c_str(), slot_override, format, true);
@@ -1728,9 +1651,6 @@ int main(int argc, char **argv)
                 if (what == "bootloader") {
                     wants_reboot = false;
                     wants_reboot_bootloader = true;
-                } else if (what == "emergency") {
-                    wants_reboot = false;
-                    wants_reboot_emergency = true;
                 } else {
                     syntax_error("unknown reboot target %s", what.c_str());
                 }
@@ -1763,9 +1683,6 @@ int main(int argc, char **argv)
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
 
             auto flash = [&](const std::string &partition) {
-                if (erase_first && needs_erase(transport, partition.c_str())) {
-                    fb_queue_erase(partition);
-                }
                 do_flash(transport, partition.c_str(), fname.c_str());
             };
             do_for_partitions(transport, pname.c_str(), slot_override, flash, true);
@@ -1785,9 +1702,9 @@ int main(int argc, char **argv)
         } else if (command == "flashall") {
             if (slot_override == "all") {
                 fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
-                do_flashall(transport, slot_override, erase_first, true);
+                do_flashall(transport, slot_override, true);
             } else {
-                do_flashall(transport, slot_override, erase_first, skip_secondary);
+                do_flashall(transport, slot_override, skip_secondary);
             }
             wants_reboot = true;
         } else if (command == "update") {
@@ -1799,8 +1716,7 @@ int main(int argc, char **argv)
             if (!args.empty()) {
                 filename = next_arg(&args);
             }
-            do_update(transport, filename.c_str(), slot_override, erase_first,
-                      skip_secondary || slot_all);
+            do_update(transport, filename.c_str(), slot_override, skip_secondary || slot_all);
             wants_reboot = true;
         } else if (command == "set_active") {
             std::string slot = verify_slot(transport, next_arg(&args), false);
@@ -1833,12 +1749,8 @@ int main(int argc, char **argv)
             } else if (args.size() == 1 && (args[0] == "unlock" || args[0] == "lock" ||
                                             args[0] == "unlock_critical" ||
                                             args[0] == "lock_critical" ||
-                                            args[0] == "get_unlock_ability" ||
-                                            args[0] == "get_unlock_bootloader_nonce" ||
-                                            args[0] == "lock_bootloader")) {
+                                            args[0] == "get_unlock_ability")) {
                 do_oem_command("flashing", &args);
-            } else if (args.size() == 2 && args[0] == "unlock_bootloader") {
-                do_bypass_unlock_command(&args);
             } else {
                 syntax_error("unknown 'flashing' command %s", args[0].c_str());
             }
@@ -1872,9 +1784,6 @@ int main(int argc, char **argv)
         fb_queue_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
-        fb_queue_wait_for_disconnect();
-    } else if (wants_reboot_emergency) {
-        fb_queue_command("reboot-emergency", "rebooting into emergency download (EDL) mode");
         fb_queue_wait_for_disconnect();
     }
 

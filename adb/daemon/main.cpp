@@ -19,10 +19,12 @@
 #include "sysdeps.h"
 
 #include <errno.h>
+#include <getopt.h>
+#include <malloc.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
+#include <sys/capability.h>
 #include <sys/prctl.h>
 
 #include <memory>
@@ -49,13 +51,13 @@
 
 static const char* root_seclabel = nullptr;
 
-static void drop_capabilities_bounding_set_if_needed(struct minijail *j) {
+static bool should_drop_capabilities_bounding_set() {
 #if defined(ALLOW_ADBD_ROOT)
     if (__android_log_is_debuggable()) {
-        return;
+        return false;
     }
 #endif
-    minijail_capbset_drop(j, CAP_TO_MASK(CAP_SETUID) | CAP_TO_MASK(CAP_SETGID));
+    return true;
 }
 
 static bool should_drop_privileges() {
@@ -116,12 +118,36 @@ static void drop_privileges(int server_port) {
     // Don't listen on a port (default 5037) if running in secure mode.
     // Don't run as root if running in secure mode.
     if (should_drop_privileges()) {
-        drop_capabilities_bounding_set_if_needed(jail.get());
+        const bool should_drop_caps = should_drop_capabilities_bounding_set();
+
+        if (should_drop_caps) {
+            minijail_use_caps(jail.get(), CAP_TO_MASK(CAP_SETUID) | CAP_TO_MASK(CAP_SETGID));
+        }
 
         minijail_change_gid(jail.get(), AID_SHELL);
         minijail_change_uid(jail.get(), AID_SHELL);
         // minijail_enter() will abort if any priv-dropping step fails.
         minijail_enter(jail.get());
+
+        // Whenever ambient capabilities are being used, minijail cannot
+        // simultaneously drop the bounding capability set to just
+        // CAP_SETUID|CAP_SETGID while clearing the inheritable, effective,
+        // and permitted sets. So we need to do that in two steps.
+        using ScopedCaps =
+            std::unique_ptr<std::remove_pointer<cap_t>::type, std::function<void(cap_t)>>;
+        ScopedCaps caps(cap_get_proc(), &cap_free);
+        if (cap_clear_flag(caps.get(), CAP_INHERITABLE) == -1) {
+            PLOG(FATAL) << "cap_clear_flag(INHERITABLE) failed";
+        }
+        if (cap_clear_flag(caps.get(), CAP_EFFECTIVE) == -1) {
+            PLOG(FATAL) << "cap_clear_flag(PEMITTED) failed";
+        }
+        if (cap_clear_flag(caps.get(), CAP_PERMITTED) == -1) {
+            PLOG(FATAL) << "cap_clear_flag(PEMITTED) failed";
+        }
+        if (cap_set_proc(caps.get()) != 0) {
+            PLOG(FATAL) << "cap_set_proc() failed";
+        }
 
         D("Local port disabled");
     } else {
@@ -213,6 +239,9 @@ int adbd_main(int server_port) {
 }
 
 int main(int argc, char** argv) {
+    // Set M_DECAY_TIME so that our allocations aren't immediately purged on free.
+    mallopt(M_DECAY_TIME, 1);
+
     while (true) {
         static struct option opts[] = {
             {"root_seclabel", required_argument, nullptr, 's'},

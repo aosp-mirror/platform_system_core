@@ -77,7 +77,15 @@ BlockingConnectionAdapter::~BlockingConnectionAdapter() {
     Stop();
 }
 
+static void AssumeLocked(std::mutex& mutex) ASSERT_CAPABILITY(mutex) {}
+
 void BlockingConnectionAdapter::Start() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (started_) {
+        LOG(FATAL) << "BlockingConnectionAdapter(" << this->transport_name_
+                   << "): started multiple times";
+    }
+
     read_thread_ = std::thread([this]() {
         LOG(INFO) << this->transport_name_ << ": read thread spawning";
         while (true) {
@@ -95,7 +103,11 @@ void BlockingConnectionAdapter::Start() {
         LOG(INFO) << this->transport_name_ << ": write thread spawning";
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_);
-            cv_.wait(lock, [this]() { return this->stopped_ || !this->write_queue_.empty(); });
+            cv_.wait(lock, [this]() REQUIRES(mutex_) {
+                return this->stopped_ || !this->write_queue_.empty();
+            });
+
+            AssumeLocked(mutex_);
 
             if (this->stopped_) {
                 return;
@@ -111,25 +123,44 @@ void BlockingConnectionAdapter::Start() {
         }
         std::call_once(this->error_flag_, [this]() { this->error_callback_(this, "write failed"); });
     });
+
+    started_ = true;
 }
 
 void BlockingConnectionAdapter::Stop() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (stopped_) {
-        LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): already stopped";
-        return;
-    }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!started_) {
+            LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): not started";
+            return;
+        }
 
-    stopped_ = true;
-    lock.unlock();
+        if (stopped_) {
+            LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_
+                      << "): already stopped";
+            return;
+        }
+
+        stopped_ = true;
+    }
 
     LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): stopping";
 
     this->underlying_->Close();
-
     this->cv_.notify_one();
-    read_thread_.join();
-    write_thread_.join();
+
+    // Move the threads out into locals with the lock taken, and then unlock to let them exit.
+    std::thread read_thread;
+    std::thread write_thread;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        read_thread = std::move(read_thread_);
+        write_thread = std::move(write_thread_);
+    }
+
+    read_thread.join();
+    write_thread.join();
 
     LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): stopped";
     std::call_once(this->error_flag_, [this]() { this->error_callback_(this, "requested stop"); });
@@ -137,7 +168,7 @@ void BlockingConnectionAdapter::Stop() {
 
 bool BlockingConnectionAdapter::Write(std::unique_ptr<apacket> packet) {
     {
-        std::unique_lock<std::mutex> lock(this->mutex_);
+        std::lock_guard<std::mutex> lock(this->mutex_);
         write_queue_.emplace_back(std::move(packet));
     }
 

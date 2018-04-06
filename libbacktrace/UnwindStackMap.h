@@ -79,6 +79,9 @@ class UnwindStackOfflineMap : public UnwindStackMap {
   bool Build(const std::vector<backtrace_map_t>& maps);
 
   bool CreateProcessMemory(const backtrace_stackinfo_t& stack);
+
+ private:
+  unwindstack::MemoryOfflineBuffer* memory_ = nullptr;
 };
 
 #endif  // _LIBBACKTRACE_UNWINDSTACK_MAP_H
