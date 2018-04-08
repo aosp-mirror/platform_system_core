@@ -3,8 +3,8 @@ cc_binary {
 
     srcs: ["lmkd.c"],
     shared_libs: [
-        "liblog",
         "libcutils",
+        "liblog",
     ],
     static_libs: [
         "libstatslogc",
