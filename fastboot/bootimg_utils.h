@@ -26,17 +26,15 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOT_BOOTIMG_UTILS_H_
-#define _FASTBOOT_BOOTIMG_UTILS_H_
+#pragma once
 
 #include <bootimg.h>
 #include <inttypes.h>
 #include <sys/types.h>
 
-void bootimg_set_cmdline(boot_img_hdr_v1* h, const char* cmdline);
-boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset, void* ramdisk,
-                           int64_t ramdisk_size, off_t ramdisk_offset, void* second,
-                           int64_t second_size, off_t second_offset, size_t page_size, size_t base,
-                           off_t tags_offset, uint32_t header_version, int64_t* bootimg_size);
+#include <string>
 
-#endif
+boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, void* ramdisk, int64_t ramdisk_size,
+                           void* second, int64_t second_size, size_t base,
+                           const boot_img_hdr_v1& src, int64_t* bootimg_size);
+void bootimg_set_cmdline(boot_img_hdr_v1* h, const std::string& cmdline);
