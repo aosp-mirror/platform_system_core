@@ -48,10 +48,8 @@
 using android::base::StringPrintf;
 
 static bool should_use_fs_config(const std::string& path) {
-    // TODO: use fs_config to configure permissions on /data.
-    return android::base::StartsWith(path, "/system/") ||
-           android::base::StartsWith(path, "/vendor/") ||
-           android::base::StartsWith(path, "/oem/");
+    // TODO: use fs_config to configure permissions on /data too.
+    return !android::base::StartsWith(path, "/data/");
 }
 
 static bool update_capabilities(const char* path, uint64_t capabilities) {
