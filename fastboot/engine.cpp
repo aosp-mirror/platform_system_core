@@ -42,6 +42,8 @@
 
 #include <android-base/stringprintf.h>
 
+#include "transport.h"
+
 enum Op {
     OP_DOWNLOAD,
     OP_COMMAND,
