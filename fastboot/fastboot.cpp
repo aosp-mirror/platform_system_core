@@ -1475,24 +1475,9 @@ int FastBoot::Main(int argc, char* argv[]) {
             } else if (name == "kernel-offset") {
                 g_boot_img_hdr.kernel_addr = strtoul(optarg, 0, 16);
             } else if (name == "os-patch-level") {
-                unsigned year, month, day;
-                if (sscanf(optarg, "%u-%u-%u", &year, &month, &day) != 3) {
-                    syntax_error("OS patch level should be YYYY-MM-DD: %s", optarg);
-                }
-                if (year < 2000 || year >= 2128) syntax_error("year out of range: %d", year);
-                if (month < 1 || month > 12) syntax_error("month out of range: %d", month);
-                g_boot_img_hdr.SetOsPatchLevel(year, month);
+                ParseOsPatchLevel(&g_boot_img_hdr, optarg);
             } else if (name == "os-version") {
-                unsigned major = 0, minor = 0, patch = 0;
-                std::vector<std::string> versions = android::base::Split(optarg, ".");
-                if (versions.size() < 1 || versions.size() > 3 ||
-                    (versions.size() >= 1 && !android::base::ParseUint(versions[0], &major)) ||
-                    (versions.size() >= 2 && !android::base::ParseUint(versions[1], &minor)) ||
-                    (versions.size() == 3 && !android::base::ParseUint(versions[2], &patch)) ||
-                    (major > 0x7f || minor > 0x7f || patch > 0x7f)) {
-                    syntax_error("bad OS version: %s", optarg);
-                }
-                g_boot_img_hdr.SetOsVersion(major, minor, patch);
+                ParseOsVersion(&g_boot_img_hdr, optarg);
             } else if (name == "page-size") {
                 g_boot_img_hdr.page_size = strtoul(optarg, nullptr, 0);
                 if (g_boot_img_hdr.page_size == 0) die("invalid page size");
@@ -1800,4 +1785,27 @@ int FastBoot::Main(int argc, char* argv[]) {
     int status = fb_execute_queue(transport) ? EXIT_FAILURE : EXIT_SUCCESS;
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
     return status;
+}
+
+void FastBoot::ParseOsPatchLevel(boot_img_hdr_v1* hdr, const char* arg) {
+    unsigned year, month, day;
+    if (sscanf(arg, "%u-%u-%u", &year, &month, &day) != 3) {
+        syntax_error("OS patch level should be YYYY-MM-DD: %s", arg);
+    }
+    if (year < 2000 || year >= 2128) syntax_error("year out of range: %d", year);
+    if (month < 1 || month > 12) syntax_error("month out of range: %d", month);
+    hdr->SetOsPatchLevel(year, month);
+}
+
+void FastBoot::ParseOsVersion(boot_img_hdr_v1* hdr, const char* arg) {
+    unsigned major = 0, minor = 0, patch = 0;
+    std::vector<std::string> versions = android::base::Split(arg, ".");
+    if (versions.size() < 1 || versions.size() > 3 ||
+        (versions.size() >= 1 && !android::base::ParseUint(versions[0], &major)) ||
+        (versions.size() >= 2 && !android::base::ParseUint(versions[1], &minor)) ||
+        (versions.size() == 3 && !android::base::ParseUint(versions[2], &patch)) ||
+        (major > 0x7f || minor > 0x7f || patch > 0x7f)) {
+        syntax_error("bad OS version: %s", arg);
+    }
+    hdr->SetOsVersion(major, minor, patch);
 }

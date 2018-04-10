@@ -57,10 +57,10 @@ const std::string fb_get_error() {
 }
 
 static int64_t check_response(Transport* transport, uint32_t size, char* response) {
-    char status[65];
+    char status[FB_RESPONSE_SZ + 1];
 
     while (true) {
-        int r = transport->Read(status, 64);
+        int r = transport->Read(status, FB_RESPONSE_SZ);
         if (r < 0) {
             g_error = android::base::StringPrintf("status read failed (%s)", strerror(errno));
             transport->Close();
@@ -120,7 +120,7 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
 
 static int64_t _command_start(Transport* transport, const std::string& cmd, uint32_t size,
                               char* response) {
-    if (cmd.size() > 64) {
+    if (cmd.size() > FB_COMMAND_SZ) {
         g_error = android::base::StringPrintf("command too large (%zu)", cmd.size());
         return -1;
     }

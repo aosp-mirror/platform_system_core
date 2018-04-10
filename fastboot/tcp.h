@@ -26,8 +26,7 @@
  * SUCH DAMAGE.
  */
 
-#ifndef TCP_H_
-#define TCP_H_
+#pragma once
 
 #include <memory>
 #include <string>
@@ -55,5 +54,3 @@ std::unique_ptr<Transport> Connect(std::unique_ptr<Socket> sock, std::string* er
 }  // namespace internal
 
 }  // namespace tcp
-
-#endif  // TCP_H_
