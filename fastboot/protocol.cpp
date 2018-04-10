@@ -75,13 +75,13 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
 
         if (!memcmp(status, "INFO", 4)) {
-            verbose("received INFO %s", status + 4);
+            verbose("received INFO \"%s\"", status + 4);
             fprintf(stderr, "(bootloader) %s\n", status + 4);
             continue;
         }
 
         if (!memcmp(status, "OKAY", 4)) {
-            verbose("received OKAY %s", status + 4);
+            verbose("received OKAY \"%s\"", status + 4);
             if (response) {
                 strcpy(response, status + 4);
             }
@@ -89,7 +89,7 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
 
         if (!memcmp(status, "FAIL", 4)) {
-            verbose("received FAIL %s", status + 4);
+            verbose("received FAIL \"%s\"", status + 4);
             if (r > 4) {
                 g_error = android::base::StringPrintf("remote: %s", status + 4);
             } else {
