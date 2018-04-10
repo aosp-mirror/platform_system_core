@@ -34,16 +34,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-void bootimg_set_cmdline(boot_img_hdr_v1* h, const char* cmdline) {
-    if (strlen(cmdline) >= sizeof(h->cmdline)) die("command line too large: %zu", strlen(cmdline));
-    strcpy(reinterpret_cast<char*>(h->cmdline), cmdline);
+void bootimg_set_cmdline(boot_img_hdr_v1* h, const std::string& cmdline) {
+    if (cmdline.size() >= sizeof(h->cmdline)) die("command line too large: %zu", cmdline.size());
+    strcpy(reinterpret_cast<char*>(h->cmdline), cmdline.c_str());
 }
 
-boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offset, void* ramdisk,
-                           int64_t ramdisk_size, off_t ramdisk_offset, void* second,
-                           int64_t second_size, off_t second_offset, size_t page_size, size_t base,
-                           off_t tags_offset, uint32_t header_version, int64_t* bootimg_size) {
-    size_t page_mask = page_size - 1;
+boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, void* ramdisk, int64_t ramdisk_size,
+                           void* second, int64_t second_size, size_t base,
+                           const boot_img_hdr_v1& src, int64_t* bootimg_size) {
+    const size_t page_mask = src.page_size - 1;
 
     int64_t header_actual = sizeof(boot_img_hdr_v1) & (~page_mask);
     int64_t kernel_actual = (kernel_size + page_mask) & (~page_mask);
@@ -53,30 +52,26 @@ boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, off_t kernel_offse
     *bootimg_size = header_actual + kernel_actual + ramdisk_actual + second_actual;
 
     boot_img_hdr_v1* hdr = reinterpret_cast<boot_img_hdr_v1*>(calloc(*bootimg_size, 1));
-    if (hdr == nullptr) {
-        return hdr;
-    }
+    if (hdr == nullptr) die("couldn't allocate boot image: %" PRId64 " bytes", *bootimg_size);
 
+    *hdr = src;
     memcpy(hdr->magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
 
     hdr->kernel_size =  kernel_size;
     hdr->ramdisk_size = ramdisk_size;
     hdr->second_size =  second_size;
 
-    hdr->kernel_addr =  base + kernel_offset;
-    hdr->ramdisk_addr = base + ramdisk_offset;
-    hdr->second_addr =  base + second_offset;
-    hdr->tags_addr =    base + tags_offset;
+    hdr->kernel_addr += base;
+    hdr->ramdisk_addr += base;
+    hdr->second_addr += base;
+    hdr->tags_addr += base;
 
-    hdr->page_size =    page_size;
-
-    if (header_version) {
-        hdr->header_version = header_version;
+    if (hdr->header_version != 0) {
         hdr->header_size = sizeof(boot_img_hdr_v1);
     }
 
-    memcpy(hdr->magic + page_size, kernel, kernel_size);
-    memcpy(hdr->magic + page_size + kernel_actual, ramdisk, ramdisk_size);
-    memcpy(hdr->magic + page_size + kernel_actual + ramdisk_actual, second, second_size);
+    memcpy(hdr->magic + hdr->page_size, kernel, kernel_size);
+    memcpy(hdr->magic + hdr->page_size + kernel_actual, ramdisk, ramdisk_size);
+    memcpy(hdr->magic + hdr->page_size + kernel_actual + ramdisk_actual, second, second_size);
     return hdr;
 }

@@ -76,9 +76,9 @@ using android::base::unique_fd;
 char cur_product[FB_RESPONSE_SZ + 1];
 
 static const char* serial = nullptr;
-static const char* cmdline = nullptr;
+
 static unsigned short vendor_id = 0;
-static int long_listing = 0;
+static bool g_long_listing = false;
 // Don't resparse files in too-big chunks.
 // libsparse will support INT_MAX, but this results in large allocations, so
 // let's keep it at 1GB to avoid memory pressure on the host.
@@ -86,12 +86,9 @@ static constexpr int64_t RESPARSE_LIMIT = 1 * 1024 * 1024 * 1024;
 static int64_t sparse_limit = -1;
 static int64_t target_sparse_limit = -1;
 
-static unsigned page_size = 2048;
-static unsigned base_addr      = 0x10000000;
-static unsigned kernel_offset  = 0x00008000;
-static unsigned ramdisk_offset = 0x01000000;
-static unsigned second_offset  = 0x00f00000;
-static unsigned tags_offset    = 0x00000100;
+static unsigned g_base_addr = 0x10000000;
+static boot_img_hdr_v1 g_boot_img_hdr = {};
+static std::string g_cmdline;
 
 static bool g_disable_verity = false;
 static bool g_disable_verification = false;
@@ -223,7 +220,7 @@ static int list_devices_callback(usb_ifc_info* info) {
             serial = "????????????";
         }
         // output compatible with "adb devices"
-        if (!long_listing) {
+        if (!g_long_listing) {
             printf("%s\tfastboot", serial.c_str());
         } else {
             printf("%-22s fastboot", serial.c_str());
@@ -360,14 +357,18 @@ static int show_help() {
             "                            Download and boot kernel from RAM.\n"
             " flash:raw PARTITION KERNEL [RAMDISK [SECOND]]\n"
             "                            Create boot image and flash it.\n"
-            // TODO: give -c a long option, and remove the short options for this group?
-            " -c CMDLINE                 Override kernel command line.\n"
+            " --cmdline CMDLINE          Override kernel command line.\n"
             " --base ADDRESS             Set kernel base address (default: 0x10000000).\n"
             " --kernel-offset            Set kernel offset (default: 0x00008000).\n"
             " --ramdisk-offset           Set ramdisk offset (default: 0x01000000).\n"
             " --tags-offset              Set tags offset (default: 0x00000100).\n"
             " --page-size BYTES          Set flash page size (default: 2048).\n"
             " --header-version VERSION   Set boot image header version.\n"
+            " --os-version MAJOR[.MINOR[.PATCH]]\n"
+            "                            Set boot image OS version (default: 0.0.0).\n"
+            " --os-patch-level YYYY-MM-DD\n"
+            "                            Set boot image OS security patch level.\n"
+            // TODO: still missing: `second_addr`, `name`, `id`, `recovery_dtbo_*`.
             "\n"
             // TODO: what device(s) used this? is there any documentation?
             //" continue                               Continue with autoboot.\n"
@@ -404,8 +405,7 @@ static int show_help() {
 }
 
 static void* load_bootable_image(const std::string& kernel, const std::string& ramdisk,
-                                 const std::string& second_stage, int64_t* sz,
-                                 const char* cmdline, uint32_t header_version) {
+                                 const std::string& second_stage, int64_t* sz) {
     int64_t ksize;
     void* kdata = load_file(kernel.c_str(), &ksize);
     if (kdata == nullptr) die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
@@ -415,12 +415,14 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
         die("cannot load '%s': too short", kernel.c_str());
     }
     if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
-        if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kdata), cmdline);
+        if (!g_cmdline.empty()) {
+            bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kdata), g_cmdline);
+        }
         uint32_t header_version_existing =
                 reinterpret_cast<boot_img_hdr_v1*>(kdata)->header_version;
-        if (header_version != header_version_existing) {
+        if (g_boot_img_hdr.header_version != header_version_existing) {
             die("header version mismatch, expected: %" PRIu32 " found %" PRIu32 "",
-                header_version, header_version_existing);
+                g_boot_img_hdr.header_version, header_version_existing);
         }
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
@@ -444,16 +446,12 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
     }
 
     fprintf(stderr,"creating boot image...\n");
-    int64_t bsize = 0;
-    boot_img_hdr_v1* bdata = mkbootimg(kdata, ksize, kernel_offset,
-                      rdata, rsize, ramdisk_offset,
-                      sdata, ssize, second_offset,
-                      page_size, base_addr, tags_offset, header_version, &bsize);
+    boot_img_hdr_v1* bdata = mkbootimg(kdata, ksize, rdata, rsize, sdata, ssize,
+                                       g_base_addr, g_boot_img_hdr, sz);
     if (bdata == nullptr) die("failed to create boot.img");
 
-    if (cmdline) bootimg_set_cmdline(bdata, cmdline);
-    fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", bsize);
-    *sz = bsize;
+    if (!g_cmdline.empty()) bootimg_set_cmdline(bdata, g_cmdline);
+    fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", *sz);
 
     return bdata;
 }
@@ -1422,34 +1420,37 @@ int main(int argc, char **argv)
     bool skip_secondary = false;
     bool set_fbe_marker = false;
     void *data;
-    uint32_t header_version = 0;
     int64_t sz;
     int longindex;
     std::string slot_override;
     std::string next_active;
 
+    g_boot_img_hdr.kernel_addr = 0x00008000;
+    g_boot_img_hdr.ramdisk_addr = 0x01000000;
+    g_boot_img_hdr.second_addr = 0x00f00000;
+    g_boot_img_hdr.tags_addr = 0x00000100;
+    g_boot_img_hdr.page_size = 2048;
+
     const struct option longopts[] = {
-        {"base", required_argument, 0, 'b'},
-        {"kernel_offset", required_argument, 0, 'k'},
-        {"kernel-offset", required_argument, 0, 'k'},
-        {"page_size", required_argument, 0, 'n'},
-        {"page-size", required_argument, 0, 'n'},
-        {"ramdisk_offset", required_argument, 0, 'r'},
-        {"ramdisk-offset", required_argument, 0, 'r'},
-        {"tags_offset", required_argument, 0, 't'},
-        {"tags-offset", required_argument, 0, 't'},
+        {"base", required_argument, 0, 0},
+        {"cmdline", required_argument, 0, 0},
+        {"disable-verification", no_argument, 0, 0},
+        {"disable-verity", no_argument, 0, 0},
+        {"header-version", required_argument, 0, 0},
         {"help", no_argument, 0, 'h'},
-        {"unbuffered", no_argument, 0, 0},
-        {"slot", required_argument, 0, 0},
-        {"set_active", optional_argument, 0, 'a'},
+        {"kernel-offset", required_argument, 0, 0},
+        {"os-patch-level", required_argument, 0, 0},
+        {"os-version", required_argument, 0, 0},
+        {"page-size", required_argument, 0, 0},
+        {"ramdisk-offset", required_argument, 0, 0},
         {"set-active", optional_argument, 0, 'a'},
-        {"skip-secondary", no_argument, 0, 0},
         {"skip-reboot", no_argument, 0, 0},
+        {"skip-secondary", no_argument, 0, 0},
+        {"slot", required_argument, 0, 0},
+        {"tags-offset", required_argument, 0, 0},
+        {"unbuffered", no_argument, 0, 0},
         {"verbose", no_argument, 0, 'v'},
         {"version", no_argument, 0, 0},
-        {"disable-verity", no_argument, 0, 0},
-        {"disable-verification", no_argument, 0, 0},
-        {"header-version", required_argument, 0, 0},
 #if !defined(_WIN32)
         {"wipe-and-use-fbe", no_argument, 0, 0},
 #endif
@@ -1458,98 +1459,108 @@ int main(int argc, char **argv)
 
     serial = getenv("ANDROID_SERIAL");
 
-    while (1) {
-        int c = getopt_long(argc, argv, "vwb:k:n:r:t:s:S:lc:i:m:ha::", longopts, &longindex);
-        if (c < 0) {
-            break;
-        }
-        /* Alphabetical cases */
-        switch (c) {
-        case 'a':
-            wants_set_active = true;
-            if (optarg)
-                next_active = optarg;
-            break;
-        case 'b':
-            base_addr = strtoul(optarg, 0, 16);
-            break;
-        case 'c':
-            cmdline = optarg;
-            break;
-        case 'h':
-            return show_help();
-        case 'i': {
-                char *endptr = nullptr;
-                unsigned long val;
-
-                val = strtoul(optarg, &endptr, 0);
-                if (!endptr || *endptr != '\0' || (val & ~0xffff))
-                    die("invalid vendor id '%s'", optarg);
-                vendor_id = (unsigned short)val;
-                break;
-            }
-        case 'k':
-            kernel_offset = strtoul(optarg, 0, 16);
-            break;
-        case 'l':
-            long_listing = 1;
-            break;
-        case 'n':
-            page_size = (unsigned)strtoul(optarg, nullptr, 0);
-            if (!page_size) die("invalid page size");
-            break;
-        case 'r':
-            ramdisk_offset = strtoul(optarg, 0, 16);
-            break;
-        case 't':
-            tags_offset = strtoul(optarg, 0, 16);
-            break;
-        case 's':
-            serial = optarg;
-            break;
-        case 'S':
-            sparse_limit = parse_num(optarg);
-            if (sparse_limit < 0) die("invalid sparse limit");
-            break;
-        case 'v':
-            set_verbose();
-            break;
-        case 'w':
-            wants_wipe = true;
-            break;
-        case '?':
-            return 1;
-        case 0:
-            if (strcmp("unbuffered", longopts[longindex].name) == 0) {
+    int c;
+    while ((c = getopt_long(argc, argv, "a::hi:ls:S:vw", longopts, &longindex)) != -1) {
+        if (c == 0) {
+            std::string name{longopts[longindex].name};
+            if (name == "base") {
+                g_base_addr = strtoul(optarg, 0, 16);
+            } else if (name == "cmdline") {
+                g_cmdline = optarg;
+            } else if (name == "disable-verification") {
+                g_disable_verification = true;
+            } else if (name == "disable-verity") {
+                g_disable_verity = true;
+            } else if (name == "header-version") {
+                g_boot_img_hdr.header_version = strtoul(optarg, nullptr, 0);
+            } else if (name == "kernel-offset") {
+                g_boot_img_hdr.kernel_addr = strtoul(optarg, 0, 16);
+            } else if (name == "os-patch-level") {
+                unsigned year, month, day;
+                if (sscanf(optarg, "%u-%u-%u", &year, &month, &day) != 3) {
+                    syntax_error("OS patch level should be YYYY-MM-DD: %s", optarg);
+                }
+                if (year < 2000 || year >= 2128) syntax_error("year out of range: %d", year);
+                if (month < 1 || month > 12) syntax_error("month out of range: %d", month);
+                g_boot_img_hdr.SetOsPatchLevel(year, month);
+            } else if (name == "os-version") {
+                unsigned major = 0, minor = 0, patch = 0;
+                std::vector<std::string> versions = android::base::Split(optarg, ".");
+                if (versions.size() < 1 || versions.size() > 3 ||
+                    (versions.size() >= 1 && !android::base::ParseUint(versions[0], &major)) ||
+                    (versions.size() >= 2 && !android::base::ParseUint(versions[1], &minor)) ||
+                    (versions.size() == 3 && !android::base::ParseUint(versions[2], &patch)) ||
+                    (major > 0x7f || minor > 0x7f || patch > 0x7f)) {
+                    syntax_error("bad OS version: %s", optarg);
+                }
+                g_boot_img_hdr.SetOsVersion(major, minor, patch);
+            } else if (name == "page-size") {
+                g_boot_img_hdr.page_size = strtoul(optarg, nullptr, 0);
+                if (g_boot_img_hdr.page_size == 0) die("invalid page size");
+            } else if (name == "ramdisk-offset") {
+                g_boot_img_hdr.ramdisk_addr = strtoul(optarg, 0, 16);
+            } else if (name == "skip-reboot") {
+                skip_reboot = true;
+            } else if (name == "skip-secondary") {
+                skip_secondary = true;
+            } else if (name == "slot") {
+                slot_override = optarg;
+            } else if (name == "tags-offset") {
+                g_boot_img_hdr.tags_addr = strtoul(optarg, 0, 16);
+            } else if (name == "unbuffered") {
                 setvbuf(stdout, nullptr, _IONBF, 0);
                 setvbuf(stderr, nullptr, _IONBF, 0);
-            } else if (strcmp("version", longopts[longindex].name) == 0) {
+            } else if (name == "version") {
                 fprintf(stdout, "fastboot version %s\n", FASTBOOT_VERSION);
                 fprintf(stdout, "Installed as %s\n", android::base::GetExecutablePath().c_str());
                 return 0;
-            } else if (strcmp("slot", longopts[longindex].name) == 0) {
-                slot_override = std::string(optarg);
-            } else if (strcmp("skip-secondary", longopts[longindex].name) == 0 ) {
-                skip_secondary = true;
-            } else if (strcmp("skip-reboot", longopts[longindex].name) == 0 ) {
-                skip_reboot = true;
-            } else if (strcmp("disable-verity", longopts[longindex].name) == 0 ) {
-                g_disable_verity = true;
-            } else if (strcmp("disable-verification", longopts[longindex].name) == 0 ) {
-                g_disable_verification = true;
 #if !defined(_WIN32)
-            } else if (strcmp("wipe-and-use-fbe", longopts[longindex].name) == 0) {
+            } else if (name == "wipe-and-use-fbe") {
                 wants_wipe = true;
                 set_fbe_marker = true;
 #endif
-            } else if (strcmp("header-version", longopts[longindex].name) == 0) {
-                header_version = strtoul(optarg, nullptr, 0);
             } else {
                 die("unknown option %s", longopts[longindex].name);
             }
-            break;
-        default:
-            abort();
+        } else {
+            switch (c) {
+                case 'a':
+                    wants_set_active = true;
+                    if (optarg) next_active = optarg;
+                    break;
+                case 'h':
+                    return show_help();
+                case 'i':
+                    {
+                        char *endptr = nullptr;
+                        unsigned long val = strtoul(optarg, &endptr, 0);
+                        if (!endptr || *endptr != '\0' || (val & ~0xffff)) {
+                            die("invalid vendor id '%s'", optarg);
+                        }
+                        vendor_id = (unsigned short)val;
+                        break;
+                    }
+                case 'l':
+                    g_long_listing = true;
+                    break;
+                case 's':
+                    serial = optarg;
+                    break;
+                case 'S':
+                    sparse_limit = parse_num(optarg);
+                    if (sparse_limit < 0) die("invalid sparse limit");
+                    break;
+                case 'v':
+                    set_verbose();
+                    break;
+                case 'w':
+                    wants_wipe = true;
+                    break;
+                case '?':
+                    return 1;
+                default:
+                    abort();
+            }
         }
     }
 
@@ -1668,7 +1679,7 @@ int main(int argc, char **argv)
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline, header_version);
+            data = load_bootable_image(kernel, ramdisk, second_stage, &sz);
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
         } else if (command == "flash") {
@@ -1694,7 +1705,7 @@ int main(int argc, char **argv)
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz, cmdline, header_version);
+            data = load_bootable_image(kernel, ramdisk, second_stage, &sz);
             auto flashraw = [&](const std::string& partition) {
                 fb_queue_flash(partition, data, sz);
             };
