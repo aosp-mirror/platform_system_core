@@ -881,46 +881,18 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
     }
 }
 
-static std::string get_current_slot(Transport* transport)
-{
+static std::string get_current_slot(Transport* transport) {
     std::string current_slot;
-    if (fb_getvar(transport, "current-slot", &current_slot)) {
-        if (current_slot == "_a") return "a"; // Legacy support
-        if (current_slot == "_b") return "b"; // Legacy support
-        return current_slot;
-    }
-    return "";
-}
-
-// Legacy support
-static std::vector<std::string> get_suffixes_obsolete(Transport* transport) {
-    std::vector<std::string> suffixes;
-    std::string suffix_list;
-    if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
-        return suffixes;
-    }
-    suffixes = android::base::Split(suffix_list, ",");
-    // Unfortunately some devices will return an error message in the
-    // guise of a valid value. If we only see only one suffix, it's probably
-    // not real.
-    if (suffixes.size() == 1) {
-        suffixes.clear();
-    }
-    return suffixes;
-}
-
-// Legacy support
-static bool supports_AB_obsolete(Transport* transport) {
-  return !get_suffixes_obsolete(transport).empty();
+    if (!fb_getvar(transport, "current-slot", &current_slot)) return "";
+    return current_slot;
 }
 
 static int get_slot_count(Transport* transport) {
     std::string var;
-    int count;
-    if (!fb_getvar(transport, "slot-count", &var)) {
-        if (supports_AB_obsolete(transport)) return 2; // Legacy support
+    int count = 0;
+    if (!fb_getvar(transport, "slot-count", &var) || !android::base::ParseInt(var, &count)) {
+        return 0;
     }
-    if (!android::base::ParseInt(var, &count)) return 0;
     return count;
 }
 
@@ -950,8 +922,6 @@ static std::string get_other_slot(Transport* transport) {
 
 static std::string verify_slot(Transport* transport, const std::string& slot_name, bool allow_all) {
     std::string slot = slot_name;
-    if (slot == "_a") slot = "a"; // Legacy support
-    if (slot == "_b") slot = "b"; // Legacy support
     if (slot == "all") {
         if (allow_all) {
             return "all";
@@ -1063,14 +1033,9 @@ static void do_update_signature(ZipArchiveHandle zip, const char* filename) {
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
 static void set_active(Transport* transport, const std::string& slot_override) {
+    if (!supports_AB(transport)) return;
+
     std::string separator = "";
-    if (!supports_AB(transport)) {
-        if (supports_AB_obsolete(transport)) {
-            separator = "_"; // Legacy support
-        } else {
-            return;
-        }
-    }
     if (slot_override != "") {
         fb_set_active(separator + slot_override);
     } else {
@@ -1569,9 +1534,6 @@ int FastBoot::Main(int argc, char* argv[]) {
 
     const double start = now();
 
-    if (!supports_AB(transport) && supports_AB_obsolete(transport)) {
-        fprintf(stderr, "Warning: Device A/B support is outdated. Bootloader update required.\n");
-    }
     if (slot_override != "") slot_override = verify_slot(transport, slot_override);
     if (next_active != "") next_active = verify_slot(transport, next_active, false);
 
@@ -1715,15 +1677,6 @@ int FastBoot::Main(int argc, char* argv[]) {
             wants_reboot = true;
         } else if (command == "set_active") {
             std::string slot = verify_slot(transport, next_arg(&args), false);
-
-            // Legacy support: verify_slot() removes leading underscores, we need to put them back
-            // in for old bootloaders. Legacy bootloaders do not have the slot-count variable but
-            // do have slot-suffixes.
-            std::string var;
-            if (!fb_getvar(transport, "slot-count", &var) &&
-                    fb_getvar(transport, "slot-suffixes", &var)) {
-                slot = "_" + slot;
-            }
             fb_set_active(slot);
         } else if (command == "stage") {
             std::string filename = next_arg(&args);
