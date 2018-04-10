@@ -1027,13 +1027,12 @@ static void do_update_signature(ZipArchiveHandle zip, const char* filename) {
 static void set_active(Transport* transport, const std::string& slot_override) {
     if (!supports_AB(transport)) return;
 
-    std::string separator = "";
     if (slot_override != "") {
-        fb_set_active(separator + slot_override);
+        fb_set_active(slot_override);
     } else {
         std::string current_slot = get_current_slot(transport);
         if (current_slot != "") {
-            fb_set_active(separator + current_slot);
+            fb_set_active(current_slot);
         }
     }
 }
