@@ -34,8 +34,7 @@
 
 #include <string>
 
-#include "transport.h"
-
+class Transport;
 struct sparse_file;
 
 /* protocol.c - fastboot protocol */
@@ -96,5 +95,10 @@ void verbose(const char* fmt, ...) __attribute__((__format__(FASTBOOT_FORMAT_ARC
 
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
+
+class FastBoot {
+  public:
+    int Main(int argc, char* argv[]);
+};
 
 #endif
