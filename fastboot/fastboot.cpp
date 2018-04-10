@@ -77,7 +77,6 @@ char cur_product[FB_RESPONSE_SZ + 1];
 
 static const char* serial = nullptr;
 
-static unsigned short vendor_id = 0;
 static bool g_long_listing = false;
 // Don't resparse files in too-big chunks.
 // libsparse will support INT_MAX, but this results in large allocations, so
@@ -190,11 +189,6 @@ static void* load_file(const std::string& path, int64_t* sz) {
 }
 
 static int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
-    // Require a matching vendor id if the user specified one with -i.
-    if (vendor_id != 0 && info->dev_vendor != vendor_id) {
-        return -1;
-    }
-
     if (info->ifc_class != 0xff || info->ifc_subclass != 0x42 || info->ifc_protocol != 0x03) {
         return -1;
     }
@@ -381,8 +375,6 @@ static int show_help() {
             " -w                         Wipe userdata.\n"
             " -s SERIAL                  Specify a USB device.\n"
             " -s tcp|udp:HOST[:PORT]     Specify a network device.\n"
-            // TODO: remove -i?
-            " -i VENDOR_ID               Filter devices by USB vendor id.\n"
             " -S SIZE[K|M|G]             Use sparse files above this limit (0 to disable).\n"
             " --slot SLOT                Use SLOT; 'all' for both slots, 'other' for\n"
             "                            non-current slot (default: current active slot).\n"
@@ -1424,7 +1416,7 @@ int FastBoot::Main(int argc, char* argv[]) {
     serial = getenv("ANDROID_SERIAL");
 
     int c;
-    while ((c = getopt_long(argc, argv, "a::hi:ls:S:vw", longopts, &longindex)) != -1) {
+    while ((c = getopt_long(argc, argv, "a::hls:S:vw", longopts, &longindex)) != -1) {
         if (c == 0) {
             std::string name{longopts[longindex].name};
             if (name == "base") {
@@ -1479,16 +1471,6 @@ int FastBoot::Main(int argc, char* argv[]) {
                     break;
                 case 'h':
                     return show_help();
-                case 'i':
-                    {
-                        char *endptr = nullptr;
-                        unsigned long val = strtoul(optarg, &endptr, 0);
-                        if (!endptr || *endptr != '\0' || (val & ~0xffff)) {
-                            die("invalid vendor id '%s'", optarg);
-                        }
-                        vendor_id = (unsigned short)val;
-                        break;
-                    }
                 case 'l':
                     g_long_listing = true;
                     break;
