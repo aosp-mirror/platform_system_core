@@ -1410,8 +1410,7 @@ failed:
     fprintf(stderr, "FAILED (%s)\n", fb_get_error().c_str());
 }
 
-int main(int argc, char **argv)
-{
+int FastBoot::Main(int argc, char* argv[]) {
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
