@@ -26,8 +26,7 @@
  * SUCH DAMAGE.
  */
 
-#ifndef SOCKET_MOCK_H_
-#define SOCKET_MOCK_H_
+#pragma once
 
 #include <memory>
 #include <queue>
@@ -97,5 +96,3 @@ class SocketMock : public Socket {
 
     DISALLOW_COPY_AND_ASSIGN(SocketMock);
 };
-
-#endif  // SOCKET_MOCK_H_

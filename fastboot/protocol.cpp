@@ -57,10 +57,10 @@ const std::string fb_get_error() {
 }
 
 static int64_t check_response(Transport* transport, uint32_t size, char* response) {
-    char status[65];
+    char status[FB_RESPONSE_SZ + 1];
 
     while (true) {
-        int r = transport->Read(status, 64);
+        int r = transport->Read(status, FB_RESPONSE_SZ);
         if (r < 0) {
             g_error = android::base::StringPrintf("status read failed (%s)", strerror(errno));
             transport->Close();
@@ -75,13 +75,13 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
 
         if (!memcmp(status, "INFO", 4)) {
-            verbose("received INFO %s", status + 4);
+            verbose("received INFO \"%s\"", status + 4);
             fprintf(stderr, "(bootloader) %s\n", status + 4);
             continue;
         }
 
         if (!memcmp(status, "OKAY", 4)) {
-            verbose("received OKAY %s", status + 4);
+            verbose("received OKAY \"%s\"", status + 4);
             if (response) {
                 strcpy(response, status + 4);
             }
@@ -89,7 +89,7 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
 
         if (!memcmp(status, "FAIL", 4)) {
-            verbose("received FAIL %s", status + 4);
+            verbose("received FAIL \"%s\"", status + 4);
             if (r > 4) {
                 g_error = android::base::StringPrintf("remote: %s", status + 4);
             } else {
@@ -120,7 +120,7 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
 
 static int64_t _command_start(Transport* transport, const std::string& cmd, uint32_t size,
                               char* response) {
-    if (cmd.size() > 64) {
+    if (cmd.size() > FB_COMMAND_SZ) {
         g_error = android::base::StringPrintf("command too large (%zu)", cmd.size());
         return -1;
     }
