@@ -683,7 +683,7 @@ void move_backward_type(wp<TYPE>* d, wp<TYPE> const* s, size_t n) {
     ReferenceMover::move_references(d, s, n);
 }
 
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 
