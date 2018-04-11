@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef TRANSPORT_H_
-#define TRANSPORT_H_
+#pragma once
 
 #include <android-base/macros.h>
 
@@ -44,5 +43,3 @@ class Transport {
   private:
     DISALLOW_COPY_AND_ASSIGN(Transport);
 };
-
-#endif  // TRANSPORT_H_

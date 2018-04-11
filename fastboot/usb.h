@@ -26,8 +26,7 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _USB_H_
-#define _USB_H_
+#pragma once
 
 #include "transport.h"
 
@@ -56,5 +55,3 @@ struct usb_ifc_info {
 typedef int (*ifc_match_func)(usb_ifc_info *ifc);
 
 Transport* usb_open(ifc_match_func callback);
-
-#endif
