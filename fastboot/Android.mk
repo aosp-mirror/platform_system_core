@@ -83,6 +83,7 @@ LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_CFLAGS := $(fastboot_cflags)
 LOCAL_CFLAGS_darwin := $(fastboot_cflags_darwin)
 LOCAL_CXX_STL := $(fastboot_stl)
+LOCAL_HEADER_LIBRARIES := bootimg_headers
 LOCAL_LDLIBS_darwin := $(fastboot_ldflags_darwin)
 LOCAL_LDLIBS_windows := $(fastboot_ldlibs_windows)
 LOCAL_REQUIRED_MODULES := mke2fs make_f2fs
@@ -93,8 +94,6 @@ LOCAL_SRC_FILES := main.cpp
 LOCAL_SHARED_LIBRARIES := $(fastboot_shared_libs)
 LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
 LOCAL_STATIC_LIBRARIES := libfastboot $(fastboot_static_libs)
-LOCAL_STATIC_LIBRARIES_darwin := libselinux
-LOCAL_STATIC_LIBRARIES_linux := libselinux
 include $(BUILD_HOST_EXECUTABLE)
 
 #
@@ -120,8 +119,10 @@ my_dist_files :=
 include $(CLEAR_VARS)
 LOCAL_MODULE := fastboot_test
 LOCAL_MODULE_HOST_OS := darwin linux windows
+LOCAL_MODULE_HOST_CROSS_ARCH := x86 # Avoid trying to build for win64.
 
 LOCAL_SRC_FILES := \
+    fastboot_test.cpp \
     socket_mock.cpp \
     socket_test.cpp \
     tcp_test.cpp \
@@ -130,7 +131,10 @@ LOCAL_SRC_FILES := \
 LOCAL_CFLAGS := $(fastboot_cflags)
 LOCAL_CFLAGS_darwin := $(fastboot_cflags_darwin)
 LOCAL_CXX_STL := $(fastboot_stl)
+LOCAL_HEADER_LIBRARIES := bootimg_headers
 LOCAL_LDLIBS_darwin := $(fastboot_ldflags_darwin)
 LOCAL_LDLIBS_windows := $(fastboot_ldlibs_windows)
+LOCAL_SHARED_LIBRARIES := $(fastboot_shared_libs)
+LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
 LOCAL_STATIC_LIBRARIES := libfastboot $(fastboot_static_libs)
 include $(BUILD_HOST_NATIVE_TEST)

@@ -26,8 +26,7 @@
  * SUCH DAMAGE.
  */
 
-#ifndef UDP_H_
-#define UDP_H_
+#pragma once
 
 #include <memory>
 #include <string>
@@ -77,5 +76,3 @@ std::unique_ptr<Transport> Connect(std::unique_ptr<Socket> sock, std::string* er
 }  // namespace internal
 
 }  // namespace udp
-
-#endif  // UDP_H_

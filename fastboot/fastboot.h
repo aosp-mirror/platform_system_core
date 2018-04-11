@@ -26,13 +26,14 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOT_H_
-#define _FASTBOOT_H_
+#pragma once
 
 #include <inttypes.h>
 #include <stdlib.h>
 
 #include <string>
+
+#include <bootimg.h>
 
 class Transport;
 struct sparse_file;
@@ -99,6 +100,7 @@ extern char cur_product[FB_RESPONSE_SZ + 1];
 class FastBoot {
   public:
     int Main(int argc, char* argv[]);
-};
 
-#endif
+    void ParseOsPatchLevel(boot_img_hdr_v1*, const char*);
+    void ParseOsVersion(boot_img_hdr_v1*, const char*);
+};
