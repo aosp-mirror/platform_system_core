@@ -31,7 +31,6 @@
 #include <cutils/klog.h>
 #include <log/log.h>
 #include <logwrap/logwrap.h>
-#include <private/android_filesystem_config.h>
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define MIN(a,b) (((a)<(b))?(a):(b))
