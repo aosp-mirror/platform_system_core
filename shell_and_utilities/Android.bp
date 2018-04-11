@@ -6,6 +6,8 @@ phony {
         "bzip2",
         "grep",
         "grep_vendor",
+        "logwrapper",
+        "logwrapper_vendor",
         "mkshrc",
         "mkshrc_vendor",
         "reboot",
