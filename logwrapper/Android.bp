@@ -1,10 +1,17 @@
-
+cc_defaults {
+    name: "logwrapper_defaults",
+    cflags: [
+        "-Werror",
+    ],
+}
 
 // ========================================================
 // Static and shared library
 // ========================================================
+
 cc_library {
     name: "liblogwrap",
+    defaults: ["logwrapper_defaults"],
     srcs: ["logwrap.c"],
     shared_libs: [
         "libcutils",
@@ -12,32 +19,45 @@ cc_library {
     ],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
-    cflags: [
-        "-Werror",
-    ],
 }
 
 // ========================================================
 // Executable
 // ========================================================
+
+cc_defaults {
+    name: "logwrapper_common",
+    defaults: ["logwrapper_defaults"],
+    local_include_dirs: ["include"],
+    srcs: [
+        "logwrap.c",
+        "logwrapper.c",
+    ],
+    shared_libs: ["libcutils", "liblog"],
+}
+
 cc_binary {
     name: "logwrapper",
-    srcs: ["logwrapper.c"],
-    static_libs: [
-        "liblog",
-        "liblogwrap",
-        "libcutils",
-    ],
-    cflags: [
-        "-Werror",
-    ],
+    defaults: ["logwrapper_common"],
+}
+
+// Build vendor logwrapper.
+// TODO: Add vendor_available to "logwrapper" module and remove "logwrapper_vendor" module
+//       when vendor_available is fully supported.
+cc_binary {
+    name: "logwrapper_vendor",
+    stem: "logwrapper",
+    vendor: true,
+    defaults: ["logwrapper_common"],
 }
 
 // ========================================================
 // Benchmark
 // ========================================================
+
 cc_benchmark {
     name: "android_fork_execvp_ext_benchmark",
+    defaults: ["logwrapper_defaults"],
     srcs: [
         "android_fork_execvp_ext_benchmark.cpp",
     ],
@@ -46,8 +66,5 @@ cc_benchmark {
         "libcutils",
         "liblog",
         "liblogwrap",
-    ],
-    cflags: [
-        "-Werror",
     ],
 }
