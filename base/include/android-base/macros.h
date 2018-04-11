@@ -20,6 +20,8 @@
 #include <stddef.h>  // for size_t
 #include <unistd.h>  // for TEMP_FAILURE_RETRY
 
+#include <utility>
+
 // bionic and glibc both have TEMP_FAILURE_RETRY, but eg Mac OS' libc doesn't.
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(exp)            \
@@ -113,6 +115,8 @@ char(&ArraySizeHelper(T(&array)[N]))[N];  // NOLINT(readability/casting)
 #define ARRAYSIZE_UNSAFE(a)     \
   ((sizeof(a) / sizeof(*(a))) / \
     static_cast<size_t>(!(sizeof(a) % sizeof(*(a)))))
+
+#define SIZEOF_MEMBER(t, f) sizeof(std::declval<t>().f)
 
 // Changing this definition will cause you a lot of pain.  A majority of
 // vendor code defines LIKELY and UNLIKELY this way, and includes

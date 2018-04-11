@@ -124,6 +124,7 @@ cc_test {
         "errors_test.cpp",
         "file_test.cpp",
         "logging_test.cpp",
+        "macros_test.cpp",
         "parsedouble_test.cpp",
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
