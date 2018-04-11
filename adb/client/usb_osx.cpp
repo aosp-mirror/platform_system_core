@@ -50,7 +50,7 @@ struct usb_handle
 {
     UInt8 bulkIn;
     UInt8 bulkOut;
-    IOUSBInterfaceInterface190** interface;
+    IOUSBInterfaceInterface550** interface;
     unsigned int zero_mask;
     size_t max_packet_size;
 
@@ -106,8 +106,8 @@ static void AddDevice(std::unique_ptr<usb_handle> handle) {
 }
 
 static void AndroidInterfaceAdded(io_iterator_t iterator);
-static std::unique_ptr<usb_handle> CheckInterface(IOUSBInterfaceInterface190 **iface,
-                                                  UInt16 vendor, UInt16 product);
+static std::unique_ptr<usb_handle> CheckInterface(IOUSBInterfaceInterface550** iface, UInt16 vendor,
+                                                  UInt16 product);
 
 static bool FindUSBDevices() {
     // Create the matching dictionary to find the Android device's adb interface.
@@ -295,8 +295,8 @@ AndroidInterfaceAdded(io_iterator_t iterator)
             continue;
         }
 
-        std::unique_ptr<usb_handle> handle = CheckInterface((IOUSBInterfaceInterface190**)iface,
-                                                            vendor, product);
+        std::unique_ptr<usb_handle> handle =
+            CheckInterface((IOUSBInterfaceInterface550**)iface, vendor, product);
         if (handle == nullptr) {
             LOG(ERROR) << "Could not find device interface";
             (*iface)->Release(iface);
@@ -315,7 +315,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
 // Used to clear both the endpoints before starting.
 // When adb quits, we might clear the host endpoint but not the device.
 // So we make sure both sides are clear before starting up.
-static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface190** interface, UInt8 bulkEp) {
+static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface550** interface, UInt8 bulkEp) {
     IOReturn rc = (*interface)->ClearPipeStallBothEnds(interface, bulkEp);
     if (rc != kIOReturnSuccess) {
         LOG(ERROR) << "Could not clear pipe stall both ends: " << std::hex << rc;
@@ -326,9 +326,8 @@ static bool ClearPipeStallBothEnds(IOUSBInterfaceInterface190** interface, UInt8
 
 //* TODO: simplify this further since we only register to get ADB interface
 //* subclass+protocol events
-static std::unique_ptr<usb_handle>
-CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 product)
-{
+static std::unique_ptr<usb_handle> CheckInterface(IOUSBInterfaceInterface550** interface,
+                                                  UInt16 vendor, UInt16 product) {
     std::unique_ptr<usb_handle> handle;
     IOReturn kr;
     UInt8 interfaceNumEndpoints, interfaceClass, interfaceSubClass, interfaceProtocol;
@@ -376,9 +375,14 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
         UInt8   interval;
         UInt8   number;
         UInt8   direction;
+        UInt8 maxBurst;
+        UInt8 mult;
+        UInt16 bytesPerInterval;
 
-        kr = (*interface)->GetPipeProperties(interface, endpoint, &direction,
-                &number, &transferType, &maxPacketSize, &interval);
+        kr = (*interface)
+                 ->GetPipePropertiesV2(interface, endpoint, &direction, &number, &transferType,
+                                       &maxPacketSize, &interval, &maxBurst, &mult,
+                                       &bytesPerInterval);
         if (kr != kIOReturnSuccess) {
             LOG(ERROR) << "FindDeviceInterface - could not get pipe properties: "
                        << std::hex << kr;
@@ -396,6 +400,13 @@ CheckInterface(IOUSBInterfaceInterface190 **interface, UInt16 vendor, UInt16 pro
             handle->bulkOut = endpoint;
             if (!ClearPipeStallBothEnds(interface, handle->bulkOut)) goto err_get_pipe_props;
         }
+
+        if (maxBurst != 0)
+            // bMaxBurst is the number of additional packets in the burst.
+            maxPacketSize /= (maxBurst + 1);
+
+        // mult is only relevant for isochronous endpoints.
+        CHECK_EQ(0, mult);
 
         handle->zero_mask = maxPacketSize - 1;
         handle->max_packet_size = maxPacketSize;
