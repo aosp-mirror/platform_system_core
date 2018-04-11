@@ -20,6 +20,7 @@
 
 #include <android-base/errors.h>
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 
