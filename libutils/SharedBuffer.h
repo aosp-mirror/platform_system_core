@@ -139,7 +139,7 @@ bool SharedBuffer::onlyOwner() const {
     return (mRefs.load(std::memory_order_acquire) == 1);
 }
 
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 

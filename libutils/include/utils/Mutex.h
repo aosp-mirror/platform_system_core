@@ -212,7 +212,7 @@ inline status_t Mutex::timedLock(nsecs_t timeoutNs) {
 typedef Mutex::Autolock AutoMutex;
 
 // ---------------------------------------------------------------------------
-}; // namespace android
+}  // namespace android
 // ---------------------------------------------------------------------------
 
 #endif // _LIBS_UTILS_MUTEX_H

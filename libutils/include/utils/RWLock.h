@@ -120,7 +120,7 @@ inline void RWLock::unlock() {
 #endif // !defined(_WIN32)
 
 // ---------------------------------------------------------------------------
-}; // namespace android
+}  // namespace android
 // ---------------------------------------------------------------------------
 
 #endif // _LIBS_UTILS_RWLOCK_H

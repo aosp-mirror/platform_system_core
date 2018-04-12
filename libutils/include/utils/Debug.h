@@ -35,6 +35,6 @@ template<> struct CompileTimeAssert<true> {};
     CompileTimeAssert<( _exp )>();
 
 // ---------------------------------------------------------------------------
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_UTILS_DEBUG_H
