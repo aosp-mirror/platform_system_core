@@ -329,6 +329,6 @@ List<T>& List<T>::operator=(const List<T>& right)
     return *this;
 }
 
-}; // namespace android
+}  // namespace android
 
 #endif // _LIBS_UTILS_LIST_H

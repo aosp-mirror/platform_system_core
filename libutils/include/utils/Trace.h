@@ -49,7 +49,7 @@ private:
     uint64_t mTag;
 };
 
-}; // namespace android
+}  // namespace android
 
 #else // !__ANDROID__
 

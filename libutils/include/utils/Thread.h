@@ -110,8 +110,7 @@ private:
 #endif
 };
 
-
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 #endif // _LIBS_UTILS_THREAD_H
