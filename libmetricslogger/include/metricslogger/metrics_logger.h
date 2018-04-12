@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <log/log_event_list.h>
 #include <cstdint>
 #include <string>
 
@@ -32,6 +33,34 @@ void LogCounter(const std::string& name, int32_t val);
 // |value| in the field |field|.
 void LogMultiAction(int32_t category, int32_t field, const std::string& value);
 
+// Logs a Tron complex event.
+//
+// A complex event can include data in a structure not suppored by the other
+// log event types above.
+//
+// Note that instances of this class are single use. You must call Record()
+// to write the event to the event log.
+class ComplexEventLogger {
+  private:
+    android_log_event_list logger;
+
+  public:
+    // Create a complex event with category|category|.
+    explicit ComplexEventLogger(int category);
+    // Add tagged data to the event, with the given tag and integer value.
+    void AddTaggedData(int tag, int32_t value);
+    // Add tagged data to the event, with the given tag and string value.
+    void AddTaggedData(int tag, const std::string& value);
+    // Add tagged data to the event, with the given tag and integer value.
+    void AddTaggedData(int tag, int64_t value);
+    // Add tagged data to the event, with the given tag and float value.
+    void AddTaggedData(int tag, float value);
+    // Record this event. This method can only be used once per instance
+    // of ComplexEventLogger. Do not made any subsequent calls to AddTaggedData
+    // after recording an event.
+    void Record();
+};
+
 // TODO: replace these with the metric_logger.proto definitions
 enum {
     LOGBUILDER_CATEGORY = 757,
@@ -44,10 +73,22 @@ enum {
 
     ACTION_BOOT = 1098,
     FIELD_PLATFORM_REASON = 1099,
+
+    ACTION_HIDDEN_API_ACCESSED = 1391,
+    FIELD_HIDDEN_API_ACCESS_METHOD = 1392,
+    FIELD_HIDDEN_API_ACCESS_DENIED = 1393,
+    FIELD_HIDDEN_API_SIGNATURE = 1394,
 };
 
 enum {
     TYPE_ACTION = 4,
+};
+
+enum {
+    ACCESS_METHOD_NONE = 0,
+    ACCESS_METHOD_REFLECTION = 1,
+    ACCESS_METHOD_JNI = 2,
+    ACCESS_METHOD_LINKING = 3,
 };
 
 }  // namespace metricslogger
