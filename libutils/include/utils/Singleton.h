@@ -95,7 +95,7 @@ private:
 
 
 // ---------------------------------------------------------------------------
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_UTILS_SINGLETON_H
 
