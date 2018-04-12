@@ -29,6 +29,7 @@ static constexpr const char* kPartnerPrefixes[] = {
 };
 
 static const std::set<std::string> kExportedActionableProperties = {
+    "dev.bootcomplete",
     "init.svc.console",
     "init.svc.mediadrm",
     "init.svc.surfaceflinger",
@@ -39,6 +40,8 @@ static const std::set<std::string> kExportedActionableProperties = {
     "ro.board.platform",
     "ro.bootmode",
     "ro.build.type",
+    "ro.crypto.state",
+    "ro.crypto.type",
     "ro.debuggable",
     "sys.boot_completed",
     "sys.boot_from_charger_mode",
@@ -50,6 +53,8 @@ static const std::set<std::string> kExportedActionableProperties = {
     "sys.usb.ffs.ready",
     "sys.user.0.ce_available",
     "sys.vdso",
+    "vold.decrypt",
+    "vold.post_fs_data_done",
     "vts.native_server.on",
     "wlan.driver.status",
 };
