@@ -22,8 +22,6 @@ namespace init {
 
 void ReapAnyOutstandingChildren();
 
-void sigchld_handler_init(void);
-
 }  // namespace init
 }  // namespace android
 
