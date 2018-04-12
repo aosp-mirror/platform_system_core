@@ -159,7 +159,7 @@ inline void Condition::broadcast() {
 #endif // !defined(_WIN32)
 
 // ---------------------------------------------------------------------------
-}; // namespace android
+}  // namespace android
 // ---------------------------------------------------------------------------
 
 #endif // _LIBS_UTILS_CONDITON_H

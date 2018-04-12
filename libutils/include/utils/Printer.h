@@ -114,6 +114,6 @@ private:
     const char* mPrefix;
 };
 
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_PRINTER_H
