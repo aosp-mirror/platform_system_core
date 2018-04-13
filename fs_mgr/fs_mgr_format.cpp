@@ -121,6 +121,7 @@ static int format_f2fs(char *fs_blkdev, uint64_t dev_sz, bool crypt_footer)
         "-f",
         "-O", "encrypt",
         "-O", "quota",
+        "-O", "verity",
         "-w", "4096",
         fs_blkdev,
         size_str.c_str(),

@@ -79,7 +79,7 @@ static char qemu[32];
 std::string default_console = "/dev/console";
 
 static int epoll_fd = -1;
-static int sigterm_signal_fd = -1;
+static int signal_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
 static std::string wait_prop_name;
@@ -492,14 +492,7 @@ static void InstallRebootSignalHandlers() {
     sigaction(SIGTRAP, &action, nullptr);
 }
 
-static void HandleSigtermSignal() {
-    signalfd_siginfo siginfo;
-    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(sigterm_signal_fd, &siginfo, sizeof(siginfo)));
-    if (bytes_read != sizeof(siginfo)) {
-        PLOG(ERROR) << "Failed to read siginfo from sigterm_signal_fd";
-        return;
-    }
-
+static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
     if (siginfo.ssi_pid != 0) {
         // Drop any userspace SIGTERM requests.
         LOG(DEBUG) << "Ignoring SIGTERM from pid " << siginfo.ssi_pid;
@@ -509,37 +502,73 @@ static void HandleSigtermSignal() {
     HandlePowerctlMessage("shutdown,container");
 }
 
-static void UnblockSigterm() {
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGTERM);
+static void HandleSignalFd() {
+    signalfd_siginfo siginfo;
+    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
+    if (bytes_read != sizeof(siginfo)) {
+        PLOG(ERROR) << "Failed to read siginfo from signal_fd";
+        return;
+    }
 
-    if (sigprocmask(SIG_UNBLOCK, &mask, nullptr) == -1) {
-        PLOG(FATAL) << "failed to unblock SIGTERM for PID " << getpid();
+    switch (siginfo.ssi_signo) {
+        case SIGCHLD:
+            ReapAnyOutstandingChildren();
+            break;
+        case SIGTERM:
+            HandleSigtermSignal(siginfo);
+            break;
+        default:
+            PLOG(ERROR) << "signal_fd: received unexpected signal " << siginfo.ssi_signo;
+            break;
     }
 }
 
-static void InstallSigtermHandler() {
+static void UnblockSignals() {
+    const struct sigaction act { .sa_handler = SIG_DFL };
+    sigaction(SIGCHLD, &act, nullptr);
+
     sigset_t mask;
     sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
     sigaddset(&mask, SIGTERM);
 
-    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        PLOG(FATAL) << "failed to block SIGTERM";
+    if (sigprocmask(SIG_UNBLOCK, &mask, nullptr) == -1) {
+        PLOG(FATAL) << "failed to unblock signals for PID " << getpid();
+    }
+}
+
+static void InstallSignalFdHandler() {
+    // Applying SA_NOCLDSTOP to a defaulted SIGCHLD handler prevents the signalfd from receiving
+    // SIGCHLD when a child process stops or continues (b/77867680#comment9).
+    const struct sigaction act { .sa_handler = SIG_DFL, .sa_flags = SA_NOCLDSTOP };
+    sigaction(SIGCHLD, &act, nullptr);
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+
+    if (!IsRebootCapable()) {
+        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
+        // In that case, receiving SIGTERM will cause the system to shut down.
+        sigaddset(&mask, SIGTERM);
     }
 
-    // Register a handler to unblock SIGTERM in the child processes.
-    const int result = pthread_atfork(nullptr, nullptr, &UnblockSigterm);
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
+        PLOG(FATAL) << "failed to block signals";
+    }
+
+    // Register a handler to unblock signals in the child processes.
+    const int result = pthread_atfork(nullptr, nullptr, &UnblockSignals);
     if (result != 0) {
         LOG(FATAL) << "Failed to register a fork handler: " << strerror(result);
     }
 
-    sigterm_signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
-    if (sigterm_signal_fd == -1) {
-        PLOG(FATAL) << "failed to create signalfd for SIGTERM";
+    signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
+    if (signal_fd == -1) {
+        PLOG(FATAL) << "failed to create signalfd";
     }
 
-    register_epoll_handler(sigterm_signal_fd, HandleSigtermSignal);
+    register_epoll_handler(signal_fd, HandleSignalFd);
 }
 
 int main(int argc, char** argv) {
@@ -682,13 +711,7 @@ int main(int argc, char** argv) {
         PLOG(FATAL) << "epoll_create1 failed";
     }
 
-    sigchld_handler_init();
-
-    if (!IsRebootCapable()) {
-        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
-        // In that case, receiving SIGTERM will cause the system to shut down.
-        InstallSigtermHandler();
-    }
+    InstallSignalFdHandler();
 
     property_load_boot_defaults();
     export_oem_lock_status();

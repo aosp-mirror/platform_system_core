@@ -30,8 +30,7 @@
 // engine should not be using this interface directly, but instead should use a higher-level
 // interface that enforces the fastboot protocol.
 
-#ifndef SOCKET_H_
-#define SOCKET_H_
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -125,5 +124,3 @@ class Socket {
 
     DISALLOW_COPY_AND_ASSIGN(Socket);
 };
-
-#endif  // SOCKET_H_

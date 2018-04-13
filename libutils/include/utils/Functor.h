@@ -32,6 +32,6 @@ public:
     virtual status_t operator ()(int /*what*/, void* /*data*/) { return NO_ERROR; }
 };
 
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_FUNCTOR_H

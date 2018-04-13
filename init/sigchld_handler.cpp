@@ -39,9 +39,6 @@ using android::base::make_scope_guard;
 namespace android {
 namespace init {
 
-static int signal_write_fd = -1;
-static int signal_read_fd = -1;
-
 static bool ReapOneProcess() {
     siginfo_t siginfo = {};
     // This returns a zombie pid or informs us that there are no zombies left to be reaped.
@@ -102,45 +99,9 @@ static bool ReapOneProcess() {
     return true;
 }
 
-static void handle_signal() {
-    // Clear outstanding requests.
-    char buf[32];
-    read(signal_read_fd, buf, sizeof(buf));
-
-    ReapAnyOutstandingChildren();
-}
-
-static void SIGCHLD_handler(int) {
-    if (TEMP_FAILURE_RETRY(write(signal_write_fd, "1", 1)) == -1) {
-        PLOG(ERROR) << "write(signal_write_fd) failed";
-    }
-}
-
 void ReapAnyOutstandingChildren() {
     while (ReapOneProcess()) {
     }
-}
-
-void sigchld_handler_init() {
-    // Create a signalling mechanism for SIGCHLD.
-    int s[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {
-        PLOG(FATAL) << "socketpair failed in sigchld_handler_init";
-    }
-
-    signal_write_fd = s[0];
-    signal_read_fd = s[1];
-
-    // Write to signal_write_fd if we catch SIGCHLD.
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_handler = SIGCHLD_handler;
-    act.sa_flags = SA_NOCLDSTOP;
-    sigaction(SIGCHLD, &act, 0);
-
-    ReapAnyOutstandingChildren();
-
-    register_epoll_handler(signal_read_fd, handle_signal);
 }
 
 }  // namespace init

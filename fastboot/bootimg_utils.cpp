@@ -44,7 +44,7 @@ boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, void* ramdisk, int
                            const boot_img_hdr_v1& src, int64_t* bootimg_size) {
     const size_t page_mask = src.page_size - 1;
 
-    int64_t header_actual = sizeof(boot_img_hdr_v1) & (~page_mask);
+    int64_t header_actual = (sizeof(boot_img_hdr_v1) + page_mask) & (~page_mask);
     int64_t kernel_actual = (kernel_size + page_mask) & (~page_mask);
     int64_t ramdisk_actual = (ramdisk_size + page_mask) & (~page_mask);
     int64_t second_actual = (second_size + page_mask) & (~page_mask);

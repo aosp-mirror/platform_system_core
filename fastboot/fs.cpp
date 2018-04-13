@@ -20,6 +20,7 @@
 
 #include <android-base/errors.h>
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 
@@ -177,6 +178,8 @@ static int generate_f2fs_image(const char* fileName, long long partSize, const s
     mkf2fs_args.push_back("encrypt");
     mkf2fs_args.push_back("-O");
     mkf2fs_args.push_back("quota");
+    mkf2fs_args.push_back("-O");
+    mkf2fs_args.push_back("verity");
     mkf2fs_args.push_back(fileName);
     mkf2fs_args.push_back(nullptr);
 

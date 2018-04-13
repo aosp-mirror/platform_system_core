@@ -77,7 +77,6 @@ char cur_product[FB_RESPONSE_SZ + 1];
 
 static const char* serial = nullptr;
 
-static unsigned short vendor_id = 0;
 static bool g_long_listing = false;
 // Don't resparse files in too-big chunks.
 // libsparse will support INT_MAX, but this results in large allocations, so
@@ -190,11 +189,6 @@ static void* load_file(const std::string& path, int64_t* sz) {
 }
 
 static int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
-    // Require a matching vendor id if the user specified one with -i.
-    if (vendor_id != 0 && info->dev_vendor != vendor_id) {
-        return -1;
-    }
-
     if (info->ifc_class != 0xff || info->ifc_subclass != 0x42 || info->ifc_protocol != 0x03) {
         return -1;
     }
@@ -381,8 +375,6 @@ static int show_help() {
             " -w                         Wipe userdata.\n"
             " -s SERIAL                  Specify a USB device.\n"
             " -s tcp|udp:HOST[:PORT]     Specify a network device.\n"
-            // TODO: remove -i?
-            " -i VENDOR_ID               Filter devices by USB vendor id.\n"
             " -S SIZE[K|M|G]             Use sparse files above this limit (0 to disable).\n"
             " --slot SLOT                Use SLOT; 'all' for both slots, 'other' for\n"
             "                            non-current slot (default: current active slot).\n"
@@ -881,46 +873,18 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
     }
 }
 
-static std::string get_current_slot(Transport* transport)
-{
+static std::string get_current_slot(Transport* transport) {
     std::string current_slot;
-    if (fb_getvar(transport, "current-slot", &current_slot)) {
-        if (current_slot == "_a") return "a"; // Legacy support
-        if (current_slot == "_b") return "b"; // Legacy support
-        return current_slot;
-    }
-    return "";
-}
-
-// Legacy support
-static std::vector<std::string> get_suffixes_obsolete(Transport* transport) {
-    std::vector<std::string> suffixes;
-    std::string suffix_list;
-    if (!fb_getvar(transport, "slot-suffixes", &suffix_list)) {
-        return suffixes;
-    }
-    suffixes = android::base::Split(suffix_list, ",");
-    // Unfortunately some devices will return an error message in the
-    // guise of a valid value. If we only see only one suffix, it's probably
-    // not real.
-    if (suffixes.size() == 1) {
-        suffixes.clear();
-    }
-    return suffixes;
-}
-
-// Legacy support
-static bool supports_AB_obsolete(Transport* transport) {
-  return !get_suffixes_obsolete(transport).empty();
+    if (!fb_getvar(transport, "current-slot", &current_slot)) return "";
+    return current_slot;
 }
 
 static int get_slot_count(Transport* transport) {
     std::string var;
-    int count;
-    if (!fb_getvar(transport, "slot-count", &var)) {
-        if (supports_AB_obsolete(transport)) return 2; // Legacy support
+    int count = 0;
+    if (!fb_getvar(transport, "slot-count", &var) || !android::base::ParseInt(var, &count)) {
+        return 0;
     }
-    if (!android::base::ParseInt(var, &count)) return 0;
     return count;
 }
 
@@ -950,8 +914,6 @@ static std::string get_other_slot(Transport* transport) {
 
 static std::string verify_slot(Transport* transport, const std::string& slot_name, bool allow_all) {
     std::string slot = slot_name;
-    if (slot == "_a") slot = "a"; // Legacy support
-    if (slot == "_b") slot = "b"; // Legacy support
     if (slot == "all") {
         if (allow_all) {
             return "all";
@@ -1063,20 +1025,14 @@ static void do_update_signature(ZipArchiveHandle zip, const char* filename) {
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
 static void set_active(Transport* transport, const std::string& slot_override) {
-    std::string separator = "";
-    if (!supports_AB(transport)) {
-        if (supports_AB_obsolete(transport)) {
-            separator = "_"; // Legacy support
-        } else {
-            return;
-        }
-    }
+    if (!supports_AB(transport)) return;
+
     if (slot_override != "") {
-        fb_set_active(separator + slot_override);
+        fb_set_active(slot_override);
     } else {
         std::string current_slot = get_current_slot(transport);
         if (current_slot != "") {
-            fb_set_active(separator + current_slot);
+            fb_set_active(current_slot);
         }
     }
 }
@@ -1410,8 +1366,7 @@ failed:
     fprintf(stderr, "FAILED (%s)\n", fb_get_error().c_str());
 }
 
-int main(int argc, char **argv)
-{
+int FastBoot::Main(int argc, char* argv[]) {
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
@@ -1460,7 +1415,7 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     int c;
-    while ((c = getopt_long(argc, argv, "a::hi:ls:S:vw", longopts, &longindex)) != -1) {
+    while ((c = getopt_long(argc, argv, "a::hls:S:vw", longopts, &longindex)) != -1) {
         if (c == 0) {
             std::string name{longopts[longindex].name};
             if (name == "base") {
@@ -1476,24 +1431,9 @@ int main(int argc, char **argv)
             } else if (name == "kernel-offset") {
                 g_boot_img_hdr.kernel_addr = strtoul(optarg, 0, 16);
             } else if (name == "os-patch-level") {
-                unsigned year, month, day;
-                if (sscanf(optarg, "%u-%u-%u", &year, &month, &day) != 3) {
-                    syntax_error("OS patch level should be YYYY-MM-DD: %s", optarg);
-                }
-                if (year < 2000 || year >= 2128) syntax_error("year out of range: %d", year);
-                if (month < 1 || month > 12) syntax_error("month out of range: %d", month);
-                g_boot_img_hdr.SetOsPatchLevel(year, month);
+                ParseOsPatchLevel(&g_boot_img_hdr, optarg);
             } else if (name == "os-version") {
-                unsigned major = 0, minor = 0, patch = 0;
-                std::vector<std::string> versions = android::base::Split(optarg, ".");
-                if (versions.size() < 1 || versions.size() > 3 ||
-                    (versions.size() >= 1 && !android::base::ParseUint(versions[0], &major)) ||
-                    (versions.size() >= 2 && !android::base::ParseUint(versions[1], &minor)) ||
-                    (versions.size() == 3 && !android::base::ParseUint(versions[2], &patch)) ||
-                    (major > 0x7f || minor > 0x7f || patch > 0x7f)) {
-                    syntax_error("bad OS version: %s", optarg);
-                }
-                g_boot_img_hdr.SetOsVersion(major, minor, patch);
+                ParseOsVersion(&g_boot_img_hdr, optarg);
             } else if (name == "page-size") {
                 g_boot_img_hdr.page_size = strtoul(optarg, nullptr, 0);
                 if (g_boot_img_hdr.page_size == 0) die("invalid page size");
@@ -1530,16 +1470,6 @@ int main(int argc, char **argv)
                     break;
                 case 'h':
                     return show_help();
-                case 'i':
-                    {
-                        char *endptr = nullptr;
-                        unsigned long val = strtoul(optarg, &endptr, 0);
-                        if (!endptr || *endptr != '\0' || (val & ~0xffff)) {
-                            die("invalid vendor id '%s'", optarg);
-                        }
-                        vendor_id = (unsigned short)val;
-                        break;
-                    }
                 case 'l':
                     g_long_listing = true;
                     break;
@@ -1585,9 +1515,6 @@ int main(int argc, char **argv)
 
     const double start = now();
 
-    if (!supports_AB(transport) && supports_AB_obsolete(transport)) {
-        fprintf(stderr, "Warning: Device A/B support is outdated. Bootloader update required.\n");
-    }
     if (slot_override != "") slot_override = verify_slot(transport, slot_override);
     if (next_active != "") next_active = verify_slot(transport, next_active, false);
 
@@ -1731,15 +1658,6 @@ int main(int argc, char **argv)
             wants_reboot = true;
         } else if (command == "set_active") {
             std::string slot = verify_slot(transport, next_arg(&args), false);
-
-            // Legacy support: verify_slot() removes leading underscores, we need to put them back
-            // in for old bootloaders. Legacy bootloaders do not have the slot-count variable but
-            // do have slot-suffixes.
-            std::string var;
-            if (!fb_getvar(transport, "slot-count", &var) &&
-                    fb_getvar(transport, "slot-suffixes", &var)) {
-                slot = "_" + slot;
-            }
             fb_set_active(slot);
         } else if (command == "stage") {
             std::string filename = next_arg(&args);
@@ -1801,4 +1719,27 @@ int main(int argc, char **argv)
     int status = fb_execute_queue(transport) ? EXIT_FAILURE : EXIT_SUCCESS;
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
     return status;
+}
+
+void FastBoot::ParseOsPatchLevel(boot_img_hdr_v1* hdr, const char* arg) {
+    unsigned year, month, day;
+    if (sscanf(arg, "%u-%u-%u", &year, &month, &day) != 3) {
+        syntax_error("OS patch level should be YYYY-MM-DD: %s", arg);
+    }
+    if (year < 2000 || year >= 2128) syntax_error("year out of range: %d", year);
+    if (month < 1 || month > 12) syntax_error("month out of range: %d", month);
+    hdr->SetOsPatchLevel(year, month);
+}
+
+void FastBoot::ParseOsVersion(boot_img_hdr_v1* hdr, const char* arg) {
+    unsigned major = 0, minor = 0, patch = 0;
+    std::vector<std::string> versions = android::base::Split(arg, ".");
+    if (versions.size() < 1 || versions.size() > 3 ||
+        (versions.size() >= 1 && !android::base::ParseUint(versions[0], &major)) ||
+        (versions.size() >= 2 && !android::base::ParseUint(versions[1], &minor)) ||
+        (versions.size() == 3 && !android::base::ParseUint(versions[2], &patch)) ||
+        (major > 0x7f || minor > 0x7f || patch > 0x7f)) {
+        syntax_error("bad OS version: %s", arg);
+    }
+    hdr->SetOsVersion(major, minor, patch);
 }

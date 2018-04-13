@@ -16,14 +16,35 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(LOCAL_PATH)/../platform_tools_tool_version.mk
 
+fastboot_cflags := -Wall -Wextra -Werror -Wunreachable-code
+fastboot_cflags += -DFASTBOOT_VERSION="\"$(tool_version)\""
+fastboot_cflags_darwin := -Wno-unused-parameter
+fastboot_ldlibs_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
+fastboot_ldlibs_windows := -lws2_32
+# Don't add anything here, we don't want additional shared dependencies
+# on the host fastboot tool, and shared libraries that link against libc++
+# will violate ODR.
+fastboot_shared_libs :=
+fastboot_static_libs := \
+    libziparchive \
+    libsparse \
+    libutils \
+    liblog \
+    libz \
+    libdiagnose_usb \
+    libbase \
+    libcutils \
+    libgtest_host \
+
+fastboot_stl := libc++_static
+
+#
+# Build host libfastboot.
+#
+
 include $(CLEAR_VARS)
-
-LOCAL_CFLAGS += -DFASTBOOT_VERSION="\"$(tool_version)\""
-
-LOCAL_C_INCLUDES := \
-  $(LOCAL_PATH)/../adb \
-
-LOCAL_HEADER_LIBRARIES := bootimg_headers
+LOCAL_MODULE := libfastboot
+LOCAL_MODULE_HOST_OS := darwin linux windows
 
 LOCAL_SRC_FILES := \
     bootimg_utils.cpp \
@@ -36,47 +57,48 @@ LOCAL_SRC_FILES := \
     udp.cpp \
     util.cpp \
 
-LOCAL_MODULE := fastboot
-LOCAL_MODULE_TAGS := debug
-LOCAL_MODULE_HOST_OS := darwin linux windows
-LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
-LOCAL_REQUIRED_MODULES := mke2fs make_f2fs
-
-LOCAL_SRC_FILES_linux := usb_linux.cpp
-LOCAL_STATIC_LIBRARIES_linux := libselinux
-LOCAL_REQUIRED_MODULES_linux := e2fsdroid mke2fs.conf sload_f2fs
-
 LOCAL_SRC_FILES_darwin := usb_osx.cpp
-LOCAL_STATIC_LIBRARIES_darwin := libselinux
-LOCAL_REQUIRED_MODULES_darwin := e2fsdroid mke2fs.conf sload_f2fs
-LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
-LOCAL_CFLAGS_darwin := -Wno-unused-parameter
-
+LOCAL_SRC_FILES_linux := usb_linux.cpp
 LOCAL_SRC_FILES_windows := usb_windows.cpp
-LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
-LOCAL_REQUIRED_MODULES_windows := AdbWinUsbApi
-LOCAL_LDLIBS_windows := -lws2_32
+
 LOCAL_C_INCLUDES_windows := development/host/windows/usb/api
+LOCAL_CFLAGS := $(fastboot_cflags)
+LOCAL_CFLAGS_darwin := $(fastboot_cflags_darwin)
+LOCAL_CXX_STL := $(fastboot_stl)
+LOCAL_HEADER_LIBRARIES := bootimg_headers
+LOCAL_LDLIBS_darwin := $(fastboot_ldlibs_darwin)
+LOCAL_LDLIBS_windows := $(fastboot_ldlibs_windows)
+LOCAL_SHARED_LIBRARIES := $(fastboot_shared_libs)
+LOCAL_STATIC_LIBRARIES := $(fastboot_static_libs)
+include $(BUILD_HOST_STATIC_LIBRARY)
 
-LOCAL_STATIC_LIBRARIES := \
-    libziparchive \
-    libsparse \
-    libutils \
-    liblog \
-    libz \
-    libdiagnose_usb \
-    libbase \
-    libcutils \
-    libgtest_host \
+#
+# Build host fastboot / fastboot.exe
+#
 
-LOCAL_CXX_STL := libc++_static
+include $(CLEAR_VARS)
+LOCAL_MODULE := fastboot
+LOCAL_MODULE_HOST_OS := darwin linux windows
 
-# Don't add anything here, we don't want additional shared dependencies
-# on the host fastboot tool, and shared libraries that link against libc++
-# will violate ODR
-LOCAL_SHARED_LIBRARIES :=
-
+LOCAL_CFLAGS := $(fastboot_cflags)
+LOCAL_CFLAGS_darwin := $(fastboot_cflags_darwin)
+LOCAL_CXX_STL := $(fastboot_stl)
+LOCAL_HEADER_LIBRARIES := bootimg_headers
+LOCAL_LDLIBS_darwin := $(fastboot_ldlibs_darwin)
+LOCAL_LDLIBS_windows := $(fastboot_ldlibs_windows)
+LOCAL_REQUIRED_MODULES := mke2fs make_f2fs
+LOCAL_REQUIRED_MODULES_darwin := e2fsdroid mke2fs.conf sload_f2fs
+LOCAL_REQUIRED_MODULES_linux := e2fsdroid mke2fs.conf sload_f2fs
+LOCAL_REQUIRED_MODULES_windows := AdbWinUsbApi
+LOCAL_SRC_FILES := main.cpp
+LOCAL_SHARED_LIBRARIES := $(fastboot_shared_libs)
+LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
+LOCAL_STATIC_LIBRARIES := libfastboot $(fastboot_static_libs)
 include $(BUILD_HOST_EXECUTABLE)
+
+#
+# Package fastboot-related executables.
+#
 
 my_dist_files := $(HOST_OUT_EXECUTABLES)/fastboot
 my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs$(HOST_EXECUTABLE_SUFFIX)
@@ -90,38 +112,29 @@ $(call dist-for-goals,win_sdk,$(ALL_MODULES.host_cross_fastboot.BUILT))
 endif
 my_dist_files :=
 
-ifeq ($(HOST_OS),linux)
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := usbtest.cpp usb_linux.cpp util.cpp
-LOCAL_MODULE := usbtest
-LOCAL_CFLAGS := -Werror
-LOCAL_STATIC_LIBRARIES := libbase
-include $(BUILD_HOST_EXECUTABLE)
-endif
+#
+# Build host fastboot_test.
+#
 
-# fastboot_test
-# =========================================================
 include $(CLEAR_VARS)
-
 LOCAL_MODULE := fastboot_test
 LOCAL_MODULE_HOST_OS := darwin linux windows
+LOCAL_MODULE_HOST_CROSS_ARCH := x86 # Avoid trying to build for win64.
 
 LOCAL_SRC_FILES := \
-    socket.cpp \
+    fastboot_test.cpp \
     socket_mock.cpp \
     socket_test.cpp \
-    tcp.cpp \
     tcp_test.cpp \
-    udp.cpp \
     udp_test.cpp \
 
-LOCAL_STATIC_LIBRARIES := libbase libcutils
-
-LOCAL_CFLAGS += -Wall -Wextra -Werror -Wunreachable-code
-
-LOCAL_LDLIBS_darwin := -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
-LOCAL_CFLAGS_darwin := -Wno-unused-parameter
-
-LOCAL_LDLIBS_windows := -lws2_32
-
+LOCAL_CFLAGS := $(fastboot_cflags)
+LOCAL_CFLAGS_darwin := $(fastboot_cflags_darwin)
+LOCAL_CXX_STL := $(fastboot_stl)
+LOCAL_HEADER_LIBRARIES := bootimg_headers
+LOCAL_LDLIBS_darwin := $(fastboot_ldlibs_darwin)
+LOCAL_LDLIBS_windows := $(fastboot_ldlibs_windows)
+LOCAL_SHARED_LIBRARIES := $(fastboot_shared_libs)
+LOCAL_SHARED_LIBRARIES_windows := AdbWinApi
+LOCAL_STATIC_LIBRARIES := libfastboot $(fastboot_static_libs)
 include $(BUILD_HOST_NATIVE_TEST)

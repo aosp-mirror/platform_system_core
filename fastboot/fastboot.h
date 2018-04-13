@@ -26,16 +26,16 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOT_H_
-#define _FASTBOOT_H_
+#pragma once
 
 #include <inttypes.h>
 #include <stdlib.h>
 
 #include <string>
 
-#include "transport.h"
+#include <bootimg.h>
 
+class Transport;
 struct sparse_file;
 
 /* protocol.c - fastboot protocol */
@@ -97,4 +97,10 @@ void verbose(const char* fmt, ...) __attribute__((__format__(FASTBOOT_FORMAT_ARC
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
 
-#endif
+class FastBoot {
+  public:
+    int Main(int argc, char* argv[]);
+
+    void ParseOsPatchLevel(boot_img_hdr_v1*, const char*);
+    void ParseOsVersion(boot_img_hdr_v1*, const char*);
+};

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SIGCHLD_HANDLER_H_
-#define _INIT_SIGCHLD_HANDLER_H_
+#include "android-base/macros.h"
 
-namespace android {
-namespace init {
+#include <stdint.h>
 
-void ReapAnyOutstandingChildren();
+#include <gtest/gtest.h>
 
-}  // namespace init
-}  // namespace android
-
-#endif
+TEST(macros, SIZEOF_MEMBER_macro) {
+  struct S {
+    int32_t i32;
+    double d;
+  };
+  ASSERT_EQ(4U, SIZEOF_MEMBER(S, i32));
+  ASSERT_EQ(8U, SIZEOF_MEMBER(S, d));
+}
