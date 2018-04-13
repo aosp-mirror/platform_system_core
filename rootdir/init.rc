@@ -176,6 +176,12 @@ on init
     copy /dev/cpuset/cpus /dev/cpuset/system-background/cpus
     copy /dev/cpuset/mems /dev/cpuset/system-background/mems
 
+    # restricted is for system tasks that are being throttled
+    # due to screen off.
+    mkdir /dev/cpuset/restricted
+    copy /dev/cpuset/cpus /dev/cpuset/restricted/cpus
+    copy /dev/cpuset/mems /dev/cpuset/restricted/mems
+
     mkdir /dev/cpuset/top-app
     copy /dev/cpuset/cpus /dev/cpuset/top-app/cpus
     copy /dev/cpuset/mems /dev/cpuset/top-app/mems
@@ -186,11 +192,13 @@ on init
     chown system system /dev/cpuset/background
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
+    chown system system /dev/cpuset/restricted
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
+    chown system system /dev/cpuset/restricted/tasks
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -199,6 +207,7 @@ on init
     chmod 0664 /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/system-background/tasks
     chmod 0664 /dev/cpuset/top-app/tasks
+    chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
 
