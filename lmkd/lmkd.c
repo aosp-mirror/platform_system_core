@@ -771,10 +771,8 @@ static int find_and_kill_processes(enum vmpressure_level level,
         struct proc *procp;
 
         while (true) {
-            if (low_ram_device)
-                procp = proc_adj_lru(i);
-            else
-                procp = proc_get_heaviest(i);
+            procp = kill_heaviest_task ?
+                proc_get_heaviest(i) : proc_adj_lru(i);
 
             if (!procp)
                 break;
@@ -1198,7 +1196,7 @@ int main(int argc __unused, char **argv __unused) {
     downgrade_pressure =
         (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 100);
     kill_heaviest_task =
-        property_get_bool("ro.lmk.kill_heaviest_task", true);
+        property_get_bool("ro.lmk.kill_heaviest_task", false);
     low_ram_device = property_get_bool("ro.config.low_ram", false);
     kill_timeout_ms =
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
