@@ -118,7 +118,7 @@ static void CreateCloser(CloseWithPacketArg* arg) {
         // each write to give the underlying implementation time to flush.
         bool socket_filled = false;
         for (int i = 0; i < 128; ++i) {
-            std::string data;
+            apacket::payload_type data;
             data.resize(MAX_PAYLOAD);
             arg->bytes_written += data.size();
             int ret = s->enqueue(s, std::move(data));

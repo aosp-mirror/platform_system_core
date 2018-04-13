@@ -36,12 +36,15 @@
 
 #include <android-base/errors.h>
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/utf8.h>
 
 #include "adb.h"
 #include "adb_utils.h"
+
+#include "sysdeps/uio.h"
 
 extern void fatal(const char *fmt, ...);
 
@@ -57,6 +60,7 @@ typedef struct FHClassRec_ {
     int (*_fh_lseek)(FH, int, int);
     int (*_fh_read)(FH, void*, int);
     int (*_fh_write)(FH, const void*, int);
+    int (*_fh_writev)(FH, const adb_iovec*, int);
 } FHClassRec;
 
 static void _fh_file_init(FH);
@@ -64,6 +68,7 @@ static int _fh_file_close(FH);
 static int _fh_file_lseek(FH, int, int);
 static int _fh_file_read(FH, void*, int);
 static int _fh_file_write(FH, const void*, int);
+static int _fh_file_writev(FH, const adb_iovec*, int);
 
 static const FHClassRec _fh_file_class = {
     _fh_file_init,
@@ -71,6 +76,7 @@ static const FHClassRec _fh_file_class = {
     _fh_file_lseek,
     _fh_file_read,
     _fh_file_write,
+    _fh_file_writev,
 };
 
 static void _fh_socket_init(FH);
@@ -78,6 +84,7 @@ static int _fh_socket_close(FH);
 static int _fh_socket_lseek(FH, int, int);
 static int _fh_socket_read(FH, void*, int);
 static int _fh_socket_write(FH, const void*, int);
+static int _fh_socket_writev(FH, const adb_iovec*, int);
 
 static const FHClassRec _fh_socket_class = {
     _fh_socket_init,
@@ -85,6 +92,7 @@ static const FHClassRec _fh_socket_class = {
     _fh_socket_lseek,
     _fh_socket_read,
     _fh_socket_write,
+    _fh_socket_writev,
 };
 
 #define assert(cond)                                                                       \
@@ -248,57 +256,88 @@ typedef std::unique_ptr<struct FHRec_, fh_deleter> unique_fh;
 /**************************************************************************/
 /**************************************************************************/
 
-static void _fh_file_init( FH  f ) {
+static void _fh_file_init(FH f) {
     f->fh_handle = INVALID_HANDLE_VALUE;
 }
 
-static int _fh_file_close( FH  f ) {
-    CloseHandle( f->fh_handle );
+static int _fh_file_close(FH f) {
+    CloseHandle(f->fh_handle);
     f->fh_handle = INVALID_HANDLE_VALUE;
     return 0;
 }
 
-static int _fh_file_read( FH  f,  void*  buf, int   len ) {
-    DWORD  read_bytes;
+static int _fh_file_read(FH f, void* buf, int len) {
+    DWORD read_bytes;
 
-    if ( !ReadFile( f->fh_handle, buf, (DWORD)len, &read_bytes, NULL ) ) {
-        D( "adb_read: could not read %d bytes from %s", len, f->name );
+    if (!ReadFile(f->fh_handle, buf, (DWORD)len, &read_bytes, NULL)) {
+        D("adb_read: could not read %d bytes from %s", len, f->name);
         errno = EIO;
         return -1;
     } else if (read_bytes < (DWORD)len) {
         f->eof = 1;
     }
-    return (int)read_bytes;
+    return read_bytes;
 }
 
-static int _fh_file_write( FH  f,  const void*  buf, int   len ) {
-    DWORD  wrote_bytes;
+static int _fh_file_write(FH f, const void* buf, int len) {
+    DWORD wrote_bytes;
 
-    if ( !WriteFile( f->fh_handle, buf, (DWORD)len, &wrote_bytes, NULL ) ) {
-        D( "adb_file_write: could not write %d bytes from %s", len, f->name );
+    if (!WriteFile(f->fh_handle, buf, (DWORD)len, &wrote_bytes, NULL)) {
+        D("adb_file_write: could not write %d bytes from %s", len, f->name);
         errno = EIO;
         return -1;
     } else if (wrote_bytes < (DWORD)len) {
         f->eof = 1;
     }
-    return  (int)wrote_bytes;
+    return wrote_bytes;
 }
 
-static int _fh_file_lseek( FH  f, int  pos, int  origin ) {
-    DWORD  method;
-    DWORD  result;
+static int _fh_file_writev(FH f, const adb_iovec* iov, int iovcnt) {
+    if (iovcnt <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
 
-    switch (origin)
-    {
-        case SEEK_SET:  method = FILE_BEGIN; break;
-        case SEEK_CUR:  method = FILE_CURRENT; break;
-        case SEEK_END:  method = FILE_END; break;
+    DWORD wrote_bytes = 0;
+
+    for (int i = 0; i < iovcnt; ++i) {
+        ssize_t rc = _fh_file_write(f, iov[i].iov_base, iov[i].iov_len);
+        if (rc == -1) {
+            return wrote_bytes > 0 ? wrote_bytes : -1;
+        } else if (rc == 0) {
+            return wrote_bytes;
+        }
+
+        wrote_bytes += rc;
+
+        if (static_cast<size_t>(rc) < iov[i].iov_len) {
+            return wrote_bytes;
+        }
+    }
+
+    return wrote_bytes;
+}
+
+static int _fh_file_lseek(FH f, int pos, int origin) {
+    DWORD method;
+    DWORD result;
+
+    switch (origin) {
+        case SEEK_SET:
+            method = FILE_BEGIN;
+            break;
+        case SEEK_CUR:
+            method = FILE_CURRENT;
+            break;
+        case SEEK_END:
+            method = FILE_END;
+            break;
         default:
             errno = EINVAL;
             return -1;
     }
 
-    result = SetFilePointer( f->fh_handle, pos, NULL, method );
+    result = SetFilePointer(f->fh_handle, pos, NULL, method);
     if (result == INVALID_SET_FILE_POINTER) {
         errno = EIO;
         return -1;
@@ -308,7 +347,6 @@ static int _fh_file_lseek( FH  f, int  pos, int  origin ) {
     return (int)result;
 }
 
-
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/
@@ -317,12 +355,11 @@ static int _fh_file_lseek( FH  f, int  pos, int  origin ) {
 /**************************************************************************/
 /**************************************************************************/
 
-int  adb_open(const char*  path, int  options)
-{
-    FH  f;
+int adb_open(const char* path, int options) {
+    FH f;
 
-    DWORD  desiredAccess       = 0;
-    DWORD  shareMode           = FILE_SHARE_READ | FILE_SHARE_WRITE;
+    DWORD desiredAccess = 0;
+    DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
 
     switch (options) {
         case O_RDONLY:
@@ -340,8 +377,8 @@ int  adb_open(const char*  path, int  options)
             return -1;
     }
 
-    f = _fh_alloc( &_fh_file_class );
-    if ( !f ) {
+    f = _fh_alloc(&_fh_file_class);
+    if (!f) {
         return -1;
     }
 
@@ -349,21 +386,21 @@ int  adb_open(const char*  path, int  options)
     if (!android::base::UTF8ToWide(path, &path_wide)) {
         return -1;
     }
-    f->fh_handle = CreateFileW( path_wide.c_str(), desiredAccess, shareMode,
-                                NULL, OPEN_EXISTING, 0, NULL );
+    f->fh_handle =
+        CreateFileW(path_wide.c_str(), desiredAccess, shareMode, NULL, OPEN_EXISTING, 0, NULL);
 
-    if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
+    if (f->fh_handle == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
         _fh_close(f);
-        D( "adb_open: could not open '%s': ", path );
+        D("adb_open: could not open '%s': ", path);
         switch (err) {
             case ERROR_FILE_NOT_FOUND:
-                D( "file not found" );
+                D("file not found");
                 errno = ENOENT;
                 return -1;
 
             case ERROR_PATH_NOT_FOUND:
-                D( "path not found" );
+                D("path not found");
                 errno = ENOTDIR;
                 return -1;
 
@@ -374,18 +411,17 @@ int  adb_open(const char*  path, int  options)
         }
     }
 
-    snprintf( f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path );
-    D( "adb_open: '%s' => fd %d", path, _fh_to_int(f) );
+    snprintf(f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path);
+    D("adb_open: '%s' => fd %d", path, _fh_to_int(f));
     return _fh_to_int(f);
 }
 
 /* ignore mode on Win32 */
-int  adb_creat(const char*  path, int  mode)
-{
-    FH  f;
+int adb_creat(const char* path, int mode) {
+    FH f;
 
-    f = _fh_alloc( &_fh_file_class );
-    if ( !f ) {
+    f = _fh_alloc(&_fh_file_class);
+    if (!f) {
         return -1;
     }
 
@@ -393,23 +429,21 @@ int  adb_creat(const char*  path, int  mode)
     if (!android::base::UTF8ToWide(path, &path_wide)) {
         return -1;
     }
-    f->fh_handle = CreateFileW( path_wide.c_str(), GENERIC_WRITE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                                NULL );
+    f->fh_handle = CreateFileW(path_wide.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if ( f->fh_handle == INVALID_HANDLE_VALUE ) {
+    if (f->fh_handle == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
         _fh_close(f);
-        D( "adb_creat: could not open '%s': ", path );
+        D("adb_creat: could not open '%s': ", path);
         switch (err) {
             case ERROR_FILE_NOT_FOUND:
-                D( "file not found" );
+                D("file not found");
                 errno = ENOENT;
                 return -1;
 
             case ERROR_PATH_NOT_FOUND:
-                D( "path not found" );
+                D("path not found");
                 errno = ENOTDIR;
                 return -1;
 
@@ -419,57 +453,64 @@ int  adb_creat(const char*  path, int  mode)
                 return -1;
         }
     }
-    snprintf( f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path );
-    D( "adb_creat: '%s' => fd %d", path, _fh_to_int(f) );
+    snprintf(f->name, sizeof(f->name), "%d(%s)", _fh_to_int(f), path);
+    D("adb_creat: '%s' => fd %d", path, _fh_to_int(f));
     return _fh_to_int(f);
 }
 
-
-int  adb_read(int  fd, void* buf, int len)
-{
-    FH     f = _fh_from_int(fd, __func__);
+int adb_read(int fd, void* buf, int len) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (f == NULL) {
+        errno = EBADF;
         return -1;
     }
 
-    return f->clazz->_fh_read( f, buf, len );
+    return f->clazz->_fh_read(f, buf, len);
 }
 
-
-int  adb_write(int  fd, const void*  buf, int  len)
-{
-    FH     f = _fh_from_int(fd, __func__);
+int adb_write(int fd, const void* buf, int len) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (f == NULL) {
+        errno = EBADF;
         return -1;
     }
 
     return f->clazz->_fh_write(f, buf, len);
 }
 
+ssize_t adb_writev(int fd, const adb_iovec* iov, int iovcnt) {
+    FH f = _fh_from_int(fd, __func__);
 
-int  adb_lseek(int  fd, int  pos, int  where)
-{
-    FH     f = _fh_from_int(fd, __func__);
+    if (f == NULL) {
+        errno = EBADF;
+        return -1;
+    }
+
+    return f->clazz->_fh_writev(f, iov, iovcnt);
+}
+
+int adb_lseek(int fd, int pos, int where) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (!f) {
+        errno = EBADF;
         return -1;
     }
 
     return f->clazz->_fh_lseek(f, pos, where);
 }
 
-
-int  adb_close(int  fd)
-{
-    FH   f = _fh_from_int(fd, __func__);
+int adb_close(int fd) {
+    FH f = _fh_from_int(fd, __func__);
 
     if (!f) {
+        errno = EBADF;
         return -1;
     }
 
-    D( "adb_close: %s", f->name);
+    D("adb_close: %s", f->name);
     _fh_close(f);
     return 0;
 }
@@ -582,7 +623,7 @@ static void _fh_socket_init(FH f) {
     f->fh_socket = INVALID_SOCKET;
 }
 
-static int _fh_socket_close( FH  f ) {
+static int _fh_socket_close(FH f) {
     if (f->fh_socket != INVALID_SOCKET) {
         /* gently tell any peer that we're closing the socket */
         if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
@@ -603,13 +644,13 @@ static int _fh_socket_close( FH  f ) {
     return 0;
 }
 
-static int _fh_socket_lseek( FH  f, int pos, int origin ) {
+static int _fh_socket_lseek(FH f, int pos, int origin) {
     errno = EPIPE;
     return -1;
 }
 
 static int _fh_socket_read(FH f, void* buf, int len) {
-    int  result = recv(f->fh_socket, reinterpret_cast<char*>(buf), len, 0);
+    int result = recv(f->fh_socket, reinterpret_cast<char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
         // WSAEWOULDBLOCK is normal with a non-blocking socket, so don't trace
@@ -621,11 +662,11 @@ static int _fh_socket_read(FH f, void* buf, int len) {
         _socket_set_errno(err);
         result = -1;
     }
-    return  result;
+    return result;
 }
 
 static int _fh_socket_write(FH f, const void* buf, int len) {
-    int  result = send(f->fh_socket, reinterpret_cast<const char*>(buf), len, 0);
+    int result = send(f->fh_socket, reinterpret_cast<const char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
         // WSAEWOULDBLOCK is normal with a non-blocking socket, so don't trace
@@ -639,11 +680,42 @@ static int _fh_socket_write(FH f, const void* buf, int len) {
     } else {
         // According to https://code.google.com/p/chromium/issues/detail?id=27870
         // Winsock Layered Service Providers may cause this.
-        CHECK_LE(result, len) << "Tried to write " << len << " bytes to "
-                              << f->name << ", but " << result
-                              << " bytes reportedly written";
+        CHECK_LE(result, len) << "Tried to write " << len << " bytes to " << f->name << ", but "
+                              << result << " bytes reportedly written";
     }
     return result;
+}
+
+// Make sure that adb_iovec is compatible with WSABUF.
+static_assert(sizeof(adb_iovec) == sizeof(WSABUF), "");
+static_assert(SIZEOF_MEMBER(adb_iovec, iov_len) == SIZEOF_MEMBER(WSABUF, len), "");
+static_assert(offsetof(adb_iovec, iov_len) == offsetof(WSABUF, len), "");
+
+static_assert(SIZEOF_MEMBER(adb_iovec, iov_base) == SIZEOF_MEMBER(WSABUF, buf), "");
+static_assert(offsetof(adb_iovec, iov_base) == offsetof(WSABUF, buf), "");
+
+static int _fh_socket_writev(FH f, const adb_iovec* iov, int iovcnt) {
+    if (iovcnt <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    WSABUF* wsabuf = reinterpret_cast<WSABUF*>(const_cast<adb_iovec*>(iov));
+    DWORD bytes_written = 0;
+    int result = WSASend(f->fh_socket, wsabuf, iovcnt, &bytes_written, 0, nullptr, nullptr);
+    if (result == SOCKET_ERROR) {
+        const DWORD err = WSAGetLastError();
+        // WSAEWOULDBLOCK is normal with a non-blocking socket, so don't trace
+        // that to reduce spam and confusion.
+        if (err != WSAEWOULDBLOCK) {
+            D("send fd %d failed: %s", _fh_to_int(f),
+              android::base::SystemErrorCodeToString(err).c_str());
+        }
+        _socket_set_errno(err);
+        result = -1;
+    }
+    CHECK_GE(static_cast<DWORD>(std::numeric_limits<int>::max()), bytes_written);
+    return static_cast<int>(bytes_written);
 }
 
 /**************************************************************************/
@@ -654,23 +726,15 @@ static int _fh_socket_write(FH f, const void* buf, int len) {
 /**************************************************************************/
 /**************************************************************************/
 
-#include <winsock2.h>
-
-static int  _winsock_init;
-
-static void
-_init_winsock( void )
-{
-    // TODO: Multiple threads calling this may potentially cause multiple calls
-    // to WSAStartup() which offers no real benefit.
-    if (!_winsock_init) {
-        WSADATA  wsaData;
-        int      rc = WSAStartup( MAKEWORD(2,2), &wsaData);
+static int _init_winsock(void) {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        WSADATA wsaData;
+        int rc = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (rc != 0) {
             fatal("adb: could not initialize Winsock: %s",
                   android::base::SystemErrorCodeToString(rc).c_str());
         }
-        _winsock_init = 1;
 
         // Note that we do not call atexit() to register WSACleanup to be called
         // at normal process termination because:
@@ -685,8 +749,11 @@ _init_winsock( void )
         //    setupapi.dll which tries to load wintrust.dll which tries to load
         //    crypt32.dll which calls atexit() which tries to acquire the C
         //    Runtime lock that the other thread holds.
-    }
+    });
+    return 0;
 }
+
+static int _winsock_init = _init_winsock();
 
 // Map a socket type to an explicit socket protocol instead of using the socket
 // protocol of 0. Explicit socket protocols are used by most apps and we should
@@ -714,8 +781,6 @@ int network_loopback_client(int port, int type, std::string* error) {
         *error = strerror(errno);
         return -1;
     }
-
-    if (!_winsock_init) _init_winsock();
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -764,8 +829,6 @@ static int _network_server(int port, int type, u_long interface_address, std::st
         *error = strerror(errno);
         return -1;
     }
-
-    if (!_winsock_init) _init_winsock();
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -843,8 +906,6 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
         return -1;
     }
 
-    if (!_winsock_init) _init_winsock();
-
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -912,52 +973,49 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
     return fd;
 }
 
-int  adb_register_socket(SOCKET s) {
-    FH f = _fh_alloc( &_fh_socket_class );
+int adb_register_socket(SOCKET s) {
+    FH f = _fh_alloc(&_fh_socket_class);
     f->fh_socket = s;
     return _fh_to_int(f);
 }
 
 #undef accept
-int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
-{
-    FH   serverfh = _fh_from_int(serverfd, __func__);
+int adb_socket_accept(int serverfd, struct sockaddr* addr, socklen_t* addrlen) {
+    FH serverfh = _fh_from_int(serverfd, __func__);
 
-    if ( !serverfh || serverfh->clazz != &_fh_socket_class ) {
+    if (!serverfh || serverfh->clazz != &_fh_socket_class) {
         D("adb_socket_accept: invalid fd %d", serverfd);
         errno = EBADF;
         return -1;
     }
 
-    unique_fh fh(_fh_alloc( &_fh_socket_class ));
+    unique_fh fh(_fh_alloc(&_fh_socket_class));
     if (!fh) {
         PLOG(ERROR) << "adb_socket_accept: failed to allocate accepted socket "
                        "descriptor";
         return -1;
     }
 
-    fh->fh_socket = accept( serverfh->fh_socket, addr, addrlen );
+    fh->fh_socket = accept(serverfh->fh_socket, addr, addrlen);
     if (fh->fh_socket == INVALID_SOCKET) {
         const DWORD err = WSAGetLastError();
-        LOG(ERROR) << "adb_socket_accept: accept on fd " << serverfd <<
-                      " failed: " + android::base::SystemErrorCodeToString(err);
-        _socket_set_errno( err );
+        LOG(ERROR) << "adb_socket_accept: accept on fd " << serverfd
+                   << " failed: " + android::base::SystemErrorCodeToString(err);
+        _socket_set_errno(err);
         return -1;
     }
 
     const int fd = _fh_to_int(fh.get());
-    snprintf( fh->name, sizeof(fh->name), "%d(accept:%s)", fd, serverfh->name );
-    D( "adb_socket_accept on fd %d returns fd %d", serverfd, fd );
+    snprintf(fh->name, sizeof(fh->name), "%d(accept:%s)", fd, serverfh->name);
+    D("adb_socket_accept on fd %d returns fd %d", serverfd, fd);
     fh.release();
-    return  fd;
+    return fd;
 }
 
+int adb_setsockopt(int fd, int level, int optname, const void* optval, socklen_t optlen) {
+    FH fh = _fh_from_int(fd, __func__);
 
-int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
-{
-    FH   fh = _fh_from_int(fd, __func__);
-
-    if ( !fh || fh->clazz != &_fh_socket_class ) {
+    if (!fh || fh->clazz != &_fh_socket_class) {
         D("adb_setsockopt: invalid fd %d", fd);
         errno = EBADF;
         return -1;
@@ -967,13 +1025,13 @@ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, soc
     // to set SOL_SOCKET, SO_SNDBUF/SO_RCVBUF, ignore it since the OS has
     // auto-tuning.
 
-    int result = setsockopt( fh->fh_socket, level, optname,
-                             reinterpret_cast<const char*>(optval), optlen );
-    if ( result == SOCKET_ERROR ) {
+    int result =
+        setsockopt(fh->fh_socket, level, optname, reinterpret_cast<const char*>(optval), optlen);
+    if (result == SOCKET_ERROR) {
         const DWORD err = WSAGetLastError();
-        D("adb_setsockopt: setsockopt on fd %d level %d optname %d failed: %s\n",
-          fd, level, optname, android::base::SystemErrorCodeToString(err).c_str());
-        _socket_set_errno( err );
+        D("adb_setsockopt: setsockopt on fd %d level %d optname %d failed: %s\n", fd, level,
+          optname, android::base::SystemErrorCodeToString(err).c_str());
+        _socket_set_errno(err);
         result = -1;
     }
     return result;
