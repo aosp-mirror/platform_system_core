@@ -14,6 +14,15 @@
  *  limitations under the License.
  */
 
+/**
+ * @addtogroup Sync
+ * @{
+ */
+
+/**
+ * @file sync.h
+ */
+
 #ifndef ANDROID_SYNC_H
 #define ANDROID_SYNC_H
 
@@ -86,3 +95,5 @@ void sync_file_info_free(struct sync_file_info *info);
 __END_DECLS
 
 #endif /* ANDROID_SYNC_H */
+
+/** @} */
