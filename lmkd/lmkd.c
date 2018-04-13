@@ -176,6 +176,11 @@ struct proc {
     struct proc *pidhash_next;
 };
 
+struct reread_data {
+    const char* const filename;
+    int fd;
+};
+
 #ifdef LMKD_LOG_STATS
 static bool enable_stats_log;
 static android_log_context log_ctx;
@@ -191,12 +196,27 @@ static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1];
 /* PAGE_SIZE / 1024 */
 static long page_k;
 
+static bool parse_int64(const char* str, int64_t* ret) {
+    char* endptr;
+    long long val = strtoll(str, &endptr, 10);
+    if (str == endptr || val > INT64_MAX) {
+        return false;
+    }
+    *ret = (int64_t)val;
+    return true;
+}
+
+/*
+ * Read file content from the beginning up to max_len bytes or EOF
+ * whichever happens first.
+ */
 static ssize_t read_all(int fd, char *buf, size_t max_len)
 {
     ssize_t ret = 0;
+    off_t offset = 0;
 
     while (max_len > 0) {
-        ssize_t r = read(fd, buf, max_len);
+        ssize_t r = TEMP_FAILURE_RETRY(pread(fd, buf, max_len, offset));
         if (r == 0) {
             break;
         }
@@ -205,10 +225,42 @@ static ssize_t read_all(int fd, char *buf, size_t max_len)
         }
         ret += r;
         buf += r;
+        offset += r;
         max_len -= r;
     }
 
     return ret;
+}
+
+/*
+ * Read a new or already opened file from the beginning.
+ * If the file has not been opened yet data->fd should be set to -1.
+ * To be used with files which are read often and possibly during high
+ * memory pressure to minimize file opening which by itself requires kernel
+ * memory allocation and might result in a stall on memory stressed system.
+ */
+static int reread_file(struct reread_data *data, char *buf, size_t buf_size) {
+    ssize_t size;
+
+    if (data->fd == -1) {
+        data->fd = open(data->filename, O_RDONLY | O_CLOEXEC);
+        if (data->fd == -1) {
+            ALOGE("%s open: %s", data->filename, strerror(errno));
+            return -1;
+        }
+    }
+
+    size = read_all(data->fd, buf, buf_size - 1);
+    if (size < 0) {
+        ALOGE("%s read: %s", data->filename, strerror(errno));
+        close(data->fd);
+        data->fd = -1;
+        return -1;
+    }
+    ALOG_ASSERT((size_t)size < buf_size - 1, data->filename " too large");
+    buf[size] = 0;
+
+    return 0;
 }
 
 static struct proc *pid_lookup(int pid) {
@@ -472,7 +524,7 @@ static void ctrl_data_close(int dsock_idx) {
 static int ctrl_data_read(int dsock_idx, char *buf, size_t bufsz) {
     int ret = 0;
 
-    ret = read(data_sock[dsock_idx].sock, buf, bufsz);
+    ret = TEMP_FAILURE_RETRY(read(data_sock[dsock_idx].sock, buf, bufsz));
 
     if (ret == -1) {
         ALOGE("control data socket read failed; errno=%d", errno);
@@ -833,23 +885,19 @@ static int find_and_kill_processes(enum vmpressure_level level,
     return pages_freed;
 }
 
-static int64_t get_memory_usage(const char* path) {
+static int64_t get_memory_usage(struct reread_data *file_data) {
     int ret;
     int64_t mem_usage;
     char buf[32];
-    int fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        ALOGE("%s open: errno=%d", path, errno);
+
+    if (reread_file(file_data, buf, sizeof(buf)) < 0) {
         return -1;
     }
 
-    ret = read_all(fd, buf, sizeof(buf) - 1);
-    close(fd);
-    if (ret < 0) {
-        ALOGE("%s error: errno=%d", path, errno);
+    if (!parse_int64(buf, &mem_usage)) {
+        ALOGE("%s parse error", file_data->filename);
         return -1;
     }
-    sscanf(buf, "%" SCNd64, &mem_usage);
     if (mem_usage == 0) {
         ALOGE("No memory!");
         return -1;
@@ -909,6 +957,14 @@ static void mp_event_common(int data, uint32_t events __unused) {
     static struct timeval last_report_tm;
     static unsigned long skip_count = 0;
     enum vmpressure_level level = (enum vmpressure_level)data;
+    static struct reread_data mem_usage_file_data = {
+        .filename = MEMCG_MEMORY_USAGE,
+        .fd = -1,
+    };
+    static struct reread_data memsw_usage_file_data = {
+        .filename = MEMCG_MEMORYSW_USAGE,
+        .fd = -1,
+    };
 
     /*
      * Check all event counters from low to critical
@@ -917,7 +973,8 @@ static void mp_event_common(int data, uint32_t events __unused) {
      */
     for (lvl = VMPRESS_LEVEL_LOW; lvl < VMPRESS_LEVEL_COUNT; lvl++) {
         if (mpevfd[lvl] != -1 &&
-            read(mpevfd[lvl], &evcount, sizeof(evcount)) > 0 &&
+            TEMP_FAILURE_RETRY(read(mpevfd[lvl],
+                               &evcount, sizeof(evcount))) > 0 &&
             evcount > 0 && lvl > level) {
             level = lvl;
         }
@@ -954,9 +1011,10 @@ static void mp_event_common(int data, uint32_t events __unused) {
         return;
     }
 
-    mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
-    memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
-    if (memsw_usage < 0 || mem_usage < 0) {
+    if ((mem_usage = get_memory_usage(&mem_usage_file_data)) < 0) {
+        goto do_kill;
+    }
+    if ((memsw_usage = get_memory_usage(&memsw_usage_file_data)) < 0) {
         goto do_kill;
     }
 
