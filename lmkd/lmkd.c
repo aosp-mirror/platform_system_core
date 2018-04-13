@@ -66,7 +66,8 @@
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
 #define MEMCG_MEMORY_USAGE "/dev/memcg/memory.usage_in_bytes"
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
-
+#define ZONEINFO_PATH "/proc/zoneinfo"
+#define MEMINFO_PATH "/proc/meminfo"
 #define LINE_MAX 128
 
 #define INKERNEL_MINFREE_PATH "/sys/module/lowmemorykiller/parameters/minfree"
@@ -151,6 +152,86 @@ static int lowmem_adj[MAX_TARGETS];
 static int lowmem_minfree[MAX_TARGETS];
 static int lowmem_targets_size;
 
+/* Fields to parse in /proc/zoneinfo */
+enum zoneinfo_field {
+    ZI_NR_FREE_PAGES = 0,
+    ZI_NR_FILE_PAGES,
+    ZI_NR_SHMEM,
+    ZI_NR_UNEVICTABLE,
+    ZI_WORKINGSET_REFAULT,
+    ZI_HIGH,
+    ZI_FIELD_COUNT
+};
+
+static const char* const zoneinfo_field_names[ZI_FIELD_COUNT] = {
+    "nr_free_pages",
+    "nr_file_pages",
+    "nr_shmem",
+    "nr_unevictable",
+    "workingset_refault",
+    "high",
+};
+
+union zoneinfo {
+    struct {
+        int64_t nr_free_pages;
+        int64_t nr_file_pages;
+        int64_t nr_shmem;
+        int64_t nr_unevictable;
+        int64_t workingset_refault;
+        int64_t high;
+        /* fields below are calculated rather than read from the file */
+        int64_t totalreserve_pages;
+    } field;
+    int64_t arr[ZI_FIELD_COUNT];
+};
+
+/* Fields to parse in /proc/meminfo */
+enum meminfo_field {
+    MI_NR_FREE_PAGES = 0,
+    MI_CACHED,
+    MI_SWAP_CACHED,
+    MI_BUFFERS,
+    MI_SHMEM,
+    MI_UNEVICTABLE,
+    MI_FREE_SWAP,
+    MI_DIRTY,
+    MI_FIELD_COUNT
+};
+
+static const char* const meminfo_field_names[MI_FIELD_COUNT] = {
+    "MemFree:",
+    "Cached:",
+    "SwapCached:",
+    "Buffers:",
+    "Shmem:",
+    "Unevictable:",
+    "SwapFree:",
+    "Dirty:",
+};
+
+union meminfo {
+    struct {
+        int64_t nr_free_pages;
+        int64_t cached;
+        int64_t swap_cached;
+        int64_t buffers;
+        int64_t shmem;
+        int64_t unevictable;
+        int64_t free_swap;
+        int64_t dirty;
+        /* fields below are calculated rather than read from the file */
+        int64_t nr_file_pages;
+    } field;
+    int64_t arr[MI_FIELD_COUNT];
+};
+
+enum field_match_result {
+    NO_MATCH,
+    PARSE_FAIL,
+    PARSE_SUCCESS
+};
+
 struct sysmeminfo {
     int nr_free_pages;
     int nr_file_pages;
@@ -199,6 +280,22 @@ static bool parse_int64(const char* str, int64_t* ret) {
     }
     *ret = (int64_t)val;
     return true;
+}
+
+static enum field_match_result match_field(const char* cp, const char* ap,
+                                   const char* const field_names[],
+                                   int field_count, int64_t* field,
+                                   int *field_idx) {
+    int64_t val;
+    int i;
+
+    for (i = 0; i < field_count; i++) {
+        if (!strcmp(cp, field_names[i])) {
+            *field_idx = i;
+            return parse_int64(ap, field) ? PARSE_SUCCESS : PARSE_FAIL;
+        }
+    }
+    return NO_MATCH;
 }
 
 /*
@@ -652,6 +749,145 @@ static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
    return 0;
 }
 #endif
+
+/* /prop/zoneinfo parsing routines */
+static int64_t zoneinfo_parse_protection(char *cp) {
+    int64_t max = 0;
+    long long zoneval;
+    char *save_ptr;
+
+    for (cp = strtok_r(cp, "(), ", &save_ptr); cp;
+         cp = strtok_r(NULL, "), ", &save_ptr)) {
+        zoneval = strtoll(cp, &cp, 0);
+        if (zoneval > max) {
+            max = (zoneval > INT64_MAX) ? INT64_MAX : zoneval;
+        }
+    }
+
+    return max;
+}
+
+static bool zoneinfo_parse_line(char *line, union zoneinfo *zi) {
+    char *cp = line;
+    char *ap;
+    char *save_ptr;
+    int64_t val;
+    int field_idx;
+
+    cp = strtok_r(line, " ", &save_ptr);
+    if (!cp) {
+        return true;
+    }
+
+    if (!strcmp(cp, "protection:")) {
+        ap = strtok_r(NULL, ")", &save_ptr);
+    } else {
+        ap = strtok_r(NULL, " ", &save_ptr);
+    }
+
+    if (!ap) {
+        return true;
+    }
+
+    switch (match_field(cp, ap, zoneinfo_field_names,
+                        ZI_FIELD_COUNT, &val, &field_idx)) {
+    case (PARSE_SUCCESS):
+        zi->arr[field_idx] += val;
+        break;
+    case (NO_MATCH):
+        if (!strcmp(cp, "protection:")) {
+            zi->field.totalreserve_pages +=
+                zoneinfo_parse_protection(ap);
+        }
+        break;
+    case (PARSE_FAIL):
+    default:
+        return false;
+    }
+    return true;
+}
+
+static int zoneinfo_parse(union zoneinfo *zi) {
+    static struct reread_data file_data = {
+        .filename = ZONEINFO_PATH,
+        .fd = -1,
+    };
+    char buf[PAGE_SIZE];
+    char *save_ptr;
+    char *line;
+
+    memset(zi, 0, sizeof(union zoneinfo));
+
+    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
+        return -1;
+    }
+
+    for (line = strtok_r(buf, "\n", &save_ptr); line;
+         line = strtok_r(NULL, "\n", &save_ptr)) {
+        if (!zoneinfo_parse_line(line, zi)) {
+            ALOGE("%s parse error", file_data.filename);
+            return -1;
+        }
+    }
+    zi->field.totalreserve_pages += zi->field.high;
+
+    return 0;
+}
+
+/* /prop/meminfo parsing routines */
+static bool meminfo_parse_line(char *line, union meminfo *mi) {
+    char *cp = line;
+    char *ap;
+    char *save_ptr;
+    int64_t val;
+    int field_idx;
+    enum field_match_result match_res;
+
+    cp = strtok_r(line, " ", &save_ptr);
+    if (!cp) {
+        return false;
+    }
+
+    ap = strtok_r(NULL, " ", &save_ptr);
+    if (!ap) {
+        return false;
+    }
+
+    match_res = match_field(cp, ap, meminfo_field_names, MI_FIELD_COUNT,
+        &val, &field_idx);
+    if (match_res == PARSE_SUCCESS) {
+        mi->arr[field_idx] = val / page_k;
+    }
+    return (match_res != PARSE_FAIL);
+}
+
+static int meminfo_parse(union meminfo *mi) {
+    static struct reread_data file_data = {
+        .filename = MEMINFO_PATH,
+        .fd = -1,
+    };
+    char buf[PAGE_SIZE];
+    char *save_ptr;
+    char *line;
+
+    memset(mi, 0, sizeof(union meminfo));
+
+    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
+        return -1;
+    }
+
+    for (line = strtok_r(buf, "\n", &save_ptr); line;
+         line = strtok_r(NULL, "\n", &save_ptr)) {
+        if (!meminfo_parse_line(line, mi)) {
+            ALOGE("%s parse error", file_data.filename);
+            return -1;
+        }
+    }
+    mi->field.nr_file_pages = mi->field.cached + mi->field.swap_cached +
+        mi->field.buffers;
+
+    return 0;
+}
 
 static int get_free_memory(struct mem_size *ms) {
     struct sysinfo si;
