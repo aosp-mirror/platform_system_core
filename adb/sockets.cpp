@@ -37,8 +37,8 @@
 
 #include "adb.h"
 #include "adb_io.h"
-#include "range.h"
 #include "transport.h"
+#include "types.h"
 
 static std::recursive_mutex& local_socket_list_lock = *new std::recursive_mutex();
 static unsigned local_socket_next_id = 1;
@@ -147,7 +147,7 @@ static SocketFlushResult local_socket_flush_incoming(asocket* s) {
 // Returns false if the socket has been closed and destroyed as a side-effect of this function.
 static bool local_socket_flush_outgoing(asocket* s) {
     const size_t max_payload = s->get_max_payload();
-    std::string data;
+    apacket::payload_type data;
     data.resize(max_payload);
     char* x = &data[0];
     size_t avail = max_payload;
@@ -214,7 +214,7 @@ static bool local_socket_flush_outgoing(asocket* s) {
     return true;
 }
 
-static int local_socket_enqueue(asocket* s, std::string data) {
+static int local_socket_enqueue(asocket* s, apacket::payload_type data) {
     D("LS(%d): enqueue %zu", s->id, data.size());
 
     Range r(std::move(data));
@@ -394,7 +394,7 @@ static asocket* create_host_service_socket(const char* name, const char* serial,
 }
 #endif /* ADB_HOST */
 
-static int remote_socket_enqueue(asocket* s, std::string data) {
+static int remote_socket_enqueue(asocket* s, apacket::payload_type data) {
     D("entered remote_socket_enqueue RS(%d) WRITE fd=%d peer.fd=%d", s->id, s->fd, s->peer->fd);
     apacket* p = get_apacket();
 
@@ -476,8 +476,7 @@ void connect_to_remote(asocket* s, const char* destination) {
     p->msg.arg0 = s->id;
 
     // adbd expects a null-terminated string.
-    p->payload = destination;
-    p->payload.push_back('\0');
+    p->payload.assign(destination, destination + strlen(destination) + 1);
     p->msg.data_length = p->payload.size();
 
     if (p->msg.data_length > s->get_max_payload()) {
@@ -612,7 +611,7 @@ char* skip_host_serial(char* service) {
 
 #endif  // ADB_HOST
 
-static int smart_socket_enqueue(asocket* s, std::string data) {
+static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 #if ADB_HOST
     char* service = nullptr;
     char* serial = nullptr;
@@ -623,7 +622,8 @@ static int smart_socket_enqueue(asocket* s, std::string data) {
     D("SS(%d): enqueue %zu", s->id, data.size());
 
     if (s->smart_socket_data.empty()) {
-        s->smart_socket_data = std::move(data);
+        // TODO: Make this a BlockChain?
+        s->smart_socket_data.assign(data.begin(), data.end());
     } else {
         std::copy(data.begin(), data.end(), std::back_inserter(s->smart_socket_data));
     }
