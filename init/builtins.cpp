@@ -82,6 +82,7 @@ namespace init {
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
 static Result<Success> reboot_into_recovery(const std::vector<std::string>& options) {
+    LOG(ERROR) << "Rebooting into recovery";
     std::string err;
     if (!write_bootloader_message(options, &err)) {
         return Error() << "Failed to set bootloader message: " << err;
@@ -285,11 +286,8 @@ static Result<Success> do_mkdir(const BuiltinArguments& args) {
 
     if (e4crypt_is_native()) {
         if (e4crypt_set_directory_policy(args[1].c_str())) {
-            const std::vector<std::string> options = {
-                "--prompt_and_wipe_data",
-                "--reason=set_policy_failed:"s + args[1]};
-            reboot_into_recovery(options);
-            return Success();
+            return reboot_into_recovery(
+                {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
         }
     }
     return Success();
@@ -493,8 +491,7 @@ static Result<Success> queue_fs_event(int code) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
-        reboot_into_recovery(options);
-        return Success();
+        return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
@@ -987,6 +984,29 @@ static bool is_file_crypto() {
     return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
+static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
+                                               const BuiltinArguments& args) {
+    auto service = Service::MakeTemporaryOneshotService(args.args);
+    if (!service) {
+        return Error() << "Could not create exec service";
+    }
+    service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
+        if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
+            if (e4crypt_is_native()) {
+                LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
+                reboot_into_recovery({"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+            } else {
+                LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
+            }
+        }
+    });
+    if (auto result = service->ExecStart(); !result) {
+        return Error() << "Could not start exec service: " << result.error();
+    }
+    ServiceList::GetInstance().AddService(std::move(service));
+    return Success();
+}
+
 static Result<Success> do_installkey(const BuiltinArguments& args) {
     if (!is_file_crypto()) return Success();
 
@@ -994,15 +1014,15 @@ static Result<Success> do_installkey(const BuiltinArguments& args) {
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         return ErrnoError() << "Failed to create " << unencrypted_dir;
     }
-    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
-                                          "enablefilecrypto"};
-    return do_exec({std::move(exec_args), args.context});
+    return ExecWithRebootOnFailure(
+        "enablefilecrypto_failed",
+        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "enablefilecrypto"}, args.context});
 }
 
 static Result<Success> do_init_user0(const BuiltinArguments& args) {
-    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
-                                          "init_user0"};
-    return do_exec({std::move(exec_args), args.context});
+    return ExecWithRebootOnFailure(
+        "init_user0_failed",
+        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
 }
 
 // Builtin-function-map start
