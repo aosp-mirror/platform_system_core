@@ -335,7 +335,7 @@ static void device_tracker_close(asocket* socket) {
     delete tracker;
 }
 
-static int device_tracker_enqueue(asocket* socket, std::string) {
+static int device_tracker_enqueue(asocket* socket, apacket::payload_type) {
     /* you can't read from a device tracker, close immediately */
     device_tracker_close(socket);
     return -1;
@@ -344,7 +344,7 @@ static int device_tracker_enqueue(asocket* socket, std::string) {
 static int device_tracker_send(device_tracker* tracker, const std::string& string) {
     asocket* peer = tracker->socket.peer;
 
-    std::string data;
+    apacket::payload_type data;
     data.resize(4 + string.size());
     char buf[5];
     snprintf(buf, sizeof(buf), "%04x", static_cast<int>(string.size()));
