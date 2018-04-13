@@ -257,7 +257,7 @@ void send_connect(atransport* t) {
                    << connection_str.length() << ")";
     }
 
-    cp->payload = std::move(connection_str);
+    cp->payload.assign(connection_str.begin(), connection_str.end());
     cp->msg.data_length = cp->payload.size();
 
     send_packet(cp, t);
@@ -329,7 +329,8 @@ static void handle_new_connection(atransport* t, apacket* p) {
     handle_offline(t);
 
     t->update_version(p->msg.arg0, p->msg.arg1);
-    parse_banner(p->payload, t);
+    std::string banner(p->payload.begin(), p->payload.end());
+    parse_banner(banner, t);
 
 #if ADB_HOST
     handle_online(t);
@@ -369,8 +370,10 @@ void handle_packet(apacket *p, atransport *t)
                 send_auth_response(p->payload.data(), p->msg.data_length, t);
                 break;
 #else
-            case ADB_AUTH_SIGNATURE:
-                if (adbd_auth_verify(t->token, sizeof(t->token), p->payload)) {
+            case ADB_AUTH_SIGNATURE: {
+                // TODO: Switch to string_view.
+                std::string signature(p->payload.begin(), p->payload.end());
+                if (adbd_auth_verify(t->token, sizeof(t->token), signature)) {
                     adbd_auth_verified(t);
                     t->failed_auth_attempts = 0;
                 } else {
@@ -378,6 +381,7 @@ void handle_packet(apacket *p, atransport *t)
                     send_auth_request(t);
                 }
                 break;
+            }
 
             case ADB_AUTH_RSAPUBLICKEY:
                 adbd_auth_confirm_key(p->payload.data(), p->msg.data_length, t);
@@ -392,7 +396,9 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_OPEN: /* OPEN(local-id, 0, "destination") */
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
-            asocket* s = create_local_service_socket(p->payload.c_str(), t);
+            // TODO: Switch to string_view.
+            std::string address(p->payload.begin(), p->payload.end());
+            asocket* s = create_local_service_socket(address.c_str(), t);
             if (s == nullptr) {
                 send_close(0, p->msg.arg0, t);
             } else {
