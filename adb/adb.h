@@ -127,7 +127,7 @@ atransport* find_emulator_transport_by_adb_port(int adb_port);
 atransport* find_emulator_transport_by_console_port(int console_port);
 #endif
 
-int service_to_fd(const char* name, const atransport* transport);
+int service_to_fd(const char* name, atransport* transport);
 #if ADB_HOST
 asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id);
 #endif
@@ -139,8 +139,7 @@ asocket* create_jdwp_tracker_service_socket();
 int create_jdwp_connection_fd(int jdwp_pid);
 #endif
 
-int handle_forward_request(const char* service, TransportType type, const char* serial,
-                           TransportId transport_id, int reply_fd);
+int handle_forward_request(const char* service, atransport* transport, int reply_fd);
 
 #if !ADB_HOST
 void framebuffer_service(int fd, void* cookie);
