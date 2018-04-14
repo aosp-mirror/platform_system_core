@@ -354,7 +354,14 @@ TEST_F(CrasherTest, abort_message) {
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
-    android_set_abort_message("abort message goes here");
+    // Arrived at experimentally;
+    // logd truncates at 4062.
+    // strlen("Abort message: ''") is 17.
+    // That's 4045, but we also want a NUL.
+    char buf[4045 + 1];
+    memset(buf, 'x', sizeof(buf));
+    buf[sizeof(buf) - 1] = '\0';
+    android_set_abort_message(buf);
     abort();
   });
   StartIntercept(&output_fd);
@@ -366,7 +373,7 @@ TEST_F(CrasherTest, abort_message) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(Abort message: 'abort message goes here')");
+  ASSERT_MATCH(result, R"(Abort message: 'x{4045}')");
 }
 
 TEST_F(CrasherTest, abort_message_backtrace) {
