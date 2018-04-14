@@ -104,8 +104,7 @@ void remove_socket(asocket *s);
 void close_all_sockets(atransport *t);
 
 asocket *create_local_socket(int fd);
-asocket *create_local_service_socket(const char* destination,
-                                     const atransport* transport);
+asocket* create_local_service_socket(const char* destination, atransport* transport);
 
 asocket *create_remote_socket(unsigned id, atransport *t);
 void connect_to_remote(asocket *s, const char *destination);
