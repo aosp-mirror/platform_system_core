@@ -74,25 +74,22 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
                       && (log->crashed_tid == log->current_tid);
   static bool write_to_kmsg = should_write_to_kmsg();
 
-  char buf[512];
+  std::string msg;
   va_list ap;
   va_start(ap, fmt);
-  vsnprintf(buf, sizeof(buf), fmt, ap);
+  android::base::StringAppendV(&msg, fmt, ap);
   va_end(ap);
 
-  size_t len = strlen(buf);
-  if (len <= 0) {
-    return;
-  }
+  if (msg.empty()) return;
 
   if (write_to_tombstone) {
-    TEMP_FAILURE_RETRY(write(log->tfd, buf, len));
+    TEMP_FAILURE_RETRY(write(log->tfd, msg.c_str(), msg.size()));
   }
 
   if (write_to_logcat) {
-    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, buf);
+    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, msg.c_str());
     if (log->amfd_data != nullptr) {
-      *log->amfd_data += buf;
+      *log->amfd_data += msg;
     }
 
     if (write_to_kmsg) {
@@ -100,11 +97,11 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
       if (kmsg_fd.get() >= 0) {
         // Our output might contain newlines which would otherwise be handled by the android logger.
         // Split the lines up ourselves before sending to the kernel logger.
-        if (buf[len - 1] == '\n') {
-          buf[len - 1] = '\0';
+        if (msg.back() == '\n') {
+          msg.back() = '\0';
         }
 
-        std::vector<std::string> fragments = android::base::Split(buf, "\n");
+        std::vector<std::string> fragments = android::base::Split(msg, "\n");
         for (const std::string& fragment : fragments) {
           static constexpr char prefix[] = "<3>DEBUG: ";
           struct iovec iov[3];
