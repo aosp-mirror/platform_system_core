@@ -35,6 +35,11 @@
  */
 
 /**
+ * @addtogroup Logging
+ * @{
+ */
+
+/**
  * \file
  *
  * Support routines to send messages to the Android log buffer,
@@ -204,5 +209,7 @@ int __android_log_buf_print(int bufID, int prio, const char* tag,
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */
 
 #endif /* _ANDROID_LOG_H */
