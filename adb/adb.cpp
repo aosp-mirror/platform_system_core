@@ -933,8 +933,7 @@ int launch_server(const std::string& socket_spec) {
 // Try to handle a network forwarding request.
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
-int handle_forward_request(const char* service, TransportType type, const char* serial,
-                           TransportId transport_id, int reply_fd) {
+int handle_forward_request(const char* service, atransport* transport, int reply_fd) {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
         std::string listeners = format_listeners();
@@ -984,14 +983,6 @@ int handle_forward_request(const char* service, TransportType type, const char* 
                 SendFail(reply_fd, android::base::StringPrintf("bad forward: %s", service));
                 return 1;
             }
-        }
-
-        std::string error_msg;
-        atransport* transport =
-            acquire_one_transport(type, serial, transport_id, nullptr, &error_msg);
-        if (!transport) {
-            SendFail(reply_fd, error_msg);
-            return 1;
         }
 
         std::string error;
@@ -1227,7 +1218,13 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         return SendOkay(reply_fd, response);
     }
 
-    int ret = handle_forward_request(service, type, serial, transport_id, reply_fd);
+    std::string error;
+    atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
+    if (!t) {
+        return SendFail(reply_fd, error);
+    }
+
+    int ret = handle_forward_request(service, t, reply_fd);
     if (ret >= 0)
       return ret - 1;
     return -1;
