@@ -28,6 +28,7 @@
 #include "adb_trace.h"
 #include "fdevent.h"
 #include "socket.h"
+#include "types.h"
 #include "usb.h"
 
 constexpr size_t MAX_PAYLOAD_V1 = 4 * 1024;
@@ -62,20 +63,6 @@ std::string adb_version();
 
 using TransportId = uint64_t;
 class atransport;
-
-struct amessage {
-    uint32_t command;     /* command identifier constant      */
-    uint32_t arg0;        /* first argument                   */
-    uint32_t arg1;        /* second argument                  */
-    uint32_t data_length; /* length of payload (0 is allowed) */
-    uint32_t data_check;  /* checksum of data payload         */
-    uint32_t magic;       /* command ^ 0xffffffff             */
-};
-
-struct apacket {
-    amessage msg;
-    std::string payload;
-};
 
 uint32_t calculate_apacket_checksum(const apacket* packet);
 
