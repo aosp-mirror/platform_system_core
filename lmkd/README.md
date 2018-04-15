@@ -29,6 +29,11 @@ properties:
   ro.config.low_ram:         choose between low-memory vs high-performance
                              device. Default = false.
 
+  ro.lmk.use_minfree_levels: use free memory and file cache thresholds for
+                             making decisions when to kill. This mode works
+                             the same way kernel lowmemorykiller driver used
+                             to work. Default = false
+
   ro.lmk.low:                min oom_adj score for processes eligible to be
                              killed at low vmpressure level. Default = 1001
                              (disabled)
