@@ -65,6 +65,7 @@
 #define MEMCG_MEMORY_USAGE "/dev/memcg/memory.usage_in_bytes"
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
 #define ZONEINFO_PATH "/proc/zoneinfo"
+#define MEMINFO_PATH "/proc/meminfo"
 #define LINE_MAX 128
 
 #define INKERNEL_MINFREE_PATH "/sys/module/lowmemorykiller/parameters/minfree"
@@ -149,6 +150,86 @@ static int lowmem_adj[MAX_TARGETS];
 static int lowmem_minfree[MAX_TARGETS];
 static int lowmem_targets_size;
 
+/* Fields to parse in /proc/zoneinfo */
+enum zoneinfo_field {
+    ZI_NR_FREE_PAGES = 0,
+    ZI_NR_FILE_PAGES,
+    ZI_NR_SHMEM,
+    ZI_NR_UNEVICTABLE,
+    ZI_WORKINGSET_REFAULT,
+    ZI_HIGH,
+    ZI_FIELD_COUNT
+};
+
+static const char* const zoneinfo_field_names[ZI_FIELD_COUNT] = {
+    "nr_free_pages",
+    "nr_file_pages",
+    "nr_shmem",
+    "nr_unevictable",
+    "workingset_refault",
+    "high",
+};
+
+union zoneinfo {
+    struct {
+        int64_t nr_free_pages;
+        int64_t nr_file_pages;
+        int64_t nr_shmem;
+        int64_t nr_unevictable;
+        int64_t workingset_refault;
+        int64_t high;
+        /* fields below are calculated rather than read from the file */
+        int64_t totalreserve_pages;
+    } field;
+    int64_t arr[ZI_FIELD_COUNT];
+};
+
+/* Fields to parse in /proc/meminfo */
+enum meminfo_field {
+    MI_NR_FREE_PAGES = 0,
+    MI_CACHED,
+    MI_SWAP_CACHED,
+    MI_BUFFERS,
+    MI_SHMEM,
+    MI_UNEVICTABLE,
+    MI_FREE_SWAP,
+    MI_DIRTY,
+    MI_FIELD_COUNT
+};
+
+static const char* const meminfo_field_names[MI_FIELD_COUNT] = {
+    "MemFree:",
+    "Cached:",
+    "SwapCached:",
+    "Buffers:",
+    "Shmem:",
+    "Unevictable:",
+    "SwapFree:",
+    "Dirty:",
+};
+
+union meminfo {
+    struct {
+        int64_t nr_free_pages;
+        int64_t cached;
+        int64_t swap_cached;
+        int64_t buffers;
+        int64_t shmem;
+        int64_t unevictable;
+        int64_t free_swap;
+        int64_t dirty;
+        /* fields below are calculated rather than read from the file */
+        int64_t nr_file_pages;
+    } field;
+    int64_t arr[MI_FIELD_COUNT];
+};
+
+enum field_match_result {
+    NO_MATCH,
+    PARSE_FAIL,
+    PARSE_SUCCESS
+};
+
 struct sysmeminfo {
     int nr_free_pages;
     int nr_file_pages;
@@ -169,6 +250,11 @@ struct proc {
     struct proc *pidhash_next;
 };
 
+struct reread_data {
+    const char* const filename;
+    int fd;
+};
+
 #define PIDHASH_SZ 1024
 static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
@@ -179,12 +265,43 @@ static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1];
 /* PAGE_SIZE / 1024 */
 static long page_k;
 
+static bool parse_int64(const char* str, int64_t* ret) {
+    char* endptr;
+    long long val = strtoll(str, &endptr, 10);
+    if (str == endptr || val > INT64_MAX) {
+        return false;
+    }
+    *ret = (int64_t)val;
+    return true;
+}
+
+static enum field_match_result match_field(const char* cp, const char* ap,
+                                   const char* const field_names[],
+                                   int field_count, int64_t* field,
+                                   int *field_idx) {
+    int64_t val;
+    int i;
+
+    for (i = 0; i < field_count; i++) {
+        if (!strcmp(cp, field_names[i])) {
+            *field_idx = i;
+            return parse_int64(ap, field) ? PARSE_SUCCESS : PARSE_FAIL;
+        }
+    }
+    return NO_MATCH;
+}
+
+/*
+ * Read file content from the beginning up to max_len bytes or EOF
+ * whichever happens first.
+ */
 static ssize_t read_all(int fd, char *buf, size_t max_len)
 {
     ssize_t ret = 0;
+    off_t offset = 0;
 
     while (max_len > 0) {
-        ssize_t r = read(fd, buf, max_len);
+        ssize_t r = TEMP_FAILURE_RETRY(pread(fd, buf, max_len, offset));
         if (r == 0) {
             break;
         }
@@ -193,10 +310,42 @@ static ssize_t read_all(int fd, char *buf, size_t max_len)
         }
         ret += r;
         buf += r;
+        offset += r;
         max_len -= r;
     }
 
     return ret;
+}
+
+/*
+ * Read a new or already opened file from the beginning.
+ * If the file has not been opened yet data->fd should be set to -1.
+ * To be used with files which are read often and possibly during high
+ * memory pressure to minimize file opening which by itself requires kernel
+ * memory allocation and might result in a stall on memory stressed system.
+ */
+static int reread_file(struct reread_data *data, char *buf, size_t buf_size) {
+    ssize_t size;
+
+    if (data->fd == -1) {
+        data->fd = open(data->filename, O_RDONLY | O_CLOEXEC);
+        if (data->fd == -1) {
+            ALOGE("%s open: %s", data->filename, strerror(errno));
+            return -1;
+        }
+    }
+
+    size = read_all(data->fd, buf, buf_size - 1);
+    if (size < 0) {
+        ALOGE("%s read: %s", data->filename, strerror(errno));
+        close(data->fd);
+        data->fd = -1;
+        return -1;
+    }
+    ALOG_ASSERT((size_t)size < buf_size - 1, data->filename " too large");
+    buf[size] = 0;
+
+    return 0;
 }
 
 static struct proc *pid_lookup(int pid) {
@@ -460,7 +609,7 @@ static void ctrl_data_close(int dsock_idx) {
 static int ctrl_data_read(int dsock_idx, char *buf, size_t bufsz) {
     int ret = 0;
 
-    ret = read(data_sock[dsock_idx].sock, buf, bufsz);
+    ret = TEMP_FAILURE_RETRY(read(data_sock[dsock_idx].sock, buf, bufsz));
 
     if (ret == -1) {
         ALOGE("control data socket read failed; errno=%d", errno);
@@ -574,73 +723,142 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
     maxevents++;
 }
 
-static int zoneinfo_parse_protection(char *cp) {
-    int max = 0;
-    int zoneval;
+/* /prop/zoneinfo parsing routines */
+static int64_t zoneinfo_parse_protection(char *cp) {
+    int64_t max = 0;
+    long long zoneval;
     char *save_ptr;
 
-    for (cp = strtok_r(cp, "(), ", &save_ptr); cp; cp = strtok_r(NULL, "), ", &save_ptr)) {
-        zoneval = strtol(cp, &cp, 0);
-        if (zoneval > max)
-            max = zoneval;
+    for (cp = strtok_r(cp, "(), ", &save_ptr); cp;
+         cp = strtok_r(NULL, "), ", &save_ptr)) {
+        zoneval = strtoll(cp, &cp, 0);
+        if (zoneval > max) {
+            max = (zoneval > INT64_MAX) ? INT64_MAX : zoneval;
+        }
     }
 
     return max;
 }
 
-static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
+static bool zoneinfo_parse_line(char *line, union zoneinfo *zi) {
     char *cp = line;
     char *ap;
     char *save_ptr;
+    int64_t val;
+    int field_idx;
 
     cp = strtok_r(line, " ", &save_ptr);
-    if (!cp)
-        return;
+    if (!cp) {
+        return true;
+    }
 
-    ap = strtok_r(NULL, " ", &save_ptr);
-    if (!ap)
-        return;
+    if (!strcmp(cp, "protection:")) {
+        ap = strtok_r(NULL, ")", &save_ptr);
+    } else {
+        ap = strtok_r(NULL, " ", &save_ptr);
+    }
 
-    if (!strcmp(cp, "nr_free_pages"))
-        mip->nr_free_pages += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "nr_file_pages"))
-        mip->nr_file_pages += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "nr_shmem"))
-        mip->nr_shmem += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "high"))
-        mip->totalreserve_pages += strtol(ap, NULL, 0);
-    else if (!strcmp(cp, "protection:"))
-        mip->totalreserve_pages += zoneinfo_parse_protection(ap);
+    if (!ap) {
+        return true;
+    }
+
+    switch (match_field(cp, ap, zoneinfo_field_names,
+                        ZI_FIELD_COUNT, &val, &field_idx)) {
+    case (PARSE_SUCCESS):
+        zi->arr[field_idx] += val;
+        break;
+    case (NO_MATCH):
+        if (!strcmp(cp, "protection:")) {
+            zi->field.totalreserve_pages +=
+                zoneinfo_parse_protection(ap);
+        }
+        break;
+    case (PARSE_FAIL):
+    default:
+        return false;
+    }
+    return true;
 }
 
-static int zoneinfo_parse(struct sysmeminfo *mip) {
-    int fd;
-    ssize_t size;
+static int zoneinfo_parse(union zoneinfo *zi) {
+    static struct reread_data file_data = {
+        .filename = ZONEINFO_PATH,
+        .fd = -1,
+    };
     char buf[PAGE_SIZE];
     char *save_ptr;
     char *line;
 
-    memset(mip, 0, sizeof(struct sysmeminfo));
+    memset(zi, 0, sizeof(union zoneinfo));
 
-    fd = open(ZONEINFO_PATH, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        ALOGE("%s open: errno=%d", ZONEINFO_PATH, errno);
+    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
         return -1;
     }
 
-    size = read_all(fd, buf, sizeof(buf) - 1);
-    if (size < 0) {
-        ALOGE("%s read: errno=%d", ZONEINFO_PATH, errno);
-        close(fd);
+    for (line = strtok_r(buf, "\n", &save_ptr); line;
+         line = strtok_r(NULL, "\n", &save_ptr)) {
+        if (!zoneinfo_parse_line(line, zi)) {
+            ALOGE("%s parse error", file_data.filename);
+            return -1;
+        }
+    }
+    zi->field.totalreserve_pages += zi->field.high;
+
+    return 0;
+}
+
+/* /prop/meminfo parsing routines */
+static bool meminfo_parse_line(char *line, union meminfo *mi) {
+    char *cp = line;
+    char *ap;
+    char *save_ptr;
+    int64_t val;
+    int field_idx;
+    enum field_match_result match_res;
+
+    cp = strtok_r(line, " ", &save_ptr);
+    if (!cp) {
+        return false;
+    }
+
+    ap = strtok_r(NULL, " ", &save_ptr);
+    if (!ap) {
+        return false;
+    }
+
+    match_res = match_field(cp, ap, meminfo_field_names, MI_FIELD_COUNT,
+        &val, &field_idx);
+    if (match_res == PARSE_SUCCESS) {
+        mi->arr[field_idx] = val / page_k;
+    }
+    return (match_res != PARSE_FAIL);
+}
+
+static int meminfo_parse(union meminfo *mi) {
+    static struct reread_data file_data = {
+        .filename = MEMINFO_PATH,
+        .fd = -1,
+    };
+    char buf[PAGE_SIZE];
+    char *save_ptr;
+    char *line;
+
+    memset(mi, 0, sizeof(union meminfo));
+
+    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
         return -1;
     }
-    ALOG_ASSERT((size_t)size < sizeof(buf) - 1, "/proc/zoneinfo too large");
-    buf[size] = 0;
 
-    for (line = strtok_r(buf, "\n", &save_ptr); line; line = strtok_r(NULL, "\n", &save_ptr))
-            zoneinfo_parse_line(line, mip);
+    for (line = strtok_r(buf, "\n", &save_ptr); line;
+         line = strtok_r(NULL, "\n", &save_ptr)) {
+        if (!meminfo_parse_line(line, mi)) {
+            ALOGE("%s parse error", file_data.filename);
+            return -1;
+        }
+    }
+    mi->field.nr_file_pages = mi->field.cached + mi->field.swap_cached +
+        mi->field.buffers;
 
-    close(fd);
     return 0;
 }
 
@@ -807,23 +1025,19 @@ static int find_and_kill_processes(enum vmpressure_level level,
     return pages_freed;
 }
 
-static int64_t get_memory_usage(const char* path) {
+static int64_t get_memory_usage(struct reread_data *file_data) {
     int ret;
     int64_t mem_usage;
     char buf[32];
-    int fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        ALOGE("%s open: errno=%d", path, errno);
+
+    if (reread_file(file_data, buf, sizeof(buf)) < 0) {
         return -1;
     }
 
-    ret = read_all(fd, buf, sizeof(buf) - 1);
-    close(fd);
-    if (ret < 0) {
-        ALOGE("%s error: errno=%d", path, errno);
+    if (!parse_int64(buf, &mem_usage)) {
+        ALOGE("%s parse error", file_data->filename);
         return -1;
     }
-    sscanf(buf, "%" SCNd64, &mem_usage);
     if (mem_usage == 0) {
         ALOGE("No memory!");
         return -1;
@@ -883,6 +1097,14 @@ static void mp_event_common(int data, uint32_t events __unused) {
     static struct timeval last_report_tm;
     static unsigned long skip_count = 0;
     enum vmpressure_level level = (enum vmpressure_level)data;
+    static struct reread_data mem_usage_file_data = {
+        .filename = MEMCG_MEMORY_USAGE,
+        .fd = -1,
+    };
+    static struct reread_data memsw_usage_file_data = {
+        .filename = MEMCG_MEMORYSW_USAGE,
+        .fd = -1,
+    };
 
     /*
      * Check all event counters from low to critical
@@ -891,7 +1113,8 @@ static void mp_event_common(int data, uint32_t events __unused) {
      */
     for (lvl = VMPRESS_LEVEL_LOW; lvl < VMPRESS_LEVEL_COUNT; lvl++) {
         if (mpevfd[lvl] != -1 &&
-            read(mpevfd[lvl], &evcount, sizeof(evcount)) > 0 &&
+            TEMP_FAILURE_RETRY(read(mpevfd[lvl],
+                               &evcount, sizeof(evcount))) > 0 &&
             evcount > 0 && lvl > level) {
             level = lvl;
         }
@@ -928,9 +1151,10 @@ static void mp_event_common(int data, uint32_t events __unused) {
         return;
     }
 
-    mem_usage = get_memory_usage(MEMCG_MEMORY_USAGE);
-    memsw_usage = get_memory_usage(MEMCG_MEMORYSW_USAGE);
-    if (memsw_usage < 0 || mem_usage < 0) {
+    if ((mem_usage = get_memory_usage(&mem_usage_file_data)) < 0) {
+        goto do_kill;
+    }
+    if ((memsw_usage = get_memory_usage(&memsw_usage_file_data)) < 0) {
         goto do_kill;
     }
 
