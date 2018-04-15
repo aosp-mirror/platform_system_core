@@ -117,7 +117,7 @@ static bool debug_process_killing;
 static bool enable_pressure_upgrade;
 static int64_t upgrade_pressure;
 static int64_t downgrade_pressure;
-static bool is_go_device;
+static bool low_ram_device;
 static bool kill_heaviest_task;
 static unsigned long kill_timeout_ms;
 
@@ -801,10 +801,8 @@ static int find_and_kill_processes(enum vmpressure_level level,
         struct proc *procp;
 
         while (true) {
-            if (is_go_device)
-                procp = proc_adj_lru(i);
-            else
-                procp = proc_get_heaviest(i);
+            procp = kill_heaviest_task ?
+                proc_get_heaviest(i) : proc_adj_lru(i);
 
             if (!procp)
                 break;
@@ -992,7 +990,7 @@ static void mp_event_common(int data, uint32_t events __unused) {
     }
 
 do_kill:
-    if (is_go_device) {
+    if (low_ram_device) {
         /* For Go devices kill only one task */
         if (find_and_kill_processes(level, 0) == 0) {
             if (debug_process_killing) {
@@ -1228,8 +1226,8 @@ int main(int argc __unused, char **argv __unused) {
     downgrade_pressure =
         (int64_t)property_get_int32("ro.lmk.downgrade_pressure", 100);
     kill_heaviest_task =
-        property_get_bool("ro.lmk.kill_heaviest_task", true);
-    is_go_device = property_get_bool("ro.config.low_ram", false);
+        property_get_bool("ro.lmk.kill_heaviest_task", false);
+    low_ram_device = property_get_bool("ro.config.low_ram", false);
     kill_timeout_ms =
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
 
