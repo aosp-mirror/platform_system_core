@@ -239,19 +239,23 @@ static void dump_abort_message(log_t* log, Memory* process_memory, uint64_t addr
     return;
   }
 
-  char msg[512];
-  if (length >= sizeof(msg)) {
-    _LOG(log, logtype::HEADER, "Abort message too long: claimed length = %zd\n", length);
+  // The length field includes the length of the length field itself.
+  if (length < sizeof(size_t)) {
+    _LOG(log, logtype::HEADER, "Abort message header malformed: claimed length = %zd\n", length);
     return;
   }
 
-  if (!process_memory->ReadFully(address + sizeof(length), msg, length)) {
+  length -= sizeof(size_t);
+
+  std::vector<char> msg(length);
+  if (!process_memory->ReadFully(address + sizeof(length), &msg[0], length)) {
     _LOG(log, logtype::HEADER, "Failed to read abort message: %s\n", strerror(errno));
     return;
   }
 
+  // The abort message should be null terminated already, but just in case...
   msg[length] = '\0';
-  _LOG(log, logtype::HEADER, "Abort message: '%s'\n", msg);
+  _LOG(log, logtype::HEADER, "Abort message: '%s'\n", &msg[0]);
 }
 
 static void dump_all_maps(log_t* log, BacktraceMap* map, Memory* process_memory, uint64_t addr) {
