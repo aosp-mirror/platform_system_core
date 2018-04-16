@@ -188,8 +188,6 @@ class ForwardReverseTest(DeviceTest):
         finally:
             self.device.reverse_remove_all()
 
-    # Note: If you run this test when adb connect'd to a physical device over
-    # TCP, it will fail in adb reverse due to https://code.google.com/p/android/issues/detail?id=189821
     def test_forward_reverse_echo(self):
         """Send data through adb forward and read it back via adb reverse"""
         forward_port = 12345
