@@ -457,12 +457,6 @@ static void* load_bootable_image(const std::string& kernel, const std::string& r
     }
     if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
         if (cmdline) bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kdata), cmdline);
-        uint32_t header_version_existing =
-                reinterpret_cast<boot_img_hdr_v1*>(kdata)->header_version;
-        if (header_version != header_version_existing) {
-            die("header version mismatch, expected: %" PRIu32 " found %" PRIu32 "",
-                header_version, header_version_existing);
-        }
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
 
