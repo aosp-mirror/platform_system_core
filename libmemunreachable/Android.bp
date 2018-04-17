@@ -46,6 +46,12 @@ cc_library {
             static_libs: ["libunwind_llvm"],
         },
     },
+
+    // TODO(b/78118944), clang lld link flags do not work with special link
+    // rules for libunwind_llvm yet. Linked aosp_arm-eng image failed to
+    // boot up in the emulator.
+    use_clang_lld: false,
+
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
 }
