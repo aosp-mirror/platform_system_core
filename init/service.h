@@ -114,6 +114,7 @@ class Service {
     bool is_override() const { return override_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
+    void set_sigstop(bool value) { sigstop_ = value; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
@@ -149,6 +150,7 @@ class Service {
     Result<Success> ParseSeclabel(const std::vector<std::string>& args);
     Result<Success> ParseSetenv(const std::vector<std::string>& args);
     Result<Success> ParseShutdown(const std::vector<std::string>& args);
+    Result<Success> ParseSigstop(const std::vector<std::string>& args);
     Result<Success> ParseSocket(const std::vector<std::string>& args);
     Result<Success> ParseFile(const std::vector<std::string>& args);
     Result<Success> ParseUser(const std::vector<std::string>& args);
@@ -208,6 +210,8 @@ class Service {
     unsigned long start_order_;
 
     std::vector<std::pair<int, rlimit>> rlimits_;
+
+    bool sigstop_ = false;
 
     std::vector<std::string> args_;
 };
