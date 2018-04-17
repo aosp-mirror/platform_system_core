@@ -38,6 +38,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/log.h>
 #include <cutils/android_reboot.h>
@@ -1096,14 +1097,28 @@ void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
   boot_event_store->AddBootEventWithValue("absolute_boot_time", absolute_total.count());
 }
 
+// Gets the boot time offset. This is useful when Android is running in a
+// container, because the boot_clock is not reset when Android reboots.
+std::chrono::nanoseconds GetBootTimeOffset() {
+  static const int64_t boottime_offset =
+      android::base::GetIntProperty<int64_t>("ro.boot.boottime_offset", 0);
+  return std::chrono::nanoseconds(boottime_offset);
+}
+
+// Returns the current uptime, accounting for any offset in the CLOCK_BOOTTIME
+// clock.
+android::base::boot_clock::duration GetUptime() {
+  return android::base::boot_clock::now().time_since_epoch() - GetBootTimeOffset();
+}
+
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
 
-  auto time_since_epoch = android::base::boot_clock::now().time_since_epoch();
-  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(time_since_epoch);
+  auto uptime_ns = GetUptime();
+  auto uptime_s = std::chrono::duration_cast<std::chrono::seconds>(uptime_ns);
   time_t current_time_utc = time(nullptr);
 
   if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
@@ -1128,19 +1143,20 @@ void RecordBootComplete() {
     // Log the amount of time elapsed until the device is decrypted, which
     // includes the variable amount of time the user takes to enter the
     // decryption password.
-    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime.count());
+    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime_s.count());
 
     // Subtract the decryption time to normalize the boot cycle timing.
-    std::chrono::seconds boot_complete = std::chrono::seconds(uptime.count() - record.second);
+    std::chrono::seconds boot_complete = std::chrono::seconds(uptime_s.count() - record.second);
     boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
                                            boot_complete.count());
   } else {
-    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption", uptime.count());
+    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
+                                           uptime_s.count());
   }
 
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
-  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime.count());
+  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime_s.count());
 
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.selinux");
@@ -1149,7 +1165,7 @@ void RecordBootComplete() {
   const BootloaderTimingMap bootloader_timings = GetBootLoaderTimings();
   RecordBootloaderTimings(&boot_event_store, bootloader_timings);
 
-  auto uptime_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_since_epoch);
+  auto uptime_ms = std::chrono::duration_cast<std::chrono::milliseconds>(uptime_ns);
   RecordAbsoluteBootTime(&boot_event_store, bootloader_timings, uptime_ms);
 }
 
