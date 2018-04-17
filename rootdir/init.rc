@@ -31,6 +31,9 @@ on early-init
     # root memory control cgroup, used by lmkd
     mkdir /dev/memcg 0700 root system
     mount cgroup none /dev/memcg nodev noexec nosuid memory
+    # memory.pressure_level used by lmkd
+    chown root system /dev/memcg/memory.pressure_level
+    chmod 0040 /dev/memcg/memory.pressure_level
     # app mem cgroups, used by activity manager, lmkd and zygote
     mkdir /dev/memcg/apps/ 0755 system system
     # cgroup for system_server and surfaceflinger
