@@ -120,6 +120,9 @@
 70200 aggregation (aggregation time|2|3)
 70201 aggregation_test (field1|1|2),(field2|1|2),(field3|1|2),(field4|1|2),(field5|1|2)
 
+# gms refuses to register this log tag, b/30156345
+70220 gms_unknown
+
 # libc failure logging
 80100 bionic_event_memcpy_buffer_overflow (uid|1)
 80105 bionic_event_strcat_buffer_overflow (uid|1)
