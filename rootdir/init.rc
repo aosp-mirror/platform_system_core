@@ -506,6 +506,7 @@ on post-fs-data
     mkdir /data/ss 0700 system system
 
     mkdir /data/system 0775 system system
+    mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
 
