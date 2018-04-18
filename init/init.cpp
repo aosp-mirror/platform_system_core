@@ -238,6 +238,10 @@ struct ControlMessageFunction {
 static const std::map<std::string, ControlMessageFunction>& get_control_message_map() {
     // clang-format off
     static const std::map<std::string, ControlMessageFunction> control_message_functions = {
+        {"sigstop_on",        {ControlTarget::SERVICE,
+                               [](auto* service) { service->set_sigstop(true); return Success(); }}},
+        {"sigstop_off",       {ControlTarget::SERVICE,
+                               [](auto* service) { service->set_sigstop(false); return Success(); }}},
         {"start",             {ControlTarget::SERVICE,   DoControlStart}},
         {"stop",              {ControlTarget::SERVICE,   DoControlStop}},
         {"restart",           {ControlTarget::SERVICE,   DoControlRestart}},
