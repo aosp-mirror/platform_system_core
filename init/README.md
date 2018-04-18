@@ -282,6 +282,10 @@ runs the service.
   "shutdown critical" will be killed. When the service tagged with "shutdown critical"
   is not running when shut down starts, it will be started.
 
+`sigstop`
+> Send SIGSTOP to the service immediately before exec is called. This is intended for debugging.
+  See the below section on debugging for how this can be used.
+
 `socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]`
 > Create a unix domain socket named /dev/socket/_name_ and pass its fd to the
   launched process.  _type_ must be "dgram", "stream" or "seqpacket".  User and
@@ -708,23 +712,39 @@ affected.
 
 Debugging init
 --------------
-By default, programs executed by init will drop stdout and stderr into
-/dev/null. To help with debugging, you can execute your program via the
-Android program logwrapper. This will redirect stdout/stderr into the
-Android logging system (accessed via logcat).
+Launching init services without init is not recommended as init sets up a significant amount of
+environment (user, groups, security label, capabilities, etc) that is hard to replicate manually.
 
-For example
-service akmd /system/bin/logwrapper /sbin/akmd
+If it is required to debug a service from its very start, the `sigstop` service option is added.
+This option will send SIGSTOP to a service immediately before calling exec. This gives a window
+where developers can attach a debugger, strace, etc before continuing the service with SIGCONT.
 
-For quicker turnaround when working on init itself, use:
+This flag can also be dynamically controled via the ctl.sigstop_on and ctl.sigstop_off properties.
 
-    mm -j &&
-    m ramdisk-nodeps &&
-    m bootimage-nodeps &&
-    adb reboot bootloader &&
-    fastboot boot $ANDROID_PRODUCT_OUT/boot.img
+Below is an example of dynamically debugging logd via the above:
 
-Alternatively, use the emulator:
+    stop logd
+    setprop ctl.sigstop_on logd
+    start logd
+    ps -e | grep logd
+    > logd          4343     1   18156   1684 do_signal_stop 538280 T init
+    gdbclient.py -p 4343
+    b main
+    c
+    c
+    c
+    > Breakpoint 1, main (argc=1, argv=0x7ff8c9a488) at system/core/logd/main.cpp:427
 
-    emulator -partition-size 1024 \
-        -verbose -show-kernel -no-window
+Below is an example of doing the same but with strace
+
+    stop logd
+    setprop ctl.sigstop_on logd
+    start logd
+    ps -e | grep logd
+    > logd          4343     1   18156   1684 do_signal_stop 538280 T init
+    strace -p 4343
+
+    (From a different shell)
+    kill -SIGCONT 4343
+
+    > strace runs
