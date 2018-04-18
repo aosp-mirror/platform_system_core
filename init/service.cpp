@@ -155,7 +155,7 @@ static void SetUpPidNamespace(const std::string& service_name) {
     }
 }
 
-static bool ExpandArgsAndExecv(const std::vector<std::string>& args) {
+static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigstop) {
     std::vector<std::string> expanded_args;
     std::vector<char*> c_strings;
 
@@ -168,6 +168,10 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args) {
         c_strings.push_back(expanded_args[i].data());
     }
     c_strings.push_back(nullptr);
+
+    if (sigstop) {
+        kill(getpid(), SIGSTOP);
+    }
 
     return execv(c_strings[0], c_strings.data()) == 0;
 }
@@ -582,6 +586,11 @@ Result<Success> Service::ParseSeclabel(const std::vector<std::string>& args) {
     return Success();
 }
 
+Result<Success> Service::ParseSigstop(const std::vector<std::string>& args) {
+    sigstop_ = true;
+    return Success();
+}
+
 Result<Success> Service::ParseSetenv(const std::vector<std::string>& args) {
     environment_vars_.emplace_back(args[1], args[2]);
     return Success();
@@ -704,6 +713,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
         {"shutdown",    {1,     1,    &Service::ParseShutdown}},
+        {"sigstop",     {0,     0,    &Service::ParseSigstop}},
         {"socket",      {3,     6,    &Service::ParseSocket}},
         {"user",        {1,     1,    &Service::ParseUser}},
         {"writepid",    {1,     kMax, &Service::ParseWritepid}},
@@ -862,7 +872,7 @@ Result<Success> Service::Start() {
         // priority. Aborts on failure.
         SetProcessAttributes();
 
-        if (!ExpandArgsAndExecv(args_)) {
+        if (!ExpandArgsAndExecv(args_, sigstop_)) {
             PLOG(ERROR) << "cannot execve('" << args_[0] << "')";
         }
 
