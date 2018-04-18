@@ -21,9 +21,6 @@ on early-init
     # Set the security context of /adb_keys if present.
     restorecon /adb_keys
 
-    # Shouldn't be necessary, but sdcard won't start without it. http://b/22568628.
-    mkdir /mnt 0775 root system
-
     # Set the security context of /postinstall if present.
     restorecon /postinstall
 
@@ -80,9 +77,6 @@ on init
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
 
-    # Mount staging areas for devices managed by vold
-    # See storage config details at http://source.android.com/tech/storage/
-    mount tmpfs tmpfs /mnt nodev noexec nosuid mode=0755,uid=0,gid=1000
     restorecon_recursive /mnt
 
     mount configfs none /config nodev noexec nosuid
@@ -689,6 +683,7 @@ on property:vold.decrypt=trigger_load_persist_props
 
 on property:vold.decrypt=trigger_post_fs_data
     trigger post-fs-data
+    trigger zygote-start
 
 on property:vold.decrypt=trigger_restart_min_framework
     # A/B update verifier that marks a successful boot.
@@ -696,6 +691,8 @@ on property:vold.decrypt=trigger_restart_min_framework
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
+    stop surfaceflinger
+    start surfaceflinger
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
     class_start main
