@@ -1221,7 +1221,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
     std::string error;
     atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
     if (!t) {
-        return SendFail(reply_fd, error);
+        return -1;
     }
 
     int ret = handle_forward_request(service, t, reply_fd);
