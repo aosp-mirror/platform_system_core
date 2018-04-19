@@ -519,6 +519,7 @@ static Result<Success> queue_fs_event(int code) {
         if (e4crypt_install_keyring()) {
             return Error() << "e4crypt_install_keyring() failed";
         }
+        property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
