@@ -72,6 +72,7 @@
 #define MEMINFO_PATH "/proc/meminfo"
 #define LINE_MAX 128
 
+/* gid containing AID_SYSTEM required */
 #define INKERNEL_MINFREE_PATH "/sys/module/lowmemorykiller/parameters/minfree"
 #define INKERNEL_ADJ_PATH "/sys/module/lowmemorykiller/parameters/adj"
 
@@ -467,6 +468,9 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
         return;
     }
 
+    /* gid containing AID_READPROC required */
+    /* CAP_SYS_RESOURCE required */
+    /* CAP_DAC_OVERRIDE required */
     snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", params.pid);
     snprintf(val, sizeof(val), "%d", params.oomadj);
     if (!writefilestring(path, val, false)) {
@@ -508,8 +512,7 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
         soft_limit_mult = 64;
     }
 
-    snprintf(path, sizeof(path),
-             "/dev/memcg/apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
+    snprintf(path, sizeof(path), MEMCG_SYSFS_PATH "apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
              params.uid, params.pid);
     snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
 
@@ -916,6 +919,7 @@ static int proc_get_size(int pid) {
     int total;
     ssize_t ret;
 
+    /* gid containing AID_READPROC required */
     snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
     fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd == -1)
@@ -939,6 +943,7 @@ static char *proc_get_name(int pid) {
     char *cp;
     ssize_t ret;
 
+    /* gid containing AID_READPROC required */
     snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
     fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd == -1)
@@ -1017,6 +1022,7 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
 
     TRACE_KILL_START(pid);
 
+    /* CAP_KILL required */
     r = kill(pid, SIGKILL);
     ALOGI(
         "Killing '%s' (%d), uid %d, adj %d\n"
@@ -1363,6 +1369,7 @@ static bool init_mp_common(enum vmpressure_level level) {
     int level_idx = (int)level;
     const char *levelstr = level_name[level_idx];
 
+    /* gid containing AID_SYSTEM required */
     mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
     if (mpfd < 0) {
         ALOGI("No kernel memory.pressure_level support (errno=%d)", errno);
@@ -1578,11 +1585,15 @@ int main(int argc __unused, char **argv __unused) {
              * pins ⊆ MCL_CURRENT, converging to just MCL_CURRENT as we fault
              * in pages.
              */
+            /* CAP_IPC_LOCK required */
             if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) && (errno != EINVAL)) {
                 ALOGW("mlockall failed %s", strerror(errno));
             }
 
-            sched_setscheduler(0, SCHED_FIFO, &param);
+            /* CAP_NICE required */
+            if (sched_setscheduler(0, SCHED_FIFO, &param)) {
+                ALOGW("set SCHED_FIFO failed %s", strerror(errno));
+            }
         }
 
         mainloop();

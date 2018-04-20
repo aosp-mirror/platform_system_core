@@ -17,6 +17,7 @@
 #ifndef _INIT_SERVICE_H
 #define _INIT_SERVICE_H
 
+#include <signal.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 
@@ -81,13 +82,16 @@ class Service {
     void Stop();
     void Terminate();
     void Restart();
-    void Reap();
+    void Reap(const siginfo_t& siginfo);
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
     bool IsShutdownCritical() const { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
     void UnSetExec() {
         is_exec_service_running_ = false;
         flags_ &= ~SVC_EXEC;
+    }
+    void AddReapCallback(std::function<void(const siginfo_t& siginfo)> callback) {
+        reap_callbacks_.emplace_back(std::move(callback));
     }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
@@ -114,6 +118,7 @@ class Service {
     bool is_override() const { return override_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
+    void set_sigstop(bool value) { sigstop_ = value; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
@@ -149,6 +154,7 @@ class Service {
     Result<Success> ParseSeclabel(const std::vector<std::string>& args);
     Result<Success> ParseSetenv(const std::vector<std::string>& args);
     Result<Success> ParseShutdown(const std::vector<std::string>& args);
+    Result<Success> ParseSigstop(const std::vector<std::string>& args);
     Result<Success> ParseSocket(const std::vector<std::string>& args);
     Result<Success> ParseFile(const std::vector<std::string>& args);
     Result<Success> ParseUser(const std::vector<std::string>& args);
@@ -209,7 +215,11 @@ class Service {
 
     std::vector<std::pair<int, rlimit>> rlimits_;
 
+    bool sigstop_ = false;
+
     std::vector<std::string> args_;
+
+    std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 };
 
 class ServiceList {

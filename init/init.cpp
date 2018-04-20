@@ -238,6 +238,10 @@ struct ControlMessageFunction {
 static const std::map<std::string, ControlMessageFunction>& get_control_message_map() {
     // clang-format off
     static const std::map<std::string, ControlMessageFunction> control_message_functions = {
+        {"sigstop_on",        {ControlTarget::SERVICE,
+                               [](auto* service) { service->set_sigstop(true); return Success(); }}},
+        {"sigstop_off",       {ControlTarget::SERVICE,
+                               [](auto* service) { service->set_sigstop(false); return Success(); }}},
         {"start",             {ControlTarget::SERVICE,   DoControlStart}},
         {"stop",              {ControlTarget::SERVICE,   DoControlStop}},
         {"restart",           {ControlTarget::SERVICE,   DoControlRestart}},
@@ -623,6 +627,14 @@ int main(int argc, char** argv) {
 
         mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
         mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
+
+        // Mount staging areas for devices managed by vold
+        // See storage config details at http://source.android.com/devices/storage/
+        mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+              "mode=0755,uid=0,gid=1000");
+        // /mnt/vendor is used to mount vendor-specific partitions that can not be
+        // part of the vendor partition, e.g. because they are mounted read-write.
+        mkdir("/mnt/vendor", 0755);
 
         // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
         // talk to the outside world...

@@ -81,16 +81,15 @@ static bool ReapOneProcess() {
         }
     }
 
-    auto status = siginfo.si_status;
-    if (WIFEXITED(status)) {
-        LOG(INFO) << name << " exited with status " << WEXITSTATUS(status) << wait_string;
-    } else if (WIFSIGNALED(status)) {
-        LOG(INFO) << name << " killed by signal " << WTERMSIG(status) << wait_string;
+    if (siginfo.si_code == CLD_EXITED) {
+        LOG(INFO) << name << " exited with status " << siginfo.si_status << wait_string;
+    } else {
+        LOG(INFO) << name << " received signal " << siginfo.si_status << wait_string;
     }
 
     if (!service) return true;
 
-    service->Reap();
+    service->Reap(siginfo);
 
     if (service->flags() & SVC_TEMPORARY) {
         ServiceList::GetInstance().RemoveService(*service);

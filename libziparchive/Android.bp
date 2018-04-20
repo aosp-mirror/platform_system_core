@@ -61,6 +61,7 @@ cc_library {
     vndk: {
         enabled: true,
     },
+    double_loadable: true,
 
     defaults: [
         "libziparchive_defaults",

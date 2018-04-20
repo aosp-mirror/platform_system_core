@@ -23,9 +23,14 @@
 
 namespace {
 
+#ifdef __ANDROID__
 EventTagMap* kEventTagMap = android_openEventTagMap(nullptr);
 const int kSysuiMultiActionTag = android_lookupEventTagNum(
     kEventTagMap, "sysui_multi_action", "(content|4)", ANDROID_LOG_UNKNOWN);
+#else
+// android_openEventTagMap does not work on host builds.
+const int kSysuiMultiActionTag = 0;
+#endif
 
 }  // namespace
 
@@ -51,6 +56,30 @@ void LogMultiAction(int32_t category, int32_t field, const std::string& value) {
     android_log_event_list log(kSysuiMultiActionTag);
     log << LOGBUILDER_CATEGORY << category << LOGBUILDER_TYPE << TYPE_ACTION
         << field << value << LOG_ID_EVENTS;
+}
+
+ComplexEventLogger::ComplexEventLogger(int category) : logger(kSysuiMultiActionTag) {
+    logger << LOGBUILDER_CATEGORY << category;
+}
+
+void ComplexEventLogger::AddTaggedData(int tag, int32_t value) {
+    logger << tag << value;
+}
+
+void ComplexEventLogger::AddTaggedData(int tag, const std::string& value) {
+    logger << tag << value;
+}
+
+void ComplexEventLogger::AddTaggedData(int tag, int64_t value) {
+    logger << tag << value;
+}
+
+void ComplexEventLogger::AddTaggedData(int tag, float value) {
+    logger << tag << value;
+}
+
+void ComplexEventLogger::Record() {
+    logger << LOG_ID_EVENTS;
 }
 
 }  // namespace metricslogger
