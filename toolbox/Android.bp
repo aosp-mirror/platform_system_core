@@ -63,7 +63,6 @@ cc_defaults {
     static_libs: ["libpropertyinfoparser"],
 
     symlinks: [
-        "dd",
         "getevent",
         "getprop",
         "newfs_msdos",
