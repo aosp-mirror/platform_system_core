@@ -66,8 +66,14 @@ default false, if true do not sysrq t (dump all threads).
 #### ro.llk.enable
 default false, allow live-lock daemon to be enabled.
 
+#### llk.enable
+default ro.llk.enable, and evaluated for eng.
+
 #### ro.khungtask.enable
 default false, allow [khungtask] daemon to be enabled.
+
+#### khungtask.enable
+default ro.khungtask.enable and evaluated for eng.
 
 #### ro.llk.mlockall
 default false, enable call to mlockall().
