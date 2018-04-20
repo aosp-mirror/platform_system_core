@@ -58,6 +58,8 @@ class RegsFake : public Regs {
   void FakeSetReturnAddress(uint64_t return_address) { fake_return_address_ = return_address; }
   void FakeSetReturnAddressValid(bool valid) { fake_return_address_valid_ = valid; }
 
+  Regs* Clone() override { return nullptr; }
+
  private:
   ArchEnum fake_arch_ = ARCH_UNKNOWN;
   uint64_t fake_pc_ = 0;
@@ -82,6 +84,8 @@ class RegsImplFake : public RegsImpl<TypeParam> {
   uint64_t GetPcAdjustment(uint64_t, Elf*) override { return 0; }
   bool SetPcFromReturnAddress(Memory*) override { return false; }
   bool StepIfSignalHandler(uint64_t, Elf*, Memory*) override { return false; }
+
+  Regs* Clone() override { return nullptr; }
 
  private:
   uint64_t fake_pc_ = 0;
