@@ -75,9 +75,11 @@ def fake_adb_server(protocol=socket.AF_INET, port=0):
                 else:
                     # Client socket
                     data = r.recv(1024)
-                    if not data:
+                    if not data or data.startswith('OPEN'):
                         if r in cnxn_sent:
                             del cnxn_sent[r]
+                        r.shutdown(socket.SHUT_RDWR)
+                        r.close()
                         rlist.remove(r)
                         continue
                     if r in cnxn_sent:
@@ -95,6 +97,25 @@ def fake_adb_server(protocol=socket.AF_INET, port=0):
     finally:
         os.close(writepipe)
         server_thread.join()
+
+
+@contextlib.contextmanager
+def adb_connect(unittest, serial):
+    """Context manager for an ADB connection.
+
+    This automatically disconnects when done with the connection.
+    """
+
+    output = subprocess.check_output(['adb', 'connect', serial])
+    unittest.assertEqual(output.strip(), 'connected to {}'.format(serial))
+
+    try:
+        yield
+    finally:
+        # Perform best-effort disconnection. Discard the output.
+        p = subprocess.Popen(['adb', 'disconnect', serial],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p.communicate()
 
 
 class NonApiTest(unittest.TestCase):
@@ -278,29 +299,60 @@ class NonApiTest(unittest.TestCase):
         for protocol in (socket.AF_INET, socket.AF_INET6):
             try:
                 with fake_adb_server(protocol=protocol) as port:
-                    output = subprocess.check_output(
-                        ['adb', 'connect', 'localhost:{}'.format(port)])
-
-                    self.assertEqual(
-                        output.strip(), 'connected to localhost:{}'.format(port))
+                    serial = 'localhost:{}'.format(port)
+                    with adb_connect(self, serial):
+                        pass
             except socket.error:
                 print("IPv6 not available, skipping")
                 continue
 
     def test_already_connected(self):
+        """Ensure that an already-connected device stays connected."""
+
         with fake_adb_server() as port:
-            output = subprocess.check_output(
-                ['adb', 'connect', 'localhost:{}'.format(port)])
+            serial = 'localhost:{}'.format(port)
+            with adb_connect(self, serial):
+                # b/31250450: this always returns 0 but probably shouldn't.
+                output = subprocess.check_output(['adb', 'connect', serial])
+                self.assertEqual(
+                    output.strip(), 'already connected to {}'.format(serial))
 
-            self.assertEqual(
-                output.strip(), 'connected to localhost:{}'.format(port))
+    def test_reconnect(self):
+        """Ensure that a disconnected device reconnects."""
 
-            # b/31250450: this always returns 0 but probably shouldn't.
-            output = subprocess.check_output(
-                ['adb', 'connect', 'localhost:{}'.format(port)])
+        with fake_adb_server() as port:
+            serial = 'localhost:{}'.format(port)
+            with adb_connect(self, serial):
+                output = subprocess.check_output(['adb', '-s', serial,
+                                                  'get-state'])
+                self.assertEqual(output.strip(), 'device')
 
-            self.assertEqual(
-                output.strip(), 'already connected to localhost:{}'.format(port))
+                # This will fail.
+                p = subprocess.Popen(['adb', '-s', serial, 'shell', 'true'],
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT)
+                output, _ = p.communicate()
+                self.assertEqual(output.strip(), 'error: closed')
+
+                subprocess.check_call(['adb', '-s', serial, 'wait-for-device'])
+
+                output = subprocess.check_output(['adb', '-s', serial,
+                                                  'get-state'])
+                self.assertEqual(output.strip(), 'device')
+
+                # Once we explicitly kick a device, it won't attempt to
+                # reconnect.
+                output = subprocess.check_output(['adb', 'disconnect', serial])
+                self.assertEqual(
+                    output.strip(), 'disconnected {}'.format(serial))
+                try:
+                    subprocess.check_output(['adb', '-s', serial, 'get-state'],
+                                            stderr=subprocess.STDOUT)
+                    self.fail('Device should not be available')
+                except subprocess.CalledProcessError as e:
+                    self.assertEqual(
+                        e.output.strip(),
+                        'error: device \'{}\' not found'.format(serial))
 
 def main():
     random.seed(0)
