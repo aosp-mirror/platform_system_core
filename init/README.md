@@ -187,6 +187,10 @@ runs the service.
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
 
+`enter_namespace <type> <path>`
+> Enters the namespace of type _type_ located at _path_. Only network namespaces are supported with
+  _type_ set to "net". Note that only one namespace of a given _type_ may be entered.
+
 `file <path> <type>`
 > Open a file path and pass its fd to the launched process. _type_ must be
   "r", "w" or "rw".  For native executables see libcutils
