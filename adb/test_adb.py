@@ -21,9 +21,11 @@ things. Most of these tests involve specific error messages or the help text.
 """
 from __future__ import print_function
 
+import binascii
 import contextlib
 import os
 import random
+import select
 import socket
 import struct
 import subprocess
@@ -31,6 +33,52 @@ import threading
 import unittest
 
 import adb
+
+
+@contextlib.contextmanager
+def fake_adb_server(protocol=socket.AF_INET, port=0):
+    """Creates a fake ADB server that just replies with a CNXN packet."""
+
+    serversock = socket.socket(protocol, socket.SOCK_STREAM)
+    if protocol == socket.AF_INET:
+        serversock.bind(('127.0.0.1', port))
+    else:
+        serversock.bind(('::1', port))
+    serversock.listen(1)
+
+    # A pipe that is used to signal the thread that it should terminate.
+    readpipe, writepipe = os.pipe()
+
+    def _handle():
+        rlist = [readpipe, serversock]
+        while True:
+            ready, _, _ = select.select(rlist, [], [])
+            for r in ready:
+                if r == readpipe:
+                    # Closure pipe
+                    os.close(r)
+                    serversock.shutdown(socket.SHUT_RDWR)
+                    serversock.close()
+                    return
+                elif r == serversock:
+                    # Server socket
+                    conn, _ = r.accept()
+                    rlist.append(conn)
+                else:
+                    # Client socket
+                    data = r.recv(1024)
+                    if not data:
+                        rlist.remove(r)
+
+    port = serversock.getsockname()[1]
+    server_thread = threading.Thread(target=_handle)
+    server_thread.start()
+
+    try:
+        yield port
+    finally:
+        os.close(writepipe)
+        server_thread.join()
 
 
 class NonApiTest(unittest.TestCase):
@@ -211,45 +259,32 @@ class NonApiTest(unittest.TestCase):
 
         Bug: http://b/30313466
         """
-        ipv4 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ipv4.bind(('127.0.0.1', 0))
-        ipv4.listen(1)
+        for protocol in (socket.AF_INET, socket.AF_INET6):
+            try:
+                with fake_adb_server(protocol=protocol) as port:
+                    output = subprocess.check_output(
+                        ['adb', 'connect', 'localhost:{}'.format(port)])
 
-        ipv6 = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        try:
-            ipv6.bind(('::1', ipv4.getsockname()[1] + 1))
-            ipv6.listen(1)
-        except socket.error:
-            print("IPv6 not available, skipping")
-            return
+                    self.assertEqual(
+                        output.strip(), 'connected to localhost:{}'.format(port))
+            except socket.error:
+                print("IPv6 not available, skipping")
+                continue
 
-        for s in (ipv4, ipv6):
-            port = s.getsockname()[1]
+    def test_already_connected(self):
+        with fake_adb_server() as port:
             output = subprocess.check_output(
                 ['adb', 'connect', 'localhost:{}'.format(port)])
 
             self.assertEqual(
                 output.strip(), 'connected to localhost:{}'.format(port))
-            s.close()
 
-    def test_already_connected(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(('127.0.0.1', 0))
-        s.listen(2)
+            # b/31250450: this always returns 0 but probably shouldn't.
+            output = subprocess.check_output(
+                ['adb', 'connect', 'localhost:{}'.format(port)])
 
-        port = s.getsockname()[1]
-        output = subprocess.check_output(
-            ['adb', 'connect', 'localhost:{}'.format(port)])
-
-        self.assertEqual(
-            output.strip(), 'connected to localhost:{}'.format(port))
-
-        # b/31250450: this always returns 0 but probably shouldn't.
-        output = subprocess.check_output(
-            ['adb', 'connect', 'localhost:{}'.format(port)])
-
-        self.assertEqual(
-            output.strip(), 'already connected to localhost:{}'.format(port))
+            self.assertEqual(
+                output.strip(), 'already connected to localhost:{}'.format(port))
 
 def main():
     random.seed(0)
