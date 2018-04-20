@@ -101,7 +101,11 @@ void connect_device(const std::string& address, std::string* response) {
     int ret = register_socket_transport(fd, serial.c_str(), port, 0);
     if (ret < 0) {
         adb_close(fd);
-        *response = android::base::StringPrintf("already connected to %s", serial.c_str());
+        if (ret == -EALREADY) {
+            *response = android::base::StringPrintf("already connected to %s", serial.c_str());
+        } else {
+            *response = android::base::StringPrintf("failed to connect to %s", serial.c_str());
+        }
     } else {
         *response = android::base::StringPrintf("connected to %s", serial.c_str());
     }
