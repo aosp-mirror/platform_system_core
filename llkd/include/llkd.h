@@ -37,6 +37,8 @@ unsigned llkCheckMilliseconds(void);
 #define KHT_ENABLE_PROPERTY            "ro." KHT_ENABLE_WRITEABLE_PROPERTY
 #define LLK_MLOCKALL_PROPERTY          "ro.llk.mlockall"
 #define LLK_MLOCKALL_DEFAULT           true
+#define LLK_KILLTEST_PROPERTY          "ro.llk.killtest"
+#define LLK_KILLTEST_DEFAULT           true
 #define LLK_TIMEOUT_MS_PROPERTY        "ro.llk.timeout_ms"
 #define KHT_TIMEOUT_PROPERTY           "ro.khungtask.timeout"
 #define LLK_D_TIMEOUT_MS_PROPERTY      "ro.llk.D.timeout_ms"
