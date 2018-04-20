@@ -974,7 +974,7 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in pending_list and fails to register";
             delete t;
-            return -1;
+            return -EALREADY;
         }
     }
 
@@ -983,7 +983,7 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in transport_list and fails to register";
             delete t;
-            return -1;
+            return -EALREADY;
         }
     }
 
