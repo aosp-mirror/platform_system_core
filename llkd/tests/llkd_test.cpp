@@ -64,10 +64,16 @@ void execute(const char* command) {
 }
 
 seconds llkdSleepPeriod(char state) {
-    auto default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, LLK_ENABLE_DEFAULT);
-    if (android::base::GetProperty(LLK_ENABLE_PROPERTY, "nothing") == "nothing") {
-        GTEST_LOG_INFO << LLK_ENABLE_PROPERTY " defaults to " << (default_enable ? "true" : "false")
-                       << "\n";
+    auto default_eng = android::base::GetProperty(LLK_ENABLE_PROPERTY, "eng") == "eng";
+    auto default_enable = LLK_ENABLE_DEFAULT;
+    if (!LLK_ENABLE_DEFAULT && default_eng &&
+        android::base::GetBoolProperty("ro.debuggable", false)) {
+        default_enable = true;
+    }
+    default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, default_enable);
+    if (default_eng) {
+        GTEST_LOG_INFO << LLK_ENABLE_PROPERTY " defaults to \"eng\" thus "
+                       << (default_enable ? "true" : "false") << "\n";
     }
     // Hail Mary hope is unconfigured.
     if ((GetUintProperty(LLK_TIMEOUT_MS_PROPERTY, LLK_TIMEOUT_MS_DEFAULT) !=
@@ -78,6 +84,8 @@ seconds llkdSleepPeriod(char state) {
         execute("stop llkd");
         rest();
         std::string setprop("setprop ");
+        execute((setprop + LLK_ENABLE_WRITEABLE_PROPERTY + " false").c_str());
+        rest();
         execute((setprop + LLK_TIMEOUT_MS_PROPERTY + " 120000").c_str());
         rest();
         execute((setprop + KHT_TIMEOUT_PROPERTY + " 130").c_str());
@@ -86,8 +94,15 @@ seconds llkdSleepPeriod(char state) {
         rest();
         execute((setprop + LLK_ENABLE_PROPERTY + " true").c_str());
         rest();
+        execute((setprop + LLK_ENABLE_WRITEABLE_PROPERTY + " true").c_str());
+        rest();
     }
-    default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, false);
+    default_enable = LLK_ENABLE_DEFAULT;
+    if (!LLK_ENABLE_DEFAULT && (android::base::GetProperty(LLK_ENABLE_PROPERTY, "eng") == "eng") &&
+        android::base::GetBoolProperty("ro.debuggable", false)) {
+        default_enable = true;
+    }
+    default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, default_enable);
     if (default_enable) {
         execute("start llkd");
         rest();
