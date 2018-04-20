@@ -82,7 +82,7 @@ static bool g_long_listing = false;
 // libsparse will support INT_MAX, but this results in large allocations, so
 // let's keep it at 1GB to avoid memory pressure on the host.
 static constexpr int64_t RESPARSE_LIMIT = 1 * 1024 * 1024 * 1024;
-static int64_t sparse_limit = -1;
+static uint64_t sparse_limit = 0;
 static int64_t target_sparse_limit = -1;
 
 static unsigned g_base_addr = 0x10000000;
@@ -375,7 +375,7 @@ static int show_help() {
             " -w                         Wipe userdata.\n"
             " -s SERIAL                  Specify a USB device.\n"
             " -s tcp|udp:HOST[:PORT]     Specify a network device.\n"
-            " -S SIZE[K|M|G]             Use sparse files above this limit (0 to disable).\n"
+            " -S SIZE[K|M|G]             Break into sparse files no larger than SIZE.\n"
             " --slot SLOT                Use SLOT; 'all' for both slots, 'other' for\n"
             "                            non-current slot (default: current active slot).\n"
             " --set-active[=SLOT]        Sets the active slot before rebooting.\n"
@@ -730,13 +730,10 @@ static int64_t get_target_sparse_limit(Transport* transport) {
 }
 
 static int64_t get_sparse_limit(Transport* transport, int64_t size) {
-    int64_t limit;
-
-    if (sparse_limit == 0) {
-        return 0;
-    } else if (sparse_limit > 0) {
-        limit = sparse_limit;
-    } else {
+    int64_t limit = sparse_limit;
+    if (limit == 0) {
+        // Unlimited, so see what the target device's limit is.
+        // TODO: shouldn't we apply this limit even if you've used -S?
         if (target_sparse_limit == -1) {
             target_sparse_limit = get_target_sparse_limit(transport);
         }
@@ -1197,47 +1194,6 @@ static void do_oem_command(const std::string& cmd, std::vector<std::string>* arg
     fb_queue_command(command, "");
 }
 
-static int64_t parse_num(const char *arg)
-{
-    char *endptr;
-    unsigned long long num;
-
-    num = strtoull(arg, &endptr, 0);
-    if (endptr == arg) {
-        return -1;
-    }
-
-    if (*endptr == 'k' || *endptr == 'K') {
-        if (num >= (-1ULL) / 1024) {
-            return -1;
-        }
-        num *= 1024LL;
-        endptr++;
-    } else if (*endptr == 'm' || *endptr == 'M') {
-        if (num >= (-1ULL) / (1024 * 1024)) {
-            return -1;
-        }
-        num *= 1024LL * 1024LL;
-        endptr++;
-    } else if (*endptr == 'g' || *endptr == 'G') {
-        if (num >= (-1ULL) / (1024 * 1024 * 1024)) {
-            return -1;
-        }
-        num *= 1024LL * 1024LL * 1024LL;
-        endptr++;
-    }
-
-    if (*endptr != '\0') {
-        return -1;
-    }
-
-    if (num > INT64_MAX) {
-        return -1;
-    }
-
-    return num;
-}
-
 static std::string fb_fix_numeric_var(std::string var) {
     // Some bootloaders (angler, for example), send spurious leading whitespace.
     var = android::base::Trim(var);
@@ -1471,8 +1427,9 @@ int FastBoot::Main(int argc, char* argv[]) {
                     serial = optarg;
                     break;
                 case 'S':
-                    sparse_limit = parse_num(optarg);
-                    if (sparse_limit < 0) die("invalid sparse limit");
+                    if (!android::base::ParseByteCount(optarg, &sparse_limit)) {
+                        die("invalid sparse limit %s", optarg);
+                    }
                     break;
                 case 'v':
                     set_verbose();
