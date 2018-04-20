@@ -53,7 +53,9 @@ on purpose, and llkd effectively sweeps up processes that create these
 conditions.  If the test can, it will reconfigure llkd to expedite the test
 duration by adjusting the ro.llk.* Android properties.  Tests run the D state
 with some scheduling progress to ensure that ABA checking prevents false
-triggers.
+triggers. If 100% reliable ABA on platform, then ro.llk.killtest can be
+set to false; however this will result in some of the unit tests to panic
+kernel instead of deal with more graceful kill operation.
 
 Android Properties
 ------------------
@@ -108,13 +110,6 @@ default <empty>, comma separated list of uid numbers or names.
 Architectural Concerns
 ----------------------
 
-- Figure out how to communicate the kernel panic better to bootstat canonical
-  boot reason determination.  This may require an alteration to bootstat, or
-  some logging from llkd.  Would like to see boot reason to be
-  watchdog,livelock as a minimum requirement.  Or more specifically would want
-  watchdog,livelock,device or watchdog,livelock,zombie be reported.
-  Currently reports panic,sysrq (user requested panic) or panic depending on
-  system support of pstore.
 - Create kernel module and associated gTest to actually test panic.
 - Create gTest to test out blacklist (ro.llk.blacklist.<properties> generally
   not be inputs).  Could require more test-only interfaces to libllkd.
