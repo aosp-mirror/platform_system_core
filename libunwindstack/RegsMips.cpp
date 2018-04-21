@@ -173,4 +173,8 @@ bool RegsMips::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_me
   return true;
 }
 
+Regs* RegsMips::Clone() {
+  return new RegsMips(*this);
+}
+
 }  // namespace unwindstack

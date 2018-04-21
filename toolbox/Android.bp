@@ -5,32 +5,8 @@ cc_defaults {
         "-Werror",
         "-Wno-unused-parameter",
         "-Wno-unused-const-variable",
-        "-include bsd-compatibility.h",
         "-D_FILE_OFFSET_BITS=64",
-    ],
-    local_include_dirs: ["upstream-netbsd/include/"],
-}
-
-cc_library_static {
-    name: "libtoolbox_dd",
-    defaults: ["toolbox_defaults"],
-    vendor_available: true,
-    srcs: [
-        "upstream-netbsd/bin/dd/args.c",
-        "upstream-netbsd/bin/dd/conv.c",
-        "upstream-netbsd/bin/dd/dd.c",
-        "upstream-netbsd/bin/dd/dd_hostops.c",
-        "upstream-netbsd/bin/dd/misc.c",
-        "upstream-netbsd/bin/dd/position.c",
-        "upstream-netbsd/lib/libc/gen/getbsize.c",
-        "upstream-netbsd/lib/libc/gen/humanize_number.c",
-        "upstream-netbsd/lib/libc/stdlib/strsuftoll.c",
-        "upstream-netbsd/lib/libc/string/swab.c",
-        "upstream-netbsd/lib/libutil/raise_default_signal.c",
-    ],
-    cflags: [
-        "-Dmain=dd_main",
-        "-DNO_CONV",
+        "-DWITHOUT_NLS",
     ],
 }
 
@@ -55,15 +31,12 @@ cc_defaults {
     generated_headers: [
         "toolbox_input_labels",
     ],
-    whole_static_libs: ["libtoolbox_dd"],
     shared_libs: [
         "libbase",
-        "libcutils",
     ],
     static_libs: ["libpropertyinfoparser"],
 
     symlinks: [
-        "dd",
         "getevent",
         "getprop",
         "newfs_msdos",

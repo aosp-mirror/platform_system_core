@@ -286,4 +286,39 @@ TEST_F(RegsTest, machine_type) {
   EXPECT_EQ(ARCH_MIPS64, mips64_regs.Arch());
 }
 
+template <typename RegisterType>
+void clone_test(Regs* regs) {
+  RegisterType* register_values = reinterpret_cast<RegisterType*>(regs->RawData());
+  int num_regs = regs->total_regs();
+  for (int i = 0; i < num_regs; ++i) {
+    register_values[i] = i;
+  }
+
+  std::unique_ptr<Regs> clone(regs->Clone());
+  ASSERT_EQ(regs->total_regs(), clone->total_regs());
+  RegisterType* clone_values = reinterpret_cast<RegisterType*>(clone->RawData());
+  for (int i = 0; i < num_regs; ++i) {
+    EXPECT_EQ(register_values[i], clone_values[i]);
+    EXPECT_NE(&register_values[i], &clone_values[i]);
+  }
+}
+
+TEST_F(RegsTest, clone) {
+  std::vector<std::unique_ptr<Regs>> regs;
+  regs.emplace_back(new RegsArm());
+  regs.emplace_back(new RegsArm64());
+  regs.emplace_back(new RegsX86());
+  regs.emplace_back(new RegsX86_64());
+  regs.emplace_back(new RegsMips());
+  regs.emplace_back(new RegsMips64());
+
+  for (auto& r : regs) {
+    if (r->Is32Bit()) {
+      clone_test<uint32_t>(r.get());
+    } else {
+      clone_test<uint64_t>(r.get());
+    }
+  }
+}
+
 }  // namespace unwindstack
