@@ -422,8 +422,10 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
 
   dump_registers(log, thread_info.registers.get());
 
+  // Unwind will mutate the registers, so make a copy first.
+  std::unique_ptr<Regs> regs_copy(thread_info.registers->Clone());
   std::vector<backtrace_frame_data_t> frames;
-  if (!Backtrace::Unwind(thread_info.registers.get(), map, &frames, 0, nullptr)) {
+  if (!Backtrace::Unwind(regs_copy.get(), map, &frames, 0, nullptr)) {
     _LOG(log, logtype::THREAD, "Failed to unwind");
     return false;
   }
