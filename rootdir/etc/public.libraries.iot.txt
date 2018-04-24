@@ -2,6 +2,7 @@
 libandroid.so
 libandroidthings.so
 libaaudio.so
+libamidi.so
 libc.so
 libcamera2ndk.so
 libdl.so
