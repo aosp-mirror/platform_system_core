@@ -193,7 +193,7 @@ runs the service.
 
 `disabled`
 > This service will not automatically start with its class.
-  It must be explicitly started by name.
+  It must be explicitly started by name or by interface name.
 
 `file <path> <type>`
 > Open a file path and pass its fd to the launched process. _type_ must be
