@@ -195,11 +195,11 @@ vmstat wc which whoami xargs xxd yes zcat
 Android Q
 ---------
 
-BSD: grep
-
 bzip2: bzcat bzip2 bunzip2
 
 one-true-awk: awk
+
+PCRE: egrep fgrep grep
 
 toolbox: getevent getprop newfs\_msdos
 
