@@ -693,9 +693,13 @@ static void queue_info_dump() {
     fb_queue_notice("--------------------------------------------");
 }
 
-static struct sparse_file** load_sparse_files(int fd, int max_size) {
+static struct sparse_file** load_sparse_files(int fd, int64_t max_size) {
     struct sparse_file* s = sparse_file_import_auto(fd, false, true);
     if (!s) die("cannot sparse read file");
+
+    if (max_size <= 0 || max_size > std::numeric_limits<uint32_t>::max()) {
+      die("invalid max size %" PRId64, max_size);
+    }
 
     int files = sparse_file_resparse(s, max_size, nullptr, 0);
     if (files < 0) die("Failed to resparse");
