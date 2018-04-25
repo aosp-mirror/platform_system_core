@@ -164,6 +164,7 @@ cc_library {
 
     shared_libs: ["liblog"],
     header_libs: [
+        "libbase_headers",
         "libcutils_headers",
         "libutils_headers",
     ],
