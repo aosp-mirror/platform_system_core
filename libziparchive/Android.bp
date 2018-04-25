@@ -93,6 +93,10 @@ cc_test {
     host_supported: true,
     defaults: ["libziparchive_flags"],
 
+    data: [
+        "testdata/**/*",
+    ],
+
     srcs: [
         "entry_name_utils_test.cc",
         "zip_archive_test.cc",
