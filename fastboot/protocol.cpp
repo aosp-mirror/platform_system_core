@@ -344,12 +344,12 @@ static int fb_download_data_sparse_flush(Transport* transport) {
 }
 
 int fb_download_data_sparse(Transport* transport, struct sparse_file* s) {
-    int size = sparse_file_len(s, true, false);
-    if (size <= 0) {
+    int64_t size = sparse_file_len(s, true, false);
+    if (size <= 0 || size > std::numeric_limits<uint32_t>::max()) {
         return -1;
     }
 
-    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    std::string cmd(android::base::StringPrintf("download:%08" PRIx64, size));
     int r = _command_start(transport, cmd, size, 0);
     if (r < 0) {
         return -1;
