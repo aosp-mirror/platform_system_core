@@ -34,7 +34,7 @@
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 
-static std::string test_data_dir;
+static std::string test_data_dir = android::base::GetExecutableDirectory() + "/testdata";
 
 static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
@@ -728,42 +728,4 @@ TEST(ziparchive, Inflate) {
     ASSERT_EQ(kIoError, ret);
     ASSERT_EQ(0u, writer.GetOutput().size());
   }
-}
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-
-  static struct option options[] = {{"test_data_dir", required_argument, nullptr, 't'},
-                                    {nullptr, 0, nullptr, 0}};
-
-  while (true) {
-    int option_index;
-    const int c = getopt_long_only(argc, argv, "", options, &option_index);
-    if (c == -1) {
-      break;
-    }
-
-    if (c == 't') {
-      test_data_dir = optarg;
-    }
-  }
-
-  if (test_data_dir.size() == 0) {
-    printf("Test data flag (--test_data_dir) required\n\n");
-    return -1;
-  }
-
-  if (test_data_dir[0] != '/') {
-    std::vector<char> cwd_buffer(1024);
-    const char* cwd = getcwd(cwd_buffer.data(), cwd_buffer.size() - 1);
-    if (cwd == nullptr) {
-      printf("Cannot get current working directory, use an absolute path instead, was %s\n\n",
-             test_data_dir.c_str());
-      return -2;
-    }
-    test_data_dir = '/' + test_data_dir;
-    test_data_dir = cwd + test_data_dir;
-  }
-
-  return RUN_ALL_TESTS();
 }
