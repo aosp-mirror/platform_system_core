@@ -1856,25 +1856,20 @@ int main(int argc, char **argv)
     }
 
     if (wants_wipe) {
-        fprintf(stderr, "wiping userdata...\n");
-        fb_queue_erase("userdata");
-        if (set_fbe_marker) {
-            fprintf(stderr, "setting FBE marker...\n");
-            std::string initial_userdata_dir = create_fbemarker_tmpdir();
-            if (initial_userdata_dir.empty()) {
-                return 1;
+        std::vector<std::string> partitions = { "userdata", "cache", "metadata" };
+        for (const auto& partition : partitions) {
+            std::string partition_type;
+            if (!fb_getvar(transport, std::string{"partition-type:"} + partition, &partition_type)) continue;
+            if (partition_type.empty()) continue;
+            fb_queue_erase(partition);
+            if (partition == "userdata" && set_fbe_marker) {
+                fprintf(stderr, "setting FBE marker on initial userdata...\n");
+                std::string initial_userdata_dir = create_fbemarker_tmpdir();
+                fb_perform_format(transport, partition, 1, "", "", initial_userdata_dir);
+                delete_fbemarker_tmpdir(initial_userdata_dir);
+            } else {
+                fb_perform_format(transport, partition, 1, "", "", "");
             }
-            fb_perform_format(transport, "userdata", 1, "", "", initial_userdata_dir);
-            delete_fbemarker_tmpdir(initial_userdata_dir);
-        } else {
-            fb_perform_format(transport, "userdata", 1, "", "", "");
-        }
-
-        std::string cache_type;
-        if (fb_getvar(transport, "partition-type:cache", &cache_type) && !cache_type.empty()) {
-            fprintf(stderr, "wiping cache...\n");
-            fb_queue_erase("cache");
-            fb_perform_format(transport, "cache", 1, "", "", "");
         }
     }
     if (wants_set_active) {
