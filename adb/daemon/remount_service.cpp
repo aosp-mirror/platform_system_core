@@ -25,14 +25,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <string>
+#include <vector>
 
 #include <android-base/properties.h>
+#include <ext4_utils/ext4_utils.h>
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "fs_mgr.h"
 
@@ -82,7 +86,27 @@ bool make_block_device_writable(const std::string& dev) {
     return result;
 }
 
-static bool remount_partition(int fd, const char* dir) {
+static bool fs_has_shared_blocks(const char* dev) {
+    struct statfs fs;
+    if (statfs(dev, &fs) == -1 || fs.f_type == EXT4_SUPER_MAGIC) {
+        return false;
+    }
+    unique_fd fd(unix_open(dev, O_RDONLY));
+    if (fd < 0) {
+        return false;
+    }
+    struct ext4_super_block sb;
+    if (lseek64(fd, 1024, SEEK_SET) < 0 || unix_read(fd, &sb, sizeof(sb)) < 0) {
+        return false;
+    }
+    struct fs_info info;
+    if (ext4_parse_sb(&sb, &info) < 0) {
+        return false;
+    }
+    return (info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS) != 0;
+}
+
+static bool remount_partition(int fd, const char* dir, std::vector<std::string>& dedup) {
     if (!directory_exists(dir)) {
         return true;
     }
@@ -108,6 +132,12 @@ static bool remount_partition(int fd, const char* dir) {
         return false;
     }
     if (mount(dev.c_str(), dir, "none", MS_REMOUNT, nullptr) == -1) {
+        if (errno == EROFS && fs_has_shared_blocks(dev.c_str())) {
+            // We return true so remount_service() can detect that the only
+            // failure was deduplicated filesystems.
+            dedup.push_back(dev);
+            return true;
+        }
         WriteFdFmt(fd, "remount of the %s superblock failed: %s\n", dir, strerror(errno));
         return false;
     }
@@ -140,17 +170,29 @@ void remount_service(int fd, void* cookie) {
     }
 
     bool success = true;
+    std::vector<std::string> dedup;
     if (android::base::GetBoolProperty("ro.build.system_root_image", false)) {
-        success &= remount_partition(fd, "/");
+        success &= remount_partition(fd, "/", dedup);
     } else {
-        success &= remount_partition(fd, "/system");
+        success &= remount_partition(fd, "/system", dedup);
     }
-    success &= remount_partition(fd, "/odm");
-    success &= remount_partition(fd, "/oem");
-    success &= remount_partition(fd, "/product");
-    success &= remount_partition(fd, "/vendor");
+    success &= remount_partition(fd, "/odm", dedup);
+    success &= remount_partition(fd, "/oem", dedup);
+    success &= remount_partition(fd, "/product", dedup);
+    success &= remount_partition(fd, "/vendor", dedup);
 
-    WriteFdExactly(fd, success ? "remount succeeded\n" : "remount failed\n");
+    if (!success) {
+        WriteFdExactly(fd, "remount failed\n");
+    } else if (dedup.empty()) {
+        WriteFdExactly(fd, "remount succeeded\n");
+    } else {
+        WriteFdExactly(fd,
+                       "The following partitions are deduplicated and could "
+                       "not be remounted:\n");
+        for (const std::string& name : dedup) {
+            WriteFdFmt(fd, "  %s\n", name.c_str());
+        }
+    }
 
     adb_close(fd);
 }
