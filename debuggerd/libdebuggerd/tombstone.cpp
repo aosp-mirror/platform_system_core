@@ -102,18 +102,24 @@ static void dump_probable_cause(log_t* log, const siginfo_t* si) {
   if (!cause.empty()) _LOG(log, logtype::HEADER, "Cause: %s\n", cause.c_str());
 }
 
-static void dump_signal_info(log_t* log, const siginfo_t* si) {
+static void dump_signal_info(log_t* log, const ThreadInfo& thread_info) {
   char addr_desc[32]; // ", fault addr 0x1234"
-  if (signal_has_si_addr(si->si_signo, si->si_code)) {
-    snprintf(addr_desc, sizeof(addr_desc), "%p", si->si_addr);
+  if (signal_has_si_addr(thread_info.siginfo)) {
+    snprintf(addr_desc, sizeof(addr_desc), "%p", thread_info.siginfo->si_addr);
   } else {
     snprintf(addr_desc, sizeof(addr_desc), "--------");
   }
 
-  _LOG(log, logtype::HEADER, "signal %d (%s), code %d (%s), fault addr %s\n", si->si_signo,
-       get_signame(si->si_signo), si->si_code, get_sigcode(si->si_signo, si->si_code), addr_desc);
+  char sender_desc[32] = {};  // " from pid 1234, uid 666"
+  if (signal_has_sender(thread_info.siginfo, thread_info.pid)) {
+    get_signal_sender(sender_desc, sizeof(sender_desc), thread_info.siginfo);
+  }
 
-  dump_probable_cause(log, si);
+  _LOG(log, logtype::HEADER, "signal %d (%s), code %d (%s%s), fault addr %s\n",
+       thread_info.siginfo->si_signo, get_signame(thread_info.siginfo),
+       thread_info.siginfo->si_code, get_sigcode(thread_info.siginfo), sender_desc, addr_desc);
+
+  dump_probable_cause(log, thread_info.siginfo);
 }
 
 static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
@@ -412,7 +418,7 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
   dump_thread_info(log, thread_info);
 
   if (thread_info.siginfo) {
-    dump_signal_info(log, thread_info.siginfo);
+    dump_signal_info(log, thread_info);
   }
 
   if (primary_thread) {
@@ -442,7 +448,7 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
     if (map) {
       uint64_t addr = 0;
       siginfo_t* si = thread_info.siginfo;
-      if (signal_has_si_addr(si->si_signo, si->si_code)) {
+      if (signal_has_si_addr(si)) {
         addr = reinterpret_cast<uint64_t>(si->si_addr);
       }
       dump_all_maps(log, map, process_memory, addr);
