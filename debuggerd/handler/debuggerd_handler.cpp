@@ -169,13 +169,15 @@ static void log_signal_summary(const siginfo_t* info) {
     return;
   }
 
-  const char* signal_name = get_signame(info->si_signo);
-  bool has_address = signal_has_si_addr(info->si_signo, info->si_code);
-
-  // Many signals don't have an address.
+  // Many signals don't have an address or sender.
   char addr_desc[32] = "";  // ", fault addr 0x1234"
-  if (has_address) {
+  if (signal_has_si_addr(info)) {
     async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
+  }
+  pid_t self_pid = __getpid();
+  char sender_desc[32] = {};  // " from pid 1234, uid 666"
+  if (signal_has_sender(info, self_pid)) {
+    get_signal_sender(sender_desc, sizeof(sender_desc), info);
   }
 
   char main_thread_name[MAX_TASK_NAME_LEN + 1];
@@ -183,10 +185,10 @@ static void log_signal_summary(const siginfo_t* info) {
     strncpy(main_thread_name, "<unknown>", sizeof(main_thread_name));
   }
 
-  async_safe_format_log(
-      ANDROID_LOG_FATAL, "libc", "Fatal signal %d (%s), code %d (%s)%s in tid %d (%s), pid %d (%s)",
-      info->si_signo, signal_name, info->si_code, get_sigcode(info->si_signo, info->si_code),
-      addr_desc, __gettid(), thread_name, __getpid(), main_thread_name);
+  async_safe_format_log(ANDROID_LOG_FATAL, "libc",
+                        "Fatal signal %d (%s), code %d (%s%s)%s in tid %d (%s), pid %d (%s)",
+                        info->si_signo, get_signame(info), info->si_code, get_sigcode(info),
+                        sender_desc, addr_desc, __gettid(), thread_name, self_pid, main_thread_name);
 }
 
 /*
