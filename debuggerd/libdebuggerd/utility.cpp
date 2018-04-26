@@ -254,13 +254,13 @@ void drop_capabilities() {
   }
 }
 
-bool signal_has_si_addr(int si_signo, int si_code) {
+bool signal_has_si_addr(const siginfo_t* si) {
   // Manually sent signals won't have si_addr.
-  if (si_code == SI_USER || si_code == SI_QUEUE || si_code == SI_TKILL) {
+  if (si->si_code == SI_USER || si->si_code == SI_QUEUE || si->si_code == SI_TKILL) {
     return false;
   }
 
-  switch (si_signo) {
+  switch (si->si_signo) {
     case SIGBUS:
     case SIGFPE:
     case SIGILL:
@@ -272,8 +272,16 @@ bool signal_has_si_addr(int si_signo, int si_code) {
   }
 }
 
-const char* get_signame(int sig) {
-  switch (sig) {
+bool signal_has_sender(const siginfo_t* si, pid_t caller_pid) {
+  return SI_FROMUSER(si) && (si->si_pid != 0) && (si->si_pid != caller_pid);
+}
+
+void get_signal_sender(char* buf, size_t n, const siginfo_t* si) {
+  snprintf(buf, n, " from pid %d, uid %d", si->si_pid, si->si_uid);
+}
+
+const char* get_signame(const siginfo_t* si) {
+  switch (si->si_signo) {
     case SIGABRT: return "SIGABRT";
     case SIGBUS: return "SIGBUS";
     case SIGFPE: return "SIGFPE";
@@ -290,11 +298,11 @@ const char* get_signame(int sig) {
   }
 }
 
-const char* get_sigcode(int signo, int code) {
+const char* get_sigcode(const siginfo_t* si) {
   // Try the signal-specific codes...
-  switch (signo) {
+  switch (si->si_signo) {
     case SIGILL:
-      switch (code) {
+      switch (si->si_code) {
         case ILL_ILLOPC: return "ILL_ILLOPC";
         case ILL_ILLOPN: return "ILL_ILLOPN";
         case ILL_ILLADR: return "ILL_ILLADR";
@@ -307,7 +315,7 @@ const char* get_sigcode(int signo, int code) {
       static_assert(NSIGILL == ILL_BADSTK, "missing ILL_* si_code");
       break;
     case SIGBUS:
-      switch (code) {
+      switch (si->si_code) {
         case BUS_ADRALN: return "BUS_ADRALN";
         case BUS_ADRERR: return "BUS_ADRERR";
         case BUS_OBJERR: return "BUS_OBJERR";
@@ -317,7 +325,7 @@ const char* get_sigcode(int signo, int code) {
       static_assert(NSIGBUS == BUS_MCEERR_AO, "missing BUS_* si_code");
       break;
     case SIGFPE:
-      switch (code) {
+      switch (si->si_code) {
         case FPE_INTDIV: return "FPE_INTDIV";
         case FPE_INTOVF: return "FPE_INTOVF";
         case FPE_FLTDIV: return "FPE_FLTDIV";
@@ -330,7 +338,7 @@ const char* get_sigcode(int signo, int code) {
       static_assert(NSIGFPE == FPE_FLTSUB, "missing FPE_* si_code");
       break;
     case SIGSEGV:
-      switch (code) {
+      switch (si->si_code) {
         case SEGV_MAPERR: return "SEGV_MAPERR";
         case SEGV_ACCERR: return "SEGV_ACCERR";
 #if defined(SEGV_BNDERR)
@@ -350,21 +358,21 @@ const char* get_sigcode(int signo, int code) {
       break;
 #if defined(SYS_SECCOMP) // Our glibc is too old, and we build this for the host too.
     case SIGSYS:
-      switch (code) {
+      switch (si->si_code) {
         case SYS_SECCOMP: return "SYS_SECCOMP";
       }
       static_assert(NSIGSYS == SYS_SECCOMP, "missing SYS_* si_code");
       break;
 #endif
     case SIGTRAP:
-      switch (code) {
+      switch (si->si_code) {
         case TRAP_BRKPT: return "TRAP_BRKPT";
         case TRAP_TRACE: return "TRAP_TRACE";
         case TRAP_BRANCH: return "TRAP_BRANCH";
         case TRAP_HWBKPT: return "TRAP_HWBKPT";
       }
-      if ((code & 0xff) == SIGTRAP) {
-        switch ((code >> 8) & 0xff) {
+      if ((si->si_code & 0xff) == SIGTRAP) {
+        switch ((si->si_code >> 8) & 0xff) {
           case PTRACE_EVENT_FORK:
             return "PTRACE_EVENT_FORK";
           case PTRACE_EVENT_VFORK:
@@ -387,7 +395,7 @@ const char* get_sigcode(int signo, int code) {
       break;
   }
   // Then the other codes...
-  switch (code) {
+  switch (si->si_code) {
     case SI_USER: return "SI_USER";
     case SI_KERNEL: return "SI_KERNEL";
     case SI_QUEUE: return "SI_QUEUE";
