@@ -74,8 +74,10 @@ void read_with_default(const char* path, char* buf, size_t len, const char* defa
 
 void drop_capabilities();
 
-bool signal_has_si_addr(int si_signo, int si_code);
-const char* get_signame(int sig);
-const char* get_sigcode(int signo, int code);
+bool signal_has_sender(const siginfo_t*, pid_t caller_pid);
+bool signal_has_si_addr(const siginfo_t*);
+void get_signal_sender(char* buf, size_t n, const siginfo_t*);
+const char* get_signame(const siginfo_t*);
+const char* get_sigcode(const siginfo_t*);
 
 #endif // _DEBUGGERD_UTILITY_H
