@@ -41,14 +41,11 @@ cc_binary {
     defaults: ["logwrapper_common"],
 }
 
-// Build vendor logwrapper.
-// TODO: Add vendor_available to "logwrapper" module and remove "logwrapper_vendor" module
-//       when vendor_available is fully supported.
 cc_binary {
     name: "logwrapper_vendor",
+    defaults: ["logwrapper_common"],
     stem: "logwrapper",
     vendor: true,
-    defaults: ["logwrapper_common"],
 }
 
 // ========================================================
