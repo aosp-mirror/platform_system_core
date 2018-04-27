@@ -78,4 +78,6 @@ cc_test {
     shared_libs: [
         "libdemangle",
     ],
+
+    test_suites: ["device-tests"],
 }

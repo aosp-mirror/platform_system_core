@@ -186,6 +186,7 @@ cc_test {
         "libgmock",
     ],
 
+    test_suites: ["device-tests"],
     data: [
         "tests/files/elf32.xz",
         "tests/files/elf64.xz",
