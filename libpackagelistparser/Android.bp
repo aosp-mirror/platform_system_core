@@ -1,6 +1,7 @@
 cc_library {
 
     name: "libpackagelistparser",
+    recovery_available: true,
     srcs: ["packagelistparser.c"],
     cflags: [
         "-Wall",
