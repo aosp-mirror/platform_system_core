@@ -201,7 +201,8 @@ class atransport {
     atransport(ConnectionState state = kCsOffline)
         : id(NextTransportId()),
           connection_state_(state),
-          connection_waitable_(std::make_shared<ConnectionWaitable>()) {
+          connection_waitable_(std::make_shared<ConnectionWaitable>()),
+          connection_(nullptr) {
         // Initialize protocol to min version for compatibility with older versions.
         // Version will be updated post-connect.
         protocol_version = A_VERSION_MIN;
@@ -216,12 +217,16 @@ class atransport {
     ConnectionState GetConnectionState() const;
     void SetConnectionState(ConnectionState state);
 
+    void SetConnection(std::unique_ptr<Connection> connection);
+    std::shared_ptr<Connection> connection() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return connection_;
+    }
+
     const TransportId id;
     size_t ref_count = 0;
     bool online = false;
     TransportType type = kTransportAny;
-
-    std::unique_ptr<Connection> connection;
 
     // Used to identify transports for clients.
     char* serial = nullptr;
@@ -301,6 +306,11 @@ class atransport {
     // A sharable object that can be used to wait for the atransport's
     // connection to be established.
     std::shared_ptr<ConnectionWaitable> connection_waitable_;
+
+    // The underlying connection object.
+    std::shared_ptr<Connection> connection_ GUARDED_BY(mutex_);
+
+    std::mutex mutex_;
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
 };
