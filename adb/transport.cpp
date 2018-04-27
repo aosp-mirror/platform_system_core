@@ -64,6 +64,21 @@ const char* const kFeatureStat2 = "stat_v2";
 const char* const kFeatureLibusb = "libusb";
 const char* const kFeaturePushSync = "push_sync";
 
+namespace {
+
+// A class that helps the Clang Thread Safety Analysis deal with
+// std::unique_lock. Given that std::unique_lock is movable, and the analysis
+// can not currently perform alias analysis, it is not annotated. In order to
+// assert that the mutex is held, a ScopedAssumeLocked can be created just after
+// the std::unique_lock.
+class SCOPED_CAPABILITY ScopedAssumeLocked {
+  public:
+    ScopedAssumeLocked(std::mutex& mutex) ACQUIRE(mutex) {}
+    ~ScopedAssumeLocked() RELEASE() {}
+};
+
+}  // namespace
+
 TransportId NextTransportId() {
     static std::atomic<TransportId> next(1);
     return next++;
@@ -76,8 +91,6 @@ BlockingConnectionAdapter::~BlockingConnectionAdapter() {
     LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): destructing";
     Stop();
 }
-
-static void AssumeLocked(std::mutex& mutex) ASSERT_CAPABILITY(mutex) {}
 
 void BlockingConnectionAdapter::Start() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -103,11 +116,10 @@ void BlockingConnectionAdapter::Start() {
         LOG(INFO) << this->transport_name_ << ": write thread spawning";
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_);
+            ScopedAssumeLocked assume_locked(mutex_);
             cv_.wait(lock, [this]() REQUIRES(mutex_) {
                 return this->stopped_ || !this->write_queue_.empty();
             });
-
-            AssumeLocked(mutex_);
 
             if (this->stopped_) {
                 return;
@@ -721,6 +733,30 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
     return result;
 }
 
+bool ConnectionWaitable::WaitForConnection(std::chrono::milliseconds timeout) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    ScopedAssumeLocked assume_locked(mutex_);
+    return cv_.wait_for(lock, timeout, [&]() REQUIRES(mutex_) {
+        return connection_established_ready_;
+    }) && connection_established_;
+}
+
+void ConnectionWaitable::SetConnectionEstablished(bool success) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (connection_established_ready_) return;
+        connection_established_ready_ = true;
+        connection_established_ = success;
+        D("connection established with %d", success);
+    }
+    cv_.notify_one();
+}
+
+atransport::~atransport() {
+    // If the connection callback had not been run before, run it now.
+    SetConnectionEstablished(false);
+}
+
 int atransport::Write(apacket* p) {
     return this->connection->Write(std::unique_ptr<apacket>(p)) ? 0 : -1;
 }
@@ -873,6 +909,10 @@ bool atransport::MatchesTarget(const std::string& target) const {
            qual_match(target.c_str(), "device:", device, false);
 }
 
+void atransport::SetConnectionEstablished(bool success) {
+    connection_waitable_->SetConnectionEstablished(success);
+}
+
 #if ADB_HOST
 
 // We use newline as our delimiter, make sure to never output it.
@@ -992,8 +1032,10 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
 
     lock.unlock();
 
+    auto waitable = t->connection_waitable();
     register_transport(t);
-    return 0;
+
+    return waitable->WaitForConnection(std::chrono::seconds(10)) ? 0 : -1;
 }
 
 #if ADB_HOST
