@@ -132,6 +132,7 @@ void handle_online(atransport *t)
 {
     D("adb: online");
     t->online = 1;
+    t->SetConnectionEstablished(true);
 }
 
 void handle_offline(atransport *t)

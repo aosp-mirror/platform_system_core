@@ -49,8 +49,16 @@ def fake_adb_server(protocol=socket.AF_INET, port=0):
     # A pipe that is used to signal the thread that it should terminate.
     readpipe, writepipe = os.pipe()
 
+    def _adb_packet(command, arg0, arg1, data):
+        bin_command = struct.unpack('I', command)[0]
+        buf = struct.pack('IIIIII', bin_command, arg0, arg1, len(data), 0,
+                          bin_command ^ 0xffffffff)
+        buf += data
+        return buf
+
     def _handle():
         rlist = [readpipe, serversock]
+        cnxn_sent = {}
         while True:
             ready, _, _ = select.select(rlist, [], [])
             for r in ready:
@@ -68,7 +76,15 @@ def fake_adb_server(protocol=socket.AF_INET, port=0):
                     # Client socket
                     data = r.recv(1024)
                     if not data:
+                        if r in cnxn_sent:
+                            del cnxn_sent[r]
                         rlist.remove(r)
+                        continue
+                    if r in cnxn_sent:
+                        continue
+                    cnxn_sent[r] = True
+                    r.sendall(_adb_packet('CNXN', 0x01000001, 1024 * 1024,
+                                          'device::ro.product.name=fakeadb'))
 
     port = serversock.getsockname()[1]
     server_thread = threading.Thread(target=_handle)
