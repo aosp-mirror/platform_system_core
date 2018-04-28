@@ -35,4 +35,5 @@ cc_test {
         "property_info_serializer_test.cpp",
     ],
     static_libs: ["libpropertyinfoserializer"],
+    test_suites: ["device-tests"],
 }

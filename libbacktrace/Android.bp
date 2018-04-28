@@ -183,6 +183,7 @@ cc_test {
         "art/runtime",
     ],
 
+    test_suites: ["device-tests"],
     data: [
         "testdata/arm/*",
         "testdata/arm64/*",
