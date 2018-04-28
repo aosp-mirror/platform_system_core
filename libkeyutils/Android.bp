@@ -13,4 +13,5 @@ cc_test {
     cflags: ["-Werror"],
     shared_libs: ["libkeyutils"],
     srcs: ["keyutils_test.cpp"],
+    test_suites: ["device-tests"],
 }
