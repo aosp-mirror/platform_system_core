@@ -162,4 +162,5 @@ cc_test {
             suffix: "64",
         },
     },
+    test_suites: ["device-tests"],
 }

@@ -89,6 +89,8 @@ cc_test {
             enabled: false,
         },
     },
+
+    test_suites: ["device-tests"],
 }
 
 cc_test {
@@ -103,4 +105,5 @@ cc_test {
         "libhwbinder",
         "libutils",
     ],
+    test_suites: ["device-tests"],
 }
