@@ -20,6 +20,7 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -30,6 +31,7 @@
 #include <thread>
 #include <unordered_set>
 
+#include <android-base/macros.h>
 #include <android-base/thread_annotations.h>
 #include <openssl/rsa.h>
 
@@ -160,6 +162,35 @@ struct UsbConnection : public BlockingConnection {
     usb_handle* handle_;
 };
 
+// Waits for a transport's connection to be not pending. This is a separate
+// object so that the transport can be destroyed and another thread can be
+// notified of it in a race-free way.
+class ConnectionWaitable {
+  public:
+    ConnectionWaitable() = default;
+    ~ConnectionWaitable() = default;
+
+    // Waits until the first CNXN packet has been received by the owning
+    // atransport, or the specified timeout has elapsed. Can be called from any
+    // thread.
+    //
+    // Returns true if the CNXN packet was received in a timely fashion, false
+    // otherwise.
+    bool WaitForConnection(std::chrono::milliseconds timeout);
+
+    // Can be called from any thread when the connection stops being pending.
+    // Only the first invocation will be acknowledged, the rest will be no-ops.
+    void SetConnectionEstablished(bool success);
+
+  private:
+    bool connection_established_ GUARDED_BY(mutex_) = false;
+    bool connection_established_ready_ GUARDED_BY(mutex_) = false;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+
+    DISALLOW_COPY_AND_ASSIGN(ConnectionWaitable);
+};
+
 class atransport {
   public:
     // TODO(danalbert): We expose waaaaaaay too much stuff because this was
@@ -168,13 +199,16 @@ class atransport {
     // it's better to do this piece by piece.
 
     atransport(ConnectionState state = kCsOffline)
-        : id(NextTransportId()), connection_state_(state) {
+        : id(NextTransportId()),
+          connection_state_(state),
+          connection_waitable_(std::make_shared<ConnectionWaitable>()),
+          connection_(nullptr) {
         // Initialize protocol to min version for compatibility with older versions.
         // Version will be updated post-connect.
         protocol_version = A_VERSION_MIN;
         max_payload = MAX_PAYLOAD;
     }
-    virtual ~atransport() {}
+    virtual ~atransport();
 
     int Write(apacket* p);
     void Kick();
@@ -183,12 +217,16 @@ class atransport {
     ConnectionState GetConnectionState() const;
     void SetConnectionState(ConnectionState state);
 
+    void SetConnection(std::unique_ptr<Connection> connection);
+    std::shared_ptr<Connection> connection() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return connection_;
+    }
+
     const TransportId id;
     size_t ref_count = 0;
     bool online = false;
     TransportType type = kTransportAny;
-
-    std::unique_ptr<Connection> connection;
 
     // Used to identify transports for clients.
     char* serial = nullptr;
@@ -241,7 +279,14 @@ class atransport {
     // This is to make it easier to use the same network target for both fastboot and adb.
     bool MatchesTarget(const std::string& target) const;
 
-private:
+    // Notifies that the atransport is no longer waiting for the connection
+    // being established.
+    void SetConnectionEstablished(bool success);
+
+    // Gets a shared reference to the ConnectionWaitable.
+    std::shared_ptr<ConnectionWaitable> connection_waitable() { return connection_waitable_; }
+
+  private:
     bool kicked_ = false;
 
     // A set of features transmitted in the banner with the initial connection.
@@ -257,6 +302,15 @@ private:
 #if ADB_HOST
     std::deque<std::shared_ptr<RSA>> keys_;
 #endif
+
+    // A sharable object that can be used to wait for the atransport's
+    // connection to be established.
+    std::shared_ptr<ConnectionWaitable> connection_waitable_;
+
+    // The underlying connection object.
+    std::shared_ptr<Connection> connection_ GUARDED_BY(mutex_);
+
+    std::mutex mutex_;
 
     DISALLOW_COPY_AND_ASSIGN(atransport);
 };

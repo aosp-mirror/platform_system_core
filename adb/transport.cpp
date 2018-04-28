@@ -64,6 +64,21 @@ const char* const kFeatureStat2 = "stat_v2";
 const char* const kFeatureLibusb = "libusb";
 const char* const kFeaturePushSync = "push_sync";
 
+namespace {
+
+// A class that helps the Clang Thread Safety Analysis deal with
+// std::unique_lock. Given that std::unique_lock is movable, and the analysis
+// can not currently perform alias analysis, it is not annotated. In order to
+// assert that the mutex is held, a ScopedAssumeLocked can be created just after
+// the std::unique_lock.
+class SCOPED_CAPABILITY ScopedAssumeLocked {
+  public:
+    ScopedAssumeLocked(std::mutex& mutex) ACQUIRE(mutex) {}
+    ~ScopedAssumeLocked() RELEASE() {}
+};
+
+}  // namespace
+
 TransportId NextTransportId() {
     static std::atomic<TransportId> next(1);
     return next++;
@@ -76,8 +91,6 @@ BlockingConnectionAdapter::~BlockingConnectionAdapter() {
     LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): destructing";
     Stop();
 }
-
-static void AssumeLocked(std::mutex& mutex) ASSERT_CAPABILITY(mutex) {}
 
 void BlockingConnectionAdapter::Start() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -103,11 +116,10 @@ void BlockingConnectionAdapter::Start() {
         LOG(INFO) << this->transport_name_ << ": write thread spawning";
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_);
+            ScopedAssumeLocked assume_locked(mutex_);
             cv_.wait(lock, [this]() REQUIRES(mutex_) {
                 return this->stopped_ || !this->write_queue_.empty();
             });
-
-            AssumeLocked(mutex_);
 
             if (this->stopped_) {
                 return;
@@ -505,8 +517,8 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
     if (t->GetConnectionState() != kCsNoPerm) {
         /* initial references are the two threads */
         t->ref_count = 1;
-        t->connection->SetTransportName(t->serial_name());
-        t->connection->SetReadCallback([t](Connection*, std::unique_ptr<apacket> p) {
+        t->connection()->SetTransportName(t->serial_name());
+        t->connection()->SetReadCallback([t](Connection*, std::unique_ptr<apacket> p) {
             if (!check_header(p.get(), t)) {
                 D("%s: remote read: bad header", t->serial);
                 return false;
@@ -519,7 +531,7 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
             fdevent_run_on_main_thread([packet, t]() { handle_packet(packet, t); });
             return true;
         });
-        t->connection->SetErrorCallback([t](Connection*, const std::string& error) {
+        t->connection()->SetErrorCallback([t](Connection*, const std::string& error) {
             D("%s: connection terminated: %s", t->serial, error.c_str());
             fdevent_run_on_main_thread([t]() {
                 handle_offline(t);
@@ -527,7 +539,7 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
             });
         });
 
-        t->connection->Start();
+        t->connection()->Start();
 #if ADB_HOST
         send_connect(t);
 #endif
@@ -596,7 +608,7 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         D("transport: %s unref (kicking and closing)", t->serial);
-        t->connection->Stop();
+        t->connection()->Stop();
         remove_transport(t);
     } else {
         D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
@@ -721,15 +733,39 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
     return result;
 }
 
+bool ConnectionWaitable::WaitForConnection(std::chrono::milliseconds timeout) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    ScopedAssumeLocked assume_locked(mutex_);
+    return cv_.wait_for(lock, timeout, [&]() REQUIRES(mutex_) {
+        return connection_established_ready_;
+    }) && connection_established_;
+}
+
+void ConnectionWaitable::SetConnectionEstablished(bool success) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (connection_established_ready_) return;
+        connection_established_ready_ = true;
+        connection_established_ = success;
+        D("connection established with %d", success);
+    }
+    cv_.notify_one();
+}
+
+atransport::~atransport() {
+    // If the connection callback had not been run before, run it now.
+    SetConnectionEstablished(false);
+}
+
 int atransport::Write(apacket* p) {
-    return this->connection->Write(std::unique_ptr<apacket>(p)) ? 0 : -1;
+    return this->connection()->Write(std::unique_ptr<apacket>(p)) ? 0 : -1;
 }
 
 void atransport::Kick() {
     if (!kicked_) {
         D("kicking transport %s", this->serial);
         kicked_ = true;
-        this->connection->Stop();
+        this->connection()->Stop();
     }
 }
 
@@ -740,6 +776,11 @@ ConnectionState atransport::GetConnectionState() const {
 void atransport::SetConnectionState(ConnectionState state) {
     check_main_thread();
     connection_state_ = state;
+}
+
+void atransport::SetConnection(std::unique_ptr<Connection> connection) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    connection_ = std::shared_ptr<Connection>(std::move(connection));
 }
 
 std::string atransport::connection_state_name() const {
@@ -873,6 +914,10 @@ bool atransport::MatchesTarget(const std::string& target) const {
            qual_match(target.c_str(), "device:", device, false);
 }
 
+void atransport::SetConnectionEstablished(bool success) {
+    connection_waitable_->SetConnectionEstablished(success);
+}
+
 #if ADB_HOST
 
 // We use newline as our delimiter, make sure to never output it.
@@ -992,8 +1037,10 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
 
     lock.unlock();
 
+    auto waitable = t->connection_waitable();
     register_transport(t);
-    return 0;
+
+    return waitable->WaitForConnection(std::chrono::seconds(10)) ? 0 : -1;
 }
 
 #if ADB_HOST
@@ -1052,8 +1099,9 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
 void unregister_usb_transport(usb_handle* usb) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     transport_list.remove_if([usb](atransport* t) {
-        if (auto connection = dynamic_cast<UsbConnection*>(t->connection.get())) {
-            return connection->handle_ == usb && t->GetConnectionState() == kCsNoPerm;
+        auto connection = t->connection();
+        if (auto usb_connection = dynamic_cast<UsbConnection*>(connection.get())) {
+            return usb_connection->handle_ == usb && t->GetConnectionState() == kCsNoPerm;
         }
         return false;
     });
