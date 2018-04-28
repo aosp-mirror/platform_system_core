@@ -180,6 +180,7 @@ cc_test {
         "util_test.cpp",
     ],
     static_libs: ["libinit"],
+    test_suites: ["device-tests"],
 }
 
 cc_benchmark {
