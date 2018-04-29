@@ -221,6 +221,8 @@ cc_test {
             stem: "debuggerd_test64",
         },
     },
+
+    test_suites: ["device-tests"],
 }
 
 cc_benchmark {

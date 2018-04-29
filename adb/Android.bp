@@ -369,6 +369,7 @@ cc_test {
         "libusb",
         "libmdnssd",
     ],
+    test_suites: ["device-tests"],
 }
 
 python_binary_host {
