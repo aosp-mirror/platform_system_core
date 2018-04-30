@@ -354,8 +354,8 @@ static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& arg
     return Success();
 }
 
-static Result<Success> keychord_init_action(const BuiltinArguments& args) {
-    keychord_init();
+static Result<Success> KeychordInitAction(const BuiltinArguments& args) {
+    KeychordInit();
     return Success();
 }
 
@@ -772,7 +772,7 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
-    am.QueueBuiltinAction(keychord_init_action, "keychord_init");
+    am.QueueBuiltinAction(KeychordInitAction, "KeychordInit");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
     // Trigger all the boot actions to get us started.
