@@ -109,7 +109,7 @@ struct output_file_normal {
 struct output_file_callback {
 	struct output_file out;
 	void *priv;
-	int (*write)(void *priv, const void *buf, int len);
+	int (*write)(void *priv, const void *buf, size_t len);
 };
 
 #define to_output_file_callback(_o) \
@@ -634,7 +634,8 @@ static struct output_file *output_file_new_normal(void)
 	return &outn->out;
 }
 
-struct output_file *output_file_open_callback(int (*write)(void *, const void *, int),
+struct output_file *output_file_open_callback(
+		int (*write)(void *, const void *, size_t),
 		void *priv, unsigned int block_size, int64_t len,
 		int gz __unused, int sparse, int chunks, int crc)
 {

@@ -18,6 +18,7 @@
 #define _LIBSPARSE_SPARSE_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef	__cplusplus
@@ -25,6 +26,11 @@ extern "C" {
 #endif
 
 struct sparse_file;
+
+// The callbacks in sparse_file_callback() and sparse_file_foreach_chunk() take
+// size_t as the length type (was `int` in past). This allows clients to keep
+// their codes compatibile with both versions as needed.
+#define	SPARSE_CALLBACK_USES_SIZE_T
 
 /**
  * sparse_file_new - create a new sparse file cookie
@@ -201,7 +207,7 @@ unsigned int sparse_file_block_size(struct sparse_file *s);
  * Returns 0 on success, negative errno on error.
  */
 int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
-		int (*write)(void *priv, const void *data, int len), void *priv);
+		int (*write)(void *priv, const void *data, size_t len), void *priv);
 
 /**
  * sparse_file_foreach_chunk - call a callback for data blocks in sparse file
@@ -218,7 +224,7 @@ int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
  * Returns 0 on success, negative errno on error.
  */
 int sparse_file_foreach_chunk(struct sparse_file *s, bool sparse, bool crc,
-	int (*write)(void *priv, const void *data, int len, unsigned int block,
+	int (*write)(void *priv, const void *data, size_t len, unsigned int block,
 		     unsigned int nr_blocks),
 	void *priv);
 /**
