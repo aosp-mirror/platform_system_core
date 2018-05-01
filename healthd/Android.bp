@@ -57,6 +57,10 @@ cc_defaults {
 cc_binary {
     name: "android.hardware.health@2.0-service",
     defaults: ["android.hardware.health@2.0-service_defaults"],
+
+    overrides: [
+        "healthd",
+    ]
 }
 
 cc_binary {
