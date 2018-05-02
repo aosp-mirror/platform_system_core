@@ -16,8 +16,16 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <log/log_event_list.h>
 #include <log/log_id.h>
+#include <stats_event_list.h>
+#include <time.h>
+
+static int64_t getElapsedRealTimeNs() {
+    struct timespec t;
+    t.tv_sec = t.tv_nsec = 0;
+    clock_gettime(CLOCK_BOOTTIME, &t);
+    return (int64_t)t.tv_sec * 1000000000LL + t.tv_nsec;
+}
 
 /**
  * Logs the change in LMKD state which is used as start/stop boundaries for logging
@@ -32,6 +40,12 @@ stats_write_lmk_state_changed(android_log_context ctx, int32_t code, int32_t sta
         return ret;
     }
 
+    reset_log_context(ctx);
+
+    if ((ret = android_log_write_int64(ctx, getElapsedRealTimeNs())) < 0) {
+        return ret;
+    }
+
     if ((ret = android_log_write_int32(ctx, code)) < 0) {
         return ret;
     }
@@ -39,7 +53,8 @@ stats_write_lmk_state_changed(android_log_context ctx, int32_t code, int32_t sta
     if ((ret = android_log_write_int32(ctx, state)) < 0) {
         return ret;
     }
-    return ret;
+
+    return write_to_logger(ctx, LOG_ID_STATS);
 }
 
 /**
@@ -54,6 +69,11 @@ stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid
     assert(ctx != NULL);
     int ret = -EINVAL;
     if (!ctx) {
+        return ret;
+    }
+    reset_log_context(ctx);
+
+    if ((ret = android_log_write_int64(ctx, getElapsedRealTimeNs())) < 0) {
         return ret;
     }
 
@@ -93,8 +113,5 @@ stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid
         return ret;
     }
 
-    if ((ret = android_log_write_list(ctx, LOG_ID_STATS)) < 0) {
-        return ret;
-    }
-    return ret;
+    return write_to_logger(ctx, LOG_ID_STATS);
 }
