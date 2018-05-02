@@ -346,7 +346,9 @@ TEST_F(CrasherTest, signal) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 0 \(SI_USER\), fault addr --------)");
+  ASSERT_MATCH(
+      result,
+      R"(signal 11 \(SIGSEGV\), code 0 \(SI_USER from pid \d+, uid \d+\), fault addr --------)");
   ASSERT_MATCH(result, R"(backtrace:)");
 }
 
