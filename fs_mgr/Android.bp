@@ -42,6 +42,7 @@ cc_library_static {
         "fs_mgr_verity.cpp",
         "fs_mgr_avb.cpp",
         "fs_mgr_avb_ops.cpp",
+        "fs_mgr_dm_linear.cpp",
     ],
     static_libs: [
         "libfec",
