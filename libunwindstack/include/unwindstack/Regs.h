@@ -73,6 +73,8 @@ class Regs {
 
   uint16_t total_regs() { return total_regs_; }
 
+  virtual Regs* Clone() = 0;
+
   static ArchEnum CurrentArch();
   static Regs* RemoteGet(pid_t pid);
   static Regs* CreateFromUcontext(ArchEnum arch, void* ucontext);
