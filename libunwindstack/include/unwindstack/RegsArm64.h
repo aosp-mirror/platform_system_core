@@ -50,6 +50,8 @@ class RegsArm64 : public RegsImpl<uint64_t> {
   void set_pc(uint64_t pc) override;
   void set_sp(uint64_t sp) override;
 
+  Regs* Clone() override final;
+
   static Regs* Read(void* data);
 
   static Regs* CreateFromUcontext(void* ucontext);

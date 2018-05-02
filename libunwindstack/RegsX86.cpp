@@ -179,4 +179,8 @@ bool RegsX86::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
   return false;
 }
 
+Regs* RegsX86::Clone() {
+  return new RegsX86(*this);
+}
+
 }  // namespace unwindstack
