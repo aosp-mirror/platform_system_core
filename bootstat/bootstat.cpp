@@ -232,7 +232,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"shutdown,thermal,battery", 87},
     {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
     {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
-    // {"usb", 90},  // Duplicate of enum 80 above. Immediate reuse possible.
+    {"reboot,rescueparty", 90},
     {"charge", 91},
     {"oem_tz_crash", 92},
     {"uvlo", 93},
