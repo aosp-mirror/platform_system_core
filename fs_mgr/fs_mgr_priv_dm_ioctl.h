@@ -20,7 +20,7 @@
 #include <linux/dm-ioctl.h>
 #include <string>
 
-void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name, unsigned flags);
+void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name);
 
 bool fs_mgr_create_verity_device(struct dm_ioctl* io, const std::string& name, int fd);
 
