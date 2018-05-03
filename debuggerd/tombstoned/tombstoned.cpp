@@ -61,6 +61,7 @@ enum CrashStatus {
 struct Crash {
   ~Crash() { event_free(crash_event); }
 
+  std::string crash_tombstone_path;
   unique_fd crash_tombstone_fd;
   unique_fd crash_socket_fd;
   pid_t crash_pid;
@@ -109,20 +110,22 @@ class CrashQueue {
     return &queue;
   }
 
-  unique_fd get_output() {
+  std::pair<std::string, unique_fd> get_output() {
+    std::string path;
     unique_fd result(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0640));
     if (result == -1) {
-      // We might not have O_TMPFILE. Try creating and unlinking instead.
-      result.reset(
-          openat(dir_fd_, ".temporary", O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0640));
+      // We might not have O_TMPFILE. Try creating with an arbitrary filename instead.
+      static size_t counter = 0;
+      std::string tmp_filename = StringPrintf(".temporary%zu", counter++);
+      result.reset(openat(dir_fd_, tmp_filename.c_str(),
+                          O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0640));
       if (result == -1) {
         PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
       }
-      if (unlinkat(dir_fd_, ".temporary", 0) != 0) {
-        PLOG(FATAL) << "failed to unlink temporary tombstone";
-      }
+
+      path = StringPrintf("%s/%s", dir_path_.c_str(), tmp_filename.c_str());
     }
-    return result;
+    return std::make_pair(std::move(path), std::move(result));
   }
 
   std::string get_next_artifact_path() {
@@ -209,7 +212,7 @@ static void perform_request(Crash* crash) {
   bool intercepted =
       intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
   if (!intercepted) {
-    output_fd = CrashQueue::for_crash(crash)->get_output();
+    std::tie(crash->crash_tombstone_path, output_fd) = CrashQueue::for_crash(crash)->get_output();
     crash->crash_tombstone_fd.reset(dup(output_fd.get()));
   }
 
@@ -351,6 +354,8 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
   if (crash->crash_tombstone_fd != -1) {
     std::string fd_path = StringPrintf("/proc/self/fd/%d", crash->crash_tombstone_fd.get());
     std::string tombstone_path = CrashQueue::for_crash(crash)->get_next_artifact_path();
+
+    // linkat doesn't let us replace a file, so we need to unlink first.
     int rc = unlink(tombstone_path.c_str());
     if (rc != 0 && errno != ENOENT) {
       PLOG(ERROR) << "failed to unlink tombstone at " << tombstone_path;
@@ -368,6 +373,14 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
         // tombstone associated with a given native crash was written. Any changes
         // to this message must be carefully considered.
         LOG(ERROR) << "Tombstone written to: " << tombstone_path;
+      }
+    }
+
+    // If we don't have O_TMPFILE, we need to clean up after ourselves.
+    if (!crash->crash_tombstone_path.empty()) {
+      rc = unlink(crash->crash_tombstone_path.c_str());
+      if (rc != 0) {
+        PLOG(ERROR) << "failed to unlink temporary tombstone at " << crash->crash_tombstone_path;
       }
     }
   }
