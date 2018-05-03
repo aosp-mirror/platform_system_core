@@ -24,11 +24,6 @@
 namespace android {
 namespace init {
 
-struct property_audit_data {
-    const ucred* cr;
-    const char* name;
-};
-
 extern uint32_t (*property_set)(const std::string& name, const std::string& value);
 
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
