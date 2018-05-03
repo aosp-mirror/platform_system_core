@@ -303,13 +303,14 @@ static std::string construct_verity_table(const AvbHashtreeDescriptor& hashtree_
 
 static bool load_verity_table(struct dm_ioctl* io, const std::string& dm_device_name, int fd,
                               uint64_t image_size, const std::string& verity_table) {
-    fs_mgr_verity_ioctl_init(io, dm_device_name, DM_STATUS_TABLE_FLAG);
+    fs_mgr_verity_ioctl_init(io, dm_device_name);
 
     // The buffer consists of [dm_ioctl][dm_target_spec][verity_params].
     char* buffer = (char*)io;
 
     // Builds the dm_target_spec arguments.
     struct dm_target_spec* dm_target = (struct dm_target_spec*)&buffer[sizeof(struct dm_ioctl)];
+    io->flags = DM_READONLY_FLAG;
     io->target_count = 1;
     dm_target->status = 0;
     dm_target->sector_start = 0;
