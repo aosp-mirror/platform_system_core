@@ -258,12 +258,13 @@ static int load_verity_table(struct dm_ioctl *io, const std::string &name,
     char *buffer = (char*) io;
     size_t bufsize;
 
-    fs_mgr_verity_ioctl_init(io, name, DM_STATUS_TABLE_FLAG);
+    fs_mgr_verity_ioctl_init(io, name);
 
     struct dm_target_spec *tgt = (struct dm_target_spec *) &buffer[sizeof(struct dm_ioctl)];
 
     // set tgt arguments
     io->target_count = 1;
+    io->flags = DM_READONLY_FLAG;
     tgt->status = 0;
     tgt->sector_start = 0;
     tgt->length = device_size / 512;
