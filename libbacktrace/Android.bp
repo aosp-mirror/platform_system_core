@@ -190,6 +190,9 @@ cc_test {
         "testdata/x86/*",
         "testdata/x86_64/*",
     ],
+    required: [
+        "libbacktrace_test",
+    ],
 }
 
 cc_benchmark {
