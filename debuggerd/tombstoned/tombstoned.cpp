@@ -352,7 +352,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
     std::string fd_path = StringPrintf("/proc/self/fd/%d", crash->crash_tombstone_fd.get());
     std::string tombstone_path = CrashQueue::for_crash(crash)->get_next_artifact_path();
     int rc = unlink(tombstone_path.c_str());
-    if (rc != 0) {
+    if (rc != 0 && errno != ENOENT) {
       PLOG(ERROR) << "failed to unlink tombstone at " << tombstone_path;
       goto fail;
     }
