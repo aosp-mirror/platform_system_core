@@ -112,7 +112,6 @@ cc_library_static {
         "libbase",
         "libdebuggerd",
         "libbacktrace",
-        "libunwind",
         "libunwindstack",
         "libdexfile",
         "liblzma",
@@ -158,7 +157,6 @@ cc_library_static {
 
     static_libs: [
         "libbacktrace",
-        "libunwind",
         "libunwindstack",
         "liblzma",
         "libbase",
