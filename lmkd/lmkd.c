@@ -39,7 +39,7 @@
 #include <log/log.h>
 
 #ifdef LMKD_LOG_STATS
-#include <statslog.h>
+#include "statslog.h"
 #endif
 
 /*
