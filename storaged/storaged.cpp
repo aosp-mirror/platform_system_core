@@ -30,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 #include <android/hidl/manager/1.0/IServiceManager.h>
 #include <batteryservice/BatteryServiceConstants.h>
 #include <cutils/properties.h>
