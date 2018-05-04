@@ -331,7 +331,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
             reinterpret_cast<android_log_event_string_t*>(buffer);
         event->header.tag = htole32(AUDITD_LOG_TAG);
         event->type = EVENT_TYPE_STRING;
-        event->length = htole32(message_len);
+        event->length = htole32(str_len);
         memcpy(event->data, str, str_len - bug_metadata.length());
         memcpy(event->data + str_len - bug_metadata.length(),
                bug_metadata.c_str(), bug_metadata.length());
