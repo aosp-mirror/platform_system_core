@@ -23,21 +23,20 @@
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_dm_ioctl.h"
 
-void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name, unsigned flags) {
+void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name) {
     memset(io, 0, DM_BUF_SIZE);
     io->data_size = DM_BUF_SIZE;
     io->data_start = sizeof(struct dm_ioctl);
     io->version[0] = 4;
     io->version[1] = 0;
     io->version[2] = 0;
-    io->flags = flags | DM_READONLY_FLAG;
     if (!name.empty()) {
         strlcpy(io->name, name.c_str(), sizeof(io->name));
     }
 }
 
 bool fs_mgr_create_verity_device(struct dm_ioctl* io, const std::string& name, int fd) {
-    fs_mgr_verity_ioctl_init(io, name, 1);
+    fs_mgr_verity_ioctl_init(io, name);
     if (ioctl(fd, DM_DEV_CREATE, io)) {
         PERROR << "Error creating device mapping";
         return false;
@@ -46,7 +45,7 @@ bool fs_mgr_create_verity_device(struct dm_ioctl* io, const std::string& name, i
 }
 
 bool fs_mgr_destroy_verity_device(struct dm_ioctl* io, const std::string& name, int fd) {
-    fs_mgr_verity_ioctl_init(io, name, 0);
+    fs_mgr_verity_ioctl_init(io, name);
     if (ioctl(fd, DM_DEV_REMOVE, io)) {
         PERROR << "Error removing device mapping";
         return false;
@@ -58,7 +57,7 @@ bool fs_mgr_get_verity_device_name(struct dm_ioctl* io, const std::string& name,
                                    std::string* out_dev_name) {
     FS_MGR_CHECK(out_dev_name != nullptr);
 
-    fs_mgr_verity_ioctl_init(io, name, 0);
+    fs_mgr_verity_ioctl_init(io, name);
     if (ioctl(fd, DM_DEV_STATUS, io)) {
         PERROR << "Error fetching verity device number";
         return false;
@@ -71,7 +70,7 @@ bool fs_mgr_get_verity_device_name(struct dm_ioctl* io, const std::string& name,
 }
 
 bool fs_mgr_resume_verity_table(struct dm_ioctl* io, const std::string& name, int fd) {
-    fs_mgr_verity_ioctl_init(io, name, 0);
+    fs_mgr_verity_ioctl_init(io, name);
     if (ioctl(fd, DM_DEV_SUSPEND, io)) {
         PERROR << "Error activating verity device";
         return false;
