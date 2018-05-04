@@ -708,22 +708,41 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
     }
     lock.unlock();
 
-    // Don't return unauthorized devices; the caller can't do anything with them.
-    if (result && result->GetConnectionState() == kCsUnauthorized && !accept_any_state) {
-        *error_out = "device unauthorized.\n";
-        char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
-        *error_out += "This adb server's $ADB_VENDOR_KEYS is ";
-        *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
-        *error_out += "\n";
-        *error_out += "Try 'adb kill-server' if that seems wrong.\n";
-        *error_out += "Otherwise check for a confirmation dialog on your device.";
-        result = nullptr;
-    }
+    if (result && !accept_any_state) {
+        // The caller requires an active transport.
+        // Make sure that we're actually connected.
+        ConnectionState state = result->GetConnectionState();
+        switch (state) {
+            case kCsConnecting:
+                *error_out = "device still connecting";
+                result = nullptr;
+                break;
 
-    // Don't return offline devices; the caller can't do anything with them.
-    if (result && result->GetConnectionState() == kCsOffline && !accept_any_state) {
-        *error_out = "device offline";
-        result = nullptr;
+            case kCsAuthorizing:
+                *error_out = "device still authorizing";
+                result = nullptr;
+                break;
+
+            case kCsUnauthorized: {
+                *error_out = "device unauthorized.\n";
+                char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
+                *error_out += "This adb server's $ADB_VENDOR_KEYS is ";
+                *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
+                *error_out += "\n";
+                *error_out += "Try 'adb kill-server' if that seems wrong.\n";
+                *error_out += "Otherwise check for a confirmation dialog on your device.";
+                result = nullptr;
+                break;
+            }
+
+            case kCsOffline:
+                *error_out = "device offline";
+                result = nullptr;
+                break;
+
+            default:
+                break;
+        }
     }
 
     if (result) {
@@ -802,6 +821,10 @@ std::string atransport::connection_state_name() const {
             return "sideload";
         case kCsUnauthorized:
             return "unauthorized";
+        case kCsAuthorizing:
+            return "authorizing";
+        case kCsConnecting:
+            return "connecting";
         default:
             return "unknown";
     }
@@ -1080,7 +1103,7 @@ void kick_all_tcp_devices() {
 
 void register_usb_transport(usb_handle* usb, const char* serial, const char* devpath,
                             unsigned writeable) {
-    atransport* t = new atransport((writeable ? kCsOffline : kCsNoPerm));
+    atransport* t = new atransport((writeable ? kCsConnecting : kCsNoPerm));
 
     D("transport: %p init'ing for usb_handle %p (sn='%s')", t, usb, serial ? serial : "");
     init_usb_transport(t, usb);

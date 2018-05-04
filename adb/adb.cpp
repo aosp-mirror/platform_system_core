@@ -365,8 +365,8 @@ void handle_packet(apacket *p, atransport *t)
         switch (p->msg.arg0) {
 #if ADB_HOST
             case ADB_AUTH_TOKEN:
-                if (t->GetConnectionState() == kCsOffline) {
-                    t->SetConnectionState(kCsUnauthorized);
+                if (t->GetConnectionState() != kCsAuthorizing) {
+                    t->SetConnectionState(kCsAuthorizing);
                 }
                 send_auth_response(p->payload.data(), p->msg.data_length, t);
                 break;
@@ -1103,14 +1103,11 @@ int handle_host_request(const char* service, TransportType type, const char* ser
     if (!strcmp(service, "reconnect-offline")) {
         std::string response;
         close_usb_devices([&response](const atransport* transport) {
-            switch (transport->GetConnectionState()) {
-                case kCsOffline:
-                case kCsUnauthorized:
-                    response += "reconnecting " + transport->serial_name() + "\n";
-                    return true;
-                default:
-                    return false;
+            if (!ConnectionStateIsOnline(transport->GetConnectionState())) {
+                response += "reconnecting " + transport->serial_name() + "\n";
+                return true;
             }
+            return false;
         });
         if (!response.empty()) {
             response.resize(response.size() - 1);

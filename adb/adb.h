@@ -95,15 +95,32 @@ enum TransportType {
 
 enum ConnectionState {
     kCsAny = -1,
-    kCsOffline = 0,
+
+    kCsConnecting = 0,  // Haven't received a response from the device yet.
+    kCsAuthorizing,     // Authorizing with keys from ADB_VENDOR_KEYS.
+    kCsUnauthorized,    // ADB_VENDOR_KEYS exhausted, fell back to user prompt.
+    kCsNoPerm,          // Insufficient permissions to communicate with the device.
+    kCsOffline,
+
     kCsBootloader,
     kCsDevice,
     kCsHost,
     kCsRecovery,
-    kCsNoPerm,  // Insufficient permissions to communicate with the device.
     kCsSideload,
-    kCsUnauthorized,
 };
+
+inline bool ConnectionStateIsOnline(ConnectionState state) {
+    switch (state) {
+        case kCsBootloader:
+        case kCsDevice:
+        case kCsHost:
+        case kCsRecovery:
+        case kCsSideload:
+            return true;
+        default:
+            return false;
+    }
+}
 
 void print_packet(const char* label, apacket* p);
 
