@@ -37,7 +37,8 @@ additional.namespaces = sphal,vndk,rs
 ###############################################################################
 namespace.default.isolated = true
 
-namespace.default.search.paths = /system/${LIB}
+namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /product/${LIB}
 
 # We can't have entire /system/${LIB} as permitted paths because doing so
 # makes it possible to load libs in /system/${LIB}/vndk* directories by
@@ -49,6 +50,7 @@ namespace.default.search.paths = /system/${LIB}
 namespace.default.permitted.paths  = /system/${LIB}/drm
 namespace.default.permitted.paths += /system/${LIB}/extractors
 namespace.default.permitted.paths += /system/${LIB}/hw
+namespace.default.permitted.paths += /product/${LIB}
 # These are where odex files are located. libart has to be able to dlopen the files
 namespace.default.permitted.paths += /system/framework
 namespace.default.permitted.paths += /system/app
@@ -68,6 +70,8 @@ namespace.default.permitted.paths += /mnt/expand
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
+namespace.default.asan.search.paths += /data/asan/product/${LIB}
+namespace.default.asan.search.paths +=           /product/${LIB}
 
 namespace.default.asan.permitted.paths  = /data
 namespace.default.asan.permitted.paths += /system/${LIB}/drm
@@ -83,6 +87,7 @@ namespace.default.asan.permitted.paths += /odm/framework
 namespace.default.asan.permitted.paths += /odm/app
 namespace.default.asan.permitted.paths += /odm/priv-app
 namespace.default.asan.permitted.paths += /oem/app
+namespace.default.asan.permitted.paths += /product/${LIB}
 namespace.default.asan.permitted.paths += /product/framework
 namespace.default.asan.permitted.paths += /product/app
 namespace.default.asan.permitted.paths += /product/priv-app
@@ -320,10 +325,13 @@ namespace.vndk.link.default.allow_all_shared_libs = true
 ###############################################################################
 namespace.system.isolated = false
 
-namespace.system.search.paths = /system/${LIB}
+namespace.system.search.paths  = /system/${LIB}
+namespace.system.search.paths += /product/${LIB}
 
 namespace.system.asan.search.paths  = /data/asan/system/${LIB}
 namespace.system.asan.search.paths +=           /system/${LIB}
+namespace.system.asan.search.paths += /data/asan/product/${LIB}
+namespace.system.asan.search.paths +=           /product/${LIB}
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
@@ -335,4 +343,5 @@ namespace.system.asan.search.paths +=           /system/${LIB}
 ###############################################################################
 [postinstall]
 namespace.default.isolated = false
-namespace.default.search.paths = /system/${LIB}
+namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /product/${LIB}
