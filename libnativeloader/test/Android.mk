@@ -30,6 +30,13 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := public.libraries-product1.txt
+LOCAL_SRC_FILES:= $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT_ETC)
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
 LOCAL_PACKAGE_NAME := oemlibrarytest-system
 LOCAL_MODULE_TAGS := tests
 LOCAL_MANIFEST_FILE := system/AndroidManifest.xml
