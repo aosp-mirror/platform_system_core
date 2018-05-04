@@ -1040,6 +1040,11 @@ int register_socket_transport(int s, const char* serial, int port, int local) {
     auto waitable = t->connection_waitable();
     register_transport(t);
 
+    if (local == 1) {
+        // Do not wait for emulator transports.
+        return 0;
+    }
+
     return waitable->WaitForConnection(std::chrono::seconds(10)) ? 0 : -1;
 }
 

@@ -47,6 +47,8 @@ class ComplexEventLogger {
   public:
     // Create a complex event with category|category|.
     explicit ComplexEventLogger(int category);
+    // Set the package name that this event originates from.
+    void SetPackageName(const std::string& package_name);
     // Add tagged data to the event, with the given tag and integer value.
     void AddTaggedData(int tag, int32_t value);
     // Add tagged data to the event, with the given tag and string value.
@@ -70,6 +72,7 @@ enum {
     LOGBUILDER_VALUE = 802,
     LOGBUILDER_COUNTER = 803,
     LOGBUILDER_HISTOGRAM = 804,
+    LOGBUILDER_PACKAGENAME = 806,
 
     ACTION_BOOT = 1098,
     FIELD_PLATFORM_REASON = 1099,
