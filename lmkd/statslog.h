@@ -18,11 +18,11 @@
 #define _STATSLOG_H_
 
 #include <assert.h>
+#include <stats_event_list.h>
 #include <stdbool.h>
 #include <sys/cdefs.h>
 
 #include <cutils/properties.h>
-#include <log/log_event_list.h>
 
 __BEGIN_DECLS
 
