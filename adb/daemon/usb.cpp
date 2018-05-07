@@ -41,7 +41,7 @@
 #include <android-base/properties.h>
 
 #include "adb.h"
-#include "daemon/usb.h"
+#include "adbd/usb.h"
 #include "transport.h"
 
 using namespace std::chrono_literals;
@@ -250,7 +250,7 @@ static int getMaxPacketSize(int ffs_fd) {
     }
 }
 
-bool init_functionfs(struct usb_handle* h) {
+static bool init_functionfs(struct usb_handle* h) {
     LOG(INFO) << "initializing functionfs";
 
     ssize_t ret;
@@ -336,9 +336,7 @@ err:
     return false;
 }
 
-static void usb_ffs_open_thread(void* x) {
-    struct usb_handle* usb = (struct usb_handle*)x;
-
+static void usb_ffs_open_thread(usb_handle *usb) {
     adb_thread_setname("usb ffs open");
 
     while (true) {
@@ -505,9 +503,7 @@ static void usb_ffs_close(usb_handle* h) {
     h->notify.notify_one();
 }
 
-static void usb_ffs_init() {
-    D("[ usb_init - using FunctionFS ]");
-
+usb_handle *create_usb_handle() {
     usb_handle* h = new usb_handle();
 
     if (android::base::GetBoolProperty("sys.usb.ffs.aio_compat", false)) {
@@ -523,15 +519,15 @@ static void usb_ffs_init() {
     }
     h->kick = usb_ffs_kick;
     h->close = usb_ffs_close;
-
-    D("[ usb_init - starting thread ]");
-    std::thread(usb_ffs_open_thread, h).detach();
+    return h;
 }
 
 void usb_init() {
+    D("[ usb_init - using FunctionFS ]");
     dummy_fd = adb_open("/dev/null", O_WRONLY);
     CHECK_NE(dummy_fd, -1);
-    usb_ffs_init();
+
+    std::thread(usb_ffs_open_thread, create_usb_handle()).detach();
 }
 
 int usb_write(usb_handle* h, const void* data, int len) {

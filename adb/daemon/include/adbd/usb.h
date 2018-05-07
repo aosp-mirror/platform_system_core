@@ -19,6 +19,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <vector>
 
 #include <asyncio/AsyncIO.h>
 
@@ -56,3 +57,4 @@ struct usb_handle {
     struct aio_block write_aiob;
 };
 
+usb_handle *create_usb_handle();
