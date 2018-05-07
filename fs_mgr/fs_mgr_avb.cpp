@@ -303,7 +303,7 @@ static std::string construct_verity_table(const AvbHashtreeDescriptor& hashtree_
 
 static bool load_verity_table(struct dm_ioctl* io, const std::string& dm_device_name, int fd,
                               uint64_t image_size, const std::string& verity_table) {
-    fs_mgr_verity_ioctl_init(io, dm_device_name);
+    fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, dm_device_name);
 
     // The buffer consists of [dm_ioctl][dm_target_spec][verity_params].
     char* buffer = (char*)io;
@@ -360,14 +360,14 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
     alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
     struct dm_ioctl* io = (struct dm_ioctl*)buffer;
     const std::string mount_point(basename(fstab_entry->mount_point));
-    if (!fs_mgr_create_verity_device(io, mount_point, fd)) {
+    if (!fs_mgr_dm_create_device(io, mount_point, fd)) {
         LERROR << "Couldn't create verity device!";
         return false;
     }
 
     // Gets the name of the device file.
     std::string verity_blk_name;
-    if (!fs_mgr_get_verity_device_name(io, mount_point, fd, &verity_blk_name)) {
+    if (!fs_mgr_dm_get_device_name(io, mount_point, fd, &verity_blk_name)) {
         LERROR << "Couldn't get verity device number!";
         return false;
     }
@@ -386,7 +386,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
     }
 
     // Activates the device.
-    if (!fs_mgr_resume_verity_table(io, mount_point, fd)) {
+    if (!fs_mgr_dm_resume_table(io, mount_point, fd)) {
         return false;
     }
 
