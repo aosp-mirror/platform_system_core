@@ -1383,7 +1383,7 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
             mount_point = basename(fstab->recs[i].mount_point);
         }
 
-        fs_mgr_verity_ioctl_init(io, mount_point);
+        fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, mount_point);
 
         const char* status;
         if (ioctl(fd, DM_TABLE_STATUS, io)) {

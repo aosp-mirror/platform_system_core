@@ -23,9 +23,9 @@
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_dm_ioctl.h"
 
-void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name) {
-    memset(io, 0, DM_BUF_SIZE);
-    io->data_size = DM_BUF_SIZE;
+void fs_mgr_dm_ioctl_init(struct dm_ioctl* io, size_t size, const std::string& name) {
+    memset(io, 0, size);
+    io->data_size = size;
     io->data_start = sizeof(struct dm_ioctl);
     io->version[0] = 4;
     io->version[1] = 0;
@@ -35,8 +35,8 @@ void fs_mgr_verity_ioctl_init(struct dm_ioctl* io, const std::string& name) {
     }
 }
 
-bool fs_mgr_create_verity_device(struct dm_ioctl* io, const std::string& name, int fd) {
-    fs_mgr_verity_ioctl_init(io, name);
+bool fs_mgr_dm_create_device(struct dm_ioctl* io, const std::string& name, int fd) {
+    fs_mgr_dm_ioctl_init(io, sizeof(*io), name);
     if (ioctl(fd, DM_DEV_CREATE, io)) {
         PERROR << "Error creating device mapping";
         return false;
@@ -44,8 +44,8 @@ bool fs_mgr_create_verity_device(struct dm_ioctl* io, const std::string& name, i
     return true;
 }
 
-bool fs_mgr_destroy_verity_device(struct dm_ioctl* io, const std::string& name, int fd) {
-    fs_mgr_verity_ioctl_init(io, name);
+bool fs_mgr_dm_destroy_device(struct dm_ioctl* io, const std::string& name, int fd) {
+    fs_mgr_dm_ioctl_init(io, sizeof(*io), name);
     if (ioctl(fd, DM_DEV_REMOVE, io)) {
         PERROR << "Error removing device mapping";
         return false;
@@ -53,13 +53,13 @@ bool fs_mgr_destroy_verity_device(struct dm_ioctl* io, const std::string& name, 
     return true;
 }
 
-bool fs_mgr_get_verity_device_name(struct dm_ioctl* io, const std::string& name, int fd,
-                                   std::string* out_dev_name) {
+bool fs_mgr_dm_get_device_name(struct dm_ioctl* io, const std::string& name, int fd,
+                               std::string* out_dev_name) {
     FS_MGR_CHECK(out_dev_name != nullptr);
 
-    fs_mgr_verity_ioctl_init(io, name);
+    fs_mgr_dm_ioctl_init(io, sizeof(*io), name);
     if (ioctl(fd, DM_DEV_STATUS, io)) {
-        PERROR << "Error fetching verity device number";
+        PERROR << "Error fetching device-mapper device number";
         return false;
     }
 
@@ -69,10 +69,10 @@ bool fs_mgr_get_verity_device_name(struct dm_ioctl* io, const std::string& name,
     return true;
 }
 
-bool fs_mgr_resume_verity_table(struct dm_ioctl* io, const std::string& name, int fd) {
-    fs_mgr_verity_ioctl_init(io, name);
+bool fs_mgr_dm_resume_table(struct dm_ioctl* io, const std::string& name, int fd) {
+    fs_mgr_dm_ioctl_init(io, sizeof(*io), name);
     if (ioctl(fd, DM_DEV_SUSPEND, io)) {
-        PERROR << "Error activating verity device";
+        PERROR << "Error activating device table";
         return false;
     }
     return true;
