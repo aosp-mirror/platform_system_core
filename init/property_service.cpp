@@ -59,6 +59,7 @@
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
+#include "selinux.h"
 #include "subcontext.h"
 #include "util.h"
 
@@ -542,7 +543,7 @@ static void LoadProperties(char* data, const char* filter, const char* filename)
     size_t flen = 0;
 
     const char* context = kInitContext.c_str();
-    if (GetIntProperty("ro.vndk.version", 28) >= 28) {
+    if (SelinuxHasVendorInit()) {
         for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
             if (StartsWith(filename, path_prefix)) {
                 context = secontext;
