@@ -258,7 +258,7 @@ static int load_verity_table(struct dm_ioctl *io, const std::string &name,
     char *buffer = (char*) io;
     size_t bufsize;
 
-    fs_mgr_verity_ioctl_init(io, name);
+    fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, name);
 
     struct dm_target_spec *tgt = (struct dm_target_spec *) &buffer[sizeof(struct dm_ioctl)];
 
@@ -805,13 +805,13 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     }
 
     // create the device
-    if (!fs_mgr_create_verity_device(io, mount_point, fd)) {
+    if (!fs_mgr_dm_create_device(io, mount_point, fd)) {
         LERROR << "Couldn't create verity device!";
         goto out;
     }
 
     // get the name of the device file
-    if (!fs_mgr_get_verity_device_name(io, mount_point, fd, &verity_blk_name)) {
+    if (!fs_mgr_dm_get_device_name(io, mount_point, fd, &verity_blk_name)) {
         LERROR << "Couldn't get verity device number!";
         goto out;
     }
@@ -900,7 +900,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
 loaded:
 
     // activate the device
-    if (!fs_mgr_resume_verity_table(io, mount_point, fd)) {
+    if (!fs_mgr_dm_resume_table(io, mount_point, fd)) {
         goto out;
     }
 
@@ -923,7 +923,7 @@ loaded:
     if (!verified_at_boot) {
         free(fstab->blk_device);
         fstab->blk_device = strdup(verity_blk_name.c_str());
-    } else if (!fs_mgr_destroy_verity_device(io, mount_point, fd)) {
+    } else if (!fs_mgr_dm_destroy_device(io, mount_point, fd)) {
         LERROR << "Failed to remove verity device " << mount_point.c_str();
         goto out;
     }

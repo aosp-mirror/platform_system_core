@@ -357,7 +357,7 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 static std::vector<Subcontext> subcontexts;
 
 std::vector<Subcontext>* InitializeSubcontexts() {
-    if (GetIntProperty("ro.vndk.version", 28) >= 28) {
+    if (SelinuxHasVendorInit()) {
         for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
             subcontexts.emplace_back(path_prefix, secontext);
         }
