@@ -240,6 +240,29 @@ static Result<Success> do_insmod(const BuiltinArguments& args) {
     return Success();
 }
 
+static Result<Success> do_interface_restart(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
+    if (!svc) return Error() << "interface " << args[1] << " not found";
+    svc->Restart();
+    return Success();
+}
+
+static Result<Success> do_interface_start(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
+    if (!svc) return Error() << "interface " << args[1] << " not found";
+    if (auto result = svc->Start(); !result) {
+        return Error() << "Could not start interface: " << result.error();
+    }
+    return Success();
+}
+
+static Result<Success> do_interface_stop(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
+    if (!svc) return Error() << "interface " << args[1] << " not found";
+    svc->Stop();
+    return Success();
+}
+
 // mkdir <path> [mode] [owner] [group]
 static Result<Success> do_mkdir(const BuiltinArguments& args) {
     mode_t mode = 0755;
@@ -1050,6 +1073,9 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"init_user0",              {0,     0,    {false,  do_init_user0}}},
         {"insmod",                  {1,     kMax, {true,   do_insmod}}},
         {"installkey",              {1,     1,    {false,  do_installkey}}},
+        {"interface_restart",       {1,     1,    {false,  do_interface_restart}}},
+        {"interface_start",         {1,     1,    {false,  do_interface_start}}},
+        {"interface_stop",          {1,     1,    {false,  do_interface_stop}}},
         {"load_persist_props",      {0,     0,    {false,  do_load_persist_props}}},
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
