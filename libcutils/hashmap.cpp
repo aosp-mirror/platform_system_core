@@ -21,7 +21,6 @@
 #include <cutils/threads.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <sys/types.h>
 
 typedef struct Entry Entry;
