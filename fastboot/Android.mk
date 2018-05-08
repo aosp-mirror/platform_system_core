@@ -101,14 +101,13 @@ include $(BUILD_HOST_EXECUTABLE)
 #
 
 my_dist_files := $(HOST_OUT_EXECUTABLES)/fastboot
-my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs$(HOST_EXECUTABLE_SUFFIX)
-my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid$(HOST_EXECUTABLE_SUFFIX)
-my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs$(HOST_EXECUTABLE_SUFFIX)
-my_dist_files += $(HOST_OUT_EXECUTABLES)/sload_f2fs$(HOST_EXECUTABLE_SUFFIX)
+my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs
+my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid
+my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs
+my_dist_files += $(HOST_OUT_EXECUTABLES)/sload_f2fs
 $(call dist-for-goals,dist_files sdk win_sdk,$(my_dist_files))
 ifdef HOST_CROSS_OS
-# Archive fastboot.exe for win_sdk build.
-$(call dist-for-goals,win_sdk,$(ALL_MODULES.host_cross_fastboot.BUILT))
+$(call dist-for-goals,dist_files sdk win_sdk,$(ALL_MODULES.host_cross_fastboot.BUILT))
 endif
 my_dist_files :=
 
