@@ -24,7 +24,6 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stdatomic.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
