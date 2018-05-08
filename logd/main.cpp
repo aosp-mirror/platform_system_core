@@ -33,7 +33,6 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#include <cstdbool>
 #include <memory>
 
 #include <android-base/macros.h>
