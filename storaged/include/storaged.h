@@ -26,7 +26,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <batteryservice/IBatteryPropertiesListener.h>
 #include <utils/Mutex.h>
 
 #include <android/hardware/health/2.0/IHealth.h>
