@@ -49,6 +49,10 @@ uint32_t HandlePropertySet(const std::string&, const std::string&, const std::st
 }
 
 // selinux.h
+bool SelinuxHasVendorInit() {
+    return true;
+}
+
 void SelabelInitialize() {}
 
 bool SelabelLookupFileContext(const std::string& key, int type, std::string* result) {
