@@ -277,40 +277,29 @@ void HandleControlMessage(const std::string& msg, const std::string& name, pid_t
 
     const ControlMessageFunction& function = it->second;
 
-    if (function.target == ControlTarget::SERVICE) {
-        Service* svc = ServiceList::GetInstance().FindService(name);
-        if (svc == nullptr) {
-            LOG(ERROR) << "No such service '" << name << "' for ctl." << msg;
-            return;
-        }
-        if (auto result = function.action(svc); !result) {
-            LOG(ERROR) << "Could not ctl." << msg << " for service " << name << ": "
-                       << result.error();
-        }
+    Service* svc = nullptr;
 
+    switch (function.target) {
+        case ControlTarget::SERVICE:
+            svc = ServiceList::GetInstance().FindService(name);
+            break;
+        case ControlTarget::INTERFACE:
+            svc = ServiceList::GetInstance().FindInterface(name);
+            break;
+        default:
+            LOG(ERROR) << "Invalid function target from static map key '" << msg << "': "
+                       << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
+            return;
+    }
+
+    if (svc == nullptr) {
+        LOG(ERROR) << "Could not find '" << name << "' for ctl." << msg;
         return;
     }
 
-    if (function.target == ControlTarget::INTERFACE) {
-        for (const auto& svc : ServiceList::GetInstance()) {
-            if (svc->interfaces().count(name) == 0) {
-                continue;
-            }
-
-            if (auto result = function.action(svc.get()); !result) {
-                LOG(ERROR) << "Could not handle ctl." << msg << " for service " << svc->name()
-                           << " with interface " << name << ": " << result.error();
-            }
-
-            return;
-        }
-
-        LOG(ERROR) << "Could not find service hosting interface " << name;
-        return;
+    if (auto result = function.action(svc); !result) {
+        LOG(ERROR) << "Could not ctl." << msg << " for '" << name << "': " << result.error();
     }
-
-    LOG(ERROR) << "Invalid function target from static map key '" << msg
-               << "': " << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
 }
 
 static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& args) {

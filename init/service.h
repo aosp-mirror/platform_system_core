@@ -244,6 +244,16 @@ class ServiceList {
         return nullptr;
     }
 
+    Service* FindInterface(const std::string& interface_name) {
+        for (const auto& svc : services_) {
+            if (svc->interfaces().count(interface_name) > 0) {
+                return svc.get();
+            }
+        }
+
+        return nullptr;
+    }
+
     void DumpState() const;
 
     auto begin() const { return services_.begin(); }
