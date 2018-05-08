@@ -160,6 +160,15 @@ cc_library {
                 misc_undefined: ["integer"],
             },
         },
+
+        vendor: {
+            exclude_srcs: [
+                // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
+                // the interface of libnetd_client.so may vary between AOSP
+                // releases, exclude qtaguid.cpp from the VNDK-SP variant.
+                "qtaguid.cpp",
+            ],
+        }
     },
 
     shared_libs: ["liblog"],
