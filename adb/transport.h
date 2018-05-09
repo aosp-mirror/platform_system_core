@@ -198,7 +198,7 @@ class atransport {
     // class in one go is a very large change. Given how bad our testing is,
     // it's better to do this piece by piece.
 
-    atransport(ConnectionState state = kCsOffline)
+    atransport(ConnectionState state = kCsConnecting)
         : id(NextTransportId()),
           connection_state_(state),
           connection_waitable_(std::make_shared<ConnectionWaitable>()),
