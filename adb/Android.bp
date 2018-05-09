@@ -222,7 +222,6 @@ cc_benchmark {
 
 cc_binary_host {
     name: "adb",
-    tags: ["debug"],
 
     defaults: ["adb_defaults"],
 
