@@ -30,8 +30,6 @@
 #include "util.h"
 
 #if defined(__ANDROID__)
-#include <android-base/properties.h>
-
 #include "property_service.h"
 #include "selinux.h"
 #else
@@ -39,7 +37,6 @@
 #endif
 
 using android::base::GetExecutablePath;
-using android::base::GetIntProperty;
 using android::base::Join;
 using android::base::Socketpair;
 using android::base::Split;
