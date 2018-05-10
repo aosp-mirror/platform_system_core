@@ -65,7 +65,6 @@
 
 using namespace std::literals;
 
-using android::base::GetIntProperty;
 using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::StartsWith;
