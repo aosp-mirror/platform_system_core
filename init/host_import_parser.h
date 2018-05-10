@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,34 +14,27 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_IMPORT_PARSER_H
-#define _INIT_IMPORT_PARSER_H
+#pragma once
 
 #include <string>
 #include <vector>
 
+#include "import_parser.h"
 #include "parser.h"
 
 namespace android {
 namespace init {
 
-class ImportParser : public SectionParser {
+class HostImportParser : public ImportParser {
   public:
-    ImportParser(Parser* parser) : parser_(parser) {}
+    HostImportParser(const std::string& out_dir, Parser* parser)
+        : ImportParser(parser), out_dir_(out_dir) {}
     Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                                  int line) override;
-    Result<Success> ParseLineSection(std::vector<std::string>&&, int) override;
-    void EndFile() override;
 
   private:
-    Parser* parser_;
-    // Store filename for later error reporting.
-    std::string filename_;
-    // Vector of imports and their line numbers for later error reporting.
-    std::vector<std::pair<std::string, int>> imports_;
+    std::string out_dir_;
 };
 
 }  // namespace init
 }  // namespace android
-
-#endif

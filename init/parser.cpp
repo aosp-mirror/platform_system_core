@@ -39,7 +39,7 @@ void Parser::AddSingleLineParser(const std::string& prefix, LineCallback callbac
     line_callbacks_.emplace_back(prefix, callback);
 }
 
-void Parser::ParseData(const std::string& filename, const std::string& data, size_t* parse_errors) {
+void Parser::ParseData(const std::string& filename, const std::string& data) {
     // TODO: Use a parser with const input and remove this copy
     std::vector<char> data_copy(data.begin(), data.end());
     data_copy.push_back('\0');
@@ -57,7 +57,7 @@ void Parser::ParseData(const std::string& filename, const std::string& data, siz
         if (section_parser == nullptr) return;
 
         if (auto result = section_parser->EndSection(); !result) {
-            (*parse_errors)++;
+            parse_error_count_++;
             LOG(ERROR) << filename << ": " << section_start_line << ": " << result.error();
         }
 
@@ -81,7 +81,7 @@ void Parser::ParseData(const std::string& filename, const std::string& data, siz
                         end_section();
 
                         if (auto result = callback(std::move(args)); !result) {
-                            (*parse_errors)++;
+                            parse_error_count_++;
                             LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         }
                         break;
@@ -94,16 +94,20 @@ void Parser::ParseData(const std::string& filename, const std::string& data, siz
                     if (auto result =
                             section_parser->ParseSection(std::move(args), filename, state.line);
                         !result) {
-                        (*parse_errors)++;
+                        parse_error_count_++;
                         LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         section_parser = nullptr;
                     }
                 } else if (section_parser) {
                     if (auto result = section_parser->ParseLineSection(std::move(args), state.line);
                         !result) {
-                        (*parse_errors)++;
+                        parse_error_count_++;
                         LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                     }
+                } else {
+                    parse_error_count_++;
+                    LOG(ERROR) << filename << ": " << state.line
+                               << ": Invalid section keyword found";
                 }
                 args.clear();
                 break;
@@ -114,17 +118,17 @@ void Parser::ParseData(const std::string& filename, const std::string& data, siz
     }
 }
 
-bool Parser::ParseConfigFile(const std::string& path, size_t* parse_errors) {
+bool Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     android::base::Timer t;
     auto config_contents = ReadFile(path);
     if (!config_contents) {
-        LOG(ERROR) << "Unable to read config file '" << path << "': " << config_contents.error();
+        LOG(INFO) << "Unable to read config file '" << path << "': " << config_contents.error();
         return false;
     }
 
     config_contents->push_back('\n');  // TODO: fix parse_config.
-    ParseData(path, *config_contents, parse_errors);
+    ParseData(path, *config_contents);
     for (const auto& [section_name, section_parser] : section_parsers_) {
         section_parser->EndFile();
     }
@@ -133,11 +137,11 @@ bool Parser::ParseConfigFile(const std::string& path, size_t* parse_errors) {
     return true;
 }
 
-bool Parser::ParseConfigDir(const std::string& path, size_t* parse_errors) {
+bool Parser::ParseConfigDir(const std::string& path) {
     LOG(INFO) << "Parsing directory " << path << "...";
     std::unique_ptr<DIR, decltype(&closedir)> config_dir(opendir(path.c_str()), closedir);
     if (!config_dir) {
-        PLOG(ERROR) << "Could not import directory '" << path << "'";
+        PLOG(INFO) << "Could not import directory '" << path << "'";
         return false;
     }
     dirent* current_file;
@@ -153,7 +157,7 @@ bool Parser::ParseConfigDir(const std::string& path, size_t* parse_errors) {
     // Sort first so we load files in a consistent order (bug 31996208)
     std::sort(files.begin(), files.end());
     for (const auto& file : files) {
-        if (!ParseConfigFile(file, parse_errors)) {
+        if (!ParseConfigFile(file)) {
             LOG(ERROR) << "could not import file '" << file << "'";
         }
     }
@@ -161,16 +165,10 @@ bool Parser::ParseConfigDir(const std::string& path, size_t* parse_errors) {
 }
 
 bool Parser::ParseConfig(const std::string& path) {
-    size_t parse_errors;
-    return ParseConfig(path, &parse_errors);
-}
-
-bool Parser::ParseConfig(const std::string& path, size_t* parse_errors) {
-    *parse_errors = 0;
     if (is_dir(path.c_str())) {
-        return ParseConfigDir(path, parse_errors);
+        return ParseConfigDir(path);
     }
-    return ParseConfigFile(path, parse_errors);
+    return ParseConfigFile(path);
 }
 
 }  // namespace init

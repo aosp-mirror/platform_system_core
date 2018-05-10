@@ -41,14 +41,15 @@ Result<Success> ImportParser::ParseSection(std::vector<std::string>&& args,
     return Success();
 }
 
+Result<Success> ImportParser::ParseLineSection(std::vector<std::string>&&, int) {
+    return Error() << "Unexpected line found after import statement";
+}
+
 void ImportParser::EndFile() {
     auto current_imports = std::move(imports_);
     imports_.clear();
     for (const auto& [import, line_num] : current_imports) {
-        if (!parser_->ParseConfig(import)) {
-            PLOG(ERROR) << filename_ << ": " << line_num << ": Could not import file '" << import
-                        << "'";
-        }
+        parser_->ParseConfig(import);
     }
 }
 
