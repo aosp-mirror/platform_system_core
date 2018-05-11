@@ -1214,10 +1214,8 @@ static void mp_event_common(int data, uint32_t events __unused) {
     }
 
     if (skip_count > 0) {
-        if (debug_process_killing) {
-            ALOGI("%lu memory pressure events were skipped after a kill!",
-                skip_count);
-        }
+        ALOGI("%lu memory pressure events were skipped after a kill!",
+              skip_count);
         skip_count = 0;
     }
 
@@ -1335,25 +1333,24 @@ do_kill:
                 return;
             }
             min_score_adj = level_oomadj[level];
-        } else {
-            if (debug_process_killing) {
-                ALOGI("Killing because cache %ldkB is below "
-                      "limit %ldkB for oom_adj %d\n"
-                      "   Free memory is %ldkB %s reserved",
-                      other_file * page_k, minfree * page_k, min_score_adj,
-                      other_free * page_k, other_free >= 0 ? "above" : "below");
-            }
         }
 
-        if (debug_process_killing) {
-            ALOGI("Trying to free %d pages", pages_to_free);
-        }
         pages_freed = find_and_kill_processes(level, min_score_adj, pages_to_free);
+
+        if (use_minfree_levels) {
+            ALOGI("Killing because cache %ldkB is below "
+                  "limit %ldkB for oom_adj %d\n"
+                  "   Free memory is %ldkB %s reserved",
+                  other_file * page_k, minfree * page_k, min_score_adj,
+                  other_free * page_k, other_free >= 0 ? "above" : "below");
+        }
+
         if (pages_freed < pages_to_free) {
-            if (debug_process_killing) {
-                ALOGI("Unable to free enough memory (pages freed=%d)", pages_freed);
-            }
+            ALOGI("Unable to free enough memory (pages to free=%d, pages freed=%d)",
+                  pages_to_free, pages_freed);
         } else {
+            ALOGI("Reclaimed enough memory (pages to free=%d, pages freed=%d)",
+                  pages_to_free, pages_freed);
             gettimeofday(&last_report_tm, NULL);
         }
     }
