@@ -34,6 +34,13 @@ class Memory;
 struct MapInfo {
   MapInfo() = default;
   MapInfo(uint64_t start, uint64_t end) : start(start), end(end) {}
+  MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const char* name)
+      : start(start),
+        end(end),
+        offset(offset),
+        flags(flags),
+        name(name),
+        load_bias(static_cast<uint64_t>(-1)) {}
   MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const std::string& name)
       : start(start),
         end(end),

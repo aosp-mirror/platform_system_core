@@ -29,7 +29,6 @@ cc_library {
         "HeapWalker.cpp",
         "LeakFolding.cpp",
         "LeakPipe.cpp",
-        "LineBuffer.cpp",
         "MemUnreachable.cpp",
         "ProcessMappings.cpp",
         "PtracerThread.cpp",
@@ -38,6 +37,7 @@ cc_library {
 
     static_libs: [
         "libc_malloc_debug_backtrace",
+        "libprocinfo",
     ],
     // Only need this for arm since libc++ uses its own unwind code that
     // doesn't mix with the other default unwind code.
