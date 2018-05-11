@@ -87,8 +87,8 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
 
   ISzAlloc alloc;
   CXzUnpacker state;
-  alloc.Alloc = [](void*, size_t size) { return malloc(size); };
-  alloc.Free = [](void*, void* ptr) { return free(ptr); };
+  alloc.Alloc = [](ISzAllocPtr, size_t size) { return malloc(size); };
+  alloc.Free = [](ISzAllocPtr, void* ptr) { return free(ptr); };
 
   XzUnpacker_Construct(&state, &alloc);
 
@@ -106,7 +106,7 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
       dst_remaining += 2 * gnu_debugdata_size_;
     }
     return_val = XzUnpacker_Code(&state, dst->GetPtr(dst_offset), &dst_remaining, &src[src_offset],
-                                 &src_remaining, CODER_FINISH_ANY, &status);
+                                 &src_remaining, true, CODER_FINISH_ANY, &status);
     src_offset += src_remaining;
     dst_offset += dst_remaining;
   } while (return_val == SZ_OK && status == CODER_STATUS_NOT_FINISHED);
