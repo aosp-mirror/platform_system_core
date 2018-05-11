@@ -24,6 +24,8 @@ else
 LOCAL_CFLAGS += -DHEALTHD_DRAW_SPLIT_OFFSET=0
 endif
 
+LOCAL_HEADER_LIBRARIES := libbatteryservice_headers
+
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
