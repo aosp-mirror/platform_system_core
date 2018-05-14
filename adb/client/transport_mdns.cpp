@@ -87,7 +87,7 @@ class AsyncServiceRef {
     }
 
   private:
-    bool initialized_;
+    bool initialized_ = false;
     fdevent fde_;
 };
 
