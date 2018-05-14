@@ -33,17 +33,17 @@
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 
 struct fdevent {
-    fdevent *next;
-    fdevent *prev;
+    fdevent* next = nullptr;
+    fdevent* prev = nullptr;
 
-    int fd;
-    int force_eof;
+    int fd = -1;
+    int force_eof = 0;
 
-    uint16_t state;
-    uint16_t events;
+    uint16_t state = 0;
+    uint16_t events = 0;
 
-    fd_func func;
-    void *arg;
+    fd_func func = nullptr;
+    void* arg = nullptr;
 };
 
 /* Allocate and initialize a new fdevent object
@@ -56,15 +56,6 @@ fdevent *fdevent_create(int fd, fd_func func, void *arg);
 ** created by fdevent_create()
 */
 void fdevent_destroy(fdevent *fde);
-
-/* Initialize an fdevent object that was externally allocated
-*/
-void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg);
-
-/* Uninitialize an fdevent object that was initialized by
-** fdevent_install()
-*/
-void fdevent_remove(fdevent *item);
 
 /* Change which events should cause notifications
 */

@@ -35,7 +35,7 @@
 #include "sysdeps.h"
 
 static DNSServiceRef service_ref;
-static fdevent service_ref_fde;
+static fdevent* service_ref_fde;
 
 // Use adb_DNSServiceRefSockFD() instead of calling DNSServiceRefSockFD()
 // directly so that the socket is put through the appropriate compatibility
@@ -68,27 +68,26 @@ class AsyncServiceRef {
     }
 
     virtual ~AsyncServiceRef() {
-        if (! initialized_) {
+        if (!initialized_) {
             return;
         }
 
         DNSServiceRefDeallocate(sdRef_);
-        fdevent_remove(&fde_);
+        fdevent_destroy(fde_);
     }
 
   protected:
     DNSServiceRef sdRef_;
 
     void Initialize() {
-        fdevent_install(&fde_, adb_DNSServiceRefSockFD(sdRef_),
-                        pump_service_ref, &sdRef_);
-        fdevent_set(&fde_, FDE_READ);
+        fde_ = fdevent_create(adb_DNSServiceRefSockFD(sdRef_), pump_service_ref, &sdRef_);
+        fdevent_set(fde_, FDE_READ);
         initialized_ = true;
     }
 
   private:
     bool initialized_ = false;
-    fdevent fde_;
+    fdevent* fde_;
 };
 
 class ResolvedService : public AsyncServiceRef {
@@ -252,14 +251,12 @@ static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
     if (errorCode != kDNSServiceErr_NoError) {
         D("Got error %d during mDNS browse.", errorCode);
         DNSServiceRefDeallocate(sdRef);
-        fdevent_remove(&service_ref_fde);
+        fdevent_destroy(service_ref_fde);
         return;
     }
 
-    auto discovered = new DiscoveredService(interfaceIndex, serviceName,
-                                            regtype, domain);
-
-    if (! discovered->Initialized()) {
+    auto discovered = new DiscoveredService(interfaceIndex, serviceName, regtype, domain);
+    if (!discovered->Initialized()) {
         delete discovered;
     }
 }
@@ -274,9 +271,9 @@ void init_mdns_transport_discovery_thread(void) {
     }
 
     fdevent_run_on_main_thread([]() {
-        fdevent_install(&service_ref_fde, adb_DNSServiceRefSockFD(service_ref), pump_service_ref,
-                        &service_ref);
-        fdevent_set(&service_ref_fde, FDE_READ);
+        service_ref_fde =
+            fdevent_create(adb_DNSServiceRefSockFD(service_ref), pump_service_ref, &service_ref);
+        fdevent_set(service_ref_fde, FDE_READ);
     });
 }
 

@@ -121,10 +121,10 @@ static SocketFlushResult local_socket_flush_incoming(asocket* s) {
             s->packet_queue.pop_front();
         } else if (rc > 0) {
             r.drop_front(rc);
-            fdevent_add(&s->fde, FDE_WRITE);
+            fdevent_add(s->fde, FDE_WRITE);
             return SocketFlushResult::TryAgain;
         } else if (rc == -1 && errno == EAGAIN) {
-            fdevent_add(&s->fde, FDE_WRITE);
+            fdevent_add(s->fde, FDE_WRITE);
             return SocketFlushResult::TryAgain;
         } else {
             // We failed to write, but it's possible that we can still read from the socket.
@@ -140,7 +140,7 @@ static SocketFlushResult local_socket_flush_incoming(asocket* s) {
         return SocketFlushResult::Destroyed;
     }
 
-    fdevent_del(&s->fde, FDE_WRITE);
+    fdevent_del(s->fde, FDE_WRITE);
     return SocketFlushResult::Completed;
 }
 
@@ -173,7 +173,7 @@ static bool local_socket_flush_outgoing(asocket* s) {
         break;
     }
     D("LS(%d): fd=%d post avail loop. r=%d is_eof=%d forced_eof=%d", s->id, s->fd, r, is_eof,
-      s->fde.force_eof);
+      s->fde->force_eof);
 
     if (avail != max_payload && s->peer) {
         data.resize(max_payload - avail);
@@ -200,13 +200,13 @@ static bool local_socket_flush_outgoing(asocket* s) {
             ** we disable notification of READs.  They'll
             ** be enabled again when we get a call to ready()
             */
-            fdevent_del(&s->fde, FDE_READ);
+            fdevent_del(s->fde, FDE_READ);
         }
     }
 
     // Don't allow a forced eof if data is still there.
-    if ((s->fde.force_eof && !r) || is_eof) {
-        D(" closing because is_eof=%d r=%d s->fde.force_eof=%d", is_eof, r, s->fde.force_eof);
+    if ((s->fde->force_eof && !r) || is_eof) {
+        D(" closing because is_eof=%d r=%d s->fde.force_eof=%d", is_eof, r, s->fde->force_eof);
         s->close(s);
         return false;
     }
@@ -236,19 +236,19 @@ static int local_socket_enqueue(asocket* s, apacket::payload_type data) {
 static void local_socket_ready(asocket* s) {
     /* far side is ready for data, pay attention to
        readable events */
-    fdevent_add(&s->fde, FDE_READ);
+    fdevent_add(s->fde, FDE_READ);
 }
 
 // be sure to hold the socket list lock when calling this
 static void local_socket_destroy(asocket* s) {
     int exit_on_close = s->exit_on_close;
 
-    D("LS(%d): destroying fde.fd=%d", s->id, s->fde.fd);
+    D("LS(%d): destroying fde.fd=%d", s->id, s->fd);
 
     /* IMPORTANT: the remove closes the fd
     ** that belongs to this socket
     */
-    fdevent_remove(&s->fde);
+    fdevent_destroy(s->fde);
 
     remove_socket(s);
     delete s;
@@ -290,11 +290,11 @@ static void local_socket_close(asocket* s) {
     */
     D("LS(%d): closing", s->id);
     s->closing = 1;
-    fdevent_del(&s->fde, FDE_READ);
+    fdevent_del(s->fde, FDE_READ);
     remove_socket(s);
     D("LS(%d): put on socket_closing_list fd=%d", s->id, s->fd);
     local_socket_closing_list.push_back(s);
-    CHECK_EQ(FDE_WRITE, s->fde.state & FDE_WRITE);
+    CHECK_EQ(FDE_WRITE, s->fde->state & FDE_WRITE);
 }
 
 static void local_socket_event_func(int fd, unsigned ev, void* _s) {
@@ -343,7 +343,7 @@ asocket* create_local_socket(int fd) {
     s->close = local_socket_close;
     install_local_socket(s);
 
-    fdevent_install(&s->fde, fd, local_socket_event_func, s);
+    s->fde = fdevent_create(fd, local_socket_event_func, s);
     D("LS(%d): created (fd=%d)", s->id, s->fd);
     return s;
 }

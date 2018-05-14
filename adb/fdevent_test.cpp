@@ -31,14 +31,14 @@
 class FdHandler {
   public:
     FdHandler(int read_fd, int write_fd) : read_fd_(read_fd), write_fd_(write_fd) {
-        fdevent_install(&read_fde_, read_fd_, FdEventCallback, this);
-        fdevent_add(&read_fde_, FDE_READ);
-        fdevent_install(&write_fde_, write_fd_, FdEventCallback, this);
+        read_fde_ = fdevent_create(read_fd_, FdEventCallback, this);
+        fdevent_add(read_fde_, FDE_READ);
+        write_fde_ = fdevent_create(write_fd_, FdEventCallback, this);
     }
 
     ~FdHandler() {
-        fdevent_remove(&read_fde_);
-        fdevent_remove(&write_fde_);
+        fdevent_destroy(read_fde_);
+        fdevent_destroy(write_fde_);
     }
 
   private:
@@ -50,7 +50,7 @@ class FdHandler {
             char c;
             ASSERT_EQ(1, adb_read(fd, &c, 1));
             handler->queue_.push(c);
-            fdevent_add(&handler->write_fde_, FDE_WRITE);
+            fdevent_add(handler->write_fde_, FDE_WRITE);
         }
         if (events & FDE_WRITE) {
             ASSERT_EQ(fd, handler->write_fd_);
@@ -59,7 +59,7 @@ class FdHandler {
             handler->queue_.pop();
             ASSERT_EQ(1, adb_write(fd, &c, 1));
             if (handler->queue_.empty()) {
-              fdevent_del(&handler->write_fde_, FDE_WRITE);
+                fdevent_del(handler->write_fde_, FDE_WRITE);
             }
         }
     }
@@ -67,8 +67,8 @@ class FdHandler {
   private:
     const int read_fd_;
     const int write_fd_;
-    fdevent read_fde_;
-    fdevent write_fde_;
+    fdevent* read_fde_;
+    fdevent* write_fde_;
     std::queue<char> queue_;
 };
 
@@ -137,7 +137,7 @@ TEST_F(FdeventTest, smoke) {
 }
 
 struct InvalidFdArg {
-    fdevent fde;
+    fdevent* fde;
     unsigned expected_events;
     size_t* happened_event_count;
 };
@@ -145,7 +145,7 @@ struct InvalidFdArg {
 static void InvalidFdEventCallback(int, unsigned events, void* userdata) {
     InvalidFdArg* arg = reinterpret_cast<InvalidFdArg*>(userdata);
     ASSERT_EQ(arg->expected_events, events);
-    fdevent_remove(&arg->fde);
+    fdevent_destroy(arg->fde);
     if (++*(arg->happened_event_count) == 2) {
         fdevent_terminate_loop();
     }
@@ -157,15 +157,15 @@ static void InvalidFdThreadFunc() {
     InvalidFdArg read_arg;
     read_arg.expected_events = FDE_READ | FDE_ERROR;
     read_arg.happened_event_count = &happened_event_count;
-    fdevent_install(&read_arg.fde, INVALID_READ_FD, InvalidFdEventCallback, &read_arg);
-    fdevent_add(&read_arg.fde, FDE_READ);
+    read_arg.fde = fdevent_create(INVALID_READ_FD, InvalidFdEventCallback, &read_arg);
+    fdevent_add(read_arg.fde, FDE_READ);
 
     const int INVALID_WRITE_FD = std::numeric_limits<int>::max();
     InvalidFdArg write_arg;
     write_arg.expected_events = FDE_READ | FDE_ERROR;
     write_arg.happened_event_count = &happened_event_count;
-    fdevent_install(&write_arg.fde, INVALID_WRITE_FD, InvalidFdEventCallback, &write_arg);
-    fdevent_add(&write_arg.fde, FDE_WRITE);
+    write_arg.fde = fdevent_create(INVALID_WRITE_FD, InvalidFdEventCallback, &write_arg);
+    fdevent_add(write_arg.fde, FDE_WRITE);
     fdevent_loop();
 }
 
