@@ -22,6 +22,8 @@
 
 #include <functional>
 
+#include "adb_unique_fd.h"
+
 /* events that may be observed */
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
@@ -33,7 +35,7 @@ struct fdevent {
     fdevent* next = nullptr;
     fdevent* prev = nullptr;
 
-    int fd = -1;
+    unique_fd fd;
     int force_eof = 0;
 
     uint16_t state = 0;
