@@ -27,9 +27,6 @@
 #define FDE_WRITE             0x0002
 #define FDE_ERROR             0x0004
 
-/* features that may be set (via the events set/add/del interface) */
-#define FDE_DONT_CLOSE        0x0080
-
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 
 struct fdevent {

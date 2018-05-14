@@ -111,9 +111,6 @@ static std::string dump_fde(const fdevent* fde) {
     if (fde->state & FDE_ERROR) {
         state += "E";
     }
-    if (fde->state & FDE_DONT_CLOSE) {
-        state += "D";
-    }
     return android::base::StringPrintf("(fdevent %d %s)", fde->fd, state.c_str());
 }
 
@@ -157,10 +154,8 @@ void fdevent_destroy(fdevent* fde) {
         if (fde->state & FDE_PENDING) {
             g_pending_list.remove(fde);
         }
-        if (!(fde->state & FDE_DONT_CLOSE)) {
-            adb_close(fde->fd);
-            fde->fd = -1;
-        }
+        adb_close(fde->fd);
+        fde->fd = -1;
         fde->state = 0;
         fde->events = 0;
     }
