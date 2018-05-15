@@ -585,7 +585,13 @@ SetUpAvbHashtreeResult FsManagerAvbHandle::SetUpAvbHashtree(struct fstab_rec* fs
 
     // Derives partition_name from blk_device to query the corresponding AVB HASHTREE descriptor
     // to setup dm-verity. The partition_names in AVB descriptors are without A/B suffix.
-    std::string partition_name(basename(fstab_entry->blk_device));
+    std::string partition_name;
+    if (fstab_entry->fs_mgr_flags & MF_LOGICAL) {
+        partition_name = fstab_entry->logical_partition_name;
+    } else {
+        partition_name = basename(fstab_entry->blk_device);
+    }
+
     if (fstab_entry->fs_mgr_flags & MF_SLOTSELECT) {
         auto ab_suffix = partition_name.rfind(fs_mgr_get_slot_suffix());
         if (ab_suffix != std::string::npos) {

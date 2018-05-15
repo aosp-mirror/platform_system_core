@@ -794,6 +794,29 @@ static bool call_vdc(const std::vector<std::string>& args) {
     return true;
 }
 
+bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
+    // Logical partitions are specified with a named partition rather than a
+    // block device, so if the block device is a path, then it has already
+    // been updated.
+    if (rec->blk_device[0] == '/') {
+        return true;
+    }
+
+    android::base::unique_fd dm_fd(open("/dev/device-mapper", O_RDONLY));
+    if (dm_fd < 0) {
+        PLOG(ERROR) << "open /dev/device-mapper failed";
+        return false;
+    }
+    struct dm_ioctl io;
+    std::string device_name;
+    if (!fs_mgr_dm_get_device_name(&io, rec->blk_device, dm_fd, &device_name)) {
+        return false;
+    }
+    free(rec->blk_device);
+    rec->blk_device = strdup(device_name.c_str());
+    return true;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -841,6 +864,13 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             int tret = translate_ext_labels(&fstab->recs[i]);
             if (tret < 0) {
                 LERROR << "Could not translate label to block device";
+                continue;
+            }
+        }
+
+        if ((fstab->recs[i].fs_mgr_flags & MF_LOGICAL)) {
+            if (!fs_mgr_update_logical_partition(&fstab->recs[i])) {
+                LERROR << "Could not set up logical partition, skipping!";
                 continue;
             }
         }
@@ -1063,6 +1093,13 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             LERROR << "Cannot mount filesystem of type "
                    << fstab->recs[i].fs_type << " on " << n_blk_device;
             return FS_MGR_DOMNT_FAILED;
+        }
+
+        if ((fstab->recs[i].fs_mgr_flags & MF_LOGICAL)) {
+            if (!fs_mgr_update_logical_partition(&fstab->recs[i])) {
+                LERROR << "Could not set up logical partition, skipping!";
+                continue;
+            }
         }
 
         /* First check the filesystem if requested */
