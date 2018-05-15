@@ -169,8 +169,6 @@ public:
 
   virtual uint64_t GetLoadBias(size_t /* index */) { return 0; }
 
-  virtual bool ParseLine(const char* line, backtrace_map_t* map);
-
   pid_t pid_;
   std::deque<backtrace_map_t> maps_;
   std::vector<std::string> suffixes_to_ignore_;
