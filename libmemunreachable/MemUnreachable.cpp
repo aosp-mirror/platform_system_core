@@ -495,6 +495,21 @@ std::string UnreachableMemoryInfo::ToString(bool log_contents) const {
   return oss.str();
 }
 
+UnreachableMemoryInfo::~UnreachableMemoryInfo() {
+  // Clear the memory that holds the leaks, otherwise the next attempt to
+  // detect leaks may find the old data (for example in the jemalloc tcache)
+  // and consider all the leaks to be referenced.
+  memset(leaks.data(), 0, leaks.capacity() * sizeof(Leak));
+
+  std::vector<Leak> tmp;
+  leaks.swap(tmp);
+
+  // Disable and re-enable malloc to flush the jemalloc tcache to make sure
+  // there are no copies of the leaked pointer addresses there.
+  malloc_disable();
+  malloc_enable();
+}
+
 std::string GetUnreachableMemoryString(bool log_contents, size_t limit) {
   UnreachableMemoryInfo info;
   if (!GetUnreachableMemory(info, limit)) {

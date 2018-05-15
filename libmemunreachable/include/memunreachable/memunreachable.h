@@ -62,12 +62,7 @@ struct UnreachableMemoryInfo {
   size_t allocation_bytes;
 
   UnreachableMemoryInfo() {}
-  ~UnreachableMemoryInfo() {
-    // Clear the memory that holds the leaks, otherwise the next attempt to
-    // detect leaks may find the old data (for example in the jemalloc tcache)
-    // and consider all the leaks to be referenced.
-    memset(leaks.data(), 0, leaks.capacity() * sizeof(Leak));
-  }
+  ~UnreachableMemoryInfo();
 
   std::string ToString(bool log_contents) const;
 };
