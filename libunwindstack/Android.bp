@@ -110,6 +110,10 @@ cc_library {
         },
     },
 
+    static_libs: [
+        "libprocinfo",
+    ],
+
     shared_libs: [
         "libbase",
         "libdexfile",
