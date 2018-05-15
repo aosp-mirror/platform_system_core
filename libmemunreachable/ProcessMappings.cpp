@@ -14,21 +14,30 @@
  * limitations under the License.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <android-base/unique_fd.h>
+#include <procinfo/process_map.h>
 
-#include "LineBuffer.h"
 #include "ProcessMappings.h"
-#include "log.h"
 
 namespace android {
 
-// This function is not re-entrant since it uses a static buffer for
-// the line data.
+struct ReadMapCallback {
+  ReadMapCallback(allocator::vector<Mapping>& mappings) : mappings_(mappings) {}
+
+  void operator()(uint64_t start, uint64_t end, uint16_t flags, uint64_t, const char* name) const {
+    mappings_.emplace_back(start, end, flags & PROT_READ, flags & PROT_WRITE, flags & PROT_EXEC,
+                           name);
+  }
+
+  allocator::vector<Mapping>& mappings_;
+};
+
 bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings) {
   char map_buffer[1024];
   snprintf(map_buffer, sizeof(map_buffer), "/proc/%d/maps", pid);
@@ -36,35 +45,13 @@ bool ProcessMappings(pid_t pid, allocator::vector<Mapping>& mappings) {
   if (fd == -1) {
     return false;
   }
-
-  LineBuffer line_buf(fd, map_buffer, sizeof(map_buffer));
-  char* line;
-  size_t line_len;
-  while (line_buf.GetLine(&line, &line_len)) {
-    int name_pos;
-    char perms[5];
-    Mapping mapping{};
-    if (sscanf(line, "%" SCNxPTR "-%" SCNxPTR " %4s %*x %*x:%*x %*d %n", &mapping.begin,
-               &mapping.end, perms, &name_pos) == 3) {
-      if (perms[0] == 'r') {
-        mapping.read = true;
-      }
-      if (perms[1] == 'w') {
-        mapping.write = true;
-      }
-      if (perms[2] == 'x') {
-        mapping.execute = true;
-      }
-      if (perms[3] == 'p') {
-        mapping.priv = true;
-      }
-      if ((size_t)name_pos < line_len) {
-        strlcpy(mapping.name, line + name_pos, sizeof(mapping.name));
-      }
-      mappings.emplace_back(mapping);
-    }
+  allocator::string content(mappings.get_allocator());
+  ssize_t n;
+  while ((n = TEMP_FAILURE_RETRY(read(fd, map_buffer, sizeof(map_buffer)))) > 0) {
+    content.append(map_buffer, n);
   }
-  return true;
+  ReadMapCallback callback(mappings);
+  return android::procinfo::ReadMapFileContent(&content[0], callback);
 }
 
 }  // namespace android

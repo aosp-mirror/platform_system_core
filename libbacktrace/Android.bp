@@ -91,7 +91,10 @@ cc_library {
                 "libdexfile",
             ],
 
-            static_libs: ["libcutils"],
+            static_libs: [
+                "libcutils",
+                "libprocinfo",
+            ],
 
             // libdexfile will eventually properly export headers, for now
             // include these directly.

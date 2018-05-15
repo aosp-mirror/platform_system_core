@@ -17,6 +17,8 @@
 #ifndef LIBMEMUNREACHABLE_PROCESS_MAPPING_H_
 #define LIBMEMUNREACHABLE_PROCESS_MAPPING_H_
 
+#include <string.h>
+
 #include "Allocator.h"
 
 namespace android {
@@ -27,8 +29,13 @@ struct Mapping {
   bool read;
   bool write;
   bool execute;
-  bool priv;
   char name[96];
+
+  Mapping() {}
+  Mapping(uintptr_t begin, uintptr_t end, bool read, bool write, bool execute, const char* name)
+      : begin(begin), end(end), read(read), write(write), execute(execute) {
+    strlcpy(this->name, name, sizeof(this->name));
+  }
 };
 
 // This function is not re-entrant since it uses a static buffer for
