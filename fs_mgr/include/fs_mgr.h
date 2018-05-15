@@ -76,6 +76,7 @@ void fs_mgr_get_crypt_info(struct fstab* fstab, char* key_loc, char* real_blk_de
 bool fs_mgr_load_verity_state(int* mode);
 bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
 int fs_mgr_swapon_all(struct fstab *fstab);
+bool fs_mgr_update_logical_partition(struct fstab_rec* rec);
 
 int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
 

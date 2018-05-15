@@ -33,11 +33,13 @@
 #include "devices.h"
 #include "fs_mgr.h"
 #include "fs_mgr_avb.h"
+#include "fs_mgr_dm_linear.h"
 #include "uevent.h"
 #include "uevent_listener.h"
 #include "util.h"
 
 using android::base::Timer;
+using android::fs_mgr::LogicalPartitionTable;
 
 namespace android {
 namespace init {
@@ -58,18 +60,21 @@ class FirstStageMount {
   protected:
     ListenerAction HandleBlockDevice(const std::string& name, const Uevent&);
     bool InitRequiredDevices();
-    bool InitVerityDevice(const std::string& verity_device);
+    bool InitMappedDevice(const std::string& verity_device);
+    bool CreateLogicalPartitions();
     bool MountPartitions();
+    bool GetBackingDmLinearDevices();
 
     virtual ListenerAction UeventCallback(const Uevent& uevent);
 
     // Pure virtual functions.
-    virtual bool GetRequiredDevices() = 0;
+    virtual bool GetDmVerityDevices() = 0;
     virtual bool SetUpDmVerity(fstab_rec* fstab_rec) = 0;
 
     bool need_dm_verity_;
 
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
+    std::unique_ptr<LogicalPartitionTable> dm_linear_table_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
     DeviceHandler device_handler_;
@@ -82,7 +87,7 @@ class FirstStageMountVBootV1 : public FirstStageMount {
     ~FirstStageMountVBootV1() override = default;
 
   protected:
-    bool GetRequiredDevices() override;
+    bool GetDmVerityDevices() override;
     bool SetUpDmVerity(fstab_rec* fstab_rec) override;
 };
 
@@ -95,7 +100,7 @@ class FirstStageMountVBootV2 : public FirstStageMount {
 
   protected:
     ListenerAction UeventCallback(const Uevent& uevent) override;
-    bool GetRequiredDevices() override;
+    bool GetDmVerityDevices() override;
     bool SetUpDmVerity(fstab_rec* fstab_rec) override;
     bool InitAvbHandle();
 
@@ -114,6 +119,17 @@ static bool inline IsRecoveryMode() {
     return access("/sbin/recovery", F_OK) == 0;
 }
 
+static inline bool IsDmLinearEnabled() {
+    bool enabled = false;
+    import_kernel_cmdline(
+        false, [&enabled](const std::string& key, const std::string& value, bool in_qemu) {
+            if (key == "androidboot.lrap" && value == "1") {
+                enabled = true;
+            }
+        });
+    return enabled;
+}
+
 // Class Definitions
 // -----------------
 FirstStageMount::FirstStageMount()
@@ -127,6 +143,10 @@ FirstStageMount::FirstStageMount()
     } else {
         LOG(INFO) << "Failed to read fstab from device tree";
     }
+
+    if (IsDmLinearEnabled()) {
+        dm_linear_table_ = android::fs_mgr::LoadPartitionsFromDeviceTree();
+    }
 }
 
 std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
@@ -138,7 +158,7 @@ std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
 }
 
 bool FirstStageMount::DoFirstStageMount() {
-    if (mount_fstab_recs_.empty()) {
+    if (!dm_linear_table_ && mount_fstab_recs_.empty()) {
         // Nothing to mount.
         LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
         return true;
@@ -146,13 +166,30 @@ bool FirstStageMount::DoFirstStageMount() {
 
     if (!InitDevices()) return false;
 
+    if (!CreateLogicalPartitions()) return false;
+
     if (!MountPartitions()) return false;
 
     return true;
 }
 
 bool FirstStageMount::InitDevices() {
-    return GetRequiredDevices() && InitRequiredDevices();
+    return GetBackingDmLinearDevices() && GetDmVerityDevices() && InitRequiredDevices();
+}
+
+bool FirstStageMount::GetBackingDmLinearDevices() {
+    // Add any additional devices required for dm-linear mappings.
+    if (!dm_linear_table_) {
+        return true;
+    }
+
+    for (const auto& partition : dm_linear_table_->partitions) {
+        for (const auto& extent : partition.extents) {
+            const std::string& partition_name = android::base::Basename(extent.block_device());
+            required_devices_partition_names_.emplace(partition_name);
+        }
+    }
+    return true;
 }
 
 // Creates devices with uevent->partition_name matching one in the member variable
@@ -163,7 +200,7 @@ bool FirstStageMount::InitRequiredDevices() {
         return true;
     }
 
-    if (need_dm_verity_) {
+    if (dm_linear_table_ || need_dm_verity_) {
         const std::string dm_path = "/devices/virtual/misc/device-mapper";
         bool found = false;
         auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
@@ -210,6 +247,13 @@ bool FirstStageMount::InitRequiredDevices() {
     return true;
 }
 
+bool FirstStageMount::CreateLogicalPartitions() {
+    if (!dm_linear_table_) {
+        return true;
+    }
+    return android::fs_mgr::CreateLogicalPartitions(*dm_linear_table_.get());
+}
+
 ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const Uevent& uevent) {
     // Matches partition name to create device nodes.
     // Both required_devices_partition_names_ and uevent->partition_name have A/B
@@ -247,14 +291,14 @@ ListenerAction FirstStageMount::UeventCallback(const Uevent& uevent) {
 }
 
 // Creates "/dev/block/dm-XX" for dm-verity by running coldboot on /sys/block/dm-XX.
-bool FirstStageMount::InitVerityDevice(const std::string& verity_device) {
-    const std::string device_name(basename(verity_device.c_str()));
+bool FirstStageMount::InitMappedDevice(const std::string& dm_device) {
+    const std::string device_name(basename(dm_device.c_str()));
     const std::string syspath = "/sys/block/" + device_name;
     bool found = false;
 
-    auto verity_callback = [&device_name, &verity_device, this, &found](const Uevent& uevent) {
+    auto verity_callback = [&device_name, &dm_device, this, &found](const Uevent& uevent) {
         if (uevent.device_name == device_name) {
-            LOG(VERBOSE) << "Creating dm-verity device : " << verity_device;
+            LOG(VERBOSE) << "Creating device-mapper device : " << dm_device;
             device_handler_.HandleDeviceEvent(uevent);
             found = true;
             return ListenerAction::kStop;
@@ -279,6 +323,14 @@ bool FirstStageMount::InitVerityDevice(const std::string& verity_device) {
 
 bool FirstStageMount::MountPartitions() {
     for (auto fstab_rec : mount_fstab_recs_) {
+        if (fs_mgr_is_logical(fstab_rec)) {
+            if (!fs_mgr_update_logical_partition(fstab_rec)) {
+                return false;
+            }
+            if (!InitMappedDevice(fstab_rec->blk_device)) {
+                return false;
+            }
+        }
         if (!SetUpDmVerity(fstab_rec)) {
             PLOG(ERROR) << "Failed to setup verity for '" << fstab_rec->mount_point << "'";
             return false;
@@ -291,7 +343,7 @@ bool FirstStageMount::MountPartitions() {
     return true;
 }
 
-bool FirstStageMountVBootV1::GetRequiredDevices() {
+bool FirstStageMountVBootV1::GetDmVerityDevices() {
     std::string verity_loc_device;
     need_dm_verity_ = false;
 
@@ -344,7 +396,7 @@ bool FirstStageMountVBootV1::SetUpDmVerity(fstab_rec* fstab_rec) {
                 // The exact block device name (fstab_rec->blk_device) is changed to
                 // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
                 // first stage.
-                return InitVerityDevice(fstab_rec->blk_device);
+                return InitMappedDevice(fstab_rec->blk_device);
             default:
                 return false;
         }
@@ -371,7 +423,7 @@ FirstStageMountVBootV2::FirstStageMountVBootV2() : avb_handle_(nullptr) {
     }
 }
 
-bool FirstStageMountVBootV2::GetRequiredDevices() {
+bool FirstStageMountVBootV2::GetDmVerityDevices() {
     need_dm_verity_ = false;
 
     // fstab_rec->blk_device has A/B suffix.
@@ -444,7 +496,7 @@ bool FirstStageMountVBootV2::SetUpDmVerity(fstab_rec* fstab_rec) {
                 // The exact block device name (fstab_rec->blk_device) is changed to
                 // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
                 // first stage.
-                return InitVerityDevice(fstab_rec->blk_device);
+                return InitMappedDevice(fstab_rec->blk_device);
             default:
                 return false;
         }

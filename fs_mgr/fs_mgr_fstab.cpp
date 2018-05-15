@@ -109,6 +109,7 @@ static struct flag_list fs_mgr_flags[] = {
     {"logicalblk=", MF_LOGICALBLKSIZE},
     {"sysfs_path=", MF_SYSFS},
     {"defaults", 0},
+    {"logical", MF_LOGICAL},
     {0, 0},
 };
 
@@ -445,10 +446,6 @@ static std::string read_fstab_from_dt() {
             LERROR << "dt_fstab: Failed to find device for partition " << dp->d_name;
             return {};
         }
-        if (!StartsWith(value, "/dev")) {
-            LERROR << "dt_fstab: Invalid device node for partition " << dp->d_name;
-            return {};
-        }
         fstab_entry.push_back(value);
 
         std::string mount_point;
@@ -631,6 +628,10 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].erase_blk_size = flag_vals.erase_blk_size;
         fstab->recs[cnt].logical_blk_size = flag_vals.logical_blk_size;
         fstab->recs[cnt].sysfs_path = flag_vals.sysfs_path;
+        if (fstab->recs[cnt].fs_mgr_flags & MF_LOGICAL) {
+            fstab->recs[cnt].logical_partition_name = strdup(fstab->recs[cnt].blk_device);
+        }
+
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
@@ -797,6 +798,7 @@ void fs_mgr_free_fstab(struct fstab *fstab)
     for (i = 0; i < fstab->num_entries; i++) {
         /* Free the pointers return by strdup(3) */
         free(fstab->recs[i].blk_device);
+        free(fstab->recs[i].logical_partition_name);
         free(fstab->recs[i].mount_point);
         free(fstab->recs[i].fs_type);
         free(fstab->recs[i].fs_options);
@@ -943,4 +945,8 @@ int fs_mgr_is_quota(const struct fstab_rec* fstab) {
 int fs_mgr_has_sysfs_path(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_SYSFS;
+}
+
+int fs_mgr_is_logical(const struct fstab_rec* fstab) {
+    return fstab->fs_mgr_flags & MF_LOGICAL;
 }
