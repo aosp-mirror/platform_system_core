@@ -234,6 +234,10 @@ static void aio_block_init(aio_block* aiob) {
     for (unsigned i = 0; i < USB_FFS_NUM_BUFS; i++) {
         aiob->iocbs[i] = &aiob->iocb[i];
     }
+    memset(&aiob->ctx, 0, sizeof(aiob->ctx));
+    if (io_setup(USB_FFS_NUM_BUFS, &aiob->ctx)) {
+        D("[ aio: got error on io_setup (%d) ]", errno);
+    }
 }
 
 static int getMaxPacketSize(int ffs_fd) {
@@ -310,13 +314,6 @@ bool init_functionfs(struct usb_handle* h) {
     if (h->bulk_in < 0) {
         PLOG(ERROR) << "cannot open bulk-in endpoint " << USB_FFS_ADB_IN;
         goto err;
-    }
-
-    memset(&h->read_aiob.ctx, 0, sizeof(h->read_aiob.ctx));
-    memset(&h->write_aiob.ctx, 0, sizeof(h->write_aiob.ctx));
-    if (io_setup(USB_FFS_NUM_BUFS, &h->read_aiob.ctx) ||
-        io_setup(USB_FFS_NUM_BUFS, &h->write_aiob.ctx)) {
-        D("[ aio: got error on io_setup (%d) ]", errno);
     }
 
     h->read_aiob.fd = h->bulk_out;
@@ -494,8 +491,6 @@ static void usb_ffs_close(usb_handle* h) {
     h->kicked = false;
     adb_close(h->bulk_out);
     adb_close(h->bulk_in);
-    io_destroy(h->read_aiob.ctx);
-    io_destroy(h->write_aiob.ctx);
 
     // Notify usb_adb_open_thread to open a new connection.
     h->lock.lock();
