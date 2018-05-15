@@ -95,18 +95,9 @@ cc_test {
 cc_benchmark {
     name: "libprocinfo_benchmark",
     defaults: ["libprocinfo_defaults"],
-    host_supported: true,
     srcs: [
         "process_map_benchmark.cpp",
     ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-        windows: {
-            enabled: false,
-        },
-    },
     shared_libs: [
         "libbacktrace",
         "libbase",
