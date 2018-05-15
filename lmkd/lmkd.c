@@ -1059,9 +1059,7 @@ static int find_and_kill_processes(enum vmpressure_level level,
     int pages_freed = 0;
 
 #ifdef LMKD_LOG_STATS
-    if (enable_stats_log) {
-        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_START);
-    }
+    bool lmk_state_change_start = false;
 #endif
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
@@ -1076,11 +1074,18 @@ static int find_and_kill_processes(enum vmpressure_level level,
 
             killed_size = kill_one_process(procp, min_score_adj, level);
             if (killed_size >= 0) {
+#ifdef LMKD_LOG_STATS
+                if (enable_stats_log && !lmk_state_change_start) {
+                    lmk_state_change_start = true;
+                    stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, FIRST_KILLING_DONE);
+                }
+#endif
+
                 pages_freed += killed_size;
                 if (pages_freed >= pages_to_free) {
 
 #ifdef LMKD_LOG_STATS
-                    if (enable_stats_log) {
+                    if (enable_stats_log && lmk_state_change_start) {
                         stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
                                 LMK_STATE_CHANGE_STOP);
                     }
@@ -1092,7 +1097,7 @@ static int find_and_kill_processes(enum vmpressure_level level,
     }
 
 #ifdef LMKD_LOG_STATS
-    if (enable_stats_log) {
+    if (enable_stats_log && lmk_state_change_start) {
         stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
     }
 #endif
