@@ -292,8 +292,6 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
                 goto CloseProcess;
             }
 
-            adb_close(fd);
-
             D("sent file descriptor %d to JDWP process %d", fd, proc->pid);
 
             proc->out_fds.pop_back();
