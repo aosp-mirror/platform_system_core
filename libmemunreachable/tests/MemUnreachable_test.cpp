@@ -23,6 +23,8 @@
 
 #include <memunreachable/memunreachable.h>
 
+#include "bionic.h"
+
 namespace android {
 
 class HiddenPointer {
@@ -48,7 +50,35 @@ static void Ref(void** ptr) {
   write(0, ptr, 0);
 }
 
-TEST(MemunreachableTest, clean) {
+class MemunreachableTest : public ::testing::Test {
+ protected:
+  virtual void SetUp() {
+    CleanStack(8192);
+    CleanTcache();
+  }
+
+  virtual void TearDown() {
+    CleanStack(8192);
+    CleanTcache();
+  }
+
+  // Allocate a buffer on the stack and zero it to make sure there are no
+  // stray pointers from old test runs.
+  void __attribute__((noinline)) CleanStack(size_t size) {
+    void* buf = alloca(size);
+    memset(buf, 0, size);
+    Ref(&buf);
+  }
+
+  // Disable and re-enable malloc to flush the jemalloc tcache to make sure
+  // there are stray pointers from old test runs there.
+  void CleanTcache() {
+    malloc_disable();
+    malloc_enable();
+  }
+};
+
+TEST_F(MemunreachableTest, clean) {
   UnreachableMemoryInfo info;
 
   ASSERT_TRUE(LogUnreachableMemory(true, 100));
@@ -57,7 +87,7 @@ TEST(MemunreachableTest, clean) {
   ASSERT_EQ(0U, info.leaks.size());
 }
 
-TEST(MemunreachableTest, stack) {
+TEST_F(MemunreachableTest, stack) {
   HiddenPointer hidden_ptr;
 
   {
@@ -91,7 +121,7 @@ TEST(MemunreachableTest, stack) {
 
 void* g_ptr;
 
-TEST(MemunreachableTest, global) {
+TEST_F(MemunreachableTest, global) {
   HiddenPointer hidden_ptr;
 
   g_ptr = hidden_ptr.Get();
@@ -122,7 +152,7 @@ TEST(MemunreachableTest, global) {
   }
 }
 
-TEST(MemunreachableTest, tls) {
+TEST_F(MemunreachableTest, tls) {
   HiddenPointer hidden_ptr;
   pthread_key_t key;
   pthread_key_create(&key, nullptr);
@@ -157,8 +187,20 @@ TEST(MemunreachableTest, tls) {
   pthread_key_delete(key);
 }
 
-TEST(MemunreachableTest, twice) {
+TEST_F(MemunreachableTest, twice) {
   HiddenPointer hidden_ptr;
+
+  {
+    void* ptr = hidden_ptr.Get();
+    Ref(&ptr);
+
+    UnreachableMemoryInfo info;
+
+    ASSERT_TRUE(GetUnreachableMemory(info));
+    ASSERT_EQ(0U, info.leaks.size());
+
+    ptr = nullptr;
+  }
 
   {
     UnreachableMemoryInfo info;
@@ -184,7 +226,7 @@ TEST(MemunreachableTest, twice) {
   }
 }
 
-TEST(MemunreachableTest, log) {
+TEST_F(MemunreachableTest, log) {
   HiddenPointer hidden_ptr;
 
   ASSERT_TRUE(LogUnreachableMemory(true, 100));
@@ -199,17 +241,23 @@ TEST(MemunreachableTest, log) {
   }
 }
 
-TEST(MemunreachableTest, notdumpable) {
+TEST_F(MemunreachableTest, notdumpable) {
+  if (getuid() == 0) {
+    // TODO(ccross): make this a skipped test when gtest supports them
+    printf("[ SKIP     ] Not testable when running as root\n");
+    return;
+  }
+
   ASSERT_EQ(0, prctl(PR_SET_DUMPABLE, 0));
 
   HiddenPointer hidden_ptr;
 
-  ASSERT_TRUE(LogUnreachableMemory(true, 100));
+  EXPECT_FALSE(LogUnreachableMemory(true, 100));
 
   ASSERT_EQ(0, prctl(PR_SET_DUMPABLE, 1));
 }
 
-TEST(MemunreachableTest, leak_lots) {
+TEST_F(MemunreachableTest, leak_lots) {
   std::vector<HiddenPointer> hidden_ptrs;
   hidden_ptrs.resize(1024);
 
