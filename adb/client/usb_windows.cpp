@@ -365,7 +365,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
         }
     }
 
-    return 0;
+    return written;
 
 fail:
     // Any failure should cause us to kick the device instead of leaving it a

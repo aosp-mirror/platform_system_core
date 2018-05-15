@@ -368,6 +368,7 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     D("about to write (fd=%d, len=%d)", h->bulk_in, len);
 
     const char* buf = static_cast<const char*>(data);
+    int orig_len = len;
     while (len > 0) {
         int write_len = std::min(USB_FFS_BULK_SIZE, len);
         int n = adb_write(h->bulk_in, buf, write_len);
@@ -380,13 +381,14 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     }
 
     D("[ done fd=%d ]", h->bulk_in);
-    return 0;
+    return orig_len;
 }
 
 static int usb_ffs_read(usb_handle* h, void* data, int len) {
     D("about to read (fd=%d, len=%d)", h->bulk_out, len);
 
     char* buf = static_cast<char*>(data);
+    int orig_len = len;
     while (len > 0) {
         int read_len = std::min(USB_FFS_BULK_SIZE, len);
         int n = adb_read(h->bulk_out, buf, read_len);
@@ -399,7 +401,7 @@ static int usb_ffs_read(usb_handle* h, void* data, int len) {
     }
 
     D("[ done fd=%d ]", h->bulk_out);
-    return 0;
+    return orig_len;
 }
 
 static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
@@ -447,6 +449,7 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
         if (num_bufs == 1 && aiob->events[0].res == -EINTR) {
             continue;
         }
+        int ret = 0;
         for (int i = 0; i < num_bufs; i++) {
             if (aiob->events[i].res < 0) {
                 errno = -aiob->events[i].res;
@@ -454,8 +457,9 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
                             << " total bufs " << num_bufs;
                 return -1;
             }
+            ret += aiob->events[i].res;
         }
-        return 0;
+        return ret;
     }
 }
 
