@@ -239,12 +239,13 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     asprintf(&mParams[1], "INTERFACE=%s", ifname);
     asprintf(&mParams[2], "FLAGS=%u", ifaddr->ifa_flags);
     asprintf(&mParams[3], "SCOPE=%u", ifaddr->ifa_scope);
+    asprintf(&mParams[4], "IFINDEX=%u", ifaddr->ifa_index);
 
     if (cacheinfo) {
-        asprintf(&mParams[4], "PREFERRED=%u", cacheinfo->ifa_prefered);
-        asprintf(&mParams[5], "VALID=%u", cacheinfo->ifa_valid);
-        asprintf(&mParams[6], "CSTAMP=%u", cacheinfo->cstamp);
-        asprintf(&mParams[7], "TSTAMP=%u", cacheinfo->tstamp);
+        asprintf(&mParams[5], "PREFERRED=%u", cacheinfo->ifa_prefered);
+        asprintf(&mParams[6], "VALID=%u", cacheinfo->ifa_valid);
+        asprintf(&mParams[7], "CSTAMP=%u", cacheinfo->cstamp);
+        asprintf(&mParams[8], "TSTAMP=%u", cacheinfo->tstamp);
     }
 
     return true;
