@@ -329,6 +329,10 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
                          << partition_name_sanitized << "'";
         }
         links.emplace_back(link_path + "/by-name/" + partition_name_sanitized);
+        // Adds symlink: /dev/block/by-name/<partition_name>.
+        if (boot_devices_.find(device) != boot_devices_.end()) {
+            links.emplace_back("/dev/block/by-name/" + partition_name_sanitized);
+        }
     }
 
     auto last_slash = uevent.path.rfind('/');
@@ -346,8 +350,14 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
             }
 
-            if (symlink(devpath.c_str(), link.c_str()) && errno != EEXIST) {
-                PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link;
+            if (symlink(devpath.c_str(), link.c_str())) {
+                if (errno != EEXIST) {
+                    PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link;
+                } else if (std::string link_path;
+                           Readlink(link, &link_path) && link_path != devpath) {
+                    PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link
+                                << ", which already links to: " << link_path;
+                }
             }
         }
     }
@@ -411,16 +421,18 @@ void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
 
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
                              std::vector<SysfsPermissions> sysfs_permissions,
-                             std::vector<Subsystem> subsystems, bool skip_restorecon)
+                             std::vector<Subsystem> subsystems, std::set<std::string> boot_devices,
+                             bool skip_restorecon)
     : dev_permissions_(std::move(dev_permissions)),
       sysfs_permissions_(std::move(sysfs_permissions)),
       subsystems_(std::move(subsystems)),
+      boot_devices_(std::move(boot_devices)),
       skip_restorecon_(skip_restorecon),
       sysfs_mount_point_("/sys") {}
 
 DeviceHandler::DeviceHandler()
     : DeviceHandler(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
-                    std::vector<Subsystem>{}, false) {}
+                    std::vector<Subsystem>{}, std::set<std::string>{}, false) {}
 
 }  // namespace init
 }  // namespace android
