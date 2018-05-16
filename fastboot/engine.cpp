@@ -42,6 +42,7 @@
 
 #include <android-base/stringprintf.h>
 
+#include "constants.h"
 #include "transport.h"
 
 enum Op {
@@ -79,7 +80,7 @@ struct Action {
 static std::vector<std::unique_ptr<Action>> action_list;
 
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value) {
-    std::string cmd = "getvar:" + key;
+    std::string cmd = FB_CMD_GETVAR ":" + key;
 
     char buf[FB_RESPONSE_SZ + 1];
     memset(buf, 0, sizeof(buf));
@@ -110,12 +111,12 @@ static Action& queue_action(Op op, const std::string& cmd) {
 }
 
 void fb_set_active(const std::string& slot) {
-    Action& a = queue_action(OP_COMMAND, "set_active:" + slot);
+    Action& a = queue_action(OP_COMMAND, FB_CMD_SET_ACTIVE ":" + slot);
     a.msg = "Setting current slot to '" + slot + "'";
 }
 
 void fb_queue_erase(const std::string& partition) {
-    Action& a = queue_action(OP_COMMAND, "erase:" + partition);
+    Action& a = queue_action(OP_COMMAND, FB_CMD_ERASE ":" + partition);
     a.msg = "Erasing '" + partition + "'";
 }
 
@@ -125,7 +126,7 @@ void fb_queue_flash_fd(const std::string& partition, int fd, uint32_t sz) {
     a.size = sz;
     a.msg = android::base::StringPrintf("Sending '%s' (%u KB)", partition.c_str(), sz / 1024);
 
-    Action& b = queue_action(OP_COMMAND, "flash:" + partition);
+    Action& b = queue_action(OP_COMMAND, FB_CMD_FLASH ":" + partition);
     b.msg = "Writing '" + partition + "'";
 }
 
@@ -135,7 +136,7 @@ void fb_queue_flash(const std::string& partition, void* data, uint32_t sz) {
     a.size = sz;
     a.msg = android::base::StringPrintf("Sending '%s' (%u KB)", partition.c_str(), sz / 1024);
 
-    Action& b = queue_action(OP_COMMAND, "flash:" + partition);
+    Action& b = queue_action(OP_COMMAND, FB_CMD_FLASH ":" + partition);
     b.msg = "Writing '" + partition + "'";
 }
 
@@ -147,7 +148,7 @@ void fb_queue_flash_sparse(const std::string& partition, struct sparse_file* s, 
     a.msg = android::base::StringPrintf("Sending sparse '%s' %zu/%zu (%u KB)", partition.c_str(),
                                         current, total, sz / 1024);
 
-    Action& b = queue_action(OP_COMMAND, "flash:" + partition);
+    Action& b = queue_action(OP_COMMAND, FB_CMD_FLASH ":" + partition);
     b.msg = android::base::StringPrintf("Writing sparse '%s' %zu/%zu", partition.c_str(), current,
                                         total);
 }
@@ -223,7 +224,7 @@ static int cb_reject(Action& a, int status, const char* resp) {
 
 void fb_queue_require(const std::string& product, const std::string& var, bool invert,
                       size_t nvalues, const char** values) {
-    Action& a = queue_action(OP_QUERY, "getvar:" + var);
+    Action& a = queue_action(OP_QUERY, FB_CMD_GETVAR ":" + var);
     a.product = product;
     a.data = values;
     a.size = nvalues;
@@ -243,7 +244,7 @@ static int cb_display(Action& a, int status, const char* resp) {
 }
 
 void fb_queue_display(const std::string& label, const std::string& var) {
-    Action& a = queue_action(OP_QUERY, "getvar:" + var);
+    Action& a = queue_action(OP_QUERY, FB_CMD_GETVAR ":" + var);
     a.data = xstrdup(label.c_str());
     a.func = cb_display;
 }
@@ -258,7 +259,7 @@ static int cb_save(Action& a, int status, const char* resp) {
 }
 
 void fb_queue_query_save(const std::string& var, char* dest, uint32_t dest_size) {
-    Action& a = queue_action(OP_QUERY, "getvar:" + var);
+    Action& a = queue_action(OP_QUERY, FB_CMD_GETVAR ":" + var);
     a.data = dest;
     a.size = dest_size;
     a.func = cb_save;
@@ -270,7 +271,7 @@ static int cb_do_nothing(Action&, int, const char*) {
 }
 
 void fb_queue_reboot() {
-    Action& a = queue_action(OP_COMMAND, "reboot");
+    Action& a = queue_action(OP_COMMAND, FB_CMD_REBOOT);
     a.func = cb_do_nothing;
     a.msg = "Rebooting";
 }
