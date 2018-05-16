@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <mntent.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,6 +107,41 @@ static bool fs_has_shared_blocks(const char* dev) {
     return (info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS) != 0;
 }
 
+static bool can_unshare_blocks(int fd, const char* dev) {
+    const char* E2FSCK_BIN = "/system/bin/e2fsck";
+    if (access(E2FSCK_BIN, X_OK)) {
+        WriteFdFmt(fd, "e2fsck is not available, cannot undo deduplication on %s\n", dev);
+        return false;
+    }
+
+    pid_t child;
+    char* env[] = {nullptr};
+    const char* argv[] = {E2FSCK_BIN, "-n", "-E", "unshare_blocks", dev, nullptr};
+    if (posix_spawn(&child, E2FSCK_BIN, nullptr, nullptr, const_cast<char**>(argv), env)) {
+        WriteFdFmt(fd, "failed to e2fsck to check deduplication: %s\n", strerror(errno));
+        return false;
+    }
+    int status = 0;
+    int ret = TEMP_FAILURE_RETRY(waitpid(child, &status, 0));
+    if (ret < 0) {
+        WriteFdFmt(fd, "failed to get e2fsck status: %s\n", strerror(errno));
+        return false;
+    }
+    if (!WIFEXITED(status)) {
+        WriteFdFmt(fd, "e2fsck exited abnormally with status %d\n", status);
+        return false;
+    }
+    int rc = WEXITSTATUS(status);
+    if (rc != 0) {
+        WriteFdFmt(fd,
+                   "%s is deduplicated, and an e2fsck check failed. It might not "
+                   "have enough free-space to be remounted as writable.\n",
+                   dev);
+        return false;
+    }
+    return true;
+}
+
 static bool remount_partition(int fd, const char* dir, std::vector<std::string>& dedup) {
     if (!directory_exists(dir)) {
         return true;
@@ -133,6 +169,9 @@ static bool remount_partition(int fd, const char* dir, std::vector<std::string>&
     }
     if (mount(dev.c_str(), dir, "none", MS_REMOUNT, nullptr) == -1) {
         if (errno == EROFS && fs_has_shared_blocks(dev.c_str())) {
+            if (!can_unshare_blocks(fd, dev.c_str())) {
+                return false;
+            }
             // We return true so remount_service() can detect that the only
             // failure was deduplicated filesystems.
             dedup.push_back(dev);
