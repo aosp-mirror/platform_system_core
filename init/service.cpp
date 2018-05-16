@@ -18,6 +18,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <linux/input.h>
 #include <linux/securebits.h>
 #include <sched.h>
 #include <sys/mount.h>
@@ -544,10 +545,13 @@ Result<Success> Service::ParseIoprio(const std::vector<std::string>& args) {
 Result<Success> Service::ParseKeycodes(const std::vector<std::string>& args) {
     for (std::size_t i = 1; i < args.size(); i++) {
         int code;
-        if (ParseInt(args[i], &code)) {
+        if (ParseInt(args[i], &code, 0, KEY_MAX)) {
+            for (auto& key : keycodes_) {
+                if (key == code) return Error() << "duplicate keycode: " << args[i];
+            }
             keycodes_.emplace_back(code);
         } else {
-            LOG(WARNING) << "ignoring invalid keycode: " << args[i];
+            return Error() << "invalid keycode: " << args[i];
         }
     }
     return Success();
