@@ -12,6 +12,27 @@ In the default (zero-overhead) mode, the returned data on leaks is limited to th
 Usage
 -------
 
+### In Android apps ###
+
+libmemunreachble is loaded by zygote and can be triggered with `dumpsys -t 600 meminfo --unreachable [process]`.
+
+To enable malloc\_debug backtraces on allocations for a single app process on a userdebug device, use:
+```
+adb root
+adb shell setprop libc.debug.malloc.program app_process
+adb shell setprop wrap.[process] "\$\@"
+adb shell setprop libc.debug.malloc.options backtrace=4
+```
+
+Kill and restart the app, trigger the leak, and then run `dumpsys -t 600 meminfo --unreachable [process]`.
+
+To disable malloc\_debug:
+```
+adb shell setprop libc.debug.malloc.options "''"
+adb shell setprop libc.debug.malloc.program "''"
+adb shell setprop wrap.[process]  "''"
+```
+
 ### C interface ###
 
 #### `bool LogUnreachableMemory(bool log_contents, size_t limit)` ####
