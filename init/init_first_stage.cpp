@@ -413,7 +413,6 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
         // the content of uevent. by-name symlink will be at [0] if uevent->partition_name
         // is not empty. e.g.,
         //   - /dev/block/platform/soc.0/f9824900.sdhci/by-name/modem
-        //   - /dev/block/platform/soc.0/f9824900.sdhci/by-num/p1
         //   - /dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1
         std::vector<std::string> links = device_handler_.GetBlockDeviceSymlinks(uevent);
         if (!links.empty()) {

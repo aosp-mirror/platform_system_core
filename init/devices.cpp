@@ -331,10 +331,6 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         links.emplace_back(link_path + "/by-name/" + partition_name_sanitized);
     }
 
-    if (uevent.partition_num >= 0) {
-        links.emplace_back(link_path + "/by-num/p" + std::to_string(uevent.partition_num));
-    }
-
     auto last_slash = uevent.path.rfind('/');
     links.emplace_back(link_path + "/" + uevent.path.substr(last_slash + 1));
 
