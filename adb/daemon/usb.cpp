@@ -436,23 +436,29 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
         num_bufs += 1;
     }
 
-    if (io_submit(aiob->ctx, num_bufs, aiob->iocbs.data()) < num_bufs) {
-        D("[ aio: got error submitting %s (%d) ]", read ? "read" : "write", errno);
-        return -1;
-    }
-    if (TEMP_FAILURE_RETRY(
-            io_getevents(aiob->ctx, num_bufs, num_bufs, aiob->events.data(), nullptr)) < num_bufs) {
-        D("[ aio: got error waiting %s (%d) ]", read ? "read" : "write", errno);
-        return -1;
-    }
-    for (int i = 0; i < num_bufs; i++) {
-        if (aiob->events[i].res < 0) {
-            errno = aiob->events[i].res;
-            D("[ aio: got error event on %s (%d) ]", read ? "read" : "write", errno);
+    while (true) {
+        if (TEMP_FAILURE_RETRY(io_submit(aiob->ctx, num_bufs, aiob->iocbs.data())) < num_bufs) {
+            PLOG(ERROR) << "aio: got error submitting " << (read ? "read" : "write");
             return -1;
         }
+        if (TEMP_FAILURE_RETRY(io_getevents(aiob->ctx, num_bufs, num_bufs, aiob->events.data(),
+                                            nullptr)) < num_bufs) {
+            PLOG(ERROR) << "aio: got error waiting " << (read ? "read" : "write");
+            return -1;
+        }
+        if (num_bufs == 1 && aiob->events[0].res == -EINTR) {
+            continue;
+        }
+        for (int i = 0; i < num_bufs; i++) {
+            if (aiob->events[i].res < 0) {
+                errno = -aiob->events[i].res;
+                PLOG(ERROR) << "aio: got error event on " << (read ? "read" : "write")
+                            << " total bufs " << num_bufs;
+                return -1;
+            }
+        }
+        return 0;
     }
-    return 0;
 }
 
 static int usb_ffs_aio_read(usb_handle* h, void* data, int len) {
