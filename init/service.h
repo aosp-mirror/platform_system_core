@@ -108,8 +108,6 @@ class Service {
     const std::vector<gid_t>& supp_gids() const { return supp_gids_; }
     const std::string& seclabel() const { return seclabel_; }
     const std::vector<int>& keycodes() const { return keycodes_; }
-    int keychord_id() const { return keychord_id_; }
-    void set_keychord_id(int keychord_id) { keychord_id_ = keychord_id; }
     IoSchedClass ioprio_class() const { return ioprio_class_; }
     int ioprio_pri() const { return ioprio_pri_; }
     const std::set<std::string>& interfaces() const { return interfaces_; }
@@ -199,9 +197,8 @@ class Service {
 
     std::set<std::string> interfaces_;  // e.g. some.package.foo@1.0::IBaz/instance-name
 
-    // keycodes for triggering this service via /dev/keychord
+    // keycodes for triggering this service via /dev/input/input*
     std::vector<int> keycodes_;
-    int keychord_id_;
 
     IoSchedClass ioprio_class_;
     int ioprio_pri_;
