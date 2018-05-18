@@ -133,7 +133,7 @@ TEST_F(ElfTest, elf_invalid) {
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
   bool finished;
-  ASSERT_FALSE(elf.Step(0, 0, 0, nullptr, nullptr, &finished));
+  ASSERT_FALSE(elf.Step(0, 0, nullptr, nullptr, &finished));
 }
 
 TEST_F(ElfTest, elf32_invalid_machine) {
@@ -330,7 +330,7 @@ TEST_F(ElfTest, step_in_signal_map) {
   elf.FakeSetValid(true);
   elf.FakeSetLoadBias(0);
   bool finished;
-  ASSERT_TRUE(elf.Step(0x1000, 0x1000, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x3000, 0x1000, &regs, &process_memory, &finished));
   EXPECT_FALSE(finished);
   EXPECT_EQ(15U, regs.pc());
   EXPECT_EQ(13U, regs.sp());
@@ -370,7 +370,7 @@ TEST_F(ElfTest, step_in_interface) {
   EXPECT_CALL(*interface, Step(0x1000, 0, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(elf.Step(0x1004, 0x1000, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x1004, 0x1000, &regs, &process_memory, &finished));
 }
 
 TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
@@ -388,7 +388,7 @@ TEST_F(ElfTest, step_in_interface_non_zero_load_bias) {
   EXPECT_CALL(*interface, Step(0x7300, 0x4000, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(elf.Step(0x7304, 0x7300, 0x2000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x7304, 0x7300, &regs, &process_memory, &finished));
 }
 
 TEST_F(ElfTest, get_global_invalid_elf) {
