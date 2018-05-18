@@ -45,6 +45,12 @@
 
 namespace unwindstack {
 
+static void AddMemory(std::string file_name, MemoryOfflineParts* parts) {
+  MemoryOffline* memory = new MemoryOffline;
+  ASSERT_TRUE(memory->Init(file_name.c_str(), 0));
+  parts->Add(memory);
+}
+
 class UnwindOfflineTest : public ::testing::Test {
  protected:
   void TearDown() override {
@@ -63,9 +69,24 @@ class UnwindOfflineTest : public ::testing::Test {
     maps_.reset(new BufferMaps(data.c_str()));
     ASSERT_TRUE(maps_->Parse());
 
-    std::unique_ptr<MemoryOffline> stack_memory(new MemoryOffline);
-    ASSERT_TRUE(stack_memory->Init((dir_ + "stack.data").c_str(), 0));
-    process_memory_.reset(stack_memory.release());
+    std::string stack_name(dir_ + "stack.data");
+    struct stat st;
+    if (stat(stack_name.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+      std::unique_ptr<MemoryOffline> stack_memory(new MemoryOffline);
+      ASSERT_TRUE(stack_memory->Init((dir_ + "stack.data").c_str(), 0));
+      process_memory_.reset(stack_memory.release());
+    } else {
+      std::unique_ptr<MemoryOfflineParts> stack_memory(new MemoryOfflineParts);
+      for (size_t i = 0;; i++) {
+        stack_name = dir_ + "stack" + std::to_string(i) + ".data";
+        if (stat(stack_name.c_str(), &st) == -1 || !S_ISREG(st.st_mode)) {
+          ASSERT_TRUE(i != 0) << "No stack data files found.";
+          break;
+        }
+        AddMemory(stack_name, stack_memory.get());
+      }
+      process_memory_.reset(stack_memory.release());
+    }
 
     switch (arch) {
       case ARCH_ARM: {
@@ -179,7 +200,7 @@ static std::string DumpFrames(Unwinder& unwinder) {
 }
 
 TEST_F(UnwindOfflineTest, pc_straddle_arm) {
-  Init("straddle_arm/", ARCH_ARM);
+  ASSERT_NO_FATAL_FAILURE(Init("straddle_arm/", ARCH_ARM));
 
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
@@ -203,7 +224,7 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm) {
 }
 
 TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
-  Init("gnu_debugdata_arm/", ARCH_ARM);
+  ASSERT_NO_FATAL_FAILURE(Init("gnu_debugdata_arm/", ARCH_ARM));
 
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
@@ -223,7 +244,7 @@ TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
 }
 
 TEST_F(UnwindOfflineTest, pc_straddle_arm64) {
-  Init("straddle_arm64/", ARCH_ARM64);
+  ASSERT_NO_FATAL_FAILURE(Init("straddle_arm64/", ARCH_ARM64));
 
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
@@ -254,14 +275,8 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm64) {
   EXPECT_EQ(0x7fe0d84110U, unwinder.frames()[5].sp);
 }
 
-static void AddMemory(std::string file_name, MemoryOfflineParts* parts) {
-  MemoryOffline* memory = new MemoryOffline;
-  ASSERT_TRUE(memory->Init(file_name.c_str(), 0));
-  parts->Add(memory);
-}
-
 TEST_F(UnwindOfflineTest, jit_debug_x86) {
-  Init("jit_debug_x86/", ARCH_X86);
+  ASSERT_NO_FATAL_FAILURE(Init("jit_debug_x86/", ARCH_X86));
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
   AddMemory(dir_ + "descriptor.data", memory);
@@ -554,7 +569,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
 }
 
 TEST_F(UnwindOfflineTest, jit_debug_arm) {
-  Init("jit_debug_arm/", ARCH_ARM);
+  ASSERT_NO_FATAL_FAILURE(Init("jit_debug_arm/", ARCH_ARM));
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
   AddMemory(dir_ + "descriptor.data", memory);
@@ -872,7 +887,7 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
 // fallback to iterating over the cies/fdes and ignore the eh_frame_hdr.
 // No .gnu_debugdata section in the elf file, so no symbols.
 TEST_F(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
-  Init("bad_eh_frame_hdr_arm64/", ARCH_ARM64);
+  ASSERT_NO_FATAL_FAILURE(Init("bad_eh_frame_hdr_arm64/", ARCH_ARM64));
 
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
@@ -901,7 +916,7 @@ TEST_F(UnwindOfflineTest, bad_eh_frame_hdr_arm64) {
 // The elf has bad eh_frame unwind information for the pcs. If eh_frame
 // is used first, the unwind will not match the expected output.
 TEST_F(UnwindOfflineTest, debug_frame_first_x86) {
-  Init("debug_frame_first_x86/", ARCH_X86);
+  ASSERT_NO_FATAL_FAILURE(Init("debug_frame_first_x86/", ARCH_X86));
 
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
@@ -929,7 +944,7 @@ TEST_F(UnwindOfflineTest, debug_frame_first_x86) {
 
 // Make sure that a pc that is at the beginning of an fde unwinds correctly.
 TEST_F(UnwindOfflineTest, eh_frame_hdr_begin_x86_64) {
-  Init("eh_frame_hdr_begin_x86_64/", ARCH_X86_64);
+  ASSERT_NO_FATAL_FAILURE(Init("eh_frame_hdr_begin_x86_64/", ARCH_X86_64));
 
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
@@ -956,7 +971,7 @@ TEST_F(UnwindOfflineTest, eh_frame_hdr_begin_x86_64) {
 }
 
 TEST_F(UnwindOfflineTest, art_quick_osr_stub_arm) {
-  Init("art_quick_osr_stub_arm/", ARCH_ARM);
+  ASSERT_NO_FATAL_FAILURE(Init("art_quick_osr_stub_arm/", ARCH_ARM));
 
   MemoryOfflineParts* memory = new MemoryOfflineParts;
   AddMemory(dir_ + "descriptor.data", memory);
@@ -1068,6 +1083,80 @@ TEST_F(UnwindOfflineTest, art_quick_osr_stub_arm) {
   EXPECT_EQ(0xcd4ff958U, unwinder.frames()[23].sp);
   EXPECT_EQ(0xe7daee39U, unwinder.frames()[24].pc);
   EXPECT_EQ(0xcd4ff960U, unwinder.frames()[24].sp);
+}
+
+TEST_F(UnwindOfflineTest, offset_arm) {
+  ASSERT_NO_FATAL_FAILURE(Init("offset_arm/", ARCH_ARM));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(19U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0032bfa0 (offset 0x42000)  libunwindstack_test (SignalInnerFunction+40)\n"
+      "  #01 pc 0032bfeb (offset 0x42000)  libunwindstack_test (SignalMiddleFunction+2)\n"
+      "  #02 pc 0032bff3 (offset 0x42000)  libunwindstack_test (SignalOuterFunction+2)\n"
+      "  #03 pc 0032fed3 (offset 0x42000)  libunwindstack_test "
+      "(_ZN11unwindstackL19SignalCallerHandlerEiP7siginfoPv+26)\n"
+      "  #04 pc 00026528 (offset 0x25000)  libc.so\n"
+      "  #05 pc 00000000  <unknown>\n"
+      "  #06 pc 0032c2d9 (offset 0x42000)  libunwindstack_test (InnerFunction+736)\n"
+      "  #07 pc 0032cc4f (offset 0x42000)  libunwindstack_test (MiddleFunction+42)\n"
+      "  #08 pc 0032cc81 (offset 0x42000)  libunwindstack_test (OuterFunction+42)\n"
+      "  #09 pc 0032e547 (offset 0x42000)  libunwindstack_test "
+      "(_ZN11unwindstackL19RemoteThroughSignalEij+270)\n"
+      "  #10 pc 0032ed99 (offset 0x42000)  libunwindstack_test "
+      "(_ZN11unwindstack55UnwindTest_remote_through_signal_with_invalid_func_Test8TestBodyEv+16)\n"
+      "  #11 pc 00354453 (offset 0x42000)  libunwindstack_test (_ZN7testing4Test3RunEv+154)\n"
+      "  #12 pc 00354de7 (offset 0x42000)  libunwindstack_test (_ZN7testing8TestInfo3RunEv+194)\n"
+      "  #13 pc 00355105 (offset 0x42000)  libunwindstack_test (_ZN7testing8TestCase3RunEv+180)\n"
+      "  #14 pc 0035a215 (offset 0x42000)  libunwindstack_test "
+      "(_ZN7testing8internal12UnitTestImpl11RunAllTestsEv+664)\n"
+      "  #15 pc 00359f4f (offset 0x42000)  libunwindstack_test (_ZN7testing8UnitTest3RunEv+110)\n"
+      "  #16 pc 0034d3db (offset 0x42000)  libunwindstack_test (main+38)\n"
+      "  #17 pc 00092c0d (offset 0x25000)  libc.so (__libc_init+48)\n"
+      "  #18 pc 0004202f (offset 0x42000)  libunwindstack_test (_start_main+38)\n",
+      frame_info);
+
+  EXPECT_EQ(0x2e55fa0U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xf43d2cccU, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x2e55febU, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xf43d2ce0U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x2e55ff3U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xf43d2ce8U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x2e59ed3U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xf43d2cf0U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xf4136528U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xf43d2d10U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xffcc0ee0U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x2e562d9U, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xffcc0ee0U, unwinder.frames()[6].sp);
+  EXPECT_EQ(0x2e56c4fU, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xffcc1060U, unwinder.frames()[7].sp);
+  EXPECT_EQ(0x2e56c81U, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xffcc1078U, unwinder.frames()[8].sp);
+  EXPECT_EQ(0x2e58547U, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xffcc1090U, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x2e58d99U, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xffcc1438U, unwinder.frames()[10].sp);
+  EXPECT_EQ(0x2e7e453U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xffcc1448U, unwinder.frames()[11].sp);
+  EXPECT_EQ(0x2e7ede7U, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xffcc1458U, unwinder.frames()[12].sp);
+  EXPECT_EQ(0x2e7f105U, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xffcc1490U, unwinder.frames()[13].sp);
+  EXPECT_EQ(0x2e84215U, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xffcc14c0U, unwinder.frames()[14].sp);
+  EXPECT_EQ(0x2e83f4fU, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xffcc1510U, unwinder.frames()[15].sp);
+  EXPECT_EQ(0x2e773dbU, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xffcc1528U, unwinder.frames()[16].sp);
+  EXPECT_EQ(0xf41a2c0dU, unwinder.frames()[17].pc);
+  EXPECT_EQ(0xffcc1540U, unwinder.frames()[17].sp);
+  EXPECT_EQ(0x2b6c02fU, unwinder.frames()[18].pc);
+  EXPECT_EQ(0xffcc1558U, unwinder.frames()[18].sp);
 }
 
 }  // namespace unwindstack
