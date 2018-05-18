@@ -160,14 +160,14 @@ uint64_t Elf::GetLastErrorAddress() {
 }
 
 // The relative pc is always relative to the start of the map from which it comes.
-bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
-               Memory* process_memory, bool* finished) {
+bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, Regs* regs, Memory* process_memory,
+               bool* finished) {
   if (!valid_) {
     return false;
   }
 
   // The relative pc expectd by StepIfSignalHandler is relative to the start of the elf.
-  if (regs->StepIfSignalHandler(rel_pc + elf_offset, this, process_memory)) {
+  if (regs->StepIfSignalHandler(rel_pc, this, process_memory)) {
     *finished = false;
     return true;
   }
