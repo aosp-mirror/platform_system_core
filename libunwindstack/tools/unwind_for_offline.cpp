@@ -30,6 +30,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <unwindstack/Elf.h>
@@ -78,30 +79,44 @@ bool SaveRegs(unwindstack::Regs* regs) {
   return true;
 }
 
-bool SaveStack(pid_t pid, uint64_t sp_start, uint64_t sp_end) {
-  std::unique_ptr<FILE, decltype(&fclose)> fp(fopen("stack.data", "w+"), &fclose);
-  if (fp == nullptr) {
-    printf("Failed to create stack.data.\n");
-    return false;
-  }
+bool SaveStack(pid_t pid, const std::vector<std::pair<uint64_t, uint64_t>>& stacks) {
+  for (size_t i = 0; i < stacks.size(); i++) {
+    std::string file_name;
+    if (stacks.size() != 1) {
+      file_name = "stack" + std::to_string(i) + ".data";
+    } else {
+      file_name = "stack.data";
+    }
 
-  size_t bytes = fwrite(&sp_start, 1, sizeof(sp_start), fp.get());
-  if (bytes != sizeof(sp_start)) {
-    perror("Failed to write all data.");
-    return false;
-  }
+    // Do this first, so if it fails, we don't create the file.
+    uint64_t sp_start = stacks[i].first;
+    uint64_t sp_end = stacks[i].second;
+    std::vector<uint8_t> buffer(sp_end - sp_start);
+    auto process_memory = unwindstack::Memory::CreateProcessMemory(pid);
+    if (!process_memory->Read(sp_start, buffer.data(), buffer.size())) {
+      printf("Unable to read stack data.\n");
+      return false;
+    }
 
-  std::vector<uint8_t> buffer(sp_end - sp_start);
-  auto process_memory = unwindstack::Memory::CreateProcessMemory(pid);
-  if (!process_memory->Read(sp_start, buffer.data(), buffer.size())) {
-    printf("Unable to read stack data.\n");
-    return false;
-  }
+    printf("Saving the stack 0x%" PRIx64 "-0x%" PRIx64 "\n", sp_start, sp_end);
 
-  bytes = fwrite(buffer.data(), 1, buffer.size(), fp.get());
-  if (bytes != buffer.size()) {
-    printf("Failed to write all stack data: stack size %zu, written %zu\n", buffer.size(), bytes);
-    return 1;
+    std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(file_name.c_str(), "w+"), &fclose);
+    if (fp == nullptr) {
+      printf("Failed to create stack.data.\n");
+      return false;
+    }
+
+    size_t bytes = fwrite(&sp_start, 1, sizeof(sp_start), fp.get());
+    if (bytes != sizeof(sp_start)) {
+      perror("Failed to write all data.");
+      return false;
+    }
+
+    bytes = fwrite(buffer.data(), 1, buffer.size(), fp.get());
+    if (bytes != buffer.size()) {
+      printf("Failed to write all stack data: stack size %zu, written %zu\n", buffer.size(), bytes);
+      return false;
+    }
   }
 
   return true;
@@ -110,17 +125,11 @@ bool SaveStack(pid_t pid, uint64_t sp_start, uint64_t sp_end) {
 bool CreateElfFromMemory(std::shared_ptr<unwindstack::Memory>& memory, map_info_t* info) {
   std::string cur_name;
   if (info->name.empty()) {
-    cur_name = android::base::StringPrintf("anonymous:%" PRIx64, info->start);
+    cur_name = android::base::StringPrintf("anonymous_%" PRIx64, info->start);
   } else {
-    cur_name = basename(info->name.c_str());
-    cur_name = android::base::StringPrintf("%s:%" PRIx64, basename(info->name.c_str()), info->start);
+    cur_name = android::base::StringPrintf("%s_%" PRIx64, basename(info->name.c_str()), info->start);
   }
 
-  std::unique_ptr<FILE, decltype(&fclose)> output(fopen(cur_name.c_str(), "w+"), &fclose);
-  if (output == nullptr) {
-    printf("Cannot create %s\n", cur_name.c_str());
-    return false;
-  }
   std::vector<uint8_t> buffer(info->end - info->start);
   // If this is a mapped in file, it might not be possible to read the entire
   // map, so read all that is readable.
@@ -129,6 +138,13 @@ bool CreateElfFromMemory(std::shared_ptr<unwindstack::Memory>& memory, map_info_
     printf("Cannot read data from address %" PRIx64 " length %zu\n", info->start, buffer.size());
     return false;
   }
+
+  std::unique_ptr<FILE, decltype(&fclose)> output(fopen(cur_name.c_str(), "w+"), &fclose);
+  if (output == nullptr) {
+    printf("Cannot create %s\n", cur_name.c_str());
+    return false;
+  }
+
   size_t bytes_written = fwrite(buffer.data(), 1, bytes, output.get());
   if (bytes_written != bytes) {
     printf("Failed to write all data to file: bytes read %zu, written %zu\n", bytes, bytes_written);
@@ -198,9 +214,21 @@ int SaveData(pid_t pid) {
   unwinder.Unwind();
 
   std::unordered_map<uint64_t, map_info_t> maps_by_start;
-  uint64_t last_sp;
+  std::vector<std::pair<uint64_t, uint64_t>> stacks;
+  uint64_t sp_map_start = 0;
+  unwindstack::MapInfo* map_info = maps.Find(sp);
+  if (map_info != nullptr) {
+    stacks.emplace_back(std::make_pair(sp, map_info->end));
+    sp_map_start = map_info->start;
+  }
+
   for (auto frame : unwinder.frames()) {
-    last_sp = frame.sp;
+    map_info = maps.Find(frame.sp);
+    if (map_info != nullptr && sp_map_start != map_info->start) {
+      stacks.emplace_back(std::make_pair(frame.sp, map_info->end));
+      sp_map_start = map_info->start;
+    }
+
     if (maps_by_start.count(frame.map_start) == 0) {
       auto info = &maps_by_start[frame.map_start];
       info->start = frame.map_start;
@@ -211,7 +239,12 @@ int SaveData(pid_t pid) {
         // Try to create the elf from memory, this will handle cases where
         // the data only exists in memory such as vdso data on x86.
         if (!CreateElfFromMemory(process_memory, info)) {
-          return 1;
+          printf("Ignoring map ");
+          if (!info->name.empty()) {
+            printf("%s\n", info->name.c_str());
+          } else {
+            printf("anonymous:%" PRIx64 "\n", info->start);
+          }
         }
       }
     }
@@ -221,7 +254,7 @@ int SaveData(pid_t pid) {
     printf("%s\n", unwinder.FormatFrame(i).c_str());
   }
 
-  if (!SaveStack(pid, sp, last_sp)) {
+  if (!SaveStack(pid, stacks)) {
     return 1;
   }
 
