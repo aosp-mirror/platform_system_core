@@ -84,7 +84,6 @@ TEST(device_handler, get_block_device_symlinks_success_platform_with_partition) 
     };
     std::vector<std::string> expected_result{
         "/dev/block/platform/soc.0/f9824900.sdhci/by-name/modem",
-        "/dev/block/platform/soc.0/f9824900.sdhci/by-num/p1",
         "/dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1",
     };
 
@@ -100,7 +99,6 @@ TEST(device_handler, get_block_device_symlinks_success_platform_with_partition_o
         .partition_num = 1,
     };
     std::vector<std::string> expected_result{
-        "/dev/block/platform/soc.0/f9824900.sdhci/by-num/p1",
         "/dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1",
     };
 
