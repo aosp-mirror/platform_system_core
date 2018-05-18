@@ -37,6 +37,7 @@ struct fstab {
 
 struct fstab_rec {
     char* blk_device;
+    char* logical_partition_name;
     char* mount_point;
     char* fs_type;
     unsigned long flags;
@@ -84,6 +85,7 @@ int fs_mgr_is_slotselect(const struct fstab_rec* fstab);
 int fs_mgr_is_nofail(const struct fstab_rec* fstab);
 int fs_mgr_is_latemount(const struct fstab_rec* fstab);
 int fs_mgr_is_quota(const struct fstab_rec* fstab);
+int fs_mgr_is_logical(const struct fstab_rec* fstab);
 int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
 
 std::string fs_mgr_get_slot_suffix();

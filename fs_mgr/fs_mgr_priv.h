@@ -82,6 +82,7 @@
  *
  */
 
+// clang-format off
 #define MF_WAIT                  0x1
 #define MF_CHECK                 0x2
 #define MF_CRYPT                 0x4
@@ -111,6 +112,8 @@
 #define MF_AVB             0X2000000
 #define MF_KEYDIRECTORY    0X4000000
 #define MF_SYSFS           0X8000000
+#define MF_LOGICAL        0x10000000
+// clang-format on
 
 #define DM_BUF_SIZE 4096
 

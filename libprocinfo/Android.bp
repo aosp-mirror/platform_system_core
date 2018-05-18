@@ -59,6 +59,7 @@ cc_test {
     host_supported: true,
     srcs: [
         "process_test.cpp",
+        "process_map_test.cpp",
     ],
     target: {
         darwin: {
@@ -84,5 +85,36 @@ cc_test {
         },
     },
 
+    data: [
+        "testdata/*",
+    ],
+
     test_suites: ["device-tests"],
+}
+
+cc_benchmark {
+    name: "libprocinfo_benchmark",
+    defaults: ["libprocinfo_defaults"],
+    srcs: [
+        "process_map_benchmark.cpp",
+    ],
+    shared_libs: [
+        "libbacktrace",
+        "libbase",
+        "libprocinfo",
+        "libunwindstack",
+    ],
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+
+    data: [
+        "testdata/*",
+    ],
 }

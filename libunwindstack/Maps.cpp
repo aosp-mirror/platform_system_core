@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <android-base/unique_fd.h>
+#include <procinfo/process_map.h>
 
 #include <algorithm>
 #include <cctype>
@@ -57,150 +58,16 @@ MapInfo* Maps::Find(uint64_t pc) {
   return nullptr;
 }
 
-// Assumes that line does not end in '\n'.
-static MapInfo* InternalParseLine(const char* line) {
-  // Do not use a sscanf implementation since it is not performant.
-
-  // Example linux /proc/<pid>/maps lines:
-  // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
-  char* str;
-  const char* old_str = line;
-  uint64_t start = strtoull(old_str, &str, 16);
-  if (old_str == str || *str++ != '-') {
-    return nullptr;
-  }
-
-  old_str = str;
-  uint64_t end = strtoull(old_str, &str, 16);
-  if (old_str == str || !std::isspace(*str++)) {
-    return nullptr;
-  }
-
-  while (std::isspace(*str)) {
-    str++;
-  }
-
-  // Parse permissions data.
-  if (*str == '\0') {
-    return nullptr;
-  }
-  uint16_t flags = 0;
-  if (*str == 'r') {
-    flags |= PROT_READ;
-  } else if (*str != '-') {
-    return nullptr;
-  }
-  str++;
-  if (*str == 'w') {
-    flags |= PROT_WRITE;
-  } else if (*str != '-') {
-    return nullptr;
-  }
-  str++;
-  if (*str == 'x') {
-    flags |= PROT_EXEC;
-  } else if (*str != '-') {
-    return nullptr;
-  }
-  str++;
-  if (*str != 'p' && *str != 's') {
-    return nullptr;
-  }
-  str++;
-
-  if (!std::isspace(*str++)) {
-    return nullptr;
-  }
-
-  old_str = str;
-  uint64_t offset = strtoull(old_str, &str, 16);
-  if (old_str == str || !std::isspace(*str)) {
-    return nullptr;
-  }
-
-  // Ignore the 00:00 values.
-  old_str = str;
-  (void)strtoull(old_str, &str, 16);
-  if (old_str == str || *str++ != ':') {
-    return nullptr;
-  }
-  if (std::isspace(*str)) {
-    return nullptr;
-  }
-
-  // Skip the inode.
-  old_str = str;
-  (void)strtoull(str, &str, 16);
-  if (old_str == str || !std::isspace(*str++)) {
-    return nullptr;
-  }
-
-  // Skip decimal digit.
-  old_str = str;
-  (void)strtoull(old_str, &str, 10);
-  if (old_str == str || (!std::isspace(*str) && *str != '\0')) {
-    return nullptr;
-  }
-
-  while (std::isspace(*str)) {
-    str++;
-  }
-  if (*str == '\0') {
-    return new MapInfo(start, end, offset, flags, "");
-  }
-
-  // Save the name data.
-  std::string name(str);
-
-  // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
-  if (name.substr(0, 5) == "/dev/" && name.substr(5, 7) != "ashmem/") {
-    flags |= MAPS_FLAGS_DEVICE_MAP;
-  }
-  return new MapInfo(start, end, offset, flags, name);
-}
-
 bool Maps::Parse() {
-  int fd = open(GetMapsFile().c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd == -1) {
-    return false;
-  }
-
-  bool return_value = true;
-  char buffer[2048];
-  size_t leftover = 0;
-  while (true) {
-    ssize_t bytes = read(fd, &buffer[leftover], 2048 - leftover);
-    if (bytes == -1) {
-      return_value = false;
-      break;
-    }
-    if (bytes == 0) {
-      break;
-    }
-    bytes += leftover;
-    char* line = buffer;
-    while (bytes > 0) {
-      char* newline = static_cast<char*>(memchr(line, '\n', bytes));
-      if (newline == nullptr) {
-        memmove(buffer, line, bytes);
-        break;
-      }
-      *newline = '\0';
-
-      MapInfo* map_info = InternalParseLine(line);
-      if (map_info == nullptr) {
-        return_value = false;
-        break;
-      }
-      maps_.push_back(map_info);
-
-      bytes -= newline - line + 1;
-      line = newline + 1;
-    }
-    leftover = bytes;
-  }
-  close(fd);
-  return return_value;
+  return android::procinfo::ReadMapFile(
+      GetMapsFile(),
+      [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name) {
+        // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
+        if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
+          flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
+        }
+        maps_.push_back(new MapInfo(start, end, pgoff, flags, name));
+      });
 }
 
 void Maps::Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
@@ -222,26 +89,16 @@ Maps::~Maps() {
 }
 
 bool BufferMaps::Parse() {
-  const char* start_of_line = buffer_;
-  do {
-    std::string line;
-    const char* end_of_line = strchr(start_of_line, '\n');
-    if (end_of_line == nullptr) {
-      line = start_of_line;
-    } else {
-      line = std::string(start_of_line, end_of_line - start_of_line);
-      end_of_line++;
-    }
-
-    MapInfo* map_info = InternalParseLine(line.c_str());
-    if (map_info == nullptr) {
-      return false;
-    }
-    maps_.push_back(map_info);
-
-    start_of_line = end_of_line;
-  } while (start_of_line != nullptr && *start_of_line != '\0');
-  return true;
+  std::string content(buffer_);
+  return android::procinfo::ReadMapFileContent(
+      &content[0],
+      [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name) {
+        // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
+        if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
+          flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
+        }
+        maps_.push_back(new MapInfo(start, end, pgoff, flags, name));
+      });
 }
 
 const std::string RemoteMaps::GetMapsFile() const {
