@@ -125,6 +125,9 @@ class Service {
     using OptionParser = Result<Success> (Service::*)(const std::vector<std::string>& args);
     class OptionParserMap;
 
+    Result<Success> SetUpMountNamespace() const;
+    Result<Success> SetUpPidNamespace() const;
+    Result<Success> EnterNamespaces() const;
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
     void ZapStdio() const;
@@ -137,6 +140,7 @@ class Service {
     Result<Success> ParseConsole(const std::vector<std::string>& args);
     Result<Success> ParseCritical(const std::vector<std::string>& args);
     Result<Success> ParseDisabled(const std::vector<std::string>& args);
+    Result<Success> ParseEnterNamespace(const std::vector<std::string>& args);
     Result<Success> ParseGroup(const std::vector<std::string>& args);
     Result<Success> ParsePriority(const std::vector<std::string>& args);
     Result<Success> ParseInterface(const std::vector<std::string>& args);
@@ -181,6 +185,8 @@ class Service {
     std::vector<gid_t> supp_gids_;
     CapSet capabilities_;
     unsigned namespace_flags_;
+    // Pair of namespace type, path to namespace.
+    std::vector<std::pair<int, std::string>> namespaces_to_enter_;
 
     std::string seclabel_;
 
