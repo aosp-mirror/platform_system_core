@@ -686,6 +686,49 @@ static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
     return a;
 }
 
+/* Extracts <device>s from the by-name symlinks specified in a fstab:
+ *   /dev/block/<type>/<device>/by-name/<partition>
+ *
+ * <type> can be: platform, pci or vbd.
+ *
+ * For example, given the following entries in the input fstab:
+ *   /dev/block/platform/soc/1da4000.ufshc/by-name/system
+ *   /dev/block/pci/soc.0/f9824900.sdhci/by-name/vendor
+ * it returns a set { "soc/1da4000.ufshc", "soc.0/f9824900.sdhci" }.
+ */
+static std::set<std::string> extract_boot_devices(const fstab& fstab) {
+    std::set<std::string> boot_devices;
+
+    for (int i = 0; i < fstab.num_entries; i++) {
+        std::string blk_device(fstab.recs[i].blk_device);
+        // Skips blk_device that doesn't conform to the format.
+        if (!android::base::StartsWith(blk_device, "/dev/block") ||
+            android::base::StartsWith(blk_device, "/dev/block/by-name") ||
+            android::base::StartsWith(blk_device, "/dev/block/bootdevice/by-name")) {
+            continue;
+        }
+        // Skips non-by_name blk_device.
+        // /dev/block/<type>/<device>/by-name/<partition>
+        //                           ^ slash_by_name
+        auto slash_by_name = blk_device.find("/by-name");
+        if (slash_by_name == std::string::npos) continue;
+        blk_device.erase(slash_by_name);  // erases /by-name/<partition>
+
+        // Erases /dev/block/, now we have <type>/<device>
+        blk_device.erase(0, std::string("/dev/block/").size());
+
+        // <type>/<device>
+        //       ^ first_slash
+        auto first_slash = blk_device.find('/');
+        if (first_slash == std::string::npos) continue;
+
+        auto boot_device = blk_device.substr(first_slash + 1);
+        if (!boot_device.empty()) boot_devices.insert(std::move(boot_device));
+    }
+
+    return boot_devices;
+}
+
 struct fstab *fs_mgr_read_fstab(const char *fstab_path)
 {
     FILE *fstab_file;
@@ -861,6 +904,23 @@ struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const st
         }
     }
     return nullptr;
+}
+
+std::set<std::string> fs_mgr_get_boot_devices() {
+    // boot_devices can be specified in device tree.
+    std::string dt_value;
+    std::string file_name = get_android_dt_dir() + "/boot_devices";
+    if (read_dt_file(file_name, &dt_value)) {
+        auto boot_devices = android::base::Split(dt_value, ",");
+        return std::set<std::string>(boot_devices.begin(), boot_devices.end());
+    }
+
+    // Fallback to extract boot devices from fstab.
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (fstab) return extract_boot_devices(*fstab);
+
+    return {};
 }
 
 int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab)
