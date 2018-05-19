@@ -304,7 +304,16 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
 
   crash_mutex.lock();
   if (lock_count++ > 0) {
-    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "recursed signal handler call, exiting");
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "recursed signal handler call, aborting");
+    signal(SIGABRT, SIG_DFL);
+    raise(SIGABRT);
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGABRT);
+    sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
+
+    // Just in case...
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "abort didn't exit, exiting");
     _exit(1);
   }
 
