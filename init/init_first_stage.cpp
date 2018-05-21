@@ -72,7 +72,7 @@ class FirstStageMount {
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
-    DeviceHandler device_handler_;
+    std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;
 };
 
@@ -127,6 +127,11 @@ FirstStageMount::FirstStageMount()
     for (int i = 0; i < device_tree_fstab_->num_entries; i++) {
         mount_fstab_recs_.push_back(&device_tree_fstab_->recs[i]);
     }
+
+    auto boot_devices = fs_mgr_get_boot_devices();
+    device_handler_ =
+        std::make_unique<DeviceHandler>(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
+                                        std::vector<Subsystem>{}, std::move(boot_devices), false);
 }
 
 std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
@@ -165,7 +170,7 @@ bool FirstStageMount::InitRequiredDevices() {
         bool found = false;
         auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
             if (uevent.path == dm_path) {
-                device_handler_.HandleDeviceEvent(uevent);
+                device_handler_->HandleDeviceEvent(uevent);
                 found = true;
                 return ListenerAction::kStop;
             }
@@ -215,7 +220,7 @@ ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const
     if (iter != required_devices_partition_names_.end()) {
         LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
         required_devices_partition_names_.erase(iter);
-        device_handler_.HandleDeviceEvent(uevent);
+        device_handler_->HandleDeviceEvent(uevent);
         if (required_devices_partition_names_.empty()) {
             return ListenerAction::kStop;
         } else {
@@ -252,7 +257,7 @@ bool FirstStageMount::InitVerityDevice(const std::string& verity_device) {
     auto verity_callback = [&device_name, &verity_device, this, &found](const Uevent& uevent) {
         if (uevent.device_name == device_name) {
             LOG(VERBOSE) << "Creating dm-verity device : " << verity_device;
-            device_handler_.HandleDeviceEvent(uevent);
+            device_handler_->HandleDeviceEvent(uevent);
             found = true;
             return ListenerAction::kStop;
         }
@@ -413,9 +418,8 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
         // the content of uevent. by-name symlink will be at [0] if uevent->partition_name
         // is not empty. e.g.,
         //   - /dev/block/platform/soc.0/f9824900.sdhci/by-name/modem
-        //   - /dev/block/platform/soc.0/f9824900.sdhci/by-num/p1
         //   - /dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1
-        std::vector<std::string> links = device_handler_.GetBlockDeviceSymlinks(uevent);
+        std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
         if (!links.empty()) {
             auto[it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
             if (!inserted) {

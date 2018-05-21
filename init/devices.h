@@ -21,6 +21,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -103,8 +104,8 @@ class DeviceHandler {
 
     DeviceHandler();
     DeviceHandler(std::vector<Permissions> dev_permissions,
-                  std::vector<SysfsPermissions> sysfs_permissions,
-                  std::vector<Subsystem> subsystems, bool skip_restorecon);
+                  std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> subsystems,
+                  std::set<std::string> boot_devices, bool skip_restorecon);
     ~DeviceHandler(){};
 
     void HandleDeviceEvent(const Uevent& uevent);
@@ -125,6 +126,7 @@ class DeviceHandler {
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
     std::vector<Subsystem> subsystems_;
+    std::set<std::string> boot_devices_;
     bool skip_restorecon_;
     std::string sysfs_mount_point_;
 };
