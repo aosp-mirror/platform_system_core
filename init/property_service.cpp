@@ -371,11 +371,16 @@ class SocketConnection {
 
             int result = TEMP_FAILURE_RETRY(recv(socket_, data, bytes_left, MSG_DONTWAIT));
             if (result <= 0) {
+                PLOG(ERROR) << "sys_prop: recv error";
                 return false;
             }
 
             bytes_left -= result;
             data += result;
+        }
+
+        if (bytes_left != 0) {
+            LOG(ERROR) << "sys_prop: recv data is not properly obtained.";
         }
 
         return bytes_left == 0;
