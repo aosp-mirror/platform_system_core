@@ -32,12 +32,14 @@
 #include <mutex>
 #include <thread>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 
 using android::base::StringPrintf;
+using android::base::boot_clock;
 using namespace std::chrono_literals;
 
 namespace android {
@@ -50,9 +52,9 @@ static std::condition_variable g_bootcharting_finished_cv;
 static bool g_bootcharting_finished;
 
 static long long get_uptime_jiffies() {
-  std::string uptime;
-  if (!android::base::ReadFileToString("/proc/uptime", &uptime)) return 0;
-  return 100LL * strtod(uptime.c_str(), NULL);
+    constexpr int64_t kNanosecondsPerJiffy = 10000000;
+    boot_clock::time_point uptime = boot_clock::now();
+    return uptime.time_since_epoch().count() / kNanosecondsPerJiffy;
 }
 
 static std::unique_ptr<FILE, decltype(&fclose)> fopen_unique(const char* filename,

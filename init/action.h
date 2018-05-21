@@ -25,7 +25,6 @@
 
 #include "builtins.h"
 #include "keyword_map.h"
-#include "parser.h"
 #include "result.h"
 #include "subcontext.h"
 
@@ -58,12 +57,12 @@ using BuiltinAction = class Action*;
 
 class Action {
   public:
-    Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line);
+    Action(bool oneshot, Subcontext* subcontext, const std::string& filename, int line,
+           const std::string& event_trigger,
+           const std::map<std::string, std::string>& property_triggers);
 
     Result<Success> AddCommand(const std::vector<std::string>& args, int line);
     void AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line);
-    Result<Success> InitTriggers(const std::vector<std::string>& args);
-    Result<Success> InitSingleTrigger(const std::string& trigger);
     std::size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
@@ -84,7 +83,6 @@ class Action {
     void ExecuteCommand(const Command& command) const;
     bool CheckPropertyTriggers(const std::string& name = "",
                                const std::string& value = "") const;
-    Result<Success> ParsePropertyTrigger(const std::string& trigger);
 
     std::map<std::string, std::string> property_triggers_;
     std::string event_trigger_;
@@ -94,48 +92,6 @@ class Action {
     std::string filename_;
     int line_;
     static const KeywordFunctionMap* function_map_;
-};
-
-class ActionManager {
-  public:
-    static ActionManager& GetInstance();
-
-    // Exposed for testing
-    ActionManager();
-
-    void AddAction(std::unique_ptr<Action> action);
-    void QueueEventTrigger(const std::string& trigger);
-    void QueuePropertyChange(const std::string& name, const std::string& value);
-    void QueueAllPropertyActions();
-    void QueueBuiltinAction(BuiltinFunction func, const std::string& name);
-    void ExecuteOneCommand();
-    bool HasMoreCommands() const;
-    void DumpState() const;
-    void ClearQueue();
-
-  private:
-    ActionManager(ActionManager const&) = delete;
-    void operator=(ActionManager const&) = delete;
-
-    std::vector<std::unique_ptr<Action>> actions_;
-    std::queue<std::variant<EventTrigger, PropertyChange, BuiltinAction>> event_queue_;
-    std::queue<const Action*> current_executing_actions_;
-    std::size_t current_command_;
-};
-
-class ActionParser : public SectionParser {
-  public:
-    ActionParser(ActionManager* action_manager, std::vector<Subcontext>* subcontexts)
-        : action_manager_(action_manager), subcontexts_(subcontexts), action_(nullptr) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
-    Result<Success> EndSection() override;
-
-  private:
-    ActionManager* action_manager_;
-    std::vector<Subcontext>* subcontexts_;
-    std::unique_ptr<Action> action_;
 };
 
 }  // namespace init

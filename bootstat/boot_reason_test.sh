@@ -239,6 +239,8 @@ EXPECT_EQ() {
   return 0
 }
 
+BAD_BOOTLOADER_REASON=
+
 [ "USAGE: EXPECT_PROPERTY <prop> <value> [--allow_failure]
 
 Returns true (0) if current return (regex) value is true and the result matches
@@ -249,9 +251,20 @@ EXPECT_PROPERTY() {
   value="${2}"
   shift 2
   val=`adb shell getprop ${property} 2>&1`
-  EXPECT_EQ "${value}" "${val}" for Android property ${property} ||
-    [ -n "${1}" ] ||
-    save_ret=${?}
+  EXPECT_EQ "${value}" "${val}" for Android property ${property}
+  local_ret=${?}
+  if [ 0 != ${local_ret} -a "ro.boot.bootreason" = "${property}" ]; then
+    if [ -z "${BAD_BOOTLOADER_REASON}" ]; then
+      BAD_BOOTLOADER_REASON=${val}
+    elif [ X"${BAD_BOOTLOADER_REASON}" = X"${val}" ]; then
+      local_ret=0
+    fi
+  fi
+  if [ 0 != ${local_ret} ]; then
+    if [ -z "${1}" ] ; then
+      save_ret=${local_ret}
+    fi
+  fi
   return ${save_ret}
 }
 
@@ -287,6 +300,7 @@ bootstat: Failed to parse boot time record: /data/misc/bootstat/post_decrypt_tim
 bootstat: Service started: /system/bin/bootstat --record_boot_reason
 bootstat: Service started: /system/bin/bootstat --record_time_since_factory_reset
 bootstat: Service started: /system/bin/bootstat -l
+bootstat: Service started: /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l
 bootstat: Battery level at shutdown 100%
 bootstat: Battery level at startup 100%
 init    : Parsing file /system/etc/init/bootstat.rc...
@@ -298,6 +312,7 @@ init    : processing action (boot) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=*) from (/system/etc/init/bootstat.rc
 init    : processing action (sys.boot_completed=1 && sys.logbootcomplete=1) from (/system/etc/init/bootstat.rc
  (/system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
+ (/system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
  (/system/bin/bootstat -r post_decrypt_time_elapsed)'
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_complete' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_reason' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
@@ -407,29 +422,31 @@ validate_reason() {
        tr ' \f\t\r\n' '_____'`
   case ${var} in
     watchdog | watchdog,?* ) ;;
-    kernel_panic | kernel_panic,?*) ;;
-    recovery | recovery,?*) ;;
-    bootloader | bootloader,?*) ;;
-    cold | cold,?*) ;;
-    hard | hard,?*) ;;
-    warm | warm,?*) ;;
-    shutdown | shutdown,?*) ;;
+    kernel_panic | kernel_panic,?* ) ;;
+    recovery | recovery,?* ) ;;
+    bootloader | bootloader,?* ) ;;
+    cold | cold,?* ) ;;
+    hard | hard,?* ) ;;
+    warm | warm,?* ) ;;
+    shutdown | shutdown,?* ) ;;
     reboot,reboot | reboot,reboot,* )     var=${var#reboot,} ; var=${var%,} ;;
     reboot,cold | reboot,cold,* )         var=${var#reboot,} ; var=${var%,} ;;
     reboot,hard | reboot,hard,* )         var=${var#reboot,} ; var=${var%,} ;;
     reboot,warm | reboot,warm,* )         var=${var#reboot,} ; var=${var%,} ;;
     reboot,recovery | reboot,recovery,* ) var=${var#reboot,} ; var=${var%,} ;;
     reboot,bootloader | reboot,bootloader,* ) var=${var#reboot,} ; var=${var%,} ;;
-    reboot | reboot,?*) ;;
+    reboot | reboot,?* ) ;;
     # Aliases and Heuristics
-    *wdog* | *watchdog* )     var="watchdog" ;;
-    *powerkey* )              var="cold,powerkey" ;;
-    *panic* | *kernel_panic*) var="kernel_panic" ;;
-    *thermal*)                var="shutdown,thermal" ;;
-    *s3_wakeup*)              var="warm,s3_wakeup" ;;
-    *hw_reset*)               var="hard,hw_reset" ;;
-    *bootloader*)             var="bootloader" ;;
-    *)                        var="reboot" ;;
+    *wdog* | *watchdog* )                   var="watchdog" ;;
+    *powerkey* | *power_key* | *PowerKey* ) var="cold,powerkey" ;;
+    *panic* | *kernel_panic* )              var="kernel_panic" ;;
+    *thermal* )                             var="shutdown,thermal" ;;
+    *s3_wakeup* )                           var="warm,s3_wakeup" ;;
+    *hw_reset* )                            var="hard,hw_reset" ;;
+    *usb* )                                 var="cold,charger" ;;
+    *rtc* )                                 var="cold,rtc" ;;
+    *bootloader* )                          var="bootloader" ;;
+    * )                                     var="reboot" ;;
   esac
   echo ${var}
 }
@@ -566,9 +583,9 @@ blind_reboot_test() {
   duration_test
   case ${TEST} in
     bootloader | recovery | cold | hard | warm ) reason=${TEST} ;;
-    *)                                           reason=reboot,${TEST} ;;
+    *)                                           reason=reboot,${TEST#optional_} ;;
   esac
-  adb reboot ${TEST}
+  adb reboot ${TEST#optional_}
   wait_for_screen
   bootloader_reason=`validate_property ro.boot.bootreason`
   EXPECT_PROPERTY ro.boot.bootreason ${bootloader_reason}
@@ -792,6 +809,63 @@ test_kernel_panic() {
   exitPstore
 }
 
+[ "USAGE: test_kernel_panic_subreason
+
+kernel_panic_subreason test:
+- echo SysRq : Trigger a crash : 'test' | adb shell su root tee /dev/kmsg
+- echo c | adb shell su root tee /proc/sysrq-trigger
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report kernel_panic,sysrq,test" ]
+test_kernel_panic_subreason() {
+  checkDebugBuild || return
+  duration_test ">90"
+  panic_msg="kernel_panic,sysrq,test"
+  enterPstore
+  if [ ${?} != 0 ]; then
+    echo "         or functional bootloader" >&2
+    panic_msg="\(kernel_panic,sysrq,test\|kernel_panic\)"
+    pstore_ok=true
+  fi
+  echo "SysRq : Trigger a crash : 'test'" | adb shell su root tee /dev/kmsg
+  echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  report_bootstat_logs kernel_panic,sysrq,test \
+    "-bootstat: Unknown boot reason: kernel_panic,sysrq,test"
+  exitPstore
+}
+
+[ "USAGE: test_kernel_panic_hung
+
+kernel_panic_hung test:
+- echo Kernel panic - not synching: hung_task: blocked tasks |
+  adb shell su root tee /dev/kmsg
+- adb reboot warm
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- NB: should report kernel_panic,hung" ]
+test_kernel_panic_hung() {
+  checkDebugBuild || return
+  duration_test
+  panic_msg="kernel_panic,hung"
+  enterPstore
+  if [ ${?} != 0 ]; then
+    echo "         or functional bootloader" >&2
+    panic_msg="\(kernel_panic,hung\|reboot,hung\)"
+    pstore_ok=true
+  fi
+  echo "Kernel panic - not syncing: hung_task: blocked tasks" |
+    adb shell su root tee /dev/kmsg
+  adb reboot warm
+  wait_for_screen
+  EXPECT_PROPERTY sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  report_bootstat_logs kernel_panic,hung
+  exitPstore
+}
+
 [ "USAGE: test_warm
 
 warm test
@@ -873,6 +947,20 @@ test_adb_reboot() {
   EXPECT_PROPERTY sys.boot.reason reboot,adb
   EXPECT_PROPERTY persist.sys.boot.reason reboot,adb
   report_bootstat_logs reboot,adb
+}
+
+[ "USAGE: test_rescueparty
+
+rescueparty test
+- adb reboot rescueparty
+- (wait until screen is up, boot has completed)
+- adb shell getprop sys.boot.reason
+- adb shell getprop ro.boot.bootreason
+- NB: should report reboot,rescueparty" ]
+test_optional_rescueparty() {
+  blind_reboot_test
+  echo "WARNING: legacy devices are allowed to fail following ro.boot.bootreason result" >&2
+  EXPECT_PROPERTY ro.boot.bootreason reboot,rescueparty
 }
 
 [ "USAGE: test_Its_Just_So_Hard_reboot
@@ -1051,12 +1139,12 @@ if [ -z "$*" ]; then
   if [ -z "${2}" ]; then
     # Hard coded should shell fail to find them above (search/permission issues)
     eval set properties ota cold factory_reset hard battery unknown \
-             kernel_panic warm thermal_shutdown userrequested_shutdown \
-             shell_reboot adb_reboot Its_Just_So_Hard_reboot \
-             bootloader_normal bootloader_watchdog bootloader_kernel_panic \
-             bootloader_oem_powerkey bootloader_wdog_reset \
-             bootloader_wdog_reset bootloader_wdog_reset bootloader_hard \
-             bootloader_recovery
+             kernel_panic kernel_panic_subreason kernel_panic_hung warm \
+             thermal_shutdown userrequested_shutdown shell_reboot adb_reboot \
+             Its_Just_So_Hard_reboot bootloader_normal bootloader_watchdog \
+             bootloader_kernel_panic bootloader_oem_powerkey \
+             bootloader_wdog_reset bootloader_wdog_reset bootloader_wdog_reset \
+             bootloader_hard bootloader_recovery
   fi
   if [ X"nothing" = X"${1}" ]; then
     shift 1

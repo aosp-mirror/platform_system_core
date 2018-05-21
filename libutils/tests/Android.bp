@@ -77,7 +77,10 @@ cc_test_library {
     host_supported: true,
     relative_install_path: "libutils_tests",
     srcs: ["Singleton_test1.cpp"],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 }
 
 cc_test_library {
@@ -85,6 +88,9 @@ cc_test_library {
     host_supported: true,
     relative_install_path: "libutils_tests",
     srcs: ["Singleton_test2.cpp"],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     shared_libs: ["libutils_tests_singleton1"],
 }

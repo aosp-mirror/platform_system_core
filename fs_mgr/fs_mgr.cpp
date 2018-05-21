@@ -32,12 +32,16 @@
 #include <unistd.h>
 
 #include <memory>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <cutils/android_filesystem_config.h>
 #include <cutils/android_reboot.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
@@ -353,7 +357,7 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
         reserved_blocks = max_reserved_blocks;
     }
 
-    if (ext4_r_blocks_count(sb) == reserved_blocks) {
+    if ((ext4_r_blocks_count(sb) == reserved_blocks) && (sb->s_def_resgid == AID_RESERVED_DISK)) {
         return;
     }
 
@@ -363,11 +367,12 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
         return;
     }
 
-    char buf[32];
-    const char* argv[] = {TUNE2FS_BIN, "-r", buf, blk_device};
-
-    snprintf(buf, sizeof(buf), "%" PRIu64, reserved_blocks);
     LINFO << "Setting reserved block count on " << blk_device << " to " << reserved_blocks;
+
+    auto reserved_blocks_str = std::to_string(reserved_blocks);
+    auto reserved_gid_str = std::to_string(AID_RESERVED_DISK);
+    const char* argv[] = {
+        TUNE2FS_BIN, "-r", reserved_blocks_str.c_str(), "-g", reserved_gid_str.c_str(), blk_device};
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
         LERROR << "Failed to run " TUNE2FS_BIN " to set the number of reserved blocks on "
                << blk_device;
@@ -773,6 +778,45 @@ static int handle_encryptable(const struct fstab_rec* rec)
     }
 }
 
+static bool call_vdc(const std::vector<std::string>& args) {
+    std::vector<char const*> argv;
+    argv.emplace_back("/system/bin/vdc");
+    for (auto& arg : args) {
+        argv.emplace_back(arg.c_str());
+    }
+    LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
+    int ret = android_fork_execvp(4, const_cast<char**>(argv.data()), nullptr, false, true);
+    if (ret != 0) {
+        LOG(ERROR) << "vdc returned error code: " << ret;
+        return false;
+    }
+    LOG(DEBUG) << "vdc finished successfully";
+    return true;
+}
+
+bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
+    // Logical partitions are specified with a named partition rather than a
+    // block device, so if the block device is a path, then it has already
+    // been updated.
+    if (rec->blk_device[0] == '/') {
+        return true;
+    }
+
+    android::base::unique_fd dm_fd(open("/dev/device-mapper", O_RDONLY));
+    if (dm_fd < 0) {
+        PLOG(ERROR) << "open /dev/device-mapper failed";
+        return false;
+    }
+    struct dm_ioctl io;
+    std::string device_name;
+    if (!fs_mgr_dm_get_device_name(&io, rec->blk_device, dm_fd, &device_name)) {
+        return false;
+    }
+    free(rec->blk_device);
+    rec->blk_device = strdup(device_name.c_str());
+    return true;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -820,6 +864,13 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             int tret = translate_ext_labels(&fstab->recs[i]);
             if (tret < 0) {
                 LERROR << "Could not translate label to block device";
+                continue;
+            }
+        }
+
+        if ((fstab->recs[i].fs_mgr_flags & MF_LOGICAL)) {
+            if (!fs_mgr_update_logical_partition(&fstab->recs[i])) {
+                LERROR << "Could not set up logical partition, skipping!";
                 continue;
             }
         }
@@ -879,6 +930,13 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
                     LERROR << "Only one encryptable/encrypted partition supported";
                 }
                 encryptable = status;
+                if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+                    if (!call_vdc(
+                            {"cryptfs", "encryptFstab", fstab->recs[attempted_idx].mount_point})) {
+                        LERROR << "Encryption failed";
+                        return FS_MGR_MNTALL_FAIL;
+                    }
+                }
             }
 
             /* Success!  Go get the next one */
@@ -953,7 +1011,11 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
         } else if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
                    should_use_metadata_encryption(&fstab->recs[attempted_idx])) {
+            if (!call_vdc({"cryptfs", "mountFstab", fstab->recs[attempted_idx].mount_point})) {
+                ++error_count;
+            }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
+            continue;
         } else {
             // fs_options might be null so we cannot use PERROR << directly.
             // Use StringPrintf to output "(null)" instead.
@@ -1031,6 +1093,13 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
             LERROR << "Cannot mount filesystem of type "
                    << fstab->recs[i].fs_type << " on " << n_blk_device;
             return FS_MGR_DOMNT_FAILED;
+        }
+
+        if ((fstab->recs[i].fs_mgr_flags & MF_LOGICAL)) {
+            if (!fs_mgr_update_logical_partition(&fstab->recs[i])) {
+                LERROR << "Could not set up logical partition, skipping!";
+                continue;
+            }
         }
 
         /* First check the filesystem if requested */
@@ -1351,7 +1420,7 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
             mount_point = basename(fstab->recs[i].mount_point);
         }
 
-        fs_mgr_verity_ioctl_init(io, mount_point, 0);
+        fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, mount_point);
 
         const char* status;
         if (ioctl(fd, DM_TABLE_STATUS, io)) {

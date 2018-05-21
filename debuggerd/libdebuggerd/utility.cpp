@@ -21,6 +21,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/capability.h>
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
@@ -34,7 +36,9 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <backtrace/Backtrace.h>
+#include <debuggerd/handler.h>
 #include <log/log.h>
+#include <unwindstack/Memory.h>
 
 using android::base::unique_fd;
 
@@ -70,25 +74,22 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
                       && (log->crashed_tid == log->current_tid);
   static bool write_to_kmsg = should_write_to_kmsg();
 
-  char buf[512];
+  std::string msg;
   va_list ap;
   va_start(ap, fmt);
-  vsnprintf(buf, sizeof(buf), fmt, ap);
+  android::base::StringAppendV(&msg, fmt, ap);
   va_end(ap);
 
-  size_t len = strlen(buf);
-  if (len <= 0) {
-    return;
-  }
+  if (msg.empty()) return;
 
   if (write_to_tombstone) {
-    TEMP_FAILURE_RETRY(write(log->tfd, buf, len));
+    TEMP_FAILURE_RETRY(write(log->tfd, msg.c_str(), msg.size()));
   }
 
   if (write_to_logcat) {
-    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, buf);
+    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, msg.c_str());
     if (log->amfd_data != nullptr) {
-      *log->amfd_data += buf;
+      *log->amfd_data += msg;
     }
 
     if (write_to_kmsg) {
@@ -96,11 +97,11 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
       if (kmsg_fd.get() >= 0) {
         // Our output might contain newlines which would otherwise be handled by the android logger.
         // Split the lines up ourselves before sending to the kernel logger.
-        if (buf[len - 1] == '\n') {
-          buf[len - 1] = '\0';
+        if (msg.back() == '\n') {
+          msg.back() = '\0';
         }
 
-        std::vector<std::string> fragments = android::base::Split(buf, "\n");
+        std::vector<std::string> fragments = android::base::Split(msg, "\n");
         for (const std::string& fragment : fragments) {
           static constexpr char prefix[] = "<3>DEBUG: ";
           struct iovec iov[3];
@@ -117,40 +118,10 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   }
 }
 
-bool wait_for_signal(pid_t tid, siginfo_t* siginfo) {
-  while (true) {
-    int status;
-    pid_t n = TEMP_FAILURE_RETRY(waitpid(tid, &status, __WALL));
-    if (n == -1) {
-      ALOGE("waitpid failed: tid %d, %s", tid, strerror(errno));
-      return false;
-    } else if (n == tid) {
-      if (WIFSTOPPED(status)) {
-        if (ptrace(PTRACE_GETSIGINFO, tid, nullptr, siginfo) != 0) {
-          ALOGE("PTRACE_GETSIGINFO failed: %s", strerror(errno));
-          return false;
-        }
-        return true;
-      } else {
-        ALOGE("unexpected waitpid response: n=%d, status=%08x\n", n, status);
-        // This is the only circumstance under which we can allow a detach
-        // to fail with ESRCH, which indicates the tid has exited.
-        return false;
-      }
-    }
-  }
-}
-
 #define MEMORY_BYTES_TO_DUMP 256
 #define MEMORY_BYTES_PER_LINE 16
 
-void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* fmt, ...) {
-  std::string log_msg;
-  va_list ap;
-  va_start(ap, fmt);
-  android::base::StringAppendV(&log_msg, fmt, ap);
-  va_end(ap);
-
+void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
   // Align the address to sizeof(long) and start 32 bytes before the address.
   addr &= ~(sizeof(long) - 1);
   if (addr >= 4128) {
@@ -167,19 +138,19 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
     return;
   }
 
-  _LOG(log, logtype::MEMORY, "\n%s\n", log_msg.c_str());
+  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
 
   // Dump 256 bytes
   uintptr_t data[MEMORY_BYTES_TO_DUMP/sizeof(uintptr_t)];
   memset(data, 0, MEMORY_BYTES_TO_DUMP);
-  size_t bytes = backtrace->Read(addr, reinterpret_cast<uint8_t*>(data), sizeof(data));
+  size_t bytes = memory->Read(addr, reinterpret_cast<uint8_t*>(data), sizeof(data));
   if (bytes % sizeof(uintptr_t) != 0) {
     // This should never happen, but just in case.
     ALOGE("Bytes read %zu, is not a multiple of %zu", bytes, sizeof(uintptr_t));
     bytes &= ~(sizeof(uintptr_t) - 1);
   }
 
-  uintptr_t start = 0;
+  uint64_t start = 0;
   bool skip_2nd_read = false;
   if (bytes == 0) {
     // In this case, we might want to try another read at the beginning of
@@ -199,8 +170,8 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
     // into a readable map. Only requires one extra read because a map has
     // to contain at least one page, and the total number of bytes to dump
     // is smaller than a page.
-    size_t bytes2 = backtrace->Read(addr + start + bytes, reinterpret_cast<uint8_t*>(data) + bytes,
-                                    sizeof(data) - bytes - start);
+    size_t bytes2 = memory->Read(addr + start + bytes, reinterpret_cast<uint8_t*>(data) + bytes,
+                                 sizeof(data) - bytes - start);
     bytes += bytes2;
     if (bytes2 > 0 && bytes % sizeof(uintptr_t) != 0) {
       // This should never happen, but we'll try and continue any way.
@@ -226,7 +197,7 @@ void dump_memory(log_t* log, Backtrace* backtrace, uintptr_t addr, const char* f
     std::string ascii;
     for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++) {
       if (current >= start && current + sizeof(uintptr_t) <= total_bytes) {
-        android::base::StringAppendF(&logline, " %" PRIPTR, *data_ptr);
+        android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
 
         // Fill out the ascii string from the data.
         uint8_t* ptr = reinterpret_cast<uint8_t*>(data_ptr);
@@ -263,4 +234,178 @@ void read_with_default(const char* path, char* buf, size_t len, const char* defa
     }
   }
   strcpy(buf, default_value);
+}
+
+void drop_capabilities() {
+  __user_cap_header_struct capheader;
+  memset(&capheader, 0, sizeof(capheader));
+  capheader.version = _LINUX_CAPABILITY_VERSION_3;
+  capheader.pid = 0;
+
+  __user_cap_data_struct capdata[2];
+  memset(&capdata, 0, sizeof(capdata));
+
+  if (capset(&capheader, &capdata[0]) == -1) {
+    PLOG(FATAL) << "failed to drop capabilities";
+  }
+
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
+    PLOG(FATAL) << "failed to set PR_SET_NO_NEW_PRIVS";
+  }
+}
+
+bool signal_has_si_addr(const siginfo_t* si) {
+  // Manually sent signals won't have si_addr.
+  if (si->si_code == SI_USER || si->si_code == SI_QUEUE || si->si_code == SI_TKILL) {
+    return false;
+  }
+
+  switch (si->si_signo) {
+    case SIGBUS:
+    case SIGFPE:
+    case SIGILL:
+    case SIGSEGV:
+    case SIGTRAP:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool signal_has_sender(const siginfo_t* si, pid_t caller_pid) {
+  return SI_FROMUSER(si) && (si->si_pid != 0) && (si->si_pid != caller_pid);
+}
+
+void get_signal_sender(char* buf, size_t n, const siginfo_t* si) {
+  snprintf(buf, n, " from pid %d, uid %d", si->si_pid, si->si_uid);
+}
+
+const char* get_signame(const siginfo_t* si) {
+  switch (si->si_signo) {
+    case SIGABRT: return "SIGABRT";
+    case SIGBUS: return "SIGBUS";
+    case SIGFPE: return "SIGFPE";
+    case SIGILL: return "SIGILL";
+    case SIGSEGV: return "SIGSEGV";
+#if defined(SIGSTKFLT)
+    case SIGSTKFLT: return "SIGSTKFLT";
+#endif
+    case SIGSTOP: return "SIGSTOP";
+    case SIGSYS: return "SIGSYS";
+    case SIGTRAP: return "SIGTRAP";
+    case DEBUGGER_SIGNAL: return "<debuggerd signal>";
+    default: return "?";
+  }
+}
+
+const char* get_sigcode(const siginfo_t* si) {
+  // Try the signal-specific codes...
+  switch (si->si_signo) {
+    case SIGILL:
+      switch (si->si_code) {
+        case ILL_ILLOPC: return "ILL_ILLOPC";
+        case ILL_ILLOPN: return "ILL_ILLOPN";
+        case ILL_ILLADR: return "ILL_ILLADR";
+        case ILL_ILLTRP: return "ILL_ILLTRP";
+        case ILL_PRVOPC: return "ILL_PRVOPC";
+        case ILL_PRVREG: return "ILL_PRVREG";
+        case ILL_COPROC: return "ILL_COPROC";
+        case ILL_BADSTK: return "ILL_BADSTK";
+      }
+      static_assert(NSIGILL == ILL_BADSTK, "missing ILL_* si_code");
+      break;
+    case SIGBUS:
+      switch (si->si_code) {
+        case BUS_ADRALN: return "BUS_ADRALN";
+        case BUS_ADRERR: return "BUS_ADRERR";
+        case BUS_OBJERR: return "BUS_OBJERR";
+        case BUS_MCEERR_AR: return "BUS_MCEERR_AR";
+        case BUS_MCEERR_AO: return "BUS_MCEERR_AO";
+      }
+      static_assert(NSIGBUS == BUS_MCEERR_AO, "missing BUS_* si_code");
+      break;
+    case SIGFPE:
+      switch (si->si_code) {
+        case FPE_INTDIV: return "FPE_INTDIV";
+        case FPE_INTOVF: return "FPE_INTOVF";
+        case FPE_FLTDIV: return "FPE_FLTDIV";
+        case FPE_FLTOVF: return "FPE_FLTOVF";
+        case FPE_FLTUND: return "FPE_FLTUND";
+        case FPE_FLTRES: return "FPE_FLTRES";
+        case FPE_FLTINV: return "FPE_FLTINV";
+        case FPE_FLTSUB: return "FPE_FLTSUB";
+      }
+      static_assert(NSIGFPE == FPE_FLTSUB, "missing FPE_* si_code");
+      break;
+    case SIGSEGV:
+      switch (si->si_code) {
+        case SEGV_MAPERR: return "SEGV_MAPERR";
+        case SEGV_ACCERR: return "SEGV_ACCERR";
+#if defined(SEGV_BNDERR)
+        case SEGV_BNDERR: return "SEGV_BNDERR";
+#endif
+#if defined(SEGV_PKUERR)
+        case SEGV_PKUERR: return "SEGV_PKUERR";
+#endif
+      }
+#if defined(SEGV_PKUERR)
+      static_assert(NSIGSEGV == SEGV_PKUERR, "missing SEGV_* si_code");
+#elif defined(SEGV_BNDERR)
+      static_assert(NSIGSEGV == SEGV_BNDERR, "missing SEGV_* si_code");
+#else
+      static_assert(NSIGSEGV == SEGV_ACCERR, "missing SEGV_* si_code");
+#endif
+      break;
+#if defined(SYS_SECCOMP) // Our glibc is too old, and we build this for the host too.
+    case SIGSYS:
+      switch (si->si_code) {
+        case SYS_SECCOMP: return "SYS_SECCOMP";
+      }
+      static_assert(NSIGSYS == SYS_SECCOMP, "missing SYS_* si_code");
+      break;
+#endif
+    case SIGTRAP:
+      switch (si->si_code) {
+        case TRAP_BRKPT: return "TRAP_BRKPT";
+        case TRAP_TRACE: return "TRAP_TRACE";
+        case TRAP_BRANCH: return "TRAP_BRANCH";
+        case TRAP_HWBKPT: return "TRAP_HWBKPT";
+      }
+      if ((si->si_code & 0xff) == SIGTRAP) {
+        switch ((si->si_code >> 8) & 0xff) {
+          case PTRACE_EVENT_FORK:
+            return "PTRACE_EVENT_FORK";
+          case PTRACE_EVENT_VFORK:
+            return "PTRACE_EVENT_VFORK";
+          case PTRACE_EVENT_CLONE:
+            return "PTRACE_EVENT_CLONE";
+          case PTRACE_EVENT_EXEC:
+            return "PTRACE_EVENT_EXEC";
+          case PTRACE_EVENT_VFORK_DONE:
+            return "PTRACE_EVENT_VFORK_DONE";
+          case PTRACE_EVENT_EXIT:
+            return "PTRACE_EVENT_EXIT";
+          case PTRACE_EVENT_SECCOMP:
+            return "PTRACE_EVENT_SECCOMP";
+          case PTRACE_EVENT_STOP:
+            return "PTRACE_EVENT_STOP";
+        }
+      }
+      static_assert(NSIGTRAP == TRAP_HWBKPT, "missing TRAP_* si_code");
+      break;
+  }
+  // Then the other codes...
+  switch (si->si_code) {
+    case SI_USER: return "SI_USER";
+    case SI_KERNEL: return "SI_KERNEL";
+    case SI_QUEUE: return "SI_QUEUE";
+    case SI_TIMER: return "SI_TIMER";
+    case SI_MESGQ: return "SI_MESGQ";
+    case SI_ASYNCIO: return "SI_ASYNCIO";
+    case SI_SIGIO: return "SI_SIGIO";
+    case SI_TKILL: return "SI_TKILL";
+    case SI_DETHREAD: return "SI_DETHREAD";
+  }
+  // Then give up...
+  return "?";
 }

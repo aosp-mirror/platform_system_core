@@ -47,6 +47,8 @@ cc_library {
 
     srcs: [
         "ArmExidx.cpp",
+        "DexFile.cpp",
+        "DexFiles.cpp",
         "DwarfCfa.cpp",
         "DwarfEhFrameWithHdr.cpp",
         "DwarfMemory.cpp",
@@ -55,6 +57,7 @@ cc_library {
         "Elf.cpp",
         "ElfInterface.cpp",
         "ElfInterfaceArm.cpp",
+        "JitDebug.cpp",
         "Log.cpp",
         "MapInfo.cpp",
         "Maps.cpp",
@@ -77,7 +80,18 @@ cc_library {
     target: {
         // Always disable optimizations for host to make it easier to debug.
         host: {
-            cflags: ["-O0", "-g"],
+            cflags: [
+                "-O0",
+                "-g",
+            ],
+        },
+        vendor: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            exclude_srcs: [
+                "DexFile.cpp",
+                "DexFiles.cpp",
+            ],
+            exclude_shared_libs: ["libdexfile"],
         },
     },
 
@@ -96,8 +110,13 @@ cc_library {
         },
     },
 
+    static_libs: [
+        "libprocinfo",
+    ],
+
     shared_libs: [
         "libbase",
+        "libdexfile",
         "liblog",
         "liblzma",
     ],
@@ -113,6 +132,8 @@ cc_test {
     srcs: [
         "tests/ArmExidxDecodeTest.cpp",
         "tests/ArmExidxExtractTest.cpp",
+        "tests/DexFileTest.cpp",
+        "tests/DexFilesTest.cpp",
         "tests/DwarfCfaLogTest.cpp",
         "tests/DwarfCfaTest.cpp",
         "tests/DwarfDebugFrameTest.cpp",
@@ -123,11 +144,13 @@ cc_test {
         "tests/DwarfOpTest.cpp",
         "tests/DwarfSectionTest.cpp",
         "tests/DwarfSectionImplTest.cpp",
+        "tests/ElfCacheTest.cpp",
         "tests/ElfFake.cpp",
         "tests/ElfInterfaceArmTest.cpp",
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
         "tests/ElfTestUtils.cpp",
+        "tests/JitDebugTest.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapInfoGetLoadBiasTest.cpp",
@@ -136,6 +159,8 @@ cc_test {
         "tests/MemoryFake.cpp",
         "tests/MemoryFileTest.cpp",
         "tests/MemoryLocalTest.cpp",
+        "tests/MemoryOfflineBufferTest.cpp",
+        "tests/MemoryOfflineTest.cpp",
         "tests/MemoryRangeTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/MemoryTest.cpp",
@@ -158,16 +183,27 @@ cc_test {
         "liblog",
         "liblzma",
         "libunwindstack",
+        "libdexfile",
     ],
 
     static_libs: [
         "libgmock",
     ],
 
+    test_suites: ["device-tests"],
     data: [
         "tests/files/elf32.xz",
         "tests/files/elf64.xz",
-        "tests/files/offline/straddle_arm32/*",
+        "tests/files/offline/art_quick_osr_stub_arm/*",
+        "tests/files/offline/bad_eh_frame_hdr_arm64/*",
+        "tests/files/offline/debug_frame_first_x86/*",
+        "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
+        "tests/files/offline/jit_debug_arm/*",
+        "tests/files/offline/jit_debug_x86/*",
+        "tests/files/offline/jit_map_arm/*",
+        "tests/files/offline/gnu_debugdata_arm/*",
+        "tests/files/offline/offset_arm/*",
+        "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
 }
@@ -210,6 +246,24 @@ cc_binary {
 
     srcs: [
         "tools/unwind_symbols.cpp",
+    ],
+}
+
+cc_binary {
+    name: "unwind_for_offline",
+    defaults: ["libunwindstack_tools"],
+
+    srcs: [
+        "tools/unwind_for_offline.cpp",
+    ],
+}
+
+cc_binary {
+    name: "unwind_reg_info",
+    defaults: ["libunwindstack_tools"],
+
+    srcs: [
+        "tools/unwind_reg_info.cpp",
     ],
 }
 

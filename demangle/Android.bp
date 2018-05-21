@@ -42,11 +42,11 @@ cc_library {
     ],
 
     local_include_dirs: [
-       "include",
+        "include",
     ],
 
     export_include_dirs: [
-       "include",
+        "include",
     ],
 }
 
@@ -76,6 +76,11 @@ cc_test {
     ],
 
     shared_libs: [
+        "libdemangle",
+    ],
+
+    test_suites: ["device-tests"],
+    required: [
         "libdemangle",
     ],
 }

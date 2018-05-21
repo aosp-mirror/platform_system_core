@@ -69,4 +69,4 @@ public:
     virtual ~VirtualLightRefBase() = default;
 };
 
-}; // namespace android
+}  // namespace android

@@ -25,6 +25,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <android-base/macros.h>
 #include <log/log.h>
 
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
@@ -57,6 +58,7 @@ static int system_bg_cpuset_fd = -1;
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
 static int ta_cpuset_fd = -1; // special cpuset for top app
+static int rs_cpuset_fd = -1;  // special cpuset for screen off restrictions
 
 // File descriptors open to /dev/stune/../tasks, setup by initialize, or -1 on error
 static int bg_schedboost_fd = -1;
@@ -151,6 +153,8 @@ static void __initialize() {
             system_bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
             filename = "/dev/cpuset/top-app/tasks";
             ta_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+            filename = "/dev/cpuset/restricted/tasks";
+            rs_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
 
             if (schedboost_enabled()) {
                 filename = "/dev/stune/top-app/tasks";
@@ -308,6 +312,9 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
     case SP_SYSTEM:
         fd = system_bg_cpuset_fd;
         break;
+    case SP_RESTRICTED:
+        fd = rs_cpuset_fd;
+        break;
     default:
         boost_fd = fd = -1;
         break;
@@ -454,20 +461,16 @@ int get_sched_policy(int /*tid*/, SchedPolicy* policy) {
 
 #endif
 
-const char *get_sched_policy_name(SchedPolicy policy)
-{
+const char* get_sched_policy_name(SchedPolicy policy) {
     policy = _policy(policy);
-    static const char * const strings[SP_CNT] = {
-       [SP_BACKGROUND] = "bg",
-       [SP_FOREGROUND] = "fg",
-       [SP_SYSTEM]     = "  ",
-       [SP_AUDIO_APP]  = "aa",
-       [SP_AUDIO_SYS]  = "as",
-       [SP_TOP_APP]    = "ta",
-       [SP_RT_APP]    = "rt",
+    static const char* const kSchedPolicyNames[] = {
+            [SP_BACKGROUND] = "bg", [SP_FOREGROUND] = "fg", [SP_SYSTEM] = "  ",
+            [SP_AUDIO_APP] = "aa",  [SP_AUDIO_SYS] = "as",  [SP_TOP_APP] = "ta",
+            [SP_RT_APP] = "rt",     [SP_RESTRICTED] = "rs",
     };
-    if ((policy < SP_CNT) && (strings[policy] != NULL))
-        return strings[policy];
-    else
+    static_assert(arraysize(kSchedPolicyNames) == SP_CNT, "missing name");
+    if (policy < SP_BACKGROUND || policy >= SP_CNT) {
         return "error";
+    }
+    return kSchedPolicyNames[policy];
 }

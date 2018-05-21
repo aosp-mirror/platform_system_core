@@ -28,7 +28,6 @@
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 
 #include "adb.h"
@@ -61,7 +60,7 @@ static void setup_daemon_logging() {
 static BOOL WINAPI ctrlc_handler(DWORD type) {
     // TODO: Consider trying to kill a starting up adb server (if we're in
     // launch_server) by calling GenerateConsoleCtrlEvent().
-    android::base::quick_exit(STATUS_CONTROL_C_EXIT);
+    exit(STATUS_CONTROL_C_EXIT);
     return TRUE;
 }
 #endif
@@ -74,6 +73,12 @@ void adb_server_cleanup() {
     close_smartsockets();
     kick_all_transports();
     usb_cleanup();
+}
+
+static void intentionally_leak() {
+    void* p = ::operator new(1);
+    // The analyzer is upset about this leaking. NOLINTNEXTLINE
+    LOG(INFO) << "leaking pointer " << p;
 }
 
 int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd) {
@@ -95,16 +100,21 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     SetConsoleCtrlHandler(ctrlc_handler, TRUE);
 #else
     signal(SIGINT, [](int) {
-        fdevent_run_on_main_thread([]() { android::base::quick_exit(0); });
+        fdevent_run_on_main_thread([]() { exit(0); });
     });
 #endif
+
+    char* leak = getenv("ADB_LEAK");
+    if (leak && strcmp(leak, "1") == 0) {
+        intentionally_leak();
+    }
 
     if (is_daemon) {
         close_stdin();
         setup_daemon_logging();
     }
 
-    android::base::at_quick_exit(adb_server_cleanup);
+    atexit(adb_server_cleanup);
 
     init_transport_registration();
     init_mdns_transport_discovery();

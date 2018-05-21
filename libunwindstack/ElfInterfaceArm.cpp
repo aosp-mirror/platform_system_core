@@ -17,17 +17,18 @@
 #include <elf.h>
 #include <stdint.h>
 
+#include <unwindstack/MachineArm.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm.h>
 
 #include "ArmExidx.h"
 #include "ElfInterfaceArm.h"
-#include "MachineArm.h"
 
 namespace unwindstack {
 
 bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
   if (start_offset_ == 0 || total_entries_ == 0) {
+    last_error_.code = ERROR_UNWIND_INFO;
     return false;
   }
 
@@ -56,12 +57,15 @@ bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
     *entry_offset = start_offset_ + (last - 1) * 8;
     return true;
   }
+  last_error_.code = ERROR_UNWIND_INFO;
   return false;
 }
 
 bool ElfInterfaceArm::GetPrel31Addr(uint32_t offset, uint32_t* addr) {
   uint32_t data;
   if (!memory_->Read32(offset, &data)) {
+    last_error_.code = ERROR_MEMORY_INVALID;
+    last_error_.address = offset;
     return false;
   }
 
@@ -92,16 +96,25 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type, uint64_t load_b
   return true;
 }
 
-bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterfaceArm::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
+                           bool* finished) {
   // Dwarf unwind information is precise about whether a pc is covered or not,
   // but arm unwind information only has ranges of pc. In order to avoid
   // incorrectly doing a bad unwind using arm unwind information for a
   // different function, always try and unwind with the dwarf information first.
-  return ElfInterface32::Step(pc, regs, process_memory, finished) ||
-         StepExidx(pc, regs, process_memory, finished);
+  return ElfInterface32::Step(pc, load_bias, regs, process_memory, finished) ||
+         StepExidx(pc, load_bias, regs, process_memory, finished);
 }
 
-bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
+                                bool* finished) {
+  // Adjust the load bias to get the real relative pc.
+  if (pc < load_bias) {
+    last_error_.code = ERROR_UNWIND_INFO;
+    return false;
+  }
+  pc -= load_bias;
+
   RegsArm* regs_arm = reinterpret_cast<RegsArm*>(regs);
   uint64_t entry_offset;
   if (!FindEntry(pc, &entry_offset)) {
@@ -114,13 +127,9 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory,
   if (arm.ExtractEntryData(entry_offset) && arm.Eval()) {
     // If the pc was not set, then use the LR registers for the PC.
     if (!arm.pc_set()) {
-      regs_arm->set_pc((*regs_arm)[ARM_REG_LR]);
-      (*regs_arm)[ARM_REG_PC] = regs_arm->pc();
-    } else {
-      regs_arm->set_pc((*regs_arm)[ARM_REG_PC]);
+      (*regs_arm)[ARM_REG_PC] = (*regs_arm)[ARM_REG_LR];
     }
-    regs_arm->set_sp(arm.cfa());
-    (*regs_arm)[ARM_REG_SP] = regs_arm->sp();
+    (*regs_arm)[ARM_REG_SP] = arm.cfa();
     return_value = true;
 
     // If the pc was set to zero, consider this the final frame.
@@ -131,7 +140,44 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory,
     *finished = true;
     return true;
   }
+
+  if (!return_value) {
+    switch (arm.status()) {
+      case ARM_STATUS_NONE:
+      case ARM_STATUS_NO_UNWIND:
+      case ARM_STATUS_FINISH:
+        last_error_.code = ERROR_NONE;
+        break;
+
+      case ARM_STATUS_RESERVED:
+      case ARM_STATUS_SPARE:
+      case ARM_STATUS_TRUNCATED:
+      case ARM_STATUS_MALFORMED:
+      case ARM_STATUS_INVALID_ALIGNMENT:
+      case ARM_STATUS_INVALID_PERSONALITY:
+        last_error_.code = ERROR_UNWIND_INFO;
+        break;
+
+      case ARM_STATUS_READ_FAILED:
+        last_error_.code = ERROR_MEMORY_INVALID;
+        last_error_.address = arm.status_address();
+        break;
+    }
+  }
   return return_value;
+}
+
+bool ElfInterfaceArm::GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
+                                      uint64_t* offset) {
+  // For ARM, thumb function symbols have bit 0 set, but the address passed
+  // in here might not have this bit set and result in a failure to find
+  // the thumb function names. Adjust the address and offset to account
+  // for this possible case.
+  if (ElfInterface32::GetFunctionName(addr | 1, load_bias, name, offset)) {
+    *offset &= ~1;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace unwindstack

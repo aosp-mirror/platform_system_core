@@ -28,27 +28,27 @@ namespace base {
 // if the mingw version of vsnprintf is used, use `gnu_printf' which allows z
 // in %zd and PRIu64 (and related) to be recognized by the compile-time
 // checking.
-#define FORMAT_ARCHETYPE __printf__
+#define ANDROID_BASE_FORMAT_ARCHETYPE __printf__
 #ifdef __USE_MINGW_ANSI_STDIO
 #if __USE_MINGW_ANSI_STDIO
-#undef FORMAT_ARCHETYPE
-#define FORMAT_ARCHETYPE gnu_printf
+#undef ANDROID_BASE_FORMAT_ARCHETYPE
+#define ANDROID_BASE_FORMAT_ARCHETYPE gnu_printf
 #endif
 #endif
 
 // Returns a string corresponding to printf-like formatting of the arguments.
 std::string StringPrintf(const char* fmt, ...)
-    __attribute__((__format__(FORMAT_ARCHETYPE, 1, 2)));
+    __attribute__((__format__(ANDROID_BASE_FORMAT_ARCHETYPE, 1, 2)));
 
 // Appends a printf-like formatting of the arguments to 'dst'.
 void StringAppendF(std::string* dst, const char* fmt, ...)
-    __attribute__((__format__(FORMAT_ARCHETYPE, 2, 3)));
+    __attribute__((__format__(ANDROID_BASE_FORMAT_ARCHETYPE, 2, 3)));
 
 // Appends a printf-like formatting of the arguments to 'dst'.
 void StringAppendV(std::string* dst, const char* format, va_list ap)
-    __attribute__((__format__(FORMAT_ARCHETYPE, 2, 0)));
+    __attribute__((__format__(ANDROID_BASE_FORMAT_ARCHETYPE, 2, 0)));
 
-#undef FORMAT_ARCHETYPE
+#undef ANDROID_BASE_FORMAT_ARCHETYPE
 
 }  // namespace base
 }  // namespace android

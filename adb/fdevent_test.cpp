@@ -26,6 +26,7 @@
 
 #include "adb_io.h"
 #include "fdevent_test.h"
+#include "sysdeps/memory.h"
 
 class FdHandler {
   public:
@@ -79,30 +80,7 @@ struct ThreadArg {
 
 TEST_F(FdeventTest, fdevent_terminate) {
     PrepareThread();
-
-    std::thread thread(fdevent_loop);
-    TerminateThread(thread);
-}
-
-static void FdEventThreadFunc(ThreadArg* arg) {
-    std::vector<int> read_fds;
-    std::vector<int> write_fds;
-
-    read_fds.push_back(arg->first_read_fd);
-    for (size_t i = 0; i < arg->middle_pipe_count; ++i) {
-        int fds[2];
-        ASSERT_EQ(0, adb_socketpair(fds));
-        read_fds.push_back(fds[0]);
-        write_fds.push_back(fds[1]);
-    }
-    write_fds.push_back(arg->last_write_fd);
-
-    std::vector<std::unique_ptr<FdHandler>> fd_handlers;
-    for (size_t i = 0; i < read_fds.size(); ++i) {
-        fd_handlers.push_back(std::unique_ptr<FdHandler>(new FdHandler(read_fds[i], write_fds[i])));
-    }
-
-    fdevent_loop();
+    TerminateThread();
 }
 
 TEST_F(FdeventTest, smoke) {
@@ -121,7 +99,26 @@ TEST_F(FdeventTest, smoke) {
     int reader = fd_pair2[0];
 
     PrepareThread();
-    std::thread thread(FdEventThreadFunc, &thread_arg);
+
+    std::vector<std::unique_ptr<FdHandler>> fd_handlers;
+    fdevent_run_on_main_thread([&thread_arg, &fd_handlers]() {
+        std::vector<int> read_fds;
+        std::vector<int> write_fds;
+
+        read_fds.push_back(thread_arg.first_read_fd);
+        for (size_t i = 0; i < thread_arg.middle_pipe_count; ++i) {
+            int fds[2];
+            ASSERT_EQ(0, adb_socketpair(fds));
+            read_fds.push_back(fds[0]);
+            write_fds.push_back(fds[1]);
+        }
+        write_fds.push_back(thread_arg.last_write_fd);
+
+        for (size_t i = 0; i < read_fds.size(); ++i) {
+            fd_handlers.push_back(std::make_unique<FdHandler>(read_fds[i], write_fds[i]));
+        }
+    });
+    WaitForFdeventLoop();
 
     for (size_t i = 0; i < MESSAGE_LOOP_COUNT; ++i) {
         std::string read_buffer = MESSAGE;
@@ -131,7 +128,10 @@ TEST_F(FdeventTest, smoke) {
         ASSERT_EQ(read_buffer, write_buffer);
     }
 
-    TerminateThread(thread);
+    fdevent_run_on_main_thread([&fd_handlers]() { fd_handlers.clear(); });
+    WaitForFdeventLoop();
+
+    TerminateThread();
     ASSERT_EQ(0, adb_close(writer));
     ASSERT_EQ(0, adb_close(reader));
 }
@@ -142,7 +142,7 @@ struct InvalidFdArg {
     size_t* happened_event_count;
 };
 
-static void InvalidFdEventCallback(int fd, unsigned events, void* userdata) {
+static void InvalidFdEventCallback(int, unsigned events, void* userdata) {
     InvalidFdArg* arg = reinterpret_cast<InvalidFdArg*>(userdata);
     ASSERT_EQ(arg->expected_events, events);
     fdevent_remove(&arg->fde);
@@ -178,16 +178,46 @@ TEST_F(FdeventTest, run_on_main_thread) {
     std::vector<int> vec;
 
     PrepareThread();
-    std::thread thread(fdevent_loop);
 
-    for (int i = 0; i < 100; ++i) {
+    // Block the main thread for a long time while we queue our callbacks.
+    fdevent_run_on_main_thread([]() {
+        check_main_thread();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    });
+
+    for (int i = 0; i < 1000000; ++i) {
         fdevent_run_on_main_thread([i, &vec]() {
             check_main_thread();
             vec.push_back(i);
         });
     }
 
-    TerminateThread(thread);
+    TerminateThread();
+
+    ASSERT_EQ(1000000u, vec.size());
+    for (int i = 0; i < 1000000; ++i) {
+        ASSERT_EQ(i, vec[i]);
+    }
+}
+
+static std::function<void()> make_appender(std::vector<int>* vec, int value) {
+    return [vec, value]() {
+        check_main_thread();
+        if (value == 100) {
+            return;
+        }
+
+        vec->push_back(value);
+        fdevent_run_on_main_thread(make_appender(vec, value + 1));
+    };
+}
+
+TEST_F(FdeventTest, run_on_main_thread_reentrant) {
+    std::vector<int> vec;
+
+    PrepareThread();
+    fdevent_run_on_main_thread(make_appender(&vec, 0));
+    TerminateThread();
 
     ASSERT_EQ(100u, vec.size());
     for (int i = 0; i < 100; ++i) {

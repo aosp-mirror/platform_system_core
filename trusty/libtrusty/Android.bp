@@ -22,7 +22,10 @@ cc_library {
 
     srcs: ["trusty.c"],
     export_include_dirs: ["include"],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 
     shared_libs: ["liblog"],
 }

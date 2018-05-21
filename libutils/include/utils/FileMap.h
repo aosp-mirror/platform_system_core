@@ -124,6 +124,6 @@ private:
     static long mPageSize;
 };
 
-}; // namespace android
+}  // namespace android
 
 #endif // __LIBS_FILE_MAP_H

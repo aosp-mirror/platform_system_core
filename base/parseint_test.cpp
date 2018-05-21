@@ -96,3 +96,44 @@ TEST(parseint, untouched_on_failure) {
   ASSERT_FALSE(android::base::ParseInt("456x", &u));
   ASSERT_EQ(123u, u);
 }
+
+TEST(parseint, ParseByteCount) {
+  uint64_t i = 0;
+  ASSERT_TRUE(android::base::ParseByteCount("123b", &i));
+  ASSERT_EQ(123ULL, i);
+
+  ASSERT_TRUE(android::base::ParseByteCount("8k", &i));
+  ASSERT_EQ(8ULL * 1024, i);
+
+  ASSERT_TRUE(android::base::ParseByteCount("8M", &i));
+  ASSERT_EQ(8ULL * 1024 * 1024, i);
+
+  ASSERT_TRUE(android::base::ParseByteCount("6g", &i));
+  ASSERT_EQ(6ULL * 1024 * 1024 * 1024, i);
+
+  ASSERT_TRUE(android::base::ParseByteCount("1T", &i));
+  ASSERT_EQ(1ULL * 1024 * 1024 * 1024 * 1024, i);
+
+  ASSERT_TRUE(android::base::ParseByteCount("2p", &i));
+  ASSERT_EQ(2ULL * 1024 * 1024 * 1024 * 1024 * 1024, i);
+
+  ASSERT_TRUE(android::base::ParseByteCount("4e", &i));
+  ASSERT_EQ(4ULL * 1024 * 1024 * 1024 * 1024 * 1024 * 1024, i);
+}
+
+TEST(parseint, ParseByteCount_invalid_suffix) {
+  unsigned u;
+  ASSERT_FALSE(android::base::ParseByteCount("1x", &u));
+}
+
+TEST(parseint, ParseByteCount_overflow) {
+  uint64_t u64;
+  ASSERT_FALSE(android::base::ParseByteCount("4294967295E", &u64));
+
+  uint16_t u16;
+  ASSERT_TRUE(android::base::ParseByteCount("63k", &u16));
+  ASSERT_EQ(63U * 1024, u16);
+  ASSERT_TRUE(android::base::ParseByteCount("65535b", &u16));
+  ASSERT_EQ(65535U, u16);
+  ASSERT_FALSE(android::base::ParseByteCount("65k", &u16));
+}

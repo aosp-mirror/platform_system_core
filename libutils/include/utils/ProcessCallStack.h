@@ -74,6 +74,6 @@ private:
     struct tm mTimeUpdated;
 };
 
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_PROCESS_CALLSTACK_H

@@ -20,8 +20,10 @@
 #include <stdint.h>
 #include <string>
 
-class Backtrace;
+namespace unwindstack {
+class Memory;
+}
 
-bool elf_get_build_id(Backtrace*, uintptr_t, std::string*);
+bool elf_get_build_id(unwindstack::Memory*, uintptr_t, std::string*);
 
 #endif // _DEBUGGERD_ELF_UTILS_H

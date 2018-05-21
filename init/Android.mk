@@ -41,16 +41,7 @@ init_cflags += \
 
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
-LOCAL_SRC_FILES:= \
-    bootchart.cpp \
-    builtins.cpp \
-    init.cpp \
-    init_first_stage.cpp \
-    keychords.cpp \
-    reboot.cpp \
-    sigchld_handler.cpp \
-    ueventd.cpp \
-    watchdogd.cpp \
+LOCAL_SRC_FILES := main.cpp
 
 LOCAL_MODULE:= init
 
@@ -84,6 +75,8 @@ LOCAL_STATIC_LIBRARIES := \
     libavb \
     libkeyutils \
     libprotobuf-cpp-lite \
+    libpropertyinfoserializer \
+    libpropertyinfoparser \
 
 LOCAL_REQUIRED_MODULES := \
     e2fsdroid \

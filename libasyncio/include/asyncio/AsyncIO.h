@@ -17,9 +17,9 @@
 #ifndef _ASYNCIO_H
 #define _ASYNCIO_H
 
-#include <cstring>
-#include <cstdint>
 #include <linux/aio_abi.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <time.h>
@@ -35,10 +35,14 @@ extern "C" {
 
 int io_setup(unsigned nr, aio_context_t* ctxp);
 int io_destroy(aio_context_t ctx);
-int io_submit(aio_context_t ctx, long nr, iocb** iocbpp);
-int io_getevents(aio_context_t ctx, long min_nr, long max_nr, io_event* events, timespec* timeout);
-int io_cancel(aio_context_t ctx, iocb*, io_event* result);
-void io_prep(iocb* iocb, int fd, const void* buf, uint64_t count, int64_t offset, bool read);
+int io_submit(aio_context_t ctx, long nr, struct iocb** iocbpp);
+int io_getevents(aio_context_t ctx, long min_nr, long max_nr, struct io_event* events,
+                 struct timespec* timeout);
+int io_cancel(aio_context_t ctx, struct iocb*, struct io_event* result);
+
+void io_prep_pread(struct iocb* iocb, int fd, void* buf, size_t count, long long offset);
+void io_prep_pwrite(struct iocb* iocb, int fd, void* buf, size_t count, long long offset);
+void io_prep(struct iocb* iocb, int fd, const void* buf, uint64_t count, int64_t offset, bool read);
 
 #ifdef __cplusplus
 };

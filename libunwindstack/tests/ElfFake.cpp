@@ -43,7 +43,16 @@ bool ElfInterfaceFake::GetFunctionName(uint64_t, uint64_t, std::string* name, ui
   return true;
 }
 
-bool ElfInterfaceFake::Step(uint64_t, Regs* regs, Memory*, bool* finished) {
+bool ElfInterfaceFake::GetGlobalVariable(const std::string& global, uint64_t* offset) {
+  auto entry = globals_.find(global);
+  if (entry == globals_.end()) {
+    return false;
+  }
+  *offset = entry->second;
+  return true;
+}
+
+bool ElfInterfaceFake::Step(uint64_t, uint64_t, Regs* regs, Memory*, bool* finished) {
   if (steps_.empty()) {
     return false;
   }
@@ -56,8 +65,8 @@ bool ElfInterfaceFake::Step(uint64_t, Regs* regs, Memory*, bool* finished) {
   }
 
   RegsFake* fake_regs = reinterpret_cast<RegsFake*>(regs);
-  fake_regs->FakeSetPc(entry.pc);
-  fake_regs->FakeSetSp(entry.sp);
+  fake_regs->set_pc(entry.pc);
+  fake_regs->set_sp(entry.sp);
   *finished = entry.finished;
   return true;
 }

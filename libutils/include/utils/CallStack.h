@@ -67,6 +67,6 @@ private:
     Vector<String8> mFrameLines;
 };
 
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_CALLSTACK_H

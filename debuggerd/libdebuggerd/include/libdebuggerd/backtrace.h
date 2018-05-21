@@ -23,21 +23,20 @@
 #include <map>
 #include <string>
 
+#include <android-base/unique_fd.h>
+
+#include "types.h"
 #include "utility.h"
 
-class Backtrace;
 class BacktraceMap;
 
 // Dumps a backtrace using a format similar to what Dalvik uses so that the result
 // can be intermixed in a bug report.
-void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid, const std::string& process_name,
-                    const std::map<pid_t, std::string>& threads, std::string* amfd_data);
+void dump_backtrace(android::base::unique_fd output_fd, BacktraceMap* map,
+                    const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread);
 
-/* Dumps the backtrace in the backtrace data structure to the log. */
-void dump_backtrace_to_log(Backtrace* backtrace, log_t* log, const char* prefix);
-
-void dump_backtrace_ucontext(int output_fd, ucontext_t* ucontext);
 void dump_backtrace_header(int output_fd);
+void dump_backtrace_thread(int output_fd, BacktraceMap* map, const ThreadInfo& thread);
 void dump_backtrace_footer(int output_fd);
 
 #endif // _DEBUGGERD_BACKTRACE_H

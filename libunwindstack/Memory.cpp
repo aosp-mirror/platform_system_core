@@ -35,10 +35,6 @@
 namespace unwindstack {
 
 static size_t ProcessVmRead(pid_t pid, uint64_t remote_src, void* dst, size_t len) {
-  struct iovec dst_iov = {
-      .iov_base = dst,
-      .iov_len = len,
-  };
 
   // Split up the remote read across page boundaries.
   // From the manpage:
@@ -49,39 +45,49 @@ static size_t ProcessVmRead(pid_t pid, uint64_t remote_src, void* dst, size_t le
   //   perform a partial transfer that splits a single iovec element.
   constexpr size_t kMaxIovecs = 64;
   struct iovec src_iovs[kMaxIovecs];
-  size_t iovecs_used = 0;
 
   uint64_t cur = remote_src;
+  size_t total_read = 0;
   while (len > 0) {
-    if (iovecs_used == kMaxIovecs) {
-      errno = EINVAL;
-      return 0;
+    struct iovec dst_iov = {
+        .iov_base = &reinterpret_cast<uint8_t*>(dst)[total_read], .iov_len = len,
+    };
+
+    size_t iovecs_used = 0;
+    while (len > 0) {
+      if (iovecs_used == kMaxIovecs) {
+        break;
+      }
+
+      // struct iovec uses void* for iov_base.
+      if (cur >= UINTPTR_MAX) {
+        errno = EFAULT;
+        return total_read;
+      }
+
+      src_iovs[iovecs_used].iov_base = reinterpret_cast<void*>(cur);
+
+      uintptr_t misalignment = cur & (getpagesize() - 1);
+      size_t iov_len = getpagesize() - misalignment;
+      iov_len = std::min(iov_len, len);
+
+      len -= iov_len;
+      if (__builtin_add_overflow(cur, iov_len, &cur)) {
+        errno = EFAULT;
+        return total_read;
+      }
+
+      src_iovs[iovecs_used].iov_len = iov_len;
+      ++iovecs_used;
     }
 
-    // struct iovec uses void* for iov_base.
-    if (cur >= UINTPTR_MAX) {
-      errno = EFAULT;
-      return 0;
+    ssize_t rc = process_vm_readv(pid, &dst_iov, 1, src_iovs, iovecs_used, 0);
+    if (rc == -1) {
+      return total_read;
     }
-
-    src_iovs[iovecs_used].iov_base = reinterpret_cast<void*>(cur);
-
-    uintptr_t misalignment = cur & (getpagesize() - 1);
-    size_t iov_len = getpagesize() - misalignment;
-    iov_len = std::min(iov_len, len);
-
-    len -= iov_len;
-    if (__builtin_add_overflow(cur, iov_len, &cur)) {
-      errno = EFAULT;
-      return 0;
-    }
-
-    src_iovs[iovecs_used].iov_len = iov_len;
-    ++iovecs_used;
+    total_read += rc;
   }
-
-  ssize_t rc = process_vm_readv(pid, &dst_iov, 1, src_iovs, iovecs_used, 0);
-  return rc == -1 ? 0 : rc;
+  return total_read;
 }
 
 static bool PtraceReadLong(pid_t pid, uint64_t addr, long* value) {
@@ -337,6 +343,47 @@ size_t MemoryOffline::Read(uint64_t addr, void* dst, size_t size) {
   }
 
   return memory_->Read(addr, dst, size);
+}
+
+MemoryOfflineBuffer::MemoryOfflineBuffer(const uint8_t* data, uint64_t start, uint64_t end)
+    : data_(data), start_(start), end_(end) {}
+
+void MemoryOfflineBuffer::Reset(const uint8_t* data, uint64_t start, uint64_t end) {
+  data_ = data;
+  start_ = start;
+  end_ = end;
+}
+
+size_t MemoryOfflineBuffer::Read(uint64_t addr, void* dst, size_t size) {
+  if (addr < start_ || addr >= end_) {
+    return 0;
+  }
+
+  size_t read_length = std::min(size, static_cast<size_t>(end_ - addr));
+  memcpy(dst, &data_[addr - start_], read_length);
+  return read_length;
+}
+
+MemoryOfflineParts::~MemoryOfflineParts() {
+  for (auto memory : memories_) {
+    delete memory;
+  }
+}
+
+size_t MemoryOfflineParts::Read(uint64_t addr, void* dst, size_t size) {
+  if (memories_.empty()) {
+    return 0;
+  }
+
+  // Do a read on each memory object, no support for reading across the
+  // different memory objects.
+  for (MemoryOffline* memory : memories_) {
+    size_t bytes = memory->Read(addr, dst, size);
+    if (bytes != 0) {
+      return bytes;
+    }
+  }
+  return 0;
 }
 
 }  // namespace unwindstack

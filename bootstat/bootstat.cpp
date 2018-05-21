@@ -29,13 +29,16 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <regex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/log.h>
 #include <cutils/android_reboot.h>
@@ -138,7 +141,7 @@ constexpr int32_t kUnknownBootReason = 1;
 // values.
 const std::map<std::string, int32_t> kBootReasonMap = {
     {"empty", kEmptyBootReason},
-    {"unknown", kUnknownBootReason},
+    {"__BOOTSTAT_UNKNOWN__", kUnknownBootReason},
     {"normal", 2},
     {"recovery", 3},
     {"reboot", 4},
@@ -191,12 +194,14 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"s3_wakeup", 51},
     {"kernel_panic,sysrq", 52},
     {"kernel_panic,NULL", 53},
+    {"kernel_panic,null", 53},
     {"kernel_panic,BUG", 54},
+    {"kernel_panic,bug", 54},
     {"bootloader", 55},
     {"cold", 56},
     {"hard", 57},
     {"warm", 58},
-    {"recovery", 59},
+    // {"recovery", 59},  // Duplicate of enum 3 above. Immediate reuse possible.
     {"thermal-shutdown", 60},
     {"shutdown,thermal", 61},
     {"shutdown,battery", 62},
@@ -227,7 +232,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"shutdown,thermal,battery", 87},
     {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
     {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
-    {"usb", 90},
+    {"reboot,rescueparty", 90},
     {"charge", 91},
     {"oem_tz_crash", 92},
     {"uvlo", 93},
@@ -246,6 +251,61 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"watchdog_sdi_apps_reset", 106},
     {"smpl", 107},
     {"oem_modem_failed_to_powerup", 108},
+    {"reboot_normal", 109},
+    {"oem_lpass_cfg", 110},
+    {"oem_xpu_ns_error", 111},
+    {"power_key_press", 112},
+    {"hardware_reset", 113},
+    {"reboot_by_powerkey", 114},
+    {"reboot_verity", 115},
+    {"oem_rpm_undef_error", 116},
+    {"oem_crash_on_the_lk", 117},
+    {"oem_rpm_reset", 118},
+    {"oem_lpass_cfg", 119},
+    {"oem_xpu_ns_error", 120},
+    {"factory_cable", 121},
+    {"oem_ar6320_failed_to_powerup", 122},
+    {"watchdog_rpm_bite", 123},
+    {"power_on_cable", 124},
+    {"reboot_unknown", 125},
+    {"wireless_charger", 126},
+    {"0x776655ff", 127},
+    {"oem_thermal_bite_reset", 128},
+    {"charger", 129},
+    {"pon1", 130},
+    {"unknown", 131},
+    {"reboot_rtc", 132},
+    {"cold_boot", 133},
+    {"hard_rst", 134},
+    {"power-on", 135},
+    {"oem_adsp_resetting_the_soc", 136},
+    {"kpdpwr", 137},
+    {"oem_modem_timeout_waiting", 138},
+    {"usb_chg", 139},
+    {"warm_reset_0x02", 140},
+    {"warm_reset_0x80", 141},
+    {"pon_reason_0xb0", 142},
+    {"reboot_download", 143},
+    {"reboot_recovery_mode", 144},
+    {"oem_sdi_err_fatal", 145},
+    {"pmic_watchdog", 146},
+    {"software_master", 147},
+    {"cold,charger", 148},
+    {"cold,rtc", 149},
+    {"cold,rtc,2sec", 150},
+    {"reboot,tool", 151},
+    {"reboot,wdt", 152},
+    {"reboot,unknown", 153},
+    {"kernel_panic,audit", 154},
+    {"kernel_panic,atomic", 155},
+    {"kernel_panic,hung", 156},
+    {"kernel_panic,hung,rcu", 157},
+    {"kernel_panic,init", 158},
+    {"kernel_panic,oom", 159},
+    {"kernel_panic,stack", 160},
+    {"kernel_panic,sysrq,livelock,alarm", 161},   // llkd
+    {"kernel_panic,sysrq,livelock,driver", 162},  // llkd
+    {"kernel_panic,sysrq,livelock,zombie", 163},  // llkd
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -289,8 +349,7 @@ bool isStrongRebootReason(const std::string& r) {
   for (auto& s : knownReasons) {
     if (s == "cold") break;
     // Prefix defined as terminated by a nul or comma (,).
-    if (android::base::StartsWith(r, s.c_str()) &&
-        ((r.length() == s.length()) || (r[s.length()] == ','))) {
+    if (android::base::StartsWith(r, s) && ((r.length() == s.length()) || (r[s.length()] == ','))) {
       return true;
     }
   }
@@ -302,8 +361,7 @@ bool isKernelRebootReason(const std::string& r) {
   for (auto& s : knownReasons) {
     if (s == "recovery") break;
     // Prefix defined as terminated by a nul or comma (,).
-    if (android::base::StartsWith(r, s.c_str()) &&
-        ((r.length() == s.length()) || (r[s.length()] == ','))) {
+    if (android::base::StartsWith(r, s) && ((r.length() == s.length()) || (r[s.length()] == ','))) {
       return true;
     }
   }
@@ -314,8 +372,7 @@ bool isKernelRebootReason(const std::string& r) {
 bool isKnownRebootReason(const std::string& r) {
   for (auto& s : knownReasons) {
     // Prefix defined as terminated by a nul or comma (,).
-    if (android::base::StartsWith(r, s.c_str()) &&
-        ((r.length() == s.length()) || (r[s.length()] == ','))) {
+    if (android::base::StartsWith(r, s) && ((r.length() == s.length()) || (r[s.length()] == ','))) {
       return true;
     }
   }
@@ -406,9 +463,11 @@ class pstoreConsole {
     if (needle.length() > pos) return std::string::npos;
     pos -= needle.length();
     // fuzzy match to maximum kBitErrorRate
-    do {
+    for (;;) {
       if (numError(pos, needle) != std::string::npos) return pos;
-    } while (pos-- != 0);
+      if (pos == 0) break;
+      --pos;
+    }
     return std::string::npos;
   }
 
@@ -423,11 +482,13 @@ class pstoreConsole {
     }
     return std::string::npos;
   }
+
+  operator const std::string&() const { return console; }
 };
 
 // If bit error match to needle, correct it.
 // Return true if any corrections were discovered and applied.
-bool correctForBer(std::string& reason, const std::string& needle) {
+bool correctForBitError(std::string& reason, const std::string& needle) {
   bool corrected = false;
   if (reason.length() < needle.length()) return corrected;
   const pstoreConsole console(reason);
@@ -445,20 +506,215 @@ bool correctForBer(std::string& reason, const std::string& needle) {
   return corrected;
 }
 
+// If bit error match to needle, correct it.
+// Return true if any corrections were discovered and applied.
+// Try again if we can replace underline with spaces.
+bool correctForBitErrorOrUnderline(std::string& reason, const std::string& needle) {
+  bool corrected = correctForBitError(reason, needle);
+  std::string _needle(needle);
+  std::transform(_needle.begin(), _needle.end(), _needle.begin(),
+                 [](char c) { return (c == '_') ? ' ' : c; });
+  if (needle != _needle) {
+    corrected |= correctForBitError(reason, _needle);
+  }
+  return corrected;
+}
+
+// Converts a string value representing the reason the system booted to a
+// string complying with Android system standard reason.
+void transformReason(std::string& reason) {
+  std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isblank(c) ? '_' : c; });
+  std::transform(reason.begin(), reason.end(), reason.begin(),
+                 [](char c) { return ::isprint(c) ? c : '?'; });
+}
+
+// Check subreasons for reboot,<subreason> kernel_panic,sysrq,<subreason> or
+// kernel_panic,<subreason>.
+//
+// If quoted flag is set, pull out and correct single quoted ('), newline (\n)
+// or unprintable character terminated subreason, pos is supplied just beyond
+// first quote.  if quoted false, pull out and correct newline (\n) or
+// unprintable character terminated subreason.
+//
+// Heuristics to find termination is painted into a corner:
+
+// single bit error for quote ' that we can block.  It is acceptable for
+// the others 7, g in reason.  2/9 chance will miss the terminating quote,
+// but there is always the terminating newline that usually immediately
+// follows to fortify our chances.
+bool likely_single_quote(char c) {
+  switch (static_cast<uint8_t>(c)) {
+    case '\'':         // '\''
+    case '\'' ^ 0x01:  // '&'
+    case '\'' ^ 0x02:  // '%'
+    case '\'' ^ 0x04:  // '#'
+    case '\'' ^ 0x08:  // '/'
+      return true;
+    case '\'' ^ 0x10:  // '7'
+      break;
+    case '\'' ^ 0x20:  // '\a' (unprintable)
+      return true;
+    case '\'' ^ 0x40:  // 'g'
+      break;
+    case '\'' ^ 0x80:  // 0xA7 (unprintable)
+      return true;
+  }
+  return false;
+}
+
+// ::isprint(c) and likely_space() will prevent us from being called for
+// fundamentally printable entries, except for '\r' and '\b'.
+//
+// Except for * and J, single bit errors for \n, all others are non-
+// printable so easy catch.  It is _acceptable_ for *, J or j to exist in
+// the reason string, so 2/9 chance we will miss the terminating newline.
+//
+// NB: J might not be acceptable, except if at the beginning or preceded
+//     with a space, '(' or any of the quotes and their BER aliases.
+// NB: * might not be acceptable, except if at the beginning or preceded
+//     with a space, another *, or any of the quotes or their BER aliases.
+//
+// To reduce the chances to closer to 1/9 is too complicated for the gain.
+bool likely_newline(char c) {
+  switch (static_cast<uint8_t>(c)) {
+    case '\n':         // '\n' (unprintable)
+    case '\n' ^ 0x01:  // '\r' (unprintable)
+    case '\n' ^ 0x02:  // '\b' (unprintable)
+    case '\n' ^ 0x04:  // 0x0E (unprintable)
+    case '\n' ^ 0x08:  // 0x02 (unprintable)
+    case '\n' ^ 0x10:  // 0x1A (unprintable)
+      return true;
+    case '\n' ^ 0x20:  // '*'
+    case '\n' ^ 0x40:  // 'J'
+      break;
+    case '\n' ^ 0x80:  // 0x8A (unprintable)
+      return true;
+  }
+  return false;
+}
+
+// ::isprint(c) will prevent us from being called for all the printable
+// matches below.  If we let unprintables through because of this, they
+// get converted to underscore (_) by the validation phase.
+bool likely_space(char c) {
+  switch (static_cast<uint8_t>(c)) {
+    case ' ':          // ' '
+    case ' ' ^ 0x01:   // '!'
+    case ' ' ^ 0x02:   // '"'
+    case ' ' ^ 0x04:   // '$'
+    case ' ' ^ 0x08:   // '('
+    case ' ' ^ 0x10:   // '0'
+    case ' ' ^ 0x20:   // '\0' (unprintable)
+    case ' ' ^ 0x40:   // 'P'
+    case ' ' ^ 0x80:   // 0xA0 (unprintable)
+    case '\t':         // '\t'
+    case '\t' ^ 0x01:  // '\b' (unprintable) (likely_newline counters)
+    case '\t' ^ 0x02:  // '\v' (unprintable)
+    case '\t' ^ 0x04:  // '\r' (unprintable) (likely_newline counters)
+    case '\t' ^ 0x08:  // 0x01 (unprintable)
+    case '\t' ^ 0x10:  // 0x19 (unprintable)
+    case '\t' ^ 0x20:  // ')'
+    case '\t' ^ 0x40:  // '1'
+    case '\t' ^ 0x80:  // 0x89 (unprintable)
+      return true;
+  }
+  return false;
+}
+
+std::string getSubreason(const std::string& content, size_t pos, bool quoted) {
+  static constexpr size_t max_reason_length = 256;
+
+  std::string subReason(content.substr(pos, max_reason_length));
+  // Correct against any known strings that Bit Error Match
+  for (const auto& s : knownReasons) {
+    correctForBitErrorOrUnderline(subReason, s);
+  }
+  std::string terminator(quoted ? "'" : "");
+  for (const auto& m : kBootReasonMap) {
+    if (m.first.length() <= strlen("cold")) continue;  // too short?
+    if (correctForBitErrorOrUnderline(subReason, m.first + terminator)) continue;
+    if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
+    if (android::base::StartsWith(m.first, "reboot,")) {
+      correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("reboot,")) + terminator);
+    } else if (android::base::StartsWith(m.first, "kernel_panic,sysrq,")) {
+      correctForBitErrorOrUnderline(subReason,
+                                    m.first.substr(strlen("kernel_panic,sysrq,")) + terminator);
+    } else if (android::base::StartsWith(m.first, "kernel_panic,")) {
+      correctForBitErrorOrUnderline(subReason, m.first.substr(strlen("kernel_panic,")) + terminator);
+    }
+  }
+  for (pos = 0; pos < subReason.length(); ++pos) {
+    char c = subReason[pos];
+    if (!(::isprint(c) || likely_space(c)) || likely_newline(c) ||
+        (quoted && likely_single_quote(c))) {
+      subReason.erase(pos);
+      break;
+    }
+  }
+  transformReason(subReason);
+  return subReason;
+}
+
 bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
   // Check for kernel panic types to refine information
-  if (console.rfind("SysRq : Trigger a crash") != std::string::npos) {
-    // Can not happen, except on userdebug, during testing/debugging.
+  if ((console.rfind("SysRq : Trigger a crash") != std::string::npos) ||
+      (console.rfind("PC is at sysrq_handle_crash+") != std::string::npos)) {
     ret = "kernel_panic,sysrq";
+    // Invented for Android to allow daemons that specifically trigger sysrq
+    // to communicate more accurate boot subreasons via last console messages.
+    static constexpr char sysrqSubreason[] = "SysRq : Trigger a crash : '";
+    auto pos = console.rfind(sysrqSubreason);
+    if (pos != std::string::npos) {
+      ret += "," + getSubreason(console, pos + strlen(sysrqSubreason), /* quoted */ true);
+    }
     return true;
   }
   if (console.rfind("Unable to handle kernel NULL pointer dereference at virtual address") !=
       std::string::npos) {
-    ret = "kernel_panic,NULL";
+    ret = "kernel_panic,null";
     return true;
   }
   if (console.rfind("Kernel BUG at ") != std::string::npos) {
-    ret = "kernel_panic,BUG";
+    ret = "kernel_panic,bug";
+    return true;
+  }
+
+  std::string panic("Kernel panic - not syncing: ");
+  auto pos = console.rfind(panic);
+  if (pos != std::string::npos) {
+    static const std::vector<std::pair<const std::string, const std::string>> panicReasons = {
+        {"Out of memory", "oom"},
+        {"out of memory", "oom"},
+        {"Oh boy, that early out of memory", "oom"},  // omg
+        {"BUG!", "bug"},
+        {"hung_task: blocked tasks", "hung"},
+        {"audit: ", "audit"},
+        {"scheduling while atomic", "atomic"},
+        {"Attempted to kill init!", "init"},
+        {"Requested init", "init"},
+        {"No working init", "init"},
+        {"Could not decompress init", "init"},
+        {"RCU Stall", "hung,rcu"},
+        {"stack-protector", "stack"},
+        {"kernel stack overflow", "stack"},
+        {"Corrupt kernel stack", "stack"},
+        {"low stack detected", "stack"},
+        {"corrupted stack end", "stack"},
+    };
+
+    ret = "kernel_panic";
+    for (auto& s : panicReasons) {
+      if (console.find(panic + s.first, pos) != std::string::npos) {
+        ret += "," + s.second;
+        return true;
+      }
+    }
+    auto reason = getSubreason(console, pos + panic.length(), /* newline */ false);
+    if (reason.length() > 3) {
+      ret += "," + reason;
+    }
     return true;
   }
   return false;
@@ -468,32 +724,12 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
   return addKernelPanicSubReason(pstoreConsole(content), ret);
 }
 
-// std::transform Helper callback functions:
-// Converts a string value representing the reason the system booted to a
-// string complying with Android system standard reason.
-char tounderline(char c) {
-  return ::isblank(c) ? '_' : c;
-}
-
-char toprintable(char c) {
-  return ::isprint(c) ? c : '?';
-}
-
-// Cleanup boot_reason regarding acceptable character set
-void transformReason(std::string& reason) {
-  std::transform(reason.begin(), reason.end(), reason.begin(), ::tolower);
-  std::transform(reason.begin(), reason.end(), reason.begin(), tounderline);
-  std::transform(reason.begin(), reason.end(), reason.begin(), toprintable);
-}
-
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
 const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
 std::string BootReasonStrToReason(const std::string& boot_reason) {
-  static const size_t max_reason_length = 256;
-
   std::string ret(GetProperty(system_reboot_reason_property));
   std::string reason(boot_reason);
   // If sys.boot.reason == ro.boot.bootreason, let's re-evaluate
@@ -528,26 +764,36 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // A series of checks to take some officially unsupported reasons
     // reported by the bootloader and find some logical and canonical
     // sense.  In an ideal world, we would require those bootloaders
-    // to behave and follow our standards.
+    // to behave and follow our CTS standards.
+    //
+    // first member is the output
+    // second member is an unanchored regex for an alias
+    //
+    // If output has a prefix of <bang> '!', we do not use it as a
+    // match needle (and drop the <bang> prefix when landing in output),
+    // otherwise look for it as well. This helps keep the scale of the
+    // following table smaller.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
         {"watchdog", "wdog"},
-        {"cold,powerkey", "powerkey"},
+        {"cold,powerkey", "powerkey|power_key|PowerKey"},
         {"kernel_panic", "panic"},
         {"shutdown,thermal", "thermal"},
         {"warm,s3_wakeup", "s3_wakeup"},
         {"hard,hw_reset", "hw_reset"},
+        {"cold,charger", "usb"},
+        {"cold,rtc", "rtc"},
         {"reboot,2sec", "2sec_reboot"},
         {"bootloader", ""},
     };
 
-    // Either the primary or alias is found _somewhere_ in the reason string.
     for (auto& s : aliasReasons) {
-      if (reason.find(s.first) != std::string::npos) {
+      size_t firstHasNot = s.first[0] == '!';
+      if (!firstHasNot && (reason.find(s.first) != std::string::npos)) {
         ret = s.first;
         break;
       }
-      if (s.second.size() && (reason.find(s.second) != std::string::npos)) {
-        ret = s.first;
+      if (s.second.size() && std::regex_search(reason, std::regex(s.second))) {
+        ret = s.first.substr(firstHasNot);
         break;
       }
     }
@@ -586,28 +832,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       static const char cmd[] = "reboot: Restarting system with command '";
       size_t pos = console.rfind(cmd);
       if (pos != std::string::npos) {
-        pos += strlen(cmd);
-        std::string subReason(content.substr(pos, max_reason_length));
-        // Correct against any known strings that Bit Error Match
-        for (const auto& s : knownReasons) {
-          correctForBer(subReason, s);
-        }
-        for (const auto& m : kBootReasonMap) {
-          if (m.first.length() <= strlen("cold")) continue;  // too short?
-          if (correctForBer(subReason, m.first + "'")) continue;
-          if (m.first.length() <= strlen("reboot,cold")) continue;  // short?
-          if (!android::base::StartsWith(m.first, "reboot,")) continue;
-          correctForBer(subReason, m.first.substr(strlen("reboot,")) + "'");
-        }
-        for (pos = 0; pos < subReason.length(); ++pos) {
-          char c = subReason[pos];
-          // #, &, %, / are common single bit error for ' that we can block
-          if (!::isprint(c) || (c == '\'') || (c == '#') || (c == '&') || (c == '%') || (c == '/')) {
-            subReason.erase(pos);
-            break;
-          }
-        }
-        transformReason(subReason);
+        std::string subReason(getSubreason(content, pos + strlen(cmd), /* quoted */ true));
         if (subReason != "") {  // Will not land "reboot" as that is too blunt.
           if (isKernelRebootReason(subReason)) {
             ret = "reboot," + subReason;  // User space can't talk kernel reasons.
@@ -645,7 +870,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       if (pos != std::string::npos) {
         digits = content.substr(pos + strlen(battery), strlen("100 "));
         // correct common errors
-        correctForBer(digits, "100 ");
+        correctForBitError(digits, "100 ");
         if (digits[0] == '!') digits[0] = '1';
         if (digits[1] == '!') digits[1] = '1';
       }
@@ -875,14 +1100,28 @@ void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
   boot_event_store->AddBootEventWithValue("absolute_boot_time", absolute_total.count());
 }
 
+// Gets the boot time offset. This is useful when Android is running in a
+// container, because the boot_clock is not reset when Android reboots.
+std::chrono::nanoseconds GetBootTimeOffset() {
+  static const int64_t boottime_offset =
+      android::base::GetIntProperty<int64_t>("ro.boot.boottime_offset", 0);
+  return std::chrono::nanoseconds(boottime_offset);
+}
+
+// Returns the current uptime, accounting for any offset in the CLOCK_BOOTTIME
+// clock.
+android::base::boot_clock::duration GetUptime() {
+  return android::base::boot_clock::now().time_since_epoch() - GetBootTimeOffset();
+}
+
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
 
-  auto time_since_epoch = android::base::boot_clock::now().time_since_epoch();
-  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(time_since_epoch);
+  auto uptime_ns = GetUptime();
+  auto uptime_s = std::chrono::duration_cast<std::chrono::seconds>(uptime_ns);
   time_t current_time_utc = time(nullptr);
 
   if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
@@ -907,19 +1146,20 @@ void RecordBootComplete() {
     // Log the amount of time elapsed until the device is decrypted, which
     // includes the variable amount of time the user takes to enter the
     // decryption password.
-    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime.count());
+    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime_s.count());
 
     // Subtract the decryption time to normalize the boot cycle timing.
-    std::chrono::seconds boot_complete = std::chrono::seconds(uptime.count() - record.second);
+    std::chrono::seconds boot_complete = std::chrono::seconds(uptime_s.count() - record.second);
     boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
                                            boot_complete.count());
   } else {
-    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption", uptime.count());
+    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
+                                           uptime_s.count());
   }
 
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
-  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime.count());
+  boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime_s.count());
 
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.selinux");
@@ -928,7 +1168,7 @@ void RecordBootComplete() {
   const BootloaderTimingMap bootloader_timings = GetBootLoaderTimings();
   RecordBootloaderTimings(&boot_event_store, bootloader_timings);
 
-  auto uptime_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_since_epoch);
+  auto uptime_ms = std::chrono::duration_cast<std::chrono::milliseconds>(uptime_ns);
   RecordAbsoluteBootTime(&boot_event_store, bootloader_timings, uptime_ms);
 }
 

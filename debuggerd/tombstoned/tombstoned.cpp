@@ -61,10 +61,11 @@ enum CrashStatus {
 struct Crash {
   ~Crash() { event_free(crash_event); }
 
-  unique_fd crash_fd;
+  std::string crash_tombstone_path;
+  unique_fd crash_tombstone_fd;
+  unique_fd crash_socket_fd;
   pid_t crash_pid;
   event* crash_event = nullptr;
-  std::string crash_path;
 
   DebuggerdDumpType crash_type;
 };
@@ -109,24 +110,29 @@ class CrashQueue {
     return &queue;
   }
 
-  std::pair<unique_fd, std::string> get_output() {
-    unique_fd result;
-    std::string file_name = StringPrintf("%s%02d", file_name_prefix_.c_str(), next_artifact_);
-
-    // Unlink and create the file, instead of using O_TRUNC, to avoid two processes
-    // interleaving their output in case we ever get into that situation.
-    if (unlinkat(dir_fd_, file_name.c_str(), 0) != 0 && errno != ENOENT) {
-      PLOG(FATAL) << "failed to unlink tombstone at " << dir_path_ << "/" << file_name;
-    }
-
-    result.reset(openat(dir_fd_, file_name.c_str(),
-                        O_CREAT | O_EXCL | O_WRONLY | O_APPEND | O_CLOEXEC, 0640));
+  std::pair<std::string, unique_fd> get_output() {
+    std::string path;
+    unique_fd result(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0640));
     if (result == -1) {
-      PLOG(FATAL) << "failed to create tombstone at " << dir_path_ << "/" << file_name;
-    }
+      // We might not have O_TMPFILE. Try creating with an arbitrary filename instead.
+      static size_t counter = 0;
+      std::string tmp_filename = StringPrintf(".temporary%zu", counter++);
+      result.reset(openat(dir_fd_, tmp_filename.c_str(),
+                          O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0640));
+      if (result == -1) {
+        PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
+      }
 
+      path = StringPrintf("%s/%s", dir_path_.c_str(), tmp_filename.c_str());
+    }
+    return std::make_pair(std::move(path), std::move(result));
+  }
+
+  std::string get_next_artifact_path() {
+    std::string file_name =
+        StringPrintf("%s/%s%02d", dir_path_.c_str(), file_name_prefix_.c_str(), next_artifact_);
     next_artifact_ = (next_artifact_ + 1) % max_artifacts_;
-    return {std::move(result), dir_path_ + "/" + file_name};
+    return file_name;
   }
 
   bool maybe_enqueue_crash(Crash* crash) {
@@ -203,14 +209,17 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 
 static void perform_request(Crash* crash) {
   unique_fd output_fd;
-  if (!intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd)) {
-    std::tie(output_fd, crash->crash_path) = CrashQueue::for_crash(crash)->get_output();
+  bool intercepted =
+      intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
+  if (!intercepted) {
+    std::tie(crash->crash_tombstone_path, output_fd) = CrashQueue::for_crash(crash)->get_output();
+    crash->crash_tombstone_fd.reset(dup(output_fd.get()));
   }
 
   TombstonedCrashPacket response = {
     .packet_type = CrashPacketType::kPerformDump
   };
-  ssize_t rc = send_fd(crash->crash_fd, &response, sizeof(response), std::move(output_fd));
+  ssize_t rc = send_fd(crash->crash_socket_fd, &response, sizeof(response), std::move(output_fd));
   if (rc == -1) {
     PLOG(WARNING) << "failed to send response to CrashRequest";
     goto fail;
@@ -222,7 +231,7 @@ static void perform_request(Crash* crash) {
     struct timeval timeout = { 10, 0 };
 
     event_base* base = event_get_base(crash->crash_event);
-    event_assign(crash->crash_event, base, crash->crash_fd, EV_TIMEOUT | EV_READ,
+    event_assign(crash->crash_event, base, crash->crash_socket_fd, EV_TIMEOUT | EV_READ,
                  crash_completed_cb, crash);
     event_add(crash->crash_event, &timeout);
   }
@@ -243,7 +252,7 @@ static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, so
   // and only native crashes on the native socket.
   struct timeval timeout = { 1, 0 };
   event* crash_event = event_new(base, sockfd, EV_TIMEOUT | EV_READ, crash_request_cb, crash);
-  crash->crash_fd.reset(sockfd);
+  crash->crash_socket_fd.reset(sockfd);
   crash->crash_event = crash_event;
   event_add(crash_event, &timeout);
 }
@@ -342,14 +351,37 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
     goto fail;
   }
 
-  if (!crash->crash_path.empty()) {
-    if (crash->crash_type == kDebuggerdJavaBacktrace) {
-      LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << crash->crash_path;
+  if (crash->crash_tombstone_fd != -1) {
+    std::string fd_path = StringPrintf("/proc/self/fd/%d", crash->crash_tombstone_fd.get());
+    std::string tombstone_path = CrashQueue::for_crash(crash)->get_next_artifact_path();
+
+    // linkat doesn't let us replace a file, so we need to unlink first.
+    int rc = unlink(tombstone_path.c_str());
+    if (rc != 0 && errno != ENOENT) {
+      PLOG(ERROR) << "failed to unlink tombstone at " << tombstone_path;
+      goto fail;
+    }
+
+    rc = linkat(AT_FDCWD, fd_path.c_str(), AT_FDCWD, tombstone_path.c_str(), AT_SYMLINK_FOLLOW);
+    if (rc != 0) {
+      PLOG(ERROR) << "failed to link tombstone";
     } else {
-      // NOTE: Several tools parse this log message to figure out where the
-      // tombstone associated with a given native crash was written. Any changes
-      // to this message must be carefully considered.
-      LOG(ERROR) << "Tombstone written to: " << crash->crash_path;
+      if (crash->crash_type == kDebuggerdJavaBacktrace) {
+        LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << tombstone_path;
+      } else {
+        // NOTE: Several tools parse this log message to figure out where the
+        // tombstone associated with a given native crash was written. Any changes
+        // to this message must be carefully considered.
+        LOG(ERROR) << "Tombstone written to: " << tombstone_path;
+      }
+    }
+
+    // If we don't have O_TMPFILE, we need to clean up after ourselves.
+    if (!crash->crash_tombstone_path.empty()) {
+      rc = unlink(crash->crash_tombstone_path.c_str());
+      if (rc != 0) {
+        PLOG(ERROR) << "failed to unlink temporary tombstone at " << crash->crash_tombstone_path;
+      }
     }
   }
 

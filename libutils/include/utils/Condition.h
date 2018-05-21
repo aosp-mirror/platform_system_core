@@ -34,6 +34,8 @@
 namespace android {
 // ---------------------------------------------------------------------------
 
+// DO NOT USE: please use std::condition_variable instead.
+
 /*
  * Condition variable class.  The implementation is system-dependent.
  *
@@ -157,7 +159,7 @@ inline void Condition::broadcast() {
 #endif // !defined(_WIN32)
 
 // ---------------------------------------------------------------------------
-}; // namespace android
+}  // namespace android
 // ---------------------------------------------------------------------------
 
 #endif // _LIBS_UTILS_CONDITON_H

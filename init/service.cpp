@@ -24,7 +24,6 @@
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/system_properties.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -33,34 +32,41 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
-#include <android-base/properties.h>
-#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <hidl-util/FQName.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
 #include <system/thread_defs.h>
 
-#include "init.h"
-#include "property_service.h"
 #include "rlimit_parser.h"
 #include "util.h"
+
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>
+
+#include <android-base/properties.h>
+
+#include "init.h"
+#include "property_service.h"
+#else
+#include "host_init_stubs.h"
+#endif
 
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
-using android::base::make_scope_guard;
 using android::base::ParseInt;
 using android::base::StartsWith;
 using android::base::StringPrintf;
+using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 namespace android {
 namespace init {
 
-static Result<std::string> ComputeContextFromExecutable(std::string& service_name,
-                                                        const std::string& service_path) {
+static Result<std::string> ComputeContextFromExecutable(const std::string& service_path) {
     std::string computed_context;
 
     char* raw_con = nullptr;
@@ -96,11 +102,8 @@ static Result<std::string> ComputeContextFromExecutable(std::string& service_nam
     return computed_context;
 }
 
-static void SetUpPidNamespace(const std::string& service_name) {
+Result<Success> Service::SetUpMountNamespace() const {
     constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
-
-    // It's OK to LOG(FATAL) in this function since it's running in the first
-    // child process.
 
     // Recursively remount / as slave like zygote does so unmounting and mounting /proc
     // doesn't interfere with the parent namespace's /proc mount. This will also
@@ -108,24 +111,40 @@ static void SetUpPidNamespace(const std::string& service_name) {
     // with the parent namespace but will still allow mount events from the parent
     // namespace to propagate to the child.
     if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
-        PLOG(FATAL) << "couldn't remount(/) recursively as slave for " << service_name;
-    }
-    // umount() then mount() /proc.
-    // Note that it is not sufficient to mount with MS_REMOUNT.
-    if (umount("/proc") == -1) {
-        PLOG(FATAL) << "couldn't umount(/proc) for " << service_name;
-    }
-    if (mount("", "/proc", "proc", kSafeFlags, "") == -1) {
-        PLOG(FATAL) << "couldn't mount(/proc) for " << service_name;
+        return ErrnoError() << "Could not remount(/) recursively as slave";
     }
 
-    if (prctl(PR_SET_NAME, service_name.c_str()) == -1) {
-        PLOG(FATAL) << "couldn't set name for " << service_name;
+    // umount() then mount() /proc and/or /sys
+    // Note that it is not sufficient to mount with MS_REMOUNT.
+    if (namespace_flags_ & CLONE_NEWPID) {
+        if (umount("/proc") == -1) {
+            return ErrnoError() << "Could not umount(/proc)";
+        }
+        if (mount("", "/proc", "proc", kSafeFlags, "") == -1) {
+            return ErrnoError() << "Could not mount(/proc)";
+        }
+    }
+    bool remount_sys = std::any_of(namespaces_to_enter_.begin(), namespaces_to_enter_.end(),
+                                   [](const auto& entry) { return entry.first == CLONE_NEWNET; });
+    if (remount_sys) {
+        if (umount2("/sys", MNT_DETACH) == -1) {
+            return ErrnoError() << "Could not umount(/sys)";
+        }
+        if (mount("", "/sys", "sys", kSafeFlags, "") == -1) {
+            return ErrnoError() << "Could not mount(/sys)";
+        }
+    }
+    return Success();
+}
+
+Result<Success> Service::SetUpPidNamespace() const {
+    if (prctl(PR_SET_NAME, name_.c_str()) == -1) {
+        return ErrnoError() << "Could not set name";
     }
 
     pid_t child_pid = fork();
     if (child_pid == -1) {
-        PLOG(FATAL) << "couldn't fork init inside the PID namespace for " << service_name;
+        return ErrnoError() << "Could not fork init inside the PID namespace";
     }
 
     if (child_pid > 0) {
@@ -148,9 +167,23 @@ static void SetUpPidNamespace(const std::string& service_name) {
         }
         _exit(WEXITSTATUS(init_exitstatus));
     }
+    return Success();
 }
 
-static bool ExpandArgsAndExecv(const std::vector<std::string>& args) {
+Result<Success> Service::EnterNamespaces() const {
+    for (const auto& [nstype, path] : namespaces_to_enter_) {
+        auto fd = unique_fd{open(path.c_str(), O_RDONLY | O_CLOEXEC)};
+        if (!fd) {
+            return ErrnoError() << "Could not open namespace at " << path;
+        }
+        if (setns(fd, nstype) == -1) {
+            return ErrnoError() << "Could not setns() namespace at " << path;
+        }
+    }
+    return Success();
+}
+
+static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigstop) {
     std::vector<std::string> expanded_args;
     std::vector<char*> c_strings;
 
@@ -163,6 +196,10 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args) {
         c_strings.push_back(expanded_args[i].data());
     }
     c_strings.push_back(nullptr);
+
+    if (sigstop) {
+        kill(getpid(), SIGSTOP);
+    }
 
     return execv(c_strings[0], c_strings.data()) == 0;
 }
@@ -189,7 +226,8 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       capabilities_(capabilities),
       namespace_flags_(namespace_flags),
       seclabel_(seclabel),
-      onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0),
+      onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
+                 "onrestart", {}),
       keychord_id_(0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
@@ -199,9 +237,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       soft_limit_in_bytes_(-1),
       limit_in_bytes_(-1),
       start_order_(0),
-      args_(args) {
-    onrestart_.InitSingleTrigger("onrestart");
-}
+      args_(args) {}
 
 void Service::NotifyStateChange(const std::string& new_state) const {
     if ((flags_ & SVC_TEMPORARY) != 0) {
@@ -299,7 +335,7 @@ void Service::SetProcessAttributes() {
     }
 }
 
-void Service::Reap() {
+void Service::Reap(const siginfo_t& siginfo) {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
         KillProcessGroup(SIGKILL);
     }
@@ -307,6 +343,10 @@ void Service::Reap() {
     // Remove any descriptor resources we may have created.
     std::for_each(descriptors_.begin(), descriptors_.end(),
                   std::bind(&DescriptorInfo::Clean, std::placeholders::_1));
+
+    for (const auto& f : reap_callbacks_) {
+        f(siginfo);
+    }
 
     if (flags_ & SVC_EXEC) UnSetExec();
 
@@ -410,6 +450,20 @@ Result<Success> Service::ParseDisabled(const std::vector<std::string>& args) {
     return Success();
 }
 
+Result<Success> Service::ParseEnterNamespace(const std::vector<std::string>& args) {
+    if (args[1] != "net") {
+        return Error() << "Init only supports entering network namespaces";
+    }
+    if (!namespaces_to_enter_.empty()) {
+        return Error() << "Only one network namespace may be entered";
+    }
+    // Network namespaces require that /sys is remounted, otherwise the old adapters will still be
+    // present. Therefore, they also require mount namespaces.
+    namespace_flags_ |= CLONE_NEWNS;
+    namespaces_to_enter_.emplace_back(CLONE_NEWNET, args[2]);
+    return Success();
+}
+
 Result<Success> Service::ParseGroup(const std::vector<std::string>& args) {
     auto gid = DecodeUid(args[1]);
     if (!gid) {
@@ -442,8 +496,8 @@ Result<Success> Service::ParseInterface(const std::vector<std::string>& args) {
     const std::string& interface_name = args[1];
     const std::string& instance_name = args[2];
 
-    const FQName fq_name = FQName(interface_name);
-    if (!fq_name.isValid()) {
+    FQName fq_name;
+    if (!FQName::parse(interface_name, &fq_name)) {
         return Error() << "Invalid fully-qualified name for interface '" << interface_name << "'";
     }
 
@@ -574,6 +628,11 @@ Result<Success> Service::ParseSeclabel(const std::vector<std::string>& args) {
     return Success();
 }
 
+Result<Success> Service::ParseSigstop(const std::vector<std::string>& args) {
+    sigstop_ = true;
+    return Success();
+}
+
 Result<Success> Service::ParseSetenv(const std::vector<std::string>& args) {
     environment_vars_.emplace_back(args[1], args[2]);
     return Success();
@@ -674,29 +733,32 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"console",     {0,     1,    &Service::ParseConsole}},
         {"critical",    {0,     0,    &Service::ParseCritical}},
         {"disabled",    {0,     0,    &Service::ParseDisabled}},
+        {"enter_namespace",
+                        {2,     2,    &Service::ParseEnterNamespace}},
+        {"file",        {2,     2,    &Service::ParseFile}},
         {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::ParseGroup}},
         {"interface",   {2,     2,    &Service::ParseInterface}},
         {"ioprio",      {2,     2,    &Service::ParseIoprio}},
-        {"priority",    {1,     1,    &Service::ParsePriority}},
         {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
-        {"oneshot",     {0,     0,    &Service::ParseOneshot}},
-        {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
-        {"override",    {0,     0,    &Service::ParseOverride}},
-        {"oom_score_adjust",
-                        {1,     1,    &Service::ParseOomScoreAdjust}},
-        {"memcg.swappiness",
-                        {1,     1,    &Service::ParseMemcgSwappiness}},
-        {"memcg.soft_limit_in_bytes",
-                        {1,     1,    &Service::ParseMemcgSoftLimitInBytes}},
         {"memcg.limit_in_bytes",
                         {1,     1,    &Service::ParseMemcgLimitInBytes}},
+        {"memcg.soft_limit_in_bytes",
+                        {1,     1,    &Service::ParseMemcgSoftLimitInBytes}},
+        {"memcg.swappiness",
+                        {1,     1,    &Service::ParseMemcgSwappiness}},
         {"namespace",   {1,     2,    &Service::ParseNamespace}},
+        {"oneshot",     {0,     0,    &Service::ParseOneshot}},
+        {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
+        {"oom_score_adjust",
+                        {1,     1,    &Service::ParseOomScoreAdjust}},
+        {"override",    {0,     0,    &Service::ParseOverride}},
+        {"priority",    {1,     1,    &Service::ParsePriority}},
         {"rlimit",      {3,     3,    &Service::ParseProcessRlimit}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
         {"shutdown",    {1,     1,    &Service::ParseShutdown}},
+        {"sigstop",     {0,     0,    &Service::ParseSigstop}},
         {"socket",      {3,     6,    &Service::ParseSocket}},
-        {"file",        {2,     2,    &Service::ParseFile}},
         {"user",        {1,     1,    &Service::ParseUser}},
         {"writepid",    {1,     kMax, &Service::ParseWritepid}},
     };
@@ -775,7 +837,7 @@ Result<Success> Service::Start() {
     if (!seclabel_.empty()) {
         scon = seclabel_;
     } else {
-        auto result = ComputeContextFromExecutable(name_, args_[0]);
+        auto result = ComputeContextFromExecutable(args_[0]);
         if (!result) {
             return result.error();
         }
@@ -794,10 +856,24 @@ Result<Success> Service::Start() {
     if (pid == 0) {
         umask(077);
 
+        if (auto result = EnterNamespaces(); !result) {
+            LOG(FATAL) << "Service '" << name_ << "' could not enter namespaces: " << result.error();
+        }
+
+        if (namespace_flags_ & CLONE_NEWNS) {
+            if (auto result = SetUpMountNamespace(); !result) {
+                LOG(FATAL) << "Service '" << name_
+                           << "' could not set up mount namespace: " << result.error();
+            }
+        }
+
         if (namespace_flags_ & CLONE_NEWPID) {
             // This will fork again to run an init process inside the PID
             // namespace.
-            SetUpPidNamespace(name_);
+            if (auto result = SetUpPidNamespace(); !result) {
+                LOG(FATAL) << "Service '" << name_
+                           << "' could not set up PID namespace: " << result.error();
+            }
         }
 
         for (const auto& [key, value] : environment_vars_) {
@@ -854,7 +930,7 @@ Result<Success> Service::Start() {
         // priority. Aborts on failure.
         SetProcessAttributes();
 
-        if (!ExpandArgsAndExecv(args_)) {
+        if (!ExpandArgsAndExecv(args_, sigstop_)) {
             PLOG(ERROR) << "cannot execve('" << args_[0] << "')";
         }
 
@@ -1125,7 +1201,7 @@ Result<Success> ServiceParser::ParseSection(std::vector<std::string>&& args,
     Subcontext* restart_action_subcontext = nullptr;
     if (subcontexts_) {
         for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix().c_str())) {
+            if (StartsWith(filename, subcontext.path_prefix())) {
                 restart_action_subcontext = &subcontext;
                 break;
             }
@@ -1165,7 +1241,7 @@ bool ServiceParser::IsValidName(const std::string& name) const {
     // Property values can contain any characters, but may only be a certain length.
     // (The latter restriction is needed because `start` and `stop` work by writing
     // the service name to the "ctl.start" and "ctl.stop" properties.)
-    return is_legal_property_name("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
+    return IsLegalPropertyName("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
 }
 
 }  // namespace init

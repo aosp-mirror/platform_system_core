@@ -37,6 +37,8 @@ namespace android {
  *
  * Objects added to the list are copied using the assignment operator,
  * so this must be defined.
+ *
+ * DO NOT USE: please use std::list<T>
  */
 template<typename T> 
 class List 
@@ -327,6 +329,6 @@ List<T>& List<T>::operator=(const List<T>& right)
     return *this;
 }
 
-}; // namespace android
+}  // namespace android
 
 #endif // _LIBS_UTILS_LIST_H

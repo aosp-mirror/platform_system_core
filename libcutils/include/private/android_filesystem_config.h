@@ -55,6 +55,9 @@
  */
 
 #define AID_ROOT 0 /* traditional unix root user */
+/* The following are for LTP and should only be used for testing */
+#define AID_DAEMON 1 /* traditional unix daemon owner */
+#define AID_BIN 2    /* traditional unix binaries owner */
 
 #define AID_SYSTEM 1000 /* system server */
 
@@ -122,6 +125,12 @@
 #define AID_AUTOMOTIVE_EVS 1062  /* Automotive rear and surround view system */
 #define AID_LOWPAN 1063          /* LoWPAN subsystem */
 #define AID_HSM 1064             /* hardware security module subsystem */
+#define AID_RESERVED_DISK 1065   /* GID that has access to reserved disk space */
+#define AID_STATSD 1066          /* statsd daemon */
+#define AID_INCIDENTD 1067       /* incidentd daemon */
+#define AID_SECURE_ELEMENT 1068  /* secure element subsystem */
+#define AID_LMKD 1069            /* low memory killer daemon */
+#define AID_LLKD 1070            /* live lock daemon */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */

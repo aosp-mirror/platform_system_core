@@ -55,7 +55,7 @@ int ion_is_legacy(int fd) {
 
 int ion_open() {
     int fd = open("/dev/ion", O_RDONLY | O_CLOEXEC);
-    if (fd < 0) ALOGE("open /dev/ion failed!\n");
+    if (fd < 0) ALOGE("open /dev/ion failed: %s", strerror(errno));
 
     return fd;
 }
@@ -69,7 +69,7 @@ int ion_close(int fd) {
 static int ion_ioctl(int fd, int req, void* arg) {
     int ret = ioctl(fd, req, arg);
     if (ret < 0) {
-        ALOGE("ioctl %x failed with code %d: %s\n", req, ret, strerror(errno));
+        ALOGE("ioctl %x failed with code %d: %s", req, ret, strerror(errno));
         return -errno;
     }
     return ret;
@@ -115,12 +115,12 @@ int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot, int flags
     ret = ion_ioctl(fd, ION_IOC_MAP, &data);
     if (ret < 0) return ret;
     if (data.fd < 0) {
-        ALOGE("map ioctl returned negative fd\n");
+        ALOGE("map ioctl returned negative fd");
         return -EINVAL;
     }
     tmp_ptr = mmap(NULL, length, prot, flags, data.fd, offset);
     if (tmp_ptr == MAP_FAILED) {
-        ALOGE("mmap failed: %s\n", strerror(errno));
+        ALOGE("mmap failed: %s", strerror(errno));
         return -errno;
     }
     *map_fd = data.fd;
@@ -140,7 +140,7 @@ int ion_share(int fd, ion_user_handle_t handle, int* share_fd) {
     ret = ion_ioctl(fd, ION_IOC_SHARE, &data);
     if (ret < 0) return ret;
     if (data.fd < 0) {
-        ALOGE("share ioctl returned negative fd\n");
+        ALOGE("share ioctl returned negative fd");
         return -EINVAL;
     }
     *share_fd = data.fd;

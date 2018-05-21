@@ -24,7 +24,6 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stdatomic.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -70,7 +69,7 @@ static bool atrace_is_cmdline_match(const char* cmdline)
     for (int i = 0; i < count; i++) {
         snprintf(buf, sizeof(buf), "debug.atrace.app_%d", i);
         property_get(buf, value, "");
-        if (strcmp(value, cmdline) == 0) {
+        if (strcmp(value, "*") == 0 || strcmp(value, cmdline) == 0) {
             return true;
         }
     }

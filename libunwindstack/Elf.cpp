@@ -20,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 #define LOG_TAG "unwind"
 #include <log/log.h>
@@ -34,6 +35,10 @@
 #include "Symbols.h"
 
 namespace unwindstack {
+
+bool Elf::cache_enabled_;
+std::unordered_map<std::string, std::pair<std::shared_ptr<Elf>, bool>>* Elf::cache_;
+std::mutex* Elf::cache_lock_;
 
 bool Elf::Init(bool init_gnu_debugdata) {
   load_bias_ = 0;
@@ -79,6 +84,7 @@ void Elf::InitGnuDebugdata() {
   uint64_t load_bias;
   if (gnu->Init(&load_bias)) {
     gnu->InitHeaders();
+    interface_->SetGnuDebugdataInterface(gnu);
   } else {
     // Free all of the memory associated with the gnu_debugdata section.
     gnu_debugdata_memory_.reset(nullptr);
@@ -102,30 +108,73 @@ bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offse
                                                      addr, load_bias_, name, func_offset)));
 }
 
+bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
+  if (!valid_) {
+    return false;
+  }
+
+  if (!interface_->GetGlobalVariable(name, memory_address) &&
+      (gnu_debugdata_interface_ == nullptr ||
+       !gnu_debugdata_interface_->GetGlobalVariable(name, memory_address))) {
+    return false;
+  }
+
+  // Adjust by the load bias.
+  if (*memory_address < load_bias_) {
+    return false;
+  }
+
+  *memory_address -= load_bias_;
+
+  // If this winds up in the dynamic section, then we might need to adjust
+  // the address.
+  uint64_t dynamic_end = interface_->dynamic_vaddr() + interface_->dynamic_size();
+  if (*memory_address >= interface_->dynamic_vaddr() && *memory_address < dynamic_end) {
+    if (interface_->dynamic_vaddr() > interface_->dynamic_offset()) {
+      *memory_address -= interface_->dynamic_vaddr() - interface_->dynamic_offset();
+    } else {
+      *memory_address += interface_->dynamic_offset() - interface_->dynamic_vaddr();
+    }
+  }
+  return true;
+}
+
+void Elf::GetLastError(ErrorData* data) {
+  if (valid_) {
+    *data = interface_->last_error();
+  }
+}
+
+ErrorCode Elf::GetLastErrorCode() {
+  if (valid_) {
+    return interface_->LastErrorCode();
+  }
+  return ERROR_NONE;
+}
+
+uint64_t Elf::GetLastErrorAddress() {
+  if (valid_) {
+    return interface_->LastErrorAddress();
+  }
+  return 0;
+}
+
 // The relative pc is always relative to the start of the map from which it comes.
-bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, uint64_t elf_offset, Regs* regs,
-               Memory* process_memory, bool* finished) {
+bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, Regs* regs, Memory* process_memory,
+               bool* finished) {
   if (!valid_) {
     return false;
   }
 
   // The relative pc expectd by StepIfSignalHandler is relative to the start of the elf.
-  if (regs->StepIfSignalHandler(rel_pc + elf_offset, this, process_memory)) {
+  if (regs->StepIfSignalHandler(rel_pc, this, process_memory)) {
     *finished = false;
     return true;
   }
 
-  // Adjust the load bias to get the real relative pc.
-  if (adjusted_rel_pc < load_bias_) {
-    return false;
-  }
-  adjusted_rel_pc -= load_bias_;
-
   // Lock during the step which can update information in the object.
   std::lock_guard<std::mutex> guard(lock_);
-  return interface_->Step(adjusted_rel_pc, regs, process_memory, finished) ||
-         (gnu_debugdata_interface_ &&
-          gnu_debugdata_interface_->Step(adjusted_rel_pc, regs, process_memory, finished));
+  return interface_->Step(adjusted_rel_pc, load_bias_, regs, process_memory, finished);
 }
 
 bool Elf::IsValidElf(Memory* memory) {
@@ -165,6 +214,23 @@ void Elf::GetInfo(Memory* memory, bool* valid, uint64_t* size) {
   } else {
     *valid = false;
   }
+}
+
+bool Elf::IsValidPc(uint64_t pc) {
+  if (!valid_ || pc < load_bias_) {
+    return false;
+  }
+  pc -= load_bias_;
+
+  if (interface_->IsValidPc(pc)) {
+    return true;
+  }
+
+  if (gnu_debugdata_interface_ != nullptr && gnu_debugdata_interface_->IsValidPc(pc)) {
+    return true;
+  }
+
+  return false;
 }
 
 ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
@@ -238,6 +304,80 @@ uint64_t Elf::GetLoadBias(Memory* memory) {
     return ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(memory);
   }
   return 0;
+}
+
+void Elf::SetCachingEnabled(bool enable) {
+  if (!cache_enabled_ && enable) {
+    cache_enabled_ = true;
+    cache_ = new std::unordered_map<std::string, std::pair<std::shared_ptr<Elf>, bool>>;
+    cache_lock_ = new std::mutex;
+  } else if (cache_enabled_ && !enable) {
+    cache_enabled_ = false;
+    delete cache_;
+    delete cache_lock_;
+  }
+}
+
+void Elf::CacheLock() {
+  cache_lock_->lock();
+}
+
+void Elf::CacheUnlock() {
+  cache_lock_->unlock();
+}
+
+void Elf::CacheAdd(MapInfo* info) {
+  // If elf_offset != 0, then cache both name:offset and name.
+  // The cached name is used to do lookups if multiple maps for the same
+  // named elf file exist.
+  // For example, if there are two maps boot.odex:1000 and boot.odex:2000
+  // where each reference the entire boot.odex, the cache will properly
+  // use the same cached elf object.
+
+  if (info->offset == 0 || info->elf_offset != 0) {
+    (*cache_)[info->name] = std::make_pair(info->elf, true);
+  }
+
+  if (info->offset != 0) {
+    // The second element in the pair indicates whether elf_offset should
+    // be set to offset when getting out of the cache.
+    (*cache_)[info->name + ':' + std::to_string(info->offset)] =
+        std::make_pair(info->elf, info->elf_offset != 0);
+  }
+}
+
+bool Elf::CacheAfterCreateMemory(MapInfo* info) {
+  if (info->name.empty() || info->offset == 0 || info->elf_offset == 0) {
+    return false;
+  }
+
+  auto entry = cache_->find(info->name);
+  if (entry == cache_->end()) {
+    return false;
+  }
+
+  // In this case, the whole file is the elf, and the name has already
+  // been cached. Add an entry at name:offset to get this directly out
+  // of the cache next time.
+  info->elf = entry->second.first;
+  (*cache_)[info->name + ':' + std::to_string(info->offset)] = std::make_pair(info->elf, true);
+  return true;
+}
+
+bool Elf::CacheGet(MapInfo* info) {
+  std::string name(info->name);
+  if (info->offset != 0) {
+    name += ':' + std::to_string(info->offset);
+  }
+  auto entry = cache_->find(name);
+  if (entry != cache_->end()) {
+    info->elf = entry->second.first;
+    if (entry->second.second) {
+      info->elf_offset = info->offset;
+    }
+    return true;
+  }
+  return false;
 }
 
 }  // namespace unwindstack

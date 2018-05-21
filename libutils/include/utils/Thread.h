@@ -36,6 +36,8 @@
 namespace android {
 // ---------------------------------------------------------------------------
 
+// DO NOT USE: please use std::thread
+
 class Thread : virtual public RefBase
 {
 public:
@@ -108,8 +110,7 @@ private:
 #endif
 };
 
-
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 #endif // _LIBS_UTILS_THREAD_H

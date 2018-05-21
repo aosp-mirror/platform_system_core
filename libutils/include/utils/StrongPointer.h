@@ -239,7 +239,7 @@ void sp<T>::set_pointer(T* ptr) {
     m_ptr = ptr;
 }
 
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 

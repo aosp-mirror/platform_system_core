@@ -79,6 +79,35 @@ TEST_F(MemoryRemoteTest, read) {
   ASSERT_TRUE(Detach(pid));
 }
 
+TEST_F(MemoryRemoteTest, read_large) {
+  static constexpr size_t kTotalPages = 245;
+  std::vector<uint8_t> src(kTotalPages * getpagesize());
+  for (size_t i = 0; i < kTotalPages; i++) {
+    memset(&src[i * getpagesize()], i, getpagesize());
+  }
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    while (true)
+      ;
+    exit(1);
+  }
+  ASSERT_LT(0, pid);
+  TestScopedPidReaper reap(pid);
+
+  ASSERT_TRUE(Attach(pid));
+
+  MemoryRemote remote(pid);
+
+  std::vector<uint8_t> dst(kTotalPages * getpagesize());
+  ASSERT_TRUE(remote.ReadFully(reinterpret_cast<uint64_t>(src.data()), dst.data(), src.size()));
+  for (size_t i = 0; i < kTotalPages * getpagesize(); i++) {
+    ASSERT_EQ(i / getpagesize(), dst[i]) << "Failed at byte " << i;
+  }
+
+  ASSERT_TRUE(Detach(pid));
+}
+
 TEST_F(MemoryRemoteTest, read_partial) {
   char* mapping = static_cast<char*>(
       mmap(nullptr, 4 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));

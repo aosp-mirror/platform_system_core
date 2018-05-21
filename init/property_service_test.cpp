@@ -45,11 +45,13 @@ TEST(property_service, very_long_name_35166374) {
   // ...so we can send it a malformed request.
   uint32_t msg = PROP_MSG_SETPROP2;
   uint32_t size = 0xffffffff;
-  uint32_t data = 0xdeadbeef;
 
   ASSERT_EQ(static_cast<ssize_t>(sizeof(msg)), send(fd, &msg, sizeof(msg), 0));
   ASSERT_EQ(static_cast<ssize_t>(sizeof(size)), send(fd, &size, sizeof(size), 0));
-  ASSERT_EQ(static_cast<ssize_t>(sizeof(data)), send(fd, &data, sizeof(data), 0));
+  uint32_t result = 0;
+  ASSERT_EQ(static_cast<ssize_t>(sizeof(result)),
+            TEMP_FAILURE_RETRY(recv(fd, &result, sizeof(result), MSG_WAITALL)));
+  EXPECT_EQ(static_cast<uint32_t>(PROP_ERROR_READ_DATA), result);
   ASSERT_EQ(0, close(fd));
 }
 

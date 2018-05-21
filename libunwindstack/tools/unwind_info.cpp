@@ -53,8 +53,7 @@ void DumpArm(ElfInterfaceArm* interface) {
       printf("  PC 0x%" PRIx64, addr + load_bias);
       uint64_t func_offset;
       uint64_t pc = addr + load_bias;
-      // This might be a thumb function, so set the low bit.
-      if (interface->GetFunctionName(pc | 1, load_bias, &name, &func_offset) && !name.empty()) {
+      if (interface->GetFunctionName(pc, load_bias, &name, &func_offset) && !name.empty()) {
         printf(" <%s>", name.c_str());
       }
       printf("\n");
@@ -87,7 +86,7 @@ void DumpDwarfSection(ElfInterface* interface, DwarfSection* section, uint64_t l
   for (const DwarfFde* fde : *section) {
     // Sometimes there are entries that have empty length, skip those since
     // they don't contain any interesting information.
-    if (fde->pc_start == fde->pc_end) {
+    if (fde == nullptr || fde->pc_start == fde->pc_end) {
       continue;
     }
     printf("\n  PC 0x%" PRIx64, fde->pc_start + load_bias);
@@ -118,6 +117,11 @@ int GetElfInfo(const char* file, uint64_t offset) {
   if (!elf.Init(true) || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;
+  }
+
+  std::string soname;
+  if (elf.GetSoname(&soname)) {
+    printf("Soname: %s\n", soname.c_str());
   }
 
   ElfInterface* interface = elf.interface();

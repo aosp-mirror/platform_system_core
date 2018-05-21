@@ -42,9 +42,9 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parsenetaddress.h>
-#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <build/version.h>
 
 #include "adb_auth.h"
 #include "adb_io.h"
@@ -67,8 +67,8 @@ std::string adb_version() {
         "Android Debug Bridge version %d.%d.%d\n"
         "Version %s\n"
         "Installed as %s\n",
-        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION, ADB_VERSION,
-        android::base::GetExecutablePath().c_str());
+        ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
+        android::build::GetBuildNumber().c_str(), android::base::GetExecutablePath().c_str());
 }
 
 void fatal(const char *fmt, ...) {
@@ -105,43 +105,48 @@ void fatal_errno(const char* fmt, ...) {
 }
 
 uint32_t calculate_apacket_checksum(const apacket* p) {
-    const unsigned char* x = reinterpret_cast<const unsigned char*>(p->data);
     uint32_t sum = 0;
-    size_t count = p->msg.data_length;
-
-    while (count-- > 0) {
-        sum += *x++;
+    for (size_t i = 0; i < p->msg.data_length; ++i) {
+        sum += static_cast<uint8_t>(p->payload[i]);
     }
-
     return sum;
 }
 
 apacket* get_apacket(void)
 {
-    apacket* p = reinterpret_cast<apacket*>(malloc(sizeof(apacket)));
+    apacket* p = new apacket();
     if (p == nullptr) {
       fatal("failed to allocate an apacket");
     }
 
-    memset(p, 0, sizeof(apacket) - MAX_PAYLOAD);
+    memset(&p->msg, 0, sizeof(p->msg));
     return p;
 }
 
 void put_apacket(apacket *p)
 {
-    free(p);
+    delete p;
 }
 
 void handle_online(atransport *t)
 {
     D("adb: online");
     t->online = 1;
+    t->SetConnectionEstablished(true);
 }
 
 void handle_offline(atransport *t)
 {
-    D("adb: offline");
-    //Close the associated usb
+    if (t->GetConnectionState() == kCsOffline) {
+        LOG(INFO) << t->serial_name() << ": already offline";
+        return;
+    }
+
+    LOG(INFO) << t->serial_name() << ": offline";
+
+    t->SetConnectionState(kCsOffline);
+
+    // Close the associated usb
     t->online = 0;
 
     // This is necessary to avoid a race condition that occurred when a transport closes
@@ -155,8 +160,7 @@ void handle_offline(atransport *t)
 #define DUMPMAX 32
 void print_packet(const char *label, apacket *p)
 {
-    char *tag;
-    char *x;
+    const char* tag;
     unsigned count;
 
     switch(p->msg.command){
@@ -173,15 +177,15 @@ void print_packet(const char *label, apacket *p)
     fprintf(stderr, "%s: %s %08x %08x %04x \"",
             label, tag, p->msg.arg0, p->msg.arg1, p->msg.data_length);
     count = p->msg.data_length;
-    x = (char*) p->data;
-    if(count > DUMPMAX) {
+    const char* x = p->payload.data();
+    if (count > DUMPMAX) {
         count = DUMPMAX;
         tag = "\n";
     } else {
         tag = "\"\n";
     }
-    while(count-- > 0){
-        if((*x >= ' ') && (*x < 127)) {
+    while (count-- > 0) {
+        if ((*x >= ' ') && (*x < 127)) {
             fputc(*x, stderr);
         } else {
             fputc('.', stderr);
@@ -240,7 +244,10 @@ void send_connect(atransport* t) {
     D("Calling send_connect");
     apacket* cp = get_apacket();
     cp->msg.command = A_CNXN;
-    cp->msg.arg0 = t->get_protocol_version();
+    // Send the max supported version, but because the transport is
+    // initialized to A_VERSION_MIN, this will be compatible with every
+    // device.
+    cp->msg.arg0 = A_VERSION;
     cp->msg.arg1 = t->get_max_payload();
 
     std::string connection_str = get_connection_string();
@@ -251,8 +258,8 @@ void send_connect(atransport* t) {
                    << connection_str.length() << ")";
     }
 
-    memcpy(cp->data, connection_str.c_str(), connection_str.length());
-    cp->msg.data_length = connection_str.length();
+    cp->payload.assign(connection_str.begin(), connection_str.end());
+    cp->msg.data_length = cp->payload.size();
 
     send_packet(cp, t);
 }
@@ -320,14 +327,10 @@ void parse_banner(const std::string& banner, atransport* t) {
 }
 
 static void handle_new_connection(atransport* t, apacket* p) {
-    if (t->GetConnectionState() != kCsOffline) {
-        t->SetConnectionState(kCsOffline);
-        handle_offline(t);
-    }
+    handle_offline(t);
 
     t->update_version(p->msg.arg0, p->msg.arg1);
-    std::string banner(reinterpret_cast<const char*>(p->data),
-                       p->msg.data_length);
+    std::string banner(p->payload.begin(), p->payload.end());
     parse_banner(banner, t);
 
 #if ADB_HOST
@@ -351,21 +354,9 @@ void handle_packet(apacket *p, atransport *t)
             ((char*) (&(p->msg.command)))[2],
             ((char*) (&(p->msg.command)))[3]);
     print_packet("recv", p);
+    CHECK_EQ(p->payload.size(), p->msg.data_length);
 
     switch(p->msg.command){
-    case A_SYNC:
-        if (p->msg.arg0){
-            send_packet(p, t);
-#if ADB_HOST
-            send_connect(t);
-#endif
-        } else {
-            t->SetConnectionState(kCsOffline);
-            handle_offline(t);
-            send_packet(p, t);
-        }
-        return;
-
     case A_CNXN:  // CONNECT(version, maxdata, "system-id-string")
         handle_new_connection(t, p);
         break;
@@ -374,14 +365,16 @@ void handle_packet(apacket *p, atransport *t)
         switch (p->msg.arg0) {
 #if ADB_HOST
             case ADB_AUTH_TOKEN:
-                if (t->GetConnectionState() == kCsOffline) {
-                    t->SetConnectionState(kCsUnauthorized);
+                if (t->GetConnectionState() != kCsAuthorizing) {
+                    t->SetConnectionState(kCsAuthorizing);
                 }
-                send_auth_response(p->data, p->msg.data_length, t);
+                send_auth_response(p->payload.data(), p->msg.data_length, t);
                 break;
 #else
-            case ADB_AUTH_SIGNATURE:
-                if (adbd_auth_verify(t->token, sizeof(t->token), p->data, p->msg.data_length)) {
+            case ADB_AUTH_SIGNATURE: {
+                // TODO: Switch to string_view.
+                std::string signature(p->payload.begin(), p->payload.end());
+                if (adbd_auth_verify(t->token, sizeof(t->token), signature)) {
                     adbd_auth_verified(t);
                     t->failed_auth_attempts = 0;
                 } else {
@@ -389,9 +382,10 @@ void handle_packet(apacket *p, atransport *t)
                     send_auth_request(t);
                 }
                 break;
+            }
 
             case ADB_AUTH_RSAPUBLICKEY:
-                adbd_auth_confirm_key(p->data, p->msg.data_length, t);
+                adbd_auth_confirm_key(p->payload.data(), p->msg.data_length, t);
                 break;
 #endif
             default:
@@ -403,9 +397,9 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_OPEN: /* OPEN(local-id, 0, "destination") */
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
-            char *name = (char*) p->data;
-            name[p->msg.data_length > 0 ? p->msg.data_length - 1 : 0] = 0;
-            asocket* s = create_local_service_socket(name, t);
+            // TODO: Switch to string_view.
+            std::string address(p->payload.begin(), p->payload.end());
+            asocket* s = create_local_service_socket(address.c_str(), t);
             if (s == nullptr) {
                 send_close(0, p->msg.arg0, t);
             } else {
@@ -471,13 +465,10 @@ void handle_packet(apacket *p, atransport *t)
             asocket* s = find_local_socket(p->msg.arg1, p->msg.arg0);
             if (s) {
                 unsigned rid = p->msg.arg0;
-                p->len = p->msg.data_length;
-
-                if (s->enqueue(s, p) == 0) {
+                if (s->enqueue(s, std::move(p->payload)) == 0) {
                     D("Enqueue the socket");
                     send_ready(s->id, rid, t);
                 }
-                return;
             }
         }
         break;
@@ -943,8 +934,7 @@ int launch_server(const std::string& socket_spec) {
 // Try to handle a network forwarding request.
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
-int handle_forward_request(const char* service, TransportType type, const char* serial,
-                           TransportId transport_id, int reply_fd) {
+int handle_forward_request(const char* service, atransport* transport, int reply_fd) {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
         std::string listeners = format_listeners();
@@ -994,14 +984,6 @@ int handle_forward_request(const char* service, TransportType type, const char* 
                 SendFail(reply_fd, android::base::StringPrintf("bad forward: %s", service));
                 return 1;
             }
-        }
-
-        std::string error_msg;
-        atransport* transport =
-            acquire_one_transport(type, serial, transport_id, nullptr, &error_msg);
-        if (!transport) {
-            SendFail(reply_fd, error_msg);
-            return 1;
         }
 
         std::string error;
@@ -1067,7 +1049,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         SendOkay(reply_fd);
 
         // Rely on process exit to close the socket for us.
-        android::base::quick_exit(0);
+        exit(0);
     }
 
     // "transport:" is used for switching transport with a specified serial number
@@ -1121,14 +1103,11 @@ int handle_host_request(const char* service, TransportType type, const char* ser
     if (!strcmp(service, "reconnect-offline")) {
         std::string response;
         close_usb_devices([&response](const atransport* transport) {
-            switch (transport->GetConnectionState()) {
-                case kCsOffline:
-                case kCsUnauthorized:
-                    response += "reconnecting " + transport->serial_name() + "\n";
-                    return true;
-                default:
-                    return false;
+            if (!ConnectionStateIsOnline(transport->GetConnectionState())) {
+                response += "reconnecting " + transport->serial_name() + "\n";
+                return true;
             }
+            return false;
         });
         if (!response.empty()) {
             response.resize(response.size() - 1);
@@ -1237,7 +1216,13 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         return SendOkay(reply_fd, response);
     }
 
-    int ret = handle_forward_request(service, type, serial, transport_id, reply_fd);
+    std::string error;
+    atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
+    if (!t) {
+        return -1;
+    }
+
+    int ret = handle_forward_request(service, t, reply_fd);
     if (ret >= 0)
       return ret - 1;
     return -1;

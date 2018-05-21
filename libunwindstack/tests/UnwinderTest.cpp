@@ -60,7 +60,7 @@ class UnwinderTest : public ::testing::Test {
     maps_.FakeClear();
     MapInfo* info = new MapInfo(0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so");
     ElfFake* elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
@@ -73,29 +73,49 @@ class UnwinderTest : public ::testing::Test {
 
     info = new MapInfo(0x20000, 0x22000, 0, PROT_READ | PROT_WRITE, "/system/fake/libunwind.so");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x23000, 0x24000, 0, PROT_READ | PROT_WRITE, "/fake/libanother.so");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk");
     elf = new ElfFake(new MemoryFake);
-    info->elf = elf;
+    info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
     info = new MapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
+    maps_.FakeAddMapInfo(info);
+
+    info = new MapInfo(0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.vdex");
+    info->load_bias = 0;
+    maps_.FakeAddMapInfo(info);
+
+    info = new MapInfo(0xa5000, 0xa6000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       "/fake/fake_load_bias.so");
+    elf = new ElfFake(new MemoryFake);
+    info->elf.reset(elf);
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    elf->FakeSetLoadBias(0x5000);
+    maps_.FakeAddMapInfo(info);
+
+    info = new MapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       "/fake/fake_offset.oat");
+    elf = new ElfFake(new MemoryFake);
+    info->elf.reset(elf);
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    info->elf_offset = 0x8000;
     maps_.FakeAddMapInfo(info);
 
     process_memory_.reset(new MemoryFake);
@@ -113,7 +133,7 @@ class UnwinderTest : public ::testing::Test {
 };
 
 MapsFake UnwinderTest::maps_;
-RegsFake UnwinderTest::regs_(5, 0);
+RegsFake UnwinderTest::regs_(5);
 std::shared_ptr<Memory> UnwinderTest::process_memory_(nullptr);
 
 TEST_F(UnwinderTest, multiple_frames) {
@@ -121,14 +141,15 @@ TEST_F(UnwinderTest, multiple_frames) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
 
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0x1102, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x1202, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -175,15 +196,133 @@ TEST_F(UnwinderTest, multiple_frames) {
   EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
 
-TEST_F(UnwinderTest, non_zero_map_offset) {
+TEST_F(UnwinderTest, multiple_frames_dont_resolve_names) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
+
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0x1102, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x1202, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.SetResolveNames(false);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(3U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0x100U, frame->rel_pc);
+  EXPECT_EQ(0x1100U, frame->pc);
+  EXPECT_EQ(0x10010U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[2];
+  EXPECT_EQ(2U, frame->num);
+  EXPECT_EQ(0x200U, frame->rel_pc);
+  EXPECT_EQ(0x1200U, frame->pc);
+  EXPECT_EQ(0x10020U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, non_zero_load_bias) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
 
-  regs_.FakeSetPc(0x43000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0xa5500);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x5500U, frame->rel_pc);
+  EXPECT_EQ(0xa5500U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake_load_bias.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa5000U, frame->map_start);
+  EXPECT_EQ(0xa6000U, frame->map_end);
+  EXPECT_EQ(0x5000U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, non_zero_elf_offset) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.set_pc(0xa7500);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x8500U, frame->rel_pc);
+  EXPECT_EQ(0xa7500U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake_offset.oat", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa7000U, frame->map_start);
+  EXPECT_EQ(0xa8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, non_zero_map_offset) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.set_pc(0x43000);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -210,14 +349,15 @@ TEST_F(UnwinderTest, no_frames_after_finished) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame3", 3));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame4", 4));
 
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0x1000, 0x10000, true));
   ElfInterfaceFake::FakePushStepData(StepData(0x1102, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x1202, 0x10020, false));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -243,11 +383,12 @@ TEST_F(UnwinderTest, max_frames) {
     ElfInterfaceFake::FakePushStepData(StepData(0x1102 + i * 0x100, 0x10010 + i * 0x10, false));
   }
 
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
 
   Unwinder unwinder(20, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_MAX_FRAMES_EXCEEDED, unwinder.LastErrorCode());
 
   ASSERT_EQ(20U, unwinder.NumFrames());
 
@@ -274,8 +415,8 @@ TEST_F(UnwinderTest, verify_frames_skipped) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
 
-  regs_.FakeSetPc(0x20000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x20000);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0x23002, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x23102, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x20002, 0x10030, false));
@@ -288,6 +429,7 @@ TEST_F(UnwinderTest, verify_frames_skipped) {
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   std::vector<std::string> skip_libs{"libunwind.so", "libanother.so"};
   unwinder.Unwind(&skip_libs);
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -339,13 +481,14 @@ TEST_F(UnwinderTest, sp_not_in_map) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
 
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x63000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x63000);
   ElfInterfaceFake::FakePushStepData(StepData(0x21002, 0x50020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(2U, unwinder.NumFrames());
 
@@ -384,14 +527,15 @@ TEST_F(UnwinderTest, pc_in_device_stops_unwind) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
 
-  regs_.FakeSetPc(0x13000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x13000);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0x23002, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x23102, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 }
@@ -402,14 +546,15 @@ TEST_F(UnwinderTest, sp_in_device_stops_unwind) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame2", 2));
 
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x13000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x13000);
   ElfInterfaceFake::FakePushStepData(StepData(0x23002, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x23102, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 }
@@ -418,11 +563,12 @@ TEST_F(UnwinderTest, sp_in_device_stops_unwind) {
 TEST_F(UnwinderTest, pc_without_map) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
 
-  regs_.FakeSetPc(0x41000);
-  regs_.FakeSetSp(0x13000);
+  regs_.set_pc(0x41000);
+  regs_.set_sp(0x13000);
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_INVALID_MAP, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -447,8 +593,8 @@ TEST_F(UnwinderTest, speculative_frame) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
 
   // Fake as if code called a nullptr function.
-  regs_.FakeSetPc(0);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0);
+  regs_.set_sp(0x10000);
   regs_.FakeSetReturnAddress(0x1202);
   regs_.FakeSetReturnAddressValid(true);
 
@@ -457,6 +603,7 @@ TEST_F(UnwinderTest, speculative_frame) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -510,13 +657,14 @@ TEST_F(UnwinderTest, speculative_frame_removed) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
 
   // Fake as if code called a nullptr function.
-  regs_.FakeSetPc(0);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0);
+  regs_.set_sp(0x10000);
   regs_.FakeSetReturnAddress(0x1202);
   regs_.FakeSetReturnAddressValid(true);
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(1U, unwinder.NumFrames());
 
@@ -543,8 +691,8 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame3", 3));
 
   // Fake as if code called a nullptr function.
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0x43402, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x53502, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
@@ -552,6 +700,7 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   std::vector<std::string> suffixes{"oat"};
   unwinder.Unwind(nullptr, &suffixes);
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
   ASSERT_EQ(2U, unwinder.NumFrames());
   // Make sure the elf was not initialized.
@@ -596,8 +745,8 @@ TEST_F(UnwinderTest, sp_pc_do_not_change) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame3", 3));
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame4", 4));
 
-  regs_.FakeSetPc(0x1000);
-  regs_.FakeSetSp(0x10000);
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
   ElfInterfaceFake::FakePushStepData(StepData(0x33402, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
@@ -607,6 +756,7 @@ TEST_F(UnwinderTest, sp_pc_do_not_change) {
 
   Unwinder unwinder(64, &maps_, &regs_, process_memory_);
   unwinder.Unwind();
+  EXPECT_EQ(ERROR_REPEATED_FRAME, unwinder.LastErrorCode());
 
   ASSERT_EQ(3U, unwinder.NumFrames());
 
@@ -645,6 +795,146 @@ TEST_F(UnwinderTest, sp_pc_do_not_change) {
   EXPECT_EQ(0x10020U, frame->sp);
   EXPECT_EQ("Frame2", frame->function_name);
   EXPECT_EQ(2U, frame->function_offset);
+  EXPECT_EQ("/fake/compressed.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x33000U, frame->map_start);
+  EXPECT_EQ(0x34000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, dex_pc_in_map) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
+  regs_.FakeSetDexPc(0xa3400);
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(2U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x400U, frame->rel_pc);
+  EXPECT_EQ(0xa3400U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.vdex", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa3000U, frame->map_start);
+  EXPECT_EQ(0xa4000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, dex_pc_not_in_map) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
+  regs_.FakeSetDexPc(0x50000);
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(2U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x50000U, frame->rel_pc);
+  EXPECT_EQ(0x50000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0U, frame->map_start);
+  EXPECT_EQ(0U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(0, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, dex_pc_multiple_frames) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
+  regs_.FakeSetDexPc(0xa3400);
+  ElfInterfaceFake::FakePushStepData(StepData(0x33402, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(3U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x400U, frame->rel_pc);
+  EXPECT_EQ(0xa3400U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.vdex", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa3000U, frame->map_start);
+  EXPECT_EQ(0xa4000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[2];
+  EXPECT_EQ(2U, frame->num);
+  EXPECT_EQ(0x400U, frame->rel_pc);
+  EXPECT_EQ(0x33400U, frame->pc);
+  EXPECT_EQ(0x10010U, frame->sp);
+  EXPECT_EQ("Frame1", frame->function_name);
+  EXPECT_EQ(1U, frame->function_offset);
   EXPECT_EQ("/fake/compressed.so", frame->map_name);
   EXPECT_EQ(0U, frame->map_offset);
   EXPECT_EQ(0x33000U, frame->map_start);
