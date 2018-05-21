@@ -9,11 +9,12 @@ cc_library {
 
     srcs: [
         "autosuspend.c",
-        "autosuspend_wakeup_count.c",
+        "autosuspend_wakeup_count.cpp",
     ],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
     shared_libs: [
+        "libbase",
         "liblog",
         "libcutils",
     ],

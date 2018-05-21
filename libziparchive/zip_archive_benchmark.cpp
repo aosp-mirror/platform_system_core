@@ -84,4 +84,4 @@ static void Iterate_all_files(benchmark::State& state) {
 }
 BENCHMARK(Iterate_all_files);
 
-BENCHMARK_MAIN()
+BENCHMARK_MAIN();

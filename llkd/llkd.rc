@@ -1,0 +1,49 @@
+# eng default for ro.llk.enable and ro.khungtask.enable
+on property:ro.debuggable=*
+    setprop llk.enable ${ro.llk.enable:-0}
+    setprop khungtask.enable ${ro.khungtask.enable:-0}
+
+on property:ro.debuggable=1
+    setprop llk.enable ${ro.llk.enable:-1}
+    setprop khungtask.enable ${ro.khungtask.enable:-1}
+
+on property:ro.llk.enable=eng
+    setprop llk.enable ${ro.debuggable:-0}
+
+on property:ro.khungtask.enable=eng
+    setprop khungtask.enable ${ro.debuggable:-0}
+
+on property:llk.enable=1
+    setprop llk.enable true
+
+on property:llk.enable=0
+    setprop llk.enable false
+
+on property:khungtask.enable=1
+    setprop khungtask.enable true
+
+on property:khungtask.enable=0
+    setprop khungtask.enable false
+
+# Configure [khungtaskd]
+on property:khungtask.enable=true
+    write /proc/sys/kernel/hung_task_timeout_secs ${ro.khungtask.timeout:-720}
+    write /proc/sys/kernel/hung_task_warnings 65535
+    write /proc/sys/kernel/hung_task_check_count 65535
+    write /proc/sys/kernel/hung_task_panic 1
+
+on property:khungtask.enable=false
+    write /proc/sys/kernel/hung_task_panic 0
+
+on property:llk.enable=true
+    start llkd
+
+service llkd /system/bin/llkd
+    class late_start
+    disabled
+    user llkd
+    group llkd readproc
+    capabilities KILL IPC_LOCK
+    file /dev/kmsg w
+    file /proc/sysrq-trigger w
+    writepid /dev/cpuset/system-background/tasks

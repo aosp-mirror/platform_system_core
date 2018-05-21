@@ -21,6 +21,10 @@
 
 namespace  android {
 
+// DO NOT USE: please use
+// - C++ lambda
+// - class with well-defined and specific functionality and semantics
+
 class Functor {
 public:
     Functor() {}
@@ -28,6 +32,6 @@ public:
     virtual status_t operator ()(int /*what*/, void* /*data*/) { return NO_ERROR; }
 };
 
-}; // namespace android
+}  // namespace android
 
 #endif // ANDROID_FUNCTOR_H

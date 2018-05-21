@@ -26,21 +26,21 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOT_H_
-#define _FASTBOOT_H_
+#pragma once
 
 #include <inttypes.h>
 #include <stdlib.h>
 
 #include <string>
 
-#include "transport.h"
+#include <bootimg.h>
 
+class Transport;
 struct sparse_file;
 
 /* protocol.c - fastboot protocol */
-int fb_command(Transport* transport, const char* cmd);
-int fb_command_response(Transport* transport, const char* cmd, char* response);
+int fb_command(Transport* transport, const std::string& cmd);
+int fb_command_response(Transport* transport, const std::string& cmd, char* response);
 int64_t fb_download_data(Transport* transport, const void* data, uint32_t size);
 int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size);
 int fb_download_data_sparse(Transport* transport, struct sparse_file* s);
@@ -52,32 +52,55 @@ const std::string fb_get_error();
 
 /* engine.c - high level command queue engine */
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value);
-void fb_queue_flash(const char *ptn, void *data, uint32_t sz);
-void fb_queue_flash_fd(const char *ptn, int fd, uint32_t sz);
-void fb_queue_flash_sparse(const char* ptn, struct sparse_file* s, uint32_t sz, size_t current,
-                           size_t total);
-void fb_queue_erase(const char *ptn);
-void fb_queue_format(const char *ptn, int skip_if_not_supported, int32_t max_chunk_sz);
-void fb_queue_require(const char *prod, const char *var, bool invert,
-                      size_t nvalues, const char **value);
-void fb_queue_display(const char *var, const char *prettyname);
-void fb_queue_query_save(const char *var, char *dest, uint32_t dest_size);
+void fb_queue_flash(const std::string& partition, void* data, uint32_t sz);
+void fb_queue_flash_fd(const std::string& partition, int fd, uint32_t sz);
+void fb_queue_flash_sparse(const std::string& partition, struct sparse_file* s, uint32_t sz,
+                           size_t current, size_t total);
+void fb_queue_erase(const std::string& partition);
+void fb_queue_format(const std::string& partition, int skip_if_not_supported, int32_t max_chunk_sz);
+void fb_queue_require(const std::string& prod, const std::string& var, bool invert, size_t nvalues,
+                      const char** values);
+void fb_queue_display(const std::string& label, const std::string& var);
+void fb_queue_query_save(const std::string& var, char* dest, uint32_t dest_size);
 void fb_queue_reboot(void);
-void fb_queue_command(const char *cmd, const char *msg);
-void fb_queue_download(const char *name, void *data, uint32_t size);
-void fb_queue_download_fd(const char *name, int fd, uint32_t sz);
-void fb_queue_upload(const char* outfile);
-void fb_queue_notice(const char *notice);
+void fb_queue_command(const std::string& cmd, const std::string& msg);
+void fb_queue_download(const std::string& name, void* data, uint32_t size);
+void fb_queue_download_fd(const std::string& name, int fd, uint32_t sz);
+void fb_queue_upload(const std::string& outfile);
+void fb_queue_notice(const std::string& notice);
 void fb_queue_wait_for_disconnect(void);
 int64_t fb_execute_queue(Transport* transport);
-void fb_set_active(const char *slot);
+void fb_set_active(const std::string& slot);
 
 /* util stuff */
 double now();
-char *mkmsg(const char *fmt, ...);
-__attribute__((__noreturn__)) void die(const char *fmt, ...);
+char* xstrdup(const char*);
+void set_verbose();
+
+// These printf-like functions are implemented in terms of vsnprintf, so they
+// use the same attribute for compile-time format string checking. On Windows,
+// if the mingw version of vsnprintf is used, use `gnu_printf' which allows z
+// in %zd and PRIu64 (and related) to be recognized by the compile-time
+// checking.
+#define FASTBOOT_FORMAT_ARCHETYPE __printf__
+#ifdef __USE_MINGW_ANSI_STDIO
+#if __USE_MINGW_ANSI_STDIO
+#undef FASTBOOT_FORMAT_ARCHETYPE
+#define FASTBOOT_FORMAT_ARCHETYPE gnu_printf
+#endif
+#endif
+void die(const char* fmt, ...) __attribute__((__noreturn__))
+__attribute__((__format__(FASTBOOT_FORMAT_ARCHETYPE, 1, 2)));
+void verbose(const char* fmt, ...) __attribute__((__format__(FASTBOOT_FORMAT_ARCHETYPE, 1, 2)));
+#undef FASTBOOT_FORMAT_ARCHETYPE
 
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
 
-#endif
+class FastBoot {
+  public:
+    int Main(int argc, char* argv[]);
+
+    void ParseOsPatchLevel(boot_img_hdr_v1*, const char*);
+    void ParseOsVersion(boot_img_hdr_v1*, const char*);
+};

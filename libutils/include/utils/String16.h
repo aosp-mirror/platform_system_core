@@ -37,6 +37,8 @@ namespace android {
 
 class String8;
 
+// DO NOT USE: please use std::u16string
+
 //! This is a string holding UTF-16 characters.
 class String16
 {
@@ -241,7 +243,7 @@ inline String16::operator const char16_t*() const
     return mString;
 }
 
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 

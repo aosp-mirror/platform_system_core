@@ -36,7 +36,7 @@ cc_library_headers {
     export_include_dirs: ["include"],
     target: {
         vendor: {
-            export_include_dirs: ["include_vndk"],
+            override_export_include_dirs: ["include_vndk"],
         },
         linux_bionic: {
             enabled: true,
@@ -160,10 +160,20 @@ cc_library {
                 misc_undefined: ["integer"],
             },
         },
+
+        vendor: {
+            exclude_srcs: [
+                // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
+                // the interface of libnetd_client.so may vary between AOSP
+                // releases, exclude qtaguid.cpp from the VNDK-SP variant.
+                "qtaguid.cpp",
+            ],
+        }
     },
 
     shared_libs: ["liblog"],
     header_libs: [
+        "libbase_headers",
         "libcutils_headers",
         "libutils_headers",
     ],

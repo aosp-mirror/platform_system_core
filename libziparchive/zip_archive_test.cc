@@ -34,7 +34,7 @@
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 
-static std::string test_data_dir;
+static std::string test_data_dir = android::base::GetExecutableDirectory() + "/testdata";
 
 static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
@@ -62,11 +62,6 @@ static const std::string kLargeUncompressTxtName("uncompress.txt");
 static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* handle) {
   const std::string abs_path = test_data_dir + "/" + name;
   return OpenArchive(abs_path.c_str(), handle);
-}
-
-static void AssertNameEquals(const std::string& name_str, const ZipString& name) {
-  ASSERT_EQ(name_str.size(), name.name_length);
-  ASSERT_EQ(0, memcmp(name_str.c_str(), name.name, name.name_length));
 }
 
 static void SetZipString(ZipString* zip_str, const std::string& str) {
@@ -117,132 +112,60 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   close(fd);
 }
 
-TEST(ziparchive, Iteration) {
+static void AssertIterationOrder(const ZipString* prefix, const ZipString* suffix,
+                                 const std::vector<std::string>& expected_names_sorted) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, nullptr, nullptr));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, prefix, suffix));
 
   ZipEntry data;
+  std::vector<std::string> names;
+
   ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // a.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("a.txt", name);
-
-  // b.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b.txt", name);
-
-  // b/
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/", name);
+  for (size_t i = 0; i < expected_names_sorted.size(); ++i) {
+    ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+    names.push_back(std::string(reinterpret_cast<const char*>(name.name), name.name_length));
+  }
 
   // End of iteration.
   ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
   CloseArchive(handle);
+
+  // Assert that the names are as expected.
+  std::sort(names.begin(), names.end());
+  ASSERT_EQ(expected_names_sorted, names);
+}
+
+TEST(ziparchive, Iteration) {
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/", "b/c.txt",
+                                                                  "b/d.txt"};
+
+  AssertIterationOrder(nullptr, nullptr, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefix) {
-  ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
-
-  void* iteration_cookie;
   ZipString prefix("b/");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, nullptr));
+  static const std::vector<std::string> kExpectedMatchesSorted = {"b/", "b/c.txt", "b/d.txt"};
 
-  ZipEntry data;
-  ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // b/
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/", name);
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
-  CloseArchive(handle);
+  AssertIterationOrder(&prefix, nullptr, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithSuffix) {
-  ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
-
-  void* iteration_cookie;
   ZipString suffix(".txt");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, nullptr, &suffix));
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/c.txt",
+                                                                  "b/d.txt"};
 
-  ZipEntry data;
-  ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // a.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("a.txt", name);
-
-  // b.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b.txt", name);
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
-  CloseArchive(handle);
+  AssertIterationOrder(nullptr, &suffix, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefixAndSuffix) {
-  ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
-
-  void* iteration_cookie;
   ZipString prefix("b");
   ZipString suffix(".txt");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
+  static const std::vector<std::string> kExpectedMatchesSorted = {"b.txt", "b/c.txt", "b/d.txt"};
 
-  ZipEntry data;
-  ZipString name;
-
-  // b/c.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/c.txt", name);
-
-  // b/d.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b/d.txt", name);
-
-  // b.txt
-  ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-  AssertNameEquals("b.txt", name);
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
-
-  CloseArchive(handle);
+  AssertIterationOrder(&prefix, &suffix, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
@@ -664,10 +587,11 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   // an entry whose name is "name" and whose size is 12 (contents =
   // "abdcdefghijk").
   ZipEntry entry;
-  ZipString empty_name;
-  SetZipString(&empty_name, "name");
+  ZipString name;
+  std::string name_str = "name";
+  SetZipString(&name, name_str);
 
-  ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, name, &entry));
   ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
 
   entry_out->resize(12);
@@ -687,7 +611,7 @@ TEST(ziparchive, ValidDataDescriptors) {
   ASSERT_EQ('k', entry[11]);
 }
 
-TEST(ziparchive, InvalidDataDescriptors) {
+TEST(ziparchive, InvalidDataDescriptors_csize) {
   std::vector<uint8_t> invalid_csize = kDataDescriptorZipFile;
   invalid_csize[kCSizeOffset] = 0xfe;
 
@@ -696,13 +620,15 @@ TEST(ziparchive, InvalidDataDescriptors) {
   ExtractEntryToMemory(invalid_csize, &entry, &error_code);
 
   ASSERT_EQ(kInconsistentInformation, error_code);
+}
 
+TEST(ziparchive, InvalidDataDescriptors_size) {
   std::vector<uint8_t> invalid_size = kDataDescriptorZipFile;
-  invalid_csize[kSizeOffset] = 0xfe;
+  invalid_size[kSizeOffset] = 0xfe;
 
-  error_code = 0;
-  entry.clear();
-  ExtractEntryToMemory(invalid_csize, &entry, &error_code);
+  std::vector<uint8_t> entry;
+  int32_t error_code = 0;
+  ExtractEntryToMemory(invalid_size, &entry, &error_code);
 
   ASSERT_EQ(kInconsistentInformation, error_code);
 }
@@ -802,42 +728,4 @@ TEST(ziparchive, Inflate) {
     ASSERT_EQ(kIoError, ret);
     ASSERT_EQ(0u, writer.GetOutput().size());
   }
-}
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-
-  static struct option options[] = {{"test_data_dir", required_argument, nullptr, 't'},
-                                    {nullptr, 0, nullptr, 0}};
-
-  while (true) {
-    int option_index;
-    const int c = getopt_long_only(argc, argv, "", options, &option_index);
-    if (c == -1) {
-      break;
-    }
-
-    if (c == 't') {
-      test_data_dir = optarg;
-    }
-  }
-
-  if (test_data_dir.size() == 0) {
-    printf("Test data flag (--test_data_dir) required\n\n");
-    return -1;
-  }
-
-  if (test_data_dir[0] != '/') {
-    std::vector<char> cwd_buffer(1024);
-    const char* cwd = getcwd(cwd_buffer.data(), cwd_buffer.size() - 1);
-    if (cwd == nullptr) {
-      printf("Cannot get current working directory, use an absolute path instead, was %s\n\n",
-             test_data_dir.c_str());
-      return -2;
-    }
-    test_data_dir = '/' + test_data_dir;
-    test_data_dir = cwd + test_data_dir;
-  }
-
-  return RUN_ALL_TESTS();
 }

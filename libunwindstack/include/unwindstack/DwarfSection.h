@@ -20,8 +20,10 @@
 #include <stdint.h>
 
 #include <iterator>
+#include <map>
 #include <unordered_map>
 
+#include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfLocation.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/DwarfStructs.h>
@@ -29,9 +31,10 @@
 namespace unwindstack {
 
 // Forward declarations.
-enum DwarfError : uint8_t;
 class Memory;
 class Regs;
+template <typename AddressType>
+struct RegsInfo;
 
 class DwarfSection {
  public:
@@ -72,7 +75,8 @@ class DwarfSection {
   iterator begin() { return iterator(this, 0); }
   iterator end() { return iterator(this, fde_count_); }
 
-  DwarfError last_error() { return last_error_; }
+  DwarfErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
 
   virtual bool Init(uint64_t offset, uint64_t size) = 0;
 
@@ -100,7 +104,7 @@ class DwarfSection {
 
  protected:
   DwarfMemory memory_;
-  DwarfError last_error_;
+  DwarfErrorData last_error_{DWARF_ERROR_NONE, 0};
 
   uint32_t cie32_value_ = 0;
   uint64_t cie64_value_ = 0;
@@ -109,6 +113,7 @@ class DwarfSection {
   std::unordered_map<uint64_t, DwarfFde> fde_entries_;
   std::unordered_map<uint64_t, DwarfCie> cie_entries_;
   std::unordered_map<uint64_t, dwarf_loc_regs_t> cie_loc_regs_;
+  std::map<uint64_t, dwarf_loc_regs_t> loc_regs_;  // Single row indexed by pc_end.
 };
 
 template <typename AddressType>
@@ -132,6 +137,8 @@ class DwarfSectionImpl : public DwarfSection {
 
   const DwarfFde* GetFdeFromIndex(size_t index) override;
 
+  bool EvalRegister(const DwarfLocation* loc, uint32_t reg, AddressType* reg_ptr, void* info);
+
   bool Eval(const DwarfCie* cie, Memory* regular_memory, const dwarf_loc_regs_t& loc_regs,
             Regs* regs, bool* finished) override;
 
@@ -146,8 +153,8 @@ class DwarfSectionImpl : public DwarfSection {
   bool Log(uint8_t indent, uint64_t pc, uint64_t load_bias, const DwarfFde* fde) override;
 
  protected:
-  bool EvalExpression(const DwarfLocation& loc, uint8_t version, Memory* regular_memory,
-                      AddressType* value);
+  bool EvalExpression(const DwarfLocation& loc, Memory* regular_memory, AddressType* value,
+                      RegsInfo<AddressType>* regs_info, bool* is_dex_pc);
 
   bool GetCieInfo(uint8_t* segment_size, uint8_t* encoding);
 

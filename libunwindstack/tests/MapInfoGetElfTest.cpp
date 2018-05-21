@@ -180,16 +180,14 @@ TEST_F(MapInfoGetElfTest, end_le_start) {
   ASSERT_TRUE(elf != nullptr);
   ASSERT_FALSE(elf->valid());
 
-  delete info.elf;
-  info.elf = nullptr;
+  info.elf.reset();
   info.end = 0xfff;
   elf = info.GetElf(process_memory_, false);
   ASSERT_TRUE(elf != nullptr);
   ASSERT_FALSE(elf->valid());
 
   // Make sure this test is valid.
-  delete info.elf;
-  info.elf = nullptr;
+  info.elf.reset();
   info.end = 0x2000;
   elf = info.GetElf(process_memory_, false);
   ASSERT_TRUE(elf != nullptr);
@@ -328,8 +326,7 @@ TEST_F(MapInfoGetElfTest, process_memory_not_read_only) {
   ASSERT_TRUE(elf != nullptr);
   ASSERT_FALSE(elf->valid());
 
-  delete info.elf;
-  info.elf = nullptr;
+  info.elf.reset();
   info.flags = PROT_READ;
   elf = info.GetElf(process_memory_, false);
   ASSERT_TRUE(elf->valid());
@@ -352,15 +349,13 @@ TEST_F(MapInfoGetElfTest, check_device_maps) {
   ASSERT_FALSE(elf->valid());
 
   // Set the name to nothing to verify that it still fails.
-  delete info.elf;
-  info.elf = nullptr;
+  info.elf.reset();
   info.name = "";
   elf = info.GetElf(process_memory_, false);
   ASSERT_FALSE(elf->valid());
 
   // Change the flags and verify the elf is valid now.
-  delete info.elf;
-  info.elf = nullptr;
+  info.elf.reset();
   info.flags = PROT_READ;
   elf = info.GetElf(process_memory_, false);
   ASSERT_TRUE(elf->valid());
@@ -403,7 +398,7 @@ TEST_F(MapInfoGetElfTest, multiple_thread_get_elf) {
   }
 
   // Now verify that all of the elf files are exactly the same and valid.
-  Elf* elf = info.elf;
+  Elf* elf = info.elf.get();
   ASSERT_TRUE(elf != nullptr);
   EXPECT_TRUE(elf->valid());
   for (size_t i = 0; i < kNumConcurrentThreads; i++) {

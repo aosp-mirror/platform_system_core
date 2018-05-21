@@ -58,10 +58,6 @@ using namespace std::chrono_literals;
 #define cpu_to_le16(x) htole16(x)
 #define cpu_to_le32(x) htole32(x)
 
-#define FUNCTIONFS_ENDPOINT_ALLOC       _IOR('g', 231, __u32)
-
-static constexpr size_t ENDPOINT_ALLOC_RETRIES = 10;
-
 static int dummy_fd = -1;
 
 struct func_desc {
@@ -238,6 +234,10 @@ static void aio_block_init(aio_block* aiob) {
     for (unsigned i = 0; i < USB_FFS_NUM_BUFS; i++) {
         aiob->iocbs[i] = &aiob->iocb[i];
     }
+    memset(&aiob->ctx, 0, sizeof(aiob->ctx));
+    if (io_setup(USB_FFS_NUM_BUFS, &aiob->ctx)) {
+        D("[ aio: got error on io_setup (%d) ]", errno);
+    }
 }
 
 static int getMaxPacketSize(int ffs_fd) {
@@ -256,7 +256,6 @@ bool init_functionfs(struct usb_handle* h) {
     ssize_t ret;
     struct desc_v1 v1_descriptor;
     struct desc_v2 v2_descriptor;
-    size_t retries = 0;
 
     v2_descriptor.header.magic = cpu_to_le32(FUNCTIONFS_DESCRIPTORS_MAGIC_V2);
     v2_descriptor.header.length = cpu_to_le32(sizeof(v2_descriptor));
@@ -274,7 +273,7 @@ bool init_functionfs(struct usb_handle* h) {
 
     if (h->control < 0) { // might have already done this before
         LOG(INFO) << "opening control endpoint " << USB_FFS_ADB_EP0;
-        h->control = adb_open(USB_FFS_ADB_EP0, O_RDWR);
+        h->control = adb_open(USB_FFS_ADB_EP0, O_WRONLY);
         if (h->control < 0) {
             PLOG(ERROR) << "cannot open control endpoint " << USB_FFS_ADB_EP0;
             goto err;
@@ -305,49 +304,20 @@ bool init_functionfs(struct usb_handle* h) {
         android::base::SetProperty("sys.usb.ffs.ready", "1");
     }
 
-    h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDWR);
+    h->bulk_out = adb_open(USB_FFS_ADB_OUT, O_RDONLY);
     if (h->bulk_out < 0) {
         PLOG(ERROR) << "cannot open bulk-out endpoint " << USB_FFS_ADB_OUT;
         goto err;
     }
 
-    h->bulk_in = adb_open(USB_FFS_ADB_IN, O_RDWR);
+    h->bulk_in = adb_open(USB_FFS_ADB_IN, O_WRONLY);
     if (h->bulk_in < 0) {
         PLOG(ERROR) << "cannot open bulk-in endpoint " << USB_FFS_ADB_IN;
         goto err;
     }
 
-    if (io_setup(USB_FFS_NUM_BUFS, &h->read_aiob.ctx) ||
-        io_setup(USB_FFS_NUM_BUFS, &h->write_aiob.ctx)) {
-        D("[ aio: got error on io_setup (%d) ]", errno);
-    }
-
     h->read_aiob.fd = h->bulk_out;
     h->write_aiob.fd = h->bulk_in;
-
-    h->max_rw = MAX_PAYLOAD;
-    while (h->max_rw >= USB_FFS_BULK_SIZE && retries < ENDPOINT_ALLOC_RETRIES) {
-        int ret_in = ioctl(h->bulk_in, FUNCTIONFS_ENDPOINT_ALLOC, static_cast<__u32>(h->max_rw));
-        int errno_in = errno;
-        int ret_out = ioctl(h->bulk_out, FUNCTIONFS_ENDPOINT_ALLOC, static_cast<__u32>(h->max_rw));
-        int errno_out = errno;
-
-        if (ret_in || ret_out) {
-            if (errno_in == ENODEV || errno_out == ENODEV) {
-                std::this_thread::sleep_for(100ms);
-                retries += 1;
-                continue;
-            }
-            h->max_rw /= 2;
-        } else {
-            return true;
-        }
-    }
-
-    D("[ adb: cannot call endpoint alloc: errno=%d ]", errno);
-    // Kernel pre-allocation could have failed for recoverable reasons.
-    // Continue running with a safe max rw size.
-    h->max_rw = USB_FFS_BULK_SIZE;
     return true;
 
 err:
@@ -401,7 +371,7 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
 
     const char* buf = static_cast<const char*>(data);
     while (len > 0) {
-        int write_len = std::min(h->max_rw, len);
+        int write_len = std::min(USB_FFS_BULK_SIZE, len);
         int n = adb_write(h->bulk_in, buf, write_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
@@ -420,7 +390,7 @@ static int usb_ffs_read(usb_handle* h, void* data, int len) {
 
     char* buf = static_cast<char*>(data);
     while (len > 0) {
-        int read_len = std::min(h->max_rw, len);
+        int read_len = std::min(USB_FFS_BULK_SIZE, len);
         int n = adb_read(h->bulk_out, buf, read_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
@@ -466,23 +436,29 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
         num_bufs += 1;
     }
 
-    if (io_submit(aiob->ctx, num_bufs, aiob->iocbs.data()) < num_bufs) {
-        D("[ aio: got error submitting %s (%d) ]", read ? "read" : "write", errno);
-        return -1;
-    }
-    if (TEMP_FAILURE_RETRY(
-            io_getevents(aiob->ctx, num_bufs, num_bufs, aiob->events.data(), nullptr)) < num_bufs) {
-        D("[ aio: got error waiting %s (%d) ]", read ? "read" : "write", errno);
-        return -1;
-    }
-    for (int i = 0; i < num_bufs; i++) {
-        if (aiob->events[i].res < 0) {
-            errno = aiob->events[i].res;
-            D("[ aio: got error event on %s (%d) ]", read ? "read" : "write", errno);
+    while (true) {
+        if (TEMP_FAILURE_RETRY(io_submit(aiob->ctx, num_bufs, aiob->iocbs.data())) < num_bufs) {
+            PLOG(ERROR) << "aio: got error submitting " << (read ? "read" : "write");
             return -1;
         }
+        if (TEMP_FAILURE_RETRY(io_getevents(aiob->ctx, num_bufs, num_bufs, aiob->events.data(),
+                                            nullptr)) < num_bufs) {
+            PLOG(ERROR) << "aio: got error waiting " << (read ? "read" : "write");
+            return -1;
+        }
+        if (num_bufs == 1 && aiob->events[0].res == -EINTR) {
+            continue;
+        }
+        for (int i = 0; i < num_bufs; i++) {
+            if (aiob->events[i].res < 0) {
+                errno = -aiob->events[i].res;
+                PLOG(ERROR) << "aio: got error event on " << (read ? "read" : "write")
+                            << " total bufs " << num_bufs;
+                return -1;
+            }
+        }
+        return 0;
     }
-    return 0;
 }
 
 static int usb_ffs_aio_read(usb_handle* h, void* data, int len) {
@@ -521,8 +497,6 @@ static void usb_ffs_close(usb_handle* h) {
     h->kicked = false;
     adb_close(h->bulk_out);
     adb_close(h->bulk_in);
-    io_destroy(h->read_aiob.ctx);
-    io_destroy(h->write_aiob.ctx);
 
     // Notify usb_adb_open_thread to open a new connection.
     h->lock.lock();

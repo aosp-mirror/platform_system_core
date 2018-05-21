@@ -2,7 +2,10 @@ cc_library {
 
     name: "libpackagelistparser",
     srcs: ["packagelistparser.c"],
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     shared_libs: ["liblog"],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],

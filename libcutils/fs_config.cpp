@@ -122,6 +122,12 @@ static const char* conf[][2] = {
     {odm_conf_file, odm_conf_dir},
 };
 
+// Do not use android_files to grant Linux capabilities.  Use ambient capabilities in their
+// associated init.rc file instead.  See https://source.android.com/devices/tech/config/ambient.
+
+// Do not place any new vendor/, data/vendor/, etc entries in android_files.
+// Vendor entries should be done via a vendor or device specific config.fs.
+// See https://source.android.com/devices/tech/config/filesystem#using-file-system-capabilities
 static const struct fs_path_config android_files[] = {
     // clang-format off
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
@@ -141,6 +147,7 @@ static const struct fs_path_config android_files[] = {
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_file + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_file + 1 },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "product/build.prop" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
@@ -184,33 +191,6 @@ static const struct fs_path_config android_files[] = {
     // Support FIFO scheduling mode in SurfaceFlinger.
     { 00755, AID_SYSTEM,    AID_GRAPHICS,  CAP_MASK_LONG(CAP_SYS_NICE),
                                               "system/bin/surfaceflinger" },
-
-    // Support hostapd administering a network interface.
-    { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_NET_RAW),
-                                              "vendor/bin/hostapd" },
-
-    // Support Bluetooth legacy hal accessing /sys/class/rfkill
-    // Support RT scheduling in Bluetooth
-    { 00700, AID_BLUETOOTH, AID_BLUETOOTH, CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_SYS_NICE),
-                                              "vendor/bin/hw/android.hardware.bluetooth@1.0-service" },
-
-    // Support wifi_hal_legacy administering a network interface.
-    { 00755, AID_WIFI,      AID_WIFI,      CAP_MASK_LONG(CAP_NET_ADMIN) |
-                                           CAP_MASK_LONG(CAP_NET_RAW),
-                                              "vendor/bin/hw/android.hardware.wifi@1.0-service" },
-
-    // A non-privileged zygote that spawns isolated processes for web rendering.
-    { 0750,  AID_ROOT,      AID_ROOT,      CAP_MASK_LONG(CAP_SETUID) |
-                                           CAP_MASK_LONG(CAP_SETGID) |
-                                           CAP_MASK_LONG(CAP_SETPCAP),
-                                              "system/bin/webview_zygote32" },
-    { 0750,  AID_ROOT,      AID_ROOT,      CAP_MASK_LONG(CAP_SETUID) |
-                                           CAP_MASK_LONG(CAP_SETGID) |
-                                           CAP_MASK_LONG(CAP_SETPCAP),
-                                              "system/bin/webview_zygote64" },
-
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },

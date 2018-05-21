@@ -29,6 +29,13 @@ cc_library_shared {
     defaults: ["metricslogger_defaults"],
 }
 
+// static version of libmetricslogger, needed by a few art static binaries
+cc_library_static {
+    name: "libmetricslogger_static",
+    srcs: metricslogger_lib_src_files,
+    defaults: ["metricslogger_defaults"],
+}
+
 // metricslogger shared library, debug
 // -----------------------------------------------------------------------------
 cc_library_shared {

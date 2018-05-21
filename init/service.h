@@ -17,6 +17,7 @@
 #ifndef _INIT_SERVICE_H
 #define _INIT_SERVICE_H
 
+#include <signal.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 
@@ -81,13 +82,16 @@ class Service {
     void Stop();
     void Terminate();
     void Restart();
-    void Reap();
+    void Reap(const siginfo_t& siginfo);
     void DumpState() const;
     void SetShutdownCritical() { flags_ |= SVC_SHUTDOWN_CRITICAL; }
     bool IsShutdownCritical() const { return (flags_ & SVC_SHUTDOWN_CRITICAL) != 0; }
     void UnSetExec() {
         is_exec_service_running_ = false;
         flags_ &= ~SVC_EXEC;
+    }
+    void AddReapCallback(std::function<void(const siginfo_t& siginfo)> callback) {
+        reap_callbacks_.emplace_back(std::move(callback));
     }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
@@ -114,12 +118,16 @@ class Service {
     bool is_override() const { return override_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
+    void set_sigstop(bool value) { sigstop_ = value; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
     using OptionParser = Result<Success> (Service::*)(const std::vector<std::string>& args);
     class OptionParserMap;
 
+    Result<Success> SetUpMountNamespace() const;
+    Result<Success> SetUpPidNamespace() const;
+    Result<Success> EnterNamespaces() const;
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
     void ZapStdio() const;
@@ -132,6 +140,7 @@ class Service {
     Result<Success> ParseConsole(const std::vector<std::string>& args);
     Result<Success> ParseCritical(const std::vector<std::string>& args);
     Result<Success> ParseDisabled(const std::vector<std::string>& args);
+    Result<Success> ParseEnterNamespace(const std::vector<std::string>& args);
     Result<Success> ParseGroup(const std::vector<std::string>& args);
     Result<Success> ParsePriority(const std::vector<std::string>& args);
     Result<Success> ParseInterface(const std::vector<std::string>& args);
@@ -149,6 +158,7 @@ class Service {
     Result<Success> ParseSeclabel(const std::vector<std::string>& args);
     Result<Success> ParseSetenv(const std::vector<std::string>& args);
     Result<Success> ParseShutdown(const std::vector<std::string>& args);
+    Result<Success> ParseSigstop(const std::vector<std::string>& args);
     Result<Success> ParseSocket(const std::vector<std::string>& args);
     Result<Success> ParseFile(const std::vector<std::string>& args);
     Result<Success> ParseUser(const std::vector<std::string>& args);
@@ -175,6 +185,8 @@ class Service {
     std::vector<gid_t> supp_gids_;
     CapSet capabilities_;
     unsigned namespace_flags_;
+    // Pair of namespace type, path to namespace.
+    std::vector<std::pair<int, std::string>> namespaces_to_enter_;
 
     std::string seclabel_;
 
@@ -209,7 +221,11 @@ class Service {
 
     std::vector<std::pair<int, rlimit>> rlimits_;
 
+    bool sigstop_ = false;
+
     std::vector<std::string> args_;
+
+    std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 };
 
 class ServiceList {
@@ -231,6 +247,16 @@ class ServiceList {
         if (svc != services_.end()) {
             return svc->get();
         }
+        return nullptr;
+    }
+
+    Service* FindInterface(const std::string& interface_name) {
+        for (const auto& svc : services_) {
+            if (svc->interfaces().count(interface_name) > 0) {
+                return svc.get();
+            }
+        }
+
         return nullptr;
     }
 

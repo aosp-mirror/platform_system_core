@@ -3,11 +3,33 @@ cc_binary {
 
     srcs: ["lmkd.c"],
     shared_libs: [
-        "liblog",
-        "libprocessgroup",
         "libcutils",
+        "liblog",
     ],
+    local_include_dirs: ["include"],
     cflags: ["-Werror"],
 
     init_rc: ["lmkd.rc"],
+
+    product_variables: {
+        debuggable: {
+            cflags: [
+                "-DLMKD_TRACE_KILLS"
+            ],
+        },
+    },
+}
+
+cc_library_static {
+    name: "liblmkd_utils",
+    srcs: ["liblmkd_utils.c"],
+    shared_libs: [
+        "libcutils",
+    ],
+    export_include_dirs: ["include"],
+    cppflags: [
+        "-g",
+        "-Wall",
+        "-Werror",
+    ]
 }

@@ -151,6 +151,34 @@ class MemoryOffline : public Memory {
   std::unique_ptr<MemoryRange> memory_;
 };
 
+class MemoryOfflineBuffer : public Memory {
+ public:
+  MemoryOfflineBuffer(const uint8_t* data, uint64_t start, uint64_t end);
+  virtual ~MemoryOfflineBuffer() = default;
+
+  void Reset(const uint8_t* data, uint64_t start, uint64_t end);
+
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
+
+ private:
+  const uint8_t* data_;
+  uint64_t start_;
+  uint64_t end_;
+};
+
+class MemoryOfflineParts : public Memory {
+ public:
+  MemoryOfflineParts() = default;
+  virtual ~MemoryOfflineParts();
+
+  void Add(MemoryOffline* memory) { memories_.push_back(memory); }
+
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
+
+ private:
+  std::vector<MemoryOffline*> memories_;
+};
+
 }  // namespace unwindstack
 
 #endif  // _LIBUNWINDSTACK_MEMORY_H

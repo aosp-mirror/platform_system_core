@@ -1,9 +1,8 @@
-
 cc_library_headers {
     name: "libnativebridge-dummy-headers",
 
     host_supported: true,
-    export_include_dirs=["include"],
+    export_include_dirs: ["include"],
 }
 
 cc_library {
@@ -11,9 +10,12 @@ cc_library {
 
     host_supported: true,
     srcs: ["native_bridge.cc"],
-    shared_libs: ["liblog", "libbase"],
+    shared_libs: [
+        "liblog",
+        "libbase",
+    ],
 
-    export_include_dirs=["include"],
+    export_include_dirs: ["include"],
 
     cflags: [
         "-Werror",

@@ -35,35 +35,43 @@
 
 #include "fastboot.h"
 
-double now()
-{
+static bool g_verbose = false;
+
+double now() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
 }
 
-char *mkmsg(const char *fmt, ...)
-{
-    char buf[256];
-    char *s;
+void die(const char* fmt, ...) {
     va_list ap;
-
     va_start(ap, fmt);
-    vsprintf(buf, fmt, ap);
+    fprintf(stderr, "fastboot: error: ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
     va_end(ap);
-
-    s = strdup(buf);
-    if (s == 0) die("out of memory");
-    return s;
+    exit(EXIT_FAILURE);
 }
 
-void die(const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    fprintf(stderr,"error: ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr,"\n");
-    va_end(ap);
-    exit(1);
+void set_verbose() {
+    g_verbose = true;
+}
+
+void verbose(const char* fmt, ...) {
+    if (!g_verbose) return;
+
+    if (*fmt != '\n') {
+        va_list ap;
+        va_start(ap, fmt);
+        fprintf(stderr, "fastboot: verbose: ");
+        vfprintf(stderr, fmt, ap);
+        va_end(ap);
+    }
+    fprintf(stderr, "\n");
+}
+
+char* xstrdup(const char* s) {
+    char* result = strdup(s);
+    if (!result) die("out of memory");
+    return result;
 }

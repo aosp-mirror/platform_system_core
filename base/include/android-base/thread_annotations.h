@@ -38,6 +38,12 @@
 #define PT_GUARDED_BY(x) \
       THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(x))
 
+#define EXCLUSIVE_LOCKS_REQUIRED(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(exclusive_locks_required(__VA_ARGS__))
+
+#define SHARED_LOCKS_REQUIRED(...) \
+      THREAD_ANNOTATION_ATTRIBUTE__(shared_locks_required(__VA_ARGS__))
+
 #define ACQUIRED_BEFORE(...) \
       THREAD_ANNOTATION_ATTRIBUTE__(acquired_before(__VA_ARGS__))
 

@@ -11,5 +11,5 @@ cc_library_headers {
         windows: {
             enabled: true,
         },
-    }
+    },
 }

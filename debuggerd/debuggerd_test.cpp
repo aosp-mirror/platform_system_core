@@ -20,6 +20,7 @@
 #include <sys/capability.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -36,9 +37,13 @@
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
+
+#include <libminijail.h>
+#include <scoped_minijail.h>
 
 #include "debuggerd/handler.h"
 #include "protocol.h"
@@ -75,25 +80,13 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
     return value;                                                  \
   }()
 
-#define ASSERT_MATCH(str, pattern)                                              \
-  do {                                                                          \
-    std::regex r((pattern));                                                    \
-    if (!std::regex_search((str), r)) {                                         \
-      FAIL() << "regex mismatch: expected " << (pattern) << " in: \n" << (str); \
-    }                                                                           \
-  } while (0)
-
-#define ASSERT_NOT_MATCH(str, pattern)                                                      \
-  do {                                                                                      \
-    std::regex r((pattern));                                                                \
-    if (std::regex_search((str), r)) {                                                      \
-      FAIL() << "regex mismatch: expected to not find " << (pattern) << " in: \n" << (str); \
-    }                                                                                       \
-  } while (0)
-
-#define ASSERT_BACKTRACE_FRAME(result, frame_name)                        \
-  ASSERT_MATCH(result, R"(#\d\d pc [0-9a-f]+\s+ /system/lib)" ARCH_SUFFIX \
-                       R"(/libc.so \()" frame_name R"(\+)")
+// Backtrace frame dump could contain:
+//   #01 pc 0001cded  /data/tmp/debuggerd_test32 (raise_debugger_signal+80)
+// or
+//   #01 pc 00022a09  /data/tmp/debuggerd_test32 (offset 0x12000) (raise_debugger_signal+80)
+#define ASSERT_BACKTRACE_FRAME(result, frame_name) \
+  ASSERT_MATCH(result,                             \
+               R"(#\d\d pc [0-9a-f]+\s+ \S+ (\(offset 0x[0-9a-f]+\) )?\()" frame_name R"(\+)");
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
                                  InterceptStatus* status, DebuggerdDumpType intercept_type) {
@@ -245,6 +238,8 @@ void CrasherTest::AssertDeath(int signo) {
   int status;
   pid_t pid = TIMEOUT(5, waitpid(crasher_pid, &status, 0));
   if (pid != crasher_pid) {
+    printf("failed to wait for crasher (pid %d)\n", crasher_pid);
+    sleep(100);
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
 
@@ -341,13 +336,12 @@ TEST_F(CrasherTest, signal) {
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
-    abort();
+    while (true) {
+      sleep(1);
+    }
   });
   StartIntercept(&output_fd);
-
-  // Wait for a bit, or we might end up killing the process before the signal
-  // handler even gets a chance to be registered.
-  std::this_thread::sleep_for(100ms);
+  FinishCrasher();
   ASSERT_EQ(0, kill(crasher_pid, SIGSEGV));
 
   AssertDeath(SIGSEGV);
@@ -357,7 +351,9 @@ TEST_F(CrasherTest, signal) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 0 \(SI_USER\), fault addr --------)");
+  ASSERT_MATCH(
+      result,
+      R"(signal 11 \(SIGSEGV\), code 0 \(SI_USER from pid \d+, uid \d+\), fault addr --------)");
   ASSERT_MATCH(result, R"(backtrace:)");
 }
 
@@ -365,7 +361,14 @@ TEST_F(CrasherTest, abort_message) {
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
-    android_set_abort_message("abort message goes here");
+    // Arrived at experimentally;
+    // logd truncates at 4062.
+    // strlen("Abort message: ''") is 17.
+    // That's 4045, but we also want a NUL.
+    char buf[4045 + 1];
+    memset(buf, 'x', sizeof(buf));
+    buf[sizeof(buf) - 1] = '\0';
+    android_set_abort_message(buf);
     abort();
   });
   StartIntercept(&output_fd);
@@ -377,7 +380,7 @@ TEST_F(CrasherTest, abort_message) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(Abort message: 'abort message goes here')");
+  ASSERT_MATCH(result, R"(Abort message: 'x{4045}')");
 }
 
 TEST_F(CrasherTest, abort_message_backtrace) {
@@ -437,19 +440,6 @@ TEST_F(CrasherTest, wait_for_gdb) {
   ASSERT_EQ(0, kill(crasher_pid, SIGCONT));
 
   AssertDeath(SIGABRT);
-}
-
-// wait_for_gdb shouldn't trigger on manually sent signals.
-TEST_F(CrasherTest, wait_for_gdb_signal) {
-  if (!android::base::SetProperty(kWaitForGdbKey, "1")) {
-    FAIL() << "failed to enable wait_for_gdb";
-  }
-
-  StartProcess([]() {
-    abort();
-  });
-  ASSERT_EQ(0, kill(crasher_pid, SIGSEGV)) << strerror(errno);
-  AssertDeath(SIGSEGV);
 }
 
 TEST_F(CrasherTest, backtrace) {
@@ -592,19 +582,200 @@ TEST_F(CrasherTest, fake_pid) {
   ASSERT_BACKTRACE_FRAME(result, "tgkill");
 }
 
+static const char* const kDebuggerdSeccompPolicy =
+    "/system/etc/seccomp_policy/crash_dump." ABI_STRING ".policy";
+
+static pid_t seccomp_fork_impl(void (*prejail)()) {
+  unique_fd policy_fd(open(kDebuggerdSeccompPolicy, O_RDONLY | O_CLOEXEC));
+  if (policy_fd == -1) {
+    LOG(FATAL) << "failed to open policy " << kDebuggerdSeccompPolicy;
+  }
+
+  ScopedMinijail jail{minijail_new()};
+  if (!jail) {
+    LOG(FATAL) << "failed to create minijail";
+  }
+
+  minijail_no_new_privs(jail.get());
+  minijail_log_seccomp_filter_failures(jail.get());
+  minijail_use_seccomp_filter(jail.get());
+  minijail_parse_seccomp_filters_from_fd(jail.get(), policy_fd.release());
+
+  pid_t result = fork();
+  if (result == -1) {
+    return result;
+  } else if (result != 0) {
+    return result;
+  }
+
+  // Spawn and detach a thread that spins forever.
+  std::atomic<bool> thread_ready(false);
+  std::thread thread([&jail, &thread_ready]() {
+    minijail_enter(jail.get());
+    thread_ready = true;
+    for (;;)
+      ;
+  });
+  thread.detach();
+
+  while (!thread_ready) {
+    continue;
+  }
+
+  if (prejail) {
+    prejail();
+  }
+
+  minijail_enter(jail.get());
+  return result;
+}
+
+static pid_t seccomp_fork() {
+  return seccomp_fork_impl(nullptr);
+}
+
+TEST_F(CrasherTest, seccomp_crash) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  StartProcess([]() { abort(); }, &seccomp_fork);
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "abort");
+}
+
+static pid_t seccomp_fork_rlimit() {
+  return seccomp_fork_impl([]() {
+    struct rlimit rlim = {
+        .rlim_cur = 512 * 1024 * 1024,
+        .rlim_max = 512 * 1024 * 1024,
+    };
+
+    if (setrlimit(RLIMIT_AS, &rlim) != 0) {
+      raise(SIGINT);
+    }
+  });
+}
+
+TEST_F(CrasherTest, seccomp_crash_oom) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  StartProcess(
+      []() {
+        std::vector<void*> vec;
+        for (int i = 0; i < 512; ++i) {
+          char* buf = static_cast<char*>(malloc(1024 * 1024));
+          if (!buf) {
+            abort();
+          }
+          memset(buf, 0xff, 1024 * 1024);
+          vec.push_back(buf);
+        }
+      },
+      &seccomp_fork_rlimit);
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  // We can't actually generate a backtrace, just make sure that the process terminates.
+}
+
+__attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
+  siginfo_t siginfo;
+  siginfo.si_code = SI_QUEUE;
+  siginfo.si_pid = getpid();
+  siginfo.si_uid = getuid();
+
+  if (dump_type != kDebuggerdNativeBacktrace && dump_type != kDebuggerdTombstone) {
+    PLOG(FATAL) << "invalid dump type";
+  }
+
+  siginfo.si_value.sival_int = dump_type == kDebuggerdNativeBacktrace;
+
+  if (syscall(__NR_rt_tgsigqueueinfo, getpid(), gettid(), DEBUGGER_SIGNAL, &siginfo) != 0) {
+    PLOG(ERROR) << "libdebuggerd_client: failed to send signal to self";
+    return false;
+  }
+
+  return true;
+}
+
+TEST_F(CrasherTest, seccomp_tombstone) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdTombstone;
+  StartProcess(
+      []() {
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+}
+
+TEST_F(CrasherTest, seccomp_backtrace) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdNativeBacktrace;
+  StartProcess(
+      []() {
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+}
+
+TEST_F(CrasherTest, seccomp_crash_logcat) {
+  StartProcess([]() { abort(); }, &seccomp_fork);
+  FinishCrasher();
+
+  // Make sure we don't get SIGSYS when trying to dump a crash to logcat.
+  AssertDeath(SIGABRT);
+}
+
 TEST_F(CrasherTest, competing_tracer) {
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
-    while (true) {
-    }
+    raise(SIGABRT);
   });
 
   StartIntercept(&output_fd);
-  FinishCrasher();
 
   ASSERT_EQ(0, ptrace(PTRACE_SEIZE, crasher_pid, 0, 0));
-  ASSERT_EQ(0, kill(crasher_pid, SIGABRT));
+  FinishCrasher();
 
   int status;
   ASSERT_EQ(crasher_pid, waitpid(crasher_pid, &status, 0));
@@ -621,6 +792,10 @@ TEST_F(CrasherTest, competing_tracer) {
   regex += std::to_string(gettid());
   regex += R"( \(.+debuggerd_test)";
   ASSERT_MATCH(result, regex.c_str());
+
+  ASSERT_EQ(crasher_pid, waitpid(crasher_pid, &status, 0));
+  ASSERT_TRUE(WIFSTOPPED(status));
+  ASSERT_EQ(SIGABRT, WSTOPSIG(status));
 
   ASSERT_EQ(0, ptrace(PTRACE_DETACH, crasher_pid, 0, SIGABRT));
   AssertDeath(SIGABRT);

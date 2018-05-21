@@ -58,7 +58,7 @@
 #include <selinux/selinux.h>
 #include <system/thread_defs.h>
 
-#include "action.h"
+#include "action_manager.h"
 #include "bootchart.h"
 #include "init.h"
 #include "parser.h"
@@ -82,6 +82,7 @@ namespace init {
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
 static Result<Success> reboot_into_recovery(const std::vector<std::string>& options) {
+    LOG(ERROR) << "Rebooting into recovery";
     std::string err;
     if (!write_bootloader_message(options, &err)) {
         return Error() << "Failed to set bootloader message: " << err;
@@ -239,6 +240,29 @@ static Result<Success> do_insmod(const BuiltinArguments& args) {
     return Success();
 }
 
+static Result<Success> do_interface_restart(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
+    if (!svc) return Error() << "interface " << args[1] << " not found";
+    svc->Restart();
+    return Success();
+}
+
+static Result<Success> do_interface_start(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
+    if (!svc) return Error() << "interface " << args[1] << " not found";
+    if (auto result = svc->Start(); !result) {
+        return Error() << "Could not start interface: " << result.error();
+    }
+    return Success();
+}
+
+static Result<Success> do_interface_stop(const BuiltinArguments& args) {
+    Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
+    if (!svc) return Error() << "interface " << args[1] << " not found";
+    svc->Stop();
+    return Success();
+}
+
 // mkdir <path> [mode] [owner] [group]
 static Result<Success> do_mkdir(const BuiltinArguments& args) {
     mode_t mode = 0755;
@@ -285,11 +309,8 @@ static Result<Success> do_mkdir(const BuiltinArguments& args) {
 
     if (e4crypt_is_native()) {
         if (e4crypt_set_directory_policy(args[1].c_str())) {
-            const std::vector<std::string> options = {
-                "--prompt_and_wipe_data",
-                "--reason=set_policy_failed:"s + args[1]};
-            reboot_into_recovery(options);
-            return Success();
+            return reboot_into_recovery(
+                {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
         }
     }
     return Success();
@@ -493,8 +514,7 @@ static Result<Success> queue_fs_event(int code) {
         /* Setup a wipe via recovery, and reboot into recovery */
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
-        reboot_into_recovery(options);
-        return Success();
+        return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (e4crypt_install_keyring()) {
@@ -514,17 +534,20 @@ static Result<Success> queue_fs_event(int code) {
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
 
-        // defaultcrypto detects file/block encryption. init flow is same for each.
-        ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
+        // Although encrypted, vold has already set the device up, so we do not need to
+        // do anything different from the nonencrypted case.
+        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
         if (e4crypt_install_keyring()) {
             return Error() << "e4crypt_install_keyring() failed";
         }
+        property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
 
-        // encrypt detects file/block encryption. init flow is same for each.
-        ActionManager::GetInstance().QueueEventTrigger("encrypt");
+        // Although encrypted, vold has already set the device up, so we do not need to
+        // do anything different from the nonencrypted case.
+        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code > 0) {
         Error() << "fs_mgr_mount_all() returned unexpected error " << code;
@@ -969,8 +992,8 @@ static Result<Success> do_wait_for_prop(const BuiltinArguments& args) {
     const char* value = args[2].c_str();
     size_t value_len = strlen(value);
 
-    if (!is_legal_property_name(name)) {
-        return Error() << "is_legal_property_name(" << name << ") failed";
+    if (!IsLegalPropertyName(name)) {
+        return Error() << "IsLegalPropertyName(" << name << ") failed";
     }
     if (value_len >= PROP_VALUE_MAX) {
         return Error() << "value too long";
@@ -985,6 +1008,29 @@ static bool is_file_crypto() {
     return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
+static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
+                                               const BuiltinArguments& args) {
+    auto service = Service::MakeTemporaryOneshotService(args.args);
+    if (!service) {
+        return Error() << "Could not create exec service";
+    }
+    service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
+        if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
+            if (e4crypt_is_native()) {
+                LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
+                reboot_into_recovery({"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+            } else {
+                LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
+            }
+        }
+    });
+    if (auto result = service->ExecStart(); !result) {
+        return Error() << "Could not start exec service: " << result.error();
+    }
+    ServiceList::GetInstance().AddService(std::move(service));
+    return Success();
+}
+
 static Result<Success> do_installkey(const BuiltinArguments& args) {
     if (!is_file_crypto()) return Success();
 
@@ -992,17 +1038,18 @@ static Result<Success> do_installkey(const BuiltinArguments& args) {
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         return ErrnoError() << "Failed to create " << unencrypted_dir;
     }
-    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
-                                          "enablefilecrypto"};
-    return do_exec({std::move(exec_args), args.context});
+    return ExecWithRebootOnFailure(
+        "enablefilecrypto_failed",
+        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "enablefilecrypto"}, args.context});
 }
 
 static Result<Success> do_init_user0(const BuiltinArguments& args) {
-    std::vector<std::string> exec_args = {"exec", "/system/bin/vdc", "--wait", "cryptfs",
-                                          "init_user0"};
-    return do_exec({std::move(exec_args), args.context});
+    return ExecWithRebootOnFailure(
+        "init_user0_failed",
+        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
 }
 
+// Builtin-function-map start
 const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
@@ -1026,10 +1073,17 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"init_user0",              {0,     0,    {false,  do_init_user0}}},
         {"insmod",                  {1,     kMax, {true,   do_insmod}}},
         {"installkey",              {1,     1,    {false,  do_installkey}}},
+        {"interface_restart",       {1,     1,    {false,  do_interface_restart}}},
+        {"interface_start",         {1,     1,    {false,  do_interface_start}}},
+        {"interface_stop",          {1,     1,    {false,  do_interface_stop}}},
         {"load_persist_props",      {0,     0,    {false,  do_load_persist_props}}},
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
         {"mkdir",                   {1,     4,    {true,   do_mkdir}}},
+        // TODO: Do mount operations in vendor_init.
+        // mount_all is currently too complex to run in vendor_init as it queues action triggers,
+        // imports rc scripts, etc.  It should be simplified and run in vendor_init context.
+        // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
@@ -1039,9 +1093,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"restorecon_recursive",    {1,     kMax, {true,   do_restorecon_recursive}}},
         {"rm",                      {1,     1,    {true,   do_rm}}},
         {"rmdir",                   {1,     1,    {true,   do_rmdir}}},
-        //  TODO: setprop should be run in the subcontext, but property service needs to be split
-        //        out from init before that is possible.
-        {"setprop",                 {2,     2,    {false,  do_setprop}}},
+        {"setprop",                 {2,     2,    {true,   do_setprop}}},
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
@@ -1058,6 +1110,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     // clang-format on
     return builtin_functions;
 }
+// Builtin-function-map end
 
 }  // namespace init
 }  // namespace android

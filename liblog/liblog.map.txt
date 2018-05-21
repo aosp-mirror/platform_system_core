@@ -3,8 +3,8 @@ LIBLOG {
     android_name_to_log_id; # vndk
     android_log_id_to_name; # vndk
     __android_log_assert;
-    __android_log_buf_print; # vndk
-    __android_log_buf_write; # vndk
+    __android_log_buf_print;
+    __android_log_buf_write;
     __android_log_print;
     __android_log_vprint;
     __android_log_write;
@@ -35,6 +35,17 @@ LIBLOG_M {
     android_logger_get_statistics; # vndk
     __android_log_error_write; # vndk
     __android_log_is_loggable;
+    create_android_logger; #vndk
+    android_log_destroy; #vndk
+    android_log_write_list_begin; #vndk
+    android_log_write_list_end; #vndk
+    android_log_write_int32; #vndk
+    android_log_write_int64; #vndk
+    android_log_write_string8; #vndk
+    android_log_write_string8_len; #vndk
+    android_log_write_float32; #vndk
+    android_log_write_list; #vndk
+
 };
 
 LIBLOG_O {

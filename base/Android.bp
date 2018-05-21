@@ -15,8 +15,12 @@
 //
 
 cc_defaults {
-    name: "libbase_defaults",
-    cflags: ["-Wall", "-Werror", "-Wextra"],
+    name: "libbase_cflags_defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+    ],
 }
 
 cc_library_headers {
@@ -35,29 +39,20 @@ cc_library_headers {
     },
 }
 
-cc_library {
-    name: "libbase",
-    defaults: ["libbase_defaults"],
-    vendor_available: true,
-    host_supported: true,
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+cc_defaults {
+    name: "libbase_defaults",
+    defaults: ["libbase_cflags_defaults"],
     srcs: [
+        "chrono_utils.cpp",
         "file.cpp",
         "logging.cpp",
         "parsenetaddress.cpp",
         "quick_exit.cpp",
         "stringprintf.cpp",
         "strings.cpp",
+        "threads.cpp",
         "test_utils.cpp",
     ],
-
-    header_libs: [
-        "libbase_headers",
-    ],
-    export_header_lib_headers: ["libbase_headers"],
 
     shared_libs: ["liblog"],
     target: {
@@ -72,14 +67,12 @@ cc_library {
         },
         linux: {
             srcs: [
-                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
         },
         darwin: {
             srcs: [
-                "chrono_utils.cpp",
                 "errors_unix.cpp",
             ],
             cppflags: ["-Wexit-time-destructors"],
@@ -97,17 +90,41 @@ cc_library {
     },
 }
 
+cc_library {
+    name: "libbase",
+    defaults: ["libbase_defaults"],
+    vendor_available: true,
+    host_supported: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
+    header_libs: [
+        "libbase_headers",
+    ],
+    export_header_lib_headers: ["libbase_headers"],
+}
+
+cc_library_static {
+    name: "libbase_ndk",
+    defaults: ["libbase_defaults"],
+    sdk_version: "current",
+    stl: "c++_static",
+    export_include_dirs: ["include"],
+}
+
 // Tests
 // ------------------------------------------------------------------------------
 cc_test {
     name: "libbase_test",
-    defaults: ["libbase_defaults"],
+    defaults: ["libbase_cflags_defaults"],
     host_supported: true,
     srcs: [
         "endian_test.cpp",
         "errors_test.cpp",
         "file_test.cpp",
         "logging_test.cpp",
+        "macros_test.cpp",
         "parsedouble_test.cpp",
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
@@ -116,6 +133,7 @@ cc_test {
         "stringprintf_test.cpp",
         "strings_test.cpp",
         "test_main.cpp",
+        "test_utils_test.cpp",
     ],
     target: {
         android: {
@@ -144,4 +162,5 @@ cc_test {
             suffix: "64",
         },
     },
+    test_suites: ["device-tests"],
 }

@@ -21,9 +21,6 @@
 #include <getopt.h>
 #include <pthread.h>
 #include <stdio.h>
-#include <sys/capability.h>
-#include <sys/prctl.h>
-#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <vector>

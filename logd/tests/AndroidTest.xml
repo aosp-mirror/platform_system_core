@@ -14,6 +14,7 @@
      limitations under the License.
 -->
 <configuration description="Config for CTS Logging Daemon test cases">
+    <option name="test-suite-tag" value="cts" />
     <option name="config-descriptor:metadata" key="component" value="systems" />
     <target_preparer class="com.android.compatibility.common.tradefed.targetprep.FilePusher">
         <option name="cleanup" value="true" />

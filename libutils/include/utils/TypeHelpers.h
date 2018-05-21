@@ -329,7 +329,7 @@ template <typename T> inline hash_t hash_type(T* const & value) {
     return hash_type(uintptr_t(value));
 }
 
-}; // namespace android
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 

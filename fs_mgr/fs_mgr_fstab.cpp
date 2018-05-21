@@ -23,11 +23,17 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <utility>
+#include <vector>
+
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
 #include "fs_mgr_priv.h"
+
+using android::base::StartsWith;
 
 const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android");
 
@@ -35,6 +41,7 @@ struct fs_mgr_flag_values {
     char *key_loc;
     char* key_dir;
     char *verity_loc;
+    char *sysfs_path;
     long long part_length;
     char *label;
     int partnum;
@@ -100,7 +107,9 @@ static struct flag_list fs_mgr_flags[] = {
     {"quota", MF_QUOTA},
     {"eraseblk=", MF_ERASEBLKSIZE},
     {"logicalblk=", MF_LOGICALBLKSIZE},
+    {"sysfs_path=", MF_SYSFS},
     {"defaults", 0},
+    {"logical", MF_LOGICAL},
     {0, 0},
 };
 
@@ -108,17 +117,21 @@ static struct flag_list fs_mgr_flags[] = {
 #define EM_ICE          2
 #define EM_AES_256_CTS  3
 #define EM_AES_256_HEH  4
+#define EM_SPECK_128_256_XTS 5
+#define EM_SPECK_128_256_CTS 6
 
 static const struct flag_list file_contents_encryption_modes[] = {
     {"aes-256-xts", EM_AES_256_XTS},
+    {"speck128/256-xts", EM_SPECK_128_256_XTS},
     {"software", EM_AES_256_XTS}, /* alias for backwards compatibility */
-    {"ice", EM_ICE}, /* hardware-specific inline cryptographic engine */
+    {"ice", EM_ICE},              /* hardware-specific inline cryptographic engine */
     {0, 0},
 };
 
 static const struct flag_list file_names_encryption_modes[] = {
     {"aes-256-cts", EM_AES_256_CTS},
     {"aes-256-heh", EM_AES_256_HEH},
+    {"speck128/256-cts", EM_SPECK_128_256_CTS},
     {0, 0},
 };
 
@@ -337,6 +350,9 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     unsigned int val = strtoul(strchr(p, '=') + 1, NULL, 0);
                     if (val >= 4096 && (val & (val - 1)) == 0)
                         flag_vals->logical_blk_size = val;
+                } else if ((fl[i].flag == MF_SYSFS) && flag_vals) {
+                    /* The path to trigger device gc by idle-maint of vold. */
+                    flag_vals->sysfs_path = strdup(strchr(p, '=') + 1);
                 }
                 break;
             }
@@ -397,16 +413,17 @@ static bool is_dt_fstab_compatible() {
 }
 
 static std::string read_fstab_from_dt() {
-    std::string fstab;
     if (!is_dt_compatible() || !is_dt_fstab_compatible()) {
-        return fstab;
+        return {};
     }
 
     std::string fstabdir_name = get_android_dt_dir() + "/fstab";
     std::unique_ptr<DIR, int (*)(DIR*)> fstabdir(opendir(fstabdir_name.c_str()), closedir);
-    if (!fstabdir) return fstab;
+    if (!fstabdir) return {};
 
     dirent* dp;
+    // Each element in fstab_dt_entries is <mount point, the line format in fstab file>.
+    std::vector<std::pair<std::string, std::string>> fstab_dt_entries;
     while ((dp = readdir(fstabdir.get())) != NULL) {
         // skip over name, compatible and .
         if (dp->d_type != DT_DIR || dp->d_name[0] == '.') continue;
@@ -427,41 +444,54 @@ static std::string read_fstab_from_dt() {
         file_name = android::base::StringPrintf("%s/%s/dev", fstabdir_name.c_str(), dp->d_name);
         if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find device for partition " << dp->d_name;
-            fstab.clear();
-            break;
+            return {};
         }
         fstab_entry.push_back(value);
-        fstab_entry.push_back(android::base::StringPrintf("/%s", dp->d_name));
+
+        std::string mount_point;
+        file_name =
+            android::base::StringPrintf("%s/%s/mnt_point", fstabdir_name.c_str(), dp->d_name);
+        if (read_dt_file(file_name, &value)) {
+            LINFO << "dt_fstab: Using a specified mount point " << value << " for " << dp->d_name;
+            mount_point = value;
+        } else {
+            mount_point = android::base::StringPrintf("/%s", dp->d_name);
+        }
+        fstab_entry.push_back(mount_point);
 
         file_name = android::base::StringPrintf("%s/%s/type", fstabdir_name.c_str(), dp->d_name);
         if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
-            fstab.clear();
-            break;
+            return {};
         }
         fstab_entry.push_back(value);
 
         file_name = android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
         if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
-            fstab.clear();
-            break;
+            return {};
         }
         fstab_entry.push_back(value);
 
         file_name = android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
         if (!read_dt_file(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
-            fstab.clear();
-            break;
+            return {};
         }
         fstab_entry.push_back(value);
-
-        fstab += android::base::Join(fstab_entry, " ");
-        fstab += '\n';
+        // Adds a fstab_entry to fstab_dt_entries, to be sorted by mount_point later.
+        fstab_dt_entries.emplace_back(mount_point, android::base::Join(fstab_entry, " "));
     }
 
-    return fstab;
+    // Sort fstab_dt entries, to ensure /vendor is mounted before /vendor/abc is attempted.
+    std::sort(fstab_dt_entries.begin(), fstab_dt_entries.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    std::string fstab_result;
+    for (const auto& [_, dt_entry] : fstab_dt_entries) {
+        fstab_result += dt_entry + "\n";
+    }
+    return fstab_result;
 }
 
 bool is_dt_compatible() {
@@ -597,6 +627,11 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
         fstab->recs[cnt].file_names_mode = flag_vals.file_names_mode;
         fstab->recs[cnt].erase_blk_size = flag_vals.erase_blk_size;
         fstab->recs[cnt].logical_blk_size = flag_vals.logical_blk_size;
+        fstab->recs[cnt].sysfs_path = flag_vals.sysfs_path;
+        if (fstab->recs[cnt].fs_mgr_flags & MF_LOGICAL) {
+            fstab->recs[cnt].logical_partition_name = strdup(fstab->recs[cnt].blk_device);
+        }
+
         cnt++;
     }
     /* If an A/B partition, modify block device to be the real block device */
@@ -620,6 +655,7 @@ err:
  * frees up memory of the return value without touching a and b. */
 static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
 {
+    if (!a && !b) return nullptr;
     if (!a) return b;
     if (!b) return a;
 
@@ -636,17 +672,61 @@ static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
     }
 
     for (int i = a->num_entries, j = 0; i < total_entries; i++, j++) {
-        // copy the pointer directly *without* malloc and memcpy
+        // Copy the structs by assignment.
         a->recs[i] = b->recs[j];
     }
 
-    // Frees up b, but don't free b->recs[X] to make sure they are
-    // accessible through a->recs[X].
+    // We can't call fs_mgr_free_fstab because a->recs still references the
+    // memory allocated by strdup.
+    free(b->recs);
     free(b->fstab_filename);
     free(b);
 
     a->num_entries = total_entries;
     return a;
+}
+
+/* Extracts <device>s from the by-name symlinks specified in a fstab:
+ *   /dev/block/<type>/<device>/by-name/<partition>
+ *
+ * <type> can be: platform, pci or vbd.
+ *
+ * For example, given the following entries in the input fstab:
+ *   /dev/block/platform/soc/1da4000.ufshc/by-name/system
+ *   /dev/block/pci/soc.0/f9824900.sdhci/by-name/vendor
+ * it returns a set { "soc/1da4000.ufshc", "soc.0/f9824900.sdhci" }.
+ */
+static std::set<std::string> extract_boot_devices(const fstab& fstab) {
+    std::set<std::string> boot_devices;
+
+    for (int i = 0; i < fstab.num_entries; i++) {
+        std::string blk_device(fstab.recs[i].blk_device);
+        // Skips blk_device that doesn't conform to the format.
+        if (!android::base::StartsWith(blk_device, "/dev/block") ||
+            android::base::StartsWith(blk_device, "/dev/block/by-name") ||
+            android::base::StartsWith(blk_device, "/dev/block/bootdevice/by-name")) {
+            continue;
+        }
+        // Skips non-by_name blk_device.
+        // /dev/block/<type>/<device>/by-name/<partition>
+        //                           ^ slash_by_name
+        auto slash_by_name = blk_device.find("/by-name");
+        if (slash_by_name == std::string::npos) continue;
+        blk_device.erase(slash_by_name);  // erases /by-name/<partition>
+
+        // Erases /dev/block/, now we have <type>/<device>
+        blk_device.erase(0, std::string("/dev/block/").size());
+
+        // <type>/<device>
+        //       ^ first_slash
+        auto first_slash = blk_device.find('/');
+        if (first_slash == std::string::npos) continue;
+
+        auto boot_device = blk_device.substr(first_slash + 1);
+        if (!boot_device.empty()) boot_devices.insert(std::move(boot_device));
+    }
+
+    return boot_devices;
 }
 
 struct fstab *fs_mgr_read_fstab(const char *fstab_path)
@@ -736,15 +816,17 @@ struct fstab *fs_mgr_read_fstab_default()
         default_fstab = get_fstab_path();
     }
 
-    if (default_fstab.empty()) {
-        LWARNING << __FUNCTION__ << "(): failed to find device default fstab";
+    struct fstab* fstab = nullptr;
+    if (!default_fstab.empty()) {
+        fstab = fs_mgr_read_fstab(default_fstab.c_str());
+    } else {
+        LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
+
+    struct fstab* fstab_dt = fs_mgr_read_fstab_dt();
 
     // combines fstab entries passed in from device tree with
     // the ones found from default_fstab file
-    struct fstab *fstab_dt = fs_mgr_read_fstab_dt();
-    struct fstab *fstab = fs_mgr_read_fstab(default_fstab.c_str());
-
     return in_place_merge(fstab_dt, fstab);
 }
 
@@ -759,12 +841,14 @@ void fs_mgr_free_fstab(struct fstab *fstab)
     for (i = 0; i < fstab->num_entries; i++) {
         /* Free the pointers return by strdup(3) */
         free(fstab->recs[i].blk_device);
+        free(fstab->recs[i].logical_partition_name);
         free(fstab->recs[i].mount_point);
         free(fstab->recs[i].fs_type);
         free(fstab->recs[i].fs_options);
         free(fstab->recs[i].key_loc);
         free(fstab->recs[i].key_dir);
         free(fstab->recs[i].label);
+        free(fstab->recs[i].sysfs_path);
     }
 
     /* Free the fstab_recs array created by calloc(3) */
@@ -820,6 +904,23 @@ struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const st
         }
     }
     return nullptr;
+}
+
+std::set<std::string> fs_mgr_get_boot_devices() {
+    // boot_devices can be specified in device tree.
+    std::string dt_value;
+    std::string file_name = get_android_dt_dir() + "/boot_devices";
+    if (read_dt_file(file_name, &dt_value)) {
+        auto boot_devices = android::base::Split(dt_value, ",");
+        return std::set<std::string>(boot_devices.begin(), boot_devices.end());
+    }
+
+    // Fallback to extract boot devices from fstab.
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (fstab) return extract_boot_devices(*fstab);
+
+    return {};
 }
 
 int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab)
@@ -899,4 +1000,13 @@ int fs_mgr_is_latemount(const struct fstab_rec* fstab) {
 
 int fs_mgr_is_quota(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_QUOTA;
+}
+
+int fs_mgr_has_sysfs_path(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_SYSFS;
+}
+
+int fs_mgr_is_logical(const struct fstab_rec* fstab) {
+    return fstab->fs_mgr_flags & MF_LOGICAL;
 }

@@ -121,10 +121,13 @@ TEST_F(sysdeps_poll, invalid_fd) {
     adb_pollfd pfd[3] = {};
     pfd[0].fd = fds[0];
     pfd[0].events = POLLRDNORM;
+    pfd[0].revents = ~0;
     pfd[1].fd = INT_MAX;
     pfd[1].events = POLLRDNORM;
+    pfd[1].revents = ~0;
     pfd[2].fd = fds[1];
     pfd[2].events = POLLWRNORM;
+    pfd[2].revents = ~0;
 
     ASSERT_TRUE(WriteFdExactly(fds[1], "foo", 4));
 
@@ -136,6 +139,17 @@ TEST_F(sysdeps_poll, invalid_fd) {
     EXPECT_EQ(POLLRDNORM, pfd[0].revents);
     EXPECT_EQ(POLLNVAL, pfd[1].revents);
     EXPECT_EQ(POLLWRNORM, pfd[2].revents);
+
+    // Make sure that we return immediately if an invalid FD is given.
+    pfd[0].fd = fds[0];
+    pfd[0].events = POLLRDNORM;
+    pfd[0].revents = ~0;
+    pfd[1].fd = INT_MAX;
+    pfd[1].events = POLLRDNORM;
+    pfd[1].revents = ~0;
+    EXPECT_EQ(2, adb_poll(pfd, 2, -1));
+    EXPECT_EQ(POLLRDNORM, pfd[0].revents);
+    EXPECT_EQ(POLLNVAL, pfd[1].revents);
 }
 
 TEST_F(sysdeps_poll, duplicate_fd) {

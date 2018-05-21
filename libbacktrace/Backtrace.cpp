@@ -30,8 +30,6 @@
 #include <demangle.h>
 
 #include "BacktraceLog.h"
-#include "UnwindCurrent.h"
-#include "UnwindPtrace.h"
 #include "UnwindStack.h"
 #include "thread_utils.h"
 
@@ -55,7 +53,7 @@ Backtrace::~Backtrace() {
   }
 }
 
-std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const backtrace_map_t* map) {
+std::string Backtrace::GetFunctionName(uint64_t pc, uint64_t* offset, const backtrace_map_t* map) {
   backtrace_map_t map_value;
   if (map == nullptr) {
     FillInMap(pc, &map_value);
@@ -68,7 +66,7 @@ std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset, const ba
   return demangle(GetFunctionNameRaw(pc, offset).c_str());
 }
 
-bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, word_t* out_value) {
+bool Backtrace::VerifyReadWordArgs(uint64_t ptr, word_t* out_value) {
   if (ptr & (sizeof(word_t)-1)) {
     BACK_LOGW("invalid pointer %p", reinterpret_cast<void*>(ptr));
     *out_value = static_cast<word_t>(-1);
@@ -87,14 +85,12 @@ std::string Backtrace::FormatFrameData(size_t frame_num) {
 std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   std::string map_name;
   if (BacktraceMap::IsValid(frame->map)) {
+    map_name = frame->map.Name();
     if (!frame->map.name.empty()) {
-      map_name = frame->map.name.c_str();
       if (map_name[0] == '[' && map_name[map_name.size() - 1] == ']') {
         map_name.resize(map_name.size() - 1);
         map_name += StringPrintf(":%" PRIPTR "]", frame->map.start);
       }
-    } else {
-      map_name = StringPrintf("<anonymous:%" PRIPTR ">", frame->map.start);
     }
   } else {
     map_name = "<unknown>";
@@ -105,12 +101,12 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   // Special handling for non-zero offset maps, we need to print that
   // information.
   if (frame->map.offset != 0) {
-    line += " (offset " + StringPrintf("0x%" PRIxPTR, frame->map.offset) + ")";
+    line += " (offset " + StringPrintf("0x%" PRIx64, frame->map.offset) + ")";
   }
   if (!frame->func_name.empty()) {
     line += " (" + frame->func_name;
     if (frame->func_offset) {
-      line += StringPrintf("+%" PRIuPTR, frame->func_offset);
+      line += StringPrintf("+%" PRIu64, frame->func_offset);
     }
     line += ')';
   }
@@ -118,7 +114,7 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   return line;
 }
 
-void Backtrace::FillInMap(uintptr_t pc, backtrace_map_t* map) {
+void Backtrace::FillInMap(uint64_t pc, backtrace_map_t* map) {
   if (map_ != nullptr) {
     map_->FillIn(pc, map);
   }
@@ -142,22 +138,37 @@ Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
 }
 
 std::string Backtrace::GetErrorString(BacktraceUnwindError error) {
-  switch (error) {
-  case BACKTRACE_UNWIND_NO_ERROR:
-    return "No error";
-  case BACKTRACE_UNWIND_ERROR_SETUP_FAILED:
-    return "Setup failed";
-  case BACKTRACE_UNWIND_ERROR_MAP_MISSING:
-    return "No map found";
-  case BACKTRACE_UNWIND_ERROR_INTERNAL:
-    return "Internal libbacktrace error, please submit a bugreport";
-  case BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST:
-    return "Thread doesn't exist";
-  case BACKTRACE_UNWIND_ERROR_THREAD_TIMEOUT:
-    return "Thread has not responded to signal in time";
-  case BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION:
-    return "Attempt to use an unsupported feature";
-  case BACKTRACE_UNWIND_ERROR_NO_CONTEXT:
-    return "Attempt to do an offline unwind without a context";
+  switch (error.error_code) {
+    case BACKTRACE_UNWIND_NO_ERROR:
+      return "No error";
+    case BACKTRACE_UNWIND_ERROR_SETUP_FAILED:
+      return "Setup failed";
+    case BACKTRACE_UNWIND_ERROR_MAP_MISSING:
+      return "No map found";
+    case BACKTRACE_UNWIND_ERROR_INTERNAL:
+      return "Internal libbacktrace error, please submit a bugreport";
+    case BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST:
+      return "Thread doesn't exist";
+    case BACKTRACE_UNWIND_ERROR_THREAD_TIMEOUT:
+      return "Thread has not responded to signal in time";
+    case BACKTRACE_UNWIND_ERROR_UNSUPPORTED_OPERATION:
+      return "Attempt to use an unsupported feature";
+    case BACKTRACE_UNWIND_ERROR_NO_CONTEXT:
+      return "Attempt to do an offline unwind without a context";
+    case BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT:
+      return "Exceed MAX_BACKTRACE_FRAMES limit";
+    case BACKTRACE_UNWIND_ERROR_ACCESS_MEM_FAILED:
+      return android::base::StringPrintf("Failed to read memory at addr 0x%" PRIx64,
+                                         error.error_info.addr);
+    case BACKTRACE_UNWIND_ERROR_ACCESS_REG_FAILED:
+      return android::base::StringPrintf("Failed to read register %" PRIu64, error.error_info.regno);
+    case BACKTRACE_UNWIND_ERROR_FIND_PROC_INFO_FAILED:
+      return "Failed to find a function in debug sections";
+    case BACKTRACE_UNWIND_ERROR_EXECUTE_DWARF_INSTRUCTION_FAILED:
+      return "Failed to execute dwarf instructions in debug sections";
+    case BACKTRACE_UNWIND_ERROR_UNWIND_INFO:
+      return "Failed to unwind due to invalid unwind information";
+    case BACKTRACE_UNWIND_ERROR_REPEATED_FRAME:
+      return "Failed to unwind due to same sp/pc repeating";
   }
 }

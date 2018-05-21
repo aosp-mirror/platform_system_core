@@ -109,26 +109,56 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   // Make sure no other thread is trying to add the elf to this map.
   std::lock_guard<std::mutex> guard(mutex_);
 
-  if (elf) {
-    return elf;
+  if (elf.get() != nullptr) {
+    return elf.get();
   }
 
-  elf = new Elf(CreateMemory(process_memory));
-  elf->Init(init_gnu_debugdata);
+  bool locked = false;
+  if (Elf::CachingEnabled() && !name.empty()) {
+    Elf::CacheLock();
+    locked = true;
+    if (Elf::CacheGet(this)) {
+      Elf::CacheUnlock();
+      return elf.get();
+    }
+  }
 
+  Memory* memory = CreateMemory(process_memory);
+  if (locked) {
+    if (Elf::CacheAfterCreateMemory(this)) {
+      delete memory;
+      Elf::CacheUnlock();
+      return elf.get();
+    }
+  }
+  elf.reset(new Elf(memory));
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
-  return elf;
+  elf->Init(init_gnu_debugdata);
+
+  if (locked) {
+    Elf::CacheAdd(this);
+    Elf::CacheUnlock();
+  }
+  return elf.get();
 }
 
 uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
+  uint64_t cur_load_bias = load_bias.load();
+  if (cur_load_bias != static_cast<uint64_t>(-1)) {
+    return cur_load_bias;
+  }
+
   {
     // Make sure no other thread is trying to add the elf to this map.
     std::lock_guard<std::mutex> guard(mutex_);
     if (elf != nullptr) {
       if (elf->valid()) {
-        return elf->GetLoadBias();
+        cur_load_bias = elf->GetLoadBias();
+        load_bias = cur_load_bias;
+        return cur_load_bias;
       } else {
+        load_bias = 0;
         return 0;
       }
     }
@@ -137,7 +167,9 @@ uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
   // Call lightweight static function that will only read enough of the
   // elf data to get the load bias.
   std::unique_ptr<Memory> memory(CreateMemory(process_memory));
-  return Elf::GetLoadBias(memory.get());
+  cur_load_bias = Elf::GetLoadBias(memory.get());
+  load_bias = cur_load_bias;
+  return cur_load_bias;
 }
 
 }  // namespace unwindstack

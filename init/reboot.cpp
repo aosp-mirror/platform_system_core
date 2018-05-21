@@ -50,6 +50,7 @@
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 
+#include "action_manager.h"
 #include "capabilities.h"
 #include "init.h"
 #include "property_service.h"
@@ -88,12 +89,13 @@ class MountEntry {
           mnt_opts_(entry.mnt_opts) {}
 
     bool Umount(bool force) {
+        LOG(INFO) << "Unmounting " << mnt_fsname_ << ":" << mnt_dir_ << " opts " << mnt_opts_;
         int r = umount2(mnt_dir_.c_str(), force ? MNT_FORCE : 0);
         if (r == 0) {
-            LOG(INFO) << "umounted " << mnt_fsname_ << ":" << mnt_dir_ << " opts " << mnt_opts_;
+            LOG(INFO) << "Umounted " << mnt_fsname_ << ":" << mnt_dir_ << " opts " << mnt_opts_;
             return true;
         } else {
-            PLOG(WARNING) << "cannot umount " << mnt_fsname_ << ":" << mnt_dir_ << " opts "
+            PLOG(WARNING) << "Cannot umount " << mnt_fsname_ << ":" << mnt_dir_ << " opts "
                           << mnt_opts_;
             return false;
         }
@@ -137,25 +139,12 @@ class MountEntry {
 
 // Turn off backlight while we are performing power down cleanup activities.
 static void TurnOffBacklight() {
-    static constexpr char OFF[] = "0";
-
-    android::base::WriteStringToFile(OFF, "/sys/class/leds/lcd-backlight/brightness");
-
-    static const char backlightDir[] = "/sys/class/backlight";
-    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(backlightDir), closedir);
-    if (!dir) {
+    Service* service = ServiceList::GetInstance().FindService("blank_screen");
+    if (service == nullptr) {
+        LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
         return;
     }
-
-    struct dirent* dp;
-    while ((dp = readdir(dir.get())) != nullptr) {
-        if (((dp->d_type != DT_DIR) && (dp->d_type != DT_LNK)) || (dp->d_name[0] == '.')) {
-            continue;
-        }
-
-        std::string fileName = StringPrintf("%s/%s/brightness", backlightDir, dp->d_name);
-        android::base::WriteStringToFile(OFF, fileName);
-    }
+    service->Start();
 }
 
 static void ShutdownVold() {
@@ -316,8 +305,6 @@ static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeo
     std::vector<MountEntry> block_devices;
     std::vector<MountEntry> emulated_devices;
 
-    TurnOffBacklight();  // this part can take time. save power.
-
     if (runFsck && !FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
         return UMOUNT_STAT_ERROR;
     }
@@ -397,6 +384,11 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         }
     }
 
+    // remaining operations (specifically fsck) may take a substantial duration
+    if (cmd == ANDROID_RB_POWEROFF || is_thermal_shutdown) {
+        TurnOffBacklight();
+    }
+
     Service* bootAnim = ServiceList::GetInstance().FindService("bootanim");
     Service* surfaceFlinger = ServiceList::GetInstance().FindService("surfaceflinger");
     if (bootAnim != nullptr && surfaceFlinger != nullptr && surfaceFlinger->IsRunning()) {
@@ -466,10 +458,20 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
         if (kill_after_apps.count(s->name())) s->Stop();
     }
     // 4. sync, try umount, and optionally run fsck for user shutdown
-    sync();
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() before umount...";
+        sync();
+        LOG(INFO) << "sync() before umount took" << sync_timer;
+    }
     UmountStat stat = TryUmountAndFsck(runFsck, shutdown_timeout - t.duration());
     // Follow what linux shutdown is doing: one more sync with little bit delay
-    sync();
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() after umount...";
+        sync();
+        LOG(INFO) << "sync() after umount took" << sync_timer;
+    }
     if (!is_thermal_shutdown) std::this_thread::sleep_for(100ms);
     LogShutdownTime(stat, &t);
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.

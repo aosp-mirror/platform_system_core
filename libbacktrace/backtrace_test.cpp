@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -67,6 +68,9 @@
 
 // Number of simultaneous threads running in our forked process.
 #define NUM_PTRACE_THREADS 5
+
+// The list of shared libaries that make up the backtrace library.
+static std::vector<std::string> kBacktraceLibs{"libunwindstack.so", "libbacktrace.so"};
 
 struct thread_t {
   pid_t tid;
@@ -143,6 +147,17 @@ static void FinishRemoteProcess(pid_t pid) {
   ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
 }
 
+#if !defined(__ANDROID__) || defined(__arm__)
+// On host and arm target we aren't guaranteed that we will terminate cleanly.
+#define VERIFY_NO_ERROR(error_code)                               \
+  ASSERT_TRUE(error_code == BACKTRACE_UNWIND_NO_ERROR ||          \
+              error_code == BACKTRACE_UNWIND_ERROR_UNWIND_INFO || \
+              error_code == BACKTRACE_UNWIND_ERROR_MAP_MISSING)   \
+      << "Unknown error code " << std::to_string(error_code);
+#else
+#define VERIFY_NO_ERROR(error_code) ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, error_code);
+#endif
+
 static bool ReadyLevelBacktrace(Backtrace* backtrace) {
   // See if test_level_four is in the backtrace.
   bool found = false;
@@ -189,7 +204,7 @@ static void VerifyLevelBacktrace(void*) {
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
   VerifyLevelDump(backtrace.get());
 }
@@ -211,7 +226,7 @@ static void VerifyMaxBacktrace(void*) {
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT, backtrace->GetError().error_code);
 
   VerifyMaxDump(backtrace.get());
 }
@@ -241,17 +256,50 @@ TEST(libbacktrace, local_no_unwind_frames) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), getpid()));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
   ASSERT_TRUE(backtrace->NumFrames() != 0);
+  // None of the frames should be in the backtrace libraries.
   for (const auto& frame : *backtrace ) {
     if (BacktraceMap::IsValid(frame.map)) {
       const std::string name = basename(frame.map.name.c_str());
-      ASSERT_TRUE(name != "libunwind.so" && name != "libbacktrace.so")
-        << DumpFrames(backtrace.get());
+      for (const auto& lib : kBacktraceLibs) {
+        ASSERT_TRUE(name != lib) << DumpFrames(backtrace.get());
+      }
     }
-    break;
   }
+}
+
+TEST(libbacktrace, local_unwind_frames) {
+  // Verify that a local unwind with the skip frames disabled does include
+  // frames within the backtrace libraries.
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), getpid()));
+  ASSERT_TRUE(backtrace.get() != nullptr);
+  backtrace->SetSkipFrames(false);
+  ASSERT_TRUE(backtrace->Unwind(0));
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
+
+  ASSERT_TRUE(backtrace->NumFrames() != 0);
+  size_t first_frame_non_backtrace_lib = 0;
+  for (const auto& frame : *backtrace) {
+    if (BacktraceMap::IsValid(frame.map)) {
+      const std::string name = basename(frame.map.name.c_str());
+      bool found = false;
+      for (const auto& lib : kBacktraceLibs) {
+        if (name == lib) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        first_frame_non_backtrace_lib = frame.num;
+        break;
+      }
+    }
+  }
+
+  ASSERT_NE(0U, first_frame_non_backtrace_lib) << "No frames found in backtrace libraries:\n"
+                                               << DumpFrames(backtrace.get());
 }
 
 TEST(libbacktrace, local_trace) {
@@ -292,19 +340,19 @@ static void VerifyLevelIgnoreFrames(void*) {
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(all.get() != nullptr);
   ASSERT_TRUE(all->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, all->GetError());
+  VERIFY_NO_ERROR(all->GetError().error_code);
 
   std::unique_ptr<Backtrace> ign1(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign1->GetError());
+  VERIFY_NO_ERROR(ign1->GetError().error_code);
 
   std::unique_ptr<Backtrace> ign2(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign2->GetError());
+  VERIFY_NO_ERROR(ign2->GetError().error_code);
 
   VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), "VerifyLevelIgnoreFrames");
 }
@@ -340,7 +388,6 @@ static void VerifyProcTest(pid_t pid, pid_t tid, bool (*ReadyFunc)(Backtrace*),
       std::unique_ptr<Backtrace> backtrace(create_func(pid, tid, map.get()));
       ASSERT_TRUE(backtrace.get() != nullptr);
       ASSERT_TRUE(backtrace->Unwind(0));
-      ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
       if (ReadyFunc(backtrace.get())) {
         VerifyFunc(backtrace.get(), create_func, map_create_func);
         verified = true;
@@ -389,12 +436,12 @@ static void VerifyProcessIgnoreFrames(Backtrace* bt_all, create_func_t create_fu
   std::unique_ptr<Backtrace> ign1(create_func(bt_all->Pid(), BACKTRACE_CURRENT_THREAD, map.get()));
   ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign1->GetError());
+  VERIFY_NO_ERROR(ign1->GetError().error_code);
 
   std::unique_ptr<Backtrace> ign2(create_func(bt_all->Pid(), BACKTRACE_CURRENT_THREAD, map.get()));
   ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign2->GetError());
+  VERIFY_NO_ERROR(ign2->GetError().error_code);
 
   VerifyIgnoreFrames(bt_all, ign1.get(), ign2.get(), nullptr);
 }
@@ -480,7 +527,7 @@ void VerifyLevelThread(void*) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
   VerifyLevelDump(backtrace.get());
 }
@@ -493,7 +540,7 @@ static void VerifyMaxThread(void*) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT, backtrace->GetError().error_code);
 
   VerifyMaxDump(backtrace.get());
 }
@@ -535,7 +582,7 @@ TEST(libbacktrace, thread_level_trace) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
   VerifyLevelDump(backtrace.get());
 
@@ -575,17 +622,17 @@ TEST(libbacktrace, thread_ignore_frames) {
   std::unique_ptr<Backtrace> all(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(all.get() != nullptr);
   ASSERT_TRUE(all->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, all->GetError());
+  VERIFY_NO_ERROR(all->GetError().error_code);
 
   std::unique_ptr<Backtrace> ign1(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign1->GetError());
+  VERIFY_NO_ERROR(ign1->GetError().error_code);
 
   std::unique_ptr<Backtrace> ign2(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, ign2->GetError());
+  VERIFY_NO_ERROR(ign2->GetError().error_code);
 
   VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), nullptr);
 
@@ -616,7 +663,7 @@ TEST(libbacktrace, thread_max_trace) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT, backtrace->GetError().error_code);
 
   VerifyMaxDump(backtrace.get());
 
@@ -713,21 +760,21 @@ TEST(libbacktrace, simultaneous_maps) {
   Backtrace* back1 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map1);
   ASSERT_TRUE(back1 != nullptr);
   EXPECT_TRUE(back1->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, back1->GetError());
+  VERIFY_NO_ERROR(back1->GetError().error_code);
   delete back1;
   delete map1;
 
   Backtrace* back2 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map2);
   ASSERT_TRUE(back2 != nullptr);
   EXPECT_TRUE(back2->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, back2->GetError());
+  VERIFY_NO_ERROR(back2->GetError().error_code);
   delete back2;
   delete map2;
 
   Backtrace* back3 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map3);
   ASSERT_TRUE(back3 != nullptr);
   EXPECT_TRUE(back3->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, back3->GetError());
+  VERIFY_NO_ERROR(back3->GetError().error_code);
   delete back3;
   delete map3;
 }
@@ -745,8 +792,8 @@ TEST(libbacktrace, fillin_erases) {
   delete back_map;
 
   ASSERT_FALSE(BacktraceMap::IsValid(map));
-  ASSERT_EQ(static_cast<uintptr_t>(0), map.start);
-  ASSERT_EQ(static_cast<uintptr_t>(0), map.end);
+  ASSERT_EQ(static_cast<uint64_t>(0), map.start);
+  ASSERT_EQ(static_cast<uint64_t>(0), map.end);
   ASSERT_EQ(0, map.flags);
   ASSERT_EQ("", map.name);
 }
@@ -851,8 +898,8 @@ TEST(libbacktrace, format_test) {
 }
 
 struct map_test_t {
-  uintptr_t start;
-  uintptr_t end;
+  uint64_t start;
+  uint64_t end;
 };
 
 static bool map_sort(map_test_t i, map_test_t j) { return i.start < j.start; }
@@ -863,7 +910,7 @@ static std::string GetTestMapsAsString(const std::vector<map_test_t>& maps) {
   }
   std::string map_txt;
   for (auto map : maps) {
-    map_txt += android::base::StringPrintf("%" PRIxPTR "-%" PRIxPTR "\n", map.start, map.end);
+    map_txt += android::base::StringPrintf("%" PRIx64 "-%" PRIx64 "\n", map.start, map.end);
   }
   return map_txt;
 }
@@ -875,7 +922,7 @@ static std::string GetMapsAsString(BacktraceMap* maps) {
   std::string map_txt;
   for (const backtrace_map_t* map : *maps) {
     map_txt += android::base::StringPrintf(
-        "%" PRIxPTR "-%" PRIxPTR " flags: 0x%x offset: 0x%" PRIxPTR " load_bias: 0x%" PRIxPTR,
+        "%" PRIx64 "-%" PRIx64 " flags: 0x%x offset: 0x%" PRIx64 " load_bias: 0x%" PRIx64,
         map->start, map->end, map->flags, map->offset, map->load_bias);
     if (!map->name.empty()) {
       map_txt += ' ' + map->name;
@@ -894,7 +941,7 @@ static void VerifyMap(pid_t pid) {
   std::vector<map_test_t> test_maps;
   while (fgets(buffer, sizeof(buffer), map_file)) {
     map_test_t map;
-    ASSERT_EQ(2, sscanf(buffer, "%" SCNxPTR "-%" SCNxPTR " ", &map.start, &map.end));
+    ASSERT_EQ(2, sscanf(buffer, "%" SCNx64 "-%" SCNx64 " ", &map.start, &map.end));
     test_maps.push_back(map);
   }
   fclose(map_file);
@@ -984,14 +1031,14 @@ static void* ThreadReadTest(void* data) {
   return nullptr;
 }
 
-static void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
+static void RunReadTest(Backtrace* backtrace, uint64_t read_addr) {
   size_t pagesize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
 
   // Create a page of data to use to do quick compares.
   uint8_t* expected = new uint8_t[pagesize];
   InitMemory(expected, pagesize);
 
-  uint8_t* data = new uint8_t[2*pagesize];
+  uint8_t* data = new uint8_t[2 * pagesize];
   // Verify that we can only read one page worth of data.
   size_t bytes_read = backtrace->Read(read_addr, data, 2 * pagesize);
   ASSERT_EQ(pagesize, bytes_read);
@@ -1035,15 +1082,17 @@ TEST(libbacktrace, thread_read) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(backtrace.get() != nullptr);
 
-  RunReadTest(backtrace.get(), reinterpret_cast<uintptr_t>(thread_data.data));
+  RunReadTest(backtrace.get(), reinterpret_cast<uint64_t>(thread_data.data));
 
   android_atomic_acquire_store(0, &thread_data.state);
 
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 10));
 }
 
-volatile uintptr_t g_ready = 0;
-volatile uintptr_t g_addr = 0;
+// The code requires these variables are the same size.
+volatile uint64_t g_ready = 0;
+volatile uint64_t g_addr = 0;
+static_assert(sizeof(g_ready) == sizeof(g_addr), "g_ready/g_addr must be same size");
 
 static void ForkedReadTest() {
   // Create two map pages.
@@ -1063,7 +1112,7 @@ static void ForkedReadTest() {
   // Set up a simple pattern in memory.
   InitMemory(memory, pagesize);
 
-  g_addr = reinterpret_cast<uintptr_t>(memory);
+  g_addr = reinterpret_cast<uint64_t>(memory);
   g_ready = 1;
 
   while (1) {
@@ -1089,17 +1138,15 @@ TEST(libbacktrace, process_read) {
       std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
       ASSERT_TRUE(backtrace.get() != nullptr);
 
-      uintptr_t read_addr;
-      size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(&g_ready),
-                                          reinterpret_cast<uint8_t*>(&read_addr),
-                                          sizeof(uintptr_t));
-      ASSERT_EQ(sizeof(uintptr_t), bytes_read);
+      uint64_t read_addr;
+      size_t bytes_read = backtrace->Read(reinterpret_cast<uint64_t>(&g_ready),
+                                          reinterpret_cast<uint8_t*>(&read_addr), sizeof(g_ready));
+      ASSERT_EQ(sizeof(g_ready), bytes_read);
       if (read_addr) {
         // The forked process is ready to be read.
-        bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(&g_addr),
-                                     reinterpret_cast<uint8_t*>(&read_addr),
-                                     sizeof(uintptr_t));
-        ASSERT_EQ(sizeof(uintptr_t), bytes_read);
+        bytes_read = backtrace->Read(reinterpret_cast<uint64_t>(&g_addr),
+                                     reinterpret_cast<uint8_t*>(&read_addr), sizeof(g_addr));
+        ASSERT_EQ(sizeof(g_addr), bytes_read);
 
         RunReadTest(backtrace.get(), read_addr);
 
@@ -1173,12 +1220,12 @@ TEST(libbacktrace, check_unreadable_elf_local) {
 
   struct stat buf;
   ASSERT_TRUE(stat(tmp_so_name, &buf) != -1);
-  uintptr_t map_size = buf.st_size;
+  uint64_t map_size = buf.st_size;
 
   int fd = open(tmp_so_name, O_RDONLY);
   ASSERT_TRUE(fd != -1);
 
-  void* map = mmap(NULL, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
+  void* map = mmap(nullptr, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
   ASSERT_TRUE(map != MAP_FAILED);
   close(fd);
   ASSERT_TRUE(unlink(tmp_so_name) != -1);
@@ -1192,11 +1239,10 @@ TEST(libbacktrace, check_unreadable_elf_local) {
   backtrace->Unwind(0);
 
   // Loop through the entire map, and get every function we can find.
-  map_size += reinterpret_cast<uintptr_t>(map);
+  map_size += reinterpret_cast<uint64_t>(map);
   std::string last_func;
-  for (uintptr_t read_addr = reinterpret_cast<uintptr_t>(map);
-       read_addr < map_size; read_addr += 4) {
-    uintptr_t offset;
+  for (uint64_t read_addr = reinterpret_cast<uint64_t>(map); read_addr < map_size; read_addr += 4) {
+    uint64_t offset;
     std::string func_name = backtrace->GetFunctionName(read_addr, &offset);
     if (!func_name.empty() && last_func != func_name) {
       found_functions.push_back(func_name);
@@ -1204,7 +1250,7 @@ TEST(libbacktrace, check_unreadable_elf_local) {
     last_func = func_name;
   }
 
-  ASSERT_TRUE(munmap(map, map_size - reinterpret_cast<uintptr_t>(map)) == 0);
+  ASSERT_TRUE(munmap(map, map_size - reinterpret_cast<uint64_t>(map)) == 0);
 
   VerifyFunctionsFound(found_functions);
 }
@@ -1217,7 +1263,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
 
   struct stat buf;
   ASSERT_TRUE(stat(tmp_so_name, &buf) != -1);
-  uintptr_t map_size = buf.st_size;
+  uint64_t map_size = buf.st_size;
 
   pid_t pid;
   if ((pid = fork()) == 0) {
@@ -1228,7 +1274,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
       exit(0);
     }
 
-    void* map = mmap(NULL, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
+    void* map = mmap(nullptr, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
     if (map == MAP_FAILED) {
       fprintf(stderr, "Failed to map in memory: %s\n", strerror(errno));
       unlink(tmp_so_name);
@@ -1240,7 +1286,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
       exit(0);
     }
 
-    g_addr = reinterpret_cast<uintptr_t>(map);
+    g_addr = reinterpret_cast<uint64_t>(map);
     g_ready = 1;
     while (true) {
       usleep(US_PER_MSEC);
@@ -1260,10 +1306,14 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
     std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, BACKTRACE_CURRENT_THREAD));
     ASSERT_TRUE(backtrace.get() != nullptr);
 
-    uintptr_t read_addr;
-    ASSERT_EQ(sizeof(uintptr_t), backtrace->Read(reinterpret_cast<uintptr_t>(&g_ready), reinterpret_cast<uint8_t*>(&read_addr), sizeof(uintptr_t)));
+    uint64_t read_addr;
+    ASSERT_EQ(sizeof(g_ready),
+              backtrace->Read(reinterpret_cast<uint64_t>(&g_ready),
+                              reinterpret_cast<uint8_t*>(&read_addr), sizeof(g_ready)));
     if (read_addr) {
-      ASSERT_EQ(sizeof(uintptr_t), backtrace->Read(reinterpret_cast<uintptr_t>(&g_addr), reinterpret_cast<uint8_t*>(&read_addr), sizeof(uintptr_t)));
+      ASSERT_EQ(sizeof(g_addr),
+                backtrace->Read(reinterpret_cast<uint64_t>(&g_addr),
+                                reinterpret_cast<uint8_t*>(&read_addr), sizeof(uint64_t)));
 
       // Needed before GetFunctionName will work.
       backtrace->Unwind(0);
@@ -1272,7 +1322,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
       map_size += read_addr;
       std::string last_func;
       for (; read_addr < map_size; read_addr += 4) {
-        uintptr_t offset;
+        uint64_t offset;
         std::string func_name = backtrace->GetFunctionName(read_addr, &offset);
         if (!func_name.empty() && last_func != func_name) {
           found_functions.push_back(func_name);
@@ -1295,7 +1345,7 @@ TEST(libbacktrace, check_unreadable_elf_remote) {
   VerifyFunctionsFound(found_functions);
 }
 
-static bool FindFuncFrameInBacktrace(Backtrace* backtrace, uintptr_t test_func, size_t* frame_num) {
+static bool FindFuncFrameInBacktrace(Backtrace* backtrace, uint64_t test_func, size_t* frame_num) {
   backtrace_map_t map;
   backtrace->FillInMap(test_func, &map);
   if (!BacktraceMap::IsValid(map)) {
@@ -1314,7 +1364,7 @@ static bool FindFuncFrameInBacktrace(Backtrace* backtrace, uintptr_t test_func, 
   return false;
 }
 
-static void VerifyUnreadableElfFrame(Backtrace* backtrace, uintptr_t test_func, size_t frame_num) {
+static void VerifyUnreadableElfFrame(Backtrace* backtrace, uint64_t test_func, size_t frame_num) {
   ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
     << DumpFrames(backtrace);
 
@@ -1322,24 +1372,26 @@ static void VerifyUnreadableElfFrame(Backtrace* backtrace, uintptr_t test_func, 
   // Make sure that there is at least one more frame above the test func call.
   ASSERT_LT(frame_num, backtrace->NumFrames()) << DumpFrames(backtrace);
 
-  uintptr_t diff = backtrace->GetFrame(frame_num)->pc - test_func;
+  uint64_t diff = backtrace->GetFrame(frame_num)->pc - test_func;
   ASSERT_LT(diff, 200U) << DumpFrames(backtrace);
 }
 
-static void VerifyUnreadableElfBacktrace(uintptr_t test_func) {
+static void VerifyUnreadableElfBacktrace(void* func) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS,
                                                          BACKTRACE_CURRENT_THREAD));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+  VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
   size_t frame_num;
-  ASSERT_TRUE(FindFuncFrameInBacktrace(backtrace.get(), test_func, &frame_num));
+  uint64_t test_func = reinterpret_cast<uint64_t>(func);
+  ASSERT_TRUE(FindFuncFrameInBacktrace(backtrace.get(), test_func, &frame_num))
+      << DumpFrames(backtrace.get());
 
   VerifyUnreadableElfFrame(backtrace.get(), test_func, frame_num);
 }
 
-typedef int (*test_func_t)(int, int, int, int, void (*)(uintptr_t), uintptr_t);
+typedef int (*test_func_t)(int, int, int, int, void (*)(void*), void*);
 
 TEST(libbacktrace, unwind_through_unreadable_elf_local) {
   const char* tmp_so_name = CopySharedLibrary();
@@ -1352,8 +1404,8 @@ TEST(libbacktrace, unwind_through_unreadable_elf_local) {
   test_func = reinterpret_cast<test_func_t>(dlsym(lib_handle, "test_level_one"));
   ASSERT_TRUE(test_func != nullptr);
 
-  ASSERT_NE(test_func(1, 2, 3, 4, VerifyUnreadableElfBacktrace,
-                      reinterpret_cast<uintptr_t>(test_func)), 0);
+  ASSERT_NE(test_func(1, 2, 3, 4, VerifyUnreadableElfBacktrace, reinterpret_cast<void*>(test_func)),
+            0);
 
   ASSERT_TRUE(dlclose(lib_handle) == 0);
 }
@@ -1388,13 +1440,12 @@ TEST(libbacktrace, unwind_through_unreadable_elf_remote) {
     std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, BACKTRACE_CURRENT_THREAD));
     ASSERT_TRUE(backtrace.get() != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
-    ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+    VERIFY_NO_ERROR(backtrace->GetError().error_code);
 
     size_t frame_num;
-    if (FindFuncFrameInBacktrace(backtrace.get(),
-                                 reinterpret_cast<uintptr_t>(test_func), &frame_num)) {
-
-      VerifyUnreadableElfFrame(backtrace.get(), reinterpret_cast<uintptr_t>(test_func), frame_num);
+    if (FindFuncFrameInBacktrace(backtrace.get(), reinterpret_cast<uint64_t>(test_func),
+                                 &frame_num)) {
+      VerifyUnreadableElfFrame(backtrace.get(), reinterpret_cast<uint64_t>(test_func), frame_num);
       done = true;
     }
 
@@ -1417,7 +1468,7 @@ TEST(libbacktrace, unwind_thread_doesnt_exist) {
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 99999999));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_FALSE(backtrace->Unwind(0));
-  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST, backtrace->GetError());
+  ASSERT_EQ(BACKTRACE_UNWIND_ERROR_THREAD_DOESNT_EXIST, backtrace->GetError().error_code);
 }
 
 TEST(libbacktrace, local_get_function_name_before_unwind) {
@@ -1426,8 +1477,8 @@ TEST(libbacktrace, local_get_function_name_before_unwind) {
   ASSERT_TRUE(backtrace.get() != nullptr);
 
   // Verify that trying to get a function name before doing an unwind works.
-  uintptr_t cur_func_offset = reinterpret_cast<uintptr_t>(&test_level_one) + 1;
-  size_t offset;
+  uint64_t cur_func_offset = reinterpret_cast<uint64_t>(&test_level_one) + 1;
+  uint64_t offset;
   ASSERT_NE(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset));
 }
 
@@ -1439,14 +1490,14 @@ TEST(libbacktrace, remote_get_function_name_before_unwind) {
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
 
   // Verify that trying to get a function name before doing an unwind works.
-  uintptr_t cur_func_offset = reinterpret_cast<uintptr_t>(&test_level_one) + 1;
-  size_t offset;
+  uint64_t cur_func_offset = reinterpret_cast<uint64_t>(&test_level_one) + 1;
+  uint64_t offset;
   ASSERT_NE(std::string(""), backtrace->GetFunctionName(cur_func_offset, &offset));
 
   FinishRemoteProcess(pid);
 }
 
-static void SetUcontextSp(uintptr_t sp, ucontext_t* ucontext) {
+static void SetUcontextSp(uint64_t sp, ucontext_t* ucontext) {
 #if defined(__arm__)
   ucontext->uc_mcontext.arm_sp = sp;
 #elif defined(__aarch64__)
@@ -1462,7 +1513,7 @@ static void SetUcontextSp(uintptr_t sp, ucontext_t* ucontext) {
 #endif
 }
 
-static void SetUcontextPc(uintptr_t pc, ucontext_t* ucontext) {
+static void SetUcontextPc(uint64_t pc, ucontext_t* ucontext) {
 #if defined(__arm__)
   ucontext->uc_mcontext.arm_pc = pc;
 #elif defined(__aarch64__)
@@ -1478,7 +1529,7 @@ static void SetUcontextPc(uintptr_t pc, ucontext_t* ucontext) {
 #endif
 }
 
-static void SetUcontextLr(uintptr_t lr, ucontext_t* ucontext) {
+static void SetUcontextLr(uint64_t lr, ucontext_t* ucontext) {
 #if defined(__arm__)
   ucontext->uc_mcontext.arm_lr = lr;
 #elif defined(__aarch64__)
@@ -1513,7 +1564,7 @@ static void SetupDeviceMap(void** device_map) {
 }
 
 static void UnwindFromDevice(Backtrace* backtrace, void* device_map) {
-  uintptr_t device_map_uint = reinterpret_cast<uintptr_t>(device_map);
+  uint64_t device_map_uint = reinterpret_cast<uint64_t>(device_map);
 
   backtrace_map_t map;
   backtrace->FillInMap(device_map_uint, &map);
@@ -1521,12 +1572,12 @@ static void UnwindFromDevice(Backtrace* backtrace, void* device_map) {
   ASSERT_EQ(PROT_DEVICE_MAP, map.flags & PROT_DEVICE_MAP);
 
   // Quick sanity checks.
-  size_t offset;
+  uint64_t offset;
   ASSERT_EQ(std::string(""), backtrace->GetFunctionName(device_map_uint, &offset));
   ASSERT_EQ(std::string(""), backtrace->GetFunctionName(device_map_uint, &offset, &map));
   ASSERT_EQ(std::string(""), backtrace->GetFunctionName(0, &offset));
 
-  uintptr_t cur_func_offset = reinterpret_cast<uintptr_t>(&test_level_one) + 1;
+  uint64_t cur_func_offset = reinterpret_cast<uint64_t>(&test_level_one) + 1;
   // Now verify the device map flag actually causes the function name to be empty.
   backtrace->FillInMap(cur_func_offset, &map);
   ASSERT_TRUE((map.flags & PROT_DEVICE_MAP) == 0);
@@ -1539,7 +1590,7 @@ static void UnwindFromDevice(Backtrace* backtrace, void* device_map) {
   // Create a context that has the pc in the device map, but the sp
   // in a non-device map.
   memset(&ucontext, 0, sizeof(ucontext));
-  SetUcontextSp(reinterpret_cast<uintptr_t>(&ucontext), &ucontext);
+  SetUcontextSp(reinterpret_cast<uint64_t>(&ucontext), &ucontext);
   SetUcontextPc(device_map_uint, &ucontext);
   SetUcontextLr(cur_func_offset, &ucontext);
 
@@ -1549,7 +1600,7 @@ static void UnwindFromDevice(Backtrace* backtrace, void* device_map) {
   ASSERT_EQ(1U, backtrace->NumFrames());
   const backtrace_frame_data_t* frame = backtrace->GetFrame(0);
   ASSERT_EQ(device_map_uint, frame->pc);
-  ASSERT_EQ(reinterpret_cast<uintptr_t>(&ucontext), frame->sp);
+  ASSERT_EQ(reinterpret_cast<uint64_t>(&ucontext), frame->sp);
 
   // Check what happens when skipping the first frame.
   ASSERT_TRUE(backtrace->Unwind(1, &ucontext));
@@ -1669,7 +1720,7 @@ static void UnwindThroughSignal(bool use_action, create_func_t create_func,
     std::unique_ptr<BacktraceMap> map(map_create_func(pid, false));
     std::unique_ptr<Backtrace> backtrace(create_func(pid, pid, map.get()));
 
-    size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(const_cast<int*>(&value)),
+    size_t bytes_read = backtrace->Read(reinterpret_cast<uint64_t>(const_cast<int*>(&value)),
                                         reinterpret_cast<uint8_t*>(&read_value), sizeof(read_value));
     ASSERT_EQ(sizeof(read_value), bytes_read);
 
@@ -1785,7 +1836,7 @@ static void CheckForLeak(pid_t pid, pid_t tid) {
     Backtrace* backtrace = Backtrace::Create(pid, tid, map.get());
     ASSERT_TRUE(backtrace != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
-    ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+    VERIFY_NO_ERROR(backtrace->GetError().error_code);
     delete backtrace;
   }
   size_t stable_pss = GetPssBytes();
@@ -1796,7 +1847,7 @@ static void CheckForLeak(pid_t pid, pid_t tid) {
     Backtrace* backtrace = Backtrace::Create(pid, tid, map.get());
     ASSERT_TRUE(backtrace != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
-    ASSERT_EQ(BACKTRACE_UNWIND_NO_ERROR, backtrace->GetError());
+    VERIFY_NO_ERROR(backtrace->GetError().error_code);
     delete backtrace;
   }
   size_t new_pss = GetPssBytes();

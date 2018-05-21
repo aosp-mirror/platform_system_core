@@ -19,18 +19,20 @@
 #include <poll.h>
 #include <sys/endian.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <unordered_set>
 
 #include <android-base/file.h>
+#include <benchmark/benchmark.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <log/log_transport.h>
 #include <private/android_logger.h>
 
-#include "benchmark.h"
+BENCHMARK_MAIN();
 
 // enhanced version of LOG_FAILURE_RETRY to add support for EAGAIN and
 // non-syscall libs. Since we are benchmarking, or using this in the emergency
@@ -51,15 +53,11 @@
  * the log at high pressure. Expect this to be less than double the process
  * wakeup time (2ms?)
  */
-static void BM_log_maximum_retry(int iters) {
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
-    LOG_FAILURE_RETRY(
-        __android_log_print(ANDROID_LOG_INFO, "BM_log_maximum_retry", "%d", i));
+static void BM_log_maximum_retry(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    LOG_FAILURE_RETRY(__android_log_print(
+        ANDROID_LOG_INFO, "BM_log_maximum_retry", "%zu", state.iterations()));
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_log_maximum_retry);
 
@@ -68,14 +66,11 @@ BENCHMARK(BM_log_maximum_retry);
  * at high pressure. Expect this to be less than double the process wakeup
  * time (2ms?)
  */
-static void BM_log_maximum(int iters) {
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
-    __android_log_print(ANDROID_LOG_INFO, "BM_log_maximum", "%d", i);
+static void BM_log_maximum(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    __android_log_print(ANDROID_LOG_INFO, "BM_log_maximum", "%zu",
+                        state.iterations());
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_log_maximum);
 
@@ -87,36 +82,98 @@ static void set_log_default() {
   android_set_log_transport(LOGGER_DEFAULT);
 }
 
-static void BM_log_maximum_null(int iters) {
+static void BM_log_maximum_null(benchmark::State& state) {
   set_log_null();
-  BM_log_maximum(iters);
+  BM_log_maximum(state);
   set_log_default();
 }
 BENCHMARK(BM_log_maximum_null);
 
 /*
  *	Measure the time it takes to collect the time using
- * discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
+ * discrete acquisition (state.PauseTiming() to state.ResumeTiming())
  * under light load. Expect this to be a syscall period (2us) or
  * data read time if zero-syscall.
  *
  * vdso support in the kernel and the library can allow
- * clock_gettime to be zero-syscall.
+ * clock_gettime to be zero-syscall, but there there does remain some
+ * benchmarking overhead to pause and resume; assumptions are both are
+ * covered.
  */
-static void BM_clock_overhead(int iters) {
-  for (int i = 0; i < iters; ++i) {
-    StartBenchmarkTiming();
-    StopBenchmarkTiming();
+static void BM_clock_overhead(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    state.PauseTiming();
+    state.ResumeTiming();
   }
 }
 BENCHMARK(BM_clock_overhead);
 
+static void do_clock_overhead(benchmark::State& state, clockid_t clk_id) {
+  timespec t;
+  while (state.KeepRunning()) {
+    clock_gettime(clk_id, &t);
+  }
+}
+
+static void BM_time_clock_gettime_REALTIME(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_REALTIME);
+}
+BENCHMARK(BM_time_clock_gettime_REALTIME);
+
+static void BM_time_clock_gettime_MONOTONIC(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_MONOTONIC);
+}
+BENCHMARK(BM_time_clock_gettime_MONOTONIC);
+
+static void BM_time_clock_gettime_MONOTONIC_syscall(benchmark::State& state) {
+  timespec t;
+  while (state.KeepRunning()) {
+    syscall(__NR_clock_gettime, CLOCK_MONOTONIC, &t);
+  }
+}
+BENCHMARK(BM_time_clock_gettime_MONOTONIC_syscall);
+
+static void BM_time_clock_gettime_MONOTONIC_RAW(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_MONOTONIC_RAW);
+}
+BENCHMARK(BM_time_clock_gettime_MONOTONIC_RAW);
+
+static void BM_time_clock_gettime_BOOTTIME(benchmark::State& state) {
+  do_clock_overhead(state, CLOCK_BOOTTIME);
+}
+BENCHMARK(BM_time_clock_gettime_BOOTTIME);
+
+static void BM_time_clock_getres_MONOTONIC(benchmark::State& state) {
+  timespec t;
+  while (state.KeepRunning()) {
+    clock_getres(CLOCK_MONOTONIC, &t);
+  }
+}
+BENCHMARK(BM_time_clock_getres_MONOTONIC);
+
+static void BM_time_clock_getres_MONOTONIC_syscall(benchmark::State& state) {
+  timespec t;
+  while (state.KeepRunning()) {
+    syscall(__NR_clock_getres, CLOCK_MONOTONIC, &t);
+  }
+}
+BENCHMARK(BM_time_clock_getres_MONOTONIC_syscall);
+
+static void BM_time_time(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    time_t now;
+    now = time(&now);
+  }
+}
+BENCHMARK(BM_time_time);
+
 /*
  * Measure the time it takes to submit the android logging data to pstore
  */
-static void BM_pmsg_short(int iters) {
+static void BM_pmsg_short(benchmark::State& state) {
   int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
   if (pstore_fd < 0) {
+    state.SkipWithError("/dev/pmsg0");
     return;
   }
 
@@ -175,13 +232,12 @@ static void BM_pmsg_short(int iters) {
   newVec[2].iov_base = &buffer;
   newVec[2].iov_len = sizeof(buffer);
 
-  StartBenchmarkTiming();
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     ++snapshot;
     buffer.payload.data = htole32(snapshot);
     writev(pstore_fd, newVec, nr);
   }
-  StopBenchmarkTiming();
+  state.PauseTiming();
   close(pstore_fd);
 }
 BENCHMARK(BM_pmsg_short);
@@ -190,9 +246,10 @@ BENCHMARK(BM_pmsg_short);
  * Measure the time it takes to submit the android logging data to pstore
  * best case aligned single block.
  */
-static void BM_pmsg_short_aligned(int iters) {
+static void BM_pmsg_short_aligned(benchmark::State& state) {
   int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
   if (pstore_fd < 0) {
+    state.SkipWithError("/dev/pmsg0");
     return;
   }
 
@@ -228,7 +285,8 @@ static void BM_pmsg_short_aligned(int iters) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
   if (((uintptr_t)&buffer->pmsg_header) & 7) {
-    fprintf(stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+            state.iterations());
   }
 
   buffer->pmsg_header.magic = LOGGER_MAGIC;
@@ -247,15 +305,14 @@ static void BM_pmsg_short_aligned(int iters) {
   uint32_t snapshot = 0;
   buffer->payload.payload.data = htole32(snapshot);
 
-  StartBenchmarkTiming();
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     ++snapshot;
     buffer->payload.payload.data = htole32(snapshot);
     write(pstore_fd, &buffer->pmsg_header,
           sizeof(android_pmsg_log_header_t) + sizeof(android_log_header_t) +
               sizeof(android_log_event_int_t));
   }
-  StopBenchmarkTiming();
+  state.PauseTiming();
   close(pstore_fd);
 }
 BENCHMARK(BM_pmsg_short_aligned);
@@ -264,9 +321,10 @@ BENCHMARK(BM_pmsg_short_aligned);
  * Measure the time it takes to submit the android logging data to pstore
  * best case aligned single block.
  */
-static void BM_pmsg_short_unaligned1(int iters) {
+static void BM_pmsg_short_unaligned1(benchmark::State& state) {
   int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
   if (pstore_fd < 0) {
+    state.SkipWithError("/dev/pmsg0");
     return;
   }
 
@@ -302,7 +360,8 @@ static void BM_pmsg_short_unaligned1(int iters) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
   if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
-    fprintf(stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+            state.iterations());
   }
 
   buffer->pmsg_header.magic = LOGGER_MAGIC;
@@ -321,15 +380,14 @@ static void BM_pmsg_short_unaligned1(int iters) {
   uint32_t snapshot = 0;
   buffer->payload.payload.data = htole32(snapshot);
 
-  StartBenchmarkTiming();
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     ++snapshot;
     buffer->payload.payload.data = htole32(snapshot);
     write(pstore_fd, &buffer->pmsg_header,
           sizeof(android_pmsg_log_header_t) + sizeof(android_log_header_t) +
               sizeof(android_log_event_int_t));
   }
-  StopBenchmarkTiming();
+  state.PauseTiming();
   close(pstore_fd);
 }
 BENCHMARK(BM_pmsg_short_unaligned1);
@@ -338,9 +396,10 @@ BENCHMARK(BM_pmsg_short_unaligned1);
  * Measure the time it takes to submit the android logging data to pstore
  * best case aligned single block.
  */
-static void BM_pmsg_long_aligned(int iters) {
+static void BM_pmsg_long_aligned(benchmark::State& state) {
   int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
   if (pstore_fd < 0) {
+    state.SkipWithError("/dev/pmsg0");
     return;
   }
 
@@ -376,7 +435,8 @@ static void BM_pmsg_long_aligned(int iters) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
   if (((uintptr_t)&buffer->pmsg_header) & 7) {
-    fprintf(stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+            state.iterations());
   }
 
   buffer->pmsg_header.magic = LOGGER_MAGIC;
@@ -395,13 +455,12 @@ static void BM_pmsg_long_aligned(int iters) {
   uint32_t snapshot = 0;
   buffer->payload.payload.data = htole32(snapshot);
 
-  StartBenchmarkTiming();
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     ++snapshot;
     buffer->payload.payload.data = htole32(snapshot);
     write(pstore_fd, &buffer->pmsg_header, LOGGER_ENTRY_MAX_PAYLOAD);
   }
-  StopBenchmarkTiming();
+  state.PauseTiming();
   close(pstore_fd);
 }
 BENCHMARK(BM_pmsg_long_aligned);
@@ -410,9 +469,10 @@ BENCHMARK(BM_pmsg_long_aligned);
  * Measure the time it takes to submit the android logging data to pstore
  * best case aligned single block.
  */
-static void BM_pmsg_long_unaligned1(int iters) {
+static void BM_pmsg_long_unaligned1(benchmark::State& state) {
   int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
   if (pstore_fd < 0) {
+    state.SkipWithError("/dev/pmsg0");
     return;
   }
 
@@ -448,7 +508,8 @@ static void BM_pmsg_long_unaligned1(int iters) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
   if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
-    fprintf(stderr, "&buffer=0x%p iters=%d\n", &buffer->pmsg_header, iters);
+    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+            state.iterations());
   }
 
   buffer->pmsg_header.magic = LOGGER_MAGIC;
@@ -467,22 +528,20 @@ static void BM_pmsg_long_unaligned1(int iters) {
   uint32_t snapshot = 0;
   buffer->payload.payload.data = htole32(snapshot);
 
-  StartBenchmarkTiming();
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     ++snapshot;
     buffer->payload.payload.data = htole32(snapshot);
     write(pstore_fd, &buffer->pmsg_header, LOGGER_ENTRY_MAX_PAYLOAD);
   }
-  StopBenchmarkTiming();
+  state.PauseTiming();
   close(pstore_fd);
 }
 BENCHMARK(BM_pmsg_long_unaligned1);
 
 /*
  *	Measure the time it takes to form sprintf plus time using
- * discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
- * under light load. Expect this to be a syscall period (2us) or sprintf
- * time if zero-syscall time.
+ * discrete acquisition under light load. Expect this to be a syscall period
+ * (2us) or sprintf time if zero-syscall time.
  */
 /* helper function */
 static void test_print(const char* fmt, ...) {
@@ -498,58 +557,55 @@ static void test_print(const char* fmt, ...) {
 #define logd_sleep() usleep(50)     // really allow logd to catch up
 
 /* performance test */
-static void BM_sprintf_overhead(int iters) {
-  for (int i = 0; i < iters; ++i) {
-    StartBenchmarkTiming();
-    test_print("BM_sprintf_overhead:%d", i);
-    StopBenchmarkTiming();
+static void BM_sprintf_overhead(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    test_print("BM_sprintf_overhead:%zu", state.iterations());
+    state.PauseTiming();
     logd_yield();
+    state.ResumeTiming();
   }
 }
 BENCHMARK(BM_sprintf_overhead);
 
 /*
  *	Measure the time it takes to submit the android printing logging call
- * using discrete acquisition discrete acquisition (StartBenchmarkTiming() ->
- * StopBenchmarkTiming()) under light load. Expect this to be a dozen or so
- * syscall periods (40us) plus time to run *printf
+ * using discrete acquisition discrete acquisition under light load. Expect
+ * this to be a dozen or so syscall periods (40us) plus time to run *printf
  */
-static void BM_log_print_overhead(int iters) {
-  for (int i = 0; i < iters; ++i) {
-    StartBenchmarkTiming();
-    __android_log_print(ANDROID_LOG_INFO, "BM_log_overhead", "%d", i);
-    StopBenchmarkTiming();
+static void BM_log_print_overhead(benchmark::State& state) {
+  while (state.KeepRunning()) {
+    __android_log_print(ANDROID_LOG_INFO, "BM_log_overhead", "%zu",
+                        state.iterations());
+    state.PauseTiming();
     logd_yield();
+    state.ResumeTiming();
   }
 }
 BENCHMARK(BM_log_print_overhead);
 
 /*
  *	Measure the time it takes to submit the android event logging call
- * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
- * under light load. Expect this to be a long path to logger to convert the
- * unknown tag (0) into a tagname (less than 200us).
+ * using discrete acquisition under light load. Expect this to be a long path
+ * to logger to convert the unknown tag (0) into a tagname (less than 200us).
  */
-static void BM_log_event_overhead(int iters) {
-  for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
-    StartBenchmarkTiming();
+static void BM_log_event_overhead(benchmark::State& state) {
+  for (int64_t i = 0; state.KeepRunning(); ++i) {
     // log tag number 0 is not known, nor shall it ever be known
     __android_log_btwrite(0, EVENT_TYPE_LONG, &i, sizeof(i));
-    StopBenchmarkTiming();
+    state.PauseTiming();
     logd_yield();
+    state.ResumeTiming();
   }
 }
 BENCHMARK(BM_log_event_overhead);
 
 /*
  *	Measure the time it takes to submit the android event logging call
- * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
- * under light load with a known logtag.  Expect this to be a dozen or so
- * syscall periods (less than 40us)
+ * using discrete acquisition under light load with a known logtag.  Expect
+ * this to be a dozen or so syscall periods (less than 40us)
  */
-static void BM_log_event_overhead_42(int iters) {
-  for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
-    StartBenchmarkTiming();
+static void BM_log_event_overhead_42(benchmark::State& state) {
+  for (int64_t i = 0; state.KeepRunning(); ++i) {
     // In system/core/logcat/event.logtags:
     // # These are used for testing, do not modify without updating
     // # tests/framework-tests/src/android/util/EventLogFunctionalTest.java.
@@ -557,40 +613,42 @@ static void BM_log_event_overhead_42(int iters) {
     // # system/core/liblog/tests/liblog_test.cpp
     // 42    answer (to life the universe etc|3)
     __android_log_btwrite(42, EVENT_TYPE_LONG, &i, sizeof(i));
-    StopBenchmarkTiming();
+    state.PauseTiming();
     logd_yield();
+    state.ResumeTiming();
   }
 }
 BENCHMARK(BM_log_event_overhead_42);
 
-static void BM_log_event_overhead_null(int iters) {
+static void BM_log_event_overhead_null(benchmark::State& state) {
   set_log_null();
-  BM_log_event_overhead(iters);
+  BM_log_event_overhead(state);
   set_log_default();
 }
 BENCHMARK(BM_log_event_overhead_null);
 
 /*
  *	Measure the time it takes to submit the android event logging call
- * using discrete acquisition (StartBenchmarkTiming() -> StopBenchmarkTiming())
- * under very-light load (<1% CPU utilization).
+ * using discrete acquisition under very-light load (<1% CPU utilization).
  */
-static void BM_log_light_overhead(int iters) {
-  for (unsigned long long i = 0; i < (unsigned)iters; ++i) {
-    StartBenchmarkTiming();
+static void BM_log_light_overhead(benchmark::State& state) {
+  for (int64_t i = 0; state.KeepRunning(); ++i) {
     __android_log_btwrite(0, EVENT_TYPE_LONG, &i, sizeof(i));
-    StopBenchmarkTiming();
+    state.PauseTiming();
     usleep(10000);
+    state.ResumeTiming();
   }
 }
 BENCHMARK(BM_log_light_overhead);
 
-static void BM_log_light_overhead_null(int iters) {
+static void BM_log_light_overhead_null(benchmark::State& state) {
   set_log_null();
-  BM_log_light_overhead(iters);
+  BM_log_light_overhead(state);
   set_log_default();
 }
-BENCHMARK(BM_log_light_overhead_null);
+// Default gets out of hand for this test, so we set a reasonable number of
+// iterations for a timely result.
+BENCHMARK(BM_log_light_overhead_null)->Iterations(500);
 
 static void caught_latency(int /*signum*/) {
   unsigned long long v = 0xDEADBEEFA55A5AA5ULL;
@@ -614,10 +672,12 @@ static const int alarm_time = 3;
 
 /*
  *	Measure the time it takes for the logd posting call to acquire the
- * timestamp to place into the internal record. Expect this to be less than
- * 4 syscalls (3us).
+ * timestamp to place into the internal record.  Expect this to be less than
+ * 4 syscalls (3us).  This test uses manual injection of timing because it is
+ * comparing the timestamp at send, and then picking up the corresponding log
+ * end-to-end long path from logd to see what actual timestamp was submitted.
  */
-static void BM_log_latency(int iters) {
+static void BM_log_latency(benchmark::State& state) {
   pid_t pid = getpid();
 
   struct logger_list* logger_list =
@@ -631,7 +691,8 @@ static void BM_log_latency(int iters) {
   signal(SIGALRM, caught_latency);
   alarm(alarm_time);
 
-  for (int j = 0, i = 0; i < iters && j < 10 * iters; ++i, ++j) {
+  for (size_t j = 0; state.KeepRunning() && j < 10 * state.iterations(); ++j) {
+  retry:  // We allow transitory errors (logd overloaded) to be retried.
     log_time ts;
     LOG_FAILURE_RETRY((ts = log_time(CLOCK_REALTIME),
                        android_btWriteLog(0, EVENT_TYPE_LONG, &ts, sizeof(ts))));
@@ -642,7 +703,7 @@ static void BM_log_latency(int iters) {
       alarm(alarm_time);
 
       if (ret <= 0) {
-        iters = i;
+        state.SkipWithError("android_logger_list_read");
         break;
       }
       if ((log_msg.entry.len != (4 + 1 + 8)) ||
@@ -658,7 +719,7 @@ static void BM_log_latency(int iters) {
       log_time tx(eventData + 4 + 1);
       if (ts != tx) {
         if (0xDEADBEEFA55A5AA5ULL == caught_convert(eventData + 4 + 1)) {
-          iters = i;
+          state.SkipWithError("signal");
           break;
         }
         continue;
@@ -666,12 +727,8 @@ static void BM_log_latency(int iters) {
 
       uint64_t start = ts.nsec();
       uint64_t end = log_msg.nsec();
-      if (end >= start) {
-        StartBenchmarkTiming(start);
-        StopBenchmarkTiming(end);
-      } else {
-        --i;
-      }
+      if (end < start) goto retry;
+      state.SetIterationTime((end - start) / (double)NS_PER_SEC);
       break;
     }
   }
@@ -681,7 +738,9 @@ static void BM_log_latency(int iters) {
 
   android_logger_list_free(logger_list);
 }
-BENCHMARK(BM_log_latency);
+// Default gets out of hand for this test, so we set a reasonable number of
+// iterations for a timely result.
+BENCHMARK(BM_log_latency)->UseManualTime()->Iterations(200);
 
 static void caught_delay(int /*signum*/) {
   unsigned long long v = 0xDEADBEEFA55A5AA6ULL;
@@ -693,7 +752,7 @@ static void caught_delay(int /*signum*/) {
  *	Measure the time it takes for the logd posting call to make it into
  * the logs. Expect this to be less than double the process wakeup time (2ms).
  */
-static void BM_log_delay(int iters) {
+static void BM_log_delay(benchmark::State& state) {
   pid_t pid = getpid();
 
   struct logger_list* logger_list =
@@ -707,9 +766,7 @@ static void BM_log_delay(int iters) {
   signal(SIGALRM, caught_delay);
   alarm(alarm_time);
 
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     log_time ts(CLOCK_REALTIME);
 
     LOG_FAILURE_RETRY(android_btWriteLog(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
@@ -720,7 +777,7 @@ static void BM_log_delay(int iters) {
       alarm(alarm_time);
 
       if (ret <= 0) {
-        iters = i;
+        state.SkipWithError("android_logger_list_read");
         break;
       }
       if ((log_msg.entry.len != (4 + 1 + 8)) ||
@@ -736,7 +793,7 @@ static void BM_log_delay(int iters) {
       log_time tx(eventData + 4 + 1);
       if (ts != tx) {
         if (0xDEADBEEFA55A5AA6ULL == caught_convert(eventData + 4 + 1)) {
-          iters = i;
+          state.SkipWithError("signal");
           break;
         }
         continue;
@@ -745,11 +802,10 @@ static void BM_log_delay(int iters) {
       break;
     }
   }
+  state.PauseTiming();
 
   signal(SIGALRM, SIG_DFL);
   alarm(0);
-
-  StopBenchmarkTiming();
 
   android_logger_list_free(logger_list);
 }
@@ -758,45 +814,33 @@ BENCHMARK(BM_log_delay);
 /*
  *	Measure the time it takes for __android_log_is_loggable.
  */
-static void BM_is_loggable(int iters) {
+static void BM_is_loggable(benchmark::State& state) {
   static const char logd[] = "logd";
 
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     __android_log_is_loggable_len(ANDROID_LOG_WARN, logd, strlen(logd),
                                   ANDROID_LOG_VERBOSE);
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_is_loggable);
 
 /*
  *	Measure the time it takes for android_log_clockid.
  */
-static void BM_clockid(int iters) {
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+static void BM_clockid(benchmark::State& state) {
+  while (state.KeepRunning()) {
     android_log_clockid();
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_clockid);
 
 /*
  *	Measure the time it takes for __android_log_security.
  */
-static void BM_security(int iters) {
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+static void BM_security(benchmark::State& state) {
+  while (state.KeepRunning()) {
     __android_log_security();
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_security);
 
@@ -824,21 +868,17 @@ static bool prechargeEventMap() {
 /*
  *	Measure the time it takes for android_lookupEventTag_len
  */
-static void BM_lookupEventTag(int iters) {
+static void BM_lookupEventTag(benchmark::State& state) {
   prechargeEventMap();
 
   std::unordered_set<uint32_t>::const_iterator it = set.begin();
 
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     size_t len;
     android_lookupEventTag_len(map, &len, (*it));
     ++it;
     if (it == set.end()) it = set.begin();
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_lookupEventTag);
 
@@ -847,7 +887,7 @@ BENCHMARK(BM_lookupEventTag);
  */
 static uint32_t notTag = 1;
 
-static void BM_lookupEventTag_NOT(int iters) {
+static void BM_lookupEventTag_NOT(benchmark::State& state) {
   prechargeEventMap();
 
   while (set.find(notTag) != set.end()) {
@@ -855,14 +895,10 @@ static void BM_lookupEventTag_NOT(int iters) {
     if (notTag >= USHRT_MAX) notTag = 1;
   }
 
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     size_t len;
     android_lookupEventTag_len(map, &len, notTag);
   }
-
-  StopBenchmarkTiming();
 
   ++notTag;
   if (notTag >= USHRT_MAX) notTag = 1;
@@ -872,42 +908,38 @@ BENCHMARK(BM_lookupEventTag_NOT);
 /*
  *	Measure the time it takes for android_lookupEventFormat_len
  */
-static void BM_lookupEventFormat(int iters) {
+static void BM_lookupEventFormat(benchmark::State& state) {
   prechargeEventMap();
 
   std::unordered_set<uint32_t>::const_iterator it = set.begin();
 
-  StartBenchmarkTiming();
-
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     size_t len;
     android_lookupEventFormat_len(map, &len, (*it));
     ++it;
     if (it == set.end()) it = set.begin();
   }
-
-  StopBenchmarkTiming();
 }
 BENCHMARK(BM_lookupEventFormat);
 
 /*
  *	Measure the time it takes for android_lookupEventTagNum plus above
  */
-static void BM_lookupEventTagNum(int iters) {
+static void BM_lookupEventTagNum(benchmark::State& state) {
   prechargeEventMap();
 
   std::unordered_set<uint32_t>::const_iterator it = set.begin();
 
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     size_t len;
     const char* name = android_lookupEventTag_len(map, &len, (*it));
     std::string Name(name, len);
     const char* format = android_lookupEventFormat_len(map, &len, (*it));
     std::string Format(format, len);
-    StartBenchmarkTiming();
+    state.ResumeTiming();
     android_lookupEventTagNum(map, Name.c_str(), Format.c_str(),
                               ANDROID_LOG_UNKNOWN);
-    StopBenchmarkTiming();
+    state.PauseTiming();
     ++it;
     if (it == set.end()) it = set.begin();
   }
@@ -943,7 +975,7 @@ static void send_to_control(char* buf, size_t len) {
   close(sock);
 }
 
-static void BM_lookupEventTagNum_logd_new(int iters) {
+static void BM_lookupEventTagNum_logd_new(benchmark::State& state) {
   fprintf(stderr,
           "WARNING: "
           "This test can cause logd to grow in size and hit DOS limiter\n");
@@ -965,7 +997,7 @@ static void BM_lookupEventTagNum_logd_new(int iters) {
     data_event_log_tags = empty_event_log_tags;
   }
 
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     char buffer[256];
     memset(buffer, 0, sizeof(buffer));
     log_time now(CLOCK_MONOTONIC);
@@ -973,9 +1005,9 @@ static void BM_lookupEventTagNum_logd_new(int iters) {
     snprintf(name, sizeof(name), "a%" PRIu64, now.nsec());
     snprintf(buffer, sizeof(buffer), "getEventTag name=%s format=\"(new|1)\"",
              name);
-    StartBenchmarkTiming();
+    state.ResumeTiming();
     send_to_control(buffer, sizeof(buffer));
-    StopBenchmarkTiming();
+    state.PauseTiming();
   }
 
   // Restore copies (logd still know about them, until crash or reboot)
@@ -1002,12 +1034,12 @@ static void BM_lookupEventTagNum_logd_new(int iters) {
 }
 BENCHMARK(BM_lookupEventTagNum_logd_new);
 
-static void BM_lookupEventTagNum_logd_existing(int iters) {
+static void BM_lookupEventTagNum_logd_existing(benchmark::State& state) {
   prechargeEventMap();
 
   std::unordered_set<uint32_t>::const_iterator it = set.begin();
 
-  for (int i = 0; i < iters; ++i) {
+  while (state.KeepRunning()) {
     size_t len;
     const char* name = android_lookupEventTag_len(map, &len, (*it));
     std::string Name(name, len);
@@ -1018,9 +1050,9 @@ static void BM_lookupEventTagNum_logd_existing(int iters) {
     snprintf(buffer, sizeof(buffer), "getEventTag name=%s format=\"%s\"",
              Name.c_str(), Format.c_str());
 
-    StartBenchmarkTiming();
+    state.ResumeTiming();
     send_to_control(buffer, sizeof(buffer));
-    StopBenchmarkTiming();
+    state.PauseTiming();
     ++it;
     if (it == set.end()) it = set.begin();
   }

@@ -289,7 +289,7 @@ noinline int do_action(const char* arg) {
         munmap(map, sizeof(int));
         map[0] = '8';
     } else if (!strcasecmp(arg, "seccomp")) {
-        set_seccomp_filter();
+        set_system_seccomp_filter();
         syscall(99999);
 #if defined(__arm__)
     } else if (!strcasecmp(arg, "kuser_helper_version")) {

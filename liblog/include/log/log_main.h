@@ -17,6 +17,8 @@
 #ifndef _LIBS_LOG_LOG_MAIN_H
 #define _LIBS_LOG_LOG_MAIN_H
 
+#include <stdbool.h>
+
 #include <android/log.h>
 #include <sys/cdefs.h>
 
@@ -175,10 +177,10 @@ __BEGIN_DECLS
 #if LOG_NDEBUG
 #define ALOGV(...)          \
   do {                      \
-    if (0) {                \
+    if (false) {            \
       __ALOGV(__VA_ARGS__); \
     }                       \
-  } while (0)
+  } while (false)
 #else
 #define ALOGV(...) __ALOGV(__VA_ARGS__)
 #endif

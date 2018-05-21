@@ -49,6 +49,8 @@ class SortedVector;
  * The main templated vector class ensuring type safety
  * while making use of VectorImpl.
  * This is the class users want to use.
+ *
+ * DO NOT USE: please use std::vector
  */
 
 template <class TYPE>
@@ -423,8 +425,7 @@ UTILS_VECTOR_NO_CFI void Vector<TYPE>::do_move_backward(void* dest, const void* 
     move_backward_type( reinterpret_cast<TYPE*>(dest), reinterpret_cast<const TYPE*>(from), num );
 }
 
-}; // namespace android
-
+}  // namespace android
 
 // ---------------------------------------------------------------------------
 

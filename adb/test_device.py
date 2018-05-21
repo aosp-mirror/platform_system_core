@@ -31,6 +31,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -187,8 +188,6 @@ class ForwardReverseTest(DeviceTest):
         finally:
             self.device.reverse_remove_all()
 
-    # Note: If you run this test when adb connect'd to a physical device over
-    # TCP, it will fail in adb reverse due to https://code.google.com/p/android/issues/detail?id=189821
     def test_forward_reverse_echo(self):
         """Send data through adb forward and read it back via adb reverse"""
         forward_port = 12345
@@ -492,6 +491,29 @@ class ShellTest(DeviceTest):
 
         stdout, _ = self.device.shell(["cat", log_path])
         self.assertEqual(stdout.strip(), "SIGHUP")
+
+    def test_exit_stress(self):
+        """Hammer `adb shell exit 42` with multiple threads."""
+        thread_count = 48
+        result = dict()
+        def hammer(thread_idx, thread_count, result):
+            success = True
+            for i in range(thread_idx, 240, thread_count):
+                ret = subprocess.call(['adb', 'shell', 'exit {}'.format(i)])
+                if ret != i % 256:
+                    success = False
+                    break
+            result[thread_idx] = success
+
+        threads = []
+        for i in range(thread_count):
+            thread = threading.Thread(target=hammer, args=(i, thread_count, result))
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+        for i, success in result.iteritems():
+            self.assertTrue(success)
 
 
 class ArgumentEscapingTest(DeviceTest):
@@ -1163,7 +1185,7 @@ class FileOperationsTest(DeviceTest):
         # Verify that the device ended up with the expected UTF-8 path
         output = self.device.shell(
                 ['ls', '/data/local/tmp/adb-test-*'])[0].strip()
-        self.assertEqual(remote_path.encode('utf-8'), output)
+        self.assertEqual(remote_path, output)
 
         # pull.
         self.device.pull(remote_path, tf.name)
@@ -1251,16 +1273,18 @@ class DeviceOfflineTest(DeviceTest):
         """
         # The values that trigger things are 507 (512 - 5 bytes from shell protocol) + 1024*n
         # Probe some surrounding values as well, for the hell of it.
-        for length in [506, 507, 508, 1018, 1019, 1020, 1530, 1531, 1532]:
-            cmd = ['dd', 'if=/dev/zero', 'bs={}'.format(length), 'count=1', '2>/dev/null;'
-                   'echo', 'foo']
-            rc, stdout, _ = self.device.shell_nocheck(cmd)
+        for base in [512] + range(1024, 1024 * 16, 1024):
+            for offset in [-6, -5, -4]:
+                length = base + offset
+                cmd = ['dd', 'if=/dev/zero', 'bs={}'.format(length), 'count=1', '2>/dev/null;'
+                       'echo', 'foo']
+                rc, stdout, _ = self.device.shell_nocheck(cmd)
 
-            self.assertEqual(0, rc)
+                self.assertEqual(0, rc)
 
-            # Output should be '\0' * length, followed by "foo\n"
-            self.assertEqual(length, len(stdout) - 4)
-            self.assertEqual(stdout, "\0" * length + "foo\n")
+                # Output should be '\0' * length, followed by "foo\n"
+                self.assertEqual(length, len(stdout) - 4)
+                self.assertEqual(stdout, "\0" * length + "foo\n")
 
 
 def main():

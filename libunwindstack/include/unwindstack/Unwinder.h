@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include <unwindstack/Error.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -31,7 +32,10 @@
 namespace unwindstack {
 
 // Forward declarations.
+class DexFiles;
 class Elf;
+class JitDebug;
+enum ArchEnum : uint8_t;
 
 struct FrameData {
   size_t num;
@@ -41,14 +45,14 @@ struct FrameData {
   uint64_t sp;
 
   std::string function_name;
-  uint64_t function_offset;
+  uint64_t function_offset = 0;
 
   std::string map_name;
-  uint64_t map_offset;
-  uint64_t map_start;
-  uint64_t map_end;
-  uint64_t map_load_bias;
-  int map_flags;
+  uint64_t map_offset = 0;
+  uint64_t map_start = 0;
+  uint64_t map_end = 0;
+  uint64_t map_load_bias = 0;
+  int map_flags = 0;
 };
 
 class Unwinder {
@@ -67,16 +71,37 @@ class Unwinder {
   const std::vector<FrameData>& frames() { return frames_; }
 
   std::string FormatFrame(size_t frame_num);
-  static std::string FormatFrame(const FrameData& frame, bool bits32);
+  static std::string FormatFrame(const FrameData& frame, bool is32bit);
+
+  void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
+
+  // Disabling the resolving of names results in the function name being
+  // set to an empty string and the function offset being set to zero.
+  void SetResolveNames(bool resolve) { resolve_names_ = resolve; }
+
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+  void SetDexFiles(DexFiles* dex_files, ArchEnum arch);
+#endif
+
+  ErrorCode LastErrorCode() { return last_error_.code; }
+  uint64_t LastErrorAddress() { return last_error_.address; }
 
  private:
-  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t adjusted_rel_pc);
+  void FillInDexFrame();
+  void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t func_pc,
+                   uint64_t pc_adjustment);
 
   size_t max_frames_;
   Maps* maps_;
   Regs* regs_;
   std::vector<FrameData> frames_;
   std::shared_ptr<Memory> process_memory_;
+  JitDebug* jit_debug_ = nullptr;
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+  DexFiles* dex_files_ = nullptr;
+#endif
+  bool resolve_names_ = true;
+  ErrorData last_error_;
 };
 
 }  // namespace unwindstack

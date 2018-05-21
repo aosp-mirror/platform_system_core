@@ -17,10 +17,14 @@
 #ifndef _INIT_INIT_H
 #define _INIT_INIT_H
 
+#include <sys/types.h>
+
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "action.h"
+#include "action_manager.h"
 #include "parser.h"
 #include "service.h"
 
@@ -35,17 +39,20 @@ extern std::vector<std::string> late_import_paths;
 
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 
-void handle_control_message(const std::string& msg, const std::string& arg);
+void HandleControlMessage(const std::string& msg, const std::string& arg, pid_t pid);
 
 void property_changed(const std::string& name, const std::string& value);
 
-void register_epoll_handler(int fd, void (*fn)());
+void register_epoll_handler(int fd, std::function<void()> handler);
+void unregister_epoll_handler(int fd);
 
 bool start_waiting_for_property(const char *name, const char *value);
 
 void DumpState();
 
 void ResetWaitForProp();
+
+int main(int argc, char** argv);
 
 }  // namespace init
 }  // namespace android

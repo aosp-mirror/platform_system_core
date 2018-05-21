@@ -91,12 +91,20 @@ bool StartsWith(const std::string& s, const char* prefix) {
   return strncmp(s.c_str(), prefix, strlen(prefix)) == 0;
 }
 
+bool StartsWith(const std::string& s, const std::string& prefix) {
+  return strncmp(s.c_str(), prefix.c_str(), prefix.size()) == 0;
+}
+
 bool StartsWithIgnoreCase(const std::string& s, const char* prefix) {
   return strncasecmp(s.c_str(), prefix, strlen(prefix)) == 0;
 }
 
-static bool EndsWith(const std::string& s, const char* suffix, bool case_sensitive) {
-  size_t suffix_length = strlen(suffix);
+bool StartsWithIgnoreCase(const std::string& s, const std::string& prefix) {
+  return strncasecmp(s.c_str(), prefix.c_str(), prefix.size()) == 0;
+}
+
+static bool EndsWith(const std::string& s, const char* suffix, size_t suffix_length,
+                     bool case_sensitive) {
   size_t string_length = s.size();
   if (suffix_length > string_length) {
     return false;
@@ -106,11 +114,19 @@ static bool EndsWith(const std::string& s, const char* suffix, bool case_sensiti
 }
 
 bool EndsWith(const std::string& s, const char* suffix) {
-  return EndsWith(s, suffix, true);
+  return EndsWith(s, suffix, strlen(suffix), true);
+}
+
+bool EndsWith(const std::string& s, const std::string& suffix) {
+  return EndsWith(s, suffix.c_str(), suffix.size(), true);
 }
 
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {
-  return EndsWith(s, suffix, false);
+  return EndsWith(s, suffix, strlen(suffix), false);
+}
+
+bool EndsWithIgnoreCase(const std::string& s, const std::string& suffix) {
+  return EndsWith(s, suffix.c_str(), suffix.size(), false);
 }
 
 bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs) {

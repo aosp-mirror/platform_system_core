@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <limits>
 #include <string>
@@ -31,14 +32,20 @@ namespace base {
 // otherwise valid values will be rejected. Returns boolean success; 'out'
 // is untouched if parsing fails.
 template <typename T>
-bool ParseUint(const char* s, T* out,
-               T max = std::numeric_limits<T>::max()) {
+bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
+               bool allow_suffixes = false) {
   int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
   unsigned long long int result = strtoull(s, &end, base);
-  if (errno != 0 || s == end || *end != '\0') {
-    return false;
+  if (errno != 0 || end == s) return false;
+  if (*end != '\0') {
+    const char* suffixes = "bkmgtpe";
+    const char* suffix;
+    if (!allow_suffixes || (suffix = strchr(suffixes, tolower(*end))) == nullptr) return false;
+#if __clang__  // TODO: win32 still builds with GCC :-(
+    if (__builtin_mul_overflow(result, 1ULL << (10 * (suffix - suffixes)), &result)) return false;
+#endif
   }
   if (max < result) {
     return false;
@@ -49,9 +56,20 @@ bool ParseUint(const char* s, T* out,
 
 // TODO: string_view
 template <typename T>
-bool ParseUint(const std::string& s, T* out,
-               T max = std::numeric_limits<T>::max()) {
-  return ParseUint(s.c_str(), out, max);
+bool ParseUint(const std::string& s, T* out, T max = std::numeric_limits<T>::max(),
+               bool allow_suffixes = false) {
+  return ParseUint(s.c_str(), out, max, allow_suffixes);
+}
+
+template <typename T>
+bool ParseByteCount(const char* s, T* out, T max = std::numeric_limits<T>::max()) {
+  return ParseUint(s, out, max, true);
+}
+
+// TODO: string_view
+template <typename T>
+bool ParseByteCount(const std::string& s, T* out, T max = std::numeric_limits<T>::max()) {
+  return ParseByteCount(s.c_str(), out, max);
 }
 
 // Parses the signed decimal integer in the string 's' and sets 'out' to

@@ -171,7 +171,9 @@ static enum match_type identical(LogBufferElement* elem,
     }
 
     // audit message (except sequence number) identical?
-    if (last->isBinary()) {
+    if (last->isBinary() &&
+        (lenl > static_cast<ssize_t>(sizeof(android_log_event_string_t))) &&
+        (lenr > static_cast<ssize_t>(sizeof(android_log_event_string_t)))) {
         if (fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_string_t) -
                                             sizeof(int32_t))) {
             return DIFFERENT;
@@ -198,7 +200,7 @@ static enum match_type identical(LogBufferElement* elem,
 
 int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                    pid_t tid, const char* msg, unsigned short len) {
-    if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
+    if (log_id >= LOG_ID_MAX) {
         return -EINVAL;
     }
 

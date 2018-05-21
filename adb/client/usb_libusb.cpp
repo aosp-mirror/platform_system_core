@@ -19,9 +19,11 @@
 #include "sysdeps.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -32,7 +34,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/quick_exit.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 

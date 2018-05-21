@@ -83,8 +83,8 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
 }
 
 UeventListener::UeventListener() {
-    // is 256K enough? udev uses 16MB!
-    device_fd_.reset(uevent_open_socket(256 * 1024, true));
+    // is 2MB enough? udev uses 128MB!
+    device_fd_.reset(uevent_open_socket(2 * 1024 * 1024, true));
     if (device_fd_ == -1) {
         LOG(FATAL) << "Could not open uevent socket";
     }

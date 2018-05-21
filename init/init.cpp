@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <paths.h>
+#include <pthread.h>
 #include <seccomp_policy.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -30,10 +31,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <map>
+#include <memory>
+#include <optional>
+
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/android_reboot.h>
 #include <keyutils.h>
@@ -41,9 +47,7 @@
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
 
-#include <memory>
-#include <optional>
-
+#include "action_parser.h"
 #include "import_parser.h"
 #include "init_first_stage.h"
 #include "keychords.h"
@@ -61,7 +65,10 @@ using namespace std::string_literals;
 
 using android::base::boot_clock;
 using android::base::GetProperty;
+using android::base::ReadFileToString;
+using android::base::StringPrintf;
 using android::base::Timer;
+using android::base::Trim;
 
 namespace android {
 namespace init {
@@ -73,7 +80,7 @@ static char qemu[32];
 std::string default_console = "/dev/console";
 
 static int epoll_fd = -1;
-static int sigterm_signal_fd = -1;
+static int signal_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
 static std::string wait_prop_name;
@@ -110,23 +117,45 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         if (!parser.ParseConfig("/system/etc/init")) {
             late_import_paths.emplace_back("/system/etc/init");
         }
-        if (!parser.ParseConfig("/vendor/etc/init")) {
-            late_import_paths.emplace_back("/vendor/etc/init");
+        if (!parser.ParseConfig("/product/etc/init")) {
+            late_import_paths.emplace_back("/product/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
+        }
+        if (!parser.ParseConfig("/vendor/etc/init")) {
+            late_import_paths.emplace_back("/vendor/etc/init");
         }
     } else {
         parser.ParseConfig(bootscript);
     }
 }
 
-void register_epoll_handler(int fd, void (*fn)()) {
+static std::map<int, std::function<void()>> epoll_handlers;
+
+void register_epoll_handler(int fd, std::function<void()> handler) {
+    auto[it, inserted] = epoll_handlers.emplace(fd, std::move(handler));
+    if (!inserted) {
+        LOG(ERROR) << "Cannot specify two epoll handlers for a given FD";
+        return;
+    }
     epoll_event ev;
     ev.events = EPOLLIN;
-    ev.data.ptr = reinterpret_cast<void*>(fn);
+    // std::map's iterators do not get invalidated until erased, so we use the pointer to the
+    // std::function in the map directly for epoll_ctl.
+    ev.data.ptr = reinterpret_cast<void*>(&it->second);
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        PLOG(ERROR) << "epoll_ctl failed";
+        PLOG(ERROR) << "epoll_ctl failed to add fd";
+        epoll_handlers.erase(fd);
+    }
+}
+
+void unregister_epoll_handler(int fd) {
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr) == -1) {
+        PLOG(ERROR) << "epoll_ctl failed to remove fd";
+    }
+    if (epoll_handlers.erase(fd) != 1) {
+        LOG(ERROR) << "Attempting to remove epoll handler for FD without an existing handler";
     }
 }
 
@@ -229,6 +258,10 @@ struct ControlMessageFunction {
 static const std::map<std::string, ControlMessageFunction>& get_control_message_map() {
     // clang-format off
     static const std::map<std::string, ControlMessageFunction> control_message_functions = {
+        {"sigstop_on",        {ControlTarget::SERVICE,
+                               [](auto* service) { service->set_sigstop(true); return Success(); }}},
+        {"sigstop_off",       {ControlTarget::SERVICE,
+                               [](auto* service) { service->set_sigstop(false); return Success(); }}},
         {"start",             {ControlTarget::SERVICE,   DoControlStart}},
         {"stop",              {ControlTarget::SERVICE,   DoControlStop}},
         {"restart",           {ControlTarget::SERVICE,   DoControlRestart}},
@@ -241,7 +274,7 @@ static const std::map<std::string, ControlMessageFunction>& get_control_message_
     return control_message_functions;
 }
 
-void handle_control_message(const std::string& msg, const std::string& name) {
+void HandleControlMessage(const std::string& msg, const std::string& name, pid_t pid) {
     const auto& map = get_control_message_map();
     const auto it = map.find(msg);
 
@@ -250,42 +283,43 @@ void handle_control_message(const std::string& msg, const std::string& name) {
         return;
     }
 
+    std::string cmdline_path = StringPrintf("proc/%d/cmdline", pid);
+    std::string process_cmdline;
+    if (ReadFileToString(cmdline_path, &process_cmdline)) {
+        std::replace(process_cmdline.begin(), process_cmdline.end(), '\0', ' ');
+        process_cmdline = Trim(process_cmdline);
+    } else {
+        process_cmdline = "unknown process";
+    }
+
+    LOG(INFO) << "Received control message '" << msg << "' for '" << name << "' from pid: " << pid
+              << " (" << process_cmdline << ")";
+
     const ControlMessageFunction& function = it->second;
 
-    if (function.target == ControlTarget::SERVICE) {
-        Service* svc = ServiceList::GetInstance().FindService(name);
-        if (svc == nullptr) {
-            LOG(ERROR) << "No such service '" << name << "' for ctl." << msg;
-            return;
-        }
-        if (auto result = function.action(svc); !result) {
-            LOG(ERROR) << "Could not ctl." << msg << " for service " << name << ": "
-                       << result.error();
-        }
+    Service* svc = nullptr;
 
+    switch (function.target) {
+        case ControlTarget::SERVICE:
+            svc = ServiceList::GetInstance().FindService(name);
+            break;
+        case ControlTarget::INTERFACE:
+            svc = ServiceList::GetInstance().FindInterface(name);
+            break;
+        default:
+            LOG(ERROR) << "Invalid function target from static map key '" << msg << "': "
+                       << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
+            return;
+    }
+
+    if (svc == nullptr) {
+        LOG(ERROR) << "Could not find '" << name << "' for ctl." << msg;
         return;
     }
 
-    if (function.target == ControlTarget::INTERFACE) {
-        for (const auto& svc : ServiceList::GetInstance()) {
-            if (svc->interfaces().count(name) == 0) {
-                continue;
-            }
-
-            if (auto result = function.action(svc.get()); !result) {
-                LOG(ERROR) << "Could not handle ctl." << msg << " for service " << svc->name()
-                           << " with interface " << name << ": " << result.error();
-            }
-
-            return;
-        }
-
-        LOG(ERROR) << "Could not find service hosting interface " << name;
-        return;
+    if (auto result = function.action(svc); !result) {
+        LOG(ERROR) << "Could not ctl." << msg << " for '" << name << "': " << result.error();
     }
-
-    LOG(ERROR) << "Invalid function target from static map key '" << msg
-               << "': " << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
 }
 
 static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& args) {
@@ -309,8 +343,8 @@ static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& arg
     return Success();
 }
 
-static Result<Success> keychord_init_action(const BuiltinArguments& args) {
-    keychord_init();
+static Result<Success> KeychordInitAction(const BuiltinArguments& args) {
+    KeychordInit();
     return Success();
 }
 
@@ -471,14 +505,7 @@ static void InstallRebootSignalHandlers() {
     sigaction(SIGTRAP, &action, nullptr);
 }
 
-static void HandleSigtermSignal() {
-    signalfd_siginfo siginfo;
-    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(sigterm_signal_fd, &siginfo, sizeof(siginfo)));
-    if (bytes_read != sizeof(siginfo)) {
-        PLOG(ERROR) << "Failed to read siginfo from sigterm_signal_fd";
-        return;
-    }
-
+static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
     if (siginfo.ssi_pid != 0) {
         // Drop any userspace SIGTERM requests.
         LOG(DEBUG) << "Ignoring SIGTERM from pid " << siginfo.ssi_pid;
@@ -488,21 +515,73 @@ static void HandleSigtermSignal() {
     HandlePowerctlMessage("shutdown,container");
 }
 
-static void InstallSigtermHandler() {
+static void HandleSignalFd() {
+    signalfd_siginfo siginfo;
+    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
+    if (bytes_read != sizeof(siginfo)) {
+        PLOG(ERROR) << "Failed to read siginfo from signal_fd";
+        return;
+    }
+
+    switch (siginfo.ssi_signo) {
+        case SIGCHLD:
+            ReapAnyOutstandingChildren();
+            break;
+        case SIGTERM:
+            HandleSigtermSignal(siginfo);
+            break;
+        default:
+            PLOG(ERROR) << "signal_fd: received unexpected signal " << siginfo.ssi_signo;
+            break;
+    }
+}
+
+static void UnblockSignals() {
+    const struct sigaction act { .sa_handler = SIG_DFL };
+    sigaction(SIGCHLD, &act, nullptr);
+
     sigset_t mask;
     sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
     sigaddset(&mask, SIGTERM);
 
+    if (sigprocmask(SIG_UNBLOCK, &mask, nullptr) == -1) {
+        PLOG(FATAL) << "failed to unblock signals for PID " << getpid();
+    }
+}
+
+static void InstallSignalFdHandler() {
+    // Applying SA_NOCLDSTOP to a defaulted SIGCHLD handler prevents the signalfd from receiving
+    // SIGCHLD when a child process stops or continues (b/77867680#comment9).
+    const struct sigaction act { .sa_handler = SIG_DFL, .sa_flags = SA_NOCLDSTOP };
+    sigaction(SIGCHLD, &act, nullptr);
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+
+    if (!IsRebootCapable()) {
+        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
+        // In that case, receiving SIGTERM will cause the system to shut down.
+        sigaddset(&mask, SIGTERM);
+    }
+
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        PLOG(FATAL) << "failed to block SIGTERM";
+        PLOG(FATAL) << "failed to block signals";
     }
 
-    sigterm_signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
-    if (sigterm_signal_fd == -1) {
-        PLOG(FATAL) << "failed to create signalfd for SIGTERM";
+    // Register a handler to unblock signals in the child processes.
+    const int result = pthread_atfork(nullptr, nullptr, &UnblockSignals);
+    if (result != 0) {
+        LOG(FATAL) << "Failed to register a fork handler: " << strerror(result);
     }
 
-    register_epoll_handler(sigterm_signal_fd, HandleSigtermSignal);
+    signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
+    if (signal_fd == -1) {
+        PLOG(FATAL) << "failed to create signalfd";
+    }
+
+    register_epoll_handler(signal_fd, HandleSignalFd);
 }
 
 int main(int argc, char** argv) {
@@ -557,6 +636,14 @@ int main(int argc, char** argv) {
 
         mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
         mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
+
+        // Mount staging areas for devices managed by vold
+        // See storage config details at http://source.android.com/devices/storage/
+        mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+              "mode=0755,uid=0,gid=1000");
+        // /mnt/vendor is used to mount vendor-specific partitions that can not be
+        // part of the vendor partition, e.g. because they are mounted read-write.
+        mkdir("/mnt/vendor", 0755);
 
         // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
         // talk to the outside world...
@@ -645,13 +732,7 @@ int main(int argc, char** argv) {
         PLOG(FATAL) << "epoll_create1 failed";
     }
 
-    sigchld_handler_init();
-
-    if (!IsRebootCapable()) {
-        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
-        // In that case, receiving SIGTERM will cause the system to shut down.
-        InstallSigtermHandler();
-    }
+    InstallSignalFdHandler();
 
     property_load_boot_defaults();
     export_oem_lock_status();
@@ -680,7 +761,7 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
-    am.QueueBuiltinAction(keychord_init_action, "keychord_init");
+    am.QueueBuiltinAction(KeychordInitAction, "KeychordInit");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
     // Trigger all the boot actions to get us started.
@@ -737,7 +818,7 @@ int main(int argc, char** argv) {
         if (nr == -1) {
             PLOG(ERROR) << "epoll_wait failed";
         } else if (nr == 1) {
-            ((void (*)()) ev.data.ptr)();
+            std::invoke(*reinterpret_cast<std::function<void()>*>(ev.data.ptr));
         }
     }
 
@@ -746,7 +827,3 @@ int main(int argc, char** argv) {
 
 }  // namespace init
 }  // namespace android
-
-int main(int argc, char** argv) {
-    android::init::main(argc, argv);
-}

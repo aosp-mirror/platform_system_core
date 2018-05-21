@@ -28,6 +28,7 @@
 #include "adb_trace.h"
 #include "fdevent.h"
 #include "socket.h"
+#include "types.h"
 #include "usb.h"
 
 constexpr size_t MAX_PAYLOAD_V1 = 4 * 1024;
@@ -44,7 +45,12 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 #define A_AUTH 0x48545541
 
 // ADB protocol version.
-#define A_VERSION 0x01000000
+// Version revision:
+// 0x01000000: original
+// 0x01000001: skip checksum (Dec 2017)
+#define A_VERSION_MIN 0x01000000
+#define A_VERSION_SKIP_CHECKSUM 0x01000001
+#define A_VERSION 0x01000001
 
 // Used for help/version information.
 #define ADB_VERSION_MAJOR 1
@@ -53,29 +59,10 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 std::string adb_version();
 
 // Increment this when we want to force users to start a new adb server.
-#define ADB_SERVER_VERSION 39
+#define ADB_SERVER_VERSION 40
 
 using TransportId = uint64_t;
 class atransport;
-
-struct amessage {
-    uint32_t command;     /* command identifier constant      */
-    uint32_t arg0;        /* first argument                   */
-    uint32_t arg1;        /* second argument                  */
-    uint32_t data_length; /* length of payload (0 is allowed) */
-    uint32_t data_check;  /* checksum of data payload         */
-    uint32_t magic;       /* command ^ 0xffffffff             */
-};
-
-struct apacket {
-    apacket* next;
-
-    size_t len;
-    char* ptr;
-
-    amessage msg;
-    char data[MAX_PAYLOAD];
-};
 
 uint32_t calculate_apacket_checksum(const apacket* packet);
 
@@ -108,15 +95,32 @@ enum TransportType {
 
 enum ConnectionState {
     kCsAny = -1,
-    kCsOffline = 0,
+
+    kCsConnecting = 0,  // Haven't received a response from the device yet.
+    kCsAuthorizing,     // Authorizing with keys from ADB_VENDOR_KEYS.
+    kCsUnauthorized,    // ADB_VENDOR_KEYS exhausted, fell back to user prompt.
+    kCsNoPerm,          // Insufficient permissions to communicate with the device.
+    kCsOffline,
+
     kCsBootloader,
     kCsDevice,
     kCsHost,
     kCsRecovery,
-    kCsNoPerm,  // Insufficient permissions to communicate with the device.
     kCsSideload,
-    kCsUnauthorized,
 };
+
+inline bool ConnectionStateIsOnline(ConnectionState state) {
+    switch (state) {
+        case kCsBootloader:
+        case kCsDevice:
+        case kCsHost:
+        case kCsRecovery:
+        case kCsSideload:
+            return true;
+        default:
+            return false;
+    }
+}
 
 void print_packet(const char* label, apacket* p);
 
@@ -131,9 +135,6 @@ int launch_server(const std::string& socket_spec);
 int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd);
 
 /* initialize a transport object's func pointers and state */
-#if ADB_HOST
-int get_available_local_transport_index();
-#endif
 int init_socket_transport(atransport* t, int s, int port, int local);
 void init_usb_transport(atransport* t, usb_handle* usb);
 
@@ -143,7 +144,7 @@ atransport* find_emulator_transport_by_adb_port(int adb_port);
 atransport* find_emulator_transport_by_console_port(int console_port);
 #endif
 
-int service_to_fd(const char* name, const atransport* transport);
+int service_to_fd(const char* name, atransport* transport);
 #if ADB_HOST
 asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id);
 #endif
@@ -155,8 +156,7 @@ asocket* create_jdwp_tracker_service_socket();
 int create_jdwp_connection_fd(int jdwp_pid);
 #endif
 
-int handle_forward_request(const char* service, TransportType type, const char* serial,
-                           TransportId transport_id, int reply_fd);
+int handle_forward_request(const char* service, atransport* transport, int reply_fd);
 
 #if !ADB_HOST
 void framebuffer_service(int fd, void* cookie);
@@ -198,10 +198,6 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
 ConnectionState connection_state(atransport* t);
 
 extern const char* adb_device_banner;
-
-#if !ADB_HOST
-extern int SHELL_EXIT_NOTIFY_FD;
-#endif  // !ADB_HOST
 
 #define CHUNK_SIZE (64 * 1024)
 

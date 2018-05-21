@@ -19,47 +19,53 @@
 #include <functional>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/MachineX86.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/RegsX86.h>
-
-#include "MachineX86.h"
-#include "UcontextX86.h"
-#include "UserX86.h"
+#include <unwindstack/UcontextX86.h>
+#include <unwindstack/UserX86.h>
 
 namespace unwindstack {
 
-RegsX86::RegsX86()
-    : RegsImpl<uint32_t>(X86_REG_LAST, X86_REG_SP, Location(LOCATION_SP_OFFSET, -4)) {}
+RegsX86::RegsX86() : RegsImpl<uint32_t>(X86_REG_LAST, Location(LOCATION_SP_OFFSET, -4)) {}
 
 ArchEnum RegsX86::Arch() {
   return ARCH_X86;
 }
 
-uint64_t RegsX86::GetAdjustedPc(uint64_t rel_pc, Elf* elf) {
-  if (!elf->valid()) {
-    return rel_pc;
-  }
+uint64_t RegsX86::pc() {
+  return regs_[X86_REG_PC];
+}
 
+uint64_t RegsX86::sp() {
+  return regs_[X86_REG_SP];
+}
+
+void RegsX86::set_pc(uint64_t pc) {
+  regs_[X86_REG_PC] = static_cast<uint32_t>(pc);
+}
+
+void RegsX86::set_sp(uint64_t sp) {
+  regs_[X86_REG_SP] = static_cast<uint32_t>(sp);
+}
+
+uint64_t RegsX86::GetPcAdjustment(uint64_t rel_pc, Elf*) {
   if (rel_pc == 0) {
     return 0;
   }
-  return rel_pc - 1;
-}
-
-void RegsX86::SetFromRaw() {
-  set_pc(regs_[X86_REG_PC]);
-  set_sp(regs_[X86_REG_SP]);
+  return 1;
 }
 
 bool RegsX86::SetPcFromReturnAddress(Memory* process_memory) {
   // Attempt to get the return address from the top of the stack.
   uint32_t new_pc;
-  if (!process_memory->ReadFully(sp_, &new_pc, sizeof(new_pc)) || new_pc == pc()) {
+  if (!process_memory->ReadFully(regs_[X86_REG_SP], &new_pc, sizeof(new_pc)) ||
+      new_pc == regs_[X86_REG_PC]) {
     return false;
   }
 
-  set_pc(new_pc);
+  regs_[X86_REG_PC] = new_pc;
   return true;
 }
 
@@ -89,7 +95,6 @@ Regs* RegsX86::Read(void* user_data) {
   (*regs)[X86_REG_ESP] = user->esp;
   (*regs)[X86_REG_EIP] = user->eip;
 
-  regs->SetFromRaw();
   return regs;
 }
 
@@ -104,7 +109,6 @@ void RegsX86::SetFromUcontext(x86_ucontext_t* ucontext) {
   regs_[X86_REG_ECX] = ucontext->uc_mcontext.ecx;
   regs_[X86_REG_EAX] = ucontext->uc_mcontext.eax;
   regs_[X86_REG_EIP] = ucontext->uc_mcontext.eip;
-  SetFromRaw();
 }
 
 Regs* RegsX86::CreateFromUcontext(void* ucontext) {
@@ -136,7 +140,7 @@ bool RegsX86::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
     //   int signum
     //   struct sigcontext (same format as mcontext)
     struct x86_mcontext_t context;
-    if (!process_memory->ReadFully(sp() + 4, &context, sizeof(context))) {
+    if (!process_memory->ReadFully(regs_[X86_REG_SP] + 4, &context, sizeof(context))) {
       return false;
     }
     regs_[X86_REG_EBP] = context.ebp;
@@ -146,7 +150,6 @@ bool RegsX86::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
     regs_[X86_REG_ECX] = context.ecx;
     regs_[X86_REG_EAX] = context.eax;
     regs_[X86_REG_EIP] = context.eip;
-    SetFromRaw();
     return true;
   } else if ((data & 0x00ffffffffffffffULL) == 0x0080cd000000adb8ULL) {
     // With SA_SIGINFO set, the return sequence is:
@@ -162,7 +165,7 @@ bool RegsX86::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
 
     // Get the location of the sigcontext data.
     uint32_t ptr;
-    if (!process_memory->ReadFully(sp() + 8, &ptr, sizeof(ptr))) {
+    if (!process_memory->ReadFully(regs_[X86_REG_SP] + 8, &ptr, sizeof(ptr))) {
       return false;
     }
     // Only read the portion of the data structure we care about.
@@ -174,6 +177,10 @@ bool RegsX86::StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_mem
     return true;
   }
   return false;
+}
+
+Regs* RegsX86::Clone() {
+  return new RegsX86(*this);
 }
 
 }  // namespace unwindstack

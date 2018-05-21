@@ -36,5 +36,5 @@ cc_binary {
     cflags: [
         "-Wall",
         "-Werror",
-    ]
+    ],
 }

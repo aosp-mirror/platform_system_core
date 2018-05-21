@@ -34,5 +34,5 @@ cc_library_static {
         "-fvisibility=hidden",
         "-Wall",
         "-Werror",
-    ]
+    ],
 }

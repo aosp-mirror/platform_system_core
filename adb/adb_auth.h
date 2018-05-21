@@ -49,7 +49,7 @@ void adbd_auth_init(void);
 void adbd_auth_verified(atransport *t);
 
 void adbd_cloexec_auth_socket();
-bool adbd_auth_verify(const char* token, size_t token_size, const char* sig, int sig_len);
+bool adbd_auth_verify(const char* token, size_t token_size, const std::string& sig);
 void adbd_auth_confirm_key(const char* data, size_t len, atransport* t);
 
 void send_auth_request(atransport *t);
