@@ -117,6 +117,7 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     atexit(adb_server_cleanup);
 
     init_transport_registration();
+    init_reconnect_handler();
     init_mdns_transport_discovery();
 
     usb_init();
