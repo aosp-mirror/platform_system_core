@@ -419,6 +419,7 @@ on post-fs-data
     mkdir /data/misc/radio 0770 system radio
     mkdir /data/misc/sms 0770 system radio
     mkdir /data/misc/carrierid 0770 system radio
+    mkdir /data/misc/apns 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
     mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
