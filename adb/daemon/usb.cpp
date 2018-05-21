@@ -53,7 +53,7 @@ using namespace std::chrono_literals;
 #define USB_FFS_BULK_SIZE 16384
 
 // Number of buffers needed to fit MAX_PAYLOAD, with an extra for ZLPs.
-#define USB_FFS_NUM_BUFS ((MAX_PAYLOAD / USB_FFS_BULK_SIZE) + 1)
+#define USB_FFS_NUM_BUFS ((4 * MAX_PAYLOAD / USB_FFS_BULK_SIZE) + 1)
 
 #define cpu_to_le16(x) htole16(x)
 #define cpu_to_le32(x) htole32(x)
@@ -226,16 +226,16 @@ static const struct {
     },
 };
 
-static void aio_block_init(aio_block* aiob) {
-    aiob->iocb.resize(USB_FFS_NUM_BUFS);
-    aiob->iocbs.resize(USB_FFS_NUM_BUFS);
-    aiob->events.resize(USB_FFS_NUM_BUFS);
+static void aio_block_init(aio_block* aiob, unsigned num_bufs) {
+    aiob->iocb.resize(num_bufs);
+    aiob->iocbs.resize(num_bufs);
+    aiob->events.resize(num_bufs);
     aiob->num_submitted = 0;
-    for (unsigned i = 0; i < USB_FFS_NUM_BUFS; i++) {
+    for (unsigned i = 0; i < num_bufs; i++) {
         aiob->iocbs[i] = &aiob->iocb[i];
     }
     memset(&aiob->ctx, 0, sizeof(aiob->ctx));
-    if (io_setup(USB_FFS_NUM_BUFS, &aiob->ctx)) {
+    if (io_setup(num_bufs, &aiob->ctx)) {
         D("[ aio: got error on io_setup (%d) ]", errno);
     }
 }
@@ -318,6 +318,7 @@ static bool init_functionfs(struct usb_handle* h) {
 
     h->read_aiob.fd = h->bulk_out;
     h->write_aiob.fd = h->bulk_in;
+    h->reads_zero_packets = true;
     return true;
 
 err:
@@ -408,7 +409,7 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
     aio_block* aiob = read ? &h->read_aiob : &h->write_aiob;
     bool zero_packet = false;
 
-    int num_bufs = len / USB_FFS_BULK_SIZE + (len % USB_FFS_BULK_SIZE == 0 ? 0 : 1);
+    int num_bufs = len / h->io_size + (len % h->io_size == 0 ? 0 : 1);
     const char* cur_data = reinterpret_cast<const char*>(data);
     int packet_size = getMaxPacketSize(aiob->fd);
 
@@ -418,7 +419,7 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
     }
 
     for (int i = 0; i < num_bufs; i++) {
-        int buf_len = std::min(len, USB_FFS_BULK_SIZE);
+        int buf_len = std::min(len, static_cast<int>(h->io_size));
         io_prep(&aiob->iocb[i], aiob->fd, cur_data, buf_len, 0, read);
 
         len -= buf_len;
@@ -427,7 +428,7 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
         if (len == 0 && buf_len % packet_size == 0 && read) {
             // adb does not expect the device to send a zero packet after data transfer,
             // but the host *does* send a zero packet for the device to read.
-            zero_packet = true;
+            zero_packet = h->reads_zero_packets;
         }
     }
     if (zero_packet) {
@@ -507,7 +508,7 @@ static void usb_ffs_close(usb_handle* h) {
     h->notify.notify_one();
 }
 
-usb_handle *create_usb_handle() {
+usb_handle *create_usb_handle(unsigned num_bufs, unsigned io_size) {
     usb_handle* h = new usb_handle();
 
     if (android::base::GetBoolProperty("sys.usb.ffs.aio_compat", false)) {
@@ -518,9 +519,10 @@ usb_handle *create_usb_handle() {
     } else {
         h->write = usb_ffs_aio_write;
         h->read = usb_ffs_aio_read;
-        aio_block_init(&h->read_aiob);
-        aio_block_init(&h->write_aiob);
+        aio_block_init(&h->read_aiob, num_bufs);
+        aio_block_init(&h->write_aiob, num_bufs);
     }
+    h->io_size = io_size;
     h->kick = usb_ffs_kick;
     h->close = usb_ffs_close;
     return h;
@@ -531,7 +533,7 @@ void usb_init() {
     dummy_fd = adb_open("/dev/null", O_WRONLY);
     CHECK_NE(dummy_fd, -1);
 
-    std::thread(usb_ffs_open_thread, create_usb_handle()).detach();
+    std::thread(usb_ffs_open_thread, create_usb_handle(USB_FFS_NUM_BUFS, USB_FFS_BULK_SIZE)).detach();
 }
 
 int usb_write(usb_handle* h, const void* data, int len) {
