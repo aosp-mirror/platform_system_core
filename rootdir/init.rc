@@ -372,6 +372,10 @@ on post-fs
     # create the lost+found directories, so as to enforce our permissions
     mkdir /cache/lost+found 0770 root root
 
+    restorecon_recursive /metadata
+    mkdir /metadata/vold
+    chmod 0700 /metadata/vold
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -428,6 +432,7 @@ on post-fs-data
     mkdir /data/misc/radio 0770 system radio
     mkdir /data/misc/sms 0770 system radio
     mkdir /data/misc/carrierid 0770 system radio
+    mkdir /data/misc/apns 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
     mkdir /data/misc/network_watchlist 0774 system system
     mkdir /data/misc/textclassifier 0771 system system
