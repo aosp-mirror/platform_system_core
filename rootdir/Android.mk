@@ -147,13 +147,10 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in $(bcp_dep)
 bcp_md5 :=
 bcp_dep :=
 
-# If BOARD_VNDK_VERSION is defined, append PLATFORM_VNDK_VERSION to base name.
+# Append PLATFORM_VNDK_VERSION to base name.
 define append_vndk_version
 $(strip \
-  $(if $(BOARD_VNDK_VERSION), \
-    $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)), \
-    $(1) \
-  ) \
+  $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)) \
 )
 endef
 
@@ -215,31 +212,46 @@ sanitizer_runtime_libraries :=
 vndk_version_suffix :=
 endef # update_and_install_ld_config
 
+
+#######################################
+# ld.config.txt selection variables
+#
+_enforce_vndk_at_runtime := false
+ifdef BOARD_VNDK_VERSION
+  ifneq ($(BOARD_VNDK_RUNTIME_DISABLE),true)
+    _enforce_vndk_at_runtime := true
+  endif
+endif
+
+_enforce_vndk_lite_at_runtime := false
+ifeq ($(_enforce_vndk_at_runtime),false)
+  ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
+    _enforce_vndk_lite_at_runtime := true
+  endif
+endif
+
 #######################################
 # ld.config.txt
 #
 # For VNDK enforced devices that have defined BOARD_VNDK_VERSION, use
 # "ld.config.txt" as a source file. This configuration includes strict VNDK
 # run-time restrictions for vendor process.
+#
 # Other treblized devices, that have not defined BOARD_VNDK_VERSION or that
 # have set BOARD_VNDK_RUNTIME_DISABLE to true, use "ld.config.vndk_lite.txt"
 # as a source file. This configuration does not have strict VNDK run-time
 # restrictions.
+#
 # If the device is not treblized, use "ld.config.legacy.txt" for legacy
 # namespace configuration.
+#
 include $(CLEAR_VARS)
 LOCAL_MODULE := ld.config.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 
-_enforce_vndk_at_runtime := false
-ifdef BOARD_VNDK_VERSION
-ifneq ($(BOARD_VNDK_RUNTIME_DISABLE),true)
-  _enforce_vndk_at_runtime := true
-endif
-endif
-
 ifeq ($(_enforce_vndk_at_runtime),true)
+
 # for VNDK enforced devices
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
@@ -248,37 +260,36 @@ $(eval $(call update_and_install_ld_config,\
   $(LOCAL_BUILT_MODULE),\
   $(PLATFORM_VNDK_VERSION)))
 
-else ifeq ($(PRODUCT_TREBLE_LINKER_NAMESPACES)|$(SANITIZE_TARGET),true|)
-# for treblized but VNDK non-enforced devices
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
+else ifeq ($(_enforce_vndk_lite_at_runtime),true)
+
+# for treblized but VNDK lightly enforced devices
+LOCAL_MODULE_STEM := ld.config.vndk_lite.txt
 include $(BUILD_SYSTEM)/base_rules.mk
 $(eval $(call update_and_install_ld_config,\
   $(LOCAL_PATH)/etc/ld.config.vndk_lite.txt,\
   $(LOCAL_BUILT_MODULE),\
-  $(if $(BOARD_VNDK_VERSION),$(PLATFORM_VNDK_VERSION)),\
+  $(PLATFORM_VNDK_VERSION),\
   true))
 
 else
+
 # for legacy non-treblized devices
-LOCAL_SRC_FILES := etc/ld.config.legacy.txt
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+LOCAL_SRC_FILES := etc/ld.config.legacy.txt
 include $(BUILD_PREBUILT)
 
-endif # if _enforce_vndk_at_runtime is true
+endif  # ifeq ($(_enforce_vndk_at_runtime),true)
 
-_enforce_vndk_at_runtime :=
 
 #######################################
-# ld.config.noenforce.txt
+# ld.config.vndk_lite.txt
 #
-# This file is a temporary configuration file only for GSI. Originally GSI has
-# BOARD_VNDK_VERSION defined and has strict VNDK enforcing rule based on
-# "ld.config.txt". However for the devices, that have not defined
-# BOARD_VNDK_VERSION, GSI provides this configuration file which is based on
-# "ld.config.vndk_lite.txt".
-# Do not install this file for the devices other than GSI.
+# This module is only for GSI.
+#
+ifeq ($(_enforce_vndk_lite_at_runtime),false)
+
 include $(CLEAR_VARS)
-LOCAL_MODULE := ld.config.noenforce.txt
+LOCAL_MODULE := ld.config.vndk_lite.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
@@ -288,6 +299,11 @@ $(eval $(call update_and_install_ld_config,\
   $(LOCAL_BUILT_MODULE),\
   $(PLATFORM_VNDK_VERSION),\
   true))
+
+endif  # ifeq ($(_enforce_vndk_lite_at_runtime),false)
+
+_enforce_vndk_at_runtime :=
+_enforce_vndk_lite_at_runtime :=
 
 #######################################
 # llndk.libraries.txt
