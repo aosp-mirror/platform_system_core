@@ -24,7 +24,6 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/epoll.h>
 #include <sys/mount.h>
 #include <sys/signalfd.h>
 #include <sys/sysmacros.h>
@@ -48,6 +47,7 @@
 #include <selinux/android.h>
 
 #include "action_parser.h"
+#include "epoll.h"
 #include "import_parser.h"
 #include "init_first_stage.h"
 #include "keychords.h"
@@ -61,6 +61,7 @@
 #include "util.h"
 #include "watchdogd.h"
 
+using namespace std::chrono_literals;
 using namespace std::string_literals;
 
 using android::base::boot_clock;
@@ -79,7 +80,6 @@ static char qemu[32];
 
 std::string default_console = "/dev/console";
 
-static int epoll_fd = -1;
 static int signal_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
@@ -128,34 +128,6 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         }
     } else {
         parser.ParseConfig(bootscript);
-    }
-}
-
-static std::map<int, std::function<void()>> epoll_handlers;
-
-void register_epoll_handler(int fd, std::function<void()> handler) {
-    auto[it, inserted] = epoll_handlers.emplace(fd, std::move(handler));
-    if (!inserted) {
-        LOG(ERROR) << "Cannot specify two epoll handlers for a given FD";
-        return;
-    }
-    epoll_event ev;
-    ev.events = EPOLLIN;
-    // std::map's iterators do not get invalidated until erased, so we use the pointer to the
-    // std::function in the map directly for epoll_ctl.
-    ev.data.ptr = reinterpret_cast<void*>(&it->second);
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        PLOG(ERROR) << "epoll_ctl failed to add fd";
-        epoll_handlers.erase(fd);
-    }
-}
-
-void unregister_epoll_handler(int fd) {
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr) == -1) {
-        PLOG(ERROR) << "epoll_ctl failed to remove fd";
-    }
-    if (epoll_handlers.erase(fd) != 1) {
-        LOG(ERROR) << "Attempting to remove epoll handler for FD without an existing handler";
     }
 }
 
@@ -340,11 +312,6 @@ static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& arg
     }
 
     property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration().count()));
-    return Success();
-}
-
-static Result<Success> KeychordInitAction(const BuiltinArguments& args) {
-    KeychordInit();
     return Success();
 }
 
@@ -550,7 +517,7 @@ static void UnblockSignals() {
     }
 }
 
-static void InstallSignalFdHandler() {
+static void InstallSignalFdHandler(Epoll* epoll) {
     // Applying SA_NOCLDSTOP to a defaulted SIGCHLD handler prevents the signalfd from receiving
     // SIGCHLD when a child process stops or continues (b/77867680#comment9).
     const struct sigaction act { .sa_handler = SIG_DFL, .sa_flags = SA_NOCLDSTOP };
@@ -581,7 +548,9 @@ static void InstallSignalFdHandler() {
         PLOG(FATAL) << "failed to create signalfd";
     }
 
-    register_epoll_handler(signal_fd, HandleSignalFd);
+    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd); !result) {
+        LOG(FATAL) << result.error();
+    }
 }
 
 int main(int argc, char** argv) {
@@ -727,16 +696,16 @@ int main(int argc, char** argv) {
     SelabelInitialize();
     SelinuxRestoreContext();
 
-    epoll_fd = epoll_create1(EPOLL_CLOEXEC);
-    if (epoll_fd == -1) {
-        PLOG(FATAL) << "epoll_create1 failed";
+    Epoll epoll;
+    if (auto result = epoll.Open(); !result) {
+        PLOG(FATAL) << result.error();
     }
 
-    InstallSignalFdHandler();
+    InstallSignalFdHandler(&epoll);
 
     property_load_boot_defaults();
     export_oem_lock_status();
-    start_property_service();
+    StartPropertyService(&epoll);
     set_usb_controller();
 
     const BuiltinFunctionMap function_map;
@@ -761,7 +730,12 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
-    am.QueueBuiltinAction(KeychordInitAction, "KeychordInit");
+    am.QueueBuiltinAction(
+        [&epoll](const BuiltinArguments& args) -> Result<Success> {
+            KeychordInit(&epoll);
+            return Success();
+        },
+        "KeychordInit");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
     // Trigger all the boot actions to get us started.
@@ -784,7 +758,7 @@ int main(int argc, char** argv) {
 
     while (true) {
         // By default, sleep until something happens.
-        int epoll_timeout_ms = -1;
+        auto epoll_timeout = std::optional<std::chrono::milliseconds>{};
 
         if (do_shutdown && !shutting_down) {
             do_shutdown = false;
@@ -802,23 +776,18 @@ int main(int argc, char** argv) {
 
                 // If there's a process that needs restarting, wake up in time for that.
                 if (next_process_restart_time) {
-                    epoll_timeout_ms = std::chrono::ceil<std::chrono::milliseconds>(
-                                           *next_process_restart_time - boot_clock::now())
-                                           .count();
-                    if (epoll_timeout_ms < 0) epoll_timeout_ms = 0;
+                    epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
+                        *next_process_restart_time - boot_clock::now());
+                    if (*epoll_timeout < 0ms) epoll_timeout = 0ms;
                 }
             }
 
             // If there's more work to do, wake up again immediately.
-            if (am.HasMoreCommands()) epoll_timeout_ms = 0;
+            if (am.HasMoreCommands()) epoll_timeout = 0ms;
         }
 
-        epoll_event ev;
-        int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, epoll_timeout_ms));
-        if (nr == -1) {
-            PLOG(ERROR) << "epoll_wait failed";
-        } else if (nr == 1) {
-            std::invoke(*reinterpret_cast<std::function<void()>*>(ev.data.ptr));
+        if (auto result = epoll.Wait(epoll_timeout); !result) {
+            LOG(ERROR) << result.error();
         }
     }
 
