@@ -28,9 +28,9 @@ struct AdbCloser {
 using unique_fd = android::base::unique_fd_impl<AdbCloser>;
 
 #if !defined(_WIN32)
-inline bool Pipe(unique_fd* read, unique_fd* write) {
+inline bool Pipe(unique_fd* read, unique_fd* write, int flags = 0) {
     int pipefd[2];
-    if (pipe(pipefd) != 0) {
+    if (pipe2(pipefd, flags) != 0) {
         return false;
     }
     read->reset(pipefd[0]);
