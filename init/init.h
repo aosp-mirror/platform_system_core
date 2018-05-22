@@ -43,9 +43,6 @@ void HandleControlMessage(const std::string& msg, const std::string& arg, pid_t 
 
 void property_changed(const std::string& name, const std::string& value);
 
-void register_epoll_handler(int fd, std::function<void()> handler);
-void unregister_epoll_handler(int fd);
-
 bool start_waiting_for_property(const char *name, const char *value);
 
 void DumpState();
