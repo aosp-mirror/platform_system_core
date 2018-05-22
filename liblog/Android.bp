@@ -46,6 +46,7 @@ cc_library_headers {
     name: "liblog_headers",
     host_supported: true,
     vendor_available: true,
+    recovery_available: true,
     export_include_dirs: ["include"],
     target: {
         windows: {
@@ -65,7 +66,7 @@ cc_library_headers {
 cc_library {
     name: "liblog",
     host_supported: true,
-
+    recovery_available: true,
     srcs: liblog_sources,
 
     target: {
