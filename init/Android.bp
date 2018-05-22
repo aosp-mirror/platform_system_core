@@ -100,6 +100,7 @@ cc_library_static {
         "capabilities.cpp",
         "descriptors.cpp",
         "devices.cpp",
+        "epoll.cpp",
         "firmware_handler.cpp",
         "import_parser.cpp",
         "init.cpp",
