@@ -15,6 +15,7 @@
 cc_library_headers {
     name: "libutils_headers",
     vendor_available: true,
+    recovery_available: true,
     host_supported: true,
 
     header_libs: [
