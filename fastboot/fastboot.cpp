@@ -507,7 +507,8 @@ static std::string make_temporary_template() {
 static std::string make_temporary_directory() {
     std::string result(make_temporary_template());
     if (mkdtemp(&result[0]) == nullptr) {
-        die("unable to create temporary directory: %s", strerror(errno));
+        die("unable to create temporary directory with template %s: %s",
+            result.c_str(), strerror(errno));
     }
     return result;
 }
@@ -516,7 +517,8 @@ static int make_temporary_fd(const char* what) {
     std::string path_template(make_temporary_template());
     int fd = mkstemp(&path_template[0]);
     if (fd == -1) {
-        die("failed to create temporary file for %s: %s\n", what, strerror(errno));
+        die("failed to create temporary file for %s with template %s: %s\n",
+            path_template.c_str(), what, strerror(errno));
     }
     unlink(path_template.c_str());
     return fd;
