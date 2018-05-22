@@ -481,46 +481,49 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
         return;
     }
 
-    if (params.oomadj >= 900) {
-        soft_limit_mult = 0;
-    } else if (params.oomadj >= 800) {
-        soft_limit_mult = 0;
-    } else if (params.oomadj >= 700) {
-        soft_limit_mult = 0;
-    } else if (params.oomadj >= 600) {
-        // Launcher should be perceptible, don't kill it.
-        params.oomadj = 200;
-        soft_limit_mult = 1;
-    } else if (params.oomadj >= 500) {
-        soft_limit_mult = 0;
-    } else if (params.oomadj >= 400) {
-        soft_limit_mult = 0;
-    } else if (params.oomadj >= 300) {
-        soft_limit_mult = 1;
-    } else if (params.oomadj >= 200) {
-        soft_limit_mult = 2;
-    } else if (params.oomadj >= 100) {
-        soft_limit_mult = 10;
-    } else if (params.oomadj >=   0) {
-        soft_limit_mult = 20;
-    } else {
-        // Persistent processes will have a large
-        // soft limit 512MB.
-        soft_limit_mult = 64;
+    if (low_ram_device) {
+        if (params.oomadj >= 900) {
+            soft_limit_mult = 0;
+        } else if (params.oomadj >= 800) {
+            soft_limit_mult = 0;
+        } else if (params.oomadj >= 700) {
+            soft_limit_mult = 0;
+        } else if (params.oomadj >= 600) {
+            // Launcher should be perceptible, don't kill it.
+            params.oomadj = 200;
+            soft_limit_mult = 1;
+        } else if (params.oomadj >= 500) {
+            soft_limit_mult = 0;
+        } else if (params.oomadj >= 400) {
+            soft_limit_mult = 0;
+        } else if (params.oomadj >= 300) {
+            soft_limit_mult = 1;
+        } else if (params.oomadj >= 200) {
+            soft_limit_mult = 2;
+        } else if (params.oomadj >= 100) {
+            soft_limit_mult = 10;
+        } else if (params.oomadj >=   0) {
+            soft_limit_mult = 20;
+        } else {
+            // Persistent processes will have a large
+            // soft limit 512MB.
+            soft_limit_mult = 64;
+        }
+
+        snprintf(path, sizeof(path), MEMCG_SYSFS_PATH
+                 "apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
+                 params.uid, params.pid);
+        snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
+
+        /*
+         * system_server process has no memcg under /dev/memcg/apps but should be
+         * registered with lmkd. This is the best way so far to identify it.
+         */
+        is_system_server = (params.oomadj == SYSTEM_ADJ &&
+                            (pwdrec = getpwnam("system")) != NULL &&
+                            params.uid == pwdrec->pw_uid);
+        writefilestring(path, val, !is_system_server);
     }
-
-    snprintf(path, sizeof(path), MEMCG_SYSFS_PATH "apps/uid_%d/pid_%d/memory.soft_limit_in_bytes",
-             params.uid, params.pid);
-    snprintf(val, sizeof(val), "%d", soft_limit_mult * EIGHT_MEGA);
-
-    /*
-     * system_server process has no memcg under /dev/memcg/apps but should be
-     * registered with lmkd. This is the best way so far to identify it.
-     */
-    is_system_server = (params.oomadj == SYSTEM_ADJ &&
-                        (pwdrec = getpwnam("system")) != NULL &&
-                        params.uid == pwdrec->pw_uid);
-    writefilestring(path, val, !is_system_server);
 
     procp = pid_lookup(params.pid);
     if (!procp) {
@@ -1247,8 +1250,15 @@ static void mp_event_common(int data, uint32_t events __unused) {
             }
         }
 
-        if (min_score_adj == OOM_SCORE_ADJ_MAX + 1)
+        if (min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
+            if (debug_process_killing) {
+                ALOGI("Ignore %s memory pressure event "
+                      "(free memory=%ldkB, cache=%ldkB, limit=%ldkB)",
+                      level_name[level], other_free * page_k, other_file * page_k,
+                      (long)lowmem_minfree[lowmem_targets_size - 1] * page_k);
+            }
             return;
+        }
 
         /* Free up enough pages to push over the highest minfree level */
         pages_to_free = lowmem_minfree[lowmem_targets_size - 1] -
