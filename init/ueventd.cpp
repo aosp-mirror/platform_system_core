@@ -30,6 +30,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <fstab/fstab.h>
 #include <selinux/android.h>
 #include <selinux/selinux.h>
 
@@ -242,8 +243,9 @@ DeviceHandler CreateDeviceHandler() {
     std::string hardware = android::base::GetProperty("ro.hardware", "");
     parser.ParseConfig("/ueventd." + hardware + ".rc");
 
+    auto boot_devices = fs_mgr_get_boot_devices();
     return DeviceHandler(std::move(dev_permissions), std::move(sysfs_permissions),
-                         std::move(subsystems), true);
+                         std::move(subsystems), std::move(boot_devices), true);
 }
 
 int ueventd_main(int argc, char** argv) {
