@@ -170,3 +170,13 @@ TEST_F(FrameworkListenerTest, RejectsInvalidCommands) {
     testCommand("test \"arg1 arg2", "500 Unclosed quotes error");
     testCommand("test \\a", "500 Unsupported escape sequence");
 }
+
+TEST_F(FrameworkListenerTest, MultipleClients) {
+    unique_fd client1 = clientSocket(mSocketPath);
+    unique_fd client2 = clientSocket(mSocketPath);
+    sendCmd(client1.get(), "test 1");
+    sendCmd(client2.get(), "test 2");
+
+    EXPECT_EQ(std::string("42 test,2") + '\0', recvReply(client2.get()));
+    EXPECT_EQ(std::string("42 test,1") + '\0', recvReply(client1.get()));
+}
