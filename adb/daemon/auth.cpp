@@ -35,8 +35,8 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
-static fdevent listener_fde;
-static fdevent framework_fde;
+static fdevent* listener_fde = nullptr;
+static fdevent* framework_fde = nullptr;
 static int framework_fd = -1;
 
 static void usb_disconnected(void* unused, atransport* t);
@@ -106,8 +106,10 @@ static void usb_disconnected(void* unused, atransport* t) {
 
 static void framework_disconnected() {
     LOG(INFO) << "Framework disconnect";
-    fdevent_remove(&framework_fde);
-    framework_fd = -1;
+    if (framework_fde) {
+        fdevent_destroy(framework_fde);
+        framework_fd = -1;
+    }
 }
 
 static void adbd_auth_event(int fd, unsigned events, void*) {
@@ -168,8 +170,8 @@ static void adbd_auth_listener(int fd, unsigned events, void* data) {
     }
 
     framework_fd = s;
-    fdevent_install(&framework_fde, framework_fd, adbd_auth_event, nullptr);
-    fdevent_add(&framework_fde, FDE_READ);
+    framework_fde = fdevent_create(framework_fd, adbd_auth_event, nullptr);
+    fdevent_add(framework_fde, FDE_READ);
 
     if (needs_retry) {
         needs_retry = false;
@@ -198,8 +200,8 @@ void adbd_auth_init(void) {
         return;
     }
 
-    fdevent_install(&listener_fde, fd, adbd_auth_listener, NULL);
-    fdevent_add(&listener_fde, FDE_READ);
+    listener_fde = fdevent_create(fd, adbd_auth_listener, NULL);
+    fdevent_add(listener_fde, FDE_READ);
 }
 
 void send_auth_request(atransport* t) {

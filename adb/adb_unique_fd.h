@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <unistd.h>
+
 #include <android-base/unique_fd.h>
 
 // Helper to automatically close an FD when it goes out of scope.
@@ -24,3 +26,15 @@ struct AdbCloser {
 };
 
 using unique_fd = android::base::unique_fd_impl<AdbCloser>;
+
+#if !defined(_WIN32)
+inline bool Pipe(unique_fd* read, unique_fd* write) {
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        return false;
+    }
+    read->reset(pipefd[0]);
+    write->reset(pipefd[1]);
+    return true;
+}
+#endif

@@ -427,7 +427,7 @@ void kick_transport(atransport* t) {
 
 static int transport_registration_send = -1;
 static int transport_registration_recv = -1;
-static fdevent transport_registration_fde;
+static fdevent* transport_registration_fde;
 
 #if ADB_HOST
 
@@ -698,10 +698,9 @@ void init_transport_registration(void) {
     transport_registration_send = s[0];
     transport_registration_recv = s[1];
 
-    fdevent_install(&transport_registration_fde, transport_registration_recv,
-                    transport_registration_func, 0);
-
-    fdevent_set(&transport_registration_fde, FDE_READ);
+    transport_registration_fde =
+        fdevent_create(transport_registration_recv, transport_registration_func, 0);
+    fdevent_set(transport_registration_fde, FDE_READ);
 }
 
 void kick_all_transports() {
