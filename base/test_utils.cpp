@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "android-base/logging.h"
 #include "android-base/test_utils.h"
 
 #include <fcntl.h>
@@ -32,6 +31,9 @@
 #endif
 
 #include <string>
+
+#include <android-base/file.h>
+#include <android-base/logging.h>
 
 #ifdef _WIN32
 int mkstemp(char* template_name) {
@@ -123,31 +125,38 @@ bool TemporaryDir::init(const std::string& tmp_dir) {
   return (mkdtemp(path) != nullptr);
 }
 
-CapturedStderr::CapturedStderr() : old_stderr_(-1) {
-  init();
+CapturedStdFd::CapturedStdFd(int std_fd) : std_fd_(std_fd), old_fd_(-1) {
+  Init();
 }
 
-CapturedStderr::~CapturedStderr() {
-  reset();
+CapturedStdFd::~CapturedStdFd() {
+  Reset();
 }
 
-int CapturedStderr::fd() const {
+int CapturedStdFd::fd() const {
   return temp_file_.fd;
 }
 
-void CapturedStderr::init() {
+std::string CapturedStdFd::str() {
+  std::string result;
+  CHECK_EQ(0, TEMP_FAILURE_RETRY(lseek(fd(), 0, SEEK_SET)));
+  android::base::ReadFdToString(fd(), &result);
+  return result;
+}
+
+void CapturedStdFd::Init() {
 #if defined(_WIN32)
   // On Windows, stderr is often buffered, so make sure it is unbuffered so
   // that we can immediately read back what was written to stderr.
-  CHECK_EQ(0, setvbuf(stderr, NULL, _IONBF, 0));
+  if (std_fd_ == STDERR_FILENO) CHECK_EQ(0, setvbuf(stderr, NULL, _IONBF, 0));
 #endif
-  old_stderr_ = dup(STDERR_FILENO);
-  CHECK_NE(-1, old_stderr_);
-  CHECK_NE(-1, dup2(fd(), STDERR_FILENO));
+  old_fd_ = dup(std_fd_);
+  CHECK_NE(-1, old_fd_);
+  CHECK_NE(-1, dup2(fd(), std_fd_));
 }
 
-void CapturedStderr::reset() {
-  CHECK_NE(-1, dup2(old_stderr_, STDERR_FILENO));
-  CHECK_EQ(0, close(old_stderr_));
+void CapturedStdFd::Reset() {
+  CHECK_NE(-1, dup2(old_fd_, std_fd_));
+  CHECK_EQ(0, close(old_fd_));
   // Note: cannot restore prior setvbuf() setting.
 }
