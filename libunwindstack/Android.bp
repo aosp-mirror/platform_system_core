@@ -261,6 +261,7 @@ cc_test {
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",
         "tests/files/offline/gnu_debugdata_arm/*",
+        "tests/files/offline/offset_arm/*",
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],

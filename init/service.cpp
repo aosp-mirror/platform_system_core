@@ -34,6 +34,7 @@
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <hidl-util/FQName.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
@@ -59,13 +60,13 @@ using android::base::Join;
 using android::base::ParseInt;
 using android::base::StartsWith;
 using android::base::StringPrintf;
+using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 namespace android {
 namespace init {
 
-static Result<std::string> ComputeContextFromExecutable(std::string& service_name,
-                                                        const std::string& service_path) {
+static Result<std::string> ComputeContextFromExecutable(const std::string& service_path) {
     std::string computed_context;
 
     char* raw_con = nullptr;
@@ -101,11 +102,8 @@ static Result<std::string> ComputeContextFromExecutable(std::string& service_nam
     return computed_context;
 }
 
-static void SetUpPidNamespace(const std::string& service_name) {
+Result<Success> Service::SetUpMountNamespace() const {
     constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
-
-    // It's OK to LOG(FATAL) in this function since it's running in the first
-    // child process.
 
     // Recursively remount / as slave like zygote does so unmounting and mounting /proc
     // doesn't interfere with the parent namespace's /proc mount. This will also
@@ -113,24 +111,40 @@ static void SetUpPidNamespace(const std::string& service_name) {
     // with the parent namespace but will still allow mount events from the parent
     // namespace to propagate to the child.
     if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
-        PLOG(FATAL) << "couldn't remount(/) recursively as slave for " << service_name;
-    }
-    // umount() then mount() /proc.
-    // Note that it is not sufficient to mount with MS_REMOUNT.
-    if (umount("/proc") == -1) {
-        PLOG(FATAL) << "couldn't umount(/proc) for " << service_name;
-    }
-    if (mount("", "/proc", "proc", kSafeFlags, "") == -1) {
-        PLOG(FATAL) << "couldn't mount(/proc) for " << service_name;
+        return ErrnoError() << "Could not remount(/) recursively as slave";
     }
 
-    if (prctl(PR_SET_NAME, service_name.c_str()) == -1) {
-        PLOG(FATAL) << "couldn't set name for " << service_name;
+    // umount() then mount() /proc and/or /sys
+    // Note that it is not sufficient to mount with MS_REMOUNT.
+    if (namespace_flags_ & CLONE_NEWPID) {
+        if (umount("/proc") == -1) {
+            return ErrnoError() << "Could not umount(/proc)";
+        }
+        if (mount("", "/proc", "proc", kSafeFlags, "") == -1) {
+            return ErrnoError() << "Could not mount(/proc)";
+        }
+    }
+    bool remount_sys = std::any_of(namespaces_to_enter_.begin(), namespaces_to_enter_.end(),
+                                   [](const auto& entry) { return entry.first == CLONE_NEWNET; });
+    if (remount_sys) {
+        if (umount2("/sys", MNT_DETACH) == -1) {
+            return ErrnoError() << "Could not umount(/sys)";
+        }
+        if (mount("", "/sys", "sys", kSafeFlags, "") == -1) {
+            return ErrnoError() << "Could not mount(/sys)";
+        }
+    }
+    return Success();
+}
+
+Result<Success> Service::SetUpPidNamespace() const {
+    if (prctl(PR_SET_NAME, name_.c_str()) == -1) {
+        return ErrnoError() << "Could not set name";
     }
 
     pid_t child_pid = fork();
     if (child_pid == -1) {
-        PLOG(FATAL) << "couldn't fork init inside the PID namespace for " << service_name;
+        return ErrnoError() << "Could not fork init inside the PID namespace";
     }
 
     if (child_pid > 0) {
@@ -153,6 +167,20 @@ static void SetUpPidNamespace(const std::string& service_name) {
         }
         _exit(WEXITSTATUS(init_exitstatus));
     }
+    return Success();
+}
+
+Result<Success> Service::EnterNamespaces() const {
+    for (const auto& [nstype, path] : namespaces_to_enter_) {
+        auto fd = unique_fd{open(path.c_str(), O_RDONLY | O_CLOEXEC)};
+        if (!fd) {
+            return ErrnoError() << "Could not open namespace at " << path;
+        }
+        if (setns(fd, nstype) == -1) {
+            return ErrnoError() << "Could not setns() namespace at " << path;
+        }
+    }
+    return Success();
 }
 
 static bool ExpandArgsAndExecv(const std::vector<std::string>& args) {
@@ -415,6 +443,20 @@ Result<Success> Service::ParseCritical(const std::vector<std::string>& args) {
 Result<Success> Service::ParseDisabled(const std::vector<std::string>& args) {
     flags_ |= SVC_DISABLED;
     flags_ |= SVC_RC_DISABLED;
+    return Success();
+}
+
+Result<Success> Service::ParseEnterNamespace(const std::vector<std::string>& args) {
+    if (args[1] != "net") {
+        return Error() << "Init only supports entering network namespaces";
+    }
+    if (!namespaces_to_enter_.empty()) {
+        return Error() << "Only one network namespace may be entered";
+    }
+    // Network namespaces require that /sys is remounted, otherwise the old adapters will still be
+    // present. Therefore, they also require mount namespaces.
+    namespace_flags_ |= CLONE_NEWNS;
+    namespaces_to_enter_.emplace_back(CLONE_NEWNET, args[2]);
     return Success();
 }
 
@@ -682,6 +724,8 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"console",     {0,     1,    &Service::ParseConsole}},
         {"critical",    {0,     0,    &Service::ParseCritical}},
         {"disabled",    {0,     0,    &Service::ParseDisabled}},
+        {"enter_namespace",
+                        {2,     2,    &Service::ParseEnterNamespace}},
         {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::ParseGroup}},
         {"interface",   {2,     2,    &Service::ParseInterface}},
         {"ioprio",      {2,     2,    &Service::ParseIoprio}},
@@ -783,7 +827,7 @@ Result<Success> Service::Start() {
     if (!seclabel_.empty()) {
         scon = seclabel_;
     } else {
-        auto result = ComputeContextFromExecutable(name_, args_[0]);
+        auto result = ComputeContextFromExecutable(args_[0]);
         if (!result) {
             return result.error();
         }
@@ -802,10 +846,24 @@ Result<Success> Service::Start() {
     if (pid == 0) {
         umask(077);
 
+        if (auto result = EnterNamespaces(); !result) {
+            LOG(FATAL) << "Service '" << name_ << "' could not enter namespaces: " << result.error();
+        }
+
+        if (namespace_flags_ & CLONE_NEWNS) {
+            if (auto result = SetUpMountNamespace(); !result) {
+                LOG(FATAL) << "Service '" << name_
+                           << "' could not set up mount namespace: " << result.error();
+            }
+        }
+
         if (namespace_flags_ & CLONE_NEWPID) {
             // This will fork again to run an init process inside the PID
             // namespace.
-            SetUpPidNamespace(name_);
+            if (auto result = SetUpPidNamespace(); !result) {
+                LOG(FATAL) << "Service '" << name_
+                           << "' could not set up PID namespace: " << result.error();
+            }
         }
 
         for (const auto& [key, value] : environment_vars_) {

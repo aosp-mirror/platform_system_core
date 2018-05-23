@@ -210,8 +210,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           in_device_map = true;
         } else {
           bool finished;
-          stepped = elf->Step(rel_pc, step_pc, map_info->elf_offset, regs_, process_memory_.get(),
-                              &finished);
+          stepped = elf->Step(rel_pc, step_pc, regs_, process_memory_.get(), &finished);
           elf->GetLastError(&last_error_);
           if (stepped && finished) {
             break;
