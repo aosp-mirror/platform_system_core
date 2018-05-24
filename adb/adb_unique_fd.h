@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <errno.h>
 #include <unistd.h>
 
 #include <android-base/unique_fd.h>
@@ -48,14 +49,18 @@ inline bool Pipe(unique_fd* read, unique_fd* write, int flags = 0) {
     if (flags & O_CLOEXEC) {
         if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 ||
             fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
-            PLOG(FATAL) << "failed to set FD_CLOEXEC on newly created pipe";
+            close(pipefd[0]);
+            close(pipefd[1]);
+            return false;
         }
     }
 
     if (flags & O_NONBLOCK) {
         if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) != 0 ||
             fcntl(pipefd[1], F_SETFL, O_NONBLOCK) != 0) {
-            PLOG(FATAL) << "failed to set O_NONBLOCK  on newly created pipe";
+            close(pipefd[0]);
+            close(pipefd[1]);
+            return false;
         }
     }
 #endif
