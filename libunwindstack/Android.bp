@@ -62,6 +62,7 @@ cc_library {
         "MapInfo.cpp",
         "Maps.cpp",
         "Memory.cpp",
+        "LocalUnwinder.cpp",
         "Regs.cpp",
         "RegsArm.cpp",
         "RegsArm64.cpp",
@@ -125,6 +126,21 @@ cc_library {
 //-------------------------------------------------------------------------
 // Unit Tests
 //-------------------------------------------------------------------------
+cc_test_library {
+    name: "libunwindstack_local",
+    defaults: ["libunwindstack_flags"],
+    srcs: ["tests/TestLocal.cpp"],
+
+    cflags: [
+        "-O0",
+        "-g",
+    ],
+
+    shared_libs: [
+        "libunwindstack",
+    ],
+}
+
 cc_test {
     name: "libunwindstack_test",
     defaults: ["libunwindstack_flags"],
@@ -151,6 +167,7 @@ cc_test {
         "tests/ElfTest.cpp",
         "tests/ElfTestUtils.cpp",
         "tests/JitDebugTest.cpp",
+        "tests/LocalUnwinderTest.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapInfoGetLoadBiasTest.cpp",
