@@ -49,3 +49,23 @@ cc_library {
         "libbase",
     ],
 }
+
+cc_library {
+    name: "libfoo.product1",
+    srcs: ["test.cpp"],
+    cflags: ["-DLIBNAME=\"libfoo.product1.so\""],
+    product_specific: true,
+    shared_libs: [
+        "libbase",
+    ],
+}
+
+cc_library {
+    name: "libbar.product1",
+    srcs: ["test.cpp"],
+    cflags: ["-DLIBNAME=\"libbar.product1.so\""],
+    product_specific: true,
+    shared_libs: [
+        "libbase",
+    ],
+}
