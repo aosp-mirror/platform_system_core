@@ -220,6 +220,15 @@ cc_defaults {
         "libbase",
         "liblzma",
     ],
+    target: {
+        // Always disable optimizations for host to make it easier to debug.
+        host: {
+            cflags: [
+                "-O0",
+                "-g",
+            ],
+        },
+    },
 }
 
 cc_binary {
