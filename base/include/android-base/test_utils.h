@@ -58,21 +58,33 @@ class TemporaryDir {
   DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
 };
 
-class CapturedStderr {
+class CapturedStdFd {
  public:
-  CapturedStderr();
-  ~CapturedStderr();
+  CapturedStdFd(int std_fd);
+  ~CapturedStdFd();
 
   int fd() const;
+  std::string str();
 
  private:
-  void init();
-  void reset();
+  void Init();
+  void Reset();
 
   TemporaryFile temp_file_;
-  int old_stderr_;
+  int std_fd_;
+  int old_fd_;
 
-  DISALLOW_COPY_AND_ASSIGN(CapturedStderr);
+  DISALLOW_COPY_AND_ASSIGN(CapturedStdFd);
+};
+
+class CapturedStderr : public CapturedStdFd {
+ public:
+  CapturedStderr() : CapturedStdFd(STDERR_FILENO) {}
+};
+
+class CapturedStdout : public CapturedStdFd {
+ public:
+  CapturedStdout() : CapturedStdFd(STDOUT_FILENO) {}
 };
 
 #define ASSERT_MATCH(str, pattern)                                             \
