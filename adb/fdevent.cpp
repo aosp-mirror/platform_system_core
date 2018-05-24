@@ -57,7 +57,7 @@ struct PollNode {
 
   explicit PollNode(fdevent* fde) : fde(fde) {
       memset(&pollfd, 0, sizeof(pollfd));
-      pollfd.fd = fde->fd;
+      pollfd.fd = fde->fd.get();
 
 #if defined(__linux__)
       // Always enable POLLRDHUP, so the host server can take action when some clients disconnect.
@@ -111,37 +111,22 @@ static std::string dump_fde(const fdevent* fde) {
     if (fde->state & FDE_ERROR) {
         state += "E";
     }
-    if (fde->state & FDE_DONT_CLOSE) {
-        state += "D";
-    }
-    return android::base::StringPrintf("(fdevent %d %s)", fde->fd, state.c_str());
-}
-
-fdevent* fdevent_create(int fd, fd_func func, void* arg) {
-    check_main_thread();
-    fdevent *fde = (fdevent*) malloc(sizeof(fdevent));
-    if(fde == 0) return 0;
-    fdevent_install(fde, fd, func, arg);
-    fde->state |= FDE_CREATED;
-    return fde;
-}
-
-void fdevent_destroy(fdevent* fde) {
-    check_main_thread();
-    if(fde == 0) return;
-    if(!(fde->state & FDE_CREATED)) {
-        LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
-    }
-    fdevent_remove(fde);
-    free(fde);
+    return android::base::StringPrintf("(fdevent %d %s)", fde->fd.get(), state.c_str());
 }
 
 void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
     check_main_thread();
     CHECK_GE(fd, 0);
     memset(fde, 0, sizeof(fdevent));
+}
+
+fdevent* fdevent_create(int fd, fd_func func, void* arg) {
+    check_main_thread();
+    CHECK_GE(fd, 0);
+
+    fdevent* fde = new fdevent();
     fde->state = FDE_ACTIVE;
-    fde->fd = fd;
+    fde->fd.reset(fd);
     fde->func = func;
     fde->arg = arg;
     if (!set_file_block_mode(fd, false)) {
@@ -150,30 +135,35 @@ void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
         // to handle it.
         LOG(ERROR) << "failed to set non-blocking mode for fd " << fd;
     }
-    auto pair = g_poll_node_map.emplace(fde->fd, PollNode(fde));
+    auto pair = g_poll_node_map.emplace(fde->fd.get(), PollNode(fde));
     CHECK(pair.second) << "install existing fd " << fd;
-    D("fdevent_install %s", dump_fde(fde).c_str());
+
+    fde->state |= FDE_CREATED;
+    return fde;
 }
 
-void fdevent_remove(fdevent* fde) {
+void fdevent_destroy(fdevent* fde) {
     check_main_thread();
-    D("fdevent_remove %s", dump_fde(fde).c_str());
+    if (fde == 0) return;
+    if (!(fde->state & FDE_CREATED)) {
+        LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
+    }
+
     if (fde->state & FDE_ACTIVE) {
-        g_poll_node_map.erase(fde->fd);
+        g_poll_node_map.erase(fde->fd.get());
         if (fde->state & FDE_PENDING) {
             g_pending_list.remove(fde);
         }
-        if (!(fde->state & FDE_DONT_CLOSE)) {
-            adb_close(fde->fd);
-            fde->fd = -1;
-        }
+        fde->fd.reset();
         fde->state = 0;
         fde->events = 0;
     }
+
+    delete fde;
 }
 
 static void fdevent_update(fdevent* fde, unsigned events) {
-    auto it = g_poll_node_map.find(fde->fd);
+    auto it = g_poll_node_map.find(fde->fd.get());
     CHECK(it != g_poll_node_map.end());
     PollNode& node = it->second;
     if (events & FDE_READ) {
@@ -272,7 +262,7 @@ static void fdevent_process() {
             auto it = g_poll_node_map.find(pollfd.fd);
             CHECK(it != g_poll_node_map.end());
             fdevent* fde = it->second.fde;
-            CHECK_EQ(fde->fd, pollfd.fd);
+            CHECK_EQ(fde->fd.get(), pollfd.fd);
             fde->events |= events;
             D("%s got events %x", dump_fde(fde).c_str(), events);
             fde->state |= FDE_PENDING;
@@ -287,7 +277,7 @@ static void fdevent_call_fdfunc(fdevent* fde) {
     CHECK(fde->state & FDE_PENDING);
     fde->state &= (~FDE_PENDING);
     D("fdevent_call_fdfunc %s", dump_fde(fde).c_str());
-    fde->func(fde->fd, events, fde->arg);
+    fde->func(fde->fd.get(), events, fde->arg);
 }
 
 static void fdevent_run_flush() EXCLUDES(run_queue_mutex) {

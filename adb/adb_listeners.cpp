@@ -42,7 +42,7 @@ class alistener {
     alistener(const std::string& _local_name, const std::string& _connect_to);
     ~alistener();
 
-    fdevent fde;
+    fdevent* fde = nullptr;
     int fd = -1;
 
     std::string local_name;
@@ -60,7 +60,7 @@ alistener::alistener(const std::string& _local_name, const std::string& _connect
 
 alistener::~alistener() {
     // Closes the corresponding fd.
-    fdevent_remove(&fde);
+    fdevent_destroy(fde);
 
     if (transport) {
         transport->RemoveDisconnect(&disconnect);
@@ -222,11 +222,11 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
 
     close_on_exec(listener->fd);
     if (listener->connect_to == "*smartsocket*") {
-        fdevent_install(&listener->fde, listener->fd, ss_listener_event_func, listener.get());
+        listener->fde = fdevent_create(listener->fd, ss_listener_event_func, listener.get());
     } else {
-        fdevent_install(&listener->fde, listener->fd, listener_event_func, listener.get());
+        listener->fde = fdevent_create(listener->fd, listener_event_func, listener.get());
     }
-    fdevent_set(&listener->fde, FDE_READ);
+    fdevent_set(listener->fde, FDE_READ);
 
     listener->transport = transport;
 
