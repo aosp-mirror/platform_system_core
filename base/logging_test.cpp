@@ -206,11 +206,9 @@ static std::string make_log_pattern(android::base::LogSeverity severity,
 }
 #endif
 
-static void CheckMessage(const CapturedStderr& cap, android::base::LogSeverity severity,
+static void CheckMessage(CapturedStderr& cap, android::base::LogSeverity severity,
                          const char* expected, const char* expected_tag = nullptr) {
-  std::string output;
-  ASSERT_EQ(0, lseek(cap.fd(), 0, SEEK_SET));
-  android::base::ReadFdToString(cap.fd(), &output);
+  std::string output = cap.str();
 
   // We can't usefully check the output of any of these on Windows because we
   // don't have std::regex, but we can at least make sure we printed at least as
@@ -622,4 +620,24 @@ TEST(logging, SetDefaultTag) {
     android::base::SetDefaultTag(old_default_tag);
   }
   CheckMessage(cap, android::base::LogSeverity::INFO, expected_msg, expected_tag);
+}
+
+TEST(logging, StdioLogger) {
+  std::string err_str;
+  std::string out_str;
+  {
+    CapturedStderr cap_err;
+    CapturedStdout cap_out;
+    android::base::SetLogger(android::base::StdioLogger);
+    LOG(INFO) << "out";
+    LOG(ERROR) << "err";
+    err_str = cap_err.str();
+    out_str = cap_out.str();
+  }
+
+  // For INFO we expect just the literal "out\n".
+  ASSERT_EQ("out\n", out_str) << out_str;
+  // Whereas ERROR logging includes the program name.
+  ASSERT_EQ(android::base::Basename(android::base::GetExecutablePath()) + ": err\n", err_str)
+      << err_str;
 }

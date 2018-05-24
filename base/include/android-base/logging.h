@@ -100,8 +100,17 @@ using LogFunction = std::function<void(LogId, LogSeverity, const char*, const ch
                                        unsigned int, const char*)>;
 using AbortFunction = std::function<void(const char*)>;
 
+// Loggers for use with InitLogging/SetLogger.
+
+// Log to the kernel log (dmesg).
 void KernelLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
+// Log to stderr in the full logcat format (with pid/tid/time/tag details).
 void StderrLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
+// Log just the message to stdout/stderr (without pid/tid/time/tag details).
+// The choice of stdout versus stderr is based on the severity.
+// Errors are also prefixed by the program name (as with err(3)/error(3)).
+// Useful for replacing printf(3)/perror(3)/err(3)/error(3) in command-line tools.
+void StdioLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
 
 void DefaultAborter(const char* abort_message);
 
