@@ -105,4 +105,83 @@ const std::string RemoteMaps::GetMapsFile() const {
   return "/proc/" + std::to_string(pid_) + "/maps";
 }
 
+const std::string LocalUpdatableMaps::GetMapsFile() const {
+  return "/proc/self/maps";
+}
+
+bool LocalUpdatableMaps::Reparse() {
+  // New maps will be added at the end without deleting the old ones.
+  size_t last_map_idx = maps_.size();
+  if (!Parse()) {
+    // Delete any maps added by the Parse call.
+    for (size_t i = last_map_idx; i < maps_.size(); i++) {
+      delete maps_[i];
+    }
+    maps_.resize(last_map_idx);
+    return false;
+  }
+
+  size_t total_entries = maps_.size();
+  size_t search_map_idx = 0;
+  for (size_t new_map_idx = last_map_idx; new_map_idx < maps_.size(); new_map_idx++) {
+    MapInfo* new_map_info = maps_[new_map_idx];
+    uint64_t start = new_map_info->start;
+    uint64_t end = new_map_info->end;
+    uint64_t flags = new_map_info->flags;
+    std::string* name = &new_map_info->name;
+    for (size_t old_map_idx = search_map_idx; old_map_idx < last_map_idx; old_map_idx++) {
+      MapInfo* info = maps_[old_map_idx];
+      if (start == info->start && end == info->end && flags == info->flags && *name == info->name) {
+        // No need to check
+        search_map_idx = old_map_idx + 1;
+        delete new_map_info;
+        maps_[new_map_idx] = nullptr;
+        total_entries--;
+        break;
+      } else if (info->start > start) {
+        // Stop, there isn't going to be a match.
+        search_map_idx = old_map_idx;
+        break;
+      }
+
+      // Never delete these maps, they may be in use. The assumption is
+      // that there will only every be a handfull of these so waiting
+      // to destroy them is not too expensive.
+      saved_maps_.push_back(info);
+      maps_[old_map_idx] = nullptr;
+      total_entries--;
+    }
+    if (search_map_idx >= last_map_idx) {
+      break;
+    }
+  }
+
+  // Now move out any of the maps that never were found.
+  for (size_t i = search_map_idx; i < last_map_idx; i++) {
+    saved_maps_.push_back(maps_[i]);
+    maps_[i] = nullptr;
+    total_entries--;
+  }
+
+  // Sort all of the values such that the nullptrs wind up at the end, then
+  // resize them away.
+  std::sort(maps_.begin(), maps_.end(), [](const auto* a, const auto* b) {
+    if (a == nullptr) {
+      return false;
+    } else if (b == nullptr) {
+      return true;
+    }
+    return a->start < b->start;
+  });
+  maps_.resize(total_entries);
+
+  return true;
+}
+
+LocalUpdatableMaps::~LocalUpdatableMaps() {
+  for (auto map_info : saved_maps_) {
+    delete map_info;
+  }
+}
+
 }  // namespace unwindstack
