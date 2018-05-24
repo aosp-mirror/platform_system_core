@@ -87,6 +87,19 @@ class LocalMaps : public RemoteMaps {
   virtual ~LocalMaps() = default;
 };
 
+class LocalUpdatableMaps : public Maps {
+ public:
+  LocalUpdatableMaps() : Maps() {}
+  virtual ~LocalUpdatableMaps();
+
+  bool Reparse();
+
+  const std::string GetMapsFile() const override;
+
+ private:
+  std::vector<MapInfo*> saved_maps_;
+};
+
 class BufferMaps : public Maps {
  public:
   BufferMaps(const char* buffer) : buffer_(buffer) {}
