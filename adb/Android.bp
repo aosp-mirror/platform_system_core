@@ -276,6 +276,7 @@ cc_binary_host {
 cc_library_static {
     name: "libadbd",
     defaults: ["adb_defaults"],
+    recovery_available: true,
 
     // libminadbd wants both, for some reason.
     compile_multilib: "both",
@@ -302,6 +303,7 @@ cc_binary {
 
     // adbd must be static, as it is copied into the recovery image.
     static_executable: true,
+    recovery_available: true,
 
     srcs: [
         "daemon/main.cpp",

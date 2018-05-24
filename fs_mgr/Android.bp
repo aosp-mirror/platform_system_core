@@ -33,6 +33,7 @@ cc_defaults {
 cc_library_static {
     name: "libfs_mgr",
     defaults: ["fs_mgr_defaults"],
+    recovery_available: true,
     export_include_dirs: ["include"],
     include_dirs: ["system/vold"],
     srcs: [
@@ -79,6 +80,7 @@ cc_library_static {
 cc_library_static {
     name: "libfstab",
     vendor_available: true,
+    recovery_available: true,
     defaults: ["fs_mgr_defaults"],
     srcs: [
         "fs_mgr_fstab.cpp",

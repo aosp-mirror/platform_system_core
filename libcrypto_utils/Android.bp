@@ -17,6 +17,7 @@
 cc_library {
     name: "libcrypto_utils",
     vendor_available: true,
+    recovery_available: true,
     vndk: {
         enabled: true,
     },
