@@ -36,6 +36,7 @@ cc_library {
     name: "libdemangle",
     defaults: ["libdemangle_defaults"],
     vendor_available: true,
+    recovery_available: true,
 
     srcs: [
         "Demangler.cpp",
