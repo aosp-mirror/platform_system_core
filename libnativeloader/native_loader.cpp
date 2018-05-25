@@ -46,6 +46,8 @@
                                              "%s:%d: %s CHECK '" #predicate "' failed.",\
                                              __FILE__, __LINE__, __FUNCTION__)
 
+using namespace std::string_literals;
+
 namespace android {
 
 #if defined(__ANDROID__)
@@ -236,10 +238,15 @@ class LibraryNamespaces {
       // Different name is useful for debugging
       namespace_name = kVendorClassloaderNamespaceName;
       ALOGD("classloader namespace configured for unbundled vendor apk. library_path=%s", library_path.c_str());
-    } else if (!oem_public_libraries_.empty()) {
-      // oem_public_libraries are NOT available to vendor apks, otherwise it
+    } else {
+      // oem and product public libraries are NOT available to vendor apks, otherwise it
       // would be system->vendor violation.
-      system_exposed_libraries = system_exposed_libraries + ":" + oem_public_libraries_.c_str();
+      if (!oem_public_libraries_.empty()) {
+        system_exposed_libraries = system_exposed_libraries + ':' + oem_public_libraries_;
+      }
+      if (!product_public_libraries_.empty()) {
+        system_exposed_libraries = system_exposed_libraries + ':' + product_public_libraries_;
+      }
     }
 
     NativeLoaderNamespace native_loader_ns;
@@ -351,6 +358,8 @@ class LibraryNamespaces {
     std::string vndksp_native_libraries_system_config =
             root_dir + kVndkspNativeLibrariesSystemConfigPathFromRoot;
 
+    std::string product_public_native_libraries_dir = "/product/etc";
+
     std::string error_msg;
     LOG_ALWAYS_FATAL_IF(
         !ReadConfig(public_native_libraries_system_config, &sonames, always_true, &error_msg),
@@ -373,7 +382,7 @@ class LibraryNamespaces {
     //
     // TODO(dimitry): this is a bit misleading since we do not know
     // if the vendor public library is going to be opened from /vendor/lib
-    // we might as well end up loading them from /system/lib
+    // we might as well end up loading them from /system/lib or /product/lib
     // For now we rely on CTS test to catch things like this but
     // it should probably be addressed in the future.
     for (const auto& soname : sonames) {
@@ -387,47 +396,14 @@ class LibraryNamespaces {
     // system libs that are exposed to apps. The libs in the txt files must be
     // named as lib<name>.<companyname>.so.
     sonames.clear();
-    std::string dirname = base::Dirname(public_native_libraries_system_config);
-    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname.c_str()), closedir);
-    if (dir != nullptr) {
-      // Failing to opening the dir is not an error, which can happen in
-      // webview_zygote.
-      struct dirent* ent;
-      while ((ent = readdir(dir.get())) != nullptr) {
-        if (ent->d_type != DT_REG && ent->d_type != DT_LNK) {
-          continue;
-        }
-        const std::string filename(ent->d_name);
-        if (android::base::StartsWith(filename, kPublicNativeLibrariesExtensionConfigPrefix) &&
-            android::base::EndsWith(filename, kPublicNativeLibrariesExtensionConfigSuffix)) {
-          const size_t start = kPublicNativeLibrariesExtensionConfigPrefixLen;
-          const size_t end = filename.size() - kPublicNativeLibrariesExtensionConfigSuffixLen;
-          const std::string company_name = filename.substr(start, end - start);
-          const std::string config_file_path = dirname + "/" + filename;
-          LOG_ALWAYS_FATAL_IF(
-              company_name.empty(),
-              "Error extracting company name from public native library list file path \"%s\"",
-              config_file_path.c_str());
-          LOG_ALWAYS_FATAL_IF(
-              !ReadConfig(
-                  config_file_path, &sonames,
-                  [&company_name](const std::string& soname, std::string* error_msg) {
-                    if (android::base::StartsWith(soname, "lib") &&
-                        android::base::EndsWith(soname, "." + company_name + ".so")) {
-                      return true;
-                    } else {
-                      *error_msg = "Library name \"" + soname +
-                                   "\" does not end with the company name: " + company_name + ".";
-                      return false;
-                    }
-                  },
-                  &error_msg),
-              "Error reading public native library list from \"%s\": %s", config_file_path.c_str(),
-              error_msg.c_str());
-        }
-      }
-    }
+    ReadExtensionLibraries(base::Dirname(public_native_libraries_system_config).c_str(), &sonames);
     oem_public_libraries_ = base::Join(sonames, ':');
+
+    // read /product/etc/public.libraries-<companyname>.txt which contain partner defined
+    // product libs that are exposed to apps.
+    sonames.clear();
+    ReadExtensionLibraries(product_public_native_libraries_dir.c_str(), &sonames);
+    product_public_libraries_ = base::Join(sonames, ':');
 
     // Insert VNDK version to llndk and vndksp config file names.
     insert_vndk_version_str(&llndk_native_libraries_system_config);
@@ -448,11 +424,54 @@ class LibraryNamespaces {
     vendor_public_libraries_ = base::Join(sonames, ':');
   }
 
-  void Reset() {
-    namespaces_.clear();
-  }
+  void Reset() { namespaces_.clear(); }
 
  private:
+  void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonames) {
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname), closedir);
+    if (dir != nullptr) {
+      // Failing to opening the dir is not an error, which can happen in
+      // webview_zygote.
+      while (struct dirent* ent = readdir(dir.get())) {
+        if (ent->d_type != DT_REG && ent->d_type != DT_LNK) {
+          continue;
+        }
+        const std::string filename(ent->d_name);
+        if (android::base::StartsWith(filename, kPublicNativeLibrariesExtensionConfigPrefix) &&
+            android::base::EndsWith(filename, kPublicNativeLibrariesExtensionConfigSuffix)) {
+          const size_t start = kPublicNativeLibrariesExtensionConfigPrefixLen;
+          const size_t end = filename.size() - kPublicNativeLibrariesExtensionConfigSuffixLen;
+          const std::string company_name = filename.substr(start, end - start);
+          const std::string config_file_path = dirname + "/"s + filename;
+          LOG_ALWAYS_FATAL_IF(
+              company_name.empty(),
+              "Error extracting company name from public native library list file path \"%s\"",
+              config_file_path.c_str());
+
+          std::string error_msg;
+
+          LOG_ALWAYS_FATAL_IF(
+              !ReadConfig(
+                  config_file_path, sonames,
+                  [&company_name](const std::string& soname, std::string* error_msg) {
+                    if (android::base::StartsWith(soname, "lib") &&
+                        android::base::EndsWith(soname, "." + company_name + ".so")) {
+                      return true;
+                    } else {
+                      *error_msg = "Library name \"" + soname +
+                                   "\" does not end with the company name: " + company_name + ".";
+                      return false;
+                    }
+                  },
+                  &error_msg),
+              "Error reading public native library list from \"%s\": %s", config_file_path.c_str(),
+              error_msg.c_str());
+        }
+      }
+    }
+  }
+
+
   bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames,
                   const std::function<bool(const std::string& /* soname */,
                                            std::string* /* error_msg */)>& check_soname,
@@ -559,6 +578,7 @@ class LibraryNamespaces {
   std::string system_public_libraries_;
   std::string vendor_public_libraries_;
   std::string oem_public_libraries_;
+  std::string product_public_libraries_;
   std::string system_llndk_libraries_;
   std::string system_vndksp_libraries_;
 

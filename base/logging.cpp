@@ -212,6 +212,16 @@ void StderrLogger(LogId, LogSeverity severity, const char* tag, const char* file
           timestamp, getpid(), GetThreadId(), file, line, message);
 }
 
+void StdioLogger(LogId, LogSeverity severity, const char* /*tag*/, const char* /*file*/,
+                 unsigned int /*line*/, const char* message) {
+  if (severity >= WARNING) {
+    fflush(stdout);
+    fprintf(stderr, "%s: %s\n", getprogname(), message);
+  } else {
+    fprintf(stdout, "%s\n", message);
+  }
+}
+
 void DefaultAborter(const char* abort_message) {
 #ifdef __ANDROID__
   android_set_abort_message(abort_message);

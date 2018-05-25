@@ -48,7 +48,7 @@ static Result<Success> do_stub(const BuiltinArguments& args) {
 #include "generated_stub_builtin_function_map.h"
 
 int main(int argc, char** argv) {
-    android::base::InitLogging(argv, &android::base::StderrLogger);
+    android::base::InitLogging(argv, &android::base::StdioLogger);
     if (argc != 2) {
         LOG(ERROR) << "Usage: " << argv[0] << " <init file to parse>";
         return -1;

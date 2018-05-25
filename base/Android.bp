@@ -95,6 +95,7 @@ cc_library {
     name: "libbase",
     defaults: ["libbase_defaults"],
     vendor_available: true,
+    recovery_available: true,
     host_supported: true,
     vndk: {
         enabled: true,

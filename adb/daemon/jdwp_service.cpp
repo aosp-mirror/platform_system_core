@@ -139,8 +139,6 @@ struct JdwpProcess {
             fatal("could not create fdevent for new JDWP process");
         }
 
-        this->fde->state |= FDE_DONT_CLOSE;
-
         /* start by waiting for the PID */
         fdevent_add(this->fde, FDE_READ);
     }
@@ -148,7 +146,6 @@ struct JdwpProcess {
     ~JdwpProcess() {
         if (this->socket >= 0) {
             adb_shutdown(this->socket);
-            adb_close(this->socket);
             this->socket = -1;
         }
 

@@ -131,7 +131,7 @@ static int __write_to_statsd_initialize_locked() {
 }
 
 static int __write_to_stats_daemon(struct iovec* vec, size_t nr) {
-    int ret, save_errno;
+    int save_errno;
     struct timespec ts;
     size_t len, i;
 
@@ -145,14 +145,7 @@ static int __write_to_stats_daemon(struct iovec* vec, size_t nr) {
     save_errno = errno;
     clock_gettime(CLOCK_REALTIME, &ts);
 
-    ret = 0;
-
-    ssize_t retval;
-    retval = (*statsdLoggerWrite.write)(&ts, vec, nr);
-    if (ret >= 0) {
-        ret = retval;
-    }
-
+    int ret = (int)(*statsdLoggerWrite.write)(&ts, vec, nr);
     errno = save_errno;
     return ret;
 }

@@ -885,9 +885,8 @@ int launch_server(const std::string& socket_spec) {
     }
 #else /* !defined(_WIN32) */
     // set up a pipe so the child can tell us when it is ready.
-    // fd[0] will be parent's end, and the child will write on fd[1]
-    int fd[2];
-    if (pipe(fd)) {
+    unique_fd pipe_read, pipe_write;
+    if (!Pipe(&pipe_read, &pipe_write)) {
         fprintf(stderr, "pipe failed in launch_server, errno: %d\n", errno);
         return -1;
     }
@@ -899,11 +898,10 @@ int launch_server(const std::string& socket_spec) {
 
     if (pid == 0) {
         // child side of the fork
-
-        adb_close(fd[0]);
+        pipe_read.reset();
 
         char reply_fd[30];
-        snprintf(reply_fd, sizeof(reply_fd), "%d", fd[1]);
+        snprintf(reply_fd, sizeof(reply_fd), "%d", pipe_write.get());
         // child process
         int result = execl(path.c_str(), "adb", "-L", socket_spec.c_str(), "fork-server", "server",
                            "--reply-fd", reply_fd, NULL);
@@ -913,10 +911,10 @@ int launch_server(const std::string& socket_spec) {
         // parent side of the fork
         char temp[3] = {};
         // wait for the "OK\n" message
-        adb_close(fd[1]);
-        int ret = adb_read(fd[0], temp, 3);
+        pipe_write.reset();
+        int ret = adb_read(pipe_read.get(), temp, 3);
         int saved_errno = errno;
-        adb_close(fd[0]);
+        pipe_read.reset();
         if (ret < 0) {
             fprintf(stderr, "could not read ok from ADB Server, errno = %d\n", saved_errno);
             return -1;

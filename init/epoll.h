@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,34 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_KEYCHORDS_H_
-#define _INIT_KEYCHORDS_H_
+#ifndef _INIT_EPOLL_H
+#define _INIT_EPOLL_H
 
-#include "epoll.h"
+#include <chrono>
+#include <functional>
+#include <map>
+#include <optional>
+
+#include <android-base/unique_fd.h>
+
+#include "result.h"
 
 namespace android {
 namespace init {
 
-void KeychordInit(Epoll* init_epoll);
+class Epoll {
+  public:
+    Epoll();
+
+    Result<Success> Open();
+    Result<Success> RegisterHandler(int fd, std::function<void()> handler);
+    Result<Success> UnregisterHandler(int fd);
+    Result<Success> Wait(std::optional<std::chrono::milliseconds> timeout);
+
+  private:
+    android::base::unique_fd epoll_fd_;
+    std::map<int, std::function<void()>> epoll_handlers_;
+};
 
 }  // namespace init
 }  // namespace android

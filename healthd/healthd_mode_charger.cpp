@@ -308,6 +308,9 @@ static void update_screen_state(charger* charger, int64_t now) {
 
     disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time;
 
+    /* unblank the screen on first cycle and first frame */
+    if (batt_anim->cur_cycle == 0 && batt_anim->cur_frame == 0) healthd_draw->blank_screen(false);
+
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
         LOGV("[%" PRId64 "] animation starting\n", now);
@@ -330,9 +333,6 @@ static void update_screen_state(charger* charger, int64_t now) {
             }
         }
     }
-
-    /* unblank the screen  on first cycle */
-    if (batt_anim->cur_cycle == 0) healthd_draw->blank_screen(false);
 
     /* draw the new frame (@ cur_frame) */
     healthd_draw->redraw_screen(charger->batt_anim, charger->surf_unknown);
@@ -635,7 +635,7 @@ void healthd_mode_charger_init(struct healthd_config* config) {
 
     ret = res_create_display_surface(anim->fail_file.c_str(), &charger->surf_unknown);
     if (ret < 0) {
-        LOGE("Cannot load custom battery_fail image. Reverting to built in.\n");
+        LOGE("Cannot load custom battery_fail image. Reverting to built in: %d\n", ret);
         ret = res_create_display_surface("charger/battery_fail", &charger->surf_unknown);
         if (ret < 0) {
             LOGE("Cannot load built in battery_fail image\n");

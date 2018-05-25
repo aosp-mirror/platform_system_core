@@ -27,6 +27,7 @@ cc_library {
     name: "libprocinfo",
     defaults: ["libprocinfo_defaults"],
     vendor_available: true,
+    recovery_available: true,
     vndk: {
         enabled: true,
     },

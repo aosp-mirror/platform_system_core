@@ -36,6 +36,7 @@
 #include <android-base/properties.h>
 
 #include "init.h"
+#include "service.h"
 
 namespace android {
 namespace init {
@@ -43,6 +44,7 @@ namespace init {
 namespace {
 
 int keychords_count;
+Epoll* epoll;
 
 struct KeychordEntry {
     const std::vector<int> keycodes;
@@ -214,7 +216,7 @@ bool KeychordGeteventEnable(int fd) {
         keychord_current |= mask & available & set;
         KeychordLambdaCheck();
     }
-    register_epoll_handler(fd, [fd]() { KeychordLambdaHandler(fd); });
+    epoll->RegisterHandler(fd, [fd]() { KeychordLambdaHandler(fd); });
     return true;
 }
 
@@ -236,7 +238,7 @@ void GeteventCloseDevice(const std::string& device) {
     auto it = keychord_registration.find(device);
     if (it == keychord_registration.end()) return;
     auto fd = (*it).second;
-    unregister_epoll_handler(fd);
+    epoll->UnregisterHandler(fd);
     keychord_registration.erase(it);
     ::close(fd);
 }
@@ -294,7 +296,7 @@ void GeteventOpenDevice() {
         }
     }
 
-    if (inotify_fd >= 0) register_epoll_handler(inotify_fd, InotifyHandler);
+    if (inotify_fd >= 0) epoll->RegisterHandler(inotify_fd, InotifyHandler);
 }
 
 void AddServiceKeycodes(Service* svc) {
@@ -309,7 +311,8 @@ void AddServiceKeycodes(Service* svc) {
 
 }  // namespace
 
-void KeychordInit() {
+void KeychordInit(Epoll* init_epoll) {
+    epoll = init_epoll;
     for (const auto& service : ServiceList::GetInstance()) {
         AddServiceKeycodes(service.get());
     }

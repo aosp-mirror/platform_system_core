@@ -58,11 +58,11 @@ struct asocket {
      * us to our fd event system.  For remote asockets
      * these fields are not used.
      */
-    fdevent fde = {};
-    int fd = 0;
+    fdevent* fde = nullptr;
+    int fd = -1;
 
     // queue of data waiting to be written
-    std::deque<Range> packet_queue;
+    IOVector packet_queue;
 
     std::string smart_socket_data;
 

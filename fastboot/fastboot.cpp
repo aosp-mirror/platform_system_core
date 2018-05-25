@@ -316,7 +316,8 @@ static void syntax_error(const char* fmt, ...) {
 static int show_help() {
     // clang-format off
     fprintf(stdout,
-/*           1234567890123456789012345678901234567890123456789012345678901234567890123456 */
+//                    1         2         3         4         5         6         7         8
+//           12345678901234567890123456789012345678901234567890123456789012345678901234567890
             "usage: fastboot [OPTION...] COMMAND...\n"
             "\n"
             "flashing:\n"
@@ -324,8 +325,8 @@ static int show_help() {
             " flashall                   Flash all partitions from $ANDROID_PRODUCT_OUT.\n"
             "                            On A/B devices, flashed slot is set as active.\n"
             "                            Secondary images may be flashed to inactive slot.\n"
-            " flash PARTITION [FILENAME]\n"
-            "                            Flash given partition only.\n"
+            " flash PARTITION [FILENAME] Flash given partition, using the image from\n"
+            "                            $ANDROID_PRODUCT_OUT if no filename is given.\n"
             "\n"
             "basics:\n"
             " devices [-l]               List devices in bootloader (-l: with device paths).\n"
@@ -507,7 +508,8 @@ static std::string make_temporary_template() {
 static std::string make_temporary_directory() {
     std::string result(make_temporary_template());
     if (mkdtemp(&result[0]) == nullptr) {
-        die("unable to create temporary directory: %s", strerror(errno));
+        die("unable to create temporary directory with template %s: %s",
+            result.c_str(), strerror(errno));
     }
     return result;
 }
@@ -516,7 +518,8 @@ static int make_temporary_fd(const char* what) {
     std::string path_template(make_temporary_template());
     int fd = mkstemp(&path_template[0]);
     if (fd == -1) {
-        die("failed to create temporary file for %s: %s\n", what, strerror(errno));
+        die("failed to create temporary file for %s with template %s: %s\n",
+            path_template.c_str(), what, strerror(errno));
     }
     unlink(path_template.c_str());
     return fd;
