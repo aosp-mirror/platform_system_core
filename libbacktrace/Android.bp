@@ -58,6 +58,7 @@ cc_library_headers {
 cc_library {
     name: "libbacktrace",
     vendor_available: false,
+    recovery_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -102,13 +103,15 @@ cc_library {
             include_dirs: [
                 "art/runtime",
             ],
-
-            header_libs: ["jni_headers"],
         },
         android: {
             static_libs: ["libasync_safe"],
         },
         vendor: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            exclude_shared_libs: ["libdexfile"],
+        },
+        recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_shared_libs: ["libdexfile"],
         },

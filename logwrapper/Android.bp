@@ -12,6 +12,7 @@ cc_defaults {
 cc_library {
     name: "liblogwrap",
     defaults: ["logwrapper_defaults"],
+    recovery_available: true,
     srcs: ["logwrap.c"],
     shared_libs: [
         "libcutils",

@@ -2,6 +2,7 @@ cc_library_static {
     name: "libdiagnose_usb",
     cflags: ["-Wall", "-Wextra", "-Werror"],
     host_supported: true,
+    recovery_available: true,
     target: {
         windows: {
             enabled: true,
