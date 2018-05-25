@@ -46,6 +46,7 @@
 
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
+#include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <cutils/atomic.h>
 #include <cutils/threads.h>
@@ -1186,49 +1187,45 @@ static void VerifyFunctionsFound(const std::vector<std::string>& found_functions
   ASSERT_TRUE(expected_functions.empty()) << "Not all functions found in shared library.";
 }
 
-static const char* CopySharedLibrary() {
-#if defined(__LP64__)
-  const char* lib_name = "lib64";
-#else
-  const char* lib_name = "lib";
-#endif
+static void CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
+  std::string system_dir;
 
 #if defined(__BIONIC__)
-  const char* tmp_so_name = "/data/local/tmp/libbacktrace_test.so";
-  std::string cp_cmd = android::base::StringPrintf("cp /system/%s/libbacktrace_test.so %s",
-                                                   lib_name, tmp_so_name);
+  system_dir = "/system/lib";
 #else
-  const char* tmp_so_name = "/tmp/libbacktrace_test.so";
-  if (getenv("ANDROID_HOST_OUT") == NULL) {
-    fprintf(stderr, "ANDROID_HOST_OUT not set, make sure you run lunch.");
-    return nullptr;
-  }
-  std::string cp_cmd = android::base::StringPrintf("cp %s/%s/libbacktrace_test.so %s",
-                                                   getenv("ANDROID_HOST_OUT"), lib_name,
-                                                   tmp_so_name);
+  const char* host_out_env = getenv("ANDROID_HOST_OUT");
+  ASSERT_TRUE(host_out_env != nullptr);
+  system_dir = std::string(host_out_env) + "/lib";
 #endif
 
-  // Copy the shared so to a tempory directory.
-  system(cp_cmd.c_str());
+#if defined(__LP64__)
+  system_dir += "64";
+#endif
 
-  return tmp_so_name;
+  *tmp_so_name = std::string(tmp_dir) + "/libbacktrace_test.so";
+  std::string cp_cmd =
+      android::base::StringPrintf("cp %s/libbacktrace_test.so %s", system_dir.c_str(), tmp_dir);
+
+  // Copy the shared so to a tempory directory.
+  ASSERT_EQ(0, system(cp_cmd.c_str()));
 }
 
 TEST(libbacktrace, check_unreadable_elf_local) {
-  const char* tmp_so_name = CopySharedLibrary();
-  ASSERT_TRUE(tmp_so_name != nullptr);
+  TemporaryDir td;
+  std::string tmp_so_name;
+  ASSERT_NO_FATAL_FAILURE(CopySharedLibrary(td.path, &tmp_so_name));
 
   struct stat buf;
-  ASSERT_TRUE(stat(tmp_so_name, &buf) != -1);
+  ASSERT_TRUE(stat(tmp_so_name.c_str(), &buf) != -1);
   uint64_t map_size = buf.st_size;
 
-  int fd = open(tmp_so_name, O_RDONLY);
+  int fd = open(tmp_so_name.c_str(), O_RDONLY);
   ASSERT_TRUE(fd != -1);
 
   void* map = mmap(nullptr, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
   ASSERT_TRUE(map != MAP_FAILED);
   close(fd);
-  ASSERT_TRUE(unlink(tmp_so_name) != -1);
+  ASSERT_TRUE(unlink(tmp_so_name.c_str()) != -1);
 
   std::vector<std::string> found_functions;
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS,
@@ -1256,32 +1253,33 @@ TEST(libbacktrace, check_unreadable_elf_local) {
 }
 
 TEST(libbacktrace, check_unreadable_elf_remote) {
-  const char* tmp_so_name = CopySharedLibrary();
-  ASSERT_TRUE(tmp_so_name != nullptr);
+  TemporaryDir td;
+  std::string tmp_so_name;
+  ASSERT_NO_FATAL_FAILURE(CopySharedLibrary(td.path, &tmp_so_name));
 
   g_ready = 0;
 
   struct stat buf;
-  ASSERT_TRUE(stat(tmp_so_name, &buf) != -1);
+  ASSERT_TRUE(stat(tmp_so_name.c_str(), &buf) != -1);
   uint64_t map_size = buf.st_size;
 
   pid_t pid;
   if ((pid = fork()) == 0) {
-    int fd = open(tmp_so_name, O_RDONLY);
+    int fd = open(tmp_so_name.c_str(), O_RDONLY);
     if (fd == -1) {
-      fprintf(stderr, "Failed to open file %s: %s\n", tmp_so_name, strerror(errno));
-      unlink(tmp_so_name);
+      fprintf(stderr, "Failed to open file %s: %s\n", tmp_so_name.c_str(), strerror(errno));
+      unlink(tmp_so_name.c_str());
       exit(0);
     }
 
     void* map = mmap(nullptr, map_size, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
     if (map == MAP_FAILED) {
       fprintf(stderr, "Failed to map in memory: %s\n", strerror(errno));
-      unlink(tmp_so_name);
+      unlink(tmp_so_name.c_str());
       exit(0);
     }
     close(fd);
-    if (unlink(tmp_so_name) == -1) {
+    if (unlink(tmp_so_name.c_str()) == -1) {
       fprintf(stderr, "Failed to unlink: %s\n", strerror(errno));
       exit(0);
     }
@@ -1394,11 +1392,13 @@ static void VerifyUnreadableElfBacktrace(void* func) {
 typedef int (*test_func_t)(int, int, int, int, void (*)(void*), void*);
 
 TEST(libbacktrace, unwind_through_unreadable_elf_local) {
-  const char* tmp_so_name = CopySharedLibrary();
-  ASSERT_TRUE(tmp_so_name != nullptr);
-  void* lib_handle = dlopen(tmp_so_name, RTLD_NOW);
+  TemporaryDir td;
+  std::string tmp_so_name;
+  ASSERT_NO_FATAL_FAILURE(CopySharedLibrary(td.path, &tmp_so_name));
+
+  void* lib_handle = dlopen(tmp_so_name.c_str(), RTLD_NOW);
   ASSERT_TRUE(lib_handle != nullptr);
-  ASSERT_TRUE(unlink(tmp_so_name) != -1);
+  ASSERT_TRUE(unlink(tmp_so_name.c_str()) != -1);
 
   test_func_t test_func;
   test_func = reinterpret_cast<test_func_t>(dlsym(lib_handle, "test_level_one"));
@@ -1411,11 +1411,13 @@ TEST(libbacktrace, unwind_through_unreadable_elf_local) {
 }
 
 TEST(libbacktrace, unwind_through_unreadable_elf_remote) {
-  const char* tmp_so_name = CopySharedLibrary();
-  ASSERT_TRUE(tmp_so_name != nullptr);
-  void* lib_handle = dlopen(tmp_so_name, RTLD_NOW);
+  TemporaryDir td;
+  std::string tmp_so_name;
+  ASSERT_NO_FATAL_FAILURE(CopySharedLibrary(td.path, &tmp_so_name));
+
+  void* lib_handle = dlopen(tmp_so_name.c_str(), RTLD_NOW);
   ASSERT_TRUE(lib_handle != nullptr);
-  ASSERT_TRUE(unlink(tmp_so_name) != -1);
+  ASSERT_TRUE(unlink(tmp_so_name.c_str()) != -1);
 
   test_func_t test_func;
   test_func = reinterpret_cast<test_func_t>(dlsym(lib_handle, "test_level_one"));
@@ -1444,7 +1446,8 @@ TEST(libbacktrace, unwind_through_unreadable_elf_remote) {
 
     size_t frame_num;
     if (FindFuncFrameInBacktrace(backtrace.get(), reinterpret_cast<uint64_t>(test_func),
-                                 &frame_num)) {
+                                 &frame_num) &&
+        frame_num != 0) {
       VerifyUnreadableElfFrame(backtrace.get(), reinterpret_cast<uint64_t>(test_func), frame_num);
       done = true;
     }
