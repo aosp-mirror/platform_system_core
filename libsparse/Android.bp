@@ -3,6 +3,7 @@
 cc_library {
     name: "libsparse",
     host_supported: true,
+    recovery_available: true,
     unique_host_soname: true,
     srcs: [
         "backed_block.c",
