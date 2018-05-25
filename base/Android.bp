@@ -48,6 +48,7 @@ cc_defaults {
         "file.cpp",
         "logging.cpp",
         "parsenetaddress.cpp",
+        "properties.cpp",
         "quick_exit.cpp",
         "stringprintf.cpp",
         "strings.cpp",
@@ -58,9 +59,6 @@ cc_defaults {
     shared_libs: ["liblog"],
     target: {
         android: {
-            srcs: [
-                "properties.cpp",
-            ],
             sanitize: {
                 misc_undefined: ["integer"],
             },
@@ -129,6 +127,7 @@ cc_test {
         "parsedouble_test.cpp",
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
+        "properties_test.cpp",
         "quick_exit_test.cpp",
         "scopeguard_test.cpp",
         "stringprintf_test.cpp",
@@ -138,7 +137,6 @@ cc_test {
     ],
     target: {
         android: {
-            srcs: ["properties_test.cpp"],
             sanitize: {
                 misc_undefined: ["integer"],
             },
