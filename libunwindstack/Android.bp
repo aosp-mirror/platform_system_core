@@ -38,6 +38,7 @@ cc_defaults {
 cc_library {
     name: "libunwindstack",
     vendor_available: true,
+    recovery_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -87,6 +88,14 @@ cc_library {
             ],
         },
         vendor: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            exclude_srcs: [
+                "DexFile.cpp",
+                "DexFiles.cpp",
+            ],
+            exclude_shared_libs: ["libdexfile"],
+        },
+        recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_srcs: [
                 "DexFile.cpp",
