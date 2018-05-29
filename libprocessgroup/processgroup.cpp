@@ -39,18 +39,14 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#ifdef __ANDROID__
 #include <android-base/properties.h>
-#endif
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <private/android_filesystem_config.h>
 
 #include <processgroup/processgroup.h>
 
-#ifdef __ANDROID__
 using android::base::GetBoolProperty;
-#endif
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
@@ -68,15 +64,10 @@ std::once_flag init_path_flag;
 static const std::string& GetCgroupRootPath() {
     static std::string cgroup_root_path;
     std::call_once(init_path_flag, [&]() {
-#ifdef __ANDROID__
         // low-ram devices use per-app memcg by default, unlike high-end ones
         bool low_ram_device = GetBoolProperty("ro.config.low_ram", false);
         bool per_app_memcg =
             GetBoolProperty("ro.config.per_app_memcg", low_ram_device);
-#else
-        // host does not support Android properties
-        bool per_app_memcg = false;
-#endif
         if (per_app_memcg) {
             // Check if mem cgroup is mounted, only then check for
             // write-access to avoid SELinux denials
