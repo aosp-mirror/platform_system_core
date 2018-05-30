@@ -21,10 +21,6 @@
 
 #include "stable_properties.h"
 
-#if !defined(__ANDROID__)
-#include "host_init_stubs.h"
-#endif
-
 using android::base::GetBoolProperty;
 using android::base::StartsWith;
 
