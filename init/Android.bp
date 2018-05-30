@@ -170,6 +170,7 @@ cc_test {
     srcs: [
         "devices_test.cpp",
         "init_test.cpp",
+        "keychords_test.cpp",
         "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "property_type_test.cpp",
