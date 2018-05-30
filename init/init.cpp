@@ -749,12 +749,13 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
+    Keychords keychords;
     am.QueueBuiltinAction(
-        [&epoll](const BuiltinArguments& args) -> Result<Success> {
+        [&epoll, &keychords](const BuiltinArguments& args) -> Result<Success> {
             for (const auto& svc : ServiceList::GetInstance()) {
-                svc->set_keychord_id(GetKeychordId(svc->keycodes()));
+                svc->set_keychord_id(keychords.GetId(svc->keycodes()));
             }
-            KeychordInit(&epoll, HandleKeychord);
+            keychords.Start(&epoll, HandleKeychord);
             return Success();
         },
         "KeychordInit");
