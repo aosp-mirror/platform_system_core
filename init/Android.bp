@@ -232,6 +232,8 @@ cc_binary {
         "action_parser.cpp",
         "capabilities.cpp",
         "descriptors.cpp",
+        "epoll.cpp",
+        "keychords.cpp",
         "import_parser.cpp",
         "host_init_parser.cpp",
         "host_init_stubs.cpp",

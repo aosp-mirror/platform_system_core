@@ -553,6 +553,25 @@ static void InstallSignalFdHandler(Epoll* epoll) {
     }
 }
 
+void HandleKeychord(int id) {
+    // Only handle keychords if adb is enabled.
+    std::string adb_enabled = android::base::GetProperty("init.svc.adbd", "");
+    if (adb_enabled == "running") {
+        Service* svc = ServiceList::GetInstance().FindService(id, &Service::keychord_id);
+        if (svc) {
+            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord " << id;
+            if (auto result = svc->Start(); !result) {
+                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord " << id
+                           << ": " << result.error();
+            }
+        } else {
+            LOG(ERROR) << "Service for keychord " << id << " not found";
+        }
+    } else {
+        LOG(WARNING) << "Not starting service for keychord " << id << " because ADB is disabled";
+    }
+}
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -732,7 +751,10 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueBuiltinAction(
         [&epoll](const BuiltinArguments& args) -> Result<Success> {
-            KeychordInit(&epoll);
+            for (const auto& svc : ServiceList::GetInstance()) {
+                svc->set_keychord_id(GetKeychordId(svc->keycodes()));
+            }
+            KeychordInit(&epoll, HandleKeychord);
             return Success();
         },
         "KeychordInit");
