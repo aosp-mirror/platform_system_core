@@ -22,20 +22,6 @@ int setgroups(size_t __size, const gid_t* __list) {
 }
 
 namespace android {
-namespace base {
-
-std::string GetProperty(const std::string&, const std::string& default_value) {
-    return default_value;
-}
-
-bool GetBoolProperty(const std::string&, bool default_value) {
-    return default_value;
-}
-
-}  // namespace base
-}  // namespace android
-
-namespace android {
 namespace init {
 
 // init.h
