@@ -553,22 +553,30 @@ static void InstallSignalFdHandler(Epoll* epoll) {
     }
 }
 
-void HandleKeychord(int id) {
+void HandleKeychord(const std::vector<int>& keycodes) {
     // Only handle keychords if adb is enabled.
     std::string adb_enabled = android::base::GetProperty("init.svc.adbd", "");
-    if (adb_enabled == "running") {
-        Service* svc = ServiceList::GetInstance().FindService(id, &Service::keychord_id);
-        if (svc) {
-            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord " << id;
+    if (adb_enabled != "running") {
+        LOG(WARNING) << "Not starting service for keychord " << android::base::Join(keycodes, ' ')
+                     << " because ADB is disabled";
+        return;
+    }
+
+    auto found = false;
+    for (const auto& service : ServiceList::GetInstance()) {
+        auto svc = service.get();
+        if (svc->keycodes() == keycodes) {
+            found = true;
+            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord "
+                      << android::base::Join(keycodes, ' ');
             if (auto result = svc->Start(); !result) {
-                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord " << id
-                           << ": " << result.error();
+                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord "
+                           << android::base::Join(keycodes, ' ') << ": " << result.error();
             }
-        } else {
-            LOG(ERROR) << "Service for keychord " << id << " not found";
         }
-    } else {
-        LOG(WARNING) << "Not starting service for keychord " << id << " because ADB is disabled";
+    }
+    if (!found) {
+        LOG(ERROR) << "Service for keychord " << android::base::Join(keycodes, ' ') << " not found";
     }
 }
 
@@ -753,7 +761,7 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(
         [&epoll, &keychords](const BuiltinArguments& args) -> Result<Success> {
             for (const auto& svc : ServiceList::GetInstance()) {
-                svc->set_keychord_id(keychords.GetId(svc->keycodes()));
+                keychords.Register(svc->keycodes());
             }
             keychords.Start(&epoll, HandleKeychord);
             return Success();
