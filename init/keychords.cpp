@@ -33,10 +33,6 @@
 #include <vector>
 
 #include <android-base/logging.h>
-#include <android-base/properties.h>
-
-#include "init.h"
-#include "service.h"
 
 namespace android {
 namespace init {
@@ -45,6 +41,7 @@ namespace {
 
 int keychords_count;
 Epoll* epoll;
+std::function<void(int)> handle_keychord;
 
 struct KeychordEntry {
     const std::vector<int> keycodes;
@@ -124,25 +121,6 @@ constexpr char kDevicePath[] = "/dev/input";
 
 std::map<std::string, int> keychord_registration;
 
-void HandleKeychord(int id) {
-    // Only handle keychords if adb is enabled.
-    std::string adb_enabled = android::base::GetProperty("init.svc.adbd", "");
-    if (adb_enabled == "running") {
-        Service* svc = ServiceList::GetInstance().FindService(id, &Service::keychord_id);
-        if (svc) {
-            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord " << id;
-            if (auto result = svc->Start(); !result) {
-                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord " << id
-                           << ": " << result.error();
-            }
-        } else {
-            LOG(ERROR) << "Service for keychord " << id << " not found";
-        }
-    } else {
-        LOG(WARNING) << "Not starting service for keychord " << id << " because ADB is disabled";
-    }
-}
-
 void KeychordLambdaCheck() {
     for (auto& e : keychord_entries) {
         bool found = true;
@@ -156,7 +134,7 @@ void KeychordLambdaCheck() {
         if (!found) continue;
         if (e.notified) continue;
         e.notified = true;
-        HandleKeychord(e.id);
+        handle_keychord(e.id);
     }
 }
 
@@ -169,12 +147,12 @@ void KeychordLambdaHandler(int fd) {
 }
 
 bool KeychordGeteventEnable(int fd) {
-    static bool EviocsmaskSupported = true;
-
     // Make sure it is an event channel, should pass this ioctl call
     int version;
     if (::ioctl(fd, EVIOCGVERSION, &version)) return false;
 
+#ifdef EVIOCSMASK
+    static auto EviocsmaskSupported = true;
     if (EviocsmaskSupported) {
         KeychordMask mask(EV_KEY);
         mask.SetBit(EV_KEY);
@@ -187,6 +165,7 @@ bool KeychordGeteventEnable(int fd) {
             EviocsmaskSupported = false;
         }
     }
+#endif
 
     KeychordMask mask;
     for (auto& e : keychord_entries) {
@@ -202,6 +181,7 @@ bool KeychordGeteventEnable(int fd) {
     if (res == -1) return false;
     if (!(available & mask)) return false;
 
+#ifdef EVIOCSMASK
     if (EviocsmaskSupported) {
         input_mask msg = {};
         msg.type = EV_KEY;
@@ -209,6 +189,7 @@ bool KeychordGeteventEnable(int fd) {
         msg.codes_ptr = reinterpret_cast<uintptr_t>(mask.data());
         ::ioctl(fd, EVIOCSMASK, &msg);
     }
+#endif
 
     KeychordMask set(mask.size());
     res = ::ioctl(fd, EVIOCGKEY(res), set.data());
@@ -299,23 +280,18 @@ void GeteventOpenDevice() {
     if (inotify_fd >= 0) epoll->RegisterHandler(inotify_fd, InotifyHandler);
 }
 
-void AddServiceKeycodes(Service* svc) {
-    if (svc->keycodes().empty()) return;
-    for (auto& code : svc->keycodes()) {
-        if ((code < 0) || (code >= KEY_MAX)) return;
-    }
-    ++keychords_count;
-    keychord_entries.emplace_back(KeychordEntry(svc->keycodes(), keychords_count));
-    svc->set_keychord_id(keychords_count);
-}
-
 }  // namespace
 
-void KeychordInit(Epoll* init_epoll) {
+int GetKeychordId(const std::vector<int>& keycodes) {
+    if (keycodes.empty()) return 0;
+    ++keychords_count;
+    keychord_entries.emplace_back(KeychordEntry(keycodes, keychords_count));
+    return keychords_count;
+}
+
+void KeychordInit(Epoll* init_epoll, std::function<void(int)> handler) {
     epoll = init_epoll;
-    for (const auto& service : ServiceList::GetInstance()) {
-        AddServiceKeycodes(service.get());
-    }
+    handle_keychord = handler;
     if (keychords_count) GeteventOpenDevice();
 }
 
