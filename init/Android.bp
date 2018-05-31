@@ -250,7 +250,10 @@ cc_binary {
     proto: {
         type: "lite",
     },
-    generated_headers: ["generated_stub_builtin_function_map"],
+    generated_headers: [
+        "generated_stub_builtin_function_map",
+        "generated_android_ids"
+    ],
     target: {
         android: {
             enabled: false,
