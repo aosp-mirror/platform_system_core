@@ -123,7 +123,7 @@ static inline bool IsDmLinearEnabled() {
     bool enabled = false;
     import_kernel_cmdline(
         false, [&enabled](const std::string& key, const std::string& value, bool in_qemu) {
-            if (key == "androidboot.lrap" && value == "1") {
+            if (key == "androidboot.logical_partitions" && value == "1") {
                 enabled = true;
             }
         });
