@@ -72,17 +72,19 @@ class Parser {
     Parser();
 
     bool ParseConfig(const std::string& path);
-    bool ParseConfig(const std::string& path, size_t* parse_errors);
     void AddSectionParser(const std::string& name, std::unique_ptr<SectionParser> parser);
     void AddSingleLineParser(const std::string& prefix, LineCallback callback);
 
+    size_t parse_error_count() const { return parse_error_count_; }
+
   private:
-    void ParseData(const std::string& filename, const std::string& data, size_t* parse_errors);
-    bool ParseConfigFile(const std::string& path, size_t* parse_errors);
-    bool ParseConfigDir(const std::string& path, size_t* parse_errors);
+    void ParseData(const std::string& filename, const std::string& data);
+    bool ParseConfigFile(const std::string& path);
+    bool ParseConfigDir(const std::string& path);
 
     std::map<std::string, std::unique_ptr<SectionParser>> section_parsers_;
     std::vector<std::pair<std::string, LineCallback>> line_callbacks_;
+    size_t parse_error_count_ = 0;
 };
 
 }  // namespace init
