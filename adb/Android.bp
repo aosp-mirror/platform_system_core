@@ -19,16 +19,12 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-Wexit-time-destructors",
         "-Wno-unused-parameter",
         "-Wno-missing-field-initializers",
         "-Wvla",
     ],
     rtti: true,
-
-    clang_cflags: [
-        "-Wexit-time-destructors",
-        "-Wthread-safety",
-    ],
 
     use_version_lib: true,
 
@@ -83,6 +79,12 @@ cc_defaults {
                 "-lws2_32",
                 "-lgdi32",
                 "-luserenv",
+            ],
+        },
+
+        not_windows: {
+            cflags: [
+                "-Wthread-safety",
             ],
         },
     },
