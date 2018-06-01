@@ -170,6 +170,7 @@ cc_test {
     srcs: [
         "devices_test.cpp",
         "init_test.cpp",
+        "keychords_test.cpp",
         "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "property_type_test.cpp",
@@ -232,8 +233,11 @@ cc_binary {
         "action_parser.cpp",
         "capabilities.cpp",
         "descriptors.cpp",
+        "epoll.cpp",
+        "keychords.cpp",
         "import_parser.cpp",
-        "host_init_parser.cpp",
+        "host_import_parser.cpp",
+        "host_init_verifier.cpp",
         "host_init_stubs.cpp",
         "parser.cpp",
         "rlimit_parser.cpp",
@@ -246,7 +250,10 @@ cc_binary {
     proto: {
         type: "lite",
     },
-    generated_headers: ["generated_stub_builtin_function_map"],
+    generated_headers: [
+        "generated_stub_builtin_function_map",
+        "generated_android_ids"
+    ],
     target: {
         android: {
             enabled: false,

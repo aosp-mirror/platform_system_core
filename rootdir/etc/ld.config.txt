@@ -7,6 +7,7 @@
 # absolute path of an executable is selected.
 dir.system = /system/bin/
 dir.system = /system/xbin/
+dir.system = /product/bin/
 
 dir.vendor = /odm/bin/
 dir.vendor = /vendor/bin/

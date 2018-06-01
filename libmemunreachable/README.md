@@ -44,7 +44,7 @@ Returns `true` if no unreachable memory was found.
 
 ### C++ interface ###
 
-####`bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit = 100)`####
+#### `bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit = 100)` ####
 Updates an `UnreachableMemoryInfo` object with information on leaks, including details on up to `limit` leaks.  Returns true if leak detection succeeded.
 
 #### `std::string GetUnreachableMemoryString(bool log_contents = false, size_t limit = 100)` ####

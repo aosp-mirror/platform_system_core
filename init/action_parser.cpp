@@ -16,15 +16,10 @@
 
 #include "action_parser.h"
 
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 
 #include "stable_properties.h"
-
-#if defined(__ANDROID__)
-#include <android-base/properties.h>
-#else
-#include "host_init_stubs.h"
-#endif
 
 using android::base::GetBoolProperty;
 using android::base::StartsWith;

@@ -291,7 +291,9 @@ int service_to_fd(const char* name, atransport* transport) {
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread("sync", file_sync_service, nullptr);
     } else if(!strncmp(name, "remount:", 8)) {
-        ret = create_service_thread("remount", remount_service, nullptr);
+        const char* options = name + strlen("remount:");
+        void* cookie = const_cast<void*>(reinterpret_cast<const void*>(options));
+        ret = create_service_thread("remount", remount_service, cookie);
     } else if(!strncmp(name, "reboot:", 7)) {
         void* arg = strdup(name + 7);
         if (arg == NULL) return -1;

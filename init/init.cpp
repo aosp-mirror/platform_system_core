@@ -553,6 +553,33 @@ static void InstallSignalFdHandler(Epoll* epoll) {
     }
 }
 
+void HandleKeychord(const std::vector<int>& keycodes) {
+    // Only handle keychords if adb is enabled.
+    std::string adb_enabled = android::base::GetProperty("init.svc.adbd", "");
+    if (adb_enabled != "running") {
+        LOG(WARNING) << "Not starting service for keychord " << android::base::Join(keycodes, ' ')
+                     << " because ADB is disabled";
+        return;
+    }
+
+    auto found = false;
+    for (const auto& service : ServiceList::GetInstance()) {
+        auto svc = service.get();
+        if (svc->keycodes() == keycodes) {
+            found = true;
+            LOG(INFO) << "Starting service '" << svc->name() << "' from keychord "
+                      << android::base::Join(keycodes, ' ');
+            if (auto result = svc->Start(); !result) {
+                LOG(ERROR) << "Could not start service '" << svc->name() << "' from keychord "
+                           << android::base::Join(keycodes, ' ') << ": " << result.error();
+            }
+        }
+    }
+    if (!found) {
+        LOG(ERROR) << "Service for keychord " << android::base::Join(keycodes, ' ') << " not found";
+    }
+}
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -730,9 +757,13 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
+    Keychords keychords;
     am.QueueBuiltinAction(
-        [&epoll](const BuiltinArguments& args) -> Result<Success> {
-            KeychordInit(&epoll);
+        [&epoll, &keychords](const BuiltinArguments& args) -> Result<Success> {
+            for (const auto& svc : ServiceList::GetInstance()) {
+                keychords.Register(svc->keycodes());
+            }
+            keychords.Start(&epoll, HandleKeychord);
             return Success();
         },
         "KeychordInit");
