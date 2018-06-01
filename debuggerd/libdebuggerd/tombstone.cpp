@@ -102,10 +102,17 @@ static void dump_probable_cause(log_t* log, const siginfo_t* si) {
   if (!cause.empty()) _LOG(log, logtype::HEADER, "Cause: %s\n", cause.c_str());
 }
 
-static void dump_signal_info(log_t* log, const ThreadInfo& thread_info) {
-  char addr_desc[32]; // ", fault addr 0x1234"
+static void dump_signal_info(log_t* log, const ThreadInfo& thread_info, Memory* process_memory) {
+  char addr_desc[64];  // ", fault addr 0x1234"
   if (signal_has_si_addr(thread_info.siginfo)) {
-    snprintf(addr_desc, sizeof(addr_desc), "%p", thread_info.siginfo->si_addr);
+    void* addr = thread_info.siginfo->si_addr;
+    if (thread_info.siginfo->si_signo == SIGILL) {
+      uint32_t instruction = {};
+      process_memory->Read(reinterpret_cast<uint64_t>(addr), &instruction, sizeof(instruction));
+      snprintf(addr_desc, sizeof(addr_desc), "%p (*pc=%#08x)", addr, instruction);
+    } else {
+      snprintf(addr_desc, sizeof(addr_desc), "%p", addr);
+    }
   } else {
     snprintf(addr_desc, sizeof(addr_desc), "--------");
   }
@@ -418,7 +425,7 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
   dump_thread_info(log, thread_info);
 
   if (thread_info.siginfo) {
-    dump_signal_info(log, thread_info);
+    dump_signal_info(log, thread_info, process_memory);
   }
 
   if (primary_thread) {
