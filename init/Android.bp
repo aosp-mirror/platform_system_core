@@ -67,24 +67,26 @@ cc_defaults {
         "libsquashfs_utils",
         "liblogwrap",
         "libext4_utils",
-        "libcutils",
-        "libbase",
-        "libc",
         "libseccomp_policy",
-        "libselinux",
-        "liblog",
         "libcrypto_utils",
-        "libcrypto",
-        "libc++_static",
-        "libdl",
         "libsparse",
-        "libz",
         "libprocessgroup",
         "libavb",
         "libkeyutils",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
+        "libselinux",
+    ],
+    shared_libs: [
+        "libcutils",
+        "libbase",
+        "libc",
+        "liblog",
+        "libcrypto",
+        "libc++",
+        "libdl",
+        "libz",
     ],
 }
 
@@ -166,7 +168,6 @@ cc_binary {
 cc_test {
     name: "init_tests",
     defaults: ["init_defaults"],
-    static_executable: true,
     srcs: [
         "devices_test.cpp",
         "init_test.cpp",
@@ -187,7 +188,6 @@ cc_test {
 
 cc_benchmark {
     name: "init_benchmarks",
-    static_executable: true,
     defaults: ["init_defaults"],
     srcs: [
         "subcontext_benchmark.cpp",
