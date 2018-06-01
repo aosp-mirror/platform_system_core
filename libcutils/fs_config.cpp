@@ -80,6 +80,7 @@ static const struct fs_path_config android_dirs[] = {
     { 00775, AID_ROOT,         AID_ROOT,         0, "data/preloads" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
+    { 00755, AID_ROOT,         AID_SHELL,        0, "product/bin" },
     { 00750, AID_ROOT,         AID_SHELL,        0, "sbin" },
     { 00777, AID_ROOT,         AID_ROOT,         0, "sdcard" },
     { 00751, AID_ROOT,         AID_SDCARD_R,     0, "storage" },
@@ -195,6 +196,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "init*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "product/bin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
@@ -237,9 +239,10 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
     return fd;
 }
 
-// if path is "vendor/<stuff>", "oem/<stuff>" or "odm/<stuff>"
+// if path is "odm/<stuff>", "oem/<stuff>", "product/<stuff>" or
+// "vendor/<stuff>"
 static bool is_partition(const char* path, size_t len) {
-    static const char* partitions[] = {"vendor/", "oem/", "odm/"};
+    static const char* partitions[] = {"odm/", "oem/", "product/", "vendor/"};
     for (size_t i = 0; i < (sizeof(partitions) / sizeof(partitions[0])); ++i) {
         size_t plen = strlen(partitions[i]);
         if (len <= plen) continue;
