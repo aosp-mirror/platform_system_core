@@ -21,77 +21,96 @@
 #include "healthd_draw.h"
 
 #define LOGE(x...) KLOG_ERROR("charger", x);
+#define LOGW(x...) KLOG_WARNING("charger", x);
 #define LOGV(x...) KLOG_DEBUG("charger", x);
 
 HealthdDraw::HealthdDraw(animation* anim)
   : kSplitScreen(HEALTHD_DRAW_SPLIT_SCREEN),
     kSplitOffset(HEALTHD_DRAW_SPLIT_OFFSET) {
-  gr_init();
-  gr_font_size(gr_sys_font(), &char_width_, &char_height_);
+    int ret = gr_init();
 
-  screen_width_ = gr_fb_width() / (kSplitScreen ? 2 : 1);
-  screen_height_ = gr_fb_height();
+    if (ret < 0) {
+        LOGE("gr_init failed\n");
+        graphics_available = false;
+        return;
+    }
 
-  int res;
-  if (!anim->text_clock.font_file.empty() &&
-      (res = gr_init_font(anim->text_clock.font_file.c_str(),
-                          &anim->text_clock.font)) < 0) {
-    LOGE("Could not load time font (%d)\n", res);
-  }
-  if (!anim->text_percent.font_file.empty() &&
-      (res = gr_init_font(anim->text_percent.font_file.c_str(),
-                          &anim->text_percent.font)) < 0) {
-    LOGE("Could not load percent font (%d)\n", res);
-  }
+    graphics_available = true;
+    sys_font = gr_sys_font();
+    if (sys_font == nullptr) {
+        LOGW("No system font, screen fallback text not available\n");
+    } else {
+        gr_font_size(sys_font, &char_width_, &char_height_);
+    }
+
+    screen_width_ = gr_fb_width() / (kSplitScreen ? 2 : 1);
+    screen_height_ = gr_fb_height();
+
+    int res;
+    if (!anim->text_clock.font_file.empty() &&
+        (res = gr_init_font(anim->text_clock.font_file.c_str(), &anim->text_clock.font)) < 0) {
+        LOGE("Could not load time font (%d)\n", res);
+    }
+    if (!anim->text_percent.font_file.empty() &&
+        (res = gr_init_font(anim->text_percent.font_file.c_str(), &anim->text_percent.font)) < 0) {
+        LOGE("Could not load percent font (%d)\n", res);
+    }
 }
 
 HealthdDraw::~HealthdDraw() {}
 
 void HealthdDraw::redraw_screen(const animation* batt_anim, GRSurface* surf_unknown) {
-  clear_screen();
+    if (!graphics_available) return;
+    clear_screen();
 
-  /* try to display *something* */
-  if (batt_anim->cur_level < 0 || batt_anim->num_frames == 0)
-    draw_unknown(surf_unknown);
-  else
-    draw_battery(batt_anim);
-  gr_flip();
+    /* try to display *something* */
+    if (batt_anim->cur_level < 0 || batt_anim->num_frames == 0)
+        draw_unknown(surf_unknown);
+    else
+        draw_battery(batt_anim);
+    gr_flip();
 }
 
-void HealthdDraw::blank_screen(bool blank) { gr_fb_blank(blank); }
+void HealthdDraw::blank_screen(bool blank) {
+    if (!graphics_available) return;
+    gr_fb_blank(blank);
+}
 
 void HealthdDraw::clear_screen(void) {
-  gr_color(0, 0, 0, 255);
-  gr_clear();
+    if (!graphics_available) return;
+    gr_color(0, 0, 0, 255);
+    gr_clear();
 }
 
 int HealthdDraw::draw_surface_centered(GRSurface* surface) {
-  int w = gr_get_width(surface);
-  int h = gr_get_height(surface);
-  int x = (screen_width_ - w) / 2 + kSplitOffset;
-  int y = (screen_height_ - h) / 2;
+    if (!graphics_available) return 0;
 
-  LOGV("drawing surface %dx%d+%d+%d\n", w, h, x, y);
-  gr_blit(surface, 0, 0, w, h, x, y);
-  if (kSplitScreen) {
-    x += screen_width_ - 2 * kSplitOffset;
+    int w = gr_get_width(surface);
+    int h = gr_get_height(surface);
+    int x = (screen_width_ - w) / 2 + kSplitOffset;
+    int y = (screen_height_ - h) / 2;
+
     LOGV("drawing surface %dx%d+%d+%d\n", w, h, x, y);
     gr_blit(surface, 0, 0, w, h, x, y);
-  }
+    if (kSplitScreen) {
+        x += screen_width_ - 2 * kSplitOffset;
+        LOGV("drawing surface %dx%d+%d+%d\n", w, h, x, y);
+        gr_blit(surface, 0, 0, w, h, x, y);
+    }
 
-  return y + h;
+    return y + h;
 }
 
 int HealthdDraw::draw_text(const GRFont* font, int x, int y, const char* str) {
-  int str_len_px = gr_measure(font, str);
+    if (!graphics_available) return 0;
+    int str_len_px = gr_measure(font, str);
 
-  if (x < 0) x = (screen_width_ - str_len_px) / 2;
-  if (y < 0) y = (screen_height_ - char_height_) / 2;
-  gr_text(font, x + kSplitOffset, y, str, false /* bold */);
-  if (kSplitScreen)
-    gr_text(font, x - kSplitOffset + screen_width_, y, str, false /* bold */);
+    if (x < 0) x = (screen_width_ - str_len_px) / 2;
+    if (y < 0) y = (screen_height_ - char_height_) / 2;
+    gr_text(font, x + kSplitOffset, y, str, false /* bold */);
+    if (kSplitScreen) gr_text(font, x - kSplitOffset + screen_width_, y, str, false /* bold */);
 
-  return y + char_height_;
+    return y + char_height_;
 }
 
 void HealthdDraw::determine_xy(const animation::text_field& field,
@@ -119,77 +138,80 @@ void HealthdDraw::determine_xy(const animation::text_field& field,
 }
 
 void HealthdDraw::draw_clock(const animation* anim) {
-  static constexpr char CLOCK_FORMAT[] = "%H:%M";
-  static constexpr int CLOCK_LENGTH = 6;
+    static constexpr char CLOCK_FORMAT[] = "%H:%M";
+    static constexpr int CLOCK_LENGTH = 6;
 
-  const animation::text_field& field = anim->text_clock;
+    const animation::text_field& field = anim->text_clock;
 
-  if (field.font == nullptr || field.font->char_width == 0 ||
-      field.font->char_height == 0)
-    return;
+    if (!graphics_available || field.font == nullptr || field.font->char_width == 0 ||
+        field.font->char_height == 0)
+        return;
 
-  time_t rawtime;
-  time(&rawtime);
-  tm* time_info = localtime(&rawtime);
+    time_t rawtime;
+    time(&rawtime);
+    tm* time_info = localtime(&rawtime);
 
-  char clock_str[CLOCK_LENGTH];
-  size_t length = strftime(clock_str, CLOCK_LENGTH, CLOCK_FORMAT, time_info);
-  if (length != CLOCK_LENGTH - 1) {
-    LOGE("Could not format time\n");
-    return;
-  }
+    char clock_str[CLOCK_LENGTH];
+    size_t length = strftime(clock_str, CLOCK_LENGTH, CLOCK_FORMAT, time_info);
+    if (length != CLOCK_LENGTH - 1) {
+        LOGE("Could not format time\n");
+        return;
+    }
 
-  int x, y;
-  determine_xy(field, length, &x, &y);
+    int x, y;
+    determine_xy(field, length, &x, &y);
 
-  LOGV("drawing clock %s %d %d\n", clock_str, x, y);
-  gr_color(field.color_r, field.color_g, field.color_b, field.color_a);
-  draw_text(field.font, x, y, clock_str);
+    LOGV("drawing clock %s %d %d\n", clock_str, x, y);
+    gr_color(field.color_r, field.color_g, field.color_b, field.color_a);
+    draw_text(field.font, x, y, clock_str);
 }
 
 void HealthdDraw::draw_percent(const animation* anim) {
-  int cur_level = anim->cur_level;
-  if (anim->cur_status == BATTERY_STATUS_FULL) {
-    cur_level = 100;
-  }
+    if (!graphics_available) return;
+    int cur_level = anim->cur_level;
+    if (anim->cur_status == BATTERY_STATUS_FULL) {
+        cur_level = 100;
+    }
 
-  if (cur_level <= 0) return;
+    if (cur_level <= 0) return;
 
-  const animation::text_field& field = anim->text_percent;
-  if (field.font == nullptr || field.font->char_width == 0 ||
-      field.font->char_height == 0) {
-    return;
-  }
+    const animation::text_field& field = anim->text_percent;
+    if (field.font == nullptr || field.font->char_width == 0 || field.font->char_height == 0) {
+        return;
+    }
 
-  std::string str = base::StringPrintf("%d%%", cur_level);
+    std::string str = base::StringPrintf("%d%%", cur_level);
 
-  int x, y;
-  determine_xy(field, str.size(), &x, &y);
+    int x, y;
+    determine_xy(field, str.size(), &x, &y);
 
-  LOGV("drawing percent %s %d %d\n", str.c_str(), x, y);
-  gr_color(field.color_r, field.color_g, field.color_b, field.color_a);
-  draw_text(field.font, x, y, str.c_str());
+    LOGV("drawing percent %s %d %d\n", str.c_str(), x, y);
+    gr_color(field.color_r, field.color_g, field.color_b, field.color_a);
+    draw_text(field.font, x, y, str.c_str());
 }
 
 void HealthdDraw::draw_battery(const animation* anim) {
-  const animation::frame& frame = anim->frames[anim->cur_frame];
+    if (!graphics_available) return;
+    const animation::frame& frame = anim->frames[anim->cur_frame];
 
-  if (anim->num_frames != 0) {
-    draw_surface_centered(frame.surface);
-    LOGV("drawing frame #%d min_cap=%d time=%d\n", anim->cur_frame,
-         frame.min_level, frame.disp_time);
-  }
-  draw_clock(anim);
-  draw_percent(anim);
+    if (anim->num_frames != 0) {
+        draw_surface_centered(frame.surface);
+        LOGV("drawing frame #%d min_cap=%d time=%d\n", anim->cur_frame, frame.min_level,
+             frame.disp_time);
+    }
+    draw_clock(anim);
+    draw_percent(anim);
 }
 
 void HealthdDraw::draw_unknown(GRSurface* surf_unknown) {
   int y;
   if (surf_unknown) {
-    draw_surface_centered(surf_unknown);
+      draw_surface_centered(surf_unknown);
+  } else if (sys_font) {
+      gr_color(0xa4, 0xc6, 0x39, 255);
+      y = draw_text(sys_font, -1, -1, "Charging!");
+      draw_text(sys_font, -1, y + 25, "?\?/100");
   } else {
-    gr_color(0xa4, 0xc6, 0x39, 255);
-    y = draw_text(gr_sys_font(), -1, -1, "Charging!");
-    draw_text(gr_sys_font(), -1, y + 25, "?\?/100");
+      LOGW("Charging, level unknown\n");
   }
 }
