@@ -197,6 +197,7 @@ static int usage() {
     fprintf(stderr, "  LOG-FATAL             call libbase LOG(FATAL)\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
+    fprintf(stderr, "  SIGILL                cause a SIGILL\n");
     fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
     fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
     fprintf(stderr, "  SIGSEGV-unmapped      mmap/munmap a region of memory and then attempt to access it\n");
@@ -268,6 +269,16 @@ noinline int do_action(const char* arg) {
     } else if (!strcasecmp(arg, "SIGFPE")) {
         raise(SIGFPE);
         return EXIT_SUCCESS;
+    } else if (!strcasecmp(arg, "SIGILL")) {
+#if defined(__aarch64__)
+      __asm__ volatile(".word 0\n");
+#elif defined(__arm__)
+      __asm__ volatile(".word 0xe7f0def0\n");
+#elif defined(__i386__) || defined(__x86_64__)
+      __asm__ volatile("ud2\n");
+#else
+#error
+#endif
     } else if (!strcasecmp(arg, "SIGTRAP")) {
         raise(SIGTRAP);
         return EXIT_SUCCESS;
