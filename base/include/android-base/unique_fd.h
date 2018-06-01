@@ -151,7 +151,8 @@ using unique_fd = unique_fd_impl<DefaultCloser>;
 #if !defined(_WIN32)
 
 // Inline functions, so that they can be used header-only.
-inline bool Pipe(unique_fd* read, unique_fd* write) {
+template <typename Closer>
+inline bool Pipe(unique_fd_impl<Closer>* read, unique_fd_impl<Closer>* write) {
   int pipefd[2];
 
 #if defined(__linux__)
@@ -175,7 +176,9 @@ inline bool Pipe(unique_fd* read, unique_fd* write) {
   return true;
 }
 
-inline bool Socketpair(int domain, int type, int protocol, unique_fd* left, unique_fd* right) {
+template <typename Closer>
+inline bool Socketpair(int domain, int type, int protocol, unique_fd_impl<Closer>* left,
+                       unique_fd_impl<Closer>* right) {
   int sockfd[2];
   if (socketpair(domain, type, protocol, sockfd) != 0) {
     return false;
@@ -185,7 +188,8 @@ inline bool Socketpair(int domain, int type, int protocol, unique_fd* left, uniq
   return true;
 }
 
-inline bool Socketpair(int type, unique_fd* left, unique_fd* right) {
+template <typename Closer>
+inline bool Socketpair(int type, unique_fd_impl<Closer>* left, unique_fd_impl<Closer>* right) {
   return Socketpair(AF_UNIX, type, 0, left, right);
 }
 
