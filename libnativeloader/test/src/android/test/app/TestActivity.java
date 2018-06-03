@@ -29,6 +29,8 @@ public class TestActivity extends Activity {
          tryLoadingLib("bar.oem1");
          tryLoadingLib("foo.oem2");
          tryLoadingLib("bar.oem2");
+         tryLoadingLib("foo.product1");
+         tryLoadingLib("bar.product1");
     }
 
     private void tryLoadingLib(String name) {
