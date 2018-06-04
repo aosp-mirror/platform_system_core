@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2014 The Android Open Source Project
+ * Copyright (C) 2008 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
 
 #include <pthread.h>
 
+#include <unordered_map>
+
 #include <sysutils/SocketClient.h>
 #include "SocketClientCommand.h"
 
@@ -25,7 +27,7 @@ class SocketListener {
     bool                    mListen;
     const char              *mSocketName;
     int                     mSock;
-    SocketClientCollection  *mClients;
+    std::unordered_map<int, SocketClient*> mClients;
     pthread_mutex_t         mClientsLock;
     int                     mCtrlPipe[2];
     pthread_t               mThread;
