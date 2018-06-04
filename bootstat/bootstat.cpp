@@ -307,6 +307,10 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"kernel_panic,sysrq,livelock,alarm", 161},   // llkd
     {"kernel_panic,sysrq,livelock,driver", 162},  // llkd
     {"kernel_panic,sysrq,livelock,zombie", 163},  // llkd
+    {"kernel_panic,modem", 164},
+    {"kernel_panic,adsp", 165},
+    {"kernel_panic,dsps", 166},
+    {"kernel_panic,wcnss", 167},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -703,6 +707,10 @@ bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
         {"Corrupt kernel stack", "stack"},
         {"low stack detected", "stack"},
         {"corrupted stack end", "stack"},
+        {"subsys-restart: Resetting the SoC - modem crashed.", "modem"},
+        {"subsys-restart: Resetting the SoC - adsp crashed.", "adsp"},
+        {"subsys-restart: Resetting the SoC - dsps crashed.", "dsps"},
+        {"subsys-restart: Resetting the SoC - wcnss crashed.", "wcnss"},
     };
 
     ret = "kernel_panic";
