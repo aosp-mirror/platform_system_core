@@ -445,6 +445,10 @@ validate_reason() {
     *hw_reset* )                            var="hard,hw_reset" ;;
     *usb* )                                 var="cold,charger" ;;
     *rtc* )                                 var="cold,rtc" ;;
+    *2sec_reboot* )                         var="cold,rtc,2sec" ;;
+    *wdt_by_pass_pwk* )                     var="warm" ;;
+    wdt )                                   var="reboot" ;;
+    *tool_by_pass_pwk* )                    var="reboot,tool" ;;
     *bootloader* )                          var="bootloader" ;;
     * )                                     var="reboot" ;;
   esac
