@@ -27,6 +27,7 @@
 // Test the APIs in this standalone include file
 #include <log/log_read.h>
 // Do not use anything in log/log_time.h despite side effects of the above.
+#include <private/android_logger.h>
 
 TEST(liblog, __android_log_write__android_logger_list_read) {
 #ifdef __ANDROID__
@@ -105,7 +106,10 @@ TEST(liblog, android_logger_get_) {
       // framework (b/68266385).
       EXPECT_LE(  // boolean 1 or 0 depending on expected content or empty
           !!((strcmp("crash", name) != 0) &&
-             ((strcmp("kernel", name) != 0) || __android_log_is_debuggable()) &&
+             ((strcmp("kernel", name) != 0) ||
+              __android_logger_property_get_bool(
+                  "ro.logd.kernel", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_ENG |
+                                        BOOL_DEFAULT_FLAG_SVELTE)) &&
              (strcmp("stats", name) != 0)),
           android_logger_get_log_readable_size(logger));
     } else {
