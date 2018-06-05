@@ -52,7 +52,6 @@ void SocketListener::init(const char *socketName, int socketFd, bool listen, boo
     mSock = socketFd;
     mUseCmdNum = useCmdNum;
     pthread_mutex_init(&mClientsLock, nullptr);
-    mClients = new SocketClientCollection();
 }
 
 SocketListener::~SocketListener() {
