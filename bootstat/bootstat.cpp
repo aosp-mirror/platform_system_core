@@ -736,6 +736,7 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
+const char last_last_reboot_reason_property[] = "sys.boot.reason.last";
 const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
@@ -1003,10 +1004,6 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
   }
 
   LOG(INFO) << "Canonical boot reason: " << ret;
-  if (isKernelRebootReason(ret) && (GetProperty(last_reboot_reason_property) != "")) {
-    // Rewrite as it must be old news, kernel reasons trump user space.
-    SetProperty(last_reboot_reason_property, ret);
-  }
   return ret;
 }
 
@@ -1158,6 +1155,15 @@ void SetSystemBootReason() {
   const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
   // Record the scrubbed system_boot_reason to the property
   SetProperty(system_reboot_reason_property, system_boot_reason);
+  // Shift last_reboot_reason_property to last_last_reboot_reason_property
+  std::string last_boot_reason(GetProperty(last_reboot_reason_property));
+  if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
+    last_boot_reason = system_boot_reason;
+  } else {
+    transformReason(last_boot_reason);
+  }
+  SetProperty(last_last_reboot_reason_property, last_boot_reason);
+  SetProperty(last_reboot_reason_property, "");
 }
 
 // Gets the boot time offset. This is useful when Android is running in a
