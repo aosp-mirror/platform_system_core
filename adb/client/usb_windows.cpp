@@ -75,7 +75,7 @@ struct usb_handle : public ::usb_handle {
 static const GUID usb_class_id = ANDROID_USB_CLASS_ID;
 
 /// List of opened usb handles
-static std::vector<usb_handle*> handle_list;
+static std::vector<usb_handle*>& handle_list = *new std::vector<usb_handle*>();
 
 /// Locker for the list of opened usb handles
 static std::mutex& usb_lock = *new std::mutex();
