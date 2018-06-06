@@ -232,6 +232,9 @@ cc_test {
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
+    required: [
+        "libunwindstack_local",
+    ],
 }
 
 //-------------------------------------------------------------------------
