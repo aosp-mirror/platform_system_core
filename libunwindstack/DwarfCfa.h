@@ -71,8 +71,7 @@ class DwarfCfa {
   bool GetLocationInfo(uint64_t pc, uint64_t start_offset, uint64_t end_offset,
                        dwarf_loc_regs_t* loc_regs);
 
-  bool Log(uint32_t indent, uint64_t pc, uint64_t load_bias, uint64_t start_offset,
-           uint64_t end_offset);
+  bool Log(uint32_t indent, uint64_t pc, uint64_t start_offset, uint64_t end_offset);
 
   const DwarfErrorData& last_error() { return last_error_; }
   DwarfErrorCode LastErrorCode() { return last_error_.code; }
