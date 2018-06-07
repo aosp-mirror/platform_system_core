@@ -679,7 +679,6 @@ static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
     // We can't call fs_mgr_free_fstab because a->recs still references the
     // memory allocated by strdup.
     free(b->recs);
-    free(b->fstab_filename);
     free(b);
 
     a->num_entries = total_entries;
@@ -741,9 +740,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     }
 
     fstab = fs_mgr_read_fstab_file(fstab_file);
-    if (fstab) {
-        fstab->fstab_filename = strdup(fstab_path);
-    } else {
+    if (!fstab) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << fstab_path << "'";
     }
 
@@ -853,9 +850,6 @@ void fs_mgr_free_fstab(struct fstab *fstab)
 
     /* Free the fstab_recs array created by calloc(3) */
     free(fstab->recs);
-
-    /* Free the fstab filename */
-    free(fstab->fstab_filename);
 
     /* Free fstab */
     free(fstab);
