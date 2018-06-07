@@ -795,6 +795,8 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"!warm", "wdt_by_pass_pwk"},  // change flavour of blunt
         {"!reboot", "^wdt$"},          // change flavour of blunt
         {"reboot,tool", "tool_by_pass_pwk"},
+        {"!reboot,longkey", "reboot_longkey"},
+        {"!reboot,longkey", "kpdpwr"},
         {"bootloader", ""},
     };
 
