@@ -49,6 +49,7 @@
 #include "AnimationParser.h"
 #include "healthd_draw.h"
 
+#include <health2/Health.h>
 #include <healthd/healthd.h>
 
 using namespace android;
@@ -307,6 +308,9 @@ static void update_screen_state(charger* charger, int64_t now) {
 
     disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time;
 
+    /* unblank the screen on first cycle and first frame */
+    if (batt_anim->cur_cycle == 0 && batt_anim->cur_frame == 0) healthd_draw->blank_screen(false);
+
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
         LOGV("[%" PRId64 "] animation starting\n", now);
@@ -329,9 +333,6 @@ static void update_screen_state(charger* charger, int64_t now) {
             }
         }
     }
-
-    /* unblank the screen  on first cycle */
-    if (batt_anim->cur_cycle == 0) healthd_draw->blank_screen(false);
 
     /* draw the new frame (@ cur_frame) */
     healthd_draw->redraw_screen(charger->batt_anim, charger->surf_unknown);
@@ -612,6 +613,8 @@ animation* init_animation() {
 }
 
 void healthd_mode_charger_init(struct healthd_config* config) {
+    using android::hardware::health::V2_0::implementation::Health;
+
     int ret;
     charger* charger = &charger_state;
     int i;
@@ -632,7 +635,7 @@ void healthd_mode_charger_init(struct healthd_config* config) {
 
     ret = res_create_display_surface(anim->fail_file.c_str(), &charger->surf_unknown);
     if (ret < 0) {
-        LOGE("Cannot load custom battery_fail image. Reverting to built in.\n");
+        LOGE("Cannot load custom battery_fail image. Reverting to built in: %d\n", ret);
         ret = res_create_display_surface("charger/battery_fail", &charger->surf_unknown);
         if (ret < 0) {
             LOGE("Cannot load built in battery_fail image\n");
@@ -666,6 +669,10 @@ void healthd_mode_charger_init(struct healthd_config* config) {
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
+
+    // Initialize Health implementation (which initializes the internal BatteryMonitor).
+    Health::initInstance(config);
+
     healthd_config = config;
     charger->boot_min_cap = config->boot_min_cap;
 }

@@ -45,6 +45,7 @@
 #include <cutils/properties.h>
 #include <log/logcat.h>
 #include <metricslogger/metrics_logger.h>
+#include <statslog.h>
 
 #include "boot_event_record_store.h"
 
@@ -1083,6 +1084,16 @@ const BootloaderTimingMap GetBootLoaderTimings() {
   return timings;
 }
 
+// Returns the total bootloader boot time from the ro.boot.boottime system property.
+int32_t GetBootloaderTime(const BootloaderTimingMap& bootloader_timings) {
+  int32_t total_time = 0;
+  for (const auto& timing : bootloader_timings) {
+    total_time += timing.second;
+  }
+
+  return total_time;
+}
+
 // Parses and records the set of bootloader stages and associated boot times
 // from the ro.boot.boottime system property.
 void RecordBootloaderTimings(BootEventRecordStore* boot_event_store,
@@ -1096,11 +1107,10 @@ void RecordBootloaderTimings(BootEventRecordStore* boot_event_store,
   boot_event_store->AddBootEventWithValue("boottime.bootloader.total", total_time);
 }
 
-// Records the closest estimation to the absolute device boot time, i.e.,
+// Returns the closest estimation to the absolute device boot time, i.e.,
 // from power on to boot_complete, including bootloader times.
-void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
-                            const BootloaderTimingMap& bootloader_timings,
-                            std::chrono::milliseconds uptime) {
+std::chrono::milliseconds GetAbsoluteBootTime(const BootloaderTimingMap& bootloader_timings,
+                                              std::chrono::milliseconds uptime) {
   int32_t bootloader_time_ms = 0;
 
   for (const auto& timing : bootloader_timings) {
@@ -1110,9 +1120,43 @@ void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
   }
 
   auto bootloader_duration = std::chrono::milliseconds(bootloader_time_ms);
-  auto absolute_total =
-      std::chrono::duration_cast<std::chrono::seconds>(bootloader_duration + uptime);
-  boot_event_store->AddBootEventWithValue("absolute_boot_time", absolute_total.count());
+  return bootloader_duration + uptime;
+}
+
+// Records the closest estimation to the absolute device boot time in seconds.
+// i.e. from power on to boot_complete, including bootloader times.
+void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
+                            std::chrono::milliseconds absolute_total) {
+  auto absolute_total_sec = std::chrono::duration_cast<std::chrono::seconds>(absolute_total);
+  boot_event_store->AddBootEventWithValue("absolute_boot_time", absolute_total_sec.count());
+}
+
+// Logs the total boot time and reason to statsd.
+void LogBootInfoToStatsd(std::chrono::milliseconds end_time,
+                         std::chrono::milliseconds total_duration, int32_t bootloader_duration_ms,
+                         double time_since_last_boot_sec) {
+  const std::string reason(GetProperty(bootloader_reboot_reason_property));
+
+  if (reason.empty()) {
+    android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, "<EMPTY>", "<EMPTY>",
+                               end_time.count(), total_duration.count(),
+                               (int64_t)bootloader_duration_ms,
+                               (int64_t)time_since_last_boot_sec * 1000);
+    return;
+  }
+
+  const std::string system_reason(GetProperty(system_reboot_reason_property));
+  android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, reason.c_str(),
+                             system_reason.c_str(), end_time.count(), total_duration.count(),
+                             (int64_t)bootloader_duration_ms,
+                             (int64_t)time_since_last_boot_sec * 1000);
+}
+
+void SetSystemBootReason() {
+  const std::string bootloader_boot_reason(GetProperty(bootloader_reboot_reason_property));
+  const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
+  // Record the scrubbed system_boot_reason to the property
+  SetProperty(system_reboot_reason_property, system_boot_reason);
 }
 
 // Gets the boot time offset. This is useful when Android is running in a
@@ -1129,13 +1173,6 @@ android::base::boot_clock::duration GetUptime() {
   return android::base::boot_clock::now().time_since_epoch() - GetBootTimeOffset();
 }
 
-void SetSystemBootReason() {
-  const std::string bootloader_boot_reason(GetProperty(bootloader_reboot_reason_property));
-  const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
-  // Record the scrubbed system_boot_reason to the property
-  SetProperty(system_reboot_reason_property, system_boot_reason);
-}
-
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
@@ -1145,10 +1182,11 @@ void RecordBootComplete() {
   auto uptime_ns = GetUptime();
   auto uptime_s = std::chrono::duration_cast<std::chrono::seconds>(uptime_ns);
   time_t current_time_utc = time(nullptr);
+  time_t time_since_last_boot = 0;
 
   if (boot_event_store.GetBootEvent("last_boot_time_utc", &record)) {
     time_t last_boot_time_utc = record.second;
-    time_t time_since_last_boot = difftime(current_time_utc, last_boot_time_utc);
+    time_since_last_boot = difftime(current_time_utc, last_boot_time_utc);
     boot_event_store.AddBootEventWithValue("time_since_last_boot", time_since_last_boot);
   }
 
@@ -1188,10 +1226,18 @@ void RecordBootComplete() {
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init.cold_boot_wait");
 
   const BootloaderTimingMap bootloader_timings = GetBootLoaderTimings();
+  int32_t bootloader_boot_duration = GetBootloaderTime(bootloader_timings);
   RecordBootloaderTimings(&boot_event_store, bootloader_timings);
 
   auto uptime_ms = std::chrono::duration_cast<std::chrono::milliseconds>(uptime_ns);
-  RecordAbsoluteBootTime(&boot_event_store, bootloader_timings, uptime_ms);
+  auto absolute_boot_time = GetAbsoluteBootTime(bootloader_timings, uptime_ms);
+  RecordAbsoluteBootTime(&boot_event_store, absolute_boot_time);
+
+  auto boot_end_time_point = std::chrono::system_clock::now().time_since_epoch();
+  auto boot_end_time = std::chrono::duration_cast<std::chrono::milliseconds>(boot_end_time_point);
+
+  LogBootInfoToStatsd(boot_end_time, absolute_boot_time, bootloader_boot_duration,
+                      time_since_last_boot);
 }
 
 // Records the boot_reason metric by querying the ro.boot.bootreason system

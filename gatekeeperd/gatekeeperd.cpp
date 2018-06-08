@@ -25,14 +25,15 @@
 #include <unistd.h>
 #include <memory>
 
+#include <android/security/IKeystoreService.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
 #include <gatekeeper/password_handle.h> // for password_handle_t
 #include <hardware/gatekeeper.h>
 #include <hardware/hw_auth_token.h>
-#include <keystore/IKeystoreService.h>
 #include <keystore/keystore.h> // For error code
+#include <keystore/keystore_return_types.h>
 #include <log/log.h>
 #include <utils/Log.h>
 #include <utils/String16.h>
@@ -315,11 +316,15 @@ public:
             // TODO: cache service?
             sp<IServiceManager> sm = defaultServiceManager();
             sp<IBinder> binder = sm->getService(String16("android.security.keystore"));
-            sp<IKeystoreService> service = interface_cast<IKeystoreService>(binder);
+            sp<security::IKeystoreService> service =
+                interface_cast<security::IKeystoreService>(binder);
             if (service != NULL) {
-                auto ret = service->addAuthToken(*auth_token, *auth_token_length);
-                if (!ret.isOk()) {
-                    ALOGE("Failure sending auth token to KeyStore: %" PRId32, int32_t(ret));
+                std::vector<uint8_t> auth_token_vector(*auth_token,
+                                                       (*auth_token) + *auth_token_length);
+                int result = 0;
+                auto binder_result = service->addAuthToken(auth_token_vector, &result);
+                if (!binder_result.isOk() || !keystore::KeyStoreServiceReturnCode(result).isOk()) {
+                    ALOGE("Failure sending auth token to KeyStore: %" PRId32, result);
                 }
             } else {
                 ALOGE("Unable to communicate with KeyStore");

@@ -19,42 +19,38 @@
 
 #include <vector>
 
-#include <binder/IInterface.h>
-#include <binder/IBinder.h>
+#include <binder/BinderService.h>
 
-#include "storaged.h"
+#include "android/os/BnStoraged.h"
+#include "android/os/storaged/BnStoragedPrivate.h"
 
-using namespace android;
+using namespace std;
+using namespace android::os;
+using namespace android::os::storaged;
 
-// Interface
-class IStoraged : public IInterface {
+class StoragedService : public BinderService<StoragedService>, public BnStoraged {
+private:
+    void dumpUidRecordsDebug(int fd, const vector<struct uid_record>& entries);
+    void dumpUidRecords(int fd, const vector<struct uid_record>& entries);
 public:
-    enum {
-        DUMPUIDS  = IBinder::FIRST_CALL_TRANSACTION,
-    };
-    // Request the service to run the test function
-    virtual std::vector<struct uid_info> dump_uids(const char* option) = 0;
+    static status_t start();
+    static char const* getServiceName() { return "storaged"; }
+    virtual status_t dump(int fd, const Vector<String16> &args) override;
 
-    DECLARE_META_INTERFACE(Storaged);
+    binder::Status onUserStarted(int32_t userId);
+    binder::Status onUserStopped(int32_t userId);
+    binder::Status getRecentPerf(int32_t* _aidl_return);
 };
 
-// Client
-class BpStoraged : public BpInterface<IStoraged> {
+class StoragedPrivateService : public BinderService<StoragedPrivateService>, public BnStoragedPrivate {
 public:
-    BpStoraged(const sp<IBinder>& impl) : BpInterface<IStoraged>(impl){};
-    virtual std::vector<struct uid_info> dump_uids(const char* option);
+    static status_t start();
+    static char const* getServiceName() { return "storaged_pri"; }
+
+    binder::Status dumpUids(vector<UidInfo>* _aidl_return);
+    binder::Status dumpPerfHistory(vector<int32_t>* _aidl_return);
 };
 
-// Server
-class BnStoraged : public BnInterface<IStoraged> {
-    virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0);
-};
-
-class Storaged : public BnStoraged {
-    virtual std::vector<struct uid_info> dump_uids(const char* option);
-    virtual status_t dump(int fd, const Vector<String16>& args);
-};
-
-sp<IStoraged> get_storaged_service();
+sp<IStoragedPrivate> get_storaged_pri_service();
 
 #endif /* _STORAGED_SERVICE_H_ */

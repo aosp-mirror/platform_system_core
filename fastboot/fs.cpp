@@ -178,6 +178,8 @@ static int generate_f2fs_image(const char* fileName, long long partSize, const s
     mkf2fs_args.push_back("encrypt");
     mkf2fs_args.push_back("-O");
     mkf2fs_args.push_back("quota");
+    mkf2fs_args.push_back("-O");
+    mkf2fs_args.push_back("verity");
     mkf2fs_args.push_back(fileName);
     mkf2fs_args.push_back(nullptr);
 
