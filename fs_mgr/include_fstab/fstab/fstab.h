@@ -33,7 +33,6 @@
 struct fstab {
     int num_entries;
     struct fstab_rec* recs;
-    char* fstab_filename;
 };
 
 struct fstab_rec {
