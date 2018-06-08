@@ -58,13 +58,15 @@
 #include <android-base/strings.h>
 #include <android-base/threads.h>
 
-namespace {
+namespace android {
+namespace base {
+
+// BSD-based systems like Android/macOS have getprogname(). Others need us to provide one.
+#if defined(__GLIBC__) || defined(_WIN32)
+static const char* getprogname() {
 #if defined(__GLIBC__)
-const char* getprogname() {
   return program_invocation_short_name;
-}
 #elif defined(_WIN32)
-const char* getprogname() {
   static bool first = true;
   static char progname[MAX_PATH] = {};
 
@@ -81,11 +83,28 @@ const char* getprogname() {
   }
 
   return progname;
+#endif
 }
 #endif
 
+static const char* GetFileBasename(const char* file) {
+  // We can't use basename(3) even on Unix because the Mac doesn't
+  // have a non-modifying basename.
+  const char* last_slash = strrchr(file, '/');
+  if (last_slash != nullptr) {
+    return last_slash + 1;
+  }
+#if defined(_WIN32)
+  const char* last_backslash = strrchr(file, '\\');
+  if (last_backslash != nullptr) {
+    return last_backslash + 1;
+  }
+#endif
+  return file;
+}
+
 #if defined(__linux__)
-int OpenKmsg() {
+static int OpenKmsg() {
 #if defined(__ANDROID__)
   // pick up 'file w /dev/kmsg' environment from daemon's init rc file
   const auto val = getenv("ANDROID_FILE__dev_kmsg");
@@ -100,10 +119,6 @@ int OpenKmsg() {
   return TEMP_FAILURE_RETRY(open("/dev/kmsg", O_WRONLY | O_CLOEXEC));
 }
 #endif
-} // namespace
-
-namespace android {
-namespace base {
 
 static std::mutex& LoggingLock() {
   static auto& logging_lock = *new std::mutex();
@@ -216,7 +231,7 @@ void StdioLogger(LogId, LogSeverity severity, const char* /*tag*/, const char* /
                  unsigned int /*line*/, const char* message) {
   if (severity >= WARNING) {
     fflush(stdout);
-    fprintf(stderr, "%s: %s\n", getprogname(), message);
+    fprintf(stderr, "%s: %s\n", GetFileBasename(getprogname()), message);
   } else {
     fprintf(stdout, "%s\n", message);
   }
@@ -334,22 +349,6 @@ void SetLogger(LogFunction&& logger) {
 void SetAborter(AbortFunction&& aborter) {
   std::lock_guard<std::mutex> lock(LoggingLock());
   Aborter() = std::move(aborter);
-}
-
-static const char* GetFileBasename(const char* file) {
-  // We can't use basename(3) even on Unix because the Mac doesn't
-  // have a non-modifying basename.
-  const char* last_slash = strrchr(file, '/');
-  if (last_slash != nullptr) {
-    return last_slash + 1;
-  }
-#if defined(_WIN32)
-  const char* last_backslash = strrchr(file, '\\');
-  if (last_backslash != nullptr) {
-    return last_backslash + 1;
-  }
-#endif
-  return file;
 }
 
 // This indirection greatly reduces the stack impact of having lots of

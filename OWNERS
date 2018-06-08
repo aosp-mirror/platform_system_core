@@ -1,5 +1,1 @@
 enh@google.com
-per-file libsysutils/src/Netlink* = ek@google.com
-per-file libsysutils/src/Netlink* = lorenzo@google.com
-per-file libsysutils/include/sysutils/Netlink* = ek@google.com
-per-file libsysutils/include/sysutils/Netlink* = lorenzo@google.com

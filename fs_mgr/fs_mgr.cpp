@@ -1190,27 +1190,6 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
     return 0;
 }
 
-int fs_mgr_unmount_all(struct fstab *fstab)
-{
-    int i = 0;
-    int ret = 0;
-
-    if (!fstab) {
-        return -1;
-    }
-
-    while (fstab->recs[i].blk_device) {
-        if (umount(fstab->recs[i].mount_point)) {
-            LERROR << "Cannot unmount filesystem at "
-                   << fstab->recs[i].mount_point;
-            ret = -1;
-        }
-        i++;
-    }
-
-    return ret;
-}
-
 /* This must be called after mount_all, because the mkswap command needs to be
  * available.
  */
