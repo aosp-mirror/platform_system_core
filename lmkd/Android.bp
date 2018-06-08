@@ -6,18 +6,33 @@ cc_binary {
         "libcutils",
         "liblog",
     ],
+    static_libs: [
+        "libstatslogc",
+        "libstatssocket",
+    ],
     local_include_dirs: ["include"],
-    cflags: ["-Werror"],
-
+    cflags: ["-Werror", "-DLMKD_TRACE_KILLS"],
     init_rc: ["lmkd.rc"],
-
     product_variables: {
-        debuggable: {
+        use_lmkd_stats_log: {
             cflags: [
-                "-DLMKD_TRACE_KILLS"
+                "-DLMKD_LOG_STATS"
             ],
         },
     },
+}
+
+cc_library_static {
+    name: "libstatslogc",
+    srcs: ["statslog.c"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "liblog",
+    ],
+    static_libs: ["libstatssocket",],
 }
 
 cc_library_static {
