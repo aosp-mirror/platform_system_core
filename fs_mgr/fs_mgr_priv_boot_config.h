@@ -19,7 +19,13 @@
 
 #include <sys/cdefs.h>
 #include <string>
+#include <utility>
+#include <vector>
 
+std::vector<std::pair<std::string, std::string>> fs_mgr_parse_boot_config(const std::string& cmdline);
+
+bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::string& key,
+                                        std::string* out_val);
 bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val);
 bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val);
 
