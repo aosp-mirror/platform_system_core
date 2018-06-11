@@ -146,7 +146,7 @@ std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
     }
 
     std::string value;
-    if (!fs_mgr_get_boot_config_from_kernel_cmdline("vbmeta.size", &value) ||
+    if (!fs_mgr_get_boot_config("vbmeta.size", &value) ||
         !android::base::ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
         LERROR << "Invalid hash size: " << value.c_str();
         return nullptr;
@@ -155,7 +155,7 @@ std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
     // Reads hash algorithm.
     size_t expected_digest_size = 0;
     std::string hash_alg;
-    fs_mgr_get_boot_config_from_kernel_cmdline("vbmeta.hash_alg", &hash_alg);
+    fs_mgr_get_boot_config("vbmeta.hash_alg", &hash_alg);
     if (hash_alg == "sha256") {
         expected_digest_size = SHA256_DIGEST_LENGTH * 2;
         avb_verifier->hash_alg_ = kSHA256;
@@ -169,7 +169,7 @@ std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
 
     // Reads digest.
     std::string digest;
-    fs_mgr_get_boot_config_from_kernel_cmdline("vbmeta.digest", &digest);
+    fs_mgr_get_boot_config("vbmeta.digest", &digest);
     if (digest.size() != expected_digest_size) {
         LERROR << "Unexpected digest size: " << digest.size()
                << " (expected: " << expected_digest_size << ")";
