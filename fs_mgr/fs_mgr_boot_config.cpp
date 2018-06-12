@@ -84,24 +84,13 @@ bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::str
     return fs_mgr_get_boot_config_from_kernel(cmdline, key, out_val);
 }
 
-// Tries to get the boot config value in properties, kernel cmdline and
-// device tree (in that order).  returns 'true' if successfully found, 'false'
-// otherwise
+// Tries to get the boot config value in device tree, properties and
+// kernel cmdline (in that order).  Returns 'true' if successfully
+// found, 'false' otherwise.
 bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
     FS_MGR_CHECK(out_val != nullptr);
 
-    // first check if we have "ro.boot" property already
-    *out_val = android::base::GetProperty("ro.boot." + key, "");
-    if (!out_val->empty()) {
-        return true;
-    }
-
-    // fallback to kernel cmdline, properties may not be ready yet
-    if (fs_mgr_get_boot_config_from_kernel_cmdline(key, out_val)) {
-        return true;
-    }
-
-    // lastly, check the device tree
+    // firstly, check the device tree
     if (is_dt_compatible()) {
         std::string file_name = get_android_dt_dir() + "/" + key;
         if (android::base::ReadFileToString(file_name, out_val)) {
@@ -110,6 +99,17 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
                 return true;
             }
         }
+    }
+
+    // next, check if we have "ro.boot" property already
+    *out_val = android::base::GetProperty("ro.boot." + key, "");
+    if (!out_val->empty()) {
+        return true;
+    }
+
+    // finally, fallback to kernel cmdline, properties may not be ready yet
+    if (fs_mgr_get_boot_config_from_kernel_cmdline(key, out_val)) {
+        return true;
     }
 
     return false;
