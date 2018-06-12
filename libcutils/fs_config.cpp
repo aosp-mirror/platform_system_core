@@ -180,8 +180,6 @@ static const struct fs_path_config android_files[] = {
     // in user builds.
     { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
                                               "system/bin/inputflinger" },
-    { 00550, AID_SYSTEM,    AID_LOG,      CAP_MASK_LONG(CAP_SYSLOG),
-                                              "system/bin/bootstat" },
     { 00750, AID_ROOT,      AID_SHELL,     CAP_MASK_LONG(CAP_SETUID) |
                                            CAP_MASK_LONG(CAP_SETGID),
                                               "system/bin/run-as" },
