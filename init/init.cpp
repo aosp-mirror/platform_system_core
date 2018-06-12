@@ -604,46 +604,60 @@ int main(int argc, char** argv) {
     if (is_first_stage) {
         boot_clock::time_point start_time = boot_clock::now();
 
+        std::vector<std::pair<std::string, int>> errors;
+#define CHECKCALL(x) \
+    if (x != 0) errors.emplace_back(#x " failed", errno);
+
         // Clear the umask.
         umask(0);
 
-        clearenv();
-        setenv("PATH", _PATH_DEFPATH, 1);
+        CHECKCALL(clearenv());
+        CHECKCALL(setenv("PATH", _PATH_DEFPATH, 1));
         // Get the basic filesystem setup we need put together in the initramdisk
         // on / and then we'll let the rc file figure out the rest.
-        mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
-        mkdir("/dev/pts", 0755);
-        mkdir("/dev/socket", 0755);
-        mount("devpts", "/dev/pts", "devpts", 0, NULL);
-        #define MAKE_STR(x) __STRING(x)
-        mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC));
+        CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
+        CHECKCALL(mkdir("/dev/pts", 0755));
+        CHECKCALL(mkdir("/dev/socket", 0755));
+        CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
+#define MAKE_STR(x) __STRING(x)
+        CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
+#undef MAKE_STR
         // Don't expose the raw commandline to unprivileged processes.
-        chmod("/proc/cmdline", 0440);
+        CHECKCALL(chmod("/proc/cmdline", 0440));
         gid_t groups[] = { AID_READPROC };
-        setgroups(arraysize(groups), groups);
-        mount("sysfs", "/sys", "sysfs", 0, NULL);
-        mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL);
+        CHECKCALL(setgroups(arraysize(groups), groups));
+        CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
+        CHECKCALL(mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL));
 
-        mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11));
+        CHECKCALL(mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11)));
 
         if constexpr (WORLD_WRITABLE_KMSG) {
-            mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11));
+            CHECKCALL(mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11)));
         }
 
-        mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8));
-        mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9));
+        CHECKCALL(mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8)));
+        CHECKCALL(mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9)));
 
         // Mount staging areas for devices managed by vold
         // See storage config details at http://source.android.com/devices/storage/
-        mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-              "mode=0755,uid=0,gid=1000");
+        CHECKCALL(mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                        "mode=0755,uid=0,gid=1000"));
         // /mnt/vendor is used to mount vendor-specific partitions that can not be
         // part of the vendor partition, e.g. because they are mounted read-write.
-        mkdir("/mnt/vendor", 0755);
+        CHECKCALL(mkdir("/mnt/vendor", 0755));
+
+#undef CHECKCALL
 
         // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
         // talk to the outside world...
         InitKernelLogging(argv);
+
+        if (!errors.empty()) {
+            for (const auto& [error_string, error_errno] : errors) {
+                LOG(ERROR) << error_string << " " << strerror(error_errno);
+            }
+            LOG(FATAL) << "Init encountered errors starting first stage, aborting";
+        }
 
         LOG(INFO) << "init first stage started!";
 
