@@ -70,24 +70,23 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
             case T_EOF:
                 end_section();
                 return;
-            case T_NEWLINE:
+            case T_NEWLINE: {
                 state.line++;
                 if (args.empty()) break;
                 // If we have a line matching a prefix we recognize, call its callback and unset any
                 // current section parsers.  This is meant for /sys/ and /dev/ line entries for
                 // uevent.
-                for (const auto& [prefix, callback] : line_callbacks_) {
-                    if (android::base::StartsWith(args[0], prefix)) {
-                        end_section();
+                auto line_callback = std::find_if(
+                    line_callbacks_.begin(), line_callbacks_.end(),
+                    [&args](const auto& c) { return android::base::StartsWith(args[0], c.first); });
+                if (line_callback != line_callbacks_.end()) {
+                    end_section();
 
-                        if (auto result = callback(std::move(args)); !result) {
-                            parse_error_count_++;
-                            LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
-                        }
-                        break;
+                    if (auto result = line_callback->second(std::move(args)); !result) {
+                        parse_error_count_++;
+                        LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                     }
-                }
-                if (section_parsers_.count(args[0])) {
+                } else if (section_parsers_.count(args[0])) {
                     end_section();
                     section_parser = section_parsers_[args[0]].get();
                     section_start_line = state.line;
@@ -111,6 +110,7 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
                 }
                 args.clear();
                 break;
+            }
             case T_TEXT:
                 args.emplace_back(state.text);
                 break;
