@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -38,78 +37,76 @@
 #define off64_t off_t
 #endif
 
-void usage()
-{
-    fprintf(stderr, "Usage: img2simg <raw_image_file> <sparse_image_file> [<block_size>]\n");
+void usage() {
+  fprintf(stderr, "Usage: img2simg <raw_image_file> <sparse_image_file> [<block_size>]\n");
 }
 
-int main(int argc, char *argv[])
-{
-	int in;
-	int out;
-	int ret;
-	struct sparse_file *s;
-	unsigned int block_size = 4096;
-	off64_t len;
+int main(int argc, char* argv[]) {
+  int in;
+  int out;
+  int ret;
+  struct sparse_file* s;
+  unsigned int block_size = 4096;
+  off64_t len;
 
-	if (argc < 3 || argc > 4) {
-		usage();
-		exit(-1);
-	}
+  if (argc < 3 || argc > 4) {
+    usage();
+    exit(-1);
+  }
 
-	if (argc == 4) {
-		block_size = atoi(argv[3]);
-	}
+  if (argc == 4) {
+    block_size = atoi(argv[3]);
+  }
 
-	if (block_size < 1024 || block_size % 4 != 0) {
-		usage();
-		exit(-1);
-	}
+  if (block_size < 1024 || block_size % 4 != 0) {
+    usage();
+    exit(-1);
+  }
 
-	if (strcmp(argv[1], "-") == 0) {
-		in = STDIN_FILENO;
-	} else {
-		in = open(argv[1], O_RDONLY | O_BINARY);
-		if (in < 0) {
-			fprintf(stderr, "Cannot open input file %s\n", argv[1]);
-			exit(-1);
-		}
-	}
+  if (strcmp(argv[1], "-") == 0) {
+    in = STDIN_FILENO;
+  } else {
+    in = open(argv[1], O_RDONLY | O_BINARY);
+    if (in < 0) {
+      fprintf(stderr, "Cannot open input file %s\n", argv[1]);
+      exit(-1);
+    }
+  }
 
-	if (strcmp(argv[2], "-") == 0) {
-		out = STDOUT_FILENO;
-	} else {
-		out = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0664);
-		if (out < 0) {
-			fprintf(stderr, "Cannot open output file %s\n", argv[2]);
-			exit(-1);
-		}
-	}
+  if (strcmp(argv[2], "-") == 0) {
+    out = STDOUT_FILENO;
+  } else {
+    out = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0664);
+    if (out < 0) {
+      fprintf(stderr, "Cannot open output file %s\n", argv[2]);
+      exit(-1);
+    }
+  }
 
-	len = lseek64(in, 0, SEEK_END);
-	lseek64(in, 0, SEEK_SET);
+  len = lseek64(in, 0, SEEK_END);
+  lseek64(in, 0, SEEK_SET);
 
-	s = sparse_file_new(block_size, len);
-	if (!s) {
-		fprintf(stderr, "Failed to create sparse file\n");
-		exit(-1);
-	}
+  s = sparse_file_new(block_size, len);
+  if (!s) {
+    fprintf(stderr, "Failed to create sparse file\n");
+    exit(-1);
+  }
 
-	sparse_file_verbose(s);
-	ret = sparse_file_read(s, in, false, false);
-	if (ret) {
-		fprintf(stderr, "Failed to read file\n");
-		exit(-1);
-	}
+  sparse_file_verbose(s);
+  ret = sparse_file_read(s, in, false, false);
+  if (ret) {
+    fprintf(stderr, "Failed to read file\n");
+    exit(-1);
+  }
 
-	ret = sparse_file_write(s, out, false, true, false);
-	if (ret) {
-		fprintf(stderr, "Failed to write sparse file\n");
-		exit(-1);
-	}
+  ret = sparse_file_write(s, out, false, true, false);
+  if (ret) {
+    fprintf(stderr, "Failed to write sparse file\n");
+    exit(-1);
+  }
 
-	close(in);
-	close(out);
+  close(in);
+  close(out);
 
-	exit(0);
+  exit(0);
 }

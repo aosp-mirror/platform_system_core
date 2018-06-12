@@ -39,11 +39,14 @@ typedef unsigned int u32;
 typedef unsigned short int u16;
 typedef unsigned char u8;
 
-#define DIV_ROUND_UP(x, y) (((x) + (y) - 1)/(y))
-#define ALIGN(x, y) ((y) * DIV_ROUND_UP((x), (y)))
+#define DIV_ROUND_UP(x, y) (((x) + (y)-1) / (y))
+#define ALIGN(x, y) ((y)*DIV_ROUND_UP((x), (y)))
 #define ALIGN_DOWN(x, y) ((y) * ((x) / (y)))
 
-#define error(fmt, args...) do { fprintf(stderr, "error: %s: " fmt "\n", __func__, ## args); } while (0)
+#define error(fmt, args...)                                    \
+  do {                                                         \
+    fprintf(stderr, "error: %s: " fmt "\n", __func__, ##args); \
+  } while (0)
 #define error_errno(s, args...) error(s ": %s", ##args, strerror(errno))
 
 #endif
