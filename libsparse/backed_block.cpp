@@ -122,7 +122,8 @@ void backed_block_destroy(struct backed_block *bb)
 
 struct backed_block_list *backed_block_list_new(unsigned int block_size)
 {
-	struct backed_block_list *b = calloc(sizeof(struct backed_block_list), 1);
+	struct backed_block_list *b = reinterpret_cast<backed_block_list*>(
+            calloc(sizeof(struct backed_block_list), 1));
 	b->block_size = block_size;
 	return b;
 }
@@ -292,7 +293,7 @@ static int queue_bb(struct backed_block_list *bbl, struct backed_block *new_bb)
 int backed_block_add_fill(struct backed_block_list *bbl, unsigned int fill_val,
 		unsigned int len, unsigned int block)
 {
-	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	struct backed_block *bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
 	if (bb == NULL) {
 		return -ENOMEM;
 	}
@@ -310,7 +311,7 @@ int backed_block_add_fill(struct backed_block_list *bbl, unsigned int fill_val,
 int backed_block_add_data(struct backed_block_list *bbl, void *data,
 		unsigned int len, unsigned int block)
 {
-	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	struct backed_block *bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
 	if (bb == NULL) {
 		return -ENOMEM;
 	}
@@ -328,7 +329,7 @@ int backed_block_add_data(struct backed_block_list *bbl, void *data,
 int backed_block_add_file(struct backed_block_list *bbl, const char *filename,
 		int64_t offset, unsigned int len, unsigned int block)
 {
-	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	struct backed_block *bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
 	if (bb == NULL) {
 		return -ENOMEM;
 	}
@@ -347,7 +348,7 @@ int backed_block_add_file(struct backed_block_list *bbl, const char *filename,
 int backed_block_add_fd(struct backed_block_list *bbl, int fd, int64_t offset,
 		unsigned int len, unsigned int block)
 {
-	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	struct backed_block *bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
 	if (bb == NULL) {
 		return -ENOMEM;
 	}
@@ -373,7 +374,7 @@ int backed_block_split(struct backed_block_list *bbl, struct backed_block *bb,
 		return 0;
 	}
 
-	new_bb = malloc(sizeof(struct backed_block));
+	new_bb = reinterpret_cast<backed_block*>(malloc(sizeof(struct backed_block)));
 	if (new_bb == NULL) {
 		return -ENOMEM;
 	}

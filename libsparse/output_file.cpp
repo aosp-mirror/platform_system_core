@@ -326,7 +326,7 @@ int read_all(int fd, void *buf, size_t len)
 {
 	size_t total = 0;
 	int ret;
-	char *ptr = buf;
+	char *ptr = reinterpret_cast<char*>(buf);
 
 	while (total < len) {
 		ret = read(fd, ptr, len - total);
@@ -350,7 +350,7 @@ static int write_sparse_skip_chunk(struct output_file *out, int64_t skip_len)
 	int ret;
 
 	if (skip_len % out->block_size) {
-		error("don't care size %"PRIi64" is not a multiple of the block size %u",
+		error("don't care size %" PRIi64 " is not a multiple of the block size %u",
 				skip_len, out->block_size);
 		return -1;
 	}
@@ -557,13 +557,13 @@ static int output_file_init(struct output_file *out, int block_size,
 	out->crc32 = 0;
 	out->use_crc = crc;
 
-	out->zero_buf = calloc(block_size, 1);
+	out->zero_buf = reinterpret_cast<char*>(calloc(block_size, 1));
 	if (!out->zero_buf) {
 		error_errno("malloc zero_buf");
 		return -ENOMEM;
 	}
 
-	out->fill_buf = calloc(block_size, 1);
+	out->fill_buf = reinterpret_cast<uint32_t*>(calloc(block_size, 1));
 	if (!out->fill_buf) {
 		error_errno("malloc fill_buf");
 		ret = -ENOMEM;
@@ -584,8 +584,8 @@ static int output_file_init(struct output_file *out, int block_size,
 				.file_hdr_sz = SPARSE_HEADER_LEN,
 				.chunk_hdr_sz = CHUNK_HEADER_LEN,
 				.blk_sz = out->block_size,
-				.total_blks = DIV_ROUND_UP(out->len, out->block_size),
-				.total_chunks = chunks,
+				.total_blks = static_cast<unsigned>(DIV_ROUND_UP(out->len, out->block_size)),
+				.total_chunks = static_cast<unsigned>(chunks),
 				.image_checksum = 0
 		};
 
@@ -610,7 +610,8 @@ err_fill_buf:
 
 static struct output_file *output_file_new_gz(void)
 {
-	struct output_file_gz *outgz = calloc(1, sizeof(struct output_file_gz));
+	struct output_file_gz *outgz = reinterpret_cast<struct output_file_gz*>(
+            calloc(1, sizeof(struct output_file_gz)));
 	if (!outgz) {
 		error_errno("malloc struct outgz");
 		return NULL;
@@ -623,7 +624,8 @@ static struct output_file *output_file_new_gz(void)
 
 static struct output_file *output_file_new_normal(void)
 {
-	struct output_file_normal *outn = calloc(1, sizeof(struct output_file_normal));
+	struct output_file_normal *outn = reinterpret_cast<struct output_file_normal*>(
+            calloc(1, sizeof(struct output_file_normal)));
 	if (!outn) {
 		error_errno("malloc struct outn");
 		return NULL;
@@ -642,7 +644,8 @@ struct output_file *output_file_open_callback(
 	int ret;
 	struct output_file_callback *outc;
 
-	outc = calloc(1, sizeof(struct output_file_callback));
+	outc = reinterpret_cast<struct output_file_callback*>(
+            calloc(1, sizeof(struct output_file_callback)));
 	if (!outc) {
 		error_errno("malloc struct outc");
 		return NULL;
@@ -716,15 +719,15 @@ int write_fd_chunk(struct output_file *out, unsigned int len,
 #ifndef _WIN32
 	if (buffer_size > SIZE_MAX)
 		return -E2BIG;
-	char *data = mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, fd,
-			aligned_offset);
+	char *data = reinterpret_cast<char*>(mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, fd,
+			aligned_offset));
 	if (data == MAP_FAILED) {
 		return -errno;
 	}
 	ptr = data + aligned_diff;
 #else
 	off64_t pos;
-	char *data = malloc(len);
+	char *data = reinterpret_cast<char*>(malloc(len));
 	if (!data) {
 		return -errno;
 	}

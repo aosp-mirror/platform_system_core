@@ -29,7 +29,7 @@
 
 struct sparse_file *sparse_file_new(unsigned int block_size, int64_t len)
 {
-	struct sparse_file *s = calloc(sizeof(struct sparse_file), 1);
+	struct sparse_file *s = reinterpret_cast<sparse_file*>(calloc(sizeof(struct sparse_file), 1));
 	if (!s) {
 		return NULL;
 	}
@@ -209,7 +209,7 @@ struct chunk_data {
 
 static int foreach_chunk_write(void *priv, const void *data, size_t len)
 {
-	struct chunk_data *chk = priv;
+	struct chunk_data *chk = reinterpret_cast<chunk_data*>(priv);
 
 	return chk->write(chk->priv, data, len, chk->block, chk->nr_blocks);
 }
@@ -252,7 +252,7 @@ int sparse_file_foreach_chunk(struct sparse_file *s, bool sparse, bool crc,
 
 static int out_counter_write(void *priv, const void *data __unused, size_t len)
 {
-	int64_t *count = priv;
+	int64_t *count = reinterpret_cast<int64_t*>(priv);
 	*count += len;
 	return 0;
 }
