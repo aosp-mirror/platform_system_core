@@ -163,7 +163,9 @@ bool fs_mgr_wants_overlayfs() {
     // Overlayfs available in the kernel, and patched for override_creds?
     static signed char overlayfs_in_kernel = -1;  // cache for constant condition
     if (overlayfs_in_kernel == -1) {
+        auto save_errno = errno;
         overlayfs_in_kernel = !access("/sys/module/overlay/parameters/override_creds", F_OK);
+        errno = save_errno;
     }
     return overlayfs_in_kernel;
 }
@@ -429,7 +431,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     const auto newpath = oldpath + ".teardown";
     ret &= fs_mgr_rm_all(newpath);
     auto save_errno = errno;
-    if (rename(oldpath.c_str(), newpath.c_str())) {
+    if (!rename(oldpath.c_str(), newpath.c_str())) {
         if (change) *change = true;
     } else if (errno != ENOENT) {
         ret = false;
