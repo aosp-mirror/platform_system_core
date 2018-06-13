@@ -87,30 +87,25 @@
 //
 
 static int drop_privs(bool klogd, bool auditd) {
-    // Tricky, if ro.build.type is "eng" then this is true because of the
-    // side effect that ro.debuggable == 1 as well, else it is false.
-    bool eng =
-        __android_logger_property_get_bool("ro.build.type", BOOL_DEFAULT_FALSE);
-
-    struct sched_param param;
-    memset(&param, 0, sizeof(param));
+    sched_param param = {};
 
     if (set_sched_policy(0, SP_BACKGROUND) < 0) {
         android::prdebug("failed to set background scheduling policy");
-        if (!eng) return -1;
+        return -1;
     }
 
     if (sched_setscheduler((pid_t)0, SCHED_BATCH, &param) < 0) {
         android::prdebug("failed to set batch scheduler");
-        if (!eng) return -1;
+        return -1;
     }
 
     if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
         android::prdebug("failed to set background cgroup");
-        if (!eng) return -1;
+        return -1;
     }
 
-    if (!eng && (prctl(PR_SET_DUMPABLE, 0) < 0)) {
+    if (__android_logger_property_get_bool("ro.debuggable", BOOL_DEFAULT_FALSE) &&
+        prctl(PR_SET_DUMPABLE, 0) == -1) {
         android::prdebug("failed to clear PR_SET_DUMPABLE");
         return -1;
     }
@@ -133,24 +128,24 @@ static int drop_privs(bool klogd, bool auditd) {
         android::prdebug(
             "failed to set CAP_SETGID, CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)",
             errno);
-        if (!eng) return -1;
+        return -1;
     }
 
     gid_t groups[] = { AID_READPROC };
 
     if (setgroups(arraysize(groups), groups) == -1) {
         android::prdebug("failed to set AID_READPROC groups");
-        if (!eng) return -1;
+        return -1;
     }
 
     if (setgid(AID_LOGD) != 0) {
         android::prdebug("failed to set AID_LOGD gid");
-        if (!eng) return -1;
+        return -1;
     }
 
     if (setuid(AID_LOGD) != 0) {
         android::prdebug("failed to set AID_LOGD uid");
-        if (!eng) return -1;
+        return -1;
     }
 
     if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, cap_value, CAP_CLEAR) < 0) {
@@ -161,7 +156,7 @@ static int drop_privs(bool klogd, bool auditd) {
     }
     if (cap_set_proc(caps.get()) < 0) {
         android::prdebug("failed to clear CAP_SETGID (%d)", errno);
-        if (!eng) return -1;
+        return -1;
     }
 
     return 0;
@@ -468,7 +463,7 @@ int main(int argc, char* argv[]) {
     bool auditd =
         __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
     if (drop_privs(klogd, auditd) != 0) {
-        return -1;
+        return EXIT_FAILURE;
     }
 
     // Serves the purpose of managing the last logs times read on a
@@ -496,7 +491,7 @@ int main(int argc, char* argv[]) {
 
     LogReader* reader = new LogReader(logBuf);
     if (reader->startListener()) {
-        exit(1);
+        return EXIT_FAILURE;
     }
 
     // LogListener listens on /dev/socket/logdw for client
@@ -506,7 +501,7 @@ int main(int argc, char* argv[]) {
     LogListener* swl = new LogListener(logBuf, reader);
     // Backlog and /proc/sys/net/unix/max_dgram_qlen set to large value
     if (swl->startListener(600)) {
-        exit(1);
+        return EXIT_FAILURE;
     }
 
     // Command listener listens on /dev/socket/logd for incoming logd
@@ -514,7 +509,7 @@ int main(int argc, char* argv[]) {
 
     CommandListener* cl = new CommandListener(logBuf, reader, swl);
     if (cl->startListener()) {
-        exit(1);
+        return EXIT_FAILURE;
     }
 
     // LogAudit listens on NETLINK_AUDIT socket for selinux
@@ -549,5 +544,5 @@ int main(int argc, char* argv[]) {
 
     TEMP_FAILURE_RETRY(pause());
 
-    exit(0);
+    return EXIT_SUCCESS;
 }
