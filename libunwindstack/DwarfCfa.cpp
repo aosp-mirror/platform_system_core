@@ -264,8 +264,8 @@ bool DwarfCfa<AddressType>::LogInstruction(uint32_t indent, uint64_t cfa_offset,
 }
 
 template <typename AddressType>
-bool DwarfCfa<AddressType>::Log(uint32_t indent, uint64_t pc, uint64_t load_bias,
-                                uint64_t start_offset, uint64_t end_offset) {
+bool DwarfCfa<AddressType>::Log(uint32_t indent, uint64_t pc, uint64_t start_offset,
+                                uint64_t end_offset) {
   memory_->set_cur_offset(start_offset);
   uint64_t cfa_offset;
   uint64_t cur_pc = fde_->pc_start;
@@ -301,8 +301,8 @@ bool DwarfCfa<AddressType>::Log(uint32_t indent, uint64_t pc, uint64_t load_bias
         break;
     }
     if (cur_pc != old_pc) {
-      log(indent, "");
-      log(indent, "PC 0x%" PRIx64, cur_pc + load_bias);
+      log(0, "");
+      log(indent, "PC 0x%" PRIx64, cur_pc);
     }
     old_pc = cur_pc;
   }

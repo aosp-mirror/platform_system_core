@@ -223,6 +223,7 @@ cc_test {
         "tests/files/offline/art_quick_osr_stub_arm/*",
         "tests/files/offline/bad_eh_frame_hdr_arm64/*",
         "tests/files/offline/debug_frame_first_x86/*",
+        "tests/files/offline/debug_frame_load_bias_arm/*",
         "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",

@@ -78,13 +78,13 @@ class DwarfSection {
   DwarfErrorCode LastErrorCode() { return last_error_.code; }
   uint64_t LastErrorAddress() { return last_error_.address; }
 
-  virtual bool Init(uint64_t offset, uint64_t size) = 0;
+  virtual bool Init(uint64_t offset, uint64_t size, uint64_t load_bias) = 0;
 
   virtual bool Eval(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*) = 0;
 
   virtual bool GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) = 0;
 
-  virtual bool Log(uint8_t indent, uint64_t pc, uint64_t load_bias, const DwarfFde* fde) = 0;
+  virtual bool Log(uint8_t indent, uint64_t pc, const DwarfFde* fde) = 0;
 
   virtual const DwarfFde* GetFdeFromIndex(size_t index) = 0;
 
@@ -131,7 +131,7 @@ class DwarfSectionImpl : public DwarfSection {
   DwarfSectionImpl(Memory* memory) : DwarfSection(memory) {}
   virtual ~DwarfSectionImpl() = default;
 
-  bool Init(uint64_t offset, uint64_t size) override;
+  bool Init(uint64_t offset, uint64_t size, uint64_t load_bias) override;
 
   bool GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) override;
 
@@ -150,7 +150,7 @@ class DwarfSectionImpl : public DwarfSection {
 
   bool GetCfaLocationInfo(uint64_t pc, const DwarfFde* fde, dwarf_loc_regs_t* loc_regs) override;
 
-  bool Log(uint8_t indent, uint64_t pc, uint64_t load_bias, const DwarfFde* fde) override;
+  bool Log(uint8_t indent, uint64_t pc, const DwarfFde* fde) override;
 
  protected:
   bool EvalExpression(const DwarfLocation& loc, Memory* regular_memory, AddressType* value,
@@ -161,6 +161,9 @@ class DwarfSectionImpl : public DwarfSection {
   bool AddFdeInfo(uint64_t entry_offset, uint8_t segment_size, uint8_t encoding);
 
   bool CreateSortedFdeList();
+
+  uint64_t load_bias_ = 0;
+  uint64_t pc_offset_ = 0;
 
   std::vector<FdeInfo> fdes_;
   uint64_t entries_offset_;

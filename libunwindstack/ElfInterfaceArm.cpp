@@ -26,6 +26,14 @@
 
 namespace unwindstack {
 
+bool ElfInterfaceArm::Init(uint64_t* load_bias) {
+  if (!ElfInterface32::Init(load_bias)) {
+    return false;
+  }
+  load_bias_ = *load_bias;
+  return true;
+}
+
 bool ElfInterfaceArm::FindEntry(uint32_t pc, uint64_t* entry_offset) {
   if (start_offset_ == 0 || total_entries_ == 0) {
     last_error_.code = ERROR_UNWIND_INFO;
@@ -96,24 +104,22 @@ bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type, uint64_t load_b
   return true;
 }
 
-bool ElfInterfaceArm::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
-                           bool* finished) {
+bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   // Dwarf unwind information is precise about whether a pc is covered or not,
   // but arm unwind information only has ranges of pc. In order to avoid
   // incorrectly doing a bad unwind using arm unwind information for a
   // different function, always try and unwind with the dwarf information first.
-  return ElfInterface32::Step(pc, load_bias, regs, process_memory, finished) ||
-         StepExidx(pc, load_bias, regs, process_memory, finished);
+  return ElfInterface32::Step(pc, regs, process_memory, finished) ||
+         StepExidx(pc, regs, process_memory, finished);
 }
 
-bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
-                                bool* finished) {
+bool ElfInterfaceArm::StepExidx(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   // Adjust the load bias to get the real relative pc.
-  if (pc < load_bias) {
+  if (pc < load_bias_) {
     last_error_.code = ERROR_UNWIND_INFO;
     return false;
   }
-  pc -= load_bias;
+  pc -= load_bias_;
 
   RegsArm* regs_arm = reinterpret_cast<RegsArm*>(regs);
   uint64_t entry_offset;
@@ -167,13 +173,12 @@ bool ElfInterfaceArm::StepExidx(uint64_t pc, uint64_t load_bias, Regs* regs, Mem
   return return_value;
 }
 
-bool ElfInterfaceArm::GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
-                                      uint64_t* offset) {
+bool ElfInterfaceArm::GetFunctionName(uint64_t addr, std::string* name, uint64_t* offset) {
   // For ARM, thumb function symbols have bit 0 set, but the address passed
   // in here might not have this bit set and result in a failure to find
   // the thumb function names. Adjust the address and offset to account
   // for this possible case.
-  if (ElfInterface32::GetFunctionName(addr | 1, load_bias, name, offset)) {
+  if (ElfInterface32::GetFunctionName(addr | 1, name, offset)) {
     *offset &= ~1;
     return true;
   }
