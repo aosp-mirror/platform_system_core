@@ -309,6 +309,16 @@ _enforce_vndk_at_runtime :=
 _enforce_vndk_lite_at_runtime :=
 
 #######################################
+# ld.config.txt for recovery
+include $(CLEAR_VARS)
+LOCAL_MODULE := ld.config.recovery.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_SRC_FILES := etc/ld.config.recovery.txt
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/etc
+LOCAL_MODULE_STEM := ld.config.txt
+include $(BUILD_PREBUILT)
+
+#######################################
 # llndk.libraries.txt
 include $(CLEAR_VARS)
 LOCAL_MODULE := llndk.libraries.txt

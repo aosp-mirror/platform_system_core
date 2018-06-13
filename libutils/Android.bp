@@ -47,6 +47,7 @@ cc_library_headers {
 cc_defaults {
     name: "libutils_defaults",
     vendor_available: true,
+    recovery_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -88,6 +89,10 @@ cc_defaults {
             sanitize: {
                 misc_undefined: ["integer"],
             },
+        },
+
+        recovery: {
+            exclude_shared_libs: ["libvndksupport"],
         },
 
         host: {
