@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,14 +40,69 @@ DeviceMapper& DeviceMapper::Instance() {
     return instance;
 }
 // Creates a new device mapper device
-bool DeviceMapper::CreateDevice(const std::string& /* name */) {
+bool DeviceMapper::CreateDevice(const std::string& name) {
+    if (name.empty()) {
+        LOG(ERROR) << "Unnamed device mapper device creation is not supported";
+        return false;
+    }
+
+    if (name.size() >= DM_NAME_LEN) {
+        LOG(ERROR) << "[" << name << "] is too long to be device mapper name";
+        return false;
+    }
+
+    std::unique_ptr<struct dm_ioctl, decltype(&free)> io(
+            static_cast<struct dm_ioctl*>(malloc(sizeof(struct dm_ioctl))), free);
+    if (io == nullptr) {
+        LOG(ERROR) << "Failed to allocate dm_ioctl";
+        return false;
+    }
+    InitIo(io.get(), name);
+
+    if (ioctl(fd_, DM_DEV_CREATE, io.get())) {
+        PLOG(ERROR) << "DM_DEV_CREATE failed to create [" << name << "]";
+        return false;
+    }
+
+    // Check to make sure the newly created device doesn't already have targets
+    // added or opened by someone
+    CHECK(io->target_count == 0) << "Unexpected targets for newly created [" << name << "] device";
+    CHECK(io->open_count == 0) << "Unexpected opens for newly created [" << name << "] device";
+
     // Creates a new device mapper device with the name passed in
-    return false;
+    return true;
 }
 
-bool DeviceMapper::DeleteDevice(const std::string& /* name */) {
-    // Destroy device here first
-    return false;
+bool DeviceMapper::DeleteDevice(const std::string& name) {
+    if (name.empty()) {
+        LOG(ERROR) << "Unnamed device mapper device creation is not supported";
+        return false;
+    }
+
+    if (name.size() >= DM_NAME_LEN) {
+        LOG(ERROR) << "[" << name << "] is too long to be device mapper name";
+        return false;
+    }
+
+    std::unique_ptr<struct dm_ioctl, decltype(&free)> io(
+            static_cast<struct dm_ioctl*>(malloc(sizeof(struct dm_ioctl))), free);
+    if (io == nullptr) {
+        LOG(ERROR) << "Failed to allocate dm_ioctl";
+        return false;
+    }
+    InitIo(io.get(), name);
+
+    if (ioctl(fd_, DM_DEV_REMOVE, io.get())) {
+        PLOG(ERROR) << "DM_DEV_REMOVE failed to create [" << name << "]";
+        return false;
+    }
+
+    // Check to make sure appropriate uevent is generated so ueventd will
+    // do the right thing and remove the corresponding device node and symlinks.
+    CHECK(io->flags & DM_UEVENT_GENERATED_FLAG)
+            << "Didn't generate uevent for [" << name << "] removal";
+
+    return true;
 }
 
 const std::unique_ptr<DmTable> DeviceMapper::table(const std::string& /* name */) const {
@@ -82,12 +138,13 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
         return false;
     }
 
+    // Sets appropriate data size and data_start to make sure we tell kernel
+    // about the total size of the buffer we are passing and where to start
+    // writing the list of targets.
     struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(buffer.get());
-    io->data_start = sizeof(*io);
+    InitIo(io);
     io->data_size = data_size;
-    io->version[0] = 4;
-    io->version[1] = 0;
-    io->version[2] = 0;
+    io->data_start = sizeof(*io);
 
     if (ioctl(fd_, DM_LIST_VERSIONS, io)) {
         PLOG(ERROR) << "Failed to get DM_LIST_VERSIONS from kernel";
@@ -129,6 +186,21 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
 // returns the path to it's device node (or symlink to the device node)
 std::string DeviceMapper::GetDmDevicePathByName(const std::string& /* name */) {
     return "";
+}
+
+// private methods of DeviceMapper
+void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
+    CHECK(io != nullptr) << "nullptr passed to dm_ioctl initialization";
+    memset(io, 0, sizeof(*io));
+
+    io->version[0] = DM_VERSION0;
+    io->version[1] = DM_VERSION1;
+    io->version[2] = DM_VERSION2;
+    io->data_size = sizeof(*io);
+    io->data_start = 0;
+    if (!name.empty()) {
+        strlcpy(io->name, name.c_str(), sizeof(io->name));
+    }
 }
 
 }  // namespace dm

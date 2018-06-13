@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/dm-ioctl.h>
 #include <unistd.h>
 
 #include <memory>
@@ -26,6 +27,11 @@
 #include <android-base/logging.h>
 
 #include <dm_table.h>
+
+// The minimum expected device mapper major.minor version
+#define DM_VERSION0 (4)
+#define DM_VERSION1 (0)
+#define DM_VERSION2 (0)
 
 #define DM_ALIGN_MASK (7)
 #define DM_ALIGN(x) ((x + DM_ALIGN_MASK) & ~DM_ALIGN_MASK)
@@ -86,6 +92,8 @@ class DeviceMapper final {
     // This is only used to read the list of targets from kernel so we allocate
     // a finite amount of memory. This limit is in no way enforced by the kernel.
     static constexpr uint32_t kMaxPossibleDmTargets = 256;
+
+    void InitIo(struct dm_ioctl* io, const std::string& name = std::string()) const;
 
     DeviceMapper() : fd_(-1) {
         fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));

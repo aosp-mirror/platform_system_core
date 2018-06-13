@@ -39,50 +39,46 @@ using DmTarget = ::android::dm::DmTarget;
 static int Usage(void) {
     std::cerr << "usage: dmctl <command> [command options]";
     std::cerr << "commands:";
-    std::cerr << "  create <dm-name> <dm-target> [-lo <filename>] <dm-target-args>";
-    std::cerr, "  delete <dm-device>";
+    std::cerr << "  create <dm-name> [dm-target> [-lo <filename>] <dm-target-args>]";
+    std::cerr, "  delete <dm-name>";
     std::cerr, "  list";
     std::cerr, "  help";
     return -EINVAL;
 }
 
 static int DmCreateCmdHandler(int argc, char** argv) {
-    if (argc <= 1) {
-        std::cerr << "DmCreateCmdHandler: Invalid arguments";
-        if (argc > 0) std::cerr << "  args: " << argv[0];
+    if (argc < 1) {
+        std::cerr << "DmCreateCmdHandler: atleast 'name' MUST be provided for target device";
         return -EINVAL;
     }
 
-    // Parse Everything first to make sure we have everything we need.
-    std::string devname = argv[0];
+    std::string name = argv[0];
     DeviceMapper& dm = DeviceMapper::Instance();
-    std::vector<DmTarget> targets;
-    if (!dm.GetAvailableTargets(&targets)) {
-        std::cerr << "Failed to read available device mapper targets";
-        return -errno;
+    if (!dm.CreateDevice(name)) {
+        std::cerr << "DmCreateCmdHandler: Failed to create " << name << " device";
+        return -EIO;
     }
 
-    if (targets.empty()) {
-        std::cerr << "zero device mapper targets available";
-        return -EEXIST;
+    // if we also have target specified
+    if (argc > 1) {
+        // fall through for now. This will eventually create a DmTarget() based on the target name
+        // passing it the table that is specified at the command line
     }
 
-    for (const auto& target : targets) {
-        if (target.name() == argv[1]) {
-            // TODO(b/110035986) : Create the target here, return success for now.
-            return 0;
-        }
-    }
-
-    std::cerr << "Invalid or non-existing target : " << argv[1];
-    return -EINVAL;
+    return 0;
 }
 
 static int DmDeleteCmdHandler(int argc, char** argv) {
-    std::cout << "DmDeleteCmdHandler:" << std::endl;
-    std::cout << "  args:" << std::endl;
-    for (int i = 0; i < argc; i++) {
-        std::cout << "        " << argv[i] << std::endl;
+    if (argc < 1) {
+        std::cerr << "DmCreateCmdHandler: atleast 'name' MUST be provided for target device";
+        return -EINVAL;
+    }
+
+    std::string name = argv[0];
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.DeleteDevice(name)) {
+        std::cerr << "DmCreateCmdHandler: Failed to create " << name << " device";
+        return -EIO;
     }
 
     return 0;
@@ -94,7 +90,7 @@ static int DmListCmdHandler(int /* argc */, char** /* argv */) {
     DeviceMapper& dm = DeviceMapper::Instance();
     std::vector<DmTarget> targets;
     if (!dm.GetAvailableTargets(&targets)) {
-        std::cerr << "Failed to read available device mapper targets";
+        std::cerr << "Failed to read available device mapper targets" << std::endl;
         return -errno;
     }
 
