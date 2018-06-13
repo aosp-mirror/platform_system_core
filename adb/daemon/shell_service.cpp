@@ -98,6 +98,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <private/android_logger.h>
+#include <selinux/android.h>
 
 #include "adb.h"
 #include "adb_io.h"
@@ -342,6 +343,24 @@ bool Subprocess::ForkAndExec(std::string* error) {
             TEMP_FAILURE_RETRY(
                 adb_write(oom_score_adj_fd, oom_score_adj_value, strlen(oom_score_adj_value)));
         }
+
+#ifdef __ANDROID_RECOVERY__
+        // Special routine for recovery. Switch to shell domain when adbd is
+        // is running with dropped privileged (i.e. not running as root) and
+        // is built for the recovery mode. This is required because recovery
+        // rootfs is not labeled and everything is labeled just as rootfs.
+        char* con = nullptr;
+        if (getcon(&con) == 0) {
+            if (!strcmp(con, "u:r:adbd:s0")) {
+                if (selinux_android_setcon("u:r:shell:s0") < 0) {
+                    LOG(FATAL) << "Could not set SELinux context for subprocess";
+                }
+            }
+            freecon(con);
+        } else {
+            LOG(FATAL) << "Failed to get SELinux context";
+        }
+#endif
 
         if (command_.empty()) {
             // Spawn a login shell if we don't have a command.

@@ -46,6 +46,7 @@ cc_defaults {
 cc_binary {
     name: "toolbox",
     defaults: ["toolbox_binary_defaults"],
+    recovery_available: true,
 }
 
 cc_binary {
