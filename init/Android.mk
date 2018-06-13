@@ -45,7 +45,6 @@ LOCAL_SRC_FILES := main.cpp
 
 LOCAL_MODULE:= init
 
-LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
@@ -59,24 +58,35 @@ LOCAL_STATIC_LIBRARIES := \
     libsquashfs_utils \
     liblogwrap \
     libext4_utils \
-    libcutils \
-    libbase \
-    libc \
     libseccomp_policy \
-    libselinux \
-    liblog \
     libcrypto_utils \
-    libcrypto \
-    libc++_static \
-    libdl \
     libsparse \
-    libz \
+    libselinux \
     libprocessgroup \
     libavb \
     libkeyutils \
     libprotobuf-cpp-lite \
     libpropertyinfoserializer \
     libpropertyinfoparser \
+
+shared_libs := \
+    libcutils \
+    libbase \
+    liblog \
+    libcrypto \
+    libdl \
+    libz \
+
+ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
+# init is static executable for non-system-as-root devices, because the dynamic linker
+# and shared libs are not available before /system is mounted, but init has to run
+# before the partition is mounted.
+LOCAL_STATIC_LIBRARIES += $(shared_libs) libc++_static
+LOCAL_FORCE_STATIC_EXECUTABLE := true
+else
+LOCAL_SHARED_LIBRARIES := $(shared_libs) libc++
+endif
+shared_libs :=
 
 LOCAL_REQUIRED_MODULES := \
     e2fsdroid \
