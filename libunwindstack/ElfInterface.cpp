@@ -124,10 +124,10 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
 }
 
 template <typename AddressType>
-void ElfInterface::InitHeadersWithTemplate() {
+void ElfInterface::InitHeadersWithTemplate(uint64_t load_bias) {
   if (eh_frame_hdr_offset_ != 0) {
     eh_frame_.reset(new DwarfEhFrameWithHdr<AddressType>(memory_));
-    if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_)) {
+    if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_, load_bias)) {
       eh_frame_.reset(nullptr);
     }
   }
@@ -136,7 +136,7 @@ void ElfInterface::InitHeadersWithTemplate() {
     // If there is an eh_frame section without an eh_frame_hdr section,
     // or using the frame hdr object failed to init.
     eh_frame_.reset(new DwarfEhFrame<AddressType>(memory_));
-    if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_)) {
+    if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_, load_bias)) {
       eh_frame_.reset(nullptr);
     }
   }
@@ -150,7 +150,7 @@ void ElfInterface::InitHeadersWithTemplate() {
 
   if (debug_frame_offset_ != 0) {
     debug_frame_.reset(new DwarfDebugFrame<AddressType>(memory_));
-    if (!debug_frame_->Init(debug_frame_offset_, debug_frame_size_)) {
+    if (!debug_frame_->Init(debug_frame_offset_, debug_frame_size_, load_bias)) {
       debug_frame_.reset(nullptr);
       debug_frame_offset_ = 0;
       debug_frame_size_ = static_cast<uint64_t>(-1);
@@ -441,14 +441,14 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
 }
 
 template <typename SymType>
-bool ElfInterface::GetFunctionNameWithTemplate(uint64_t addr, uint64_t load_bias, std::string* name,
+bool ElfInterface::GetFunctionNameWithTemplate(uint64_t addr, std::string* name,
                                                uint64_t* func_offset) {
   if (symbols_.empty()) {
     return false;
   }
 
   for (const auto symbol : symbols_) {
-    if (symbol->GetName<SymType>(addr, load_bias, memory_, name, func_offset)) {
+    if (symbol->GetName<SymType>(addr, memory_, name, func_offset)) {
       return true;
     }
   }
@@ -469,34 +469,25 @@ bool ElfInterface::GetGlobalVariableWithTemplate(const std::string& name, uint64
   return false;
 }
 
-bool ElfInterface::Step(uint64_t pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
-                        bool* finished) {
+bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
-
-  // Adjust the load bias to get the real relative pc.
-  if (pc < load_bias) {
-    last_error_.code = ERROR_UNWIND_INFO;
-    return false;
-  }
-  uint64_t adjusted_pc = pc - load_bias;
 
   // Try the debug_frame first since it contains the most specific unwind
   // information.
   DwarfSection* debug_frame = debug_frame_.get();
-  if (debug_frame != nullptr && debug_frame->Step(adjusted_pc, regs, process_memory, finished)) {
+  if (debug_frame != nullptr && debug_frame->Step(pc, regs, process_memory, finished)) {
     return true;
   }
 
   // Try the eh_frame next.
   DwarfSection* eh_frame = eh_frame_.get();
-  if (eh_frame != nullptr && eh_frame->Step(adjusted_pc, regs, process_memory, finished)) {
+  if (eh_frame != nullptr && eh_frame->Step(pc, regs, process_memory, finished)) {
     return true;
   }
 
-  // Finally try the gnu_debugdata interface, but always use a zero load bias.
   if (gnu_debugdata_interface_ != nullptr &&
-      gnu_debugdata_interface_->Step(pc, 0, regs, process_memory, finished)) {
+      gnu_debugdata_interface_->Step(pc, regs, process_memory, finished)) {
     return true;
   }
 
@@ -559,8 +550,8 @@ void ElfInterface::GetMaxSizeWithTemplate(Memory* memory, uint64_t* size) {
 }
 
 // Instantiate all of the needed template functions.
-template void ElfInterface::InitHeadersWithTemplate<uint32_t>();
-template void ElfInterface::InitHeadersWithTemplate<uint64_t>();
+template void ElfInterface::InitHeadersWithTemplate<uint32_t>(uint64_t);
+template void ElfInterface::InitHeadersWithTemplate<uint64_t>(uint64_t);
 
 template bool ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(uint64_t*);
 template bool ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(uint64_t*);
@@ -574,9 +565,9 @@ template bool ElfInterface::ReadSectionHeaders<Elf64_Ehdr, Elf64_Shdr>(const Elf
 template bool ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(std::string*);
 template bool ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(std::string*);
 
-template bool ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(uint64_t, uint64_t, std::string*,
+template bool ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(uint64_t, std::string*,
                                                                    uint64_t*);
-template bool ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(uint64_t, uint64_t, std::string*,
+template bool ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(uint64_t, std::string*,
                                                                    uint64_t*);
 
 template bool ElfInterface::GetGlobalVariableWithTemplate<Elf32_Sym>(const std::string&, uint64_t*);
