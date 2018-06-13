@@ -26,7 +26,6 @@ cc_defaults {
         "toolbox.c",
         "getevent.c",
         "getprop.cpp",
-        "newfs_msdos.c",
     ],
     generated_headers: [
         "toolbox_input_labels",
@@ -39,7 +38,6 @@ cc_defaults {
     symlinks: [
         "getevent",
         "getprop",
-        "newfs_msdos",
     ],
 }
 
@@ -60,11 +58,4 @@ cc_binary {
     name: "r",
     defaults: ["toolbox_defaults"],
     srcs: ["r.c"],
-}
-
-cc_binary_host {
-    name: "newfs_msdos",
-    defaults: ["toolbox_defaults"],
-    srcs: ["newfs_msdos.c"],
-    cflags: ["-Dnewfs_msdos_main=main"]
 }
