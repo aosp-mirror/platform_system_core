@@ -67,13 +67,13 @@ class ElfInterfaceFake : public ElfInterface {
   virtual ~ElfInterfaceFake() = default;
 
   bool Init(uint64_t*) override { return false; }
-  void InitHeaders() override {}
+  void InitHeaders(uint64_t) override {}
   bool GetSoname(std::string*) override { return false; }
 
-  bool GetFunctionName(uint64_t, uint64_t, std::string*, uint64_t*) override;
+  bool GetFunctionName(uint64_t, std::string*, uint64_t*) override;
   bool GetGlobalVariable(const std::string&, uint64_t*) override;
 
-  bool Step(uint64_t, uint64_t, Regs*, Memory*, bool*) override;
+  bool Step(uint64_t, Regs*, Memory*, bool*) override;
 
   void FakeSetGlobalVariable(const std::string& global, uint64_t offset) {
     globals_[global] = offset;

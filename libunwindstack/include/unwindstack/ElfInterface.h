@@ -54,17 +54,15 @@ class ElfInterface {
 
   virtual bool Init(uint64_t* load_bias) = 0;
 
-  virtual void InitHeaders() = 0;
+  virtual void InitHeaders(uint64_t load_bias) = 0;
 
   virtual bool GetSoname(std::string* name) = 0;
 
-  virtual bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
-                               uint64_t* offset) = 0;
+  virtual bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* offset) = 0;
 
   virtual bool GetGlobalVariable(const std::string& name, uint64_t* memory_address) = 0;
 
-  virtual bool Step(uint64_t rel_pc, uint64_t load_bias, Regs* regs, Memory* process_memory,
-                    bool* finished);
+  virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
 
   virtual bool IsValidPc(uint64_t pc);
 
@@ -100,7 +98,7 @@ class ElfInterface {
 
  protected:
   template <typename AddressType>
-  void InitHeadersWithTemplate();
+  void InitHeadersWithTemplate(uint64_t load_bias);
 
   template <typename EhdrType, typename PhdrType, typename ShdrType>
   bool ReadAllHeaders(uint64_t* load_bias);
@@ -115,8 +113,7 @@ class ElfInterface {
   bool GetSonameWithTemplate(std::string* soname);
 
   template <typename SymType>
-  bool GetFunctionNameWithTemplate(uint64_t addr, uint64_t load_bias, std::string* name,
-                                   uint64_t* func_offset);
+  bool GetFunctionNameWithTemplate(uint64_t addr, std::string* name, uint64_t* func_offset);
 
   template <typename SymType>
   bool GetGlobalVariableWithTemplate(const std::string& name, uint64_t* memory_address);
@@ -169,15 +166,16 @@ class ElfInterface32 : public ElfInterface {
     return ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(load_bias);
   }
 
-  void InitHeaders() override { ElfInterface::InitHeadersWithTemplate<uint32_t>(); }
+  void InitHeaders(uint64_t load_bias) override {
+    ElfInterface::InitHeadersWithTemplate<uint32_t>(load_bias);
+  }
 
   bool GetSoname(std::string* soname) override {
     return ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(soname);
   }
 
-  bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
-                       uint64_t* func_offset) override {
-    return ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(addr, load_bias, name, func_offset);
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
+    return ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(addr, name, func_offset);
   }
 
   bool GetGlobalVariable(const std::string& name, uint64_t* memory_address) override {
@@ -198,15 +196,16 @@ class ElfInterface64 : public ElfInterface {
     return ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(load_bias);
   }
 
-  void InitHeaders() override { ElfInterface::InitHeadersWithTemplate<uint64_t>(); }
+  void InitHeaders(uint64_t load_bias) override {
+    ElfInterface::InitHeadersWithTemplate<uint64_t>(load_bias);
+  }
 
   bool GetSoname(std::string* soname) override {
     return ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(soname);
   }
 
-  bool GetFunctionName(uint64_t addr, uint64_t load_bias, std::string* name,
-                       uint64_t* func_offset) override {
-    return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, load_bias, name, func_offset);
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) override {
+    return ElfInterface::GetFunctionNameWithTemplate<Elf64_Sym>(addr, name, func_offset);
   }
 
   bool GetGlobalVariable(const std::string& name, uint64_t* memory_address) override {

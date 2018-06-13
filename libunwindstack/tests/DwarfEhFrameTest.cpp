@@ -103,7 +103,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init32) {
   this->memory_.SetData32(0x5508, 0x4500);
   this->memory_.SetData32(0x550c, 0x500);
 
-  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x600, 0));
   ASSERT_EQ(4U, this->eh_frame_->TestGetFdeCount());
 
   typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
@@ -142,7 +142,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init32_fde_not_following_cie) {
   this->memory_.SetData32(0x5108, 0x1500);
   this->memory_.SetData32(0x510c, 0x200);
 
-  ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600, 0));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->LastErrorCode());
 }
 
@@ -187,7 +187,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init64) {
   this->memory_.SetData64(0x5514, 0x4500);
   this->memory_.SetData64(0x551c, 0x500);
 
-  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x600, 0));
   ASSERT_EQ(4U, this->eh_frame_->TestGetFdeCount());
 
   typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
@@ -228,8 +228,46 @@ TYPED_TEST_P(DwarfEhFrameTest, Init64_fde_not_following_cie) {
   this->memory_.SetData64(0x5114, 0x1500);
   this->memory_.SetData64(0x511c, 0x200);
 
-  ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600));
+  ASSERT_FALSE(this->eh_frame_->Init(0x5000, 0x600, 0));
   ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->LastErrorCode());
+}
+
+TYPED_TEST_P(DwarfEhFrameTest, Init_non_zero_load_bias) {
+  // CIE 32 information.
+  this->memory_.SetData32(0x5000, 0xfc);
+  this->memory_.SetData32(0x5004, 0);
+  this->memory_.SetData8(0x5008, 1);
+  this->memory_.SetData8(0x5009, 'z');
+  this->memory_.SetData8(0x500a, 'R');
+  this->memory_.SetData8(0x500b, '\0');
+  this->memory_.SetData8(0x500c, 0);
+  this->memory_.SetData8(0x500d, 0);
+  this->memory_.SetData8(0x500e, 0);
+  this->memory_.SetData8(0x500f, 0);
+  this->memory_.SetData8(0x5010, 0x1b);
+
+  // FDE 32 information.
+  this->memory_.SetData32(0x5100, 0xfc);
+  this->memory_.SetData32(0x5104, 0x104);
+  this->memory_.SetData32(0x5108, 0x1500);
+  this->memory_.SetData32(0x510c, 0x200);
+  this->memory_.SetData8(0x5110, 0);
+  this->memory_.SetData8(0x5111, 0);
+
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200, 0x2000));
+  ASSERT_EQ(1U, this->eh_frame_->TestGetFdeCount());
+
+  typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
+
+  this->eh_frame_->TestGetFdeInfo(0, &info);
+  EXPECT_EQ(0x5100U, info.offset);
+  EXPECT_EQ(0x8608U, info.start);
+  EXPECT_EQ(0x8808U, info.end);
+
+  const DwarfFde* fde = this->eh_frame_->GetFdeFromPc(0x8700);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x8608U, fde->pc_start);
+  EXPECT_EQ(0x8808U, fde->pc_end);
 }
 
 TYPED_TEST_P(DwarfEhFrameTest, Init_version1) {
@@ -256,7 +294,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init_version1) {
   this->memory_.SetData16(0x5108, 0x1500);
   this->memory_.SetData16(0x510a, 0x200);
 
-  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200));
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200, 0));
   ASSERT_EQ(1U, this->eh_frame_->TestGetFdeCount());
 
   typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
@@ -299,7 +337,7 @@ TYPED_TEST_P(DwarfEhFrameTest, Init_version4) {
   this->memory_.SetData16(0x5108, 0x1500);
   this->memory_.SetData16(0x510a, 0x200);
 
-  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200));
+  ASSERT_TRUE(this->eh_frame_->Init(0x5000, 0x200, 0));
   ASSERT_EQ(1U, this->eh_frame_->TestGetFdeCount());
 
   typename DwarfEhFrame<TypeParam>::FdeInfo info(0, 0, 0);
@@ -450,8 +488,8 @@ TYPED_TEST_P(DwarfEhFrameTest, GetCieFde64) {
 }
 
 REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameTest, Init32, Init32_fde_not_following_cie, Init64,
-                           Init64_fde_not_following_cie, Init_version1, Init_version4,
-                           GetFdeOffsetFromPc, GetCieFde32, GetCieFde64);
+                           Init64_fde_not_following_cie, Init_non_zero_load_bias, Init_version1,
+                           Init_version4, GetFdeOffsetFromPc, GetCieFde32, GetCieFde64);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(, DwarfEhFrameTest, DwarfEhFrameTestTypes);

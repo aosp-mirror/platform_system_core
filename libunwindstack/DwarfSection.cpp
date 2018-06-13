@@ -420,6 +420,7 @@ bool DwarfSectionImpl<AddressType>::FillInCie(DwarfCie* cie) {
           last_error_.address = memory_.cur_offset();
           return false;
         }
+        memory_.set_pc_offset(pc_offset_);
         if (!memory_.ReadEncodedValue<AddressType>(encoding, &cie->personality_handler)) {
           last_error_.code = DWARF_ERROR_MEMORY_INVALID;
           last_error_.address = memory_.cur_offset();
@@ -521,19 +522,19 @@ bool DwarfSectionImpl<AddressType>::FillInFde(DwarfFde* fde) {
   }
   memory_.set_cur_offset(cur_offset);
 
-  if (!memory_.ReadEncodedValue<AddressType>(cie->fde_address_encoding & 0xf, &fde->pc_start)) {
-    last_error_.code = DWARF_ERROR_MEMORY_INVALID;
-    last_error_.address = memory_.cur_offset();
-    return false;
-  }
+  // The load bias only applies to the start.
+  memory_.set_pc_offset(load_bias_);
+  bool valid = memory_.ReadEncodedValue<AddressType>(cie->fde_address_encoding, &fde->pc_start);
   fde->pc_start = AdjustPcFromFde(fde->pc_start);
 
-  if (!memory_.ReadEncodedValue<AddressType>(cie->fde_address_encoding & 0xf, &fde->pc_end)) {
+  memory_.set_pc_offset(0);
+  if (!valid || !memory_.ReadEncodedValue<AddressType>(cie->fde_address_encoding, &fde->pc_end)) {
     last_error_.code = DWARF_ERROR_MEMORY_INVALID;
     last_error_.address = memory_.cur_offset();
     return false;
   }
   fde->pc_end += fde->pc_start;
+
   if (cie->augmentation_string.size() > 0 && cie->augmentation_string[0] == 'z') {
     // Augmentation Size
     uint64_t aug_length;
@@ -544,6 +545,7 @@ bool DwarfSectionImpl<AddressType>::FillInFde(DwarfFde* fde) {
     }
     uint64_t cur_offset = memory_.cur_offset();
 
+    memory_.set_pc_offset(pc_offset_);
     if (!memory_.ReadEncodedValue<AddressType>(cie->lsda_encoding, &fde->lsda_address)) {
       last_error_.code = DWARF_ERROR_MEMORY_INVALID;
       last_error_.address = memory_.cur_offset();
@@ -582,17 +584,16 @@ bool DwarfSectionImpl<AddressType>::GetCfaLocationInfo(uint64_t pc, const DwarfF
 }
 
 template <typename AddressType>
-bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, uint64_t load_bias,
-                                        const DwarfFde* fde) {
+bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, const DwarfFde* fde) {
   DwarfCfa<AddressType> cfa(&memory_, fde);
 
   // Always print the cie information.
   const DwarfCie* cie = fde->cie;
-  if (!cfa.Log(indent, pc, load_bias, cie->cfa_instructions_offset, cie->cfa_instructions_end)) {
+  if (!cfa.Log(indent, pc, cie->cfa_instructions_offset, cie->cfa_instructions_end)) {
     last_error_ = cfa.last_error();
     return false;
   }
-  if (!cfa.Log(indent, pc, load_bias, fde->cfa_instructions_offset, fde->cfa_instructions_end)) {
+  if (!cfa.Log(indent, pc, fde->cfa_instructions_offset, fde->cfa_instructions_end)) {
     last_error_ = cfa.last_error();
     return false;
   }
@@ -600,15 +601,16 @@ bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, uint64_t lo
 }
 
 template <typename AddressType>
-bool DwarfSectionImpl<AddressType>::Init(uint64_t offset, uint64_t size) {
+bool DwarfSectionImpl<AddressType>::Init(uint64_t offset, uint64_t size, uint64_t load_bias) {
+  load_bias_ = load_bias;
   entries_offset_ = offset;
   entries_end_ = offset + size;
 
   memory_.clear_func_offset();
   memory_.clear_text_offset();
-  memory_.set_data_offset(offset);
   memory_.set_cur_offset(offset);
-  memory_.set_pc_offset(offset);
+  memory_.set_data_offset(offset);
+  pc_offset_ = offset;
 
   return CreateSortedFdeList();
 }
@@ -717,6 +719,7 @@ bool DwarfSectionImpl<AddressType>::GetCieInfo(uint8_t* segment_size, uint8_t* e
         return false;
       }
       uint64_t value;
+      memory_.set_pc_offset(pc_offset_);
       if (!memory_.template ReadEncodedValue<AddressType>(encoding, &value)) {
         last_error_.code = DWARF_ERROR_MEMORY_INVALID;
         last_error_.address = memory_.cur_offset();
@@ -737,15 +740,13 @@ bool DwarfSectionImpl<AddressType>::AddFdeInfo(uint64_t entry_offset, uint8_t se
   }
 
   uint64_t start;
-  if (!memory_.template ReadEncodedValue<AddressType>(encoding & 0xf, &start)) {
-    last_error_.code = DWARF_ERROR_MEMORY_INVALID;
-    last_error_.address = memory_.cur_offset();
-    return false;
-  }
+  memory_.set_pc_offset(load_bias_);
+  bool valid = memory_.template ReadEncodedValue<AddressType>(encoding, &start);
   start = AdjustPcFromFde(start);
 
   uint64_t length;
-  if (!memory_.template ReadEncodedValue<AddressType>(encoding & 0xf, &length)) {
+  memory_.set_pc_offset(0);
+  if (!valid || !memory_.template ReadEncodedValue<AddressType>(encoding, &length)) {
     last_error_.code = DWARF_ERROR_MEMORY_INVALID;
     last_error_.address = memory_.cur_offset();
     return false;
@@ -877,7 +878,7 @@ bool DwarfSectionImpl<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t* fd
   while (first < last) {
     size_t current = (first + last) / 2;
     const FdeInfo* info = &fdes_[current];
-    if (pc >= info->start && pc <= info->end) {
+    if (pc >= info->start && pc < info->end) {
       *fde_offset = info->offset;
       return true;
     }
