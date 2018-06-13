@@ -20,6 +20,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
+#include <linux/kdev_t.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
 #include <memory>
@@ -43,6 +45,28 @@ enum class DmDeviceState { INVALID, SUSPENDED, ACTIVE };
 
 class DeviceMapper final {
   public:
+    class DmBlockDevice final {
+      public:
+        // only allow creating this with dm_name_list
+        DmBlockDevice() = delete;
+
+        explicit DmBlockDevice(struct dm_name_list* d) : name_(d->name), dev_(d->dev){};
+
+        // Returs device mapper name associated with the block device
+        const std::string& name() const { return name_; }
+
+        // Return major number for the block device
+        uint32_t Major() const { return major(dev_); }
+
+        // Return minor number for the block device
+        uint32_t Minor() const { return minor(dev_); }
+        ~DmBlockDevice() = default;
+
+      private:
+        std::string name_;
+        uint64_t dev_;
+    };
+
     // Creates a device mapper device with given name.
     // Return 'true' on success and 'false' on failure to
     // create OR if a device mapper device with the same name already
@@ -74,6 +98,12 @@ class DeviceMapper final {
     // successfully read and stored in 'targets'. Returns 'false' otherwise.
     bool GetAvailableTargets(std::vector<DmTarget>* targets);
 
+    // Return 'true' if it can successfully read the list of device mapper block devices
+    // currently created. 'devices' will be empty if the kernel interactions
+    // were successful and there are no block devices at the moment. Returns
+    // 'false' in case of any failure along the way.
+    bool GetAvailableDevices(std::vector<DmBlockDevice>* devices);
+
     // Returns the path to the device mapper device node in '/dev' corresponding to
     // 'name'.
     std::string GetDmDevicePathByName(const std::string& name);
@@ -92,6 +122,12 @@ class DeviceMapper final {
     // This is only used to read the list of targets from kernel so we allocate
     // a finite amount of memory. This limit is in no way enforced by the kernel.
     static constexpr uint32_t kMaxPossibleDmTargets = 256;
+
+    // Maximum possible device mapper created block devices. Note that this is restricted by
+    // the minor numbers (that used to be 8 bits) that can be range from 0 to 2^20-1 in newer
+    // kernels. In Android systems however, we never expect these to grow beyond the artificial
+    // limit we are imposing here of 256.
+    static constexpr uint32_t kMaxPossibleDmDevices = 256;
 
     void InitIo(struct dm_ioctl* io, const std::string& name = std::string()) const;
 

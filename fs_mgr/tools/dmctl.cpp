@@ -35,13 +35,14 @@
 
 using DeviceMapper = ::android::dm::DeviceMapper;
 using DmTarget = ::android::dm::DmTarget;
+using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
     std::cerr << "usage: dmctl <command> [command options]";
     std::cerr << "commands:";
     std::cerr << "  create <dm-name> [dm-target> [-lo <filename>] <dm-target-args>]";
     std::cerr, "  delete <dm-name>";
-    std::cerr, "  list";
+    std::cerr, "  list <devices | targets>";
     std::cerr, "  help";
     return -EINVAL;
 }
@@ -84,16 +85,14 @@ static int DmDeleteCmdHandler(int argc, char** argv) {
     return 0;
 }
 
-static int DmListCmdHandler(int /* argc */, char** /* argv */) {
-    std::cout << "Available Device Mapper Targets:" << std::endl;
-
-    DeviceMapper& dm = DeviceMapper::Instance();
+static int DmListTargets(DeviceMapper& dm) {
     std::vector<DmTarget> targets;
     if (!dm.GetAvailableTargets(&targets)) {
         std::cerr << "Failed to read available device mapper targets" << std::endl;
         return -errno;
     }
 
+    std::cout << "Available Device Mapper Targets:" << std::endl;
     if (targets.empty()) {
         std::cout << "  <empty>" << std::endl;
         return 0;
@@ -105,6 +104,46 @@ static int DmListCmdHandler(int /* argc */, char** /* argv */) {
     }
 
     return 0;
+}
+
+static int DmListDevices(DeviceMapper& dm) {
+    std::vector<DmBlockDevice> devices;
+    if (!dm.GetAvailableDevices(&devices)) {
+        std::cerr << "Failed to read available device mapper devices" << std::endl;
+        return -errno;
+    }
+    std::cout << "Available Device Mapper Devices:" << std::endl;
+    if (devices.empty()) {
+        std::cout << "  <empty>" << std::endl;
+        return 0;
+    }
+
+    for (const auto& dev : devices) {
+        std::cout << std::left << std::setw(20) << dev.name() << " : " << dev.Major() << ":"
+                  << dev.Minor() << std::endl;
+    }
+
+    return 0;
+}
+
+static const std::map<std::string, std::function<int(DeviceMapper&)>> listmap = {
+        {"targets", DmListTargets},
+        {"devices", DmListDevices},
+};
+
+static int DmListCmdHandler(int argc, char** argv) {
+    if (argc < 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    for (const auto& l : listmap) {
+        if (l.first == argv[0]) return l.second(dm);
+    }
+
+    std::cerr << "Invalid argument to \'dmctl list\': " << argv[0] << std::endl;
+    return -EINVAL;
 }
 
 static int HelpCmdHandler(int /* argc */, char** /* argv */) {

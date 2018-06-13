@@ -182,6 +182,69 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
     return true;
 }
 
+bool DeviceMapper::GetAvailableDevices(std::vector<DmBlockDevice>* devices) {
+    devices->clear();
+
+    // calculate the space needed to read a maximum of 256 targets, each with
+    // name with maximum length of 16 bytes
+    uint32_t payload_size = sizeof(struct dm_name_list);
+    // 128-bytes for the name
+    payload_size += DM_NAME_LEN;
+    // dm wants every device spec to be aligned at 8-byte boundary
+    payload_size = DM_ALIGN(payload_size);
+    payload_size *= kMaxPossibleDmDevices;
+    uint32_t data_size = sizeof(struct dm_ioctl) + payload_size;
+    auto buffer = std::unique_ptr<void, void (*)(void*)>(calloc(1, data_size), free);
+    if (buffer == nullptr) {
+        LOG(ERROR) << "failed to allocate memory";
+        return false;
+    }
+
+    // Sets appropriate data size and data_start to make sure we tell kernel
+    // about the total size of the buffer we are passing and where to start
+    // writing the list of targets.
+    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(buffer.get());
+    InitIo(io);
+    io->data_size = data_size;
+    io->data_start = sizeof(*io);
+
+    if (ioctl(fd_, DM_LIST_DEVICES, io)) {
+        PLOG(ERROR) << "Failed to get DM_LIST_DEVICES from kernel";
+        return false;
+    }
+
+    // If the provided buffer wasn't enough to list all devices any data
+    // beyond sizeof(*io) must not be read.
+    if (io->flags & DM_BUFFER_FULL_FLAG) {
+        LOG(INFO) << data_size << " is not enough memory to list all dm devices";
+        return false;
+    }
+
+    // if there are no devices created yet, return success with empty vector
+    if (io->data_size == sizeof(*io)) {
+        return true;
+    }
+
+    // Parse each device and add a new DmBlockDevice to the vector
+    // created from the kernel data.
+    uint32_t next = sizeof(*io);
+    data_size = io->data_size - next;
+    struct dm_name_list* dm_dev =
+            reinterpret_cast<struct dm_name_list*>(static_cast<char*>(buffer.get()) + next);
+
+    while (next && data_size) {
+        devices->emplace_back((dm_dev));
+        if (dm_dev->next == 0) {
+            break;
+        }
+        next += dm_dev->next;
+        data_size -= dm_dev->next;
+        dm_dev = reinterpret_cast<struct dm_name_list*>(static_cast<char*>(buffer.get()) + next);
+    }
+
+    return true;
+}
+
 // Accepts a device mapper device name (like system_a, vendor_b etc) and
 // returns the path to it's device node (or symlink to the device node)
 std::string DeviceMapper::GetDmDevicePathByName(const std::string& /* name */) {
