@@ -927,27 +927,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         }
         android_logcat_pclose(&ctx, fp);
         static const char logcat_battery[] = "W/healthd (    0): battery l=";
-        const char* match = logcat_battery;
 
-        if (content == "") {
-          // Service logd.klog not running, go to smaller buffer in the kernel.
-          int rc = klogctl(KLOG_SIZE_BUFFER, nullptr, 0);
-          if (rc > 0) {
-            ssize_t len = rc + 1024;  // 1K Margin should it grow between calls.
-            std::unique_ptr<char[]> buf(new char[len]);
-            rc = klogctl(KLOG_READ_ALL, buf.get(), len);
-            if (rc < len) {
-              len = rc + 1;
-            }
-            buf[--len] = '\0';
-            content = buf.get();
-          }
-          match = battery;
-        }
-
-        pos = content.find(match);  // The first one it finds.
+        pos = content.find(logcat_battery);  // The first one it finds.
         if (pos != std::string::npos) {
-          digits = content.substr(pos + strlen(match), strlen("100 "));
+          digits = content.substr(pos + strlen(logcat_battery), strlen("100 "));
         }
         endptr = digits.c_str();
         level = 0;
