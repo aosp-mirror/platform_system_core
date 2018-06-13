@@ -115,11 +115,6 @@ static int drop_privs(bool klogd, bool auditd) {
         return -1;
     }
 
-    if (prctl(PR_SET_KEEPCAPS, 1) < 0) {
-        android::prdebug("failed to set PR_SET_KEEPCAPS");
-        if (!eng) return -1;
-    }
-
     std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(),
                                                              cap_free);
     if (cap_clear(caps.get()) < 0) return -1;
