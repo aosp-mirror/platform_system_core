@@ -23,6 +23,7 @@
 #include <sys/mount.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -96,9 +97,24 @@ std::string fs_mgr_get_context(const std::string& mount_point) {
     return "";
 }
 
+// At less than 1% free space return value of false,
+// means we will try to wrap with overlayfs.
+bool fs_mgr_filesystem_has_space(const char* mount_point) {
+    // If we have access issues to find out space remaining, return true
+    // to prevent us trying to override with overlayfs.
+    struct statvfs vst;
+    if (statvfs(mount_point, &vst)) return true;
+
+    static constexpr int percent = 1;  // 1%
+
+    return (vst.f_bfree >= (vst.f_blocks * percent / 100));
+}
+
 bool fs_mgr_overlayfs_enabled(const struct fstab_rec* fsrec) {
     // readonly filesystem, can not be mount -o remount,rw
-    return "squashfs"s == fsrec->fs_type;
+    // if squashfs or if free space is (near) zero making
+    // such a remount virtually useless.
+    return ("squashfs"s == fsrec->fs_type) || !fs_mgr_filesystem_has_space(fsrec->mount_point);
 }
 
 constexpr char upper_name[] = "upper";
