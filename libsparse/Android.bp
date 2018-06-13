@@ -6,11 +6,11 @@ cc_library {
     recovery_available: true,
     unique_host_soname: true,
     srcs: [
-        "backed_block.c",
-        "output_file.c",
-        "sparse.c",
-        "sparse_crc32.c",
-        "sparse_err.c",
+        "backed_block.cpp",
+        "output_file.cpp",
+        "sparse.cpp",
+        "sparse_crc32.cpp",
+        "sparse_err.cpp",
         "sparse_read.cpp",
     ],
     cflags: ["-Werror"],
@@ -31,8 +31,8 @@ cc_binary {
     name: "simg2img",
     host_supported: true,
     srcs: [
-        "simg2img.c",
-        "sparse_crc32.c",
+        "simg2img.cpp",
+        "sparse_crc32.cpp",
     ],
     static_libs: [
         "libsparse",
@@ -46,7 +46,7 @@ cc_binary {
 cc_binary {
     name: "img2simg",
     host_supported: true,
-    srcs: ["img2simg.c"],
+    srcs: ["img2simg.cpp"],
     static_libs: [
         "libsparse",
         "libz",
@@ -58,7 +58,7 @@ cc_binary {
 
 cc_binary_host {
     name: "append2simg",
-    srcs: ["append2simg.c"],
+    srcs: ["append2simg.cpp"],
     static_libs: [
         "libsparse",
         "libz",
