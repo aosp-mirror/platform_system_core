@@ -15,6 +15,35 @@
 #include <random>
 #include <unordered_map>
 
+/* These deprecated declarations were in the legacy android/sync.h. They've been removed to
+ * encourage code to move to the modern equivalents. But they are still implemented in libsync.so
+ * to avoid breaking existing binaries; as long as that's true we should keep testing them here.
+ * That means making local copies of the declarations.
+ */
+extern "C" {
+
+struct sync_fence_info_data {
+    uint32_t len;
+    char name[32];
+    int32_t status;
+    uint8_t pt_info[0];
+};
+
+struct sync_pt_info {
+    uint32_t len;
+    char obj_name[32];
+    char driver_name[32];
+    int32_t status;
+    uint64_t timestamp_ns;
+    uint8_t driver_data[0];
+};
+
+struct sync_fence_info_data* sync_fence_info(int fd);
+struct sync_pt_info* sync_pt_info(struct sync_fence_info_data* info, struct sync_pt_info* itr);
+void sync_fence_info_free(struct sync_fence_info_data* info);
+
+}  // extern "C"
+
 // TODO: better stress tests?
 // Handle more than 64 fd's simultaneously, i.e. fix sync_fence_info's 4k limit.
 // Handle wraparound in timelines like nvidia.
