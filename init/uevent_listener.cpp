@@ -23,11 +23,7 @@
 
 #include <memory>
 
-#include <android-base/chrono_utils.h>
-#include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/scopeguard.h>
-#include <android-base/stringprintf.h>
 #include <cutils/uevent.h>
 
 namespace android {
@@ -134,18 +130,8 @@ ListenerAction UeventListener::RegenerateUeventsForDir(DIR* d,
 
     int fd = openat(dfd, "uevent", O_WRONLY);
     if (fd >= 0) {
-        android::base::Timer t;
         write(fd, "add\n", 4);
-        const std::string fd_path = android::base::StringPrintf("/proc/self/fd/%d", fd);
-        std::string uevent_file_path;
-        android::base::Readlink(fd_path, &uevent_file_path);
         close(fd);
-
-        auto guard = android::base::make_scope_guard([&t, &uevent_file_path]() {
-            if (t.duration() > 50ms) {
-                LOG(WARNING) << "ReadUevent took " << t << " on '" << uevent_file_path << "'";
-            }
-        });
 
         Uevent uevent;
         while (ReadUevent(&uevent)) {
