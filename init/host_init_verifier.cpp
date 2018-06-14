@@ -102,6 +102,14 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
         }
     }
 
+    unsigned int oem_uid;
+    if (sscanf(login, "oem_%u", &oem_uid) == 1) {
+        snprintf(static_name, sizeof(static_name), "%s", login);
+        static_passwd.pw_uid = oem_uid;
+        static_passwd.pw_gid = oem_uid;
+        return &static_passwd;
+    }
+
     errno = ENOENT;
     return nullptr;
 }
