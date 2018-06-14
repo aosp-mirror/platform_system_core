@@ -47,6 +47,7 @@ cc_library_shared {
 cc_library_static {
     name: "libtombstoned_client_static",
     defaults: ["debuggerd_defaults"],
+    recovery_available: true,
     srcs: [
         "tombstoned/tombstoned_client.cpp",
         "util.cpp",
@@ -90,7 +91,6 @@ cc_library_static {
 cc_library_static {
     name: "libdebuggerd_handler",
     defaults: ["debuggerd_defaults"],
-    recovery_available: true,
     srcs: ["handler/debuggerd_fallback_nop.cpp"],
 
     whole_static_libs: [
@@ -104,6 +104,7 @@ cc_library_static {
 cc_library_static {
     name: "libdebuggerd_handler_fallback",
     defaults: ["debuggerd_defaults"],
+    recovery_available: true,
     srcs: [
         "handler/debuggerd_fallback.cpp",
     ],
@@ -120,6 +121,12 @@ cc_library_static {
         "liblzma",
         "libcutils",
     ],
+    target: {
+        recovery: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            exclude_static_libs: ["libdexfile"],
+        },
+    },
 
     export_include_dirs: ["include"],
 }

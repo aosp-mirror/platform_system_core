@@ -12,10 +12,13 @@ phony {
         "mkshrc_vendor",
         "reboot",
         "sh",
+        "sh.recovery",
         "sh_vendor",
         "toolbox",
+        "toolbox.recovery",
         "toolbox_vendor",
         "toybox",
+        "toybox.recovery",
         "toybox_vendor",
     ],
 }
