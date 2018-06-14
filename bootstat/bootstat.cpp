@@ -43,7 +43,6 @@
 #include <android/log.h>
 #include <cutils/android_reboot.h>
 #include <cutils/properties.h>
-#include <log/logcat.h>
 #include <metricslogger/metrics_logger.h>
 
 #include "boot_event_record_store.h"
@@ -870,86 +869,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       }
     }
 
-    // The following battery test should migrate to a default system health HAL
-
-    // Let us not worry if the reboot command was issued, for the cases of
-    // reboot -p, reboot <no reason>, reboot cold, reboot warm and reboot hard.
-    // Same for bootloader and ro.boot.bootreasons of this set, but a dead
-    // battery could conceivably lead to these, so worthy of override.
-    if (isBluntRebootReason(ret)) {
-      // Heuristic to determine if shutdown possibly because of a dead battery?
-      // Really a hail-mary pass to find it in last klog content ...
-      static const int battery_dead_threshold = 2;  // percent
-      static const char battery[] = "healthd: battery l=";
-      const pstoreConsole console(content);
-      size_t pos = console.rfind(battery);  // last one
-      std::string digits;
-      if (pos != std::string::npos) {
-        digits = content.substr(pos + strlen(battery), strlen("100 "));
-        // correct common errors
-        correctForBitError(digits, "100 ");
-        if (digits[0] == '!') digits[0] = '1';
-        if (digits[1] == '!') digits[1] = '1';
-      }
-      const char* endptr = digits.c_str();
-      unsigned level = 0;
-      while (::isdigit(*endptr)) {
-        level *= 10;
-        level += *endptr++ - '0';
-        // make sure no leading zeros, except zero itself, and range check.
-        if ((level == 0) || (level > 100)) break;
-      }
-      // example bit error rate issues for 10%
-      //   'l=10 ' no bits in error
-      //   'l=00 ' single bit error (fails above)
-      //   'l=1  ' single bit error
-      //   'l=0  ' double bit error
-      // There are others, not typically critical because of 2%
-      // battery_dead_threshold. KISS check, make sure second
-      // character after digit sequence is not a space.
-      if ((level <= 100) && (endptr != digits.c_str()) && (endptr[0] == ' ') && (endptr[1] != ' ')) {
-        LOG(INFO) << "Battery level at shutdown " << level << "%";
-        if (level <= battery_dead_threshold) {
-          ret = "shutdown,battery";
-        }
-      } else {        // Most likely
-        digits = "";  // reset digits
-
-        // Content buffer no longer will have console data. Beware if more
-        // checks added below, that depend on parsing console content.
-        content = "";
-
-        LOG(DEBUG) << "Can not find last low battery in last console messages";
-        android_logcat_context ctx = create_android_logcat();
-        FILE* fp = android_logcat_popen(&ctx, "logcat -b kernel -v brief -d");
-        if (fp != nullptr) {
-          android::base::ReadFdToString(fileno(fp), &content);
-        }
-        android_logcat_pclose(&ctx, fp);
-        static const char logcat_battery[] = "W/healthd (    0): battery l=";
-
-        pos = content.find(logcat_battery);  // The first one it finds.
-        if (pos != std::string::npos) {
-          digits = content.substr(pos + strlen(logcat_battery), strlen("100 "));
-        }
-        endptr = digits.c_str();
-        level = 0;
-        while (::isdigit(*endptr)) {
-          level *= 10;
-          level += *endptr++ - '0';
-          // make sure no leading zeros, except zero itself, and range check.
-          if ((level == 0) || (level > 100)) break;
-        }
-        if ((level <= 100) && (endptr != digits.c_str()) && (*endptr == ' ')) {
-          LOG(INFO) << "Battery level at startup " << level << "%";
-          if (level <= battery_dead_threshold) {
-            ret = "shutdown,battery";
-          }
-        } else {
-          LOG(DEBUG) << "Can not find first battery level in dmesg or logcat";
-        }
-      }
-    }
+    // TODO: use the HAL to get battery level (http://b/77725702).
 
     // Is there a controlled shutdown hint in last_reboot_reason_property?
     if (isBluntRebootReason(ret)) {
