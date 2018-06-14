@@ -1136,8 +1136,7 @@ static int logcat(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    // No need for shell protocol with logcat, always disable for simplicity.
-    return send_shell_command(cmd, true);
+    return send_shell_command(cmd);
 }
 
 static void write_zeros(int bytes, int fd) {
@@ -1861,7 +1860,7 @@ static int uninstall_app(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(cmd, false);
+    return send_shell_command(cmd);
 }
 
 static int install_app(int argc, const char** argv) {
@@ -2049,7 +2048,7 @@ static int pm_command(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(cmd, false);
+    return send_shell_command(cmd);
 }
 
 static int uninstall_app_legacy(int argc, const char** argv) {
@@ -2073,7 +2072,7 @@ static int uninstall_app_legacy(int argc, const char** argv) {
 
 static int delete_file(const std::string& filename) {
     std::string cmd = "rm -f " + escape_arg(filename);
-    return send_shell_command(cmd, false);
+    return send_shell_command(cmd);
 }
 
 static int install_app_legacy(int argc, const char** argv) {
