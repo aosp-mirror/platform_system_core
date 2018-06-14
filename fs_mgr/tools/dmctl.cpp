@@ -38,12 +38,12 @@ using DmTarget = ::android::dm::DmTarget;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
-    std::cerr << "usage: dmctl <command> [command options]";
-    std::cerr << "commands:";
-    std::cerr << "  create <dm-name> [dm-target> [-lo <filename>] <dm-target-args>]";
-    std::cerr, "  delete <dm-name>";
-    std::cerr, "  list <devices | targets>";
-    std::cerr, "  help";
+    std::cerr << "usage: dmctl <command> [command options]" << std::endl;
+    std::cerr << "commands:" << std::endl;
+    std::cerr << "  create <dm-name> [<dm-target> [-lo <filename>] <dm-target-args>]" << std::endl;
+    std::cerr << "  delete <dm-name>" << std::endl;
+    std::cerr << "  list <devices | targets>" << std::endl;
+    std::cerr << "  help" << std::endl;
     return -EINVAL;
 }
 
