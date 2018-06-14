@@ -92,6 +92,7 @@ std::unique_ptr<LogicalPartitionTable> LoadPartitionsFromDeviceTree();
 //   /dev/block/dm-<name> where |name| is the partition name.
 //
 bool CreateLogicalPartitions(const LogicalPartitionTable& table);
+bool CreateLogicalPartitions(const std::string& block_device);
 
 }  // namespace fs_mgr
 }  // namespace android
