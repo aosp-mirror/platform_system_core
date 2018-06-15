@@ -19,21 +19,16 @@
 #include <string>
 #include <vector>
 
-#include "import_parser.h"
 #include "parser.h"
 
 namespace android {
 namespace init {
 
-class HostImportParser : public ImportParser {
+class HostImportParser : public SectionParser {
   public:
-    HostImportParser(const std::string& out_dir, Parser* parser)
-        : ImportParser(parser), out_dir_(out_dir) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-
-  private:
-    std::string out_dir_;
+    HostImportParser() {}
+    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string&, int) override;
+    Result<Success> ParseLineSection(std::vector<std::string>&&, int) override;
 };
 
 }  // namespace init

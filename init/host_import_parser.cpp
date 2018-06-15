@@ -23,22 +23,17 @@ using android::base::StartsWith;
 namespace android {
 namespace init {
 
-Result<Success> HostImportParser::ParseSection(std::vector<std::string>&& args,
-                                               const std::string& filename, int line) {
+Result<Success> HostImportParser::ParseSection(std::vector<std::string>&& args, const std::string&,
+                                               int) {
     if (args.size() != 2) {
         return Error() << "single argument needed for import\n";
     }
 
-    auto import_path = args[1];
+    return Success();
+}
 
-    if (StartsWith(import_path, "/system") || StartsWith(import_path, "/product") ||
-        StartsWith(import_path, "/odm") || StartsWith(import_path, "/vendor")) {
-        import_path = out_dir_ + "/" + import_path;
-    } else {
-        import_path = out_dir_ + "/root/" + import_path;
-    }
-
-    return ImportParser::ParseSection({"import", import_path}, filename, line);
+Result<Success> HostImportParser::ParseLineSection(std::vector<std::string>&&, int) {
+    return Error() << "Unexpected line found after import statement";
 }
 
 }  // namespace init
