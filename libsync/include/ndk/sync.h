@@ -32,8 +32,6 @@
 
 __BEGIN_DECLS
 
-#if __ANDROID_API__ >= __ANDROID_API_O__
-
 /* Fences indicate the status of an asynchronous task. They are initially
  * in unsignaled state (0), and make a one-time transition to either signaled
  * (1) or error (< 0) state. A sync file is a collection of one or more fences;
@@ -63,14 +61,14 @@ __BEGIN_DECLS
  * The original fences remain valid, and the caller is responsible for closing
  * them.
  */
-int32_t sync_merge(const char *name, int32_t fd1, int32_t fd2);
+int32_t sync_merge(const char* name, int32_t fd1, int32_t fd2) __INTRODUCED_IN(26);
 
 /**
  * Retrieve detailed information about a sync file and its fences.
  *
  * The returned sync_file_info must be freed by calling sync_file_info_free().
  */
-struct sync_file_info *sync_file_info(int32_t fd);
+struct sync_file_info* sync_file_info(int32_t fd) __INTRODUCED_IN(26);
 
 /**
  * Get the array of fence infos from the sync file's info.
@@ -88,9 +86,7 @@ static inline struct sync_fence_info* sync_get_fence_info(const struct sync_file
 }
 
 /** Free a struct sync_file_info structure */
-void sync_file_info_free(struct sync_file_info *info);
-
-#endif // __ANDROID_API__ >= __ANDROID_API_O__
+void sync_file_info_free(struct sync_file_info* info) __INTRODUCED_IN(26);
 
 __END_DECLS
 
