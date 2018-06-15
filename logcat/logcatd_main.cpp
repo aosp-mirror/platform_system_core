@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include <log/logcat.h>
+#include "logcat.h"
 
 int main(int argc, char** argv, char** envp) {
     android_logcat_context ctx = create_android_logcat();
