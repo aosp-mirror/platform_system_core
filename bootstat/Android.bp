@@ -64,7 +64,6 @@ cc_binary {
     defaults: ["bootstat_defaults"],
     static_libs: ["libbootstat"],
     shared_libs: [
-        "liblogcat",
         "libstatslog"
     ],
     init_rc: ["bootstat.rc"],
