@@ -53,7 +53,7 @@ bool Elf::Init(bool init_gnu_debugdata) {
 
   valid_ = interface_->Init(&load_bias_);
   if (valid_) {
-    interface_->InitHeaders();
+    interface_->InitHeaders(load_bias_);
     if (init_gnu_debugdata) {
       InitGnuDebugdata();
     } else {
@@ -83,7 +83,7 @@ void Elf::InitGnuDebugdata() {
   // is in the uncompressed data.
   uint64_t load_bias;
   if (gnu->Init(&load_bias)) {
-    gnu->InitHeaders();
+    gnu->InitHeaders(load_bias);
     interface_->SetGnuDebugdataInterface(gnu);
   } else {
     // Free all of the memory associated with the gnu_debugdata section.
@@ -103,9 +103,9 @@ uint64_t Elf::GetRelPc(uint64_t pc, const MapInfo* map_info) {
 
 bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
   std::lock_guard<std::mutex> guard(lock_);
-  return valid_ && (interface_->GetFunctionName(addr, load_bias_, name, func_offset) ||
-                    (gnu_debugdata_interface_ && gnu_debugdata_interface_->GetFunctionName(
-                                                     addr, load_bias_, name, func_offset)));
+  return valid_ && (interface_->GetFunctionName(addr, name, func_offset) ||
+                    (gnu_debugdata_interface_ &&
+                     gnu_debugdata_interface_->GetFunctionName(addr, name, func_offset)));
 }
 
 bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
@@ -174,7 +174,7 @@ bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, Regs* regs, Memory* pr
 
   // Lock during the step which can update information in the object.
   std::lock_guard<std::mutex> guard(lock_);
-  return interface_->Step(adjusted_rel_pc, load_bias_, regs, process_memory, finished);
+  return interface_->Step(adjusted_rel_pc, regs, process_memory, finished);
 }
 
 bool Elf::IsValidElf(Memory* memory) {
@@ -220,7 +220,6 @@ bool Elf::IsValidPc(uint64_t pc) {
   if (!valid_ || pc < load_bias_) {
     return false;
   }
-  pc -= load_bias_;
 
   if (interface_->IsValidPc(pc)) {
     return true;

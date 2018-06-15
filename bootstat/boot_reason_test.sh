@@ -480,23 +480,25 @@ properties test
 - (wait until screen is up, boot has completed)
 - adb shell getprop ro.boot.bootreason (bootloader reason)
 - adb shell getprop persist.sys.boot.reason (last reason)
+- adb shell getprop sys.boot.reason.last (last last reason)
 - adb shell getprop sys.boot.reason (system reason)
 - NB: all should have a value that is compliant with our known set." ]
 test_properties() {
   duration_test 1
   wait_for_screen
   retval=0
-  check_set="ro.boot.bootreason persist.sys.boot.reason sys.boot.reason"
+  check_set="ro.boot.bootreason sys.boot.reason.last sys.boot.reason"
   bootloader=""
   # NB: this test could fail if performed _after_ optional_factory_reset test
   # and will report
   #  ERROR: expected "reboot" got ""
-  #        for Android property persist.sys.boot.reason
+  #        for Android property sys.boot.reason.last
   # following is mitigation for the persist.sys.boot.reason, skip it
   if [ "reboot,factory_reset" = "`validate_property ro.boot_bootreason`" ]; then
     check_set="ro.boot.bootreason sys.boot.reason"
     bootloader="bootloader"
   fi
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   for prop in ${check_set}; do
     reason=`validate_property ${prop}`
     EXPECT_PROPERTY ${prop} ${reason} || retval=${?}
@@ -554,7 +556,8 @@ test_ota() {
   popd >&2
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason "\(reboot,ota\|bootloader\)"
-  EXPECT_PROPERTY persist.sys.boot.reason bootloader
+  EXPECT_PROPERTY sys.boot.reason.last bootloader
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,ota bootloader
 }
 
@@ -568,7 +571,8 @@ test_optional_ota() {
   adb reboot ota
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,ota
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,ota
+  EXPECT_PROPERTY sys.boot.reason.last reboot,ota
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,ota
 }
 
@@ -593,9 +597,15 @@ blind_reboot_test() {
   wait_for_screen
   bootloader_reason=`validate_property ro.boot.bootreason`
   EXPECT_PROPERTY ro.boot.bootreason ${bootloader_reason}
-  EXPECT_PROPERTY sys.boot.reason ${reason}
-  EXPECT_PROPERTY persist.sys.boot.reason ${reason}
-  report_bootstat_logs ${reason}
+  # to make sys.boot.reason report user friendly
+  reasons=${reason}
+  if [ "${bootloader_reason}" != "${reason}" -a -n "${bootloader_reason}" ]; then
+    reasons="\(${reason}\|${bootloader_reason}\)"
+  fi
+  EXPECT_PROPERTY sys.boot.reason ${reasons}
+  EXPECT_PROPERTY sys.boot.reason.last ${reason}
+  EXPECT_PROPERTY persist.sys.boot.reason ""
+  report_bootstat_logs ${reason} ${bootloader_reason}
 }
 
 [ "USAGE: test_cold
@@ -627,7 +637,8 @@ test_factory_reset() {
   adb reboot >&2
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
-  EXPECT_PROPERTY persist.sys.boot.reason "reboot,.*"
+  EXPECT_PROPERTY sys.boot.reason.last "reboot,.*"
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,factory_reset reboot, reboot,adb \
     "-bootstat: Failed to read /data/misc/bootstat/build_date: No such file or directory" \
     "-bootstat: Failed to parse boot time record: /data/misc/bootstat/build_date"
@@ -658,6 +669,7 @@ test_optional_factory_reset() {
   wait_for_screen
   ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
+  EXPECT_PROPERTY sys.boot.reason.last ""
   EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,factory_reset bootloader \
     "-bootstat: Failed to read /data/misc/bootstat/last_boot_time_utc: No such file or directory" \
@@ -731,7 +743,8 @@ test_battery() {
     )
 
   EXPECT_PROPERTY sys.boot.reason shutdown,battery
-  EXPECT_PROPERTY persist.sys.boot.reason cold
+  EXPECT_PROPERTY sys.boot.reason.last cold
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs shutdown,battery "-bootstat: Battery level at shutdown 2%"
   exitPstore
 }
@@ -752,7 +765,8 @@ test_optional_battery() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,battery
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,battery
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,battery
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs shutdown,battery
 }
 
@@ -772,7 +786,8 @@ test_optional_battery_thermal() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,thermal,battery
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,thermal,battery
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,thermal,battery
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs shutdown,thermal,battery
 }
 
@@ -808,7 +823,8 @@ test_kernel_panic() {
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
-  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs kernel_panic,sysrq
   exitPstore
 }
@@ -835,7 +851,8 @@ test_kernel_panic_subreason() {
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
-  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs kernel_panic,sysrq,test \
     "-bootstat: Unknown boot reason: kernel_panic,sysrq,test"
   exitPstore
@@ -865,7 +882,8 @@ test_kernel_panic_hung() {
   adb reboot warm
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
-  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs kernel_panic,hung
   exitPstore
 }
@@ -897,7 +915,8 @@ test_thermal_shutdown() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,thermal
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,thermal
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,thermal
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs shutdown,thermal
 }
 
@@ -917,7 +936,8 @@ test_userrequested_shutdown() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,userrequested
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,userrequested
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,userrequested
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs shutdown,userrequested
 }
 
@@ -933,7 +953,8 @@ test_shell_reboot() {
   adb shell reboot
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,shell
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,shell
+  EXPECT_PROPERTY sys.boot.reason.last reboot,shell
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,shell
 }
 
@@ -949,7 +970,8 @@ test_adb_reboot() {
   adb reboot
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,adb
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,adb
+  EXPECT_PROPERTY sys.boot.reason.last reboot,adb
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,adb
 }
 
@@ -984,23 +1006,8 @@ test_Its_Just_So_Hard_reboot() {
   adb shell 'reboot "Its Just So Hard"'
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
-  EXPECT_PROPERTY persist.sys.boot.reason "reboot,Its Just So Hard"
-  # Do not leave this test with an illegal value in persist.sys.boot.reason
-  save_ret=${?}           # hold on to error code from above two lines
-  if isDebuggable; then   # can do this easy, or we can do this hard.
-    adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
-    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
-  else
-    report_bootstat_logs reboot,its_just_so_hard  # report what we have so far
-    # user build mitigation
-    adb shell reboot its_just_so_hard
-    wait_for_screen
-    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
-    EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
-  fi
-  # Ensure persist.sys.boot.reason now valid, failure here acts as a signal
-  # that we could choke up following tests.  For example test_properties.
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard ${flag}
+  EXPECT_PROPERTY sys.boot.reason.last reboot,its_just_so_hard
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs reboot,its_just_so_hard
 }
 
@@ -1049,7 +1056,8 @@ run_bootloader() {
   # Check values
   EXPECT_PROPERTY ro.boot.bootreason "${bootloader_expected}"
   EXPECT_PROPERTY sys.boot.reason "${sys_expected}"
-  EXPECT_PROPERTY persist.sys.boot.reason "${last_expected}"
+  EXPECT_PROPERTY sys.boot.reason.last "${last_expected}"
+  EXPECT_PROPERTY persist.sys.boot.reason ""
   report_bootstat_logs "${sys_expected}"
 }
 

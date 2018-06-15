@@ -30,13 +30,13 @@ class MockDwarfSection : public DwarfSection {
   MockDwarfSection(Memory* memory) : DwarfSection(memory) {}
   virtual ~MockDwarfSection() = default;
 
-  MOCK_METHOD4(Log, bool(uint8_t, uint64_t, uint64_t, const DwarfFde*));
+  MOCK_METHOD3(Log, bool(uint8_t, uint64_t, const DwarfFde*));
 
   MOCK_METHOD5(Eval, bool(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*));
 
   MOCK_METHOD3(GetCfaLocationInfo, bool(uint64_t, const DwarfFde*, dwarf_loc_regs_t*));
 
-  MOCK_METHOD2(Init, bool(uint64_t, uint64_t));
+  MOCK_METHOD3(Init, bool(uint64_t, uint64_t, uint64_t));
 
   MOCK_METHOD2(GetFdeOffsetFromPc, bool(uint64_t, uint64_t*));
 

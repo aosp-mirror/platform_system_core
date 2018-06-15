@@ -36,7 +36,7 @@ class MockDwarfSectionImpl : public DwarfSectionImpl<TypeParam> {
   MockDwarfSectionImpl(Memory* memory) : DwarfSectionImpl<TypeParam>(memory) {}
   virtual ~MockDwarfSectionImpl() = default;
 
-  MOCK_METHOD2(Init, bool(uint64_t, uint64_t));
+  MOCK_METHOD3(Init, bool(uint64_t, uint64_t, uint64_t));
 
   MOCK_METHOD2(GetFdeOffsetFromPc, bool(uint64_t, uint64_t*));
 
@@ -884,7 +884,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Log) {
 
   this->memory_.SetMemory(0x5000, std::vector<uint8_t>{0x00});
   this->memory_.SetMemory(0x6000, std::vector<uint8_t>{0xc2});
-  ASSERT_TRUE(this->section_->Log(2, 0x1000, 0x1000, &fde));
+  ASSERT_TRUE(this->section_->Log(2, 0x1000, &fde));
 
   ASSERT_EQ(
       "4 unwind     DW_CFA_nop\n"

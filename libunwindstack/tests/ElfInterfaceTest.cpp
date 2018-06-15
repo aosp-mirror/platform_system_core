@@ -647,7 +647,7 @@ void ElfInterfaceTest::InitHeadersEhFrameTest() {
   memory_.SetData32(0x10004, 0x500);
   memory_.SetData32(0x10008, 250);
 
-  elf.InitHeaders();
+  elf.InitHeaders(0);
 
   EXPECT_FALSE(elf.eh_frame() == nullptr);
   EXPECT_TRUE(elf.debug_frame() == nullptr);
@@ -680,7 +680,7 @@ void ElfInterfaceTest::InitHeadersDebugFrame() {
   memory_.SetData32(0x5108, 0x1500);
   memory_.SetData32(0x510c, 0x200);
 
-  elf.InitHeaders();
+  elf.InitHeaders(0);
 
   EXPECT_TRUE(elf.eh_frame() == nullptr);
   EXPECT_FALSE(elf.debug_frame() == nullptr);
@@ -703,7 +703,7 @@ void ElfInterfaceTest::InitHeadersEhFrameFail() {
   elf.FakeSetDebugFrameOffset(0);
   elf.FakeSetDebugFrameSize(0);
 
-  elf.InitHeaders();
+  elf.InitHeaders(0);
 
   EXPECT_TRUE(elf.eh_frame() == nullptr);
   EXPECT_EQ(0U, elf.eh_frame_offset());
@@ -728,7 +728,7 @@ void ElfInterfaceTest::InitHeadersDebugFrameFail() {
   elf.FakeSetDebugFrameOffset(0x1000);
   elf.FakeSetDebugFrameSize(0x100);
 
-  elf.InitHeaders();
+  elf.InitHeaders(0);
 
   EXPECT_TRUE(elf.eh_frame() == nullptr);
   EXPECT_TRUE(elf.debug_frame() == nullptr);
@@ -833,10 +833,10 @@ void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
   // Look in the first symbol table.
   std::string name;
   uint64_t name_offset;
-  ASSERT_TRUE(elf->GetFunctionName(0x90010, 0, &name, &name_offset));
+  ASSERT_TRUE(elf->GetFunctionName(0x90010, &name, &name_offset));
   EXPECT_EQ("function_one", name);
   EXPECT_EQ(16U, name_offset);
-  ASSERT_TRUE(elf->GetFunctionName(0xd0020, 0, &name, &name_offset));
+  ASSERT_TRUE(elf->GetFunctionName(0xd0020, &name, &name_offset));
   EXPECT_EQ("function_two", name);
   EXPECT_EQ(32U, name_offset);
 }
@@ -1065,7 +1065,7 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_debug_frame) {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  elf->InitHeaders();
+  elf->InitHeaders(0);
   EXPECT_EQ(0U, load_bias);
   EXPECT_FALSE(elf->IsValidPc(0));
   EXPECT_FALSE(elf->IsValidPc(0x20ff));
@@ -1128,7 +1128,7 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_eh_frame) {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  elf->InitHeaders();
+  elf->InitHeaders(0);
   EXPECT_EQ(0U, load_bias);
   EXPECT_FALSE(elf->IsValidPc(0));
   EXPECT_FALSE(elf->IsValidPc(0x27ff));

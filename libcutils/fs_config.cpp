@@ -154,6 +154,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/debuggerd" },
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/install-recovery.sh" },
+    { 00550, AID_LOGD,      AID_LOGD,      0, "system/bin/logd" },
     { 00700, AID_ROOT,      AID_ROOT,      0, "system/bin/secilc" },
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/uncrypt" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "system/build.prop" },
@@ -179,12 +180,6 @@ static const struct fs_path_config android_files[] = {
     // in user builds.
     { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
                                               "system/bin/inputflinger" },
-    { 00550, AID_LOGD,      AID_LOGD,      CAP_MASK_LONG(CAP_SYSLOG) |
-                                           CAP_MASK_LONG(CAP_AUDIT_CONTROL) |
-                                           CAP_MASK_LONG(CAP_SETGID),
-                                              "system/bin/logd" },
-    { 00550, AID_SYSTEM,    AID_LOG,      CAP_MASK_LONG(CAP_SYSLOG),
-                                              "system/bin/bootstat" },
     { 00750, AID_ROOT,      AID_SHELL,     CAP_MASK_LONG(CAP_SETUID) |
                                            CAP_MASK_LONG(CAP_SETGID),
                                               "system/bin/run-as" },

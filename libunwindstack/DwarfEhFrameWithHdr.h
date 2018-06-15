@@ -38,6 +38,7 @@ class DwarfEhFrameWithHdr : public DwarfEhFrame<AddressType> {
   using DwarfSectionImpl<AddressType>::entries_offset_;
   using DwarfSectionImpl<AddressType>::entries_end_;
   using DwarfSectionImpl<AddressType>::last_error_;
+  using DwarfSectionImpl<AddressType>::load_bias_;
 
   struct FdeInfo {
     AddressType pc;
@@ -47,7 +48,7 @@ class DwarfEhFrameWithHdr : public DwarfEhFrame<AddressType> {
   DwarfEhFrameWithHdr(Memory* memory) : DwarfEhFrame<AddressType>(memory) {}
   virtual ~DwarfEhFrameWithHdr() = default;
 
-  bool Init(uint64_t offset, uint64_t size) override;
+  bool Init(uint64_t offset, uint64_t size, uint64_t load_bias) override;
 
   bool GetFdeOffsetFromPc(uint64_t pc, uint64_t* fde_offset) override;
 

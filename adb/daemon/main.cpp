@@ -38,7 +38,6 @@
 #include <scoped_minijail.h>
 
 #include <private/android_filesystem_config.h>
-#include "debuggerd/handler.h"
 #include "selinux/android.h"
 
 #include "adb.h"
@@ -274,7 +273,6 @@ int main(int argc, char** argv) {
 
     close_stdin();
 
-    debuggerd_init(nullptr);
     adb_trace_init(argv);
 
     D("Handling main()");

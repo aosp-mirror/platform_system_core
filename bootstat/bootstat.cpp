@@ -311,6 +311,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"kernel_panic,adsp", 165},
     {"kernel_panic,dsps", 166},
     {"kernel_panic,wcnss", 167},
+    {"kernel_panic,_sde_encoder_phys_cmd_handle_ppdone_timeout", 168},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -735,6 +736,7 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
+const char last_last_reboot_reason_property[] = "sys.boot.reason.last";
 const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
@@ -926,27 +928,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         }
         android_logcat_pclose(&ctx, fp);
         static const char logcat_battery[] = "W/healthd (    0): battery l=";
-        const char* match = logcat_battery;
 
-        if (content == "") {
-          // Service logd.klog not running, go to smaller buffer in the kernel.
-          int rc = klogctl(KLOG_SIZE_BUFFER, nullptr, 0);
-          if (rc > 0) {
-            ssize_t len = rc + 1024;  // 1K Margin should it grow between calls.
-            std::unique_ptr<char[]> buf(new char[len]);
-            rc = klogctl(KLOG_READ_ALL, buf.get(), len);
-            if (rc < len) {
-              len = rc + 1;
-            }
-            buf[--len] = '\0';
-            content = buf.get();
-          }
-          match = battery;
-        }
-
-        pos = content.find(match);  // The first one it finds.
+        pos = content.find(logcat_battery);  // The first one it finds.
         if (pos != std::string::npos) {
-          digits = content.substr(pos + strlen(match), strlen("100 "));
+          digits = content.substr(pos + strlen(logcat_battery), strlen("100 "));
         }
         endptr = digits.c_str();
         level = 0;
@@ -1002,10 +987,6 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
   }
 
   LOG(INFO) << "Canonical boot reason: " << ret;
-  if (isKernelRebootReason(ret) && (GetProperty(last_reboot_reason_property) != "")) {
-    // Rewrite as it must be old news, kernel reasons trump user space.
-    SetProperty(last_reboot_reason_property, ret);
-  }
   return ret;
 }
 
@@ -1157,6 +1138,15 @@ void SetSystemBootReason() {
   const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
   // Record the scrubbed system_boot_reason to the property
   SetProperty(system_reboot_reason_property, system_boot_reason);
+  // Shift last_reboot_reason_property to last_last_reboot_reason_property
+  std::string last_boot_reason(GetProperty(last_reboot_reason_property));
+  if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
+    last_boot_reason = system_boot_reason;
+  } else {
+    transformReason(last_boot_reason);
+  }
+  SetProperty(last_last_reboot_reason_property, last_boot_reason);
+  SetProperty(last_reboot_reason_property, "");
 }
 
 // Gets the boot time offset. This is useful when Android is running in a
