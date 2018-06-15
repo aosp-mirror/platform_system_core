@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include <limits>
+#include <string_view>
 #include <thread>
 
 #include <android-base/file.h>
@@ -33,9 +34,10 @@
 using android::base::unique_fd;
 
 static void usage(int exit_code) {
-  fprintf(stderr, "usage: debuggerd [-b] PID\n");
+  fprintf(stderr, "usage: debuggerd [-bj] PID\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "-b, --backtrace    just a backtrace rather than a full tombstone\n");
+  fprintf(stderr, "-j                 collect java traces\n");
   _exit(exit_code);
 }
 
@@ -58,8 +60,19 @@ static std::thread spawn_redirect_thread(unique_fd fd) {
 int main(int argc, char* argv[]) {
   if (argc <= 1) usage(0);
   if (argc > 3) usage(1);
-  if (argc == 3 && strcmp(argv[1], "-b") != 0 && strcmp(argv[1], "--backtrace") != 0) usage(1);
-  bool backtrace_only = argc == 3;
+
+  DebuggerdDumpType dump_type = kDebuggerdTombstone;
+
+  if (argc == 3) {
+    std::string_view flag = argv[1];
+    if (flag == "-b" || flag == "--backtrace") {
+      dump_type = kDebuggerdNativeBacktrace;
+    } else if (flag == "-j") {
+      dump_type = kDebuggerdJavaBacktrace;
+    } else {
+      usage(1);
+    }
+  }
 
   pid_t pid;
   if (!android::base::ParseInt(argv[argc - 1], &pid, 1, std::numeric_limits<pid_t>::max())) {
@@ -90,8 +103,7 @@ int main(int argc, char* argv[]) {
   }
 
   std::thread redirect_thread = spawn_redirect_thread(std::move(piperead));
-  if (!debuggerd_trigger_dump(pid, backtrace_only ? kDebuggerdNativeBacktrace : kDebuggerdTombstone,
-                              0, std::move(pipewrite))) {
+  if (!debuggerd_trigger_dump(pid, dump_type, 0, std::move(pipewrite))) {
     redirect_thread.join();
     errx(1, "failed to dump process %d", pid);
   }
