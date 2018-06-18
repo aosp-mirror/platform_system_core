@@ -14,42 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOGCAT_H /* header boilerplate */
-#define _LIBS_LOGCAT_H
+#pragma once
 
 #include <stdio.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#ifndef __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE 1
-#elif __ANDROID_API__ > 24 /* > Nougat */
-#define __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE
-
-/* For managing an in-process logcat function, rather than forking/execing
- *
- * It also serves as the basis for the logcat command.
- *
- * The following C API allows a logcat instance to be created, run
- * to completion, and then release all the associated resources.
- */
 
 /*
  * The opaque context
  */
-#ifndef __android_logcat_context_defined /* typedef boilerplate */
-#define __android_logcat_context_defined
 typedef struct android_logcat_context_internal* android_logcat_context;
-#endif
 
 /* Creates a context associated with this logcat instance
  *
@@ -86,11 +58,3 @@ int android_logcat_run_command(android_logcat_context ctx, int output, int error
  * non-zero for any errors.
  */
 int android_logcat_destroy(android_logcat_context* ctx);
-
-#endif /* __ANDROID_USE_LIBLOG_LOGCAT_INTERFACE */
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* _LIBS_LOGCAT_H */
