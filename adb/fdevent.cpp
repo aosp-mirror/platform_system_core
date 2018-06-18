@@ -21,6 +21,7 @@
 #include "fdevent.h"
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,6 +76,8 @@ static std::atomic<bool> terminate_loop(false);
 static bool main_thread_valid;
 static uint64_t main_thread_id;
 
+static uint64_t fdevent_id;
+
 static bool run_needs_flush = false;
 static auto& run_queue_notify_fd = *new unique_fd();
 static auto& run_queue_mutex = *new std::mutex();
@@ -111,7 +114,8 @@ static std::string dump_fde(const fdevent* fde) {
     if (fde->state & FDE_ERROR) {
         state += "E";
     }
-    return android::base::StringPrintf("(fdevent %d %s)", fde->fd.get(), state.c_str());
+    return android::base::StringPrintf("(fdevent %" PRIu64 ": fd %d %s)", fde->id, fde->fd.get(),
+                                       state.c_str());
 }
 
 void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
@@ -125,6 +129,7 @@ fdevent* fdevent_create(int fd, fd_func func, void* arg) {
     CHECK_GE(fd, 0);
 
     fdevent* fde = new fdevent();
+    fde->id = fdevent_id++;
     fde->state = FDE_ACTIVE;
     fde->fd.reset(fd);
     fde->func = func;
