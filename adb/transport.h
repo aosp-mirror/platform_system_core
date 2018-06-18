@@ -92,6 +92,8 @@ struct Connection {
     std::string transport_name_;
     ReadCallback read_callback_;
     ErrorCallback error_callback_;
+
+    static std::unique_ptr<Connection> FromFd(unique_fd fd);
 };
 
 // Abstraction for a blocking packet transport.

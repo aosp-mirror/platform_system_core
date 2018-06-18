@@ -24,13 +24,19 @@
 #include "sysdeps.h"
 #include "transport.h"
 
-#define ADB_CONNECTION_BENCHMARK(benchmark_name, ...)               \
-    BENCHMARK_TEMPLATE(benchmark_name, FdConnection, ##__VA_ARGS__) \
-        ->Arg(1)                                                    \
-        ->Arg(16384)                                                \
-        ->Arg(MAX_PAYLOAD)                                          \
+#define ADB_CONNECTION_BENCHMARK(benchmark_name, ...)                          \
+    BENCHMARK_TEMPLATE(benchmark_name, FdConnection, ##__VA_ARGS__)            \
+        ->Arg(1)                                                               \
+        ->Arg(16384)                                                           \
+        ->Arg(MAX_PAYLOAD)                                                     \
+        ->UseRealTime();                                                       \
+    BENCHMARK_TEMPLATE(benchmark_name, NonblockingFdConnection, ##__VA_ARGS__) \
+        ->Arg(1)                                                               \
+        ->Arg(16384)                                                           \
+        ->Arg(MAX_PAYLOAD)                                                     \
         ->UseRealTime()
 
+struct NonblockingFdConnection;
 template <typename ConnectionType>
 std::unique_ptr<Connection> MakeConnection(unique_fd fd);
 
@@ -38,6 +44,11 @@ template <>
 std::unique_ptr<Connection> MakeConnection<FdConnection>(unique_fd fd) {
     auto fd_connection = std::make_unique<FdConnection>(std::move(fd));
     return std::make_unique<BlockingConnectionAdapter>(std::move(fd_connection));
+}
+
+template <>
+std::unique_ptr<Connection> MakeConnection<NonblockingFdConnection>(unique_fd fd) {
+    return Connection::FromFd(std::move(fd));
 }
 
 template <typename ConnectionType>
