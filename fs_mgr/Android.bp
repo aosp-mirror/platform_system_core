@@ -57,15 +57,12 @@ cc_library_static {
         "libavb",
         "libfstab",
         "libdm",
-        "liblp",
     ],
     export_static_lib_headers: [
         "libfstab",
         "libdm",
-        "liblp",
     ],
     whole_static_libs: [
-        "liblp",
         "liblogwrap",
         "libdm",
         "libfstab",
