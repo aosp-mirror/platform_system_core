@@ -52,6 +52,7 @@ namespace.default.permitted.paths  = /system/${LIB}/drm
 namespace.default.permitted.paths += /system/${LIB}/extractors
 namespace.default.permitted.paths += /system/${LIB}/hw
 namespace.default.permitted.paths += /product/${LIB}
+namespace.default.permitted.paths += /system/product/${LIB}
 # These are where odex files are located. libart has to be able to dlopen the files
 namespace.default.permitted.paths += /system/framework
 namespace.default.permitted.paths += /system/app
@@ -66,6 +67,9 @@ namespace.default.permitted.paths += /oem/app
 namespace.default.permitted.paths += /product/framework
 namespace.default.permitted.paths += /product/app
 namespace.default.permitted.paths += /product/priv-app
+namespace.default.permitted.paths += /system/product/framework
+namespace.default.permitted.paths += /system/product/app
+namespace.default.permitted.paths += /system/product/priv-app
 namespace.default.permitted.paths += /data
 namespace.default.permitted.paths += /mnt/expand
 
@@ -92,6 +96,10 @@ namespace.default.asan.permitted.paths += /product/${LIB}
 namespace.default.asan.permitted.paths += /product/framework
 namespace.default.asan.permitted.paths += /product/app
 namespace.default.asan.permitted.paths += /product/priv-app
+namespace.default.asan.permitted.paths += /system/product/${LIB}
+namespace.default.asan.permitted.paths += /system/product/framework
+namespace.default.asan.permitted.paths += /system/product/app
+namespace.default.asan.permitted.paths += /system/product/priv-app
 namespace.default.asan.permitted.paths += /mnt/expand
 
 ###############################################################################
