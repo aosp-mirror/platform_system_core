@@ -61,6 +61,7 @@ cc_binary {
 
 cc_binary {
     name: "android.hardware.health@2.0-service.override",
+    stem: "android.hardware.health@2.0-service",
     defaults: ["android.hardware.health@2.0-service_defaults"],
 
     overrides: [
