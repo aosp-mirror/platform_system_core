@@ -181,6 +181,29 @@ static void reconnect_service(int fd, void* arg) {
     kick_transport(t);
 }
 
+static void spin_service(int fd, void*) {
+    unique_fd sfd(fd);
+
+    if (!__android_log_is_debuggable()) {
+        WriteFdExactly(sfd.get(), "refusing to spin on non-debuggable build\n");
+        return;
+    }
+
+    // A service that creates an fdevent that's always pending, and then ignores it.
+    unique_fd pipe_read, pipe_write;
+    if (!Pipe(&pipe_read, &pipe_write)) {
+        WriteFdExactly(sfd.get(), "failed to create pipe\n");
+        return;
+    }
+
+    fdevent_run_on_main_thread([fd = pipe_read.release()]() {
+        fdevent* fde = fdevent_create(fd, [](int, unsigned, void*) {}, nullptr);
+        fdevent_add(fde, FDE_READ);
+    });
+
+    WriteFdExactly(sfd.get(), "spinning\n");
+}
+
 int reverse_service(const char* command, atransport* transport) {
     int s[2];
     if (adb_socketpair(s)) {
@@ -328,6 +351,8 @@ int service_to_fd(const char* name, atransport* transport) {
                                     reinterpret_cast<void*>(1));
     } else if (!strcmp(name, "reconnect")) {
         ret = create_service_thread("reconnect", reconnect_service, transport);
+    } else if (!strcmp(name, "spin")) {
+        ret = create_service_thread("spin", spin_service, nullptr);
 #endif
     }
     if (ret >= 0) {
