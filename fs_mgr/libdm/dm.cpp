@@ -51,23 +51,18 @@ bool DeviceMapper::CreateDevice(const std::string& name) {
         return false;
     }
 
-    std::unique_ptr<struct dm_ioctl, decltype(&free)> io(
-            static_cast<struct dm_ioctl*>(malloc(sizeof(struct dm_ioctl))), free);
-    if (io == nullptr) {
-        LOG(ERROR) << "Failed to allocate dm_ioctl";
-        return false;
-    }
-    InitIo(io.get(), name);
+    struct dm_ioctl io;
+    InitIo(&io, name);
 
-    if (ioctl(fd_, DM_DEV_CREATE, io.get())) {
-        PLOG(ERROR) << "DM_DEV_CREATE failed to create [" << name << "]";
+    if (ioctl(fd_, DM_DEV_CREATE, &io)) {
+        PLOG(ERROR) << "DM_DEV_CREATE failed for [" << name << "]";
         return false;
     }
 
     // Check to make sure the newly created device doesn't already have targets
     // added or opened by someone
-    CHECK(io->target_count == 0) << "Unexpected targets for newly created [" << name << "] device";
-    CHECK(io->open_count == 0) << "Unexpected opens for newly created [" << name << "] device";
+    CHECK(io.target_count == 0) << "Unexpected targets for newly created [" << name << "] device";
+    CHECK(io.open_count == 0) << "Unexpected opens for newly created [" << name << "] device";
 
     // Creates a new device mapper device with the name passed in
     return true;
@@ -84,22 +79,17 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
         return false;
     }
 
-    std::unique_ptr<struct dm_ioctl, decltype(&free)> io(
-            static_cast<struct dm_ioctl*>(malloc(sizeof(struct dm_ioctl))), free);
-    if (io == nullptr) {
-        LOG(ERROR) << "Failed to allocate dm_ioctl";
-        return false;
-    }
-    InitIo(io.get(), name);
+    struct dm_ioctl io;
+    InitIo(&io, name);
 
-    if (ioctl(fd_, DM_DEV_REMOVE, io.get())) {
-        PLOG(ERROR) << "DM_DEV_REMOVE failed to create [" << name << "]";
+    if (ioctl(fd_, DM_DEV_REMOVE, &io)) {
+        PLOG(ERROR) << "DM_DEV_REMOVE failed for [" << name << "]";
         return false;
     }
 
     // Check to make sure appropriate uevent is generated so ueventd will
     // do the right thing and remove the corresponding device node and symlinks.
-    CHECK(io->flags & DM_UEVENT_GENERATED_FLAG)
+    CHECK(io.flags & DM_UEVENT_GENERATED_FLAG)
             << "Didn't generate uevent for [" << name << "] removal";
 
     return true;
@@ -147,7 +137,7 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
     io->data_start = sizeof(*io);
 
     if (ioctl(fd_, DM_LIST_VERSIONS, io)) {
-        PLOG(ERROR) << "Failed to get DM_LIST_VERSIONS from kernel";
+        PLOG(ERROR) << "DM_LIST_VERSIONS failed";
         return false;
     }
 
@@ -209,7 +199,7 @@ bool DeviceMapper::GetAvailableDevices(std::vector<DmBlockDevice>* devices) {
     io->data_start = sizeof(*io);
 
     if (ioctl(fd_, DM_LIST_DEVICES, io)) {
-        PLOG(ERROR) << "Failed to get DM_LIST_DEVICES from kernel";
+        PLOG(ERROR) << "DM_LIST_DEVICES failed";
         return false;
     }
 
