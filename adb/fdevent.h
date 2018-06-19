@@ -32,8 +32,7 @@
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 
 struct fdevent {
-    fdevent* next = nullptr;
-    fdevent* prev = nullptr;
+    uint64_t id;
 
     unique_fd fd;
     int force_eof = 0;
