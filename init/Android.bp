@@ -76,7 +76,6 @@ cc_defaults {
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libselinux",
     ],
     shared_libs: [
         "libcutils",
@@ -87,6 +86,7 @@ cc_defaults {
         "libc++",
         "libdl",
         "libz",
+        "libselinux",
     ],
 }
 
