@@ -1795,6 +1795,11 @@ int adb_commandline(int argc, const char** argv) {
     }
     else if (!strcmp(argv[0], "track-devices")) {
         return adb_connect_command("host:track-devices");
+    } else if (!strcmp(argv[0], "raw")) {
+        if (argc != 2) {
+            return syntax_error("adb raw SERVICE");
+        }
+        return adb_connect_command(argv[1]);
     }
 
 
