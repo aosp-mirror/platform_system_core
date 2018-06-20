@@ -10,6 +10,7 @@ phony {
         "logwrapper_vendor",
         "mkshrc",
         "mkshrc_vendor",
+        "newfs_msdos",
         "reboot",
         "sh",
         "sh.recovery",
