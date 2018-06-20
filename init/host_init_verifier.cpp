@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
-    if (!parser.ParseConfig(argv[1])) {
+    if (!parser.ParseConfigFileInsecure(argv[1])) {
         LOG(ERROR) << "Failed to open init rc script '" << argv[1] << "'";
         return EXIT_FAILURE;
     }
