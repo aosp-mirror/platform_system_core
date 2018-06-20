@@ -61,7 +61,6 @@ LOCAL_STATIC_LIBRARIES := \
     libseccomp_policy \
     libcrypto_utils \
     libsparse \
-    libselinux \
     libprocessgroup \
     libavb \
     libkeyutils \
@@ -76,6 +75,7 @@ shared_libs := \
     libcrypto \
     libdl \
     libz \
+    libselinux \
 
 ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
 # init is static executable for non-system-as-root devices, because the dynamic linker
