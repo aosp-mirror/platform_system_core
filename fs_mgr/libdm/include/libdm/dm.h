@@ -17,18 +17,20 @@
 #ifndef _LIBDM_DM_H_
 #define _LIBDM_DM_H_
 
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
 #include <linux/kdev_t.h>
+#include <stdint.h>
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <android-base/logging.h>
 
-#include <dm_table.h>
+#include "dm_table.h"
 
 // The minimum expected device mapper major.minor version
 #define DM_VERSION0 (4)

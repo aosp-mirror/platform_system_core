@@ -14,23 +14,12 @@
  * limitations under the License.
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/dm-ioctl.h>
-#include <stdint.h>
+#include "libdm/dm.h"
+
 #include <sys/ioctl.h>
 #include <sys/types.h>
-#include <unistd.h>
 
-#include <memory>
-#include <string>
-#include <vector>
-
-#include <android-base/logging.h>
 #include <android-base/macros.h>
-#include <android-base/unique_fd.h>
-
-#include "dm.h"
 
 namespace android {
 namespace dm {
