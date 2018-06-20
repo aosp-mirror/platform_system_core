@@ -29,6 +29,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <liblp/metadata_format.h>
 
 #include "devices.h"
 #include "fs_mgr.h"
@@ -75,6 +76,7 @@ class FirstStageMount {
 
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
     std::unique_ptr<LogicalPartitionTable> dm_linear_table_;
+    std::string lp_metadata_partition_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
     std::unique_ptr<DeviceHandler> device_handler_;
@@ -120,13 +122,17 @@ static bool inline IsRecoveryMode() {
 }
 
 static inline bool IsDmLinearEnabled() {
-    bool enabled = false;
-    import_kernel_cmdline(
-        false, [&enabled](const std::string& key, const std::string& value, bool in_qemu) {
-            if (key == "androidboot.logical_partitions" && value == "1") {
-                enabled = true;
-            }
-        });
+    static bool checked = false;
+    static bool enabled = false;
+    if (checked) {
+        return enabled;
+    }
+    import_kernel_cmdline(false, [](const std::string& key, const std::string& value, bool in_qemu) {
+        if (key == "androidboot.logical_partitions" && value == "1") {
+            enabled = true;
+        }
+    });
+    checked = true;
     return enabled;
 }
 
@@ -163,7 +169,7 @@ std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
 }
 
 bool FirstStageMount::DoFirstStageMount() {
-    if (!dm_linear_table_ && mount_fstab_recs_.empty()) {
+    if (!IsDmLinearEnabled() && mount_fstab_recs_.empty()) {
         // Nothing to mount.
         LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
         return true;
@@ -184,14 +190,18 @@ bool FirstStageMount::InitDevices() {
 
 bool FirstStageMount::GetBackingDmLinearDevices() {
     // Add any additional devices required for dm-linear mappings.
-    if (!dm_linear_table_) {
+    if (!IsDmLinearEnabled()) {
         return true;
     }
 
-    for (const auto& partition : dm_linear_table_->partitions) {
-        for (const auto& extent : partition.extents) {
-            const std::string& partition_name = android::base::Basename(extent.block_device());
-            required_devices_partition_names_.emplace(partition_name);
+    required_devices_partition_names_.emplace(LP_METADATA_PARTITION_NAME);
+
+    if (dm_linear_table_) {
+        for (const auto& partition : dm_linear_table_->partitions) {
+            for (const auto& extent : partition.extents) {
+                const std::string& partition_name = android::base::Basename(extent.block_device());
+                required_devices_partition_names_.emplace(partition_name);
+            }
         }
     }
     return true;
@@ -205,7 +215,7 @@ bool FirstStageMount::InitRequiredDevices() {
         return true;
     }
 
-    if (dm_linear_table_ || need_dm_verity_) {
+    if (IsDmLinearEnabled() || need_dm_verity_) {
         const std::string dm_path = "/devices/virtual/misc/device-mapper";
         bool found = false;
         auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
@@ -253,10 +263,21 @@ bool FirstStageMount::InitRequiredDevices() {
 }
 
 bool FirstStageMount::CreateLogicalPartitions() {
-    if (!dm_linear_table_) {
+    if (!IsDmLinearEnabled()) {
         return true;
     }
-    return android::fs_mgr::CreateLogicalPartitions(*dm_linear_table_.get());
+
+    if (lp_metadata_partition_.empty()) {
+        LOG(ERROR) << "Could not locate logical partition tables in partition "
+                   << LP_METADATA_PARTITION_NAME;
+        return false;
+    }
+    if (dm_linear_table_) {
+        if (!android::fs_mgr::CreateLogicalPartitions(*dm_linear_table_.get())) {
+            return false;
+        }
+    }
+    return android::fs_mgr::CreateLogicalPartitions(lp_metadata_partition_);
 }
 
 ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const Uevent& uevent) {
@@ -266,6 +287,10 @@ ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const
     auto iter = required_devices_partition_names_.find(name);
     if (iter != required_devices_partition_names_.end()) {
         LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
+        if (IsDmLinearEnabled() && name == LP_METADATA_PARTITION_NAME) {
+            std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
+            lp_metadata_partition_ = links[0];
+        }
         required_devices_partition_names_.erase(iter);
         device_handler_->HandleDeviceEvent(uevent);
         if (required_devices_partition_names_.empty()) {

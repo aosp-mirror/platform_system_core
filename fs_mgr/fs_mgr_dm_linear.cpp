@@ -37,6 +37,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <liblp/reader.h>
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_dm_ioctl.h"
@@ -135,6 +136,31 @@ bool CreateLogicalPartitions(const LogicalPartitionTable& table) {
 
 std::unique_ptr<LogicalPartitionTable> LoadPartitionsFromDeviceTree() {
     return nullptr;
+}
+
+bool CreateLogicalPartitions(const std::string& block_device) {
+    uint32_t slot = SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
+    auto metadata = ReadMetadata(block_device.c_str(), slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read partition table.";
+        return true;
+    }
+
+    LogicalPartitionTable table;
+    for (const auto& partition : metadata->partitions) {
+        LogicalPartition new_partition;
+        new_partition.name = GetPartitionName(partition);
+        new_partition.attributes = partition.attributes;
+        for (size_t i = 0; i < partition.num_extents; i++) {
+            const auto& extent = metadata->extents[partition.first_extent_index + i];
+            new_partition.extents.emplace_back(new_partition.num_sectors, extent.target_data,
+                                               extent.num_sectors, block_device.c_str());
+            new_partition.num_sectors += extent.num_sectors;
+        }
+        table.partitions.push_back(new_partition);
+    }
+
+    return CreateLogicalPartitions(table);
 }
 
 }  // namespace fs_mgr
