@@ -755,24 +755,31 @@ static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
 }
 
 static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
-   FILE *fp;
-   char buf[PATH_MAX];
+    FILE *fp;
+    char buf[PATH_MAX];
 
-   snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
+    /*
+     * Per-application memory.stat files are available only when
+     * per-application memcgs are enabled.
+     */
+    if (!per_app_memcg)
+        return -1;
 
-   fp = fopen(buf, "r");
+    snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
 
-   if (fp == NULL) {
-       ALOGE("%s open failed: %s", buf, strerror(errno));
-       return -1;
-   }
+    fp = fopen(buf, "r");
 
-   while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
-       memory_stat_parse_line(buf, mem_st);
-   }
-   fclose(fp);
+    if (fp == NULL) {
+        ALOGE("%s open failed: %s", buf, strerror(errno));
+        return -1;
+    }
 
-   return 0;
+    while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
+        memory_stat_parse_line(buf, mem_st);
+    }
+    fclose(fp);
+
+    return 0;
 }
 #endif
 
