@@ -75,10 +75,13 @@ class Parser {
     void AddSectionParser(const std::string& name, std::unique_ptr<SectionParser> parser);
     void AddSingleLineParser(const std::string& prefix, LineCallback callback);
 
+    // Host init verifier check file permissions.
+    bool ParseConfigFileInsecure(const std::string& path);
+
     size_t parse_error_count() const { return parse_error_count_; }
 
   private:
-    void ParseData(const std::string& filename, const std::string& data);
+    void ParseData(const std::string& filename, std::string* data);
     bool ParseConfigFile(const std::string& path);
     bool ParseConfigDir(const std::string& path);
 
