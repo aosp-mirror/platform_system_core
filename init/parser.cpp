@@ -19,6 +19,7 @@
 #include <dirent.h>
 
 #include <android-base/chrono_utils.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -39,14 +40,13 @@ void Parser::AddSingleLineParser(const std::string& prefix, LineCallback callbac
     line_callbacks_.emplace_back(prefix, callback);
 }
 
-void Parser::ParseData(const std::string& filename, const std::string& data) {
-    // TODO: Use a parser with const input and remove this copy
-    std::vector<char> data_copy(data.begin(), data.end());
-    data_copy.push_back('\0');
+void Parser::ParseData(const std::string& filename, std::string* data) {
+    data->push_back('\n');  // TODO: fix tokenizer
+    data->push_back('\0');
 
     parse_state state;
     state.line = 0;
-    state.ptr = &data_copy[0];
+    state.ptr = data->data();
     state.nexttoken = 0;
 
     SectionParser* section_parser = nullptr;
@@ -69,6 +69,11 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
         switch (next_token(&state)) {
             case T_EOF:
                 end_section();
+
+                for (const auto& [section_name, section_parser] : section_parsers_) {
+                    section_parser->EndFile();
+                }
+
                 return;
             case T_NEWLINE: {
                 state.line++;
@@ -118,6 +123,16 @@ void Parser::ParseData(const std::string& filename, const std::string& data) {
     }
 }
 
+bool Parser::ParseConfigFileInsecure(const std::string& path) {
+    std::string config_contents;
+    if (!android::base::ReadFileToString(path, &config_contents)) {
+        return false;
+    }
+
+    ParseData(path, &config_contents);
+    return true;
+}
+
 bool Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     android::base::Timer t;
@@ -127,11 +142,7 @@ bool Parser::ParseConfigFile(const std::string& path) {
         return false;
     }
 
-    config_contents->push_back('\n');  // TODO: fix parse_config.
-    ParseData(path, *config_contents);
-    for (const auto& [section_name, section_parser] : section_parsers_) {
-        section_parser->EndFile();
-    }
+    ParseData(path, &config_contents.value());
 
     LOG(VERBOSE) << "(Parsing " << path << " took " << t << ".)";
     return true;
