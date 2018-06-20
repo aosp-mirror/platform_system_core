@@ -36,6 +36,7 @@
 using DeviceMapper = ::android::dm::DeviceMapper;
 using DmTable = ::android::dm::DmTable;
 using DmTarget = ::android::dm::DmTarget;
+using DmTargetTypeInfo = ::android::dm::DmTargetTypeInfo;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
@@ -89,7 +90,7 @@ static int DmDeleteCmdHandler(int argc, char** argv) {
 }
 
 static int DmListTargets(DeviceMapper& dm) {
-    std::vector<DmTarget> targets;
+    std::vector<DmTargetTypeInfo> targets;
     if (!dm.GetAvailableTargets(&targets)) {
         std::cerr << "Failed to read available device mapper targets" << std::endl;
         return -errno;
