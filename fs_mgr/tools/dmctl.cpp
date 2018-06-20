@@ -49,14 +49,14 @@ static int Usage(void) {
 
 static int DmCreateCmdHandler(int argc, char** argv) {
     if (argc < 1) {
-        std::cerr << "DmCreateCmdHandler: atleast 'name' MUST be provided for target device";
+        std::cerr << "Usage: dmctl create <name> [table-args]" << std::endl;
         return -EINVAL;
     }
 
     std::string name = argv[0];
     DeviceMapper& dm = DeviceMapper::Instance();
     if (!dm.CreateDevice(name)) {
-        std::cerr << "DmCreateCmdHandler: Failed to create " << name << " device";
+        std::cerr << "Failed to create device-mapper device with name: " << name << std::endl;
         return -EIO;
     }
 
@@ -71,14 +71,14 @@ static int DmCreateCmdHandler(int argc, char** argv) {
 
 static int DmDeleteCmdHandler(int argc, char** argv) {
     if (argc < 1) {
-        std::cerr << "DmCreateCmdHandler: atleast 'name' MUST be provided for target device";
+        std::cerr << "Usage: dmctl delete <name>" << std::endl;
         return -EINVAL;
     }
 
     std::string name = argv[0];
     DeviceMapper& dm = DeviceMapper::Instance();
     if (!dm.DeleteDevice(name)) {
-        std::cerr << "DmCreateCmdHandler: Failed to create " << name << " device";
+        std::cerr << "Failed to delete [" << name << "]" << std::endl;
         return -EIO;
     }
 
