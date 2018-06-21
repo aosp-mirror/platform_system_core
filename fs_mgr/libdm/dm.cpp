@@ -94,8 +94,37 @@ DmDeviceState DeviceMapper::state(const std::string& /* name */) const {
     return DmDeviceState::INVALID;
 }
 
-bool DeviceMapper::LoadTableAndActivate(const std::string& /* name */, const DmTable& /* table */) {
-    return false;
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
+    if (!CreateDevice(name)) {
+        return false;
+    }
+    if (!LoadTableAndActivate(name, table)) {
+        DeleteDevice(name);
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& table) {
+    std::string ioctl_buffer(sizeof(struct dm_ioctl), 0);
+    ioctl_buffer += table.Serialize();
+
+    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(&ioctl_buffer[0]);
+    InitIo(io, name);
+    io->data_size = ioctl_buffer.size();
+    io->data_start = sizeof(struct dm_ioctl);
+    io->target_count = static_cast<uint32_t>(table.num_targets());
+    if (ioctl(fd_, DM_TABLE_LOAD, io)) {
+        PLOG(ERROR) << "DM_TABLE_LOAD failed";
+        return false;
+    }
+
+    InitIo(io, name);
+    if (ioctl(fd_, DM_DEV_SUSPEND, io)) {
+        PLOG(ERROR) << "DM_TABLE_SUSPEND resume failed";
+        return false;
+    }
+    return true;
 }
 
 // Reads all the available device mapper targets and their corresponding

@@ -34,8 +34,8 @@ bool DmTable::valid() const {
     return true;
 }
 
-uint64_t DmTable::size() const {
-    return valid() ? size_ : 0;
+uint64_t DmTable::num_sectors() const {
+    return valid() ? num_sectors_ : 0;
 }
 
 // Returns a string represnetation of the table that is ready to be passed

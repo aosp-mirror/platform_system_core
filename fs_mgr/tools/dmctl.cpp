@@ -34,6 +34,7 @@
 #include <vector>
 
 using DeviceMapper = ::android::dm::DeviceMapper;
+using DmTable = ::android::dm::DmTable;
 using DmTarget = ::android::dm::DmTarget;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
@@ -53,9 +54,11 @@ static int DmCreateCmdHandler(int argc, char** argv) {
         return -EINVAL;
     }
 
+    DmTable table;
+
     std::string name = argv[0];
     DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.CreateDevice(name)) {
+    if (!dm.CreateDevice(name, table)) {
         std::cerr << "Failed to create device-mapper device with name: " << name << std::endl;
         return -EIO;
     }
