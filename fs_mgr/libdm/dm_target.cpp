@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
+#include "libdm/dm_target.h"
+
 #include <android-base/logging.h>
 #include <android-base/macros.h>
-
-#include <stdint.h>
-
-#include <string>
-#include <vector>
-
-#include "dm_target.h"
 
 namespace android {
 namespace dm {}  // namespace dm
