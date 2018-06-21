@@ -23,7 +23,7 @@
 #include <unistd.h>
 
 #include <android-base/unique_fd.h>
-#include <dm.h>
+#include <libdm/dm.h>
 
 #include <functional>
 #include <iomanip>
