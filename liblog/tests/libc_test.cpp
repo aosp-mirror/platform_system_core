@@ -21,6 +21,7 @@
 
 TEST(libc, __pstore_append) {
 #ifdef __ANDROID__
+#ifndef NO_PSTORE
   FILE* fp;
   ASSERT_TRUE(NULL != (fp = fopen("/dev/pmsg0", "a")));
   static const char message[] = "libc.__pstore_append\n";
@@ -43,6 +44,9 @@ TEST(libc, __pstore_append) {
             "Reboot, ensure string libc.__pstore_append is in "
             "/sys/fs/pstore/pmsg-ramoops-0\n");
   }
+#else  /* NO_PSTORE */
+  GTEST_LOG_(INFO) << "This test does nothing because of NO_PSTORE.\n";
+#endif /* NO_PSTORE */
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
