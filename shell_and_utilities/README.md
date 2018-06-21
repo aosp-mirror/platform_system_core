@@ -193,13 +193,15 @@ which whoami xargs xxd yes zcat
 Android Q
 ---------
 
+BSD: fsck\_msdos newfs\_msdos
+
 bzip2: bzcat bzip2 bunzip2
 
 one-true-awk: awk
 
 PCRE: egrep fgrep grep
 
-toolbox: getevent getprop newfs\_msdos
+toolbox: getevent getprop
 
 toybox: acpi base64 basename blockdev cal cat chcon chgrp chmod chown
 chroot chrt cksum clear cmp comm cp cpio cut date dd df diff dirname
