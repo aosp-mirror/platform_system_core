@@ -787,9 +787,9 @@ Result<Success> Service::ExecStart() {
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
 
-    LOG(INFO) << "SVC_EXEC pid " << pid_ << " (uid " << uid_ << " gid " << gid_ << "+"
-              << supp_gids_.size() << " context " << (!seclabel_.empty() ? seclabel_ : "default")
-              << ") started; waiting...";
+    LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << uid_ << " gid "
+              << gid_ << "+" << supp_gids_.size() << " context "
+              << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
 
     return Success();
 }
