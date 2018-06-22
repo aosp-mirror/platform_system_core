@@ -95,7 +95,7 @@ class DeviceMapper final {
 
     // Returns true if a list of available device mapper targets registered in the kernel was
     // successfully read and stored in 'targets'. Returns 'false' otherwise.
-    bool GetAvailableTargets(std::vector<DmTarget>* targets);
+    bool GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets);
 
     // Return 'true' if it can successfully read the list of device mapper block devices
     // currently created. 'devices' will be empty if the kernel interactions
