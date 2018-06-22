@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
 #include <libdm/dm.h>
 
@@ -30,46 +31,131 @@
 #include <ios>
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
 using DeviceMapper = ::android::dm::DeviceMapper;
 using DmTable = ::android::dm::DmTable;
 using DmTarget = ::android::dm::DmTarget;
+using DmTargetLinear = ::android::dm::DmTargetLinear;
+using DmTargetZero = ::android::dm::DmTargetZero;
 using DmTargetTypeInfo = ::android::dm::DmTargetTypeInfo;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
     std::cerr << "usage: dmctl <command> [command options]" << std::endl;
     std::cerr << "commands:" << std::endl;
-    std::cerr << "  create <dm-name> [<dm-target> [-lo <filename>] <dm-target-args>]" << std::endl;
+    std::cerr << "  create <dm-name> [-ro] <targets...>" << std::endl;
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets>" << std::endl;
     std::cerr << "  help" << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Target syntax:" << std::endl;
+    std::cerr << "  <target_type> <start_sector> <num_sectors> [target_data]" << std::endl;
     return -EINVAL;
 }
 
+class TargetParser final {
+  public:
+    TargetParser(int argc, char** argv) : arg_index_(0), argc_(argc), argv_(argv) {}
+
+    bool More() const { return arg_index_ < argc_; }
+    std::unique_ptr<DmTarget> Next() {
+        if (!HasArgs(3)) {
+            std::cerr << "Expected <target_type> <start_sector> <num_sectors>" << std::endl;
+            return nullptr;
+        }
+
+        std::string target_type = NextArg();
+        uint64_t start_sector, num_sectors;
+        if (!android::base::ParseUint(NextArg(), &start_sector)) {
+            std::cerr << "Expected start sector, got: " << PreviousArg() << std::endl;
+            return nullptr;
+        }
+        if (!android::base::ParseUint(NextArg(), &num_sectors) || !num_sectors) {
+            std::cerr << "Expected non-zero sector count, got: " << PreviousArg() << std::endl;
+            return nullptr;
+        }
+
+        if (target_type == "zero") {
+            return std::make_unique<DmTargetZero>(start_sector, num_sectors);
+        } else if (target_type == "linear") {
+            if (!HasArgs(2)) {
+                std::cerr << "Expected \"linear\" <block_device> <sector>" << std::endl;
+                return nullptr;
+            }
+
+            std::string block_device = NextArg();
+            uint64_t physical_sector;
+            if (!android::base::ParseUint(NextArg(), &physical_sector)) {
+                std::cerr << "Expected sector, got: \"" << PreviousArg() << "\"" << std::endl;
+                return nullptr;
+            }
+            return std::make_unique<DmTargetLinear>(start_sector, num_sectors, block_device,
+                                                    physical_sector);
+        } else {
+            std::cerr << "Unrecognized target type: " << target_type << std::endl;
+            return nullptr;
+        }
+    }
+
+  private:
+    bool HasArgs(int count) { return arg_index_ + count <= argc_; }
+    const char* NextArg() {
+        CHECK(arg_index_ < argc_);
+        return argv_[arg_index_++];
+    }
+    const char* PreviousArg() {
+        CHECK(arg_index_ >= 0);
+        return argv_[arg_index_ - 1];
+    }
+
+  private:
+    int arg_index_;
+    int argc_;
+    char** argv_;
+};
+
 static int DmCreateCmdHandler(int argc, char** argv) {
     if (argc < 1) {
-        std::cerr << "Usage: dmctl create <name> [table-args]" << std::endl;
+        std::cerr << "Usage: dmctl create <dm-name> [-ro] <targets...>" << std::endl;
+        return -EINVAL;
+    }
+    std::string name = argv[0];
+
+    // Parse extended options first.
+    DmTable table;
+    int arg_index = 1;
+    while (arg_index < argc && argv[arg_index][0] == '-') {
+        if (strcmp(argv[arg_index], "-ro") == 0) {
+            table.set_readonly(true);
+        } else {
+            std::cerr << "Unrecognized option: " << argv[arg_index] << std::endl;
+            return -EINVAL;
+        }
+        arg_index++;
+    }
+
+    // Parse everything else as target information.
+    TargetParser parser(argc - arg_index, argv + arg_index);
+    while (parser.More()) {
+        std::unique_ptr<DmTarget> target = parser.Next();
+        if (!target || !table.AddTarget(std::move(target))) {
+            return -EINVAL;
+        }
+    }
+
+    if (table.num_targets() == 0) {
+        std::cerr << "Must define at least one target." << std::endl;
         return -EINVAL;
     }
 
-    DmTable table;
-
-    std::string name = argv[0];
     DeviceMapper& dm = DeviceMapper::Instance();
     if (!dm.CreateDevice(name, table)) {
         std::cerr << "Failed to create device-mapper device with name: " << name << std::endl;
         return -EIO;
     }
-
-    // if we also have target specified
-    if (argc > 1) {
-        // fall through for now. This will eventually create a DmTarget() based on the target name
-        // passing it the table that is specified at the command line
-    }
-
     return 0;
 }
 
