@@ -55,7 +55,7 @@ class DmTarget {
     virtual ~DmTarget() = default;
 
     // Returns name of the target.
-    virtual const std::string& name() const = 0;
+    virtual std::string name() const = 0;
 
     // Return the first logical sector represented by this target.
     uint64_t start() const { return start_; }
@@ -67,12 +67,39 @@ class DmTarget {
     // Function that converts this object to a string of arguments that can
     // be passed to the kernel for adding this target in a table. Each target (e.g. verity, linear)
     // must implement this, for it to be used on a device.
-    virtual std::string Serialize() const = 0;
+    std::string Serialize() const;
+
+  protected:
+    // Get the parameter string that is passed to the end of the dm_target_spec
+    // for this target type.
+    virtual std::string GetParameterString() const = 0;
 
   private:
     // logical sector number start and total length (in terms of 512-byte sectors) represented
     // by this target within a DmTable.
     uint64_t start_, length_;
+};
+
+class DmTargetZero final : public DmTarget {
+  public:
+    DmTargetZero(uint64_t start, uint64_t length) : DmTarget(start, length) {}
+
+    std::string name() const override { return "zero"; }
+    std::string GetParameterString() const override;
+};
+
+class DmTargetLinear final : public DmTarget {
+  public:
+    DmTargetLinear(uint64_t start, uint64_t length, const std::string& block_device,
+                   uint64_t physical_sector)
+        : DmTarget(start, length), block_device_(block_device), physical_sector_(physical_sector) {}
+
+    std::string name() const override { return "linear"; }
+    std::string GetParameterString() const override;
+
+  private:
+    std::string block_device_;
+    uint64_t physical_sector_;
 };
 
 }  // namespace dm
