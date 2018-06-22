@@ -30,7 +30,7 @@ namespace dm {
 
 class DmTable {
   public:
-    DmTable() : size_(0){};
+    DmTable() : num_sectors_(0), readonly_(false) {}
 
     // Adds a target to the device mapper table for a range specified in the target object.
     // The function will return 'true' if the target was successfully added and doesn't overlap with
@@ -48,13 +48,19 @@ class DmTable {
     // table is malformed.
     bool valid() const;
 
+    // Returns the toatl number of targets.
+    size_t num_targets() const { return targets_.size(); }
+
     // Returns the total size represented by the table in terms of number of 512-byte sectors.
     // NOTE: This function will overlook if there are any gaps in the targets added in the table.
-    uint64_t size() const;
+    uint64_t num_sectors() const;
 
     // Returns the string represntation of the table that is ready to be passed into the kernel
     // as part of the DM_TABLE_LOAD ioctl.
     std::string Serialize() const;
+
+    void set_readonly(bool readonly) { readonly_ = readonly; }
+    bool readonly() const { return readonly_; }
 
     ~DmTable() = default;
 
@@ -66,7 +72,10 @@ class DmTable {
 
     // Total size in terms of # of sectors, as calculated by looking at the last and the first
     // target in 'target_'.
-    uint64_t size_;
+    uint64_t num_sectors_;
+
+    // True if the device should be read-only; false otherwise.
+    bool readonly_;
 };
 
 }  // namespace dm

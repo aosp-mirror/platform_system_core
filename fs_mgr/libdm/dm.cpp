@@ -14,23 +14,12 @@
  * limitations under the License.
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/dm-ioctl.h>
-#include <stdint.h>
+#include "libdm/dm.h"
+
 #include <sys/ioctl.h>
 #include <sys/types.h>
-#include <unistd.h>
 
-#include <memory>
-#include <string>
-#include <vector>
-
-#include <android-base/logging.h>
 #include <android-base/macros.h>
-#include <android-base/unique_fd.h>
-
-#include "dm.h"
 
 namespace android {
 namespace dm {
@@ -51,23 +40,18 @@ bool DeviceMapper::CreateDevice(const std::string& name) {
         return false;
     }
 
-    std::unique_ptr<struct dm_ioctl, decltype(&free)> io(
-            static_cast<struct dm_ioctl*>(malloc(sizeof(struct dm_ioctl))), free);
-    if (io == nullptr) {
-        LOG(ERROR) << "Failed to allocate dm_ioctl";
-        return false;
-    }
-    InitIo(io.get(), name);
+    struct dm_ioctl io;
+    InitIo(&io, name);
 
-    if (ioctl(fd_, DM_DEV_CREATE, io.get())) {
-        PLOG(ERROR) << "DM_DEV_CREATE failed to create [" << name << "]";
+    if (ioctl(fd_, DM_DEV_CREATE, &io)) {
+        PLOG(ERROR) << "DM_DEV_CREATE failed for [" << name << "]";
         return false;
     }
 
     // Check to make sure the newly created device doesn't already have targets
     // added or opened by someone
-    CHECK(io->target_count == 0) << "Unexpected targets for newly created [" << name << "] device";
-    CHECK(io->open_count == 0) << "Unexpected opens for newly created [" << name << "] device";
+    CHECK(io.target_count == 0) << "Unexpected targets for newly created [" << name << "] device";
+    CHECK(io.open_count == 0) << "Unexpected opens for newly created [" << name << "] device";
 
     // Creates a new device mapper device with the name passed in
     return true;
@@ -84,22 +68,17 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
         return false;
     }
 
-    std::unique_ptr<struct dm_ioctl, decltype(&free)> io(
-            static_cast<struct dm_ioctl*>(malloc(sizeof(struct dm_ioctl))), free);
-    if (io == nullptr) {
-        LOG(ERROR) << "Failed to allocate dm_ioctl";
-        return false;
-    }
-    InitIo(io.get(), name);
+    struct dm_ioctl io;
+    InitIo(&io, name);
 
-    if (ioctl(fd_, DM_DEV_REMOVE, io.get())) {
-        PLOG(ERROR) << "DM_DEV_REMOVE failed to create [" << name << "]";
+    if (ioctl(fd_, DM_DEV_REMOVE, &io)) {
+        PLOG(ERROR) << "DM_DEV_REMOVE failed for [" << name << "]";
         return false;
     }
 
     // Check to make sure appropriate uevent is generated so ueventd will
     // do the right thing and remove the corresponding device node and symlinks.
-    CHECK(io->flags & DM_UEVENT_GENERATED_FLAG)
+    CHECK(io.flags & DM_UEVENT_GENERATED_FLAG)
             << "Didn't generate uevent for [" << name << "] removal";
 
     return true;
@@ -115,13 +94,45 @@ DmDeviceState DeviceMapper::state(const std::string& /* name */) const {
     return DmDeviceState::INVALID;
 }
 
-bool DeviceMapper::LoadTableAndActivate(const std::string& /* name */, const DmTable& /* table */) {
-    return false;
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
+    if (!CreateDevice(name)) {
+        return false;
+    }
+    if (!LoadTableAndActivate(name, table)) {
+        DeleteDevice(name);
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& table) {
+    std::string ioctl_buffer(sizeof(struct dm_ioctl), 0);
+    ioctl_buffer += table.Serialize();
+
+    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(&ioctl_buffer[0]);
+    InitIo(io, name);
+    io->data_size = ioctl_buffer.size();
+    io->data_start = sizeof(struct dm_ioctl);
+    io->target_count = static_cast<uint32_t>(table.num_targets());
+    if (table.readonly()) {
+        io->flags |= DM_READONLY_FLAG;
+    }
+    if (ioctl(fd_, DM_TABLE_LOAD, io)) {
+        PLOG(ERROR) << "DM_TABLE_LOAD failed";
+        return false;
+    }
+
+    InitIo(io, name);
+    if (ioctl(fd_, DM_DEV_SUSPEND, io)) {
+        PLOG(ERROR) << "DM_TABLE_SUSPEND resume failed";
+        return false;
+    }
+    return true;
 }
 
 // Reads all the available device mapper targets and their corresponding
 // versions from the kernel and returns in a vector
-bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
+bool DeviceMapper::GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets) {
     targets->clear();
 
     // calculate the space needed to read a maximum of kMaxPossibleDmTargets
@@ -147,7 +158,7 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
     io->data_start = sizeof(*io);
 
     if (ioctl(fd_, DM_LIST_VERSIONS, io)) {
-        PLOG(ERROR) << "Failed to get DM_LIST_VERSIONS from kernel";
+        PLOG(ERROR) << "DM_LIST_VERSIONS failed";
         return false;
     }
 
@@ -170,7 +181,7 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
     struct dm_target_versions* vers =
             reinterpret_cast<struct dm_target_versions*>(static_cast<char*>(buffer.get()) + next);
     while (next && data_size) {
-        targets->emplace_back((vers));
+        targets->emplace_back(vers);
         if (vers->next == 0) {
             break;
         }
@@ -209,7 +220,7 @@ bool DeviceMapper::GetAvailableDevices(std::vector<DmBlockDevice>* devices) {
     io->data_start = sizeof(*io);
 
     if (ioctl(fd_, DM_LIST_DEVICES, io)) {
-        PLOG(ERROR) << "Failed to get DM_LIST_DEVICES from kernel";
+        PLOG(ERROR) << "DM_LIST_DEVICES failed";
         return false;
     }
 

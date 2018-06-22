@@ -17,18 +17,20 @@
 #ifndef _LIBDM_DM_H_
 #define _LIBDM_DM_H_
 
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
 #include <linux/kdev_t.h>
+#include <stdint.h>
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <android-base/logging.h>
 
-#include <dm_table.h>
+#include "dm_table.h"
 
 // The minimum expected device mapper major.minor version
 #define DM_VERSION0 (4)
@@ -67,14 +69,6 @@ class DeviceMapper final {
         uint64_t dev_;
     };
 
-    // Creates a device mapper device with given name.
-    // Return 'true' on success and 'false' on failure to
-    // create OR if a device mapper device with the same name already
-    // exists.
-    // TODO(b/110035986): Make this method private and to be only
-    // called through LoadTableAndActivate() below.
-    bool CreateDevice(const std::string& name);
-
     // Removes a device mapper device with the given name.
     // Returns 'true' on success, false otherwise.
     bool DeleteDevice(const std::string& name);
@@ -88,15 +82,20 @@ class DeviceMapper final {
     // One of INVALID, SUSPENDED or ACTIVE.
     DmDeviceState state(const std::string& name) const;
 
-    // Loads the device mapper table from parameter into the underlying
-    // device mapper device with given name and activate / resumes the device in the process.
-    // If a device mapper device with the 'name', doesn't exist, it will be created.
+    // Creates a device, loads the given table, and activates it. If the device
+    // is not able to be activated, it is destroyed, and false is returned.
+    bool CreateDevice(const std::string& name, const DmTable& table);
+
+    // Loads the device mapper table from parameter into the underlying device
+    // mapper device with given name and activate / resumes the device in the
+    // process. A device with the given name must already exist.
+    //
     // Returns 'true' on success, false otherwise.
     bool LoadTableAndActivate(const std::string& name, const DmTable& table);
 
     // Returns true if a list of available device mapper targets registered in the kernel was
     // successfully read and stored in 'targets'. Returns 'false' otherwise.
-    bool GetAvailableTargets(std::vector<DmTarget>* targets);
+    bool GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets);
 
     // Return 'true' if it can successfully read the list of device mapper block devices
     // currently created. 'devices' will be empty if the kernel interactions
@@ -137,6 +136,12 @@ class DeviceMapper final {
             PLOG(ERROR) << "Failed to open device-mapper";
         }
     }
+
+    // Creates a device mapper device with given name.
+    // Return 'true' on success and 'false' on failure to
+    // create OR if a device mapper device with the same name already
+    // exists.
+    bool CreateDevice(const std::string& name);
 
     int fd_;
     // Non-copyable & Non-movable

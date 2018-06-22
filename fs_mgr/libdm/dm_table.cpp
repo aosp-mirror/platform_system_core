@@ -14,18 +14,16 @@
  * limitations under the License.
  */
 
+#include "libdm/dm_table.h"
+
 #include <android-base/logging.h>
 #include <android-base/macros.h>
-
-#include <string>
-#include <vector>
-
-#include "dm_table.h"
 
 namespace android {
 namespace dm {
 
-bool DmTable::AddTarget(std::unique_ptr<DmTarget>&& /* target */) {
+bool DmTable::AddTarget(std::unique_ptr<DmTarget>&& target) {
+    targets_.push_back(std::move(target));
     return true;
 }
 
@@ -34,21 +32,37 @@ bool DmTable::RemoveTarget(std::unique_ptr<DmTarget>&& /* target */) {
 }
 
 bool DmTable::valid() const {
+    if (targets_.empty()) {
+        LOG(ERROR) << "Device-mapper table must have at least one target.";
+        return "";
+    }
+    if (targets_[0]->start() != 0) {
+        LOG(ERROR) << "Device-mapper table must start at logical sector 0.";
+        return "";
+    }
     return true;
 }
 
-uint64_t DmTable::size() const {
-    return valid() ? size_ : 0;
+uint64_t DmTable::num_sectors() const {
+    return valid() ? num_sectors_ : 0;
 }
 
-// Returns a string represnetation of the table that is ready to be passed
-// down to the kernel for loading
+// Returns a string representation of the table that is ready to be passed
+// down to the kernel for loading.
 //
 // Implementation must verify there are no gaps in the table, table starts
 // with sector == 0, and iterate over each target to get its table
 // serialized.
 std::string DmTable::Serialize() const {
-    return "";
+    if (!valid()) {
+        return "";
+    }
+
+    std::string table;
+    for (const auto& target : targets_) {
+        table += target->Serialize();
+    }
+    return table;
 }
 
 }  // namespace dm
