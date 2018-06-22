@@ -7,10 +7,6 @@ HOST SERVICES:
 host:version
     Ask the ADB server for its internal version number.
 
-    As a special exception, the server will respond with a 4-byte
-    hex string corresponding to its internal version number, without
-    any OKAY or FAIL.
-
 host:kill
     Ask the ADB server to quit immediately. This is used when the
     ADB client detects that an obsolete server is running after an
