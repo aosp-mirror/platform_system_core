@@ -118,6 +118,7 @@ static bool low_ram_device;
 static bool kill_heaviest_task;
 static unsigned long kill_timeout_ms;
 static bool use_minfree_levels;
+static bool per_app_memcg;
 
 /* data required to handle events */
 struct event_handler_info {
@@ -484,7 +485,7 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
         return;
     }
 
-    if (low_ram_device) {
+    if (per_app_memcg) {
         if (params.oomadj >= 900) {
             soft_limit_mult = 0;
         } else if (params.oomadj >= 800) {
@@ -754,24 +755,31 @@ static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
 }
 
 static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
-   FILE *fp;
-   char buf[PATH_MAX];
+    FILE *fp;
+    char buf[PATH_MAX];
 
-   snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
+    /*
+     * Per-application memory.stat files are available only when
+     * per-application memcgs are enabled.
+     */
+    if (!per_app_memcg)
+        return -1;
 
-   fp = fopen(buf, "r");
+    snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
 
-   if (fp == NULL) {
-       ALOGE("%s open failed: %s", buf, strerror(errno));
-       return -1;
-   }
+    fp = fopen(buf, "r");
 
-   while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
-       memory_stat_parse_line(buf, mem_st);
-   }
-   fclose(fp);
+    if (fp == NULL) {
+        ALOGE("%s open failed: %s", buf, strerror(errno));
+        return -1;
+    }
 
-   return 0;
+    while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
+        memory_stat_parse_line(buf, mem_st);
+    }
+    fclose(fp);
+
+    return 0;
 }
 #endif
 
@@ -1580,6 +1588,8 @@ int main(int argc __unused, char **argv __unused) {
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
     use_minfree_levels =
         property_get_bool("ro.lmk.use_minfree_levels", false);
+    per_app_memcg =
+        property_get_bool("ro.config.per_app_memcg", low_ram_device);
 
 #ifdef LMKD_LOG_STATS
     statslog_init(&log_ctx, &enable_stats_log);
