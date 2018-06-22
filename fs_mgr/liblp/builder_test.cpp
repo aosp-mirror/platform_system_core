@@ -306,3 +306,21 @@ TEST(liblp, ExportInvalidGuid) {
     unique_ptr<LpMetadata> exported = builder->Export();
     EXPECT_EQ(exported, nullptr);
 }
+
+TEST(liblp, MetadataTooLarge) {
+    static const size_t kDiskSize = 128 * 1024;
+    static const size_t kMetadataSize = 64 * 1024;
+
+    // No space to store metadata + geometry.
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(kDiskSize, kMetadataSize, 1);
+    EXPECT_EQ(builder, nullptr);
+
+    // No space to store metadata + geometry + one free sector.
+    builder = MetadataBuilder::New(kDiskSize + LP_METADATA_GEOMETRY_SIZE * 2, kMetadataSize, 1);
+    EXPECT_EQ(builder, nullptr);
+
+    // Space for metadata + geometry + one free sector.
+    builder = MetadataBuilder::New(kDiskSize + LP_METADATA_GEOMETRY_SIZE * 2 + LP_SECTOR_SIZE,
+                                   kMetadataSize, 1);
+    EXPECT_NE(builder, nullptr);
+}
