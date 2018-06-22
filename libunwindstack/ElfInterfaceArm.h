@@ -70,7 +70,7 @@ class ElfInterfaceArm : public ElfInterface32 {
 
   bool FindEntry(uint32_t pc, uint64_t* entry_offset);
 
-  bool HandleType(uint64_t offset, uint32_t type, uint64_t load_bias) override;
+  bool HandleType(uint64_t offset, uint32_t type) override;
 
   bool Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) override;
 

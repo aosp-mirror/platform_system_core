@@ -245,55 +245,40 @@ TEST_F(ElfInterfaceArmTest, iterate) {
 TEST_F(ElfInterfaceArmTest, HandleType_not_arm_exidx) {
   ElfInterfaceArmFake interface(&memory_);
 
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_NULL, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOAD, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_DYNAMIC, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_INTERP, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_NOTE, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_SHLIB, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_PHDR, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_TLS, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOOS, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_HIOS, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOPROC, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_HIPROC, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_GNU_EH_FRAME, 0));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_GNU_STACK, 0));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_NULL));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOAD));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_DYNAMIC));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_INTERP));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_NOTE));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_SHLIB));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_PHDR));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_TLS));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOOS));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_HIOS));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOPROC));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_HIPROC));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_GNU_EH_FRAME));
+  ASSERT_FALSE(interface.HandleType(0x1000, PT_GNU_STACK));
 }
 
 TEST_F(ElfInterfaceArmTest, HandleType_arm_exidx) {
   ElfInterfaceArmFake interface(&memory_);
 
-  Elf32_Phdr phdr;
+  Elf32_Phdr phdr = {};
   interface.FakeSetStartOffset(0x1000);
   interface.FakeSetTotalEntries(100);
-  phdr.p_vaddr = 0x2000;
-  phdr.p_memsz = 0xa00;
+  phdr.p_offset = 0x2000;
+  phdr.p_filesz = 0xa00;
 
   // Verify that if reads fail, we don't set the values but still get true.
-  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001, 0));
-  ASSERT_EQ(0x1000U, interface.start_offset());
-  ASSERT_EQ(100U, interface.total_entries());
-
-  // Verify that if the second read fails, we still don't set the values.
-  memory_.SetData32(
-      0x1000 + reinterpret_cast<uint64_t>(&phdr.p_vaddr) - reinterpret_cast<uint64_t>(&phdr),
-      phdr.p_vaddr);
-  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001, 0));
+  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001));
   ASSERT_EQ(0x1000U, interface.start_offset());
   ASSERT_EQ(100U, interface.total_entries());
 
   // Everything is correct and present.
-  memory_.SetData32(
-      0x1000 + reinterpret_cast<uint64_t>(&phdr.p_memsz) - reinterpret_cast<uint64_t>(&phdr),
-      phdr.p_memsz);
-  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001, 0));
+  memory_.SetMemory(0x1000, &phdr, sizeof(phdr));
+  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001));
   ASSERT_EQ(0x2000U, interface.start_offset());
-  ASSERT_EQ(320U, interface.total_entries());
-
-  // Non-zero load bias.
-  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001, 0x1000));
-  ASSERT_EQ(0x1000U, interface.start_offset());
   ASSERT_EQ(320U, interface.total_entries());
 }
 
