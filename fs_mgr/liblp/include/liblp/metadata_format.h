@@ -46,6 +46,7 @@ extern "C" {
  * READONLY - The partition should not be considered writable. When used with
  * device mapper, the block device will be created as read-only.
  */
+#define LP_PARTITION_ATTR_NONE 0x0
 #define LP_PARTITION_ATTR_READONLY 0x1
 
 /* Mask that defines all valid attributes. */
