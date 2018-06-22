@@ -55,6 +55,7 @@ cc_test {
     ],
     srcs: [
         "builder_test.cpp",
+        "io_test.cpp",
         "utility_test.cpp",
     ],
 }
