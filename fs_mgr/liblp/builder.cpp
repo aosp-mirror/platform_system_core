@@ -287,7 +287,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_siz
         DCHECK(first_sector <= geometry_.last_logical_sector);
 
         // Note: the last usable sector is inclusive.
-        if (first_sector + sectors_needed > geometry_.last_logical_sector) {
+        if (geometry_.last_logical_sector + 1 - first_sector < sectors_needed) {
             LERROR << "Not enough free space to expand partition: " << partition->name();
             return false;
         }
@@ -345,6 +345,10 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
     metadata->header.partitions.num_entries = static_cast<uint32_t>(metadata->partitions.size());
     metadata->header.extents.num_entries = static_cast<uint32_t>(metadata->extents.size());
     return metadata;
+}
+
+uint64_t MetadataBuilder::AllocatableSpace() const {
+    return (geometry_.last_logical_sector - geometry_.first_logical_sector + 1) * LP_SECTOR_SIZE;
 }
 
 }  // namespace fs_mgr

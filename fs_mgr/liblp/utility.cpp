@@ -84,7 +84,7 @@ std::string GetPartitionGuid(const LpMetadataPartition& partition) {
     // macro to assist with buffer sizing.
     static const size_t kGuidLen = 36;
     char buffer[kGuidLen + 1];
-    uuid_unparse(partition.guid, buffer);
+    uuid_unparse_upper(partition.guid, buffer);
     return buffer;
 }
 
