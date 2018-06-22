@@ -129,7 +129,7 @@ bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& 
 
 // Reads all the available device mapper targets and their corresponding
 // versions from the kernel and returns in a vector
-bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
+bool DeviceMapper::GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets) {
     targets->clear();
 
     // calculate the space needed to read a maximum of kMaxPossibleDmTargets
@@ -178,7 +178,7 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTarget>* targets) {
     struct dm_target_versions* vers =
             reinterpret_cast<struct dm_target_versions*>(static_cast<char*>(buffer.get()) + next);
     while (next && data_size) {
-        targets->emplace_back((vers));
+        targets->emplace_back(vers);
         if (vers->next == 0) {
             break;
         }

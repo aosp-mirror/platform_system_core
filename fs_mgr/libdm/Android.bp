@@ -16,6 +16,7 @@
 
 cc_library_static {
     name: "libdm",
+    defaults: ["fs_mgr_defaults"],
     recovery_available: true,
 
     export_include_dirs: ["include"],
@@ -34,4 +35,17 @@ cc_library_static {
         "libbase_headers",
         "liblog_headers",
     ],
+}
+
+cc_test {
+    name: "libdm_test",
+    defaults: ["fs_mgr_defaults"],
+    static_libs: [
+        "libdm",
+        "libbase",
+        "liblog",
+    ],
+    srcs: [
+        "dm_test.cpp",
+    ]
 }

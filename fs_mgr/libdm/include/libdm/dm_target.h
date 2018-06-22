@@ -27,45 +27,49 @@
 namespace android {
 namespace dm {
 
+class DmTargetTypeInfo {
+  public:
+    DmTargetTypeInfo() : major_(0), minor_(0), patch_(0) {}
+    DmTargetTypeInfo(const struct dm_target_versions* info)
+        : name_(info->name),
+          major_(info->version[0]),
+          minor_(info->version[1]),
+          patch_(info->version[2]) {}
+
+    const std::string& name() const { return name_; }
+    std::string version() const {
+        return std::to_string(major_) + "." + std::to_string(minor_) + "." + std::to_string(patch_);
+    }
+
+  private:
+    std::string name_;
+    uint32_t major_;
+    uint32_t minor_;
+    uint32_t patch_;
+};
+
 class DmTarget {
   public:
-    DmTarget(const std::string& name, uint64_t start = 0, uint64_t length = 0)
-        : name_(name), v0_(0), v1_(0), v2_(0), start_(start), length_(length){};
-
-    // Creates a DmTarget object from dm_target_version as read from kernel
-    // with DM_LIST_VERSION ioctl.
-    DmTarget(const struct dm_target_versions* vers) : start_(0), length_(0) {
-        CHECK(vers != nullptr) << "Can't create DmTarget with dm_target_versions set to nullptr";
-        v0_ = vers->version[0];
-        v1_ = vers->version[1];
-        v2_ = vers->version[2];
-        name_ = vers->name;
-    }
+    DmTarget(uint64_t start, uint64_t length) : start_(start), length_(length) {}
 
     virtual ~DmTarget() = default;
 
     // Returns name of the target.
-    const std::string& name() const { return name_; }
+    virtual const std::string& name() const = 0;
+
+    // Return the first logical sector represented by this target.
+    uint64_t start() const { return start_; }
 
     // Returns size in number of sectors when this target is part of
     // a DmTable, return 0 otherwise.
     uint64_t size() const { return length_; }
 
-    // Return string representation of the device mapper target version.
-    std::string version() const {
-        return std::to_string(v0_) + "." + std::to_string(v1_) + "." + std::to_string(v2_);
-    }
-
     // Function that converts this object to a string of arguments that can
     // be passed to the kernel for adding this target in a table. Each target (e.g. verity, linear)
     // must implement this, for it to be used on a device.
-    virtual std::string Serialize() const { return ""; }
+    virtual std::string Serialize() const = 0;
 
   private:
-    // Name of the target.
-    std::string name_;
-    // Target version.
-    uint32_t v0_, v1_, v2_;
     // logical sector number start and total length (in terms of 512-byte sectors) represented
     // by this target within a DmTable.
     uint64_t start_, length_;
