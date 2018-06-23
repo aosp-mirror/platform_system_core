@@ -211,7 +211,7 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
       return false;
     }
 
-    if (HandleType(offset, phdr.p_type, *load_bias)) {
+    if (HandleType(offset, phdr.p_type)) {
       continue;
     }
 
