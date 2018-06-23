@@ -104,8 +104,9 @@ class DeviceMapper final {
     bool GetAvailableDevices(std::vector<DmBlockDevice>* devices);
 
     // Returns the path to the device mapper device node in '/dev' corresponding to
-    // 'name'.
-    std::string GetDmDevicePathByName(const std::string& name);
+    // 'name'. If the device does not exist, false is returned, and the path
+    // parameter is not set.
+    bool GetDmDevicePathByName(const std::string& name, std::string* path);
 
     // The only way to create a DeviceMapper object.
     static DeviceMapper& Instance();
