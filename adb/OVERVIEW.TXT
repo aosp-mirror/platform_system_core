@@ -103,9 +103,6 @@ II. Protocol details:
            4-byte hex length, followed by a string giving the reason
            for failure.
 
-        3. As a special exception, for 'host:version', a 4-byte
-           hex string corresponding to the server's internal version number
-
     Note that the connection is still alive after an OKAY, which allows the
     client to make other requests. But in certain cases, an OKAY will even
     change the state of the connection.
