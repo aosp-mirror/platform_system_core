@@ -17,6 +17,7 @@
 #include "libdm/dm.h"
 
 #include <sys/ioctl.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
 
 #include <android-base/macros.h>
@@ -258,8 +259,17 @@ bool DeviceMapper::GetAvailableDevices(std::vector<DmBlockDevice>* devices) {
 
 // Accepts a device mapper device name (like system_a, vendor_b etc) and
 // returns the path to it's device node (or symlink to the device node)
-std::string DeviceMapper::GetDmDevicePathByName(const std::string& /* name */) {
-    return "";
+bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* path) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(ERROR) << "DM_DEV_STATUS failed for " << name;
+        return false;
+    }
+
+    uint32_t dev_num = minor(io.dev);
+    *path = "/dev/block/dm-" + std::to_string(dev_num);
+    return true;
 }
 
 // private methods of DeviceMapper
