@@ -352,21 +352,23 @@ static void export_oem_lock_status() {
 }
 
 static void export_kernel_boot_props() {
+    constexpr const char* UNSET = "";
     struct {
         const char *src_prop;
         const char *dst_prop;
         const char *default_value;
     } prop_map[] = {
-        { "ro.boot.serialno",   "ro.serialno",   "", },
+        { "ro.boot.serialno",   "ro.serialno",   UNSET, },
         { "ro.boot.mode",       "ro.bootmode",   "unknown", },
         { "ro.boot.baseband",   "ro.baseband",   "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
         { "ro.boot.hardware",   "ro.hardware",   "unknown", },
         { "ro.boot.revision",   "ro.revision",   "0", },
     };
-    for (size_t i = 0; i < arraysize(prop_map); i++) {
-        std::string value = GetProperty(prop_map[i].src_prop, "");
-        property_set(prop_map[i].dst_prop, (!value.empty()) ? value : prop_map[i].default_value);
+    for (const auto& prop : prop_map) {
+        std::string value = GetProperty(prop.src_prop, prop.default_value);
+        if (value != UNSET)
+            property_set(prop.dst_prop, value);
     }
 }
 

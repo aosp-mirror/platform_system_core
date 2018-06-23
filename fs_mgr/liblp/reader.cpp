@@ -76,7 +76,7 @@ static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
 // Read and validate geometry information from a block device that holds
 // logical partitions. If the information is corrupted, this will attempt
 // to read it from a secondary backup location.
-static bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
+bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
     // Read the first 4096 bytes.
     std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
     if (SeekFile64(fd, 0, SEEK_SET) < 0) {
@@ -236,14 +236,14 @@ static std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
     return metadata;
 }
 
-std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number) {
-    android::base::unique_fd fd(open(block_device, O_RDONLY));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
-        return nullptr;
-    }
+std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
     LpMetadataGeometry geometry;
     if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
+        return nullptr;
+    }
+
+    if (slot_number >= geometry.metadata_slot_count) {
+        LERROR << __PRETTY_FUNCTION__ << "invalid metadata slot number";
         return nullptr;
     }
 
@@ -253,26 +253,34 @@ std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
         return nullptr;
     }
-    if (std::unique_ptr<LpMetadata> metadata = ParseMetadata(fd)) {
-        return metadata;
+    std::unique_ptr<LpMetadata> metadata = ParseMetadata(fd);
+
+    // If the primary copy failed, try the backup copy.
+    if (!metadata) {
+        offset = GetBackupMetadataOffset(geometry, slot_number);
+        if (SeekFile64(fd, offset, SEEK_END) < 0) {
+            PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
+            return nullptr;
+        }
+        metadata = ParseMetadata(fd);
     }
 
-    // Next try the backup copy.
-    offset = GetBackupMetadataOffset(geometry, slot_number);
-    if (SeekFile64(fd, offset, SEEK_END) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
-        return nullptr;
+    if (metadata) {
+        metadata->geometry = geometry;
     }
-    return ParseMetadata(fd);
+    return metadata;
 }
 
-std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
-    android::base::unique_fd fd(open(file, O_RDONLY));
+std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number) {
+    android::base::unique_fd fd(open(block_device, O_RDONLY));
     if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << file;
+        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
         return nullptr;
     }
+    return ReadMetadata(fd, slot_number);
+}
 
+std::unique_ptr<LpMetadata> ReadFromImageFile(int fd) {
     LpMetadataGeometry geometry;
     if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
         return nullptr;
@@ -287,6 +295,15 @@ std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
     }
     metadata->geometry = geometry;
     return metadata;
+}
+
+std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
+    android::base::unique_fd fd(open(file, O_RDONLY));
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "open failed: " << file;
+        return nullptr;
+    }
+    return ReadFromImageFile(fd);
 }
 
 static std::string NameFromFixedArray(const char* name, size_t buffer_size) {

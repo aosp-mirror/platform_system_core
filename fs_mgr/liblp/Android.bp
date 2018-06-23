@@ -42,3 +42,20 @@ cc_library_static {
     ],
     export_include_dirs: ["include"],
 }
+
+cc_test {
+    name: "liblp_test",
+    defaults: ["fs_mgr_defaults"],
+    static_libs: [
+        "libbase",
+        "liblog",
+        "libcrypto",
+        "libcrypto_utils",
+        "liblp",
+    ],
+    srcs: [
+        "builder_test.cpp",
+        "io_test.cpp",
+        "utility_test.cpp",
+    ],
+}

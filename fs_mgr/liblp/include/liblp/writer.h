@@ -42,10 +42,13 @@ enum class SyncMode {
 // The slot number indicates which metadata slot to use.
 bool WritePartitionTable(const char* block_device, const LpMetadata& metadata, SyncMode sync_mode,
                          uint32_t slot_number);
+bool WritePartitionTable(int fd, const LpMetadata& metadata, SyncMode sync_mode,
+                         uint32_t slot_number);
 
 // Helper function to serialize geometry and metadata to a normal file, for
 // flashing or debugging.
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
+bool WriteToImageFile(int fd, const LpMetadata& metadata);
 
 }  // namespace fs_mgr
 }  // namespace android
