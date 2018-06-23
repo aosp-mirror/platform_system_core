@@ -118,7 +118,7 @@ class ElfInterface {
   template <typename SymType>
   bool GetGlobalVariableWithTemplate(const std::string& name, uint64_t* memory_address);
 
-  virtual bool HandleType(uint64_t, uint32_t, uint64_t) { return false; }
+  virtual bool HandleType(uint64_t, uint32_t) { return false; }
 
   template <typename EhdrType>
   static void GetMaxSizeWithTemplate(Memory* memory, uint64_t* size);
