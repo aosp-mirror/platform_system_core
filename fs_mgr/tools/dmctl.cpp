@@ -49,6 +49,7 @@ static int Usage(void) {
     std::cerr << "  create <dm-name> [-ro] <targets...>" << std::endl;
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets>" << std::endl;
+    std::cerr << "  getpath <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Target syntax:" << std::endl;
@@ -241,11 +242,30 @@ static int HelpCmdHandler(int /* argc */, char** /* argv */) {
     return 0;
 }
 
+static int GetPathCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::string path;
+    if (!dm.GetDmDevicePathByName(argv[0], &path)) {
+        std::cerr << "Could not query path of device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    std::cout << path << std::endl;
+    return 0;
+}
+
 static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
+        // clang-format off
         {"create", DmCreateCmdHandler},
         {"delete", DmDeleteCmdHandler},
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
+        {"getpath", GetPathCmdHandler},
+        // clang-format on
 };
 
 int main(int argc, char** argv) {
