@@ -116,8 +116,7 @@ class ElfInterfaceTest : public ::testing::Test {
 template <typename Sym>
 void ElfInterfaceTest::InitSym(uint64_t offset, uint32_t value, uint32_t size, uint32_t name_offset,
                                uint64_t sym_offset, const char* name) {
-  Sym sym;
-  memset(&sym, 0, sizeof(sym));
+  Sym sym = {};
   sym.st_info = STT_FUNC;
   sym.st_value = value;
   sym.st_size = size;
@@ -132,15 +131,13 @@ template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
 void ElfInterfaceTest::SinglePtLoad() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 1;
   ehdr.e_phentsize = sizeof(Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0x2000;
   phdr.p_memsz = 0x10000;
@@ -172,15 +169,13 @@ template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
 void ElfInterfaceTest::MultipleExecutablePtLoads() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 3;
   ehdr.e_phentsize = sizeof(Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0x2000;
   phdr.p_memsz = 0x10000;
@@ -241,15 +236,13 @@ template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
 void ElfInterfaceTest::MultipleExecutablePtLoadsIncrementsNotSizeOfPhdr() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 3;
   ehdr.e_phentsize = sizeof(Phdr) + 100;
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0x2000;
   phdr.p_memsz = 0x10000;
@@ -312,15 +305,13 @@ template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
 void ElfInterfaceTest::NonExecutablePtLoads() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 3;
   ehdr.e_phentsize = sizeof(Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0x2000;
   phdr.p_memsz = 0x10000;
@@ -371,17 +362,15 @@ template <typename Ehdr, typename Phdr, typename Dyn, typename ElfInterfaceType>
 void ElfInterfaceTest::ManyPhdrs() {
   std::unique_ptr<ElfInterface> elf(new ElfInterfaceType(&memory_));
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 7;
   ehdr.e_phentsize = sizeof(Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Phdr phdr;
   uint64_t phdr_offset = 0x100;
 
-  memset(&phdr, 0, sizeof(phdr));
+  Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0x2000;
   phdr.p_memsz = 0x10000;
@@ -444,18 +433,16 @@ TEST_F(ElfInterfaceTest, elf64_many_phdrs) {
 TEST_F(ElfInterfaceTest, elf32_arm) {
   ElfInterfaceArm elf_arm(&memory_);
 
-  Elf32_Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Elf32_Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 1;
   ehdr.e_phentsize = sizeof(Elf32_Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Elf32_Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Elf32_Phdr phdr = {};
   phdr.p_type = PT_ARM_EXIDX;
-  phdr.p_vaddr = 0x2000;
-  phdr.p_memsz = 16;
+  phdr.p_offset = 0x2000;
+  phdr.p_filesz = 16;
   memory_.SetMemory(0x100, &phdr, sizeof(phdr));
 
   // Add arm exidx entries.
@@ -480,8 +467,7 @@ TEST_F(ElfInterfaceTest, elf32_arm) {
 
 template <typename Ehdr, typename Phdr, typename Shdr, typename Dyn>
 void ElfInterfaceTest::SonameInit(SonameTestEnum test_type) {
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_shoff = 0x200;
   ehdr.e_shnum = 2;
   ehdr.e_shentsize = sizeof(Shdr);
@@ -490,8 +476,7 @@ void ElfInterfaceTest::SonameInit(SonameTestEnum test_type) {
   ehdr.e_phentsize = sizeof(Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Shdr shdr;
-  memset(&shdr, 0, sizeof(shdr));
+  Shdr shdr = {};
   shdr.sh_type = SHT_STRTAB;
   if (test_type == SONAME_MISSING_MAP) {
     shdr.sh_addr = 0x20100;
@@ -501,8 +486,7 @@ void ElfInterfaceTest::SonameInit(SonameTestEnum test_type) {
   shdr.sh_offset = 0x10000;
   memory_.SetMemory(0x200 + sizeof(shdr), &shdr, sizeof(shdr));
 
-  Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Phdr phdr = {};
   phdr.p_type = PT_DYNAMIC;
   phdr.p_offset = 0x2000;
   phdr.p_memsz = sizeof(Dyn) * 3;
@@ -748,8 +732,7 @@ template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
 void ElfInterfaceTest::InitSectionHeadersMalformed() {
   std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_shoff = 0x1000;
   ehdr.e_shnum = 10;
   ehdr.e_shentsize = sizeof(Shdr);
@@ -774,8 +757,7 @@ void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
 
   uint64_t offset = 0x1000;
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_shoff = offset;
   ehdr.e_shnum = 10;
   ehdr.e_shentsize = entry_size;
@@ -783,8 +765,7 @@ void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
 
   offset += ehdr.e_shentsize;
 
-  Shdr shdr;
-  memset(&shdr, 0, sizeof(shdr));
+  Shdr shdr = {};
   shdr.sh_type = SHT_SYMTAB;
   shdr.sh_link = 4;
   shdr.sh_addr = 0x5000;
@@ -863,8 +844,7 @@ void ElfInterfaceTest::InitSectionHeadersOffsets() {
 
   uint64_t offset = 0x2000;
 
-  Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Ehdr ehdr = {};
   ehdr.e_shoff = offset;
   ehdr.e_shnum = 10;
   ehdr.e_shentsize = sizeof(Shdr);
@@ -873,8 +853,7 @@ void ElfInterfaceTest::InitSectionHeadersOffsets() {
 
   offset += ehdr.e_shentsize;
 
-  Shdr shdr;
-  memset(&shdr, 0, sizeof(shdr));
+  Shdr shdr = {};
   shdr.sh_type = SHT_PROGBITS;
   shdr.sh_link = 2;
   shdr.sh_name = 0x200;
@@ -956,15 +935,13 @@ TEST_F(ElfInterfaceTest, init_section_headers_offsets64) {
 TEST_F(ElfInterfaceTest, is_valid_pc_from_pt_load) {
   std::unique_ptr<ElfInterface> elf(new ElfInterface32(&memory_));
 
-  Elf32_Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Elf32_Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 1;
   ehdr.e_phentsize = sizeof(Elf32_Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Elf32_Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Elf32_Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0;
   phdr.p_memsz = 0x10000;
@@ -984,15 +961,13 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_pt_load) {
 TEST_F(ElfInterfaceTest, is_valid_pc_from_pt_load_non_zero_load_bias) {
   std::unique_ptr<ElfInterface> elf(new ElfInterface32(&memory_));
 
-  Elf32_Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Elf32_Ehdr ehdr = {};
   ehdr.e_phoff = 0x100;
   ehdr.e_phnum = 1;
   ehdr.e_phentsize = sizeof(Elf32_Phdr);
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Elf32_Phdr phdr;
-  memset(&phdr, 0, sizeof(phdr));
+  Elf32_Phdr phdr = {};
   phdr.p_type = PT_LOAD;
   phdr.p_vaddr = 0x2000;
   phdr.p_memsz = 0x10000;
@@ -1017,16 +992,14 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_debug_frame) {
 
   uint64_t sh_offset = 0x100;
 
-  Elf32_Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Elf32_Ehdr ehdr = {};
   ehdr.e_shstrndx = 1;
   ehdr.e_shoff = sh_offset;
   ehdr.e_shentsize = sizeof(Elf32_Shdr);
   ehdr.e_shnum = 3;
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Elf32_Shdr shdr;
-  memset(&shdr, 0, sizeof(shdr));
+  Elf32_Shdr shdr = {};
   shdr.sh_type = SHT_NULL;
   memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
 
@@ -1080,16 +1053,14 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_eh_frame) {
 
   uint64_t sh_offset = 0x100;
 
-  Elf32_Ehdr ehdr;
-  memset(&ehdr, 0, sizeof(ehdr));
+  Elf32_Ehdr ehdr = {};
   ehdr.e_shstrndx = 1;
   ehdr.e_shoff = sh_offset;
   ehdr.e_shentsize = sizeof(Elf32_Shdr);
   ehdr.e_shnum = 3;
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
-  Elf32_Shdr shdr;
-  memset(&shdr, 0, sizeof(shdr));
+  Elf32_Shdr shdr = {};
   shdr.sh_type = SHT_NULL;
   memory_.SetMemory(sh_offset, &shdr, sizeof(shdr));
 
