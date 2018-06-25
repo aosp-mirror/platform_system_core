@@ -17,17 +17,16 @@
 #include "libdm/loop_control.h"
 
 #include <fcntl.h>
-#include <linux/memfd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
+#include "test_util.h"
 
 using namespace std;
 using namespace android::dm;
@@ -36,7 +35,7 @@ using unique_fd = android::base::unique_fd;
 static unique_fd TempFile() {
     // A loop device needs to be at least one sector to actually work, so fill
     // up the file with a message.
-    unique_fd fd(syscall(__NR_memfd_create, "fake_disk", 0));
+    unique_fd fd(CreateTempFile("temp", 0));
     if (fd < 0) {
         return {};
     }
