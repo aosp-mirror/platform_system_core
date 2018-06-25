@@ -49,5 +49,6 @@ cc_test {
     srcs: [
         "dm_test.cpp",
         "loop_control_test.cpp",
+        "test_util.cpp",
     ]
 }
