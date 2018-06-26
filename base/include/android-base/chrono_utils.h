@@ -20,7 +20,7 @@
 #include <chrono>
 #include <sstream>
 
-#if __cplusplus > 201103L  // C++14
+#if __cplusplus > 201103L && !defined(__WIN32)  // C++14
 using namespace std::chrono_literals;
 #endif
 
