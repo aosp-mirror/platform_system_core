@@ -47,8 +47,8 @@
 #include <memory>
 #include <thread>
 
-#include "fastboot.h"
 #include "usb.h"
+#include "util.h"
 
 using namespace std::chrono_literals;
 
