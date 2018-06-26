@@ -41,16 +41,8 @@
 
 // Some printf-like functions are implemented in terms of
 // android::base::StringAppendV, so they should use the same attribute for
-// compile-time format string checking. On Windows, if the mingw version of
-// vsnprintf is used in StringAppendV, use `gnu_printf' which allows z in %zd
-// and PRIu64 (and related) to be recognized by the compile-time checking.
+// compile-time format string checking.
 #define ADB_FORMAT_ARCHETYPE __printf__
-#ifdef __USE_MINGW_ANSI_STDIO
-#if __USE_MINGW_ANSI_STDIO
-#undef ADB_FORMAT_ARCHETYPE
-#define ADB_FORMAT_ARCHETYPE gnu_printf
-#endif
-#endif
 
 #ifdef _WIN32
 

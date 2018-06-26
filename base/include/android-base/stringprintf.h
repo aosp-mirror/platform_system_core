@@ -24,17 +24,8 @@ namespace android {
 namespace base {
 
 // These printf-like functions are implemented in terms of vsnprintf, so they
-// use the same attribute for compile-time format string checking. On Windows,
-// if the mingw version of vsnprintf is used, use `gnu_printf' which allows z
-// in %zd and PRIu64 (and related) to be recognized by the compile-time
-// checking.
+// use the same attribute for compile-time format string checking.
 #define ANDROID_BASE_FORMAT_ARCHETYPE __printf__
-#ifdef __USE_MINGW_ANSI_STDIO
-#if __USE_MINGW_ANSI_STDIO
-#undef ANDROID_BASE_FORMAT_ARCHETYPE
-#define ANDROID_BASE_FORMAT_ARCHETYPE gnu_printf
-#endif
-#endif
 
 // Returns a string corresponding to printf-like formatting of the arguments.
 std::string StringPrintf(const char* fmt, ...)
