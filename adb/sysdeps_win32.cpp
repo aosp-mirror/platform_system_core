@@ -2455,9 +2455,8 @@ static int _console_write_utf8(const char* const buf, const size_t buf_size, FIL
 }
 
 // Function prototype because attributes cannot be placed on func definitions.
-static int _console_vfprintf(const HANDLE console, FILE* stream,
-                             const char *format, va_list ap)
-    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 3, 0)));
+static int _console_vfprintf(const HANDLE console, FILE* stream, const char* format, va_list ap)
+        __attribute__((__format__(__printf__, 3, 0)));
 
 // Internal function to format a UTF-8 string and write it to a Win32 console.
 // Returns -1 on error.
