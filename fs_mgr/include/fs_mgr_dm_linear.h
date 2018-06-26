@@ -26,53 +26,20 @@
 #define __CORE_FS_MGR_DM_LINEAR_H
 
 #include <stdint.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
+#include <libdm/dm.h>
+#include <liblp/metadata_format.h>
+
 namespace android {
 namespace fs_mgr {
 
-static const uint32_t kPartitionReadonly = 0x1;
-
-class LogicalPartitionExtent {
-  public:
-    LogicalPartitionExtent() : logical_sector_(0), first_sector_(0), num_sectors_(0) {}
-    LogicalPartitionExtent(uint64_t logical_sector, uint64_t first_sector, uint64_t num_sectors,
-                           const std::string& block_device)
-        : logical_sector_(logical_sector),
-          first_sector_(first_sector),
-          num_sectors_(num_sectors),
-          block_device_(block_device) {}
-
-    // Return a string containing the dm_target_spec buffer needed to use this
-    // extent in a device-mapper table.
-    std::string Serialize() const;
-
-    const std::string& block_device() const { return block_device_; }
-
-  private:
-    // Logical sector this extent represents in the presented block device.
-    // This is equal to the previous extent's logical sector plus the number
-    // of sectors in that extent. The first extent always starts at 0.
-    uint64_t logical_sector_;
-    // First 512-byte sector of this extent, on the source block device.
-    uint64_t first_sector_;
-    // Number of 512-byte sectors.
-    uint64_t num_sectors_;
-    // Target block device.
-    std::string block_device_;
-};
-
 struct LogicalPartition {
-    LogicalPartition() : attributes(0), num_sectors(0) {}
-
     std::string name;
-    uint32_t attributes;
-    // Number of 512-byte sectors total.
-    uint64_t num_sectors;
-    // List of extents.
-    std::vector<LogicalPartitionExtent> extents;
+    std::vector<android::dm::DmTargetLinear> extents;
 };
 
 struct LogicalPartitionTable {
