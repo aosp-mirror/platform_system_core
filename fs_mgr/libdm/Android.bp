@@ -28,7 +28,8 @@ cc_library_static {
     srcs: [
         "dm_table.cpp",
         "dm_target.cpp",
-        "dm.cpp"
+        "dm.cpp",
+        "loop_control.cpp",
     ],
 
     header_libs: [
@@ -47,5 +48,7 @@ cc_test {
     ],
     srcs: [
         "dm_test.cpp",
+        "loop_control_test.cpp",
+        "test_util.cpp",
     ]
 }
