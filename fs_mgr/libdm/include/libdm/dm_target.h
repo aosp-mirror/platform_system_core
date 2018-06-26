@@ -96,6 +96,7 @@ class DmTargetLinear final : public DmTarget {
 
     std::string name() const override { return "linear"; }
     std::string GetParameterString() const override;
+    const std::string& block_device() const { return block_device_; }
 
   private:
     std::string block_device_;
