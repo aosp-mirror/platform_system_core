@@ -50,6 +50,7 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets>" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
+    std::cerr << "  table <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Target syntax:" << std::endl;
@@ -258,6 +259,31 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
+static int TableCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (!dm.GetTableStatus(argv[0], &table)) {
+        std::cerr << "Could not query table status of device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    std::cout << "Targets in the device-mapper table for " << argv[0] << ":" << std::endl;
+    for (const auto& target : table) {
+        std::cout << target.spec.sector_start << "-"
+                  << (target.spec.sector_start + target.spec.length) << ": "
+                  << target.spec.target_type;
+        if (!target.data.empty()) {
+            std::cout << ", " << target.data;
+        }
+        std::cout << std::endl;
+    }
+    return 0;
+}
+
 static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         // clang-format off
         {"create", DmCreateCmdHandler},
@@ -265,6 +291,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
+        {"table", TableCmdHandler},
         // clang-format on
 };
 

@@ -50,6 +50,7 @@
 #include <ext4_utils/ext4_sb.h>
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
+#include <libdm/dm.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <linux/magic.h>
@@ -75,6 +76,8 @@
 #define ZRAM_CONF_MCS   "/sys/block/zram0/max_comp_streams"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+
+using DeviceMapper = android::dm::DeviceMapper;
 
 // record fs stat
 enum FsStatFlags {
@@ -1369,12 +1372,6 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
         return false;
     }
 
-    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC)));
-    if (fd == -1) {
-        PERROR << "Error opening device mapper";
-        return false;
-    }
-
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
                                                                fs_mgr_free_fstab);
     if (!fstab) {
@@ -1382,8 +1379,8 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
         return false;
     }
 
-    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
-    struct dm_ioctl* io = (struct dm_ioctl*)buffer;
+    DeviceMapper& dm = DeviceMapper::Instance();
+
     bool system_root = android::base::GetProperty("ro.build.system_root_image", "") == "true";
 
     for (int i = 0; i < fstab->num_entries; i++) {
@@ -1399,19 +1396,19 @@ bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
             mount_point = basename(fstab->recs[i].mount_point);
         }
 
-        fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, mount_point);
+        const char* status = nullptr;
 
-        const char* status;
-        if (ioctl(fd, DM_TABLE_STATUS, io)) {
+        std::vector<DeviceMapper::TargetInfo> table;
+        if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
             if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
                 status = "V";
             } else {
                 PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point.c_str();
                 continue;
             }
+        } else {
+            status = table[0].data.c_str();
         }
-
-        status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
         // To be consistent in vboot 1.0 and vboot 2.0 (AVB), change the mount_point
         // back to 'system' for the callback. So it has property [partition.system.verified]
