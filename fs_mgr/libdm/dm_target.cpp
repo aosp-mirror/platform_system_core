@@ -18,6 +18,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/strings.h>
 
 #include <libdm/dm.h>
 
@@ -53,6 +54,61 @@ std::string DmTargetZero::GetParameterString() const {
 
 std::string DmTargetLinear::GetParameterString() const {
     return block_device_ + " " + std::to_string(physical_sector_);
+}
+
+DmTargetVerity::DmTargetVerity(uint64_t start, uint64_t length, uint32_t version,
+                               const std::string& block_device, const std::string& hash_device,
+                               uint32_t data_block_size, uint32_t hash_block_size,
+                               uint32_t num_data_blocks, uint32_t hash_start_block,
+                               const std::string& hash_algorithm, const std::string& root_digest,
+                               const std::string& salt)
+    : DmTarget(start, length), valid_(true) {
+    base_args_ = {
+            std::to_string(version),
+            block_device,
+            hash_device,
+            std::to_string(data_block_size),
+            std::to_string(hash_block_size),
+            std::to_string(num_data_blocks),
+            std::to_string(hash_start_block),
+            hash_algorithm,
+            root_digest,
+            salt,
+    };
+}
+
+void DmTargetVerity::UseFec(const std::string& device, uint32_t num_roots, uint32_t num_blocks,
+                            uint32_t start) {
+    optional_args_.emplace_back("use_fec_from_device");
+    optional_args_.emplace_back(device);
+    optional_args_.emplace_back("fec_roots");
+    optional_args_.emplace_back(std::to_string(num_roots));
+    optional_args_.emplace_back("fec_blocks");
+    optional_args_.emplace_back(std::to_string(num_blocks));
+    optional_args_.emplace_back("fec_start");
+    optional_args_.emplace_back(std::to_string(start));
+}
+
+void DmTargetVerity::SetVerityMode(const std::string& mode) {
+    if (mode != "restart_on_corruption" && mode != "ignore_corruption") {
+        LOG(ERROR) << "Unknown verity mode: " << mode;
+        valid_ = false;
+        return;
+    }
+    optional_args_.emplace_back(mode);
+}
+
+void DmTargetVerity::IgnoreZeroBlocks() {
+    optional_args_.emplace_back("ignore_zero_blocks");
+}
+
+std::string DmTargetVerity::GetParameterString() const {
+    std::string base = android::base::Join(base_args_, " ");
+    if (optional_args_.empty()) {
+        return base;
+    }
+    std::string optional = android::base::Join(optional_args_, " ");
+    return base + " " + std::to_string(optional_args_.size()) + " " + optional;
 }
 
 }  // namespace dm
