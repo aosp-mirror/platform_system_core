@@ -33,11 +33,11 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <libavb/libavb.h>
+#include <libdm/dm.h>
 
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_avb_ops.h"
-#include "fs_mgr_priv_dm_ioctl.h"
 #include "fs_mgr_priv_sha.h"
 
 static inline bool nibble_value(const char& c, uint8_t* value) {
@@ -218,9 +218,9 @@ bool FsManagerAvbVerifier::VerifyVbmetaImages(const AvbSlotVerifyData& verify_da
 // Constructs dm-verity arguments for sending DM_TABLE_LOAD ioctl to kernel.
 // See the following link for more details:
 // https://gitlab.com/cryptsetup/cryptsetup/wikis/DMVerity
-static std::string construct_verity_table(const AvbHashtreeDescriptor& hashtree_desc,
-                                          const std::string& salt, const std::string& root_digest,
-                                          const std::string& blk_device) {
+static bool construct_verity_table(const AvbHashtreeDescriptor& hashtree_desc,
+                                   const std::string& salt, const std::string& root_digest,
+                                   const std::string& blk_device, android::dm::DmTable* table) {
     // Loads androidboot.veritymode from kernel cmdline.
     std::string verity_mode;
     if (!fs_mgr_get_boot_config("veritymode", &verity_mode)) {
@@ -235,145 +235,56 @@ static std::string construct_verity_table(const AvbHashtreeDescriptor& hashtree_
         dm_verity_mode = "ignore_corruption";
     } else if (verity_mode != "eio") {  // Default dm_verity_mode is eio.
         LERROR << "Unknown androidboot.veritymode: " << verity_mode;
-        return "";
+        return false;
     }
 
-    // dm-verity construction parameters:
-    //   <version> <dev> <hash_dev>
-    //   <data_block_size> <hash_block_size>
-    //   <num_data_blocks> <hash_start_block>
-    //   <algorithm> <digest> <salt>
-    //   [<#opt_params> <opt_params>]
-    std::ostringstream verity_table;
-    verity_table << hashtree_desc.dm_verity_version << " " << blk_device << " " << blk_device << " "
-                 << hashtree_desc.data_block_size << " " << hashtree_desc.hash_block_size << " "
-                 << hashtree_desc.image_size / hashtree_desc.data_block_size << " "
-                 << hashtree_desc.tree_offset / hashtree_desc.hash_block_size << " "
-                 << hashtree_desc.hash_algorithm << " " << root_digest << " " << salt;
+    std::ostringstream hash_algorithm;
+    hash_algorithm << hashtree_desc.hash_algorithm;
 
-    // Continued from the above optional parameters:
-    //   [<#opt_params> <opt_params>]
-    int optional_argc = 0;
-    std::ostringstream optional_args;
-
-    // dm-verity optional parameters for FEC (forward error correction):
-    //   use_fec_from_device <fec_dev>
-    //   fec_roots <num>
-    //   fec_blocks <num>
-    //   fec_start <offset>
+    android::dm::DmTargetVerity target(0, hashtree_desc.image_size / 512,
+                                       hashtree_desc.dm_verity_version, blk_device, blk_device,
+                                       hashtree_desc.data_block_size, hashtree_desc.hash_block_size,
+                                       hashtree_desc.image_size / hashtree_desc.data_block_size,
+                                       hashtree_desc.tree_offset / hashtree_desc.hash_block_size,
+                                       hash_algorithm.str(), root_digest, salt);
     if (hashtree_desc.fec_size > 0) {
-        // Note that fec_blocks is the size that FEC covers, *NOT* the
-        // size of the FEC data. Since we use FEC for everything up until
-        // the FEC data, it's the same as the offset (fec_start).
-        optional_argc += 8;
-        // clang-format off
-        optional_args << "use_fec_from_device " << blk_device
-                      << " fec_roots " << hashtree_desc.fec_num_roots
-                      << " fec_blocks " << hashtree_desc.fec_offset / hashtree_desc.data_block_size
-                      << " fec_start " << hashtree_desc.fec_offset / hashtree_desc.data_block_size
-                      << " ";
-        // clang-format on
+        target.UseFec(blk_device, hashtree_desc.fec_num_roots,
+                      hashtree_desc.fec_offset / hashtree_desc.data_block_size,
+                      hashtree_desc.fec_offset / hashtree_desc.data_block_size);
     }
-
     if (!dm_verity_mode.empty()) {
-        optional_argc += 1;
-        optional_args << dm_verity_mode << " ";
+        target.SetVerityMode(dm_verity_mode);
     }
-
     // Always use ignore_zero_blocks.
-    optional_argc += 1;
-    optional_args << "ignore_zero_blocks";
+    target.IgnoreZeroBlocks();
 
-    verity_table << " " << optional_argc << " " << optional_args.str();
-    return verity_table.str();
-}
+    LINFO << "Built verity table: '" << target.GetParameterString() << "'";
 
-static bool load_verity_table(struct dm_ioctl* io, const std::string& dm_device_name, int fd,
-                              uint64_t image_size, const std::string& verity_table) {
-    fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, dm_device_name);
-
-    // The buffer consists of [dm_ioctl][dm_target_spec][verity_params].
-    char* buffer = (char*)io;
-
-    // Builds the dm_target_spec arguments.
-    struct dm_target_spec* dm_target = (struct dm_target_spec*)&buffer[sizeof(struct dm_ioctl)];
-    io->flags = DM_READONLY_FLAG;
-    io->target_count = 1;
-    dm_target->status = 0;
-    dm_target->sector_start = 0;
-    dm_target->length = image_size / 512;
-    strcpy(dm_target->target_type, "verity");
-
-    // Builds the verity params.
-    char* verity_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
-    size_t bufsize = DM_BUF_SIZE - (verity_params - buffer);
-
-    LINFO << "Loading verity table: '" << verity_table << "'";
-
-    // Copies verity_table to verity_params (including the terminating null byte).
-    if (verity_table.size() > bufsize - 1) {
-        LERROR << "Verity table size too large: " << verity_table.size()
-               << " (max allowable size: " << bufsize - 1 << ")";
-        return false;
-    }
-    memcpy(verity_params, verity_table.c_str(), verity_table.size() + 1);
-
-    // Sets ext target boundary.
-    verity_params += verity_table.size() + 1;
-    verity_params = (char*)(((unsigned long)verity_params + 7) & ~7);
-    dm_target->next = verity_params - buffer;
-
-    // Sends the ioctl to load the verity table.
-    if (ioctl(fd, DM_TABLE_LOAD, io)) {
-        PERROR << "Error loading verity table";
-        return false;
-    }
-
-    return true;
+    return table->AddTarget(std::make_unique<android::dm::DmTargetVerity>(target));
 }
 
 static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
                                      const AvbHashtreeDescriptor& hashtree_desc,
                                      const std::string& salt, const std::string& root_digest,
                                      bool wait_for_verity_dev) {
-    // Gets the device mapper fd.
-    android::base::unique_fd fd(open("/dev/device-mapper", O_RDWR));
-    if (fd < 0) {
-        PERROR << "Error opening device mapper";
+    android::dm::DmTable table;
+    if (!construct_verity_table(hashtree_desc, salt, root_digest, fstab_entry->blk_device, &table) ||
+        !table.valid()) {
+        LERROR << "Failed to construct verity table.";
         return false;
     }
+    table.set_readonly(true);
 
-    // Creates the device.
-    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
-    struct dm_ioctl* io = (struct dm_ioctl*)buffer;
     const std::string mount_point(basename(fstab_entry->mount_point));
-    if (!fs_mgr_dm_create_device(io, mount_point, fd)) {
+    android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
+    if (!dm.CreateDevice(mount_point, table)) {
         LERROR << "Couldn't create verity device!";
         return false;
     }
 
-    // Gets the name of the device file.
-    std::string verity_blk_name;
-    if (!fs_mgr_dm_get_device_name(io, mount_point, fd, &verity_blk_name)) {
-        LERROR << "Couldn't get verity device number!";
-        return false;
-    }
-
-    std::string verity_table =
-        construct_verity_table(hashtree_desc, salt, root_digest, fstab_entry->blk_device);
-    if (verity_table.empty()) {
-        LERROR << "Failed to construct verity table.";
-        return false;
-    }
-
-    // Loads the verity mapping table.
-    if (!load_verity_table(io, mount_point, fd, hashtree_desc.image_size, verity_table)) {
-        LERROR << "Couldn't load verity table!";
-        return false;
-    }
-
-    // Activates the device.
-    if (!fs_mgr_dm_resume_table(io, mount_point, fd)) {
+    std::string dev_path;
+    if (!dm.GetDmDevicePathByName(mount_point, &dev_path)) {
+        LERROR << "Couldn't get verity device path!";
         return false;
     }
 
@@ -382,10 +293,10 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
 
     // Updates fstab_rec->blk_device to verity device name.
     free(fstab_entry->blk_device);
-    fstab_entry->blk_device = strdup(verity_blk_name.c_str());
+    fstab_entry->blk_device = strdup(dev_path.c_str());
 
     // Makes sure we've set everything up properly.
-    if (wait_for_verity_dev && !fs_mgr_wait_for_file(verity_blk_name, 1s)) {
+    if (wait_for_verity_dev && !fs_mgr_wait_for_file(dev_path, 1s)) {
         return false;
     }
 

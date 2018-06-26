@@ -164,3 +164,25 @@ TEST(libdm, DmLinear) {
     // test should ensure that device deletion works.
     ASSERT_TRUE(dev.Destroy());
 }
+
+TEST(libdm, DmVerityArgsAvb2) {
+    std::string device = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a";
+    std::string algorithm = "sha1";
+    std::string digest = "4be7e823b8c40f7bd5c8ccd5123f0722c5baca21";
+    std::string salt = "cc99f81ecb9484220a003b0719ee59dcf9be7e5d";
+
+    DmTargetVerity target(0, 10000, 1, device, device, 4096, 4096, 125961, 125961, algorithm,
+                          digest, salt);
+    target.UseFec(device, 2, 126955, 126955);
+    target.SetVerityMode("restart_on_corruption");
+    target.IgnoreZeroBlocks();
+
+    // Verity table from a walleye build.
+    std::string expected =
+            "1 /dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a "
+            "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a 4096 4096 125961 125961 sha1 "
+            "4be7e823b8c40f7bd5c8ccd5123f0722c5baca21 cc99f81ecb9484220a003b0719ee59dcf9be7e5d 10 "
+            "use_fec_from_device /dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a fec_roots "
+            "2 fec_blocks 126955 fec_start 126955 restart_on_corruption ignore_zero_blocks";
+    EXPECT_EQ(target.GetParameterString(), expected);
+}

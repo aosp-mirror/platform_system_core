@@ -23,6 +23,9 @@ namespace android {
 namespace dm {
 
 bool DmTable::AddTarget(std::unique_ptr<DmTarget>&& target) {
+    if (!target->Valid()) {
+        return false;
+    }
     targets_.push_back(std::move(target));
     return true;
 }
