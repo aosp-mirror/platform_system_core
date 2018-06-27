@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_MACROS_H
-#define ANDROID_BASE_MACROS_H
+#pragma once
 
 #include <stddef.h>  // for size_t
 #include <unistd.h>  // for TEMP_FAILURE_RETRY
@@ -197,5 +196,3 @@ void UNUSED(const T&...) {
 #elif defined(__mips__) && defined(__LP64__)
 #define ABI_STRING "mips64"
 #endif
-
-#endif  // ANDROID_BASE_MACROS_H
