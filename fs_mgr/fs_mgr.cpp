@@ -60,7 +60,6 @@
 #include "fs_mgr.h"
 #include "fs_mgr_avb.h"
 #include "fs_mgr_priv.h"
-#include "fs_mgr_priv_dm_ioctl.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -805,14 +804,9 @@ bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
         return true;
     }
 
-    android::base::unique_fd dm_fd(open("/dev/device-mapper", O_RDONLY));
-    if (dm_fd < 0) {
-        PLOG(ERROR) << "open /dev/device-mapper failed";
-        return false;
-    }
-    struct dm_ioctl io;
+    DeviceMapper& dm = DeviceMapper::Instance();
     std::string device_name;
-    if (!fs_mgr_dm_get_device_name(&io, rec->blk_device, dm_fd, &device_name)) {
+    if (!dm.GetDmDevicePathByName(rec->blk_device, &device_name)) {
         return false;
     }
     free(rec->blk_device);
