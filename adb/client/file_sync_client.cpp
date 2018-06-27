@@ -510,8 +510,7 @@ class SyncConnection {
         return false;
     }
 
-
-    void Printf(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+    void Printf(const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3))) {
         std::string s;
 
         va_list ap;
@@ -522,7 +521,7 @@ class SyncConnection {
         line_printer_.Print(s, LinePrinter::INFO);
     }
 
-    void Println(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+    void Println(const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3))) {
         std::string s;
 
         va_list ap;
@@ -534,7 +533,7 @@ class SyncConnection {
         line_printer_.KeepInfoLine();
     }
 
-    void Error(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+    void Error(const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3))) {
         std::string s = "adb: error: ";
 
         va_list ap;
@@ -545,7 +544,7 @@ class SyncConnection {
         line_printer_.Print(s, LinePrinter::ERROR);
     }
 
-    void Warning(const char* fmt, ...) __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3))) {
+    void Warning(const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3))) {
         std::string s = "adb: warning: ";
 
         va_list ap;
