@@ -160,6 +160,20 @@ TEST(libdm, DmLinear) {
         ASSERT_EQ(strncmp(sector, message2, sizeof(message2)), 0);
     }
 
+    // Test GetTableStatus.
+    DeviceMapper& dm = DeviceMapper::Instance();
+    vector<DeviceMapper::TargetInfo> targets;
+    ASSERT_TRUE(dm.GetTableStatus(dev.name(), &targets));
+    ASSERT_EQ(targets.size(), 2);
+    EXPECT_EQ(strcmp(targets[0].spec.target_type, "linear"), 0);
+    EXPECT_TRUE(targets[0].data.empty());
+    EXPECT_EQ(targets[0].spec.sector_start, 0);
+    EXPECT_EQ(targets[0].spec.length, 1);
+    EXPECT_EQ(strcmp(targets[1].spec.target_type, "linear"), 0);
+    EXPECT_TRUE(targets[1].data.empty());
+    EXPECT_EQ(targets[1].spec.sector_start, 1);
+    EXPECT_EQ(targets[1].spec.length, 1);
+
     // Normally the TestDevice destructor would delete this, but at least one
     // test should ensure that device deletion works.
     ASSERT_TRUE(dev.Destroy());
