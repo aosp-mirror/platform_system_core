@@ -179,6 +179,7 @@ cc_test {
         "rlimit_parser_test.cpp",
         "service_test.cpp",
         "subcontext_test.cpp",
+        "tokenizer_test.cpp",
         "ueventd_test.cpp",
         "util_test.cpp",
     ],
