@@ -128,6 +128,22 @@ class DmTargetVerity final : public DmTarget {
     bool valid_;
 };
 
+// This is the same as DmTargetVerity, but the table may be specified as a raw
+// string. This code exists only for fs_mgr_verity and should be avoided. Use
+// DmTargetVerity for new code instead.
+class DmTargetVerityString final : public DmTarget {
+  public:
+    DmTargetVerityString(uint64_t start, uint64_t length, const std::string& target_string)
+        : DmTarget(start, length), target_string_(target_string) {}
+
+    std::string name() const override { return "verity"; }
+    std::string GetParameterString() const override { return target_string_; }
+    bool Valid() const override { return true; }
+
+  private:
+    std::string target_string_;
+};
+
 }  // namespace dm
 }  // namespace android
 
