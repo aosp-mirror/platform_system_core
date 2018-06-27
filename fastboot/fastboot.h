@@ -79,11 +79,9 @@ void set_verbose();
 
 // These printf-like functions are implemented in terms of vsnprintf, so they
 // use the same attribute for compile-time format string checking.
-#define FASTBOOT_FORMAT_ARCHETYPE __printf__
 void die(const char* fmt, ...) __attribute__((__noreturn__))
-__attribute__((__format__(FASTBOOT_FORMAT_ARCHETYPE, 1, 2)));
-void verbose(const char* fmt, ...) __attribute__((__format__(FASTBOOT_FORMAT_ARCHETYPE, 1, 2)));
-#undef FASTBOOT_FORMAT_ARCHETYPE
+__attribute__((__format__(__printf__, 1, 2)));
+void verbose(const char* fmt, ...) __attribute__((__format__(__printf__, 1, 2)));
 
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
