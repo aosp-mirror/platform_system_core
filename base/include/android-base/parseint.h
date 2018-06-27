@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_PARSEINT_H
-#define ANDROID_BASE_PARSEINT_H
+#pragma once
 
 #include <errno.h>
 #include <stdlib.h>
@@ -104,5 +103,3 @@ bool ParseInt(const std::string& s, T* out,
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_PARSEINT_H

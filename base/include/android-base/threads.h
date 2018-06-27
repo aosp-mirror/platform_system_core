@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_THREADS_H
-#define ANDROID_BASE_THREADS_H
+#pragma once
 
 #include <stdint.h>
 
@@ -24,5 +23,3 @@ namespace base {
 uint64_t GetThreadId();
 }
 }  // namespace android
-
-#endif
