@@ -85,15 +85,19 @@ textresume:
                 goto textdone;
             case 'n':
                 *s++ = '\n';
+                x++;
                 break;
             case 'r':
                 *s++ = '\r';
+                x++;
                 break;
             case 't':
                 *s++ = '\t';
+                x++;
                 break;
             case '\\':
                 *s++ = '\\';
+                x++;
                 break;
             case '\r':
                     /* \ <cr> <lf> -> line continuation */
@@ -101,6 +105,7 @@ textresume:
                     x++;
                     continue;
                 }
+                x++;
             case '\n':
                     /* \ <lf> -> line continuation */
                 state->line++;
