@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_UNIQUE_FD_H
-#define ANDROID_BASE_UNIQUE_FD_H
+#pragma once
 
 #include <fcntl.h>
 
@@ -150,5 +149,3 @@ int close(const android::base::unique_fd_impl<T>&)
 #endif
     "close called on unique_fd"
   )));
-
-#endif  // ANDROID_BASE_UNIQUE_FD_H

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_PROPERTIES_H
-#define ANDROID_BASE_PROPERTIES_H
+#pragma once
 
 #include <sys/cdefs.h>
 
@@ -73,5 +72,3 @@ bool WaitForPropertyCreation(const std::string& key, std::chrono::milliseconds r
 
 } // namespace base
 } // namespace android
-
-#endif  // ANDROID_BASE_PROPERTIES_H
