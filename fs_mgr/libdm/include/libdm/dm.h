@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/logging.h>
@@ -116,6 +117,18 @@ class DeviceMapper final {
             ::close(fd_);
         }
     }
+
+    // Query the status of a table, given a device name. The output vector will
+    // contain one TargetInfo for each target in the table. If the device does
+    // not exist, or there were too many targets, the call will fail and return
+    // false.
+    struct TargetInfo {
+        struct dm_target_spec spec;
+        std::string data;
+        TargetInfo(const struct dm_target_spec& spec, const std::string& data)
+            : spec(spec), data(data) {}
+    };
+    bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table);
 
   private:
     // Maximum possible device mapper targets registered in the kernel.
