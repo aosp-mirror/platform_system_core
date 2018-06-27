@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_TEST_UTILS_H
-#define ANDROID_BASE_TEST_UTILS_H
+#pragma once
 
 #include <regex>
 #include <string>
@@ -114,5 +113,3 @@ class CapturedStdout : public CapturedStdFd {
       ADD_FAILURE() << "regex mismatch: expected to not find " << (pattern) << " in:\n" << (str); \
     }                                                                                             \
   } while (0)
-
-#endif  // ANDROID_BASE_TEST_UTILS_H

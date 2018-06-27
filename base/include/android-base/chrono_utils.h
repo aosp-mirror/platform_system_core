@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_CHRONO_UTILS_H
-#define ANDROID_BASE_CHRONO_UTILS_H
+#pragma once
 
 #include <chrono>
 #include <sstream>
@@ -52,5 +51,3 @@ std::ostream& operator<<(std::ostream& os, const Timer& t);
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_CHRONO_UTILS_H

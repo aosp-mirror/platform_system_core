@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_STRINGS_H
-#define ANDROID_BASE_STRINGS_H
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -75,5 +74,3 @@ bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs);
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_STRINGS_H
