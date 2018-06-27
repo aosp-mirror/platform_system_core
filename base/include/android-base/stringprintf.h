@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_STRINGPRINTF_H
-#define ANDROID_BASE_STRINGPRINTF_H
+#pragma once
 
 #include <stdarg.h>
 #include <string>
@@ -39,5 +38,3 @@ void StringAppendV(std::string* dst, const char* format, va_list ap)
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_STRINGPRINTF_H
