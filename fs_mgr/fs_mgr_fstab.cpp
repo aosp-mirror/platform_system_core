@@ -235,41 +235,46 @@ static int parse_flags(char *flags, struct flag_list *fl,
          * If not found, the loop exits with fl[i].name being null.
          */
         for (i = 0; fl[i].name; i++) {
-            if (!strncmp(p, fl[i].name, strlen(fl[i].name))) {
+            auto name = fl[i].name;
+            auto len = strlen(name);
+            auto end = len;
+            if (name[end - 1] == '=') --end;
+            if (!strncmp(p, name, len) && (p[end] == name[end])) {
                 f |= fl[i].flag;
-                if ((fl[i].flag == MF_CRYPT) && flag_vals) {
+                if (!flag_vals) break;
+                if (p[end] != '=') break;
+                char* arg = p + end + 1;
+                auto flag = fl[i].flag;
+                if (flag == MF_CRYPT) {
                     /* The encryptable flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
-                } else if ((fl[i].flag == MF_VERIFY) && flag_vals) {
+                    flag_vals->key_loc = strdup(arg);
+                } else if (flag == MF_VERIFY) {
                     /* If the verify flag is followed by an = and the
                      * location for the verity state,  get it and return it.
                      */
-                    char *start = strchr(p, '=');
-                    if (start) {
-                        flag_vals->verity_loc = strdup(start + 1);
-                    }
-                } else if ((fl[i].flag == MF_FORCECRYPT) && flag_vals) {
+                    flag_vals->verity_loc = strdup(arg);
+                } else if (flag == MF_FORCECRYPT) {
                     /* The forceencrypt flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
-                } else if ((fl[i].flag == MF_FORCEFDEORFBE) && flag_vals) {
+                    flag_vals->key_loc = strdup(arg);
+                } else if (flag == MF_FORCEFDEORFBE) {
                     /* The forcefdeorfbe flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                    flag_vals->key_loc = strdup(arg);
                     flag_vals->file_contents_mode = EM_AES_256_XTS;
                     flag_vals->file_names_mode = EM_AES_256_CTS;
-                } else if ((fl[i].flag == MF_FILEENCRYPTION) && flag_vals) {
+                } else if (flag == MF_FILEENCRYPTION) {
                     /* The fileencryption flag is followed by an = and
                      * the mode of contents encryption, then optionally a
                      * : and the mode of filenames encryption (defaults
                      * to aes-256-cts).  Get it and return it.
                      */
-                    char *mode = strchr(p, '=') + 1;
-                    char *colon = strchr(mode, ':');
+                    auto mode = arg;
+                    auto colon = strchr(mode, ':');
                     if (colon) {
                         *colon = '\0';
                     }
@@ -283,33 +288,30 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     } else {
                         flag_vals->file_names_mode = EM_AES_256_CTS;
                     }
-                } else if ((fl[i].flag == MF_KEYDIRECTORY) && flag_vals) {
+                } else if (flag == MF_KEYDIRECTORY) {
                     /* The metadata flag is followed by an = and the
                      * directory for the keys.  Get it and return it.
                      */
-                    flag_vals->key_dir = strdup(strchr(p, '=') + 1);
-                } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
+                    flag_vals->key_dir = strdup(arg);
+                } else if (flag == MF_LENGTH) {
                     /* The length flag is followed by an = and the
                      * size of the partition.  Get it and return it.
                      */
-                    flag_vals->part_length = strtoll(strchr(p, '=') + 1, NULL, 0);
-                } else if ((fl[i].flag == MF_VOLDMANAGED) && flag_vals) {
+                    flag_vals->part_length = strtoll(arg, NULL, 0);
+                } else if (flag == MF_VOLDMANAGED) {
                     /* The voldmanaged flag is followed by an = and the
                      * label, a colon and the partition number or the
                      * word "auto", e.g.
                      *   voldmanaged=sdcard:3
                      * Get and return them.
                      */
-                    char *label_start;
-                    char *label_end;
-                    char *part_start;
+                    auto label_start = arg;
+                    auto label_end = strchr(label_start, ':');
 
-                    label_start = strchr(p, '=') + 1;
-                    label_end = strchr(p, ':');
                     if (label_end) {
                         flag_vals->label = strndup(label_start,
                                                    (int) (label_end - label_start));
-                        part_start = strchr(p, ':') + 1;
+                        auto part_start = label_end + 1;
                         if (!strcmp(part_start, "auto")) {
                             flag_vals->partnum = -1;
                         } else {
@@ -318,41 +320,41 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     } else {
                         LERROR << "Warning: voldmanaged= flag malformed";
                     }
-                } else if ((fl[i].flag == MF_SWAPPRIO) && flag_vals) {
-                    flag_vals->swap_prio = strtoll(strchr(p, '=') + 1, NULL, 0);
-                } else if ((fl[i].flag == MF_MAX_COMP_STREAMS) && flag_vals) {
-                    flag_vals->max_comp_streams = strtoll(strchr(p, '=') + 1, NULL, 0);
-                } else if ((fl[i].flag == MF_ZRAMSIZE) && flag_vals) {
-                    int is_percent = !!strrchr(p, '%');
-                    unsigned int val = strtoll(strchr(p, '=') + 1, NULL, 0);
+                } else if (flag == MF_SWAPPRIO) {
+                    flag_vals->swap_prio = strtoll(arg, NULL, 0);
+                } else if (flag == MF_MAX_COMP_STREAMS) {
+                    flag_vals->max_comp_streams = strtoll(arg, NULL, 0);
+                } else if (flag == MF_ZRAMSIZE) {
+                    auto is_percent = !!strrchr(arg, '%');
+                    auto val = strtoll(arg, NULL, 0);
                     if (is_percent)
                         flag_vals->zram_size = calculate_zram_size(val);
                     else
                         flag_vals->zram_size = val;
-                } else if ((fl[i].flag == MF_RESERVEDSIZE) && flag_vals) {
+                } else if (flag == MF_RESERVEDSIZE) {
                     /* The reserved flag is followed by an = and the
                      * reserved size of the partition.  Get it and return it.
                      */
-                    flag_vals->reserved_size = parse_size(strchr(p, '=') + 1);
-                } else if ((fl[i].flag == MF_ERASEBLKSIZE) && flag_vals) {
+                    flag_vals->reserved_size = parse_size(arg);
+                } else if (flag == MF_ERASEBLKSIZE) {
                     /* The erase block size flag is followed by an = and the flash
                      * erase block size. Get it, check that it is a power of 2 and
                      * at least 4096, and return it.
                      */
-                    unsigned int val = strtoul(strchr(p, '=') + 1, NULL, 0);
+                    auto val = strtoul(arg, NULL, 0);
                     if (val >= 4096 && (val & (val - 1)) == 0)
                         flag_vals->erase_blk_size = val;
-                } else if ((fl[i].flag == MF_LOGICALBLKSIZE) && flag_vals) {
+                } else if (flag == MF_LOGICALBLKSIZE) {
                     /* The logical block size flag is followed by an = and the flash
                      * logical block size. Get it, check that it is a power of 2 and
                      * at least 4096, and return it.
                      */
-                    unsigned int val = strtoul(strchr(p, '=') + 1, NULL, 0);
+                    auto val = strtoul(arg, NULL, 0);
                     if (val >= 4096 && (val & (val - 1)) == 0)
                         flag_vals->logical_blk_size = val;
-                } else if ((fl[i].flag == MF_SYSFS) && flag_vals) {
+                } else if (flag == MF_SYSFS) {
                     /* The path to trigger device gc by idle-maint of vold. */
-                    flag_vals->sysfs_path = strdup(strchr(p, '=') + 1);
+                    flag_vals->sysfs_path = strdup(arg);
                 }
                 break;
             }
@@ -506,8 +508,7 @@ bool is_dt_compatible() {
     return false;
 }
 
-static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
-{
+static struct fstab* fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts) {
     int cnt, entries;
     ssize_t len;
     size_t alloc_len = 0;
@@ -607,7 +608,10 @@ static struct fstab *fs_mgr_read_fstab_file(FILE *fstab_file)
             fstab->recs[cnt].fs_options = NULL;
         }
 
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
+        // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
+        if (proc_mounts) {
+            p += strlen(p);
+        } else if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             LERROR << "Error parsing fs_mgr_options";
             goto err;
         }
@@ -739,7 +743,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         return nullptr;
     }
 
-    fstab = fs_mgr_read_fstab_file(fstab_file);
+    fstab = fs_mgr_read_fstab_file(fstab_file, !strcmp("/proc/mounts", fstab_path));
     if (!fstab) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << fstab_path << "'";
     }
@@ -767,7 +771,7 @@ struct fstab *fs_mgr_read_fstab_dt()
         return nullptr;
     }
 
-    struct fstab *fstab = fs_mgr_read_fstab_file(fstab_file.get());
+    struct fstab* fstab = fs_mgr_read_fstab_file(fstab_file.get(), false);
     if (!fstab) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:"
                << std::endl << fstab_buf;
