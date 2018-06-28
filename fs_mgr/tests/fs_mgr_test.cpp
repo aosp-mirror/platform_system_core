@@ -14,13 +14,18 @@
  * limitations under the License.
  */
 
+#include <linux/fs.h>
+#include <mntent.h>
+
 #include <algorithm>
 #include <iterator>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <android-base/strings.h>
+#include <fstab/fstab.h>
 #include <gtest/gtest.h>
 
 #include "../fs_mgr_priv_boot_config.h"
@@ -128,4 +133,71 @@ TEST(fs_mgr, fs_mgr_get_boot_config_from_kernel_cmdline) {
     EXPECT_TRUE(content.empty()) << content;
     EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "nospace", &content));
     EXPECT_TRUE(content.empty()) << content;
+}
+
+TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
+    auto fstab = fs_mgr_read_fstab("/proc/mounts");
+    ASSERT_NE(fstab, nullptr);
+
+    std::unique_ptr<std::FILE, int (*)(std::FILE*)> mounts(setmntent("/proc/mounts", "r"),
+                                                           endmntent);
+    ASSERT_NE(mounts, nullptr);
+
+    mntent* mentry;
+    int i = 0;
+    while ((mentry = getmntent(mounts.get())) != nullptr) {
+        ASSERT_LT(i, fstab->num_entries);
+        auto fsrec = &fstab->recs[i];
+
+        std::string mnt_fsname(mentry->mnt_fsname ?: "nullptr");
+        std::string blk_device(fsrec->blk_device ?: "nullptr");
+        EXPECT_EQ(mnt_fsname, blk_device);
+
+        std::string mnt_dir(mentry->mnt_dir ?: "nullptr");
+        std::string mount_point(fsrec->mount_point ?: "nullptr");
+        EXPECT_EQ(mnt_dir, mount_point);
+
+        std::string mnt_type(mentry->mnt_type ?: "nullptr");
+        std::string fs_type(fsrec->fs_type ?: "nullptr");
+        EXPECT_EQ(mnt_type, fs_type);
+
+        std::set<std::string> mnt_opts;
+        for (auto& s : android::base::Split(mentry->mnt_opts ?: "nullptr", ",")) {
+            mnt_opts.emplace(s);
+        }
+        std::set<std::string> fs_options;
+        for (auto& s : android::base::Split(fsrec->fs_options ?: "nullptr", ",")) {
+            fs_options.emplace(s);
+        }
+        // matches private content in fs_mgr_fstab.c
+        static struct flag_list {
+            const char* name;
+            unsigned int flag;
+        } mount_flags[] = {
+                {"noatime", MS_NOATIME},
+                {"noexec", MS_NOEXEC},
+                {"nosuid", MS_NOSUID},
+                {"nodev", MS_NODEV},
+                {"nodiratime", MS_NODIRATIME},
+                {"ro", MS_RDONLY},
+                {"rw", 0},
+                {"remount", MS_REMOUNT},
+                {"bind", MS_BIND},
+                {"rec", MS_REC},
+                {"unbindable", MS_UNBINDABLE},
+                {"private", MS_PRIVATE},
+                {"slave", MS_SLAVE},
+                {"shared", MS_SHARED},
+                {"defaults", 0},
+                {0, 0},
+        };
+        for (auto f = 0; mount_flags[f].name; ++f) {
+            if (mount_flags[f].flag & fsrec->flags) {
+                fs_options.emplace(mount_flags[f].name);
+            }
+        }
+        if (!(fsrec->flags & MS_RDONLY)) fs_options.emplace("rw");
+        EXPECT_EQ(mnt_opts, fs_options);
+        ++i;
+    }
 }
