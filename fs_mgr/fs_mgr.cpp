@@ -31,6 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -1356,7 +1357,7 @@ bool fs_mgr_load_verity_state(int* mode) {
     return true;
 }
 
-bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback) {
+bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback) {
     if (!callback) {
         return false;
     }
