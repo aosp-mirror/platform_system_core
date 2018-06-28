@@ -32,10 +32,6 @@
 
 #include "android_get_control_env.h"
 
-#ifndef TEMP_FAILURE_RETRY
-#define TEMP_FAILURE_RETRY(exp) (exp) // KISS implementation
-#endif
-
 #if defined(__ANDROID__)
 /* For the socket trust (credentials) check */
 #include <private/android_filesystem_config.h>
@@ -102,15 +98,15 @@ int android_get_control_socket(const char* name) {
     // Compare to UNIX domain socket name, must match!
     struct sockaddr_un addr;
     socklen_t addrlen = sizeof(addr);
-    int ret = TEMP_FAILURE_RETRY(getsockname(fd, (struct sockaddr *)&addr, &addrlen));
+    int ret = getsockname(fd, (struct sockaddr*)&addr, &addrlen);
     if (ret < 0) return -1;
-    char *path = NULL;
-    if (asprintf(&path, ANDROID_SOCKET_DIR "/%s", name) < 0) return -1;
-    if (!path) return -1;
-    int cmp = strcmp(addr.sun_path, path);
-    free(path);
-    if (cmp != 0) return -1;
 
-    // It is what we think it is
-    return fd;
+    constexpr char prefix[] = ANDROID_SOCKET_DIR "/";
+    constexpr size_t prefix_size = sizeof(prefix) - sizeof('\0');
+    if ((strncmp(addr.sun_path, prefix, prefix_size) == 0) &&
+        (strcmp(addr.sun_path + prefix_size, name) == 0)) {
+        // It is what we think it is
+        return fd;
+    }
+    return -1;
 }
