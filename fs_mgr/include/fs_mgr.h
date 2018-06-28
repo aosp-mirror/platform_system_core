@@ -22,6 +22,8 @@
 #include <stdbool.h>
 #include <linux/dm-ioctl.h>
 
+#include <functional>
+
 #include <fstab/fstab.h>
 
 // Magic number at start of verity metadata
@@ -48,8 +50,8 @@ enum mount_mode {
 };
 
 // Callback function for verity status
-typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
-        const char *mount_point, int mode, int status);
+typedef void fs_mgr_verity_state_callback(struct fstab_rec* fstab, const char* mount_point,
+                                          int mode, int status);
 
 #define FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED 7
 #define FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION 6
@@ -73,7 +75,7 @@ int fs_mgr_do_tmpfs_mount(const char *n_name);
 struct fstab_rec const* fs_mgr_get_crypt_entry(struct fstab const* fstab);
 void fs_mgr_get_crypt_info(struct fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
 bool fs_mgr_load_verity_state(int* mode);
-bool fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
+bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback);
 int fs_mgr_swapon_all(struct fstab *fstab);
 bool fs_mgr_update_logical_partition(struct fstab_rec* rec);
 
