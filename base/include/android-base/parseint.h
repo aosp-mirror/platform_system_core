@@ -26,9 +26,9 @@
 namespace android {
 namespace base {
 
-// Parses the unsigned decimal integer in the string 's' and sets 'out' to
-// that value. Optionally allows the caller to define a 'max' beyond which
-// otherwise valid values will be rejected. Returns boolean success; 'out'
+// Parses the unsigned decimal or hexadecimal integer in the string 's' and sets
+// 'out' to that value. Optionally allows the caller to define a 'max' beyond
+// which otherwise valid values will be rejected. Returns boolean success; 'out'
 // is untouched if parsing fails.
 template <typename T>
 bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
@@ -71,8 +71,8 @@ bool ParseByteCount(const std::string& s, T* out, T max = std::numeric_limits<T>
   return ParseByteCount(s.c_str(), out, max);
 }
 
-// Parses the signed decimal integer in the string 's' and sets 'out' to
-// that value. Optionally allows the caller to define a 'min' and 'max
+// Parses the signed decimal or hexadecimal integer in the string 's' and sets
+// 'out' to that value. Optionally allows the caller to define a 'min' and 'max'
 // beyond which otherwise valid values will be rejected. Returns boolean
 // success; 'out' is untouched if parsing fails.
 template <typename T>
