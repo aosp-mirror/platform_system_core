@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_LOGGING_H
-#define ANDROID_BASE_LOGGING_H
+#pragma once
 
 //
 // Google-style C++ logging.
@@ -506,5 +505,3 @@ inline std::ostream& operator<<(std::ostream& stream, const std::string* string_
 #undef OSTREAM_STRING_POINTER_USAGE_WARNING
 
 }  // namespace std
-
-#endif  // ANDROID_BASE_LOGGING_H

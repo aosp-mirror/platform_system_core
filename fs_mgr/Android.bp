@@ -38,7 +38,6 @@ cc_library_static {
     include_dirs: ["system/vold"],
     srcs: [
         "fs_mgr.cpp",
-        "fs_mgr_dm_ioctl.cpp",
         "fs_mgr_format.cpp",
         "fs_mgr_verity.cpp",
         "fs_mgr_avb.cpp",

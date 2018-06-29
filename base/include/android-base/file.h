@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_FILE_H
-#define ANDROID_BASE_FILE_H
+#pragma once
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -78,5 +77,3 @@ std::string Dirname(const std::string& path);
 
 }  // namespace base
 }  // namespace android
-
-#endif // ANDROID_BASE_FILE_H

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_SCOPEGUARD_H
-#define ANDROID_BASE_SCOPEGUARD_H
+#pragma once
 
 #include <utility>  // for std::move, std::forward
 
@@ -66,5 +65,3 @@ ScopeGuard<F> make_scope_guard(F&& f) {
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_SCOPEGUARD_H

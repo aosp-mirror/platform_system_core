@@ -160,7 +160,43 @@ TEST(libdm, DmLinear) {
         ASSERT_EQ(strncmp(sector, message2, sizeof(message2)), 0);
     }
 
+    // Test GetTableStatus.
+    DeviceMapper& dm = DeviceMapper::Instance();
+    vector<DeviceMapper::TargetInfo> targets;
+    ASSERT_TRUE(dm.GetTableStatus(dev.name(), &targets));
+    ASSERT_EQ(targets.size(), 2);
+    EXPECT_EQ(strcmp(targets[0].spec.target_type, "linear"), 0);
+    EXPECT_TRUE(targets[0].data.empty());
+    EXPECT_EQ(targets[0].spec.sector_start, 0);
+    EXPECT_EQ(targets[0].spec.length, 1);
+    EXPECT_EQ(strcmp(targets[1].spec.target_type, "linear"), 0);
+    EXPECT_TRUE(targets[1].data.empty());
+    EXPECT_EQ(targets[1].spec.sector_start, 1);
+    EXPECT_EQ(targets[1].spec.length, 1);
+
     // Normally the TestDevice destructor would delete this, but at least one
     // test should ensure that device deletion works.
     ASSERT_TRUE(dev.Destroy());
+}
+
+TEST(libdm, DmVerityArgsAvb2) {
+    std::string device = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a";
+    std::string algorithm = "sha1";
+    std::string digest = "4be7e823b8c40f7bd5c8ccd5123f0722c5baca21";
+    std::string salt = "cc99f81ecb9484220a003b0719ee59dcf9be7e5d";
+
+    DmTargetVerity target(0, 10000, 1, device, device, 4096, 4096, 125961, 125961, algorithm,
+                          digest, salt);
+    target.UseFec(device, 2, 126955, 126955);
+    target.SetVerityMode("restart_on_corruption");
+    target.IgnoreZeroBlocks();
+
+    // Verity table from a walleye build.
+    std::string expected =
+            "1 /dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a "
+            "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a 4096 4096 125961 125961 sha1 "
+            "4be7e823b8c40f7bd5c8ccd5123f0722c5baca21 cc99f81ecb9484220a003b0719ee59dcf9be7e5d 10 "
+            "use_fec_from_device /dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a fec_roots "
+            "2 fec_blocks 126955 fec_start 126955 restart_on_corruption ignore_zero_blocks";
+    EXPECT_EQ(target.GetParameterString(), expected);
 }

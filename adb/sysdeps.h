@@ -39,19 +39,6 @@
 #include "sysdeps/network.h"
 #include "sysdeps/stat.h"
 
-// Some printf-like functions are implemented in terms of
-// android::base::StringAppendV, so they should use the same attribute for
-// compile-time format string checking. On Windows, if the mingw version of
-// vsnprintf is used in StringAppendV, use `gnu_printf' which allows z in %zd
-// and PRIu64 (and related) to be recognized by the compile-time checking.
-#define ADB_FORMAT_ARCHETYPE __printf__
-#ifdef __USE_MINGW_ANSI_STDIO
-#if __USE_MINGW_ANSI_STDIO
-#undef ADB_FORMAT_ARCHETYPE
-#define ADB_FORMAT_ARCHETYPE gnu_printf
-#endif
-#endif
-
 #ifdef _WIN32
 
 // Clang-only nullability specifiers
@@ -212,14 +199,12 @@ extern int adb_closedir(DIR* dir);
 extern int adb_utime(const char *, struct utimbuf *);
 extern int adb_chmod(const char *, int);
 
-extern int adb_vfprintf(FILE *stream, const char *format, va_list ap)
-    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 0)));
-extern int adb_vprintf(const char *format, va_list ap)
-    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 1, 0)));
-extern int adb_fprintf(FILE *stream, const char *format, ...)
-    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 2, 3)));
-extern int adb_printf(const char *format, ...)
-    __attribute__((__format__(ADB_FORMAT_ARCHETYPE, 1, 2)));
+extern int adb_vfprintf(FILE* stream, const char* format, va_list ap)
+        __attribute__((__format__(__printf__, 2, 0)));
+extern int adb_vprintf(const char* format, va_list ap) __attribute__((__format__(__printf__, 1, 0)));
+extern int adb_fprintf(FILE* stream, const char* format, ...)
+        __attribute__((__format__(__printf__, 2, 3)));
+extern int adb_printf(const char* format, ...) __attribute__((__format__(__printf__, 1, 2)));
 
 extern int adb_fputs(const char* buf, FILE* stream);
 extern int adb_fputc(int ch, FILE* stream);
