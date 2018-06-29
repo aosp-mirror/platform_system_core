@@ -242,44 +242,21 @@ TEST_F(ElfInterfaceArmTest, iterate) {
   ASSERT_EQ(0xa020U, entries[4]);
 }
 
-TEST_F(ElfInterfaceArmTest, HandleType_not_arm_exidx) {
+TEST_F(ElfInterfaceArmTest, HandleUnknownType_arm_exidx) {
   ElfInterfaceArmFake interface(&memory_);
 
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_NULL));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOAD));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_DYNAMIC));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_INTERP));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_NOTE));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_SHLIB));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_PHDR));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_TLS));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOOS));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_HIOS));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_LOPROC));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_HIPROC));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_GNU_EH_FRAME));
-  ASSERT_FALSE(interface.HandleType(0x1000, PT_GNU_STACK));
-}
-
-TEST_F(ElfInterfaceArmTest, HandleType_arm_exidx) {
-  ElfInterfaceArmFake interface(&memory_);
-
-  Elf32_Phdr phdr = {};
   interface.FakeSetStartOffset(0x1000);
   interface.FakeSetTotalEntries(100);
-  phdr.p_offset = 0x2000;
-  phdr.p_filesz = 0xa00;
 
-  // Verify that if reads fail, we don't set the values but still get true.
-  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001));
+  // Verify that if the type is not the one we want, we don't set the values.
+  interface.HandleUnknownType(0x70000000, 0x2000, 320);
   ASSERT_EQ(0x1000U, interface.start_offset());
   ASSERT_EQ(100U, interface.total_entries());
 
   // Everything is correct and present.
-  memory_.SetMemory(0x1000, &phdr, sizeof(phdr));
-  ASSERT_TRUE(interface.HandleType(0x1000, 0x70000001));
+  interface.HandleUnknownType(0x70000001, 0x2000, 320);
   ASSERT_EQ(0x2000U, interface.start_offset());
-  ASSERT_EQ(320U, interface.total_entries());
+  ASSERT_EQ(40U, interface.total_entries());
 }
 
 TEST_F(ElfInterfaceArmTest, StepExidx) {
