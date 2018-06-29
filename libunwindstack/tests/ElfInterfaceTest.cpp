@@ -656,8 +656,7 @@ void ElfInterfaceTest::InitHeadersDebugFrame() {
 
   memory_.SetData32(0x5000, 0xfc);
   memory_.SetData32(0x5004, 0xffffffff);
-  memory_.SetData8(0x5008, 1);
-  memory_.SetData8(0x5009, '\0');
+  memory_.SetMemory(0x5008, std::vector<uint8_t>{1, '\0', 4, 8, 2});
 
   memory_.SetData32(0x5100, 0xfc);
   memory_.SetData32(0x5104, 0);
@@ -676,56 +675,6 @@ TEST_F(ElfInterfaceTest, init_headers_debug_frame32) {
 
 TEST_F(ElfInterfaceTest, init_headers_debug_frame64) {
   InitHeadersDebugFrame<ElfInterface64Fake>();
-}
-
-template <typename ElfType>
-void ElfInterfaceTest::InitHeadersEhFrameFail() {
-  ElfType elf(&memory_);
-
-  elf.FakeSetEhFrameOffset(0x1000);
-  elf.FakeSetEhFrameSize(0x100);
-  elf.FakeSetDebugFrameOffset(0);
-  elf.FakeSetDebugFrameSize(0);
-
-  elf.InitHeaders(0);
-
-  EXPECT_TRUE(elf.eh_frame() == nullptr);
-  EXPECT_EQ(0U, elf.eh_frame_offset());
-  EXPECT_EQ(static_cast<uint64_t>(-1), elf.eh_frame_size());
-  EXPECT_TRUE(elf.debug_frame() == nullptr);
-}
-
-TEST_F(ElfInterfaceTest, init_headers_eh_frame32_fail) {
-  InitHeadersEhFrameFail<ElfInterface32Fake>();
-}
-
-TEST_F(ElfInterfaceTest, init_headers_eh_frame64_fail) {
-  InitHeadersEhFrameFail<ElfInterface64Fake>();
-}
-
-template <typename ElfType>
-void ElfInterfaceTest::InitHeadersDebugFrameFail() {
-  ElfType elf(&memory_);
-
-  elf.FakeSetEhFrameOffset(0);
-  elf.FakeSetEhFrameSize(0);
-  elf.FakeSetDebugFrameOffset(0x1000);
-  elf.FakeSetDebugFrameSize(0x100);
-
-  elf.InitHeaders(0);
-
-  EXPECT_TRUE(elf.eh_frame() == nullptr);
-  EXPECT_TRUE(elf.debug_frame() == nullptr);
-  EXPECT_EQ(0U, elf.debug_frame_offset());
-  EXPECT_EQ(static_cast<uint64_t>(-1), elf.debug_frame_size());
-}
-
-TEST_F(ElfInterfaceTest, init_headers_debug_frame32_fail) {
-  InitHeadersDebugFrameFail<ElfInterface32Fake>();
-}
-
-TEST_F(ElfInterfaceTest, init_headers_debug_frame64_fail) {
-  InitHeadersDebugFrameFail<ElfInterface64Fake>();
 }
 
 template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
@@ -1024,11 +973,7 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_debug_frame) {
   // CIE 32.
   memory_.SetData32(0x600, 0xfc);
   memory_.SetData32(0x604, 0xffffffff);
-  memory_.SetData8(0x608, 1);
-  memory_.SetData8(0x609, '\0');
-  memory_.SetData8(0x60a, 0x4);
-  memory_.SetData8(0x60b, 0x4);
-  memory_.SetData8(0x60c, 0x1);
+  memory_.SetMemory(0x608, std::vector<uint8_t>{1, '\0', 4, 4, 1});
 
   // FDE 32.
   memory_.SetData32(0x700, 0xfc);
@@ -1085,11 +1030,7 @@ TEST_F(ElfInterfaceTest, is_valid_pc_from_eh_frame) {
   // CIE 32.
   memory_.SetData32(0x600, 0xfc);
   memory_.SetData32(0x604, 0);
-  memory_.SetData8(0x608, 1);
-  memory_.SetData8(0x609, '\0');
-  memory_.SetData8(0x60a, 0x4);
-  memory_.SetData8(0x60b, 0x4);
-  memory_.SetData8(0x60c, 0x1);
+  memory_.SetMemory(0x608, std::vector<uint8_t>{1, '\0', 4, 4, 1});
 
   // FDE 32.
   memory_.SetData32(0x700, 0xfc);

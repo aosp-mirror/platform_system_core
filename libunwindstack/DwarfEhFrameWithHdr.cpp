@@ -39,6 +39,7 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint
   memory_.clear_text_offset();
   memory_.set_data_offset(offset);
   memory_.set_cur_offset(offset);
+  pc_offset_ = offset;
 
   // Read the first four bytes all at once.
   uint8_t data[4];
@@ -88,12 +89,22 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint
 }
 
 template <typename AddressType>
-const DwarfFde* DwarfEhFrameWithHdr<AddressType>::GetFdeFromIndex(size_t index) {
-  const FdeInfo* info = GetFdeInfoFromIndex(index);
-  if (info == nullptr) {
+const DwarfFde* DwarfEhFrameWithHdr<AddressType>::GetFdeFromPc(uint64_t pc) {
+  uint64_t fde_offset;
+  if (!GetFdeOffsetFromPc(pc, &fde_offset)) {
     return nullptr;
   }
-  return this->GetFdeFromOffset(info->offset);
+  const DwarfFde* fde = this->GetFdeFromOffset(fde_offset);
+  if (fde == nullptr) {
+    return nullptr;
+  }
+
+  // Guaranteed pc >= pc_start, need to check pc in the fde range.
+  if (pc < fde->pc_end) {
+    return fde;
+  }
+  last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
+  return nullptr;
 }
 
 template <typename AddressType>
@@ -238,6 +249,21 @@ bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t*
   } else {
     // Do a sequential search since each table entry size is variable.
     return GetFdeOffsetSequential(pc, fde_offset);
+  }
+}
+
+template <typename AddressType>
+void DwarfEhFrameWithHdr<AddressType>::GetFdes(std::vector<const DwarfFde*>* fdes) {
+  for (size_t i = 0; i < fde_count_; i++) {
+    const FdeInfo* info = GetFdeInfoFromIndex(i);
+    if (info == nullptr) {
+      break;
+    }
+    const DwarfFde* fde = this->GetFdeFromOffset(info->offset);
+    if (fde == nullptr) {
+      break;
+    }
+    fdes->push_back(fde);
   }
 }
 
