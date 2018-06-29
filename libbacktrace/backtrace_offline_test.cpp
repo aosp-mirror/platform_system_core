@@ -37,15 +37,7 @@
 
 #include <gtest/gtest.h>
 
-extern "C" {
-// Prototypes for functions in the test library.
-int test_level_one(int, int, int, int, void (*)(void*), void*);
-int test_level_two(int, int, int, int, void (*)(void*), void*);
-int test_level_three(int, int, int, int, void (*)(void*), void*);
-int test_level_four(int, int, int, int, void (*)(void*), void*);
-int test_recursive_call(int, void (*)(void*), void*);
-void test_get_context_and_wait(void* context, volatile int* exit_flag);
-}
+#include "BacktraceTest.h"
 
 struct FunctionSymbol {
   std::string name;
@@ -56,12 +48,13 @@ struct FunctionSymbol {
 static std::vector<FunctionSymbol> GetFunctionSymbols() {
   std::vector<FunctionSymbol> symbols = {
       {"unknown_start", 0, 0},
-      {"test_level_one", reinterpret_cast<uint64_t>(&test_level_one), 0},
-      {"test_level_two", reinterpret_cast<uint64_t>(&test_level_two), 0},
-      {"test_level_three", reinterpret_cast<uint64_t>(&test_level_three), 0},
-      {"test_level_four", reinterpret_cast<uint64_t>(&test_level_four), 0},
-      {"test_recursive_call", reinterpret_cast<uint64_t>(&test_recursive_call), 0},
-      {"test_get_context_and_wait", reinterpret_cast<uint64_t>(&test_get_context_and_wait), 0},
+      {"test_level_one", reinterpret_cast<uint64_t>(&BacktraceTest::test_level_one_), 0},
+      {"test_level_two", reinterpret_cast<uint64_t>(&BacktraceTest::test_level_two_), 0},
+      {"test_level_three", reinterpret_cast<uint64_t>(&BacktraceTest::test_level_three_), 0},
+      {"test_level_four", reinterpret_cast<uint64_t>(&BacktraceTest::test_level_four_), 0},
+      {"test_recursive_call", reinterpret_cast<uint64_t>(&BacktraceTest::test_recursive_call_), 0},
+      {"test_get_context_and_wait",
+       reinterpret_cast<uint64_t>(&BacktraceTest::test_get_context_and_wait_), 0},
       {"unknown_end", static_cast<uint64_t>(-1), static_cast<uint64_t>(-1)},
   };
   std::sort(
@@ -100,7 +93,7 @@ struct OfflineThreadArg {
 static void* OfflineThreadFunc(void* arg) {
   OfflineThreadArg* fn_arg = reinterpret_cast<OfflineThreadArg*>(arg);
   fn_arg->tid = android::base::GetThreadId();
-  test_get_context_and_wait(&fn_arg->ucontext, &fn_arg->exit_flag);
+  BacktraceTest::test_get_context_and_wait_(&fn_arg->ucontext, &fn_arg->exit_flag);
   return nullptr;
 }
 
@@ -109,7 +102,7 @@ std::string GetTestPath(const std::string& arch, const std::string& path) {
 }
 
 // This test is disable because it is for generating test data.
-TEST(libbacktrace, DISABLED_generate_offline_testdata) {
+TEST_F(BacktraceTest, DISABLED_generate_offline_testdata) {
   // Create a thread to generate the needed stack and registers information.
   const size_t stack_size = 16 * 1024;
   void* stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -304,22 +297,22 @@ static void BacktraceOfflineTest(std::string arch_str, const std::string& testli
 }
 
 // For now, these tests can only run on the given architectures.
-TEST(libbacktrace, offline_eh_frame) {
+TEST_F(BacktraceTest, offline_eh_frame) {
   BacktraceOfflineTest("arm64", "libbacktrace_test_eh_frame.so");
   BacktraceOfflineTest("x86_64", "libbacktrace_test_eh_frame.so");
 }
 
-TEST(libbacktrace, offline_debug_frame) {
+TEST_F(BacktraceTest, offline_debug_frame) {
   BacktraceOfflineTest("arm", "libbacktrace_test_debug_frame.so");
   BacktraceOfflineTest("x86", "libbacktrace_test_debug_frame.so");
 }
 
-TEST(libbacktrace, offline_gnu_debugdata) {
+TEST_F(BacktraceTest, offline_gnu_debugdata) {
   BacktraceOfflineTest("arm", "libbacktrace_test_gnu_debugdata.so");
   BacktraceOfflineTest("x86", "libbacktrace_test_gnu_debugdata.so");
 }
 
-TEST(libbacktrace, offline_arm_exidx) {
+TEST_F(BacktraceTest, offline_arm_exidx) {
   BacktraceOfflineTest("arm", "libbacktrace_test_arm_exidx.so");
 }
 
@@ -373,32 +366,32 @@ static void LibUnwindingTest(const std::string& arch_str, const std::string& tes
 
 // This test tests the situation that ranges of functions covered by .eh_frame and .ARM.exidx
 // overlap with each other, which appears in /system/lib/libart.so.
-TEST(libbacktrace, offline_unwind_mix_eh_frame_and_arm_exidx) {
+TEST_F(BacktraceTest, offline_unwind_mix_eh_frame_and_arm_exidx) {
   LibUnwindingTest("arm", "offline_testdata_for_libart", "libart.so");
 }
 
-TEST(libbacktrace, offline_debug_frame_with_load_bias) {
+TEST_F(BacktraceTest, offline_debug_frame_with_load_bias) {
   LibUnwindingTest("arm", "offline_testdata_for_libandroid_runtime", "libandroid_runtime.so");
 }
 
-TEST(libbacktrace, offline_try_armexidx_after_debug_frame) {
+TEST_F(BacktraceTest, offline_try_armexidx_after_debug_frame) {
   LibUnwindingTest("arm", "offline_testdata_for_libGLESv2_adreno", "libGLESv2_adreno.so");
 }
 
-TEST(libbacktrace, offline_cie_with_P_augmentation) {
+TEST_F(BacktraceTest, offline_cie_with_P_augmentation) {
   // Make sure we can unwind through functions with CIE entry containing P augmentation, which
   // makes unwinding library reading personality handler from memory. One example is
   // /system/lib64/libskia.so.
   LibUnwindingTest("arm64", "offline_testdata_for_libskia", "libskia.so");
 }
 
-TEST(libbacktrace, offline_empty_eh_frame_hdr) {
+TEST_F(BacktraceTest, offline_empty_eh_frame_hdr) {
   // Make sure we can unwind through libraries with empty .eh_frame_hdr section. One example is
   // /vendor/lib64/egl/eglSubDriverAndroid.so.
   LibUnwindingTest("arm64", "offline_testdata_for_eglSubDriverAndroid", "eglSubDriverAndroid.so");
 }
 
-TEST(libbacktrace, offline_max_frames_limit) {
+TEST_F(BacktraceTest, offline_max_frames_limit) {
   // The length of callchain can reach 256 when recording an application.
   ASSERT_GE(MAX_BACKTRACE_FRAMES, 256);
 }
