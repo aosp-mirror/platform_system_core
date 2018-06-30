@@ -236,6 +236,8 @@ on init
 
     # pstore/ramoops previous console log
     mount pstore pstore /sys/fs/pstore nodev noexec nosuid
+    chown system log /sys/fs/pstore
+    chmod 0550 /sys/fs/pstore
     chown system log /sys/fs/pstore/console-ramoops
     chmod 0440 /sys/fs/pstore/console-ramoops
     chown system log /sys/fs/pstore/console-ramoops-0
