@@ -16,6 +16,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/fs.h>
 #include <selinux/selinux.h>
 #include <stdio.h>
@@ -25,6 +26,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <map>
@@ -36,6 +38,8 @@
 #include <android-base/macros.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
+#include <ext4_utils/ext4_utils.h>
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
 
@@ -112,9 +116,11 @@ bool fs_mgr_filesystem_has_space(const char* mount_point) {
 
 bool fs_mgr_overlayfs_enabled(const struct fstab_rec* fsrec) {
     // readonly filesystem, can not be mount -o remount,rw
-    // if squashfs or if free space is (near) zero making
-    // such a remount virtually useless.
-    return ("squashfs"s == fsrec->fs_type) || !fs_mgr_filesystem_has_space(fsrec->mount_point);
+    // if squashfs or if free space is (near) zero making such a remount
+    // virtually useless, or if there are shared blocks that prevent remount,rw
+    return ("squashfs"s == fsrec->fs_type) ||
+           fs_mgr_has_shared_blocks(fsrec->mount_point, fsrec->blk_device) ||
+           !fs_mgr_filesystem_has_space(fsrec->mount_point);
 }
 
 constexpr char upper_name[] = "upper";
@@ -191,6 +197,7 @@ bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
 
     auto fsrec_mount_point = fsrec->mount_point;
     if (!fsrec_mount_point) return false;
+    if (!fsrec->blk_device) return false;
 
     if (!fsrec->fs_type) return false;
 
@@ -493,3 +500,25 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
 }
 
 #endif  // ALLOW_ADBD_DISABLE_VERITY != 0
+
+bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string& dev) {
+    struct statfs fs;
+    if ((statfs((mount_point + "/lost+found").c_str(), &fs) == -1) ||
+        (fs.f_type != EXT4_SUPER_MAGIC)) {
+        return false;
+    }
+
+    android::base::unique_fd fd(open(dev.c_str(), O_RDONLY | O_CLOEXEC));
+    if (fd < 0) return false;
+
+    struct ext4_super_block sb;
+    if ((TEMP_FAILURE_RETRY(lseek64(fd, 1024, SEEK_SET)) < 0) ||
+        (TEMP_FAILURE_RETRY(read(fd, &sb, sizeof(sb))) < 0)) {
+        return false;
+    }
+
+    struct fs_info info;
+    if (ext4_parse_sb(&sb, &info) < 0) return false;
+
+    return (info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS) != 0;
+}
