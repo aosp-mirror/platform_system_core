@@ -42,9 +42,7 @@ bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
     const char* suffixes = "bkmgtpe";
     const char* suffix;
     if (!allow_suffixes || (suffix = strchr(suffixes, tolower(*end))) == nullptr) return false;
-#if __clang__  // TODO: win32 still builds with GCC :-(
     if (__builtin_mul_overflow(result, 1ULL << (10 * (suffix - suffixes)), &result)) return false;
-#endif
   }
   if (max < result) {
     return false;
