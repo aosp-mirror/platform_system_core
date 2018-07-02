@@ -170,17 +170,7 @@ void UNUSED(const T&...) {
 //
 //  In either case this macro has no effect on runtime behavior and performance
 //  of code.
-#if defined(__clang__) && defined(__has_warning)
-#if __has_feature(cxx_attributes) && __has_warning("-Wimplicit-fallthrough")
 #define FALLTHROUGH_INTENDED [[clang::fallthrough]]  // NOLINT
-#endif
-#endif
-
-#ifndef FALLTHROUGH_INTENDED
-#define FALLTHROUGH_INTENDED \
-  do {                       \
-  } while (0)
-#endif
 
 // Current ABI string
 #if defined(__arm__)

@@ -142,10 +142,4 @@ inline bool Socketpair(int type, unique_fd* left, unique_fd* right) {
 
 template <typename T>
 int close(const android::base::unique_fd_impl<T>&)
-#if defined(__clang__)
-  __attribute__((__unavailable__(
-#else
-  __attribute__((__error__(
-#endif
-    "close called on unique_fd"
-  )));
+    __attribute__((__unavailable__("close called on unique_fd")));
