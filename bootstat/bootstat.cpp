@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <regex>
@@ -124,12 +125,12 @@ std::string GetProperty(const char* key) {
   return std::string(&temp[0], len);
 }
 
-void SetProperty(const char* key, const std::string& val) {
-  property_set(key, val.c_str());
+bool SetProperty(const char* key, const std::string& val) {
+  return property_set(key, val.c_str()) == 0;
 }
 
-void SetProperty(const char* key, const char* val) {
-  property_set(key, val);
+bool SetProperty(const char* key, const char* val) {
+  return property_set(key, val) == 0;
 }
 
 constexpr int32_t kEmptyBootReason = 0;
@@ -736,7 +737,48 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
 const char last_last_reboot_reason_property[] = "sys.boot.reason.last";
+constexpr size_t history_reboot_reason_size = 4;
+const char history_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY ".history";
 const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
+
+// Land system_boot_reason into system_reboot_reason_property.
+// Shift system_boot_reason into history_reboot_reason_property.
+void BootReasonAddToHistory(const std::string& system_boot_reason) {
+  if (system_boot_reason.empty()) return;
+  LOG(INFO) << "Canonical boot reason: " << system_boot_reason;
+  auto old_system_boot_reason = GetProperty(system_reboot_reason_property);
+  if (!SetProperty(system_reboot_reason_property, system_boot_reason)) {
+    SetProperty(system_reboot_reason_property, system_boot_reason.substr(0, PROPERTY_VALUE_MAX - 1));
+  }
+  auto reason_history = android::base::Split(GetProperty(history_reboot_reason_property), "\n");
+  static auto mark = time(nullptr);
+  auto mark_str = std::string(",") + std::to_string(mark);
+  auto marked_system_boot_reason = system_boot_reason + mark_str;
+  if (!reason_history.empty()) {
+    // delete any entries that we just wrote in a previous
+    // call and leveraging duplicate line handling
+    auto last = old_system_boot_reason + mark_str;
+    // trim the list to (history_reboot_reason_size - 1)
+    ssize_t max = history_reboot_reason_size;
+    for (auto it = reason_history.begin(); it != reason_history.end();) {
+      if (it->empty() || (last == *it) || (marked_system_boot_reason == *it) || (--max <= 0)) {
+        it = reason_history.erase(it);
+      } else {
+        last = *it;
+        ++it;
+      }
+    }
+  }
+  // insert at the front, concatenating mark (<epoch time>) detail to the value.
+  reason_history.insert(reason_history.begin(), marked_system_boot_reason);
+  // If the property string is too long ( > PROPERTY_VALUE_MAX)
+  // we get an error, so trim out last entry and try again.
+  while (!(SetProperty(history_reboot_reason_property, android::base::Join(reason_history, '\n')))) {
+    auto it = std::prev(reason_history.end());
+    if (it == reason_history.end()) break;
+    reason_history.erase(it);
+  }
+}
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
 std::string BootReasonStrToReason(const std::string& boot_reason) {
@@ -933,13 +975,11 @@ std::string CalculateBootCompletePrefix() {
   if (!boot_event_store.GetBootEvent(kBuildDateKey, &record)) {
     boot_complete_prefix = "factory_reset_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
-    LOG(INFO) << "Canonical boot reason: reboot,factory_reset";
-    SetProperty(system_reboot_reason_property, "reboot,factory_reset");
+    BootReasonAddToHistory("reboot,factory_reset");
   } else if (build_date != record.second) {
     boot_complete_prefix = "ota_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
-    LOG(INFO) << "Canonical boot reason: reboot,ota";
-    SetProperty(system_reboot_reason_property, "reboot,ota");
+    BootReasonAddToHistory("reboot,ota");
   }
 
   return boot_complete_prefix;
@@ -1059,7 +1099,7 @@ void SetSystemBootReason() {
   const std::string bootloader_boot_reason(GetProperty(bootloader_reboot_reason_property));
   const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
   // Record the scrubbed system_boot_reason to the property
-  SetProperty(system_reboot_reason_property, system_boot_reason);
+  BootReasonAddToHistory(system_boot_reason);
   // Shift last_reboot_reason_property to last_last_reboot_reason_property
   std::string last_boot_reason(GetProperty(last_reboot_reason_property));
   if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
