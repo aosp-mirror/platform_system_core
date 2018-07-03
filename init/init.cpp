@@ -647,6 +647,9 @@ int main(int argc, char** argv) {
         // /mnt/vendor is used to mount vendor-specific partitions that can not be
         // part of the vendor partition, e.g. because they are mounted read-write.
         CHECKCALL(mkdir("/mnt/vendor", 0755));
+        // /mnt/product is used to mount product-specific partitions that can not be
+        // part of the product partition, e.g. because they are mounted read-write.
+        CHECKCALL(mkdir("/mnt/product", 0755));
 
 #undef CHECKCALL
 
