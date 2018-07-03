@@ -487,21 +487,14 @@ namespace std {
 // Note: to print the pointer, use "<< static_cast<const void*>(string_pointer)" instead.
 // Note: a not-recommended alternative is to let Clang ignore the warning by adding
 //       -Wno-user-defined-warnings to CPPFLAGS.
-#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgcc-compat"
 #define OSTREAM_STRING_POINTER_USAGE_WARNING \
     __attribute__((diagnose_if(true, "Unexpected logging of string pointer", "warning")))
-#else
-#define OSTREAM_STRING_POINTER_USAGE_WARNING /* empty */
-#endif
 inline std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer)
     OSTREAM_STRING_POINTER_USAGE_WARNING {
   return stream << static_cast<const void*>(string_pointer);
 }
-#ifdef __clang__
 #pragma clang diagnostic pop
-#endif
-#undef OSTREAM_STRING_POINTER_USAGE_WARNING
 
 }  // namespace std
