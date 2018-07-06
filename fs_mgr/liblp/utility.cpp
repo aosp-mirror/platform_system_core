@@ -38,7 +38,8 @@ bool GetDescriptorSize(int fd, uint64_t* size) {
     }
 
     if (S_ISBLK(s.st_mode)) {
-        return get_block_device_size(fd);
+        *size = get_block_device_size(fd);
+        return *size != 0;
     }
 
     int64_t result = SeekFile64(fd, 0, SEEK_END);
