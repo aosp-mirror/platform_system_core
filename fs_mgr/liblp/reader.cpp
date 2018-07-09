@@ -41,11 +41,18 @@ static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
         LERROR << "Logical partition metadata has invalid geometry magic signature.";
         return false;
     }
+    // Reject if the struct size is larger than what we compiled. This is so we
+    // can compute a checksum with the |struct_size| field rather than using
+    // sizeof.
+    if (geometry->struct_size > sizeof(LpMetadataGeometry)) {
+        LERROR << "Logical partition metadata has unrecognized fields.";
+        return false;
+    }
     // Recompute and check the CRC32.
     {
         LpMetadataGeometry temp = *geometry;
         memset(&temp.checksum, 0, sizeof(temp.checksum));
-        SHA256(&temp, sizeof(temp), temp.checksum);
+        SHA256(&temp, temp.struct_size, temp.checksum);
         if (memcmp(temp.checksum, geometry->checksum, sizeof(temp.checksum)) != 0) {
             LERROR << "Logical partition metadata has invalid geometry checksum.";
             return false;
