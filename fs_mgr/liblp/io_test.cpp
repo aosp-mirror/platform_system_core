@@ -102,7 +102,7 @@ static unique_fd CreateFlashedDisk() {
     if (!exported) {
         return {};
     }
-    if (!WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0)) {
+    if (!FlashPartitionTable(fd, *exported.get(), 0)) {
         return {};
     }
     return fd;
@@ -131,7 +131,7 @@ TEST(liblp, ExportDiskTooSmall) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    EXPECT_FALSE(WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0));
+    EXPECT_FALSE(FlashPartitionTable(fd, *exported.get(), 0));
 }
 
 // Test the basics of flashing a partition and reading it back.
@@ -146,7 +146,7 @@ TEST(liblp, FlashAndReadback) {
     // Export and flash.
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    ASSERT_TRUE(WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0));
+    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get(), 0));
 
     // Read back. Note that some fields are only filled in during
     // serialization, so exported and imported will not be identical. For
@@ -195,7 +195,7 @@ TEST(liblp, UpdateAnyMetadataSlot) {
 
     // Change the name before writing to the next slot.
     strncpy(imported->partitions[0].name, "vendor", sizeof(imported->partitions[0].name));
-    ASSERT_TRUE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_TRUE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     // Read back the original slot, make sure it hasn't changed.
     imported = ReadMetadata(fd, 0);
@@ -231,7 +231,7 @@ TEST(liblp, InvalidMetadataSlot) {
     unique_ptr<LpMetadata> metadata = ReadMetadata(fd, 0);
     ASSERT_NE(metadata, nullptr);
     for (uint32_t i = 1; i < kMetadataSlots; i++) {
-        ASSERT_TRUE(WritePartitionTable(fd, *metadata.get(), SyncMode::Update, i));
+        ASSERT_TRUE(UpdatePartitionTable(fd, *metadata.get(), i));
     }
 
     // Verify that we can't read unavailable slots.
@@ -246,25 +246,25 @@ TEST(liblp, NoChangingGeometry) {
 
     unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
-    ASSERT_TRUE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_TRUE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported->geometry.metadata_max_size += LP_SECTOR_SIZE;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.metadata_slot_count++;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.first_logical_sector++;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.last_logical_sector--;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 }
 
 // Test that changing one bit of metadata is enough to break the checksum.
@@ -353,8 +353,8 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_GE(fd, 0);
 
     // Check that we are able to write our table.
-    ASSERT_TRUE(WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0));
-    ASSERT_TRUE(WritePartitionTable(fd, *exported.get(), SyncMode::Update, 1));
+    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get(), 0));
+    ASSERT_TRUE(UpdatePartitionTable(fd, *exported.get(), 1));
 
     // Check that adding one more partition overflows the metadata allotment.
     partition = builder->AddPartition("final", TEST_GUID, LP_PARTITION_ATTR_NONE);
@@ -364,7 +364,7 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_NE(exported, nullptr);
 
     // The new table should be too large to be written.
-    ASSERT_FALSE(WritePartitionTable(fd, *exported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *exported.get(), 1));
 
     // Check that the first and last logical sectors weren't touched when we
     // wrote this almost-full metadata.
