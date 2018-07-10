@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
+#include "fs_mgr.h"
+#include "utility.h"
 
 using namespace std;
 using namespace android::fs_mgr;
@@ -125,6 +127,89 @@ TEST(liblp, MetadataAlignment) {
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.metadata_max_size, 1024);
+}
+
+TEST(liblp, InternalAlignment) {
+    // Test the metadata fitting within alignment.
+    BlockDeviceInfo device_info(1024 * 1024, 768 * 1024, 0);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 1536);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2035);
+
+    // Test a large alignment offset thrown in.
+    device_info.alignment_offset = 753664;
+    builder = MetadataBuilder::New(device_info, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+    exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 1472);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2035);
+
+    // Test only an alignment offset (which should simply bump up the first
+    // logical sector).
+    device_info.alignment = 0;
+    builder = MetadataBuilder::New(device_info, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+    exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 1484);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2035);
+
+    // Test a small alignment with an alignment offset.
+    device_info.alignment = 12 * 1024;
+    device_info.alignment_offset = 3 * 1024;
+    builder = MetadataBuilder::New(device_info, 16 * 1024, 2);
+    ASSERT_NE(builder, nullptr);
+    exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 78);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 1975);
+
+    // Test a small alignment with no alignment offset.
+    device_info.alignment = 11 * 1024;
+    builder = MetadataBuilder::New(device_info, 16 * 1024, 2);
+    ASSERT_NE(builder, nullptr);
+    exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 72);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 1975);
+}
+
+TEST(liblp, InternalPartitionAlignment) {
+    BlockDeviceInfo device_info(512 * 1024 * 1024, 768 * 1024, 753664);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 32 * 1024, 2);
+
+    Partition* a = builder->AddPartition("a", TEST_GUID, 0);
+    ASSERT_NE(a, nullptr);
+    Partition* b = builder->AddPartition("b", TEST_GUID2, 0);
+    ASSERT_NE(b, nullptr);
+
+    // Add a bunch of small extents to each, interleaving.
+    for (size_t i = 0; i < 10; i++) {
+        ASSERT_TRUE(builder->GrowPartition(a, a->size() + 4096));
+        ASSERT_TRUE(builder->GrowPartition(b, b->size() + 4096));
+    }
+    EXPECT_EQ(a->size(), 40960);
+    EXPECT_EQ(b->size(), 40960);
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+
+    // Check that each starting sector is aligned.
+    for (const auto& extent : exported->extents) {
+        ASSERT_EQ(extent.target_type, LP_TARGET_TYPE_LINEAR);
+        EXPECT_EQ(extent.num_sectors, 8);
+
+        uint64_t lba = extent.target_data * LP_SECTOR_SIZE;
+        uint64_t aligned_lba = AlignTo(lba, device_info.alignment, device_info.alignment_offset);
+        EXPECT_EQ(lba, aligned_lba);
+    }
+
+    // Sanity check one extent.
+    EXPECT_EQ(exported->extents.back().target_data, 30656);
 }
 
 TEST(liblp, UseAllDiskSpace) {
@@ -312,15 +397,72 @@ TEST(liblp, MetadataTooLarge) {
     static const size_t kMetadataSize = 64 * 1024;
 
     // No space to store metadata + geometry.
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(kDiskSize, kMetadataSize, 1);
+    BlockDeviceInfo device_info(kDiskSize, 0, 0);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
 
     // No space to store metadata + geometry + one free sector.
-    builder = MetadataBuilder::New(kDiskSize + LP_METADATA_GEOMETRY_SIZE * 2, kMetadataSize, 1);
+    device_info.size += LP_METADATA_GEOMETRY_SIZE * 2;
+    builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
 
     // Space for metadata + geometry + one free sector.
-    builder = MetadataBuilder::New(kDiskSize + LP_METADATA_GEOMETRY_SIZE * 2 + LP_SECTOR_SIZE,
-                                   kMetadataSize, 1);
+    device_info.size += LP_SECTOR_SIZE;
+    builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_NE(builder, nullptr);
+
+    // Test with alignment.
+    device_info.alignment = 131072;
+    builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
+    EXPECT_EQ(builder, nullptr);
+
+    device_info.alignment = 0;
+    device_info.alignment_offset = 32768 - LP_SECTOR_SIZE;
+    builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
+    EXPECT_EQ(builder, nullptr);
+}
+
+TEST(liblp, block_device_info) {
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    ASSERT_NE(fstab, nullptr);
+
+    // This should read from the "super" partition once we have a well-defined
+    // way to access it.
+    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), "/data");
+    ASSERT_NE(rec, nullptr);
+
+    BlockDeviceInfo device_info;
+    ASSERT_TRUE(GetBlockDeviceInfo(rec->blk_device, &device_info));
+
+    // Sanity check that the device doesn't give us some weird inefficient
+    // alignment.
+    ASSERT_EQ(device_info.alignment % LP_SECTOR_SIZE, 0);
+    ASSERT_EQ(device_info.alignment_offset % LP_SECTOR_SIZE, 0);
+    ASSERT_LE(device_info.alignment_offset, INT_MAX);
+
+    // Having an alignment offset > alignment doesn't really make sense.
+    ASSERT_LT(device_info.alignment_offset, device_info.alignment);
+}
+
+TEST(liblp, UpdateBlockDeviceInfo) {
+    BlockDeviceInfo device_info(1024 * 1024, 4096, 1024);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+
+    EXPECT_EQ(builder->block_device_info().size, device_info.size);
+    EXPECT_EQ(builder->block_device_info().alignment, device_info.alignment);
+    EXPECT_EQ(builder->block_device_info().alignment_offset, device_info.alignment_offset);
+
+    device_info.alignment = 0;
+    device_info.alignment_offset = 2048;
+    builder->set_block_device_info(device_info);
+    EXPECT_EQ(builder->block_device_info().alignment, 4096);
+    EXPECT_EQ(builder->block_device_info().alignment_offset, device_info.alignment_offset);
+
+    device_info.alignment = 8192;
+    device_info.alignment_offset = 0;
+    builder->set_block_device_info(device_info);
+    EXPECT_EQ(builder->block_device_info().alignment, 8192);
+    EXPECT_EQ(builder->block_device_info().alignment_offset, 2048);
 }

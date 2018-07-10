@@ -52,6 +52,7 @@ cc_test {
         "libcrypto",
         "libcrypto_utils",
         "liblp",
+        "libfs_mgr",
     ],
     srcs: [
         "builder_test.cpp",
