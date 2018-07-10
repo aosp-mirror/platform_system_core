@@ -737,6 +737,9 @@ on property:sys.sysctl.tcp_def_init_rwnd=*
 
 on property:security.perf_harden=0
     write /proc/sys/kernel/perf_event_paranoid 1
+    write /proc/sys/kernel/perf_event_max_sample_rate ${debug.perf_event_max_sample_rate:-100000}
+    write /proc/sys/kernel/perf_cpu_time_max_percent ${debug.perf_cpu_time_max_percent:-25}
+    write /proc/sys/kernel/perf_event_mlock_kb ${debug.perf_event_mlock_kb:-516}
 
 on property:security.perf_harden=1
     write /proc/sys/kernel/perf_event_paranoid 3
