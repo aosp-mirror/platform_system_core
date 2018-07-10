@@ -750,7 +750,6 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
-    @unittest.expectedFailure # b/25566053
     def test_push_empty(self):
         """Push a directory containing an empty directory to the device."""
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
