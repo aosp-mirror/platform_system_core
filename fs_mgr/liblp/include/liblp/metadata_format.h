@@ -107,6 +107,28 @@ typedef struct LpMetadataGeometry {
      * backup geometry block at the very end.
      */
     uint64_t last_logical_sector;
+
+    /* 64: Alignment for defining partitions or partition extents. For example,
+     * an alignment of 1MiB will require that all partitions have a size evenly
+     * divisible by 1MiB, and that the smallest unit the partition can grow by
+     * is 1MiB.
+     *
+     * Alignment is normally determined at runtime when growing or adding
+     * partitions. If for some reason the alignment cannot be determined, then
+     * this predefined alignment in the geometry is used instead. By default
+     * it is set to 1MiB.
+     */
+    uint32_t alignment;
+
+    /* 68: Alignment offset for "stacked" devices. For example, if the "super"
+     * partition itself is not aligned within the parent block device's
+     * partition table, then we adjust for this in deciding where to place
+     * |first_logical_sector|.
+     *
+     * Similar to |alignment|, this will be derived from the operating system.
+     * If it cannot be determined, it is assumed to be 0.
+     */
+    uint32_t alignment_offset;
 } __attribute__((packed)) LpMetadataGeometry;
 
 /* The logical partition metadata has a number of tables; they are described
