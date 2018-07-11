@@ -44,6 +44,8 @@
 #include "sysdeps/errno.h"
 #include "sysdeps/stat.h"
 
+#include "client/commandline.h"
+
 #include <android-base/file.h>
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
@@ -202,12 +204,11 @@ class SyncConnection {
         max = SYNC_DATA_MAX; // TODO: decide at runtime.
 
         std::string error;
-        FeatureSet features;
-        if (!adb_get_feature_set(&features, &error)) {
+        if (!adb_get_feature_set(&features_, &error)) {
             fd = -1;
             Error("failed to get feature set: %s", error.c_str());
         } else {
-            have_stat_v2_ = CanUseFeature(features, kFeatureStat2);
+            have_stat_v2_ = CanUseFeature(features_, kFeatureStat2);
             fd = adb_connect("sync:", &error);
             if (fd < 0) {
                 Error("connect failed: %s", error.c_str());
@@ -231,6 +232,8 @@ class SyncConnection {
 
         line_printer_.KeepInfoLine();
     }
+
+    const FeatureSet& Features() const { return features_; }
 
     bool IsValid() { return fd >= 0; }
 
@@ -576,6 +579,7 @@ class SyncConnection {
 
   private:
     bool expect_done_;
+    FeatureSet features_;
     bool have_stat_v2_;
 
     TransferLedger global_ledger_;
@@ -805,7 +809,7 @@ static bool IsDotOrDotDot(const char* name) {
 }
 
 static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* file_list,
-                             const std::string& lpath,
+                             std::vector<std::string>* directory_list, const std::string& lpath,
                              const std::string& rpath) {
     std::vector<copyinfo> dirlist;
     std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(lpath.c_str()), closedir);
@@ -848,21 +852,9 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* file_lis
     // Close this directory and recurse.
     dir.reset();
 
-    // Add the current directory to the list if it was empty, to ensure that
-    // it gets created.
-    if (empty_dir) {
-        // TODO(b/25566053): Make pushing empty directories work.
-        // TODO(b/25457350): We don't preserve permissions on directories.
-        sc.Warning("skipping empty directory '%s'", lpath.c_str());
-        copyinfo ci(android::base::Dirname(lpath), android::base::Dirname(rpath),
-                    android::base::Basename(lpath), S_IFDIR);
-        ci.skip = true;
-        file_list->push_back(ci);
-        return true;
-    }
-
     for (const copyinfo& ci : dirlist) {
-        local_build_list(sc, file_list, ci.lpath, ci.rpath);
+        directory_list->push_back(ci.rpath);
+        local_build_list(sc, file_list, directory_list, ci.lpath, ci.rpath);
     }
 
     return true;
@@ -879,9 +871,52 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
 
     // Recursively build the list of files to copy.
     std::vector<copyinfo> file_list;
+    std::vector<std::string> directory_list;
+
+    for (std::string dirpath = rpath; dirpath != "/"; dirpath = android::base::Dirname(dirpath)) {
+        directory_list.push_back(dirpath);
+    }
+    std::reverse(directory_list.begin(), directory_list.end());
+
     int skipped = 0;
-    if (!local_build_list(sc, &file_list, lpath, rpath)) {
+    if (!local_build_list(sc, &file_list, &directory_list, lpath, rpath)) {
         return false;
+    }
+
+    // b/110953234:
+    // P shipped with a bug that causes directory creation as a side-effect of a push to fail.
+    // Work around this by explicitly doing a mkdir via shell.
+    //
+    // Devices that don't support shell_v2 are unhappy if we try to send a too-long packet to them,
+    // but they're not affected by this bug, so only apply the workaround if we have shell_v2.
+    //
+    // TODO(b/25457350): We don't preserve permissions on directories.
+    // TODO: Find all of the leaves and `mkdir -p` them instead?
+    if (CanUseFeature(sc.Features(), kFeatureShell2)) {
+        SilentStandardStreamsCallbackInterface cb;
+        std::string cmd = "mkdir";
+        for (const auto& dir : directory_list) {
+            std::string escaped_path = escape_arg(dir);
+            if (escaped_path.size() > 16384) {
+                // Somewhat arbitrarily limit that probably won't ever happen.
+                sc.Error("path too long: %s", escaped_path.c_str());
+                return false;
+            }
+
+            // The maximum should be 64kiB, but that's not including other stuff that gets tacked
+            // onto the command line, so let's be a bit conservative.
+            if (cmd.size() + escaped_path.size() > 32768) {
+                // Dispatch the command, ignoring failure (since the directory might already exist).
+                send_shell_command(cmd, false, &cb);
+                cmd = "mkdir";
+            }
+            cmd += " ";
+            cmd += escaped_path;
+        }
+
+        if (cmd != "mkdir") {
+            send_shell_command(cmd, false, &cb);
+        }
     }
 
     if (check_timestamps) {
