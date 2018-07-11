@@ -32,6 +32,7 @@
 #include <vector>
 
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
@@ -231,8 +232,7 @@ TEST_F(UnwindTest, from_context) {
     usleep(1000);
   }
   ASSERT_NE(0, tid.load());
-  // Portable tgkill method.
-  ASSERT_EQ(0, syscall(__NR_tgkill, getpid(), tid.load(), SIGUSR1)) << "Error: " << strerror(errno);
+  ASSERT_EQ(0, tgkill(getpid(), tid.load(), SIGUSR1)) << "Error: " << strerror(errno);
 
   // Wait for context data.
   void* ucontext;
