@@ -16,22 +16,47 @@
 
 #include "liblp/builder.h"
 
+#if defined(__linux__)
+#include <linux/fs.h>
+#endif
 #include <string.h>
+#include <sys/ioctl.h>
 
 #include <algorithm>
 
+#include <android-base/unique_fd.h>
 #include <uuid/uuid.h>
 
 #include "liblp/metadata_format.h"
+#include "liblp/reader.h"
 #include "utility.h"
 
 namespace android {
 namespace fs_mgr {
 
-// Align a byte count up to the nearest 512-byte sector.
-template <typename T>
-static inline T AlignToSector(T value) {
-    return (value + (LP_SECTOR_SIZE - 1)) & ~T(LP_SECTOR_SIZE - 1);
+bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {
+#if defined(__linux__)
+    android::base::unique_fd fd(open(block_device.c_str(), O_RDONLY));
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "open '" << block_device << "' failed";
+        return false;
+    }
+    if (!GetDescriptorSize(fd, &device_info->size)) {
+        return false;
+    }
+    if (ioctl(fd, BLKIOMIN, &device_info->alignment) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
+        return false;
+    }
+    if (ioctl(fd, BLKALIGNOFF, &device_info->alignment_offset) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
+        return false;
+    }
+    return true;
+#else
+    LERROR << __PRETTY_FUNCTION__ << ": Not supported on this operating system.";
+    return false;
+#endif
 }
 
 void LinearExtent::AddTo(LpMetadata* out) const {
@@ -56,7 +81,7 @@ void Partition::RemoveExtents() {
 }
 
 void Partition::ShrinkTo(uint64_t requested_size) {
-    uint64_t aligned_size = AlignToSector(requested_size);
+    uint64_t aligned_size = AlignTo(requested_size, LP_SECTOR_SIZE);
     if (size_ <= aligned_size) {
         return;
     }
@@ -82,11 +107,28 @@ void Partition::ShrinkTo(uint64_t requested_size) {
     DCHECK(size_ == requested_size);
 }
 
-std::unique_ptr<MetadataBuilder> MetadataBuilder::New(uint64_t blockdevice_size,
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& block_device,
+                                                      uint32_t slot_number) {
+    std::unique_ptr<LpMetadata> metadata = ReadMetadata(block_device.c_str(), slot_number);
+    if (!metadata) {
+        return nullptr;
+    }
+    std::unique_ptr<MetadataBuilder> builder = New(*metadata.get());
+    if (!builder) {
+        return nullptr;
+    }
+    BlockDeviceInfo device_info;
+    if (fs_mgr::GetBlockDeviceInfo(block_device, &device_info)) {
+        builder->set_block_device_info(device_info);
+    }
+    return builder;
+}
+
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const BlockDeviceInfo& device_info,
                                                       uint32_t metadata_max_size,
                                                       uint32_t metadata_slot_count) {
     std::unique_ptr<MetadataBuilder> builder(new MetadataBuilder());
-    if (!builder->Init(blockdevice_size, metadata_max_size, metadata_slot_count)) {
+    if (!builder->Init(device_info, metadata_max_size, metadata_slot_count)) {
         return nullptr;
     }
     return builder;
@@ -135,10 +177,13 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
             }
         }
     }
+
+    device_info_.alignment = geometry_.alignment;
+    device_info_.alignment_offset = geometry_.alignment_offset;
     return true;
 }
 
-bool MetadataBuilder::Init(uint64_t blockdevice_size, uint32_t metadata_max_size,
+bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata_max_size,
                            uint32_t metadata_slot_count) {
     if (metadata_max_size < sizeof(LpMetadataHeader)) {
         LERROR << "Invalid metadata maximum size.";
@@ -150,7 +195,22 @@ bool MetadataBuilder::Init(uint64_t blockdevice_size, uint32_t metadata_max_size
     }
 
     // Align the metadata size up to the nearest sector.
-    metadata_max_size = AlignToSector(metadata_max_size);
+    metadata_max_size = AlignTo(metadata_max_size, LP_SECTOR_SIZE);
+
+    // Check that device properties are sane.
+    if (device_info_.alignment_offset % LP_SECTOR_SIZE != 0) {
+        LERROR << "Alignment offset is not sector-aligned.";
+        return false;
+    }
+    if (device_info_.alignment % LP_SECTOR_SIZE != 0) {
+        LERROR << "Partition alignment is not sector-aligned.";
+        return false;
+    }
+    if (device_info_.alignment_offset > device_info_.alignment) {
+        LERROR << "Partition alignment offset is greater than its alignment.";
+        return false;
+    }
+    device_info_ = device_info;
 
     // We reserve a geometry block (4KB) plus space for each copy of the
     // maximum size of a metadata blob. Then, we double that space since
@@ -158,20 +218,36 @@ bool MetadataBuilder::Init(uint64_t blockdevice_size, uint32_t metadata_max_size
     uint64_t reserved =
             LP_METADATA_GEOMETRY_SIZE + (uint64_t(metadata_max_size) * metadata_slot_count);
     uint64_t total_reserved = reserved * 2;
-
-    if (blockdevice_size < total_reserved || blockdevice_size - total_reserved < LP_SECTOR_SIZE) {
+    if (device_info_.size < total_reserved) {
         LERROR << "Attempting to create metadata on a block device that is too small.";
         return false;
     }
 
-    // The last sector is inclusive. We subtract one to make sure that logical
-    // partitions won't overlap with the same sector as the backup metadata,
-    // which could happen if the block device was not aligned to LP_SECTOR_SIZE.
-    geometry_.first_logical_sector = reserved / LP_SECTOR_SIZE;
-    geometry_.last_logical_sector = ((blockdevice_size - reserved) / LP_SECTOR_SIZE) - 1;
+    // Compute the first free sector, factoring in alignment.
+    uint64_t free_area = AlignTo(reserved, device_info_.alignment, device_info_.alignment_offset);
+    uint64_t first_sector = free_area / LP_SECTOR_SIZE;
+
+    // Compute the last free sector, which is inclusive. We subtract 1 to make
+    // sure that logical partitions won't overlap with the same sector as the
+    // backup metadata, which could happen if the block device was not aligned
+    // to LP_SECTOR_SIZE.
+    uint64_t last_sector = ((device_info_.size - reserved) / LP_SECTOR_SIZE) - 1;
+
+    // If this check fails, it means either (1) we did not have free space to
+    // allocate a single sector, or (2) we did, but the alignment was high
+    // enough to bump the first sector out of range. Either way, we cannot
+    // continue.
+    if (first_sector > last_sector) {
+        LERROR << "Not enough space to allocate any partition tables.";
+        return false;
+    }
+
+    geometry_.first_logical_sector = first_sector;
+    geometry_.last_logical_sector = last_sector;
     geometry_.metadata_max_size = metadata_max_size;
     geometry_.metadata_slot_count = metadata_slot_count;
-    DCHECK(geometry_.last_logical_sector >= geometry_.first_logical_sector);
+    geometry_.alignment = device_info_.alignment;
+    geometry_.alignment_offset = device_info_.alignment_offset;
     return true;
 }
 
@@ -209,7 +285,7 @@ void MetadataBuilder::RemovePartition(const std::string& name) {
 
 bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_size) {
     // Align the space needed up to the nearest sector.
-    uint64_t aligned_size = AlignToSector(requested_size);
+    uint64_t aligned_size = AlignTo(requested_size, LP_SECTOR_SIZE);
     if (partition->size() >= aligned_size) {
         return true;
     }
@@ -259,10 +335,16 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_siz
             continue;
         }
 
+        uint64_t aligned = AlignSector(previous.end);
+        if (aligned >= current.start) {
+            // After alignment, this extent is not usable.
+            continue;
+        }
+
         // This gap is enough to hold the remainder of the space requested, so we
         // can allocate what we need and return.
-        if (current.start - previous.end >= sectors_needed) {
-            auto extent = std::make_unique<LinearExtent>(sectors_needed, previous.end);
+        if (current.start - aligned >= sectors_needed) {
+            auto extent = std::make_unique<LinearExtent>(sectors_needed, aligned);
             sectors_needed -= extent->num_sectors();
             new_extents.push_back(std::move(extent));
             break;
@@ -270,7 +352,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_siz
 
         // This gap is not big enough to fit the remainder of the space requested,
         // so consume the whole thing and keep looking for more.
-        auto extent = std::make_unique<LinearExtent>(current.start - previous.end, previous.end);
+        auto extent = std::make_unique<LinearExtent>(current.start - aligned, aligned);
         sectors_needed -= extent->num_sectors();
         new_extents.push_back(std::move(extent));
     }
@@ -286,8 +368,12 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_siz
         }
         DCHECK(first_sector <= geometry_.last_logical_sector);
 
+        // Note: After alignment, |first_sector| may be > the last usable sector.
+        first_sector = AlignSector(first_sector);
+
         // Note: the last usable sector is inclusive.
-        if (geometry_.last_logical_sector + 1 - first_sector < sectors_needed) {
+        if (first_sector > geometry_.last_logical_sector ||
+            geometry_.last_logical_sector + 1 - first_sector < sectors_needed) {
             LERROR << "Not enough free space to expand partition: " << partition->name();
             return false;
         }
@@ -349,6 +435,27 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
 
 uint64_t MetadataBuilder::AllocatableSpace() const {
     return (geometry_.last_logical_sector - geometry_.first_logical_sector + 1) * LP_SECTOR_SIZE;
+}
+
+uint64_t MetadataBuilder::AlignSector(uint64_t sector) {
+    // Note: when reading alignment info from the Kernel, we don't assume it
+    // is aligned to the sector size, so we round up to the nearest sector.
+    uint64_t lba = sector * LP_SECTOR_SIZE;
+    uint64_t aligned = AlignTo(lba, device_info_.alignment, device_info_.alignment_offset);
+    return AlignTo(aligned, LP_SECTOR_SIZE) / LP_SECTOR_SIZE;
+}
+
+void MetadataBuilder::set_block_device_info(const BlockDeviceInfo& device_info) {
+    device_info_.size = device_info.size;
+
+    // The kernel does not guarantee these values are present, so we only
+    // replace existing values if the new values are non-zero.
+    if (device_info.alignment) {
+        device_info_.alignment = device_info.alignment;
+    }
+    if (device_info.alignment_offset) {
+        device_info_.alignment_offset = device_info.alignment_offset;
+    }
 }
 
 }  // namespace fs_mgr

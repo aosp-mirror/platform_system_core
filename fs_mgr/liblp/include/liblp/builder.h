@@ -30,6 +30,24 @@ namespace fs_mgr {
 
 class LinearExtent;
 
+// By default, partitions are aligned on a 1MiB boundary.
+static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
+
+struct BlockDeviceInfo {
+    BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0) {}
+    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset)
+        : size(size), alignment(alignment), alignment_offset(alignment_offset) {}
+    // Size of the block device, in bytes.
+    uint64_t size;
+    // Optimal target alignment, in bytes. Partition extents will be aligned to
+    // this value by default. This value must be 0 or a multiple of 512.
+    uint32_t alignment;
+    // Alignment offset to parent device (if any), in bytes. The sector at
+    // |alignment_offset| on the target device is correctly aligned on its
+    // parent device. This value must be 0 or a multiple of 512.
+    uint32_t alignment_offset;
+};
+
 // Abstraction around dm-targets that can be encoded into logical partition tables.
 class Extent {
   public:
@@ -107,13 +125,28 @@ class MetadataBuilder {
     // If the parameters would yield invalid metadata, nullptr is returned. This
     // could happen if the block device size is too small to store the metadata
     // and backup copies.
-    static std::unique_ptr<MetadataBuilder> New(uint64_t blockdevice_size,
+    static std::unique_ptr<MetadataBuilder> New(const BlockDeviceInfo& device_info,
                                                 uint32_t metadata_max_size,
                                                 uint32_t metadata_slot_count);
 
+    // Import an existing table for modification. This reads metadata off the
+    // given block device and imports it. It also adjusts alignment information
+    // based on run-time values in the operating system.
+    static std::unique_ptr<MetadataBuilder> New(const std::string& block_device,
+                                                uint32_t slot_number);
+
     // Import an existing table for modification. If the table is not valid, for
     // example it contains duplicate partition names, then nullptr is returned.
+    // This method is for testing or changing off-line tables.
     static std::unique_ptr<MetadataBuilder> New(const LpMetadata& metadata);
+
+    // Wrapper around New() with a BlockDeviceInfo that only specifies a device
+    // size. This is a convenience method for tests.
+    static std::unique_ptr<MetadataBuilder> New(uint64_t blockdev_size, uint32_t metadata_max_size,
+                                                uint32_t metadata_slot_count) {
+        BlockDeviceInfo device_info(blockdev_size, 0, 0);
+        return New(device_info, metadata_max_size, metadata_slot_count);
+    }
 
     // Export metadata so it can be serialized to an image, to disk, or mounted
     // via device-mapper.
@@ -156,15 +189,27 @@ class MetadataBuilder {
     // Amount of space that can be allocated to logical partitions.
     uint64_t AllocatableSpace() const;
 
+    // Merge new block device information into previous values. Alignment values
+    // are only overwritten if the new values are non-zero.
+    void set_block_device_info(const BlockDeviceInfo& device_info);
+    const BlockDeviceInfo& block_device_info() const { return device_info_; }
+
   private:
     MetadataBuilder();
-    bool Init(uint64_t blockdevice_size, uint32_t metadata_max_size, uint32_t metadata_slot_count);
+    bool Init(const BlockDeviceInfo& info, uint32_t metadata_max_size, uint32_t metadata_slot_count);
     bool Init(const LpMetadata& metadata);
+
+    uint64_t AlignSector(uint64_t sector);
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
     std::vector<std::unique_ptr<Partition>> partitions_;
+    BlockDeviceInfo device_info_;
 };
+
+// Read BlockDeviceInfo for a given block device. This always returns false
+// for non-Linux operating systems.
+bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info);
 
 }  // namespace fs_mgr
 }  // namespace android
