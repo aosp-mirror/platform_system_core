@@ -27,6 +27,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/threads.h>
 
 #include <benchmark/benchmark.h>
 
@@ -154,7 +155,7 @@ using BacktraceCreateFn = decltype(Backtrace::Create);
 
 static void CreateBacktrace(benchmark::State& state, BacktraceMap* map, BacktraceCreateFn fn) {
   while (state.KeepRunning()) {
-    std::unique_ptr<Backtrace> backtrace(fn(getpid(), gettid(), map));
+    std::unique_ptr<Backtrace> backtrace(fn(getpid(), android::base::GetThreadId(), map));
     backtrace->Unwind(0);
   }
 }
