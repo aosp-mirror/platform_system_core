@@ -23,6 +23,7 @@
 #include <string>
 
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
@@ -31,7 +32,6 @@
 
 #include "BacktraceLog.h"
 #include "UnwindStack.h"
-#include "thread_utils.h"
 
 using android::base::StringPrintf;
 
@@ -124,7 +124,7 @@ Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
   if (pid == BACKTRACE_CURRENT_PROCESS) {
     pid = getpid();
     if (tid == BACKTRACE_CURRENT_THREAD) {
-      tid = gettid();
+      tid = android::base::GetThreadId();
     }
   } else if (tid == BACKTRACE_CURRENT_THREAD) {
     tid = pid;
