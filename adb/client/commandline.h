@@ -83,6 +83,14 @@ class DefaultStandardStreamsCallback : public StandardStreamsCallbackInterface {
     DISALLOW_COPY_AND_ASSIGN(DefaultStandardStreamsCallback);
 };
 
+class SilentStandardStreamsCallbackInterface : public StandardStreamsCallbackInterface {
+  public:
+    SilentStandardStreamsCallbackInterface() = default;
+    void OnStdout(const char*, int) override final {}
+    void OnStderr(const char*, int) override final {}
+    int Done(int status) override final { return status; }
+};
+
 // Singleton.
 extern DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK;
 
