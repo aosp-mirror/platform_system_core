@@ -54,6 +54,8 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
     }
     return true;
 #else
+    (void)block_device;
+    (void)device_info;
     LERROR << __PRETTY_FUNCTION__ << ": Not supported on this operating system.";
     return false;
 #endif
