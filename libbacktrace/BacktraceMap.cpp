@@ -32,8 +32,6 @@
 #include <procinfo/process_map.h>
 #endif
 
-#include "thread_utils.h"
-
 using android::base::StringPrintf;
 
 std::string backtrace_map_t::Name() const {

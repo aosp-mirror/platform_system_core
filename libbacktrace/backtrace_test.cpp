@@ -47,16 +47,15 @@
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/test_utils.h>
+#include <android-base/threads.h>
 #include <android-base/unique_fd.h>
 #include <cutils/atomic.h>
-#include <cutils/threads.h>
 
 #include <gtest/gtest.h>
 
 // For the THREAD_SIGNAL definition.
 #include "BacktraceCurrent.h"
 #include "backtrace_testlib.h"
-#include "thread_utils.h"
 
 // Number of microseconds per milliseconds.
 #define US_PER_MSEC             1000
@@ -525,7 +524,7 @@ TEST(libbacktrace, ptrace_threads) {
 }
 
 void VerifyLevelThread(void*) {
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), android::base::GetThreadId()));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
   VERIFY_NO_ERROR(backtrace->GetError().error_code);
@@ -538,7 +537,7 @@ TEST(libbacktrace, thread_current_level) {
 }
 
 static void VerifyMaxThread(void*) {
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), android::base::GetThreadId()));
   ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
   ASSERT_EQ(BACKTRACE_UNWIND_ERROR_EXCEED_MAX_FRAMES_LIMIT, backtrace->GetError().error_code);
@@ -553,7 +552,7 @@ TEST(libbacktrace, thread_current_max) {
 static void* ThreadLevelRun(void* data) {
   thread_t* thread = reinterpret_cast<thread_t*>(data);
 
-  thread->tid = gettid();
+  thread->tid = android::base::GetThreadId();
   EXPECT_NE(test_level_one(1, 2, 3, 4, ThreadSetState, data), 0);
   return nullptr;
 }
@@ -644,7 +643,7 @@ TEST(libbacktrace, thread_ignore_frames) {
 static void* ThreadMaxRun(void* data) {
   thread_t* thread = reinterpret_cast<thread_t*>(data);
 
-  thread->tid = gettid();
+  thread->tid = android::base::GetThreadId();
   EXPECT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, ThreadSetState, data), 0);
   return nullptr;
 }
@@ -994,7 +993,7 @@ static void InitMemory(uint8_t* memory, size_t bytes) {
 static void* ThreadReadTest(void* data) {
   thread_t* thread_data = reinterpret_cast<thread_t*>(data);
 
-  thread_data->tid = gettid();
+  thread_data->tid = android::base::GetThreadId();
 
   // Create two map pages.
   // Mark the second page as not-readable.
@@ -1816,7 +1815,8 @@ TEST(libbacktrace, unwind_remote_through_signal_using_action) {
 
 static void TestFrameSkipNumbering(create_func_t create_func, map_create_func_t map_create_func) {
   std::unique_ptr<BacktraceMap> map(map_create_func(getpid(), false));
-  std::unique_ptr<Backtrace> backtrace(create_func(getpid(), gettid(), map.get()));
+  std::unique_ptr<Backtrace> backtrace(
+      create_func(getpid(), android::base::GetThreadId(), map.get()));
   backtrace->Unwind(1);
   ASSERT_NE(0U, backtrace->NumFrames());
   ASSERT_EQ(0U, backtrace->GetFrame(0)->num);
