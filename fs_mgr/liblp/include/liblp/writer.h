@@ -22,28 +22,26 @@
 namespace android {
 namespace fs_mgr {
 
-// When flashing the initial logical partition layout, we also write geometry
-// information at the start and end of the big physical partition. This helps
-// locate metadata and backup metadata in the case of corruption or a failed
-// update. For normal changes to the metadata, we never modify the geometry.
-enum class SyncMode {
-    // Write geometry information.
-    Flash,
-    // Normal update of a single slot.
-    Update
-};
+// Place an initial partition table on the device. This will overwrite the
+// existing geometry, and should not be used for normal partition table
+// updates. False can be returned if the geometry is incompatible with the
+// block device or an I/O error occurs.
+bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata,
+                         uint32_t slot_number);
 
-// Write the given partition table to the given block device, writing only
-// copies according to the given sync mode.
-//
-// This will perform some verification, such that the device has enough space
-// to store the metadata as well as all of its extents.
-//
-// The slot number indicates which metadata slot to use.
-bool WritePartitionTable(const char* block_device, const LpMetadata& metadata, SyncMode sync_mode,
-                         uint32_t slot_number);
-bool WritePartitionTable(int fd, const LpMetadata& metadata, SyncMode sync_mode,
-                         uint32_t slot_number);
+// Update the partition table for a given metadata slot number. False is
+// returned if an error occurs, which can include:
+//  - Invalid slot number.
+//  - I/O error.
+//  - Corrupt or missing metadata geometry on disk.
+//  - Incompatible geometry.
+bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
+                          uint32_t slot_number);
+
+// These variants are for testing only. The path-based functions should be used
+// for actual operation, so that open() is called with the correct flags.
+bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
+bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
 
 // Helper function to serialize geometry and metadata to a normal file, for
 // flashing or debugging.
