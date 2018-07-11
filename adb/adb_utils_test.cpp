@@ -82,30 +82,38 @@ TEST(adb_utils, directory_exists_win32_symlink_junction) {
 #endif
 
 TEST(adb_utils, escape_arg) {
-  ASSERT_EQ(R"('')", escape_arg(""));
+  EXPECT_EQ(R"('')", escape_arg(""));
 
-  ASSERT_EQ(R"('abc')", escape_arg("abc"));
+  EXPECT_EQ(R"('abc')", escape_arg("abc"));
 
-  ASSERT_EQ(R"(' abc')", escape_arg(" abc"));
-  ASSERT_EQ(R"(''\''abc')", escape_arg("'abc"));
-  ASSERT_EQ(R"('"abc')", escape_arg("\"abc"));
-  ASSERT_EQ(R"('\abc')", escape_arg("\\abc"));
-  ASSERT_EQ(R"('(abc')", escape_arg("(abc"));
-  ASSERT_EQ(R"(')abc')", escape_arg(")abc"));
+  auto wrap = [](const std::string& x) { return '\'' + x + '\''; };
+  const std::string q = R"('\'')";
+  EXPECT_EQ(wrap(q), escape_arg("'"));
+  EXPECT_EQ(wrap(q + q), escape_arg("''"));
+  EXPECT_EQ(wrap(q + "abc" + q), escape_arg("'abc'"));
+  EXPECT_EQ(wrap(q + "abc"), escape_arg("'abc"));
+  EXPECT_EQ(wrap("abc" + q), escape_arg("abc'"));
+  EXPECT_EQ(wrap("abc" + q + "def"), escape_arg("abc'def"));
+  EXPECT_EQ(wrap("a" + q + "b" + q + "c"), escape_arg("a'b'c"));
+  EXPECT_EQ(wrap("a" + q + "bcde" + q + "f"), escape_arg("a'bcde'f"));
 
-  ASSERT_EQ(R"('abc abc')", escape_arg("abc abc"));
-  ASSERT_EQ(R"('abc'\''abc')", escape_arg("abc'abc"));
-  ASSERT_EQ(R"('abc"abc')", escape_arg("abc\"abc"));
-  ASSERT_EQ(R"('abc\abc')", escape_arg("abc\\abc"));
-  ASSERT_EQ(R"('abc(abc')", escape_arg("abc(abc"));
-  ASSERT_EQ(R"('abc)abc')", escape_arg("abc)abc"));
+  EXPECT_EQ(R"(' abc')", escape_arg(" abc"));
+  EXPECT_EQ(R"('"abc')", escape_arg("\"abc"));
+  EXPECT_EQ(R"('\abc')", escape_arg("\\abc"));
+  EXPECT_EQ(R"('(abc')", escape_arg("(abc"));
+  EXPECT_EQ(R"(')abc')", escape_arg(")abc"));
 
-  ASSERT_EQ(R"('abc ')", escape_arg("abc "));
-  ASSERT_EQ(R"('abc'\''')", escape_arg("abc'"));
-  ASSERT_EQ(R"('abc"')", escape_arg("abc\""));
-  ASSERT_EQ(R"('abc\')", escape_arg("abc\\"));
-  ASSERT_EQ(R"('abc(')", escape_arg("abc("));
-  ASSERT_EQ(R"('abc)')", escape_arg("abc)"));
+  EXPECT_EQ(R"('abc abc')", escape_arg("abc abc"));
+  EXPECT_EQ(R"('abc"abc')", escape_arg("abc\"abc"));
+  EXPECT_EQ(R"('abc\abc')", escape_arg("abc\\abc"));
+  EXPECT_EQ(R"('abc(abc')", escape_arg("abc(abc"));
+  EXPECT_EQ(R"('abc)abc')", escape_arg("abc)abc"));
+
+  EXPECT_EQ(R"('abc ')", escape_arg("abc "));
+  EXPECT_EQ(R"('abc"')", escape_arg("abc\""));
+  EXPECT_EQ(R"('abc\')", escape_arg("abc\\"));
+  EXPECT_EQ(R"('abc(')", escape_arg("abc("));
+  EXPECT_EQ(R"('abc)')", escape_arg("abc)"));
 }
 
 void test_mkdirs(const std::string& basepath) {
