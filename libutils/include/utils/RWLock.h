@@ -48,7 +48,7 @@ public:
 
                 RWLock();
     explicit    RWLock(const char* name);
-    explicit    RWLock(int type, const char* name = NULL);
+    explicit    RWLock(int type, const char* name = nullptr);
                 ~RWLock();
 
     status_t    readLock();
@@ -82,10 +82,10 @@ private:
 };
 
 inline RWLock::RWLock() {
-    pthread_rwlock_init(&mRWLock, NULL);
+    pthread_rwlock_init(&mRWLock, nullptr);
 }
 inline RWLock::RWLock(__attribute__((unused)) const char* name) {
-    pthread_rwlock_init(&mRWLock, NULL);
+    pthread_rwlock_init(&mRWLock, nullptr);
 }
 inline RWLock::RWLock(int type, __attribute__((unused)) const char* name) {
     if (type == SHARED) {
@@ -95,7 +95,7 @@ inline RWLock::RWLock(int type, __attribute__((unused)) const char* name) {
         pthread_rwlock_init(&mRWLock, &attr);
         pthread_rwlockattr_destroy(&attr);
     } else {
-        pthread_rwlock_init(&mRWLock, NULL);
+        pthread_rwlock_init(&mRWLock, nullptr);
     }
 }
 inline RWLock::~RWLock() {
