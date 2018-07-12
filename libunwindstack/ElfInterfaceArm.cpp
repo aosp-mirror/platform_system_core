@@ -87,23 +87,17 @@ bool ElfInterfaceArm::GetPrel31Addr(uint32_t offset, uint32_t* addr) {
 #define PT_ARM_EXIDX 0x70000001
 #endif
 
-bool ElfInterfaceArm::HandleType(uint64_t offset, uint32_t type) {
+void ElfInterfaceArm::HandleUnknownType(uint32_t type, uint64_t ph_offset, uint64_t ph_filesz) {
   if (type != PT_ARM_EXIDX) {
-    return false;
-  }
-
-  Elf32_Phdr phdr;
-  if (!memory_->ReadFully(offset, &phdr, sizeof(phdr))) {
-    return true;
+    return;
   }
 
   // The offset already takes into account the load bias.
-  start_offset_ = phdr.p_offset;
+  start_offset_ = ph_offset;
 
   // Always use filesz instead of memsz. In most cases they are the same,
   // but some shared libraries wind up setting one correctly and not the other.
-  total_entries_ = phdr.p_filesz / 8;
-  return true;
+  total_entries_ = ph_filesz / 8;
 }
 
 bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {

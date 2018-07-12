@@ -204,49 +204,19 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
   uint64_t offset = ehdr.e_phoff;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
     PhdrType phdr;
-    if (!memory_->ReadField(offset, &phdr, &phdr.p_type, sizeof(phdr.p_type))) {
+    if (!memory_->ReadFully(offset, &phdr, sizeof(phdr))) {
       last_error_.code = ERROR_MEMORY_INVALID;
-      last_error_.address =
-          offset + reinterpret_cast<uintptr_t>(&phdr.p_type) - reinterpret_cast<uintptr_t>(&phdr);
+      last_error_.address = offset;
       return false;
-    }
-
-    if (HandleType(offset, phdr.p_type)) {
-      continue;
     }
 
     switch (phdr.p_type) {
     case PT_LOAD:
     {
-      // Get the flags first, if this isn't an executable header, ignore it.
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_flags, sizeof(phdr.p_flags))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_flags) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       if ((phdr.p_flags & PF_X) == 0) {
         continue;
       }
 
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_vaddr) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_offset) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_memsz) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       pt_loads_[phdr.p_offset] = LoadInfo{phdr.p_offset, phdr.p_vaddr,
                                           static_cast<size_t>(phdr.p_memsz)};
       if (phdr.p_offset == 0) {
@@ -256,45 +226,19 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
     }
 
     case PT_GNU_EH_FRAME:
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_offset) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       // This is really the pointer to the .eh_frame_hdr section.
       eh_frame_hdr_offset_ = phdr.p_offset;
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_memsz) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       eh_frame_hdr_size_ = phdr.p_memsz;
       break;
 
     case PT_DYNAMIC:
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_offset, sizeof(phdr.p_offset))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_offset) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       dynamic_offset_ = phdr.p_offset;
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_vaddr, sizeof(phdr.p_vaddr))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_vaddr) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       dynamic_vaddr_ = phdr.p_vaddr;
-      if (!memory_->ReadField(offset, &phdr, &phdr.p_memsz, sizeof(phdr.p_memsz))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = offset + reinterpret_cast<uintptr_t>(&phdr.p_memsz) -
-                              reinterpret_cast<uintptr_t>(&phdr);
-        return false;
-      }
       dynamic_size_ = phdr.p_memsz;
+      break;
+
+    default:
+      HandleUnknownType(phdr.p_type, phdr.p_offset, phdr.p_filesz);
       break;
     }
   }
@@ -313,8 +257,7 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
   ShdrType shdr;
   if (ehdr.e_shstrndx < ehdr.e_shnum) {
     uint64_t sh_offset = offset + ehdr.e_shstrndx * ehdr.e_shentsize;
-    if (memory_->ReadField(sh_offset, &shdr, &shdr.sh_offset, sizeof(shdr.sh_offset)) &&
-        memory_->ReadField(sh_offset, &shdr, &shdr.sh_size, sizeof(shdr.sh_size))) {
+    if (memory_->ReadFully(sh_offset, &shdr, sizeof(shdr))) {
       sec_offset = shdr.sh_offset;
       sec_size = shdr.sh_size;
     }
