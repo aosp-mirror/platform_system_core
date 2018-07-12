@@ -130,8 +130,13 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     return true;
 }
 
+static bool DefaultWriter(int fd, const std::string& blob) {
+    return android::base::WriteFully(fd, blob.data(), blob.size());
+}
+
 static bool WriteMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t slot_number,
-                          const std::string& blob) {
+                          const std::string& blob,
+                          std::function<bool(int, const std::string&)> writer) {
     // Make sure we're writing to a valid metadata slot.
     if (slot_number >= geometry.metadata_slot_count) {
         LERROR << "Invalid logical partition metadata slot number.";
@@ -144,7 +149,7 @@ static bool WriteMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t s
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << primary_offset;
         return false;
     }
-    if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
+    if (!writer(fd, blob)) {
         PERROR << __PRETTY_FUNCTION__ << "write " << blob.size() << " bytes failed";
         return false;
     }
@@ -161,7 +166,7 @@ static bool WriteMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t s
                << " is within logical partition bounds, sector " << geometry.last_logical_sector;
         return false;
     }
-    if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
+    if (!writer(fd, blob)) {
         PERROR << __PRETTY_FUNCTION__ << "backup write " << blob.size() << " bytes failed";
         return false;
     }
@@ -197,10 +202,11 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numbe
     }
 
     // Write metadata to the correct slot, now that geometry is in place.
-    return WriteMetadata(fd, metadata.geometry, slot_number, metadata_blob);
+    return WriteMetadata(fd, metadata.geometry, slot_number, metadata_blob, DefaultWriter);
 }
 
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
+bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
+                          std::function<bool(int, const std::string&)> writer) {
     // Before writing geometry and/or logical partition tables, perform some
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
@@ -221,7 +227,7 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
         LERROR << "Incompatible geometry in new logical partition metadata";
         return false;
     }
-    return WriteMetadata(fd, geometry, slot_number, blob);
+    return WriteMetadata(fd, geometry, slot_number, blob, writer);
 }
 
 bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata,
@@ -242,6 +248,10 @@ bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& met
         return false;
     }
     return UpdatePartitionTable(fd, metadata, slot_number);
+}
+
+bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
+    return UpdatePartitionTable(fd, metadata, slot_number, DefaultWriter);
 }
 
 bool WriteToImageFile(int fd, const LpMetadata& input) {
