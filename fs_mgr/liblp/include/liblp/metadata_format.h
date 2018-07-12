@@ -262,28 +262,4 @@ typedef struct LpMetadataExtent {
 } /* extern "C" */
 #endif
 
-#ifdef __cplusplus
-namespace android {
-namespace fs_mgr {
-
-// Helper structure for easily interpreting deserialized metadata, or
-// re-serializing metadata.
-struct LpMetadata {
-    LpMetadataGeometry geometry;
-    LpMetadataHeader header;
-    std::vector<LpMetadataPartition> partitions;
-    std::vector<LpMetadataExtent> extents;
-};
-
-// Helper to extract safe C++ strings from partition info.
-std::string GetPartitionName(const LpMetadataPartition& partition);
-std::string GetPartitionGuid(const LpMetadataPartition& partition);
-
-// Helper to return a slot number for a slot suffix.
-uint32_t SlotNumberForSlotSuffix(const std::string& suffix);
-
-}  // namespace fs_mgr
-}  // namespace android
-#endif
-
 #endif /* LOGICAL_PARTITION_METADATA_FORMAT_H_ */
