@@ -32,6 +32,8 @@
 #include "ScopedDisableMalloc.h"
 #include "ScopedPipe.h"
 
+#include <android-base/threads.h>
+
 using namespace std::chrono_literals;
 
 namespace android {
@@ -260,7 +262,7 @@ TEST_F(ThreadCaptureTest, capture_kill) {
 
       ThreadCapture thread_capture(ret, heap);
       thread_capture.InjectTestFunc([&](pid_t tid) {
-        syscall(SYS_tgkill, ret, tid, SIGKILL);
+        tgkill(ret, tid, SIGKILL);
         usleep(10000);
       });
       auto list_tids = allocator::vector<pid_t>(heap);
@@ -319,7 +321,7 @@ TEST_F(ThreadCaptureTest, capture_signal) {
 
           ThreadCapture thread_capture(child, heap);
           thread_capture.InjectTestFunc([&](pid_t tid) {
-            syscall(SYS_tgkill, child, tid, sig);
+            tgkill(child, tid, sig);
             usleep(10000);
           });
           auto list_tids = allocator::vector<pid_t>(heap);

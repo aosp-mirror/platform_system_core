@@ -23,10 +23,6 @@
 #include <set>
 #include <string>
 
-#if !defined(__ANDROID__)
-#include <cutils/threads.h>
-#endif
-
 #include <backtrace/Backtrace.h>
 #include <demangle.h>
 #include <unwindstack/Elf.h>

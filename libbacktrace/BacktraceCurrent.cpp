@@ -28,13 +28,13 @@
 
 #include <string>
 
+#include <android-base/threads.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
 #include "BacktraceAsyncSafeLog.h"
 #include "BacktraceCurrent.h"
 #include "ThreadEntry.h"
-#include "thread_utils.h"
 
 bool BacktraceCurrent::ReadWord(uint64_t ptr, word_t* out_value) {
   if (!VerifyReadWordArgs(ptr, out_value)) {
@@ -76,7 +76,7 @@ bool BacktraceCurrent::Unwind(size_t num_ignore_frames, void* ucontext) {
     return UnwindFromContext(num_ignore_frames, ucontext);
   }
 
-  if (Tid() != gettid()) {
+  if (Tid() != android::base::GetThreadId()) {
     return UnwindThread(num_ignore_frames);
   }
 
@@ -114,16 +114,17 @@ class ErrnoRestorer {
 static void SignalLogOnly(int, siginfo_t*, void*) {
   ErrnoRestorer restore;
 
-  BACK_ASYNC_SAFE_LOGE("pid %d, tid %d: Received a spurious signal %d\n", getpid(), gettid(),
-                       THREAD_SIGNAL);
+  BACK_ASYNC_SAFE_LOGE("pid %d, tid %d: Received a spurious signal %d\n", getpid(),
+                       static_cast<int>(android::base::GetThreadId()), THREAD_SIGNAL);
 }
 
 static void SignalHandler(int, siginfo_t*, void* sigcontext) {
   ErrnoRestorer restore;
 
-  ThreadEntry* entry = ThreadEntry::Get(getpid(), gettid(), false);
+  ThreadEntry* entry = ThreadEntry::Get(getpid(), android::base::GetThreadId(), false);
   if (!entry) {
-    BACK_ASYNC_SAFE_LOGE("pid %d, tid %d entry not found", getpid(), gettid());
+    BACK_ASYNC_SAFE_LOGE("pid %d, tid %d entry not found", getpid(),
+                         static_cast<int>(android::base::GetThreadId()));
     return;
   }
 
