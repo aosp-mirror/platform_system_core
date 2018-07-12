@@ -45,7 +45,7 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numbe
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
 
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
-                          std::function<bool(int, const std::string&)> writer);
+                          const std::function<bool(int, const std::string&)>& writer);
 
 // Helper function to serialize geometry and metadata to a normal file, for
 // flashing or debugging.
