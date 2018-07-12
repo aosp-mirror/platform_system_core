@@ -23,7 +23,7 @@
 #include <map>
 #include <memory>
 
-#include "metadata_format.h"
+#include "liblp.h"
 
 namespace android {
 namespace fs_mgr {

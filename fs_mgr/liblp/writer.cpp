@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "writer.h"
+
 #include <inttypes.h>
 #include <unistd.h>
 
@@ -22,8 +24,7 @@
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 
-#include "liblp/reader.h"
-#include "liblp/writer.h"
+#include "reader.h"
 #include "utility.h"
 
 namespace android {

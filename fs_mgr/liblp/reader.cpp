@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "liblp/reader.h"
+#include "reader.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -164,8 +164,6 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
     }
     return true;
 }
-
-using ReadMetadataFn = std::function<bool(void* buffer, size_t num_bytes)>;
 
 // Parse and validate all metadata at the current position in the given file
 // descriptor.

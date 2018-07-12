@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-#include "utility.h"
 #include <gtest/gtest.h>
+#include <liblp/liblp.h>
+
+#include "utility.h"
 
 using namespace android;
 using namespace android::fs_mgr;
