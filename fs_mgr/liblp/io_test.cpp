@@ -23,10 +23,10 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
-#include <liblp/reader.h>
-#include <liblp/writer.h>
 
+#include "reader.h"
 #include "utility.h"
+#include "writer.h"
 
 using namespace std;
 using namespace android::fs_mgr;
