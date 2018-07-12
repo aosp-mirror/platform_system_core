@@ -29,6 +29,7 @@
 #include "nativebridge/native_bridge.h"
 
 #include <algorithm>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -150,15 +151,14 @@ class LibraryNamespaces {
  public:
   LibraryNamespaces() : initialized_(false) { }
 
-  bool Create(JNIEnv* env,
-              uint32_t target_sdk_version,
-              jobject class_loader,
-              bool is_shared,
-              bool is_for_vendor,
-              jstring java_library_path,
-              jstring java_permitted_path,
-              NativeLoaderNamespace* ns,
-              std::string* error_msg) {
+  NativeLoaderNamespace* Create(JNIEnv* env,
+                                uint32_t target_sdk_version,
+                                jobject class_loader,
+                                bool is_shared,
+                                bool is_for_vendor,
+                                jstring java_library_path,
+                                jstring java_permitted_path,
+                                std::string* error_msg) {
     std::string library_path; // empty string by default.
 
     if (java_library_path != nullptr) {
@@ -182,10 +182,10 @@ class LibraryNamespaces {
     }
 
     if (!initialized_ && !InitPublicNamespace(library_path.c_str(), error_msg)) {
-      return false;
+      return nullptr;
     }
 
-    bool found = FindNamespaceByClassLoader(env, class_loader, nullptr);
+    bool found = FindNamespaceByClassLoader(env, class_loader);
 
     LOG_ALWAYS_FATAL_IF(found,
                         "There is already a namespace associated with this classloader");
@@ -199,13 +199,12 @@ class LibraryNamespaces {
       namespace_type |= ANDROID_NAMESPACE_TYPE_GREYLIST_ENABLED;
     }
 
-    NativeLoaderNamespace parent_ns;
-    bool found_parent_namespace = FindParentNamespaceByClassLoader(env, class_loader, &parent_ns);
+    NativeLoaderNamespace* parent_ns = FindParentNamespaceByClassLoader(env, class_loader);
 
     bool is_native_bridge = false;
 
-    if (found_parent_namespace) {
-      is_native_bridge = !parent_ns.is_android_namespace();
+    if (parent_ns != nullptr) {
+      is_native_bridge = !parent_ns->is_android_namespace();
     } else if (!library_path.empty()) {
       is_native_bridge = NativeBridgeIsPathSupported(library_path.c_str());
     }
@@ -251,15 +250,17 @@ class LibraryNamespaces {
 
     NativeLoaderNamespace native_loader_ns;
     if (!is_native_bridge) {
+      android_namespace_t* android_parent_ns =
+          parent_ns == nullptr ? nullptr : parent_ns->get_android_ns();
       android_namespace_t* ns = android_create_namespace(namespace_name,
                                                          nullptr,
                                                          library_path.c_str(),
                                                          namespace_type,
                                                          permitted_path.c_str(),
-                                                         parent_ns.get_android_ns());
+                                                         android_parent_ns);
       if (ns == nullptr) {
         *error_msg = dlerror();
-        return false;
+        return nullptr;
       }
 
       // Note that when vendor_ns is not configured this function will return nullptr
@@ -269,49 +270,50 @@ class LibraryNamespaces {
 
       if (!android_link_namespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = dlerror();
-        return false;
+        return nullptr;
       }
 
       if (vndk_ns != nullptr && !system_vndksp_libraries_.empty()) {
         // vendor apks are allowed to use VNDK-SP libraries.
         if (!android_link_namespaces(ns, vndk_ns, system_vndksp_libraries_.c_str())) {
           *error_msg = dlerror();
-          return false;
+          return nullptr;
         }
       }
 
       if (!vendor_public_libraries_.empty()) {
         if (!android_link_namespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
           *error_msg = dlerror();
-          return false;
+          return nullptr;
         }
       }
 
       native_loader_ns = NativeLoaderNamespace(ns);
     } else {
+      native_bridge_namespace_t* native_bridge_parent_namespace =
+          parent_ns == nullptr ? nullptr : parent_ns->get_native_bridge_ns();
       native_bridge_namespace_t* ns = NativeBridgeCreateNamespace(namespace_name,
                                                                   nullptr,
                                                                   library_path.c_str(),
                                                                   namespace_type,
                                                                   permitted_path.c_str(),
-                                                                  parent_ns.get_native_bridge_ns());
-
+                                                                  native_bridge_parent_namespace);
       if (ns == nullptr) {
         *error_msg = NativeBridgeGetError();
-        return false;
+        return nullptr;
       }
 
       native_bridge_namespace_t* vendor_ns = NativeBridgeGetVendorNamespace();
 
       if (!NativeBridgeLinkNamespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = NativeBridgeGetError();
-        return false;
+        return nullptr;
       }
 
       if (!vendor_public_libraries_.empty()) {
         if (!NativeBridgeLinkNamespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
           *error_msg = NativeBridgeGetError();
-          return false;
+          return nullptr;
         }
       }
 
@@ -320,24 +322,19 @@ class LibraryNamespaces {
 
     namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), native_loader_ns));
 
-    *ns = native_loader_ns;
-    return true;
+    return &(namespaces_.back().second);
   }
 
-  bool FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader, NativeLoaderNamespace* ns) {
+  NativeLoaderNamespace* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
     auto it = std::find_if(namespaces_.begin(), namespaces_.end(),
                 [&](const std::pair<jweak, NativeLoaderNamespace>& value) {
                   return env->IsSameObject(value.first, class_loader);
                 });
     if (it != namespaces_.end()) {
-      if (ns != nullptr) {
-        *ns = it->second;
-      }
-
-      return true;
+      return &it->second;
     }
 
-    return false;
+    return nullptr;
   }
 
   void Initialize() {
@@ -557,24 +554,23 @@ class LibraryNamespaces {
     return env->CallObjectMethod(class_loader, get_parent);
   }
 
-  bool FindParentNamespaceByClassLoader(JNIEnv* env,
-                                        jobject class_loader,
-                                        NativeLoaderNamespace* ns) {
+  NativeLoaderNamespace* FindParentNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
     jobject parent_class_loader = GetParentClassLoader(env, class_loader);
 
     while (parent_class_loader != nullptr) {
-      if (FindNamespaceByClassLoader(env, parent_class_loader, ns)) {
-        return true;
+      NativeLoaderNamespace* ns;
+      if ((ns = FindNamespaceByClassLoader(env, parent_class_loader)) != nullptr) {
+        return ns;
       }
 
       parent_class_loader = GetParentClassLoader(env, parent_class_loader);
     }
 
-    return false;
+    return nullptr;
   }
 
   bool initialized_;
-  std::vector<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
+  std::list<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
   std::string system_public_libraries_;
   std::string vendor_public_libraries_;
   std::string oem_public_libraries_;
@@ -614,7 +610,6 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
 
   std::string error_msg;
-  NativeLoaderNamespace ns;
   bool success = g_namespaces->Create(env,
                                       target_sdk_version,
                                       class_loader,
@@ -622,8 +617,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
                                       is_for_vendor,
                                       library_path,
                                       permitted_path,
-                                      &ns,
-                                      &error_msg);
+                                      &error_msg) != nullptr;
   if (!success) {
     return env->NewStringUTF(error_msg.c_str());
   }
@@ -649,43 +643,24 @@ void* OpenNativeLibrary(JNIEnv* env,
   }
 
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
-  NativeLoaderNamespace ns;
+  NativeLoaderNamespace* ns;
 
-  if (!g_namespaces->FindNamespaceByClassLoader(env, class_loader, &ns)) {
+  if ((ns = g_namespaces->FindNamespaceByClassLoader(env, class_loader)) == nullptr) {
     // This is the case where the classloader was not created by ApplicationLoaders
     // In this case we create an isolated not-shared namespace for it.
-    if (!g_namespaces->Create(env,
-                              target_sdk_version,
-                              class_loader,
-                              false /* is_shared */,
-                              false /* is_for_vendor */,
-                              library_path,
-                              nullptr,
-                              &ns,
-                              error_msg)) {
+    if ((ns = g_namespaces->Create(env,
+                                   target_sdk_version,
+                                   class_loader,
+                                   false /* is_shared */,
+                                   false /* is_for_vendor */,
+                                   library_path,
+                                   nullptr,
+                                   error_msg)) == nullptr) {
       return nullptr;
     }
   }
 
-  if (ns.is_android_namespace()) {
-    android_dlextinfo extinfo;
-    extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
-    extinfo.library_namespace = ns.get_android_ns();
-
-    void* handle = android_dlopen_ext(path, RTLD_NOW, &extinfo);
-    if (handle == nullptr) {
-      *error_msg = dlerror();
-    }
-    *needs_native_bridge = false;
-    return handle;
-  } else {
-    void* handle = NativeBridgeLoadLibraryExt(path, RTLD_NOW, ns.get_native_bridge_ns());
-    if (handle == nullptr) {
-      *error_msg = NativeBridgeGetError();
-    }
-    *needs_native_bridge = true;
-    return handle;
-  }
+  return OpenNativeLibrary(ns, path, needs_native_bridge, error_msg);
 #else
   UNUSED(env, target_sdk_version, class_loader);
 
@@ -741,17 +716,44 @@ bool CloseNativeLibrary(void* handle, const bool needs_native_bridge) {
 }
 
 #if defined(__ANDROID__)
+void* OpenNativeLibrary(NativeLoaderNamespace* ns, const char* path, bool* needs_native_bridge,
+                        std::string* error_msg) {
+  if (ns->is_android_namespace()) {
+    android_dlextinfo extinfo;
+    extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
+    extinfo.library_namespace = ns->get_android_ns();
+
+    void* handle = android_dlopen_ext(path, RTLD_NOW, &extinfo);
+    if (handle == nullptr) {
+      *error_msg = dlerror();
+    }
+    *needs_native_bridge = false;
+    return handle;
+  } else {
+    void* handle = NativeBridgeLoadLibraryExt(path, RTLD_NOW, ns->get_native_bridge_ns());
+    if (handle == nullptr) {
+      *error_msg = NativeBridgeGetError();
+    }
+    *needs_native_bridge = true;
+    return handle;
+  }
+}
+
 // native_bridge_namespaces are not supported for callers of this function.
 // This function will return nullptr in the case when application is running
 // on native bridge.
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
-  NativeLoaderNamespace ns;
-  if (g_namespaces->FindNamespaceByClassLoader(env, class_loader, &ns)) {
-    return ns.is_android_namespace() ? ns.get_android_ns() : nullptr;
+  NativeLoaderNamespace* ns = g_namespaces->FindNamespaceByClassLoader(env, class_loader);
+  if (ns != nullptr) {
+    return ns->is_android_namespace() ? ns->get_android_ns() : nullptr;
   }
 
   return nullptr;
+}
+NativeLoaderNamespace* FindNativeLoaderNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
+  std::lock_guard<std::mutex> guard(g_namespaces_mutex);
+  return g_namespaces->FindNamespaceByClassLoader(env, class_loader);
 }
 #endif
 

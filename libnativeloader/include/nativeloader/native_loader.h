@@ -53,8 +53,21 @@ bool CloseNativeLibrary(void* handle, const bool needs_native_bridge);
 #if defined(__ANDROID__)
 // Look up linker namespace by class_loader. Returns nullptr if
 // there is no namespace associated with the class_loader.
+// TODO(b/79940628): move users to FindNativeLoaderNamespaceByClassLoader and remove this function.
 __attribute__((visibility("default")))
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader);
+// That version works with native bridge namespaces, but requires use of OpenNativeLibrary.
+class NativeLoaderNamespace;
+__attribute__((visibility("default")))
+NativeLoaderNamespace* FindNativeLoaderNamespaceByClassLoader(
+    JNIEnv* env, jobject class_loader);
+// Load library.  Unlinke OpenNativeLibrary above couldn't create namespace on demand, but does
+// not require access to JNIEnv either.
+__attribute__((visibility("default")))
+void* OpenNativeLibrary(NativeLoaderNamespace* ns,
+                        const char* path,
+                        bool* needs_native_bridge,
+                        std::string* error_msg);
 #endif
 
 __attribute__((visibility("default")))
