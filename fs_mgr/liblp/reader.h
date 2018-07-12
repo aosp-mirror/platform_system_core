@@ -21,14 +21,11 @@
 
 #include <memory>
 
-#include "metadata_format.h"
+#include <liblp/liblp.h>
 
 namespace android {
 namespace fs_mgr {
 
-// Read logical partition metadata from its predetermined location on a block
-// device. If readback fails, we also attempt to load from a backup copy.
-std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number);
 std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number);
 
 // Helper functions for manually reading geometry and metadata.
@@ -40,9 +37,6 @@ std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry
 std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
                                                uint32_t slot_number);
 
-// Read logical partition metadata from an image file that was created with
-// WriteToImageFile().
-std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file);
 std::unique_ptr<LpMetadata> ReadFromImageFile(int fd);
 
 }  // namespace fs_mgr

@@ -18,26 +18,12 @@
 #define LIBLP_WRITER_H
 
 #include <functional>
-#include "metadata_format.h"
+#include <string>
+
+#include <liblp/liblp.h>
 
 namespace android {
 namespace fs_mgr {
-
-// Place an initial partition table on the device. This will overwrite the
-// existing geometry, and should not be used for normal partition table
-// updates. False can be returned if the geometry is incompatible with the
-// block device or an I/O error occurs.
-bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                         uint32_t slot_number);
-
-// Update the partition table for a given metadata slot number. False is
-// returned if an error occurs, which can include:
-//  - Invalid slot number.
-//  - I/O error.
-//  - Corrupt or missing metadata geometry on disk.
-//  - Incompatible geometry.
-bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                          uint32_t slot_number);
 
 // These variants are for testing only. The path-based functions should be used
 // for actual operation, so that open() is called with the correct flags.
