@@ -46,6 +46,9 @@ cc_library_static {
 cc_test {
     name: "liblp_test",
     defaults: ["fs_mgr_defaults"],
+    cppflags: [
+        "-Wno-unused-parameter",
+    ],
     static_libs: [
         "libbase",
         "liblog",

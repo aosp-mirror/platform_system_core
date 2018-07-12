@@ -17,6 +17,7 @@
 #ifndef LIBLP_WRITER_H
 #define LIBLP_WRITER_H
 
+#include <functional>
 #include "metadata_format.h"
 
 namespace android {
@@ -42,6 +43,9 @@ bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& met
 // for actual operation, so that open() is called with the correct flags.
 bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
+
+bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
+                          std::function<bool(int, const std::string&)> writer);
 
 // Helper function to serialize geometry and metadata to a normal file, for
 // flashing or debugging.
