@@ -73,8 +73,14 @@ static std::string SerializeMetadata(const LpMetadata& input) {
 
 // Perform sanity checks so we don't accidentally overwrite valid metadata
 // with potentially invalid metadata, or random partition data with metadata.
-static bool ValidateGeometryAndMetadata(const LpMetadata& metadata, uint64_t blockdevice_size,
-                                        uint64_t metadata_size) {
+static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std::string* blob) {
+    uint64_t blockdevice_size;
+    if (!GetDescriptorSize(fd, &blockdevice_size)) {
+        return false;
+    }
+
+    *blob = SerializeMetadata(metadata);
+
     const LpMetadataHeader& header = metadata.header;
     const LpMetadataGeometry& geometry = metadata.geometry;
     // Validate the usable sector range.
@@ -83,7 +89,7 @@ static bool ValidateGeometryAndMetadata(const LpMetadata& metadata, uint64_t blo
         return false;
     }
     // Make sure we're writing within the space reserved.
-    if (metadata_size > geometry.metadata_max_size) {
+    if (blob->size() > geometry.metadata_max_size) {
         LERROR << "Logical partition metadata is too large.";
         return false;
     }
@@ -124,61 +130,12 @@ static bool ValidateGeometryAndMetadata(const LpMetadata& metadata, uint64_t blo
     return true;
 }
 
-bool WritePartitionTable(int fd, const LpMetadata& metadata, SyncMode sync_mode,
-                         uint32_t slot_number) {
-    uint64_t size;
-    if (!GetDescriptorSize(fd, &size)) {
-        return false;
-    }
-
-    const LpMetadataGeometry& geometry = metadata.geometry;
-    if (sync_mode != SyncMode::Flash) {
-        // Verify that the old geometry is identical. If it's not, then we've
-        // based this new metadata on invalid assumptions.
-        LpMetadataGeometry old_geometry;
-        if (!ReadLogicalPartitionGeometry(fd, &old_geometry)) {
-            return false;
-        }
-        if (!CompareGeometry(geometry, old_geometry)) {
-            LERROR << "Incompatible geometry in new logical partition metadata";
-            return false;
-        }
-    }
-
+static bool WriteMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t slot_number,
+                          const std::string& blob) {
     // Make sure we're writing to a valid metadata slot.
     if (slot_number >= geometry.metadata_slot_count) {
         LERROR << "Invalid logical partition metadata slot number.";
         return false;
-    }
-
-    // Before writing geometry and/or logical partition tables, perform some
-    // basic checks that the geometry and tables are coherent, and will fit
-    // on the given block device.
-    std::string blob = SerializeMetadata(metadata);
-    if (!ValidateGeometryAndMetadata(metadata, size, blob.size())) {
-        return false;
-    }
-
-    // First write geometry if this is a flash operation. It gets written to
-    // the first and last 4096-byte regions of the device.
-    if (sync_mode == SyncMode::Flash) {
-        std::string blob = SerializeGeometry(metadata.geometry);
-        if (SeekFile64(fd, 0, SEEK_SET) < 0) {
-            PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset 0";
-            return false;
-        }
-        if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
-            PERROR << __PRETTY_FUNCTION__ << "write " << blob.size() << " bytes failed";
-            return false;
-        }
-        if (SeekFile64(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END) < 0) {
-            PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << -LP_METADATA_GEOMETRY_SIZE;
-            return false;
-        }
-        if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
-            PERROR << __PRETTY_FUNCTION__ << "backup write " << blob.size() << " bytes failed";
-            return false;
-        }
     }
 
     // Write the primary copy of the metadata.
@@ -211,14 +168,80 @@ bool WritePartitionTable(int fd, const LpMetadata& metadata, SyncMode sync_mode,
     return true;
 }
 
-bool WritePartitionTable(const char* block_device, const LpMetadata& metadata, SyncMode sync_mode,
+bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
+    // Before writing geometry and/or logical partition tables, perform some
+    // basic checks that the geometry and tables are coherent, and will fit
+    // on the given block device.
+    std::string metadata_blob;
+    if (!ValidateAndSerializeMetadata(fd, metadata, &metadata_blob)) {
+        return false;
+    }
+
+    // Write geometry to the first and last 4096 bytes of the device.
+    std::string blob = SerializeGeometry(metadata.geometry);
+    if (SeekFile64(fd, 0, SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset 0";
+        return false;
+    }
+    if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
+        PERROR << __PRETTY_FUNCTION__ << "write " << blob.size() << " bytes failed";
+        return false;
+    }
+    if (SeekFile64(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << -LP_METADATA_GEOMETRY_SIZE;
+        return false;
+    }
+    if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
+        PERROR << __PRETTY_FUNCTION__ << "backup write " << blob.size() << " bytes failed";
+        return false;
+    }
+
+    // Write metadata to the correct slot, now that geometry is in place.
+    return WriteMetadata(fd, metadata.geometry, slot_number, metadata_blob);
+}
+
+bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
+    // Before writing geometry and/or logical partition tables, perform some
+    // basic checks that the geometry and tables are coherent, and will fit
+    // on the given block device.
+    std::string blob;
+    if (!ValidateAndSerializeMetadata(fd, metadata, &blob)) {
+        return false;
+    }
+
+    // Verify that the old geometry is identical. If it's not, then we might be
+    // writing a table that was built for a different device, so we must reject
+    // it.
+    const LpMetadataGeometry& geometry = metadata.geometry;
+    LpMetadataGeometry old_geometry;
+    if (!ReadLogicalPartitionGeometry(fd, &old_geometry)) {
+        return false;
+    }
+    if (!CompareGeometry(geometry, old_geometry)) {
+        LERROR << "Incompatible geometry in new logical partition metadata";
+        return false;
+    }
+    return WriteMetadata(fd, geometry, slot_number, blob);
+}
+
+bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata,
                          uint32_t slot_number) {
-    android::base::unique_fd fd(open(block_device, O_RDWR | O_SYNC));
+    android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
         return false;
     }
-    return WritePartitionTable(fd, metadata, sync_mode, slot_number);
+    return FlashPartitionTable(fd, metadata, slot_number);
+}
+
+bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
+                          uint32_t slot_number) {
+    android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
+        return false;
+    }
+    return UpdatePartitionTable(fd, metadata, slot_number);
 }
 
 bool WriteToImageFile(int fd, const LpMetadata& input) {
