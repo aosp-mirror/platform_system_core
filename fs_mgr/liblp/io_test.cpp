@@ -393,3 +393,85 @@ TEST(liblp, ImageFiles) {
     unique_ptr<LpMetadata> imported = ReadFromImageFile(fd);
     ASSERT_NE(imported, nullptr);
 }
+
+class BadWriter {
+  public:
+    // When requested, write garbage instead of the requested bytes, then
+    // return false.
+    bool operator()(int fd, const std::string& blob) {
+        if (++write_count_ == fail_on_write_) {
+            std::unique_ptr<char[]> new_data = std::make_unique<char[]>(blob.size());
+            memset(new_data.get(), 0xe5, blob.size());
+            EXPECT_TRUE(android::base::WriteFully(fd, new_data.get(), blob.size()));
+            return false;
+        } else {
+            return android::base::WriteFully(fd, blob.data(), blob.size());
+        }
+    }
+    void FailOnWrite(int number) {
+        fail_on_write_ = number;
+        write_count_ = 0;
+    }
+
+  private:
+    int fail_on_write_ = 0;
+    int write_count_ = 0;
+};
+
+// Test that an interrupted flash operation on the "primary" copy of metadata
+// is not fatal.
+TEST(liblp, FlashPrimaryMetadataFailure) {
+    // Initial state.
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    BadWriter writer;
+
+    // Read and write it back.
+    writer.FailOnWrite(1);
+    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+
+    // We should still be able to read the backup copy.
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+
+    // Flash again, this time fail the backup copy. We should still be able
+    // to read the primary.
+    writer.FailOnWrite(2);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+}
+
+// Test that an interrupted flash operation on the "backup" copy of metadata
+// is not fatal.
+TEST(liblp, FlashBackupMetadataFailure) {
+    // Initial state.
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    BadWriter writer;
+
+    // Read and write it back.
+    writer.FailOnWrite(2);
+    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+
+    // We should still be able to read the primary copy.
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+
+    // Flash again, this time fail the primary copy. We should still be able
+    // to read the primary.
+    //
+    // TODO(dvander): This is currently not handled correctly. liblp does not
+    // guarantee both copies are in sync before the update. The ASSERT_EQ
+    // will change to an ASSERT_NE when this is fixed.
+    writer.FailOnWrite(1);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+    imported = ReadMetadata(fd, 0);
+    ASSERT_EQ(imported, nullptr);
+}
