@@ -16,6 +16,9 @@
 
 /**
  * Hash map.
+ *
+ * Use std::map or std::unordered_map instead.
+ * https://en.cppreference.com/w/cpp/container
  */
 
 #ifndef __HASHMAP_H
@@ -68,38 +71,17 @@ void* hashmapPut(Hashmap* map, void* key, void* value);
 void* hashmapGet(Hashmap* map, void* key);
 
 /**
- * Returns true if the map contains an entry for the given key.
- */
-bool hashmapContainsKey(Hashmap* map, void* key);
-
-/**
- * Gets the value for a key. If a value is not found, this function gets a 
- * value and creates an entry using the given callback.
- *
- * If memory allocation fails, the callback is not called, this function
- * returns NULL, and errno is set to ENOMEM.
- */
-void* hashmapMemoize(Hashmap* map, void* key, 
-        void* (*initialValue)(void* key, void* context), void* context);
-
-/**
  * Removes an entry from the map. Returns the removed value or NULL if no
  * entry was present.
  */
 void* hashmapRemove(Hashmap* map, void* key);
 
 /**
- * Gets the number of entries in this map.
- */
-size_t hashmapSize(Hashmap* map);
-
-/**
  * Invokes the given callback on each entry in the map. Stops iterating if
  * the callback returns false.
  */
-void hashmapForEach(Hashmap* map, 
-        bool (*callback)(void* key, void* value, void* context),
-        void* context);
+void hashmapForEach(Hashmap* map, bool (*callback)(void* key, void* value, void* context),
+                    void* context);
 
 /**
  * Concurrency support.
@@ -115,36 +97,8 @@ void hashmapLock(Hashmap* map);
  */
 void hashmapUnlock(Hashmap* map);
 
-/**
- * Key utilities.
- */
-
-/**
- * Hashes int keys. 'key' is a pointer to int.
- */
-int hashmapIntHash(void* key);
-
-/**
- * Compares two int keys for equality.
- */
-bool hashmapIntEquals(void* keyA, void* keyB);
-
-/**
- * For debugging.
- */
-
-/**
- * Gets current capacity.
- */
-size_t hashmapCurrentCapacity(Hashmap* map);
-
-/**
- * Counts the number of entry collisions.
- */
-size_t hashmapCountCollisions(Hashmap* map);
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __HASHMAP_H */ 
+#endif /* __HASHMAP_H */
