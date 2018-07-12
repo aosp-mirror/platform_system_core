@@ -65,7 +65,6 @@ cc_library {
         "iosched_policy.cpp",
         "load_file.cpp",
         "native_handle.cpp",
-        "open_memstream.c",
         "record_stream.cpp",
         "sched_policy.cpp",
         "sockets.cpp",
