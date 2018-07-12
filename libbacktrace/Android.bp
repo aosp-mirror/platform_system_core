@@ -42,7 +42,6 @@ libbacktrace_sources = [
     "Backtrace.cpp",
     "BacktraceCurrent.cpp",
     "BacktracePtrace.cpp",
-    "thread_utils.c",
     "ThreadEntry.cpp",
     "UnwindStack.cpp",
     "UnwindStackMap.cpp",
@@ -94,7 +93,6 @@ cc_library {
             ],
 
             static_libs: [
-                "libcutils",
                 "libprocinfo",
             ],
 
@@ -145,7 +143,6 @@ cc_test {
         "backtrace_offline_test.cpp",
         "backtrace_test.cpp",
         "GetPss.cpp",
-        "thread_utils.c",
     ],
 
     cflags: [
@@ -159,7 +156,6 @@ cc_test {
         "libbacktrace",
         "libdexfile",
         "libbase",
-        "libcutils",
         "liblog",
         "libunwindstack",
     ],

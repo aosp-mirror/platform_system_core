@@ -28,7 +28,6 @@
 
 #include "BacktraceLog.h"
 #include "BacktracePtrace.h"
-#include "thread_utils.h"
 
 #if !defined(__APPLE__)
 static bool PtraceRead(pid_t tid, uint64_t addr, word_t* out_value) {

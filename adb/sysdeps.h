@@ -314,7 +314,6 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 #else /* !_WIN32 a.k.a. Unix */
 
 #include <cutils/sockets.h>
-#include <cutils/threads.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
