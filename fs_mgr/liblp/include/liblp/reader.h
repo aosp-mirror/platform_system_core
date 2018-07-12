@@ -31,9 +31,14 @@ namespace fs_mgr {
 std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number);
 std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number);
 
-// Read and validate the logical partition geometry from a block device.
-bool ReadLogicalPartitionGeometry(const char* block_device, LpMetadataGeometry* geometry);
+// Helper functions for manually reading geometry and metadata.
 bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry);
+
+// These functions assume a valid geometry and slot number.
+std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
+                                                uint32_t slot_number);
+std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
+                                               uint32_t slot_number);
 
 // Read logical partition metadata from an image file that was created with
 // WriteToImageFile().
