@@ -399,29 +399,42 @@ class BadWriter {
     // When requested, write garbage instead of the requested bytes, then
     // return false.
     bool operator()(int fd, const std::string& blob) {
-        if (++write_count_ == fail_on_write_) {
+        write_count_++;
+        if (write_count_ == fail_on_write_) {
             std::unique_ptr<char[]> new_data = std::make_unique<char[]>(blob.size());
             memset(new_data.get(), 0xe5, blob.size());
             EXPECT_TRUE(android::base::WriteFully(fd, new_data.get(), blob.size()));
             return false;
         } else {
-            return android::base::WriteFully(fd, blob.data(), blob.size());
+            if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
+                return false;
+            }
+            return fail_after_write_ != write_count_;
         }
     }
-    void FailOnWrite(int number) {
-        fail_on_write_ = number;
+    void Reset() {
+        fail_on_write_ = 0;
+        fail_after_write_ = 0;
         write_count_ = 0;
+    }
+    void FailOnWrite(int number) {
+        Reset();
+        fail_on_write_ = number;
+    }
+    void FailAfterWrite(int number) {
+        Reset();
+        fail_after_write_ = number;
     }
 
   private:
     int fail_on_write_ = 0;
+    int fail_after_write_ = 0;
     int write_count_ = 0;
 };
 
 // Test that an interrupted flash operation on the "primary" copy of metadata
 // is not fatal.
-TEST(liblp, FlashPrimaryMetadataFailure) {
-    // Initial state.
+TEST(liblp, UpdatePrimaryMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -439,7 +452,7 @@ TEST(liblp, FlashPrimaryMetadataFailure) {
 
     // Flash again, this time fail the backup copy. We should still be able
     // to read the primary.
-    writer.FailOnWrite(2);
+    writer.FailOnWrite(3);
     ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
@@ -447,8 +460,7 @@ TEST(liblp, FlashPrimaryMetadataFailure) {
 
 // Test that an interrupted flash operation on the "backup" copy of metadata
 // is not fatal.
-TEST(liblp, FlashBackupMetadataFailure) {
-    // Initial state.
+TEST(liblp, UpdateBackupMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -466,12 +478,45 @@ TEST(liblp, FlashBackupMetadataFailure) {
 
     // Flash again, this time fail the primary copy. We should still be able
     // to read the primary.
-    //
-    // TODO(dvander): This is currently not handled correctly. liblp does not
-    // guarantee both copies are in sync before the update. The ASSERT_EQ
-    // will change to an ASSERT_NE when this is fixed.
-    writer.FailOnWrite(1);
+    writer.FailOnWrite(2);
     ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
     imported = ReadMetadata(fd, 0);
-    ASSERT_EQ(imported, nullptr);
+    ASSERT_NE(imported, nullptr);
+}
+
+// Test that an interrupted write *in between* writing metadata will read
+// the correct metadata copy. The primary is always considered newer than
+// the backup.
+TEST(liblp, UpdateMetadataCleanFailure) {
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    BadWriter writer;
+
+    // Change the name of the existing partition.
+    unique_ptr<LpMetadata> new_table = ReadMetadata(fd, 0);
+    ASSERT_NE(new_table, nullptr);
+    ASSERT_GE(new_table->partitions.size(), 1);
+    new_table->partitions[0].name[0]++;
+
+    // Flash it, but fail to write the backup copy.
+    writer.FailAfterWrite(2);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *new_table.get(), 0, writer));
+
+    // When we read back, we should get the updated primary copy.
+    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_GE(new_table->partitions.size(), 1);
+    ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
+
+    // Flash again. After, the backup and primary copy should be coherent.
+    // Note that the sync step should have used the primary to sync, not
+    // the backup.
+    writer.Reset();
+    ASSERT_TRUE(UpdatePartitionTable(fd, *new_table.get(), 0, writer));
+
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_GE(new_table->partitions.size(), 1);
+    ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
 }
