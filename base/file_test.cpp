@@ -26,6 +26,10 @@
 
 #include "android-base/test_utils.h"
 
+#if !defined(_WIN32)
+#include <pwd.h>
+#endif
+
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
   errno = 0;
@@ -115,7 +119,7 @@ TEST(file, WriteFully) {
   ASSERT_FALSE(android::base::ReadFully(tf.fd, &s[0], s.size()));
 }
 
-TEST(file, RemoveFileIfExist) {
+TEST(file, RemoveFileIfExists) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
   close(tf.fd);
@@ -126,8 +130,42 @@ TEST(file, RemoveFileIfExist) {
   TemporaryDir td;
   ASSERT_FALSE(android::base::RemoveFileIfExists(td.path));
   ASSERT_FALSE(android::base::RemoveFileIfExists(td.path, &err));
-  ASSERT_EQ("is not a regular or symbol link file", err);
+  ASSERT_EQ("is not a regular file or symbolic link", err);
 }
+
+TEST(file, RemoveFileIfExists_ENOTDIR) {
+  TemporaryFile tf;
+  close(tf.fd);
+  tf.fd = -1;
+  std::string err{"xxx"};
+  ASSERT_TRUE(android::base::RemoveFileIfExists(std::string{tf.path} + "/abc", &err));
+  ASSERT_EQ("xxx", err);
+}
+
+#if !defined(_WIN32)
+TEST(file, RemoveFileIfExists_EACCES) {
+  // EACCES -- one of the directories in the path has no search permission
+  // root can bypass permission restrictions, so drop root.
+  if (getuid() == 0) {
+    passwd* shell = getpwnam("shell");
+    setgid(shell->pw_gid);
+    setuid(shell->pw_uid);
+  }
+
+  TemporaryDir td;
+  TemporaryFile tf(td.path);
+  close(tf.fd);
+  tf.fd = -1;
+  std::string err{"xxx"};
+  // Remove dir's search permission.
+  ASSERT_TRUE(chmod(td.path, S_IRUSR | S_IWUSR) == 0);
+  ASSERT_FALSE(android::base::RemoveFileIfExists(tf.path, &err));
+  ASSERT_EQ("Permission denied", err);
+  // Set dir's search permission again.
+  ASSERT_TRUE(chmod(td.path, S_IRWXU) == 0);
+  ASSERT_TRUE(android::base::RemoveFileIfExists(tf.path, &err));
+}
+#endif
 
 TEST(file, Readlink) {
 #if !defined(_WIN32)
