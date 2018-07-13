@@ -130,7 +130,7 @@ Result<Success> Service::SetUpMountNamespace() const {
         if (umount2("/sys", MNT_DETACH) == -1) {
             return ErrnoError() << "Could not umount(/sys)";
         }
-        if (mount("", "/sys", "sys", kSafeFlags, "") == -1) {
+        if (mount("", "/sys", "sysfs", kSafeFlags, "") == -1) {
             return ErrnoError() << "Could not mount(/sys)";
         }
     }
