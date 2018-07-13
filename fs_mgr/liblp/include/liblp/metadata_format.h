@@ -67,7 +67,7 @@ extern "C" {
  *     | Geometry Backup    |
  *     +--------------------+
  */
-#define LP_METADATA_PARTITION_NAME "android"
+#define LP_METADATA_PARTITION_NAME "super"
 
 /* Size of a sector is always 512 bytes for compatibility with the Linux kernel. */
 #define LP_SECTOR_SIZE 512
