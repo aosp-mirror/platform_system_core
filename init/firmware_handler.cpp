@@ -21,7 +21,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <string>
 #include <thread>
 
 #include <android-base/chrono_utils.h>
@@ -35,6 +34,8 @@ using android::base::WriteFully;
 
 namespace android {
 namespace init {
+
+std::vector<std::string> firmware_directories;
 
 static void LoadFirmware(const Uevent& uevent, const std::string& root, int fw_fd, size_t fw_size,
                          int loading_fd, int data_fd) {
@@ -78,12 +79,9 @@ static void ProcessFirmwareEvent(const Uevent& uevent) {
         return;
     }
 
-    static const char* firmware_dirs[] = {"/etc/firmware/", "/odm/firmware/",
-                                          "/vendor/firmware/", "/firmware/image/"};
-
 try_loading_again:
-    for (size_t i = 0; i < arraysize(firmware_dirs); i++) {
-        std::string file = firmware_dirs[i] + uevent.firmware;
+    for (const auto& firmware_directory : firmware_directories) {
+        std::string file = firmware_directory + uevent.firmware;
         unique_fd fw_fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
         struct stat sb;
         if (fw_fd != -1 && fstat(fw_fd, &sb) != -1) {
