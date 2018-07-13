@@ -14,29 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef LIBLP_WRITER_H
-#define LIBLP_WRITER_H
-
-#include <functional>
-#include <string>
-
 #include <liblp/liblp.h>
 
 namespace android {
 namespace fs_mgr {
 
-std::string SerializeGeometry(const LpMetadataGeometry& input);
-std::string SerializeMetadata(const LpMetadata& input);
-
-// These variants are for testing only. The path-based functions should be used
-// for actual operation, so that open() is called with the correct flags.
-bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
-
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
-                          const std::function<bool(int, const std::string&)>& writer);
+// Helper function to serialize geometry and metadata to a normal file, for
+// flashing or debugging.
+std::unique_ptr<LpMetadata> ReadFromImageFile(int fd);
+bool WriteToImageFile(const char* file, const LpMetadata& metadata);
+bool WriteToImageFile(int fd, const LpMetadata& metadata);
 
 }  // namespace fs_mgr
 }  // namespace android
-
-#endif /* LIBLP_WRITER_H */
