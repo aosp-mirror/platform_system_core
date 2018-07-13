@@ -106,7 +106,6 @@ class DeviceHandler {
     DeviceHandler(std::vector<Permissions> dev_permissions,
                   std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> subsystems,
                   std::set<std::string> boot_devices, bool skip_restorecon);
-    ~DeviceHandler(){};
 
     void HandleDeviceEvent(const Uevent& uevent);
 
