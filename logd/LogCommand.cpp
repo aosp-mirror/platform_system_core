@@ -44,9 +44,9 @@ static bool groupIsLog(char* buf) {
     char* ptr;
     static const char ws[] = " \n";
 
-    for (buf = strtok_r(buf, ws, &ptr); buf; buf = strtok_r(NULL, ws, &ptr)) {
+    for (buf = strtok_r(buf, ws, &ptr); buf; buf = strtok_r(nullptr, ws, &ptr)) {
         errno = 0;
-        gid_t Gid = strtol(buf, NULL, 10);
+        gid_t Gid = strtol(buf, nullptr, 10);
         if (errno != 0) {
             return false;
         }
@@ -98,7 +98,7 @@ bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid) {
             continue;
         }
 
-        char* line = NULL;
+        char* line = nullptr;
         size_t len = 0;
         while (getline(&line, &len, file) > 0) {
             static const char groups_string[] = "Groups:\t";
