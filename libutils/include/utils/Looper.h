@@ -262,7 +262,7 @@ public:
      */
     int pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outData);
     inline int pollOnce(int timeoutMillis) {
-        return pollOnce(timeoutMillis, NULL, NULL, NULL);
+        return pollOnce(timeoutMillis, nullptr, nullptr, nullptr);
     }
 
     /**
@@ -272,7 +272,7 @@ public:
      */
     int pollAll(int timeoutMillis, int* outFd, int* outEvents, void** outData);
     inline int pollAll(int timeoutMillis) {
-        return pollAll(timeoutMillis, NULL, NULL, NULL);
+        return pollAll(timeoutMillis, nullptr, nullptr, nullptr);
     }
 
     /**
