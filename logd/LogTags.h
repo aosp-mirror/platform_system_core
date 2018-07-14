@@ -87,14 +87,14 @@ class LogTags {
     bool RebuildFileEventLogTags(const char* filename, bool warn = true);
 
     void AddEventLogTags(uint32_t tag, uid_t uid, const std::string& Name,
-                         const std::string& Format, const char* source = NULL,
+                         const std::string& Format, const char* source = nullptr,
                          bool warn = false);
 
     void WriteDynamicEventLogTags(uint32_t tag, uid_t uid);
     void WriteDebugEventLogTags(uint32_t tag, uid_t uid);
     // push tag details to persistent storage
     void WritePersistEventLogTags(uint32_t tag, uid_t uid = AID_ROOT,
-                                  const char* source = NULL);
+                                  const char* source = nullptr);
 
     static const uint32_t emptyTag = uint32_t(-1);
 
