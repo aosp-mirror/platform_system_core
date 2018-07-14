@@ -91,7 +91,7 @@ unsigned short LogBufferElement::setDropped(unsigned short value) {
 
 // caller must own and free character string
 char* android::tidToName(pid_t tid) {
-    char* retval = NULL;
+    char* retval = nullptr;
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "/proc/%u/comm", tid);
     int fd = open(buffer, O_RDONLY);
@@ -114,7 +114,7 @@ char* android::tidToName(pid_t tid) {
     char* name = android::pidToName(tid);
     if (!retval) {
         retval = name;
-        name = NULL;
+        name = nullptr;
     }
 
     // check if comm is truncated, see if cmdline has full representation
@@ -162,15 +162,15 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
         if (!strncmp(name + 1, commName + 1, len)) {
             if (commName[len + 1] == '\0') {
                 free(const_cast<char*>(commName));
-                commName = NULL;
+                commName = nullptr;
             } else {
                 free(const_cast<char*>(name));
-                name = NULL;
+                name = nullptr;
             }
         }
     }
     if (name) {
-        char* buf = NULL;
+        char* buf = nullptr;
         asprintf(&buf, "(%s)", name);
         if (buf) {
             free(const_cast<char*>(name));
@@ -178,7 +178,7 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
         }
     }
     if (commName) {
-        char* buf = NULL;
+        char* buf = nullptr;
         asprintf(&buf, " %s", commName);
         if (buf) {
             free(const_cast<char*>(commName));
@@ -187,7 +187,7 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     }
     // identical to below to calculate the buffer size required
     const char* type = lastSame ? "identical" : "expire";
-    size_t len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
+    size_t len = snprintf(nullptr, 0, format_uid, mUid, name ? name : "",
                           commName ? commName : "", type, getDropped(),
                           (getDropped() > 1) ? "s" : "");
 
@@ -247,7 +247,7 @@ log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
     iovec[0].iov_base = &entry;
     iovec[0].iov_len = entry.hdr_size;
 
-    char* buffer = NULL;
+    char* buffer = nullptr;
 
     if (mDropped) {
         entry.len = populateDroppedMessage(buffer, parent, lastSame);
