@@ -89,10 +89,10 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     // unbuffer stdout and stderr just like if we were run at the console.
     // This also keeps stderr unbuffered when it is redirected to adb.log.
     if (is_daemon) {
-        if (setvbuf(stdout, NULL, _IONBF, 0) == -1) {
+        if (setvbuf(stdout, nullptr, _IONBF, 0) == -1) {
             fatal("cannot make stdout unbuffered: %s", strerror(errno));
         }
-        if (setvbuf(stderr, NULL, _IONBF, 0) == -1) {
+        if (setvbuf(stderr, nullptr, _IONBF, 0) == -1) {
             fatal("cannot make stderr unbuffered: %s", strerror(errno));
         }
     }

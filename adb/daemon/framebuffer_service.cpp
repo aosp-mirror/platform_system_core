@@ -75,7 +75,7 @@ void framebuffer_service(int fd, void *cookie)
         adb_close(fds[0]);
         adb_close(fds[1]);
         const char* command = "screencap";
-        const char *args[2] = {command, NULL};
+        const char *args[2] = {command, nullptr};
         execvp(command, (char**)args);
         exit(1);
     }
@@ -182,7 +182,7 @@ void framebuffer_service(int fd, void *cookie)
 done:
     adb_close(fds[0]);
 
-    TEMP_FAILURE_RETRY(waitpid(pid, NULL, 0));
+    TEMP_FAILURE_RETRY(waitpid(pid, nullptr, 0));
 pipefail:
     adb_close(fd);
 }

@@ -126,11 +126,11 @@ void usb_kick(usb_handle* handle);
 int usb_close(usb_handle* handle);
 
 int known_device_locked(const wchar_t* dev_name) {
-    if (NULL != dev_name) {
+    if (nullptr != dev_name) {
         // Iterate through the list looking for the name match.
         for (usb_handle* usb : handle_list) {
             // In Windows names are not case sensetive!
-            if ((NULL != usb->interface_name) && (0 == wcsicmp(usb->interface_name, dev_name))) {
+            if ((nullptr != usb->interface_name) && (0 == wcsicmp(usb->interface_name, dev_name))) {
                 return 1;
             }
         }
@@ -142,7 +142,7 @@ int known_device_locked(const wchar_t* dev_name) {
 int known_device(const wchar_t* dev_name) {
     int ret = 0;
 
-    if (NULL != dev_name) {
+    if (nullptr != dev_name) {
         std::lock_guard<std::mutex> lock(usb_lock);
         ret = known_device_locked(dev_name);
     }
@@ -151,7 +151,7 @@ int known_device(const wchar_t* dev_name) {
 }
 
 int register_new_device(usb_handle* handle) {
-    if (NULL == handle) return 0;
+    if (nullptr == handle) return 0;
 
     std::lock_guard<std::mutex> lock(usb_lock);
 
@@ -209,7 +209,7 @@ static void _power_notification_thread() {
 
     // Get the HINSTANCE corresponding to the module that _power_window_proc
     // is in (the main module).
-    const HINSTANCE instance = GetModuleHandleW(NULL);
+    const HINSTANCE instance = GetModuleHandleW(nullptr);
     if (!instance) {
         // This is such a common API call that this should never fail.
         fatal("GetModuleHandleW failed: %s",
@@ -228,14 +228,14 @@ static void _power_notification_thread() {
     }
 
     if (!CreateWindowExW(WS_EX_NOACTIVATE, kPowerNotificationWindowClassName,
-                         L"ADB Power Notification Window", WS_POPUP, 0, 0, 0, 0, NULL, NULL,
-                         instance, NULL)) {
+                         L"ADB Power Notification Window", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
+                         instance, nullptr)) {
         fatal("CreateWindowExW failed: %s",
               android::base::SystemErrorCodeToString(GetLastError()).c_str());
     }
 
     MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0)) {
+    while (GetMessageW(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -259,14 +259,14 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
 
     // Allocate our handle
     usb_handle* ret = (usb_handle*)calloc(1, sizeof(usb_handle));
-    if (NULL == ret) {
+    if (nullptr == ret) {
         D("Could not allocate %u bytes for usb_handle: %s", sizeof(usb_handle), strerror(errno));
         goto fail;
     }
 
     // Create interface.
     ret->adb_interface = AdbCreateInterfaceByName(interface_name);
-    if (NULL == ret->adb_interface) {
+    if (nullptr == ret->adb_interface) {
         D("AdbCreateInterfaceByName failed: %s",
           android::base::SystemErrorCodeToString(GetLastError()).c_str());
         goto fail;
@@ -275,7 +275,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
     // Open read pipe (endpoint)
     ret->adb_read_pipe = AdbOpenDefaultBulkReadEndpoint(
         ret->adb_interface, AdbOpenAccessTypeReadWrite, AdbOpenSharingModeReadWrite);
-    if (NULL == ret->adb_read_pipe) {
+    if (nullptr == ret->adb_read_pipe) {
         D("AdbOpenDefaultBulkReadEndpoint failed: %s",
           android::base::SystemErrorCodeToString(GetLastError()).c_str());
         goto fail;
@@ -284,7 +284,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
     // Open write pipe (endpoint)
     ret->adb_write_pipe = AdbOpenDefaultBulkWriteEndpoint(
         ret->adb_interface, AdbOpenAccessTypeReadWrite, AdbOpenSharingModeReadWrite);
-    if (NULL == ret->adb_write_pipe) {
+    if (nullptr == ret->adb_write_pipe) {
         D("AdbOpenDefaultBulkWriteEndpoint failed: %s",
           android::base::SystemErrorCodeToString(GetLastError()).c_str());
         goto fail;
@@ -292,7 +292,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
 
     // Save interface name
     // First get expected name length
-    AdbGetInterfaceName(ret->adb_interface, NULL, &name_len, false);
+    AdbGetInterfaceName(ret->adb_interface, nullptr, &name_len, false);
     if (0 == name_len) {
         D("AdbGetInterfaceName returned name length of zero: %s",
           android::base::SystemErrorCodeToString(GetLastError()).c_str());
@@ -300,7 +300,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
     }
 
     ret->interface_name = (wchar_t*)malloc(name_len * sizeof(ret->interface_name[0]));
-    if (NULL == ret->interface_name) {
+    if (nullptr == ret->interface_name) {
         D("Could not allocate %lu characters for interface_name: %s", name_len, strerror(errno));
         goto fail;
     }
@@ -316,12 +316,12 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
     return ret;
 
 fail:
-    if (NULL != ret) {
+    if (nullptr != ret) {
         usb_cleanup_handle(ret);
         free(ret);
     }
 
-    return NULL;
+    return nullptr;
 }
 
 int usb_write(usb_handle* handle, const void* data, int len) {
@@ -330,7 +330,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
     int err = 0;
 
     D("usb_write %d", len);
-    if (NULL == handle) {
+    if (nullptr == handle) {
         D("usb_write was passed NULL handle");
         err = EINVAL;
         goto fail;
@@ -370,7 +370,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
 fail:
     // Any failure should cause us to kick the device instead of leaving it a
     // zombie state with potential to hang.
-    if (NULL != handle) {
+    if (nullptr != handle) {
         D("Kicking device due to error in usb_write");
         usb_kick(handle);
     }
@@ -387,7 +387,7 @@ int usb_read(usb_handle* handle, void* data, int len) {
     int orig_len = len;
 
     D("usb_read %d", len);
-    if (NULL == handle) {
+    if (nullptr == handle) {
         D("usb_read was passed NULL handle");
         err = EINVAL;
         goto fail;
@@ -411,7 +411,7 @@ int usb_read(usb_handle* handle, void* data, int len) {
 fail:
     // Any failure should cause us to kick the device instead of leaving it a
     // zombie state with potential to hang.
-    if (NULL != handle) {
+    if (nullptr != handle) {
         D("Kicking device due to error in usb_read");
         usb_kick(handle);
     }
@@ -431,19 +431,19 @@ static void _adb_close_handle(ADBAPIHANDLE adb_handle) {
 
 void usb_cleanup_handle(usb_handle* handle) {
     D("usb_cleanup_handle");
-    if (NULL != handle) {
-        if (NULL != handle->interface_name) free(handle->interface_name);
+    if (nullptr != handle) {
+        if (nullptr != handle->interface_name) free(handle->interface_name);
         // AdbCloseHandle(pipe) will break any threads out of pending IO calls and
         // wait until the pipe no longer uses the interface. Then we can
         // AdbCloseHandle() the interface.
-        if (NULL != handle->adb_write_pipe) _adb_close_handle(handle->adb_write_pipe);
-        if (NULL != handle->adb_read_pipe) _adb_close_handle(handle->adb_read_pipe);
-        if (NULL != handle->adb_interface) _adb_close_handle(handle->adb_interface);
+        if (nullptr != handle->adb_write_pipe) _adb_close_handle(handle->adb_write_pipe);
+        if (nullptr != handle->adb_read_pipe) _adb_close_handle(handle->adb_read_pipe);
+        if (nullptr != handle->adb_interface) _adb_close_handle(handle->adb_interface);
 
-        handle->interface_name = NULL;
-        handle->adb_write_pipe = NULL;
-        handle->adb_read_pipe = NULL;
-        handle->adb_interface = NULL;
+        handle->interface_name = nullptr;
+        handle->adb_write_pipe = nullptr;
+        handle->adb_read_pipe = nullptr;
+        handle->adb_interface = nullptr;
     }
 }
 
@@ -455,7 +455,7 @@ static void usb_kick_locked(usb_handle* handle) {
 
 void usb_kick(usb_handle* handle) {
     D("usb_kick");
-    if (NULL != handle) {
+    if (nullptr != handle) {
         std::lock_guard<std::mutex> lock(usb_lock);
         usb_kick_locked(handle);
     } else {
@@ -466,7 +466,7 @@ void usb_kick(usb_handle* handle) {
 int usb_close(usb_handle* handle) {
     D("usb_close");
 
-    if (NULL != handle) {
+    if (nullptr != handle) {
         // Remove handle from the list
         {
             std::lock_guard<std::mutex> lock(usb_lock);
@@ -487,7 +487,7 @@ size_t usb_get_max_packet_size(usb_handle* handle) {
 }
 
 int recognized_device(usb_handle* handle) {
-    if (NULL == handle) return 0;
+    if (nullptr == handle) return 0;
 
     // Check vendor and product id first
     USB_DEVICE_DESCRIPTOR device_desc;
@@ -532,7 +532,7 @@ int recognized_device(usb_handle* handle) {
 }
 
 void find_devices() {
-    usb_handle* handle = NULL;
+    usb_handle* handle = nullptr;
     char entry_buffer[2048];
     AdbInterfaceInfo* next_interface = (AdbInterfaceInfo*)(&entry_buffer[0]);
     unsigned long entry_buffer_size = sizeof(entry_buffer);
@@ -540,7 +540,7 @@ void find_devices() {
     // Enumerate all present and active interfaces.
     ADBAPIHANDLE enum_handle = AdbEnumInterfaces(usb_class_id, true, true, true);
 
-    if (NULL == enum_handle) {
+    if (nullptr == enum_handle) {
         D("AdbEnumInterfaces failed: %s",
           android::base::SystemErrorCodeToString(GetLastError()).c_str());
         return;
@@ -551,7 +551,7 @@ void find_devices() {
         if (!known_device(next_interface->device_name)) {
             // This seems to be a new device. Open it!
             handle = do_usb_open(next_interface->device_name);
-            if (NULL != handle) {
+            if (nullptr != handle) {
                 // Lets see if this interface (device) belongs to us
                 if (recognized_device(handle)) {
                     D("adding a new device %ls", next_interface->device_name);
@@ -569,7 +569,7 @@ void find_devices() {
                                            true)) {
                         // Lets make sure that we don't duplicate this device
                         if (register_new_device(handle)) {
-                            register_usb_transport(handle, serial_number, NULL, 1);
+                            register_usb_transport(handle, serial_number, nullptr, 1);
                         } else {
                             D("register_new_device failed for %ls", next_interface->device_name);
                             usb_cleanup_handle(handle);
