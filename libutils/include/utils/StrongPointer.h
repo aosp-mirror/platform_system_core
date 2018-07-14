@@ -52,7 +52,7 @@ inline bool operator _op_ (const wp<U>& o) const {              \
 template<typename T>
 class sp {
 public:
-    inline sp() : m_ptr(0) { }
+    inline sp() : m_ptr(nullptr) { }
 
     sp(T* other);  // NOLINT(implicit)
     sp(const sp<T>& other);
@@ -230,7 +230,7 @@ template<typename T>
 void sp<T>::clear() {
     if (m_ptr) {
         m_ptr->decStrong(this);
-        m_ptr = 0;
+        m_ptr = nullptr;
     }
 }
 
