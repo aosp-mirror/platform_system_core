@@ -173,7 +173,7 @@ class __android_log_event_list : public android_log_event_list {
 #if defined(_USING_LIBCXX)
   operator std::string() {
     if (ret) return std::string("");
-    const char* cp = NULL;
+    const char* cp = nullptr;
     ssize_t len = android_log_write_list_buffer(ctx, &cp);
     if (len < 0) ret = len;
     if (!cp || (len <= 0)) return std::string("");

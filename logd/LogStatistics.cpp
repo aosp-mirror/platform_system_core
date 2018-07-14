@@ -56,7 +56,7 @@ size_t sizesTotal() {
 
 // caller must own and free character string
 char* pidToName(pid_t pid) {
-    char* retval = NULL;
+    char* retval = nullptr;
     if (pid == 0) {  // special case from auditd/klogd for kernel
         retval = strdup("logd");
     } else {
@@ -286,7 +286,7 @@ const char* LogStatistics::uidToName(uid_t uid) const {
                     name = strdup(nameTmp);
                 } else if (fastcmp<strcmp>(name, nameTmp)) {
                     free(const_cast<char*>(name));
-                    name = NULL;
+                    name = nullptr;
                     break;
                 }
             }
@@ -872,7 +872,7 @@ const char* LogStatistics::pidToName(pid_t pid) const {
     pidTable_t& writablePidTable = const_cast<pidTable_t&>(pidTable);
     const char* name = writablePidTable.add(pid)->second.getName();
     if (!name) {
-        return NULL;
+        return nullptr;
     }
     return strdup(name);
 }
