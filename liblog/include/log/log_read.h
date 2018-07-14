@@ -184,7 +184,7 @@ struct log_msg {
       hdr_size = sizeof(entry_v1);
     }
     if ((hdr_size < sizeof(entry_v1)) || (hdr_size > sizeof(entry))) {
-      return NULL;
+      return nullptr;
     }
     return reinterpret_cast<char*>(buf) + hdr_size;
   }
