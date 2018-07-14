@@ -91,7 +91,7 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
         fd = TEMP_FAILURE_RETRY(open(
             filename, O_WRONLY | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY));
         if (fd >= 0) {
-            time_t now = time(NULL);
+            time_t now = time(nullptr);
             struct tm tm;
             localtime_r(&now, &tm);
             char timebuf[20];
@@ -208,7 +208,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
             } else if (lineStart) {
                 if (*cp == '#') {
                     /* comment; just scan to end */
-                    lineStart = NULL;
+                    lineStart = nullptr;
                 } else if (isdigit(*cp)) {
                     unsigned long Tag = strtoul(cp, &cp, 10);
                     if (warn && (Tag > emptyTag)) {
@@ -235,7 +235,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                     if (hasAlpha &&
                         ((cp >= endp) || (*cp == '#') || isspace(*cp))) {
                         if (Tag > emptyTag) {
-                            if (*cp != '\n') lineStart = NULL;
+                            if (*cp != '\n') lineStart = nullptr;
                             continue;
                         }
                         while ((cp < endp) && (*cp != '\n') && isspace(*cp))
@@ -245,14 +245,14 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                         while ((cp < endp) && (*cp != '\n')) {
                             if (*cp == '#') {
                                 uid = sniffUid(cp, endp);
-                                lineStart = NULL;
+                                lineStart = nullptr;
                                 break;
                             }
                             ++cp;
                         }
                         while ((cp > format) && isspace(cp[-1])) {
                             --cp;
-                            lineStart = NULL;
+                            lineStart = nullptr;
                         }
                         std::string Format(format, cp - format);
 
@@ -263,7 +263,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                             android::prdebug("tag name invalid %.*s",
                                              (int)(cp - name + 1), name);
                         }
-                        lineStart = NULL;
+                        lineStart = nullptr;
                     }
                 } else if (!isspace(*cp)) {
                     break;
@@ -364,7 +364,7 @@ const char* LogTags::tagToName(uint32_t tag) const {
     android::RWLock::AutoRLock readLock(const_cast<android::RWLock&>(rwlock));
 
     it = tag2name.find(tag);
-    if ((it == tag2name.end()) || (it->second.length() == 0)) return NULL;
+    if ((it == tag2name.end()) || (it->second.length() == 0)) return nullptr;
 
     return it->second.c_str();
 }
@@ -383,7 +383,7 @@ const char* LogTags::tagToName(uint32_t tag) const {
 const char* android::tagToName(uint32_t tag) {
     LogTags* me = logtags;
 
-    if (!me) return NULL;
+    if (!me) return nullptr;
     me->WritePmsgEventLogTags(tag);
     return me->tagToName(tag);
 }
@@ -412,7 +412,7 @@ const char* LogTags::tagToFormat(uint32_t tag) const {
     android::RWLock::AutoRLock readLock(const_cast<android::RWLock&>(rwlock));
 
     iform = tag2format.find(tag);
-    if (iform == tag2format.end()) return NULL;
+    if (iform == tag2format.end()) return nullptr;
 
     return iform->second.c_str();
 }
@@ -441,7 +441,7 @@ uint32_t LogTags::nameToTag_locked(const std::string& name, const char* format,
                                    bool& unique) {
     key2tag_const_iterator ik;
 
-    bool write = format != NULL;
+    bool write = format != nullptr;
     unique = write;
 
     if (!write) {
@@ -679,7 +679,7 @@ void LogTags::WritePersistEventLogTags(uint32_t tag, uid_t uid,
 // are in readonly mode.
 uint32_t LogTags::nameToTag(uid_t uid, const char* name, const char* format) {
     std::string Name = std::string(name);
-    bool write = format != NULL;
+    bool write = format != nullptr;
     bool updateUid = uid != AID_ROOT;
     bool updateFormat = format && *format;
     bool unique;
@@ -848,7 +848,7 @@ std::string LogTags::formatGetEventTag(uid_t uid, const char* name,
 
     if (!list) {
         // switch to read entry only if format == "*"
-        if (format && (format[0] == '*') && !format[1]) format = NULL;
+        if (format && (format[0] == '*') && !format[1]) format = nullptr;
 
         // WAI: for null format, only works for a single entry, we can have
         // multiple entries, one for each format, so we find first entry
