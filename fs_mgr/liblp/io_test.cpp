@@ -23,10 +23,10 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
-#include <liblp/reader.h>
-#include <liblp/writer.h>
 
+#include "reader.h"
 #include "utility.h"
+#include "writer.h"
 
 using namespace std;
 using namespace android::fs_mgr;
@@ -102,7 +102,7 @@ static unique_fd CreateFlashedDisk() {
     if (!exported) {
         return {};
     }
-    if (!WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0)) {
+    if (!FlashPartitionTable(fd, *exported.get(), 0)) {
         return {};
     }
     return fd;
@@ -131,7 +131,7 @@ TEST(liblp, ExportDiskTooSmall) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    EXPECT_FALSE(WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0));
+    EXPECT_FALSE(FlashPartitionTable(fd, *exported.get(), 0));
 }
 
 // Test the basics of flashing a partition and reading it back.
@@ -146,7 +146,7 @@ TEST(liblp, FlashAndReadback) {
     // Export and flash.
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    ASSERT_TRUE(WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0));
+    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get(), 0));
 
     // Read back. Note that some fields are only filled in during
     // serialization, so exported and imported will not be identical. For
@@ -195,7 +195,7 @@ TEST(liblp, UpdateAnyMetadataSlot) {
 
     // Change the name before writing to the next slot.
     strncpy(imported->partitions[0].name, "vendor", sizeof(imported->partitions[0].name));
-    ASSERT_TRUE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_TRUE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     // Read back the original slot, make sure it hasn't changed.
     imported = ReadMetadata(fd, 0);
@@ -231,7 +231,7 @@ TEST(liblp, InvalidMetadataSlot) {
     unique_ptr<LpMetadata> metadata = ReadMetadata(fd, 0);
     ASSERT_NE(metadata, nullptr);
     for (uint32_t i = 1; i < kMetadataSlots; i++) {
-        ASSERT_TRUE(WritePartitionTable(fd, *metadata.get(), SyncMode::Update, i));
+        ASSERT_TRUE(UpdatePartitionTable(fd, *metadata.get(), i));
     }
 
     // Verify that we can't read unavailable slots.
@@ -246,25 +246,25 @@ TEST(liblp, NoChangingGeometry) {
 
     unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
-    ASSERT_TRUE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_TRUE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported->geometry.metadata_max_size += LP_SECTOR_SIZE;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.metadata_slot_count++;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.first_logical_sector++;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.last_logical_sector--;
-    ASSERT_FALSE(WritePartitionTable(fd, *imported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 }
 
 // Test that changing one bit of metadata is enough to break the checksum.
@@ -353,8 +353,8 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_GE(fd, 0);
 
     // Check that we are able to write our table.
-    ASSERT_TRUE(WritePartitionTable(fd, *exported.get(), SyncMode::Flash, 0));
-    ASSERT_TRUE(WritePartitionTable(fd, *exported.get(), SyncMode::Update, 1));
+    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get(), 0));
+    ASSERT_TRUE(UpdatePartitionTable(fd, *exported.get(), 1));
 
     // Check that adding one more partition overflows the metadata allotment.
     partition = builder->AddPartition("final", TEST_GUID, LP_PARTITION_ATTR_NONE);
@@ -364,7 +364,7 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_NE(exported, nullptr);
 
     // The new table should be too large to be written.
-    ASSERT_FALSE(WritePartitionTable(fd, *exported.get(), SyncMode::Update, 1));
+    ASSERT_FALSE(UpdatePartitionTable(fd, *exported.get(), 1));
 
     // Check that the first and last logical sectors weren't touched when we
     // wrote this almost-full metadata.
@@ -392,4 +392,131 @@ TEST(liblp, ImageFiles) {
 
     unique_ptr<LpMetadata> imported = ReadFromImageFile(fd);
     ASSERT_NE(imported, nullptr);
+}
+
+class BadWriter {
+  public:
+    // When requested, write garbage instead of the requested bytes, then
+    // return false.
+    bool operator()(int fd, const std::string& blob) {
+        write_count_++;
+        if (write_count_ == fail_on_write_) {
+            std::unique_ptr<char[]> new_data = std::make_unique<char[]>(blob.size());
+            memset(new_data.get(), 0xe5, blob.size());
+            EXPECT_TRUE(android::base::WriteFully(fd, new_data.get(), blob.size()));
+            return false;
+        } else {
+            if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
+                return false;
+            }
+            return fail_after_write_ != write_count_;
+        }
+    }
+    void Reset() {
+        fail_on_write_ = 0;
+        fail_after_write_ = 0;
+        write_count_ = 0;
+    }
+    void FailOnWrite(int number) {
+        Reset();
+        fail_on_write_ = number;
+    }
+    void FailAfterWrite(int number) {
+        Reset();
+        fail_after_write_ = number;
+    }
+
+  private:
+    int fail_on_write_ = 0;
+    int fail_after_write_ = 0;
+    int write_count_ = 0;
+};
+
+// Test that an interrupted flash operation on the "primary" copy of metadata
+// is not fatal.
+TEST(liblp, UpdatePrimaryMetadataFailure) {
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    BadWriter writer;
+
+    // Read and write it back.
+    writer.FailOnWrite(1);
+    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+
+    // We should still be able to read the backup copy.
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+
+    // Flash again, this time fail the backup copy. We should still be able
+    // to read the primary.
+    writer.FailOnWrite(3);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+}
+
+// Test that an interrupted flash operation on the "backup" copy of metadata
+// is not fatal.
+TEST(liblp, UpdateBackupMetadataFailure) {
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    BadWriter writer;
+
+    // Read and write it back.
+    writer.FailOnWrite(2);
+    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+
+    // We should still be able to read the primary copy.
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+
+    // Flash again, this time fail the primary copy. We should still be able
+    // to read the primary.
+    writer.FailOnWrite(2);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+}
+
+// Test that an interrupted write *in between* writing metadata will read
+// the correct metadata copy. The primary is always considered newer than
+// the backup.
+TEST(liblp, UpdateMetadataCleanFailure) {
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    BadWriter writer;
+
+    // Change the name of the existing partition.
+    unique_ptr<LpMetadata> new_table = ReadMetadata(fd, 0);
+    ASSERT_NE(new_table, nullptr);
+    ASSERT_GE(new_table->partitions.size(), 1);
+    new_table->partitions[0].name[0]++;
+
+    // Flash it, but fail to write the backup copy.
+    writer.FailAfterWrite(2);
+    ASSERT_FALSE(UpdatePartitionTable(fd, *new_table.get(), 0, writer));
+
+    // When we read back, we should get the updated primary copy.
+    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_GE(new_table->partitions.size(), 1);
+    ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
+
+    // Flash again. After, the backup and primary copy should be coherent.
+    // Note that the sync step should have used the primary to sync, not
+    // the backup.
+    writer.Reset();
+    ASSERT_TRUE(UpdatePartitionTable(fd, *new_table.get(), 0, writer));
+
+    imported = ReadMetadata(fd, 0);
+    ASSERT_NE(imported, nullptr);
+    ASSERT_GE(new_table->partitions.size(), 1);
+    ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
 }

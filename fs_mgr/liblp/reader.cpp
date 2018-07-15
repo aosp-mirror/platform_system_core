@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "liblp/reader.h"
+#include "reader.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -111,16 +111,6 @@ bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
     return ParseGeometry(buffer.get(), geometry);
 }
 
-// Helper function to read geometry from a device without an open descriptor.
-bool ReadLogicalPartitionGeometry(const char* block_device, LpMetadataGeometry* geometry) {
-    android::base::unique_fd fd(open(block_device, O_RDONLY));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
-        return false;
-    }
-    return ReadLogicalPartitionGeometry(fd, geometry);
-}
-
 static bool ValidateTableBounds(const LpMetadataHeader& header,
                                 const LpMetadataTableDescriptor& table) {
     if (table.offset > header.tables_size) {
@@ -174,8 +164,6 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
     }
     return true;
 }
-
-using ReadMetadataFn = std::function<bool(void* buffer, size_t num_bytes)>;
 
 // Parse and validate all metadata at the current position in the given file
 // descriptor.
@@ -243,6 +231,26 @@ static std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
     return metadata;
 }
 
+std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
+                                                uint32_t slot_number) {
+    int64_t offset = GetPrimaryMetadataOffset(geometry, slot_number);
+    if (SeekFile64(fd, offset, SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
+        return nullptr;
+    }
+    return ParseMetadata(fd);
+}
+
+std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
+                                               uint32_t slot_number) {
+    int64_t offset = GetBackupMetadataOffset(geometry, slot_number);
+    if (SeekFile64(fd, offset, SEEK_END) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
+        return nullptr;
+    }
+    return ParseMetadata(fd);
+}
+
 std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
     LpMetadataGeometry geometry;
     if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
@@ -254,24 +262,11 @@ std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
         return nullptr;
     }
 
-    // First try the primary copy.
-    int64_t offset = GetPrimaryMetadataOffset(geometry, slot_number);
-    if (SeekFile64(fd, offset, SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
-        return nullptr;
-    }
-    std::unique_ptr<LpMetadata> metadata = ParseMetadata(fd);
-
-    // If the primary copy failed, try the backup copy.
+    // Read the priamry copy, and if that fails, try the backup.
+    std::unique_ptr<LpMetadata> metadata = ReadPrimaryMetadata(fd, geometry, slot_number);
     if (!metadata) {
-        offset = GetBackupMetadataOffset(geometry, slot_number);
-        if (SeekFile64(fd, offset, SEEK_END) < 0) {
-            PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
-            return nullptr;
-        }
-        metadata = ParseMetadata(fd);
+        metadata = ReadBackupMetadata(fd, geometry, slot_number);
     }
-
     if (metadata) {
         metadata->geometry = geometry;
     }

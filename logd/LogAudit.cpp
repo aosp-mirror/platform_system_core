@@ -171,13 +171,13 @@ void LogAudit::auditParse(const std::string& string, uid_t uid,
 }
 
 int LogAudit::logPrint(const char* fmt, ...) {
-    if (fmt == NULL) {
+    if (fmt == nullptr) {
         return -EINVAL;
     }
 
     va_list args;
 
-    char* str = NULL;
+    char* str = nullptr;
     va_start(args, fmt);
     int rc = vasprintf(&str, fmt, args);
     va_end(args);
@@ -228,7 +228,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
         static char* last_str;
         static bool last_info;
 
-        if (last_str != NULL) {
+        if (last_str != nullptr) {
             static const char avc[] = "): avc: ";
             char* avcl = strstr(last_str, avc);
             bool skip = false;
@@ -265,10 +265,10 @@ int LogAudit::logPrint(const char* fmt, ...) {
 
                 writev(fdDmesg, iov, arraysize(iov));
                 free(last_str);
-                last_str = NULL;
+                last_str = nullptr;
             }
         }
-        if (last_str == NULL) {
+        if (last_str == nullptr) {
             count = 0;
             last_str = strdup(str);
             last_info = info;
@@ -357,7 +357,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
     static const char comm_str[] = " comm=\"";
     const char* comm = strstr(str, comm_str);
     const char* estr = str + strlen(str);
-    const char* commfree = NULL;
+    const char* commfree = nullptr;
     if (comm) {
         estr = comm;
         comm += sizeof(comm_str) - 1;

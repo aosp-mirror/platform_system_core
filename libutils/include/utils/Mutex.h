@@ -100,7 +100,7 @@ class CAPABILITY("mutex") Mutex {
 
     Mutex();
     explicit Mutex(const char* name);
-    explicit Mutex(int type, const char* name = NULL);
+    explicit Mutex(int type, const char* name = nullptr);
     ~Mutex();
 
     // lock or unlock the mutex
@@ -160,10 +160,10 @@ class CAPABILITY("mutex") Mutex {
 #if !defined(_WIN32)
 
 inline Mutex::Mutex() {
-    pthread_mutex_init(&mMutex, NULL);
+    pthread_mutex_init(&mMutex, nullptr);
 }
 inline Mutex::Mutex(__attribute__((unused)) const char* name) {
-    pthread_mutex_init(&mMutex, NULL);
+    pthread_mutex_init(&mMutex, nullptr);
 }
 inline Mutex::Mutex(int type, __attribute__((unused)) const char* name) {
     if (type == SHARED) {
@@ -173,7 +173,7 @@ inline Mutex::Mutex(int type, __attribute__((unused)) const char* name) {
         pthread_mutex_init(&mMutex, &attr);
         pthread_mutexattr_destroy(&attr);
     } else {
-        pthread_mutex_init(&mMutex, NULL);
+        pthread_mutex_init(&mMutex, nullptr);
     }
 }
 inline Mutex::~Mutex() {
