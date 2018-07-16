@@ -30,14 +30,13 @@ std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number);
 
 // Helper functions for manually reading geometry and metadata.
 bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry);
+std::unique_ptr<LpMetadata> ParseMetadata(int fd);
 
 // These functions assume a valid geometry and slot number.
 std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
                                                 uint32_t slot_number);
 std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
                                                uint32_t slot_number);
-
-std::unique_ptr<LpMetadata> ReadFromImageFile(int fd);
 
 }  // namespace fs_mgr
 }  // namespace android
