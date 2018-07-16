@@ -86,7 +86,9 @@ typedef struct LpMetadataGeometry {
     /*  8: SHA256 checksum of this struct, with this field set to 0. */
     uint8_t checksum[32];
 
-    /* 40: Maximum amount of space a single copy of the metadata can use. */
+    /* 40: Maximum amount of space a single copy of the metadata can use. This
+     * must be a multiple of LP_SECTOR_SIZE.
+     */
     uint32_t metadata_max_size;
 
     /* 44: Number of copies of the metadata to keep. For A/B devices, this
