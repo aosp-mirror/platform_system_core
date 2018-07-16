@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 
+#include "images.h"
 #include "reader.h"
 #include "utility.h"
 #include "writer.h"
