@@ -171,7 +171,7 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
 
 // Parse and validate all metadata at the current position in the given file
 // descriptor.
-static std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
+std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
     // First read and validate the header.
     std::unique_ptr<LpMetadata> metadata = std::make_unique<LpMetadata>();
     if (!android::base::ReadFully(fd, &metadata->header, sizeof(metadata->header))) {
@@ -284,32 +284,6 @@ std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot
         return nullptr;
     }
     return ReadMetadata(fd, slot_number);
-}
-
-std::unique_ptr<LpMetadata> ReadFromImageFile(int fd) {
-    LpMetadataGeometry geometry;
-    if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
-        return nullptr;
-    }
-    if (SeekFile64(fd, LP_METADATA_GEOMETRY_SIZE, SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << LP_METADATA_GEOMETRY_SIZE;
-        return nullptr;
-    }
-    std::unique_ptr<LpMetadata> metadata = ParseMetadata(fd);
-    if (!metadata) {
-        return nullptr;
-    }
-    metadata->geometry = geometry;
-    return metadata;
-}
-
-std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
-    android::base::unique_fd fd(open(file, O_RDONLY));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << file;
-        return nullptr;
-    }
-    return ReadFromImageFile(fd);
 }
 
 static std::string NameFromFixedArray(const char* name, size_t buffer_size) {
