@@ -106,19 +106,9 @@ TEST(liblp, DiskAlignment) {
     static const uint32_t kMetadataSize = 1024;
     static const uint32_t kMetadataSlots = 2;
 
-    // If the disk size is not aligned to 512 bytes, make sure it still leaves
-    // space at the end for backup metadata, and that it doesn't overlap with
-    // the space for logical partitions.
     unique_ptr<MetadataBuilder> builder =
             MetadataBuilder::New(kDiskSize, kMetadataSize, kMetadataSlots);
-    unique_ptr<LpMetadata> exported = builder->Export();
-    ASSERT_NE(exported, nullptr);
-
-    static const size_t kMetadataSpace =
-            (kMetadataSize * kMetadataSlots) + LP_METADATA_GEOMETRY_SIZE;
-    uint64_t space_at_end =
-            kDiskSize - (exported->geometry.last_logical_sector + 1) * LP_SECTOR_SIZE;
-    EXPECT_GE(space_at_end, kMetadataSpace);
+    ASSERT_EQ(builder, nullptr);
 }
 
 TEST(liblp, MetadataAlignment) {
@@ -148,15 +138,10 @@ TEST(liblp, InternalAlignment) {
     EXPECT_EQ(exported->geometry.first_logical_sector, 1472);
     EXPECT_EQ(exported->geometry.last_logical_sector, 2035);
 
-    // Test only an alignment offset (which should simply bump up the first
-    // logical sector).
+    // Alignment offset without alignment doesn't mean anything.
     device_info.alignment = 0;
     builder = MetadataBuilder::New(device_info, 1024, 2);
-    ASSERT_NE(builder, nullptr);
-    exported = builder->Export();
-    ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 1484);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2035);
+    ASSERT_EQ(builder, nullptr);
 
     // Test a small alignment with an alignment offset.
     device_info.alignment = 12 * 1024;
