@@ -68,6 +68,10 @@ static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
         LERROR << "Logical partition metadata has invalid slot count.";
         return false;
     }
+    if (geometry->metadata_max_size % LP_SECTOR_SIZE != 0) {
+        LERROR << "Metadata max size is not sector-aligned.";
+        return false;
+    }
 
     // Check that the metadata area and logical partition areas don't overlap.
     int64_t end_of_metadata =

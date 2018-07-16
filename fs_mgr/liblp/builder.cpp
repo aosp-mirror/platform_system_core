@@ -200,6 +200,11 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     metadata_max_size = AlignTo(metadata_max_size, LP_SECTOR_SIZE);
 
     // Check that device properties are sane.
+    device_info_ = device_info;
+    if (device_info_.size % LP_SECTOR_SIZE != 0) {
+        LERROR << "Block device size must be a multiple of 512.";
+        return false;
+    }
     if (device_info_.alignment_offset % LP_SECTOR_SIZE != 0) {
         LERROR << "Alignment offset is not sector-aligned.";
         return false;
@@ -212,7 +217,6 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
         LERROR << "Partition alignment offset is greater than its alignment.";
         return false;
     }
-    device_info_ = device_info;
 
     // We reserve a geometry block (4KB) plus space for each copy of the
     // maximum size of a metadata blob. Then, we double that space since
