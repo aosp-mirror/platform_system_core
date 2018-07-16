@@ -129,6 +129,11 @@ typedef struct LpMetadataGeometry {
      * If it cannot be determined, it is assumed to be 0.
      */
     uint32_t alignment_offset;
+
+    /* 72: Block device size, as specified when the metadata was created. This
+     * can be used to verify the geometry against a target device.
+     */
+    uint64_t block_device_size;
 } __attribute__((packed)) LpMetadataGeometry;
 
 /* The logical partition metadata has a number of tables; they are described

@@ -250,6 +250,7 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     geometry_.metadata_slot_count = metadata_slot_count;
     geometry_.alignment = device_info_.alignment;
     geometry_.alignment_offset = device_info_.alignment_offset;
+    geometry_.block_device_size = device_info_.size;
     return true;
 }
 
