@@ -31,8 +31,16 @@ TEST(liblp, SlotNumberForSlotSuffix) {
 }
 
 TEST(liblp, GetMetadataOffset) {
-    LpMetadataGeometry geometry = {
-            LP_METADATA_GEOMETRY_MAGIC, sizeof(geometry), {0}, 16384, 4, 10000, 80000, 0, 0};
+    LpMetadataGeometry geometry = {LP_METADATA_GEOMETRY_MAGIC,
+                                   sizeof(geometry),
+                                   {0},
+                                   16384,
+                                   4,
+                                   10000,
+                                   80000,
+                                   0,
+                                   0,
+                                   1024 * 1024};
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), 4096);
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 1), 4096 + 16384);
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 2), 4096 + 16384 * 2);

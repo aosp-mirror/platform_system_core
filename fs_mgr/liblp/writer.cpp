@@ -108,6 +108,11 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
         LERROR << "Not enough space to backup all logical partition metadata slots.";
         return false;
     }
+    if (blockdevice_size != metadata.geometry.block_device_size) {
+        LERROR << "Block device size " << blockdevice_size
+               << " does not match metadata requested size " << metadata.geometry.block_device_size;
+        return false;
+    }
 
     // Make sure all partition entries reference valid extents.
     for (const auto& partition : metadata.partitions) {
