@@ -59,6 +59,7 @@ std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot
 
 // Read/Write logical partition metadata to an image file, for diagnostics or
 // flashing.
+bool WriteToSparseFile(const char* file, const LpMetadata& metadata);
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file);
 
