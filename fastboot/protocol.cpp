@@ -44,6 +44,7 @@
 #include <sparse/sparse.h>
 #include <utils/FileMap.h>
 
+#include "constants.h"
 #include "fastboot.h"
 #include "transport.h"
 
@@ -68,39 +69,39 @@ static int64_t check_response(Transport* transport, uint32_t size, char* respons
         }
         status[r] = 0;
 
-        if (r < 4) {
+        if (static_cast<size_t>(r) < strlen(RESPONSE_OKAY)) {
             g_error = android::base::StringPrintf("status malformed (%d bytes)", r);
             transport->Close();
             return -1;
         }
 
-        if (!memcmp(status, "INFO", 4)) {
-            verbose("received INFO \"%s\"", status + 4);
-            fprintf(stderr, "(bootloader) %s\n", status + 4);
+        if (!memcmp(status, RESPONSE_INFO, strlen(RESPONSE_INFO))) {
+            verbose("received INFO \"%s\"", status + strlen(RESPONSE_INFO));
+            fprintf(stderr, "(bootloader) %s\n", status + strlen(RESPONSE_INFO));
             continue;
         }
 
-        if (!memcmp(status, "OKAY", 4)) {
-            verbose("received OKAY \"%s\"", status + 4);
+        if (!memcmp(status, RESPONSE_OKAY, strlen(RESPONSE_OKAY))) {
+            verbose("received OKAY \"%s\"", status + strlen(RESPONSE_OKAY));
             if (response) {
-                strcpy(response, status + 4);
+                strcpy(response, status + strlen(RESPONSE_OKAY));
             }
             return 0;
         }
 
-        if (!memcmp(status, "FAIL", 4)) {
-            verbose("received FAIL \"%s\"", status + 4);
-            if (r > 4) {
-                g_error = android::base::StringPrintf("remote: %s", status + 4);
+        if (!memcmp(status, RESPONSE_FAIL, strlen(RESPONSE_FAIL))) {
+            verbose("received FAIL \"%s\"", status + strlen(RESPONSE_FAIL));
+            if (static_cast<size_t>(r) > strlen(RESPONSE_FAIL)) {
+                g_error = android::base::StringPrintf("remote: %s", status + strlen(RESPONSE_FAIL));
             } else {
                 g_error = "remote failure";
             }
             return -1;
         }
 
-        if (!memcmp(status, "DATA", 4) && size > 0){
-            verbose("received DATA %s", status + 4);
-            uint32_t dsize = strtol(status + 4, 0, 16);
+        if (!memcmp(status, RESPONSE_DATA, strlen(RESPONSE_DATA)) && size > 0){
+            verbose("received DATA %s", status + strlen(RESPONSE_DATA));
+            uint32_t dsize = strtol(status + strlen(RESPONSE_DATA), 0, 16);
             if (dsize > size) {
                 g_error = android::base::StringPrintf("data size too large (%d)", dsize);
                 transport->Close();
@@ -247,18 +248,21 @@ int fb_command_response(Transport* transport, const std::string& cmd, char* resp
 }
 
 int64_t fb_download_data(Transport* transport, const void* data, uint32_t size) {
-    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    std::string cmd(android::base::StringPrintf(
+                FB_CMD_DOWNLOAD ":" "%08x", size));
     return _command_send(transport, cmd.c_str(), data, size, 0) < 0 ? -1 : 0;
 }
 
 int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size) {
-    std::string cmd(android::base::StringPrintf("download:%08x", size));
+    std::string cmd(android::base::StringPrintf(
+                FB_CMD_DOWNLOAD ":" "%08x", size));
     return _command_send_fd(transport, cmd.c_str(), fd, size, 0) < 0 ? -1 : 0;
 }
 
 int64_t fb_upload_data(Transport* transport, const char* outfile) {
     // positive return value is the upload size sent by the device
-    int64_t r = _command_start(transport, "upload", std::numeric_limits<int32_t>::max(), nullptr);
+    int64_t r = _command_start(transport, FB_CMD_UPLOAD,
+            std::numeric_limits<int32_t>::max(), nullptr);
     if (r <= 0) {
         g_error = android::base::StringPrintf("command start failed (%s)", strerror(errno));
         return r;
@@ -345,7 +349,8 @@ int fb_download_data_sparse(Transport* transport, struct sparse_file* s) {
         return -1;
     }
 
-    std::string cmd(android::base::StringPrintf("download:%08" PRIx64, size));
+    std::string cmd(android::base::StringPrintf(
+                FB_CMD_DOWNLOAD ":" "%08" PRIx64, size));
     int r = _command_start(transport, cmd, size, 0);
     if (r < 0) {
         return -1;
