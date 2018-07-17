@@ -163,7 +163,7 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
     // Note that *threadID is directly available to the parent only, as it is
     // assigned after the child starts.  Use memory barrier / lock if the child
     // or other threads also need access.
-    if (threadId != NULL) {
+    if (threadId != nullptr) {
         *threadId = (android_thread_id_t)thread; // XXX: this is not portable
     }
     return 1;
@@ -768,7 +768,7 @@ int Thread::_threadLoop(void* user)
         strong.clear();
         // And immediately, re-acquire a strong reference for the next loop
         strong = weak.promote();
-    } while(strong != 0);
+    } while(strong != nullptr);
 
     return 0;
 }

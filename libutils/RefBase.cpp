@@ -712,7 +712,7 @@ RefBase::~RefBase()
         delete mRefs;
     }
     // For debugging purposes, clear mRefs.  Ineffective against outstanding wp's.
-    const_cast<weakref_impl*&>(mRefs) = NULL;
+    const_cast<weakref_impl*&>(mRefs) = nullptr;
 }
 
 void RefBase::extendObjectLifetime(int32_t mode)

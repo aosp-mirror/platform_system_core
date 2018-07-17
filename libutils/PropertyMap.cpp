@@ -112,7 +112,7 @@ void PropertyMap::addAll(const PropertyMap* map) {
 }
 
 status_t PropertyMap::load(const String8& filename, PropertyMap** outMap) {
-    *outMap = NULL;
+    *outMap = nullptr;
 
     Tokenizer* tokenizer;
     status_t status = Tokenizer::open(filename, &tokenizer);

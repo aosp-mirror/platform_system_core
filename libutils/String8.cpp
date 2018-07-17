@@ -58,7 +58,7 @@ static char* allocFromUTF8(const char* in, size_t len)
 {
     if (len > 0) {
         if (len == SIZE_MAX) {
-            return NULL;
+            return nullptr;
         }
         SharedBuffer* buf = SharedBuffer::alloc(len+1);
         ALOG_ASSERT(buf, "Unable to allocate shared buffer");
@@ -68,7 +68,7 @@ static char* allocFromUTF8(const char* in, size_t len)
             str[len] = 0;
             return str;
         }
-        return NULL;
+        return nullptr;
     }
 
     return getEmptyString();
@@ -126,7 +126,7 @@ String8::String8()
 }
 
 String8::String8(StaticLinkage)
-    : mString(0)
+    : mString(nullptr)
 {
     // this constructor is used when we can't rely on the static-initializers
     // having run. In this case we always allocate an empty string. It's less
@@ -147,7 +147,7 @@ String8::String8(const String8& o)
 String8::String8(const char* o)
     : mString(allocFromUTF8(o, strlen(o)))
 {
-    if (mString == NULL) {
+    if (mString == nullptr) {
         mString = getEmptyString();
     }
 }
@@ -155,7 +155,7 @@ String8::String8(const char* o)
 String8::String8(const char* o, size_t len)
     : mString(allocFromUTF8(o, len))
 {
-    if (mString == NULL) {
+    if (mString == nullptr) {
         mString = getEmptyString();
     }
 }
@@ -319,7 +319,7 @@ status_t String8::appendFormatV(const char* fmt, va_list args)
      * second vsnprintf access undefined args.
      */
     va_copy(tmp_args, args);
-    n = vsnprintf(NULL, 0, fmt, tmp_args);
+    n = vsnprintf(nullptr, 0, fmt, tmp_args);
     va_end(tmp_args);
 
     if (n != 0) {
@@ -360,7 +360,7 @@ char* String8::lockBuffer(size_t size)
         mString = str;
         return str;
     }
-    return NULL;
+    return nullptr;
 }
 
 void String8::unlockBuffer()
@@ -512,7 +512,7 @@ String8 String8::getPathLeaf(void) const
     const char*const buf = mString;
 
     cp = strrchr(buf, OS_PATH_SEPARATOR);
-    if (cp == NULL)
+    if (cp == nullptr)
         return String8(*this);
     else
         return String8(cp+1);
@@ -524,7 +524,7 @@ String8 String8::getPathDir(void) const
     const char*const str = mString;
 
     cp = strrchr(str, OS_PATH_SEPARATOR);
-    if (cp == NULL)
+    if (cp == nullptr)
         return String8("");
     else
         return String8(str, cp - str);
@@ -543,7 +543,7 @@ String8 String8::walkPath(String8* outRemains) const
         cp = strchr(buf, OS_PATH_SEPARATOR);
     }
 
-    if (cp == NULL) {
+    if (cp == nullptr) {
         String8 res = buf != str ? String8(buf) : *this;
         if (outRemains) *outRemains = String8("");
         return res;
@@ -567,15 +567,15 @@ char* String8::find_extension(void) const
 
     // only look at the filename
     lastSlash = strrchr(str, OS_PATH_SEPARATOR);
-    if (lastSlash == NULL)
+    if (lastSlash == nullptr)
         lastSlash = str;
     else
         lastSlash++;
 
     // find the last dot
     lastDot = strrchr(lastSlash, '.');
-    if (lastDot == NULL)
-        return NULL;
+    if (lastDot == nullptr)
+        return nullptr;
 
     // looks good, ship it
     return const_cast<char*>(lastDot);
@@ -586,7 +586,7 @@ String8 String8::getPathExtension(void) const
     char* ext;
 
     ext = find_extension();
-    if (ext != NULL)
+    if (ext != nullptr)
         return String8(ext);
     else
         return String8("");
@@ -598,7 +598,7 @@ String8 String8::getBasePath(void) const
     const char* const str = mString;
 
     ext = find_extension();
-    if (ext == NULL)
+    if (ext == nullptr)
         return String8(*this);
     else
         return String8(str, ext - str);
