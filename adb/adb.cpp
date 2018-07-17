@@ -415,7 +415,7 @@ void handle_packet(apacket *p, atransport *t)
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 != 0) {
             asocket* s = find_local_socket(p->msg.arg1, 0);
             if (s) {
-                if(s->peer == 0) {
+                if(s->peer == nullptr) {
                     /* On first READY message, create the connection. */
                     s->peer = create_remote_socket(p->msg.arg0, t);
                     s->peer->peer = s;
