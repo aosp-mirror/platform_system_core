@@ -128,7 +128,7 @@ static void find_usb_device(const std::string& base,
     if (!bus_dir) return;
 
     dirent* de;
-    while ((de = readdir(bus_dir.get())) != 0) {
+    while ((de = readdir(bus_dir.get())) != nullptr) {
         if (contains_non_digit(de->d_name)) continue;
 
         std::string bus_name = base + "/" + de->d_name;

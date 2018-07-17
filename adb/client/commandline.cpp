@@ -885,7 +885,7 @@ static int adb_sideload_host(const char* filename) {
             return 0;
         }
 
-        int block = strtol(buf, NULL, 10);
+        int block = strtol(buf, nullptr, 10);
 
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
         if (offset >= static_cast<size_t>(sb.st_size)) {
@@ -968,7 +968,7 @@ static int ppp(int argc, const char** argv) {
             //argv[2] and beyond become ppp_args[1] and beyond
             ppp_args[i - 1] = argv[i];
         }
-        ppp_args[i-1] = NULL;
+        ppp_args[i-1] = nullptr;
 
         // child side
 
@@ -1174,7 +1174,7 @@ static int backup(int argc, const char** argv) {
                 argv[i++] = argv[j++];
             }
             argc -= 2;
-            argv[argc] = NULL;
+            argv[argc] = nullptr;
         }
     }
 
@@ -1969,7 +1969,7 @@ static int install_multiple_app(int argc, const char** argv) {
         char* end = strrchr(buf, ']');
         if (start && end) {
             *end = '\0';
-            session_id = strtol(start + 1, NULL, 10);
+            session_id = strtol(start + 1, nullptr, 10);
         }
     }
     if (session_id < 0) {

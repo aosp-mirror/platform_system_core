@@ -100,7 +100,7 @@ static bool adbd_auth_generate_token(void* token, size_t token_size) {
 
 static void usb_disconnected(void* unused, atransport* t) {
     LOG(INFO) << "USB disconnect";
-    usb_transport = NULL;
+    usb_transport = nullptr;
     needs_retry = false;
 }
 
@@ -200,7 +200,7 @@ void adbd_auth_init(void) {
         return;
     }
 
-    listener_fde = fdevent_create(fd, adbd_auth_listener, NULL);
+    listener_fde = fdevent_create(fd, adbd_auth_listener, nullptr);
     fdevent_add(listener_fde, FDE_READ);
 }
 
