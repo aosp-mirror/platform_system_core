@@ -60,15 +60,6 @@ cc_binary {
 }
 
 cc_binary {
-    name: "android.hardware.health@2.0-service.override",
-    defaults: ["android.hardware.health@2.0-service_defaults"],
-
-    overrides: [
-        "healthd",
-    ],
-}
-
-cc_binary {
     name: "healthd",
     init_rc: ["healthd.rc"],
     srcs: [
@@ -101,4 +92,7 @@ cc_binary {
         "android.hardware.health@2.0",
     ],
 
+    vintf_fragments: [
+        "manifest_healthd.xml"
+    ],
 }
