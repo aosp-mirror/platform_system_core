@@ -497,8 +497,8 @@ int usb_write(usb_handle *handle, const void *buf, int len)
         }
     }
 
-    if (0 == result)
-        return 0;
+    if (!result)
+        return len;
 
     LOG(ERROR) << "usb_write failed with status: " << std::hex << result;
     return -1;
