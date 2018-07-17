@@ -35,6 +35,8 @@
 
 #include <bootimg.h>
 
+#include "constants.h"
+
 class Transport;
 struct sparse_file;
 
@@ -46,9 +48,6 @@ int64_t fb_download_data_fd(Transport* transport, int fd, uint32_t size);
 int fb_download_data_sparse(Transport* transport, struct sparse_file* s);
 int64_t fb_upload_data(Transport* transport, const char* outfile);
 const std::string fb_get_error();
-
-#define FB_COMMAND_SZ 64
-#define FB_RESPONSE_SZ 64
 
 /* engine.c - high level command queue engine */
 bool fb_getvar(Transport* transport, const std::string& key, std::string* value);
