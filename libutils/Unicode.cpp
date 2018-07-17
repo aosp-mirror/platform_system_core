@@ -159,7 +159,7 @@ int32_t utf32_from_utf8_at(const char *src, size_t src_len, size_t index, size_t
         return -1;
     }
     size_t dummy_index;
-    if (next_index == NULL) {
+    if (next_index == nullptr) {
         next_index = &dummy_index;
     }
     size_t num_read;
@@ -173,7 +173,7 @@ int32_t utf32_from_utf8_at(const char *src, size_t src_len, size_t index, size_t
 
 ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len)
 {
-    if (src == NULL || src_len == 0) {
+    if (src == nullptr || src_len == 0) {
         return -1;
     }
 
@@ -195,7 +195,7 @@ ssize_t utf32_to_utf8_length(const char32_t *src, size_t src_len)
 
 void utf32_to_utf8(const char32_t* src, size_t src_len, char* dst, size_t dst_len)
 {
-    if (src == NULL || src_len == 0 || dst == NULL) {
+    if (src == nullptr || src_len == 0 || dst == nullptr) {
         return;
     }
 
@@ -363,7 +363,7 @@ int strzcmp16_h_n(const char16_t *s1H, size_t n1, const char16_t *s2N, size_t n2
 
 void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_len)
 {
-    if (src == NULL || src_len == 0 || dst == NULL) {
+    if (src == nullptr || src_len == 0 || dst == nullptr) {
         return;
     }
 
@@ -440,7 +440,7 @@ ssize_t utf8_length(const char *src)
 
 ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
 {
-    if (src == NULL || src_len == 0) {
+    if (src == nullptr || src_len == 0) {
         return -1;
     }
 
@@ -490,7 +490,7 @@ static inline void utf8_shift_and_mask(uint32_t* codePoint, const uint8_t byte)
 
 size_t utf8_to_utf32_length(const char *src, size_t src_len)
 {
-    if (src == NULL || src_len == 0) {
+    if (src == nullptr || src_len == 0) {
         return 0;
     }
     size_t ret = 0;
@@ -515,7 +515,7 @@ size_t utf8_to_utf32_length(const char *src, size_t src_len)
 
 void utf8_to_utf32(const char* src, size_t src_len, char32_t* dst)
 {
-    if (src == NULL || src_len == 0 || dst == NULL) {
+    if (src == nullptr || src_len == 0 || dst == nullptr) {
         return;
     }
 

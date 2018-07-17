@@ -75,7 +75,7 @@ SharedBuffer* SharedBuffer::editResize(size_t newSize) const
                             "Invalid buffer size %zu", newSize);
 
         buf = (SharedBuffer*)realloc(buf, sizeof(SharedBuffer) + newSize);
-        if (buf != NULL) {
+        if (buf != nullptr) {
             buf->mSize = newSize;
             return buf;
         }
@@ -94,7 +94,7 @@ SharedBuffer* SharedBuffer::attemptEdit() const
     if (onlyOwner()) {
         return const_cast<SharedBuffer*>(this);
     }
-    return 0;
+    return nullptr;
 }
 
 SharedBuffer* SharedBuffer::reset(size_t new_size) const
