@@ -49,7 +49,7 @@ bool ReadProtocolString(int fd, std::string* s, std::string* error) {
     }
     buf[4] = 0;
 
-    unsigned long len = strtoul(buf, 0, 16);
+    unsigned long len = strtoul(buf, nullptr, 16);
     s->resize(len, '\0');
     if (!ReadFdExactly(fd, &(*s)[0], len)) {
         *error = perror_str("protocol fault (couldn't read status message)");

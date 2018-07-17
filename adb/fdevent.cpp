@@ -149,7 +149,7 @@ fdevent* fdevent_create(int fd, fd_func func, void* arg) {
 
 void fdevent_destroy(fdevent* fde) {
     check_main_thread();
-    if (fde == 0) return;
+    if (fde == nullptr) return;
     if (!(fde->state & FDE_CREATED)) {
         LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
     }

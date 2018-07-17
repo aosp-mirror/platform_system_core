@@ -337,7 +337,7 @@ asocket* create_local_socket(int fd) {
     s->fd = fd;
     s->enqueue = local_socket_enqueue;
     s->ready = local_socket_ready;
-    s->shutdown = NULL;
+    s->shutdown = nullptr;
     s->close = local_socket_close;
     install_local_socket(s);
 
@@ -383,7 +383,7 @@ static asocket* create_host_service_socket(const char* name, const char* serial,
 
     s = host_service_to_socket(name, serial, transport_id);
 
-    if (s != NULL) {
+    if (s != nullptr) {
         D("LS(%d) bound to '%s'", s->id, name);
         return s;
     }
@@ -435,7 +435,7 @@ static void remote_socket_shutdown(asocket* s) {
 
 static void remote_socket_close(asocket* s) {
     if (s->peer) {
-        s->peer->peer = 0;
+        s->peer->peer = nullptr;
         D("RS(%d) peer->close()ing peer->id=%d peer->fd=%d", s->id, s->peer->id, s->peer->fd);
         s->peer->close(s->peer);
     }
@@ -488,7 +488,7 @@ void connect_to_remote(asocket* s, const char* destination) {
    send the go-ahead message when they connect */
 static void local_socket_ready_notify(asocket* s) {
     s->ready = local_socket_ready;
-    s->shutdown = NULL;
+    s->shutdown = nullptr;
     s->close = local_socket_close;
     SendOkay(s->fd);
     s->ready(s);
@@ -499,7 +499,7 @@ static void local_socket_ready_notify(asocket* s) {
    connected (to avoid closing them without a status message) */
 static void local_socket_close_notify(asocket* s) {
     s->ready = local_socket_ready;
-    s->shutdown = NULL;
+    s->shutdown = nullptr;
     s->close = local_socket_close;
     SendFail(s->fd, "closed");
     s->close(s);
@@ -706,7 +706,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
         ** and tear down here.
         */
         s2 = create_host_service_socket(service, serial, transport_id);
-        if (s2 == 0) {
+        if (s2 == nullptr) {
             D("SS(%d): couldn't create host service '%s'", s->id, service);
             SendFail(s->peer->fd, "unknown host service");
             goto fail;
@@ -726,7 +726,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
         s->peer->close = local_socket_close;
         s->peer->peer = s2;
         s2->peer = s->peer;
-        s->peer = 0;
+        s->peer = nullptr;
         D("SS(%d): okay", s->id);
         s->close(s);
 
@@ -764,12 +764,12 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
     s->peer->ready = local_socket_ready_notify;
     s->peer->shutdown = nullptr;
     s->peer->close = local_socket_close_notify;
-    s->peer->peer = 0;
+    s->peer->peer = nullptr;
     /* give him our transport and upref it */
     s->peer->transport = s->transport;
 
     connect_to_remote(s->peer, s->smart_socket_data.data() + 4);
-    s->peer = 0;
+    s->peer = nullptr;
     s->close(s);
     return 1;
 
@@ -789,9 +789,9 @@ static void smart_socket_ready(asocket* s) {
 static void smart_socket_close(asocket* s) {
     D("SS(%d): closed", s->id);
     if (s->peer) {
-        s->peer->peer = 0;
+        s->peer->peer = nullptr;
         s->peer->close(s->peer);
-        s->peer = 0;
+        s->peer = nullptr;
     }
     delete s;
 }
@@ -801,7 +801,7 @@ static asocket* create_smart_socket(void) {
     asocket* s = new asocket();
     s->enqueue = smart_socket_enqueue;
     s->ready = smart_socket_ready;
-    s->shutdown = NULL;
+    s->shutdown = nullptr;
     s->close = smart_socket_close;
 
     D("SS(%d)", s->id);
