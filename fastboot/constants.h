@@ -27,6 +27,8 @@
 #define FB_CMD_REBOOT "reboot"
 #define FB_CMD_SHUTDOWN "shutdown"
 #define FB_CMD_REBOOT_BOOTLOADER "reboot-bootloader"
+#define FB_CMD_REBOOT_RECOVERY "reboot-recovery"
+#define FB_CMD_REBOOT_FASTBOOT "reboot-fastboot"
 #define FB_CMD_POWERDOWN "powerdown"
 
 #define RESPONSE_OKAY "OKAY"
