@@ -418,11 +418,11 @@ int usb_write(usb_handle *h, const void *_data, int len)
     if (h->zero_mask && !(len & h->zero_mask)) {
         // If we need 0-markers and our transfer is an even multiple of the packet size,
         // then send a zero marker.
-        return usb_bulk_write(h, _data, 0);
+        return usb_bulk_write(h, _data, 0) == 0 ? n : -1;
     }
 
     D("-- usb_write --");
-    return 0;
+    return n;
 }
 
 int usb_read(usb_handle *h, void *_data, int len)
