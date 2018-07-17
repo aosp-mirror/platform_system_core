@@ -91,7 +91,7 @@ String16::String16()
 }
 
 String16::String16(StaticLinkage)
-    : mString(0)
+    : mString(nullptr)
 {
     // this constructor is used when we can't rely on the static-initializers
     // having run. In this case we always allocate an empty string. It's less
@@ -342,7 +342,7 @@ status_t String16::makeLower()
 {
     const size_t N = size();
     const char16_t* str = string();
-    char16_t* edit = NULL;
+    char16_t* edit = nullptr;
     for (size_t i=0; i<N; i++) {
         const char16_t v = str[i];
         if (v >= 'A' && v <= 'Z') {
@@ -364,7 +364,7 @@ status_t String16::replaceAll(char16_t replaceThis, char16_t withThis)
 {
     const size_t N = size();
     const char16_t* str = string();
-    char16_t* edit = NULL;
+    char16_t* edit = nullptr;
     for (size_t i=0; i<N; i++) {
         if (str[i] == replaceThis) {
             if (!edit) {

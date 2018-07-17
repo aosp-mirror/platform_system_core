@@ -98,7 +98,7 @@ TEST_F(VectorTest, _grow_OverflowSize) {
 
   // Checks that the size calculation (not the capacity calculation) doesn't
   // overflow : the size here will be (1 + SIZE_MAX).
-  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, SIZE_MAX), "new_size overflow");
+  EXPECT_DEATH(vector.insertArrayAt(nullptr, 0, SIZE_MAX), "new_size overflow");
 }
 
 TEST_F(VectorTest, _grow_OverflowCapacityDoubling) {
@@ -106,14 +106,14 @@ TEST_F(VectorTest, _grow_OverflowCapacityDoubling) {
 
   // This should fail because the calculated capacity will overflow even though
   // the size of the vector doesn't.
-  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX - 1)), "new_capacity overflow");
+  EXPECT_DEATH(vector.insertArrayAt(nullptr, 0, (SIZE_MAX - 1)), "new_capacity overflow");
 }
 
 TEST_F(VectorTest, _grow_OverflowBufferAlloc) {
   Vector<int> vector;
   // This should fail because the capacity * sizeof(int) overflows, even
   // though the capacity itself doesn't.
-  EXPECT_DEATH(vector.insertArrayAt(NULL, 0, (SIZE_MAX / 2)), "new_alloc_size overflow");
+  EXPECT_DEATH(vector.insertArrayAt(nullptr, 0, (SIZE_MAX / 2)), "new_alloc_size overflow");
 }
 
 TEST_F(VectorTest, editArray_Shared) {

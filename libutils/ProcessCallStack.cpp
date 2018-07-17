@@ -42,14 +42,14 @@ static const char* PATH_THREAD_NAME = "/proc/self/task/%d/comm";
 static const char* PATH_SELF_TASK = "/proc/self/task";
 
 static void dumpProcessHeader(Printer& printer, pid_t pid, const char* timeStr) {
-    if (timeStr == NULL) {
+    if (timeStr == nullptr) {
         ALOGW("%s: timeStr was NULL", __FUNCTION__);
         return;
     }
 
     char path[PATH_MAX];
     char procNameBuf[MAX_PROC_PATH];
-    char* procName = NULL;
+    char* procName = nullptr;
     FILE* fp;
 
     snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
@@ -76,7 +76,7 @@ static void dumpProcessFooter(Printer& printer, pid_t pid) {
 
 static String8 getThreadName(pid_t tid) {
     char path[PATH_MAX];
-    char* procName = NULL;
+    char* procName = nullptr;
     char procNameBuf[MAX_PROC_PATH];
     FILE* fp;
 
@@ -88,7 +88,7 @@ static String8 getThreadName(pid_t tid) {
         ALOGE("%s: Failed to open %s", __FUNCTION__, path);
     }
 
-    if (procName == NULL) {
+    if (procName == nullptr) {
         // Reading /proc/self/task/%d/comm failed due to a race
         return String8::format("[err-unknown-tid-%d]", tid);
     }
@@ -128,7 +128,7 @@ void ProcessCallStack::clear() {
 
 void ProcessCallStack::update() {
     std::unique_ptr<DIR, decltype(&closedir)> dp(opendir(PATH_SELF_TASK), closedir);
-    if (dp == NULL) {
+    if (dp == nullptr) {
         ALOGE("%s: Failed to update the process's call stacks: %s",
               __FUNCTION__, strerror(errno));
         return;
@@ -140,7 +140,7 @@ void ProcessCallStack::update() {
 
     // Get current time.
     {
-        time_t t = time(NULL);
+        time_t t = time(nullptr);
         struct tm tm;
         localtime_r(&t, &tm);
 
@@ -152,7 +152,7 @@ void ProcessCallStack::update() {
      * - Read every file in directory => get every tid
      */
     dirent* ep;
-    while ((ep = readdir(dp.get())) != NULL) {
+    while ((ep = readdir(dp.get())) != nullptr) {
         pid_t tid = -1;
         sscanf(ep->d_name, "%d", &tid);
 

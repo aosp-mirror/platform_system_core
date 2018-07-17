@@ -110,7 +110,7 @@ template<> inline android::hash_t hash_type(const KeyFailsOnCopy& value) {
 
 class EntryRemovedCallback : public OnEntryRemoved<SimpleKey, StringValue> {
 public:
-    EntryRemovedCallback() : callbackCount(0), lastKey(-1), lastValue(NULL) { }
+    EntryRemovedCallback() : callbackCount(0), lastKey(-1), lastValue(nullptr) { }
     ~EntryRemovedCallback() {}
     void operator()(SimpleKey& k, StringValue& v) {
         callbackCount += 1;
@@ -153,7 +153,7 @@ protected:
 TEST_F(LruCacheTest, Empty) {
     LruCache<SimpleKey, StringValue> cache(100);
 
-    EXPECT_EQ(NULL, cache.get(0));
+    EXPECT_EQ(nullptr, cache.get(0));
     EXPECT_EQ(0u, cache.size());
 }
 
@@ -175,7 +175,7 @@ TEST_F(LruCacheTest, MaxCapacity) {
     cache.put(1, "one");
     cache.put(2, "two");
     cache.put(3, "three");
-    EXPECT_EQ(NULL, cache.get(1));
+    EXPECT_EQ(nullptr, cache.get(1));
     EXPECT_STREQ("two", cache.get(2));
     EXPECT_STREQ("three", cache.get(3));
     EXPECT_EQ(2u, cache.size());
@@ -188,7 +188,7 @@ TEST_F(LruCacheTest, RemoveLru) {
     cache.put(2, "two");
     cache.put(3, "three");
     cache.removeOldest();
-    EXPECT_EQ(NULL, cache.get(1));
+    EXPECT_EQ(nullptr, cache.get(1));
     EXPECT_STREQ("two", cache.get(2));
     EXPECT_STREQ("three", cache.get(3));
     EXPECT_EQ(2u, cache.size());
@@ -203,7 +203,7 @@ TEST_F(LruCacheTest, GetUpdatesLru) {
     EXPECT_STREQ("one", cache.get(1));
     cache.removeOldest();
     EXPECT_STREQ("one", cache.get(1));
-    EXPECT_EQ(NULL, cache.get(2));
+    EXPECT_EQ(nullptr, cache.get(2));
     EXPECT_STREQ("three", cache.get(3));
     EXPECT_EQ(2u, cache.size());
 }
@@ -230,7 +230,7 @@ TEST_F(LruCacheTest, StressTest) {
         int index = random() % kNumKeys;
         uint32_t key = hash_int(index);
         const char *val = cache.get(key);
-        if (val != NULL) {
+        if (val != nullptr) {
             EXPECT_EQ(strings[index], val);
             hitCount++;
         } else {

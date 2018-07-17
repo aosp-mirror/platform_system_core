@@ -339,7 +339,7 @@ TEST_F(LooperTest, PollOnce_WhenNonCallbackFdIsSignalled_ReturnsIdent) {
     Pipe pipe;
 
     pipe.writeSignal();
-    mLooper->addFd(pipe.receiveFd, expectedIdent, Looper::EVENT_INPUT, NULL, expectedData);
+    mLooper->addFd(pipe.receiveFd, expectedIdent, Looper::EVENT_INPUT, nullptr, expectedData);
 
     StopWatch stopWatch("pollOnce");
     int fd;
@@ -364,7 +364,7 @@ TEST_F(LooperTest, PollOnce_WhenNonCallbackFdIsSignalled_ReturnsIdent) {
 
 TEST_F(LooperTest, AddFd_WhenCallbackAdded_ReturnsOne) {
     Pipe pipe;
-    int result = mLooper->addFd(pipe.receiveFd, 0, Looper::EVENT_INPUT, NULL, NULL);
+    int result = mLooper->addFd(pipe.receiveFd, 0, Looper::EVENT_INPUT, nullptr, nullptr);
 
     EXPECT_EQ(1, result)
             << "addFd should return 1 because FD was added";
@@ -372,7 +372,7 @@ TEST_F(LooperTest, AddFd_WhenCallbackAdded_ReturnsOne) {
 
 TEST_F(LooperTest, AddFd_WhenIdentIsNegativeAndCallbackIsNull_ReturnsError) {
     Pipe pipe;
-    int result = mLooper->addFd(pipe.receiveFd, -1, Looper::EVENT_INPUT, NULL, NULL);
+    int result = mLooper->addFd(pipe.receiveFd, -1, Looper::EVENT_INPUT, nullptr, nullptr);
 
     EXPECT_EQ(-1, result)
             << "addFd should return -1 because arguments were invalid";
@@ -381,7 +381,7 @@ TEST_F(LooperTest, AddFd_WhenIdentIsNegativeAndCallbackIsNull_ReturnsError) {
 TEST_F(LooperTest, AddFd_WhenNoCallbackAndAllowNonCallbacksIsFalse_ReturnsError) {
     Pipe pipe;
     sp<Looper> looper = new Looper(false /*allowNonCallbacks*/);
-    int result = looper->addFd(pipe.receiveFd, 0, 0, NULL, NULL);
+    int result = looper->addFd(pipe.receiveFd, 0, 0, nullptr, nullptr);
 
     EXPECT_EQ(-1, result)
             << "addFd should return -1 because arguments were invalid";
