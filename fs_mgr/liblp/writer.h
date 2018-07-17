@@ -25,6 +25,9 @@
 namespace android {
 namespace fs_mgr {
 
+std::string SerializeGeometry(const LpMetadataGeometry& input);
+std::string SerializeMetadata(const LpMetadata& input);
+
 // These variants are for testing only. The path-based functions should be used
 // for actual operation, so that open() is called with the correct flags.
 bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
@@ -32,11 +35,6 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
 
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
                           const std::function<bool(int, const std::string&)>& writer);
-
-// Helper function to serialize geometry and metadata to a normal file, for
-// flashing or debugging.
-bool WriteToImageFile(const char* file, const LpMetadata& metadata);
-bool WriteToImageFile(int fd, const LpMetadata& metadata);
 
 }  // namespace fs_mgr
 }  // namespace android

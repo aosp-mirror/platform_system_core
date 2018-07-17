@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_UEVENTD_PARSER_H
-#define _INIT_UEVENTD_PARSER_H
-
-#include <string>
-#include <vector>
-
-#include "devices.h"
+#include <liblp/liblp.h>
 
 namespace android {
-namespace init {
+namespace fs_mgr {
 
-struct UeventdConfiguration {
-    std::vector<Subsystem> subsystems;
-    std::vector<SysfsPermissions> sysfs_permissions;
-    std::vector<Permissions> dev_permissions;
-    std::vector<std::string> firmware_directories;
-};
+// Helper function to serialize geometry and metadata to a normal file, for
+// flashing or debugging.
+std::unique_ptr<LpMetadata> ReadFromImageFile(int fd);
+bool WriteToImageFile(const char* file, const LpMetadata& metadata);
+bool WriteToImageFile(int fd, const LpMetadata& metadata);
 
-UeventdConfiguration ParseConfig(const std::vector<std::string>& configs);
-
-}  // namespace init
+}  // namespace fs_mgr
 }  // namespace android
-
-#endif

@@ -24,6 +24,7 @@ cc_library_static {
     ],
     srcs: [
         "builder.cpp",
+        "images.cpp",
         "reader.cpp",
         "utility.cpp",
         "writer.cpp",
@@ -33,6 +34,7 @@ cc_library_static {
         "liblog",
         "libcrypto",
         "libcrypto_utils",
+        "libsparse",
     ],
     whole_static_libs: [
         "libext2_uuid",

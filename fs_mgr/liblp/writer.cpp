@@ -30,7 +30,7 @@
 namespace android {
 namespace fs_mgr {
 
-static std::string SerializeGeometry(const LpMetadataGeometry& input) {
+std::string SerializeGeometry(const LpMetadataGeometry& input) {
     LpMetadataGeometry geometry = input;
     memset(geometry.checksum, 0, sizeof(geometry.checksum));
     SHA256(&geometry, sizeof(geometry), geometry.checksum);
@@ -44,7 +44,7 @@ static bool CompareGeometry(const LpMetadataGeometry& g1, const LpMetadataGeomet
            g1.last_logical_sector == g2.last_logical_sector;
 }
 
-static std::string SerializeMetadata(const LpMetadata& input) {
+std::string SerializeMetadata(const LpMetadata& input) {
     LpMetadata metadata = input;
     LpMetadataHeader& header = metadata.header;
 
@@ -106,6 +106,11 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     }
     if (blockdevice_size - reserved_size < (geometry.last_logical_sector + 1) * LP_SECTOR_SIZE) {
         LERROR << "Not enough space to backup all logical partition metadata slots.";
+        return false;
+    }
+    if (blockdevice_size != metadata.geometry.block_device_size) {
+        LERROR << "Block device size " << blockdevice_size
+               << " does not match metadata requested size " << metadata.geometry.block_device_size;
         return false;
     }
 
@@ -311,29 +316,6 @@ bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& met
 
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
     return UpdatePartitionTable(fd, metadata, slot_number, DefaultWriter);
-}
-
-bool WriteToImageFile(int fd, const LpMetadata& input) {
-    std::string geometry = SerializeGeometry(input.geometry);
-    std::string padding(LP_METADATA_GEOMETRY_SIZE - geometry.size(), '\0');
-    std::string metadata = SerializeMetadata(input);
-
-    std::string everything = geometry + padding + metadata;
-
-    if (!android::base::WriteFully(fd, everything.data(), everything.size())) {
-        PERROR << __PRETTY_FUNCTION__ << "write " << everything.size() << " bytes failed";
-        return false;
-    }
-    return true;
-}
-
-bool WriteToImageFile(const char* file, const LpMetadata& input) {
-    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC, 0644));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << file;
-        return false;
-    }
-    return WriteToImageFile(fd, input);
 }
 
 }  // namespace fs_mgr

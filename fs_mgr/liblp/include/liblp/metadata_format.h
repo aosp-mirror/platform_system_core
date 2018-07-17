@@ -86,7 +86,9 @@ typedef struct LpMetadataGeometry {
     /*  8: SHA256 checksum of this struct, with this field set to 0. */
     uint8_t checksum[32];
 
-    /* 40: Maximum amount of space a single copy of the metadata can use. */
+    /* 40: Maximum amount of space a single copy of the metadata can use. This
+     * must be a multiple of LP_SECTOR_SIZE.
+     */
     uint32_t metadata_max_size;
 
     /* 44: Number of copies of the metadata to keep. For A/B devices, this
@@ -129,6 +131,11 @@ typedef struct LpMetadataGeometry {
      * If it cannot be determined, it is assumed to be 0.
      */
     uint32_t alignment_offset;
+
+    /* 72: Block device size, as specified when the metadata was created. This
+     * can be used to verify the geometry against a target device.
+     */
+    uint64_t block_device_size;
 } __attribute__((packed)) LpMetadataGeometry;
 
 /* The logical partition metadata has a number of tables; they are described
