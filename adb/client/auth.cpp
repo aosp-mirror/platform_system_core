@@ -109,7 +109,7 @@ static int generate_key(const std::string& file) {
     LOG(INFO) << "generate_key(" << file << ")...";
 
     mode_t old_mask;
-    FILE *f = NULL;
+    FILE *f = nullptr;
     int ret = 0;
 
     EVP_PKEY* pkey = EVP_PKEY_new();
@@ -121,7 +121,7 @@ static int generate_key(const std::string& file) {
     }
 
     BN_set_word(exponent, RSA_F4);
-    RSA_generate_key_ex(rsa, 2048, exponent, NULL);
+    RSA_generate_key_ex(rsa, 2048, exponent, nullptr);
     EVP_PKEY_set1_RSA(pkey, rsa);
 
     old_mask = umask(077);
@@ -135,7 +135,7 @@ static int generate_key(const std::string& file) {
 
     umask(old_mask);
 
-    if (!PEM_write_PrivateKey(f, pkey, NULL, NULL, 0, NULL, NULL)) {
+    if (!PEM_write_PrivateKey(f, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
         D("Failed to write key");
         goto out;
     }
@@ -302,7 +302,7 @@ std::deque<std::shared_ptr<RSA>> adb_auth_get_private_keys() {
 static std::string adb_auth_sign(RSA* key, const char* token, size_t token_size) {
     if (token_size != TOKEN_SIZE) {
         D("Unexpected token size %zd", token_size);
-        return 0;
+        return nullptr;
     }
 
     std::string result;

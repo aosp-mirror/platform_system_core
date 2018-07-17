@@ -352,7 +352,7 @@ static void wait_for_state(int fd, void* data) {
     while (true) {
         bool is_ambiguous = false;
         std::string error = "unknown error";
-        const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : NULL;
+        const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : nullptr;
         atransport* t = acquire_one_transport(sinfo->transport_type, serial, sinfo->transport_id,
                                               &is_ambiguous, &error);
         if (t != nullptr && (sinfo->state == kCsAny || sinfo->state == t->GetConnectionState())) {
@@ -389,8 +389,8 @@ void connect_emulator(const std::string& port_spec, std::string* response) {
         return;
     }
 
-    int console_port = strtol(pieces[0].c_str(), NULL, 0);
-    int adb_port = strtol(pieces[1].c_str(), NULL, 0);
+    int console_port = strtol(pieces[0].c_str(), nullptr, 0);
+    int adb_port = strtol(pieces[1].c_str(), nullptr, 0);
     if (console_port <= 0 || adb_port <= 0) {
         *response = android::base::StringPrintf("Invalid port numbers: %s", port_spec.c_str());
         return;
@@ -494,6 +494,6 @@ asocket* host_service_to_socket(const char* name, const char* serial, TransportI
         }
         return create_local_socket(fd);
     }
-    return NULL;
+    return nullptr;
 }
 #endif /* ADB_HOST */

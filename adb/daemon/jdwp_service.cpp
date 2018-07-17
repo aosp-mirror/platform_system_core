@@ -264,7 +264,7 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
 
             iov.iov_base = &dummy;
             iov.iov_len = 1;
-            msg.msg_name = NULL;
+            msg.msg_name = nullptr;
             msg.msg_namelen = 0;
             msg.msg_iov = &iov;
             msg.msg_iovlen = 1;
@@ -393,7 +393,7 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
     control->listen_socket = s;
 
     control->fde = fdevent_create(s, jdwp_control_event, control);
-    if (control->fde == NULL) {
+    if (control->fde == nullptr) {
         D("could not create fdevent for jdwp control socket");
         adb_close(s);
         return -1;
