@@ -299,6 +299,10 @@ cc_library_static {
         "libqemu_pipe",
         "libbase",
     ],
+
+    export_include_dirs: [
+        "daemon/include",
+    ],
 }
 
 cc_binary {
