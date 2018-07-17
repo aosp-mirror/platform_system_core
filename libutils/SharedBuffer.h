@@ -124,11 +124,11 @@ size_t SharedBuffer::size() const {
 }
 
 SharedBuffer* SharedBuffer::bufferFromData(void* data) {
-    return data ? static_cast<SharedBuffer *>(data)-1 : 0;
+    return data ? static_cast<SharedBuffer *>(data)-1 : nullptr;
 }
     
 const SharedBuffer* SharedBuffer::bufferFromData(const void* data) {
-    return data ? static_cast<const SharedBuffer *>(data)-1 : 0;
+    return data ? static_cast<const SharedBuffer *>(data)-1 : nullptr;
 }
 
 size_t SharedBuffer::sizeFromData(const void* data) {
