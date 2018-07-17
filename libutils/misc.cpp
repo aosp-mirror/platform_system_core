@@ -41,13 +41,13 @@ struct sysprop_change_callback_info {
 
 #if !defined(_WIN32)
 static pthread_mutex_t gSyspropMutex = PTHREAD_MUTEX_INITIALIZER;
-static Vector<sysprop_change_callback_info>* gSyspropList = NULL;
+static Vector<sysprop_change_callback_info>* gSyspropList = nullptr;
 #endif
 
 #if !defined(_WIN32)
 void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
     pthread_mutex_lock(&gSyspropMutex);
-    if (gSyspropList == NULL) {
+    if (gSyspropList == nullptr) {
         gSyspropList = new Vector<sysprop_change_callback_info>();
     }
     sysprop_change_callback_info info;
@@ -103,7 +103,7 @@ void do_report_sysprop_change() {
 #if !defined(_WIN32)
     pthread_mutex_lock(&gSyspropMutex);
     Vector<sysprop_change_callback_info> listeners;
-    if (gSyspropList != NULL) {
+    if (gSyspropList != nullptr) {
         listeners = *gSyspropList;
     }
     pthread_mutex_unlock(&gSyspropMutex);

@@ -44,7 +44,7 @@ static inline size_t max(size_t a, size_t b) {
 // ----------------------------------------------------------------------------
 
 VectorImpl::VectorImpl(size_t itemSize, uint32_t flags)
-    : mStorage(0), mCount(0), mFlags(flags), mItemSize(itemSize)
+    : mStorage(nullptr), mCount(0), mFlags(flags), mItemSize(itemSize)
 {
 }
 
@@ -77,7 +77,7 @@ VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
             mCount = rhs.mCount;
             SharedBuffer::bufferFromData(mStorage)->acquire();
         } else {
-            mStorage = 0;
+            mStorage = nullptr;
             mCount = 0;
         }
     }
@@ -89,14 +89,14 @@ void* VectorImpl::editArrayImpl()
     if (mStorage) {
         const SharedBuffer* sb = SharedBuffer::bufferFromData(mStorage);
         SharedBuffer* editable = sb->attemptEdit();
-        if (editable == 0) {
+        if (editable == nullptr) {
             // If we're here, we're not the only owner of the buffer.
             // We must make a copy of it.
             editable = SharedBuffer::alloc(sb->size());
             // Fail instead of returning a pointer to storage that's not
             // editable. Otherwise we'd be editing the contents of a buffer
             // for which we're not the only owner, which is undefined behaviour.
-            LOG_ALWAYS_FATAL_IF(editable == NULL);
+            LOG_ALWAYS_FATAL_IF(editable == nullptr);
             _do_copy(editable->data(), mStorage, mCount);
             release_storage();
             mStorage = editable->data();
@@ -141,7 +141,7 @@ ssize_t VectorImpl::appendArray(const void* array, size_t length)
 
 ssize_t VectorImpl::insertAt(size_t index, size_t numItems)
 {
-    return insertAt(0, index, numItems);
+    return insertAt(nullptr, index, numItems);
 }
 
 ssize_t VectorImpl::insertAt(const void* item, size_t index, size_t numItems)
@@ -177,7 +177,7 @@ status_t VectorImpl::sort(VectorImpl::compar_r_t cmp, void* state)
     const ssize_t count = size();
     if (count > 1) {
         void* array = const_cast<void*>(arrayImpl());
-        void* temp = 0;
+        void* temp = nullptr;
         ssize_t i = 1;
         while (i < count) {
             void* item = reinterpret_cast<char*>(array) + mItemSize*(i);
@@ -205,7 +205,7 @@ status_t VectorImpl::sort(VectorImpl::compar_r_t cmp, void* state)
                     _do_copy(next, curr, 1);
                     next = curr;
                     --j;
-                    curr = NULL;
+                    curr = nullptr;
                     if (j >= 0) {
                         curr = reinterpret_cast<char*>(array) + mItemSize*(j);
                     }
@@ -233,7 +233,7 @@ void VectorImpl::pop()
 
 void VectorImpl::push()
 {
-    push(0);
+    push(nullptr);
 }
 
 void VectorImpl::push(const void* item)
@@ -243,7 +243,7 @@ void VectorImpl::push(const void* item)
 
 ssize_t VectorImpl::add()
 {
-    return add(0);
+    return add(nullptr);
 }
 
 ssize_t VectorImpl::add(const void* item)
@@ -253,7 +253,7 @@ ssize_t VectorImpl::add(const void* item)
 
 ssize_t VectorImpl::replaceAt(size_t index)
 {
-    return replaceAt(0, index);
+    return replaceAt(nullptr, index);
 }
 
 ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
@@ -267,10 +267,10 @@ ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
 
     void* item = editItemLocation(index);
     if (item != prototype) {
-        if (item == 0)
+        if (item == nullptr)
             return NO_MEMORY;
         _do_destroy(item, 1);
-        if (prototype == 0) {
+        if (prototype == nullptr) {
             _do_construct(item, 1);
         } else {
             _do_copy(item, prototype, 1);
@@ -294,7 +294,7 @@ ssize_t VectorImpl::removeItemsAt(size_t index, size_t count)
 void VectorImpl::finish_vector()
 {
     release_storage();
-    mStorage = 0;
+    mStorage = nullptr;
     mCount = 0;
 }
 
@@ -315,7 +315,7 @@ void* VectorImpl::editItemLocation(size_t index)
             return reinterpret_cast<char*>(buffer) + index*mItemSize;
         }
     }
-    return 0;
+    return nullptr;
 }
 
 const void* VectorImpl::itemLocation(size_t index) const
@@ -330,7 +330,7 @@ const void* VectorImpl::itemLocation(size_t index) const
             return reinterpret_cast<const char*>(buffer) + index*mItemSize;
         }
     }
-    return 0;
+    return nullptr;
 }
 
 ssize_t VectorImpl::setCapacity(size_t new_capacity)
@@ -418,7 +418,7 @@ void* VectorImpl::_grow(size_t where, size_t amount)
             if (sb) {
                 mStorage = sb->data();
             } else {
-                return NULL;
+                return nullptr;
             }
         } else {
             SharedBuffer* sb = SharedBuffer::alloc(new_alloc_size);
@@ -435,7 +435,7 @@ void* VectorImpl::_grow(size_t where, size_t amount)
                 release_storage();
                 mStorage = const_cast<void*>(array);
             } else {
-                return NULL;
+                return nullptr;
             }
         }
     } else {

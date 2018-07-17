@@ -29,7 +29,7 @@ WeakMessageHandler::~WeakMessageHandler() {
 
 void WeakMessageHandler::handleMessage(const Message& message) {
     sp<MessageHandler> handler = mHandler.promote();
-    if (handler != NULL) {
+    if (handler != nullptr) {
         handler->handleMessage(message);
     }
 }
@@ -87,7 +87,7 @@ void Looper::initTLSKey() {
 
 void Looper::threadDestructor(void *st) {
     Looper* const self = static_cast<Looper*>(st);
-    if (self != NULL) {
+    if (self != nullptr) {
         self->decStrong((void*)threadDestructor);
     }
 }
@@ -95,13 +95,13 @@ void Looper::threadDestructor(void *st) {
 void Looper::setForThread(const sp<Looper>& looper) {
     sp<Looper> old = getForThread(); // also has side-effect of initializing TLS
 
-    if (looper != NULL) {
+    if (looper != nullptr) {
         looper->incStrong((void*)threadDestructor);
     }
 
     pthread_setspecific(gTLSKey, looper.get());
 
-    if (old != NULL) {
+    if (old != nullptr) {
         old->decStrong((void*)threadDestructor);
     }
 }
@@ -116,7 +116,7 @@ sp<Looper> Looper::getForThread() {
 sp<Looper> Looper::prepare(int opts) {
     bool allowNonCallbacks = opts & PREPARE_ALLOW_NON_CALLBACKS;
     sp<Looper> looper = Looper::getForThread();
-    if (looper == NULL) {
+    if (looper == nullptr) {
         looper = new Looper(allowNonCallbacks);
         Looper::setForThread(looper);
     }
@@ -190,9 +190,9 @@ int Looper::pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outDa
                         "fd=%d, events=0x%x, data=%p",
                         this, ident, fd, events, data);
 #endif
-                if (outFd != NULL) *outFd = fd;
-                if (outEvents != NULL) *outEvents = events;
-                if (outData != NULL) *outData = data;
+                if (outFd != nullptr) *outFd = fd;
+                if (outEvents != nullptr) *outEvents = events;
+                if (outData != nullptr) *outData = data;
                 return ident;
             }
         }
@@ -201,9 +201,9 @@ int Looper::pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outDa
 #if DEBUG_POLL_AND_WAKE
             ALOGD("%p ~ pollOnce - returning result %d", this, result);
 #endif
-            if (outFd != NULL) *outFd = 0;
-            if (outEvents != NULL) *outEvents = 0;
-            if (outData != NULL) *outData = NULL;
+            if (outFd != nullptr) *outFd = 0;
+            if (outEvents != nullptr) *outEvents = 0;
+            if (outData != nullptr) *outData = nullptr;
             return result;
         }
 
@@ -427,7 +427,7 @@ void Looper::pushResponse(int events, const Request& request) {
 }
 
 int Looper::addFd(int fd, int ident, int events, Looper_callbackFunc callback, void* data) {
-    return addFd(fd, ident, events, callback ? new SimpleLooperCallback(callback) : NULL, data);
+    return addFd(fd, ident, events, callback ? new SimpleLooperCallback(callback) : nullptr, data);
 }
 
 int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callback, void* data) {
@@ -542,7 +542,7 @@ int Looper::removeFd(int fd, int seq) {
         // updating the epoll set so that we avoid accidentally leaking callbacks.
         mRequests.removeItemsAt(requestIndex);
 
-        int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, NULL);
+        int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, nullptr);
         if (epollResult < 0) {
             if (seq != -1 && (errno == EBADF || errno == ENOENT)) {
                 // Tolerate EBADF or ENOENT when the sequence number is known because it
