@@ -490,7 +490,7 @@ int init_socket_transport(atransport* t, int s, int adb_port, int local) {
             std::make_unique<BlockingConnectionAdapter>(std::move(emulator_connection)));
         std::lock_guard<std::mutex> lock(local_transports_lock);
         atransport* existing_transport = find_emulator_transport_by_adb_port_locked(adb_port);
-        if (existing_transport != NULL) {
+        if (existing_transport != nullptr) {
             D("local transport for port %d already registered (%p)?", adb_port, existing_transport);
             fail = -1;
         } else if (local_transports.size() >= ADB_LOCAL_TRANSPORT_MAX) {

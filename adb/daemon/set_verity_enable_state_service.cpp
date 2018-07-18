@@ -135,7 +135,7 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
     unique_fd closer(fd);
     bool any_changed = false;
 
-    bool enable = (cookie != NULL);
+    bool enable = (cookie != nullptr);
 
     // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
     // contract, androidboot.vbmeta.digest is set by the bootloader

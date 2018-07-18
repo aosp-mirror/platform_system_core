@@ -404,7 +404,7 @@ void send_packet(apacket* p, atransport* t) {
 
     VLOG(TRANSPORT) << dump_packet(t->serial, "to remote", p);
 
-    if (t == NULL) {
+    if (t == nullptr) {
         fatal("Transport is null");
     }
 
@@ -467,7 +467,7 @@ static void device_tracker_close(asocket* socket) {
 
     D("device tracker %p removed", tracker);
     if (peer) {
-        peer->peer = NULL;
+        peer->peer = nullptr;
         peer->close(peer);
     }
     device_tracker_remove(tracker);
@@ -699,7 +699,7 @@ void init_transport_registration(void) {
     transport_registration_recv = s[1];
 
     transport_registration_fde =
-        fdevent_create(transport_registration_recv, transport_registration_func, 0);
+        fdevent_create(transport_registration_recv, transport_registration_func, nullptr);
     fdevent_set(transport_registration_fde, FDE_READ);
 }
 

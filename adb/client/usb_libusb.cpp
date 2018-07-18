@@ -589,7 +589,7 @@ int usb_write(usb_handle* h, const void* d, int len) {
 
     int rc = perform_usb_transfer(h, info, std::move(lock));
     LOG(DEBUG) << "usb_write(" << len << ") = " << rc;
-    return rc;
+    return info->transfer->actual_length;
 }
 
 int usb_read(usb_handle* h, void* d, int len) {

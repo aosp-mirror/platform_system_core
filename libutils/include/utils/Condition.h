@@ -124,7 +124,7 @@ inline status_t Condition::waitRelative(Mutex& mutex, nsecs_t reltime) {
 #else // __APPLE__
     // Apple doesn't support POSIX clocks.
     struct timeval t;
-    gettimeofday(&t, NULL);
+    gettimeofday(&t, nullptr);
     ts.tv_sec = t.tv_sec;
     ts.tv_nsec = t.tv_usec*1000;
 #endif

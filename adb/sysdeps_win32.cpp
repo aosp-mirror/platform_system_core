@@ -158,7 +158,7 @@ _fh_from_int( int   fd, const char*   func )
         D( "_fh_from_int: invalid fd %d passed to %s", fd + WIN32_FH_BASE,
            func );
         errno = EBADF;
-        return NULL;
+        return nullptr;
     }
 
     f = &_win32_fhs[fd];
@@ -167,7 +167,7 @@ _fh_from_int( int   fd, const char*   func )
         D( "_fh_from_int: invalid fd %d passed to %s", fd + WIN32_FH_BASE,
            func );
         errno = EBADF;
-        return NULL;
+        return nullptr;
     }
 
     return f;
@@ -186,12 +186,12 @@ _fh_to_int( FH  f )
 static FH
 _fh_alloc( FHClass  clazz )
 {
-    FH   f = NULL;
+    FH   f = nullptr;
 
     std::lock_guard<std::mutex> lock(_win32_lock);
 
     for (int i = _win32_fh_next; i < WIN32_MAX_FHS; ++i) {
-        if (_win32_fhs[i].clazz == NULL) {
+        if (_win32_fhs[i].clazz == nullptr) {
             f = &_win32_fhs[i];
             _win32_fh_next = i + 1;
             f->clazz = clazz;
@@ -226,7 +226,7 @@ _fh_close( FH   f )
         f->name[0] = '\0';
         f->eof     = 0;
         f->used    = 0;
-        f->clazz   = NULL;
+        f->clazz   = nullptr;
     }
     return 0;
 }
@@ -269,7 +269,7 @@ static int _fh_file_close(FH f) {
 static int _fh_file_read(FH f, void* buf, int len) {
     DWORD read_bytes;
 
-    if (!ReadFile(f->fh_handle, buf, (DWORD)len, &read_bytes, NULL)) {
+    if (!ReadFile(f->fh_handle, buf, (DWORD)len, &read_bytes, nullptr)) {
         D("adb_read: could not read %d bytes from %s", len, f->name);
         errno = EIO;
         return -1;
@@ -282,7 +282,7 @@ static int _fh_file_read(FH f, void* buf, int len) {
 static int _fh_file_write(FH f, const void* buf, int len) {
     DWORD wrote_bytes;
 
-    if (!WriteFile(f->fh_handle, buf, (DWORD)len, &wrote_bytes, NULL)) {
+    if (!WriteFile(f->fh_handle, buf, (DWORD)len, &wrote_bytes, nullptr)) {
         D("adb_file_write: could not write %d bytes from %s", len, f->name);
         errno = EIO;
         return -1;
@@ -337,7 +337,7 @@ static int _fh_file_lseek(FH f, int pos, int origin) {
             return -1;
     }
 
-    result = SetFilePointer(f->fh_handle, pos, NULL, method);
+    result = SetFilePointer(f->fh_handle, pos, nullptr, method);
     if (result == INVALID_SET_FILE_POINTER) {
         errno = EIO;
         return -1;
@@ -387,7 +387,7 @@ int adb_open(const char* path, int options) {
         return -1;
     }
     f->fh_handle =
-        CreateFileW(path_wide.c_str(), desiredAccess, shareMode, NULL, OPEN_EXISTING, 0, NULL);
+        CreateFileW(path_wide.c_str(), desiredAccess, shareMode, nullptr, OPEN_EXISTING, 0, nullptr);
 
     if (f->fh_handle == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
@@ -430,7 +430,7 @@ int adb_creat(const char* path, int mode) {
         return -1;
     }
     f->fh_handle = CreateFileW(path_wide.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                               NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                               nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
     if (f->fh_handle == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
@@ -461,7 +461,7 @@ int adb_creat(const char* path, int mode) {
 int adb_read(int fd, void* buf, int len) {
     FH f = _fh_from_int(fd, __func__);
 
-    if (f == NULL) {
+    if (f == nullptr) {
         errno = EBADF;
         return -1;
     }
@@ -472,7 +472,7 @@ int adb_read(int fd, void* buf, int len) {
 int adb_write(int fd, const void* buf, int len) {
     FH f = _fh_from_int(fd, __func__);
 
-    if (f == NULL) {
+    if (f == nullptr) {
         errno = EBADF;
         return -1;
     }
@@ -483,7 +483,7 @@ int adb_write(int fd, const void* buf, int len) {
 ssize_t adb_writev(int fd, const adb_iovec* iov, int iovcnt) {
     FH f = _fh_from_int(fd, __func__);
 
-    if (f == NULL) {
+    if (f == nullptr) {
         errno = EBADF;
         return -1;
     }
@@ -1700,7 +1700,7 @@ static int _console_read(const HANDLE console, void* buf, size_t len) {
 
         // The following emulation code should write the output sequence to
         // either seqstr or to seqbuf and seqbuflen.
-        const char* seqstr = NULL;  // NULL terminated C-string
+        const char* seqstr = nullptr;  // NULL terminated C-string
         // Enough space for max sequence string below, plus modifiers and/or
         // escape prefix.
         char seqbuf[16];
@@ -1998,7 +1998,7 @@ static int _console_read(const HANDLE console, void* buf, size_t len) {
         // * seqstr is set (and strlen can be used to determine the length).
         // * seqbuf and seqbuflen are set
         // Fallback to ch from Windows.
-        if (seqstr != NULL) {
+        if (seqstr != nullptr) {
             out = seqstr;
             outlen = strlen(seqstr);
         } else if (seqbuflen > 0) {
@@ -2068,9 +2068,9 @@ void stdin_raw_init() {
 }
 
 void stdin_raw_restore() {
-    if (_console_handle != NULL) {
+    if (_console_handle != nullptr) {
         const HANDLE in = _console_handle;
-        _console_handle = NULL;  // clear state
+        _console_handle = nullptr;  // clear state
 
         if (!SetConsoleMode(in, _old_console_mode)) {
             // This really should not fail.
@@ -2082,7 +2082,7 @@ void stdin_raw_restore() {
 
 // Called by 'adb shell' and 'adb exec-in' (via unix_read()) to read from stdin.
 int unix_read_interruptible(int fd, void* buf, size_t len) {
-    if ((fd == STDIN_FILENO) && (_console_handle != NULL)) {
+    if ((fd == STDIN_FILENO) && (_console_handle != nullptr)) {
         // If it is a request to read from stdin, and stdin_raw_init() has been
         // called, and it successfully configured the console, then read from
         // the console using Win32 console APIs and partially emulate a unix
@@ -2442,7 +2442,7 @@ static int _console_write_utf8(const char* const buf, const size_t buf_size, FIL
 
     // Write UTF-16 to the console.
     DWORD written = 0;
-    if (!WriteConsoleW(console, utf16.c_str(), utf16.length(), &written, NULL)) {
+    if (!WriteConsoleW(console, utf16.c_str(), utf16.length(), &written, nullptr)) {
         errno = EIO;
         return -1;
     }
@@ -2486,7 +2486,7 @@ int adb_vfprintf(FILE *stream, const char *format, va_list ap) {
 
     // If there is an associated Win32 console, write to it specially,
     // otherwise defer to the regular C Runtime, passing it UTF-8.
-    if (console != NULL) {
+    if (console != nullptr) {
         return _console_vfprintf(console, stream, format, ap);
     } else {
         // If vfprintf is a macro, undefine it, so we can call the real
@@ -2577,7 +2577,7 @@ size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
 
     // If there is an associated Win32 console, write to it specially,
     // otherwise defer to the regular C Runtime, passing it UTF-8.
-    if (console != NULL) {
+    if (console != nullptr) {
         return _console_fwrite(ptr, size, nmemb, stream, console);
     } else {
         // If fwrite is a macro, undefine it, so we can call the real
