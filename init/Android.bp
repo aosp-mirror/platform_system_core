@@ -180,6 +180,7 @@ cc_test {
         "service_test.cpp",
         "subcontext_test.cpp",
         "tokenizer_test.cpp",
+        "ueventd_parser_test.cpp",
         "ueventd_test.cpp",
         "util_test.cpp",
     ],
