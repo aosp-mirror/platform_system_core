@@ -19,6 +19,8 @@
 #include <string>
 #include <unordered_map>
 
+#include <binder/Parcelable.h>
+
 namespace android {
 namespace os {
 namespace storaged {
