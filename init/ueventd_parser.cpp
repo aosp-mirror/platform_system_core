@@ -117,11 +117,11 @@ Result<Success> SubsystemParser::ParseSection(std::vector<std::string>&& args,
 
 Result<Success> SubsystemParser::ParseDevName(std::vector<std::string>&& args) {
     if (args[1] == "uevent_devname") {
-        subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVNAME;
+        subsystem_.devname_source_ = Subsystem::DEVNAME_UEVENT_DEVNAME;
         return Success();
     }
     if (args[1] == "uevent_devpath") {
-        subsystem_.devname_source_ = Subsystem::DevnameSource::DEVNAME_UEVENT_DEVPATH;
+        subsystem_.devname_source_ = Subsystem::DEVNAME_UEVENT_DEVPATH;
         return Success();
     }
 
