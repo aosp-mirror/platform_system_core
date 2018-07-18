@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -59,7 +60,8 @@ std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot
 
 // Read/Write logical partition metadata to an image file, for diagnostics or
 // flashing.
-bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t block_size);
+bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
+                       const std::map<std::string, std::string>& images);
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file);
 
