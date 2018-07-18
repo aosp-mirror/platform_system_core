@@ -1,6 +1,7 @@
 cc_library_headers {
     name: "libhealthd_headers",
     vendor_available: true,
+    recovery_available: true,
     export_include_dirs: ["include"],
     header_libs: ["libbatteryservice_headers"],
     export_header_lib_headers: ["libbatteryservice_headers"],
@@ -11,6 +12,7 @@ cc_library_static {
     srcs: ["BatteryMonitor.cpp"],
     cflags: ["-Wall", "-Werror"],
     vendor_available: true,
+    recovery_available: true,
     export_include_dirs: ["include"],
     shared_libs: [
         "libutils",
