@@ -66,6 +66,7 @@ cc_library_static {
     ],
 
     static_libs: ["libhealthhalutils"],
+    header_libs: ["libbatteryservice_headers"],
 
     logtags: ["EventLogTags.logtags"],
 
