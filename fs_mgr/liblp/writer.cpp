@@ -34,7 +34,10 @@ std::string SerializeGeometry(const LpMetadataGeometry& input) {
     LpMetadataGeometry geometry = input;
     memset(geometry.checksum, 0, sizeof(geometry.checksum));
     SHA256(&geometry, sizeof(geometry), geometry.checksum);
-    return std::string(reinterpret_cast<const char*>(&geometry), sizeof(geometry));
+
+    std::string blob(reinterpret_cast<const char*>(&geometry), sizeof(geometry));
+    blob.resize(LP_METADATA_GEOMETRY_SIZE);
+    return blob;
 }
 
 static bool CompareGeometry(const LpMetadataGeometry& g1, const LpMetadataGeometry& g2) {
