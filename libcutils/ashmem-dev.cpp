@@ -90,7 +90,7 @@ static int __ashmem_is_ashmem(int fd, int fatal)
     dev_t rdev;
     struct stat st;
 
-    if (TEMP_FAILURE_RETRY(fstat(fd, &st)) < 0) {
+    if (fstat(fd, &st) < 0) {
         return -1;
     }
 
@@ -133,6 +133,12 @@ static int __ashmem_is_ashmem(int fd, int fatal)
 
     errno = ENOTTY;
     return -1;
+}
+
+static int __ashmem_check_failure(int fd, int result)
+{
+    if (result == -1 && errno == ENOTTY) __ashmem_is_ashmem(fd, 1);
+    return result;
 }
 
 int ashmem_valid(int fd)
@@ -182,12 +188,7 @@ error:
 
 int ashmem_set_prot_region(int fd, int prot)
 {
-    int ret = __ashmem_is_ashmem(fd, 1);
-    if (ret < 0) {
-        return ret;
-    }
-
-    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_PROT_MASK, prot));
+    return __ashmem_check_failure(fd, TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_PROT_MASK, prot)));
 }
 
 int ashmem_pin_region(int fd, size_t offset, size_t len)
@@ -195,12 +196,7 @@ int ashmem_pin_region(int fd, size_t offset, size_t len)
     // TODO: should LP64 reject too-large offset/len?
     ashmem_pin pin = { static_cast<uint32_t>(offset), static_cast<uint32_t>(len) };
 
-    int ret = __ashmem_is_ashmem(fd, 1);
-    if (ret < 0) {
-        return ret;
-    }
-
-    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_PIN, &pin));
+    return __ashmem_check_failure(fd, TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_PIN, &pin)));
 }
 
 int ashmem_unpin_region(int fd, size_t offset, size_t len)
@@ -208,20 +204,10 @@ int ashmem_unpin_region(int fd, size_t offset, size_t len)
     // TODO: should LP64 reject too-large offset/len?
     ashmem_pin pin = { static_cast<uint32_t>(offset), static_cast<uint32_t>(len) };
 
-    int ret = __ashmem_is_ashmem(fd, 1);
-    if (ret < 0) {
-        return ret;
-    }
-
-    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_UNPIN, &pin));
+    return __ashmem_check_failure(fd, TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_UNPIN, &pin)));
 }
 
 int ashmem_get_size_region(int fd)
 {
-    int ret = __ashmem_is_ashmem(fd, 1);
-    if (ret < 0) {
-        return ret;
-    }
-
-    return TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_GET_SIZE, NULL));
+    return __ashmem_check_failure(fd, TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_GET_SIZE, NULL)));
 }
