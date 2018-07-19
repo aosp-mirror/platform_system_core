@@ -40,6 +40,17 @@ __BEGIN_DECLS
 #endif
 #endif
 
+/*
+ * Use __VA_ARGS__ if running a static analyzer,
+ * to avoid warnings of unused variables in __VA_ARGS__.
+ */
+
+#ifdef __clang_analyzer__
+#define __FAKE_USE_VA_ARGS(...) ((void)(__VA_ARGS__))
+#else
+#define __FAKE_USE_VA_ARGS(...) ((void)(0))
+#endif
+
 /* --------------------------------------------------------------------- */
 
 /*
@@ -112,7 +123,7 @@ __BEGIN_DECLS
 #define LOG_ALWAYS_FATAL_IF(cond, ...)                              \
   ((__predict_false(cond))                                          \
        ? ((void)android_printAssert(#cond, LOG_TAG, ##__VA_ARGS__)) \
-       : (void)0)
+       : __FAKE_USE_VA_ARGS(__VA_ARGS__))
 #endif
 
 #ifndef LOG_ALWAYS_FATAL
@@ -128,10 +139,10 @@ __BEGIN_DECLS
 #if LOG_NDEBUG
 
 #ifndef LOG_FATAL_IF
-#define LOG_FATAL_IF(cond, ...) ((void)0)
+#define LOG_FATAL_IF(cond, ...) __FAKE_USE_VA_ARGS(__VA_ARGS__)
 #endif
 #ifndef LOG_FATAL
-#define LOG_FATAL(...) ((void)0)
+#define LOG_FATAL(...) __FAKE_USE_VA_ARGS(__VA_ARGS__)
 #endif
 
 #else
@@ -175,11 +186,12 @@ __BEGIN_DECLS
 #ifndef ALOGV
 #define __ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #if LOG_NDEBUG
-#define ALOGV(...)          \
-  do {                      \
-    if (false) {            \
-      __ALOGV(__VA_ARGS__); \
-    }                       \
+#define ALOGV(...)                   \
+  do {                               \
+    __FAKE_USE_VA_ARGS(__VA_ARGS__); \
+    if (false) {                     \
+      __ALOGV(__VA_ARGS__);          \
+    }                                \
   } while (false)
 #else
 #define ALOGV(...) __ALOGV(__VA_ARGS__)
@@ -188,11 +200,11 @@ __BEGIN_DECLS
 
 #ifndef ALOGV_IF
 #if LOG_NDEBUG
-#define ALOGV_IF(cond, ...) ((void)0)
+#define ALOGV_IF(cond, ...) __FAKE_USE_VA_ARGS(__VA_ARGS__)
 #else
 #define ALOGV_IF(cond, ...)                                                  \
   ((__predict_false(cond)) ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-                           : (void)0)
+                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
 #endif
 #endif
 
@@ -206,7 +218,7 @@ __BEGIN_DECLS
 #ifndef ALOGD_IF
 #define ALOGD_IF(cond, ...)                                                \
   ((__predict_false(cond)) ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-                           : (void)0)
+                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
 #endif
 
 /*
@@ -219,7 +231,7 @@ __BEGIN_DECLS
 #ifndef ALOGI_IF
 #define ALOGI_IF(cond, ...)                                               \
   ((__predict_false(cond)) ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-                           : (void)0)
+                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
 #endif
 
 /*
@@ -232,7 +244,7 @@ __BEGIN_DECLS
 #ifndef ALOGW_IF
 #define ALOGW_IF(cond, ...)                                               \
   ((__predict_false(cond)) ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-                           : (void)0)
+                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
 #endif
 
 /*
@@ -245,7 +257,7 @@ __BEGIN_DECLS
 #ifndef ALOGE_IF
 #define ALOGE_IF(cond, ...)                                                \
   ((__predict_false(cond)) ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-                           : (void)0)
+                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
 #endif
 
 /* --------------------------------------------------------------------- */
