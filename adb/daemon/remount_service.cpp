@@ -44,6 +44,7 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "fs_mgr.h"
+#include "set_verity_enable_state_service.h"
 
 // Returns the device used to mount a directory in /proc/mounts.
 static std::string find_proc_mount(const char* dir) {
@@ -218,14 +219,11 @@ static void reboot_for_remount(int fd, bool need_fsck) {
     android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_cmd.c_str());
 }
 
-void remount_service(int fd, void* cookie) {
-    unique_fd close_fd(fd);
-
-    const char* cmd = reinterpret_cast<const char*>(cookie);
-    bool user_requested_reboot = cmd && !strcmp(cmd, "-R");
+void remount_service(android::base::unique_fd fd, const std::string& cmd) {
+    bool user_requested_reboot = cmd != "-R";
 
     if (getuid() != 0) {
-        WriteFdExactly(fd, "Not running as root. Try \"adb root\" first.\n");
+        WriteFdExactly(fd.get(), "Not running as root. Try \"adb root\" first.\n");
         return;
     }
 
@@ -246,7 +244,7 @@ void remount_service(int fd, void* cookie) {
         if (dev.empty() || !fs_has_shared_blocks(dev.c_str())) {
             continue;
         }
-        if (can_unshare_blocks(fd, dev.c_str())) {
+        if (can_unshare_blocks(fd.get(), dev.c_str())) {
             dedup.emplace(partition);
         }
     }
@@ -257,12 +255,12 @@ void remount_service(int fd, void* cookie) {
     if (user_requested_reboot) {
         if (!dedup.empty() || verity_enabled) {
             if (verity_enabled) {
-                set_verity_enabled_state_service(fd, nullptr);
+                set_verity_enabled_state_service(android::base::unique_fd(dup(fd.get())), false);
             }
-            reboot_for_remount(fd, !dedup.empty());
+            reboot_for_remount(fd.get(), !dedup.empty());
             return;
         }
-        WriteFdExactly(fd, "No reboot needed, skipping -R.\n");
+        WriteFdExactly(fd.get(), "No reboot needed, skipping -R.\n");
     }
 
     // If we need to disable-verity, but we also need to perform a recovery
@@ -271,17 +269,14 @@ void remount_service(int fd, void* cookie) {
     if (verity_enabled && dedup.empty()) {
         // Allow remount but warn of likely bad effects
         bool both = system_verified && vendor_verified;
-        WriteFdFmt(fd,
-                   "dm_verity is enabled on the %s%s%s partition%s.\n",
-                   system_verified ? "system" : "",
-                   both ? " and " : "",
-                   vendor_verified ? "vendor" : "",
-                   both ? "s" : "");
-        WriteFdExactly(fd,
+        WriteFdFmt(fd.get(), "dm_verity is enabled on the %s%s%s partition%s.\n",
+                   system_verified ? "system" : "", both ? " and " : "",
+                   vendor_verified ? "vendor" : "", both ? "s" : "");
+        WriteFdExactly(fd.get(),
                        "Use \"adb disable-verity\" to disable verity.\n"
                        "If you do not, remount may succeed, however, you will still "
                        "not be able to write to these volumes.\n");
-        WriteFdExactly(fd,
+        WriteFdExactly(fd.get(),
                        "Alternately, use \"adb remount -R\" to disable verity "
                        "and automatically reboot.\n");
     }
@@ -292,29 +287,29 @@ void remount_service(int fd, void* cookie) {
         if (dedup.count(partition)) {
             continue;
         }
-        success &= remount_partition(fd, partition.c_str());
+        success &= remount_partition(fd.get(), partition.c_str());
     }
 
     if (!dedup.empty()) {
-        WriteFdExactly(fd,
+        WriteFdExactly(fd.get(),
                        "The following partitions are deduplicated and cannot "
                        "yet be remounted:\n");
         for (const std::string& name : dedup) {
-            WriteFdFmt(fd, "  %s\n", name.c_str());
+            WriteFdFmt(fd.get(), "  %s\n", name.c_str());
         }
 
-        WriteFdExactly(fd,
+        WriteFdExactly(fd.get(),
                        "To reboot and un-deduplicate the listed partitions, "
                        "please retry with adb remount -R.\n");
         if (system_verified || vendor_verified) {
-            WriteFdExactly(fd, "Note: verity will be automatically disabled after reboot.\n");
+            WriteFdExactly(fd.get(), "Note: verity will be automatically disabled after reboot.\n");
         }
         return;
     }
 
     if (!success) {
-        WriteFdExactly(fd, "remount failed\n");
+        WriteFdExactly(fd.get(), "remount failed\n");
     } else {
-        WriteFdExactly(fd, "remount succeeded\n");
+        WriteFdExactly(fd.get(), "remount succeeded\n");
     }
 }
