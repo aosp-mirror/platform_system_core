@@ -59,7 +59,16 @@
 #include "protocol.h"
 
 using android::base::Pipe;
-using android::base::unique_fd;
+
+// We muck with our fds in a 'thread' that doesn't share the same fd table.
+// Close fds in that thread with a raw close syscall instead of going through libc.
+struct FdsanBypassCloser {
+  static void Close(int fd) {
+    syscall(__NR_close, fd);
+  }
+};
+
+using unique_fd = android::base::unique_fd_impl<FdsanBypassCloser>;
 
 // see man(2) prctl, specifically the section about PR_GET_NAME
 #define MAX_TASK_NAME_LEN (16)
@@ -299,7 +308,8 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   debugger_thread_info* thread_info = static_cast<debugger_thread_info*>(arg);
 
   for (int i = 0; i < 1024; ++i) {
-    close(i);
+    // Don't use close to avoid bionic's file descriptor ownership checks.
+    syscall(__NR_close, i);
   }
 
   int devnull = TEMP_FAILURE_RETRY(open("/dev/null", O_RDWR));
