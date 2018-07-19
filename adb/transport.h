@@ -238,11 +238,11 @@ class atransport {
     TransportType type = kTransportAny;
 
     // Used to identify transports for clients.
-    char* serial = nullptr;
-    char* product = nullptr;
-    char* model = nullptr;
-    char* device = nullptr;
-    char* devpath = nullptr;
+    std::string serial;
+    std::string product;
+    std::string model;
+    std::string device;
+    std::string devpath;
 
     bool IsTcpDevice() const { return type == kTransportLocal; }
 
@@ -253,7 +253,7 @@ class atransport {
     char token[TOKEN_SIZE] = {};
     size_t failed_auth_attempts = 0;
 
-    std::string serial_name() const { return serial ? serial : "<unknown>"; }
+    std::string serial_name() const { return !serial.empty() ? serial : "<unknown>"; }
     std::string connection_state_name() const;
 
     void update_version(int version, size_t payload);
