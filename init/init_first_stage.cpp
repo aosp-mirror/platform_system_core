@@ -456,12 +456,19 @@ FirstStageMountVBootV2::FirstStageMountVBootV2() : avb_handle_(nullptr) {
 bool FirstStageMountVBootV2::GetDmVerityDevices() {
     need_dm_verity_ = false;
 
+    std::set<std::string> logical_partitions;
+
     // fstab_rec->blk_device has A/B suffix.
     for (auto fstab_rec : mount_fstab_recs_) {
         if (fs_mgr_is_avb(fstab_rec)) {
             need_dm_verity_ = true;
         }
-        required_devices_partition_names_.emplace(basename(fstab_rec->blk_device));
+        if (fs_mgr_is_logical(fstab_rec)) {
+            // Don't try to find logical partitions via uevent regeneration.
+            logical_partitions.emplace(basename(fstab_rec->blk_device));
+        } else {
+            required_devices_partition_names_.emplace(basename(fstab_rec->blk_device));
+        }
     }
 
     // libavb verifies AVB metadata on all verified partitions at once.
@@ -476,11 +483,15 @@ bool FirstStageMountVBootV2::GetDmVerityDevices() {
         std::vector<std::string> partitions = android::base::Split(device_tree_vbmeta_parts_, ",");
         std::string ab_suffix = fs_mgr_get_slot_suffix();
         for (const auto& partition : partitions) {
+            std::string partition_name = partition + ab_suffix;
+            if (logical_partitions.count(partition_name)) {
+                continue;
+            }
             // required_devices_partition_names_ is of type std::set so it's not an issue
             // to emplace a partition twice. e.g., /vendor might be in both places:
             //   - device_tree_vbmeta_parts_ = "vbmeta,boot,system,vendor"
             //   - mount_fstab_recs_: /vendor_a
-            required_devices_partition_names_.emplace(partition + ab_suffix);
+            required_devices_partition_names_.emplace(partition_name);
         }
     }
     return true;
