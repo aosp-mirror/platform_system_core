@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/statvfs.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
@@ -145,6 +146,17 @@ static bool can_unshare_blocks(int fd, const char* dev) {
     return true;
 }
 
+static unsigned long get_mount_flags(int fd, const char* dir) {
+    struct statvfs st_vfs;
+    if (statvfs(dir, &st_vfs) == -1) {
+        // Even though we could not get the original mount flags, assume that
+        // the mount was originally read-only.
+        WriteFdFmt(fd, "statvfs of the %s mount failed: %s.\n", dir, strerror(errno));
+        return MS_RDONLY;
+    }
+    return st_vfs.f_flag;
+}
+
 static bool remount_partition(int fd, const char* dir) {
     if (!directory_exists(dir)) {
         return true;
@@ -163,14 +175,23 @@ static bool remount_partition(int fd, const char* dir) {
                    dir, dev.c_str(), strerror(errno));
         return false;
     }
-    if (mount(dev.c_str(), dir, "none", MS_REMOUNT | MS_BIND, nullptr) == -1) {
+
+    unsigned long remount_flags = get_mount_flags(fd, dir);
+    if ((remount_flags & MS_RDONLY) == 0) {
+        // Mount is already writable.
+        return true;
+    }
+    remount_flags &= ~MS_RDONLY;
+    remount_flags |= MS_REMOUNT;
+
+    if (mount(dev.c_str(), dir, "none", remount_flags | MS_BIND, nullptr) == -1) {
         // This is useful for cases where the superblock is already marked as
         // read-write, but the mount itself is read-only, such as containers
         // where the remount with just MS_REMOUNT is forbidden by the kernel.
         WriteFdFmt(fd, "remount of the %s mount failed: %s.\n", dir, strerror(errno));
         return false;
     }
-    if (mount(dev.c_str(), dir, "none", MS_REMOUNT, nullptr) == -1) {
+    if (mount(dev.c_str(), dir, "none", remount_flags, nullptr) == -1) {
         WriteFdFmt(fd, "remount of the %s superblock failed: %s\n", dir, strerror(errno));
         return false;
     }
