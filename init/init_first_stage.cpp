@@ -40,7 +40,6 @@
 #include "util.h"
 
 using android::base::Timer;
-using android::fs_mgr::LogicalPartitionTable;
 
 namespace android {
 namespace init {
@@ -75,7 +74,6 @@ class FirstStageMount {
     bool need_dm_verity_;
 
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
-    std::unique_ptr<LogicalPartitionTable> dm_linear_table_;
     std::string lp_metadata_partition_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
@@ -150,10 +148,6 @@ FirstStageMount::FirstStageMount()
         LOG(INFO) << "Failed to read fstab from device tree";
     }
 
-    if (IsDmLinearEnabled()) {
-        dm_linear_table_ = android::fs_mgr::LoadPartitionsFromDeviceTree();
-    }
-
     auto boot_devices = fs_mgr_get_boot_devices();
     device_handler_ =
         std::make_unique<DeviceHandler>(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
@@ -195,15 +189,6 @@ bool FirstStageMount::GetBackingDmLinearDevices() {
     }
 
     required_devices_partition_names_.emplace(LP_METADATA_PARTITION_NAME);
-
-    if (dm_linear_table_) {
-        for (const auto& partition : dm_linear_table_->partitions) {
-            for (const auto& extent : partition.extents) {
-                const std::string& partition_name = android::base::Basename(extent.block_device());
-                required_devices_partition_names_.emplace(partition_name);
-            }
-        }
-    }
     return true;
 }
 
@@ -271,11 +256,6 @@ bool FirstStageMount::CreateLogicalPartitions() {
         LOG(ERROR) << "Could not locate logical partition tables in partition "
                    << LP_METADATA_PARTITION_NAME;
         return false;
-    }
-    if (dm_linear_table_) {
-        if (!android::fs_mgr::CreateLogicalPartitions(*dm_linear_table_.get())) {
-            return false;
-        }
     }
     return android::fs_mgr::CreateLogicalPartitions(lp_metadata_partition_);
 }
