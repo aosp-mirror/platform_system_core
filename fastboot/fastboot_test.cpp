@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "fastboot.h"
+#include "engine.h"
 
 #include <gtest/gtest.h>
 
 TEST(FastBoot, ParseOsPatchLevel) {
-    FastBoot fb;
+    FastBootTool fb;
     boot_img_hdr_v1 hdr;
 
     hdr = {};
@@ -34,7 +34,7 @@ TEST(FastBoot, ParseOsPatchLevel) {
 }
 
 TEST(FastBoot, ParseOsVersion) {
-    FastBoot fb;
+    FastBootTool fb;
     boot_img_hdr_v1 hdr;
 
     hdr = {};

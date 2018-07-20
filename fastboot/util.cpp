@@ -33,7 +33,7 @@
 
 #include <sys/time.h>
 
-#include "fastboot.h"
+#include "util.h"
 
 static bool g_verbose = false;
 
