@@ -33,13 +33,14 @@
 #include <keymaster/authorization_set.h>
 #include <log/log.h>
 
-#include "keymaster_ipc.h"
-#include "trusty_keymaster_device.h"
-#include "trusty_keymaster_ipc.h"
+#include <trusty_keymaster/ipc/keymaster_ipc.h>
+#include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
+#include <trusty_keymaster/legacy/trusty_keymaster_device.h>
 
 // Maximum size of message from Trusty is 8K (for RSA attestation key and chain)
 const uint32_t RECV_BUF_SIZE = 2 * PAGE_SIZE;
-const uint32_t SEND_BUF_SIZE = (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
+const uint32_t SEND_BUF_SIZE =
+        (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
 
 const size_t kMaximumAttestationChallengeLength = 128;
 const size_t kMaximumFinishInputLength = 2048;
@@ -208,8 +209,8 @@ keymaster_error_t TrustyKeymasterDevice::add_rng_entropy(const uint8_t* data, si
 }
 
 keymaster_error_t TrustyKeymasterDevice::generate_key(
-    const keymaster_key_param_set_t* params, keymaster_key_blob_t* key_blob,
-    keymaster_key_characteristics_t* characteristics) {
+        const keymaster_key_param_set_t* params, keymaster_key_blob_t* key_blob,
+        keymaster_key_characteristics_t* characteristics) {
     ALOGD("Device received generate_key");
 
     if (error_ != KM_ERROR_OK) {
@@ -234,7 +235,7 @@ keymaster_error_t TrustyKeymasterDevice::generate_key(
 
     key_blob->key_material_size = response.key_blob.key_material_size;
     key_blob->key_material =
-        DuplicateBuffer(response.key_blob.key_material, response.key_blob.key_material_size);
+            DuplicateBuffer(response.key_blob.key_material, response.key_blob.key_material_size);
     if (!key_blob->key_material) {
         return KM_ERROR_MEMORY_ALLOCATION_FAILED;
     }
@@ -248,8 +249,8 @@ keymaster_error_t TrustyKeymasterDevice::generate_key(
 }
 
 keymaster_error_t TrustyKeymasterDevice::get_key_characteristics(
-    const keymaster_key_blob_t* key_blob, const keymaster_blob_t* client_id,
-    const keymaster_blob_t* app_data, keymaster_key_characteristics_t* characteristics) {
+        const keymaster_key_blob_t* key_blob, const keymaster_blob_t* client_id,
+        const keymaster_blob_t* app_data, keymaster_key_characteristics_t* characteristics) {
     ALOGD("Device received get_key_characteristics");
 
     if (error_ != KM_ERROR_OK) {
@@ -279,9 +280,9 @@ keymaster_error_t TrustyKeymasterDevice::get_key_characteristics(
 }
 
 keymaster_error_t TrustyKeymasterDevice::import_key(
-    const keymaster_key_param_set_t* params, keymaster_key_format_t key_format,
-    const keymaster_blob_t* key_data, keymaster_key_blob_t* key_blob,
-    keymaster_key_characteristics_t* characteristics) {
+        const keymaster_key_param_set_t* params, keymaster_key_format_t key_format,
+        const keymaster_blob_t* key_data, keymaster_key_blob_t* key_blob,
+        keymaster_key_characteristics_t* characteristics) {
     ALOGD("Device received import_key");
 
     if (error_ != KM_ERROR_OK) {
@@ -309,7 +310,7 @@ keymaster_error_t TrustyKeymasterDevice::import_key(
 
     key_blob->key_material_size = response.key_blob.key_material_size;
     key_blob->key_material =
-        DuplicateBuffer(response.key_blob.key_material, response.key_blob.key_material_size);
+            DuplicateBuffer(response.key_blob.key_material, response.key_blob.key_material_size);
     if (!key_blob->key_material) {
         return KM_ERROR_MEMORY_ALLOCATION_FAILED;
     }
@@ -401,7 +402,7 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster_key_blob_t* 
     // Allocate and clear storage for cert_chain.
     keymaster_cert_chain_t& rsp_chain = response.certificate_chain;
     cert_chain->entries = reinterpret_cast<keymaster_blob_t*>(
-        malloc(rsp_chain.entry_count * sizeof(*cert_chain->entries)));
+            malloc(rsp_chain.entry_count * sizeof(*cert_chain->entries)));
     if (!cert_chain->entries) {
         return KM_ERROR_MEMORY_ALLOCATION_FAILED;
     }
@@ -425,9 +426,9 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster_key_blob_t* 
     return KM_ERROR_OK;
 }
 
-keymaster_error_t TrustyKeymasterDevice::upgrade_key(const keymaster_key_blob_t* key_to_upgrade,
-                                                     const keymaster_key_param_set_t* upgrade_params,
-                                                     keymaster_key_blob_t* upgraded_key) {
+keymaster_error_t TrustyKeymasterDevice::upgrade_key(
+        const keymaster_key_blob_t* key_to_upgrade, const keymaster_key_param_set_t* upgrade_params,
+        keymaster_key_blob_t* upgraded_key) {
     ALOGD("Device received upgrade_key");
 
     if (error_ != KM_ERROR_OK) {
@@ -669,25 +670,25 @@ keymaster_error_t TrustyKeymasterDevice::add_rng_entropy(const keymaster2_device
 
 /* static */
 keymaster_error_t TrustyKeymasterDevice::generate_key(
-    const keymaster2_device_t* dev, const keymaster_key_param_set_t* params,
-    keymaster_key_blob_t* key_blob, keymaster_key_characteristics_t* characteristics) {
+        const keymaster2_device_t* dev, const keymaster_key_param_set_t* params,
+        keymaster_key_blob_t* key_blob, keymaster_key_characteristics_t* characteristics) {
     return convert_device(dev)->generate_key(params, key_blob, characteristics);
 }
 
 /* static */
 keymaster_error_t TrustyKeymasterDevice::get_key_characteristics(
-    const keymaster2_device_t* dev, const keymaster_key_blob_t* key_blob,
-    const keymaster_blob_t* client_id, const keymaster_blob_t* app_data,
-    keymaster_key_characteristics_t* characteristics) {
+        const keymaster2_device_t* dev, const keymaster_key_blob_t* key_blob,
+        const keymaster_blob_t* client_id, const keymaster_blob_t* app_data,
+        keymaster_key_characteristics_t* characteristics) {
     return convert_device(dev)->get_key_characteristics(key_blob, client_id, app_data,
                                                         characteristics);
 }
 
 /* static */
 keymaster_error_t TrustyKeymasterDevice::import_key(
-    const keymaster2_device_t* dev, const keymaster_key_param_set_t* params,
-    keymaster_key_format_t key_format, const keymaster_blob_t* key_data,
-    keymaster_key_blob_t* key_blob, keymaster_key_characteristics_t* characteristics) {
+        const keymaster2_device_t* dev, const keymaster_key_param_set_t* params,
+        keymaster_key_format_t key_format, const keymaster_blob_t* key_data,
+        keymaster_key_blob_t* key_blob, keymaster_key_characteristics_t* characteristics) {
     return convert_device(dev)->import_key(params, key_format, key_data, key_blob, characteristics);
 }
 
@@ -711,10 +712,9 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster2_device_t* d
 }
 
 /* static */
-keymaster_error_t TrustyKeymasterDevice::upgrade_key(const keymaster2_device_t* dev,
-                                                     const keymaster_key_blob_t* key_to_upgrade,
-                                                     const keymaster_key_param_set_t* upgrade_params,
-                                                     keymaster_key_blob_t* upgraded_key) {
+keymaster_error_t TrustyKeymasterDevice::upgrade_key(
+        const keymaster2_device_t* dev, const keymaster_key_blob_t* key_to_upgrade,
+        const keymaster_key_param_set_t* upgrade_params, keymaster_key_blob_t* upgraded_key) {
     return convert_device(dev)->upgrade_key(key_to_upgrade, upgrade_params, upgraded_key);
 }
 
@@ -730,9 +730,9 @@ keymaster_error_t TrustyKeymasterDevice::begin(const keymaster2_device_t* dev,
 
 /* static */
 keymaster_error_t TrustyKeymasterDevice::update(
-    const keymaster2_device_t* dev, keymaster_operation_handle_t operation_handle,
-    const keymaster_key_param_set_t* in_params, const keymaster_blob_t* input,
-    size_t* input_consumed, keymaster_key_param_set_t* out_params, keymaster_blob_t* output) {
+        const keymaster2_device_t* dev, keymaster_operation_handle_t operation_handle,
+        const keymaster_key_param_set_t* in_params, const keymaster_blob_t* input,
+        size_t* input_consumed, keymaster_key_param_set_t* out_params, keymaster_blob_t* output) {
     return convert_device(dev)->update(operation_handle, in_params, input, input_consumed,
                                        out_params, output);
 }

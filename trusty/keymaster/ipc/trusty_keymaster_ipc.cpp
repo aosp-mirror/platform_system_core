@@ -29,8 +29,8 @@
 #include <log/log.h>
 #include <trusty/tipc.h>
 
-#include "keymaster_ipc.h"
-#include "trusty_keymaster_ipc.h"
+#include <trusty_keymaster/ipc/keymaster_ipc.h>
+#include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 
 #define TRUSTY_DEVICE_NAME "/dev/trusty-ipc-dev0"
 
@@ -76,9 +76,9 @@ int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out
     struct keymaster_message header;
     iov[0] = {.iov_base = &header, .iov_len = sizeof(struct keymaster_message)};
     while (true) {
-        iov[1] = {
-            .iov_base = out + *out_size,
-            .iov_len = std::min<uint32_t>(KEYMASTER_MAX_BUFFER_LENGTH, out_max_size - *out_size)};
+        iov[1] = {.iov_base = out + *out_size,
+                  .iov_len = std::min<uint32_t>(KEYMASTER_MAX_BUFFER_LENGTH,
+                                                out_max_size - *out_size)};
         rc = readv(handle_, iov, 2);
         if (rc < 0) {
             ALOGE("failed to retrieve response for cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT,

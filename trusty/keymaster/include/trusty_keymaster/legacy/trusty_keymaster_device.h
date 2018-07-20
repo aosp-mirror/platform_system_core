@@ -36,7 +36,8 @@ class TrustyKeymasterDevice {
      * These are the only symbols that will be exported by libtrustykeymaster.  All functionality
      * can be reached via the function pointers in device_.
      */
-    __attribute__((visibility("default"))) explicit TrustyKeymasterDevice(const hw_module_t* module);
+    __attribute__((visibility("default"))) explicit TrustyKeymasterDevice(
+            const hw_module_t* module);
     __attribute__((visibility("default"))) hw_device_t* hw_device();
 
     ~TrustyKeymasterDevice();
@@ -134,12 +135,15 @@ class TrustyKeymasterDevice {
                                     keymaster_operation_handle_t operation_handle,
                                     const keymaster_key_param_set_t* in_params,
                                     const keymaster_blob_t* input, size_t* input_consumed,
-                                    keymaster_key_param_set_t* out_params, keymaster_blob_t* output);
+                                    keymaster_key_param_set_t* out_params,
+                                    keymaster_blob_t* output);
     static keymaster_error_t finish(const keymaster2_device_t* dev,
                                     keymaster_operation_handle_t operation_handle,
                                     const keymaster_key_param_set_t* in_params,
-                                    const keymaster_blob_t* input, const keymaster_blob_t* signature,
-                                    keymaster_key_param_set_t* out_params, keymaster_blob_t* output);
+                                    const keymaster_blob_t* input,
+                                    const keymaster_blob_t* signature,
+                                    keymaster_key_param_set_t* out_params,
+                                    keymaster_blob_t* output);
     static keymaster_error_t abort(const keymaster2_device_t* dev,
                                    keymaster_operation_handle_t operation_handle);
 

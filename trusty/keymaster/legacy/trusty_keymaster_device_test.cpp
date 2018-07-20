@@ -28,9 +28,9 @@
 #include <keymaster/keymaster_tags.h>
 #include <keymaster/soft_keymaster_context.h>
 
+#include <trusty_keymaster/legacy/trusty_keymaster_device.h>
 #include "android_keymaster_test_utils.h"
 #include "openssl_utils.h"
-#include "trusty_keymaster_device.h"
 
 using std::ifstream;
 using std::istreambuf_iterator;
