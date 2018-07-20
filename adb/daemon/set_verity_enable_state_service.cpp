@@ -16,6 +16,7 @@
 
 #define TRACE_TAG ADB
 
+#include "set_verity_enable_state_service.h"
 #include "sysdeps.h"
 
 #include <fcntl.h>
@@ -25,8 +26,8 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-#include "android-base/properties.h"
-#include "android-base/stringprintf.h"
+#include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <log/log_properties.h>
 
 #include "adb.h"
@@ -131,11 +132,8 @@ static bool set_avb_verity_enabled_state(int fd, AvbOps* ops, bool enable_verity
     return true;
 }
 
-void set_verity_enabled_state_service(int fd, void* cookie) {
-    unique_fd closer(fd);
+void set_verity_enabled_state_service(android::base::unique_fd fd, bool enable) {
     bool any_changed = false;
-
-    bool enable = (cookie != nullptr);
 
     // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
     // contract, androidboot.vbmeta.digest is set by the bootloader
@@ -147,12 +145,12 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
     // VB1.0 dm-verity is only enabled on certain builds.
     if (!using_avb) {
         if (!kAllowDisableVerity) {
-            WriteFdFmt(fd, "%s-verity only works for userdebug builds\n",
+            WriteFdFmt(fd.get(), "%s-verity only works for userdebug builds\n",
                        enable ? "enable" : "disable");
         }
 
         if (!android::base::GetBoolProperty("ro.secure", false)) {
-            WriteFdFmt(fd, "verity not enabled - ENG build\n");
+            WriteFdFmt(fd.get(), "verity not enabled - ENG build\n");
             return;
         }
     }
@@ -160,7 +158,7 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
     // Should never be possible to disable dm-verity on a USER build
     // regardless of using AVB or VB1.0.
     if (!__android_log_is_debuggable()) {
-        WriteFdFmt(fd, "verity cannot be disabled/enabled - USER build\n");
+        WriteFdFmt(fd.get(), "verity cannot be disabled/enabled - USER build\n");
         return;
     }
 
@@ -168,10 +166,10 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
         // Yep, the system is using AVB.
         AvbOps* ops = avb_ops_user_new();
         if (ops == nullptr) {
-            WriteFdFmt(fd, "Error getting AVB ops\n");
+            WriteFdFmt(fd.get(), "Error getting AVB ops\n");
             return;
         }
-        if (set_avb_verity_enabled_state(fd, ops, enable)) {
+        if (set_avb_verity_enabled_state(fd.get(), ops, enable)) {
             any_changed = true;
         }
         avb_ops_user_free(ops);
@@ -181,14 +179,14 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
         // read all fstab entries at once from all sources
         fstab = fs_mgr_read_fstab_default();
         if (!fstab) {
-            WriteFdFmt(fd, "Failed to read fstab\nMaybe run adb root?\n");
+            WriteFdFmt(fd.get(), "Failed to read fstab\nMaybe run adb root?\n");
             return;
         }
 
         // Loop through entries looking for ones that vold manages.
         for (int i = 0; i < fstab->num_entries; i++) {
             if (fs_mgr_is_verified(&fstab->recs[i])) {
-                if (set_verity_enabled_state(fd, fstab->recs[i].blk_device,
+                if (set_verity_enabled_state(fd.get(), fstab->recs[i].blk_device,
                                              fstab->recs[i].mount_point, enable)) {
                     any_changed = true;
                 }
@@ -197,6 +195,6 @@ void set_verity_enabled_state_service(int fd, void* cookie) {
     }
 
     if (any_changed) {
-        WriteFdFmt(fd, "Now reboot your device for settings to take effect\n");
+        WriteFdFmt(fd.get(), "Now reboot your device for settings to take effect\n");
     }
 }
