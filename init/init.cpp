@@ -48,8 +48,8 @@
 
 #include "action_parser.h"
 #include "epoll.h"
+#include "first_stage_mount.h"
 #include "import_parser.h"
-#include "init_first_stage.h"
 #include "keychords.h"
 #include "log.h"
 #include "property_service.h"
