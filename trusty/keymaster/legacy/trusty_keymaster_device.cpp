@@ -37,46 +37,10 @@
 #include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 #include <trusty_keymaster/legacy/trusty_keymaster_device.h>
 
-// Maximum size of message from Trusty is 8K (for RSA attestation key and chain)
-const uint32_t RECV_BUF_SIZE = 2 * PAGE_SIZE;
-const uint32_t SEND_BUF_SIZE =
-        (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
-
 const size_t kMaximumAttestationChallengeLength = 128;
 const size_t kMaximumFinishInputLength = 2048;
 
 namespace keymaster {
-
-static keymaster_error_t translate_error(int err) {
-    switch (err) {
-        case 0:
-            return KM_ERROR_OK;
-        case -EPERM:
-        case -EACCES:
-            return KM_ERROR_SECURE_HW_ACCESS_DENIED;
-
-        case -ECANCELED:
-            return KM_ERROR_OPERATION_CANCELLED;
-
-        case -ENODEV:
-            return KM_ERROR_UNIMPLEMENTED;
-
-        case -ENOMEM:
-            return KM_ERROR_MEMORY_ALLOCATION_FAILED;
-
-        case -EBUSY:
-            return KM_ERROR_SECURE_HW_BUSY;
-
-        case -EIO:
-            return KM_ERROR_SECURE_HW_COMMUNICATION_FAILED;
-
-        case -EOVERFLOW:
-            return KM_ERROR_INVALID_INPUT_LENGTH;
-
-        default:
-            return KM_ERROR_UNKNOWN_ERROR;
-    }
-}
 
 TrustyKeymasterDevice::TrustyKeymasterDevice(const hw_module_t* module) {
     static_assert(std::is_standard_layout<TrustyKeymasterDevice>::value,
@@ -122,7 +86,7 @@ TrustyKeymasterDevice::TrustyKeymasterDevice(const hw_module_t* module) {
 
     GetVersionRequest version_request;
     GetVersionResponse version_response;
-    error_ = Send(KM_GET_VERSION, version_request, &version_response);
+    error_ = trusty_keymaster_send(KM_GET_VERSION, version_request, &version_response);
     if (error_ == KM_ERROR_INVALID_ARGUMENT || error_ == KM_ERROR_UNIMPLEMENTED) {
         ALOGE("\"Bad parameters\" error on GetVersion call.  Version 0 is not supported.");
         error_ = KM_ERROR_VERSION_MISMATCH;
@@ -187,7 +151,7 @@ keymaster_error_t TrustyKeymasterDevice::configure(const keymaster_key_param_set
     }
 
     ConfigureResponse response(message_version_);
-    keymaster_error_t err = Send(KM_CONFIGURE, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_CONFIGURE, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -205,7 +169,7 @@ keymaster_error_t TrustyKeymasterDevice::add_rng_entropy(const uint8_t* data, si
     AddEntropyRequest request(message_version_);
     request.random_data.Reinitialize(data, data_length);
     AddEntropyResponse response(message_version_);
-    return Send(KM_ADD_RNG_ENTROPY, request, &response);
+    return trusty_keymaster_send(KM_ADD_RNG_ENTROPY, request, &response);
 }
 
 keymaster_error_t TrustyKeymasterDevice::generate_key(
@@ -228,7 +192,7 @@ keymaster_error_t TrustyKeymasterDevice::generate_key(
     request.key_description.push_back(TAG_CREATION_DATETIME, java_time(time(NULL)));
 
     GenerateKeyResponse response(message_version_);
-    keymaster_error_t err = Send(KM_GENERATE_KEY, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_GENERATE_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -268,7 +232,7 @@ keymaster_error_t TrustyKeymasterDevice::get_key_characteristics(
     AddClientAndAppData(client_id, app_data, &request);
 
     GetKeyCharacteristicsResponse response(message_version_);
-    keymaster_error_t err = Send(KM_GET_KEY_CHARACTERISTICS, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_GET_KEY_CHARACTERISTICS, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -303,7 +267,7 @@ keymaster_error_t TrustyKeymasterDevice::import_key(
     request.SetKeyMaterial(key_data->data, key_data->data_length);
 
     ImportKeyResponse response(message_version_);
-    keymaster_error_t err = Send(KM_IMPORT_KEY, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_IMPORT_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -349,7 +313,7 @@ keymaster_error_t TrustyKeymasterDevice::export_key(keymaster_key_format_t expor
     AddClientAndAppData(client_id, app_data, &request);
 
     ExportKeyResponse response(message_version_);
-    keymaster_error_t err = Send(KM_EXPORT_KEY, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_EXPORT_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -394,7 +358,7 @@ keymaster_error_t TrustyKeymasterDevice::attest_key(const keymaster_key_blob_t* 
     }
 
     AttestKeyResponse response(message_version_);
-    keymaster_error_t err = Send(KM_ATTEST_KEY, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_ATTEST_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -446,7 +410,7 @@ keymaster_error_t TrustyKeymasterDevice::upgrade_key(
     request.upgrade_params.Reinitialize(*upgrade_params);
 
     UpgradeKeyResponse response(message_version_);
-    keymaster_error_t err = Send(KM_UPGRADE_KEY, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_UPGRADE_KEY, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -488,7 +452,7 @@ keymaster_error_t TrustyKeymasterDevice::begin(keymaster_purpose_t purpose,
     request.additional_params.Reinitialize(*in_params);
 
     BeginOperationResponse response(message_version_);
-    keymaster_error_t err = Send(KM_BEGIN_OPERATION, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_BEGIN_OPERATION, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -536,12 +500,12 @@ keymaster_error_t TrustyKeymasterDevice::update(keymaster_operation_handle_t ope
         request.additional_params.Reinitialize(*in_params);
     }
     if (input && input->data_length > 0) {
-        size_t max_input_size = SEND_BUF_SIZE - request.SerializedSize();
+        size_t max_input_size = TRUSTY_KEYMASTER_SEND_BUF_SIZE - request.SerializedSize();
         request.input.Reinitialize(input->data, std::min(input->data_length, max_input_size));
     }
 
     UpdateOperationResponse response(message_version_);
-    keymaster_error_t err = Send(KM_UPDATE_OPERATION, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_UPDATE_OPERATION, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -604,7 +568,7 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
     }
 
     FinishOperationResponse response(message_version_);
-    keymaster_error_t err = Send(KM_FINISH_OPERATION, request, &response);
+    keymaster_error_t err = trusty_keymaster_send(KM_FINISH_OPERATION, request, &response);
     if (err != KM_ERROR_OK) {
         return err;
     }
@@ -639,7 +603,7 @@ keymaster_error_t TrustyKeymasterDevice::abort(keymaster_operation_handle_t oper
     AbortOperationRequest request(message_version_);
     request.op_handle = operation_handle;
     AbortOperationResponse response(message_version_);
-    return Send(KM_ABORT_OPERATION, request, &response);
+    return trusty_keymaster_send(KM_ABORT_OPERATION, request, &response);
 }
 
 hw_device_t* TrustyKeymasterDevice::hw_device() {
@@ -753,44 +717,6 @@ keymaster_error_t TrustyKeymasterDevice::finish(const keymaster2_device_t* dev,
 keymaster_error_t TrustyKeymasterDevice::abort(const keymaster2_device_t* dev,
                                                keymaster_operation_handle_t operation_handle) {
     return convert_device(dev)->abort(operation_handle);
-}
-
-keymaster_error_t TrustyKeymasterDevice::Send(uint32_t command, const Serializable& req,
-                                              KeymasterResponse* rsp) {
-    uint32_t req_size = req.SerializedSize();
-    if (req_size > SEND_BUF_SIZE) {
-        return KM_ERROR_MEMORY_ALLOCATION_FAILED;
-    }
-    uint8_t send_buf[SEND_BUF_SIZE];
-    Eraser send_buf_eraser(send_buf, SEND_BUF_SIZE);
-    req.Serialize(send_buf, send_buf + req_size);
-
-    // Send it
-    uint8_t recv_buf[RECV_BUF_SIZE];
-    Eraser recv_buf_eraser(recv_buf, RECV_BUF_SIZE);
-    uint32_t rsp_size = RECV_BUF_SIZE;
-    ALOGV("Sending %d byte request\n", (int)req.SerializedSize());
-    int rc = trusty_keymaster_call(command, send_buf, req_size, recv_buf, &rsp_size);
-    if (rc < 0) {
-        // Reset the connection on tipc error
-        trusty_keymaster_disconnect();
-        trusty_keymaster_connect();
-        ALOGE("tipc error: %d\n", rc);
-        // TODO(swillden): Distinguish permanent from transient errors and set error_ appropriately.
-        return translate_error(rc);
-    } else {
-        ALOGV("Received %d byte response\n", rsp_size);
-    }
-
-    const uint8_t* p = recv_buf;
-    if (!rsp->Deserialize(&p, p + rsp_size)) {
-        ALOGE("Error deserializing response of size %d\n", (int)rsp_size);
-        return KM_ERROR_UNKNOWN_ERROR;
-    } else if (rsp->error != KM_ERROR_OK) {
-        ALOGE("Response of size %d contained error code %d\n", (int)rsp_size, (int)rsp->error);
-        return rsp->error;
-    }
-    return rsp->error;
 }
 
 }  // namespace keymaster
