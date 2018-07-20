@@ -183,6 +183,8 @@ static int usage() {
     fprintf(stderr, "  exit                  call exit(1)\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  fortify               fail a _FORTIFY_SOURCE check\n");
+    fprintf(stderr, "  fdsan_file            close a file descriptor that's owned by a FILE*\n");
+    fprintf(stderr, "  fdsan_dir             close a file descriptor that's owned by a DIR*\n");
     fprintf(stderr, "  seccomp               fail a seccomp check\n");
 #if defined(__arm__)
     fprintf(stderr, "  kuser_helper_version  call kuser_helper_version\n");
@@ -236,39 +238,45 @@ noinline int do_action(const char* arg) {
 
     // Actions.
     if (!strcasecmp(arg, "SIGSEGV-non-null")) {
-        sigsegv_non_null();
+      sigsegv_non_null();
     } else if (!strcasecmp(arg, "smash-stack")) {
-        volatile int len = 128;
-        return smash_stack(&len);
+      volatile int len = 128;
+      return smash_stack(&len);
     } else if (!strcasecmp(arg, "stack-overflow")) {
-        overflow_stack(nullptr);
+      overflow_stack(nullptr);
     } else if (!strcasecmp(arg, "nostack")) {
-        crashnostack();
+      crashnostack();
     } else if (!strcasecmp(arg, "exit")) {
-        exit(1);
+      exit(1);
     } else if (!strcasecmp(arg, "call-null")) {
       return crash_null();
     } else if (!strcasecmp(arg, "crash") || !strcmp(arg, "SIGSEGV")) {
-        return crash(42);
+      return crash(42);
     } else if (!strcasecmp(arg, "abort")) {
-        maybe_abort();
+      maybe_abort();
     } else if (!strcasecmp(arg, "assert")) {
-        __assert("some_file.c", 123, "false");
+      __assert("some_file.c", 123, "false");
     } else if (!strcasecmp(arg, "assert2")) {
-        __assert2("some_file.c", 123, "some_function", "false");
+      __assert2("some_file.c", 123, "some_function", "false");
     } else if (!strcasecmp(arg, "fortify")) {
-        char buf[10];
-        __read_chk(-1, buf, 32, 10);
-        while (true) pause();
+      char buf[10];
+      __read_chk(-1, buf, 32, 10);
+      while (true) pause();
+    } else if (!strcasecmp(arg, "fdsan_file")) {
+      FILE* f = fopen("/dev/null", "r");
+      close(fileno(f));
+    } else if (!strcasecmp(arg, "fdsan_dir")) {
+      DIR* d = opendir("/dev/");
+      close(dirfd(d));
     } else if (!strcasecmp(arg, "LOG(FATAL)")) {
-        LOG(FATAL) << "hello " << 123;
+      LOG(FATAL) << "hello " << 123;
     } else if (!strcasecmp(arg, "LOG_ALWAYS_FATAL")) {
-        LOG_ALWAYS_FATAL("hello %s", "world");
+      LOG_ALWAYS_FATAL("hello %s", "world");
     } else if (!strcasecmp(arg, "LOG_ALWAYS_FATAL_IF")) {
-        LOG_ALWAYS_FATAL_IF(true, "hello %s", "world");
+      LOG_ALWAYS_FATAL_IF(true, "hello %s", "world");
     } else if (!strcasecmp(arg, "SIGFPE")) {
-        raise(SIGFPE);
-        return EXIT_SUCCESS;
+      raise(SIGFPE);
+      return EXIT_SUCCESS;
     } else if (!strcasecmp(arg, "SIGILL")) {
 #if defined(__aarch64__)
       __asm__ volatile(".word 0\n");
@@ -280,28 +288,28 @@ noinline int do_action(const char* arg) {
 #error
 #endif
     } else if (!strcasecmp(arg, "SIGTRAP")) {
-        raise(SIGTRAP);
-        return EXIT_SUCCESS;
+      raise(SIGTRAP);
+      return EXIT_SUCCESS;
     } else if (!strcasecmp(arg, "fprintf-NULL")) {
-        fprintf_null();
+      fprintf_null();
     } else if (!strcasecmp(arg, "readdir-NULL")) {
-        readdir_null();
+      readdir_null();
     } else if (!strcasecmp(arg, "strlen-NULL")) {
-        return strlen_null();
+      return strlen_null();
     } else if (!strcasecmp(arg, "pthread_join-NULL")) {
-        return pthread_join(0, nullptr);
+      return pthread_join(0, nullptr);
     } else if (!strcasecmp(arg, "heap-usage")) {
-        abuse_heap();
+      abuse_heap();
     } else if (!strcasecmp(arg, "leak")) {
-        leak();
+      leak();
     } else if (!strcasecmp(arg, "SIGSEGV-unmapped")) {
-        char* map = reinterpret_cast<char*>(mmap(nullptr, sizeof(int), PROT_READ | PROT_WRITE,
-                                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0));
-        munmap(map, sizeof(int));
-        map[0] = '8';
+      char* map = reinterpret_cast<char*>(
+          mmap(nullptr, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
+      munmap(map, sizeof(int));
+      map[0] = '8';
     } else if (!strcasecmp(arg, "seccomp")) {
-        set_system_seccomp_filter();
-        syscall(99999);
+      set_system_seccomp_filter();
+      syscall(99999);
 #if defined(__arm__)
     } else if (!strcasecmp(arg, "kuser_helper_version")) {
         return __kuser_helper_version;

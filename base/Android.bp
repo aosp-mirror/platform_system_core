@@ -135,6 +135,7 @@ cc_test {
         "strings_test.cpp",
         "test_main.cpp",
         "test_utils_test.cpp",
+        "unique_fd_test.cpp",
     ],
     target: {
         android: {
