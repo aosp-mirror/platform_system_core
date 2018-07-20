@@ -156,11 +156,6 @@ int create_jdwp_connection_fd(int jdwp_pid);
 
 int handle_forward_request(const char* service, atransport* transport, int reply_fd);
 
-#if !ADB_HOST
-void framebuffer_service(int fd, void* cookie);
-void set_verity_enabled_state_service(int fd, void* cookie);
-#endif
-
 /* packet allocator */
 apacket* get_apacket(void);
 void put_apacket(apacket* p);

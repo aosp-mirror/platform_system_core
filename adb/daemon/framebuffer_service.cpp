@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "framebuffer_service.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
@@ -55,8 +57,7 @@ struct fbinfo {
     unsigned int alpha_length;
 } __attribute__((packed));
 
-void framebuffer_service(int fd, void *cookie)
-{
+void framebuffer_service(android::base::unique_fd fd) {
     struct fbinfo fbinfo;
     unsigned int i, bsize;
     char buf[640];
@@ -65,7 +66,7 @@ void framebuffer_service(int fd, void *cookie)
     int fds[2];
     pid_t pid;
 
-    if (pipe2(fds, O_CLOEXEC) < 0) goto pipefail;
+    if (pipe2(fds, O_CLOEXEC) < 0) return;
 
     pid = fork();
     if (pid < 0) goto done;
@@ -168,7 +169,7 @@ void framebuffer_service(int fd, void *cookie)
     }
 
     /* write header */
-    if(!WriteFdExactly(fd, &fbinfo, sizeof(fbinfo))) goto done;
+    if (!WriteFdExactly(fd.get(), &fbinfo, sizeof(fbinfo))) goto done;
 
     /* write data */
     for(i = 0; i < fbinfo.size; i += bsize) {
@@ -176,13 +177,11 @@ void framebuffer_service(int fd, void *cookie)
       if (i + bsize > fbinfo.size)
         bsize = fbinfo.size - i;
       if(!ReadFdExactly(fd_screencap, buf, bsize)) goto done;
-      if(!WriteFdExactly(fd, buf, bsize)) goto done;
+      if (!WriteFdExactly(fd.get(), buf, bsize)) goto done;
     }
 
 done:
     adb_close(fds[0]);
 
     TEMP_FAILURE_RETRY(waitpid(pid, nullptr, 0));
-pipefail:
-    adb_close(fd);
 }

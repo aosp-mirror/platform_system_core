@@ -136,9 +136,10 @@ std::string format_listeners() EXCLUDES(listener_list_mutex) {
         }
         //  <device-serial> " " <local-name> " " <remote-name> "\n"
         // Entries from "adb reverse" have no serial.
-        android::base::StringAppendF(&result, "%s %s %s\n",
-                                     l->transport->serial ? l->transport->serial : "(reverse)",
-                                     l->local_name.c_str(), l->connect_to.c_str());
+        android::base::StringAppendF(
+                &result, "%s %s %s\n",
+                !l->transport->serial.empty() ? l->transport->serial.c_str() : "(reverse)",
+                l->local_name.c_str(), l->connect_to.c_str());
     }
     return result;
 }
