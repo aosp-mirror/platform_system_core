@@ -1,0 +1,56 @@
+cc_library_host_static {
+    name: "libfastboot2",
+
+    //host_supported: true,
+
+    compile_multilib: "first",
+    srcs: [
+      "bootimg_utils.cpp",
+      "fs.cpp",
+      "socket.cpp",
+      "tcp.cpp",
+      "udp.cpp",
+      "util.cpp",
+      "fastboot_driver.cpp",
+    ],
+
+    static_libs: [
+      "libziparchive",
+      "libsparse",
+      "libutils",
+      "liblog",
+      "libz",
+      "libdiagnose_usb",
+      "libbase",
+      "libcutils",
+      "libgtest",
+      "libgtest_main",
+      "libbase",
+      "libadb_host"
+    ],
+
+    header_libs: [
+      "bootimg_headers"
+    ],
+
+    export_header_lib_headers: [
+      "bootimg_headers"
+    ],
+
+
+    target: {
+      linux: {
+        srcs: ["usb_linux.cpp"],
+      },
+    },
+
+    cflags: [
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Wunreachable-code",
+    ],
+
+    export_include_dirs: ["."],
+
+}

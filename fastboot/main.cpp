@@ -26,9 +26,9 @@
  * SUCH DAMAGE.
  */
 
-#include "fastboot.h"
+#include "engine.h"
 
 int main(int argc, char* argv[]) {
-    FastBoot fb;
+    FastBootTool fb;
     return fb.Main(argc, argv);
 }
