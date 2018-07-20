@@ -264,15 +264,6 @@ void send_connect(atransport* t) {
     send_packet(cp, t);
 }
 
-// qual_overwrite is used to overwrite a qualifier string.  dst is a
-// pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
-// was malloc'ed and needs to freed.  *dst will be set to a dup of src.
-// TODO: switch to std::string for these atransport fields instead.
-static void qual_overwrite(char** dst, const std::string& src) {
-    free(*dst);
-    *dst = strdup(src.c_str());
-}
-
 void parse_banner(const std::string& banner, atransport* t) {
     D("parse_banner: %s", banner.c_str());
 
@@ -296,11 +287,11 @@ void parse_banner(const std::string& banner, atransport* t) {
             const std::string& key = key_value[0];
             const std::string& value = key_value[1];
             if (key == "ro.product.name") {
-                qual_overwrite(&t->product, value);
+                t->product = value;
             } else if (key == "ro.product.model") {
-                qual_overwrite(&t->model, value);
+                t->model = value;
             } else if (key == "ro.product.device") {
-                qual_overwrite(&t->device, value);
+                t->device = value;
             } else if (key == "features") {
                 t->SetFeatures(value);
             }
@@ -424,8 +415,8 @@ void handle_packet(apacket *p, atransport *t)
                     /* Other READY messages must use the same local-id */
                     s->ready(s);
                 } else {
-                    D("Invalid A_OKAY(%d,%d), expected A_OKAY(%d,%d) on transport %s",
-                      p->msg.arg0, p->msg.arg1, s->peer->id, p->msg.arg1, t->serial);
+                    D("Invalid A_OKAY(%d,%d), expected A_OKAY(%d,%d) on transport %s", p->msg.arg0,
+                      p->msg.arg1, s->peer->id, p->msg.arg1, t->serial.c_str());
                 }
             } else {
                 // When receiving A_OKAY from device for A_OPEN request, the host server may
@@ -451,8 +442,8 @@ void handle_packet(apacket *p, atransport *t)
                  * socket has a peer on the same transport.
                  */
                 if (p->msg.arg0 == 0 && s->peer && s->peer->transport != t) {
-                    D("Invalid A_CLSE(0, %u) from transport %s, expected transport %s",
-                      p->msg.arg1, t->serial, s->peer->transport->serial);
+                    D("Invalid A_CLSE(0, %u) from transport %s, expected transport %s", p->msg.arg1,
+                      t->serial.c_str(), s->peer->transport->serial.c_str());
                 } else {
                     s->close(s);
                 }
@@ -1171,7 +1162,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         std::string error;
         atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
-            return SendOkay(reply_fd, t->serial ? t->serial : "unknown");
+            return SendOkay(reply_fd, !t->serial.empty() ? t->serial : "unknown");
         } else {
             return SendFail(reply_fd, error);
         }
@@ -1180,7 +1171,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         std::string error;
         atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
-            return SendOkay(reply_fd, t->devpath ? t->devpath : "unknown");
+            return SendOkay(reply_fd, !t->devpath.empty() ? t->devpath : "unknown");
         } else {
             return SendFail(reply_fd, error);
         }

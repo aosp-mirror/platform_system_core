@@ -173,18 +173,18 @@ void ReconnectHandler::Run() {
             attempt = reconnect_queue_.front();
             reconnect_queue_.pop();
             if (attempt.transport->kicked()) {
-                D("transport %s was kicked. giving up on it.", attempt.transport->serial);
+                D("transport %s was kicked. giving up on it.", attempt.transport->serial.c_str());
                 remove_transport(attempt.transport);
                 continue;
             }
         }
-        D("attempting to reconnect %s", attempt.transport->serial);
+        D("attempting to reconnect %s", attempt.transport->serial.c_str());
 
         if (!attempt.transport->Reconnect()) {
-            D("attempting to reconnect %s failed.", attempt.transport->serial);
+            D("attempting to reconnect %s failed.", attempt.transport->serial.c_str());
             if (attempt.attempts_left == 0) {
                 D("transport %s exceeded the number of retry attempts. giving up on it.",
-                  attempt.transport->serial);
+                  attempt.transport->serial.c_str());
                 remove_transport(attempt.transport);
                 continue;
             }
@@ -197,7 +197,7 @@ void ReconnectHandler::Run() {
             continue;
         }
 
-        D("reconnection to %s succeeded.", attempt.transport->serial);
+        D("reconnection to %s succeeded.", attempt.transport->serial.c_str());
         register_transport(attempt.transport);
     }
 }
@@ -402,14 +402,14 @@ void send_packet(apacket* p, atransport* t) {
         p->msg.data_check = calculate_apacket_checksum(p);
     }
 
-    VLOG(TRANSPORT) << dump_packet(t->serial, "to remote", p);
+    VLOG(TRANSPORT) << dump_packet(t->serial.c_str(), "to remote", p);
 
     if (t == nullptr) {
         fatal("Transport is null");
     }
 
     if (t->Write(p) != 0) {
-        D("%s: failed to enqueue packet, closing transport", t->serial);
+        D("%s: failed to enqueue packet, closing transport", t->serial.c_str());
         t->Kick();
     }
 }
@@ -619,18 +619,12 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
     t = m.transport;
 
     if (m.action == 0) {
-        D("transport: %s deleting", t->serial);
+        D("transport: %s deleting", t->serial.c_str());
 
         {
             std::lock_guard<std::recursive_mutex> lock(transport_lock);
             transport_list.remove(t);
         }
-
-        if (t->product) free(t->product);
-        if (t->serial) free(t->serial);
-        if (t->model) free(t->model);
-        if (t->device) free(t->device);
-        if (t->devpath) free(t->devpath);
 
         delete t;
 
@@ -646,11 +640,11 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
         t->connection()->SetTransportName(t->serial_name());
         t->connection()->SetReadCallback([t](Connection*, std::unique_ptr<apacket> p) {
             if (!check_header(p.get(), t)) {
-                D("%s: remote read: bad header", t->serial);
+                D("%s: remote read: bad header", t->serial.c_str());
                 return false;
             }
 
-            VLOG(TRANSPORT) << dump_packet(t->serial, "from remote", p.get());
+            VLOG(TRANSPORT) << dump_packet(t->serial.c_str(), "from remote", p.get());
             apacket* packet = p.release();
 
             // TODO: Does this need to run on the main thread?
@@ -658,7 +652,7 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
             return true;
         });
         t->connection()->SetErrorCallback([t](Connection*, const std::string& error) {
-            D("%s: connection terminated: %s", t->serial, error.c_str());
+            D("%s: connection terminated: %s", t->serial.c_str(), error.c_str());
             fdevent_run_on_main_thread([t]() {
                 handle_offline(t);
                 transport_unref(t);
@@ -717,7 +711,7 @@ static void register_transport(atransport* transport) {
     tmsg m;
     m.transport = transport;
     m.action = 1;
-    D("transport: %s registered", transport->serial);
+    D("transport: %s registered", transport->serial.c_str());
     if (transport_write_action(transport_registration_send, &m)) {
         fatal_errno("cannot write transport registration socket\n");
     }
@@ -727,7 +721,7 @@ static void remove_transport(atransport* transport) {
     tmsg m;
     m.transport = transport;
     m.action = 0;
-    D("transport: %s removed", transport->serial);
+    D("transport: %s removed", transport->serial.c_str());
     if (transport_write_action(transport_registration_send, &m)) {
         fatal_errno("cannot write transport registration socket\n");
     }
@@ -743,38 +737,38 @@ static void transport_unref(atransport* t) {
     if (t->ref_count == 0) {
         t->connection()->Stop();
         if (t->IsTcpDevice() && !t->kicked()) {
-            D("transport: %s unref (attempting reconnection) %d", t->serial, t->kicked());
+            D("transport: %s unref (attempting reconnection) %d", t->serial.c_str(), t->kicked());
             reconnect_handler.TrackTransport(t);
         } else {
-            D("transport: %s unref (kicking and closing)", t->serial);
+            D("transport: %s unref (kicking and closing)", t->serial.c_str());
             remove_transport(t);
         }
     } else {
-        D("transport: %s unref (count=%zu)", t->serial, t->ref_count);
+        D("transport: %s unref (count=%zu)", t->serial.c_str(), t->ref_count);
     }
 }
 
-static int qual_match(const char* to_test, const char* prefix, const char* qual,
+static int qual_match(const std::string& to_test, const char* prefix, const std::string& qual,
                       bool sanitize_qual) {
-    if (!to_test || !*to_test) /* Return true if both the qual and to_test are null strings. */
-        return !qual || !*qual;
+    if (to_test.empty()) /* Return true if both the qual and to_test are empty strings. */
+        return qual.empty();
 
-    if (!qual) return 0;
+    if (qual.empty()) return 0;
 
+    const char* ptr = to_test.c_str();
     if (prefix) {
         while (*prefix) {
-            if (*prefix++ != *to_test++) return 0;
+            if (*prefix++ != *ptr++) return 0;
         }
     }
 
-    while (*qual) {
-        char ch = *qual++;
+    for (char ch : qual) {
         if (sanitize_qual && !isalnum(ch)) ch = '_';
-        if (ch != *to_test++) return 0;
+        if (ch != *ptr++) return 0;
     }
 
-    /* Everything matched so far.  Return true if *to_test is a NUL. */
-    return !*to_test;
+    /* Everything matched so far.  Return true if *ptr is a NUL. */
+    return !*ptr;
 }
 
 atransport* acquire_one_transport(TransportType type, const char* serial, TransportId transport_id,
@@ -921,7 +915,7 @@ int atransport::Write(apacket* p) {
 
 void atransport::Kick() {
     if (!kicked_.exchange(true)) {
-        D("kicking transport %p %s", this, this->serial);
+        D("kicking transport %p %s", this, this->serial.c_str());
         this->connection()->Stop();
     }
 }
@@ -1040,7 +1034,7 @@ void atransport::RunDisconnects() {
 }
 
 bool atransport::MatchesTarget(const std::string& target) const {
-    if (serial) {
+    if (!serial.empty()) {
         if (target == serial) {
             return true;
         } else if (type == kTransportLocal) {
@@ -1069,10 +1063,9 @@ bool atransport::MatchesTarget(const std::string& target) const {
         }
     }
 
-    return (devpath && target == devpath) ||
-           qual_match(target.c_str(), "product:", product, false) ||
-           qual_match(target.c_str(), "model:", model, true) ||
-           qual_match(target.c_str(), "device:", device, false);
+    return (target == devpath) || qual_match(target, "product:", product, false) ||
+           qual_match(target, "model:", model, true) ||
+           qual_match(target, "device:", device, false);
 }
 
 void atransport::SetConnectionEstablished(bool success) {
@@ -1093,9 +1086,9 @@ static std::string sanitize(std::string str, bool alphanumeric) {
     return str;
 }
 
-static void append_transport_info(std::string* result, const char* key, const char* value,
+static void append_transport_info(std::string* result, const char* key, const std::string& value,
                                   bool alphanumeric) {
-    if (value == nullptr || *value == '\0') {
+    if (value.empty()) {
         return;
     }
 
@@ -1105,8 +1098,8 @@ static void append_transport_info(std::string* result, const char* key, const ch
 }
 
 static void append_transport(const atransport* t, std::string* result, bool long_listing) {
-    const char* serial = t->serial;
-    if (!serial || !serial[0]) {
+    std::string serial = t->serial;
+    if (serial.empty()) {
         serial = "(no serial number)";
     }
 
@@ -1115,7 +1108,8 @@ static void append_transport(const atransport* t, std::string* result, bool long
         *result += '\t';
         *result += t->connection_state_name();
     } else {
-        android::base::StringAppendF(result, "%-22s %s", serial, t->connection_state_name().c_str());
+        android::base::StringAppendF(result, "%-22s %s", serial.c_str(),
+                                     t->connection_state_name().c_str());
 
         append_transport_info(result, "", t->devpath, false);
         append_transport_info(result, "product:", t->product, false);
@@ -1138,7 +1132,7 @@ std::string list_transports(bool long_listing) {
         if (x->type != y->type) {
             return x->type < y->type;
         }
-        return strcmp(x->serial, y->serial) < 0;
+        return x->serial < y->serial;
     });
 
     std::string result;
@@ -1181,7 +1175,7 @@ int register_socket_transport(int s, const char* serial, int port, int local,
 
     std::unique_lock<std::recursive_mutex> lock(transport_lock);
     for (const auto& transport : pending_list) {
-        if (transport->serial && strcmp(serial, transport->serial) == 0) {
+        if (strcmp(serial, transport->serial.c_str()) == 0) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in pending_list and fails to register";
             delete t;
@@ -1190,7 +1184,7 @@ int register_socket_transport(int s, const char* serial, int port, int local,
     }
 
     for (const auto& transport : transport_list) {
-        if (transport->serial && strcmp(serial, transport->serial) == 0) {
+        if (strcmp(serial, transport->serial.c_str()) == 0) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in transport_list and fails to register";
             delete t;
@@ -1199,7 +1193,7 @@ int register_socket_transport(int s, const char* serial, int port, int local,
     }
 
     pending_list.push_front(t);
-    t->serial = strdup(serial);
+    t->serial = serial;
 
     lock.unlock();
 
@@ -1220,7 +1214,7 @@ atransport* find_transport(const char* serial) {
 
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto& t : transport_list) {
-        if (t->serial && strcmp(serial, t->serial) == 0) {
+        if (strcmp(serial, t->serial.c_str()) == 0) {
             result = t;
             break;
         }
@@ -1251,11 +1245,11 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
     D("transport: %p init'ing for usb_handle %p (sn='%s')", t, usb, serial ? serial : "");
     init_usb_transport(t, usb);
     if (serial) {
-        t->serial = strdup(serial);
+        t->serial = serial;
     }
 
     if (devpath) {
-        t->devpath = strdup(devpath);
+        t->devpath = devpath;
     }
 
     {
