@@ -428,6 +428,10 @@ void local_init(int port)
     std::thread(func, port).detach();
 }
 
+std::string getEmulatorSerialString(int console_port) {
+    return android::base::StringPrintf("emulator-%d", console_port);
+}
+
 #if ADB_HOST
 struct EmulatorConnection : public FdConnection {
     EmulatorConnection(unique_fd fd, int local_port)
@@ -460,10 +464,6 @@ static atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
         return nullptr;
     }
     return it->second;
-}
-
-std::string getEmulatorSerialString(int console_port) {
-    return android::base::StringPrintf("emulator-%d", console_port);
 }
 
 atransport* find_emulator_transport_by_adb_port(int adb_port) {
