@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -37,7 +38,7 @@ struct Block {
 
     template <typename Iterator>
     Block(Iterator begin, Iterator end) : Block(end - begin) {
-        std::copy(begin, end, data_);
+        std::copy(begin, end, data_.get());
     }
 
     Block(const Block& copy) = delete;
@@ -73,11 +74,11 @@ struct Block {
     void assign(InputIt begin, InputIt end) {
         clear();
         allocate(end - begin);
-        std::copy(begin, end, data_);
+        std::copy(begin, end, data_.get());
     }
 
     void clear() {
-        free(data_);
+        data_.reset();
         capacity_ = 0;
         size_ = 0;
     }
@@ -86,11 +87,11 @@ struct Block {
     size_t size() const { return size_; }
     bool empty() const { return size() == 0; }
 
-    char* data() { return data_; }
-    const char* data() const { return data_; }
+    char* data() { return data_.get(); }
+    const char* data() const { return data_.get(); }
 
-    char* begin() { return data_; }
-    const char* begin() const { return data_; }
+    char* begin() { return data_.get(); }
+    const char* begin() const { return data_.get(); }
 
     char* end() { return data() + size_; }
     const char* end() const { return data() + size_; }
@@ -108,13 +109,13 @@ struct Block {
         CHECK_EQ(0ULL, capacity_);
         CHECK_EQ(0ULL, size_);
         if (size != 0) {
-            data_ = static_cast<char*>(malloc(size));
+            data_ = std::make_unique<char[]>(size);
             capacity_ = size;
             size_ = size;
         }
     }
 
-    char* data_ = nullptr;
+    std::unique_ptr<char[]> data_;
     size_t capacity_ = 0;
     size_t size_ = 0;
 };
