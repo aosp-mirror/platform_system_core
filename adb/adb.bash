@@ -16,11 +16,11 @@
 #
 
 _adb() {
-    if ! type -t "$1" >/dev/null; then
+    if ! check_type "$1" >/dev/null; then
         return
     fi
 
-    if type -t _init_completion >/dev/null; then
+    if check_type _init_completion >/dev/null; then
         _init_completion || return
     fi
 
@@ -435,7 +435,7 @@ _adb_util_list_files() {
     fi
 
     # Since we're probably doing file completion here, don't add a space after.
-    if [[ $(type -t compopt) = "builtin" ]]; then
+    if [[ $(check_type compopt) == "builtin" ]]; then
         compopt -o nospace
     fi
 
@@ -451,7 +451,7 @@ _adb_util_complete_local_file()
     xspec=$2
 
     # Since we're probably doing file completion here, don't add a space after.
-    if [[ $(type -t compopt) = "builtin" ]]; then
+    if [[ $(check_type compopt) == "builtin" ]]; then
         compopt -o plusdirs
         if [[ "${xspec}" == "" ]]; then
             COMPREPLY=( ${COMPREPLY[@]:-} $(compgen -f -- "${cur}") )
@@ -492,7 +492,7 @@ _adb_util_complete_local_file()
 }
 
 
-if [[ $(type -t compopt) = "builtin" ]]; then
+if [[ $(check_type compopt) == "builtin" ]]; then
     complete -F _adb adb
 else
     complete -o nospace -F _adb adb
