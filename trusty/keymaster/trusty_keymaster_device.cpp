@@ -38,7 +38,7 @@
 #include "trusty_keymaster_ipc.h"
 
 // Maximum size of message from Trusty is 8K (for RSA attestation key and chain)
-const uint32_t RECV_BUF_SIZE = 2*PAGE_SIZE;
+const uint32_t RECV_BUF_SIZE = 2 * PAGE_SIZE;
 const uint32_t SEND_BUF_SIZE = (PAGE_SIZE - sizeof(struct keymaster_message) - 16 /* tipc header */);
 
 const size_t kMaximumAttestationChallengeLength = 128;
@@ -578,8 +578,8 @@ keymaster_error_t TrustyKeymasterDevice::finish(keymaster_operation_handle_t ope
         return error_;
     }
     if (input && input->data_length > kMaximumFinishInputLength) {
-        ALOGE("%zu-byte input to finish; only %zu bytes allowed",
-              input->data_length, kMaximumFinishInputLength);
+        ALOGE("%zu-byte input to finish; only %zu bytes allowed", input->data_length,
+              kMaximumFinishInputLength);
         return KM_ERROR_INVALID_INPUT_LENGTH;
     }
 
