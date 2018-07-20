@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef _REMOUNT_SERVICE_H_
-#define _REMOUNT_SERVICE_H_
-
-#include <string>
+#ifndef _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
+#define _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
 
 #include <android-base/unique_fd.h>
 
-bool make_block_device_writable(const std::string&);
-void remount_service(android::base::unique_fd, const std::string&);
+void set_verity_enabled_state_service(android::base::unique_fd fd, bool enable);
 
-#endif
+#endif  // _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
