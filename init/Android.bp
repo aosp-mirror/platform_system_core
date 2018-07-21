@@ -108,7 +108,6 @@ cc_library_static {
         "init.cpp",
         "init_first_stage.cpp",
         "keychords.cpp",
-        "log.cpp",
         "parser.cpp",
         "persistent_properties.cpp",
         "persistent_properties.proto",

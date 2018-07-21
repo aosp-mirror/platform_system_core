@@ -36,7 +36,6 @@
 
 #include "devices.h"
 #include "firmware_handler.h"
-#include "log.h"
 #include "selinux.h"
 #include "uevent_listener.h"
 #include "ueventd_parser.h"
@@ -223,7 +222,7 @@ int ueventd_main(int argc, char** argv) {
      */
     umask(000);
 
-    InitKernelLogging(argv);
+    android::base::InitLogging(argv, &android::base::KernelLogger);
 
     LOG(INFO) << "ueventd started!";
 
