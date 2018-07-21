@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "init_first_stage.h"
+#include "first_stage_mount.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -125,11 +125,12 @@ static inline bool IsDmLinearEnabled() {
     if (checked) {
         return enabled;
     }
-    import_kernel_cmdline(false, [](const std::string& key, const std::string& value, bool in_qemu) {
-        if (key == "androidboot.logical_partitions" && value == "1") {
-            enabled = true;
-        }
-    });
+    import_kernel_cmdline(false,
+                          [](const std::string& key, const std::string& value, bool in_qemu) {
+                              if (key == "androidboot.logical_partitions" && value == "1") {
+                                  enabled = true;
+                              }
+                          });
     checked = true;
     return enabled;
 }
@@ -149,9 +150,9 @@ FirstStageMount::FirstStageMount()
     }
 
     auto boot_devices = fs_mgr_get_boot_devices();
-    device_handler_ =
-        std::make_unique<DeviceHandler>(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
-                                        std::vector<Subsystem>{}, std::move(boot_devices), false);
+    device_handler_ = std::make_unique<DeviceHandler>(
+            std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
+            std::move(boot_devices), false);
 }
 
 std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
@@ -484,7 +485,7 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
     // as it finds them, so this must happen first.
     if (!uevent.partition_name.empty() &&
         required_devices_partition_names_.find(uevent.partition_name) !=
-            required_devices_partition_names_.end()) {
+                required_devices_partition_names_.end()) {
         // GetBlockDeviceSymlinks() will return three symlinks at most, depending on
         // the content of uevent. by-name symlink will be at [0] if uevent->partition_name
         // is not empty. e.g.,
@@ -492,7 +493,7 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
         //   - /dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1
         std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
         if (!links.empty()) {
-            auto[it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
+            auto [it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
             if (!inserted) {
                 LOG(ERROR) << "Partition '" << uevent.partition_name
                            << "' already existed in the by-name symlink map with a value of '"
@@ -508,7 +509,7 @@ bool FirstStageMountVBootV2::SetUpDmVerity(fstab_rec* fstab_rec) {
     if (fs_mgr_is_avb(fstab_rec)) {
         if (!InitAvbHandle()) return false;
         SetUpAvbHashtreeResult hashtree_result =
-            avb_handle_->SetUpAvbHashtree(fstab_rec, false /* wait_for_verity_dev */);
+                avb_handle_->SetUpAvbHashtree(fstab_rec, false /* wait_for_verity_dev */);
         switch (hashtree_result) {
             case SetUpAvbHashtreeResult::kDisabled:
                 return true;  // Returns true to mount the partition.
@@ -585,7 +586,7 @@ void SetInitAvbVersionInRecovery() {
     }
 
     FsManagerAvbUniquePtr avb_handle =
-        FsManagerAvbHandle::Open(std::move(avb_first_mount.by_name_symlink_map_));
+            FsManagerAvbHandle::Open(std::move(avb_first_mount.by_name_symlink_map_));
     if (!avb_handle) {
         PLOG(ERROR) << "Failed to open FsManagerAvbHandle for INIT_AVB_VERSION";
         return;
