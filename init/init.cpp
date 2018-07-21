@@ -51,7 +51,6 @@
 #include "import_parser.h"
 #include "init_first_stage.h"
 #include "keychords.h"
-#include "log.h"
 #include "property_service.h"
 #include "reboot.h"
 #include "security.h"
@@ -582,6 +581,34 @@ void HandleKeychord(const std::vector<int>& keycodes) {
     }
 }
 
+static void InitAborter(const char* abort_message) {
+    // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
+    // simply abort instead of trying to reboot the system.
+    if (getpid() != 1) {
+        android::base::DefaultAborter(abort_message);
+        return;
+    }
+
+    RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+}
+
+static void InitKernelLogging(char* argv[]) {
+    // Make stdin/stdout/stderr all point to /dev/null.
+    int fd = open("/sys/fs/selinux/null", O_RDWR);
+    if (fd == -1) {
+        int saved_errno = errno;
+        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
+        errno = saved_errno;
+        PLOG(FATAL) << "Couldn't open /sys/fs/selinux/null";
+    }
+    dup2(fd, 0);
+    dup2(fd, 1);
+    dup2(fd, 2);
+    if (fd > 2) close(fd);
+
+    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
+}
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -592,7 +619,7 @@ int main(int argc, char** argv) {
     }
 
     if (argc > 1 && !strcmp(argv[1], "subcontext")) {
-        InitKernelLogging(argv);
+        android::base::InitLogging(argv, &android::base::KernelLogger);
         const BuiltinFunctionMap function_map;
         return SubcontextMain(argc, argv, &function_map);
     }
