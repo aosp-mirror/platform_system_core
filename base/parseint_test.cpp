@@ -36,6 +36,10 @@ TEST(parseint, signed_smoke) {
   ASSERT_EQ(12, i);
   ASSERT_FALSE(android::base::ParseInt("-12", &i, 0, 15));
   ASSERT_FALSE(android::base::ParseInt("16", &i, 0, 15));
+
+  ASSERT_FALSE(android::base::ParseInt<int>("x", nullptr));
+  ASSERT_FALSE(android::base::ParseInt<int>("123x", nullptr));
+  ASSERT_TRUE(android::base::ParseInt<int>("1234", nullptr));
 }
 
 TEST(parseint, unsigned_smoke) {
@@ -55,6 +59,10 @@ TEST(parseint, unsigned_smoke) {
   ASSERT_EQ(12u, i);
   ASSERT_FALSE(android::base::ParseUint("-12", &i, 15u));
   ASSERT_FALSE(android::base::ParseUint("16", &i, 15u));
+
+  ASSERT_FALSE(android::base::ParseUint<unsigned short>("x", nullptr));
+  ASSERT_FALSE(android::base::ParseUint<unsigned short>("123x", nullptr));
+  ASSERT_TRUE(android::base::ParseUint<unsigned short>("1234", nullptr));
 }
 
 TEST(parseint, no_implicit_octal) {
