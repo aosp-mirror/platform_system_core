@@ -31,7 +31,6 @@
 #include <selinux/selinux.h>
 
 #include "selinux.h"
-#include "ueventd.h"
 #include "util.h"
 
 #ifdef _INIT_INIT_H
