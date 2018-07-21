@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_FIRST_STAGE_H
-#define _INIT_FIRST_STAGE_H
+#pragma once
 
 namespace android {
 namespace init {
@@ -25,5 +24,3 @@ void SetInitAvbVersionInRecovery();
 
 }  // namespace init
 }  // namespace android
-
-#endif
