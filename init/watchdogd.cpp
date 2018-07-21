@@ -23,8 +23,6 @@
 
 #include <android-base/logging.h>
 
-#include "log.h"
-
 #ifdef _INIT_INIT_H
 #error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
 #endif
@@ -35,7 +33,7 @@ namespace android {
 namespace init {
 
 int watchdogd_main(int argc, char **argv) {
-    InitKernelLogging(argv);
+    android::base::InitLogging(argv, &android::base::KernelLogger);
 
     int interval = 10;
     if (argc >= 2) interval = atoi(argv[1]);
