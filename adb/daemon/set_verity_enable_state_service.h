@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_FIRST_STAGE_H
-#define _INIT_FIRST_STAGE_H
+#ifndef _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
+#define _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
 
-namespace android {
-namespace init {
+#include <android-base/unique_fd.h>
 
-bool DoFirstStageMount();
-void SetInitAvbVersionInRecovery();
+void set_verity_enabled_state_service(android::base::unique_fd fd, bool enable);
 
-}  // namespace init
-}  // namespace android
-
-#endif
+#endif  // _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_

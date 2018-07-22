@@ -30,7 +30,7 @@ cc_defaults {
     ],
 }
 
-cc_library_static {
+cc_library {
     name: "libfs_mgr",
     defaults: ["fs_mgr_defaults"],
     recovery_available: true,
@@ -44,18 +44,24 @@ cc_library_static {
         "fs_mgr_avb_ops.cpp",
         "fs_mgr_dm_linear.cpp",
     ],
-    static_libs: [
+    shared_libs: [
         "libfec",
         "libfec_rs",
         "libbase",
         "libcrypto_utils",
         "libcrypto",
+        "libcutils",
         "libext4_utils",
+        "libkeyutils",
+        "liblog",
+        "liblogwrap",
         "libsquashfs_utils",
         "libselinux",
+    ],
+    static_libs: [
         "libavb",
-        "libfstab",
         "libdm",
+        "libfstab",
         "liblp",
     ],
     export_static_lib_headers: [
@@ -65,9 +71,8 @@ cc_library_static {
     ],
     whole_static_libs: [
         "liblp",
-        "liblogwrap",
-        "libdm",
         "libfstab",
+        "libdm",
     ],
     cppflags: [
         "-DALLOW_ADBD_DISABLE_VERITY=0",
@@ -82,7 +87,7 @@ cc_library_static {
     },
 }
 
-cc_library_static {
+cc_library {
     name: "libfstab",
     vendor_available: true,
     recovery_available: true,
@@ -93,5 +98,7 @@ cc_library_static {
         "fs_mgr_slotselect.cpp",
     ],
     export_include_dirs: ["include_fstab"],
-    header_libs: ["libbase_headers"],
+    shared_libs: [
+        "libbase",
+    ],
 }

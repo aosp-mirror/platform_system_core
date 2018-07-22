@@ -36,7 +36,6 @@
 
 #include "devices.h"
 #include "firmware_handler.h"
-#include "log.h"
 #include "selinux.h"
 #include "uevent_listener.h"
 #include "ueventd_parser.h"
@@ -223,7 +222,7 @@ int ueventd_main(int argc, char** argv) {
      */
     umask(000);
 
-    InitKernelLogging(argv);
+    android::base::InitLogging(argv, &android::base::KernelLogger);
 
     LOG(INFO) << "ueventd started!";
 
@@ -240,7 +239,8 @@ int ueventd_main(int argc, char** argv) {
         auto hardware = android::base::GetProperty("ro.hardware", "");
 
         auto ueventd_configuration =
-                ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc", "/odm/ueventd.rc", hardware});
+                ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc", "/odm/ueventd.rc",
+                             "/ueventd." + hardware + ".rc"});
 
         device_handler = DeviceHandler{std::move(ueventd_configuration.dev_permissions),
                                        std::move(ueventd_configuration.sysfs_permissions),

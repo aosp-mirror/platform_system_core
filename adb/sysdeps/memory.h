@@ -23,6 +23,23 @@
 // We don't have C++14 on Windows yet.
 // Reimplement std::make_unique ourselves until we do.
 
+namespace internal {
+
+template <typename T>
+struct array_known_bounds;
+
+template <typename T>
+struct array_known_bounds<T[]> {
+    constexpr static bool value = false;
+};
+
+template <typename T, size_t N>
+struct array_known_bounds<T[N]> {
+    constexpr static bool value = true;
+};
+
+}  // namespace internal
+
 namespace std {
 
 template <typename T, typename... Args>
@@ -30,6 +47,18 @@ typename std::enable_if<!std::is_array<T>::value, std::unique_ptr<T>>::type make
     Args&&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
+
+template <typename T>
+typename std::enable_if<std::is_array<T>::value && !internal::array_known_bounds<T>::value,
+                        std::unique_ptr<T>>::type
+make_unique(std::size_t size) {
+    return std::unique_ptr<T>(new typename std::remove_extent<T>::type[size]());
+}
+
+template <typename T, typename... Args>
+typename std::enable_if<std::is_array<T>::value && internal::array_known_bounds<T>::value,
+                        std::unique_ptr<T>>::type
+make_unique(Args&&... args) = delete;
 
 }  // namespace std
 

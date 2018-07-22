@@ -47,7 +47,9 @@ bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
   if (max < result) {
     return false;
   }
-  *out = static_cast<T>(result);
+  if (out != nullptr) {
+    *out = static_cast<T>(result);
+  }
   return true;
 }
 
@@ -87,7 +89,9 @@ bool ParseInt(const char* s, T* out,
   if (result < min || max < result) {
     return false;
   }
-  *out = static_cast<T>(result);
+  if (out != nullptr) {
+    *out = static_cast<T>(result);
+  }
   return true;
 }
 

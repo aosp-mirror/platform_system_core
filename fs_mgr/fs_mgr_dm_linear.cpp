@@ -50,33 +50,6 @@ using DmTarget = android::dm::DmTarget;
 using DmTargetZero = android::dm::DmTargetZero;
 using DmTargetLinear = android::dm::DmTargetLinear;
 
-static bool CreateDmDeviceForPartition(DeviceMapper& dm, const LogicalPartition& partition) {
-    DmTable table;
-    for (const auto& extent : partition.extents) {
-        table.AddTarget(std::make_unique<DmTargetLinear>(extent));
-    }
-    if (!dm.CreateDevice(partition.name, table)) {
-        return false;
-    }
-    LINFO << "Created device-mapper device: " << partition.name;
-    return true;
-}
-
-bool CreateLogicalPartitions(const LogicalPartitionTable& table) {
-    DeviceMapper& dm = DeviceMapper::Instance();
-    for (const auto& partition : table.partitions) {
-        if (!CreateDmDeviceForPartition(dm, partition)) {
-            LOG(ERROR) << "could not create dm-linear device for partition: " << partition.name;
-            return false;
-        }
-    }
-    return true;
-}
-
-std::unique_ptr<LogicalPartitionTable> LoadPartitionsFromDeviceTree() {
-    return nullptr;
-}
-
 static bool CreateDmTable(const std::string& block_device, const LpMetadata& metadata,
                           const LpMetadataPartition& partition, DmTable* table) {
     uint64_t sector = 0;

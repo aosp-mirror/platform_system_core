@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "init_first_stage.h"
+#include "first_stage_mount.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -40,7 +40,6 @@
 #include "util.h"
 
 using android::base::Timer;
-using android::fs_mgr::LogicalPartitionTable;
 
 namespace android {
 namespace init {
@@ -75,7 +74,6 @@ class FirstStageMount {
     bool need_dm_verity_;
 
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
-    std::unique_ptr<LogicalPartitionTable> dm_linear_table_;
     std::string lp_metadata_partition_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
@@ -127,11 +125,12 @@ static inline bool IsDmLinearEnabled() {
     if (checked) {
         return enabled;
     }
-    import_kernel_cmdline(false, [](const std::string& key, const std::string& value, bool in_qemu) {
-        if (key == "androidboot.logical_partitions" && value == "1") {
-            enabled = true;
-        }
-    });
+    import_kernel_cmdline(false,
+                          [](const std::string& key, const std::string& value, bool in_qemu) {
+                              if (key == "androidboot.logical_partitions" && value == "1") {
+                                  enabled = true;
+                              }
+                          });
     checked = true;
     return enabled;
 }
@@ -150,14 +149,10 @@ FirstStageMount::FirstStageMount()
         LOG(INFO) << "Failed to read fstab from device tree";
     }
 
-    if (IsDmLinearEnabled()) {
-        dm_linear_table_ = android::fs_mgr::LoadPartitionsFromDeviceTree();
-    }
-
     auto boot_devices = fs_mgr_get_boot_devices();
-    device_handler_ =
-        std::make_unique<DeviceHandler>(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
-                                        std::vector<Subsystem>{}, std::move(boot_devices), false);
+    device_handler_ = std::make_unique<DeviceHandler>(
+            std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
+            std::move(boot_devices), false);
 }
 
 std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
@@ -195,15 +190,6 @@ bool FirstStageMount::GetBackingDmLinearDevices() {
     }
 
     required_devices_partition_names_.emplace(LP_METADATA_PARTITION_NAME);
-
-    if (dm_linear_table_) {
-        for (const auto& partition : dm_linear_table_->partitions) {
-            for (const auto& extent : partition.extents) {
-                const std::string& partition_name = android::base::Basename(extent.block_device());
-                required_devices_partition_names_.emplace(partition_name);
-            }
-        }
-    }
     return true;
 }
 
@@ -271,11 +257,6 @@ bool FirstStageMount::CreateLogicalPartitions() {
         LOG(ERROR) << "Could not locate logical partition tables in partition "
                    << LP_METADATA_PARTITION_NAME;
         return false;
-    }
-    if (dm_linear_table_) {
-        if (!android::fs_mgr::CreateLogicalPartitions(*dm_linear_table_.get())) {
-            return false;
-        }
     }
     return android::fs_mgr::CreateLogicalPartitions(lp_metadata_partition_);
 }
@@ -456,12 +437,19 @@ FirstStageMountVBootV2::FirstStageMountVBootV2() : avb_handle_(nullptr) {
 bool FirstStageMountVBootV2::GetDmVerityDevices() {
     need_dm_verity_ = false;
 
+    std::set<std::string> logical_partitions;
+
     // fstab_rec->blk_device has A/B suffix.
     for (auto fstab_rec : mount_fstab_recs_) {
         if (fs_mgr_is_avb(fstab_rec)) {
             need_dm_verity_ = true;
         }
-        required_devices_partition_names_.emplace(basename(fstab_rec->blk_device));
+        if (fs_mgr_is_logical(fstab_rec)) {
+            // Don't try to find logical partitions via uevent regeneration.
+            logical_partitions.emplace(basename(fstab_rec->blk_device));
+        } else {
+            required_devices_partition_names_.emplace(basename(fstab_rec->blk_device));
+        }
     }
 
     // libavb verifies AVB metadata on all verified partitions at once.
@@ -476,11 +464,15 @@ bool FirstStageMountVBootV2::GetDmVerityDevices() {
         std::vector<std::string> partitions = android::base::Split(device_tree_vbmeta_parts_, ",");
         std::string ab_suffix = fs_mgr_get_slot_suffix();
         for (const auto& partition : partitions) {
+            std::string partition_name = partition + ab_suffix;
+            if (logical_partitions.count(partition_name)) {
+                continue;
+            }
             // required_devices_partition_names_ is of type std::set so it's not an issue
             // to emplace a partition twice. e.g., /vendor might be in both places:
             //   - device_tree_vbmeta_parts_ = "vbmeta,boot,system,vendor"
             //   - mount_fstab_recs_: /vendor_a
-            required_devices_partition_names_.emplace(partition + ab_suffix);
+            required_devices_partition_names_.emplace(partition_name);
         }
     }
     return true;
@@ -493,7 +485,7 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
     // as it finds them, so this must happen first.
     if (!uevent.partition_name.empty() &&
         required_devices_partition_names_.find(uevent.partition_name) !=
-            required_devices_partition_names_.end()) {
+                required_devices_partition_names_.end()) {
         // GetBlockDeviceSymlinks() will return three symlinks at most, depending on
         // the content of uevent. by-name symlink will be at [0] if uevent->partition_name
         // is not empty. e.g.,
@@ -501,7 +493,7 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
         //   - /dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1
         std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
         if (!links.empty()) {
-            auto[it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
+            auto [it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
             if (!inserted) {
                 LOG(ERROR) << "Partition '" << uevent.partition_name
                            << "' already existed in the by-name symlink map with a value of '"
@@ -517,7 +509,7 @@ bool FirstStageMountVBootV2::SetUpDmVerity(fstab_rec* fstab_rec) {
     if (fs_mgr_is_avb(fstab_rec)) {
         if (!InitAvbHandle()) return false;
         SetUpAvbHashtreeResult hashtree_result =
-            avb_handle_->SetUpAvbHashtree(fstab_rec, false /* wait_for_verity_dev */);
+                avb_handle_->SetUpAvbHashtree(fstab_rec, false /* wait_for_verity_dev */);
         switch (hashtree_result) {
             case SetUpAvbHashtreeResult::kDisabled:
                 return true;  // Returns true to mount the partition.
@@ -594,7 +586,7 @@ void SetInitAvbVersionInRecovery() {
     }
 
     FsManagerAvbUniquePtr avb_handle =
-        FsManagerAvbHandle::Open(std::move(avb_first_mount.by_name_symlink_map_));
+            FsManagerAvbHandle::Open(std::move(avb_first_mount.by_name_symlink_map_));
     if (!avb_handle) {
         PLOG(ERROR) << "Failed to open FsManagerAvbHandle for INIT_AVB_VERSION";
         return;
