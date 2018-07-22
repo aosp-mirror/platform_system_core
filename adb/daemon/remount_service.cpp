@@ -178,10 +178,6 @@ static bool remount_partition(int fd, const char* dir) {
     }
 
     unsigned long remount_flags = get_mount_flags(fd, dir);
-    if ((remount_flags & MS_RDONLY) == 0) {
-        // Mount is already writable.
-        return true;
-    }
     remount_flags &= ~MS_RDONLY;
     remount_flags |= MS_REMOUNT;
 
@@ -192,7 +188,7 @@ static bool remount_partition(int fd, const char* dir) {
         WriteFdFmt(fd, "remount of the %s mount failed: %s.\n", dir, strerror(errno));
         return false;
     }
-    if (mount(dev.c_str(), dir, "none", remount_flags, nullptr) == -1) {
+    if (mount(dev.c_str(), dir, "none", MS_REMOUNT, nullptr) == -1) {
         WriteFdFmt(fd, "remount of the %s superblock failed: %s\n", dir, strerror(errno));
         return false;
     }
