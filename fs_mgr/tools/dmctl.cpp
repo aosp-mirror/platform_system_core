@@ -40,6 +40,7 @@ using DmTable = ::android::dm::DmTable;
 using DmTarget = ::android::dm::DmTarget;
 using DmTargetLinear = ::android::dm::DmTargetLinear;
 using DmTargetZero = ::android::dm::DmTargetZero;
+using DmTargetAndroidVerity = ::android::dm::DmTargetAndroidVerity;
 using DmTargetTypeInfo = ::android::dm::DmTargetTypeInfo;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
@@ -96,6 +97,16 @@ class TargetParser final {
             }
             return std::make_unique<DmTargetLinear>(start_sector, num_sectors, block_device,
                                                     physical_sector);
+        } else if (target_type == "android-verity") {
+            if (!HasArgs(2)) {
+                std::cerr << "Expected \"android-verity\" <public-key-id> <block_device>"
+                          << std::endl;
+                return nullptr;
+            }
+            std::string keyid = NextArg();
+            std::string block_device = NextArg();
+            return std::make_unique<DmTargetAndroidVerity>(start_sector, num_sectors, keyid,
+                                                           block_device);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
