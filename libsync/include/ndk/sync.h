@@ -27,10 +27,13 @@
 #define ANDROID_SYNC_H
 
 #include <stdint.h>
+#include <sys/cdefs.h>
 
 #include <linux/sync_file.h>
 
 __BEGIN_DECLS
+
+#if __ANDROID_API__ >= 26
 
 /* Fences indicate the status of an asynchronous task. They are initially
  * in unsignaled state (0), and make a one-time transition to either signaled
@@ -87,6 +90,8 @@ static inline struct sync_fence_info* sync_get_fence_info(const struct sync_file
 
 /** Free a struct sync_file_info structure */
 void sync_file_info_free(struct sync_file_info* info) __INTRODUCED_IN(26);
+
+#endif /* __ANDROID_API__ >= 26 */
 
 __END_DECLS
 
