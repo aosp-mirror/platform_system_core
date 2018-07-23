@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-cc_library {
+cc_library_static {
     name: "libdm",
     defaults: ["fs_mgr_defaults"],
     recovery_available: true,
@@ -32,9 +32,9 @@ cc_library {
         "loop_control.cpp",
     ],
 
-    shared_libs: [
-        "libbase",
-        "liblog",
+    header_libs: [
+        "libbase_headers",
+        "liblog_headers",
     ],
 }
 
