@@ -132,11 +132,11 @@ static int DmCreateCmdHandler(int argc, char** argv) {
     while (arg_index < argc && argv[arg_index][0] == '-') {
         if (strcmp(argv[arg_index], "-ro") == 0) {
             table.set_readonly(true);
+            arg_index++;
         } else {
             std::cerr << "Unrecognized option: " << argv[arg_index] << std::endl;
             return -EINVAL;
         }
-        arg_index++;
     }
 
     // Parse everything else as target information.
