@@ -43,10 +43,11 @@ __BEGIN_DECLS
 /*
  * Use __VA_ARGS__ if running a static analyzer,
  * to avoid warnings of unused variables in __VA_ARGS__.
+ * __FAKE_USE_VA_ARGS is undefined at link time,
+ * so don't link with __clang_analyzer__ defined.
  */
-
 #ifdef __clang_analyzer__
-#define __FAKE_USE_VA_ARGS(...) ((void)(__VA_ARGS__))
+extern void __FAKE_USE_VA_ARGS(...);
 #else
 #define __FAKE_USE_VA_ARGS(...) ((void)(0))
 #endif
