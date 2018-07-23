@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  files = sparse_file_resparse(s, max_size, NULL, 0);
+  files = sparse_file_resparse(s, max_size, nullptr, 0);
   if (files < 0) {
     fprintf(stderr, "Failed to resparse\n");
     exit(-1);

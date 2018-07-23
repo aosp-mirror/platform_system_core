@@ -276,7 +276,7 @@ static int process_crc32_chunk(SparseFileSource* source, unsigned int chunk_size
     return ret;
   }
 
-  if (crc32 != NULL && file_crc32 != *crc32) {
+  if (crc32 != nullptr && file_crc32 != *crc32) {
     return -EINVAL;
   }
 
@@ -339,7 +339,7 @@ static int sparse_file_read_sparse(struct sparse_file* s, SparseFileSource* sour
   sparse_header_t sparse_header;
   chunk_header_t chunk_header;
   uint32_t crc32 = 0;
-  uint32_t* crc_ptr = 0;
+  uint32_t* crc_ptr = nullptr;
   unsigned int cur_block = 0;
 
   if (!copybuf) {
@@ -489,39 +489,39 @@ static struct sparse_file* sparse_file_import_source(SparseFileSource* source, b
   ret = source->ReadValue(&sparse_header, sizeof(sparse_header));
   if (ret < 0) {
     verbose_error(verbose, ret, "header");
-    return NULL;
+    return nullptr;
   }
 
   if (sparse_header.magic != SPARSE_HEADER_MAGIC) {
     verbose_error(verbose, -EINVAL, "header magic");
-    return NULL;
+    return nullptr;
   }
 
   if (sparse_header.major_version != SPARSE_HEADER_MAJOR_VER) {
     verbose_error(verbose, -EINVAL, "header major version");
-    return NULL;
+    return nullptr;
   }
 
   if (sparse_header.file_hdr_sz < SPARSE_HEADER_LEN) {
-    return NULL;
+    return nullptr;
   }
 
   if (sparse_header.chunk_hdr_sz < sizeof(chunk_header_t)) {
-    return NULL;
+    return nullptr;
   }
 
   len = (int64_t)sparse_header.total_blks * sparse_header.blk_sz;
   s = sparse_file_new(sparse_header.blk_sz, len);
   if (!s) {
-    verbose_error(verbose, -EINVAL, NULL);
-    return NULL;
+    verbose_error(verbose, -EINVAL, nullptr);
+    return nullptr;
   }
 
   ret = source->SetOffset(0);
   if (ret < 0) {
     verbose_error(verbose, ret, "seeking");
     sparse_file_destroy(s);
-    return NULL;
+    return nullptr;
   }
 
   s->verbose = verbose;
@@ -529,7 +529,7 @@ static struct sparse_file* sparse_file_import_source(SparseFileSource* source, b
   ret = sparse_file_read_sparse(s, source, crc);
   if (ret < 0) {
     sparse_file_destroy(s);
-    return NULL;
+    return nullptr;
   }
 
   return s;
@@ -557,20 +557,20 @@ struct sparse_file* sparse_file_import_auto(int fd, bool crc, bool verbose) {
 
   len = lseek64(fd, 0, SEEK_END);
   if (len < 0) {
-    return NULL;
+    return nullptr;
   }
 
   lseek64(fd, 0, SEEK_SET);
 
   s = sparse_file_new(4096, len);
   if (!s) {
-    return NULL;
+    return nullptr;
   }
 
   ret = sparse_file_read_normal(s, fd);
   if (ret < 0) {
     sparse_file_destroy(s);
-    return NULL;
+    return nullptr;
   }
 
   return s;

@@ -133,7 +133,7 @@ void backed_block_list_move(struct backed_block_list* from, struct backed_block_
                             struct backed_block* start, struct backed_block* end) {
   struct backed_block* bb;
 
-  if (start == NULL) {
+  if (start == nullptr) {
     start = from->data_blocks;
   }
 
@@ -142,12 +142,12 @@ void backed_block_list_move(struct backed_block_list* from, struct backed_block_
       ;
   }
 
-  if (start == NULL || end == NULL) {
+  if (start == nullptr || end == nullptr) {
     return;
   }
 
-  from->last_used = NULL;
-  to->last_used = NULL;
+  from->last_used = nullptr;
+  to->last_used = nullptr;
   if (from->data_blocks == start) {
     from->data_blocks = end->next;
   } else {
@@ -161,7 +161,7 @@ void backed_block_list_move(struct backed_block_list* from, struct backed_block_
 
   if (!to->data_blocks) {
     to->data_blocks = start;
-    end->next = NULL;
+    end->next = nullptr;
   } else {
     for (bb = to->data_blocks; bb; bb = bb->next) {
       if (!bb->next || bb->next->block > start->block) {
@@ -230,7 +230,7 @@ static int merge_bb(struct backed_block_list* bbl, struct backed_block* a, struc
 static int queue_bb(struct backed_block_list* bbl, struct backed_block* new_bb) {
   struct backed_block* bb;
 
-  if (bbl->data_blocks == NULL) {
+  if (bbl->data_blocks == nullptr) {
     bbl->data_blocks = new_bb;
     return 0;
   }
@@ -253,7 +253,7 @@ static int queue_bb(struct backed_block_list* bbl, struct backed_block* new_bb) 
   for (; bb->next && bb->next->block < new_bb->block; bb = bb->next)
     ;
 
-  if (bb->next == NULL) {
+  if (bb->next == nullptr) {
     bb->next = new_bb;
   } else {
     new_bb->next = bb->next;
@@ -273,7 +273,7 @@ static int queue_bb(struct backed_block_list* bbl, struct backed_block* new_bb) 
 int backed_block_add_fill(struct backed_block_list* bbl, unsigned int fill_val, unsigned int len,
                           unsigned int block) {
   struct backed_block* bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
-  if (bb == NULL) {
+  if (bb == nullptr) {
     return -ENOMEM;
   }
 
@@ -281,7 +281,7 @@ int backed_block_add_fill(struct backed_block_list* bbl, unsigned int fill_val, 
   bb->len = len;
   bb->type = BACKED_BLOCK_FILL;
   bb->fill.val = fill_val;
-  bb->next = NULL;
+  bb->next = nullptr;
 
   return queue_bb(bbl, bb);
 }
@@ -290,7 +290,7 @@ int backed_block_add_fill(struct backed_block_list* bbl, unsigned int fill_val, 
 int backed_block_add_data(struct backed_block_list* bbl, void* data, unsigned int len,
                           unsigned int block) {
   struct backed_block* bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
-  if (bb == NULL) {
+  if (bb == nullptr) {
     return -ENOMEM;
   }
 
@@ -298,7 +298,7 @@ int backed_block_add_data(struct backed_block_list* bbl, void* data, unsigned in
   bb->len = len;
   bb->type = BACKED_BLOCK_DATA;
   bb->data.data = data;
-  bb->next = NULL;
+  bb->next = nullptr;
 
   return queue_bb(bbl, bb);
 }
@@ -307,7 +307,7 @@ int backed_block_add_data(struct backed_block_list* bbl, void* data, unsigned in
 int backed_block_add_file(struct backed_block_list* bbl, const char* filename, int64_t offset,
                           unsigned int len, unsigned int block) {
   struct backed_block* bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
-  if (bb == NULL) {
+  if (bb == nullptr) {
     return -ENOMEM;
   }
 
@@ -316,7 +316,7 @@ int backed_block_add_file(struct backed_block_list* bbl, const char* filename, i
   bb->type = BACKED_BLOCK_FILE;
   bb->file.filename = strdup(filename);
   bb->file.offset = offset;
-  bb->next = NULL;
+  bb->next = nullptr;
 
   return queue_bb(bbl, bb);
 }
@@ -325,7 +325,7 @@ int backed_block_add_file(struct backed_block_list* bbl, const char* filename, i
 int backed_block_add_fd(struct backed_block_list* bbl, int fd, int64_t offset, unsigned int len,
                         unsigned int block) {
   struct backed_block* bb = reinterpret_cast<backed_block*>(calloc(1, sizeof(struct backed_block)));
-  if (bb == NULL) {
+  if (bb == nullptr) {
     return -ENOMEM;
   }
 
@@ -334,7 +334,7 @@ int backed_block_add_fd(struct backed_block_list* bbl, int fd, int64_t offset, u
   bb->type = BACKED_BLOCK_FD;
   bb->fd.fd = fd;
   bb->fd.offset = offset;
-  bb->next = NULL;
+  bb->next = nullptr;
 
   return queue_bb(bbl, bb);
 }
@@ -350,7 +350,7 @@ int backed_block_split(struct backed_block_list* bbl, struct backed_block* bb,
   }
 
   new_bb = reinterpret_cast<backed_block*>(malloc(sizeof(struct backed_block)));
-  if (new_bb == NULL) {
+  if (new_bb == nullptr) {
     return -ENOMEM;
   }
 
