@@ -277,7 +277,7 @@ cc_binary_host {
     },
 }
 
-cc_library {
+cc_library_static {
     name: "libadbd",
     defaults: ["adb_defaults"],
     recovery_available: true,
@@ -288,36 +288,16 @@ cc_library {
         "daemon/auth.cpp",
         "daemon/usb.cpp",
         "daemon/jdwp_service.cpp",
-        "daemon/mdns.cpp",
-        "daemon/file_sync_service.cpp",
-        "daemon/framebuffer_service.cpp",
-        "daemon/remount_service.cpp",
-        "daemon/set_verity_enable_state_service.cpp",
-        "daemon/shell_service.cpp",
-        "shell_service_protocol.cpp",
     ],
 
     static_libs: [
-        "libavb_user",
-        "libdiagnose_usb",
-        "libfec",
-        "libfec_rs",
-        "libfs_mgr",
-        "libmdnssd",
-        "libqemu_pipe",
-        "libsquashfs_utils",
-        "libselinux",
-    ],
-
-    shared_libs: [
         "libasyncio",
         "libbootloader_message",
-        "libbase",
         "libcrypto_utils",
         "libcrypto",
-        "libcutils",
-        "libext4_utils",
-        "liblog",
+        "libdiagnose_usb",
+        "libqemu_pipe",
+        "libbase",
     ],
 
     export_include_dirs: [
@@ -333,6 +313,13 @@ cc_binary {
 
     srcs: [
         "daemon/main.cpp",
+        "daemon/mdns.cpp",
+        "daemon/file_sync_service.cpp",
+        "daemon/framebuffer_service.cpp",
+        "daemon/remount_service.cpp",
+        "daemon/set_verity_enable_state_service.cpp",
+        "daemon/shell_service.cpp",
+        "shell_service_protocol.cpp",
     ],
 
     cflags: [
@@ -344,19 +331,27 @@ cc_binary {
         keep_symbols: true,
     },
 
-    shared_libs: [
+    static_libs: [
         "libadbd",
         "libasyncio",
-        "libbase",
+        "libavb_user",
         "libbootloader_message",
-        "libcap",
         "libcrypto_utils",
         "libcrypto",
-        "libcutils",
-        "libext4_utils",
+        "libdiagnose_usb",
+        "libfec",
+        "libfec_rs",
+        "libfs_mgr",
         "liblog",
+        "libext4_utils",
+        "libmdnssd",
         "libminijail",
         "libselinux",
+        "libsquashfs_utils",
+        "libqemu_pipe",
+
+        "libbase",
+        "libcutils",
     ],
 }
 
