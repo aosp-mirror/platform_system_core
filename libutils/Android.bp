@@ -155,6 +155,7 @@ cc_library {
             ],
         },
         linux: {
+            shared_libs: ["libbase"],
             srcs: [
                 "Looper.cpp",
             ],
