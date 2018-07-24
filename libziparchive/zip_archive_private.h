@@ -156,33 +156,9 @@ struct ZipArchive {
   uint32_t hash_table_size;
   ZipString* hash_table;
 
-  ZipArchive(const int fd, bool assume_ownership)
-      : mapped_zip(fd),
-        close_file(assume_ownership),
-        directory_offset(0),
-        central_directory(),
-        directory_map(new android::FileMap()),
-        num_entries(0),
-        hash_table_size(0),
-        hash_table(nullptr) {}
-
-  ZipArchive(void* address, size_t length)
-      : mapped_zip(address, length),
-        close_file(false),
-        directory_offset(0),
-        central_directory(),
-        directory_map(new android::FileMap()),
-        num_entries(0),
-        hash_table_size(0),
-        hash_table(nullptr) {}
-
-  ~ZipArchive() {
-    if (close_file && mapped_zip.GetFileDescriptor() >= 0) {
-      close(mapped_zip.GetFileDescriptor());
-    }
-
-    free(hash_table);
-  }
+  ZipArchive(const int fd, bool assume_ownership);
+  ZipArchive(void* address, size_t length);
+  ~ZipArchive();
 
   bool InitializeCentralDirectory(const char* debug_file_name, off64_t cd_start_offset,
                                   size_t cd_size);

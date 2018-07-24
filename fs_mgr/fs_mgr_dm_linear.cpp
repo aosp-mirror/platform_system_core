@@ -79,6 +79,25 @@ static bool CreateDmTable(const std::string& block_device, const LpMetadata& met
     return true;
 }
 
+static bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
+                                   const LpMetadataPartition& partition, std::string* path) {
+    DeviceMapper& dm = DeviceMapper::Instance();
+
+    DmTable table;
+    if (!CreateDmTable(block_device, metadata, partition, &table)) {
+        return false;
+    }
+    std::string name = GetPartitionName(partition);
+    if (!dm.CreateDevice(name, table)) {
+        return false;
+    }
+    if (!dm.GetDmDevicePathByName(name, path)) {
+        return false;
+    }
+    LINFO << "Created logical partition " << name << " on device " << *path;
+    return true;
+}
+
 bool CreateLogicalPartitions(const std::string& block_device) {
     uint32_t slot = SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
     auto metadata = ReadMetadata(block_device.c_str(), slot);
@@ -86,22 +105,35 @@ bool CreateLogicalPartitions(const std::string& block_device) {
         LOG(ERROR) << "Could not read partition table.";
         return true;
     }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
     for (const auto& partition : metadata->partitions) {
-        DmTable table;
-        if (!CreateDmTable(block_device, *metadata.get(), partition, &table)) {
-            return false;
-        }
-        std::string name = GetPartitionName(partition);
-        if (!dm.CreateDevice(name, table)) {
-            return false;
-        }
         std::string path;
-        dm.GetDmDevicePathByName(partition.name, &path);
-        LINFO << "Created logical partition " << name << " on device " << path;
+        if (!CreateLogicalPartition(block_device, *metadata.get(), partition, &path)) {
+            LERROR << "Could not create logical partition: " << GetPartitionName(partition);
+            return false;
+        }
     }
     return true;
+}
+
+bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
+                            const std::string& partition_name, std::string* path) {
+    auto metadata = ReadMetadata(block_device.c_str(), metadata_slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read partition table.";
+        return true;
+    }
+    for (const auto& partition : metadata->partitions) {
+        if (GetPartitionName(partition) == partition_name) {
+            return CreateLogicalPartition(block_device, *metadata.get(), partition, path);
+        }
+    }
+    LERROR << "Could not find any partition with name: " << partition_name;
+    return false;
+}
+
+bool DestroyLogicalPartition(const std::string& name) {
+    DeviceMapper& dm = DeviceMapper::Instance();
+    return dm.DeleteDevice(name);
 }
 
 }  // namespace fs_mgr
