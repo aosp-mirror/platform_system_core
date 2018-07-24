@@ -9,6 +9,7 @@ cc_library_headers {
 cc_library_headers {
     name: "bootimg_headers",
     vendor_available: true,
+    recovery_available: true,
     export_include_dirs: ["include/bootimg"],
     host_supported: true,
     target: {
