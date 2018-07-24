@@ -23,6 +23,7 @@
 #include <algorithm>
 
 #include "constants.h"
+#include "flashing.h"
 #include "usb_client.h"
 
 using ::android::hardware::hidl_string;
@@ -40,6 +41,8 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_REBOOT_BOOTLOADER, RebootBootloaderHandler},
               {FB_CMD_REBOOT_FASTBOOT, RebootFastbootHandler},
               {FB_CMD_REBOOT_RECOVERY, RebootRecoveryHandler},
+              {FB_CMD_ERASE, EraseHandler},
+              {FB_CMD_FLASH, FlashHandler},
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()) {}

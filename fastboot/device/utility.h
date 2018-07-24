@@ -15,8 +15,32 @@
  */
 #pragma once
 
+#include <optional>
 #include <string>
 
+#include <android-base/unique_fd.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
+
+// Logical partitions are only mapped to a block device as needed, and
+// immediately unmapped when no longer needed. In order to enforce this we
+// require accessing partitions through a Handle abstraction, which may perform
+// additional operations after closing its file descriptor.
+class PartitionHandle {
+  public:
+    PartitionHandle() {}
+    explicit PartitionHandle(const std::string& path) : path_(path) {}
+    const std::string& path() const { return path_; }
+    int fd() const { return fd_.get(); }
+    void set_fd(android::base::unique_fd&& fd) { fd_ = std::move(fd); }
+
+  private:
+    std::string path_;
+    android::base::unique_fd fd_;
+};
+
+class FastbootDevice;
+
+std::optional<std::string> FindPhysicalPartition(const std::string& name);
+bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle);
 
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);

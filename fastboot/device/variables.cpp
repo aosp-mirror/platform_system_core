@@ -16,6 +16,8 @@
 
 #include "variables.h"
 
+#include <inttypes.h>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -24,6 +26,7 @@
 #include <ext4_utils/ext4_utils.h>
 
 #include "fastboot_device.h"
+#include "flashing.h"
 #include "utility.h"
 
 using ::android::hardware::boot::V1_0::BoolResult;
@@ -124,4 +127,16 @@ bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args) {
     }
     std::string result = (args[0] == "userdata" ? "no" : "yes");
     return device->WriteOkay(result);
+}
+
+bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 1) {
+        return device->WriteFail("Missing argument");
+    }
+    PartitionHandle handle;
+    if (!OpenPartition(device, args[0], &handle)) {
+        return device->WriteFail("Could not open partition");
+    }
+    uint64_t size = get_block_device_size(handle.fd());
+    return device->WriteOkay(android::base::StringPrintf("%" PRIX64, size));
 }
