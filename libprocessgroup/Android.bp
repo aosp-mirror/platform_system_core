@@ -2,6 +2,7 @@ cc_library {
     srcs: ["processgroup.cpp"],
     name: "libprocessgroup",
     host_supported: true,
+    recovery_available: true,
     shared_libs: ["libbase"],
     export_include_dirs: ["include"],
     cflags: [
