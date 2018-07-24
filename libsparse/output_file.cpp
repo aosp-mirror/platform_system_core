@@ -233,7 +233,7 @@ static int gz_file_write(struct output_file* out, void* data, size_t len) {
   while (len > 0) {
     ret = gzwrite(outgz->gz_fd, data, min(len, (unsigned int)INT_MAX));
     if (ret == 0) {
-      error("gzwrite %s", gzerror(outgz->gz_fd, NULL));
+      error("gzwrite %s", gzerror(outgz->gz_fd, nullptr));
       return -1;
     }
     len -= ret;
@@ -269,7 +269,7 @@ static int callback_file_skip(struct output_file* out, int64_t off) {
 
   while (off > 0) {
     to_write = min(off, (int64_t)INT_MAX);
-    ret = outc->write(outc->priv, NULL, to_write);
+    ret = outc->write(outc->priv, nullptr, to_write);
     if (ret < 0) {
       return ret;
     }
@@ -568,7 +568,7 @@ static struct output_file* output_file_new_gz(void) {
       reinterpret_cast<struct output_file_gz*>(calloc(1, sizeof(struct output_file_gz)));
   if (!outgz) {
     error_errno("malloc struct outgz");
-    return NULL;
+    return nullptr;
   }
 
   outgz->out.ops = &gz_file_ops;
@@ -581,7 +581,7 @@ static struct output_file* output_file_new_normal(void) {
       reinterpret_cast<struct output_file_normal*>(calloc(1, sizeof(struct output_file_normal)));
   if (!outn) {
     error_errno("malloc struct outn");
-    return NULL;
+    return nullptr;
   }
 
   outn->out.ops = &file_ops;
@@ -599,7 +599,7 @@ struct output_file* output_file_open_callback(int (*write)(void*, const void*, s
       reinterpret_cast<struct output_file_callback*>(calloc(1, sizeof(struct output_file_callback)));
   if (!outc) {
     error_errno("malloc struct outc");
-    return NULL;
+    return nullptr;
   }
 
   outc->out.ops = &callback_file_ops;
@@ -609,7 +609,7 @@ struct output_file* output_file_open_callback(int (*write)(void*, const void*, s
   ret = output_file_init(&outc->out, block_size, len, sparse, chunks, crc);
   if (ret < 0) {
     free(outc);
-    return NULL;
+    return nullptr;
   }
 
   return &outc->out;
@@ -626,7 +626,7 @@ struct output_file* output_file_open_fd(int fd, unsigned int block_size, int64_t
     out = output_file_new_normal();
   }
   if (!out) {
-    return NULL;
+    return nullptr;
   }
 
   out->ops->open(out, fd);
@@ -634,7 +634,7 @@ struct output_file* output_file_open_fd(int fd, unsigned int block_size, int64_t
   ret = output_file_init(out, block_size, len, sparse, chunks, crc);
   if (ret < 0) {
     free(out);
-    return NULL;
+    return nullptr;
   }
 
   return out;
@@ -664,7 +664,7 @@ int write_fd_chunk(struct output_file* out, unsigned int len, int fd, int64_t of
 #ifndef _WIN32
   if (buffer_size > SIZE_MAX) return -E2BIG;
   char* data =
-      reinterpret_cast<char*>(mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, fd, aligned_offset));
+      reinterpret_cast<char*>(mmap64(nullptr, buffer_size, PROT_READ, MAP_SHARED, fd, aligned_offset));
   if (data == MAP_FAILED) {
     return -errno;
   }
