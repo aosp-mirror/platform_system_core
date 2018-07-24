@@ -24,6 +24,8 @@
 
 #include <sys/epoll.h>
 
+#include <android-base/unique_fd.h>
+
 namespace android {
 
 /*
@@ -447,7 +449,7 @@ private:
 
     const bool mAllowNonCallbacks; // immutable
 
-    int mWakeEventFd;  // immutable
+    android::base::unique_fd mWakeEventFd;  // immutable
     Mutex mLock;
 
     Vector<MessageEnvelope> mMessageEnvelopes; // guarded by mLock
@@ -457,7 +459,7 @@ private:
     // any use of it is racy anyway.
     volatile bool mPolling;
 
-    int mEpollFd; // guarded by mLock but only modified on the looper thread
+    android::base::unique_fd mEpollFd;  // guarded by mLock but only modified on the looper thread
     bool mEpollRebuildRequired; // guarded by mLock
 
     // Locked list of file descriptor monitoring requests.
