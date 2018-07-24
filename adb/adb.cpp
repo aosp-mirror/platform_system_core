@@ -924,25 +924,6 @@ int launch_server(const std::string& socket_spec) {
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
 int handle_forward_request(const char* service, atransport* transport, int reply_fd) {
-    if (!strcmp(service, "list-forward")) {
-        // Create the list of forward redirections.
-        std::string listeners = format_listeners();
-#if ADB_HOST
-        SendOkay(reply_fd);
-#endif
-        return SendProtocolString(reply_fd, listeners);
-    }
-
-    if (!strcmp(service, "killforward-all")) {
-        remove_all_listeners();
-#if ADB_HOST
-        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
-        SendOkay(reply_fd);
-#endif
-        SendOkay(reply_fd);
-        return 1;
-    }
-
     if (!strncmp(service, "forward:", 8) || !strncmp(service, "killforward:", 12)) {
         // killforward:local
         // forward:(norebind:)?local;remote
@@ -1205,10 +1186,30 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         return SendOkay(reply_fd, response);
     }
 
+    if (!strcmp(service, "list-forward")) {
+        // Create the list of forward redirections.
+        std::string listeners = format_listeners();
+#if ADB_HOST
+        SendOkay(reply_fd);
+#endif
+        return SendProtocolString(reply_fd, listeners);
+    }
+
+    if (!strcmp(service, "killforward-all")) {
+        remove_all_listeners();
+#if ADB_HOST
+        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
+        SendOkay(reply_fd);
+#endif
+        SendOkay(reply_fd);
+        return 1;
+    }
+
     std::string error;
     atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
     if (!t) {
-        return -1;
+        SendFail(reply_fd, error);
+        return 1;
     }
 
     int ret = handle_forward_request(service, t, reply_fd);
