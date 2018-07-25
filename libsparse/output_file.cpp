@@ -29,6 +29,8 @@
 #include <unistd.h>
 #include <zlib.h>
 
+#include <algorithm>
+
 #include "defs.h"
 #include "output_file.h"
 #include "sparse_crc32.h"
@@ -48,13 +50,6 @@
 #define off64_t off_t
 #endif
 
-#define min(a, b)        \
-  ({                     \
-    typeof(a) _a = (a);  \
-    typeof(b) _b = (b);  \
-    (_a < _b) ? _a : _b; \
-  })
-
 #define SPARSE_HEADER_MAJOR_VER 1
 #define SPARSE_HEADER_MINOR_VER 0
 #define SPARSE_HEADER_LEN (sizeof(sparse_header_t))
@@ -67,11 +62,14 @@ struct output_file_ops {
   int (*skip)(struct output_file*, int64_t);
   int (*pad)(struct output_file*, int64_t);
   int (*write)(struct output_file*, void*, size_t);
+  int (*write_fd)(struct output_file*, int, size_t);
+  int (*write_fill)(struct output_file*, uint32_t, size_t);
   void (*close)(struct output_file*);
 };
 
 struct sparse_file_ops {
   int (*write_data_chunk)(struct output_file* out, unsigned int len, void* data);
+  int (*write_fd_chunk)(struct output_file* out, unsigned int len, int fd);
   int (*write_fill_chunk)(struct output_file* out, unsigned int len, uint32_t fill_val);
   int (*write_skip_chunk)(struct output_file* out, int64_t len);
   int (*write_end_chunk)(struct output_file* out);
@@ -108,10 +106,95 @@ struct output_file_normal {
 struct output_file_callback {
   struct output_file out;
   void* priv;
-  int (*write)(void* priv, const void* buf, size_t len);
+  int (*data_write)(void* priv, const void* data, size_t len);
+  int (*fd_write)(void* priv, int fd, size_t len);
+  int (*fill_write)(void* priv, uint32_t fill_val, size_t len);
+  int (*skip_write)(void* priv, off64_t len);
 };
 
 #define to_output_file_callback(_o) container_of((_o), struct output_file_callback, out)
+
+union handle_data {
+  void* data_ptr;
+  int fd;
+};
+
+static int default_file_write_fd(struct output_file* out, int fd, size_t len) {
+  int ret;
+  int64_t aligned_offset;
+  int aligned_diff;
+  uint64_t buffer_size;
+  char* ptr;
+  int64_t offset = lseek64(fd, 0, SEEK_CUR);
+
+  if (offset < 0) {
+    return -errno;
+  }
+
+  aligned_offset = offset & ~(4096 - 1);
+  aligned_diff = offset - aligned_offset;
+  buffer_size = (uint64_t)len + (uint64_t)aligned_diff;
+
+#ifndef _WIN32
+  if (buffer_size > SIZE_MAX) {
+    return -E2BIG;
+  }
+  char* data =
+      reinterpret_cast<char*>(mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, fd, aligned_offset));
+  if (data == MAP_FAILED) {
+    return -errno;
+  }
+  ptr = data + aligned_diff;
+#else
+  char* data = reinterpret_cast<char*>(malloc(len));
+  if (!data) {
+    return -errno;
+  }
+  ret = read_all(fd, data, len);
+  if (ret < 0) {
+    free(data);
+    return -errno;
+  }
+  ptr = data;
+#endif
+
+  ret = out->ops->write(out, ptr, len);
+
+  if (out->use_crc) {
+    out->crc32 = sparse_crc32(out->crc32, ptr, len);
+  }
+
+#ifndef _WIN32
+  munmap(data, buffer_size);
+#else
+  free(data);
+#endif
+
+  return ret;
+}
+
+static int default_file_write_fill(struct output_file* out, uint32_t fill_val, size_t len) {
+  int ret;
+  unsigned int i;
+  unsigned int write_len;
+
+  /* Initialize fill_buf with the fill_val */
+  for (i = 0; i < out->block_size / sizeof(uint32_t); i++) {
+    out->fill_buf[i] = fill_val;
+  }
+
+  while (len) {
+    write_len = std::min(len, static_cast<size_t>(out->block_size));
+    ret = out->ops->write(out, out->fill_buf, write_len);
+    if (ret < 0) {
+      return ret;
+    }
+
+    len -= write_len;
+  }
+
+  return 0;
+}
 
 static int file_open(struct output_file* out, int fd) {
   struct output_file_normal* outn = to_output_file_normal(out);
@@ -176,6 +259,8 @@ static struct output_file_ops file_ops = {
     .skip = file_skip,
     .pad = file_pad,
     .write = file_write,
+    .write_fd = default_file_write_fd,
+    .write_fill = default_file_write_fill,
     .close = file_close,
 };
 
@@ -231,7 +316,7 @@ static int gz_file_write(struct output_file* out, void* data, size_t len) {
   struct output_file_gz* outgz = to_output_file_gz(out);
 
   while (len > 0) {
-    ret = gzwrite(outgz->gz_fd, data, min(len, (unsigned int)INT_MAX));
+    ret = gzwrite(outgz->gz_fd, data, std::min(len, static_cast<size_t>(INT_MAX)));
     if (ret == 0) {
       error("gzwrite %s", gzerror(outgz->gz_fd, nullptr));
       return -1;
@@ -255,6 +340,8 @@ static struct output_file_ops gz_file_ops = {
     .skip = gz_file_skip,
     .pad = gz_file_pad,
     .write = gz_file_write,
+    .write_fd = default_file_write_fd,
+    .write_fill = default_file_write_fill,
     .close = gz_file_close,
 };
 
@@ -267,9 +354,13 @@ static int callback_file_skip(struct output_file* out, int64_t off) {
   int to_write;
   int ret;
 
+  if (outc->skip_write) {
+    return outc->skip_write(outc->priv, off);
+  }
+
   while (off > 0) {
-    to_write = min(off, (int64_t)INT_MAX);
-    ret = outc->write(outc->priv, nullptr, to_write);
+    to_write = std::min(off, static_cast<int64_t>(INT_MAX));
+    ret = outc->data_write(outc->priv, nullptr, to_write);
     if (ret < 0) {
       return ret;
     }
@@ -285,8 +376,23 @@ static int callback_file_pad(struct output_file* out __unused, int64_t len __unu
 
 static int callback_file_write(struct output_file* out, void* data, size_t len) {
   struct output_file_callback* outc = to_output_file_callback(out);
+  return outc->data_write(outc->priv, data, len);
+}
 
-  return outc->write(outc->priv, data, len);
+static int callback_file_write_fd(struct output_file* out, int fd, size_t len) {
+  struct output_file_callback* outc = to_output_file_callback(out);
+  if (outc->fd_write) {
+    return outc->fd_write(outc->priv, fd, len);
+  }
+  return default_file_write_fd(out, fd, len);
+}
+
+static int callback_file_write_fill(struct output_file* out, uint32_t fill_val, size_t len) {
+  struct output_file_callback* outc = to_output_file_callback(out);
+  if (outc->fill_write) {
+    return outc->fill_write(outc->priv, fill_val, len);
+  }
+  return default_file_write_fill(out, fill_val, len);
 }
 
 static void callback_file_close(struct output_file* out) {
@@ -300,6 +406,8 @@ static struct output_file_ops callback_file_ops = {
     .skip = callback_file_skip,
     .pad = callback_file_pad,
     .write = callback_file_write,
+    .write_fd = callback_file_write_fd,
+    .write_fill = callback_file_write_fill,
     .close = callback_file_close,
 };
 
@@ -376,7 +484,8 @@ static int write_sparse_fill_chunk(struct output_file* out, unsigned int len, ui
   return 0;
 }
 
-static int write_sparse_data_chunk(struct output_file* out, unsigned int len, void* data) {
+static int write_sparse_data_chunk_variant(struct output_file* out, unsigned int len,
+                                           handle_data data, bool is_fd) {
   chunk_header_t chunk_header;
   int rnd_up_len, zero_len;
   int ret;
@@ -393,7 +502,16 @@ static int write_sparse_data_chunk(struct output_file* out, unsigned int len, vo
   ret = out->ops->write(out, &chunk_header, sizeof(chunk_header));
 
   if (ret < 0) return -1;
-  ret = out->ops->write(out, data, len);
+
+  if (is_fd) {
+    // CRC is handled by write_fd
+    ret = out->ops->write_fd(out, data.fd, len);
+  } else {
+    ret = out->ops->write(out, data.data_ptr, len);
+    if (out->use_crc) {
+      out->crc32 = sparse_crc32(out->crc32, data.data_ptr, len);
+    }
+  }
   if (ret < 0) return -1;
   if (zero_len) {
     ret = out->ops->write(out, out->zero_buf, zero_len);
@@ -401,7 +519,6 @@ static int write_sparse_data_chunk(struct output_file* out, unsigned int len, vo
   }
 
   if (out->use_crc) {
-    out->crc32 = sparse_crc32(out->crc32, data, len);
     if (zero_len) out->crc32 = sparse_crc32(out->crc32, out->zero_buf, zero_len);
   }
 
@@ -409,6 +526,16 @@ static int write_sparse_data_chunk(struct output_file* out, unsigned int len, vo
   out->chunk_cnt++;
 
   return 0;
+}
+
+static int write_sparse_data_chunk(struct output_file* out, unsigned int len, void* data_ptr) {
+  handle_data data = {data_ptr};
+  return write_sparse_data_chunk_variant(out, len, data, false /* isFd */);
+}
+
+static int write_sparse_fd_chunk(struct output_file* out, unsigned int len, int fd) {
+  handle_data data = {.fd = fd};
+  return write_sparse_data_chunk_variant(out, len, data, true /* isFd */);
 }
 
 int write_sparse_end_chunk(struct output_file* out) {
@@ -438,16 +565,22 @@ int write_sparse_end_chunk(struct output_file* out) {
 
 static struct sparse_file_ops sparse_file_ops = {
     .write_data_chunk = write_sparse_data_chunk,
+    .write_fd_chunk = write_sparse_fd_chunk,
     .write_fill_chunk = write_sparse_fill_chunk,
     .write_skip_chunk = write_sparse_skip_chunk,
     .write_end_chunk = write_sparse_end_chunk,
 };
 
-static int write_normal_data_chunk(struct output_file* out, unsigned int len, void* data) {
+static int write_normal_data_chunk_variant(struct output_file* out, unsigned int len,
+                                           handle_data data, bool isFd) {
   int ret;
   unsigned int rnd_up_len = ALIGN(len, out->block_size);
 
-  ret = out->ops->write(out, data, len);
+  if (isFd) {
+    ret = out->ops->write_fd(out, data.fd, len);
+  } else {
+    ret = out->ops->write(out, data.data_ptr, len);
+  }
   if (ret < 0) {
     return ret;
   }
@@ -459,27 +592,18 @@ static int write_normal_data_chunk(struct output_file* out, unsigned int len, vo
   return ret;
 }
 
+static int write_normal_data_chunk(struct output_file* out, unsigned int len, void* data_ptr) {
+  handle_data data = {data_ptr};
+  return write_normal_data_chunk_variant(out, len, data, false /* isFd */);
+}
+
+static int write_normal_fd_chunk(struct output_file* out, unsigned int len, int fd) {
+  handle_data data = {.fd = fd};
+  return write_normal_data_chunk_variant(out, len, data, true /* isFd */);
+}
+
 static int write_normal_fill_chunk(struct output_file* out, unsigned int len, uint32_t fill_val) {
-  int ret;
-  unsigned int i;
-  unsigned int write_len;
-
-  /* Initialize fill_buf with the fill_val */
-  for (i = 0; i < out->block_size / sizeof(uint32_t); i++) {
-    out->fill_buf[i] = fill_val;
-  }
-
-  while (len) {
-    write_len = min(len, out->block_size);
-    ret = out->ops->write(out, out->fill_buf, write_len);
-    if (ret < 0) {
-      return ret;
-    }
-
-    len -= write_len;
-  }
-
-  return 0;
+  return out->ops->write_fill(out, fill_val, len);
 }
 
 static int write_normal_skip_chunk(struct output_file* out, int64_t len) {
@@ -492,6 +616,7 @@ int write_normal_end_chunk(struct output_file* out) {
 
 static struct sparse_file_ops normal_file_ops = {
     .write_data_chunk = write_normal_data_chunk,
+    .write_fd_chunk = write_normal_fd_chunk,
     .write_fill_chunk = write_normal_fill_chunk,
     .write_skip_chunk = write_normal_skip_chunk,
     .write_end_chunk = write_normal_end_chunk,
@@ -589,11 +714,19 @@ static struct output_file* output_file_new_normal(void) {
   return &outn->out;
 }
 
-struct output_file* output_file_open_callback(int (*write)(void*, const void*, size_t), void* priv,
-                                              unsigned int block_size, int64_t len, int gz __unused,
-                                              int sparse, int chunks, int crc) {
+struct output_file* output_file_open_callback(int (*data_write)(void*, const void*, size_t),
+                                              int (*fd_write)(void*, int, size_t),
+                                              int (*fill_write)(void*, uint32_t, size_t),
+                                              int (*skip_write)(void*, off64_t), void* priv,
+                                              unsigned int block_size, int64_t len, int sparse,
+                                              int chunks, int crc) {
   int ret;
   struct output_file_callback* outc;
+
+  if (!data_write || (crc && (fd_write || fill_write))) {
+    errno = EINVAL;
+    return nullptr;
+  }
 
   outc =
       reinterpret_cast<struct output_file_callback*>(calloc(1, sizeof(struct output_file_callback)));
@@ -604,7 +737,10 @@ struct output_file* output_file_open_callback(int (*write)(void*, const void*, s
 
   outc->out.ops = &callback_file_ops;
   outc->priv = priv;
-  outc->write = write;
+  outc->data_write = data_write;
+  outc->fd_write = fd_write;
+  outc->fill_write = fill_write;
+  outc->skip_write = skip_write;
 
   ret = output_file_init(&outc->out, block_size, len, sparse, chunks, crc);
   if (ret < 0) {
@@ -651,52 +787,8 @@ int write_fill_chunk(struct output_file* out, unsigned int len, uint32_t fill_va
 }
 
 int write_fd_chunk(struct output_file* out, unsigned int len, int fd, int64_t offset) {
-  int ret;
-  int64_t aligned_offset;
-  int aligned_diff;
-  uint64_t buffer_size;
-  char* ptr;
-
-  aligned_offset = offset & ~(4096 - 1);
-  aligned_diff = offset - aligned_offset;
-  buffer_size = (uint64_t)len + (uint64_t)aligned_diff;
-
-#ifndef _WIN32
-  if (buffer_size > SIZE_MAX) return -E2BIG;
-  char* data =
-      reinterpret_cast<char*>(mmap64(nullptr, buffer_size, PROT_READ, MAP_SHARED, fd, aligned_offset));
-  if (data == MAP_FAILED) {
-    return -errno;
-  }
-  ptr = data + aligned_diff;
-#else
-  off64_t pos;
-  char* data = reinterpret_cast<char*>(malloc(len));
-  if (!data) {
-    return -errno;
-  }
-  pos = lseek64(fd, offset, SEEK_SET);
-  if (pos < 0) {
-    free(data);
-    return -errno;
-  }
-  ret = read_all(fd, data, len);
-  if (ret < 0) {
-    free(data);
-    return ret;
-  }
-  ptr = data;
-#endif
-
-  ret = out->sparse_ops->write_data_chunk(out, len, ptr);
-
-#ifndef _WIN32
-  munmap(data, buffer_size);
-#else
-  free(data);
-#endif
-
-  return ret;
+  lseek64(fd, offset, SEEK_SET);
+  return out->sparse_ops->write_fd_chunk(out, len, fd);
 }
 
 /* Write a contiguous region of data blocks from a file */
