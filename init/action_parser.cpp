@@ -60,7 +60,7 @@ Result<Success> ParsePropertyTrigger(const std::string& trigger, Subcontext* sub
     prop_name.erase(equal_pos);
 
     if (!IsActionableProperty(subcontext, prop_name)) {
-        return Error() << "unexported property tigger found: " << prop_name;
+        return Error() << "unexported property trigger found: " << prop_name;
     }
 
     if (auto [it, inserted] = property_triggers->emplace(prop_name, prop_value); !inserted) {
