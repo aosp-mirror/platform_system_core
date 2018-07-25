@@ -54,10 +54,10 @@
 #include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
 #include "daemon/set_verity_enable_state_service.h"
+#include "daemon/shell_service.h"
 #endif
 #include "remount_service.h"
 #include "services.h"
-#include "shell_service.h"
 #include "socket_spec.h"
 #include "sysdeps.h"
 #include "transport.h"

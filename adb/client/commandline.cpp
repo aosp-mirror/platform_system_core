@@ -59,7 +59,7 @@
 #include "client/file_sync_client.h"
 #include "commandline.h"
 #include "services.h"
-#include "shell_service.h"
+#include "shell_protocol.h"
 #include "sysdeps/chrono.h"
 #include "sysdeps/memory.h"
 
