@@ -16,8 +16,9 @@
 
 #define TRACE_TAG SYNC
 
+#include "daemon/file_sync_service.h"
+
 #include "sysdeps.h"
-#include "file_sync_service.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -42,6 +43,7 @@
 #include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
+#include "file_sync_protocol.h"
 #include "security_log_tags.h"
 #include "sysdeps/errno.h"
 

@@ -51,10 +51,10 @@
 #include "adb_io.h"
 #include "adb_utils.h"
 #if !ADB_HOST
+#include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
 #include "daemon/set_verity_enable_state_service.h"
 #endif
-#include "file_sync_service.h"
 #include "remount_service.h"
 #include "services.h"
 #include "shell_service.h"
