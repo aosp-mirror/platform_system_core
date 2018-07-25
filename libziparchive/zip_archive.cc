@@ -33,6 +33,10 @@
 #include <memory>
 #include <vector>
 
+#if defined(__BIONIC__)
+#include <android/fdsan.h>
+#endif
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
@@ -163,6 +167,44 @@ static int32_t AddToHash(ZipString* hash_table, const uint64_t hash_table_size,
   hash_table[ent].name = name.name;
   hash_table[ent].name_length = name.name_length;
   return 0;
+}
+
+ZipArchive::ZipArchive(const int fd, bool assume_ownership)
+    : mapped_zip(fd),
+      close_file(assume_ownership),
+      directory_offset(0),
+      central_directory(),
+      directory_map(new android::FileMap()),
+      num_entries(0),
+      hash_table_size(0),
+      hash_table(nullptr) {
+#if defined(__BIONIC__)
+  if (assume_ownership) {
+    android_fdsan_exchange_owner_tag(fd, 0, reinterpret_cast<uint64_t>(this));
+  }
+#endif
+}
+
+ZipArchive::ZipArchive(void* address, size_t length)
+    : mapped_zip(address, length),
+      close_file(false),
+      directory_offset(0),
+      central_directory(),
+      directory_map(new android::FileMap()),
+      num_entries(0),
+      hash_table_size(0),
+      hash_table(nullptr) {}
+
+ZipArchive::~ZipArchive() {
+  if (close_file && mapped_zip.GetFileDescriptor() >= 0) {
+#if defined(__BIONIC__)
+    android_fdsan_close_with_tag(mapped_zip.GetFileDescriptor(), reinterpret_cast<uint64_t>(this));
+#else
+    close(mapped_zip.GetFileDescriptor());
+#endif
+  }
+
+  free(hash_table);
 }
 
 static int32_t MapCentralDirectory0(const char* debug_file_name, ZipArchive* archive,

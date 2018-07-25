@@ -111,7 +111,7 @@ typedef struct boot_img_hdr_v0 boot_img_hdr;
 
 struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
     uint32_t recovery_dtbo_size;   /* size in bytes for recovery DTBO image */
-    uint64_t recovery_dtbo_offset; /* physical load addr */
+    uint64_t recovery_dtbo_offset; /* offset to recovery dtbo in boot image */
     uint32_t header_size;
 } __attribute__((packed));
 
@@ -138,11 +138,14 @@ struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
  * 1. kernel and ramdisk are required (size != 0)
  * 2. recovery_dtbo is required for recovery.img in non-A/B devices(recovery_dtbo_size != 0)
  * 3. second is optional (second_size == 0 -> no second)
- * 4. load each element (kernel, ramdisk, second, recovery_dtbo) at
+ * 4. load each element (kernel, ramdisk, second) at
  *    the specified physical address (kernel_addr, etc)
- * 5. prepare tags at tag_addr.  kernel_args[] is
+ * 5. If booting to recovery mode in a non-A/B device, extract recovery dtbo and
+ *    apply the correct set of overlays on the base device tree depending on the
+ *    hardware/product revision.
+ * 6. prepare tags at tag_addr.  kernel_args[] is
  *    appended to the kernel commandline in the tags.
- * 6. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
- * 7. if second_size != 0: jump to second_addr
+ * 7. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
+ * 8. if second_size != 0: jump to second_addr
  *    else: jump to kernel_addr
  */

@@ -56,6 +56,7 @@
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
+#include "epoll.h"
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
@@ -94,6 +95,11 @@ uint32_t (*property_set)(const std::string& name, const std::string& value) = In
 
 void CreateSerializedPropertyInfo();
 
+struct PropertyAuditData {
+    const ucred* cr;
+    const char* name;
+};
+
 void property_init() {
     mkdir("/dev/__properties__", S_IRWXU | S_IXGRP | S_IXOTH);
     CreateSerializedPropertyInfo();
@@ -110,7 +116,7 @@ static bool CheckMacPerms(const std::string& name, const char* target_context,
         return false;
     }
 
-    property_audit_data audit_data;
+    PropertyAuditData audit_data;
 
     audit_data.name = name.c_str();
     audit_data.cr = &cr;
@@ -371,11 +377,16 @@ class SocketConnection {
 
             int result = TEMP_FAILURE_RETRY(recv(socket_, data, bytes_left, MSG_DONTWAIT));
             if (result <= 0) {
+                PLOG(ERROR) << "sys_prop: recv error";
                 return false;
             }
 
             bytes_left -= result;
             data += result;
+        }
+
+        if (bytes_left != 0) {
+            LOG(ERROR) << "sys_prop: recv data is not properly obtained.";
         }
 
         return bytes_left == 0;
@@ -387,6 +398,35 @@ class SocketConnection {
     DISALLOW_IMPLICIT_CONSTRUCTORS(SocketConnection);
 };
 
+bool CheckControlPropertyPerms(const std::string& name, const std::string& value,
+                               const std::string& source_context, const ucred& cr) {
+    // We check the legacy method first but these properties are dontaudit, so we only log an audit
+    // if the newer method fails as well.  We only do this with the legacy ctl. properties.
+    if (name == "ctl.start" || name == "ctl.stop" || name == "ctl.restart") {
+        // The legacy permissions model is that ctl. properties have their name ctl.<action> and
+        // their value is the name of the service to apply that action to.  Permissions for these
+        // actions are based on the service, so we must create a fake name of ctl.<service> to
+        // check permissions.
+        auto control_string_legacy = "ctl." + value;
+        const char* target_context_legacy = nullptr;
+        const char* type_legacy = nullptr;
+        property_info_area->GetPropertyInfo(control_string_legacy.c_str(), &target_context_legacy,
+                                            &type_legacy);
+
+        if (CheckMacPerms(control_string_legacy, target_context_legacy, source_context.c_str(), cr)) {
+            return true;
+        }
+    }
+
+    auto control_string_full = name + "$" + value;
+    const char* target_context_full = nullptr;
+    const char* type_full = nullptr;
+    property_info_area->GetPropertyInfo(control_string_full.c_str(), &target_context_full,
+                                        &type_full);
+
+    return CheckMacPerms(control_string_full, target_context_full, source_context.c_str(), cr);
+}
+
 // This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                            const std::string& source_context, const ucred& cr, std::string* error) {
@@ -396,15 +436,9 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
     }
 
     if (StartsWith(name, "ctl.")) {
-        // ctl. properties have their name ctl.<action> and their value is the name of the service
-        // to apply that action to.  Permissions for these actions are based on the service, so we
-        // must create a fake name of ctl.<service> to check permissions.
-        auto control_string = "ctl." + value;
-        const char* target_context = nullptr;
-        const char* type = nullptr;
-        property_info_area->GetPropertyInfo(control_string.c_str(), &target_context, &type);
-        if (!CheckMacPerms(control_string, target_context, source_context.c_str(), cr)) {
-            *error = StringPrintf("Unable to '%s' service %s", name.c_str() + 4, value.c_str());
+        if (!CheckControlPropertyPerms(name, value, source_context, cr)) {
+            *error = StringPrintf("Invalid permissions to perform '%s' on '%s'", name.c_str() + 4,
+                                  value.c_str());
             return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
         }
 
@@ -736,7 +770,7 @@ void load_system_props() {
 }
 
 static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {
-    property_audit_data* d = reinterpret_cast<property_audit_data*>(data);
+    auto* d = reinterpret_cast<PropertyAuditData*>(data);
 
     if (!d || !d->name || !d->cr) {
         LOG(ERROR) << "AuditCallback invoked with null data arguments!";
@@ -808,7 +842,7 @@ void CreateSerializedPropertyInfo() {
     selinux_android_restorecon(kPropertyInfosPath, 0);
 }
 
-void start_property_service() {
+void StartPropertyService(Epoll* epoll) {
     selinux_callback cb;
     cb.func_audit = SelinuxAuditCallback;
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
@@ -823,7 +857,9 @@ void start_property_service() {
 
     listen(property_set_fd, 8);
 
-    register_epoll_handler(property_set_fd, handle_property_set_fd);
+    if (auto result = epoll->RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
+        PLOG(FATAL) << result.error();
+    }
 }
 
 }  // namespace init

@@ -18,6 +18,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <linux/input.h>
 #include <linux/securebits.h>
 #include <sched.h>
 #include <sys/mount.h>
@@ -32,6 +33,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -45,8 +47,6 @@
 
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
-
-#include <android-base/properties.h>
 
 #include "init.h"
 #include "property_service.h"
@@ -130,7 +130,7 @@ Result<Success> Service::SetUpMountNamespace() const {
         if (umount2("/sys", MNT_DETACH) == -1) {
             return ErrnoError() << "Could not umount(/sys)";
         }
-        if (mount("", "/sys", "sys", kSafeFlags, "") == -1) {
+        if (mount("", "/sys", "sysfs", kSafeFlags, "") == -1) {
             return ErrnoError() << "Could not mount(/sys)";
         }
     }
@@ -228,7 +228,6 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       seclabel_(seclabel),
       onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
                  "onrestart", {}),
-      keychord_id_(0),
       ioprio_class_(IoSchedClass_NONE),
       ioprio_pri_(0),
       priority_(0),
@@ -544,10 +543,13 @@ Result<Success> Service::ParseIoprio(const std::vector<std::string>& args) {
 Result<Success> Service::ParseKeycodes(const std::vector<std::string>& args) {
     for (std::size_t i = 1; i < args.size(); i++) {
         int code;
-        if (ParseInt(args[i], &code)) {
-            keycodes_.emplace_back(code);
+        if (ParseInt(args[i], &code, 0, KEY_MAX)) {
+            for (auto& key : keycodes_) {
+                if (key == code) return Error() << "duplicate keycode: " << args[i];
+            }
+            keycodes_.insert(std::upper_bound(keycodes_.begin(), keycodes_.end(), code), code);
         } else {
-            LOG(WARNING) << "ignoring invalid keycode: " << args[i];
+            return Error() << "invalid keycode: " << args[i];
         }
     }
     return Success();
@@ -785,9 +787,9 @@ Result<Success> Service::ExecStart() {
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
 
-    LOG(INFO) << "SVC_EXEC pid " << pid_ << " (uid " << uid_ << " gid " << gid_ << "+"
-              << supp_gids_.size() << " context " << (!seclabel_.empty() ? seclabel_ : "default")
-              << ") started; waiting...";
+    LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << uid_ << " gid "
+              << gid_ << "+" << supp_gids_.size() << " context "
+              << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
 
     return Success();
 }

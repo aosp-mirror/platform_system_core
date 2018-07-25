@@ -33,18 +33,14 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <selinux/android.h>
 
-#include "reboot.h"
-
 #if defined(__ANDROID__)
-#include <android-base/properties.h>
-
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"

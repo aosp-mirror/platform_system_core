@@ -46,7 +46,7 @@
 #include "sysdeps/chrono.h"
 
 static TransportType __adb_transport = kTransportAny;
-static const char* __adb_serial = NULL;
+static const char* __adb_serial = nullptr;
 static TransportId __adb_transport_id = 0;
 
 static const char* __adb_server_socket_spec;

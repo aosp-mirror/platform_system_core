@@ -32,6 +32,7 @@
 #include <vector>
 
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
@@ -106,15 +107,12 @@ static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
   Unwinder unwinder(512, maps, regs, process_memory);
   unwinder.Unwind();
 
-  std::string expected_function = expected_function_names.back();
-  expected_function_names.pop_back();
   for (auto& frame : unwinder.frames()) {
-    if (frame.function_name == expected_function) {
+    if (frame.function_name == expected_function_names.back()) {
+      expected_function_names.pop_back();
       if (expected_function_names.empty()) {
         break;
       }
-      expected_function = expected_function_names.back();
-      expected_function_names.pop_back();
     }
   }
 
@@ -234,8 +232,7 @@ TEST_F(UnwindTest, from_context) {
     usleep(1000);
   }
   ASSERT_NE(0, tid.load());
-  // Portable tgkill method.
-  ASSERT_EQ(0, syscall(__NR_tgkill, getpid(), tid.load(), SIGUSR1)) << "Error: " << strerror(errno);
+  ASSERT_EQ(0, tgkill(getpid(), tid.load(), SIGUSR1)) << "Error: " << strerror(errno);
 
   // Wait for context data.
   void* ucontext;

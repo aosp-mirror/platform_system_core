@@ -40,13 +40,6 @@ cc_library_static {
 }
 
 cc_test {
-    name: "sync_test",
-    defaults: ["libsync_defaults"],
-    gtest: false,
-    srcs: ["sync_test.c"],
-}
-
-cc_test {
     name: "sync-unit-tests",
     shared_libs: ["libsync"],
     srcs: ["tests/sync_test.cpp"],

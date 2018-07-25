@@ -68,8 +68,9 @@ on property:init.svc.zygote=stopping
 
 # Record boot complete metrics.
 on property:sys.boot_completed=1 && property:sys.logbootcomplete=1
+    # Converts bootloader boot reason to system boot reason
     # Record boot_complete and related stats (decryption, etc).
     # Record the boot reason.
     # Record time since factory reset.
     # Log all boot events.
-    exec_background - system log -- /system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l
+    exec_background - system log -- /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l

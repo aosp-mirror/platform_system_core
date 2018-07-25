@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_PARSEINT_H
-#define ANDROID_BASE_PARSEINT_H
+#pragma once
 
 #include <errno.h>
 #include <stdlib.h>
@@ -27,9 +26,9 @@
 namespace android {
 namespace base {
 
-// Parses the unsigned decimal integer in the string 's' and sets 'out' to
-// that value. Optionally allows the caller to define a 'max' beyond which
-// otherwise valid values will be rejected. Returns boolean success; 'out'
+// Parses the unsigned decimal or hexadecimal integer in the string 's' and sets
+// 'out' to that value. Optionally allows the caller to define a 'max' beyond
+// which otherwise valid values will be rejected. Returns boolean success; 'out'
 // is untouched if parsing fails.
 template <typename T>
 bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
@@ -43,14 +42,14 @@ bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
     const char* suffixes = "bkmgtpe";
     const char* suffix;
     if (!allow_suffixes || (suffix = strchr(suffixes, tolower(*end))) == nullptr) return false;
-#if __clang__  // TODO: win32 still builds with GCC :-(
     if (__builtin_mul_overflow(result, 1ULL << (10 * (suffix - suffixes)), &result)) return false;
-#endif
   }
   if (max < result) {
     return false;
   }
-  *out = static_cast<T>(result);
+  if (out != nullptr) {
+    *out = static_cast<T>(result);
+  }
   return true;
 }
 
@@ -72,8 +71,8 @@ bool ParseByteCount(const std::string& s, T* out, T max = std::numeric_limits<T>
   return ParseByteCount(s.c_str(), out, max);
 }
 
-// Parses the signed decimal integer in the string 's' and sets 'out' to
-// that value. Optionally allows the caller to define a 'min' and 'max
+// Parses the signed decimal or hexadecimal integer in the string 's' and sets
+// 'out' to that value. Optionally allows the caller to define a 'min' and 'max'
 // beyond which otherwise valid values will be rejected. Returns boolean
 // success; 'out' is untouched if parsing fails.
 template <typename T>
@@ -90,7 +89,9 @@ bool ParseInt(const char* s, T* out,
   if (result < min || max < result) {
     return false;
   }
-  *out = static_cast<T>(result);
+  if (out != nullptr) {
+    *out = static_cast<T>(result);
+  }
   return true;
 }
 
@@ -104,5 +105,3 @@ bool ParseInt(const std::string& s, T* out,
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_PARSEINT_H

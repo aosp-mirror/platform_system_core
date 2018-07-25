@@ -122,7 +122,7 @@ class Backtrace {
   // Tracing a thread in a different process is not supported.
   // If map is NULL, then create the map and manage it internally.
   // If map is not NULL, the map is still owned by the caller.
-  static Backtrace* Create(pid_t pid, pid_t tid, BacktraceMap* map = NULL);
+  static Backtrace* Create(pid_t pid, pid_t tid, BacktraceMap* map = nullptr);
 
   // Create an offline Backtrace object that can be used to do an unwind without a process
   // that is still running. By default, information is only cached in the map
@@ -145,7 +145,7 @@ class Backtrace {
   virtual ~Backtrace();
 
   // Get the current stack trace and store in the backtrace_ structure.
-  virtual bool Unwind(size_t num_ignore_frames, void* context = NULL) = 0;
+  virtual bool Unwind(size_t num_ignore_frames, void* context = nullptr) = 0;
 
   static bool Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                      std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
@@ -160,7 +160,7 @@ class Backtrace {
   // If the string is empty, then no valid function name was found,
   // or the pc is not in any valid map.
   virtual std::string GetFunctionName(uint64_t pc, uint64_t* offset,
-                                      const backtrace_map_t* map = NULL);
+                                      const backtrace_map_t* map = nullptr);
 
   // Fill in the map data associated with the given pc.
   virtual void FillInMap(uint64_t pc, backtrace_map_t* map);
@@ -185,7 +185,7 @@ class Backtrace {
 
   const backtrace_frame_data_t* GetFrame(size_t frame_num) {
     if (frame_num >= frames_.size()) {
-      return NULL;
+      return nullptr;
     }
     return &frames_[frame_num];
   }

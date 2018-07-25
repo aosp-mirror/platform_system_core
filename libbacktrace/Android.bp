@@ -42,7 +42,6 @@ libbacktrace_sources = [
     "Backtrace.cpp",
     "BacktraceCurrent.cpp",
     "BacktracePtrace.cpp",
-    "thread_utils.c",
     "ThreadEntry.cpp",
     "UnwindStack.cpp",
     "UnwindStackMap.cpp",
@@ -51,12 +50,14 @@ libbacktrace_sources = [
 cc_library_headers {
     name: "libbacktrace_headers",
     vendor_available: true,
+    recovery_available: true,
     export_include_dirs: ["include"],
 }
 
 cc_library {
     name: "libbacktrace",
     vendor_available: false,
+    recovery_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -92,7 +93,6 @@ cc_library {
             ],
 
             static_libs: [
-                "libcutils",
                 "libprocinfo",
             ],
 
@@ -101,13 +101,15 @@ cc_library {
             include_dirs: [
                 "art/runtime",
             ],
-
-            header_libs: ["jni_headers"],
         },
         android: {
             static_libs: ["libasync_safe"],
         },
         vendor: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            exclude_shared_libs: ["libdexfile"],
+        },
+        recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_shared_libs: ["libdexfile"],
         },
@@ -141,7 +143,6 @@ cc_test {
         "backtrace_offline_test.cpp",
         "backtrace_test.cpp",
         "GetPss.cpp",
-        "thread_utils.c",
     ],
 
     cflags: [
@@ -155,7 +156,6 @@ cc_test {
         "libbacktrace",
         "libdexfile",
         "libbase",
-        "libcutils",
         "liblog",
         "libunwindstack",
     ],

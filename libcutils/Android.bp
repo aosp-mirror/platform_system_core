@@ -20,6 +20,7 @@
 libcutils_nonwindows_sources = [
     "android_get_control_file.cpp",
     "fs.cpp",
+    "hashmap.cpp",
     "multiuser.cpp",
     "socket_inaddr_any_server_unix.cpp",
     "socket_local_client_unix.cpp",
@@ -32,6 +33,7 @@ libcutils_nonwindows_sources = [
 cc_library_headers {
     name: "libcutils_headers",
     vendor_available: true,
+    recovery_available: true,
     host_supported: true,
     export_include_dirs: ["include"],
     target: {
@@ -54,16 +56,15 @@ cc_library {
         enabled: true,
         support_system_process: true,
     },
+    recovery_available: true,
     host_supported: true,
     srcs: [
         "config_utils.cpp",
         "fs_config.cpp",
         "canned_fs_config.cpp",
-        "hashmap.cpp",
         "iosched_policy.cpp",
         "load_file.cpp",
         "native_handle.cpp",
-        "open_memstream.c",
         "record_stream.cpp",
         "sched_policy.cpp",
         "sockets.cpp",

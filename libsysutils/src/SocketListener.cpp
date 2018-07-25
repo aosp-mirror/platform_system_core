@@ -39,7 +39,7 @@ SocketListener::SocketListener(const char *socketName, bool listen) {
 }
 
 SocketListener::SocketListener(int socketFd, bool listen) {
-    init(NULL, socketFd, listen, false);
+    init(nullptr, socketFd, listen, false);
 }
 
 SocketListener::SocketListener(const char *socketName, bool listen, bool useCmdNum) {
@@ -51,7 +51,7 @@ void SocketListener::init(const char *socketName, int socketFd, bool listen, boo
     mSocketName = socketName;
     mSock = socketFd;
     mUseCmdNum = useCmdNum;
-    pthread_mutex_init(&mClientsLock, NULL);
+    pthread_mutex_init(&mClientsLock, nullptr);
     mClients = new SocketClientCollection();
 }
 
@@ -102,7 +102,7 @@ int SocketListener::startListener(int backlog) {
         return -1;
     }
 
-    if (pthread_create(&mThread, NULL, SocketListener::threadStart, this)) {
+    if (pthread_create(&mThread, nullptr, SocketListener::threadStart, this)) {
         SLOGE("pthread_create (%s)", strerror(errno));
         return -1;
     }
@@ -147,8 +147,8 @@ void *SocketListener::threadStart(void *obj) {
     SocketListener *me = reinterpret_cast<SocketListener *>(obj);
 
     me->runListener();
-    pthread_exit(NULL);
-    return NULL;
+    pthread_exit(nullptr);
+    return nullptr;
 }
 
 void SocketListener::runListener() {
@@ -183,7 +183,7 @@ void SocketListener::runListener() {
         }
         pthread_mutex_unlock(&mClientsLock);
         SLOGV("mListen=%d, max=%d, mSocketName=%s", mListen, max, mSocketName);
-        if ((rc = select(max + 1, &read_fds, NULL, NULL, NULL)) < 0) {
+        if ((rc = select(max + 1, &read_fds, nullptr, nullptr, nullptr)) < 0) {
             if (errno == EINTR)
                 continue;
             SLOGE("select failed (%s) mListen=%d, max=%d", strerror(errno), mListen, max);

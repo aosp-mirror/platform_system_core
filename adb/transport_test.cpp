@@ -86,9 +86,9 @@ TEST(transport, parse_banner_no_features) {
     ASSERT_EQ(0U, t.features().size());
     ASSERT_EQ(kCsHost, t.GetConnectionState());
 
-    ASSERT_EQ(nullptr, t.product);
-    ASSERT_EQ(nullptr, t.model);
-    ASSERT_EQ(nullptr, t.device);
+    ASSERT_EQ(std::string(), t.product);
+    ASSERT_EQ(std::string(), t.model);
+    ASSERT_EQ(std::string(), t.device);
 }
 
 TEST(transport, parse_banner_product_features) {

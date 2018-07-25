@@ -16,11 +16,11 @@
 #
 
 _fastboot() {
-    if ! type -t "$1" >/dev/null; then
+    if ! check_type "$1" >/dev/null; then
         return
     fi
 
-    if type -t _init_completion >/dev/null; then
+    if check_type _init_completion >/dev/null; then
         _init_completion || return
     fi
 
@@ -135,7 +135,7 @@ _fastboot_util_complete_local_file() {
     xspec=$2
 
     # Since we're probably doing file completion here, don't add a space after.
-    if [[ $(type -t compopt) = "builtin" ]]; then
+    if [[ $(check_type compopt) == "builtin" ]]; then
         compopt -o plusdirs
         if [[ "${xspec}" == "" ]]; then
             COMPREPLY=( ${COMPREPLY[@]:-} $(compgen -f -- "${cur}") )
@@ -175,7 +175,7 @@ _fastboot_util_complete_local_file() {
     fi
 }
 
-if [[ $(type -t compopt) = "builtin" ]]; then
+if [[ $(check_type compopt) == "builtin" ]]; then
     complete -F _fastboot fastboot
 else
     complete -o nospace -F _fastboot fastboot

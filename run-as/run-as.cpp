@@ -28,6 +28,7 @@
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
+#include <android-base/properties.h>
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/android.h>
@@ -40,6 +41,7 @@
 //  The 'run-as' binary is installed with CAP_SETUID and CAP_SETGID file
 //  capabilities, but will check the following:
 //
+//  - that the ro.boot.disable_runas property is not set
 //  - that it is invoked from the 'shell' or 'root' user (abort otherwise)
 //  - that '<package-name>' is the name of an installed and debuggable package
 //  - that the package's data directory is well-formed
@@ -137,6 +139,12 @@ int main(int argc, char* argv[]) {
   // production devices. Check user id of caller --- must be 'shell' or 'root'.
   if (getuid() != AID_SHELL && getuid() != AID_ROOT) {
     error(1, 0, "only 'shell' or 'root' users can run this program");
+  }
+
+  // Some devices can disable running run-as, such as Chrome OS when running in
+  // non-developer mode.
+  if (android::base::GetBoolProperty("ro.boot.disable_runas", false)) {
+      error(1, 0, "run-as is disabled from the kernel commandline");
   }
 
   char* pkgname = argv[1];

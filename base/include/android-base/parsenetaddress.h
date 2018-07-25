@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_PARSENETADDRESS_H
-#define ANDROID_BASE_PARSENETADDRESS_H
+#pragma once
 
 #include <string>
 
@@ -34,5 +33,3 @@ bool ParseNetAddress(const std::string& address, std::string* host, int* port,
 
 }  // namespace base
 }  // namespace android
-
-#endif  // ANDROID_BASE_PARSENETADDRESS_H

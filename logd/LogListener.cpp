@@ -50,7 +50,7 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
 
     alignas(4) char control[CMSG_SPACE(sizeof(struct ucred))];
     struct msghdr hdr = {
-        NULL, 0, &iov, 1, control, sizeof(control), 0,
+        nullptr, 0, &iov, 1, control, sizeof(control), 0,
     };
 
     int socket = cli->getSocket();
@@ -66,10 +66,10 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
 
     buffer[n] = 0;
 
-    struct ucred* cred = NULL;
+    struct ucred* cred = nullptr;
 
     struct cmsghdr* cmsg = CMSG_FIRSTHDR(&hdr);
-    while (cmsg != NULL) {
+    while (cmsg != nullptr) {
         if (cmsg->cmsg_level == SOL_SOCKET &&
             cmsg->cmsg_type == SCM_CREDENTIALS) {
             cred = (struct ucred*)CMSG_DATA(cmsg);
@@ -79,7 +79,7 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
     }
 
     struct ucred fake_cred;
-    if (cred == NULL) {
+    if (cred == nullptr) {
         cred = &fake_cred;
         cred->pid = 0;
         cred->uid = DEFAULT_OVERFLOWUID;

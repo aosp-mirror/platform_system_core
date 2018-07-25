@@ -51,7 +51,7 @@ std::string Prune::format() {
 }
 
 PruneList::PruneList() {
-    init(NULL);
+    init(nullptr);
 }
 
 PruneList::~PruneList() {
@@ -79,7 +79,7 @@ int PruneList::init(const char* str) {
     // default here means take ro.logd.filter, persist.logd.filter then
     // internal default in that order.
     if (str && !strcmp(str, _default)) {
-        str = NULL;
+        str = nullptr;
     }
     static const char _disable[] = "disable";
     if (str && !strcmp(str, _disable)) {

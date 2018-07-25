@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <regex>
@@ -43,7 +44,6 @@
 #include <android/log.h>
 #include <cutils/android_reboot.h>
 #include <cutils/properties.h>
-#include <log/logcat.h>
 #include <metricslogger/metrics_logger.h>
 
 #include "boot_event_record_store.h"
@@ -124,12 +124,12 @@ std::string GetProperty(const char* key) {
   return std::string(&temp[0], len);
 }
 
-void SetProperty(const char* key, const std::string& val) {
-  property_set(key, val.c_str());
+bool SetProperty(const char* key, const std::string& val) {
+  return property_set(key, val.c_str()) == 0;
 }
 
-void SetProperty(const char* key, const char* val) {
-  property_set(key, val);
+bool SetProperty(const char* key, const char* val) {
+  return property_set(key, val) == 0;
 }
 
 constexpr int32_t kEmptyBootReason = 0;
@@ -201,7 +201,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"cold", 56},
     {"hard", 57},
     {"warm", 58},
-    // {"recovery", 59},  // Duplicate of enum 3 above. Immediate reuse possible.
+    {"reboot,kernel_power_off_charging__reboot_system", 59},  // Can not happen
     {"thermal-shutdown", 60},
     {"shutdown,thermal", 61},
     {"shutdown,battery", 62},
@@ -228,7 +228,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"2sec_reboot", 83},
     {"reboot,by_key", 84},
     {"reboot,longkey", 85},
-    {"reboot,2sec", 86},
+    {"reboot,2sec", 86},  // Deprecate in two years, replaced with cold,rtc,2sec
     {"shutdown,thermal,battery", 87},
     {"reboot,its_just_so_hard", 88},  // produced by boot_reason_test
     {"reboot,Its Just So Hard", 89},  // produced by boot_reason_test
@@ -306,6 +306,11 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"kernel_panic,sysrq,livelock,alarm", 161},   // llkd
     {"kernel_panic,sysrq,livelock,driver", 162},  // llkd
     {"kernel_panic,sysrq,livelock,zombie", 163},  // llkd
+    {"kernel_panic,modem", 164},
+    {"kernel_panic,adsp", 165},
+    {"kernel_panic,dsps", 166},
+    {"kernel_panic,wcnss", 167},
+    {"kernel_panic,_sde_encoder_phys_cmd_handle_ppdone_timeout", 168},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -702,6 +707,10 @@ bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
         {"Corrupt kernel stack", "stack"},
         {"low stack detected", "stack"},
         {"corrupted stack end", "stack"},
+        {"subsys-restart: Resetting the SoC - modem crashed.", "modem"},
+        {"subsys-restart: Resetting the SoC - adsp crashed.", "adsp"},
+        {"subsys-restart: Resetting the SoC - dsps crashed.", "dsps"},
+        {"subsys-restart: Resetting the SoC - wcnss crashed.", "wcnss"},
     };
 
     ret = "kernel_panic";
@@ -726,7 +735,49 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
+const char last_last_reboot_reason_property[] = "sys.boot.reason.last";
+constexpr size_t history_reboot_reason_size = 4;
+const char history_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY ".history";
 const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
+
+// Land system_boot_reason into system_reboot_reason_property.
+// Shift system_boot_reason into history_reboot_reason_property.
+void BootReasonAddToHistory(const std::string& system_boot_reason) {
+  if (system_boot_reason.empty()) return;
+  LOG(INFO) << "Canonical boot reason: " << system_boot_reason;
+  auto old_system_boot_reason = GetProperty(system_reboot_reason_property);
+  if (!SetProperty(system_reboot_reason_property, system_boot_reason)) {
+    SetProperty(system_reboot_reason_property, system_boot_reason.substr(0, PROPERTY_VALUE_MAX - 1));
+  }
+  auto reason_history = android::base::Split(GetProperty(history_reboot_reason_property), "\n");
+  static auto mark = time(nullptr);
+  auto mark_str = std::string(",") + std::to_string(mark);
+  auto marked_system_boot_reason = system_boot_reason + mark_str;
+  if (!reason_history.empty()) {
+    // delete any entries that we just wrote in a previous
+    // call and leveraging duplicate line handling
+    auto last = old_system_boot_reason + mark_str;
+    // trim the list to (history_reboot_reason_size - 1)
+    ssize_t max = history_reboot_reason_size;
+    for (auto it = reason_history.begin(); it != reason_history.end();) {
+      if (it->empty() || (last == *it) || (marked_system_boot_reason == *it) || (--max <= 0)) {
+        it = reason_history.erase(it);
+      } else {
+        last = *it;
+        ++it;
+      }
+    }
+  }
+  // insert at the front, concatenating mark (<epoch time>) detail to the value.
+  reason_history.insert(reason_history.begin(), marked_system_boot_reason);
+  // If the property string is too long ( > PROPERTY_VALUE_MAX)
+  // we get an error, so trim out last entry and try again.
+  while (!(SetProperty(history_reboot_reason_property, android::base::Join(reason_history, '\n')))) {
+    auto it = std::prev(reason_history.end());
+    if (it == reason_history.end()) break;
+    reason_history.erase(it);
+  }
+}
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
 std::string BootReasonStrToReason(const std::string& boot_reason) {
@@ -782,7 +833,12 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"hard,hw_reset", "hw_reset"},
         {"cold,charger", "usb"},
         {"cold,rtc", "rtc"},
-        {"reboot,2sec", "2sec_reboot"},
+        {"cold,rtc,2sec", "2sec_reboot"},
+        {"!warm", "wdt_by_pass_pwk"},  // change flavour of blunt
+        {"!reboot", "^wdt$"},          // change flavour of blunt
+        {"reboot,tool", "tool_by_pass_pwk"},
+        {"!reboot,longkey", "reboot_longkey"},
+        {"!reboot,longkey", "kpdpwr"},
         {"bootloader", ""},
     };
 
@@ -842,6 +898,10 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
             ret = "reboot," + subReason;  // legitimize unknown reasons
           }
         }
+        // Some bootloaders shutdown results record in last kernel message.
+        if (!strcmp(ret.c_str(), "reboot,kernel_power_off_charging__reboot_system")) {
+          ret = "shutdown";
+        }
       }
 
       // Check for kernel panics, allowed to override reboot command.
@@ -853,103 +913,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       }
     }
 
-    // The following battery test should migrate to a default system health HAL
-
-    // Let us not worry if the reboot command was issued, for the cases of
-    // reboot -p, reboot <no reason>, reboot cold, reboot warm and reboot hard.
-    // Same for bootloader and ro.boot.bootreasons of this set, but a dead
-    // battery could conceivably lead to these, so worthy of override.
-    if (isBluntRebootReason(ret)) {
-      // Heuristic to determine if shutdown possibly because of a dead battery?
-      // Really a hail-mary pass to find it in last klog content ...
-      static const int battery_dead_threshold = 2;  // percent
-      static const char battery[] = "healthd: battery l=";
-      const pstoreConsole console(content);
-      size_t pos = console.rfind(battery);  // last one
-      std::string digits;
-      if (pos != std::string::npos) {
-        digits = content.substr(pos + strlen(battery), strlen("100 "));
-        // correct common errors
-        correctForBitError(digits, "100 ");
-        if (digits[0] == '!') digits[0] = '1';
-        if (digits[1] == '!') digits[1] = '1';
-      }
-      const char* endptr = digits.c_str();
-      unsigned level = 0;
-      while (::isdigit(*endptr)) {
-        level *= 10;
-        level += *endptr++ - '0';
-        // make sure no leading zeros, except zero itself, and range check.
-        if ((level == 0) || (level > 100)) break;
-      }
-      // example bit error rate issues for 10%
-      //   'l=10 ' no bits in error
-      //   'l=00 ' single bit error (fails above)
-      //   'l=1  ' single bit error
-      //   'l=0  ' double bit error
-      // There are others, not typically critical because of 2%
-      // battery_dead_threshold. KISS check, make sure second
-      // character after digit sequence is not a space.
-      if ((level <= 100) && (endptr != digits.c_str()) && (endptr[0] == ' ') && (endptr[1] != ' ')) {
-        LOG(INFO) << "Battery level at shutdown " << level << "%";
-        if (level <= battery_dead_threshold) {
-          ret = "shutdown,battery";
-        }
-      } else {        // Most likely
-        digits = "";  // reset digits
-
-        // Content buffer no longer will have console data. Beware if more
-        // checks added below, that depend on parsing console content.
-        content = "";
-
-        LOG(DEBUG) << "Can not find last low battery in last console messages";
-        android_logcat_context ctx = create_android_logcat();
-        FILE* fp = android_logcat_popen(&ctx, "logcat -b kernel -v brief -d");
-        if (fp != nullptr) {
-          android::base::ReadFdToString(fileno(fp), &content);
-        }
-        android_logcat_pclose(&ctx, fp);
-        static const char logcat_battery[] = "W/healthd (    0): battery l=";
-        const char* match = logcat_battery;
-
-        if (content == "") {
-          // Service logd.klog not running, go to smaller buffer in the kernel.
-          int rc = klogctl(KLOG_SIZE_BUFFER, nullptr, 0);
-          if (rc > 0) {
-            ssize_t len = rc + 1024;  // 1K Margin should it grow between calls.
-            std::unique_ptr<char[]> buf(new char[len]);
-            rc = klogctl(KLOG_READ_ALL, buf.get(), len);
-            if (rc < len) {
-              len = rc + 1;
-            }
-            buf[--len] = '\0';
-            content = buf.get();
-          }
-          match = battery;
-        }
-
-        pos = content.find(match);  // The first one it finds.
-        if (pos != std::string::npos) {
-          digits = content.substr(pos + strlen(match), strlen("100 "));
-        }
-        endptr = digits.c_str();
-        level = 0;
-        while (::isdigit(*endptr)) {
-          level *= 10;
-          level += *endptr++ - '0';
-          // make sure no leading zeros, except zero itself, and range check.
-          if ((level == 0) || (level > 100)) break;
-        }
-        if ((level <= 100) && (endptr != digits.c_str()) && (*endptr == ' ')) {
-          LOG(INFO) << "Battery level at startup " << level << "%";
-          if (level <= battery_dead_threshold) {
-            ret = "shutdown,battery";
-          }
-        } else {
-          LOG(DEBUG) << "Can not find first battery level in dmesg or logcat";
-        }
-      }
-    }
+    // TODO: use the HAL to get battery level (http://b/77725702).
 
     // Is there a controlled shutdown hint in last_reboot_reason_property?
     if (isBluntRebootReason(ret)) {
@@ -986,10 +950,6 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
   }
 
   LOG(INFO) << "Canonical boot reason: " << ret;
-  if (isKernelRebootReason(ret) && (GetProperty(last_reboot_reason_property) != "")) {
-    // Rewrite as it must be old news, kernel reasons trump user space.
-    SetProperty(last_reboot_reason_property, ret);
-  }
   return ret;
 }
 
@@ -1014,13 +974,11 @@ std::string CalculateBootCompletePrefix() {
   if (!boot_event_store.GetBootEvent(kBuildDateKey, &record)) {
     boot_complete_prefix = "factory_reset_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
-    LOG(INFO) << "Canonical boot reason: reboot,factory_reset";
-    SetProperty(system_reboot_reason_property, "reboot,factory_reset");
+    BootReasonAddToHistory("reboot,factory_reset");
   } else if (build_date != record.second) {
     boot_complete_prefix = "ota_" + boot_complete_prefix;
     boot_event_store.AddBootEventWithValue(kBuildDateKey, build_date);
-    LOG(INFO) << "Canonical boot reason: reboot,ota";
-    SetProperty(system_reboot_reason_property, "reboot,ota");
+    BootReasonAddToHistory("reboot,ota");
   }
 
   return boot_complete_prefix;
@@ -1114,6 +1072,22 @@ android::base::boot_clock::duration GetUptime() {
   return android::base::boot_clock::now().time_since_epoch() - GetBootTimeOffset();
 }
 
+void SetSystemBootReason() {
+  const std::string bootloader_boot_reason(GetProperty(bootloader_reboot_reason_property));
+  const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
+  // Record the scrubbed system_boot_reason to the property
+  BootReasonAddToHistory(system_boot_reason);
+  // Shift last_reboot_reason_property to last_last_reboot_reason_property
+  std::string last_boot_reason(GetProperty(last_reboot_reason_property));
+  if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
+    last_boot_reason = system_boot_reason;
+  } else {
+    transformReason(last_boot_reason);
+  }
+  SetProperty(last_last_reboot_reason_property, last_boot_reason);
+  SetProperty(last_reboot_reason_property, "");
+}
+
 // Records several metrics related to the time it takes to boot the device,
 // including disambiguating boot time on encrypted or non-encrypted devices.
 void RecordBootComplete() {
@@ -1193,12 +1167,10 @@ void RecordBootReason() {
   boot_event_store.AddBootEventWithValue("boot_reason", boot_reason);
 
   // Log the scrubbed system_boot_reason.
-  const std::string system_reason(BootReasonStrToReason(reason));
+  const std::string system_reason(GetProperty(system_reboot_reason_property));
   int32_t system_boot_reason = BootReasonStrToEnum(system_reason);
   boot_event_store.AddBootEventWithValue("system_boot_reason", system_boot_reason);
 
-  // Record the scrubbed system_boot_reason to the property
-  SetProperty(system_reboot_reason_property, system_reason);
   if (reason == "") {
     SetProperty(bootloader_reboot_reason_property, system_reason);
   }
@@ -1264,20 +1236,22 @@ int main(int argc, char** argv) {
 
   int option_index = 0;
   static const char value_str[] = "value";
+  static const char system_boot_reason_str[] = "set_system_boot_reason";
   static const char boot_complete_str[] = "record_boot_complete";
   static const char boot_reason_str[] = "record_boot_reason";
   static const char factory_reset_str[] = "record_time_since_factory_reset";
   static const struct option long_options[] = {
       // clang-format off
-      { "help",            no_argument,       NULL,   'h' },
-      { "log",             no_argument,       NULL,   'l' },
-      { "print",           no_argument,       NULL,   'p' },
-      { "record",          required_argument, NULL,   'r' },
-      { value_str,         required_argument, NULL,   0 },
-      { boot_complete_str, no_argument,       NULL,   0 },
-      { boot_reason_str,   no_argument,       NULL,   0 },
-      { factory_reset_str, no_argument,       NULL,   0 },
-      { NULL,              0,                 NULL,   0 }
+      { "help",                 no_argument,       NULL,   'h' },
+      { "log",                  no_argument,       NULL,   'l' },
+      { "print",                no_argument,       NULL,   'p' },
+      { "record",               required_argument, NULL,   'r' },
+      { value_str,              required_argument, NULL,   0 },
+      { system_boot_reason_str, no_argument,       NULL,   0 },
+      { boot_complete_str,      no_argument,       NULL,   0 },
+      { boot_reason_str,        no_argument,       NULL,   0 },
+      { factory_reset_str,      no_argument,       NULL,   0 },
+      { NULL,                   0,                 NULL,   0 }
       // clang-format on
   };
 
@@ -1293,6 +1267,8 @@ int main(int argc, char** argv) {
           // |optarg| is an external variable set by getopt representing
           // the option argument.
           value = optarg;
+        } else if (option_name == system_boot_reason_str) {
+          SetSystemBootReason();
         } else if (option_name == boot_complete_str) {
           RecordBootComplete();
         } else if (option_name == boot_reason_str) {

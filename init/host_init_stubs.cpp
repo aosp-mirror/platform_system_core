@@ -16,24 +16,12 @@
 
 #include "host_init_stubs.h"
 
+#include <android-base/properties.h>
+
 // unistd.h
 int setgroups(size_t __size, const gid_t* __list) {
     return 0;
 }
-
-namespace android {
-namespace base {
-
-std::string GetProperty(const std::string&, const std::string& default_value) {
-    return default_value;
-}
-
-bool GetBoolProperty(const std::string&, bool default_value) {
-    return default_value;
-}
-
-}  // namespace base
-}  // namespace android
 
 namespace android {
 namespace init {
@@ -42,7 +30,11 @@ namespace init {
 std::string default_console = "/dev/console";
 
 // property_service.h
-uint32_t (*property_set)(const std::string& name, const std::string& value) = nullptr;
+uint32_t SetProperty(const std::string& key, const std::string& value) {
+    android::base::SetProperty(key, value);
+    return 0;
+}
+uint32_t (*property_set)(const std::string& name, const std::string& value) = SetProperty;
 uint32_t HandlePropertySet(const std::string&, const std::string&, const std::string&, const ucred&,
                            std::string*) {
     return 0;

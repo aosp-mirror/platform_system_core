@@ -31,9 +31,9 @@
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/threads.h>
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
-#include <cutils/threads.h>
 
 #include <gtest/gtest.h>
 
@@ -99,7 +99,7 @@ struct OfflineThreadArg {
 
 static void* OfflineThreadFunc(void* arg) {
   OfflineThreadArg* fn_arg = reinterpret_cast<OfflineThreadArg*>(arg);
-  fn_arg->tid = gettid();
+  fn_arg->tid = android::base::GetThreadId();
   test_get_context_and_wait(&fn_arg->ucontext, &fn_arg->exit_flag);
   return nullptr;
 }

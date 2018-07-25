@@ -113,6 +113,9 @@
 # graphics timestamp
 # 60100 - 60199 reserved for surfaceflinger
 
+# audio
+# 61000 - 61199 reserved for audioserver
+
 # 0 for screen off, 1 for screen on, 2 for key-guard done
 70000 screen_toggled (screen_state|1|5)
 

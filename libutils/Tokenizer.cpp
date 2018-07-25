@@ -28,7 +28,7 @@
 namespace android {
 
 static inline bool isDelimiter(char ch, const char* delimiters) {
-    return strchr(delimiters, ch) != NULL;
+    return strchr(delimiters, ch) != nullptr;
 }
 
 Tokenizer::Tokenizer(const String8& filename, FileMap* fileMap, char* buffer,
@@ -46,7 +46,7 @@ Tokenizer::~Tokenizer() {
 }
 
 status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
-    *outTokenizer = NULL;
+    *outTokenizer = nullptr;
 
     int result = NO_ERROR;
     int fd = ::open(filename.string(), O_RDONLY);
@@ -64,12 +64,12 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
             FileMap* fileMap = new FileMap();
             bool ownBuffer = false;
             char* buffer;
-            if (fileMap->create(NULL, fd, 0, length, true)) {
+            if (fileMap->create(nullptr, fd, 0, length, true)) {
                 fileMap->advise(FileMap::SEQUENTIAL);
                 buffer = static_cast<char*>(fileMap->getDataPtr());
             } else {
                 delete fileMap;
-                fileMap = NULL;
+                fileMap = nullptr;
 
                 // Fall back to reading into a buffer since we can't mmap files in sysfs.
                 // The length we obtained from stat is wrong too (it will always be 4096)
@@ -81,7 +81,7 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
                     result = -errno;
                     ALOGE("Error reading file '%s': %s", filename.string(), strerror(errno));
                     delete[] buffer;
-                    buffer = NULL;
+                    buffer = nullptr;
                 } else {
                     length = size_t(nrd);
                 }
@@ -98,7 +98,7 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
 
 status_t Tokenizer::fromContents(const String8& filename,
         const char* contents, Tokenizer** outTokenizer) {
-    *outTokenizer = new Tokenizer(filename, NULL,
+    *outTokenizer = new Tokenizer(filename, nullptr,
             const_cast<char*>(contents), false, strlen(contents));
     return OK;
 }

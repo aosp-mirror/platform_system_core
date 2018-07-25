@@ -45,7 +45,7 @@ public:
     // (Note that the default ALOG behavior is to ignore blank lines)
     LogPrinter(const char* logtag,
                android_LogPriority priority = ANDROID_LOG_DEBUG,
-               const char* prefix = 0,
+               const char* prefix = nullptr,
                bool ignoreBlankLines = false);
 
     // Print the specified line to logcat. No \n at the end is necessary.
@@ -66,7 +66,7 @@ public:
     // Create a printer using the specified file descriptor.
     // - Each line will be prefixed with 'indent' number of blank spaces.
     // - In addition, each line will be prefixed with the 'prefix' string.
-    FdPrinter(int fd, unsigned int indent = 0, const char* prefix = 0);
+    FdPrinter(int fd, unsigned int indent = 0, const char* prefix = nullptr);
 
     // Print the specified line to the file descriptor. \n is appended automatically.
     virtual void printLine(const char* string);
@@ -90,7 +90,7 @@ public:
     // Create a printer using the specified String8 as the target.
     // - In addition, each line will be prefixed with the 'prefix' string.
     // - target's memory lifetime must be a superset of this String8Printer.
-    String8Printer(String8* target, const char* prefix = 0);
+    String8Printer(String8* target, const char* prefix = nullptr);
 
     // Append the specified line to the String8. \n is appended automatically.
     virtual void printLine(const char* string);

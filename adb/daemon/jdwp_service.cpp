@@ -139,8 +139,6 @@ struct JdwpProcess {
             fatal("could not create fdevent for new JDWP process");
         }
 
-        this->fde->state |= FDE_DONT_CLOSE;
-
         /* start by waiting for the PID */
         fdevent_add(this->fde, FDE_READ);
     }
@@ -148,7 +146,6 @@ struct JdwpProcess {
     ~JdwpProcess() {
         if (this->socket >= 0) {
             adb_shutdown(this->socket);
-            adb_close(this->socket);
             this->socket = -1;
         }
 
@@ -267,7 +264,7 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
 
             iov.iov_base = &dummy;
             iov.iov_len = 1;
-            msg.msg_name = NULL;
+            msg.msg_name = nullptr;
             msg.msg_namelen = 0;
             msg.msg_iov = &iov;
             msg.msg_iovlen = 1;
@@ -396,7 +393,7 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
     control->listen_socket = s;
 
     control->fde = fdevent_create(s, jdwp_control_event, control);
-    if (control->fde == NULL) {
+    if (control->fde == nullptr) {
         D("could not create fdevent for jdwp control socket");
         adb_close(s);
         return -1;

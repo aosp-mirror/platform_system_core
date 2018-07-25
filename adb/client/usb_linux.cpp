@@ -128,7 +128,7 @@ static void find_usb_device(const std::string& base,
     if (!bus_dir) return;
 
     dirent* de;
-    while ((de = readdir(bus_dir.get())) != 0) {
+    while ((de = readdir(bus_dir.get())) != nullptr) {
         if (contains_non_digit(de->d_name)) continue;
 
         std::string bus_name = base + "/" + de->d_name;
@@ -418,11 +418,11 @@ int usb_write(usb_handle *h, const void *_data, int len)
     if (h->zero_mask && !(len & h->zero_mask)) {
         // If we need 0-markers and our transfer is an even multiple of the packet size,
         // then send a zero marker.
-        return usb_bulk_write(h, _data, 0);
+        return usb_bulk_write(h, _data, 0) == 0 ? n : -1;
     }
 
     D("-- usb_write --");
-    return 0;
+    return n;
 }
 
 int usb_read(usb_handle *h, void *_data, int len)
