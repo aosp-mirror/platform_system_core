@@ -42,7 +42,7 @@ FrameworkListener::FrameworkListener(const char *socketName) :
 
 FrameworkListener::FrameworkListener(int sock) :
                             SocketListener(sock, true) {
-    init(NULL, false);
+    init(nullptr, false);
 }
 
 void FrameworkListener::init(const char *socketName UNUSED, bool withSeq) {
@@ -154,7 +154,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
             if (!haveCmdNum) {
                 char *endptr;
                 int cmdNum = (int)strtol(tmp, &endptr, 0);
-                if (endptr == NULL || *endptr != '\0') {
+                if (endptr == nullptr || *endptr != '\0') {
                     cli->sendMsg(500, "Invalid sequence number", false);
                     goto out;
                 }
