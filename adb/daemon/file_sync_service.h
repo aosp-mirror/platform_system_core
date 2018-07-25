@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (C) 2018 The Android Open Source Project
  *
@@ -16,6 +14,8 @@
  * limitations under the License.
  */
 
-#include <android-base/unique_fd.h>
+#pragma once
 
-void file_sync_service(android::base::unique_fd fd);
+#include "adb_unique_fd.h"
+
+void file_sync_service(unique_fd fd);

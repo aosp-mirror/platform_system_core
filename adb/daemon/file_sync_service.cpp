@@ -527,7 +527,7 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     return true;
 }
 
-void file_sync_service(android::base::unique_fd fd) {
+void file_sync_service(unique_fd fd) {
     std::vector<char> buffer(SYNC_DATA_MAX);
 
     while (handle_sync_command(fd.get(), buffer)) {

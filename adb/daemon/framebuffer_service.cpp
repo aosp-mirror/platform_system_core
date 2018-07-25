@@ -57,7 +57,7 @@ struct fbinfo {
     unsigned int alpha_length;
 } __attribute__((packed));
 
-void framebuffer_service(android::base::unique_fd fd) {
+void framebuffer_service(unique_fd fd) {
     struct fbinfo fbinfo;
     unsigned int i, bsize;
     char buf[640];

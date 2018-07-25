@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef _REMOUNT_SERVICE_H_
-#define _REMOUNT_SERVICE_H_
+#pragma once
 
 #include <string>
 
-#include <android-base/unique_fd.h>
+#include "adb_unique_fd.h"
 
 bool make_block_device_writable(const std::string&);
-void remount_service(android::base::unique_fd, const std::string&);
-
-#endif
+void remount_service(unique_fd, const std::string&);
