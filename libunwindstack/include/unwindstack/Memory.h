@@ -41,18 +41,6 @@ class Memory {
 
   bool ReadFully(uint64_t addr, void* dst, size_t size);
 
-  inline bool ReadField(uint64_t addr, void* start, void* field, size_t size) {
-    if (reinterpret_cast<uintptr_t>(field) < reinterpret_cast<uintptr_t>(start)) {
-      return false;
-    }
-    uint64_t offset = reinterpret_cast<uintptr_t>(field) - reinterpret_cast<uintptr_t>(start);
-    if (__builtin_add_overflow(addr, offset, &offset)) {
-      return false;
-    }
-    // The read will check if offset + size overflows.
-    return ReadFully(offset, field, size);
-  }
-
   inline bool Read32(uint64_t addr, uint32_t* dst) {
     return ReadFully(addr, dst, sizeof(uint32_t));
   }

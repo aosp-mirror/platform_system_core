@@ -288,9 +288,9 @@ int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc,
         uid = AID_ROOT;
     }
 
-    const char* name = NULL;
-    const char* format = NULL;
-    const char* id = NULL;
+    const char* name = nullptr;
+    const char* format = nullptr;
+    const char* id = nullptr;
     for (int i = 1; i < argc; ++i) {
         static const char _name[] = "name=";
         if (!strncmp(argv[i], _name, strlen(_name))) {

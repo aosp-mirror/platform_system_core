@@ -28,7 +28,7 @@
 
 #include "bootimg_utils.h"
 
-#include "fastboot.h"
+#include "util.h"
 
 #include <stdio.h>
 #include <stdlib.h>

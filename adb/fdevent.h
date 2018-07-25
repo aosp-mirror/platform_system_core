@@ -22,28 +22,26 @@
 
 #include <functional>
 
+#include "adb_unique_fd.h"
+
 /* events that may be observed */
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
 #define FDE_ERROR             0x0004
 
-/* features that may be set (via the events set/add/del interface) */
-#define FDE_DONT_CLOSE        0x0080
-
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 
 struct fdevent {
-    fdevent *next;
-    fdevent *prev;
+    uint64_t id;
 
-    int fd;
-    int force_eof;
+    unique_fd fd;
+    int force_eof = 0;
 
-    uint16_t state;
-    uint16_t events;
+    uint16_t state = 0;
+    uint16_t events = 0;
 
-    fd_func func;
-    void *arg;
+    fd_func func = nullptr;
+    void* arg = nullptr;
 };
 
 /* Allocate and initialize a new fdevent object
@@ -56,15 +54,6 @@ fdevent *fdevent_create(int fd, fd_func func, void *arg);
 ** created by fdevent_create()
 */
 void fdevent_destroy(fdevent *fde);
-
-/* Initialize an fdevent object that was externally allocated
-*/
-void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg);
-
-/* Uninitialize an fdevent object that was initialized by
-** fdevent_install()
-*/
-void fdevent_remove(fdevent *item);
 
 /* Change which events should cause notifications
 */

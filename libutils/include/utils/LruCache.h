@@ -71,7 +71,7 @@ private:
         Entry* parent;
         Entry* child;
 
-        Entry(TKey _key, TValue _value) : key(_key), value(_value), parent(NULL), child(NULL) {
+        Entry(TKey _key, TValue _value) : key(_key), value(_value), parent(nullptr), child(nullptr) {
         }
         const TKey& getKey() const final { return key; }
     };
@@ -162,9 +162,9 @@ public:
 template <typename TKey, typename TValue>
 LruCache<TKey, TValue>::LruCache(uint32_t maxCapacity)
     : mSet(new LruCacheSet())
-    , mListener(NULL)
-    , mOldest(NULL)
-    , mYoungest(NULL)
+    , mListener(nullptr)
+    , mOldest(nullptr)
+    , mYoungest(nullptr)
     , mMaxCapacity(maxCapacity)
     , mNullValue(0) {
     mSet->max_load_factor(1.0);
@@ -236,7 +236,7 @@ bool LruCache<TKey, TValue>::remove(const TKey& key) {
 
 template <typename TKey, typename TValue>
 bool LruCache<TKey, TValue>::removeOldest() {
-    if (mOldest != NULL) {
+    if (mOldest != nullptr) {
         return remove(mOldest->key);
         // TODO: should probably abort if false
     }
@@ -254,12 +254,12 @@ const TValue& LruCache<TKey, TValue>::peekOldestValue() {
 template <typename TKey, typename TValue>
 void LruCache<TKey, TValue>::clear() {
     if (mListener) {
-        for (Entry* p = mOldest; p != NULL; p = p->child) {
+        for (Entry* p = mOldest; p != nullptr; p = p->child) {
             (*mListener)(p->key, p->value);
         }
     }
-    mYoungest = NULL;
-    mOldest = NULL;
+    mYoungest = nullptr;
+    mOldest = nullptr;
     for (auto entry : *mSet.get()) {
         delete entry;
     }
@@ -268,7 +268,7 @@ void LruCache<TKey, TValue>::clear() {
 
 template <typename TKey, typename TValue>
 void LruCache<TKey, TValue>::attachToCache(Entry& entry) {
-    if (mYoungest == NULL) {
+    if (mYoungest == nullptr) {
         mYoungest = mOldest = &entry;
     } else {
         entry.parent = mYoungest;
@@ -279,19 +279,19 @@ void LruCache<TKey, TValue>::attachToCache(Entry& entry) {
 
 template <typename TKey, typename TValue>
 void LruCache<TKey, TValue>::detachFromCache(Entry& entry) {
-    if (entry.parent != NULL) {
+    if (entry.parent != nullptr) {
         entry.parent->child = entry.child;
     } else {
         mOldest = entry.child;
     }
-    if (entry.child != NULL) {
+    if (entry.child != nullptr) {
         entry.child->parent = entry.parent;
     } else {
         mYoungest = entry.parent;
     }
 
-    entry.parent = NULL;
-    entry.child = NULL;
+    entry.parent = nullptr;
+    entry.child = nullptr;
 }
 
 }

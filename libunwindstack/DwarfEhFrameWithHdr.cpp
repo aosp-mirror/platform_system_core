@@ -22,19 +22,27 @@
 
 #include "Check.h"
 #include "DwarfEhFrameWithHdr.h"
+#include "DwarfEncoding.h"
 
 namespace unwindstack {
 
+static inline bool IsEncodingRelative(uint8_t encoding) {
+  encoding >>= 4;
+  return encoding > 0 && encoding <= DW_EH_PE_funcrel;
+}
+
 template <typename AddressType>
-bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size) {
-  uint8_t data[4];
+bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint64_t load_bias) {
+  load_bias_ = load_bias;
 
   memory_.clear_func_offset();
   memory_.clear_text_offset();
   memory_.set_data_offset(offset);
   memory_.set_cur_offset(offset);
+  pc_offset_ = offset;
 
   // Read the first four bytes all at once.
+  uint8_t data[4];
   if (!memory_.ReadBytes(data, 4)) {
     last_error_.code = DWARF_ERROR_MEMORY_INVALID;
     last_error_.address = memory_.cur_offset();
@@ -81,12 +89,22 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size) {
 }
 
 template <typename AddressType>
-const DwarfFde* DwarfEhFrameWithHdr<AddressType>::GetFdeFromIndex(size_t index) {
-  const FdeInfo* info = GetFdeInfoFromIndex(index);
-  if (info == nullptr) {
+const DwarfFde* DwarfEhFrameWithHdr<AddressType>::GetFdeFromPc(uint64_t pc) {
+  uint64_t fde_offset;
+  if (!GetFdeOffsetFromPc(pc, &fde_offset)) {
     return nullptr;
   }
-  return this->GetFdeFromOffset(info->offset);
+  const DwarfFde* fde = this->GetFdeFromOffset(fde_offset);
+  if (fde == nullptr) {
+    return nullptr;
+  }
+
+  // Guaranteed pc >= pc_start, need to check pc in the fde range.
+  if (pc < fde->pc_end) {
+    return fde;
+  }
+  last_error_.code = DWARF_ERROR_ILLEGAL_STATE;
+  return nullptr;
 }
 
 template <typename AddressType>
@@ -100,7 +118,7 @@ DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
 
   memory_.set_data_offset(entries_data_offset_);
   memory_.set_cur_offset(entries_offset_ + 2 * index * table_entry_size_);
-  memory_.set_pc_offset(memory_.cur_offset());
+  memory_.set_pc_offset(0);
   uint64_t value;
   if (!memory_.template ReadEncodedValue<AddressType>(table_encoding_, &value) ||
       !memory_.template ReadEncodedValue<AddressType>(table_encoding_, &info->offset)) {
@@ -108,6 +126,11 @@ DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
     last_error_.address = memory_.cur_offset();
     fde_info_.erase(index);
     return nullptr;
+  }
+
+  // Relative encodings require adding in the load bias.
+  if (IsEncodingRelative(table_encoding_)) {
+    value += load_bias_;
   }
   info->pc = value;
   return info;
@@ -174,27 +197,27 @@ bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetSequential(uint64_t pc, uint6
 
   memory_.set_data_offset(entries_data_offset_);
   memory_.set_cur_offset(cur_entries_offset_);
+  memory_.set_pc_offset(0);
   cur_entries_offset_ = 0;
 
   FdeInfo* prev_info = nullptr;
   for (size_t current = fde_info_.size();
        current < fde_count_ && memory_.cur_offset() < entries_end_; current++) {
-    memory_.set_pc_offset(memory_.cur_offset());
-    uint64_t value;
-    if (!memory_.template ReadEncodedValue<AddressType>(table_encoding_, &value)) {
-      last_error_.code = DWARF_ERROR_MEMORY_INVALID;
-      last_error_.address = memory_.cur_offset();
-      return false;
-    }
-
     FdeInfo* info = &fde_info_[current];
-    if (!memory_.template ReadEncodedValue<AddressType>(table_encoding_, &info->offset)) {
+    uint64_t value;
+    if (!memory_.template ReadEncodedValue<AddressType>(table_encoding_, &value) ||
+        !memory_.template ReadEncodedValue<AddressType>(table_encoding_, &info->offset)) {
       fde_info_.erase(current);
       last_error_.code = DWARF_ERROR_MEMORY_INVALID;
       last_error_.address = memory_.cur_offset();
       return false;
     }
-    info->pc = value + 4;
+
+    // Relative encodings require adding in the load bias.
+    if (IsEncodingRelative(table_encoding_)) {
+      value += load_bias_;
+    }
+    info->pc = value;
 
     if (pc < info->pc) {
       if (prev_info == nullptr) {
@@ -226,6 +249,21 @@ bool DwarfEhFrameWithHdr<AddressType>::GetFdeOffsetFromPc(uint64_t pc, uint64_t*
   } else {
     // Do a sequential search since each table entry size is variable.
     return GetFdeOffsetSequential(pc, fde_offset);
+  }
+}
+
+template <typename AddressType>
+void DwarfEhFrameWithHdr<AddressType>::GetFdes(std::vector<const DwarfFde*>* fdes) {
+  for (size_t i = 0; i < fde_count_; i++) {
+    const FdeInfo* info = GetFdeInfoFromIndex(i);
+    if (info == nullptr) {
+      break;
+    }
+    const DwarfFde* fde = this->GetFdeFromOffset(info->offset);
+    if (fde == nullptr) {
+      break;
+    }
+    fdes->push_back(fde);
   }
 }
 

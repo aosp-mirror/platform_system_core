@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_TEST_UTILS_H
-#define ANDROID_BASE_TEST_UTILS_H
+#pragma once
 
 #include <regex>
 #include <string>
@@ -58,21 +57,33 @@ class TemporaryDir {
   DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
 };
 
-class CapturedStderr {
+class CapturedStdFd {
  public:
-  CapturedStderr();
-  ~CapturedStderr();
+  CapturedStdFd(int std_fd);
+  ~CapturedStdFd();
 
   int fd() const;
+  std::string str();
 
  private:
-  void init();
-  void reset();
+  void Init();
+  void Reset();
 
   TemporaryFile temp_file_;
-  int old_stderr_;
+  int std_fd_;
+  int old_fd_;
 
-  DISALLOW_COPY_AND_ASSIGN(CapturedStderr);
+  DISALLOW_COPY_AND_ASSIGN(CapturedStdFd);
+};
+
+class CapturedStderr : public CapturedStdFd {
+ public:
+  CapturedStderr() : CapturedStdFd(STDERR_FILENO) {}
+};
+
+class CapturedStdout : public CapturedStdFd {
+ public:
+  CapturedStdout() : CapturedStdFd(STDOUT_FILENO) {}
 };
 
 #define ASSERT_MATCH(str, pattern)                                             \
@@ -102,5 +113,3 @@ class CapturedStderr {
       ADD_FAILURE() << "regex mismatch: expected to not find " << (pattern) << " in:\n" << (str); \
     }                                                                                             \
   } while (0)
-
-#endif  // ANDROID_BASE_TEST_UTILS_H

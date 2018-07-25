@@ -210,6 +210,37 @@ int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
 		int (*write)(void *priv, const void *data, size_t len), void *priv);
 
 /**
+ * sparse_file_callback_typed - call a callback for blocks based on type
+ *
+ * @s - sparse file cookie
+ * @sparse - write in the Android sparse file format
+ * @data_write - function to call for data blocks. must not be null
+ * @fd_write - function to call for fd blocks
+ * @fill_write - function to call for fill blocks
+ * @skip_write - function to call for skip blocks
+ * @priv - value that will be passed as the first argument to each write
+ *
+ * Writes a sparse file by calling callback functions.  If sparse is true, the
+ * file will be written in the Android sparse file format, and fill and skip blocks
+ * along with metadata will be written with data_write. If sparse is false, the file
+ * will be expanded into normal format and fill and skip blocks will be written with
+ * the given callbacks.
+ * If a callback function is provided, the library will not unroll data into a buffer,
+ * and will instead pass it directly to the caller for custom implementation. If a
+ * callback is not provided, that type of block will be converted into a void* and
+ * written with data_write. If no callbacks other than data are provided, the behavior
+ * is the same as sparse_file_callback(). The callback should return negative on error,
+ * 0 on success.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int sparse_file_callback_typed(struct sparse_file* s, bool sparse,
+                               int (*data_write)(void* priv, const void* data, size_t len),
+                               int (*fd_write)(void* priv, int fd, size_t len),
+                               int (*fill_write)(void* priv, uint32_t fill_val, size_t len),
+                               int (*skip_write)(void* priv, int64_t len), void* priv);
+
+/**
  * sparse_file_foreach_chunk - call a callback for data blocks in sparse file
  *
  * @s - sparse file cookie
@@ -246,9 +277,24 @@ int sparse_file_foreach_chunk(struct sparse_file *s, bool sparse, bool crc,
 int sparse_file_read(struct sparse_file *s, int fd, bool sparse, bool crc);
 
 /**
- * sparse_file_import - import an existing sparse file
+ * sparse_file_read_buf - read a buffer into a sparse file cookie
  *
  * @s - sparse file cookie
+ * @buf - buffer to read from
+ * @crc - verify the crc of a file in the Android sparse file format
+ *
+ * Reads a buffer into a sparse file cookie. The buffer must remain
+ * valid until the sparse file cookie is freed. If crc is true, the
+ * crc of the sparse file will be verified.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int sparse_file_read_buf(struct sparse_file *s, char *buf, bool crc);
+
+/**
+ * sparse_file_import - import an existing sparse file
+ *
+ * @fd - file descriptor to read from
  * @verbose - print verbose errors while reading the sparse file
  * @crc - verify the crc of a file in the Android sparse file format
  *
@@ -259,6 +305,21 @@ int sparse_file_read(struct sparse_file *s, int fd, bool sparse, bool crc);
  * Returns a new sparse file cookie on success, NULL on error.
  */
 struct sparse_file *sparse_file_import(int fd, bool verbose, bool crc);
+
+/**
+ * sparse_file_import_buf - import an existing sparse file from a buffer
+ *
+ * @buf - buffer to read from
+ * @verbose - print verbose errors while reading the sparse file
+ * @crc - verify the crc of a file in the Android sparse file format
+ *
+ * Reads existing sparse file data into a sparse file cookie, recreating the same
+ * sparse cookie that was used to write it.  If verbose is true, prints verbose
+ * errors when the sparse file is formatted incorrectly.
+ *
+ * Returns a new sparse file cookie on success, NULL on error.
+ */
+struct sparse_file *sparse_file_import_buf(char* buf, bool verbose, bool crc);
 
 /**
  * sparse_file_import_auto - import an existing sparse or normal file

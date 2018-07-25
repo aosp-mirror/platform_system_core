@@ -362,9 +362,8 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 }
 
 static void copy_to_file(int inFd, int outFd) {
-    const size_t BUFSIZE = 32 * 1024;
-    char* buf = (char*) malloc(BUFSIZE);
-    if (buf == nullptr) fatal("couldn't allocate buffer for copy_to_file");
+    constexpr size_t BUFSIZE = 32 * 1024;
+    std::vector<char> buf(BUFSIZE);
     int len;
     long total = 0;
     int old_stdin_mode = -1;
@@ -376,9 +375,9 @@ static void copy_to_file(int inFd, int outFd) {
 
     while (true) {
         if (inFd == STDIN_FILENO) {
-            len = unix_read(inFd, buf, BUFSIZE);
+            len = unix_read(inFd, buf.data(), BUFSIZE);
         } else {
-            len = adb_read(inFd, buf, BUFSIZE);
+            len = adb_read(inFd, buf.data(), BUFSIZE);
         }
         if (len == 0) {
             D("copy_to_file() : read 0 bytes; exiting");
@@ -389,10 +388,10 @@ static void copy_to_file(int inFd, int outFd) {
             break;
         }
         if (outFd == STDOUT_FILENO) {
-            fwrite(buf, 1, len, stdout);
+            fwrite(buf.data(), 1, len, stdout);
             fflush(stdout);
         } else {
-            adb_write(outFd, buf, len);
+            adb_write(outFd, buf.data(), len);
         }
         total += len;
     }
@@ -400,7 +399,6 @@ static void copy_to_file(int inFd, int outFd) {
     stdinout_raw_epilogue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
     D("copy_to_file() finished after %lu bytes", total);
-    free(buf);
 }
 
 static void send_window_size_change(int fd, std::unique_ptr<ShellProtocol>& shell) {
@@ -885,7 +883,7 @@ static int adb_sideload_host(const char* filename) {
             return 0;
         }
 
-        int block = strtol(buf, NULL, 10);
+        int block = strtol(buf, nullptr, 10);
 
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
         if (offset >= static_cast<size_t>(sb.st_size)) {
@@ -968,7 +966,7 @@ static int ppp(int argc, const char** argv) {
             //argv[2] and beyond become ppp_args[1] and beyond
             ppp_args[i - 1] = argv[i];
         }
-        ppp_args[i-1] = NULL;
+        ppp_args[i-1] = nullptr;
 
         // child side
 
@@ -1136,31 +1134,28 @@ static int logcat(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    // No need for shell protocol with logcat, always disable for simplicity.
-    return send_shell_command(cmd, true);
+    return send_shell_command(cmd);
 }
 
 static void write_zeros(int bytes, int fd) {
     int old_stdin_mode = -1;
     int old_stdout_mode = -1;
-    char* buf = (char*) calloc(1, bytes);
-    if (buf == nullptr) fatal("couldn't allocate buffer for write_zeros");
+    std::vector<char> buf(bytes);
 
     D("write_zeros(%d) -> %d", bytes, fd);
 
     stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
 
     if (fd == STDOUT_FILENO) {
-        fwrite(buf, 1, bytes, stdout);
+        fwrite(buf.data(), 1, bytes, stdout);
         fflush(stdout);
     } else {
-        adb_write(fd, buf, bytes);
+        adb_write(fd, buf.data(), bytes);
     }
 
     stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
 
     D("write_zeros() finished");
-    free(buf);
 }
 
 static int backup(int argc, const char** argv) {
@@ -1175,7 +1170,7 @@ static int backup(int argc, const char** argv) {
                 argv[i++] = argv[j++];
             }
             argc -= 2;
-            argv[argc] = NULL;
+            argv[argc] = nullptr;
         }
     }
 
@@ -1796,6 +1791,11 @@ int adb_commandline(int argc, const char** argv) {
     }
     else if (!strcmp(argv[0], "track-devices")) {
         return adb_connect_command("host:track-devices");
+    } else if (!strcmp(argv[0], "raw")) {
+        if (argc != 2) {
+            return syntax_error("adb raw SERVICE");
+        }
+        return adb_connect_command(argv[1]);
     }
 
 
@@ -1861,7 +1861,7 @@ static int uninstall_app(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(cmd, false);
+    return send_shell_command(cmd);
 }
 
 static int install_app(int argc, const char** argv) {
@@ -1965,7 +1965,7 @@ static int install_multiple_app(int argc, const char** argv) {
         char* end = strrchr(buf, ']');
         if (start && end) {
             *end = '\0';
-            session_id = strtol(start + 1, NULL, 10);
+            session_id = strtol(start + 1, nullptr, 10);
         }
     }
     if (session_id < 0) {
@@ -2049,7 +2049,7 @@ static int pm_command(int argc, const char** argv) {
         cmd += " " + escape_arg(*argv++);
     }
 
-    return send_shell_command(cmd, false);
+    return send_shell_command(cmd);
 }
 
 static int uninstall_app_legacy(int argc, const char** argv) {
@@ -2073,7 +2073,7 @@ static int uninstall_app_legacy(int argc, const char** argv) {
 
 static int delete_file(const std::string& filename) {
     std::string cmd = "rm -f " + escape_arg(filename);
-    return send_shell_command(cmd, false);
+    return send_shell_command(cmd);
 }
 
 static int install_app_legacy(int argc, const char** argv) {

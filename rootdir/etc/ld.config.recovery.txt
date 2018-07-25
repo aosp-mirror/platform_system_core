@@ -1,0 +1,9 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Bionic loader config file for recovery mode
+#
+
+dir.recovery = /system/bin
+
+[recovery]
+namespace.default.search.paths = /system/${LIB}

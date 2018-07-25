@@ -124,8 +124,6 @@ inline bool ConnectionStateIsOnline(ConnectionState state) {
 
 void print_packet(const char* label, apacket* p);
 
-// These use the system (v)fprintf, not the adb prefixed ones defined in sysdeps.h, so they
-// shouldn't be tagged with ADB_FORMAT_ARCHETYPE.
 void fatal(const char* fmt, ...) __attribute__((noreturn, format(__printf__, 1, 2)));
 void fatal_errno(const char* fmt, ...) __attribute__((noreturn, format(__printf__, 1, 2)));
 
@@ -157,11 +155,6 @@ int create_jdwp_connection_fd(int jdwp_pid);
 #endif
 
 int handle_forward_request(const char* service, atransport* transport, int reply_fd);
-
-#if !ADB_HOST
-void framebuffer_service(int fd, void* cookie);
-void set_verity_enabled_state_service(int fd, void* cookie);
-#endif
 
 /* packet allocator */
 apacket* get_apacket(void);

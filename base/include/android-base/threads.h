@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_THREADS_H
-#define ANDROID_BASE_THREADS_H
+#pragma once
 
 #include <stdint.h>
 
@@ -25,4 +24,7 @@ uint64_t GetThreadId();
 }
 }  // namespace android
 
+#if defined(__GLIBC__)
+// bionic has this Linux-specifix call, but glibc doesn't.
+extern "C" int tgkill(int tgid, int tid, int sig);
 #endif

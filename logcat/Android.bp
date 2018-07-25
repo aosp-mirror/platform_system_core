@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2006-2017 The Android Open Source Project
+// Copyright (C) 2006 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,25 +31,13 @@ cc_defaults {
     logtags: ["event.logtags"],
 }
 
-cc_library {
-    name: "liblogcat",
-
-    defaults: ["logcat_defaults"],
-    srcs: [
-        "logcat.cpp",
-        "getopt_long.cpp",
-        "logcat_system.cpp",
-    ],
-    export_include_dirs: ["include"],
-}
-
 cc_binary {
     name: "logcat",
 
     defaults: ["logcat_defaults"],
-    shared_libs: ["liblogcat"],
     srcs: [
         "logcat_main.cpp",
+        "logcat.cpp",
     ],
 }
 
@@ -57,9 +45,9 @@ cc_binary {
     name: "logcatd",
 
     defaults: ["logcat_defaults"],
-    shared_libs: ["liblogcat"],
     srcs: [
         "logcatd_main.cpp",
+        "logcat.cpp",
     ],
 }
 

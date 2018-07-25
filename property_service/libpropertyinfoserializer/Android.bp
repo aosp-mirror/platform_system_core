@@ -17,6 +17,7 @@ cc_defaults {
 cc_library_static {
     name: "libpropertyinfoserializer",
     defaults: ["propertyinfoserializer_defaults"],
+    recovery_available: true,
     srcs: [
         "property_info_file.cpp",
         "property_info_serializer.cpp",

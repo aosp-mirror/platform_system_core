@@ -19,7 +19,9 @@
 
 #include <string>
 
+#include <android-base/unique_fd.h>
+
 bool make_block_device_writable(const std::string&);
-void remount_service(int, void*);
+void remount_service(android::base::unique_fd, const std::string&);
 
 #endif

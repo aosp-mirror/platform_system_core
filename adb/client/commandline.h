@@ -83,6 +83,14 @@ class DefaultStandardStreamsCallback : public StandardStreamsCallbackInterface {
     DISALLOW_COPY_AND_ASSIGN(DefaultStandardStreamsCallback);
 };
 
+class SilentStandardStreamsCallbackInterface : public StandardStreamsCallbackInterface {
+  public:
+    SilentStandardStreamsCallbackInterface() = default;
+    void OnStdout(const char*, int) override final {}
+    void OnStderr(const char*, int) override final {}
+    int Done(int status) override final { return status; }
+};
+
 // Singleton.
 extern DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK;
 
@@ -92,7 +100,7 @@ int adb_commandline(int argc, const char** argv);
 // resulting output.
 // if |callback| is non-null, stdout/stderr output will be handled by it.
 int send_shell_command(
-    const std::string& command, bool disable_shell_protocol,
-    StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
+        const std::string& command, bool disable_shell_protocol = false,
+        StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
 
 #endif  // COMMANDLINE_H

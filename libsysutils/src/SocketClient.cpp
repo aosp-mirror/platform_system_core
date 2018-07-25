@@ -42,8 +42,8 @@ void SocketClient::init(int socket, bool owned, bool useCmdNum) {
     mSocket = socket;
     mSocketOwned = owned;
     mUseCmdNum = useCmdNum;
-    pthread_mutex_init(&mWriteMutex, NULL);
-    pthread_mutex_init(&mRefCountMutex, NULL);
+    pthread_mutex_init(&mWriteMutex, nullptr);
+    pthread_mutex_init(&mRefCountMutex, nullptr);
     mPid = -1;
     mUid = -1;
     mGid = -1;
@@ -135,9 +135,9 @@ char *SocketClient::quoteArg(const char *arg) {
     const char *end = arg + len;
     char *oldresult;
 
-    if(result == NULL) {
+    if(result == nullptr) {
         SLOGW("malloc error (%s)", strerror(errno));
-        return NULL;
+        return nullptr;
     }
 
     *(current++) = '"';

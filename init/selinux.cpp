@@ -59,7 +59,6 @@
 #include <android-base/unique_fd.h>
 #include <selinux/android.h>
 
-#include "log.h"
 #include "util.h"
 
 using android::base::ParseInt;
@@ -448,10 +447,26 @@ void SelinuxRestoreContext() {
     selinux_android_restorecon("/sbin/sload.f2fs", 0);
 }
 
+int SelinuxKlogCallback(int type, const char* fmt, ...) {
+    android::base::LogSeverity severity = android::base::ERROR;
+    if (type == SELINUX_WARNING) {
+        severity = android::base::WARNING;
+    } else if (type == SELINUX_INFO) {
+        severity = android::base::INFO;
+    }
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
+    return 0;
+}
+
 // This function sets up SELinux logging to be written to kmsg, to match init's logging.
 void SelinuxSetupKernelLogging() {
     selinux_callback cb;
-    cb.func_log = selinux_klog_callback;
+    cb.func_log = SelinuxKlogCallback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
 }
 

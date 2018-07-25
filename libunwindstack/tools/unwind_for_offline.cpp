@@ -69,7 +69,7 @@ static bool Attach(pid_t pid) {
 bool SaveRegs(unwindstack::Regs* regs) {
   std::unique_ptr<FILE, decltype(&fclose)> fp(fopen("regs.txt", "w+"), &fclose);
   if (fp == nullptr) {
-    printf("Failed to create file regs.txt.\n");
+    perror("Failed to create file regs.txt");
     return false;
   }
   regs->IterateRegisters([&fp](const char* name, uint64_t value) {
@@ -102,13 +102,14 @@ bool SaveStack(pid_t pid, const std::vector<std::pair<uint64_t, uint64_t>>& stac
 
     std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(file_name.c_str(), "w+"), &fclose);
     if (fp == nullptr) {
-      printf("Failed to create stack.data.\n");
+      perror("Failed to create stack.data");
       return false;
     }
 
     size_t bytes = fwrite(&sp_start, 1, sizeof(sp_start), fp.get());
     if (bytes != sizeof(sp_start)) {
-      perror("Failed to write all data.");
+      printf("Failed to write sp_start data: sizeof(sp_start) %zu, written %zu\n", sizeof(sp_start),
+             bytes);
       return false;
     }
 
@@ -141,7 +142,7 @@ bool CreateElfFromMemory(std::shared_ptr<unwindstack::Memory>& memory, map_info_
 
   std::unique_ptr<FILE, decltype(&fclose)> output(fopen(cur_name.c_str(), "w+"), &fclose);
   if (output == nullptr) {
-    printf("Cannot create %s\n", cur_name.c_str());
+    perror((std::string("Cannot create ") + cur_name).c_str());
     return false;
   }
 
@@ -160,13 +161,14 @@ bool CreateElfFromMemory(std::shared_ptr<unwindstack::Memory>& memory, map_info_
 bool CopyElfFromFile(map_info_t* info) {
   std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(info->name.c_str(), "r"), &fclose);
   if (fp == nullptr) {
+    perror((std::string("Cannot open ") + info->name).c_str());
     return false;
   }
 
   std::string cur_name = basename(info->name.c_str());
   std::unique_ptr<FILE, decltype(&fclose)> output(fopen(cur_name.c_str(), "w+"), &fclose);
   if (output == nullptr) {
-    printf("Cannot create file %s\n", cur_name.c_str());
+    perror((std::string("Cannot create file " + cur_name)).c_str());
     return false;
   }
   std::vector<uint8_t> buffer(10000);
@@ -265,7 +267,7 @@ int SaveData(pid_t pid) {
 
   std::unique_ptr<FILE, decltype(&fclose)> fp(fopen("maps.txt", "w+"), &fclose);
   if (fp == nullptr) {
-    printf("Failed to create maps.txt.\n");
+    perror("Failed to create maps.txt");
     return false;
   }
 

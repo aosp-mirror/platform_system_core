@@ -73,7 +73,7 @@ LogPrinter::LogPrinter(const char* logtag,
 }
 
 void LogPrinter::printLine(const char* string) {
-    if (string == NULL) {
+    if (string == nullptr) {
         ALOGW("%s: NULL string passed in", __FUNCTION__);
         return;
     }
@@ -107,7 +107,7 @@ FdPrinter::FdPrinter(int fd, unsigned int indent, const char* prefix) :
 }
 
 void FdPrinter::printLine(const char* string) {
-    if (string == NULL) {
+    if (string == nullptr) {
         ALOGW("%s: NULL string passed in", __FUNCTION__);
         return;
     } else if (mFd < 0) {
@@ -127,16 +127,16 @@ String8Printer::String8Printer(String8* target, const char* prefix) :
         mTarget(target),
         mPrefix(prefix ?: "") {
 
-    if (target == NULL) {
+    if (target == nullptr) {
         ALOGW("%s: Target string was NULL", __FUNCTION__);
     }
 }
 
 void String8Printer::printLine(const char* string) {
-    if (string == NULL) {
+    if (string == nullptr) {
         ALOGW("%s: NULL string passed in", __FUNCTION__);
         return;
-    } else if (mTarget == NULL) {
+    } else if (mTarget == nullptr) {
         ALOGW("%s: Target string was NULL", __FUNCTION__);
         return;
     }

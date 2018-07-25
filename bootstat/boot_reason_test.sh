@@ -24,6 +24,7 @@ RED="${ESCAPE}[38;5;196m"
 NORMAL="${ESCAPE}[0m"
 # Best guess to an average device's reboot time, refined as tests return
 DURATION_DEFAULT=45
+STOP_ON_FAILURE=false
 
 # Helper functions
 
@@ -50,11 +51,18 @@ hasPstore() {
   fi
 }
 
+[ "USAGE: get_property <prop>
+
+Returns the property value" ]
+get_property() {
+  adb shell getprop ${1} 2>&1 </dev/null
+}
+
 [ "USAGE: isDebuggable
 
 Returns: true if device is (likely) a debug build" ]
 isDebuggable() {
-  if inAdb && [ 1 -ne `adb shell getprop ro.debuggable` ]; then
+  if inAdb && [ 1 -ne `get_property ro.debuggable` ]; then
     false
   fi
 }
@@ -93,7 +101,7 @@ setBootloaderBootReason() {
     return 1
   fi
   adb shell su root setprop persist.test.boot.reason "'${1}'" 2>/dev/null
-  test_reason="`adb shell getprop persist.test.boot.reason 2>/dev/null`"
+  test_reason="`get_property persist.test.boot.reason`"
   if [ X"${test_reason}" != X"${1}" ]; then
     echo "ERROR: can not set persist.test.boot.reason to '${1}'." >&2
     return 1
@@ -188,9 +196,9 @@ wait_for_screen() {
       if [ 0 != ${counter} ]; then
         adb wait-for-device </dev/null >/dev/null 2>/dev/null
       fi
-      if [ -n "`adb shell getprop sys.boot.reason </dev/null 2>/dev/null`" ]
+      if [ -n "`get_property sys.boot.reason`" ]
       then
-        vals=`adb shell getprop </dev/null 2>/dev/null |
+        vals=`get_property |
               sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
         if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
         then
@@ -223,15 +231,38 @@ EXPECT_EQ() {
   rval="${2}"
   shift 2
   if ! ( echo X"${rval}" | grep '^X'"${lval}"'$' >/dev/null 2>/dev/null ); then
-    echo "ERROR: expected \"${lval}\" got \"${rval}\"" >&2
-    if [ -n "${*}" ] ; then
-      echo "       ${*}" >&2
+    if [ `echo ${lval}${rval}${*} | wc -c` -gt 50 -o "${rval}" != "${rval%
+*}" ]; then
+      echo "ERROR: expected \"${lval}\"" >&2
+      echo "       got \"${rval}\"" |
+        sed ': again
+             N
+             s/\(\n\)\([^ ]\)/\1             \2/
+             t again' >&2
+      if [ -n "${*}" ] ; then
+        echo "       ${*}" >&2
+      fi
+    else
+      echo "ERROR: expected \"${lval}\" got \"${rval}\" ${*}" >&2
     fi
     return 1
   fi
   if [ -n "${*}" ] ; then
     if [ X"${lval}" != X"${rval}" ]; then
-      echo "INFO: ok \"${lval}\"(=\"${rval}\") ${*}" >&2
+      if [ `echo ${lval}${rval}${*} | wc -c` -gt 60 -o "${rval}" != "${rval%
+*}" ]; then
+        echo "INFO: ok \"${lval}\"" >&2
+        echo "       = \"${rval}\"" |
+          sed ': again
+               N
+               s/\(\n\)\([^ ]\)/\1          \2/
+               t again' >&2
+        if [ -n "${*}" ] ; then
+          echo "      ${*}" >&2
+        fi
+      else
+        echo "INFO: ok \"${lval}\" = \"${rval}\" ${*}" >&2
+      fi
     else
       echo "INFO: ok \"${lval}\" ${*}" >&2
     fi
@@ -250,7 +281,7 @@ EXPECT_PROPERTY() {
   property="${1}"
   value="${2}"
   shift 2
-  val=`adb shell getprop ${property} 2>&1`
+  val=`get_property ${property}`
   EXPECT_EQ "${value}" "${val}" for Android property ${property}
   local_ret=${?}
   if [ 0 != ${local_ret} -a "ro.boot.bootreason" = "${property}" ]; then
@@ -317,6 +348,7 @@ init    : processing action (sys.boot_completed=1 && sys.logbootcomplete=1) from
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_complete' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_reason' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_time_since_factory_reset' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
+init    : Command 'exec_background - system log -- /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc
  (/system/bin/bootstat --record_boot_complete)'...
  (/system/bin/bootstat --record_boot_complete)' (pid${SPACE}
  (/system/bin/bootstat --record_boot_reason)'...
@@ -392,6 +424,9 @@ end_test() {
     echo "${GREEN}[       OK ]${NORMAL} ${TEST} ${*}"
   else
     echo "${RED}[  FAILED  ]${NORMAL} ${TEST} ${*}"
+    if ${STOP_ON_FAILURE}; then
+      exit ${save_ret}
+    fi
   fi
   return ${save_ret}
 }
@@ -445,6 +480,10 @@ validate_reason() {
     *hw_reset* )                            var="hard,hw_reset" ;;
     *usb* )                                 var="cold,charger" ;;
     *rtc* )                                 var="cold,rtc" ;;
+    *2sec_reboot* )                         var="cold,rtc,2sec" ;;
+    *wdt_by_pass_pwk* )                     var="warm" ;;
+    wdt )                                   var="reboot" ;;
+    *tool_by_pass_pwk* )                    var="reboot,tool" ;;
     *bootloader* )                          var="bootloader" ;;
     * )                                     var="reboot" ;;
   esac
@@ -458,12 +497,23 @@ string representing what is acceptable.
 
 NB: must also roughly match heuristics in system/core/bootstat/bootstat.cpp" ]
 validate_property() {
-  val="`adb shell getprop ${1} 2>&1`"
+  val=`get_property ${1}`
   ret=`validate_reason "${val}"`
   if [ "reboot" = "${ret}" ]; then
     ret=`validate_reason "reboot,${val}"`
   fi
   echo ${ret}
+}
+
+[ "USAGE: check_boilerblate_properties
+
+Check for common property values" ]
+check_boilerplate_properties() {
+  EXPECT_PROPERTY persist.sys.boot.reason ""
+  save_ret=${?}
+  reason=`validate_property sys.boot.reason`
+  ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
+  EXPECT_PROPERTY persist.sys.boot.reason.history "${reason},[1-9][0-9]*\(\|[^0-9].*\)"
 }
 
 #
@@ -476,18 +526,20 @@ properties test
 - (wait until screen is up, boot has completed)
 - adb shell getprop ro.boot.bootreason (bootloader reason)
 - adb shell getprop persist.sys.boot.reason (last reason)
+- adb shell getprop sys.boot.reason.last (last last reason)
 - adb shell getprop sys.boot.reason (system reason)
 - NB: all should have a value that is compliant with our known set." ]
 test_properties() {
   duration_test 1
   wait_for_screen
   retval=0
-  check_set="ro.boot.bootreason persist.sys.boot.reason sys.boot.reason"
+  # sys.boot.reason is last for a reason
+  check_set="ro.boot.bootreason sys.boot.reason.last sys.boot.reason"
   bootloader=""
   # NB: this test could fail if performed _after_ optional_factory_reset test
   # and will report
   #  ERROR: expected "reboot" got ""
-  #        for Android property persist.sys.boot.reason
+  #        for Android property sys.boot.reason.last
   # following is mitigation for the persist.sys.boot.reason, skip it
   if [ "reboot,factory_reset" = "`validate_property ro.boot_bootreason`" ]; then
     check_set="ro.boot.bootreason sys.boot.reason"
@@ -497,7 +549,7 @@ test_properties() {
     reason=`validate_property ${prop}`
     EXPECT_PROPERTY ${prop} ${reason} || retval=${?}
   done
-  # sys.boot.reason is last for a reason
+  check_boilerplate_properties || retval=${?}
   report_bootstat_logs ${reason} ${bootloader}
   return ${retval}
 }
@@ -550,7 +602,8 @@ test_ota() {
   popd >&2
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason "\(reboot,ota\|bootloader\)"
-  EXPECT_PROPERTY persist.sys.boot.reason bootloader
+  EXPECT_PROPERTY sys.boot.reason.last bootloader
+  check_boilerplate_properties
   report_bootstat_logs reboot,ota bootloader
 }
 
@@ -564,7 +617,8 @@ test_optional_ota() {
   adb reboot ota
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,ota
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,ota
+  EXPECT_PROPERTY sys.boot.reason.last reboot,ota
+  check_boilerplate_properties
   report_bootstat_logs reboot,ota
 }
 
@@ -589,9 +643,15 @@ blind_reboot_test() {
   wait_for_screen
   bootloader_reason=`validate_property ro.boot.bootreason`
   EXPECT_PROPERTY ro.boot.bootreason ${bootloader_reason}
-  EXPECT_PROPERTY sys.boot.reason ${reason}
-  EXPECT_PROPERTY persist.sys.boot.reason ${reason}
-  report_bootstat_logs ${reason}
+  # to make sys.boot.reason report user friendly
+  reasons=${reason}
+  if [ "${bootloader_reason}" != "${reason}" -a -n "${bootloader_reason}" ]; then
+    reasons="\(${reason}\|${bootloader_reason}\)"
+  fi
+  EXPECT_PROPERTY sys.boot.reason ${reasons}
+  EXPECT_PROPERTY sys.boot.reason.last ${reason}
+  check_boilerplate_properties
+  report_bootstat_logs ${reason} ${bootloader_reason}
 }
 
 [ "USAGE: test_cold
@@ -623,7 +683,8 @@ test_factory_reset() {
   adb reboot >&2
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
-  EXPECT_PROPERTY persist.sys.boot.reason "reboot,.*"
+  EXPECT_PROPERTY sys.boot.reason.last "reboot,.*"
+  check_boilerplate_properties
   report_bootstat_logs reboot,factory_reset reboot, reboot,adb \
     "-bootstat: Failed to read /data/misc/bootstat/build_date: No such file or directory" \
     "-bootstat: Failed to parse boot time record: /data/misc/bootstat/build_date"
@@ -654,7 +715,8 @@ test_optional_factory_reset() {
   wait_for_screen
   ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
-  EXPECT_PROPERTY persist.sys.boot.reason ""
+  EXPECT_PROPERTY sys.boot.reason.last ""
+  check_boilerplate_properties
   report_bootstat_logs reboot,factory_reset bootloader \
     "-bootstat: Failed to read /data/misc/bootstat/last_boot_time_utc: No such file or directory" \
     "-bootstat: Failed to parse boot time record: /data/misc/bootstat/last_boot_time_utc" \
@@ -727,7 +789,8 @@ test_battery() {
     )
 
   EXPECT_PROPERTY sys.boot.reason shutdown,battery
-  EXPECT_PROPERTY persist.sys.boot.reason cold
+  EXPECT_PROPERTY sys.boot.reason.last cold
+  check_boilerplate_properties
   report_bootstat_logs shutdown,battery "-bootstat: Battery level at shutdown 2%"
   exitPstore
 }
@@ -748,7 +811,8 @@ test_optional_battery() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,battery
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,battery
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,battery
+  check_boilerplate_properties
   report_bootstat_logs shutdown,battery
 }
 
@@ -768,7 +832,8 @@ test_optional_battery_thermal() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,thermal,battery
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,thermal,battery
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,thermal,battery
+  check_boilerplate_properties
   report_bootstat_logs shutdown,thermal,battery
 }
 
@@ -804,7 +869,8 @@ test_kernel_panic() {
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
-  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
+  check_boilerplate_properties
   report_bootstat_logs kernel_panic,sysrq
   exitPstore
 }
@@ -831,7 +897,8 @@ test_kernel_panic_subreason() {
   echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
-  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
+  check_boilerplate_properties
   report_bootstat_logs kernel_panic,sysrq,test \
     "-bootstat: Unknown boot reason: kernel_panic,sysrq,test"
   exitPstore
@@ -861,7 +928,8 @@ test_kernel_panic_hung() {
   adb reboot warm
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
-  EXPECT_PROPERTY persist.sys.boot.reason ${panic_msg}
+  EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
+  check_boilerplate_properties
   report_bootstat_logs kernel_panic,hung
   exitPstore
 }
@@ -893,7 +961,8 @@ test_thermal_shutdown() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,thermal
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,thermal
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,thermal
+  check_boilerplate_properties
   report_bootstat_logs shutdown,thermal
 }
 
@@ -913,7 +982,8 @@ test_userrequested_shutdown() {
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
   EXPECT_PROPERTY sys.boot.reason shutdown,userrequested
-  EXPECT_PROPERTY persist.sys.boot.reason shutdown,userrequested
+  EXPECT_PROPERTY sys.boot.reason.last shutdown,userrequested
+  check_boilerplate_properties
   report_bootstat_logs shutdown,userrequested
 }
 
@@ -929,7 +999,8 @@ test_shell_reboot() {
   adb shell reboot
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,shell
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,shell
+  EXPECT_PROPERTY sys.boot.reason.last reboot,shell
+  check_boilerplate_properties
   report_bootstat_logs reboot,shell
 }
 
@@ -945,7 +1016,8 @@ test_adb_reboot() {
   adb reboot
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,adb
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,adb
+  EXPECT_PROPERTY sys.boot.reason.last reboot,adb
+  check_boilerplate_properties
   report_bootstat_logs reboot,adb
 }
 
@@ -980,23 +1052,8 @@ test_Its_Just_So_Hard_reboot() {
   adb shell 'reboot "Its Just So Hard"'
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
-  EXPECT_PROPERTY persist.sys.boot.reason "reboot,Its Just So Hard"
-  # Do not leave this test with an illegal value in persist.sys.boot.reason
-  save_ret=${?}           # hold on to error code from above two lines
-  if isDebuggable; then   # can do this easy, or we can do this hard.
-    adb shell su root setprop persist.sys.boot.reason reboot,its_just_so_hard
-    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
-  else
-    report_bootstat_logs reboot,its_just_so_hard  # report what we have so far
-    # user build mitigation
-    adb shell reboot its_just_so_hard
-    wait_for_screen
-    ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
-    EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
-  fi
-  # Ensure persist.sys.boot.reason now valid, failure here acts as a signal
-  # that we could choke up following tests.  For example test_properties.
-  EXPECT_PROPERTY persist.sys.boot.reason reboot,its_just_so_hard ${flag}
+  EXPECT_PROPERTY sys.boot.reason.last reboot,its_just_so_hard
+  check_boilerplate_properties
   report_bootstat_logs reboot,its_just_so_hard
 }
 
@@ -1045,7 +1102,8 @@ run_bootloader() {
   # Check values
   EXPECT_PROPERTY ro.boot.bootreason "${bootloader_expected}"
   EXPECT_PROPERTY sys.boot.reason "${sys_expected}"
-  EXPECT_PROPERTY persist.sys.boot.reason "${last_expected}"
+  EXPECT_PROPERTY sys.boot.reason.last "${last_expected}"
+  check_boilerplate_properties
   report_bootstat_logs "${sys_expected}"
 }
 
@@ -1099,88 +1157,98 @@ if [ ${#} -ge 2 -a X"-s" = X"${1}" ]; then
   shift 2
 fi
 
-if [ X"--help" = X"${1}" -o X"-h" = X"${1}" -o X"-?" = X"${1}" ]; then
-  echo "USAGE: ${0##*/} [-s SERIAL] [tests]"
-  echo tests - `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null`
-  exit 0
-fi
+# Helpful for debugging, allows us to import the functions.
+if [ X"--macros" != X"${1}" ]; then
 
-# Check if all conditions for the script are sane
+  if [ X"--help" = X"${1}" -o X"-h" = X"${1}" -o X"-?" = X"${1}" ]; then
+    echo "USAGE: ${0##*/} [-s SERIAL] [tests]"
+    echo tests - `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null`
+    exit 0
+  fi
 
-if [ -z "${ANDROID_SERIAL}" ]; then
-  ndev=`(
-      adb devices | grep -v 'List of devices attached'
-      fastboot devices
-    ) |
-    grep -v "^[${SPACE}${TAB}]*\$" |
-    wc -l`
-  if [ ${ndev} -gt 1 ]; then
-    echo "ERROR: no target device specified, ${ndev} connected" >&2
-    echo "${RED}[  FAILED  ]${NORMAL}"
-    exit 1
+  if [ X"--stop" = X"${1}" ]; then
+    STOP_ON_FAILURE=true
+    shift
   fi
-  echo "WARNING: no target device specified" >&2
-fi
 
-ret=0
+  # Check if all conditions for the script are sane
 
-# Test Series
-if [ X"all" = X"${*}" ]; then
-  # automagically pick up all test_<function>s.
-  eval set nothing `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null`
-  if [ X"nothing" = X"${1}" ]; then
-    shift 1
-  fi
-fi
-if [ -z "$*" ]; then
-  # automagically pick up all test_<function>, except test_optional_<function>.
-  eval set nothing `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null |
-                            grep -v '^optional_'`
-  if [ -z "${2}" ]; then
-    # Hard coded should shell fail to find them above (search/permission issues)
-    eval set properties ota cold factory_reset hard battery unknown \
-             kernel_panic kernel_panic_subreason kernel_panic_hung warm \
-             thermal_shutdown userrequested_shutdown shell_reboot adb_reboot \
-             Its_Just_So_Hard_reboot bootloader_normal bootloader_watchdog \
-             bootloader_kernel_panic bootloader_oem_powerkey \
-             bootloader_wdog_reset bootloader_wdog_reset bootloader_wdog_reset \
-             bootloader_hard bootloader_recovery
-  fi
-  if [ X"nothing" = X"${1}" ]; then
-    shift 1
-  fi
-fi
-echo "INFO: selected test(s): ${@}" >&2
-echo
-# Prepare device
-setBootloaderBootReason 2>/dev/null
-# Start pouring through the tests.
-failures=
-successes=
-for t in "${@}"; do
-  wrap_test ${t}
-  retval=${?}
-  if [ 0 = ${retval} ]; then
-    if [ -z "${successes}" ]; then
-      successes=${t}
-    else
-      successes="${successes} ${t}"
+  if [ -z "${ANDROID_SERIAL}" ]; then
+    ndev=`(
+        adb devices | grep -v 'List of devices attached'
+        fastboot devices
+      ) |
+      grep -v "^[${SPACE}${TAB}]*\$" |
+      wc -l`
+    if [ ${ndev} -gt 1 ]; then
+      echo "ERROR: no target device specified, ${ndev} connected" >&2
+      echo "${RED}[  FAILED  ]${NORMAL}"
+      exit 1
     fi
-  else
-    ret=${retval}
-    if [ -z "${failures}" ]; then
-      failures=${t}
-    else
-      failures="${failures} ${t}"
+    echo "WARNING: no target device specified" >&2
+  fi
+
+  ret=0
+
+  # Test Series
+  if [ X"all" = X"${*}" ]; then
+    # automagically pick up all test_<function>s.
+    eval set nothing `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null`
+    if [ X"nothing" = X"${1}" ]; then
+      shift 1
     fi
   fi
+  if [ -z "$*" ]; then
+    # automagically pick up all test_<function>, except test_optional_<function>.
+    eval set nothing `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null |
+                              grep -v '^optional_'`
+    if [ -z "${2}" ]; then
+      # Hard coded should shell fail to find them (search/permission issues)
+      eval set properties ota cold factory_reset hard battery unknown \
+               kernel_panic kernel_panic_subreason kernel_panic_hung warm \
+               thermal_shutdown userrequested_shutdown shell_reboot adb_reboot \
+               Its_Just_So_Hard_reboot bootloader_normal bootloader_watchdog \
+               bootloader_kernel_panic bootloader_oem_powerkey \
+               bootloader_wdog_reset bootloader_cold bootloader_warm \
+               bootloader_hard bootloader_recovery
+    fi
+    if [ X"nothing" = X"${1}" ]; then
+      shift 1
+    fi
+  fi
+  echo "INFO: selected test(s): ${@}" >&2
   echo
-done
+  # Prepare device
+  setBootloaderBootReason 2>/dev/null
+  # Start pouring through the tests.
+  failures=
+  successes=
+  for t in "${@}"; do
+    wrap_test ${t}
+    retval=${?}
+    if [ 0 = ${retval} ]; then
+      if [ -z "${successes}" ]; then
+        successes=${t}
+      else
+        successes="${successes} ${t}"
+      fi
+    else
+      ret=${retval}
+      if [ -z "${failures}" ]; then
+        failures=${t}
+      else
+        failures="${failures} ${t}"
+      fi
+    fi
+    echo
+  done
 
-if [ -n "${successes}" ]; then
-  echo "${GREEN}[  PASSED  ]${NORMAL} ${successes}"
+  if [ -n "${successes}" ]; then
+    echo "${GREEN}[  PASSED  ]${NORMAL} ${successes}"
+  fi
+  if [ -n "${failures}" ]; then
+    echo "${RED}[  FAILED  ]${NORMAL} ${failures}"
+  fi
+  exit ${ret}
+
 fi
-if [ -n "${failures}" ]; then
-  echo "${RED}[  FAILED  ]${NORMAL} ${failures}"
-fi
-exit ${ret}

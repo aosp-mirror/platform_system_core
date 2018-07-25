@@ -26,13 +26,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/statvfs.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
+#include <set>
 #include <string>
 #include <vector>
 
 #include <android-base/properties.h>
+#include <bootloader_message/bootloader_message.h>
+#include <cutils/android_reboot.h>
 #include <ext4_utils/ext4_utils.h>
 
 #include "adb.h"
@@ -40,6 +44,7 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "fs_mgr.h"
+#include "set_verity_enable_state_service.h"
 
 // Returns the device used to mount a directory in /proc/mounts.
 static std::string find_proc_mount(const char* dir) {
@@ -142,7 +147,18 @@ static bool can_unshare_blocks(int fd, const char* dev) {
     return true;
 }
 
-static bool remount_partition(int fd, const char* dir, std::vector<std::string>& dedup) {
+static unsigned long get_mount_flags(int fd, const char* dir) {
+    struct statvfs st_vfs;
+    if (statvfs(dir, &st_vfs) == -1) {
+        // Even though we could not get the original mount flags, assume that
+        // the mount was originally read-only.
+        WriteFdFmt(fd, "statvfs of the %s mount failed: %s.\n", dir, strerror(errno));
+        return MS_RDONLY;
+    }
+    return st_vfs.f_flag;
+}
+
+static bool remount_partition(int fd, const char* dir) {
     if (!directory_exists(dir)) {
         return true;
     }
@@ -160,7 +176,12 @@ static bool remount_partition(int fd, const char* dir, std::vector<std::string>&
                    dir, dev.c_str(), strerror(errno));
         return false;
     }
-    if (mount(dev.c_str(), dir, "none", MS_REMOUNT | MS_BIND, nullptr) == -1) {
+
+    unsigned long remount_flags = get_mount_flags(fd, dir);
+    remount_flags &= ~MS_RDONLY;
+    remount_flags |= MS_REMOUNT;
+
+    if (mount(dev.c_str(), dir, "none", remount_flags | MS_BIND, nullptr) == -1) {
         // This is useful for cases where the superblock is already marked as
         // read-write, but the mount itself is read-only, such as containers
         // where the remount with just MS_REMOUNT is forbidden by the kernel.
@@ -168,70 +189,123 @@ static bool remount_partition(int fd, const char* dir, std::vector<std::string>&
         return false;
     }
     if (mount(dev.c_str(), dir, "none", MS_REMOUNT, nullptr) == -1) {
-        if (errno == EROFS && fs_has_shared_blocks(dev.c_str())) {
-            if (!can_unshare_blocks(fd, dev.c_str())) {
-                return false;
-            }
-            // We return true so remount_service() can detect that the only
-            // failure was deduplicated filesystems.
-            dedup.push_back(dev);
-            return true;
-        }
         WriteFdFmt(fd, "remount of the %s superblock failed: %s\n", dir, strerror(errno));
         return false;
     }
     return true;
 }
 
-void remount_service(int fd, void* cookie) {
+static void reboot_for_remount(int fd, bool need_fsck) {
+    std::string reboot_cmd = "reboot";
+    if (need_fsck) {
+        const std::vector<std::string> options = {"--fsck_unshare_blocks"};
+        std::string err;
+        if (!write_bootloader_message(options, &err)) {
+            WriteFdFmt(fd, "Failed to set bootloader message: %s\n", err.c_str());
+            return;
+        }
+
+        WriteFdExactly(fd,
+                       "The device will now reboot to recovery and attempt "
+                       "un-deduplication.\n");
+        reboot_cmd = "reboot,recovery";
+    }
+
+    sync();
+    android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_cmd.c_str());
+}
+
+void remount_service(android::base::unique_fd fd, const std::string& cmd) {
+    bool user_requested_reboot = cmd != "-R";
+
     if (getuid() != 0) {
-        WriteFdExactly(fd, "Not running as root. Try \"adb root\" first.\n");
-        adb_close(fd);
+        WriteFdExactly(fd.get(), "Not running as root. Try \"adb root\" first.\n");
         return;
     }
 
     bool system_verified = !(android::base::GetProperty("partition.system.verified", "").empty());
     bool vendor_verified = !(android::base::GetProperty("partition.vendor.verified", "").empty());
 
-    if (system_verified || vendor_verified) {
-        // Allow remount but warn of likely bad effects
-        bool both = system_verified && vendor_verified;
-        WriteFdFmt(fd,
-                   "dm_verity is enabled on the %s%s%s partition%s.\n",
-                   system_verified ? "system" : "",
-                   both ? " and " : "",
-                   vendor_verified ? "vendor" : "",
-                   both ? "s" : "");
-        WriteFdExactly(fd,
-                       "Use \"adb disable-verity\" to disable verity.\n"
-                       "If you do not, remount may succeed, however, you will still "
-                       "not be able to write to these volumes.\n");
-    }
-
-    bool success = true;
-    std::vector<std::string> dedup;
+    std::vector<std::string> partitions = {"/odm", "/oem", "/product", "/vendor"};
     if (android::base::GetBoolProperty("ro.build.system_root_image", false)) {
-        success &= remount_partition(fd, "/", dedup);
+        partitions.push_back("/");
     } else {
-        success &= remount_partition(fd, "/system", dedup);
+        partitions.push_back("/system");
     }
-    success &= remount_partition(fd, "/odm", dedup);
-    success &= remount_partition(fd, "/oem", dedup);
-    success &= remount_partition(fd, "/product", dedup);
-    success &= remount_partition(fd, "/vendor", dedup);
 
-    if (!success) {
-        WriteFdExactly(fd, "remount failed\n");
-    } else if (dedup.empty()) {
-        WriteFdExactly(fd, "remount succeeded\n");
-    } else {
-        WriteFdExactly(fd,
-                       "The following partitions are deduplicated and could "
-                       "not be remounted:\n");
-        for (const std::string& name : dedup) {
-            WriteFdFmt(fd, "  %s\n", name.c_str());
+    // Find partitions that are deduplicated, and can be un-deduplicated.
+    std::set<std::string> dedup;
+    for (const auto& partition : partitions) {
+        std::string dev = find_mount(partition.c_str(), partition == "/");
+        if (dev.empty() || !fs_has_shared_blocks(dev.c_str())) {
+            continue;
+        }
+        if (can_unshare_blocks(fd.get(), dev.c_str())) {
+            dedup.emplace(partition);
         }
     }
 
-    adb_close(fd);
+    bool verity_enabled = (system_verified || vendor_verified);
+
+    // Reboot now if the user requested it (and an operation needs a reboot).
+    if (user_requested_reboot) {
+        if (!dedup.empty() || verity_enabled) {
+            if (verity_enabled) {
+                set_verity_enabled_state_service(android::base::unique_fd(dup(fd.get())), false);
+            }
+            reboot_for_remount(fd.get(), !dedup.empty());
+            return;
+        }
+        WriteFdExactly(fd.get(), "No reboot needed, skipping -R.\n");
+    }
+
+    // If we need to disable-verity, but we also need to perform a recovery
+    // fsck for deduplicated partitions, hold off on warning about verity. We
+    // can handle both verity and the recovery fsck in the same reboot cycle.
+    if (verity_enabled && dedup.empty()) {
+        // Allow remount but warn of likely bad effects
+        bool both = system_verified && vendor_verified;
+        WriteFdFmt(fd.get(), "dm_verity is enabled on the %s%s%s partition%s.\n",
+                   system_verified ? "system" : "", both ? " and " : "",
+                   vendor_verified ? "vendor" : "", both ? "s" : "");
+        WriteFdExactly(fd.get(),
+                       "Use \"adb disable-verity\" to disable verity.\n"
+                       "If you do not, remount may succeed, however, you will still "
+                       "not be able to write to these volumes.\n");
+        WriteFdExactly(fd.get(),
+                       "Alternately, use \"adb remount -R\" to disable verity "
+                       "and automatically reboot.\n");
+    }
+
+    bool success = true;
+    for (const auto& partition : partitions) {
+        // Don't try to remount partitions that need an fsck in recovery.
+        if (dedup.count(partition)) {
+            continue;
+        }
+        success &= remount_partition(fd.get(), partition.c_str());
+    }
+
+    if (!dedup.empty()) {
+        WriteFdExactly(fd.get(),
+                       "The following partitions are deduplicated and cannot "
+                       "yet be remounted:\n");
+        for (const std::string& name : dedup) {
+            WriteFdFmt(fd.get(), "  %s\n", name.c_str());
+        }
+
+        WriteFdExactly(fd.get(),
+                       "To reboot and un-deduplicate the listed partitions, "
+                       "please retry with adb remount -R.\n");
+        if (system_verified || vendor_verified) {
+            WriteFdExactly(fd.get(), "Note: verity will be automatically disabled after reboot.\n");
+        }
+        return;
+    }
+
+    if (!success) {
+        WriteFdExactly(fd.get(), "remount failed\n");
+    } else {
+        WriteFdExactly(fd.get(), "remount succeeded\n");
+    }
 }

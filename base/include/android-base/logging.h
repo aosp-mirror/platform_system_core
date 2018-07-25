@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_LOGGING_H
-#define ANDROID_BASE_LOGGING_H
+#pragma once
 
 //
 // Google-style C++ logging.
@@ -100,8 +99,17 @@ using LogFunction = std::function<void(LogId, LogSeverity, const char*, const ch
                                        unsigned int, const char*)>;
 using AbortFunction = std::function<void(const char*)>;
 
+// Loggers for use with InitLogging/SetLogger.
+
+// Log to the kernel log (dmesg).
 void KernelLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
+// Log to stderr in the full logcat format (with pid/tid/time/tag details).
 void StderrLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
+// Log just the message to stdout/stderr (without pid/tid/time/tag details).
+// The choice of stdout versus stderr is based on the severity.
+// Errors are also prefixed by the program name (as with err(3)/error(3)).
+// Useful for replacing printf(3)/perror(3)/err(3)/error(3) in command-line tools.
+void StdioLogger(LogId, LogSeverity, const char*, const char*, unsigned int, const char*);
 
 void DefaultAborter(const char* abort_message);
 
@@ -479,23 +487,14 @@ namespace std {
 // Note: to print the pointer, use "<< static_cast<const void*>(string_pointer)" instead.
 // Note: a not-recommended alternative is to let Clang ignore the warning by adding
 //       -Wno-user-defined-warnings to CPPFLAGS.
-#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgcc-compat"
 #define OSTREAM_STRING_POINTER_USAGE_WARNING \
     __attribute__((diagnose_if(true, "Unexpected logging of string pointer", "warning")))
-#else
-#define OSTREAM_STRING_POINTER_USAGE_WARNING /* empty */
-#endif
 inline std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer)
     OSTREAM_STRING_POINTER_USAGE_WARNING {
   return stream << static_cast<const void*>(string_pointer);
 }
-#ifdef __clang__
 #pragma clang diagnostic pop
-#endif
-#undef OSTREAM_STRING_POINTER_USAGE_WARNING
 
 }  // namespace std
-
-#endif  // ANDROID_BASE_LOGGING_H

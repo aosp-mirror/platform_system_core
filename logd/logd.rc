@@ -6,6 +6,7 @@ service logd /system/bin/logd
     file /dev/kmsg w
     user logd
     group logd system package_info readproc
+    capabilities SYSLOG AUDIT_CONTROL SETGID
     writepid /dev/cpuset/system-background/tasks
 
 service logd-reinit /system/bin/logd --reinit

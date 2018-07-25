@@ -1,6 +1,5 @@
 #include "fs.h"
 
-#include "fastboot.h"
 
 #include <errno.h>
 #include <fcntl.h>

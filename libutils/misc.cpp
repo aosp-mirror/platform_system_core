@@ -23,7 +23,7 @@
 #include <utils/Log.h>
 #include <utils/Vector.h>
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
 #include <dlfcn.h>
 #include <vndksupport/linker.h>
 #endif
@@ -41,13 +41,13 @@ struct sysprop_change_callback_info {
 
 #if !defined(_WIN32)
 static pthread_mutex_t gSyspropMutex = PTHREAD_MUTEX_INITIALIZER;
-static Vector<sysprop_change_callback_info>* gSyspropList = NULL;
+static Vector<sysprop_change_callback_info>* gSyspropList = nullptr;
 #endif
 
 #if !defined(_WIN32)
 void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
     pthread_mutex_lock(&gSyspropMutex);
-    if (gSyspropList == NULL) {
+    if (gSyspropList == nullptr) {
         gSyspropList = new Vector<sysprop_change_callback_info>();
     }
     sysprop_change_callback_info info;
@@ -70,7 +70,7 @@ void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
 void add_sysprop_change_callback(sysprop_change_callback, int) {}
 #endif
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
 void (*get_report_sysprop_change_func())() {
     void (*func)() = nullptr;
     void* handle = android_load_sphal_library("libutils.so", RTLD_NOW);
@@ -85,7 +85,7 @@ void (*get_report_sysprop_change_func())() {
 void report_sysprop_change() {
     do_report_sysprop_change();
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
     // libutils.so is double loaded; from the default namespace and from the
     // 'sphal' namespace. Redirect the sysprop change event to the other instance
     // of libutils.so loaded in the 'sphal' namespace so that listeners attached
@@ -103,7 +103,7 @@ void do_report_sysprop_change() {
 #if !defined(_WIN32)
     pthread_mutex_lock(&gSyspropMutex);
     Vector<sysprop_change_callback_info> listeners;
-    if (gSyspropList != NULL) {
+    if (gSyspropList != nullptr) {
         listeners = *gSyspropList;
     }
     pthread_mutex_unlock(&gSyspropMutex);

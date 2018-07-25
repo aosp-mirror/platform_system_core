@@ -36,7 +36,7 @@
 // reference counts are used to ensure that individual
 // LogTimeEntry lifetime is managed when not protected.
 void FlushCommand::runSocketCommand(SocketClient* client) {
-    LogTimeEntry* entry = NULL;
+    LogTimeEntry* entry = nullptr;
     LastLogTimes& times = mReader.logbuf().mTimes;
 
     LogTimeEntry::wrlock();

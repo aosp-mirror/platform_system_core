@@ -752,3 +752,22 @@ Below is an example of doing the same but with strace
     kill -SIGCONT 4343
 
     > strace runs
+
+Host Init Script Verification
+-----------------------------
+
+Init scripts are checked for correctness during build time. Specifically the below is checked.
+
+1) Well formatted action, service and import sections, e.g. no actions without a preceding 'on'
+line, and no extraneous lines after an 'import' statement.
+2) All commands map to a valid keyword and the argument count is within the correct range.
+3) All service options are valid. This is stricter than how commands are checked as the service
+options' arguments are fully parsed, e.g. UIDs and GIDs must resolve.
+
+There are other parts of init scripts that are only parsed at runtime and therefore not checked
+during build time, among them are the below.
+
+1) The validity of the arguments of commands, e.g. no checking if file paths actually exist, if
+SELinux would permit the operation, or if the UIDs and GIDs resolve.
+2) No checking if a service exists or has a valid SELinux domain defined
+3) No checking if a service has not been previously defined in a different init script.

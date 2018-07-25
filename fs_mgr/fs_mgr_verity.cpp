@@ -35,6 +35,7 @@
 #include <android-base/unique_fd.h>
 #include <crypto_utils/android_pubkey.h>
 #include <cutils/properties.h>
+#include <libdm/dm.h>
 #include <logwrap/logwrap.h>
 #include <openssl/obj_mac.h>
 #include <openssl/rsa.h>
@@ -44,7 +45,6 @@
 
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
-#include "fs_mgr_priv_dm_ioctl.h"
 
 #define VERITY_TABLE_RSA_KEY "/verity_key"
 #define VERITY_TABLE_HASH_IDX 8
@@ -250,48 +250,27 @@ static bool format_legacy_verity_table(char *buf, const size_t bufsize,
     return true;
 }
 
-static int load_verity_table(struct dm_ioctl *io, const std::string &name,
-                             uint64_t device_size, int fd,
-        const struct verity_table_params *params, format_verity_table_func format)
-{
-    char *verity_params;
-    char *buffer = (char*) io;
-    size_t bufsize;
+static int load_verity_table(android::dm::DeviceMapper& dm, const std::string& name,
+                             uint64_t device_size, const struct verity_table_params* params,
+                             format_verity_table_func format) {
+    android::dm::DmTable table;
+    table.set_readonly(true);
 
-    fs_mgr_dm_ioctl_init(io, DM_BUF_SIZE, name);
-
-    struct dm_target_spec *tgt = (struct dm_target_spec *) &buffer[sizeof(struct dm_ioctl)];
-
-    // set tgt arguments
-    io->target_count = 1;
-    io->flags = DM_READONLY_FLAG;
-    tgt->status = 0;
-    tgt->sector_start = 0;
-    tgt->length = device_size / 512;
-    strcpy(tgt->target_type, "verity");
-
-    // build the verity params
-    verity_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
-    bufsize = DM_BUF_SIZE - (verity_params - buffer);
-
-    if (!format(verity_params, bufsize, params)) {
+    char buffer[DM_BUF_SIZE];
+    if (!format(buffer, sizeof(buffer), params)) {
         LERROR << "Failed to format verity parameters";
         return -1;
     }
 
-    LINFO << "loading verity table: '" << verity_params << "'";
-
-    // set next target boundary
-    verity_params += strlen(verity_params) + 1;
-    verity_params = (char*)(((uintptr_t)verity_params + 7) & ~7);
-    tgt->next = verity_params - buffer;
-
-    // send the ioctl to load the verity table
-    if (ioctl(fd, DM_TABLE_LOAD, io)) {
-        PERROR << "Error loading verity table";
+    android::dm::DmTargetVerityString target(0, device_size / 512, buffer);
+    if (!table.AddTarget(std::make_unique<decltype(target)>(target))) {
+        LERROR << "Failed to add verity target";
         return -1;
     }
-
+    if (!dm.CreateDevice(name, table)) {
+        LERROR << "Failed to create verity device \"" << name << "\"";
+        return -1;
+    }
     return 0;
 }
 
@@ -761,10 +740,10 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     struct fec_verity_metadata verity;
     struct verity_table_params params = { .table = NULL };
 
-    alignas(dm_ioctl) char buffer[DM_BUF_SIZE];
-    struct dm_ioctl *io = (struct dm_ioctl *) buffer;
     const std::string mount_point(basename(fstab->mount_point));
     bool verified_at_boot = false;
+
+    android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
 
     if (fec_open(&f, fstab->blk_device, O_RDONLY, FEC_VERITY_DISABLE,
             FEC_DEFAULT_ROOTS) < 0) {
@@ -797,24 +776,6 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     }
 
     params.ecc_dev = fstab->blk_device;
-
-    // get the device mapper fd
-    if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
-        PERROR << "Error opening device mapper";
-        goto out;
-    }
-
-    // create the device
-    if (!fs_mgr_dm_create_device(io, mount_point, fd)) {
-        LERROR << "Couldn't create verity device!";
-        goto out;
-    }
-
-    // get the name of the device file
-    if (!fs_mgr_dm_get_device_name(io, mount_point, fd, &verity_blk_name)) {
-        LERROR << "Couldn't get verity device number!";
-        goto out;
-    }
 
     if (load_verity_state(fstab, &params.mode) < 0) {
         /* if accessing or updating the state failed, switch to the default
@@ -861,8 +822,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
                                    fstab->fs_mgr_flags & MF_SLOTSELECT);
 
     // load the verity mapping table
-    if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
-            format_verity_table) == 0) {
+    if (load_verity_table(dm, mount_point, verity.data_size, &params, format_verity_table) == 0) {
         goto loaded;
     }
 
@@ -871,15 +831,14 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
         LINFO << "Disabling error correction for " << mount_point.c_str();
         params.ecc.valid = false;
 
-        if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
-                format_verity_table) == 0) {
+        if (load_verity_table(dm, mount_point, verity.data_size, &params, format_verity_table) == 0) {
             goto loaded;
         }
     }
 
     // try the legacy format for backwards compatibility
-    if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
-            format_legacy_verity_table) == 0) {
+    if (load_verity_table(dm, mount_point, verity.data_size, &params, format_legacy_verity_table) ==
+        0) {
         goto loaded;
     }
 
@@ -888,8 +847,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
         LINFO << "Falling back to EIO mode for " << mount_point.c_str();
         params.mode = VERITY_MODE_EIO;
 
-        if (load_verity_table(io, mount_point, verity.data_size, fd, &params,
-                format_legacy_verity_table) == 0) {
+        if (load_verity_table(dm, mount_point, verity.data_size, &params,
+                              format_legacy_verity_table) == 0) {
             goto loaded;
         }
     }
@@ -898,9 +857,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     goto out;
 
 loaded:
-
-    // activate the device
-    if (!fs_mgr_dm_resume_table(io, mount_point, fd)) {
+    if (!dm.GetDmDevicePathByName(mount_point, &verity_blk_name)) {
+        LERROR << "Couldn't get verity device number!";
         goto out;
     }
 
@@ -923,7 +881,7 @@ loaded:
     if (!verified_at_boot) {
         free(fstab->blk_device);
         fstab->blk_device = strdup(verity_blk_name.c_str());
-    } else if (!fs_mgr_dm_destroy_device(io, mount_point, fd)) {
+    } else if (!dm.DeleteDevice(mount_point)) {
         LERROR << "Failed to remove verity device " << mount_point.c_str();
         goto out;
     }

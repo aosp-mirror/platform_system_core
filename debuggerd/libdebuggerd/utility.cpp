@@ -287,9 +287,7 @@ const char* get_signame(const siginfo_t* si) {
     case SIGFPE: return "SIGFPE";
     case SIGILL: return "SIGILL";
     case SIGSEGV: return "SIGSEGV";
-#if defined(SIGSTKFLT)
     case SIGSTKFLT: return "SIGSTKFLT";
-#endif
     case SIGSTOP: return "SIGSTOP";
     case SIGSYS: return "SIGSYS";
     case SIGTRAP: return "SIGTRAP";
@@ -311,8 +309,14 @@ const char* get_sigcode(const siginfo_t* si) {
         case ILL_PRVREG: return "ILL_PRVREG";
         case ILL_COPROC: return "ILL_COPROC";
         case ILL_BADSTK: return "ILL_BADSTK";
+        case ILL_BADIADDR:
+          return "ILL_BADIADDR";
+        case __ILL_BREAK:
+          return "ILL_BREAK";
+        case __ILL_BNDMOD:
+          return "ILL_BNDMOD";
       }
-      static_assert(NSIGILL == ILL_BADSTK, "missing ILL_* si_code");
+      static_assert(NSIGILL == __ILL_BNDMOD, "missing ILL_* si_code");
       break;
     case SIGBUS:
       switch (si->si_code) {
@@ -334,36 +338,44 @@ const char* get_sigcode(const siginfo_t* si) {
         case FPE_FLTRES: return "FPE_FLTRES";
         case FPE_FLTINV: return "FPE_FLTINV";
         case FPE_FLTSUB: return "FPE_FLTSUB";
+        case __FPE_DECOVF:
+          return "FPE_DECOVF";
+        case __FPE_DECDIV:
+          return "FPE_DECDIV";
+        case __FPE_DECERR:
+          return "FPE_DECERR";
+        case __FPE_INVASC:
+          return "FPE_INVASC";
+        case __FPE_INVDEC:
+          return "FPE_INVDEC";
+        case FPE_FLTUNK:
+          return "FPE_FLTUNK";
+        case FPE_CONDTRAP:
+          return "FPE_CONDTRAP";
       }
-      static_assert(NSIGFPE == FPE_FLTSUB, "missing FPE_* si_code");
+      static_assert(NSIGFPE == FPE_CONDTRAP, "missing FPE_* si_code");
       break;
     case SIGSEGV:
       switch (si->si_code) {
         case SEGV_MAPERR: return "SEGV_MAPERR";
         case SEGV_ACCERR: return "SEGV_ACCERR";
-#if defined(SEGV_BNDERR)
         case SEGV_BNDERR: return "SEGV_BNDERR";
-#endif
-#if defined(SEGV_PKUERR)
         case SEGV_PKUERR: return "SEGV_PKUERR";
-#endif
+        case SEGV_ACCADI:
+          return "SEGV_ACCADI";
+        case SEGV_ADIDERR:
+          return "SEGV_ADIDERR";
+        case SEGV_ADIPERR:
+          return "SEGV_ADIPERR";
       }
-#if defined(SEGV_PKUERR)
-      static_assert(NSIGSEGV == SEGV_PKUERR, "missing SEGV_* si_code");
-#elif defined(SEGV_BNDERR)
-      static_assert(NSIGSEGV == SEGV_BNDERR, "missing SEGV_* si_code");
-#else
-      static_assert(NSIGSEGV == SEGV_ACCERR, "missing SEGV_* si_code");
-#endif
+      static_assert(NSIGSEGV == SEGV_ADIPERR, "missing SEGV_* si_code");
       break;
-#if defined(SYS_SECCOMP) // Our glibc is too old, and we build this for the host too.
     case SIGSYS:
       switch (si->si_code) {
         case SYS_SECCOMP: return "SYS_SECCOMP";
       }
       static_assert(NSIGSYS == SYS_SECCOMP, "missing SYS_* si_code");
       break;
-#endif
     case SIGTRAP:
       switch (si->si_code) {
         case TRAP_BRKPT: return "TRAP_BRKPT";

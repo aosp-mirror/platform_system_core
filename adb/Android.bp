@@ -19,16 +19,12 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-Wexit-time-destructors",
         "-Wno-unused-parameter",
         "-Wno-missing-field-initializers",
         "-Wvla",
     ],
     rtti: true,
-
-    clang_cflags: [
-        "-Wexit-time-destructors",
-        "-Wthread-safety",
-    ],
 
     use_version_lib: true,
 
@@ -85,6 +81,12 @@ cc_defaults {
                 "-luserenv",
             ],
         },
+
+        not_windows: {
+            cflags: [
+                "-Wthread-safety",
+            ],
+        },
     },
 }
 
@@ -96,6 +98,7 @@ libadb_srcs = [
     "adb_io.cpp",
     "adb_listeners.cpp",
     "adb_trace.cpp",
+    "adb_unique_fd.cpp",
     "adb_utils.cpp",
     "fdevent.cpp",
     "services.cpp",
@@ -103,6 +106,7 @@ libadb_srcs = [
     "socket_spec.cpp",
     "sysdeps/errno.cpp",
     "transport.cpp",
+    "transport_fd.cpp",
     "transport_local.cpp",
     "transport_usb.cpp",
 ]
@@ -122,6 +126,7 @@ libadb_test_srcs = [
     "sysdeps_test.cpp",
     "sysdeps/stat_test.cpp",
     "transport_test.cpp",
+    "types_test.cpp",
 ]
 
 cc_library_host_static {
@@ -275,6 +280,7 @@ cc_binary_host {
 cc_library_static {
     name: "libadbd",
     defaults: ["adb_defaults"],
+    recovery_available: true,
 
     // libminadbd wants both, for some reason.
     compile_multilib: "both",
@@ -293,14 +299,17 @@ cc_library_static {
         "libqemu_pipe",
         "libbase",
     ],
+
+    export_include_dirs: [
+        "daemon/include",
+    ],
 }
 
 cc_binary {
     name: "adbd",
     defaults: ["adb_defaults"],
 
-    // adbd must be static, as it is copied into the recovery image.
-    static_executable: true,
+    recovery_available: true,
 
     srcs: [
         "daemon/main.cpp",
@@ -340,7 +349,6 @@ cc_binary {
         "libselinux",
         "libsquashfs_utils",
         "libqemu_pipe",
-        "libdebuggerd_handler",
 
         "libbase",
         "libcutils",
@@ -367,6 +375,7 @@ cc_test {
         "liblog",
         "libusb",
         "libmdnssd",
+        "libselinux",
     ],
     test_suites: ["device-tests"],
 }

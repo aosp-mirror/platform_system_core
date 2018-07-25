@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_BASE_MACROS_H
-#define ANDROID_BASE_MACROS_H
+#pragma once
 
 #include <stddef.h>  // for size_t
 #include <unistd.h>  // for TEMP_FAILURE_RETRY
@@ -171,17 +170,7 @@ void UNUSED(const T&...) {
 //
 //  In either case this macro has no effect on runtime behavior and performance
 //  of code.
-#if defined(__clang__) && defined(__has_warning)
-#if __has_feature(cxx_attributes) && __has_warning("-Wimplicit-fallthrough")
 #define FALLTHROUGH_INTENDED [[clang::fallthrough]]  // NOLINT
-#endif
-#endif
-
-#ifndef FALLTHROUGH_INTENDED
-#define FALLTHROUGH_INTENDED \
-  do {                       \
-  } while (0)
-#endif
 
 // Current ABI string
 #if defined(__arm__)
@@ -197,5 +186,3 @@ void UNUSED(const T&...) {
 #elif defined(__mips__) && defined(__LP64__)
 #define ABI_STRING "mips64"
 #endif
-
-#endif  // ANDROID_BASE_MACROS_H

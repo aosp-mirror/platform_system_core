@@ -39,12 +39,14 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <private/android_filesystem_config.h>
 
 #include <processgroup/processgroup.h>
 
+using android::base::GetBoolProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
@@ -62,12 +64,20 @@ std::once_flag init_path_flag;
 static const std::string& GetCgroupRootPath() {
     static std::string cgroup_root_path;
     std::call_once(init_path_flag, [&]() {
-            // Check if mem cgroup is mounted, only then check for write-access to avoid
-            // SELinux denials
+        // low-ram devices use per-app memcg by default, unlike high-end ones
+        bool low_ram_device = GetBoolProperty("ro.config.low_ram", false);
+        bool per_app_memcg =
+            GetBoolProperty("ro.config.per_app_memcg", low_ram_device);
+        if (per_app_memcg) {
+            // Check if mem cgroup is mounted, only then check for
+            // write-access to avoid SELinux denials
             cgroup_root_path =
-                (access(MEM_CGROUP_TASKS, F_OK) || access(MEM_CGROUP_PATH, W_OK) ? ACCT_CGROUP_PATH
-                                                                                 : MEM_CGROUP_PATH);
-            });
+                (access(MEM_CGROUP_TASKS, F_OK) || access(MEM_CGROUP_PATH, W_OK) ?
+                ACCT_CGROUP_PATH : MEM_CGROUP_PATH);
+        } else {
+            cgroup_root_path = ACCT_CGROUP_PATH;
+        }
+    });
     return cgroup_root_path;
 }
 

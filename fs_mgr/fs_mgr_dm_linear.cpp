@@ -37,104 +37,103 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <liblp/reader.h>
 
 #include "fs_mgr_priv.h"
-#include "fs_mgr_priv_dm_ioctl.h"
 
 namespace android {
 namespace fs_mgr {
 
-std::string LogicalPartitionExtent::Serialize() const {
-    // Note: we need to include an explicit null-terminator.
-    std::string argv =
-        android::base::StringPrintf("%s %" PRIu64, block_device_.c_str(), first_sector_);
-    argv.push_back(0);
+using DeviceMapper = android::dm::DeviceMapper;
+using DmTable = android::dm::DmTable;
+using DmTarget = android::dm::DmTarget;
+using DmTargetZero = android::dm::DmTargetZero;
+using DmTargetLinear = android::dm::DmTargetLinear;
 
-    // The kernel expects each target to be aligned.
-    size_t spec_bytes = sizeof(struct dm_target_spec) + argv.size();
-    size_t padding = ((spec_bytes + 7) & ~7) - spec_bytes;
-    for (size_t i = 0; i < padding; i++) {
-        argv.push_back(0);
+static bool CreateDmTable(const std::string& block_device, const LpMetadata& metadata,
+                          const LpMetadataPartition& partition, DmTable* table) {
+    uint64_t sector = 0;
+    for (size_t i = 0; i < partition.num_extents; i++) {
+        const auto& extent = metadata.extents[partition.first_extent_index + i];
+        std::unique_ptr<DmTarget> target;
+        switch (extent.target_type) {
+            case LP_TARGET_TYPE_ZERO:
+                target = std::make_unique<DmTargetZero>(sector, extent.num_sectors);
+                break;
+            case LP_TARGET_TYPE_LINEAR:
+                target = std::make_unique<DmTargetLinear>(sector, extent.num_sectors, block_device,
+                                                          extent.target_data);
+                break;
+            default:
+                LOG(ERROR) << "Unknown target type in metadata: " << extent.target_type;
+                return false;
+        }
+        if (!table->AddTarget(std::move(target))) {
+            return false;
+        }
+        sector += extent.num_sectors;
     }
-
-    struct dm_target_spec spec;
-    spec.sector_start = logical_sector_;
-    spec.length = num_sectors_;
-    spec.status = 0;
-    strcpy(spec.target_type, "linear");
-    spec.next = sizeof(struct dm_target_spec) + argv.size();
-
-    return std::string((char*)&spec, sizeof(spec)) + argv;
-}
-
-static bool LoadDmTable(int dm_fd, const LogicalPartition& partition) {
-    // Combine all dm_target_spec buffers together.
-    std::string target_string;
-    for (const auto& extent : partition.extents) {
-        target_string += extent.Serialize();
-    }
-
-    // Allocate the ioctl buffer.
-    size_t buffer_size = sizeof(struct dm_ioctl) + target_string.size();
-    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(buffer_size);
-
-    // Initialize the ioctl buffer header, then copy our target specs in.
-    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(buffer.get());
-    fs_mgr_dm_ioctl_init(io, buffer_size, partition.name);
-    io->target_count = partition.extents.size();
-    if (partition.attributes & kPartitionReadonly) {
-        io->flags |= DM_READONLY_FLAG;
-    }
-    memcpy(io + 1, target_string.c_str(), target_string.size());
-
-    if (ioctl(dm_fd, DM_TABLE_LOAD, io)) {
-        PERROR << "Failed ioctl() on DM_TABLE_LOAD, partition " << partition.name;
-        return false;
+    if (partition.attributes & LP_PARTITION_ATTR_READONLY) {
+        table->set_readonly(true);
     }
     return true;
 }
 
-static bool LoadTablesAndActivate(int dm_fd, const LogicalPartition& partition) {
-    if (!LoadDmTable(dm_fd, partition)) {
+static bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
+                                   const LpMetadataPartition& partition, std::string* path) {
+    DeviceMapper& dm = DeviceMapper::Instance();
+
+    DmTable table;
+    if (!CreateDmTable(block_device, metadata, partition, &table)) {
         return false;
     }
-
-    struct dm_ioctl io;
-    return fs_mgr_dm_resume_table(&io, partition.name, dm_fd);
-}
-
-static bool CreateDmDeviceForPartition(int dm_fd, const LogicalPartition& partition) {
-    struct dm_ioctl io;
-    if (!fs_mgr_dm_create_device(&io, partition.name, dm_fd)) {
+    std::string name = GetPartitionName(partition);
+    if (!dm.CreateDevice(name, table)) {
         return false;
     }
-    if (!LoadTablesAndActivate(dm_fd, partition)) {
-        // Remove the device rather than leave it in an inactive state.
-        fs_mgr_dm_destroy_device(&io, partition.name, dm_fd);
+    if (!dm.GetDmDevicePathByName(name, path)) {
         return false;
     }
-
-    LINFO << "Created device-mapper device: " << partition.name;
+    LINFO << "Created logical partition " << name << " on device " << *path;
     return true;
 }
 
-bool CreateLogicalPartitions(const LogicalPartitionTable& table) {
-    android::base::unique_fd dm_fd(open("/dev/device-mapper", O_RDWR));
-    if (dm_fd < 0) {
-        PLOG(ERROR) << "failed to open /dev/device-mapper";
-        return false;
+bool CreateLogicalPartitions(const std::string& block_device) {
+    uint32_t slot = SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
+    auto metadata = ReadMetadata(block_device.c_str(), slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read partition table.";
+        return true;
     }
-    for (const auto& partition : table.partitions) {
-        if (!CreateDmDeviceForPartition(dm_fd, partition)) {
-            LOG(ERROR) << "could not create dm-linear device for partition: " << partition.name;
+    for (const auto& partition : metadata->partitions) {
+        std::string path;
+        if (!CreateLogicalPartition(block_device, *metadata.get(), partition, &path)) {
+            LERROR << "Could not create logical partition: " << GetPartitionName(partition);
             return false;
         }
     }
     return true;
 }
 
-std::unique_ptr<LogicalPartitionTable> LoadPartitionsFromDeviceTree() {
-    return nullptr;
+bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
+                            const std::string& partition_name, std::string* path) {
+    auto metadata = ReadMetadata(block_device.c_str(), metadata_slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read partition table.";
+        return true;
+    }
+    for (const auto& partition : metadata->partitions) {
+        if (GetPartitionName(partition) == partition_name) {
+            return CreateLogicalPartition(block_device, *metadata.get(), partition, path);
+        }
+    }
+    LERROR << "Could not find any partition with name: " << partition_name;
+    return false;
+}
+
+bool DestroyLogicalPartition(const std::string& name) {
+    DeviceMapper& dm = DeviceMapper::Instance();
+    return dm.DeleteDevice(name);
 }
 
 }  // namespace fs_mgr

@@ -18,11 +18,9 @@ the system), so although this was the beginning of the end of toolbox it
 (a) didn't stand out given all the other systems-level changes and (b)
 in Marshmallow we changed direction and started the move to toybox.
 
-Not everything is provided by toybox, though. We currently still use
-the BSD dd and grep (because the toybox versions are still unfinished),
-and for the bzip2 command-line tools we use the ones that are part of
-the bzip2 distribution. The awk added in Android P is Brian Kernighan's
-"one true" awk.
+Not everything is provided by toybox, though. For the bzip2 command-line tools
+we use the ones that are part of the bzip2 distribution. The awk added in
+Android P is Brian Kernighan's "one true" awk.
 
 The lists below show what tools were provided and where they came from in
 each release starting with Gingerbread. This doesn't tell the full story,
@@ -195,13 +193,15 @@ which whoami xargs xxd yes zcat
 Android Q
 ---------
 
+BSD: fsck\_msdos newfs\_msdos
+
 bzip2: bzcat bzip2 bunzip2
 
 one-true-awk: awk
 
 PCRE: egrep fgrep grep
 
-toolbox: getevent getprop newfs\_msdos
+toolbox: getevent getprop
 
 toybox: acpi base64 basename blockdev cal cat chcon chgrp chmod chown
 chroot chrt cksum clear cmp comm cp cpio cut date dd df diff dirname

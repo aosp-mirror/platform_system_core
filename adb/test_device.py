@@ -750,7 +750,6 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
-    @unittest.expectedFailure # b/25566053
     def test_push_empty(self):
         """Push a directory containing an empty directory to the device."""
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
@@ -865,6 +864,21 @@ class FileOperationsTest(DeviceTest):
 
             self.assertTrue('Permission denied' in output or
                             'Read-only file system' in output)
+
+    @requires_non_root
+    def test_push_directory_creation(self):
+        """Regression test for directory creation.
+
+        Bug: http://b/110953234
+        """
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            tmp_file.write('\0' * 1024 * 1024)
+            tmp_file.flush()
+            remote_path = self.DEVICE_TEMP_DIR + '/test_push_directory_creation'
+            self.device.shell(['rm', '-rf', remote_path])
+
+            remote_path += '/filename'
+            self.device.push(local=tmp_file.name, remote=remote_path)
 
     def _test_pull(self, remote_file, checksum):
         tmp_write = tempfile.NamedTemporaryFile(mode='wb', delete=False)

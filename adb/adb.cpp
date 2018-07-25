@@ -264,15 +264,6 @@ void send_connect(atransport* t) {
     send_packet(cp, t);
 }
 
-// qual_overwrite is used to overwrite a qualifier string.  dst is a
-// pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
-// was malloc'ed and needs to freed.  *dst will be set to a dup of src.
-// TODO: switch to std::string for these atransport fields instead.
-static void qual_overwrite(char** dst, const std::string& src) {
-    free(*dst);
-    *dst = strdup(src.c_str());
-}
-
 void parse_banner(const std::string& banner, atransport* t) {
     D("parse_banner: %s", banner.c_str());
 
@@ -296,11 +287,11 @@ void parse_banner(const std::string& banner, atransport* t) {
             const std::string& key = key_value[0];
             const std::string& value = key_value[1];
             if (key == "ro.product.name") {
-                qual_overwrite(&t->product, value);
+                t->product = value;
             } else if (key == "ro.product.model") {
-                qual_overwrite(&t->model, value);
+                t->model = value;
             } else if (key == "ro.product.device") {
-                qual_overwrite(&t->device, value);
+                t->device = value;
             } else if (key == "features") {
                 t->SetFeatures(value);
             }
@@ -415,7 +406,7 @@ void handle_packet(apacket *p, atransport *t)
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 != 0) {
             asocket* s = find_local_socket(p->msg.arg1, 0);
             if (s) {
-                if(s->peer == 0) {
+                if(s->peer == nullptr) {
                     /* On first READY message, create the connection. */
                     s->peer = create_remote_socket(p->msg.arg0, t);
                     s->peer->peer = s;
@@ -424,8 +415,8 @@ void handle_packet(apacket *p, atransport *t)
                     /* Other READY messages must use the same local-id */
                     s->ready(s);
                 } else {
-                    D("Invalid A_OKAY(%d,%d), expected A_OKAY(%d,%d) on transport %s",
-                      p->msg.arg0, p->msg.arg1, s->peer->id, p->msg.arg1, t->serial);
+                    D("Invalid A_OKAY(%d,%d), expected A_OKAY(%d,%d) on transport %s", p->msg.arg0,
+                      p->msg.arg1, s->peer->id, p->msg.arg1, t->serial.c_str());
                 }
             } else {
                 // When receiving A_OKAY from device for A_OPEN request, the host server may
@@ -451,8 +442,8 @@ void handle_packet(apacket *p, atransport *t)
                  * socket has a peer on the same transport.
                  */
                 if (p->msg.arg0 == 0 && s->peer && s->peer->transport != t) {
-                    D("Invalid A_CLSE(0, %u) from transport %s, expected transport %s",
-                      p->msg.arg1, t->serial, s->peer->transport->serial);
+                    D("Invalid A_CLSE(0, %u) from transport %s, expected transport %s", p->msg.arg1,
+                      t->serial.c_str(), s->peer->transport->serial.c_str());
                 } else {
                     s->close(s);
                 }
@@ -885,9 +876,8 @@ int launch_server(const std::string& socket_spec) {
     }
 #else /* !defined(_WIN32) */
     // set up a pipe so the child can tell us when it is ready.
-    // fd[0] will be parent's end, and the child will write on fd[1]
-    int fd[2];
-    if (pipe(fd)) {
+    unique_fd pipe_read, pipe_write;
+    if (!Pipe(&pipe_read, &pipe_write)) {
         fprintf(stderr, "pipe failed in launch_server, errno: %d\n", errno);
         return -1;
     }
@@ -899,11 +889,10 @@ int launch_server(const std::string& socket_spec) {
 
     if (pid == 0) {
         // child side of the fork
-
-        adb_close(fd[0]);
+        pipe_read.reset();
 
         char reply_fd[30];
-        snprintf(reply_fd, sizeof(reply_fd), "%d", fd[1]);
+        snprintf(reply_fd, sizeof(reply_fd), "%d", pipe_write.get());
         // child process
         int result = execl(path.c_str(), "adb", "-L", socket_spec.c_str(), "fork-server", "server",
                            "--reply-fd", reply_fd, NULL);
@@ -913,10 +902,10 @@ int launch_server(const std::string& socket_spec) {
         // parent side of the fork
         char temp[3] = {};
         // wait for the "OK\n" message
-        adb_close(fd[1]);
-        int ret = adb_read(fd[0], temp, 3);
+        pipe_write.reset();
+        int ret = adb_read(pipe_read.get(), temp, 3);
         int saved_errno = errno;
-        adb_close(fd[0]);
+        pipe_read.reset();
         if (ret < 0) {
             fprintf(stderr, "could not read ok from ADB Server, errno = %d\n", saved_errno);
             return -1;
@@ -935,25 +924,6 @@ int launch_server(const std::string& socket_spec) {
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
 int handle_forward_request(const char* service, atransport* transport, int reply_fd) {
-    if (!strcmp(service, "list-forward")) {
-        // Create the list of forward redirections.
-        std::string listeners = format_listeners();
-#if ADB_HOST
-        SendOkay(reply_fd);
-#endif
-        return SendProtocolString(reply_fd, listeners);
-    }
-
-    if (!strcmp(service, "killforward-all")) {
-        remove_all_listeners();
-#if ADB_HOST
-        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
-        SendOkay(reply_fd);
-#endif
-        SendOkay(reply_fd);
-        return 1;
-    }
-
     if (!strncmp(service, "forward:", 8) || !strncmp(service, "killforward:", 12)) {
         // killforward:local
         // forward:(norebind:)?local;remote
@@ -1173,7 +1143,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         std::string error;
         atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
-            return SendOkay(reply_fd, t->serial ? t->serial : "unknown");
+            return SendOkay(reply_fd, !t->serial.empty() ? t->serial : "unknown");
         } else {
             return SendFail(reply_fd, error);
         }
@@ -1182,7 +1152,7 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         std::string error;
         atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
-            return SendOkay(reply_fd, t->devpath ? t->devpath : "unknown");
+            return SendOkay(reply_fd, !t->devpath.empty() ? t->devpath : "unknown");
         } else {
             return SendFail(reply_fd, error);
         }
@@ -1216,10 +1186,30 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         return SendOkay(reply_fd, response);
     }
 
+    if (!strcmp(service, "list-forward")) {
+        // Create the list of forward redirections.
+        std::string listeners = format_listeners();
+#if ADB_HOST
+        SendOkay(reply_fd);
+#endif
+        return SendProtocolString(reply_fd, listeners);
+    }
+
+    if (!strcmp(service, "killforward-all")) {
+        remove_all_listeners();
+#if ADB_HOST
+        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
+        SendOkay(reply_fd);
+#endif
+        SendOkay(reply_fd);
+        return 1;
+    }
+
     std::string error;
     atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
     if (!t) {
-        return -1;
+        SendFail(reply_fd, error);
+        return 1;
     }
 
     int ret = handle_forward_request(service, t, reply_fd);

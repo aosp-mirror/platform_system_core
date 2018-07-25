@@ -58,6 +58,7 @@ cc_library {
     name: "libziparchive",
     host_supported: true,
     vendor_available: true,
+    recovery_available: true,
     vndk: {
         enabled: true,
     },
