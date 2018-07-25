@@ -65,20 +65,17 @@ struct usb_handle
     unsigned int zero_mask;
 };
 
-class OsxUsbTransport : public UsbTransport {
+class OsxUsbTransport : public Transport {
   public:
-    OsxUsbTransport(std::unique_ptr<usb_handle> handle, uint32_t ms_timeout)
-        : handle_(std::move(handle)), ms_timeout_(ms_timeout) {}
+    OsxUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
     ~OsxUsbTransport() override = default;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
     int Close() override;
-    int Reset() override;
 
   private:
     std::unique_ptr<usb_handle> handle_;
-    const uint32_t ms_timeout_;
 
     DISALLOW_COPY_AND_ASSIGN(OsxUsbTransport);
 };
@@ -459,7 +456,7 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
  * Definitions of this file's public functions.
  */
 
-UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms) {
+Transport* usb_open(ifc_match_func callback) {
     std::unique_ptr<usb_handle> handle;
 
     if (init_usb(callback, &handle) < 0) {
@@ -467,23 +464,12 @@ UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms) {
         return nullptr;
     }
 
-    return new OsxUsbTransport(std::move(handle), timeout_ms);
+    return new OsxUsbTransport(std::move(handle));
 }
 
 int OsxUsbTransport::Close() {
     /* TODO: Something better here? */
     return 0;
-}
-
-int OsxUsbTransport::Reset() {
-    IOReturn result = (*handle_->interface)->ResetDevice(handle_->interface);
-
-    if (result == 0) {
-        return 0;
-    } else {
-        ERR("usb_reset failed with status %x\n", result);
-        return -1;
-    }
 }
 
 ssize_t OsxUsbTransport::Read(void* data, size_t len) {
@@ -508,9 +494,7 @@ ssize_t OsxUsbTransport::Read(void* data, size_t len) {
         return -1;
     }
 
-    result = (*handle_->interface)
-                     ->ReadPipeTO(handle_->interface, handle_->bulkIn, data, &numBytes,
-                                  USB_TRANSACTION_TIMEOUT, USB_TRANSACTION_TIMEOUT);
+    result = (*handle_->interface)->ReadPipe(handle_->interface, handle_->bulkIn, data, &numBytes);
 
     if (result == 0) {
         return (int) numBytes;
