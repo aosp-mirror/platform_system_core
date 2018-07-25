@@ -332,7 +332,7 @@ static int reread_file(struct reread_data *data, char *buf, size_t buf_size) {
         data->fd = -1;
         return -1;
     }
-    ALOG_ASSERT((size_t)size < buf_size - 1, data->filename " too large");
+    ALOG_ASSERT((size_t)size < buf_size - 1, "%s too large", data->filename);
     buf[size] = 0;
 
     return 0;
