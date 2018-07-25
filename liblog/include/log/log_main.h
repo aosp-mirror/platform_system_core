@@ -47,7 +47,8 @@ __BEGIN_DECLS
  * so don't link with __clang_analyzer__ defined.
  */
 #ifdef __clang_analyzer__
-extern void __FAKE_USE_VA_ARGS(...);
+extern void __fake_use_va_args(int, ...);
+#define __FAKE_USE_VA_ARGS(...) __fake_use_va_args(0, ##__VA_ARGS__)
 #else
 #define __FAKE_USE_VA_ARGS(...) ((void)(0))
 #endif
