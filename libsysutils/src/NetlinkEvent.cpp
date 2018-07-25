@@ -45,8 +45,8 @@ const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 NetlinkEvent::NetlinkEvent() {
     mAction = Action::kUnknown;
     memset(mParams, 0, sizeof(mParams));
-    mPath = NULL;
-    mSubsystem = NULL;
+    mPath = nullptr;
+    mSubsystem = nullptr;
 }
 
 NetlinkEvent::~NetlinkEvent() {
@@ -89,7 +89,7 @@ static const char *rtMessageName(int type) {
         NL_EVENT_RTM_NAME(LOCAL_QLOG_NL_EVENT);
         NL_EVENT_RTM_NAME(LOCAL_NFLOG_PACKET);
         default:
-            return NULL;
+            return nullptr;
     }
 #undef NL_EVENT_RTM_NAME
 }
@@ -158,7 +158,7 @@ bool NetlinkEvent::parseIfInfoMessage(const struct nlmsghdr *nh) {
  */
 bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     struct ifaddrmsg *ifaddr = (struct ifaddrmsg *) NLMSG_DATA(nh);
-    struct ifa_cacheinfo *cacheinfo = NULL;
+    struct ifa_cacheinfo *cacheinfo = nullptr;
     char addrstr[INET6_ADDRSTRLEN] = "";
     char ifname[IFNAMSIZ] = "";
 
@@ -286,7 +286,7 @@ static uint32_t nlAttrU32(const nlattr* nla) {
 bool NetlinkEvent::parseNfPacketMessage(struct nlmsghdr *nh) {
     int uid = -1;
     int len = 0;
-    char* raw = NULL;
+    char* raw = nullptr;
 
     struct nlattr* uid_attr = findNlAttr(nh, sizeof(struct genlmsghdr), NFULA_UID);
     if (uid_attr) {
@@ -584,7 +584,7 @@ has_prefix(const char* str, const char* end, const char* prefix, size_t prefixle
         (prefixlen == 0 || !memcmp(str, prefix, prefixlen))) {
         return str + prefixlen;
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -625,16 +625,16 @@ bool NetlinkEvent::parseAsciiNetlinkMessage(char *buffer, int size) {
             first = 0;
         } else {
             const char* a;
-            if ((a = HAS_CONST_PREFIX(s, end, "ACTION=")) != NULL) {
+            if ((a = HAS_CONST_PREFIX(s, end, "ACTION=")) != nullptr) {
                 if (!strcmp(a, "add"))
                     mAction = Action::kAdd;
                 else if (!strcmp(a, "remove"))
                     mAction = Action::kRemove;
                 else if (!strcmp(a, "change"))
                     mAction = Action::kChange;
-            } else if ((a = HAS_CONST_PREFIX(s, end, "SEQNUM=")) != NULL) {
+            } else if ((a = HAS_CONST_PREFIX(s, end, "SEQNUM=")) != nullptr) {
                 mSeq = atoi(a);
-            } else if ((a = HAS_CONST_PREFIX(s, end, "SUBSYSTEM=")) != NULL) {
+            } else if ((a = HAS_CONST_PREFIX(s, end, "SUBSYSTEM=")) != nullptr) {
                 mSubsystem = strdup(a);
             } else if (param_idx < NL_PARAMS_MAX) {
                 mParams[param_idx++] = strdup(s);
@@ -656,14 +656,14 @@ bool NetlinkEvent::decode(char *buffer, int size, int format) {
 
 const char *NetlinkEvent::findParam(const char *paramName) {
     size_t len = strlen(paramName);
-    for (int i = 0; i < NL_PARAMS_MAX && mParams[i] != NULL; ++i) {
+    for (int i = 0; i < NL_PARAMS_MAX && mParams[i] != nullptr; ++i) {
         const char *ptr = mParams[i] + len;
         if (!strncmp(mParams[i], paramName, len) && *ptr == '=')
             return ++ptr;
     }
 
     SLOGE("NetlinkEvent::FindParam(): Parameter '%s' not found", paramName);
-    return NULL;
+    return nullptr;
 }
 
 nlattr* NetlinkEvent::findNlAttr(const nlmsghdr* nh, size_t hdrlen, uint16_t attr) {
