@@ -31,17 +31,19 @@ using android::base::unique_fd;
 namespace android {
 namespace procinfo {
 
-bool GetProcessInfo(pid_t tid, ProcessInfo* process_info) {
+bool GetProcessInfo(pid_t tid, ProcessInfo* process_info, std::string* error) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/%d", tid);
 
   unique_fd dirfd(open(path, O_DIRECTORY | O_RDONLY));
   if (dirfd == -1) {
-    PLOG(ERROR) << "failed to open " << path;
+    if (error != nullptr) {
+      *error = std::string("failed to open ") + path;
+    }
     return false;
   }
 
-  return GetProcessInfoFromProcPidFd(dirfd.get(), process_info);
+  return GetProcessInfoFromProcPidFd(dirfd.get(), process_info, error);
 }
 
 static ProcessState parse_state(const char* state) {
@@ -62,17 +64,21 @@ static ProcessState parse_state(const char* state) {
   }
 }
 
-bool GetProcessInfoFromProcPidFd(int fd, ProcessInfo* process_info) {
+bool GetProcessInfoFromProcPidFd(int fd, ProcessInfo* process_info, std::string* error) {
   int status_fd = openat(fd, "status", O_RDONLY | O_CLOEXEC);
 
   if (status_fd == -1) {
-    PLOG(ERROR) << "failed to open status fd in GetProcessInfoFromProcPidFd";
+    if (error != nullptr) {
+      *error = "failed to open status fd in GetProcessInfoFromProcPidFd";
+    }
     return false;
   }
 
   std::unique_ptr<FILE, decltype(&fclose)> fp(fdopen(status_fd, "r"), fclose);
   if (!fp) {
-    PLOG(ERROR) << "failed to open status file in GetProcessInfoFromProcPidFd";
+    if (error != nullptr) {
+      *error = "failed to open status file in GetProcessInfoFromProcPidFd";
+    }
     close(status_fd);
     return false;
   }
