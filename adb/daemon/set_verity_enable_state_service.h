@@ -14,11 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
-#define _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
+#pragma once
 
-#include <android-base/unique_fd.h>
+#include "adb_unique_fd.h"
 
-void set_verity_enabled_state_service(android::base::unique_fd fd, bool enable);
-
-#endif  // _DAEMON_SET_VERITY_ENABLED_STATE_SERVICE_H_
+void set_verity_enabled_state_service(unique_fd fd, bool enable);

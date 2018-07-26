@@ -14,16 +14,7 @@
  * limitations under the License.
  */
 
-// This file contains classes and functionality to launch shell subprocesses
-// in adbd and communicate between those subprocesses and the adb client.
-//
-// The main features exposed here are:
-//   1. A ShellPacket class to wrap data in a simple protocol. Both adbd and
-//      the adb client use this class to transmit data between them.
-//   2. Functions to launch a subprocess on the adbd side.
-
-#ifndef SHELL_SERVICE_H_
-#define SHELL_SERVICE_H_
+#pragma once
 
 #include <stdint.h>
 
@@ -124,26 +115,3 @@ class ShellProtocol {
 
     DISALLOW_COPY_AND_ASSIGN(ShellProtocol);
 };
-
-#if !ADB_HOST
-
-enum class SubprocessType {
-    kPty,
-    kRaw,
-};
-
-enum class SubprocessProtocol {
-    kNone,
-    kShell,
-};
-
-// Forks and starts a new shell subprocess. If |name| is empty an interactive
-// shell is started, otherwise |name| is executed non-interactively.
-//
-// Returns an open FD connected to the subprocess or -1 on failure.
-int StartSubprocess(const char* name, const char* terminal_type,
-                    SubprocessType type, SubprocessProtocol protocol);
-
-#endif  // !ADB_HOST
-
-#endif  // SHELL_SERVICE_H_
