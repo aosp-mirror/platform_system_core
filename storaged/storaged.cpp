@@ -194,7 +194,7 @@ void storaged_t::load_proto(userid_t user_id) {
         return;
     }
 
-    mUidm.load_uid_io_proto(proto.uid_io_usage());
+    mUidm.load_uid_io_proto(user_id, proto.uid_io_usage());
 
     if (user_id == USER_SYSTEM) {
         storage_info->load_perf_history_proto(proto.perf_history());

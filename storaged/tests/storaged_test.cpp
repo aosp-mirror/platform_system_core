@@ -551,8 +551,8 @@ TEST(storaged_test, uid_monitor) {
         },
     };
 
-    uidm.load_uid_io_proto(protos[0].uid_io_usage());
-    uidm.load_uid_io_proto(protos[1].uid_io_usage());
+    uidm.load_uid_io_proto(0, protos[0].uid_io_usage());
+    uidm.load_uid_io_proto(1, protos[1].uid_io_usage());
 
     EXPECT_EQ(io_history.size(), 3UL);
     EXPECT_EQ(io_history.count(200), 1UL);
@@ -626,4 +626,41 @@ TEST(storaged_test, uid_monitor) {
     uidm.clear_user_history(1);
 
     EXPECT_EQ(uidm.io_history_.size(), 0UL);
+}
+
+TEST(storaged_test, load_uid_io_proto) {
+    uid_monitor uidm;
+
+    uidm.io_history_[200] = {
+        .start_ts = 100,
+        .entries = {
+            { "app1", {
+                .user_id = 0,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON] = 1000,
+              }
+            },
+            { "app2", {
+                .user_id = 0,
+                .uid_ios.bytes[READ][FOREGROUND][CHARGER_OFF] = 2000,
+              }
+            },
+            { "app3", {
+                .user_id = 0,
+                .uid_ios.bytes[READ][FOREGROUND][CHARGER_OFF] = 3000,
+              }
+            },
+        },
+    };
+
+    unordered_map<int, StoragedProto> protos;
+    uidm.update_uid_io_proto(&protos);
+    ASSERT_EQ(protos.size(), size_t(1));
+
+    // Loading the same proto many times should not add duplicate entries.
+    const UidIOUsage& user_0 = protos[0].uid_io_usage();
+    for (size_t i = 0; i < 10000; i++) {
+        uidm.load_uid_io_proto(0, user_0);
+    }
+    ASSERT_EQ(uidm.io_history_.size(), size_t(1));
+    ASSERT_EQ(uidm.io_history_[200].entries.size(), size_t(3));
 }

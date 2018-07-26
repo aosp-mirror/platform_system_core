@@ -21,6 +21,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <android/content/pm/IPackageManagerNative.h>
 #include <android-base/file.h>
@@ -468,7 +469,7 @@ void uid_monitor::clear_user_history(userid_t user_id)
     }
 }
 
-void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
+void uid_monitor::load_uid_io_proto(userid_t user_id, const UidIOUsage& uid_io_proto)
 {
     if (!enabled()) return;
 
@@ -478,8 +479,23 @@ void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
         const UidIORecords& records_proto = item_proto.records();
         struct uid_records* recs = &io_history_[item_proto.end_ts()];
 
+        // It's possible that the same uid_io_proto file gets loaded more than
+        // once, for example, if system_server crashes. In this case we avoid
+        // adding duplicate entries, so we build a quick way to check for
+        // duplicates.
+        std::unordered_set<std::string> existing_uids;
+        for (const auto& rec : recs->entries) {
+            if (rec.ios.user_id == user_id) {
+                existing_uids.emplace(rec.name);
+            }
+        }
+
         recs->start_ts = records_proto.start_ts();
         for (const auto& rec_proto : records_proto.entries()) {
+            if (existing_uids.find(rec_proto.uid_name()) != existing_uids.end()) {
+                continue;
+            }
+
             struct uid_record record;
             record.name = rec_proto.uid_name();
             record.ios.user_id = rec_proto.user_id();
