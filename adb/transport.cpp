@@ -1157,7 +1157,7 @@ void close_usb_devices() {
 }
 #endif  // ADB_HOST
 
-int register_socket_transport(int s, const char* serial, int port, int local,
+int register_socket_transport(unique_fd s, const char* serial, int port, int local,
                               atransport::ReconnectCallback reconnect) {
     atransport* t = new atransport(std::move(reconnect), kCsOffline);
 
@@ -1167,8 +1167,8 @@ int register_socket_transport(int s, const char* serial, int port, int local,
         serial = buf;
     }
 
-    D("transport: %s init'ing for socket %d, on port %d", serial, s, port);
-    if (init_socket_transport(t, s, port, local) < 0) {
+    D("transport: %s init'ing for socket %d, on port %d", serial, s.get(), port);
+    if (init_socket_transport(t, std::move(s), port, local) < 0) {
         delete t;
         return -1;
     }

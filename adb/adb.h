@@ -133,7 +133,7 @@ int launch_server(const std::string& socket_spec);
 int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply_fd);
 
 /* initialize a transport object's func pointers and state */
-int init_socket_transport(atransport* t, int s, int port, int local);
+int init_socket_transport(atransport* t, unique_fd s, int port, int local);
 void init_usb_transport(atransport* t, usb_handle* usb);
 
 std::string getEmulatorSerialString(int console_port);

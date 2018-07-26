@@ -18,4 +18,4 @@
 
 #include "adb_unique_fd.h"
 
-void framebuffer_service(unique_fd fd);
+void file_sync_service(unique_fd fd);

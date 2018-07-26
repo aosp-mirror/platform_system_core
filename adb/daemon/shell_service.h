@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _REMOUNT_SERVICE_H_
-#define _REMOUNT_SERVICE_H_
+#pragma once
 
-#include <string>
+enum class SubprocessType {
+    kPty,
+    kRaw,
+};
 
-#include <android-base/unique_fd.h>
+enum class SubprocessProtocol {
+    kNone,
+    kShell,
+};
 
-bool make_block_device_writable(const std::string&);
-void remount_service(android::base::unique_fd, const std::string&);
-
-#endif
+// Forks and starts a new shell subprocess. If |name| is empty an interactive
+// shell is started, otherwise |name| is executed non-interactively.
+//
+// Returns an open FD connected to the subprocess or -1 on failure.
+int StartSubprocess(const char* name, const char* terminal_type, SubprocessType type,
+                    SubprocessProtocol protocol);
