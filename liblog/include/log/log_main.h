@@ -40,19 +40,6 @@ __BEGIN_DECLS
 #endif
 #endif
 
-/*
- * Use __VA_ARGS__ if running a static analyzer,
- * to avoid warnings of unused variables in __VA_ARGS__.
- * __FAKE_USE_VA_ARGS is undefined at link time,
- * so don't link with __clang_analyzer__ defined.
- */
-#ifdef __clang_analyzer__
-extern void __fake_use_va_args(int, ...);
-#define __FAKE_USE_VA_ARGS(...) __fake_use_va_args(0, ##__VA_ARGS__)
-#else
-#define __FAKE_USE_VA_ARGS(...) ((void)(0))
-#endif
-
 /* --------------------------------------------------------------------- */
 
 /*
@@ -64,6 +51,19 @@ extern void __fake_use_va_args(int, ...);
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#endif
+
+/*
+ * Use __VA_ARGS__ if running a static analyzer,
+ * to avoid warnings of unused variables in __VA_ARGS__.
+ * __FAKE_USE_VA_ARGS is undefined at link time,
+ * so don't link with __clang_analyzer__ defined.
+ */
+#ifdef __clang_analyzer__
+extern void __fake_use_va_args(int, ...);
+#define __FAKE_USE_VA_ARGS(...) __fake_use_va_args(0, ##__VA_ARGS__)
+#else
+#define __FAKE_USE_VA_ARGS(...) ((void)(0))
 #endif
 
 #ifndef __predict_false
