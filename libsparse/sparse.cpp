@@ -160,30 +160,7 @@ int sparse_file_callback(struct sparse_file* s, bool sparse, bool crc,
   struct output_file* out;
 
   chunks = sparse_count_chunks(s);
-  out = output_file_open_callback(write, nullptr, nullptr, nullptr, priv, s->block_size, s->len,
-                                  sparse, chunks, crc);
-
-  if (!out) return -ENOMEM;
-
-  ret = write_all_blocks(s, out);
-
-  output_file_close(out);
-
-  return ret;
-}
-
-int sparse_file_callback_typed(struct sparse_file* s, bool sparse,
-                               int (*data_write)(void* priv, const void* data, size_t len),
-                               int (*fd_write)(void* priv, int fd, size_t len),
-                               int (*fill_write)(void* priv, uint32_t fill_val, size_t len),
-                               int (*skip_write)(void* priv, int64_t len), void* priv) {
-  int ret;
-  int chunks;
-  struct output_file* out;
-
-  chunks = sparse_count_chunks(s);
-  out = output_file_open_callback(data_write, fd_write, fill_write, skip_write, priv, s->block_size,
-                                  s->len, sparse, chunks, false);
+  out = output_file_open_callback(write, priv, s->block_size, s->len, false, sparse, chunks, crc);
 
   if (!out) return -ENOMEM;
 
@@ -221,8 +198,8 @@ int sparse_file_foreach_chunk(struct sparse_file* s, bool sparse, bool crc,
   chk.write = write;
   chk.block = chk.nr_blocks = 0;
   chunks = sparse_count_chunks(s);
-  out = output_file_open_callback(foreach_chunk_write, nullptr, nullptr, nullptr, &chk,
-                                  s->block_size, s->len, sparse, chunks, crc);
+  out = output_file_open_callback(foreach_chunk_write, &chk, s->block_size, s->len, false, sparse,
+                                  chunks, crc);
 
   if (!out) return -ENOMEM;
 
@@ -250,8 +227,8 @@ int64_t sparse_file_len(struct sparse_file* s, bool sparse, bool crc) {
   int64_t count = 0;
   struct output_file* out;
 
-  out = output_file_open_callback(out_counter_write, nullptr, nullptr, nullptr, &count,
-                                  s->block_size, s->len, sparse, chunks, crc);
+  out = output_file_open_callback(out_counter_write, &count, s->block_size, s->len, false, sparse,
+                                  chunks, crc);
   if (!out) {
     return -1;
   }
@@ -290,8 +267,8 @@ static struct backed_block* move_chunks_up_to_len(struct sparse_file* from, stru
   len -= overhead;
 
   start = backed_block_iter_new(from->backed_block_list);
-  out_counter = output_file_open_callback(out_counter_write, nullptr, nullptr, nullptr, &count,
-                                          to->block_size, to->len, true, 0, false);
+  out_counter = output_file_open_callback(out_counter_write, &count, to->block_size, to->len, false,
+                                          true, 0, false);
   if (!out_counter) {
     return nullptr;
   }
