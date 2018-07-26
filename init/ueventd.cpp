@@ -36,6 +36,7 @@
 
 #include "devices.h"
 #include "firmware_handler.h"
+#include "modalias_handler.h"
 #include "selinux.h"
 #include "uevent_listener.h"
 #include "ueventd_parser.h"
@@ -106,9 +107,11 @@ namespace init {
 
 class ColdBoot {
   public:
-    ColdBoot(UeventListener& uevent_listener, DeviceHandler& device_handler)
+    ColdBoot(UeventListener& uevent_listener, DeviceHandler& device_handler,
+             ModaliasHandler& modalias_handler)
         : uevent_listener_(uevent_listener),
           device_handler_(device_handler),
+          modalias_handler_(modalias_handler),
           num_handler_subprocesses_(std::thread::hardware_concurrency() ?: 4) {}
 
     void Run();
@@ -122,6 +125,7 @@ class ColdBoot {
 
     UeventListener& uevent_listener_;
     DeviceHandler& device_handler_;
+    ModaliasHandler& modalias_handler_;
 
     unsigned int num_handler_subprocesses_;
     std::vector<Uevent> uevent_queue_;
@@ -133,6 +137,7 @@ void ColdBoot::UeventHandlerMain(unsigned int process_num, unsigned int total_pr
     for (unsigned int i = process_num; i < uevent_queue_.size(); i += total_processes) {
         auto& uevent = uevent_queue_[i];
         device_handler_.HandleDeviceEvent(uevent);
+        modalias_handler_.HandleModaliasEvent(uevent);
     }
     _exit(EXIT_SUCCESS);
 }
@@ -230,6 +235,7 @@ int ueventd_main(int argc, char** argv) {
     SelabelInitialize();
 
     DeviceHandler device_handler;
+    ModaliasHandler modalias_handler;
     UeventListener uevent_listener;
 
     {
@@ -251,7 +257,7 @@ int ueventd_main(int argc, char** argv) {
     }
 
     if (access(COLDBOOT_DONE, F_OK) != 0) {
-        ColdBoot cold_boot(uevent_listener, device_handler);
+        ColdBoot cold_boot(uevent_listener, device_handler, modalias_handler);
         cold_boot.Run();
     }
 
@@ -262,8 +268,9 @@ int ueventd_main(int argc, char** argv) {
     while (waitpid(-1, nullptr, WNOHANG) > 0) {
     }
 
-    uevent_listener.Poll([&device_handler](const Uevent& uevent) {
+    uevent_listener.Poll([&device_handler, &modalias_handler](const Uevent& uevent) {
         HandleFirmwareEvent(uevent);
+        modalias_handler.HandleModaliasEvent(uevent);
         device_handler.HandleDeviceEvent(uevent);
         return ListenerAction::kContinue;
     });
