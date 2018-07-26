@@ -128,6 +128,20 @@ class DmTargetVerity final : public DmTarget {
     bool valid_;
 };
 
+class DmTargetAndroidVerity final : public DmTarget {
+  public:
+    DmTargetAndroidVerity(uint64_t start, uint64_t length, const std::string& block_device,
+                          const std::string& keyid)
+        : DmTarget(start, length), keyid_(keyid), block_device_(block_device) {}
+
+    std::string name() const override { return "android-verity"; }
+    std::string GetParameterString() const override;
+
+  private:
+    std::string keyid_;
+    std::string block_device_;
+};
+
 // This is the same as DmTargetVerity, but the table may be specified as a raw
 // string. This code exists only for fs_mgr_verity and should be avoided. Use
 // DmTargetVerity for new code instead.

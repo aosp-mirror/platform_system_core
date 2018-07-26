@@ -111,5 +111,9 @@ std::string DmTargetVerity::GetParameterString() const {
     return base + " " + std::to_string(optional_args_.size()) + " " + optional;
 }
 
+std::string DmTargetAndroidVerity::GetParameterString() const {
+    return keyid_ + " " + block_device_;
+}
+
 }  // namespace dm
 }  // namespace android
