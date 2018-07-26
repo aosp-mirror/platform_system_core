@@ -122,12 +122,12 @@ void connect_device(const std::string& address, std::string* response) {
         // invoked if the atransport* has already been setup. This eventually
         // calls atransport->SetConnection() with a newly created Connection*
         // that will in turn send the CNXN packet.
-        return init_socket_transport(t, fd.release(), port, 0) >= 0;
+        return init_socket_transport(t, std::move(fd), port, 0) >= 0;
     };
 
-    int ret = register_socket_transport(fd.release(), serial.c_str(), port, 0, std::move(reconnect));
+    int ret =
+            register_socket_transport(std::move(fd), serial.c_str(), port, 0, std::move(reconnect));
     if (ret < 0) {
-        adb_close(fd);
         if (ret == -EALREADY) {
             *response = android::base::StringPrintf("already connected to %s", serial.c_str());
         } else {
@@ -162,7 +162,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         close_on_exec(fd.get());
         disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
-        if (register_socket_transport(fd.release(), serial.c_str(), adb_port, 1,
+        if (register_socket_transport(std::move(fd), serial.c_str(), adb_port, 1,
                                       [](atransport*) { return false; }) == 0) {
             return 0;
         }
@@ -242,34 +242,31 @@ static void client_socket_thread(int) {
 #else // ADB_HOST
 
 static void server_socket_thread(int port) {
-    int serverfd, fd;
+    unique_fd serverfd;
 
     adb_thread_setname("server socket");
     D("transport: server_socket_thread() starting");
-    serverfd = -1;
-    for(;;) {
-        if(serverfd == -1) {
-            std::string error;
-            serverfd = network_inaddr_any_server(port, SOCK_STREAM, &error);
-            if(serverfd < 0) {
-                D("server: cannot bind socket yet: %s", error.c_str());
-                std::this_thread::sleep_for(1s);
-                continue;
-            }
-            close_on_exec(serverfd);
+    while (serverfd == -1) {
+        std::string error;
+        serverfd.reset(network_inaddr_any_server(port, SOCK_STREAM, &error));
+        if (serverfd < 0) {
+            D("server: cannot bind socket yet: %s", error.c_str());
+            std::this_thread::sleep_for(1s);
+            continue;
         }
+        close_on_exec(serverfd.get());
+    }
 
+    while (true) {
         D("server: trying to get new connection from %d", port);
-        fd = adb_socket_accept(serverfd, nullptr, nullptr);
-        if(fd >= 0) {
-            D("server: new connection on fd %d", fd);
-            close_on_exec(fd);
-            disable_tcp_nagle(fd);
-            std::string serial = android::base::StringPrintf("host-%d", fd);
-            if (register_socket_transport(fd, serial.c_str(), port, 1,
-                                          [](atransport*) { return false; }) != 0) {
-                adb_close(fd);
-            }
+        unique_fd fd(adb_socket_accept(serverfd, nullptr, nullptr));
+        if (fd >= 0) {
+            D("server: new connection on fd %d", fd.get());
+            close_on_exec(fd.get());
+            disable_tcp_nagle(fd.get());
+            std::string serial = android::base::StringPrintf("host-%d", fd.get());
+            register_socket_transport(std::move(fd), serial.c_str(), port, 1,
+                                      [](atransport*) { return false; });
         }
     }
     D("transport: server_socket_thread() exiting");
@@ -330,7 +327,6 @@ static void qemu_socket_thread(int port) {
     /* 'ok' reply from the adb QEMUD service. */
     static const char _ok_resp[] = "ok";
 
-    int fd;
     char tmp[256];
     char con_name[32];
 
@@ -341,7 +337,7 @@ static void qemu_socket_thread(int port) {
     snprintf(con_name, sizeof(con_name), "pipe:qemud:adb:%d", port);
 
     /* Connect to the adb QEMUD service. */
-    fd = qemu_pipe_open(con_name);
+    unique_fd fd(qemu_pipe_open(con_name));
     if (fd < 0) {
         /* This could be an older version of the emulator, that doesn't
          * implement adb QEMUD service. Fall back to the old TCP way. */
@@ -350,31 +346,28 @@ static void qemu_socket_thread(int port) {
         return;
     }
 
-    for(;;) {
+    while (true) {
         /*
          * Wait till the host creates a new connection.
          */
 
         /* Send the 'accept' request. */
-        if (WriteFdExactly(fd, _accept_req, strlen(_accept_req))) {
+        if (WriteFdExactly(fd.get(), _accept_req, strlen(_accept_req))) {
             /* Wait for the response. In the response we expect 'ok' on success,
              * or 'ko' on failure. */
-            if (!ReadFdExactly(fd, tmp, 2) || memcmp(tmp, _ok_resp, 2)) {
+            if (!ReadFdExactly(fd.get(), tmp, 2) || memcmp(tmp, _ok_resp, 2)) {
                 D("Accepting ADB host connection has failed.");
-                adb_close(fd);
             } else {
                 /* Host is connected. Register the transport, and start the
                  * exchange. */
-                std::string serial = android::base::StringPrintf("host-%d", fd);
-                if (register_socket_transport(fd, serial.c_str(), port, 1,
-                                              [](atransport*) { return false; }) != 0 ||
-                    !WriteFdExactly(fd, _start_req, strlen(_start_req))) {
-                    adb_close(fd);
-                }
+                std::string serial = android::base::StringPrintf("host-%d", fd.get());
+                WriteFdExactly(fd.get(), _start_req, strlen(_start_req));
+                register_socket_transport(std::move(fd), serial.c_str(), port, 1,
+                                          [](atransport*) { return false; });
             }
 
             /* Prepare for accepting of the next ADB host connection. */
-            fd = qemu_pipe_open(con_name);
+            fd.reset(qemu_pipe_open(con_name));
             if (fd < 0) {
                 D("adb service become unavailable.");
                 return;
@@ -475,10 +468,9 @@ atransport* find_emulator_transport_by_console_port(int console_port) {
 }
 #endif
 
-int init_socket_transport(atransport* t, int s, int adb_port, int local) {
+int init_socket_transport(atransport* t, unique_fd fd, int adb_port, int local) {
     int fail = 0;
 
-    unique_fd fd(s);
     t->type = kTransportLocal;
 
 #if ADB_HOST
