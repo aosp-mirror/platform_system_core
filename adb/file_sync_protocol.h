@@ -14,34 +14,28 @@
  * limitations under the License.
  */
 
-#ifndef _FILE_SYNC_SERVICE_H_
-#define _FILE_SYNC_SERVICE_H_
+#pragma once
 
-#include <string>
-#include <vector>
+#define MKID(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 
-#include <android-base/unique_fd.h>
-
-#define MKID(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
-
-#define ID_LSTAT_V1 MKID('S','T','A','T')
-#define ID_STAT_V2 MKID('S','T','A','2')
-#define ID_LSTAT_V2 MKID('L','S','T','2')
-#define ID_LIST MKID('L','I','S','T')
-#define ID_SEND MKID('S','E','N','D')
-#define ID_RECV MKID('R','E','C','V')
-#define ID_DENT MKID('D','E','N','T')
-#define ID_DONE MKID('D','O','N','E')
-#define ID_DATA MKID('D','A','T','A')
-#define ID_OKAY MKID('O','K','A','Y')
-#define ID_FAIL MKID('F','A','I','L')
-#define ID_QUIT MKID('Q','U','I','T')
+#define ID_LSTAT_V1 MKID('S', 'T', 'A', 'T')
+#define ID_STAT_V2 MKID('S', 'T', 'A', '2')
+#define ID_LSTAT_V2 MKID('L', 'S', 'T', '2')
+#define ID_LIST MKID('L', 'I', 'S', 'T')
+#define ID_SEND MKID('S', 'E', 'N', 'D')
+#define ID_RECV MKID('R', 'E', 'C', 'V')
+#define ID_DENT MKID('D', 'E', 'N', 'T')
+#define ID_DONE MKID('D', 'O', 'N', 'E')
+#define ID_DATA MKID('D', 'A', 'T', 'A')
+#define ID_OKAY MKID('O', 'K', 'A', 'Y')
+#define ID_FAIL MKID('F', 'A', 'I', 'L')
+#define ID_QUIT MKID('Q', 'U', 'I', 'T')
 
 struct SyncRequest {
-    uint32_t id;  // ID_STAT, et cetera.
+    uint32_t id;           // ID_STAT, et cetera.
     uint32_t path_length;  // <= 1024
     // Followed by 'path_length' bytes of path (not NUL-terminated).
-} __attribute__((packed)) ;
+} __attribute__((packed));
 
 union syncmsg {
     struct __attribute__((packed)) {
@@ -81,14 +75,4 @@ union syncmsg {
     } status;
 };
 
-void file_sync_service(android::base::unique_fd fd);
-bool do_sync_ls(const char* path);
-bool do_sync_push(const std::vector<const char*>& srcs, const char* dst, bool sync);
-bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
-                  bool copy_attrs, const char* name=nullptr);
-
-bool do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only);
-
-#define SYNC_DATA_MAX (64*1024)
-
-#endif
+#define SYNC_DATA_MAX (64 * 1024)

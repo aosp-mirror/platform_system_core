@@ -27,6 +27,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "shell_protocol.h"
 #include "sysdeps.h"
 
 class ShellServiceTest : public ::testing::Test {
