@@ -215,7 +215,7 @@ static void reboot_for_remount(int fd, bool need_fsck) {
     android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_cmd.c_str());
 }
 
-void remount_service(android::base::unique_fd fd, const std::string& cmd) {
+void remount_service(unique_fd fd, const std::string& cmd) {
     bool user_requested_reboot = cmd != "-R";
 
     if (getuid() != 0) {
@@ -251,7 +251,7 @@ void remount_service(android::base::unique_fd fd, const std::string& cmd) {
     if (user_requested_reboot) {
         if (!dedup.empty() || verity_enabled) {
             if (verity_enabled) {
-                set_verity_enabled_state_service(android::base::unique_fd(dup(fd.get())), false);
+                set_verity_enabled_state_service(unique_fd(dup(fd.get())), false);
             }
             reboot_for_remount(fd.get(), !dedup.empty());
             return;

@@ -37,7 +37,6 @@
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 
 #if !ADB_HOST
@@ -49,31 +48,31 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "adb_utils.h"
 #if !ADB_HOST
+#include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
+#include "daemon/remount_service.h"
 #include "daemon/set_verity_enable_state_service.h"
+#include "daemon/shell_service.h"
 #endif
-#include "file_sync_service.h"
-#include "remount_service.h"
 #include "services.h"
-#include "shell_service.h"
 #include "socket_spec.h"
 #include "sysdeps.h"
 #include "transport.h"
 
 namespace {
 
-void service_bootstrap_func(std::string service_name,
-                            std::function<void(android::base::unique_fd)> func,
-                            android::base::unique_fd fd) {
+void service_bootstrap_func(std::string service_name, std::function<void(unique_fd)> func,
+                            unique_fd fd) {
     adb_thread_setname(android::base::StringPrintf("%s svc %d", service_name.c_str(), fd.get()));
     func(std::move(fd));
 }
 
 #if !ADB_HOST
 
-void restart_root_service(android::base::unique_fd fd) {
+void restart_root_service(unique_fd fd) {
     if (getuid() == 0) {
         WriteFdExactly(fd.get(), "adbd is already running as root\n");
         return;
@@ -87,7 +86,7 @@ void restart_root_service(android::base::unique_fd fd) {
     WriteFdExactly(fd.get(), "restarting adbd as root\n");
 }
 
-void restart_unroot_service(android::base::unique_fd fd) {
+void restart_unroot_service(unique_fd fd) {
     if (getuid() != 0) {
         WriteFdExactly(fd.get(), "adbd not running as root\n");
         return;
@@ -96,7 +95,7 @@ void restart_unroot_service(android::base::unique_fd fd) {
     WriteFdExactly(fd.get(), "restarting adbd as non root\n");
 }
 
-void restart_tcp_service(android::base::unique_fd fd, int port) {
+void restart_tcp_service(unique_fd fd, int port) {
     if (port <= 0) {
         WriteFdFmt(fd.get(), "invalid port %d\n", port);
         return;
@@ -106,12 +105,12 @@ void restart_tcp_service(android::base::unique_fd fd, int port) {
     WriteFdFmt(fd.get(), "restarting in TCP mode port: %d\n", port);
 }
 
-void restart_usb_service(android::base::unique_fd fd) {
+void restart_usb_service(unique_fd fd) {
     android::base::SetProperty("service.adb.tcp.port", "0");
     WriteFdExactly(fd.get(), "restarting in USB mode\n");
 }
 
-bool reboot_service_impl(android::base::unique_fd fd, const std::string& arg) {
+bool reboot_service_impl(unique_fd fd, const std::string& arg) {
     std::string reboot_arg = arg;
     bool auto_reboot = false;
 
@@ -152,7 +151,7 @@ bool reboot_service_impl(android::base::unique_fd fd, const std::string& arg) {
     return true;
 }
 
-void reboot_service(android::base::unique_fd fd, const std::string& arg) {
+void reboot_service(unique_fd fd, const std::string& arg) {
     if (!reboot_service_impl(std::move(fd), arg)) {
         return;
     }
@@ -163,7 +162,7 @@ void reboot_service(android::base::unique_fd fd, const std::string& arg) {
     }
 }
 
-void reconnect_service(android::base::unique_fd fd, atransport* t) {
+void reconnect_service(unique_fd fd, atransport* t) {
     WriteFdExactly(fd, "done");
     kick_transport(t);
 }
@@ -223,12 +222,11 @@ int ShellService(const std::string& args, const atransport* transport) {
 
 #endif  // !ADB_HOST
 
-android::base::unique_fd create_service_thread(const char* service_name,
-                                               std::function<void(android::base::unique_fd)> func) {
+unique_fd create_service_thread(const char* service_name, std::function<void(unique_fd)> func) {
     int s[2];
     if (adb_socketpair(s)) {
         printf("cannot create service socket pair\n");
-        return android::base::unique_fd();
+        return unique_fd();
     }
     D("socketpair: (%d,%d)", s[0], s[1]);
 
@@ -241,10 +239,10 @@ android::base::unique_fd create_service_thread(const char* service_name,
     }
 #endif // !ADB_HOST
 
-    std::thread(service_bootstrap_func, service_name, func, android::base::unique_fd(s[1])).detach();
+    std::thread(service_bootstrap_func, service_name, func, unique_fd(s[1])).detach();
 
     D("service thread started, %d:%d",s[0], s[1]);
-    return android::base::unique_fd(s[0]);
+    return unique_fd(s[0]);
 }
 
 }  // namespace
@@ -407,7 +405,7 @@ void connect_emulator(const std::string& port_spec, std::string* response) {
     }
 }
 
-static void connect_service(android::base::unique_fd fd, std::string host) {
+static void connect_service(unique_fd fd, std::string host) {
     std::string response;
     if (!strncmp(host.c_str(), "emu:", 4)) {
         connect_emulator(host.c_str() + 4, &response);

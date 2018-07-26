@@ -106,6 +106,7 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "security_log_tags.h"
+#include "shell_protocol.h"
 
 namespace {
 

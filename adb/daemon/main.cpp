@@ -18,6 +18,7 @@
 
 #include "sysdeps.h"
 
+#include <android/fdsan.h>
 #include <errno.h>
 #include <getopt.h>
 #include <malloc.h>
@@ -176,6 +177,11 @@ int adbd_main(int server_port) {
     umask(0);
 
     signal(SIGPIPE, SIG_IGN);
+
+    auto fdsan_level = android_fdsan_get_error_level();
+    if (fdsan_level == ANDROID_FDSAN_ERROR_LEVEL_DISABLED) {
+        android_fdsan_set_error_level(ANDROID_FDSAN_ERROR_LEVEL_WARN_ONCE);
+    }
 
     init_transport_registration();
 
