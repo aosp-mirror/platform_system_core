@@ -140,7 +140,7 @@ void connect_device(const std::string& address, std::string* response) {
 
 
 int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error) {
-    int fd = -1;
+    unique_fd fd;
 
 #if ADB_HOST
     if (find_emulator_transport_by_adb_port(adb_port) != nullptr ||
@@ -150,23 +150,22 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
 
     const char *host = getenv("ADBHOST");
     if (host) {
-        fd = network_connect(host, adb_port, SOCK_STREAM, 0, error);
+        fd.reset(network_connect(host, adb_port, SOCK_STREAM, 0, error));
     }
 #endif
     if (fd < 0) {
-        fd = network_loopback_client(adb_port, SOCK_STREAM, error);
+        fd.reset(network_loopback_client(adb_port, SOCK_STREAM, error));
     }
 
     if (fd >= 0) {
-        D("client: connected on remote on fd %d", fd);
-        close_on_exec(fd);
-        disable_tcp_nagle(fd);
+        D("client: connected on remote on fd %d", fd.get());
+        close_on_exec(fd.get());
+        disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
-        if (register_socket_transport(fd, serial.c_str(), adb_port, 1,
+        if (register_socket_transport(fd.release(), serial.c_str(), adb_port, 1,
                                       [](atransport*) { return false; }) == 0) {
             return 0;
         }
-        adb_close(fd);
     }
     return -1;
 }
