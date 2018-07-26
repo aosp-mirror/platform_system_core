@@ -108,6 +108,7 @@ cc_library_static {
         "import_parser.cpp",
         "init.cpp",
         "keychords.cpp",
+        "modalias_handler.cpp",
         "parser.cpp",
         "persistent_properties.cpp",
         "persistent_properties.proto",
