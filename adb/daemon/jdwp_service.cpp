@@ -311,7 +311,7 @@ CloseProcess:
     jdwp_process_list_updated();
 }
 
-int create_jdwp_connection_fd(int pid) {
+unique_fd create_jdwp_connection_fd(int pid) {
     D("looking for pid %d in JDWP process list", pid);
 
     for (auto& proc : _jdwp_list) {
@@ -320,7 +320,7 @@ int create_jdwp_connection_fd(int pid) {
 
             if (adb_socketpair(fds) < 0) {
                 D("%s: socket pair creation failed: %s", __FUNCTION__, strerror(errno));
-                return -1;
+                return unique_fd{};
             }
             D("socketpair: (%d,%d)", fds[0], fds[1]);
 
@@ -329,11 +329,11 @@ int create_jdwp_connection_fd(int pid) {
                 fdevent_add(proc->fde, FDE_WRITE);
             }
 
-            return fds[0];
+            return unique_fd{fds[0]};
         }
     }
     D("search failed !!");
-    return -1;
+    return unique_fd{};
 }
 
 /**  VM DEBUG CONTROL SOCKET
