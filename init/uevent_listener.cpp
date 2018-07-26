@@ -39,6 +39,7 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
     uevent->firmware.clear();
     uevent->partition_name.clear();
     uevent->device_name.clear();
+    uevent->modalias.clear();
     // currently ignoring SEQNUM
     while (*msg) {
         if (!strncmp(msg, "ACTION=", 7)) {
@@ -68,6 +69,9 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
         } else if (!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
+        } else if (!strncmp(msg, "MODALIAS=", 9)) {
+            msg += 9;
+            uevent->modalias = msg;
         }
 
         // advance to after the next \0
