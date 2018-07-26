@@ -206,15 +206,42 @@ TEST(DexFileTest, get_method) {
 
   std::string method;
   uint64_t method_offset;
-  dex_file->GetMethodInformation(0x102, &method, &method_offset);
+  ASSERT_TRUE(dex_file->GetMethodInformation(0x102, &method, &method_offset));
   EXPECT_EQ("Main.<init>", method);
   EXPECT_EQ(2U, method_offset);
 
-  method = "not_in_a_method";
-  method_offset = 0x123;
-  dex_file->GetMethodInformation(0x100000, &method, &method_offset);
-  EXPECT_EQ("not_in_a_method", method);
-  EXPECT_EQ(0x123U, method_offset);
+  ASSERT_TRUE(dex_file->GetMethodInformation(0x118, &method, &method_offset));
+  EXPECT_EQ("Main.main", method);
+  EXPECT_EQ(0U, method_offset);
+
+  // Make sure that any data that is cached is still retrievable.
+  ASSERT_TRUE(dex_file->GetMethodInformation(0x104, &method, &method_offset));
+  EXPECT_EQ("Main.<init>", method);
+  EXPECT_EQ(4U, method_offset);
+
+  ASSERT_TRUE(dex_file->GetMethodInformation(0x119, &method, &method_offset));
+  EXPECT_EQ("Main.main", method);
+  EXPECT_EQ(1U, method_offset);
+}
+
+TEST(DexFileTest, get_method_empty) {
+  MemoryFake memory;
+  memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
+  MapInfo info(0x100, 0x10000, 0x200, 0x5, "");
+  std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
+  ASSERT_TRUE(dex_file != nullptr);
+
+  std::string method;
+  uint64_t method_offset;
+  EXPECT_FALSE(dex_file->GetMethodInformation(0x100000, &method, &method_offset));
+
+  EXPECT_FALSE(dex_file->GetMethodInformation(0x98, &method, &method_offset));
+
+  // Make sure that once the whole dex file has been cached, no problems occur.
+  EXPECT_FALSE(dex_file->GetMethodInformation(0x98, &method, &method_offset));
+
+  // Choose a value that is in the cached map, but not in a valid method.
+  EXPECT_FALSE(dex_file->GetMethodInformation(0x110, &method, &method_offset));
 }
 
 }  // namespace unwindstack
