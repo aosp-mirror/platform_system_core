@@ -93,6 +93,11 @@ ifdef BOARD_USES_PRODUCTIMAGE
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product $(TARGET_ROOT_OUT)/product
 endif
+ifdef BOARD_USES_PRODUCT_SERVICES_IMAGE
+  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/product-services
+else
+  LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product-services $(TARGET_ROOT_OUT)/product-services
+endif
 ifdef BOARD_USES_METADATA_PARTITION
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/metadata
 endif
@@ -205,6 +210,7 @@ $(2): $(1)
 	$$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $$@
 	$$(hide) sed -i -e 's?%VNDK_VER%?$$(PRIVATE_VNDK_VERSION)?g' $$@
 	$$(hide) sed -i -e 's?%PRODUCT%?$$(TARGET_COPY_OUT_PRODUCT)?g' $$@
+	$$(hide) sed -i -e 's?%PRODUCTSERVICES%?$$(TARGET_COPY_OUT_PRODUCTSERVICES)?g' $$@
 
 llndk_libraries_list :=
 vndksp_libraries_list :=

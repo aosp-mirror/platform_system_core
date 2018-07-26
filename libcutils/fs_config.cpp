@@ -130,7 +130,7 @@ static const char* conf[][2] = {
 // Vendor entries should be done via a vendor or device specific config.fs.
 // See https://source.android.com/devices/tech/config/filesystem#using-file-system-capabilities
 static const struct fs_path_config android_files[] = {
-    // clang-format off
+        // clang-format off
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-ephemeral/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
@@ -149,6 +149,7 @@ static const struct fs_path_config android_files[] = {
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_file + 1 },
     { 00600, AID_ROOT,      AID_ROOT,      0, "product/build.prop" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "product-services/build.prop" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
@@ -200,7 +201,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
-    // clang-format on
+        // clang-format on
 };
 #ifndef __ANDROID_VNDK__
 auto __for_testing_only__android_files = android_files;
