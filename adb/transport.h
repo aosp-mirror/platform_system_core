@@ -364,7 +364,7 @@ void register_usb_transport(usb_handle* h, const char* serial,
 void connect_device(const std::string& address, std::string* response);
 
 /* cause new transports to be init'd and added to the list */
-int register_socket_transport(int s, const char* serial, int port, int local,
+int register_socket_transport(unique_fd s, const char* serial, int port, int local,
                               atransport::ReconnectCallback reconnect);
 
 // This should only be used for transports with connection_state == kCsNoPerm.

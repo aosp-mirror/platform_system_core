@@ -132,7 +132,7 @@ static bool set_avb_verity_enabled_state(int fd, AvbOps* ops, bool enable_verity
     return true;
 }
 
-void set_verity_enabled_state_service(android::base::unique_fd fd, bool enable) {
+void set_verity_enabled_state_service(unique_fd fd, bool enable) {
     bool any_changed = false;
 
     // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
