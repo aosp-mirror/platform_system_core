@@ -811,7 +811,7 @@ struct fstab *fs_mgr_read_fstab_default()
     std::string default_fstab;
 
     // Use different fstab paths for normal boot and recovery boot, respectively
-    if (access("/sbin/recovery", F_OK) == 0) {
+    if (access("/system/bin/recovery", F_OK) == 0) {
         default_fstab = "/etc/recovery.fstab";
     } else {  // normal boot
         default_fstab = get_fstab_path();
