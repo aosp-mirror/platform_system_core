@@ -60,3 +60,20 @@ cc_binary {
     defaults: ["toolbox_defaults"],
     srcs: ["r.c"],
 }
+
+// We build BSD grep separately (but see http://b/111849261).
+cc_binary {
+    name: "grep",
+    defaults: ["toolbox_defaults"],
+    srcs: [
+        "upstream-netbsd/usr.bin/grep/fastgrep.c",
+        "upstream-netbsd/usr.bin/grep/file.c",
+        "upstream-netbsd/usr.bin/grep/grep.c",
+        "upstream-netbsd/usr.bin/grep/queue.c",
+        "upstream-netbsd/usr.bin/grep/util.c",
+    ],
+
+    sanitize: {
+        integer_overflow: false,
+    },
+}
