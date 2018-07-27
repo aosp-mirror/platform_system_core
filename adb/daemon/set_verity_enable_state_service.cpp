@@ -66,7 +66,7 @@ static bool set_verity_enabled_state(int fd, const char* block_device, const cha
     fec_verity_metadata metadata;
 
     if (!fh.get_verity_metadata(metadata)) {
-        WriteFdFmt(fd, "Couldn't find verity metadata!\n");
+        WriteFdExactly(fd, "Couldn't find verity metadata!\n");
         return false;
     }
 
@@ -109,12 +109,12 @@ static bool set_avb_verity_enabled_state(int fd, AvbOps* ops, bool enable_verity
     bool verity_enabled;
 
     if (is_avb_device_locked()) {
-        WriteFdFmt(fd, "Device is locked. Please unlock the device first\n");
+        WriteFdExactly(fd, "Device is locked. Please unlock the device first\n");
         return false;
     }
 
     if (!avb_user_verity_get(ops, ab_suffix.c_str(), &verity_enabled)) {
-        WriteFdFmt(fd, "Error getting verity state. Try adb root first?\n");
+        WriteFdExactly(fd, "Error getting verity state. Try adb root first?\n");
         return false;
     }
 
@@ -124,7 +124,7 @@ static bool set_avb_verity_enabled_state(int fd, AvbOps* ops, bool enable_verity
     }
 
     if (!avb_user_verity_set(ops, ab_suffix.c_str(), enable_verity)) {
-        WriteFdFmt(fd, "Error setting verity\n");
+        WriteFdExactly(fd, "Error setting verity\n");
         return false;
     }
 
@@ -150,7 +150,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         }
 
         if (!android::base::GetBoolProperty("ro.secure", false)) {
-            WriteFdFmt(fd.get(), "verity not enabled - ENG build\n");
+            WriteFdExactly(fd.get(), "verity not enabled - ENG build\n");
             return;
         }
     }
@@ -158,7 +158,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
     // Should never be possible to disable dm-verity on a USER build
     // regardless of using AVB or VB1.0.
     if (!__android_log_is_debuggable()) {
-        WriteFdFmt(fd.get(), "verity cannot be disabled/enabled - USER build\n");
+        WriteFdExactly(fd.get(), "verity cannot be disabled/enabled - USER build\n");
         return;
     }
 
@@ -166,7 +166,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         // Yep, the system is using AVB.
         AvbOps* ops = avb_ops_user_new();
         if (ops == nullptr) {
-            WriteFdFmt(fd.get(), "Error getting AVB ops\n");
+            WriteFdExactly(fd.get(), "Error getting AVB ops\n");
             return;
         }
         if (set_avb_verity_enabled_state(fd.get(), ops, enable)) {
@@ -179,7 +179,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         // read all fstab entries at once from all sources
         fstab = fs_mgr_read_fstab_default();
         if (!fstab) {
-            WriteFdFmt(fd.get(), "Failed to read fstab\nMaybe run adb root?\n");
+            WriteFdExactly(fd.get(), "Failed to read fstab\nMaybe run adb root?\n");
             return;
         }
 
@@ -195,6 +195,6 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
     }
 
     if (any_changed) {
-        WriteFdFmt(fd.get(), "Now reboot your device for settings to take effect\n");
+        WriteFdExactly(fd.get(), "Now reboot your device for settings to take effect\n");
     }
 }
