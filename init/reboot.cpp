@@ -443,6 +443,7 @@ void DoReboot(unsigned int cmd, const std::string& reason, const std::string& re
     for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
         if (!s->IsShutdownCritical()) s->Stop();
     }
+    SubcontextTerminate();
     ReapAnyOutstandingChildren();
 
     // 3. send volume shutdown to vold
