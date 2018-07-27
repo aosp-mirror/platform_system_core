@@ -105,6 +105,10 @@ private:
     // writes io_history to protobuf
     void update_uid_io_proto(unordered_map<int, StoragedProto>* protos);
 
+    // Ensure that io_history_ can append |n| items without exceeding
+    // MAX_UID_RECORDS_SIZE in size.
+    void maybe_shrink_history_for_items(size_t nitems);
+
 public:
     uid_monitor();
     // called by storaged main thread
@@ -124,6 +128,8 @@ public:
     void clear_user_history(userid_t user_id);
 
     map<uint64_t, uid_records>& io_history() { return io_history_; }
+
+    static constexpr int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */
