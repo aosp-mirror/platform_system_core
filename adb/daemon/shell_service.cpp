@@ -716,38 +716,37 @@ void Subprocess::WaitForExit() {
 }  // namespace
 
 // Create a pipe containing the error.
-static int ReportError(SubprocessProtocol protocol, const std::string& message) {
-    int pipefd[2];
-    if (pipe(pipefd) != 0) {
-        LOG(ERROR) << "failed to create pipe to report error";
-        return -1;
+static unique_fd ReportError(SubprocessProtocol protocol, const std::string& message) {
+    unique_fd read, write;
+    if (!Pipe(&read, &write)) {
+        PLOG(ERROR) << "failed to create pipe to report error";
+        return unique_fd{};
     }
 
     std::string buf = android::base::StringPrintf("error: %s\n", message.c_str());
     if (protocol == SubprocessProtocol::kShell) {
         ShellProtocol::Id id = ShellProtocol::kIdStderr;
         uint32_t length = buf.length();
-        WriteFdExactly(pipefd[1], &id, sizeof(id));
-        WriteFdExactly(pipefd[1], &length, sizeof(length));
+        WriteFdExactly(write.get(), &id, sizeof(id));
+        WriteFdExactly(write.get(), &length, sizeof(length));
     }
 
-    WriteFdExactly(pipefd[1], buf.data(), buf.length());
+    WriteFdExactly(write.get(), buf.data(), buf.length());
 
     if (protocol == SubprocessProtocol::kShell) {
         ShellProtocol::Id id = ShellProtocol::kIdExit;
         uint32_t length = 1;
         char exit_code = 126;
-        WriteFdExactly(pipefd[1], &id, sizeof(id));
-        WriteFdExactly(pipefd[1], &length, sizeof(length));
-        WriteFdExactly(pipefd[1], &exit_code, sizeof(exit_code));
+        WriteFdExactly(write.get(), &id, sizeof(id));
+        WriteFdExactly(write.get(), &length, sizeof(length));
+        WriteFdExactly(write.get(), &exit_code, sizeof(exit_code));
     }
 
-    adb_close(pipefd[1]);
-    return pipefd[0];
+    return read;
 }
 
-int StartSubprocess(const char* name, const char* terminal_type,
-                    SubprocessType type, SubprocessProtocol protocol) {
+unique_fd StartSubprocess(const char* name, const char* terminal_type, SubprocessType type,
+                          SubprocessProtocol protocol) {
     D("starting %s subprocess (protocol=%s, TERM=%s): '%s'",
       type == SubprocessType::kRaw ? "raw" : "PTY",
       protocol == SubprocessProtocol::kNone ? "none" : "shell",
@@ -774,5 +773,5 @@ int StartSubprocess(const char* name, const char* terminal_type,
         return ReportError(protocol, error);
     }
 
-    return local_socket.release();
+    return local_socket;
 }
