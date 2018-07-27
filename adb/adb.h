@@ -143,6 +143,10 @@ atransport* find_emulator_transport_by_console_port(int console_port);
 #endif
 
 int service_to_fd(const char* name, atransport* transport);
+#if !ADB_HOST
+unique_fd daemon_service_to_fd(const char* name, atransport* transport);
+#endif
+
 #if ADB_HOST
 asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id);
 #endif
@@ -151,7 +155,7 @@ asocket* host_service_to_socket(const char* name, const char* serial, TransportI
 int init_jdwp(void);
 asocket* create_jdwp_service_socket();
 asocket* create_jdwp_tracker_service_socket();
-int create_jdwp_connection_fd(int jdwp_pid);
+unique_fd create_jdwp_connection_fd(int jdwp_pid);
 #endif
 
 int handle_forward_request(const char* service, atransport* transport, int reply_fd);
