@@ -56,20 +56,21 @@ cc_library {
         "liblog",
         "libsquashfs_utils",
         "libselinux",
+        "liblp",
     ],
     static_libs: [
         "libavb",
         "libfstab",
         "libdm",
-        "liblp",
     ],
     export_static_lib_headers: [
         "libfstab",
         "libdm",
+    ],
+    export_shared_lib_headers: [
         "liblp",
     ],
     whole_static_libs: [
-        "liblp",
         "liblogwrap",
         "libdm",
         "libfstab",
