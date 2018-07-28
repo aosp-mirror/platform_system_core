@@ -216,7 +216,7 @@ static void reboot_for_remount(int fd, bool need_fsck) {
 }
 
 void remount_service(unique_fd fd, const std::string& cmd) {
-    bool user_requested_reboot = cmd != "-R";
+    bool user_requested_reboot = cmd == "-R";
 
     if (getuid() != 0) {
         WriteFdExactly(fd.get(), "Not running as root. Try \"adb root\" first.\n");
