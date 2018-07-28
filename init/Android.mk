@@ -67,6 +67,7 @@ LOCAL_STATIC_LIBRARIES := \
     libprotobuf-cpp-lite \
     libpropertyinfoserializer \
     libpropertyinfoparser \
+    liblp \
 
 shared_libs := \
     libcutils \
