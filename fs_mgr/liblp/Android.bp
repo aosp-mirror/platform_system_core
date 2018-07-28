@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-cc_library_static {
+cc_library {
     name: "liblp",
     host_supported: true,
     recovery_available: true,
@@ -29,17 +29,14 @@ cc_library_static {
         "utility.cpp",
         "writer.cpp",
     ],
-    static_libs: [
+    shared_libs: [
         "libbase",
         "liblog",
         "libcrypto",
         "libcrypto_utils",
         "libsparse",
-    ],
-    whole_static_libs: [
         "libext2_uuid",
         "libext4_utils",
-        "libsparse",
         "libz",
     ],
     export_include_dirs: ["include"],
@@ -51,12 +48,9 @@ cc_test {
     cppflags: [
         "-Wno-unused-parameter",
     ],
-    static_libs: [
-        "libbase",
-        "liblog",
-        "libcrypto",
-        "libcrypto_utils",
+    shared_libs: [
         "liblp",
+        "libbase",
         "libfs_mgr",
     ],
     srcs: [
