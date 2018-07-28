@@ -63,6 +63,7 @@ class Subcontext {
 int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map);
 std::vector<Subcontext>* InitializeSubcontexts();
 bool SubcontextChildReap(pid_t pid);
+void SubcontextTerminate();
 
 }  // namespace init
 }  // namespace android
