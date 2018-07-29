@@ -116,7 +116,7 @@ static inline bool IsDtVbmetaCompatible() {
 }
 
 static bool inline IsRecoveryMode() {
-    return access("/sbin/recovery", F_OK) == 0;
+    return access("/system/bin/recovery", F_OK) == 0;
 }
 
 static inline bool IsDmLinearEnabled() {

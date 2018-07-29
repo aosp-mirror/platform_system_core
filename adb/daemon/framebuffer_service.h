@@ -14,11 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _DAEMON_FRAMEBUFFER_SERVICE_H_
-#define _DAEMON_FRAMEBUFFER_SERVICE_H_
+#pragma once
 
-#include <android-base/unique_fd.h>
+#include "adb_unique_fd.h"
 
-void framebuffer_service(android::base::unique_fd fd);
-
-#endif  // _DAEMON_FRAMEBUFFER_SERVICE_H_
+void framebuffer_service(unique_fd fd);

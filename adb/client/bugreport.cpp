@@ -25,8 +25,9 @@
 #include <android-base/strings.h>
 
 #include "sysdeps.h"
+
 #include "adb_utils.h"
-#include "file_sync_service.h"
+#include "client/file_sync_client.h"
 
 static constexpr char BUGZ_BEGIN_PREFIX[] = "BEGIN:";
 static constexpr char BUGZ_PROGRESS_PREFIX[] = "PROGRESS:";

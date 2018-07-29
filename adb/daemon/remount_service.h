@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef SERVICES_H_
-#define SERVICES_H_
+#pragma once
+
+#include <string>
 
 #include "adb_unique_fd.h"
 
-constexpr char kShellServiceArgRaw[] = "raw";
-constexpr char kShellServiceArgPty[] = "pty";
-constexpr char kShellServiceArgShellProtocol[] = "v2";
-
-unique_fd create_service_thread(const char* service_name, std::function<void(unique_fd)> func);
-#endif  // SERVICES_H_
+bool make_block_device_writable(const std::string&);
+void remount_service(unique_fd, const std::string&);

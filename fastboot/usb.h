@@ -52,6 +52,14 @@ struct usb_ifc_info {
     char device_path[256];
 };
 
+class UsbTransport : public Transport {
+    // Resets the underlying transport.  Returns 0 on success.
+    // This effectively simulates unplugging and replugging
+  public:
+    virtual int Reset() = 0;
+};
+
 typedef int (*ifc_match_func)(usb_ifc_info *ifc);
 
-Transport* usb_open(ifc_match_func callback);
+// 0 is non blocking
+UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms = 0);

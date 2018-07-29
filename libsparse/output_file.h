@@ -22,18 +22,14 @@ extern "C" {
 #endif
 
 #include <sparse/sparse.h>
-#include <sys/types.h>
 
 struct output_file;
 
 struct output_file* output_file_open_fd(int fd, unsigned int block_size, int64_t len, int gz,
                                         int sparse, int chunks, int crc);
-struct output_file* output_file_open_callback(int (*data_write)(void*, const void*, size_t),
-                                              int (*fd_write)(void*, int, size_t),
-                                              int (*fill_write)(void*, uint32_t, size_t),
-                                              int (*skip_write)(void*, off64_t), void* priv,
-                                              unsigned int block_size, int64_t len, int sparse,
-                                              int chunks, int crc);
+struct output_file* output_file_open_callback(int (*write)(void*, const void*, size_t), void* priv,
+                                              unsigned int block_size, int64_t len, int gz,
+                                              int sparse, int chunks, int crc);
 int write_data_chunk(struct output_file* out, unsigned int len, void* data);
 int write_fill_chunk(struct output_file* out, unsigned int len, uint32_t fill_val);
 int write_file_chunk(struct output_file* out, unsigned int len, const char* file, int64_t offset);

@@ -52,7 +52,7 @@
 
 using namespace std::chrono_literals;
 
-#define MAX_RETRIES 5
+#define MAX_RETRIES 2
 
 /* Timeout in seconds for usb_wait_for_disconnect.
  * It doesn't usually take long for a device to disconnect (almost always
@@ -91,18 +91,21 @@ struct usb_handle
     unsigned char ep_out;
 };
 
-class LinuxUsbTransport : public Transport {
+class LinuxUsbTransport : public UsbTransport {
   public:
-    explicit LinuxUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
+    explicit LinuxUsbTransport(std::unique_ptr<usb_handle> handle, uint32_t ms_timeout = 0)
+        : handle_(std::move(handle)), ms_timeout_(ms_timeout) {}
     ~LinuxUsbTransport() override = default;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
     int Close() override;
+    int Reset() override;
     int WaitForDisconnect() override;
 
   private:
     std::unique_ptr<usb_handle> handle_;
+    const uint32_t ms_timeout_;
 
     DISALLOW_COPY_AND_ASSIGN(LinuxUsbTransport);
 };
@@ -402,7 +405,7 @@ ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)
         bulk.ep = handle_->ep_out;
         bulk.len = xfer;
         bulk.data = data;
-        bulk.timeout = 0;
+        bulk.timeout = ms_timeout_;
 
         n = ioctl(handle_->desc, USBDEVFS_BULK, &bulk);
         if(n != xfer) {
@@ -436,7 +439,7 @@ ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
         bulk.ep = handle_->ep_in;
         bulk.len = xfer;
         bulk.data = data;
-        bulk.timeout = 0;
+        bulk.timeout = ms_timeout_;
         retry = 0;
 
         do {
@@ -447,7 +450,7 @@ ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
             if (n < 0) {
                 DBG1("ERROR: n = %d, errno = %d (%s)\n",n, errno, strerror(errno));
                 if (++retry > MAX_RETRIES) return -1;
-                std::this_thread::sleep_for(1s);
+                std::this_thread::sleep_for(100ms);
             }
         } while (n < 0);
 
@@ -477,10 +480,19 @@ int LinuxUsbTransport::Close()
     return 0;
 }
 
-Transport* usb_open(ifc_match_func callback)
-{
+int LinuxUsbTransport::Reset() {
+    int ret = 0;
+    // We reset the USB connection
+    if ((ret = ioctl(handle_->desc, USBDEVFS_RESET, 0))) {
+        return ret;
+    }
+
+    return 0;
+}
+
+UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms) {
     std::unique_ptr<usb_handle> handle = find_usb_device("/sys/bus/usb/devices", callback);
-    return handle ? new LinuxUsbTransport(std::move(handle)) : nullptr;
+    return handle ? new LinuxUsbTransport(std::move(handle), timeout_ms) : nullptr;
 }
 
 /* Wait for the system to notice the device is gone, so that a subsequent

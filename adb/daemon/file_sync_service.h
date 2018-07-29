@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef SERVICES_H_
-#define SERVICES_H_
+#pragma once
 
 #include "adb_unique_fd.h"
 
-constexpr char kShellServiceArgRaw[] = "raw";
-constexpr char kShellServiceArgPty[] = "pty";
-constexpr char kShellServiceArgShellProtocol[] = "v2";
-
-unique_fd create_service_thread(const char* service_name, std::function<void(unique_fd)> func);
-#endif  // SERVICES_H_
+void file_sync_service(unique_fd fd);

@@ -68,31 +68,33 @@ struct uid_io_usage {
 
 struct uid_record {
     string name;
-    struct uid_io_usage ios;
+    uid_io_usage ios;
 };
 
 struct uid_records {
     uint64_t start_ts;
-    vector<struct uid_record> entries;
+    vector<uid_record> entries;
 };
 
 class uid_monitor {
 private:
     FRIEND_TEST(storaged_test, uid_monitor);
+    FRIEND_TEST(storaged_test, load_uid_io_proto);
+
     // last dump from /proc/uid_io/stats, uid -> uid_info
-    unordered_map<uint32_t, uid_info> last_uid_io_stats;
+    unordered_map<uint32_t, uid_info> last_uid_io_stats_;
     // current io usage for next report, app name -> uid_io_usage
-    unordered_map<string, struct uid_io_usage> curr_io_stats;
+    unordered_map<string, uid_io_usage> curr_io_stats_;
     // io usage records, end timestamp -> {start timestamp, vector of records}
-    map<uint64_t, struct uid_records> io_history;
+    map<uint64_t, uid_records> io_history_;
     // charger ON/OFF
-    charger_stat_t charger_stat;
+    charger_stat_t charger_stat_;
     // protects curr_io_stats, last_uid_io_stats, records and charger_stat
-    Mutex uidm_mutex;
+    Mutex uidm_mutex_;
     // start time for IO records
-    uint64_t start_ts;
+    uint64_t start_ts_;
     // true if UID_IO_STATS_PATH is accessible
-    const bool enable;
+    const bool enabled_;
 
     // reads from /proc/uid_io/stats
     unordered_map<uint32_t, uid_info> get_uid_io_stats_locked();
@@ -103,6 +105,10 @@ private:
     // writes io_history to protobuf
     void update_uid_io_proto(unordered_map<int, StoragedProto>* protos);
 
+    // Ensure that io_history_ can append |n| items without exceeding
+    // MAX_UID_RECORDS_SIZE in size.
+    void maybe_shrink_history_for_items(size_t nitems);
+
 public:
     uid_monitor();
     // called by storaged main thread
@@ -110,16 +116,20 @@ public:
     // called by storaged -u
     unordered_map<uint32_t, uid_info> get_uid_io_stats();
     // called by dumpsys
-    map<uint64_t, struct uid_records> dump(
+    map<uint64_t, uid_records> dump(
         double hours, uint64_t threshold, bool force_report);
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
     // called by storaged periodic_chore or dump with force_report
-    bool enabled() { return enable; };
+    bool enabled() { return enabled_; };
     void report(unordered_map<int, StoragedProto>* protos);
     // restores io_history from protobuf
-    void load_uid_io_proto(const UidIOUsage& proto);
+    void load_uid_io_proto(userid_t user_id, const UidIOUsage& proto);
     void clear_user_history(userid_t user_id);
+
+    map<uint64_t, uid_records>& io_history() { return io_history_; }
+
+    static constexpr int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */

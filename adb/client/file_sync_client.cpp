@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "client/file_sync_client.h"
+
 #include <dirent.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -39,7 +41,7 @@
 #include "adb_client.h"
 #include "adb_io.h"
 #include "adb_utils.h"
-#include "file_sync_service.h"
+#include "file_sync_protocol.h"
 #include "line_printer.h"
 #include "sysdeps/errno.h"
 #include "sysdeps/stat.h"

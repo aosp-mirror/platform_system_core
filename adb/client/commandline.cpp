@@ -56,10 +56,10 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "bugreport.h"
+#include "client/file_sync_client.h"
 #include "commandline.h"
-#include "file_sync_service.h"
 #include "services.h"
-#include "shell_service.h"
+#include "shell_protocol.h"
 #include "sysdeps/chrono.h"
 #include "sysdeps/memory.h"
 

@@ -352,6 +352,7 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 }
 
 static std::vector<Subcontext> subcontexts;
+static bool shutting_down;
 
 std::vector<Subcontext>* InitializeSubcontexts() {
     if (SelinuxHasVendorInit()) {
@@ -365,11 +366,20 @@ std::vector<Subcontext>* InitializeSubcontexts() {
 bool SubcontextChildReap(pid_t pid) {
     for (auto& subcontext : subcontexts) {
         if (subcontext.pid() == pid) {
-            subcontext.Restart();
+            if (!shutting_down) {
+                subcontext.Restart();
+            }
             return true;
         }
     }
     return false;
+}
+
+void SubcontextTerminate() {
+    shutting_down = true;
+    for (auto& subcontext : subcontexts) {
+        kill(subcontext.pid(), SIGTERM);
+    }
 }
 
 }  // namespace init

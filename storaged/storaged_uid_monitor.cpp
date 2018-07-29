@@ -21,6 +21,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <android/content/pm/IPackageManagerNative.h>
 #include <android-base/file.h>
@@ -50,7 +51,7 @@ const char* UID_IO_STATS_PATH = "/proc/uid_io/stats";
 
 std::unordered_map<uint32_t, uid_info> uid_monitor::get_uid_io_stats()
 {
-    Mutex::Autolock _l(uidm_mutex);
+    Mutex::Autolock _l(uidm_mutex_);
     return get_uid_io_stats_locked();
 };
 
@@ -178,10 +179,10 @@ std::unordered_map<uint32_t, uid_info> uid_monitor::get_uid_io_stats_locked()
             uid_io_stats[u.uid].name = std::to_string(u.uid);
             uids.push_back(u.uid);
             uid_names.push_back(&uid_io_stats[u.uid].name);
-            if (last_uid_io_stats.find(u.uid) == last_uid_io_stats.end()) {
+            if (last_uid_io_stats_.find(u.uid) == last_uid_io_stats_.end()) {
                 refresh_uid_names = true;
             } else {
-                uid_io_stats[u.uid].name = last_uid_io_stats[u.uid].name;
+                uid_io_stats[u.uid].name = last_uid_io_stats_[u.uid].name;
             }
         } else {
             task_info t;
@@ -200,8 +201,6 @@ std::unordered_map<uint32_t, uid_info> uid_monitor::get_uid_io_stats_locked()
 
 namespace {
 
-const int MAX_UID_RECORDS_SIZE = 1000 * 48; // 1000 uids in 48 hours
-
 inline size_t history_size(
     const std::map<uint64_t, struct uid_records>& history)
 {
@@ -218,12 +217,12 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
 {
     // remove records more than 5 days old
     if (curr_ts > 5 * DAY_TO_SEC) {
-        auto it = io_history.lower_bound(curr_ts - 5 * DAY_TO_SEC);
-        io_history.erase(io_history.begin(), it);
+        auto it = io_history_.lower_bound(curr_ts - 5 * DAY_TO_SEC);
+        io_history_.erase(io_history_.begin(), it);
     }
 
     struct uid_records new_records;
-    for (const auto& p : curr_io_stats) {
+    for (const auto& p : curr_io_stats_) {
         struct uid_record record = {};
         record.name = p.first;
         if (!p.second.uid_ios.is_zero()) {
@@ -237,23 +236,26 @@ void uid_monitor::add_records_locked(uint64_t curr_ts)
         }
     }
 
-    curr_io_stats.clear();
-    new_records.start_ts = start_ts;
-    start_ts = curr_ts;
+    curr_io_stats_.clear();
+    new_records.start_ts = start_ts_;
+    start_ts_ = curr_ts;
 
     if (new_records.entries.empty())
       return;
 
     // make some room for new records
-    ssize_t overflow = history_size(io_history) +
-        new_records.entries.size() - MAX_UID_RECORDS_SIZE;
-    while (overflow > 0 && io_history.size() > 0) {
-        auto del_it = io_history.begin();
-        overflow -= del_it->second.entries.size();
-        io_history.erase(io_history.begin());
-    }
+    maybe_shrink_history_for_items(new_records.entries.size());
 
-    io_history[curr_ts] = new_records;
+    io_history_[curr_ts] = new_records;
+}
+
+void uid_monitor::maybe_shrink_history_for_items(size_t nitems) {
+    ssize_t overflow = history_size(io_history_) + nitems - MAX_UID_RECORDS_SIZE;
+    while (overflow > 0 && io_history_.size() > 0) {
+        auto del_it = io_history_.begin();
+        overflow -= del_it->second.entries.size();
+        io_history_.erase(io_history_.begin());
+    }
 }
 
 std::map<uint64_t, struct uid_records> uid_monitor::dump(
@@ -263,7 +265,7 @@ std::map<uint64_t, struct uid_records> uid_monitor::dump(
         report(nullptr);
     }
 
-    Mutex::Autolock _l(uidm_mutex);
+    Mutex::Autolock _l(uidm_mutex_);
 
     std::map<uint64_t, struct uid_records> dump_records;
     uint64_t first_ts = 0;
@@ -272,7 +274,7 @@ std::map<uint64_t, struct uid_records> uid_monitor::dump(
         first_ts = time(NULL) - hours * HOUR_TO_SEC;
     }
 
-    for (auto it = io_history.lower_bound(first_ts); it != io_history.end(); ++it) {
+    for (auto it = io_history_.lower_bound(first_ts); it != io_history_.end(); ++it) {
         const std::vector<struct uid_record>& recs = it->second.entries;
         struct uid_records filtered;
 
@@ -311,29 +313,29 @@ void uid_monitor::update_curr_io_stats_locked()
 
     for (const auto& it : uid_io_stats) {
         const uid_info& uid = it.second;
-        if (curr_io_stats.find(uid.name) == curr_io_stats.end()) {
-            curr_io_stats[uid.name] = {};
+        if (curr_io_stats_.find(uid.name) == curr_io_stats_.end()) {
+            curr_io_stats_[uid.name] = {};
         }
 
-        struct uid_io_usage& usage = curr_io_stats[uid.name];
+        struct uid_io_usage& usage = curr_io_stats_[uid.name];
         usage.user_id = multiuser_get_user_id(uid.uid);
 
         int64_t fg_rd_delta = uid.io[FOREGROUND].read_bytes -
-            last_uid_io_stats[uid.uid].io[FOREGROUND].read_bytes;
+            last_uid_io_stats_[uid.uid].io[FOREGROUND].read_bytes;
         int64_t bg_rd_delta = uid.io[BACKGROUND].read_bytes -
-            last_uid_io_stats[uid.uid].io[BACKGROUND].read_bytes;
+            last_uid_io_stats_[uid.uid].io[BACKGROUND].read_bytes;
         int64_t fg_wr_delta = uid.io[FOREGROUND].write_bytes -
-            last_uid_io_stats[uid.uid].io[FOREGROUND].write_bytes;
+            last_uid_io_stats_[uid.uid].io[FOREGROUND].write_bytes;
         int64_t bg_wr_delta = uid.io[BACKGROUND].write_bytes -
-            last_uid_io_stats[uid.uid].io[BACKGROUND].write_bytes;
+            last_uid_io_stats_[uid.uid].io[BACKGROUND].write_bytes;
 
-        usage.uid_ios.bytes[READ][FOREGROUND][charger_stat] +=
+        usage.uid_ios.bytes[READ][FOREGROUND][charger_stat_] +=
             (fg_rd_delta < 0) ? 0 : fg_rd_delta;
-        usage.uid_ios.bytes[READ][BACKGROUND][charger_stat] +=
+        usage.uid_ios.bytes[READ][BACKGROUND][charger_stat_] +=
             (bg_rd_delta < 0) ? 0 : bg_rd_delta;
-        usage.uid_ios.bytes[WRITE][FOREGROUND][charger_stat] +=
+        usage.uid_ios.bytes[WRITE][FOREGROUND][charger_stat_] +=
             (fg_wr_delta < 0) ? 0 : fg_wr_delta;
-        usage.uid_ios.bytes[WRITE][BACKGROUND][charger_stat] +=
+        usage.uid_ios.bytes[WRITE][BACKGROUND][charger_stat_] +=
             (bg_wr_delta < 0) ? 0 : bg_wr_delta;
 
         for (const auto& task_it : uid.tasks) {
@@ -341,34 +343,34 @@ void uid_monitor::update_curr_io_stats_locked()
             const pid_t pid = task_it.first;
             const std::string& comm = task_it.second.comm;
             int64_t task_fg_rd_delta = task.io[FOREGROUND].read_bytes -
-                last_uid_io_stats[uid.uid].tasks[pid].io[FOREGROUND].read_bytes;
+                last_uid_io_stats_[uid.uid].tasks[pid].io[FOREGROUND].read_bytes;
             int64_t task_bg_rd_delta = task.io[BACKGROUND].read_bytes -
-                last_uid_io_stats[uid.uid].tasks[pid].io[BACKGROUND].read_bytes;
+                last_uid_io_stats_[uid.uid].tasks[pid].io[BACKGROUND].read_bytes;
             int64_t task_fg_wr_delta = task.io[FOREGROUND].write_bytes -
-                last_uid_io_stats[uid.uid].tasks[pid].io[FOREGROUND].write_bytes;
+                last_uid_io_stats_[uid.uid].tasks[pid].io[FOREGROUND].write_bytes;
             int64_t task_bg_wr_delta = task.io[BACKGROUND].write_bytes -
-                last_uid_io_stats[uid.uid].tasks[pid].io[BACKGROUND].write_bytes;
+                last_uid_io_stats_[uid.uid].tasks[pid].io[BACKGROUND].write_bytes;
 
             io_usage& task_usage = usage.task_ios[comm];
-            task_usage.bytes[READ][FOREGROUND][charger_stat] +=
+            task_usage.bytes[READ][FOREGROUND][charger_stat_] +=
                 (task_fg_rd_delta < 0) ? 0 : task_fg_rd_delta;
-            task_usage.bytes[READ][BACKGROUND][charger_stat] +=
+            task_usage.bytes[READ][BACKGROUND][charger_stat_] +=
                 (task_bg_rd_delta < 0) ? 0 : task_bg_rd_delta;
-            task_usage.bytes[WRITE][FOREGROUND][charger_stat] +=
+            task_usage.bytes[WRITE][FOREGROUND][charger_stat_] +=
                 (task_fg_wr_delta < 0) ? 0 : task_fg_wr_delta;
-            task_usage.bytes[WRITE][BACKGROUND][charger_stat] +=
+            task_usage.bytes[WRITE][BACKGROUND][charger_stat_] +=
                 (task_bg_wr_delta < 0) ? 0 : task_bg_wr_delta;
         }
     }
 
-    last_uid_io_stats = uid_io_stats;
+    last_uid_io_stats_ = uid_io_stats;
 }
 
 void uid_monitor::report(unordered_map<int, StoragedProto>* protos)
 {
     if (!enabled()) return;
 
-    Mutex::Autolock _l(uidm_mutex);
+    Mutex::Autolock _l(uidm_mutex_);
 
     update_curr_io_stats_locked();
     add_records_locked(time(NULL));
@@ -408,7 +410,7 @@ void get_io_usage_proto(io_usage* usage, const IOUsage& io_proto)
 
 void uid_monitor::update_uid_io_proto(unordered_map<int, StoragedProto>* protos)
 {
-    for (const auto& item : io_history) {
+    for (const auto& item : io_history_) {
         const uint64_t& end_ts = item.first;
         const struct uid_records& recs = item.second;
         unordered_map<userid_t, UidIOItem*> user_items;
@@ -448,9 +450,9 @@ void uid_monitor::update_uid_io_proto(unordered_map<int, StoragedProto>* protos)
 
 void uid_monitor::clear_user_history(userid_t user_id)
 {
-    Mutex::Autolock _l(uidm_mutex);
+    Mutex::Autolock _l(uidm_mutex_);
 
-    for (auto& item : io_history) {
+    for (auto& item : io_history_) {
         vector<uid_record>* entries = &item.second.entries;
         entries->erase(
             remove_if(entries->begin(), entries->end(),
@@ -459,27 +461,42 @@ void uid_monitor::clear_user_history(userid_t user_id)
             entries->end());
     }
 
-    for (auto it = io_history.begin(); it != io_history.end(); ) {
+    for (auto it = io_history_.begin(); it != io_history_.end(); ) {
         if (it->second.entries.empty()) {
-            it = io_history.erase(it);
+            it = io_history_.erase(it);
         } else {
             it++;
         }
     }
 }
 
-void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
+void uid_monitor::load_uid_io_proto(userid_t user_id, const UidIOUsage& uid_io_proto)
 {
     if (!enabled()) return;
 
-    Mutex::Autolock _l(uidm_mutex);
+    Mutex::Autolock _l(uidm_mutex_);
 
     for (const auto& item_proto : uid_io_proto.uid_io_items()) {
         const UidIORecords& records_proto = item_proto.records();
-        struct uid_records* recs = &io_history[item_proto.end_ts()];
+        struct uid_records* recs = &io_history_[item_proto.end_ts()];
+
+        // It's possible that the same uid_io_proto file gets loaded more than
+        // once, for example, if system_server crashes. In this case we avoid
+        // adding duplicate entries, so we build a quick way to check for
+        // duplicates.
+        std::unordered_set<std::string> existing_uids;
+        for (const auto& rec : recs->entries) {
+            if (rec.ios.user_id == user_id) {
+                existing_uids.emplace(rec.name);
+            }
+        }
 
         recs->start_ts = records_proto.start_ts();
         for (const auto& rec_proto : records_proto.entries()) {
+            if (existing_uids.find(rec_proto.uid_name()) != existing_uids.end()) {
+                continue;
+            }
+
             struct uid_record record;
             record.name = rec_proto.uid_name();
             record.ios.user_id = rec_proto.user_id();
@@ -492,29 +509,35 @@ void uid_monitor::load_uid_io_proto(const UidIOUsage& uid_io_proto)
             }
             recs->entries.push_back(record);
         }
+
+        // We already added items, so this will just cull down to the maximum
+        // length. We do not remove anything if there is only one entry.
+        if (io_history_.size() > 1) {
+            maybe_shrink_history_for_items(0);
+        }
     }
 }
 
 void uid_monitor::set_charger_state(charger_stat_t stat)
 {
-    Mutex::Autolock _l(uidm_mutex);
+    Mutex::Autolock _l(uidm_mutex_);
 
-    if (charger_stat == stat) {
+    if (charger_stat_ == stat) {
         return;
     }
 
     update_curr_io_stats_locked();
-    charger_stat = stat;
+    charger_stat_ = stat;
 }
 
 void uid_monitor::init(charger_stat_t stat)
 {
-    charger_stat = stat;
+    charger_stat_ = stat;
 
-    start_ts = time(NULL);
-    last_uid_io_stats = get_uid_io_stats();
+    start_ts_ = time(NULL);
+    last_uid_io_stats_ = get_uid_io_stats();
 }
 
 uid_monitor::uid_monitor()
-    : enable(!access(UID_IO_STATS_PATH, R_OK)) {
+    : enabled_(!access(UID_IO_STATS_PATH, R_OK)) {
 }

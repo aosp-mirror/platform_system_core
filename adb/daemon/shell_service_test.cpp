@@ -27,6 +27,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "shell_protocol.h"
 #include "sysdeps.h"
 
 class ShellServiceTest : public ::testing::Test {
@@ -54,7 +55,7 @@ class ShellServiceTest : public ::testing::Test {
 
     static sighandler_t saved_sigpipe_handler_;
 
-    int subprocess_fd_ = -1;
+    unique_fd subprocess_fd_;
 };
 
 sighandler_t ShellServiceTest::saved_sigpipe_handler_ = nullptr;
@@ -66,10 +67,6 @@ void ShellServiceTest::StartTestSubprocess(
 }
 
 void ShellServiceTest::CleanupTestSubprocess() {
-    if (subprocess_fd_ >= 0) {
-        adb_close(subprocess_fd_);
-        subprocess_fd_ = -1;
-    }
 }
 
 namespace {

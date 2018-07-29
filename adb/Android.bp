@@ -292,7 +292,6 @@ cc_library_static {
 
     static_libs: [
         "libasyncio",
-        "libbootloader_message",
         "libcrypto_utils",
         "libcrypto",
         "libdiagnose_usb",
@@ -318,6 +317,7 @@ cc_binary {
         "daemon/framebuffer_service.cpp",
         "daemon/remount_service.cpp",
         "daemon/set_verity_enable_state_service.cpp",
+        "daemon/services.cpp",
         "daemon/shell_service.cpp",
         "shell_service_protocol.cpp",
     ],
@@ -359,6 +359,7 @@ cc_test {
     name: "adbd_test",
     defaults: ["adb_defaults"],
     srcs: libadb_test_srcs + [
+        "daemon/services.cpp",
         "daemon/shell_service.cpp",
         "daemon/shell_service_test.cpp",
         "shell_service_protocol.cpp",
@@ -368,6 +369,7 @@ cc_test {
     static_libs: [
         "libadbd",
         "libbase",
+        "libbootloader_message",
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
