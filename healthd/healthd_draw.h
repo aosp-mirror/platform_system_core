@@ -70,6 +70,12 @@ class HealthdDraw {
   const bool kSplitScreen;
   // Pixels to offset graphics towards center split.
   const int kSplitOffset;
+
+  // system text font, may be nullptr
+  const GRFont* sys_font;
+
+  // true if minui init'ed OK, false if minui init failed
+  bool graphics_available;
 };
 
 #endif  // HEALTHD_DRAW_H
