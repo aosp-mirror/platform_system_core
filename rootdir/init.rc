@@ -26,6 +26,7 @@ on early-init
 
     # Mount cgroup mount point for cpu accounting
     mount cgroup none /acct nodev noexec nosuid cpuacct
+    chmod 0555 /acct
     mkdir /acct/uid
 
     # root memory control cgroup, used by lmkd
