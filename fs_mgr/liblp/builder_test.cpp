@@ -45,7 +45,7 @@ TEST(liblp, ResizePartition) {
 
     Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
-    EXPECT_EQ(builder->GrowPartition(system, 65536), true);
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
     EXPECT_EQ(system->size(), 65536);
     ASSERT_EQ(system->extents().size(), 1);
 
@@ -55,24 +55,23 @@ TEST(liblp, ResizePartition) {
     // The first logical sector will be (4096+1024*2)/512 = 12.
     EXPECT_EQ(extent->physical_sector(), 12);
 
-    // Test growing to the same size.
-    EXPECT_EQ(builder->GrowPartition(system, 65536), true);
+    // Test resizing to the same size.
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
     EXPECT_EQ(system->size(), 65536);
     EXPECT_EQ(system->extents().size(), 1);
     EXPECT_EQ(system->extents()[0]->num_sectors(), 65536 / LP_SECTOR_SIZE);
-    // Test growing to a smaller size.
-    EXPECT_EQ(builder->GrowPartition(system, 0), true);
-    EXPECT_EQ(system->size(), 65536);
+    // Test resizing to a smaller size.
+    EXPECT_EQ(builder->ResizePartition(system, 0), true);
+    EXPECT_EQ(system->size(), 0);
+    EXPECT_EQ(system->extents().size(), 0);
+    // Test resizing to a greater size.
+    builder->ResizePartition(system, 131072);
+    EXPECT_EQ(system->size(), 131072);
     EXPECT_EQ(system->extents().size(), 1);
-    EXPECT_EQ(system->extents()[0]->num_sectors(), 65536 / LP_SECTOR_SIZE);
-    // Test shrinking to a greater size.
-    builder->ShrinkPartition(system, 131072);
-    EXPECT_EQ(system->size(), 65536);
-    EXPECT_EQ(system->extents().size(), 1);
-    EXPECT_EQ(system->extents()[0]->num_sectors(), 65536 / LP_SECTOR_SIZE);
+    EXPECT_EQ(system->extents()[0]->num_sectors(), 131072 / LP_SECTOR_SIZE);
 
     // Test shrinking within the same extent.
-    builder->ShrinkPartition(system, 32768);
+    builder->ResizePartition(system, 32768);
     EXPECT_EQ(system->size(), 32768);
     EXPECT_EQ(system->extents().size(), 1);
     extent = system->extents()[0]->AsLinearExtent();
@@ -81,7 +80,7 @@ TEST(liblp, ResizePartition) {
     EXPECT_EQ(extent->physical_sector(), 12);
 
     // Test shrinking to 0.
-    builder->ShrinkPartition(system, 0);
+    builder->ResizePartition(system, 0);
     EXPECT_EQ(system->size(), 0);
     EXPECT_EQ(system->extents().size(), 0);
 }
@@ -92,11 +91,11 @@ TEST(liblp, PartitionAlignment) {
     // Test that we align up to one sector.
     Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
-    EXPECT_EQ(builder->GrowPartition(system, 10000), true);
+    EXPECT_EQ(builder->ResizePartition(system, 10000), true);
     EXPECT_EQ(system->size(), 10240);
     EXPECT_EQ(system->extents().size(), 1);
 
-    builder->ShrinkPartition(system, 9000);
+    builder->ResizePartition(system, 9000);
     EXPECT_EQ(system->size(), 9216);
     EXPECT_EQ(system->extents().size(), 1);
 }
@@ -174,8 +173,8 @@ TEST(liblp, InternalPartitionAlignment) {
 
     // Add a bunch of small extents to each, interleaving.
     for (size_t i = 0; i < 10; i++) {
-        ASSERT_TRUE(builder->GrowPartition(a, a->size() + 4096));
-        ASSERT_TRUE(builder->GrowPartition(b, b->size() + 4096));
+        ASSERT_TRUE(builder->ResizePartition(a, a->size() + 4096));
+        ASSERT_TRUE(builder->ResizePartition(b, b->size() + 4096));
     }
     EXPECT_EQ(a->size(), 40960);
     EXPECT_EQ(b->size(), 40960);
@@ -203,9 +202,9 @@ TEST(liblp, UseAllDiskSpace) {
 
     Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
-    EXPECT_EQ(builder->GrowPartition(system, 1036288), true);
+    EXPECT_EQ(builder->ResizePartition(system, 1036288), true);
     EXPECT_EQ(system->size(), 1036288);
-    EXPECT_EQ(builder->GrowPartition(system, 1036289), false);
+    EXPECT_EQ(builder->ResizePartition(system, 1036289), false);
 }
 
 TEST(liblp, BuildComplex) {
@@ -215,9 +214,9 @@ TEST(liblp, BuildComplex) {
     Partition* vendor = builder->AddPartition("vendor", TEST_GUID2, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     ASSERT_NE(vendor, nullptr);
-    EXPECT_EQ(builder->GrowPartition(system, 65536), true);
-    EXPECT_EQ(builder->GrowPartition(vendor, 32768), true);
-    EXPECT_EQ(builder->GrowPartition(system, 98304), true);
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
+    EXPECT_EQ(builder->ResizePartition(vendor, 32768), true);
+    EXPECT_EQ(builder->ResizePartition(system, 98304), true);
     EXPECT_EQ(system->size(), 98304);
     EXPECT_EQ(vendor->size(), 32768);
 
@@ -268,9 +267,9 @@ TEST(liblp, BuilderExport) {
     Partition* vendor = builder->AddPartition("vendor", TEST_GUID2, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     ASSERT_NE(vendor, nullptr);
-    EXPECT_EQ(builder->GrowPartition(system, 65536), true);
-    EXPECT_EQ(builder->GrowPartition(vendor, 32768), true);
-    EXPECT_EQ(builder->GrowPartition(system, 98304), true);
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
+    EXPECT_EQ(builder->ResizePartition(vendor, 32768), true);
+    EXPECT_EQ(builder->ResizePartition(system, 98304), true);
 
     unique_ptr<LpMetadata> exported = builder->Export();
     EXPECT_NE(exported, nullptr);
@@ -323,9 +322,9 @@ TEST(liblp, BuilderImport) {
     Partition* vendor = builder->AddPartition("vendor", TEST_GUID2, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     ASSERT_NE(vendor, nullptr);
-    EXPECT_EQ(builder->GrowPartition(system, 65536), true);
-    EXPECT_EQ(builder->GrowPartition(vendor, 32768), true);
-    EXPECT_EQ(builder->GrowPartition(system, 98304), true);
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
+    EXPECT_EQ(builder->ResizePartition(vendor, 32768), true);
+    EXPECT_EQ(builder->ResizePartition(system, 98304), true);
 
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
