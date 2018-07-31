@@ -102,7 +102,7 @@ class ReconnectHandler {
     // Tracks a reconnection attempt.
     struct ReconnectAttempt {
         atransport* transport;
-        std::chrono::system_clock::time_point deadline;
+        std::chrono::steady_clock::time_point reconnect_time;
         size_t attempts_left;
     };
 
@@ -149,8 +149,8 @@ void ReconnectHandler::TrackTransport(atransport* transport) {
         std::lock_guard<std::mutex> lock(reconnect_mutex_);
         if (!running_) return;
         reconnect_queue_.emplace(ReconnectAttempt{
-            transport, std::chrono::system_clock::now() + ReconnectHandler::kDefaultTimeout,
-            ReconnectHandler::kMaxAttempts});
+                transport, std::chrono::steady_clock::now() + ReconnectHandler::kDefaultTimeout,
+                ReconnectHandler::kMaxAttempts});
     }
     reconnect_cv_.notify_one();
 }
@@ -162,14 +162,26 @@ void ReconnectHandler::Run() {
             std::unique_lock<std::mutex> lock(reconnect_mutex_);
             ScopedAssumeLocked assume_lock(reconnect_mutex_);
 
-            auto deadline = std::chrono::time_point<std::chrono::system_clock>::max();
-            if (!reconnect_queue_.empty()) deadline = reconnect_queue_.front().deadline;
-            reconnect_cv_.wait_until(lock, deadline, [&]() REQUIRES(reconnect_mutex_) {
-                return !running_ ||
-                       (!reconnect_queue_.empty() && reconnect_queue_.front().deadline < deadline);
-            });
+            if (!reconnect_queue_.empty()) {
+                // FIXME: libstdc++ (used on Windows) implements condition_variable with
+                //        system_clock as its clock, so we're probably hosed if the clock changes,
+                //        even if we use steady_clock throughout. This problem goes away once we
+                //        switch to libc++.
+                reconnect_cv_.wait_until(lock, reconnect_queue_.front().reconnect_time);
+            } else {
+                reconnect_cv_.wait(lock);
+            }
 
             if (!running_) return;
+            if (reconnect_queue_.empty()) continue;
+
+            // Go back to sleep in case |reconnect_cv_| woke up spuriously and we still
+            // have more time to wait for the current attempt.
+            auto now = std::chrono::steady_clock::now();
+            if (reconnect_queue_.front().reconnect_time > now) {
+                continue;
+            }
+
             attempt = reconnect_queue_.front();
             reconnect_queue_.pop();
             if (attempt.transport->kicked()) {
@@ -191,9 +203,9 @@ void ReconnectHandler::Run() {
 
             std::lock_guard<std::mutex> lock(reconnect_mutex_);
             reconnect_queue_.emplace(ReconnectAttempt{
-                attempt.transport,
-                std::chrono::system_clock::now() + ReconnectHandler::kDefaultTimeout,
-                attempt.attempts_left - 1});
+                    attempt.transport,
+                    std::chrono::steady_clock::now() + ReconnectHandler::kDefaultTimeout,
+                    attempt.attempts_left - 1});
             continue;
         }
 
