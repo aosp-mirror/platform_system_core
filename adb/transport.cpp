@@ -50,6 +50,7 @@
 #include "adb_trace.h"
 #include "adb_utils.h"
 #include "fdevent.h"
+#include "sysdeps/chrono.h"
 
 static void register_transport(atransport* transport);
 static void remove_transport(atransport* transport);
@@ -104,10 +105,16 @@ class ReconnectHandler {
         atransport* transport;
         std::chrono::steady_clock::time_point reconnect_time;
         size_t attempts_left;
+
+        bool operator<(const ReconnectAttempt& rhs) const {
+            // std::priority_queue returns the largest element first, so we want attempts that have
+            // less time remaining (i.e. smaller time_points) to compare greater.
+            return reconnect_time > rhs.reconnect_time;
+        }
     };
 
     // Only retry for up to one minute.
-    static constexpr const std::chrono::seconds kDefaultTimeout = std::chrono::seconds(10);
+    static constexpr const std::chrono::seconds kDefaultTimeout = 10s;
     static constexpr const size_t kMaxAttempts = 6;
 
     // Protects all members.
@@ -115,7 +122,7 @@ class ReconnectHandler {
     bool running_ GUARDED_BY(reconnect_mutex_) = true;
     std::thread handler_thread_;
     std::condition_variable reconnect_cv_;
-    std::queue<ReconnectAttempt> reconnect_queue_ GUARDED_BY(reconnect_mutex_);
+    std::priority_queue<ReconnectAttempt> reconnect_queue_ GUARDED_BY(reconnect_mutex_);
 
     DISALLOW_COPY_AND_ASSIGN(ReconnectHandler);
 };
@@ -137,7 +144,7 @@ void ReconnectHandler::Stop() {
     // Drain the queue to free all resources.
     std::lock_guard<std::mutex> lock(reconnect_mutex_);
     while (!reconnect_queue_.empty()) {
-        ReconnectAttempt attempt = reconnect_queue_.front();
+        ReconnectAttempt attempt = reconnect_queue_.top();
         reconnect_queue_.pop();
         remove_transport(attempt.transport);
     }
@@ -148,9 +155,10 @@ void ReconnectHandler::TrackTransport(atransport* transport) {
     {
         std::lock_guard<std::mutex> lock(reconnect_mutex_);
         if (!running_) return;
-        reconnect_queue_.emplace(ReconnectAttempt{
-                transport, std::chrono::steady_clock::now() + ReconnectHandler::kDefaultTimeout,
-                ReconnectHandler::kMaxAttempts});
+        // Arbitrary sleep to give adbd time to get ready, if we disconnected because it exited.
+        auto reconnect_time = std::chrono::steady_clock::now() + 250ms;
+        reconnect_queue_.emplace(
+                ReconnectAttempt{transport, reconnect_time, ReconnectHandler::kMaxAttempts});
     }
     reconnect_cv_.notify_one();
 }
@@ -167,7 +175,7 @@ void ReconnectHandler::Run() {
                 //        system_clock as its clock, so we're probably hosed if the clock changes,
                 //        even if we use steady_clock throughout. This problem goes away once we
                 //        switch to libc++.
-                reconnect_cv_.wait_until(lock, reconnect_queue_.front().reconnect_time);
+                reconnect_cv_.wait_until(lock, reconnect_queue_.top().reconnect_time);
             } else {
                 reconnect_cv_.wait(lock);
             }
@@ -178,11 +186,11 @@ void ReconnectHandler::Run() {
             // Go back to sleep in case |reconnect_cv_| woke up spuriously and we still
             // have more time to wait for the current attempt.
             auto now = std::chrono::steady_clock::now();
-            if (reconnect_queue_.front().reconnect_time > now) {
+            if (reconnect_queue_.top().reconnect_time > now) {
                 continue;
             }
 
-            attempt = reconnect_queue_.front();
+            attempt = reconnect_queue_.top();
             reconnect_queue_.pop();
             if (attempt.transport->kicked()) {
                 D("transport %s was kicked. giving up on it.", attempt.transport->serial.c_str());
