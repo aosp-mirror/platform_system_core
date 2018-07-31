@@ -447,11 +447,6 @@ class LogMessage {
  private:
   const std::unique_ptr<LogMessageData> data_;
 
-  // TODO(b/35361699): remove these symbols once all prebuilds stop using it.
-  LogMessage(const char* file, unsigned int line, LogId id, LogSeverity severity, int error);
-  static void LogLine(const char* file, unsigned int line, LogId id, LogSeverity severity,
-                      const char* msg);
-
   DISALLOW_COPY_AND_ASSIGN(LogMessage);
 };
 
