@@ -158,7 +158,10 @@ asocket* create_jdwp_tracker_service_socket();
 unique_fd create_jdwp_connection_fd(int jdwp_pid);
 #endif
 
-int handle_forward_request(const char* service, atransport* transport, int reply_fd);
+bool handle_forward_request(const char* service, atransport* transport, int reply_fd);
+bool handle_forward_request(const char* service,
+                            std::function<atransport*(std::string* error)> transport_acquirer,
+                            int reply_fd);
 
 /* packet allocator */
 apacket* get_apacket(void);
