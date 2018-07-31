@@ -462,6 +462,10 @@ RetCode FastBootDriver::SendBuffer(const std::vector<char>& buf) {
 }
 
 RetCode FastBootDriver::SendBuffer(const void* buf, size_t size) {
+    if (!size) {
+        return SUCCESS;
+    }
+
     // Write the buffer
     ssize_t tmp = transport->Write(buf, size);
 
