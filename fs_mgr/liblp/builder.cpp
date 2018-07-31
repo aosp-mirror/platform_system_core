@@ -299,49 +299,59 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         Interval(uint64_t start, uint64_t end) : start(start), end(end) {}
         bool operator<(const Interval& other) const { return start < other.start; }
     };
-    std::vector<Interval> intervals;
 
-    // Collect all extents in the partition table.
+    // Collect all extents in the partition table, then sort them by starting
+    // sector.
+    std::vector<Interval> extents;
     for (const auto& partition : partitions_) {
         for (const auto& extent : partition->extents()) {
             LinearExtent* linear = extent->AsLinearExtent();
             if (!linear) {
                 continue;
             }
-            intervals.emplace_back(linear->physical_sector(),
-                                   linear->physical_sector() + extent->num_sectors());
+            extents.emplace_back(linear->physical_sector(),
+                                 linear->physical_sector() + extent->num_sectors());
         }
     }
+    std::sort(extents.begin(), extents.end());
 
-    // Sort extents by starting sector.
-    std::sort(intervals.begin(), intervals.end());
+    // Convert the extent list into a list of gaps between the extents; i.e.,
+    // the list of ranges that are free on the disk.
+    std::vector<Interval> free_regions;
+    for (size_t i = 1; i < extents.size(); i++) {
+        const Interval& previous = extents[i - 1];
+        const Interval& current = extents[i];
+
+        uint64_t aligned = AlignSector(previous.end);
+        if (aligned >= current.start) {
+            // There is no gap between these two extents, try the next one.
+            // Note that we check with >= instead of >, since alignment may
+            // bump the ending sector past the beginning of the next extent.
+            continue;
+        }
+
+        // The new interval represents the free space starting at the end of
+        // the previous interval, and ending at the start of the next interval.
+        free_regions.emplace_back(aligned, current.start);
+    }
+
+    // Add a final interval representing the remainder of the free space.
+    uint64_t last_free_extent_start =
+            extents.empty() ? geometry_.first_logical_sector : extents.back().end;
+    last_free_extent_start = AlignSector(last_free_extent_start);
+    if (last_free_extent_start <= geometry_.last_logical_sector) {
+        free_regions.emplace_back(last_free_extent_start, geometry_.last_logical_sector + 1);
+    }
 
     // Find gaps that we can use for new extents. Note we store new extents in a
     // temporary vector, and only commit them if we are guaranteed enough free
     // space.
     std::vector<std::unique_ptr<LinearExtent>> new_extents;
-    for (size_t i = 1; i < intervals.size(); i++) {
-        const Interval& previous = intervals[i - 1];
-        const Interval& current = intervals[i];
-
-        if (previous.end >= current.start) {
-            // There is no gap between these two extents, try the next one. Note that
-            // extents may never overlap, but just for safety, we ignore them if they
-            // do.
-            DCHECK(previous.end == current.start);
-            continue;
-        }
-
-        uint64_t aligned = AlignSector(previous.end);
-        if (aligned >= current.start) {
-            // After alignment, this extent is not usable.
-            continue;
-        }
-
+    for (const auto& region : free_regions) {
         // This gap is enough to hold the remainder of the space requested, so we
         // can allocate what we need and return.
-        if (current.start - aligned >= sectors_needed) {
-            auto extent = std::make_unique<LinearExtent>(sectors_needed, aligned);
+        if (region.end - region.start >= sectors_needed) {
+            auto extent = std::make_unique<LinearExtent>(sectors_needed, region.start);
             sectors_needed -= extent->num_sectors();
             new_extents.push_back(std::move(extent));
             break;
@@ -349,33 +359,13 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
 
         // This gap is not big enough to fit the remainder of the space requested,
         // so consume the whole thing and keep looking for more.
-        auto extent = std::make_unique<LinearExtent>(current.start - aligned, aligned);
+        auto extent = std::make_unique<LinearExtent>(region.end - region.start, region.start);
         sectors_needed -= extent->num_sectors();
         new_extents.push_back(std::move(extent));
     }
-
-    // If we still have more to allocate, take it from the remaining free space
-    // in the allocatable region.
     if (sectors_needed) {
-        uint64_t first_sector;
-        if (intervals.empty()) {
-            first_sector = geometry_.first_logical_sector;
-        } else {
-            first_sector = intervals.back().end;
-        }
-        DCHECK(first_sector <= geometry_.last_logical_sector);
-
-        // Note: After alignment, |first_sector| may be > the last usable sector.
-        first_sector = AlignSector(first_sector);
-
-        // Note: the last usable sector is inclusive.
-        if (first_sector > geometry_.last_logical_sector ||
-            geometry_.last_logical_sector + 1 - first_sector < sectors_needed) {
-            LERROR << "Not enough free space to expand partition: " << partition->name();
-            return false;
-        }
-        auto extent = std::make_unique<LinearExtent>(sectors_needed, first_sector);
-        new_extents.push_back(std::move(extent));
+        LERROR << "Not enough free space to expand partition: " << partition->name();
+        return false;
     }
 
     for (auto& extent : new_extents) {
