@@ -47,6 +47,7 @@
 
 #include "selinux.h"
 
+#include <android/api-level.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -470,29 +471,27 @@ void SelinuxSetupKernelLogging() {
     selinux_set_callback(SELINUX_CB_LOG, cb);
 }
 
-// This function checks whether the sepolicy supports vendor init.
-bool SelinuxHasVendorInit() {
+// This function returns the Android version with which the vendor SEPolicy was compiled.
+// It is used for version checks such as whether or not vendor_init should be used
+int SelinuxGetVendorAndroidVersion() {
     if (!IsSplitPolicyDevice()) {
-        // If this device does not split sepolicy files, vendor_init will be available in the latest
-        // monolithic sepolicy file.
-        return true;
+        // If this device does not split sepolicy files, it's not a Treble device and therefore,
+        // we assume it's always on the latest platform.
+        return __ANDROID_API_FUTURE__;
     }
 
     std::string version;
     if (!GetVendorMappingVersion(&version)) {
-        // Return true as the default if we failed to load the vendor sepolicy version.
-        return true;
+        LOG(FATAL) << "Could not read vendor SELinux version";
     }
 
     int major_version;
     std::string major_version_str(version, 0, version.find('.'));
     if (!ParseInt(major_version_str, &major_version)) {
-        PLOG(ERROR) << "Failed to parse the vendor sepolicy major version " << major_version_str;
-        // Return true as the default if we failed to parse the major version.
-        return true;
+        PLOG(FATAL) << "Failed to parse the vendor sepolicy major version " << major_version_str;
     }
 
-    return major_version >= 28;
+    return major_version;
 }
 
 // selinux_android_file_context_handle() takes on the order of 10+ms to run, so we want to cache

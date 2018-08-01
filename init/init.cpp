@@ -58,7 +58,6 @@
 #include "sigchld_handler.h"
 #include "ueventd.h"
 #include "util.h"
-#include "watchdogd.h"
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -615,10 +614,6 @@ static void InitKernelLogging(char* argv[]) {
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
-    }
-
-    if (!strcmp(basename(argv[0]), "watchdogd")) {
-        return watchdogd_main(argc, argv);
     }
 
     if (argc > 1 && !strcmp(argv[1], "subcontext")) {

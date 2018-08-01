@@ -127,7 +127,6 @@ cc_library_static {
         "ueventd.cpp",
         "ueventd_parser.cpp",
         "util.cpp",
-        "watchdogd.cpp",
     ],
     whole_static_libs: ["libcap"],
     header_libs: ["bootimg_headers"],
@@ -157,7 +156,6 @@ cc_binary {
     srcs: ["main.cpp"],
     symlinks: [
         "sbin/ueventd",
-        "sbin/watchdogd",
     ],
 }
 */
