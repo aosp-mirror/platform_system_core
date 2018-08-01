@@ -319,7 +319,7 @@ TEST_F(MapInfoGetElfTest, process_memory_not_read_only) {
   TestInitEhdr<Elf64_Ehdr>(&ehdr, ELFCLASS64, EM_AARCH64);
   ehdr.e_shoff = 0x2000;
   ehdr.e_shentsize = sizeof(Elf64_Shdr) + 100;
-  ehdr.e_shnum = 4;
+  ehdr.e_shnum = 0;
   memory_->SetMemory(0x9000, &ehdr, sizeof(ehdr));
 
   Elf* elf = info.GetElf(process_memory_, false);
@@ -341,7 +341,7 @@ TEST_F(MapInfoGetElfTest, check_device_maps) {
   TestInitEhdr<Elf64_Ehdr>(&ehdr, ELFCLASS64, EM_X86_64);
   ehdr.e_shoff = 0x2000;
   ehdr.e_shentsize = sizeof(Elf64_Shdr) + 100;
-  ehdr.e_shnum = 4;
+  ehdr.e_shnum = 0;
   memory_->SetMemory(0x7000, &ehdr, sizeof(ehdr));
 
   Elf* elf = info.GetElf(process_memory_, false);
@@ -368,7 +368,7 @@ TEST_F(MapInfoGetElfTest, multiple_thread_get_elf) {
   TestInitEhdr<Elf64_Ehdr>(&ehdr, ELFCLASS64, EM_X86_64);
   ehdr.e_shoff = 0x2000;
   ehdr.e_shentsize = sizeof(Elf64_Shdr) + 100;
-  ehdr.e_shnum = 4;
+  ehdr.e_shnum = 0;
   memory_->SetMemory(0x7000, &ehdr, sizeof(ehdr));
 
   Elf* elf_in_threads[kNumConcurrentThreads];
