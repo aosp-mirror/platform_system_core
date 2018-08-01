@@ -92,12 +92,13 @@ bool make_block_device_writable(const std::string& dev) {
     return result;
 }
 
-static bool fs_has_shared_blocks(const char* dev) {
+static bool fs_has_shared_blocks(const std::string& mount_point, const std::string& device) {
+    std::string path = mount_point + "/lost+found";
     struct statfs fs;
-    if (statfs(dev, &fs) == -1 || fs.f_type == EXT4_SUPER_MAGIC) {
+    if (statfs(path.c_str(), &fs) == -1 || fs.f_type != EXT4_SUPER_MAGIC) {
         return false;
     }
-    unique_fd fd(unix_open(dev, O_RDONLY));
+    unique_fd fd(unix_open(device.c_str(), O_RDONLY));
     if (fd < 0) {
         return false;
     }
@@ -237,7 +238,7 @@ void remount_service(unique_fd fd, const std::string& cmd) {
     std::set<std::string> dedup;
     for (const auto& partition : partitions) {
         std::string dev = find_mount(partition.c_str(), partition == "/");
-        if (dev.empty() || !fs_has_shared_blocks(dev.c_str())) {
+        if (dev.empty() || !fs_has_shared_blocks(partition, dev)) {
             continue;
         }
         if (can_unshare_blocks(fd.get(), dev.c_str())) {
