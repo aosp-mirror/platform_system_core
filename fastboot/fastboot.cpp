@@ -127,6 +127,7 @@ static struct {
                                                       "product-services",
                                                                   true,  false },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
+    { "super",    "super.img",        "super.sig",    "super",    true,  false },
     { "system",   "system.img",       "system.sig",   "system",   false, false },
     { nullptr,    "system_other.img", "system.sig",   "system",   true,  true  },
     { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false },
