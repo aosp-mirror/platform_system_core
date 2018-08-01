@@ -414,6 +414,8 @@ void SelinuxRestoreContext() {
     if constexpr (WORLD_WRITABLE_KMSG) {
         selinux_android_restorecon("/dev/kmsg_debug", 0);
     }
+    selinux_android_restorecon("/dev/null", 0);
+    selinux_android_restorecon("/dev/ptmx", 0);
     selinux_android_restorecon("/dev/socket", 0);
     selinux_android_restorecon("/dev/random", 0);
     selinux_android_restorecon("/dev/urandom", 0);
