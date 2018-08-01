@@ -32,11 +32,16 @@ class LinearExtent;
 
 // By default, partitions are aligned on a 1MiB boundary.
 static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
+static const uint32_t kDefaultBlockSize = 4096;
 
 struct BlockDeviceInfo {
-    BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0) {}
-    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset)
-        : size(size), alignment(alignment), alignment_offset(alignment_offset) {}
+    BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0), logical_block_size(0) {}
+    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset,
+                    uint32_t logical_block_size)
+        : size(size),
+          alignment(alignment),
+          alignment_offset(alignment_offset),
+          logical_block_size(logical_block_size) {}
     // Size of the block device, in bytes.
     uint64_t size;
     // Optimal target alignment, in bytes. Partition extents will be aligned to
@@ -46,6 +51,8 @@ struct BlockDeviceInfo {
     // |alignment_offset| on the target device is correctly aligned on its
     // parent device. This value must be 0 or a multiple of 512.
     uint32_t alignment_offset;
+    // Block size, for aligning extent sizes and partition sizes.
+    uint32_t logical_block_size;
 };
 
 // Abstraction around dm-targets that can be encoded into logical partition tables.
@@ -88,6 +95,8 @@ class ZeroExtent final : public Extent {
 };
 
 class Partition final {
+    friend class MetadataBuilder;
+
   public:
     Partition(const std::string& name, const std::string& guid, uint32_t attributes);
 
@@ -97,10 +106,6 @@ class Partition final {
     // Remove all extents from this partition.
     void RemoveExtents();
 
-    // Remove and/or shrink extents until the partition is the requested size.
-    // See MetadataBuilder::ShrinkPartition for more information.
-    void ShrinkTo(uint64_t requested_size);
-
     const std::string& name() const { return name_; }
     uint32_t attributes() const { return attributes_; }
     const std::string& guid() const { return guid_; }
@@ -108,6 +113,8 @@ class Partition final {
     uint64_t size() const { return size_; }
 
   private:
+    void ShrinkTo(uint64_t aligned_size);
+
     std::string name_;
     std::string guid_;
     std::vector<std::unique_ptr<Extent>> extents_;
@@ -144,7 +151,7 @@ class MetadataBuilder {
     // size. This is a convenience method for tests.
     static std::unique_ptr<MetadataBuilder> New(uint64_t blockdev_size, uint32_t metadata_max_size,
                                                 uint32_t metadata_slot_count) {
-        BlockDeviceInfo device_info(blockdev_size, 0, 0);
+        BlockDeviceInfo device_info(blockdev_size, 0, 0, kDefaultBlockSize);
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 

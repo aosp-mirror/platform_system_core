@@ -136,6 +136,12 @@ typedef struct LpMetadataGeometry {
      * can be used to verify the geometry against a target device.
      */
     uint64_t block_device_size;
+
+    /* 76: Logical block size of the super partition block device. This is the
+     * minimal alignment for partition and extent sizes, and it must be a
+     * multiple of LP_SECTOR_SIZE.
+     */
+    uint32_t logical_block_size;
 } __attribute__((packed)) LpMetadataGeometry;
 
 /* The logical partition metadata has a number of tables; they are described
