@@ -1052,6 +1052,9 @@ int fs_mgr_do_mount_one(struct fstab_rec *rec)
         return FS_MGR_DOMNT_FAILED;
     }
 
+    // Run fsck if needed
+    prepare_fs_for_mount(rec->blk_device, rec);
+
     int ret = __mount(rec->blk_device, rec->mount_point, rec);
     if (ret) {
       ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
