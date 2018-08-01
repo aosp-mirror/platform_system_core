@@ -920,13 +920,45 @@ int launch_server(const std::string& socket_spec) {
 }
 #endif /* ADB_HOST */
 
+bool handle_forward_request(const char* service, atransport* transport, int reply_fd) {
+    return handle_forward_request(service, [transport](std::string*) { return transport; },
+                                  reply_fd);
+}
+
 // Try to handle a network forwarding request.
-// This returns 1 on success, 0 on failure, and -1 to indicate this is not
-// a forwarding-related request.
-int handle_forward_request(const char* service, atransport* transport, int reply_fd) {
+bool handle_forward_request(const char* service,
+                            std::function<atransport*(std::string* error)> transport_acquirer,
+                            int reply_fd) {
+    if (!strcmp(service, "list-forward")) {
+        // Create the list of forward redirections.
+        std::string listeners = format_listeners();
+#if ADB_HOST
+        SendOkay(reply_fd);
+#endif
+        SendProtocolString(reply_fd, listeners);
+        return true;
+    }
+
+    if (!strcmp(service, "killforward-all")) {
+        remove_all_listeners();
+#if ADB_HOST
+        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
+        SendOkay(reply_fd);
+#endif
+        SendOkay(reply_fd);
+        return true;
+    }
+
     if (!strncmp(service, "forward:", 8) || !strncmp(service, "killforward:", 12)) {
         // killforward:local
         // forward:(norebind:)?local;remote
+        std::string error;
+        atransport* transport = transport_acquirer(&error);
+        if (!transport) {
+            SendFail(reply_fd, error);
+            return true;
+        }
+
         bool kill_forward = false;
         bool no_rebind = false;
         if (android::base::StartsWith(service, "killforward:")) {
@@ -946,17 +978,16 @@ int handle_forward_request(const char* service, atransport* transport, int reply
             // Check killforward: parameter format: '<local>'
             if (pieces.size() != 1 || pieces[0].empty()) {
                 SendFail(reply_fd, android::base::StringPrintf("bad killforward: %s", service));
-                return 1;
+                return true;
             }
         } else {
             // Check forward: parameter format: '<local>;<remote>'
             if (pieces.size() != 2 || pieces[0].empty() || pieces[1].empty() || pieces[1][0] == '*') {
                 SendFail(reply_fd, android::base::StringPrintf("bad forward: %s", service));
-                return 1;
+                return true;
             }
         }
 
-        std::string error;
         InstallStatus r;
         int resolved_tcp_port = 0;
         if (kill_forward) {
@@ -977,7 +1008,7 @@ int handle_forward_request(const char* service, atransport* transport, int reply
                 SendProtocolString(reply_fd, android::base::StringPrintf("%d", resolved_tcp_port));
             }
 
-            return 1;
+            return true;
         }
 
         std::string message;
@@ -996,9 +1027,10 @@ int handle_forward_request(const char* service, atransport* transport, int reply
             break;
         }
         SendFail(reply_fd, message);
-        return 1;
+        return true;
     }
-    return 0;
+
+    return false;
 }
 
 #if ADB_HOST
@@ -1186,35 +1218,15 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         return SendOkay(reply_fd, response);
     }
 
-    if (!strcmp(service, "list-forward")) {
-        // Create the list of forward redirections.
-        std::string listeners = format_listeners();
-#if ADB_HOST
-        SendOkay(reply_fd);
-#endif
-        return SendProtocolString(reply_fd, listeners);
+    if (handle_forward_request(service,
+                               [=](std::string* error) {
+                                   return acquire_one_transport(type, serial, transport_id, nullptr,
+                                                                error);
+                               },
+                               reply_fd)) {
+        return 0;
     }
 
-    if (!strcmp(service, "killforward-all")) {
-        remove_all_listeners();
-#if ADB_HOST
-        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
-        SendOkay(reply_fd);
-#endif
-        SendOkay(reply_fd);
-        return 1;
-    }
-
-    std::string error;
-    atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
-    if (!t) {
-        SendFail(reply_fd, error);
-        return 1;
-    }
-
-    int ret = handle_forward_request(service, t, reply_fd);
-    if (ret >= 0)
-      return ret - 1;
     return -1;
 }
 
