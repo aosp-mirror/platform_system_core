@@ -1614,9 +1614,9 @@ int adb_commandline(int argc, const char** argv) {
         return bugreport.DoIt(argc, argv);
     } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
-        ++argv;
         --argc;
         if (argc < 1) return syntax_error("%s requires an argument", argv[0]);
+        ++argv;
 
         // Determine the <host-prefix> for this command.
         std::string host_prefix;

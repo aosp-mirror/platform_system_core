@@ -157,7 +157,7 @@ unique_fd reverse_service(const char* command, atransport* transport) {
         return unique_fd{};
     }
     VLOG(SERVICES) << "service socketpair: " << s[0] << ", " << s[1];
-    if (handle_forward_request(command, transport, s[1]) < 0) {
+    if (!handle_forward_request(command, transport, s[1])) {
         SendFail(s[1], "not a reverse forwarding command");
     }
     adb_close(s[1]);
