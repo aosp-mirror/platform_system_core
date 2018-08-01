@@ -410,10 +410,6 @@ LogMessage::LogMessage(const char* file, unsigned int line, LogId id, LogSeverit
                        const char* tag, int error)
     : data_(new LogMessageData(file, line, id, severity, tag, error)) {}
 
-LogMessage::LogMessage(const char* file, unsigned int line, LogId id, LogSeverity severity,
-                       int error)
-    : LogMessage(file, line, id, severity, nullptr, error) {}
-
 LogMessage::~LogMessage() {
   // Check severity again. This is duplicate work wrt/ LOG macros, but not LOG_STREAM.
   if (!WOULD_LOG(data_->GetSeverity())) {
@@ -468,11 +464,6 @@ void LogMessage::LogLine(const char* file, unsigned int line, LogId id, LogSever
   } else {
     Logger()(id, severity, tag, file, line, message);
   }
-}
-
-void LogMessage::LogLine(const char* file, unsigned int line, LogId id, LogSeverity severity,
-                         const char* message) {
-  LogLine(file, line, id, severity, nullptr, message);
 }
 
 LogSeverity GetMinimumLogSeverity() {
