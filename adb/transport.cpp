@@ -81,6 +81,7 @@ class SCOPED_CAPABILITY ScopedAssumeLocked {
     ~ScopedAssumeLocked() RELEASE() {}
 };
 
+#if ADB_HOST
 // Tracks and handles atransport*s that are attempting reconnection.
 class ReconnectHandler {
   public:
@@ -223,6 +224,8 @@ void ReconnectHandler::Run() {
 }
 
 static auto& reconnect_handler = *new ReconnectHandler();
+
+#endif
 
 }  // namespace
 
@@ -697,9 +700,11 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
     update_transports();
 }
 
+#if ADB_HOST
 void init_reconnect_handler(void) {
     reconnect_handler.Start();
 }
+#endif
 
 void init_transport_registration(void) {
     int s[2];
@@ -718,7 +723,9 @@ void init_transport_registration(void) {
 }
 
 void kick_all_transports() {
+#if ADB_HOST
     reconnect_handler.Stop();
+#endif
     // To avoid only writing part of a packet to a transport after exit, kick all transports.
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto t : transport_list) {
@@ -756,13 +763,19 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         t->connection()->Stop();
+#if ADB_HOST
         if (t->IsTcpDevice() && !t->kicked()) {
-            D("transport: %s unref (attempting reconnection) %d", t->serial.c_str(), t->kicked());
+            D("transport: %s unref (attempting reconnection)", t->serial.c_str());
             reconnect_handler.TrackTransport(t);
         } else {
             D("transport: %s unref (kicking and closing)", t->serial.c_str());
             remove_transport(t);
         }
+#else
+        D("transport: %s unref (kicking and closing)", t->serial.c_str());
+        remove_transport(t);
+#endif
+
     } else {
         D("transport: %s unref (count=%zu)", t->serial.c_str(), t->ref_count);
     }
