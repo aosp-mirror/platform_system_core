@@ -162,29 +162,17 @@ class MetadataBuilder {
     // Find a partition by name. If no partition is found, nullptr is returned.
     Partition* FindPartition(const std::string& name);
 
-    // Grow a partition to the requested size. If the partition's size is already
-    // greater or equal to the requested size, this will return true and the
-    // partition table will not be changed. Otherwise, a greedy algorithm is
-    // used to find free gaps in the partition table and allocate them for this
-    // partition. If not enough space can be allocated, false is returned, and
-    // the parition table will not be modified.
+    // Grow or shrink a partition to the requested size. This size will be
+    // rounded UP to the nearest block (512 bytes).
     //
-    // The size will be rounded UP to the nearest sector.
-    //
-    // Note, this is an in-memory operation, and it does not alter the
-    // underlying filesystem or contents of the partition on disk.
-    bool GrowPartition(Partition* partition, uint64_t requested_size);
-
-    // Shrink a partition to the requested size. If the partition is already
-    // smaller than the given size, this will return and the partition table
-    // will not be changed. Otherwise, extents will be removed and/or shrunk
-    // from the end of the partition until it is the requested size.
-    //
-    // The size will be rounded UP to the nearest sector.
+    // When growing a partition, a greedy algorithm is used to find free gaps
+    // in the partition table and allocate them. If not enough space can be
+    // allocated, false is returned, and the parition table will not be
+    // modified.
     //
     // Note, this is an in-memory operation, and it does not alter the
     // underlying filesystem or contents of the partition on disk.
-    void ShrinkPartition(Partition* partition, uint64_t requested_size);
+    bool ResizePartition(Partition* partition, uint64_t requested_size);
 
     // Amount of space that can be allocated to logical partitions.
     uint64_t AllocatableSpace() const;
@@ -198,7 +186,8 @@ class MetadataBuilder {
     MetadataBuilder();
     bool Init(const BlockDeviceInfo& info, uint32_t metadata_max_size, uint32_t metadata_slot_count);
     bool Init(const LpMetadata& metadata);
-
+    bool GrowPartition(Partition* partition, uint64_t aligned_size);
+    void ShrinkPartition(Partition* partition, uint64_t aligned_size);
     uint64_t AlignSector(uint64_t sector);
 
     LpMetadataGeometry geometry_;
