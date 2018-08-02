@@ -94,7 +94,7 @@ void restart_usb_service(unique_fd fd) {
     WriteFdExactly(fd.get(), "restarting in USB mode\n");
 }
 
-bool reboot_service_impl(unique_fd fd, const std::string& arg) {
+void reboot_service(unique_fd fd, const std::string& arg) {
     std::string reboot_arg = arg;
     bool auto_reboot = false;
 
@@ -108,7 +108,7 @@ bool reboot_service_impl(unique_fd fd, const std::string& arg) {
     if (reboot_arg == "sideload") {
         if (getuid() != 0) {
             WriteFdExactly(fd.get(), "'adb root' is required for 'adb reboot sideload'.\n");
-            return false;
+            return;
         }
 
         const std::vector<std::string> options = {auto_reboot ? "--sideload_auto_reboot"
@@ -116,7 +116,7 @@ bool reboot_service_impl(unique_fd fd, const std::string& arg) {
         std::string err;
         if (!write_bootloader_message(options, &err)) {
             D("Failed to set bootloader message: %s", err.c_str());
-            return false;
+            return;
         }
 
         reboot_arg = "recovery";
@@ -128,16 +128,9 @@ bool reboot_service_impl(unique_fd fd, const std::string& arg) {
     std::string reboot_string = android::base::StringPrintf("reboot,%s", reboot_arg.c_str());
     if (!android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_string)) {
         WriteFdFmt(fd.get(), "reboot (%s) failed\n", reboot_string.c_str());
-        return false;
-    }
-
-    return true;
-}
-
-void reboot_service(unique_fd fd, const std::string& arg) {
-    if (!reboot_service_impl(std::move(fd), arg)) {
         return;
     }
+
     // Don't return early. Give the reboot command time to take effect
     // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
     while (true) {
