@@ -21,13 +21,23 @@
 #include <vector>
 
 #include "uevent.h"
+#include "uevent_handler.h"
 
 namespace android {
 namespace init {
 
-extern std::vector<std::string> firmware_directories;
+class FirmwareHandler : public UeventHandler {
+  public:
+    explicit FirmwareHandler(std::vector<std::string> firmware_directories);
+    virtual ~FirmwareHandler() = default;
 
-void HandleFirmwareEvent(const Uevent& uevent);
+    void HandleUevent(const Uevent& uevent) override;
+
+  private:
+    void ProcessFirmwareEvent(const Uevent& uevent);
+
+    std::vector<std::string> firmware_directories_;
+};
 
 }  // namespace init
 }  // namespace android
