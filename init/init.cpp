@@ -670,6 +670,10 @@ int main(int argc, char** argv) {
         CHECKCALL(mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8)));
         CHECKCALL(mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9)));
 
+        // This is needed for log wrapper, which gets called before ueventd runs.
+        CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
+        CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
+
         // Mount staging areas for devices managed by vold
         // See storage config details at http://source.android.com/devices/storage/
         CHECKCALL(mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
