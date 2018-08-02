@@ -108,6 +108,13 @@ android_log_context create_android_log_parser(const char* msg, size_t len);
 android_log_list_element android_log_read_next(android_log_context ctx);
 android_log_list_element android_log_peek_next(android_log_context ctx);
 
+/* Reset writer context */
+int android_log_reset(android_log_context ctx);
+
+/* Reset reader context */
+int android_log_parser_reset(android_log_context ctx,
+                             const char* msg, size_t len);
+
 /* Finished with reader or writer context */
 int android_log_destroy(android_log_context* ctx);
 

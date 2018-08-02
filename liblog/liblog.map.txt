@@ -53,3 +53,9 @@ LIBLOG_O {
     __android_log_is_loggable_len;
     __android_log_is_debuggable; # vndk
 };
+
+LIBLOG_Q {
+  global:
+    android_log_reset; #vndk
+    android_log_parser_reset; #vndk
+};
