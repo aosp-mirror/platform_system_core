@@ -1190,17 +1190,11 @@ void close_usb_devices() {
 }
 #endif  // ADB_HOST
 
-int register_socket_transport(unique_fd s, const char* serial, int port, int local,
+int register_socket_transport(unique_fd s, std::string serial, int port, int local,
                               atransport::ReconnectCallback reconnect) {
     atransport* t = new atransport(std::move(reconnect), kCsOffline);
 
-    if (!serial) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "T-%p", t);
-        serial = buf;
-    }
-
-    D("transport: %s init'ing for socket %d, on port %d", serial, s.get(), port);
+    D("transport: %s init'ing for socket %d, on port %d", serial.c_str(), s.get(), port);
     if (init_socket_transport(t, std::move(s), port, local) < 0) {
         delete t;
         return -1;
@@ -1208,7 +1202,7 @@ int register_socket_transport(unique_fd s, const char* serial, int port, int loc
 
     std::unique_lock<std::recursive_mutex> lock(transport_lock);
     for (const auto& transport : pending_list) {
-        if (strcmp(serial, transport->serial.c_str()) == 0) {
+        if (serial == transport->serial) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in pending_list and fails to register";
             delete t;
@@ -1217,7 +1211,7 @@ int register_socket_transport(unique_fd s, const char* serial, int port, int loc
     }
 
     for (const auto& transport : transport_list) {
-        if (strcmp(serial, transport->serial.c_str()) == 0) {
+        if (serial == transport->serial) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in transport_list and fails to register";
             delete t;
@@ -1225,8 +1219,8 @@ int register_socket_transport(unique_fd s, const char* serial, int port, int loc
         }
     }
 
+    t->serial = std::move(serial);
     pending_list.push_front(t);
-    t->serial = serial;
 
     lock.unlock();
 
