@@ -190,6 +190,7 @@ cc_test {
         "tests/MemoryRangeTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/MemoryTest.cpp",
+        "tests/RegsInfoTest.cpp",
         "tests/RegsIterateTest.cpp",
         "tests/RegsStepIfSignalHandlerTest.cpp",
         "tests/RegsTest.cpp",
