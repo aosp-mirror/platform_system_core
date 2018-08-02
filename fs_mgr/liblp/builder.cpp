@@ -82,11 +82,7 @@ void Partition::RemoveExtents() {
     extents_.clear();
 }
 
-void Partition::ShrinkTo(uint64_t requested_size) {
-    uint64_t aligned_size = AlignTo(requested_size, LP_SECTOR_SIZE);
-    if (size_ <= aligned_size) {
-        return;
-    }
+void Partition::ShrinkTo(uint64_t aligned_size) {
     if (aligned_size == 0) {
         RemoveExtents();
         return;
@@ -106,7 +102,7 @@ void Partition::ShrinkTo(uint64_t requested_size) {
         sectors_to_remove -= extent->num_sectors();
         extents_.pop_back();
     }
-    DCHECK(size_ == requested_size);
+    DCHECK(size_ == aligned_size);
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& block_device,
@@ -290,13 +286,7 @@ void MetadataBuilder::RemovePartition(const std::string& name) {
     }
 }
 
-bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_size) {
-    // Align the space needed up to the nearest sector.
-    uint64_t aligned_size = AlignTo(requested_size, LP_SECTOR_SIZE);
-    if (partition->size() >= aligned_size) {
-        return true;
-    }
-
+bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
     // Figure out how much we need to allocate.
     uint64_t space_needed = aligned_size - partition->size();
     uint64_t sectors_needed = space_needed / LP_SECTOR_SIZE;
@@ -394,8 +384,8 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t requested_siz
     return true;
 }
 
-void MetadataBuilder::ShrinkPartition(Partition* partition, uint64_t requested_size) {
-    partition->ShrinkTo(requested_size);
+void MetadataBuilder::ShrinkPartition(Partition* partition, uint64_t aligned_size) {
+    partition->ShrinkTo(aligned_size);
 }
 
 std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
@@ -463,6 +453,19 @@ void MetadataBuilder::set_block_device_info(const BlockDeviceInfo& device_info) 
     if (device_info.alignment_offset) {
         device_info_.alignment_offset = device_info.alignment_offset;
     }
+}
+
+bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size) {
+    // Align the space needed up to the nearest sector.
+    uint64_t aligned_size = AlignTo(requested_size, LP_SECTOR_SIZE);
+
+    if (aligned_size > partition->size()) {
+        return GrowPartition(partition, aligned_size);
+    }
+    if (aligned_size < partition->size()) {
+        ShrinkPartition(partition, aligned_size);
+    }
+    return true;
 }
 
 }  // namespace fs_mgr
