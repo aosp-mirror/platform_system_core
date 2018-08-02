@@ -38,6 +38,7 @@
 #include "firmware_handler.h"
 #include "modalias_handler.h"
 #include "selinux.h"
+#include "uevent_handler.h"
 #include "uevent_listener.h"
 #include "ueventd_parser.h"
 #include "util.h"
@@ -107,11 +108,10 @@ namespace init {
 
 class ColdBoot {
   public:
-    ColdBoot(UeventListener& uevent_listener, DeviceHandler& device_handler,
-             ModaliasHandler& modalias_handler)
+    ColdBoot(UeventListener& uevent_listener,
+             std::vector<std::unique_ptr<UeventHandler>>& uevent_handlers)
         : uevent_listener_(uevent_listener),
-          device_handler_(device_handler),
-          modalias_handler_(modalias_handler),
+          uevent_handlers_(uevent_handlers),
           num_handler_subprocesses_(std::thread::hardware_concurrency() ?: 4) {}
 
     void Run();
@@ -124,8 +124,7 @@ class ColdBoot {
     void WaitForSubProcesses();
 
     UeventListener& uevent_listener_;
-    DeviceHandler& device_handler_;
-    ModaliasHandler& modalias_handler_;
+    std::vector<std::unique_ptr<UeventHandler>>& uevent_handlers_;
 
     unsigned int num_handler_subprocesses_;
     std::vector<Uevent> uevent_queue_;
@@ -136,16 +135,16 @@ class ColdBoot {
 void ColdBoot::UeventHandlerMain(unsigned int process_num, unsigned int total_processes) {
     for (unsigned int i = process_num; i < uevent_queue_.size(); i += total_processes) {
         auto& uevent = uevent_queue_[i];
-        device_handler_.HandleDeviceEvent(uevent);
-        modalias_handler_.HandleModaliasEvent(uevent);
+
+        for (auto& uevent_handler : uevent_handlers_) {
+            uevent_handler->HandleUevent(uevent);
+        }
     }
     _exit(EXIT_SUCCESS);
 }
 
 void ColdBoot::RegenerateUevents() {
     uevent_listener_.RegenerateUevents([this](const Uevent& uevent) {
-        HandleFirmwareEvent(uevent);
-
         uevent_queue_.emplace_back(std::move(uevent));
         return ListenerAction::kContinue;
     });
@@ -168,7 +167,6 @@ void ColdBoot::ForkSubProcesses() {
 
 void ColdBoot::DoRestoreCon() {
     selinux_android_restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
-    device_handler_.set_skip_restorecon(false);
 }
 
 void ColdBoot::WaitForSubProcesses() {
@@ -234,8 +232,7 @@ int ueventd_main(int argc, char** argv) {
     SelinuxSetupKernelLogging();
     SelabelInitialize();
 
-    DeviceHandler device_handler;
-    ModaliasHandler modalias_handler;
+    std::vector<std::unique_ptr<UeventHandler>> uevent_handlers;
     UeventListener uevent_listener;
 
     {
@@ -248,17 +245,25 @@ int ueventd_main(int argc, char** argv) {
                 ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc", "/odm/ueventd.rc",
                              "/ueventd." + hardware + ".rc"});
 
-        device_handler = DeviceHandler{std::move(ueventd_configuration.dev_permissions),
-                                       std::move(ueventd_configuration.sysfs_permissions),
-                                       std::move(ueventd_configuration.subsystems),
-                                       fs_mgr_get_boot_devices(), true};
+        uevent_handlers.emplace_back(std::make_unique<DeviceHandler>(
+                std::move(ueventd_configuration.dev_permissions),
+                std::move(ueventd_configuration.sysfs_permissions),
+                std::move(ueventd_configuration.subsystems), fs_mgr_get_boot_devices(), true));
+        uevent_handlers.emplace_back(std::make_unique<FirmwareHandler>(
+                std::move(ueventd_configuration.firmware_directories)));
 
-        firmware_directories = ueventd_configuration.firmware_directories;
+        if (ueventd_configuration.enable_modalias_handling) {
+            uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>());
+        }
     }
 
     if (access(COLDBOOT_DONE, F_OK) != 0) {
-        ColdBoot cold_boot(uevent_listener, device_handler, modalias_handler);
+        ColdBoot cold_boot(uevent_listener, uevent_handlers);
         cold_boot.Run();
+    }
+
+    for (auto& uevent_handler : uevent_handlers) {
+        uevent_handler->ColdbootDone();
     }
 
     // We use waitpid() in ColdBoot, so we can't ignore SIGCHLD until now.
@@ -268,10 +273,10 @@ int ueventd_main(int argc, char** argv) {
     while (waitpid(-1, nullptr, WNOHANG) > 0) {
     }
 
-    uevent_listener.Poll([&device_handler, &modalias_handler](const Uevent& uevent) {
-        HandleFirmwareEvent(uevent);
-        modalias_handler.HandleModaliasEvent(uevent);
-        device_handler.HandleDeviceEvent(uevent);
+    uevent_listener.Poll([&uevent_handlers](const Uevent& uevent) {
+        for (auto& uevent_handler : uevent_handlers) {
+            uevent_handler->HandleUevent(uevent);
+        }
         return ListenerAction::kContinue;
     });
 
