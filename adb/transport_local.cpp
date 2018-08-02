@@ -125,8 +125,7 @@ void connect_device(const std::string& address, std::string* response) {
         return init_socket_transport(t, std::move(fd), port, 0) >= 0;
     };
 
-    int ret =
-            register_socket_transport(std::move(fd), serial.c_str(), port, 0, std::move(reconnect));
+    int ret = register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect));
     if (ret < 0) {
         if (ret == -EALREADY) {
             *response = android::base::StringPrintf("already connected to %s", serial.c_str());
@@ -162,7 +161,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         close_on_exec(fd.get());
         disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
-        if (register_socket_transport(std::move(fd), serial.c_str(), adb_port, 1,
+        if (register_socket_transport(std::move(fd), std::move(serial), adb_port, 1,
                                       [](atransport*) { return false; }) == 0) {
             return 0;
         }
@@ -265,7 +264,7 @@ static void server_socket_thread(int port) {
             close_on_exec(fd.get());
             disable_tcp_nagle(fd.get());
             std::string serial = android::base::StringPrintf("host-%d", fd.get());
-            register_socket_transport(std::move(fd), serial.c_str(), port, 1,
+            register_socket_transport(std::move(fd), std::move(serial), port, 1,
                                       [](atransport*) { return false; });
         }
     }
@@ -362,7 +361,7 @@ static void qemu_socket_thread(int port) {
                  * exchange. */
                 std::string serial = android::base::StringPrintf("host-%d", fd.get());
                 WriteFdExactly(fd.get(), _start_req, strlen(_start_req));
-                register_socket_transport(std::move(fd), serial.c_str(), port, 1,
+                register_socket_transport(std::move(fd), std::move(serial), port, 1,
                                           [](atransport*) { return false; });
             }
 
