@@ -63,6 +63,13 @@ int android_log_write_float32(android_log_context ctx, float value);
 /* NB: LOG_ID_EVENTS and LOG_ID_SECURITY only valid binary buffers */
 int android_log_write_list(android_log_context ctx, log_id_t id);
 
+/* Reset writer context */
+int android_log_reset(android_log_context ctx);
+
+/* Reset reader context */
+int android_log_parser_reset(android_log_context ctx,
+                             const char* msg, size_t len);
+
 /* Finished with reader or writer context */
 int android_log_destroy(android_log_context* ctx);
 
