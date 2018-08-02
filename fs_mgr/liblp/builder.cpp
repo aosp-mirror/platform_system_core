@@ -48,10 +48,20 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
         PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
         return false;
     }
-    if (ioctl(fd, BLKALIGNOFF, &device_info->alignment_offset) < 0) {
+
+    int alignment_offset;
+    if (ioctl(fd, BLKALIGNOFF, &alignment_offset) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
         return false;
     }
+    int logical_block_size;
+    if (ioctl(fd, BLKSSZGET, &logical_block_size) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << "BLKSSZGET failed";
+        return false;
+    }
+
+    device_info->alignment_offset = static_cast<uint32_t>(alignment_offset);
+    device_info->logical_block_size = static_cast<uint32_t>(logical_block_size);
     return true;
 #else
     (void)block_device;
@@ -178,6 +188,7 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
 
     device_info_.alignment = geometry_.alignment;
     device_info_.alignment_offset = geometry_.alignment_offset;
+    device_info_.logical_block_size = geometry_.logical_block_size;
     return true;
 }
 
@@ -199,6 +210,10 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     device_info_ = device_info;
     if (device_info_.size % LP_SECTOR_SIZE != 0) {
         LERROR << "Block device size must be a multiple of 512.";
+        return false;
+    }
+    if (device_info_.logical_block_size % LP_SECTOR_SIZE != 0) {
+        LERROR << "Logical block size must be a multiple of 512.";
         return false;
     }
     if (device_info_.alignment_offset % LP_SECTOR_SIZE != 0) {
@@ -244,6 +259,18 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
         return false;
     }
 
+    // Finally, the size of the allocatable space must be a multiple of the
+    // logical block size. If we have no more free space after this
+    // computation, then we abort. Note that the last sector is inclusive,
+    // so we have to account for that.
+    uint64_t num_free_sectors = last_sector - first_sector + 1;
+    uint64_t sectors_per_block = device_info_.logical_block_size / LP_SECTOR_SIZE;
+    if (num_free_sectors < sectors_per_block) {
+        LERROR << "Not enough space to allocate any partition tables.";
+        return false;
+    }
+    last_sector = first_sector + (num_free_sectors / sectors_per_block) * sectors_per_block - 1;
+
     geometry_.first_logical_sector = first_sector;
     geometry_.last_logical_sector = last_sector;
     geometry_.metadata_max_size = metadata_max_size;
@@ -251,6 +278,7 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     geometry_.alignment = device_info_.alignment;
     geometry_.alignment_offset = device_info_.alignment_offset;
     geometry_.block_device_size = device_info_.size;
+    geometry_.logical_block_size = device_info.logical_block_size;
     return true;
 }
 
@@ -297,87 +325,93 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         uint64_t end;
 
         Interval(uint64_t start, uint64_t end) : start(start), end(end) {}
+        uint64_t length() const { return end - start; }
         bool operator<(const Interval& other) const { return start < other.start; }
     };
-    std::vector<Interval> intervals;
 
-    // Collect all extents in the partition table.
+    // Collect all extents in the partition table, then sort them by starting
+    // sector.
+    std::vector<Interval> extents;
     for (const auto& partition : partitions_) {
         for (const auto& extent : partition->extents()) {
             LinearExtent* linear = extent->AsLinearExtent();
             if (!linear) {
                 continue;
             }
-            intervals.emplace_back(linear->physical_sector(),
-                                   linear->physical_sector() + extent->num_sectors());
+            extents.emplace_back(linear->physical_sector(),
+                                 linear->physical_sector() + extent->num_sectors());
         }
     }
+    std::sort(extents.begin(), extents.end());
 
-    // Sort extents by starting sector.
-    std::sort(intervals.begin(), intervals.end());
+    // Convert the extent list into a list of gaps between the extents; i.e.,
+    // the list of ranges that are free on the disk.
+    std::vector<Interval> free_regions;
+    for (size_t i = 1; i < extents.size(); i++) {
+        const Interval& previous = extents[i - 1];
+        const Interval& current = extents[i];
+
+        uint64_t aligned = AlignSector(previous.end);
+        if (aligned >= current.start) {
+            // There is no gap between these two extents, try the next one.
+            // Note that we check with >= instead of >, since alignment may
+            // bump the ending sector past the beginning of the next extent.
+            continue;
+        }
+
+        // The new interval represents the free space starting at the end of
+        // the previous interval, and ending at the start of the next interval.
+        free_regions.emplace_back(aligned, current.start);
+    }
+
+    // Add a final interval representing the remainder of the free space.
+    uint64_t last_free_extent_start =
+            extents.empty() ? geometry_.first_logical_sector : extents.back().end;
+    last_free_extent_start = AlignSector(last_free_extent_start);
+    if (last_free_extent_start <= geometry_.last_logical_sector) {
+        free_regions.emplace_back(last_free_extent_start, geometry_.last_logical_sector + 1);
+    }
+
+    const uint64_t sectors_per_block = device_info_.logical_block_size / LP_SECTOR_SIZE;
+    CHECK(sectors_needed % sectors_per_block == 0);
 
     // Find gaps that we can use for new extents. Note we store new extents in a
     // temporary vector, and only commit them if we are guaranteed enough free
     // space.
     std::vector<std::unique_ptr<LinearExtent>> new_extents;
-    for (size_t i = 1; i < intervals.size(); i++) {
-        const Interval& previous = intervals[i - 1];
-        const Interval& current = intervals[i];
+    for (auto& region : free_regions) {
+        if (region.length() % sectors_per_block != 0) {
+            // This should never happen, because it would imply that we
+            // once allocated an extent that was not a multiple of the
+            // block size. That extent would be rejected by DM_TABLE_LOAD.
+            LERROR << "Region " << region.start << ".." << region.end
+                   << " is not a multiple of the block size, " << sectors_per_block;
 
-        if (previous.end >= current.start) {
-            // There is no gap between these two extents, try the next one. Note that
-            // extents may never overlap, but just for safety, we ignore them if they
-            // do.
-            DCHECK(previous.end == current.start);
-            continue;
+            // If for some reason the final region is mis-sized we still want
+            // to be able to grow partitions. So just to be safe, round the
+            // region down to the nearest block.
+            region.end = region.start + (region.length() / sectors_per_block) * sectors_per_block;
+            if (!region.length()) {
+                continue;
+            }
         }
 
-        uint64_t aligned = AlignSector(previous.end);
-        if (aligned >= current.start) {
-            // After alignment, this extent is not usable.
-            continue;
-        }
+        uint64_t sectors = std::min(sectors_needed, region.length());
+        CHECK(sectors % sectors_per_block == 0);
 
-        // This gap is enough to hold the remainder of the space requested, so we
-        // can allocate what we need and return.
-        if (current.start - aligned >= sectors_needed) {
-            auto extent = std::make_unique<LinearExtent>(sectors_needed, aligned);
-            sectors_needed -= extent->num_sectors();
-            new_extents.push_back(std::move(extent));
+        auto extent = std::make_unique<LinearExtent>(sectors, region.start);
+        new_extents.push_back(std::move(extent));
+        sectors_needed -= sectors;
+        if (!sectors_needed) {
             break;
         }
-
-        // This gap is not big enough to fit the remainder of the space requested,
-        // so consume the whole thing and keep looking for more.
-        auto extent = std::make_unique<LinearExtent>(current.start - aligned, aligned);
-        sectors_needed -= extent->num_sectors();
-        new_extents.push_back(std::move(extent));
     }
-
-    // If we still have more to allocate, take it from the remaining free space
-    // in the allocatable region.
     if (sectors_needed) {
-        uint64_t first_sector;
-        if (intervals.empty()) {
-            first_sector = geometry_.first_logical_sector;
-        } else {
-            first_sector = intervals.back().end;
-        }
-        DCHECK(first_sector <= geometry_.last_logical_sector);
-
-        // Note: After alignment, |first_sector| may be > the last usable sector.
-        first_sector = AlignSector(first_sector);
-
-        // Note: the last usable sector is inclusive.
-        if (first_sector > geometry_.last_logical_sector ||
-            geometry_.last_logical_sector + 1 - first_sector < sectors_needed) {
-            LERROR << "Not enough free space to expand partition: " << partition->name();
-            return false;
-        }
-        auto extent = std::make_unique<LinearExtent>(sectors_needed, first_sector);
-        new_extents.push_back(std::move(extent));
+        LERROR << "Not enough free space to expand partition: " << partition->name();
+        return false;
     }
 
+    // Everything succeeded, so commit the new extents.
     for (auto& extent : new_extents) {
         partition->AddExtent(std::move(extent));
     }
@@ -445,6 +479,12 @@ uint64_t MetadataBuilder::AlignSector(uint64_t sector) {
 void MetadataBuilder::set_block_device_info(const BlockDeviceInfo& device_info) {
     device_info_.size = device_info.size;
 
+    // Note that if the logical block size changes, we're probably in trouble:
+    // we could have already built extents that will only work on the previous
+    // size.
+    DCHECK(partitions_.empty() ||
+           device_info_.logical_block_size == device_info.logical_block_size);
+
     // The kernel does not guarantee these values are present, so we only
     // replace existing values if the new values are non-zero.
     if (device_info.alignment) {
@@ -457,7 +497,7 @@ void MetadataBuilder::set_block_device_info(const BlockDeviceInfo& device_info) 
 
 bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size) {
     // Align the space needed up to the nearest sector.
-    uint64_t aligned_size = AlignTo(requested_size, LP_SECTOR_SIZE);
+    uint64_t aligned_size = AlignTo(requested_size, device_info_.logical_block_size);
 
     if (aligned_size > partition->size()) {
         return GrowPartition(partition, aligned_size);
