@@ -45,14 +45,9 @@ typedef struct {
   uint8_t storage[LOGGER_ENTRY_MAX_PAYLOAD];
 } android_log_context_internal;
 
-LIBLOG_ABI_PUBLIC android_log_context create_android_logger(uint32_t tag) {
-  size_t needed, i;
-  android_log_context_internal* context;
+static void init_context(android_log_context_internal* context, uint32_t tag) {
+  size_t needed;
 
-  context = calloc(1, sizeof(android_log_context_internal));
-  if (!context) {
-    return NULL;
-  }
   context->tag = tag;
   context->read_write_flag = kAndroidLoggerWrite;
   needed = sizeof(uint8_t) + sizeof(uint8_t);
@@ -63,6 +58,24 @@ LIBLOG_ABI_PUBLIC android_log_context create_android_logger(uint32_t tag) {
   context->storage[context->pos + 0] = EVENT_TYPE_LIST;
   context->list[0] = context->pos + 1;
   context->pos += needed;
+}
+
+static void init_parser_context(android_log_context_internal* context,
+                                const char* msg, size_t len) {
+  len = (len <= MAX_EVENT_PAYLOAD) ? len : MAX_EVENT_PAYLOAD;
+  context->len = len;
+  memcpy(context->storage, msg, len);
+  context->read_write_flag = kAndroidLoggerRead;
+}
+
+LIBLOG_ABI_PUBLIC android_log_context create_android_logger(uint32_t tag) {
+  android_log_context_internal* context;
+
+  context = calloc(1, sizeof(android_log_context_internal));
+  if (!context) {
+    return NULL;
+  }
+  init_context(context, tag);
 
   return (android_log_context)context;
 }
@@ -76,10 +89,7 @@ LIBLOG_ABI_PUBLIC android_log_context create_android_log_parser(const char* msg,
   if (!context) {
     return NULL;
   }
-  len = (len <= MAX_EVENT_PAYLOAD) ? len : MAX_EVENT_PAYLOAD;
-  context->len = len;
-  memcpy(context->storage, msg, len);
-  context->read_write_flag = kAndroidLoggerRead;
+  init_parser_context(context, msg, len);
 
   return (android_log_context)context;
 }
@@ -96,6 +106,38 @@ LIBLOG_ABI_PUBLIC int android_log_destroy(android_log_context* ctx) {
   *ctx = NULL;
   return 0;
 }
+
+LIBLOG_ABI_PUBLIC int android_log_reset(android_log_context ctx) {
+  android_log_context_internal* context;
+  uint32_t tag;
+
+  context = (android_log_context_internal*)ctx;
+  if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
+    return -EBADF;
+  }
+
+  tag = context->tag;
+  memset(context, 0, sizeof(*context));
+  init_context(context, tag);
+
+  return 0;
+}
+
+LIBLOG_ABI_PUBLIC int android_log_parser_reset(android_log_context ctx,
+                                               const char* msg, size_t len) {
+  android_log_context_internal* context;
+
+  context = (android_log_context_internal*)ctx;
+  if (!context || (kAndroidLoggerRead != context->read_write_flag)) {
+    return -EBADF;
+  }
+
+  memset(context, 0, sizeof(*context));
+  init_parser_context(context, msg, len);
+
+  return 0;
+}
+
 
 LIBLOG_ABI_PUBLIC int android_log_write_list_begin(android_log_context ctx) {
   size_t needed;
