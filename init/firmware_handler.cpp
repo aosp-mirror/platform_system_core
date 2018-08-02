@@ -35,8 +35,6 @@ using android::base::WriteFully;
 namespace android {
 namespace init {
 
-std::vector<std::string> firmware_directories;
-
 static void LoadFirmware(const Uevent& uevent, const std::string& root, int fw_fd, size_t fw_size,
                          int loading_fd, int data_fd) {
     // Start transfer.
@@ -58,7 +56,10 @@ static bool IsBooting() {
     return access("/dev/.booting", F_OK) == 0;
 }
 
-static void ProcessFirmwareEvent(const Uevent& uevent) {
+FirmwareHandler::FirmwareHandler(std::vector<std::string> firmware_directories)
+    : firmware_directories_(std::move(firmware_directories)) {}
+
+void FirmwareHandler::ProcessFirmwareEvent(const Uevent& uevent) {
     int booting = IsBooting();
 
     LOG(INFO) << "firmware: loading '" << uevent.firmware << "' for '" << uevent.path << "'";
@@ -80,7 +81,7 @@ static void ProcessFirmwareEvent(const Uevent& uevent) {
     }
 
 try_loading_again:
-    for (const auto& firmware_directory : firmware_directories) {
+    for (const auto& firmware_directory : firmware_directories_) {
         std::string file = firmware_directory + uevent.firmware;
         unique_fd fw_fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
         struct stat sb;
@@ -104,7 +105,7 @@ try_loading_again:
     write(loading_fd, "-1", 2);
 }
 
-void HandleFirmwareEvent(const Uevent& uevent) {
+void FirmwareHandler::HandleUevent(const Uevent& uevent) {
     if (uevent.subsystem != "firmware" || uevent.action != "add") return;
 
     // Loading the firmware in a child means we can do that in parallel...

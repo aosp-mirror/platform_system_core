@@ -139,7 +139,7 @@ Result<Success> ModaliasHandler::InsmodWithDeps(const std::string& module_name,
     return Insmod(dependencies[0], args);
 }
 
-void ModaliasHandler::HandleModaliasEvent(const Uevent& uevent) {
+void ModaliasHandler::HandleUevent(const Uevent& uevent) {
     if (uevent.modalias.empty()) return;
 
     for (const auto& [alias, module] : module_aliases_) {

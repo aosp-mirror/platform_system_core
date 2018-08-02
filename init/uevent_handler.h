@@ -16,33 +16,18 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
-#include <vector>
-
-#include "result.h"
 #include "uevent.h"
-#include "uevent_handler.h"
 
 namespace android {
 namespace init {
 
-class ModaliasHandler : public UeventHandler {
+class UeventHandler {
   public:
-    ModaliasHandler();
-    virtual ~ModaliasHandler() = default;
+    virtual ~UeventHandler() = default;
 
-    void HandleUevent(const Uevent& uevent) override;
+    virtual void HandleUevent(const Uevent& uevent) = 0;
 
-  private:
-    Result<Success> InsmodWithDeps(const std::string& module_name, const std::string& args);
-    Result<Success> Insmod(const std::string& path_name, const std::string& args);
-
-    Result<Success> ParseDepCallback(std::vector<std::string>&& args);
-    Result<Success> ParseAliasCallback(std::vector<std::string>&& args);
-
-    std::vector<std::pair<std::string, std::string>> module_aliases_;
-    std::unordered_map<std::string, std::vector<std::string>> module_deps_;
+    virtual void ColdbootDone() {}
 };
 
 }  // namespace init
