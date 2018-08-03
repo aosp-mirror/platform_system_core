@@ -69,6 +69,11 @@ TEST(liblp, ResizePartition) {
     EXPECT_EQ(system->size(), 131072);
     EXPECT_EQ(system->extents().size(), 1);
     EXPECT_EQ(system->extents()[0]->num_sectors(), 131072 / LP_SECTOR_SIZE);
+    // Test resizing again, that the extents are merged together.
+    builder->ResizePartition(system, 1024 * 256);
+    EXPECT_EQ(system->size(), 1024 * 256);
+    EXPECT_EQ(system->extents().size(), 1);
+    EXPECT_EQ(system->extents()[0]->num_sectors(), (1024 * 256) / LP_SECTOR_SIZE);
 
     // Test shrinking within the same extent.
     builder->ResizePartition(system, 32768);
