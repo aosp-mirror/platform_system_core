@@ -41,10 +41,9 @@ uint32_t HandlePropertySet(const std::string&, const std::string&, const std::st
 }
 
 // selinux.h
-bool SelinuxHasVendorInit() {
-    return true;
+int SelinuxGetVendorAndroidVersion() {
+    return 10000;
 }
-
 void SelabelInitialize() {}
 
 bool SelabelLookupFileContext(const std::string& key, int type, std::string* result) {
