@@ -134,7 +134,7 @@ RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint32_t>
         return ret;
     }
 
-    std::regex reg("partition-size[[:s:]]*:[[:s:]]*([[:w:]]+)[[:s:]]*:[[:s:]]*0x([[:d:]]+)");
+    std::regex reg("partition-size[[:s:]]*:[[:s:]]*([[:w:]]+)[[:s:]]*:[[:s:]]*0x([[:xdigit:]]+)");
     std::smatch sm;
 
     for (auto& s : all) {
@@ -264,9 +264,14 @@ RetCode FastBootDriver::Upload(const std::string& outfile, std::string* response
                                std::vector<std::string>* info) {
     RetCode ret;
     int dsize;
-    if ((ret = RawCommand(Commands::UPLOAD, response, info, &dsize)) || dsize == 0) {
-        error_ = "Upload request failed";
+    if ((ret = RawCommand(Commands::UPLOAD, response, info, &dsize))) {
+        error_ = "Upload request failed: " + error_;
         return ret;
+    }
+
+    if (!dsize) {
+        error_ = "Upload request failed, device reports 0 bytes available";
+        return BAD_DEV_RESP;
     }
 
     std::vector<char> data;
@@ -462,10 +467,10 @@ RetCode FastBootDriver::SendBuffer(const std::vector<char>& buf) {
 }
 
 RetCode FastBootDriver::SendBuffer(const void* buf, size_t size) {
+    // ioctl on 0-length buffer causes freezing
     if (!size) {
-        return SUCCESS;
+        return BAD_ARG;
     }
-
     // Write the buffer
     ssize_t tmp = transport->Write(buf, size);
 
@@ -521,7 +526,7 @@ int FastBootDriver::SparseWriteCallback(std::vector<char>& tpbuf, const char* da
     // Now we need to send a multiple of chunk size
     size_t nchunks = (len - total) / TRANSPORT_CHUNK_SIZE;
     size_t nbytes = TRANSPORT_CHUNK_SIZE * nchunks;
-    if (SendBuffer(data + total, nbytes)) {
+    if (nbytes && SendBuffer(data + total, nbytes)) {  // Don't send a ZLP
         error_ = ErrnoStr("Send failed in SparseWriteCallback()");
         return -1;
     }
