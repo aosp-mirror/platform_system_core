@@ -23,6 +23,9 @@
 
 #include <string>
 
+// android/api-level.h
+#define __ANDROID_API_P__ 28
+
 // sys/system_properties.h
 #define PROP_VALUE_MAX 92
 
@@ -41,7 +44,7 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                            const std::string& source_context, const ucred& cr, std::string* error);
 
 // selinux.h
-bool SelinuxHasVendorInit();
+int SelinuxGetVendorAndroidVersion();
 void SelabelInitialize();
 bool SelabelLookupFileContext(const std::string& key, int type, std::string* result);
 
