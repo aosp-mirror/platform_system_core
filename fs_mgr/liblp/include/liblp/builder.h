@@ -81,6 +81,7 @@ class LinearExtent final : public Extent {
     LinearExtent* AsLinearExtent() override { return this; }
 
     uint64_t physical_sector() const { return physical_sector_; }
+    uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
 
   private:
     uint64_t physical_sector_;

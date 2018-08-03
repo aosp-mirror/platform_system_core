@@ -84,6 +84,19 @@ Partition::Partition(const std::string& name, const std::string& guid, uint32_t 
 
 void Partition::AddExtent(std::unique_ptr<Extent>&& extent) {
     size_ += extent->num_sectors() * LP_SECTOR_SIZE;
+
+    if (LinearExtent* new_extent = extent->AsLinearExtent()) {
+        if (!extents_.empty() && extents_.back()->AsLinearExtent() &&
+            extents_.back()->AsLinearExtent()->end_sector() == new_extent->physical_sector()) {
+            // If the previous extent can be merged into this new one, do so
+            // to avoid creating unnecessary extents.
+            LinearExtent* prev_extent = extents_.back()->AsLinearExtent();
+            extent = std::make_unique<LinearExtent>(
+                    prev_extent->num_sectors() + new_extent->num_sectors(),
+                    prev_extent->physical_sector());
+            extents_.pop_back();
+        }
+    }
     extents_.push_back(std::move(extent));
 }
 
