@@ -86,7 +86,6 @@ GGLfixed gglRoundx(GGLfixed v) {
 GGLfixed gglPowx(GGLfixed x, GGLfixed y) CONST;
 GGLfixed gglSqrtx(GGLfixed a) CONST;
 GGLfixed gglSqrtRecipx(GGLfixed x) CONST;
-GGLfixed gglFastDivx(GGLfixed n, GGLfixed d) CONST;
 int32_t gglMulDivi(int32_t a, int32_t b, int32_t c);
 
 int32_t gglRecipQNormalized(int32_t x, int* exponent);
