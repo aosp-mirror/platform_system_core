@@ -27,7 +27,7 @@ void SelinuxInitialize();
 void SelinuxRestoreContext();
 
 void SelinuxSetupKernelLogging();
-bool SelinuxHasVendorInit();
+int SelinuxGetVendorAndroidVersion();
 
 void SelabelInitialize();
 bool SelabelLookupFileContext(const std::string& key, int type, std::string* result);

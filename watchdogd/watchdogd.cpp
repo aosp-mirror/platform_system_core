@@ -23,16 +23,9 @@
 
 #include <android-base/logging.h>
 
-#ifdef _INIT_INIT_H
-#error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
-#endif
-
 #define DEV_NAME "/dev/watchdog"
 
-namespace android {
-namespace init {
-
-int watchdogd_main(int argc, char **argv) {
+int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::KernelLogger);
 
     int interval = 10;
@@ -43,7 +36,7 @@ int watchdogd_main(int argc, char **argv) {
 
     LOG(INFO) << "watchdogd started (interval " << interval << ", margin " << margin << ")!";
 
-    int fd = open(DEV_NAME, O_RDWR|O_CLOEXEC);
+    int fd = open(DEV_NAME, O_RDWR | O_CLOEXEC);
     if (fd == -1) {
         PLOG(ERROR) << "Failed to open " << DEV_NAME;
         return 1;
@@ -63,9 +56,8 @@ int watchdogd_main(int argc, char **argv) {
                 interval = 1;
             }
             LOG(WARNING) << "Adjusted interval to timeout returned by driver: "
-                         << "timeout " << timeout
-                         << ", interval " << interval
-                         << ", margin " << margin;
+                         << "timeout " << timeout << ", interval " << interval << ", margin "
+                         << margin;
         }
     }
 
@@ -74,6 +66,3 @@ int watchdogd_main(int argc, char **argv) {
         sleep(interval);
     }
 }
-
-}  // namespace init
-}  // namespace android
