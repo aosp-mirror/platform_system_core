@@ -304,7 +304,11 @@ bool FlashPartitionTable(const std::string& block_device, const LpMetadata& meta
         PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
         return false;
     }
-    return FlashPartitionTable(fd, metadata, slot_number);
+    if (!FlashPartitionTable(fd, metadata, slot_number)) {
+        return false;
+    }
+    LWARN << "Flashed new logical partition geometry to " << block_device;
+    return true;
 }
 
 bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
@@ -314,7 +318,12 @@ bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& met
         PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
         return false;
     }
-    return UpdatePartitionTable(fd, metadata, slot_number);
+    if (!UpdatePartitionTable(fd, metadata, slot_number)) {
+        return false;
+    }
+    LINFO << "Updated logical partition table at slot " << slot_number << " on device "
+          << block_device;
+    return true;
 }
 
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {

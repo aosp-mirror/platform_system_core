@@ -133,7 +133,11 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
 
 bool DestroyLogicalPartition(const std::string& name) {
     DeviceMapper& dm = DeviceMapper::Instance();
-    return dm.DeleteDevice(name);
+    if (!dm.DeleteDevice(name)) {
+        return false;
+    }
+    LINFO << "Unmapped logical partition " << name;
+    return true;
 }
 
 }  // namespace fs_mgr
