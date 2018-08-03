@@ -50,6 +50,7 @@
 #include "adb_trace.h"
 #include "adb_utils.h"
 #include "fdevent.h"
+#include "sysdeps/chrono.h"
 
 static void register_transport(atransport* transport);
 static void remove_transport(atransport* transport);
@@ -80,6 +81,7 @@ class SCOPED_CAPABILITY ScopedAssumeLocked {
     ~ScopedAssumeLocked() RELEASE() {}
 };
 
+#if ADB_HOST
 // Tracks and handles atransport*s that are attempting reconnection.
 class ReconnectHandler {
   public:
@@ -102,12 +104,18 @@ class ReconnectHandler {
     // Tracks a reconnection attempt.
     struct ReconnectAttempt {
         atransport* transport;
-        std::chrono::system_clock::time_point deadline;
+        std::chrono::steady_clock::time_point reconnect_time;
         size_t attempts_left;
+
+        bool operator<(const ReconnectAttempt& rhs) const {
+            // std::priority_queue returns the largest element first, so we want attempts that have
+            // less time remaining (i.e. smaller time_points) to compare greater.
+            return reconnect_time > rhs.reconnect_time;
+        }
     };
 
     // Only retry for up to one minute.
-    static constexpr const std::chrono::seconds kDefaultTimeout = std::chrono::seconds(10);
+    static constexpr const std::chrono::seconds kDefaultTimeout = 10s;
     static constexpr const size_t kMaxAttempts = 6;
 
     // Protects all members.
@@ -115,7 +123,7 @@ class ReconnectHandler {
     bool running_ GUARDED_BY(reconnect_mutex_) = true;
     std::thread handler_thread_;
     std::condition_variable reconnect_cv_;
-    std::queue<ReconnectAttempt> reconnect_queue_ GUARDED_BY(reconnect_mutex_);
+    std::priority_queue<ReconnectAttempt> reconnect_queue_ GUARDED_BY(reconnect_mutex_);
 
     DISALLOW_COPY_AND_ASSIGN(ReconnectHandler);
 };
@@ -137,7 +145,7 @@ void ReconnectHandler::Stop() {
     // Drain the queue to free all resources.
     std::lock_guard<std::mutex> lock(reconnect_mutex_);
     while (!reconnect_queue_.empty()) {
-        ReconnectAttempt attempt = reconnect_queue_.front();
+        ReconnectAttempt attempt = reconnect_queue_.top();
         reconnect_queue_.pop();
         remove_transport(attempt.transport);
     }
@@ -148,9 +156,10 @@ void ReconnectHandler::TrackTransport(atransport* transport) {
     {
         std::lock_guard<std::mutex> lock(reconnect_mutex_);
         if (!running_) return;
-        reconnect_queue_.emplace(ReconnectAttempt{
-            transport, std::chrono::system_clock::now() + ReconnectHandler::kDefaultTimeout,
-            ReconnectHandler::kMaxAttempts});
+        // Arbitrary sleep to give adbd time to get ready, if we disconnected because it exited.
+        auto reconnect_time = std::chrono::steady_clock::now() + 250ms;
+        reconnect_queue_.emplace(
+                ReconnectAttempt{transport, reconnect_time, ReconnectHandler::kMaxAttempts});
     }
     reconnect_cv_.notify_one();
 }
@@ -162,15 +171,27 @@ void ReconnectHandler::Run() {
             std::unique_lock<std::mutex> lock(reconnect_mutex_);
             ScopedAssumeLocked assume_lock(reconnect_mutex_);
 
-            auto deadline = std::chrono::time_point<std::chrono::system_clock>::max();
-            if (!reconnect_queue_.empty()) deadline = reconnect_queue_.front().deadline;
-            reconnect_cv_.wait_until(lock, deadline, [&]() REQUIRES(reconnect_mutex_) {
-                return !running_ ||
-                       (!reconnect_queue_.empty() && reconnect_queue_.front().deadline < deadline);
-            });
+            if (!reconnect_queue_.empty()) {
+                // FIXME: libstdc++ (used on Windows) implements condition_variable with
+                //        system_clock as its clock, so we're probably hosed if the clock changes,
+                //        even if we use steady_clock throughout. This problem goes away once we
+                //        switch to libc++.
+                reconnect_cv_.wait_until(lock, reconnect_queue_.top().reconnect_time);
+            } else {
+                reconnect_cv_.wait(lock);
+            }
 
             if (!running_) return;
-            attempt = reconnect_queue_.front();
+            if (reconnect_queue_.empty()) continue;
+
+            // Go back to sleep in case |reconnect_cv_| woke up spuriously and we still
+            // have more time to wait for the current attempt.
+            auto now = std::chrono::steady_clock::now();
+            if (reconnect_queue_.top().reconnect_time > now) {
+                continue;
+            }
+
+            attempt = reconnect_queue_.top();
             reconnect_queue_.pop();
             if (attempt.transport->kicked()) {
                 D("transport %s was kicked. giving up on it.", attempt.transport->serial.c_str());
@@ -191,9 +212,9 @@ void ReconnectHandler::Run() {
 
             std::lock_guard<std::mutex> lock(reconnect_mutex_);
             reconnect_queue_.emplace(ReconnectAttempt{
-                attempt.transport,
-                std::chrono::system_clock::now() + ReconnectHandler::kDefaultTimeout,
-                attempt.attempts_left - 1});
+                    attempt.transport,
+                    std::chrono::steady_clock::now() + ReconnectHandler::kDefaultTimeout,
+                    attempt.attempts_left - 1});
             continue;
         }
 
@@ -203,6 +224,8 @@ void ReconnectHandler::Run() {
 }
 
 static auto& reconnect_handler = *new ReconnectHandler();
+
+#endif
 
 }  // namespace
 
@@ -677,9 +700,11 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
     update_transports();
 }
 
+#if ADB_HOST
 void init_reconnect_handler(void) {
     reconnect_handler.Start();
 }
+#endif
 
 void init_transport_registration(void) {
     int s[2];
@@ -698,7 +723,9 @@ void init_transport_registration(void) {
 }
 
 void kick_all_transports() {
+#if ADB_HOST
     reconnect_handler.Stop();
+#endif
     // To avoid only writing part of a packet to a transport after exit, kick all transports.
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto t : transport_list) {
@@ -736,13 +763,19 @@ static void transport_unref(atransport* t) {
     t->ref_count--;
     if (t->ref_count == 0) {
         t->connection()->Stop();
+#if ADB_HOST
         if (t->IsTcpDevice() && !t->kicked()) {
-            D("transport: %s unref (attempting reconnection) %d", t->serial.c_str(), t->kicked());
+            D("transport: %s unref (attempting reconnection)", t->serial.c_str());
             reconnect_handler.TrackTransport(t);
         } else {
             D("transport: %s unref (kicking and closing)", t->serial.c_str());
             remove_transport(t);
         }
+#else
+        D("transport: %s unref (kicking and closing)", t->serial.c_str());
+        remove_transport(t);
+#endif
+
     } else {
         D("transport: %s unref (count=%zu)", t->serial.c_str(), t->ref_count);
     }
@@ -1157,25 +1190,19 @@ void close_usb_devices() {
 }
 #endif  // ADB_HOST
 
-int register_socket_transport(int s, const char* serial, int port, int local,
+int register_socket_transport(unique_fd s, std::string serial, int port, int local,
                               atransport::ReconnectCallback reconnect) {
     atransport* t = new atransport(std::move(reconnect), kCsOffline);
 
-    if (!serial) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "T-%p", t);
-        serial = buf;
-    }
-
-    D("transport: %s init'ing for socket %d, on port %d", serial, s, port);
-    if (init_socket_transport(t, s, port, local) < 0) {
+    D("transport: %s init'ing for socket %d, on port %d", serial.c_str(), s.get(), port);
+    if (init_socket_transport(t, std::move(s), port, local) < 0) {
         delete t;
         return -1;
     }
 
     std::unique_lock<std::recursive_mutex> lock(transport_lock);
     for (const auto& transport : pending_list) {
-        if (strcmp(serial, transport->serial.c_str()) == 0) {
+        if (serial == transport->serial) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in pending_list and fails to register";
             delete t;
@@ -1184,7 +1211,7 @@ int register_socket_transport(int s, const char* serial, int port, int local,
     }
 
     for (const auto& transport : transport_list) {
-        if (strcmp(serial, transport->serial.c_str()) == 0) {
+        if (serial == transport->serial) {
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in transport_list and fails to register";
             delete t;
@@ -1192,8 +1219,8 @@ int register_socket_transport(int s, const char* serial, int port, int local,
         }
     }
 
+    t->serial = std::move(serial);
     pending_list.push_front(t);
-    t->serial = serial;
 
     lock.unlock();
 

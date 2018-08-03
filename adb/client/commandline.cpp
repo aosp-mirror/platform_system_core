@@ -56,10 +56,10 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "bugreport.h"
+#include "client/file_sync_client.h"
 #include "commandline.h"
-#include "file_sync_service.h"
 #include "services.h"
-#include "shell_service.h"
+#include "shell_protocol.h"
 #include "sysdeps/chrono.h"
 #include "sysdeps/memory.h"
 
@@ -1614,9 +1614,9 @@ int adb_commandline(int argc, const char** argv) {
         return bugreport.DoIt(argc, argv);
     } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
-        ++argv;
         --argc;
         if (argc < 1) return syntax_error("%s requires an argument", argv[0]);
+        ++argv;
 
         // Determine the <host-prefix> for this command.
         std::string host_prefix;
@@ -1925,7 +1925,8 @@ static int install_multiple_app(int argc, const char** argv) {
     for (int i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
 
-        if (android::base::EndsWithIgnoreCase(file, ".apk")) {
+        if (android::base::EndsWithIgnoreCase(file, ".apk") ||
+            android::base::EndsWithIgnoreCase(file, ".dm")) {
             struct stat sb;
             if (stat(file, &sb) != -1) total_size += sb.st_size;
             first_apk = i;
@@ -1986,9 +1987,8 @@ static int install_multiple_app(int argc, const char** argv) {
         }
 
         std::string cmd = android::base::StringPrintf(
-                "%s install-write -S %" PRIu64 " %d %d_%s -",
-                install_cmd.c_str(), static_cast<uint64_t>(sb.st_size), session_id, i,
-                android::base::Basename(file).c_str());
+            "%s install-write -S %" PRIu64 " %d %s -", install_cmd.c_str(),
+            static_cast<uint64_t>(sb.st_size), session_id, android::base::Basename(file).c_str());
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {

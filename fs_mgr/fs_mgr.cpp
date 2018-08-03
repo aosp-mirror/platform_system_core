@@ -1052,6 +1052,9 @@ int fs_mgr_do_mount_one(struct fstab_rec *rec)
         return FS_MGR_DOMNT_FAILED;
     }
 
+    // Run fsck if needed
+    prepare_fs_for_mount(rec->blk_device, rec);
+
     int ret = __mount(rec->blk_device, rec->mount_point, rec);
     if (ret) {
       ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
@@ -1177,8 +1180,8 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
 {
     int ret;
 
-    ret = mount("tmpfs", n_name, "tmpfs",
-                MS_NOATIME | MS_NOSUID | MS_NODEV, CRYPTO_TMPFS_OPTIONS);
+    ret = mount("tmpfs", n_name, "tmpfs", MS_NOATIME | MS_NOSUID | MS_NODEV | MS_NOEXEC,
+                CRYPTO_TMPFS_OPTIONS);
     if (ret < 0) {
         LERROR << "Cannot mount tmpfs filesystem at " << n_name;
         return -1;

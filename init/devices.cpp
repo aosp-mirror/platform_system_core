@@ -34,7 +34,7 @@
 #include "util.h"
 
 #ifdef _INIT_INIT_H
-#error "Do not include init.h in files used by ueventd or watchdogd; it will expose init's globals"
+#error "Do not include init.h in files used by ueventd; it will expose init's globals"
 #endif
 
 using android::base::Basename;
@@ -372,7 +372,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     }
 }
 
-void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
+void DeviceHandler::HandleUevent(const Uevent& uevent) {
     if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
         FixupSysPermissions(uevent.path, uevent.subsystem);
     }
@@ -416,6 +416,10 @@ void DeviceHandler::HandleDeviceEvent(const Uevent& uevent) {
     mkdir_recursive(Dirname(devpath), 0755);
 
     HandleDevice(uevent.action, devpath, block, uevent.major, uevent.minor, links);
+}
+
+void DeviceHandler::ColdbootDone() {
+    skip_restorecon_ = true;
 }
 
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,

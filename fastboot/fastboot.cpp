@@ -114,20 +114,26 @@ static struct {
     bool is_optional;
     bool is_secondary;
 } images[] = {
-    // clang-format off
+        // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, false },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  true  },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
     { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false },
     { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false },
     { "product",  "product.img",      "product.sig",  "product",  true,  false },
+    { "product-services",
+                  "product-services.img",
+                                      "product-services.sig",
+                                                      "product-services",
+                                                                  true,  false },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
+    { "super",    "super.img",        "super.sig",    "super",    true,  false },
     { "system",   "system.img",       "system.sig",   "system",   false, false },
     { nullptr,    "system_other.img", "system.sig",   "system",   true,  true  },
     { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false },
     { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  false },
     { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  true  },
-    // clang-format on
+        // clang-format on
 };
 
 static std::string find_item_given_name(const char* img_name) {

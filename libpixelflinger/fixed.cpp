@@ -70,17 +70,6 @@ int32_t gglRecipQ(GGLfixed x, int q)
 
 // ------------------------------------------------------------------------
 
-GGLfixed gglFastDivx(GGLfixed n, GGLfixed d)
-{
-    if ((d>>24) && ((d>>24)+1)) {
-        n >>= 8;
-        d >>= 8;
-    }
-    return gglMulx(n, gglRecip(d));
-}
-
-// ------------------------------------------------------------------------
-
 static const GGLfixed ggl_sqrt_reciproc_approx_tab[8] = {
     // 1/sqrt(x) with x = 1-N/16, N=[8...1]
     0x16A09, 0x15555, 0x143D1, 0x134BF, 0x1279A, 0x11C01, 0x111AC, 0x10865

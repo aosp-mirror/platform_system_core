@@ -58,7 +58,6 @@
 #include "sigchld_handler.h"
 #include "ueventd.h"
 #include "util.h"
-#include "watchdogd.h"
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -118,6 +117,9 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         }
         if (!parser.ParseConfig("/product/etc/init")) {
             late_import_paths.emplace_back("/product/etc/init");
+        }
+        if (!parser.ParseConfig("/product-services/etc/init")) {
+            late_import_paths.emplace_back("/product-services/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
@@ -614,10 +616,6 @@ int main(int argc, char** argv) {
         return ueventd_main(argc, argv);
     }
 
-    if (!strcmp(basename(argv[0]), "watchdogd")) {
-        return watchdogd_main(argc, argv);
-    }
-
     if (argc > 1 && !strcmp(argv[1], "subcontext")) {
         android::base::InitLogging(argv, &android::base::KernelLogger);
         const BuiltinFunctionMap function_map;
@@ -666,6 +664,10 @@ int main(int argc, char** argv) {
 
         CHECKCALL(mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8)));
         CHECKCALL(mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9)));
+
+        // This is needed for log wrapper, which gets called before ueventd runs.
+        CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
+        CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
 
         // Mount staging areas for devices managed by vold
         // See storage config details at http://source.android.com/devices/storage/

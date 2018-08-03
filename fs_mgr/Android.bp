@@ -30,7 +30,7 @@ cc_defaults {
     ],
 }
 
-cc_library_static {
+cc_library {
     name: "libfs_mgr",
     defaults: ["fs_mgr_defaults"],
     recovery_available: true,
@@ -44,27 +44,33 @@ cc_library_static {
         "fs_mgr_avb_ops.cpp",
         "fs_mgr_dm_linear.cpp",
     ],
-    static_libs: [
+    shared_libs: [
         "libfec",
         "libfec_rs",
         "libbase",
         "libcrypto_utils",
         "libcrypto",
+        "libcutils",
         "libext4_utils",
+        "libkeyutils",
+        "liblog",
         "libsquashfs_utils",
         "libselinux",
+        "liblp",
+    ],
+    static_libs: [
         "libavb",
         "libfstab",
         "libdm",
-        "liblp",
     ],
     export_static_lib_headers: [
         "libfstab",
         "libdm",
+    ],
+    export_shared_lib_headers: [
         "liblp",
     ],
     whole_static_libs: [
-        "liblp",
         "liblogwrap",
         "libdm",
         "libfstab",

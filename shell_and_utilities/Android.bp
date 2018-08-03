@@ -18,6 +18,7 @@ phony {
         "newfs_msdos",
         "reboot",
         "sh",
+        "tcpdump",
         "toolbox",
         "toybox",
     ],
@@ -26,6 +27,7 @@ phony {
 phony {
     name: "shell_and_utilities_recovery",
     required: [
+        "grep.recovery",
         "sh.recovery",
         "toolbox.recovery",
         "toybox.recovery",

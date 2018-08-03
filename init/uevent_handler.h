@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_WATCHDOGD_H_
-#define _INIT_WATCHDOGD_H_
+#pragma once
+
+#include "uevent.h"
 
 namespace android {
 namespace init {
 
-int watchdogd_main(int argc, char **argv);
+class UeventHandler {
+  public:
+    virtual ~UeventHandler() = default;
+
+    virtual void HandleUevent(const Uevent& uevent) = 0;
+
+    virtual void ColdbootDone() {}
+};
 
 }  // namespace init
 }  // namespace android
-
-#endif
