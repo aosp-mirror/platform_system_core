@@ -116,7 +116,7 @@ static inline bool IsDtVbmetaCompatible() {
 }
 
 static bool inline IsRecoveryMode() {
-    return access("/sbin/recovery", F_OK) == 0;
+    return access("/system/bin/recovery", F_OK) == 0;
 }
 
 static inline bool IsDmLinearEnabled() {
@@ -206,7 +206,7 @@ bool FirstStageMount::InitRequiredDevices() {
         bool found = false;
         auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
             if (uevent.path == dm_path) {
-                device_handler_->HandleDeviceEvent(uevent);
+                device_handler_->HandleUevent(uevent);
                 found = true;
                 return ListenerAction::kStop;
             }
@@ -273,7 +273,7 @@ ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const
             lp_metadata_partition_ = links[0];
         }
         required_devices_partition_names_.erase(iter);
-        device_handler_->HandleDeviceEvent(uevent);
+        device_handler_->HandleUevent(uevent);
         if (required_devices_partition_names_.empty()) {
             return ListenerAction::kStop;
         } else {
@@ -310,7 +310,7 @@ bool FirstStageMount::InitMappedDevice(const std::string& dm_device) {
     auto verity_callback = [&device_name, &dm_device, this, &found](const Uevent& uevent) {
         if (uevent.device_name == device_name) {
             LOG(VERBOSE) << "Creating device-mapper device : " << dm_device;
-            device_handler_->HandleDeviceEvent(uevent);
+            device_handler_->HandleUevent(uevent);
             found = true;
             return ListenerAction::kStop;
         }

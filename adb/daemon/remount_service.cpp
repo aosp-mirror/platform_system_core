@@ -92,12 +92,13 @@ bool make_block_device_writable(const std::string& dev) {
     return result;
 }
 
-static bool fs_has_shared_blocks(const char* dev) {
+static bool fs_has_shared_blocks(const std::string& mount_point, const std::string& device) {
+    std::string path = mount_point + "/lost+found";
     struct statfs fs;
-    if (statfs(dev, &fs) == -1 || fs.f_type == EXT4_SUPER_MAGIC) {
+    if (statfs(path.c_str(), &fs) == -1 || fs.f_type != EXT4_SUPER_MAGIC) {
         return false;
     }
-    unique_fd fd(unix_open(dev, O_RDONLY));
+    unique_fd fd(unix_open(device.c_str(), O_RDONLY));
     if (fd < 0) {
         return false;
     }
@@ -215,8 +216,8 @@ static void reboot_for_remount(int fd, bool need_fsck) {
     android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_cmd.c_str());
 }
 
-void remount_service(android::base::unique_fd fd, const std::string& cmd) {
-    bool user_requested_reboot = cmd != "-R";
+void remount_service(unique_fd fd, const std::string& cmd) {
+    bool user_requested_reboot = cmd == "-R";
 
     if (getuid() != 0) {
         WriteFdExactly(fd.get(), "Not running as root. Try \"adb root\" first.\n");
@@ -237,7 +238,7 @@ void remount_service(android::base::unique_fd fd, const std::string& cmd) {
     std::set<std::string> dedup;
     for (const auto& partition : partitions) {
         std::string dev = find_mount(partition.c_str(), partition == "/");
-        if (dev.empty() || !fs_has_shared_blocks(dev.c_str())) {
+        if (dev.empty() || !fs_has_shared_blocks(partition, dev)) {
             continue;
         }
         if (can_unshare_blocks(fd.get(), dev.c_str())) {
@@ -251,7 +252,7 @@ void remount_service(android::base::unique_fd fd, const std::string& cmd) {
     if (user_requested_reboot) {
         if (!dedup.empty() || verity_enabled) {
             if (verity_enabled) {
-                set_verity_enabled_state_service(android::base::unique_fd(dup(fd.get())), false);
+                set_verity_enabled_state_service(unique_fd(dup(fd.get())), false);
             }
             reboot_for_remount(fd.get(), !dedup.empty());
             return;

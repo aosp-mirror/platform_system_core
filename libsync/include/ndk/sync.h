@@ -63,6 +63,8 @@ __BEGIN_DECLS
  *
  * The original fences remain valid, and the caller is responsible for closing
  * them.
+ *
+ * Available since API level 26.
  */
 int32_t sync_merge(const char* name, int32_t fd1, int32_t fd2) __INTRODUCED_IN(26);
 
@@ -70,6 +72,8 @@ int32_t sync_merge(const char* name, int32_t fd1, int32_t fd2) __INTRODUCED_IN(2
  * Retrieve detailed information about a sync file and its fences.
  *
  * The returned sync_file_info must be freed by calling sync_file_info_free().
+ *
+ * Available since API level 26.
  */
 struct sync_file_info* sync_file_info(int32_t fd) __INTRODUCED_IN(26);
 
@@ -78,6 +82,8 @@ struct sync_file_info* sync_file_info(int32_t fd) __INTRODUCED_IN(26);
  *
  * The returned array is owned by the parent sync file info, and has
  * info->num_fences entries.
+ *
+ * Available since API level 26.
  */
 static inline struct sync_fence_info* sync_get_fence_info(const struct sync_file_info* info) {
 // This header should compile in C, but some C++ projects enable
@@ -88,7 +94,11 @@ static inline struct sync_fence_info* sync_get_fence_info(const struct sync_file
 #pragma GCC diagnostic pop
 }
 
-/** Free a struct sync_file_info structure */
+/**
+ * Free a struct sync_file_info structure
+ *
+ * Available since API level 26.
+ */
 void sync_file_info_free(struct sync_file_info* info) __INTRODUCED_IN(26);
 
 #endif /* __ANDROID_API__ >= 26 */

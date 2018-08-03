@@ -84,6 +84,23 @@ Result<Success> ParseFirmwareDirectoriesLine(std::vector<std::string>&& args,
     return Success();
 }
 
+Result<Success> ParseModaliasHandlingLine(std::vector<std::string>&& args,
+                                          bool* enable_modalias_handling) {
+    if (args.size() != 2) {
+        return Error() << "modalias_handling lines take exactly one parameter";
+    }
+
+    if (args[1] == "enabled") {
+        *enable_modalias_handling = true;
+    } else if (args[1] == "disabled") {
+        *enable_modalias_handling = false;
+    } else {
+        return Error() << "modalias_handling takes either 'enabled' or 'disabled' as a parameter";
+    }
+
+    return Success();
+}
+
 class SubsystemParser : public SectionParser {
   public:
     SubsystemParser(std::vector<Subsystem>* subsystems) : subsystems_(subsystems) {}
@@ -182,6 +199,9 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
     parser.AddSingleLineParser("firmware_directories",
                                std::bind(ParseFirmwareDirectoriesLine, _1,
                                          &ueventd_configuration.firmware_directories));
+    parser.AddSingleLineParser("modalias_handling",
+                               std::bind(ParseModaliasHandlingLine, _1,
+                                         &ueventd_configuration.enable_modalias_handling));
 
     for (const auto& config : configs) {
         parser.ParseConfig(config);

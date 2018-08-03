@@ -30,6 +30,7 @@
 #include "util.h"
 
 #if defined(__ANDROID__)
+#include <android/api-level.h>
 #include "property_service.h"
 #include "selinux.h"
 #else
@@ -352,9 +353,10 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 }
 
 static std::vector<Subcontext> subcontexts;
+static bool shutting_down;
 
 std::vector<Subcontext>* InitializeSubcontexts() {
-    if (SelinuxHasVendorInit()) {
+    if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
         for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
             subcontexts.emplace_back(path_prefix, secontext);
         }
@@ -365,11 +367,20 @@ std::vector<Subcontext>* InitializeSubcontexts() {
 bool SubcontextChildReap(pid_t pid) {
     for (auto& subcontext : subcontexts) {
         if (subcontext.pid() == pid) {
-            subcontext.Restart();
+            if (!shutting_down) {
+                subcontext.Restart();
+            }
             return true;
         }
     }
     return false;
+}
+
+void SubcontextTerminate() {
+    shutting_down = true;
+    for (auto& subcontext : subcontexts) {
+        kill(subcontext.pid(), SIGTERM);
+    }
 }
 
 }  // namespace init

@@ -30,6 +30,7 @@ struct UeventdConfiguration {
     std::vector<SysfsPermissions> sysfs_permissions;
     std::vector<Permissions> dev_permissions;
     std::vector<std::string> firmware_directories;
+    bool enable_modalias_handling = false;
 };
 
 UeventdConfiguration ParseConfig(const std::vector<std::string>& configs);

@@ -31,3 +31,7 @@ using unique_fd = android::base::unique_fd_impl<AdbCloser>;
 #if !defined(_WIN32)
 bool Pipe(unique_fd* read, unique_fd* write, int flags = 0);
 #endif
+
+template <typename T>
+int adb_close(const android::base::unique_fd_impl<T>&)
+        __attribute__((__unavailable__("adb_close called on unique_fd")));

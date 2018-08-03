@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "shell_service.h"
+#include "shell_protocol.h"
 
 #include <gtest/gtest.h>
 

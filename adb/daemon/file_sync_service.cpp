@@ -16,8 +16,9 @@
 
 #define TRACE_TAG SYNC
 
+#include "daemon/file_sync_service.h"
+
 #include "sysdeps.h"
-#include "file_sync_service.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -42,6 +43,7 @@
 #include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
+#include "file_sync_protocol.h"
 #include "security_log_tags.h"
 #include "sysdeps/errno.h"
 
@@ -525,7 +527,7 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     return true;
 }
 
-void file_sync_service(android::base::unique_fd fd) {
+void file_sync_service(unique_fd fd) {
     std::vector<char> buffer(SYNC_DATA_MAX);
 
     while (handle_sync_command(fd.get(), buffer)) {
