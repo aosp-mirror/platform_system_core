@@ -498,13 +498,18 @@ void MetadataBuilder::set_block_device_info(const BlockDeviceInfo& device_info) 
 bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size) {
     // Align the space needed up to the nearest sector.
     uint64_t aligned_size = AlignTo(requested_size, device_info_.logical_block_size);
+    uint64_t old_size = partition->size();
 
-    if (aligned_size > partition->size()) {
-        return GrowPartition(partition, aligned_size);
-    }
-    if (aligned_size < partition->size()) {
+    if (aligned_size > old_size) {
+        if (!GrowPartition(partition, aligned_size)) {
+            return false;
+        }
+    } else if (aligned_size < partition->size()) {
         ShrinkPartition(partition, aligned_size);
     }
+
+    LINFO << "Partition " << partition->name() << " will resize from " << old_size << " bytes to "
+          << aligned_size << " bytes";
     return true;
 }
 
