@@ -16,6 +16,7 @@
 
 #include "property_service.h"
 
+#include <android/api-level.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -576,7 +577,7 @@ static void LoadProperties(char* data, const char* filter, const char* filename)
     size_t flen = 0;
 
     const char* context = kInitContext.c_str();
-    if (SelinuxHasVendorInit()) {
+    if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
         for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
             if (StartsWith(filename, path_prefix)) {
                 context = secontext;
