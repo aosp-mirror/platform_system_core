@@ -97,8 +97,14 @@ class ElfInterfaceTest : public ::testing::Test {
   template <typename ElfType>
   void InitHeadersDebugFrameFail();
 
+  template <typename Ehdr, typename Phdr, typename ElfInterfaceType>
+  void InitProgramHeadersMalformed();
+
   template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
   void InitSectionHeadersMalformed();
+
+  template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
+  void InitSectionHeadersMalformedSymData();
 
   template <typename Ehdr, typename Shdr, typename Sym, typename ElfInterfaceType>
   void InitSectionHeaders(uint64_t entry_size);
@@ -677,6 +683,29 @@ TEST_F(ElfInterfaceTest, init_headers_debug_frame64) {
   InitHeadersDebugFrame<ElfInterface64Fake>();
 }
 
+template <typename Ehdr, typename Phdr, typename ElfInterfaceType>
+void ElfInterfaceTest::InitProgramHeadersMalformed() {
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+
+  Ehdr ehdr = {};
+  ehdr.e_phoff = 0x100;
+  ehdr.e_phnum = 3;
+  ehdr.e_phentsize = sizeof(Phdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+}
+
+TEST_F(ElfInterfaceTest, init_program_headers_malformed32) {
+  InitProgramHeadersMalformed<Elf32_Ehdr, Elf32_Phdr, ElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_program_headers_malformed64) {
+  InitProgramHeadersMalformed<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>();
+}
+
 template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
 void ElfInterfaceTest::InitSectionHeadersMalformed() {
   std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
@@ -700,6 +729,80 @@ TEST_F(ElfInterfaceTest, init_section_headers_malformed64) {
   InitSectionHeadersMalformed<Elf64_Ehdr, Elf64_Shdr, ElfInterface64>();
 }
 
+template <typename Ehdr, typename Shdr, typename ElfInterfaceType>
+void ElfInterfaceTest::InitSectionHeadersMalformedSymData() {
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+
+  uint64_t offset = 0x1000;
+
+  Ehdr ehdr = {};
+  ehdr.e_shoff = offset;
+  ehdr.e_shnum = 5;
+  ehdr.e_shentsize = sizeof(Shdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  offset += ehdr.e_shentsize;
+
+  Shdr shdr = {};
+  shdr.sh_type = SHT_SYMTAB;
+  shdr.sh_link = 4;
+  shdr.sh_addr = 0x5000;
+  shdr.sh_offset = 0x5000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = shdr.sh_entsize * 10;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_DYNSYM;
+  shdr.sh_link = 10;
+  shdr.sh_addr = 0x6000;
+  shdr.sh_offset = 0x6000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = shdr.sh_entsize * 10;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_DYNSYM;
+  shdr.sh_link = 2;
+  shdr.sh_addr = 0x6000;
+  shdr.sh_offset = 0x6000;
+  shdr.sh_entsize = 0x100;
+  shdr.sh_size = shdr.sh_entsize * 10;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  // The string data for the entries.
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  shdr.sh_name = 0x20000;
+  shdr.sh_offset = 0xf000;
+  shdr.sh_size = 0x1000;
+  memory_.SetMemory(offset, &shdr, sizeof(shdr));
+  offset += ehdr.e_shentsize;
+
+  uint64_t load_bias = 0;
+  ASSERT_TRUE(elf->Init(&load_bias));
+  EXPECT_EQ(0U, load_bias);
+  EXPECT_EQ(0U, elf->debug_frame_offset());
+  EXPECT_EQ(0U, elf->debug_frame_size());
+  EXPECT_EQ(0U, elf->gnu_debugdata_offset());
+  EXPECT_EQ(0U, elf->gnu_debugdata_size());
+
+  std::string name;
+  uint64_t name_offset;
+  ASSERT_FALSE(elf->GetFunctionName(0x90010, &name, &name_offset));
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_malformed_symdata32) {
+  InitSectionHeadersMalformedSymData<Elf32_Ehdr, Elf32_Shdr, ElfInterface32>();
+}
+
+TEST_F(ElfInterfaceTest, init_section_headers_malformed_symdata64) {
+  InitSectionHeadersMalformedSymData<Elf64_Ehdr, Elf64_Shdr, ElfInterface64>();
+}
+
 template <typename Ehdr, typename Shdr, typename Sym, typename ElfInterfaceType>
 void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
   std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
@@ -708,7 +811,7 @@ void ElfInterfaceTest::InitSectionHeaders(uint64_t entry_size) {
 
   Ehdr ehdr = {};
   ehdr.e_shoff = offset;
-  ehdr.e_shnum = 10;
+  ehdr.e_shnum = 5;
   ehdr.e_shentsize = entry_size;
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
 
@@ -795,7 +898,7 @@ void ElfInterfaceTest::InitSectionHeadersOffsets() {
 
   Ehdr ehdr = {};
   ehdr.e_shoff = offset;
-  ehdr.e_shnum = 10;
+  ehdr.e_shnum = 6;
   ehdr.e_shentsize = sizeof(Shdr);
   ehdr.e_shstrndx = 2;
   memory_.SetMemory(0, &ehdr, sizeof(ehdr));
