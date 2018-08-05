@@ -18,15 +18,12 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <paths.h>
 #include <pthread.h>
-#include <seccomp_policy.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/signalfd.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -43,8 +40,6 @@
 #include <cutils/android_reboot.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
-#include <private/android_filesystem_config.h>
-#include <selinux/android.h>
 
 #include "action_parser.h"
 #include "epoll.h"
@@ -53,12 +48,12 @@
 #include "keychords.h"
 #include "property_service.h"
 #include "reboot.h"
+#include "reboot_utils.h"
 #include "security.h"
 #include "selinux.h"
 #include "sigchld_handler.h"
 #include "ueventd.h"
 #include "util.h"
-#include "watchdogd.h"
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -418,14 +413,6 @@ static Result<Success> queue_property_triggers_action(const BuiltinArguments& ar
     return Success();
 }
 
-static void global_seccomp() {
-    import_kernel_cmdline(false, [](const std::string& key, const std::string& value, bool in_qemu) {
-        if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
-            LOG(FATAL) << "Failed to globally enable seccomp!";
-        }
-    });
-}
-
 // Set the UDC controller for the ConfigFS USB Gadgets.
 // Read the UDC controller in use from "/sys/class/udc".
 // In case of multiple UDC controllers select the first one.
@@ -440,40 +427,6 @@ static void set_usb_controller() {
         property_set("sys.usb.controller", dp->d_name);
         break;
     }
-}
-
-static void InstallRebootSignalHandlers() {
-    // Instead of panic'ing the kernel as is the default behavior when init crashes,
-    // we prefer to reboot to bootloader on development builds, as this will prevent
-    // boot looping bad configurations and allow both developers and test farms to easily
-    // recover.
-    struct sigaction action;
-    memset(&action, 0, sizeof(action));
-    sigfillset(&action.sa_mask);
-    action.sa_handler = [](int signal) {
-        // These signal handlers are also caught for processes forked from init, however we do not
-        // want them to trigger reboot, so we directly call _exit() for children processes here.
-        if (getpid() != 1) {
-            _exit(signal);
-        }
-
-        // Calling DoReboot() or LOG(FATAL) is not a good option as this is a signal handler.
-        // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
-        // and probably good enough given this is already an error case and only enabled for
-        // development builds.
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
-    };
-    action.sa_flags = SA_RESTART;
-    sigaction(SIGABRT, &action, nullptr);
-    sigaction(SIGBUS, &action, nullptr);
-    sigaction(SIGFPE, &action, nullptr);
-    sigaction(SIGILL, &action, nullptr);
-    sigaction(SIGSEGV, &action, nullptr);
-#if defined(SIGSTKFLT)
-    sigaction(SIGSTKFLT, &action, nullptr);
-#endif
-    sigaction(SIGSYS, &action, nullptr);
-    sigaction(SIGTRAP, &action, nullptr);
 }
 
 static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
@@ -612,13 +565,11 @@ static void InitKernelLogging(char* argv[]) {
     android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
+int first_stage_main(int argc, char** argv);
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
-    }
-
-    if (!strcmp(basename(argv[0]), "watchdogd")) {
-        return watchdogd_main(argc, argv);
     }
 
     if (argc > 1 && !strcmp(argv[1], "subcontext")) {
@@ -627,114 +578,14 @@ int main(int argc, char** argv) {
         return SubcontextMain(argc, argv, &function_map);
     }
 
+    if (getenv("INIT_SECOND_STAGE") == nullptr) {
+        return first_stage_main(argc, argv);
+    }
+
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
 
-    bool is_first_stage = (getenv("INIT_SECOND_STAGE") == nullptr);
-
-    if (is_first_stage) {
-        boot_clock::time_point start_time = boot_clock::now();
-
-        std::vector<std::pair<std::string, int>> errors;
-#define CHECKCALL(x) \
-    if (x != 0) errors.emplace_back(#x " failed", errno);
-
-        // Clear the umask.
-        umask(0);
-
-        CHECKCALL(clearenv());
-        CHECKCALL(setenv("PATH", _PATH_DEFPATH, 1));
-        // Get the basic filesystem setup we need put together in the initramdisk
-        // on / and then we'll let the rc file figure out the rest.
-        CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
-        CHECKCALL(mkdir("/dev/pts", 0755));
-        CHECKCALL(mkdir("/dev/socket", 0755));
-        CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
-#define MAKE_STR(x) __STRING(x)
-        CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
-#undef MAKE_STR
-        // Don't expose the raw commandline to unprivileged processes.
-        CHECKCALL(chmod("/proc/cmdline", 0440));
-        gid_t groups[] = { AID_READPROC };
-        CHECKCALL(setgroups(arraysize(groups), groups));
-        CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
-        CHECKCALL(mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL));
-
-        CHECKCALL(mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11)));
-
-        if constexpr (WORLD_WRITABLE_KMSG) {
-            CHECKCALL(mknod("/dev/kmsg_debug", S_IFCHR | 0622, makedev(1, 11)));
-        }
-
-        CHECKCALL(mknod("/dev/random", S_IFCHR | 0666, makedev(1, 8)));
-        CHECKCALL(mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9)));
-
-        // This is needed for log wrapper, which gets called before ueventd runs.
-        CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
-        CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
-
-        // Mount staging areas for devices managed by vold
-        // See storage config details at http://source.android.com/devices/storage/
-        CHECKCALL(mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-                        "mode=0755,uid=0,gid=1000"));
-        // /mnt/vendor is used to mount vendor-specific partitions that can not be
-        // part of the vendor partition, e.g. because they are mounted read-write.
-        CHECKCALL(mkdir("/mnt/vendor", 0755));
-        // /mnt/product is used to mount product-specific partitions that can not be
-        // part of the product partition, e.g. because they are mounted read-write.
-        CHECKCALL(mkdir("/mnt/product", 0755));
-
-#undef CHECKCALL
-
-        // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
-        // talk to the outside world...
-        InitKernelLogging(argv);
-
-        if (!errors.empty()) {
-            for (const auto& [error_string, error_errno] : errors) {
-                LOG(ERROR) << error_string << " " << strerror(error_errno);
-            }
-            LOG(FATAL) << "Init encountered errors starting first stage, aborting";
-        }
-
-        LOG(INFO) << "init first stage started!";
-
-        if (!DoFirstStageMount()) {
-            LOG(FATAL) << "Failed to mount required partitions early ...";
-        }
-
-        SetInitAvbVersionInRecovery();
-
-        // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
-        global_seccomp();
-
-        // Set up SELinux, loading the SELinux policy.
-        SelinuxSetupKernelLogging();
-        SelinuxInitialize();
-
-        // We're in the kernel domain, so re-exec init to transition to the init domain now
-        // that the SELinux policy has been loaded.
-        if (selinux_android_restorecon("/init", 0) == -1) {
-            PLOG(FATAL) << "restorecon failed of /init failed";
-        }
-
-        setenv("INIT_SECOND_STAGE", "true", 1);
-
-        static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
-        uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
-        setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
-
-        char* path = argv[0];
-        char* args[] = { path, nullptr };
-        execv(path, args);
-
-        // execv() only returns if an error happened, in which case we
-        // panic and never fall through this conditional.
-        PLOG(FATAL) << "execv(\"" << path << "\") failed";
-    }
-
-    // At this point we're in the second stage of init.
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 

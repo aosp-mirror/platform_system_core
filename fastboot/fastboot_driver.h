@@ -103,7 +103,7 @@ class FastBootDriver {
 
     /* HELPERS */
     void SetInfoCallback(std::function<void(std::string&)> info);
-    const std::string RCString(RetCode rc);
+    static const std::string RCString(RetCode rc);
     std::string Error();
     RetCode WaitForDisconnect();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_WATCHDOGD_H_
-#define _INIT_WATCHDOGD_H_
+#pragma once
+
+#include <string>
 
 namespace android {
 namespace init {
 
-int watchdogd_main(int argc, char **argv);
+// Determines whether the system is capable of rebooting. This is conservative,
+// so if any of the attempts to determine this fail, it will still return true.
+bool IsRebootCapable();
+// This is a wrapper around the actual reboot calls.
+void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& reboot_target);
+void InstallRebootSignalHandlers();
 
 }  // namespace init
 }  // namespace android
-
-#endif

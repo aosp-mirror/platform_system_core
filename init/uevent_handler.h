@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_REBOOT_H
-#define _INIT_REBOOT_H
+#pragma once
 
-#include <string>
+#include "uevent.h"
 
 namespace android {
 namespace init {
 
-// Parses and handles a setprop sys.powerctl message.
-bool HandlePowerctlMessage(const std::string& command);
+class UeventHandler {
+  public:
+    virtual ~UeventHandler() = default;
+
+    virtual void HandleUevent(const Uevent& uevent) = 0;
+
+    virtual void ColdbootDone() {}
+};
 
 }  // namespace init
 }  // namespace android
-
-#endif

@@ -40,7 +40,8 @@ TEST(liblp, GetMetadataOffset) {
                                    80000,
                                    0,
                                    0,
-                                   1024 * 1024};
+                                   1024 * 1024,
+                                   4096};
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), 4096);
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 1), 4096 + 16384);
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 2), 4096 + 16384 * 2);

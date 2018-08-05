@@ -16,22 +16,23 @@
 
 #pragma once
 
-#include "result.h"
-#include "uevent.h"
-
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "result.h"
+#include "uevent.h"
+#include "uevent_handler.h"
+
 namespace android {
 namespace init {
 
-class ModaliasHandler {
+class ModaliasHandler : public UeventHandler {
   public:
     ModaliasHandler();
-    ~ModaliasHandler(){};
+    virtual ~ModaliasHandler() = default;
 
-    void HandleModaliasEvent(const Uevent& uevent);
+    void HandleUevent(const Uevent& uevent) override;
 
   private:
     Result<Success> InsmodWithDeps(const std::string& module_name, const std::string& args);

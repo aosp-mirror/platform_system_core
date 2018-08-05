@@ -85,7 +85,7 @@ static bool AddDefaultPartitions(MetadataBuilder* builder) {
     if (!system) {
         return false;
     }
-    return builder->GrowPartition(system, 24 * 1024);
+    return builder->ResizePartition(system, 24 * 1024);
 }
 
 // Create a temporary disk and flash it with the default partition setup.
@@ -345,7 +345,7 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_NE(partition, nullptr);
     // Add one extent to any partition to fill up more space - we're at 508
     // bytes after this, out of 512.
-    ASSERT_TRUE(builder->GrowPartition(partition, 1024));
+    ASSERT_TRUE(builder->ResizePartition(partition, 1024));
 
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);

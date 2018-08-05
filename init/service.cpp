@@ -46,10 +46,12 @@
 #include "util.h"
 
 #if defined(__ANDROID__)
+#include <android/api-level.h>
 #include <sys/system_properties.h>
 
 #include "init.h"
 #include "property_service.h"
+#include "selinux.h"
 #else
 #include "host_init_stubs.h"
 #endif
@@ -1211,6 +1213,13 @@ Result<Success> ServiceParser::ParseSection(std::vector<std::string>&& args,
     }
 
     std::vector<std::string> str_args(args.begin() + 2, args.end());
+
+    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_P__) {
+        if (str_args[0] == "/sbin/watchdogd") {
+            str_args[0] = "/system/bin/watchdogd";
+        }
+    }
+
     service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args);
     return Success();
 }

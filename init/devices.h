@@ -29,6 +29,7 @@
 #include <selinux/label.h>
 
 #include "uevent.h"
+#include "uevent_handler.h"
 
 namespace android {
 namespace init {
@@ -105,7 +106,7 @@ class Subsystem {
     std::string dir_name_ = "/dev";
 };
 
-class DeviceHandler {
+class DeviceHandler : public UeventHandler {
   public:
     friend class DeviceHandlerTester;
 
@@ -113,11 +114,12 @@ class DeviceHandler {
     DeviceHandler(std::vector<Permissions> dev_permissions,
                   std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> subsystems,
                   std::set<std::string> boot_devices, bool skip_restorecon);
+    virtual ~DeviceHandler() = default;
 
-    void HandleDeviceEvent(const Uevent& uevent);
+    void HandleUevent(const Uevent& uevent) override;
+    void ColdbootDone() override;
 
     std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
-    void set_skip_restorecon(bool value) { skip_restorecon_ = value; }
 
   private:
     bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;

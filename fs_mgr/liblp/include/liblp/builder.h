@@ -32,11 +32,16 @@ class LinearExtent;
 
 // By default, partitions are aligned on a 1MiB boundary.
 static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
+static const uint32_t kDefaultBlockSize = 4096;
 
 struct BlockDeviceInfo {
-    BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0) {}
-    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset)
-        : size(size), alignment(alignment), alignment_offset(alignment_offset) {}
+    BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0), logical_block_size(0) {}
+    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset,
+                    uint32_t logical_block_size)
+        : size(size),
+          alignment(alignment),
+          alignment_offset(alignment_offset),
+          logical_block_size(logical_block_size) {}
     // Size of the block device, in bytes.
     uint64_t size;
     // Optimal target alignment, in bytes. Partition extents will be aligned to
@@ -46,6 +51,8 @@ struct BlockDeviceInfo {
     // |alignment_offset| on the target device is correctly aligned on its
     // parent device. This value must be 0 or a multiple of 512.
     uint32_t alignment_offset;
+    // Block size, for aligning extent sizes and partition sizes.
+    uint32_t logical_block_size;
 };
 
 // Abstraction around dm-targets that can be encoded into logical partition tables.
@@ -74,6 +81,7 @@ class LinearExtent final : public Extent {
     LinearExtent* AsLinearExtent() override { return this; }
 
     uint64_t physical_sector() const { return physical_sector_; }
+    uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
 
   private:
     uint64_t physical_sector_;
@@ -88,6 +96,8 @@ class ZeroExtent final : public Extent {
 };
 
 class Partition final {
+    friend class MetadataBuilder;
+
   public:
     Partition(const std::string& name, const std::string& guid, uint32_t attributes);
 
@@ -97,10 +107,6 @@ class Partition final {
     // Remove all extents from this partition.
     void RemoveExtents();
 
-    // Remove and/or shrink extents until the partition is the requested size.
-    // See MetadataBuilder::ShrinkPartition for more information.
-    void ShrinkTo(uint64_t requested_size);
-
     const std::string& name() const { return name_; }
     uint32_t attributes() const { return attributes_; }
     const std::string& guid() const { return guid_; }
@@ -108,6 +114,8 @@ class Partition final {
     uint64_t size() const { return size_; }
 
   private:
+    void ShrinkTo(uint64_t aligned_size);
+
     std::string name_;
     std::string guid_;
     std::vector<std::unique_ptr<Extent>> extents_;
@@ -144,7 +152,7 @@ class MetadataBuilder {
     // size. This is a convenience method for tests.
     static std::unique_ptr<MetadataBuilder> New(uint64_t blockdev_size, uint32_t metadata_max_size,
                                                 uint32_t metadata_slot_count) {
-        BlockDeviceInfo device_info(blockdev_size, 0, 0);
+        BlockDeviceInfo device_info(blockdev_size, 0, 0, kDefaultBlockSize);
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 
@@ -162,29 +170,17 @@ class MetadataBuilder {
     // Find a partition by name. If no partition is found, nullptr is returned.
     Partition* FindPartition(const std::string& name);
 
-    // Grow a partition to the requested size. If the partition's size is already
-    // greater or equal to the requested size, this will return true and the
-    // partition table will not be changed. Otherwise, a greedy algorithm is
-    // used to find free gaps in the partition table and allocate them for this
-    // partition. If not enough space can be allocated, false is returned, and
-    // the parition table will not be modified.
+    // Grow or shrink a partition to the requested size. This size will be
+    // rounded UP to the nearest block (512 bytes).
     //
-    // The size will be rounded UP to the nearest sector.
-    //
-    // Note, this is an in-memory operation, and it does not alter the
-    // underlying filesystem or contents of the partition on disk.
-    bool GrowPartition(Partition* partition, uint64_t requested_size);
-
-    // Shrink a partition to the requested size. If the partition is already
-    // smaller than the given size, this will return and the partition table
-    // will not be changed. Otherwise, extents will be removed and/or shrunk
-    // from the end of the partition until it is the requested size.
-    //
-    // The size will be rounded UP to the nearest sector.
+    // When growing a partition, a greedy algorithm is used to find free gaps
+    // in the partition table and allocate them. If not enough space can be
+    // allocated, false is returned, and the parition table will not be
+    // modified.
     //
     // Note, this is an in-memory operation, and it does not alter the
     // underlying filesystem or contents of the partition on disk.
-    void ShrinkPartition(Partition* partition, uint64_t requested_size);
+    bool ResizePartition(Partition* partition, uint64_t requested_size);
 
     // Amount of space that can be allocated to logical partitions.
     uint64_t AllocatableSpace() const;
@@ -198,7 +194,8 @@ class MetadataBuilder {
     MetadataBuilder();
     bool Init(const BlockDeviceInfo& info, uint32_t metadata_max_size, uint32_t metadata_slot_count);
     bool Init(const LpMetadata& metadata);
-
+    bool GrowPartition(Partition* partition, uint64_t aligned_size);
+    void ShrinkPartition(Partition* partition, uint64_t aligned_size);
     uint64_t AlignSector(uint64_t sector);
 
     LpMetadataGeometry geometry_;
