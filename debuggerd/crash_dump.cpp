@@ -249,24 +249,48 @@ static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdD
 }
 
 static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
-                          std::unique_ptr<unwindstack::Regs>* regs, uintptr_t* abort_address) {
+                          std::unique_ptr<unwindstack::Regs>* regs, uintptr_t* abort_msg_address,
+                          uintptr_t* fdsan_table_address) {
   std::aligned_storage<sizeof(CrashInfo) + 1, alignof(CrashInfo)>::type buf;
+  CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
   ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &buf, sizeof(buf)));
   if (rc == -1) {
     PLOG(FATAL) << "failed to read target ucontext";
-  } else if (rc != sizeof(CrashInfo)) {
-    LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
-               << sizeof(CrashInfo);
+  } else {
+    ssize_t expected_size = 0;
+    switch (crash_info->header.version) {
+      case 1:
+        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV1);
+        break;
+
+      case 2:
+        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV2);
+        break;
+
+      default:
+        LOG(FATAL) << "unexpected CrashInfo version: " << crash_info->header.version;
+        break;
+    };
+
+    if (rc != expected_size) {
+      LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
+                 << expected_size;
+    }
   }
 
-  CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
-  if (crash_info->version != 1) {
-    LOG(FATAL) << "version mismatch, expected 1, received " << crash_info->version;
-  }
+  *fdsan_table_address = 0;
+  switch (crash_info->header.version) {
+    case 2:
+      *fdsan_table_address = crash_info->data.v2.fdsan_table_address;
+    case 1:
+      *abort_msg_address = crash_info->data.v1.abort_msg_address;
+      *siginfo = crash_info->data.v1.siginfo;
+      regs->reset(Regs::CreateFromUcontext(Regs::CurrentArch(), &crash_info->data.v1.ucontext));
+      break;
 
-  *siginfo = crash_info->siginfo;
-  regs->reset(Regs::CreateFromUcontext(Regs::CurrentArch(), &crash_info->ucontext));
-  *abort_address = crash_info->abort_msg_address;
+    default:
+      __builtin_unreachable();
+  }
 }
 
 // Wait for a process to clone and return the child's pid.
@@ -369,7 +393,8 @@ int main(int argc, char** argv) {
   ATRACE_NAME("after reparent");
   pid_t pseudothread_tid;
   DebuggerdDumpType dump_type;
-  uintptr_t abort_address = 0;
+  uintptr_t abort_msg_address = 0;
+  uintptr_t fdsan_table_address = 0;
 
   Initialize(argv);
   ParseArgs(argc, argv, &pseudothread_tid, &dump_type);
@@ -429,7 +454,8 @@ int main(int argc, char** argv) {
 
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
-        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &abort_address);
+        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &abort_msg_address,
+                      &fdsan_table_address);
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
       } else {
@@ -504,8 +530,8 @@ int main(int argc, char** argv) {
     g_output_fd = std::move(devnull);
   }
 
-  LOG(INFO) << "performing dump of process " << target_process << " (target tid = " << g_target_thread
-            << ")";
+  LOG(INFO) << "performing dump of process " << target_process
+            << " (target tid = " << g_target_thread << ")";
 
   int signo = siginfo.si_signo;
   bool fatal_signal = signo != DEBUGGER_SIGNAL;
@@ -543,7 +569,7 @@ int main(int argc, char** argv) {
   } else {
     ATRACE_NAME("engrave_tombstone");
     engrave_tombstone(std::move(g_output_fd), map.get(), process_memory.get(), thread_info,
-                      g_target_thread, abort_address, &open_files, &amfd_data);
+                      g_target_thread, abort_msg_address, &open_files, &amfd_data);
   }
 
   if (fatal_signal) {
