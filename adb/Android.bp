@@ -277,26 +277,113 @@ cc_binary_host {
     },
 }
 
+// libadbd_core contains the common sources to build libadbd and libadbd_services.
 cc_library_static {
+    name: "libadbd_core",
+    defaults: ["adb_defaults"],
+    recovery_available: true,
+
+    // libminadbd wants both, as it's used to build native tests.
+    compile_multilib: "both",
+
+    srcs: libadb_srcs + libadb_posix_srcs + [
+        "daemon/auth.cpp",
+        "daemon/jdwp_service.cpp",
+        "daemon/usb.cpp",
+    ],
+
+    local_include_dirs: [
+        "daemon/include",
+    ],
+
+    static_libs: [
+        "libdiagnose_usb",
+        "libqemu_pipe",
+    ],
+
+    shared_libs: [
+        "libasyncio",
+        "libbase",
+        "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "liblog",
+    ],
+}
+
+cc_library {
+    name: "libadbd_services",
+    defaults: ["adb_defaults"],
+    recovery_available: true,
+    compile_multilib: "both",
+
+    srcs: [
+        "daemon/file_sync_service.cpp",
+        "daemon/framebuffer_service.cpp",
+        "daemon/mdns.cpp",
+        "daemon/remount_service.cpp",
+        "daemon/services.cpp",
+        "daemon/set_verity_enable_state_service.cpp",
+        "daemon/shell_service.cpp",
+        "shell_service_protocol.cpp",
+    ],
+
+    cflags: [
+        "-D_GNU_SOURCE",
+        "-Wno-deprecated-declarations",
+    ],
+
+    static_libs: [
+        "libadbd_core",
+        "libavb_user",
+        "libdiagnose_usb",
+        "libqemu_pipe",
+
+        // `daemon/shell_service.cpp` uses selinux_android_setcon(), which is not exposed by
+        // libselinux.
+        "libselinux",
+    ],
+
+    shared_libs: [
+        "libasyncio",
+        "libbase",
+        "libbootloader_message",
+        "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "libext4_utils",
+        "libfec",
+        "libfec_rs",
+        "libfs_mgr",
+        "liblog",
+        "libmdnssd",
+    ],
+}
+
+cc_library {
     name: "libadbd",
     defaults: ["adb_defaults"],
     recovery_available: true,
 
-    // libminadbd wants both, for some reason.
+    // Avoid getting duplicate symbol of android::build::GetBuildNumber().
+    use_version_lib: false,
+
+    // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
-    srcs: libadb_srcs + libadb_posix_srcs + [
-        "daemon/auth.cpp",
-        "daemon/usb.cpp",
-        "daemon/jdwp_service.cpp",
+
+    // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
+    whole_static_libs: [
+        "libadbd_core",
     ],
 
-    static_libs: [
+    shared_libs: [
+        "libadbd_services",
         "libasyncio",
-        "libcrypto_utils",
-        "libcrypto",
-        "libdiagnose_usb",
-        "libqemu_pipe",
         "libbase",
+        "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "liblog",
     ],
 
     export_include_dirs: [
@@ -307,19 +394,10 @@ cc_library_static {
 cc_binary {
     name: "adbd",
     defaults: ["adb_defaults"],
-
     recovery_available: true,
 
     srcs: [
         "daemon/main.cpp",
-        "daemon/mdns.cpp",
-        "daemon/file_sync_service.cpp",
-        "daemon/framebuffer_service.cpp",
-        "daemon/remount_service.cpp",
-        "daemon/set_verity_enable_state_service.cpp",
-        "daemon/services.cpp",
-        "daemon/shell_service.cpp",
-        "shell_service_protocol.cpp",
     ],
 
     cflags: [
@@ -331,27 +409,16 @@ cc_binary {
         keep_symbols: true,
     },
 
-    static_libs: [
+    shared_libs: [
         "libadbd",
-        "libasyncio",
-        "libavb_user",
-        "libbootloader_message",
-        "libcrypto_utils",
+        "libadbd_services",
+        "libbase",
+        "libcap",
         "libcrypto",
-        "libdiagnose_usb",
-        "libfec",
-        "libfec_rs",
-        "libfs_mgr",
+        "libcutils",
         "liblog",
-        "libext4_utils",
-        "libmdnssd",
         "libminijail",
         "libselinux",
-        "libsquashfs_utils",
-        "libqemu_pipe",
-
-        "libbase",
-        "libcutils",
     ],
 }
 
