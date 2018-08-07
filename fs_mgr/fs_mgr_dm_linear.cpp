@@ -110,6 +110,10 @@ bool CreateLogicalPartitions(const std::string& block_device) {
         return true;
     }
     for (const auto& partition : metadata->partitions) {
+        if (!partition.num_extents) {
+            LINFO << "Skipping zero-length logical partition: " << GetPartitionName(partition);
+            continue;
+        }
         std::string path;
         if (!CreateLogicalPartition(block_device, *metadata.get(), partition, false, &path)) {
             LERROR << "Could not create logical partition: " << GetPartitionName(partition);
