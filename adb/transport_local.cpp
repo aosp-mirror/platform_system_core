@@ -453,10 +453,6 @@ static atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
     return it->second;
 }
 
-std::string getEmulatorSerialString(int console_port) {
-    return android::base::StringPrintf("emulator-%d", console_port);
-}
-
 atransport* find_emulator_transport_by_adb_port(int adb_port) {
     std::lock_guard<std::mutex> lock(local_transports_lock);
     return find_emulator_transport_by_adb_port_locked(adb_port);
@@ -466,6 +462,10 @@ atransport* find_emulator_transport_by_console_port(int console_port) {
     return find_transport(getEmulatorSerialString(console_port).c_str());
 }
 #endif
+
+std::string getEmulatorSerialString(int console_port) {
+    return android::base::StringPrintf("emulator-%d", console_port);
+}
 
 int init_socket_transport(atransport* t, unique_fd fd, int adb_port, int local) {
     int fail = 0;
