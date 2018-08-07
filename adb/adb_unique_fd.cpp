@@ -21,6 +21,10 @@
 
 #include "sysdeps.h"
 
+void AdbCloser::Close(int fd) {
+    adb_close(fd);
+}
+
 #if !defined(_WIN32)
 bool Pipe(unique_fd* read, unique_fd* write, int flags) {
     int pipefd[2];
