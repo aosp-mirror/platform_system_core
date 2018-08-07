@@ -80,12 +80,16 @@ static bool CreateDmTable(const std::string& block_device, const LpMetadata& met
 }
 
 static bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
-                                   const LpMetadataPartition& partition, std::string* path) {
+                                   const LpMetadataPartition& partition, bool force_writable,
+                                   std::string* path) {
     DeviceMapper& dm = DeviceMapper::Instance();
 
     DmTable table;
     if (!CreateDmTable(block_device, metadata, partition, &table)) {
         return false;
+    }
+    if (force_writable) {
+        table.set_readonly(false);
     }
     std::string name = GetPartitionName(partition);
     if (!dm.CreateDevice(name, table)) {
@@ -107,7 +111,7 @@ bool CreateLogicalPartitions(const std::string& block_device) {
     }
     for (const auto& partition : metadata->partitions) {
         std::string path;
-        if (!CreateLogicalPartition(block_device, *metadata.get(), partition, &path)) {
+        if (!CreateLogicalPartition(block_device, *metadata.get(), partition, false, &path)) {
             LERROR << "Could not create logical partition: " << GetPartitionName(partition);
             return false;
         }
@@ -116,7 +120,8 @@ bool CreateLogicalPartitions(const std::string& block_device) {
 }
 
 bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
-                            const std::string& partition_name, std::string* path) {
+                            const std::string& partition_name, bool force_writable,
+                            std::string* path) {
     auto metadata = ReadMetadata(block_device.c_str(), metadata_slot);
     if (!metadata) {
         LOG(ERROR) << "Could not read partition table.";
@@ -124,7 +129,8 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
     }
     for (const auto& partition : metadata->partitions) {
         if (GetPartitionName(partition) == partition_name) {
-            return CreateLogicalPartition(block_device, *metadata.get(), partition, path);
+            return CreateLogicalPartition(block_device, *metadata.get(), partition, force_writable,
+                                          path);
         }
     }
     LERROR << "Could not find any partition with name: " << partition_name;
