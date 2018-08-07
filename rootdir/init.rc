@@ -732,7 +732,7 @@ on property:security.perf_harden=1
 
 ## Daemon processes to be run by init.
 ##
-service ueventd /sbin/ueventd
+service ueventd /system/bin/ueventd
     class core
     critical
     seclabel u:r:ueventd:s0

@@ -92,6 +92,7 @@ cc_defaults {
 
 cc_library_static {
     name: "libinit",
+    recovery_available: true,
     defaults: ["init_defaults"],
     srcs: [
         "action.cpp",
@@ -107,7 +108,6 @@ cc_library_static {
         "first_stage_mount.cpp",
         "import_parser.cpp",
         "init.cpp",
-        "init_first_stage.cpp",
         "keychords.cpp",
         "modalias_handler.cpp",
         "parser.cpp",
@@ -138,29 +138,21 @@ cc_library_static {
     },
 }
 
-/*
-This is not yet ready, see the below TODOs for what is missing
-
 cc_binary {
-    // TODO: Missing,
-    //LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-    //LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
-
-    name: "init",
+    name: "init_second_stage",
+    recovery_available: true,
+    stem: "init",
     defaults: ["init_defaults"],
+    static_libs: ["libinit"],
     required: [
         "e2fsdroid",
         "mke2fs",
         "sload_f2fs",
         "make_f2fs",
     ],
-    static_executable: true,
     srcs: ["main.cpp"],
-    symlinks: [
-        "sbin/ueventd",
-    ],
+    symlinks: ["ueventd"],
 }
-*/
 
 // Tests
 // ------------------------------------------------------------------------------
