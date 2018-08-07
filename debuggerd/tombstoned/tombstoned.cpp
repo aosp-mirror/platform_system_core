@@ -112,7 +112,7 @@ class CrashQueue {
 
   std::pair<std::string, unique_fd> get_output() {
     std::string path;
-    unique_fd result(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0640));
+    unique_fd result(openat(dir_fd_, ".", O_CREAT | O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0640));
     if (result == -1) {
       // We might not have O_TMPFILE. Try creating with an arbitrary filename instead.
       static size_t counter = 0;
