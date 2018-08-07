@@ -891,6 +891,10 @@ int launch_server(const std::string& socket_spec) {
         // child side of the fork
         pipe_read.reset();
 
+        // android::base::Pipe unconditionally opens the pipe with O_CLOEXEC.
+        // Undo this manually.
+        fcntl(pipe_write.get(), F_SETFD, 0);
+
         char reply_fd[30];
         snprintf(reply_fd, sizeof(reply_fd), "%d", pipe_write.get());
         // child process
