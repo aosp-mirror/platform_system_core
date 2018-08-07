@@ -81,9 +81,24 @@ struct InterceptResponse {
 };
 
 // Sent from handler to crash_dump via pipe.
-struct __attribute__((__packed__)) CrashInfo {
-  uint32_t version;  // must be 1.
+struct __attribute__((__packed__)) CrashInfoHeader {
+  uint32_t version;
+};
+
+struct __attribute__((__packed__)) CrashInfoDataV1 {
   siginfo_t siginfo;
   ucontext_t ucontext;
   uintptr_t abort_msg_address;
+};
+
+struct __attribute__((__packed__)) CrashInfoDataV2 : public CrashInfoDataV1 {
+  uintptr_t fdsan_table_address;
+};
+
+struct __attribute__((__packed__)) CrashInfo {
+  CrashInfoHeader header;
+  union {
+    CrashInfoDataV1 v1;
+    CrashInfoDataV2 v2;
+  } data;
 };
