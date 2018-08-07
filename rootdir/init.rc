@@ -84,7 +84,7 @@ on init
     restorecon_recursive /mnt
 
     mount configfs none /config nodev noexec nosuid
-    chmod 0775 /config/sdcardfs
+    chmod 0770 /config/sdcardfs
     chown system package_info /config/sdcardfs
 
     mkdir /mnt/secure 0700 root root
@@ -180,6 +180,12 @@ on init
     copy /dev/cpuset/cpus /dev/cpuset/system-background/cpus
     copy /dev/cpuset/mems /dev/cpuset/system-background/mems
 
+    # restricted is for system tasks that are being throttled
+    # due to screen off.
+    mkdir /dev/cpuset/restricted
+    copy /dev/cpuset/cpus /dev/cpuset/restricted/cpus
+    copy /dev/cpuset/mems /dev/cpuset/restricted/mems
+
     mkdir /dev/cpuset/top-app
     copy /dev/cpuset/cpus /dev/cpuset/top-app/cpus
     copy /dev/cpuset/mems /dev/cpuset/top-app/mems
@@ -190,11 +196,13 @@ on init
     chown system system /dev/cpuset/background
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
+    chown system system /dev/cpuset/restricted
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
+    chown system system /dev/cpuset/restricted/tasks
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -203,6 +211,7 @@ on init
     chmod 0664 /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/system-background/tasks
     chmod 0664 /dev/cpuset/top-app/tasks
+    chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
 
@@ -366,6 +375,10 @@ on post-fs
     # create the lost+found directories, so as to enforce our permissions
     mkdir /cache/lost+found 0770 root root
 
+    restorecon_recursive /metadata
+    mkdir /metadata/vold
+    chmod 0700 /metadata/vold
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -424,6 +437,7 @@ on post-fs-data
     mkdir /data/misc/carrierid 0770 system radio
     mkdir /data/misc/apns 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
+    mkdir /data/misc/network_watchlist 0774 system system
     mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
@@ -456,6 +470,8 @@ on post-fs-data
     mkdir /data/misc/gcov 0770 root root
 
     mkdir /data/vendor 0771 root root
+    mkdir /data/vendor_ce 0771 root root
+    mkdir /data/vendor_de 0771 root root
     mkdir /data/vendor/hardware 0771 root root
 
     # For security reasons, /data/local/tmp should always be empty.
@@ -688,6 +704,7 @@ on property:vold.decrypt=trigger_load_persist_props
 
 on property:vold.decrypt=trigger_post_fs_data
     trigger post-fs-data
+    trigger zygote-start
 
 on property:vold.decrypt=trigger_restart_min_framework
     # A/B update verifier that marks a successful boot.
@@ -695,6 +712,8 @@ on property:vold.decrypt=trigger_restart_min_framework
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
+    stop surfaceflinger
+    start surfaceflinger
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
     class_start main
@@ -737,11 +756,6 @@ service ueventd /sbin/ueventd
     critical
     seclabel u:r:ueventd:s0
     shutdown critical
-
-service healthd /system/bin/healthd
-    class core
-    critical
-    group root system wakelock
 
 service console /system/bin/sh
     class core

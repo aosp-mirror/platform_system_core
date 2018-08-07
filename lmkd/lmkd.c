@@ -38,6 +38,10 @@
 #include <lmkd.h>
 #include <log/log.h>
 
+#ifdef LMKD_LOG_STATS
+#include "statslog.h"
+#endif
+
 /*
  * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
  * to profile and correlate with OOM kills
@@ -245,6 +249,11 @@ struct reread_data {
     const char* const filename;
     int fd;
 };
+
+#ifdef LMKD_LOG_STATS
+static bool enable_stats_log;
+static android_log_context log_ctx;
+#endif
 
 #define PIDHASH_SZ 1024
 static struct proc *pidhash[PIDHASH_SZ];
@@ -719,6 +728,51 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
     maxevents++;
 }
 
+#ifdef LMKD_LOG_STATS
+static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
+    char key[LINE_MAX];
+    int64_t value;
+
+    sscanf(line,"%s  %" SCNd64 "", key, &value);
+
+    if (strcmp(key, "total_") < 0) {
+        return;
+    }
+
+    if (!strcmp(key, "total_pgfault"))
+        mem_st->pgfault = value;
+    else if (!strcmp(key, "total_pgmajfault"))
+        mem_st->pgmajfault = value;
+    else if (!strcmp(key, "total_rss"))
+        mem_st->rss_in_bytes = value;
+    else if (!strcmp(key, "total_cache"))
+        mem_st->cache_in_bytes = value;
+    else if (!strcmp(key, "total_swap"))
+        mem_st->swap_in_bytes = value;
+}
+
+static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
+   FILE *fp;
+   char buf[PATH_MAX];
+
+   snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
+
+   fp = fopen(buf, "r");
+
+   if (fp == NULL) {
+       ALOGE("%s open failed: %s", buf, strerror(errno));
+       return -1;
+   }
+
+   while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
+       memory_stat_parse_line(buf, mem_st);
+   }
+   fclose(fp);
+
+   return 0;
+}
+#endif
+
 /* /prop/zoneinfo parsing routines */
 static int64_t zoneinfo_parse_protection(char *cp) {
     int64_t max = 0;
@@ -944,6 +998,11 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     int tasksize;
     int r;
 
+#ifdef LMKD_LOG_STATS
+    struct memory_stat mem_st = {};
+    int memory_stat_parse_result = -1;
+#endif
+
     taskname = proc_get_name(pid);
     if (!taskname) {
         pid_remove(pid);
@@ -955,6 +1014,12 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
         pid_remove(pid);
         return -1;
     }
+
+#ifdef LMKD_LOG_STATS
+    if (enable_stats_log) {
+        memory_stat_parse_result = memory_stat_parse(&mem_st, pid, uid);
+    }
+#endif
 
     TRACE_KILL_START(pid);
 
@@ -972,6 +1037,15 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
         return -1;
+    } else {
+#ifdef LMKD_LOG_STATS
+        if (memory_stat_parse_result == 0) {
+            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
+                    procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
+                    mem_st.cache_in_bytes, mem_st.swap_in_bytes);
+        }
+#endif
+        return tasksize;
     }
 
     return tasksize;
@@ -988,6 +1062,10 @@ static int find_and_kill_processes(enum vmpressure_level level,
     int killed_size;
     int pages_freed = 0;
 
+#ifdef LMKD_LOG_STATS
+    bool lmk_state_change_start = false;
+#endif
+
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
 
@@ -1000,13 +1078,34 @@ static int find_and_kill_processes(enum vmpressure_level level,
 
             killed_size = kill_one_process(procp, min_score_adj, level);
             if (killed_size >= 0) {
+#ifdef LMKD_LOG_STATS
+                if (enable_stats_log && !lmk_state_change_start) {
+                    lmk_state_change_start = true;
+                    stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
+                                                  LMK_STATE_CHANGE_START);
+                }
+#endif
+
                 pages_freed += killed_size;
                 if (pages_freed >= pages_to_free) {
+
+#ifdef LMKD_LOG_STATS
+                    if (enable_stats_log && lmk_state_change_start) {
+                        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
+                                LMK_STATE_CHANGE_STOP);
+                    }
+#endif
                     return pages_freed;
                 }
             }
         }
     }
+
+#ifdef LMKD_LOG_STATS
+    if (enable_stats_log && lmk_state_change_start) {
+        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
+    }
+#endif
 
     return pages_freed;
 }
@@ -1122,10 +1221,8 @@ static void mp_event_common(int data, uint32_t events __unused) {
     }
 
     if (skip_count > 0) {
-        if (debug_process_killing) {
-            ALOGI("%lu memory pressure events were skipped after a kill!",
-                skip_count);
-        }
+        ALOGI("%lu memory pressure events were skipped after a kill!",
+              skip_count);
         skip_count = 0;
     }
 
@@ -1250,25 +1347,24 @@ do_kill:
                 return;
             }
             min_score_adj = level_oomadj[level];
-        } else {
-            if (debug_process_killing) {
-                ALOGI("Killing because cache %ldkB is below "
-                      "limit %ldkB for oom_adj %d\n"
-                      "   Free memory is %ldkB %s reserved",
-                      other_file * page_k, minfree * page_k, min_score_adj,
-                      other_free * page_k, other_free >= 0 ? "above" : "below");
-            }
         }
 
-        if (debug_process_killing) {
-            ALOGI("Trying to free %d pages", pages_to_free);
-        }
         pages_freed = find_and_kill_processes(level, min_score_adj, pages_to_free);
+
+        if (use_minfree_levels) {
+            ALOGI("Killing because cache %ldkB is below "
+                  "limit %ldkB for oom_adj %d\n"
+                  "   Free memory is %ldkB %s reserved",
+                  other_file * page_k, minfree * page_k, min_score_adj,
+                  other_free * page_k, other_free >= 0 ? "above" : "below");
+        }
+
         if (pages_freed < pages_to_free) {
-            if (debug_process_killing) {
-                ALOGI("Unable to free enough memory (pages freed=%d)", pages_freed);
-            }
+            ALOGI("Unable to free enough memory (pages to free=%d, pages freed=%d)",
+                  pages_to_free, pages_freed);
         } else {
+            ALOGI("Reclaimed enough memory (pages to free=%d, pages freed=%d)",
+                  pages_to_free, pages_freed);
             gettimeofday(&last_report_tm, NULL);
         }
     }
@@ -1485,6 +1581,10 @@ int main(int argc __unused, char **argv __unused) {
     per_app_memcg =
         property_get_bool("ro.config.per_app_memcg", low_ram_device);
 
+#ifdef LMKD_LOG_STATS
+    statslog_init(&log_ctx, &enable_stats_log);
+#endif
+
     if (!init()) {
         if (!use_inkernel_interface) {
             /*
@@ -1511,6 +1611,10 @@ int main(int argc __unused, char **argv __unused) {
 
         mainloop();
     }
+
+#ifdef LMKD_LOG_STATS
+    statslog_destroy(&log_ctx);
+#endif
 
     ALOGI("exiting");
     return 0;

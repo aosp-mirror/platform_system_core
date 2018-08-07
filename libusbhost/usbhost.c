@@ -76,9 +76,11 @@ struct usb_host_context {
     int                         wddbus;
 };
 
+#define MAX_DESCRIPTORS_LENGTH 4096
+
 struct usb_device {
     char dev_name[64];
-    unsigned char desc[4096];
+    unsigned char desc[MAX_DESCRIPTORS_LENGTH];
     int desc_length;
     int fd;
     int writeable;
@@ -387,6 +389,8 @@ struct usb_device *usb_device_new(const char *dev_name, int fd)
     return device;
 
 failed:
+    // TODO It would be more appropriate to have callers do this
+    // since this function doesn't "own" this file descriptor.
     close(fd);
     free(device);
     return NULL;
@@ -455,9 +459,16 @@ uint16_t usb_device_get_product_id(struct usb_device *device)
     return __le16_to_cpu(desc->idProduct);
 }
 
-const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_device *device)
-{
+const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_device* device) {
     return (struct usb_device_descriptor*)device->desc;
+}
+
+size_t usb_device_get_descriptors_length(const struct usb_device* device) {
+    return device->desc_length;
+}
+
+const unsigned char* usb_device_get_raw_descriptors(const struct usb_device* device) {
+    return device->desc;
 }
 
 /* Returns a USB descriptor string for the given string ID.
