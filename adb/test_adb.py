@@ -44,7 +44,7 @@ def fake_adbd(protocol=socket.AF_INET, port=0):
     serversock.listen(1)
 
     # A pipe that is used to signal the thread that it should terminate.
-    readpipe, writepipe = os.pipe()
+    readsock, writesock = socket.socketpair()
 
     def _adb_packet(command: bytes, arg0: int, arg1: int, data: bytes) -> bytes:
         bin_command = struct.unpack('I', command)[0]
@@ -55,19 +55,15 @@ def fake_adbd(protocol=socket.AF_INET, port=0):
 
     def _handle(sock):
         with contextlib.closing(sock) as serversock:
-            rlist = [readpipe, serversock]
+            rlist = [readsock, serversock]
             cnxn_sent = {}
             while True:
                 read_ready, _, _ = select.select(rlist, [], [])
                 for ready in read_ready:
-                    if ready == readpipe:
+                    if ready == readsock:
                         # Closure pipe
-                        serversock.shutdown(socket.SHUT_RDWR)
                         for f in rlist:
-                            if isinstance(f, int):
-                                os.close(f)
-                            else:
-                                f.close()
+                            f.close()
                         return
                     elif ready == serversock:
                         # Server socket
@@ -96,7 +92,7 @@ def fake_adbd(protocol=socket.AF_INET, port=0):
     try:
         yield port
     finally:
-        os.close(writepipe)
+        writesock.close()
         server_thread.join()
 
 
