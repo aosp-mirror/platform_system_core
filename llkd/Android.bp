@@ -20,6 +20,12 @@ cc_library_static {
     export_include_dirs: ["include"],
 
     cflags: ["-Werror"],
+
+    product_variables: {
+        debuggable: {
+            cppflags: ["-D__PTRACE_ENABLED__"],
+        },
+    },
 }
 
 cc_binary {
@@ -39,4 +45,9 @@ cc_binary {
     cflags: ["-Werror"],
 
     init_rc: ["llkd.rc"],
+    product_variables: {
+        debuggable: {
+            init_rc: ["llkd-debuggable.rc"],
+	},
+    },
 }
