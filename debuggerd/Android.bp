@@ -166,6 +166,9 @@ cc_library_static {
     local_include_dirs: ["libdebuggerd/include"],
     export_include_dirs: ["libdebuggerd/include"],
 
+    // Needed for private/bionic_fdsan.h
+    include_dirs: ["bionic/libc"],
+
     static_libs: [
         "libbacktrace",
         "libunwindstack",

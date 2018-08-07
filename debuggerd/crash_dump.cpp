@@ -412,7 +412,7 @@ int main(int argc, char** argv) {
   OpenFilesList open_files;
   {
     ATRACE_NAME("open files");
-    populate_open_files_list(g_target_thread, &open_files);
+    populate_open_files_list(&open_files, g_target_thread);
   }
 
   // In order to reduce the duration that we pause the process for, we ptrace
@@ -567,9 +567,16 @@ int main(int argc, char** argv) {
     ATRACE_NAME("dump_backtrace");
     dump_backtrace(std::move(g_output_fd), map.get(), thread_info, g_target_thread);
   } else {
-    ATRACE_NAME("engrave_tombstone");
-    engrave_tombstone(std::move(g_output_fd), map.get(), process_memory.get(), thread_info,
-                      g_target_thread, abort_msg_address, &open_files, &amfd_data);
+    {
+      ATRACE_NAME("fdsan table dump");
+      populate_fdsan_table(&open_files, process_memory, fdsan_table_address);
+    }
+
+    {
+      ATRACE_NAME("engrave_tombstone");
+      engrave_tombstone(std::move(g_output_fd), map.get(), process_memory.get(), thread_info,
+                        g_target_thread, abort_msg_address, &open_files, &amfd_data);
+    }
   }
 
   if (fatal_signal) {
