@@ -98,6 +98,9 @@ ifdef BOARD_USES_PRODUCT_SERVICESIMAGE
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product-services $(TARGET_ROOT_OUT)/product-services
 endif
+ifdef BOARD_USES_METADATA_PARTITION
+  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/metadata
+endif
 
 # For /odm partition.
 LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/odm

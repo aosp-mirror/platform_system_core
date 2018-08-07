@@ -1115,9 +1115,6 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
-        // 3 second limit to continue search for out-of-order entries.
-        log_time min = start - pruneMargin;
-
         // Cap to 300 iterations we look back for out-of-order entries.
         size_t count = 300;
 
@@ -1133,7 +1130,7 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
             } else if (element->getRealTime() == start) {
                 last = ++it;
                 break;
-            } else if (!--count || (element->getRealTime() < min)) {
+            } else if (!--count) {
                 break;
             }
         }

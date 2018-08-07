@@ -39,7 +39,6 @@ cc_binary {
         "libcrypto",
         "libcutils",
         "libkeymaster_portable",
-        "libkeymaster_staging",
         "libtrusty",
         "libkeymaster_messages",
         "libsoftkeymasterdevice",
