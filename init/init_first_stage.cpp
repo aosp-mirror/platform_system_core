@@ -51,7 +51,7 @@ static void GlobalSeccomp() {
     });
 }
 
-int first_stage_main(int argc, char** argv) {
+int main(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
@@ -141,17 +141,15 @@ int first_stage_main(int argc, char** argv) {
     // Unneeded?  It's an ext4 file system so shouldn't it have the right domain already?
     // We're in the kernel domain, so re-exec init to transition to the init domain now
     // that the SELinux policy has been loaded.
-    if (selinux_android_restorecon("/init", 0) == -1) {
-        PLOG(FATAL) << "restorecon failed of /init failed";
+    if (selinux_android_restorecon("/system/bin/init", 0) == -1) {
+        PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
     }
-
-    setenv("INIT_SECOND_STAGE", "true", 1);
 
     static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
     uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
     setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
 
-    const char* path = argv[0];
+    const char* path = "/system/bin/init";
     const char* args[] = {path, nullptr};
     execv(path, const_cast<char**>(args));
 
@@ -164,3 +162,7 @@ int first_stage_main(int argc, char** argv) {
 
 }  // namespace init
 }  // namespace android
+
+int main(int argc, char** argv) {
+    return android::init::main(argc, argv);
+}
