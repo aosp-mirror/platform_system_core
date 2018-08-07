@@ -565,8 +565,6 @@ static void InitKernelLogging(char* argv[]) {
     android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
-int first_stage_main(int argc, char** argv);
-
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -576,10 +574,6 @@ int main(int argc, char** argv) {
         android::base::InitLogging(argv, &android::base::KernelLogger);
         const BuiltinFunctionMap function_map;
         return SubcontextMain(argc, argv, &function_map);
-    }
-
-    if (getenv("INIT_SECOND_STAGE") == nullptr) {
-        return first_stage_main(argc, argv);
     }
 
     if (REBOOT_BOOTLOADER_ON_PANIC) {
@@ -617,7 +611,6 @@ int main(int argc, char** argv) {
     if (avb_version) property_set("ro.boot.avb_version", avb_version);
 
     // Clean up our environment.
-    unsetenv("INIT_SECOND_STAGE");
     unsetenv("INIT_STARTED_AT");
     unsetenv("INIT_SELINUX_TOOK");
     unsetenv("INIT_AVB_VERSION");
