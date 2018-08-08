@@ -14,6 +14,7 @@
 
 cc_library {
     name: "libadf",
+    recovery_available: true,
     vendor_available: true,
     vndk: {
         enabled: true,
