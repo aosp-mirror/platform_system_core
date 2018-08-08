@@ -465,6 +465,7 @@ void send_auth_response(const char* token, size_t token_size, atransport* t) {
     if (key == nullptr) {
         // No more private keys to try, send the public key.
         t->SetConnectionState(kCsUnauthorized);
+        t->SetConnectionEstablished(true);
         send_auth_publickey(t);
         return;
     }
