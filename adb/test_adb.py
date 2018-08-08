@@ -38,17 +38,17 @@ def fake_adbd(protocol=socket.AF_INET, port=0):
     serversock = socket.socket(protocol, socket.SOCK_STREAM)
     serversock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     if protocol == socket.AF_INET:
-        serversock.bind(('127.0.0.1', port))
+        serversock.bind(("127.0.0.1", port))
     else:
-        serversock.bind(('::1', port))
+        serversock.bind(("::1", port))
     serversock.listen(1)
 
     # A pipe that is used to signal the thread that it should terminate.
     readsock, writesock = socket.socketpair()
 
     def _adb_packet(command: bytes, arg0: int, arg1: int, data: bytes) -> bytes:
-        bin_command = struct.unpack('I', command)[0]
-        buf = struct.pack('IIIIII', bin_command, arg0, arg1, len(data), 0,
+        bin_command = struct.unpack("I", command)[0]
+        buf = struct.pack("IIIIII", bin_command, arg0, arg1, len(data), 0,
                           bin_command ^ 0xffffffff)
         buf += data
         return buf
@@ -72,7 +72,7 @@ def fake_adbd(protocol=socket.AF_INET, port=0):
                     else:
                         # Client socket
                         data = ready.recv(1024)
-                        if not data or data.startswith(b'OPEN'):
+                        if not data or data.startswith(b"OPEN"):
                             if ready in cnxn_sent:
                                 del cnxn_sent[ready]
                             ready.shutdown(socket.SHUT_RDWR)
@@ -82,8 +82,8 @@ def fake_adbd(protocol=socket.AF_INET, port=0):
                         if ready in cnxn_sent:
                             continue
                         cnxn_sent[ready] = True
-                        ready.sendall(_adb_packet(b'CNXN', 0x01000001, 1024 * 1024,
-                                                  b'device::ro.product.name=fakeadb'))
+                        ready.sendall(_adb_packet(b"CNXN", 0x01000001, 1024 * 1024,
+                                                  b"device::ro.product.name=fakeadb"))
 
     port = serversock.getsockname()[1]
     server_thread = threading.Thread(target=_handle, args=(serversock,))
@@ -103,15 +103,15 @@ def adb_connect(unittest, serial):
     This automatically disconnects when done with the connection.
     """
 
-    output = subprocess.check_output(['adb', 'connect', serial])
+    output = subprocess.check_output(["adb", "connect", serial])
     unittest.assertEqual(output.strip(),
-                        'connected to {}'.format(serial).encode("utf8"))
+                        "connected to {}".format(serial).encode("utf8"))
 
     try:
         yield
     finally:
         # Perform best-effort disconnection. Discard the output.
-        subprocess.Popen(['adb', 'disconnect', serial],
+        subprocess.Popen(["adb", "disconnect", serial],
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE).communicate()
 
@@ -120,22 +120,22 @@ def adb_connect(unittest, serial):
 def adb_server():
     """Context manager for an ADB server.
 
-    This creates an ADB server and returns the port it's listening on.
+    This creates an ADB server and returns the port it"s listening on.
     """
 
     port = 5038
     # Kill any existing server on this non-default port.
-    subprocess.check_output(['adb', '-P', str(port), 'kill-server'],
+    subprocess.check_output(["adb", "-P", str(port), "kill-server"],
                             stderr=subprocess.STDOUT)
     read_pipe, write_pipe = os.pipe()
     os.set_inheritable(write_pipe, True)
-    proc = subprocess.Popen(['adb', '-L', 'tcp:localhost:{}'.format(port),
-                             'fork-server', 'server',
-                             '--reply-fd', str(write_pipe)], close_fds=False)
+    proc = subprocess.Popen(["adb", "-L", "tcp:localhost:{}".format(port),
+                             "fork-server", "server",
+                             "--reply-fd", str(write_pipe)], close_fds=False)
     try:
         os.close(write_pipe)
         greeting = os.read(read_pipe, 1024)
-        assert greeting == b'OK\n', repr(greeting)
+        assert greeting == b"OK\n", repr(greeting)
         yield port
     finally:
         proc.terminate()
@@ -148,37 +148,37 @@ class CommandlineTest(unittest.TestCase):
     def test_help(self):
         """Make sure we get _something_ out of help."""
         out = subprocess.check_output(
-            ['adb', 'help'], stderr=subprocess.STDOUT)
+            ["adb", "help"], stderr=subprocess.STDOUT)
         self.assertGreater(len(out), 0)
 
     def test_version(self):
         """Get a version number out of the output of adb."""
-        lines = subprocess.check_output(['adb', 'version']).splitlines()
+        lines = subprocess.check_output(["adb", "version"]).splitlines()
         version_line = lines[0]
         self.assertRegex(
-            version_line, rb'^Android Debug Bridge version \d+\.\d+\.\d+$')
+            version_line, rb"^Android Debug Bridge version \d+\.\d+\.\d+$")
         if len(lines) == 2:
             # Newer versions of ADB have a second line of output for the
             # version that includes a specific revision (git SHA).
             revision_line = lines[1]
             self.assertRegex(
-                revision_line, rb'^Revision [0-9a-f]{12}-android$')
+                revision_line, rb"^Revision [0-9a-f]{12}-android$")
 
     def test_tcpip_error_messages(self):
         """Make sure 'adb tcpip' parsing is sane."""
-        proc = subprocess.Popen(['adb', 'tcpip'],
+        proc = subprocess.Popen(["adb", "tcpip"],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT)
         out, _ = proc.communicate()
         self.assertEqual(1, proc.returncode)
-        self.assertIn(b'requires an argument', out)
+        self.assertIn(b"requires an argument", out)
 
-        proc = subprocess.Popen(['adb', 'tcpip', 'foo'],
+        proc = subprocess.Popen(["adb", "tcpip", "foo"],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT)
         out, _ = proc.communicate()
         self.assertEqual(1, proc.returncode)
-        self.assertIn(b'invalid port', out)
+        self.assertIn(b"invalid port", out)
 
 
 class ServerTest(unittest.TestCase):
@@ -214,12 +214,12 @@ class ServerTest(unittest.TestCase):
 
         port = 5038
         # Kill any existing server on this non-default port.
-        subprocess.check_output(['adb', '-P', str(port), 'kill-server'],
+        subprocess.check_output(["adb", "-P", str(port), "kill-server"],
                                 stderr=subprocess.STDOUT)
 
         try:
             # Run the adb client and have it start the adb server.
-            proc = subprocess.Popen(['adb', '-P', str(port), 'start-server'],
+            proc = subprocess.Popen(["adb", "-P", str(port), "start-server"],
                                     stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
@@ -248,7 +248,7 @@ class ServerTest(unittest.TestCase):
             # probably letting the adb server inherit stdin which would be
             # wrong.
             with self.assertRaises(IOError):
-                proc.stdin.write(b'x')
+                proc.stdin.write(b"x")
                 proc.stdin.flush()
 
             # Wait a few seconds for stdout/stderr to be closed (in the success
@@ -262,7 +262,7 @@ class ServerTest(unittest.TestCase):
             stderr_thread.join()
         finally:
             # If we started a server, kill it.
-            subprocess.check_output(['adb', '-P', str(port), 'kill-server'],
+            subprocess.check_output(["adb", "-P", str(port), "kill-server"],
                                     stderr=subprocess.STDOUT)
 
 
@@ -272,7 +272,7 @@ class EmulatorTest(unittest.TestCase):
     def _reset_socket_on_close(self, sock):
         """Use SO_LINGER to cause TCP RST segment to be sent on socket close."""
         # The linger structure is two shorts on Windows, but two ints on Unix.
-        linger_format = 'hh' if os.name == 'nt' else 'ii'
+        linger_format = "hh" if os.name == "nt" else "ii"
         l_onoff = 1
         l_linger = 0
 
@@ -293,33 +293,33 @@ class EmulatorTest(unittest.TestCase):
             # Use SO_REUSEADDR so subsequent runs of the test can grab the port
             # even if it is in TIME_WAIT.
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            listener.bind(('127.0.0.1', 0))
+            listener.bind(("127.0.0.1", 0))
             listener.listen(4)
             port = listener.getsockname()[1]
 
             # Now that listening has started, start adb emu kill, telling it to
             # connect to our mock emulator.
             proc = subprocess.Popen(
-                ['adb', '-s', 'emulator-' + str(port), 'emu', 'kill'],
+                ["adb", "-s", "emulator-" + str(port), "emu", "kill"],
                 stderr=subprocess.STDOUT)
 
             accepted_connection, addr = listener.accept()
             with contextlib.closing(accepted_connection) as conn:
                 # If WSAECONNABORTED (10053) is raised by any socket calls,
                 # then adb probably isn't reading the data that we sent it.
-                conn.sendall(('Android Console: type \'help\' for a list '
-                             'of commands\r\n').encode("utf8"))
-                conn.sendall(b'OK\r\n')
+                conn.sendall(("Android Console: type 'help' for a list "
+                             "of commands\r\n").encode("utf8"))
+                conn.sendall(b"OK\r\n")
 
                 with contextlib.closing(conn.makefile()) as connf:
                     line = connf.readline()
-                    if line.startswith('auth'):
+                    if line.startswith("auth"):
                         # Ignore the first auth line.
                         line = connf.readline()
-                    self.assertEqual('kill\n', line)
-                    self.assertEqual('quit\n', connf.readline())
+                    self.assertEqual("kill\n", line)
+                    self.assertEqual("quit\n", connf.readline())
 
-                conn.sendall(b'OK: killing emulator, bye bye\r\n')
+                conn.sendall(b"OK: killing emulator, bye bye\r\n")
 
                 # Use SO_LINGER to send TCP RST segment to test whether adb
                 # ignores WSAECONNRESET on Windows. This happens with the
@@ -343,31 +343,31 @@ class EmulatorTest(unittest.TestCase):
         """
         with adb_server() as server_port:
             with fake_adbd() as port:
-                serial = 'emulator-{}'.format(port - 1)
+                serial = "emulator-{}".format(port - 1)
                 # Ensure that the emulator is not there.
                 try:
-                    subprocess.check_output(['adb', '-P', str(server_port),
-                                             '-s', serial, 'get-state'],
+                    subprocess.check_output(["adb", "-P", str(server_port),
+                                             "-s", serial, "get-state"],
                                             stderr=subprocess.STDOUT)
-                    self.fail('Device should not be available')
+                    self.fail("Device should not be available")
                 except subprocess.CalledProcessError as err:
                     self.assertEqual(
                         err.output.strip(),
-                        'error: device \'{}\' not found'.format(serial).encode("utf8"))
+                        "error: device '{}' not found".format(serial).encode("utf8"))
 
                 # Let the ADB server know that the emulator has started.
                 with contextlib.closing(
                         socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-                    sock.connect(('localhost', server_port))
-                    command = 'host:emulator:{}'.format(port).encode("utf8")
-                    sock.sendall(b'%04x%s' % (len(command), command))
+                    sock.connect(("localhost", server_port))
+                    command = "host:emulator:{}".format(port).encode("utf8")
+                    sock.sendall(b"%04x%s" % (len(command), command))
 
                 # Ensure the emulator is there.
-                subprocess.check_call(['adb', '-P', str(server_port),
-                                       '-s', serial, 'wait-for-device'])
-                output = subprocess.check_output(['adb', '-P', str(server_port),
-                                                  '-s', serial, 'get-state'])
-                self.assertEqual(output.strip(), b'device')
+                subprocess.check_call(["adb", "-P", str(server_port),
+                                       "-s", serial, "wait-for-device"])
+                output = subprocess.check_output(["adb", "-P", str(server_port),
+                                                  "-s", serial, "get-state"])
+                self.assertEqual(output.strip(), b"device")
 
 
 class ConnectionTest(unittest.TestCase):
@@ -381,7 +381,7 @@ class ConnectionTest(unittest.TestCase):
         for protocol in (socket.AF_INET, socket.AF_INET6):
             try:
                 with fake_adbd(protocol=protocol) as port:
-                    serial = 'localhost:{}'.format(port)
+                    serial = "localhost:{}".format(port)
                     with adb_connect(self, serial):
                         pass
             except socket.error:
@@ -392,51 +392,51 @@ class ConnectionTest(unittest.TestCase):
         """Ensure that an already-connected device stays connected."""
 
         with fake_adbd() as port:
-            serial = 'localhost:{}'.format(port)
+            serial = "localhost:{}".format(port)
             with adb_connect(self, serial):
                 # b/31250450: this always returns 0 but probably shouldn't.
-                output = subprocess.check_output(['adb', 'connect', serial])
+                output = subprocess.check_output(["adb", "connect", serial])
                 self.assertEqual(
                     output.strip(),
-                    'already connected to {}'.format(serial).encode("utf8"))
+                    "already connected to {}".format(serial).encode("utf8"))
 
     def test_reconnect(self):
         """Ensure that a disconnected device reconnects."""
 
         with fake_adbd() as port:
-            serial = 'localhost:{}'.format(port)
+            serial = "localhost:{}".format(port)
             with adb_connect(self, serial):
-                output = subprocess.check_output(['adb', '-s', serial,
-                                                  'get-state'])
-                self.assertEqual(output.strip(), b'device')
+                output = subprocess.check_output(["adb", "-s", serial,
+                                                  "get-state"])
+                self.assertEqual(output.strip(), b"device")
 
                 # This will fail.
-                proc = subprocess.Popen(['adb', '-s', serial, 'shell', 'true'],
+                proc = subprocess.Popen(["adb", "-s", serial, "shell", "true"],
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
                 output, _ = proc.communicate()
-                self.assertEqual(output.strip(), b'error: closed')
+                self.assertEqual(output.strip(), b"error: closed")
 
-                subprocess.check_call(['adb', '-s', serial, 'wait-for-device'])
+                subprocess.check_call(["adb", "-s", serial, "wait-for-device"])
 
-                output = subprocess.check_output(['adb', '-s', serial,
-                                                  'get-state'])
-                self.assertEqual(output.strip(), b'device')
+                output = subprocess.check_output(["adb", "-s", serial,
+                                                  "get-state"])
+                self.assertEqual(output.strip(), b"device")
 
                 # Once we explicitly kick a device, it won't attempt to
                 # reconnect.
-                output = subprocess.check_output(['adb', 'disconnect', serial])
+                output = subprocess.check_output(["adb", "disconnect", serial])
                 self.assertEqual(
                     output.strip(),
-                    'disconnected {}'.format(serial).encode("utf8"))
+                    "disconnected {}".format(serial).encode("utf8"))
                 try:
-                    subprocess.check_output(['adb', '-s', serial, 'get-state'],
+                    subprocess.check_output(["adb", "-s", serial, "get-state"],
                                             stderr=subprocess.STDOUT)
-                    self.fail('Device should not be available')
+                    self.fail("Device should not be available")
                 except subprocess.CalledProcessError as err:
                     self.assertEqual(
                         err.output.strip(),
-                        'error: device \'{}\' not found'.format(serial).encode("utf8"))
+                        "error: device '{}' not found".format(serial).encode("utf8"))
 
 
 def main():
@@ -445,5 +445,5 @@ def main():
     unittest.main(verbosity=3)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
