@@ -82,6 +82,9 @@
 /* Defined as ProcessList.SYSTEM_ADJ in ProcessList.java */
 #define SYSTEM_ADJ (-900)
 
+#define STRINGIFY(x) STRINGIFY_INTERNAL(x)
+#define STRINGIFY_INTERNAL(x) #x
+
 /* default to old in-kernel interface if no memory pressure events */
 static bool use_inkernel_interface = true;
 static bool has_inkernel_module;
@@ -730,10 +733,10 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
 
 #ifdef LMKD_LOG_STATS
 static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
-    char key[LINE_MAX];
+    char key[LINE_MAX + 1];
     int64_t value;
 
-    sscanf(line,"%s  %" SCNd64 "", key, &value);
+    sscanf(line, "%" STRINGIFY(LINE_MAX) "s  %" SCNd64 "", key, &value);
 
     if (strcmp(key, "total_") < 0) {
         return;
