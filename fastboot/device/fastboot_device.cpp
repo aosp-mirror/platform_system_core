@@ -18,23 +18,31 @@
 
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <android/hardware/boot/1.0/IBootControl.h>
 
 #include <algorithm>
 
 #include "constants.h"
 #include "usb_client.h"
 
+using ::android::hardware::hidl_string;
+using ::android::hardware::boot::V1_0::IBootControl;
+using ::android::hardware::boot::V1_0::Slot;
+namespace sph = std::placeholders;
+
 FastbootDevice::FastbootDevice()
     : kCommandMap({
               {FB_CMD_SET_ACTIVE, SetActiveHandler},
               {FB_CMD_DOWNLOAD, DownloadHandler},
+              {FB_CMD_GETVAR, GetVarHandler},
               {FB_CMD_SHUTDOWN, ShutDownHandler},
               {FB_CMD_REBOOT, RebootHandler},
               {FB_CMD_REBOOT_BOOTLOADER, RebootBootloaderHandler},
               {FB_CMD_REBOOT_FASTBOOT, RebootFastbootHandler},
               {FB_CMD_REBOOT_RECOVERY, RebootRecoveryHandler},
       }),
-      transport_(std::make_unique<ClientUsbTransport>()) {}
+      transport_(std::make_unique<ClientUsbTransport>()),
+      boot_control_hal_(IBootControl::getService()) {}
 
 FastbootDevice::~FastbootDevice() {
     CloseDevice();
@@ -44,9 +52,21 @@ void FastbootDevice::CloseDevice() {
     transport_->Close();
 }
 
+std::string FastbootDevice::GetCurrentSlot() {
+    // Non-A/B devices must not have boot control HALs.
+    if (!boot_control_hal_) {
+        return "";
+    }
+    std::string suffix;
+    auto cb = [&suffix](hidl_string s) { suffix = s; };
+    boot_control_hal_->getSuffix(boot_control_hal_->getCurrentSlot(), cb);
+    return suffix;
+}
+
 bool FastbootDevice::WriteStatus(FastbootResult result, const std::string& message) {
     constexpr size_t kResponseReasonSize = 4;
     constexpr size_t kNumResponseTypes = 4;  // "FAIL", "OKAY", "INFO", "DATA"
+
     char buf[FB_RESPONSE_SZ];
     constexpr size_t kMaxMessageSize = sizeof(buf) - kResponseReasonSize;
     size_t msg_len = std::min(kMaxMessageSize, message.size());
