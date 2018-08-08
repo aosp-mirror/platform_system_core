@@ -20,8 +20,9 @@ cc_defaults {
     cflags: ["-Werror"],
 }
 
-cc_library_shared {
+cc_library {
     name: "libsync",
+    recovery_available: true,
     defaults: ["libsync_defaults"],
 }
 
@@ -29,15 +30,6 @@ llndk_library {
     name: "libsync",
     symbol_file: "libsync.map.txt",
     export_include_dirs: ["include"],
-}
-
-// libsync_recovery is only intended for the recovery binary.
-// Future versions of the kernel WILL require an updated libsync, and will break
-// anything statically linked against the current libsync.
-cc_library_static {
-    name: "libsync_recovery",
-    recovery_available: true,
-    defaults: ["libsync_defaults"],
 }
 
 cc_test {
