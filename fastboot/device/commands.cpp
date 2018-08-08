@@ -27,7 +27,43 @@
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
 
+#include "constants.h"
 #include "fastboot_device.h"
+#include "utility.h"
+
+using ::android::hardware::hidl_string;
+using ::android::hardware::boot::V1_0::BoolResult;
+using ::android::hardware::boot::V1_0::CommandResult;
+using ::android::hardware::boot::V1_0::Slot;
+
+bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    using VariableHandler =
+            std::function<std::string(FastbootDevice*, const std::vector<std::string>&)>;
+    const std::unordered_map<std::string, VariableHandler> kVariableMap = {
+            {FB_VAR_VERSION, GetVersion},
+            {FB_VAR_VERSION_BOOTLOADER, GetBootloaderVersion},
+            {FB_VAR_VERSION_BASEBAND, GetBasebandVersion},
+            {FB_VAR_PRODUCT, GetProduct},
+            {FB_VAR_SERIALNO, GetSerial},
+            {FB_VAR_SECURE, GetSecure},
+            {FB_VAR_UNLOCKED, GetUnlocked},
+            {FB_VAR_MAX_DOWNLOAD_SIZE, GetMaxDownloadSize},
+            {FB_VAR_CURRENT_SLOT, ::GetCurrentSlot},
+            {FB_VAR_SLOT_COUNT, GetSlotCount},
+            {FB_VAR_HAS_SLOT, GetHasSlot},
+            {FB_VAR_SLOT_SUCCESSFUL, GetSlotSuccessful},
+            {FB_VAR_SLOT_UNBOOTABLE, GetSlotUnbootable}};
+
+    // args[0] is command name, args[1] is variable.
+    auto found_variable = kVariableMap.find(args[1]);
+    if (found_variable == kVariableMap.end()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Unknown variable");
+    }
+
+    std::vector<std::string> getvar_args(args.begin() + 2, args.end());
+    auto result = found_variable->second(device, getvar_args);
+    return device->WriteStatus(FastbootResult::OKAY, result);
+}
 
 bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
@@ -51,8 +87,31 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
     return device->WriteStatus(FastbootResult::FAIL, "Couldn't download data");
 }
 
-bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteStatus(FastbootResult::OKAY, "");
+bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteStatus(FastbootResult::FAIL, "Missing slot argument");
+    }
+
+    // Slot suffix needs to be between 'a' and 'z'.
+    Slot slot;
+    if (!GetSlotNumber(args[1], &slot)) {
+        return device->WriteStatus(FastbootResult::FAIL, "Bad slot suffix");
+    }
+
+    // Non-A/B devices will not have a boot control HAL.
+    auto boot_control_hal = device->boot_control_hal();
+    if (!boot_control_hal) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Cannot set slot: boot control HAL absent");
+    }
+    if (slot >= boot_control_hal->getNumberSlots()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Slot out of range");
+    }
+    CommandResult ret;
+    auto cb = [&ret](CommandResult result) { ret = result; };
+    auto result = boot_control_hal->setActiveBootSlot(slot, cb);
+    if (result.isOk() && ret.success) return device->WriteStatus(FastbootResult::OKAY, "");
+    return device->WriteStatus(FastbootResult::FAIL, "Unable to set slot");
 }
 
 bool ShutDownHandler(FastbootDevice* device, const std::vector<std::string>& /* args */) {
