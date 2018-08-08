@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -28,7 +29,6 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "sysdeps.h"
-#include "sysdeps/memory.h"
 #include "transport.h"
 #include "types.h"
 

@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "sysdeps/memory.h"
+#include <memory>
 #include "types.h"
 
 static std::unique_ptr<IOVector::block_type> create_block(const std::string& string) {

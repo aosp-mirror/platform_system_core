@@ -95,6 +95,10 @@ static const FHClassRec _fh_socket_class = {
     _fh_socket_writev,
 };
 
+#if defined(assert)
+#undef assert
+#endif
+
 #define assert(cond)                                                                       \
     do {                                                                                   \
         if (!(cond)) fatal("assertion failed '%s' on %s:%d\n", #cond, __FILE__, __LINE__); \
