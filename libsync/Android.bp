@@ -36,6 +36,7 @@ llndk_library {
 // anything statically linked against the current libsync.
 cc_library_static {
     name: "libsync_recovery",
+    recovery_available: true,
     defaults: ["libsync_defaults"],
 }
 
