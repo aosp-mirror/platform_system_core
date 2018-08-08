@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,25 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
-#include <errno.h>
-#include <unistd.h>
+#include <memory>
 
-#include <android-base/unique_fd.h>
+#include <adbd/usb.h>
 
-#if defined(_WIN32)
-// Helper to automatically close an FD when it goes out of scope.
-struct AdbCloser {
-    static void Close(int fd);
+#include "transport.h"
+
+class ClientUsbTransport : public Transport {
+  public:
+    ClientUsbTransport();
+    ~ClientUsbTransport() override = default;
+
+    ssize_t Read(void* data, size_t len) override;
+    ssize_t Write(const void* data, size_t len) override;
+    int Close() override;
+
+  private:
+    std::unique_ptr<usb_handle> handle_;
+
+    DISALLOW_COPY_AND_ASSIGN(ClientUsbTransport);
 };
-
-using unique_fd = android::base::unique_fd_impl<AdbCloser>;
-#else
-using unique_fd = android::base::unique_fd;
-#endif
-
-template <typename T>
-int adb_close(const android::base::unique_fd_impl<T>&)
-        __attribute__((__unavailable__("adb_close called on unique_fd")));

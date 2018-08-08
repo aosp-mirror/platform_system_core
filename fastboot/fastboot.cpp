@@ -111,12 +111,13 @@ static struct {
     const char* img_name;
     const char* sig_name;
     const char* part_name;
-    bool is_optional;
-    bool is_secondary;
+    bool optional_if_no_image;
+    bool optional_if_no_partition;
+    bool IsSecondary() const { return nickname == nullptr; }
 } images[] = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, false },
-    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  true  },
+    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  false },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
     { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false },
     { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false },
@@ -125,14 +126,14 @@ static struct {
                   "product-services.img",
                                       "product-services.sig",
                                                       "product-services",
-                                                                  true,  false },
+                                                                  true,  true  },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
-    { "super",    "super.img",        "super.sig",    "super",    true,  false },
-    { "system",   "system.img",       "system.sig",   "system",   false, false },
-    { nullptr,    "system_other.img", "system.sig",   "system",   true,  true  },
+    { "super",    "super.img",        "super.sig",    "super",    true,  true  },
+    { "system",   "system.img",       "system.sig",   "system",   false, true  },
+    { nullptr,    "system_other.img", "system.sig",   "system",   true,  false },
     { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false },
-    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  false },
-    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  true  },
+    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  true  },
+    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  false },
         // clang-format on
 };
 
@@ -637,7 +638,8 @@ static void check_requirement(char* line) {
     // "require partition-exists=x" is a special case, added because of the trouble we had when
     // Pixel 2 shipped with new partitions and users used old versions of fastboot to flash them,
     // missing out new partitions. A device with new partitions can use "partition-exists" to
-    // override the `is_optional` field in the `images` array.
+    // override the fields `optional_if_no_image` and 'optional_if_no_partition' in the `images`
+    // array.
     if (!strcmp(name, "partition-exists")) {
         const char* partition_name = val[0];
         std::string has_slot;
@@ -648,7 +650,8 @@ static void check_requirement(char* line) {
         bool known_partition = false;
         for (size_t i = 0; i < arraysize(images); ++i) {
             if (images[i].nickname && !strcmp(images[i].nickname, partition_name)) {
-                images[i].is_optional = false;
+                images[i].optional_if_no_image = false;
+                images[i].optional_if_no_partition = false;
                 known_partition = true;
             }
         }
@@ -1041,6 +1044,25 @@ static void set_active(const std::string& slot_override) {
     }
 }
 
+static bool if_partition_exists(const std::string& partition, const std::string& slot) {
+    std::string has_slot;
+    std::string partition_name = partition;
+
+    if (fb_getvar("has-slot:" + partition, &has_slot) && has_slot == "yes") {
+        if (slot == "") {
+            std::string current_slot = get_current_slot();
+            if (current_slot == "") {
+                die("Failed to identify current slot");
+            }
+            partition_name += "_" + current_slot;
+        } else {
+            partition_name += "_" + slot;
+        }
+    }
+    std::string partition_size;
+    return fb_getvar("partition-size:" + partition_name, &partition_size);
+}
+
 static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary) {
     queue_info_dump();
 
@@ -1076,7 +1098,7 @@ static void do_update(const char* filename, const std::string& slot_override, bo
     }
     for (size_t i = 0; i < arraysize(images); ++i) {
         const char* slot = slot_override.c_str();
-        if (images[i].is_secondary) {
+        if (images[i].IsSecondary()) {
             if (!skip_secondary) {
                 slot = secondary.c_str();
             } else {
@@ -1086,10 +1108,15 @@ static void do_update(const char* filename, const std::string& slot_override, bo
 
         int fd = unzip_to_file(zip, images[i].img_name);
         if (fd == -1) {
-            if (images[i].is_optional) {
+            if (images[i].optional_if_no_image) {
                 continue; // An optional file is missing, so ignore it.
             }
             die("non-optional file %s missing", images[i].img_name);
+        }
+
+        if (images[i].optional_if_no_partition &&
+            !if_partition_exists(images[i].part_name, slot)) {
+            continue;
         }
 
         fastboot_buffer buf;
@@ -1163,7 +1190,7 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary) {
 
     for (size_t i = 0; i < arraysize(images); i++) {
         const char* slot = NULL;
-        if (images[i].is_secondary) {
+        if (images[i].IsSecondary()) {
             if (!skip_secondary) slot = secondary.c_str();
         } else {
             slot = slot_override.c_str();
@@ -1172,10 +1199,13 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary) {
         fname = find_item_given_name(images[i].img_name);
         fastboot_buffer buf;
         if (!load_buf(fname.c_str(), &buf)) {
-            if (images[i].is_optional) continue;
+            if (images[i].optional_if_no_image) continue;
             die("could not load '%s': %s", images[i].img_name, strerror(errno));
         }
-
+        if (images[i].optional_if_no_partition &&
+            !if_partition_exists(images[i].part_name, slot)) {
+            continue;
+        }
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname.c_str());
             flash_buf(partition.c_str(), &buf);
@@ -1333,6 +1363,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
+    bool wants_reboot_recovery = false;
+    bool wants_reboot_fastboot = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
@@ -1555,6 +1587,12 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 if (what == "bootloader") {
                     wants_reboot = false;
                     wants_reboot_bootloader = true;
+                } else if (what == "recovery") {
+                    wants_reboot = false;
+                    wants_reboot_recovery = true;
+                } else if (what == "fastboot") {
+                    wants_reboot = false;
+                    wants_reboot_fastboot = true;
                 } else {
                     syntax_error("unknown reboot target %s", what.c_str());
                 }
@@ -1563,6 +1601,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!args.empty()) syntax_error("junk after reboot command");
         } else if (command == "reboot-bootloader") {
             wants_reboot_bootloader = true;
+        } else if (command == "reboot-recovery") {
+            wants_reboot_recovery = true;
+        } else if (command == "reboot-fastboot") {
+            wants_reboot_fastboot = true;
         } else if (command == "continue") {
             fb_queue_command("continue", "resuming boot");
         } else if (command == "boot") {
@@ -1679,6 +1721,12 @@ int FastBootTool::Main(int argc, char* argv[]) {
         fb_queue_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
+        fb_queue_wait_for_disconnect();
+    } else if (wants_reboot_recovery) {
+        fb_queue_command("reboot-recovery", "rebooting into recovery");
+        fb_queue_wait_for_disconnect();
+    } else if (wants_reboot_fastboot) {
+        fb_queue_command("reboot-fastboot", "rebooting into fastboot");
         fb_queue_wait_for_disconnect();
     }
 

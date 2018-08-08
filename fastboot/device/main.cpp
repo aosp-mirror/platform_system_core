@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,15 @@
  * limitations under the License.
  */
 
-#pragma once
+#include <android-base/logging.h>
 
-#include <errno.h>
-#include <unistd.h>
+#include "fastboot_device.h"
 
-#include <android-base/unique_fd.h>
+int main(int /*argc*/, char* argv[]) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
 
-#if defined(_WIN32)
-// Helper to automatically close an FD when it goes out of scope.
-struct AdbCloser {
-    static void Close(int fd);
-};
-
-using unique_fd = android::base::unique_fd_impl<AdbCloser>;
-#else
-using unique_fd = android::base::unique_fd;
-#endif
-
-template <typename T>
-int adb_close(const android::base::unique_fd_impl<T>&)
-        __attribute__((__unavailable__("adb_close called on unique_fd")));
+    while (true) {
+        FastbootDevice device;
+        device.ExecuteCommands();
+    }
+}

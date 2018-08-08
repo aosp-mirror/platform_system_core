@@ -14,23 +14,31 @@
  * limitations under the License.
  */
 
-#ifndef _DEBUGGERD_OPEN_FILES_LIST_H
-#define _DEBUGGERD_OPEN_FILES_LIST_H
+#pragma once
 
+#include <stdint.h>
 #include <sys/types.h>
 
+#include <map>
+#include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "utility.h"
 
-typedef std::vector<std::pair<int, std::string>> OpenFilesList;
+struct FDInfo {
+  std::optional<std::string> path;
+  std::optional<uint64_t> fdsan_owner;
+};
 
-/* Populates the given list with open files for the given process. */
-void populate_open_files_list(pid_t pid, OpenFilesList* list);
+using OpenFilesList = std::map<int, FDInfo>;
 
-/* Dumps the open files list to the log. */
+// Populates the given list with open files for the given process.
+void populate_open_files_list(OpenFilesList* list, pid_t pid);
+
+// Populates the given list with the target process's fdsan table.
+void populate_fdsan_table(OpenFilesList* list, std::shared_ptr<unwindstack::Memory> memory,
+                          uint64_t fdsan_table_address);
+
+// Dumps the open files list to the log.
 void dump_open_files_list(log_t* log, const OpenFilesList& files, const char* prefix);
-
-#endif // _DEBUGGERD_OPEN_FILES_LIST_H
