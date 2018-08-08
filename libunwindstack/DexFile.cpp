@@ -24,6 +24,7 @@
 
 #include <android-base/unique_fd.h>
 
+#include <dex/class_accessor-inl.h>
 #include <dex/code_item_accessors-inl.h>
 #include <dex/compact_dex_file.h>
 #include <dex/dex_file-inl.h>
@@ -98,38 +99,20 @@ bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name
 
   // Check the methods we haven't cached.
   for (; class_def_index_ < dex_file_->NumClassDefs(); class_def_index_++) {
-    const art::DexFile::ClassDef& class_def = dex_file_->GetClassDef(class_def_index_);
-    const uint8_t* class_data = dex_file_->GetClassData(class_def);
-    if (class_data == nullptr) {
-      continue;
-    }
+    art::ClassAccessor accessor(*dex_file_, dex_file_->GetClassDef(class_def_index_));
 
-    if (class_it_.get() == nullptr || !class_it_->HasNext()) {
-      class_it_.reset(new art::ClassDataItemIterator(*dex_file_.get(), class_data));
-    }
-
-    for (; class_it_->HasNext(); class_it_->Next()) {
-      if (!class_it_->IsAtMethod()) {
-        continue;
-      }
-      const art::DexFile::CodeItem* code_item = class_it_->GetMethodCodeItem();
-      if (code_item == nullptr) {
-        continue;
-      }
-      art::CodeItemInstructionAccessor code(*dex_file_.get(), code_item);
+    for (const art::ClassAccessor::Method& method : accessor.GetMethods()) {
+      art::CodeItemInstructionAccessor code = method.GetInstructions();
       if (!code.HasCodeItem()) {
         continue;
       }
-
       uint32_t offset = reinterpret_cast<const uint8_t*>(code.Insns()) - dex_file_->Begin();
-      uint32_t offset_end = offset + code.InsnsSizeInCodeUnits() * sizeof(uint16_t);
-      uint32_t member_index = class_it_->GetMemberIndex();
+      uint32_t offset_end = offset + code.InsnsSizeInBytes();
+      uint32_t member_index = method.GetIndex();
       method_cache_[offset_end] = std::make_pair(offset, member_index);
       if (offset <= dex_offset && dex_offset < offset_end) {
         *method_name = dex_file_->PrettyMethod(member_index, false);
         *method_offset = dex_offset - offset;
-        // Move past this element.
-        class_it_->Next();
         return true;
       }
     }
