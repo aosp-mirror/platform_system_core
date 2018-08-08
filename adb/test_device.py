@@ -1033,7 +1033,8 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
-    def test_pull_symlink_dir(self):
+    # selinux prevents adbd from accessing symlinks on /data/local/tmp.
+    def disabled_test_pull_symlink_dir(self):
         """Pull a symlink to a directory of symlinks to files."""
         try:
             host_dir = tempfile.mkdtemp()
