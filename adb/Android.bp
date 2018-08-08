@@ -449,7 +449,7 @@ cc_test {
     test_suites: ["device-tests"],
 }
 
-python_binary_host {
+python_test_host {
     name: "adb_integration_test_adb",
     main: "test_adb.py",
     srcs: [
@@ -458,6 +458,8 @@ python_binary_host {
     libs: [
         "adb_py",
     ],
+    test_config: "adb_integration_test_adb.xml",
+    test_suites: ["general-tests"],
     version: {
         py2: {
             enabled: true,
