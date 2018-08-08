@@ -685,13 +685,9 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
     if (service) {
         asocket* s2;
 
-        /* some requests are handled immediately -- in that
-        ** case the handle_host_request() routine has sent
-        ** the OKAY or FAIL message and all we have to do
-        ** is clean up.
-        */
-        if (handle_host_request(service, type, serial, transport_id, s->peer->fd, s) == 0) {
-            /* XXX fail message? */
+        // Some requests are handled immediately -- in that case the handle_host_request() routine
+        // has sent the OKAY or FAIL message and all we have to do is clean up.
+        if (handle_host_request(service, type, serial, transport_id, s->peer->fd, s)) {
             D("SS(%d): handled host service '%s'", s->id, service);
             goto fail;
         }
