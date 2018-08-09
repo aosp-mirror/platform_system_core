@@ -37,8 +37,7 @@ using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
 
 bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    using VariableHandler =
-            std::function<std::string(FastbootDevice*, const std::vector<std::string>&)>;
+    using VariableHandler = std::function<bool(FastbootDevice*, const std::vector<std::string>&)>;
     const std::unordered_map<std::string, VariableHandler> kVariableMap = {
             {FB_VAR_VERSION, GetVersion},
             {FB_VAR_VERSION_BOOTLOADER, GetBootloaderVersion},
@@ -61,8 +60,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
     }
 
     std::vector<std::string> getvar_args(args.begin() + 2, args.end());
-    auto result = found_variable->second(device, getvar_args);
-    return device->WriteStatus(FastbootResult::OKAY, result);
+    return found_variable->second(device, getvar_args);
 }
 
 bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& args) {
