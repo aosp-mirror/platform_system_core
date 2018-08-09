@@ -1190,14 +1190,15 @@ void close_usb_devices() {
 }
 #endif  // ADB_HOST
 
-int register_socket_transport(unique_fd s, std::string serial, int port, int local,
-                              atransport::ReconnectCallback reconnect) {
+bool register_socket_transport(unique_fd s, std::string serial, int port, int local,
+                               atransport::ReconnectCallback reconnect, int* error) {
     atransport* t = new atransport(std::move(reconnect), kCsOffline);
 
     D("transport: %s init'ing for socket %d, on port %d", serial.c_str(), s.get(), port);
     if (init_socket_transport(t, std::move(s), port, local) < 0) {
         delete t;
-        return -1;
+        if (error) *error = errno;
+        return false;
     }
 
     std::unique_lock<std::recursive_mutex> lock(transport_lock);
@@ -1206,7 +1207,8 @@ int register_socket_transport(unique_fd s, std::string serial, int port, int loc
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in pending_list and fails to register";
             delete t;
-            return -EALREADY;
+            if (error) *error = EALREADY;
+            return false;
         }
     }
 
@@ -1215,7 +1217,8 @@ int register_socket_transport(unique_fd s, std::string serial, int port, int loc
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in transport_list and fails to register";
             delete t;
-            return -EALREADY;
+            if (error) *error = EALREADY;
+            return false;
         }
     }
 
@@ -1229,10 +1232,20 @@ int register_socket_transport(unique_fd s, std::string serial, int port, int loc
 
     if (local == 1) {
         // Do not wait for emulator transports.
-        return 0;
+        return true;
     }
 
-    return waitable->WaitForConnection(std::chrono::seconds(10)) ? 0 : -1;
+    if (!waitable->WaitForConnection(std::chrono::seconds(10))) {
+        if (error) *error = ETIMEDOUT;
+        return false;
+    }
+
+    if (t->GetConnectionState() == kCsUnauthorized) {
+        if (error) *error = EPERM;
+        return false;
+    }
+
+    return true;
 }
 
 #if ADB_HOST
