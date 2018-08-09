@@ -125,10 +125,12 @@ void connect_device(const std::string& address, std::string* response) {
         return init_socket_transport(t, std::move(fd), port, 0) >= 0;
     };
 
-    int ret = register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect));
-    if (ret < 0) {
-        if (ret == -EALREADY) {
+    int error;
+    if (!register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect), &error)) {
+        if (error == EALREADY) {
             *response = android::base::StringPrintf("already connected to %s", serial.c_str());
+        } else if (error == EPERM) {
+            *response = android::base::StringPrintf("failed to authenticate to %s", serial.c_str());
         } else {
             *response = android::base::StringPrintf("failed to connect to %s", serial.c_str());
         }
@@ -162,7 +164,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
         if (register_socket_transport(std::move(fd), std::move(serial), adb_port, 1,
-                                      [](atransport*) { return false; }) == 0) {
+                                      [](atransport*) { return false; })) {
             return 0;
         }
     }

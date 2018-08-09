@@ -455,17 +455,14 @@ python_test_host {
     srcs: [
         "test_adb.py",
     ],
-    libs: [
-        "adb_py",
-    ],
     test_config: "adb_integration_test_adb.xml",
     test_suites: ["general-tests"],
     version: {
         py2: {
-            enabled: true,
+            enabled: false,
         },
         py3: {
-            enabled: false,
+            enabled: true,
         },
     },
 }
