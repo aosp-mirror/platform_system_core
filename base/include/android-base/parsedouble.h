@@ -24,7 +24,7 @@
 namespace android {
 namespace base {
 
-// Parse double value in the string 's' and sets 'out' to that value.
+// Parse double value in the string 's' and sets 'out' to that value if it exists.
 // Optionally allows the caller to define a 'min' and 'max' beyond which
 // otherwise valid values will be rejected. Returns boolean success.
 static inline bool ParseDouble(const char* s, double* out,
@@ -39,7 +39,9 @@ static inline bool ParseDouble(const char* s, double* out,
   if (result < min || max < result) {
     return false;
   }
-  *out = result;
+  if (out != nullptr) {
+    *out = result;
+  }
   return true;
 }
 

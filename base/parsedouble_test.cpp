@@ -35,4 +35,9 @@ TEST(parsedouble, smoke) {
   ASSERT_FALSE(android::base::ParseDouble("3.0", &d, -1.0, 2.0));
   ASSERT_TRUE(android::base::ParseDouble("1.0", &d, 0.0, 2.0));
   ASSERT_DOUBLE_EQ(1.0, d);
+
+  ASSERT_FALSE(android::base::ParseDouble("123.4x", nullptr));
+  ASSERT_TRUE(android::base::ParseDouble("-123.4", nullptr));
+  ASSERT_FALSE(android::base::ParseDouble("3.0", nullptr, -1.0, 2.0));
+  ASSERT_TRUE(android::base::ParseDouble("1.0", nullptr, 0.0, 2.0));
 }
