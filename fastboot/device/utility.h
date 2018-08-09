@@ -29,6 +29,17 @@ class PartitionHandle {
   public:
     PartitionHandle() {}
     explicit PartitionHandle(const std::string& path) : path_(path) {}
+    PartitionHandle(const std::string& path, std::function<void()>&& closer)
+        : path_(path), closer_(std::move(closer)) {}
+    PartitionHandle(PartitionHandle&& other) = default;
+    PartitionHandle& operator=(PartitionHandle&& other) = default;
+    ~PartitionHandle() {
+        if (closer_) {
+            // Make sure the device is closed first.
+            fd_ = {};
+            closer_();
+        }
+    }
     const std::string& path() const { return path_; }
     int fd() const { return fd_.get(); }
     void set_fd(android::base::unique_fd&& fd) { fd_ = std::move(fd); }
@@ -36,11 +47,14 @@ class PartitionHandle {
   private:
     std::string path_;
     android::base::unique_fd fd_;
+    std::function<void()> closer_;
 };
 
 class FastbootDevice;
 
 std::optional<std::string> FindPhysicalPartition(const std::string& name);
+bool LogicalPartitionExists(const std::string& name, const std::string& slot_suffix,
+                            bool* is_zero_length = nullptr);
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle);
 
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);

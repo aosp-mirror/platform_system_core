@@ -25,7 +25,6 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
-#include <fs_mgr.h>
 #include <sparse/sparse.h>
 
 #include "fastboot_device.h"

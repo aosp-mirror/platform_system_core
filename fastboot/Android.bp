@@ -114,6 +114,7 @@ cc_binary {
         "libhidltransport",
         "libhwbinder",
         "liblog",
+        "liblp",
         "libsparse",
         "libutils",
     ],

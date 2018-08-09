@@ -133,6 +133,14 @@ bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& ar
     if (args.size() < 1) {
         return device->WriteFail("Missing argument");
     }
+    // Zero-length partitions cannot be created through device-mapper, so we
+    // special case them here.
+    bool is_zero_length;
+    if (LogicalPartitionExists(args[0], device->GetCurrentSlot(), &is_zero_length) &&
+        is_zero_length) {
+        return device->WriteOkay("0");
+    }
+    // Otherwise, open the partition as normal.
     PartitionHandle handle;
     if (!OpenPartition(device, args[0], &handle)) {
         return device->WriteFail("Could not open partition");
