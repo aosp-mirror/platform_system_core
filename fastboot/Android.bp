@@ -94,6 +94,7 @@ cc_binary {
     srcs: [
         "device/commands.cpp",
         "device/fastboot_device.cpp",
+        "device/flashing.cpp",
         "device/main.cpp",
         "device/usb_client.cpp",
         "device/utility.cpp",
@@ -113,6 +114,7 @@ cc_binary {
         "libhidltransport",
         "libhwbinder",
         "liblog",
+        "liblp",
         "libsparse",
         "libutils",
     ],

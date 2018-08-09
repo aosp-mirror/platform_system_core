@@ -43,9 +43,7 @@ class FastbootDevice {
     bool WriteOkay(const std::string& message);
     bool WriteFail(const std::string& message);
 
-    std::vector<char>& get_download_data() { return download_data_; }
-    void set_upload_data(const std::vector<char>& data) { upload_data_ = data; }
-    void set_upload_data(std::vector<char>&& data) { upload_data_ = std::move(data); }
+    std::vector<char>& download_data() { return download_data_; }
     Transport* get_transport() { return transport_.get(); }
     android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal() {
         return boot_control_hal_;
@@ -57,5 +55,4 @@ class FastbootDevice {
     std::unique_ptr<Transport> transport_;
     android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal_;
     std::vector<char> download_data_;
-    std::vector<char> upload_data_;
 };
