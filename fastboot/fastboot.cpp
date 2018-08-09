@@ -1691,6 +1691,17 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 syntax_error("unknown 'flashing' command %s", args[0].c_str());
             }
+        } else if (command == "create-logical-partition") {
+            std::string partition = next_arg(&args);
+            std::string size = next_arg(&args);
+            fb_queue_create_partition(partition, size);
+        } else if (command == "delete-logical-partition") {
+            std::string partition = next_arg(&args);
+            fb_queue_delete_partition(partition);
+        } else if (command == "resize-logical-partition") {
+            std::string partition = next_arg(&args);
+            std::string size = next_arg(&args);
+            fb_queue_resize_partition(partition, size);
         } else {
             syntax_error("unknown command %s", command.c_str());
         }

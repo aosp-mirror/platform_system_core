@@ -155,6 +155,21 @@ void fb_queue_flash_sparse(const std::string& partition, struct sparse_file* s, 
                                         total);
 }
 
+void fb_queue_create_partition(const std::string& partition, const std::string& size) {
+    Action& a = queue_action(OP_COMMAND, FB_CMD_CREATE_PARTITION ":" + partition + ":" + size);
+    a.msg = "Creating '" + partition + "'";
+}
+
+void fb_queue_delete_partition(const std::string& partition) {
+    Action& a = queue_action(OP_COMMAND, FB_CMD_DELETE_PARTITION ":" + partition);
+    a.msg = "Deleting '" + partition + "'";
+}
+
+void fb_queue_resize_partition(const std::string& partition, const std::string& size) {
+    Action& a = queue_action(OP_COMMAND, FB_CMD_RESIZE_PARTITION ":" + partition + ":" + size);
+    a.msg = "Resizing '" + partition + "'";
+}
+
 static int match(const char* str, const char** value, unsigned count) {
     unsigned n;
 
