@@ -34,3 +34,4 @@ bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& a
 bool GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& args);
 bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& args);
 bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args);
