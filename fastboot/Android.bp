@@ -96,6 +96,8 @@ cc_binary {
         "device/fastboot_device.cpp",
         "device/main.cpp",
         "device/usb_client.cpp",
+        "device/utility.cpp",
+        "device/variables.cpp",
     ],
 
     shared_libs: [
@@ -103,6 +105,7 @@ cc_binary {
         "libext4_utils",
         "libsparse",
         "liblog",
+        "android.hardware.boot@1.0",
         "libbootloader_message",
         "libhidltransport",
         "libhidlbase",
