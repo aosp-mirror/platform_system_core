@@ -59,7 +59,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_SLOT_SUCCESSFUL, GetSlotSuccessful},
             {FB_VAR_SLOT_UNBOOTABLE, GetSlotUnbootable},
             {FB_VAR_PARTITION_SIZE, GetPartitionSize},
-            {FB_VAR_IS_LOGICAL, GetPartitionIsLogical}};
+            {FB_VAR_IS_LOGICAL, GetPartitionIsLogical},
+            {FB_VAR_IS_USERSPACE, GetIsUserspace}};
 
     // args[0] is command name, args[1] is variable.
     auto found_variable = kVariableMap.find(args[1]);
