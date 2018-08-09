@@ -21,16 +21,16 @@
 
 class FastbootDevice;
 
-std::string GetVersion(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetProduct(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetSerial(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetSecure(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetSlotCount(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetUnlocked(FastbootDevice* device, const std::vector<std::string>& args);
-std::string GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetVersion(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetProduct(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetSerial(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetSecure(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args);
