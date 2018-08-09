@@ -32,91 +32,96 @@ using ::android::hardware::boot::V1_0::Slot;
 constexpr int kMaxDownloadSizeDefault = 0x20000000;
 constexpr char kFastbootProtocolVersion[] = "0.4";
 
-std::string GetVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */) {
-    return kFastbootProtocolVersion;
+bool GetVersion(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(kFastbootProtocolVersion);
 }
 
-std::string GetBootloaderVersion(FastbootDevice* /* device */,
-                                 const std::vector<std::string>& /* args */) {
-    return android::base::GetProperty("ro.bootloader", "");
+bool GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(android::base::GetProperty("ro.bootloader", ""));
 }
 
-std::string GetBasebandVersion(FastbootDevice* /* device */,
-                               const std::vector<std::string>& /* args */) {
-    return android::base::GetProperty("ro.build.expect.baseband", "");
+bool GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(android::base::GetProperty("ro.build.expect.baseband", ""));
 }
 
-std::string GetProduct(FastbootDevice* /* device */, const std::vector<std::string>& /* args */) {
-    return android::base::GetProperty("ro.product.device", "");
+bool GetProduct(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(android::base::GetProperty("ro.product.device", ""));
 }
 
-std::string GetSerial(FastbootDevice* /* device */, const std::vector<std::string>& /* args */) {
-    return android::base::GetProperty("ro.serialno", "");
+bool GetSerial(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(android::base::GetProperty("ro.serialno", ""));
 }
 
-std::string GetSecure(FastbootDevice* /* device */, const std::vector<std::string>& /* args */) {
-    return android::base::GetBoolProperty("ro.secure", "") ? "yes" : "no";
+bool GetSecure(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(android::base::GetBoolProperty("ro.secure", "") ? "yes" : "no");
 }
 
-std::string GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& /* args */) {
     std::string suffix = device->GetCurrentSlot();
-    return suffix.size() == 2 ? suffix.substr(1) : suffix;
+    std::string slot = suffix.size() == 2 ? suffix.substr(1) : suffix;
+    return device->WriteOkay(slot);
 }
 
-std::string GetSlotCount(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& /* args */) {
     auto boot_control_hal = device->boot_control_hal();
     if (!boot_control_hal) {
         return "0";
     }
-    return std::to_string(boot_control_hal->getNumberSlots());
+    return device->WriteOkay(std::to_string(boot_control_hal->getNumberSlots()));
 }
 
-std::string GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.empty()) {
-        return "no";
+        return device->WriteFail("Missing argument");
     }
     Slot slot;
     if (!GetSlotNumber(args[0], &slot)) {
-        return "no";
+        return device->WriteFail("Invalid slot");
     }
     auto boot_control_hal = device->boot_control_hal();
     if (!boot_control_hal) {
-        return "no";
+        return device->WriteFail("Device has no slots");
     }
-    return boot_control_hal->isSlotMarkedSuccessful(slot) == BoolResult::TRUE ? "yes" : "no";
+    if (boot_control_hal->isSlotMarkedSuccessful(slot) != BoolResult::TRUE) {
+        return device->WriteOkay("no");
+    }
+    return device->WriteOkay("yes");
 }
 
-std::string GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.empty()) {
-        return "no";
+        return device->WriteFail("Missing argument");
     }
     Slot slot;
     if (!GetSlotNumber(args[0], &slot)) {
-        return "no";
+        return device->WriteFail("Invalid slot");
     }
     auto boot_control_hal = device->boot_control_hal();
     if (!boot_control_hal) {
-        return "no";
+        return device->WriteFail("Device has no slots");
     }
-    return boot_control_hal->isSlotBootable(slot) == BoolResult::TRUE ? "no" : "yes";
+    if (boot_control_hal->isSlotBootable(slot) != BoolResult::TRUE) {
+        return device->WriteOkay("yes");
+    }
+    return device->WriteOkay("no");
 }
 
-std::string GetMaxDownloadSize(FastbootDevice* /* device */,
-                               const std::vector<std::string>& /* args */) {
-    return std::to_string(kMaxDownloadSizeDefault);
+bool GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay(std::to_string(kMaxDownloadSizeDefault));
 }
 
-std::string GetUnlocked(FastbootDevice* /* device */, const std::vector<std::string>& /* args */) {
-    return "yes";
+bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay("yes");
 }
 
-std::string GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.empty()) {
-        return "no";
+        return device->WriteFail("Missing argument");
     }
     std::string slot_suffix = device->GetCurrentSlot();
     if (slot_suffix.empty()) {
-        return "no";
+        return device->WriteFail("Invalid slot");
     }
-    return args[0] == "userdata" ? "no" : "yes";
+    std::string result = (args[0] == "userdata" ? "no" : "yes");
+    return device->WriteOkay(result);
 }
