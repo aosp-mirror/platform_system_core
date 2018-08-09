@@ -39,3 +39,5 @@ bool RebootBootloaderHandler(FastbootDevice* device, const std::vector<std::stri
 bool RebootFastbootHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool RebootRecoveryHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args);
+bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args);
+bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args);

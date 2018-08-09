@@ -26,9 +26,11 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
+#include <ext4_utils/wipe.h>
 
 #include "constants.h"
 #include "fastboot_device.h"
+#include "flashing.h"
 #include "utility.h"
 
 using ::android::hardware::hidl_string;
@@ -51,7 +53,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_SLOT_COUNT, GetSlotCount},
             {FB_VAR_HAS_SLOT, GetHasSlot},
             {FB_VAR_SLOT_SUCCESSFUL, GetSlotSuccessful},
-            {FB_VAR_SLOT_UNBOOTABLE, GetSlotUnbootable}};
+            {FB_VAR_SLOT_UNBOOTABLE, GetSlotUnbootable},
+            {FB_VAR_PARTITION_SIZE, GetPartitionSize}};
 
     // args[0] is command name, args[1] is variable.
     auto found_variable = kVariableMap.find(args[1]);
@@ -63,6 +66,20 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
     return found_variable->second(device, getvar_args);
 }
 
+bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
+    }
+    PartitionHandle handle;
+    if (!OpenPartition(device, args[1], &handle)) {
+        return device->WriteStatus(FastbootResult::FAIL, "Partition doesn't exist");
+    }
+    if (wipe_block_device(handle.fd(), get_block_device_size(handle.fd())) == 0) {
+        return device->WriteStatus(FastbootResult::OKAY, "Erasing succeeded");
+    }
+    return device->WriteStatus(FastbootResult::FAIL, "Erasing failed");
+}
+
 bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "size argument unspecified");
@@ -72,17 +89,28 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
     if (!android::base::ParseUint("0x" + args[1], &size, UINT_MAX)) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid size");
     }
-    device->get_download_data().resize(size);
+    device->download_data().resize(size);
     if (!device->WriteStatus(FastbootResult::DATA, android::base::StringPrintf("%08x", size))) {
         return false;
     }
 
-    if (device->HandleData(true, &device->get_download_data())) {
+    if (device->HandleData(true, &device->download_data())) {
         return device->WriteStatus(FastbootResult::OKAY, "");
     }
 
     PLOG(ERROR) << "Couldn't download data";
     return device->WriteStatus(FastbootResult::FAIL, "Couldn't download data");
+}
+
+bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
+    }
+    int ret = Flash(device, args[1]);
+    if (ret < 0) {
+        return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
+    }
+    return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
 bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& args) {
