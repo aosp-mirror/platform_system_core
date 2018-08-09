@@ -186,7 +186,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"wdog_bark", 42},
     {"wdog_bite", 43},
     {"wdog_reset", 44},
-    {"shutdown,", 45},  // Trailing comma is intentional.
+    {"shutdown,", 45},  // Trailing comma is intentional. Do NOT use.
     {"shutdown,userrequested", 46},
     {"reboot,bootloader", 47},
     {"reboot,cold", 48},
@@ -262,8 +262,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"oem_rpm_undef_error", 116},
     {"oem_crash_on_the_lk", 117},
     {"oem_rpm_reset", 118},
-    {"oem_lpass_cfg", 119},
-    {"oem_xpu_ns_error", 120},
+    {"REUSE1", 119},  // Former dupe, can be re-used
+    {"REUSE2", 120},  // Former dupe, can be re-used
     {"factory_cable", 121},
     {"oem_ar6320_failed_to_powerup", 122},
     {"watchdog_rpm_bite", 123},
