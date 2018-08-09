@@ -122,3 +122,11 @@ void FastbootDevice::ExecuteCommands() {
         }
     }
 }
+
+bool FastbootDevice::WriteOkay(const std::string& message) {
+    return WriteStatus(FastbootResult::OKAY, message);
+}
+
+bool FastbootDevice::WriteFail(const std::string& message) {
+    return WriteStatus(FastbootResult::FAIL, message);
+}
