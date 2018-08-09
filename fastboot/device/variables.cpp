@@ -148,3 +148,20 @@ bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& ar
     uint64_t size = get_block_device_size(handle.fd());
     return device->WriteOkay(android::base::StringPrintf("%" PRIX64, size));
 }
+
+bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 1) {
+        return device->WriteFail("Missing argument");
+    }
+    // Note: if a partition name is in both the GPT and the super partition, we
+    // return "true", to be consistent with prefering to flash logical partitions
+    // over physical ones.
+    std::string partition_name = args[0];
+    if (LogicalPartitionExists(partition_name, device->GetCurrentSlot())) {
+        return device->WriteOkay("yes");
+    }
+    if (FindPhysicalPartition(partition_name)) {
+        return device->WriteOkay("no");
+    }
+    return device->WriteFail("Partition not found");
+}
