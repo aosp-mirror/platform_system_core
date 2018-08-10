@@ -28,15 +28,15 @@
 #include <keymaster/keymaster_tags.h>
 #include <keymaster/soft_keymaster_context.h>
 
+#include <trusty_keymaster/legacy/trusty_keymaster_device.h>
 #include "android_keymaster_test_utils.h"
-#include "trusty_keymaster_device.h"
 #include "openssl_utils.h"
 
-using std::string;
 using std::ifstream;
 using std::istreambuf_iterator;
+using std::string;
 
-static keymaster::AndroidKeymaster *impl_ =  nullptr;
+static keymaster::AndroidKeymaster* impl_ = nullptr;
 
 extern "C" {
 int __android_log_print();
@@ -65,8 +65,8 @@ void trusty_keymaster_disconnect() {
 
 template <typename Req, typename Rsp>
 static int fake_call(keymaster::AndroidKeymaster* device,
-                       void (keymaster::AndroidKeymaster::*method)(const Req&, Rsp*), void* in_buf,
-                       uint32_t in_size, void* out_buf, uint32_t* out_size) {
+                     void (keymaster::AndroidKeymaster::*method)(const Req&, Rsp*), void* in_buf,
+                     uint32_t in_size, void* out_buf, uint32_t* out_size) {
     Req req;
     const uint8_t* in = static_cast<uint8_t*>(in_buf);
     req.Deserialize(&in, in + in_size);
@@ -80,29 +80,28 @@ static int fake_call(keymaster::AndroidKeymaster* device,
 }
 
 int trusty_keymaster_call(uint32_t cmd, void* in_buf, uint32_t in_size, void* out_buf,
-                       uint32_t* out_size) {
+                          uint32_t* out_size) {
     switch (cmd) {
-    case KM_GENERATE_KEY:
-        return fake_call(impl_, &keymaster::AndroidKeymaster::GenerateKey, in_buf, in_size,
-                           out_buf, out_size);
-    case KM_BEGIN_OPERATION:
-        return fake_call(impl_, &keymaster::AndroidKeymaster::BeginOperation, in_buf, in_size,
-                           out_buf, out_size);
-    case KM_UPDATE_OPERATION:
-        return fake_call(impl_, &keymaster::AndroidKeymaster::UpdateOperation, in_buf, in_size,
-                           out_buf, out_size);
-    case KM_FINISH_OPERATION:
-        return fake_call(impl_, &keymaster::AndroidKeymaster::FinishOperation, in_buf, in_size,
-                           out_buf, out_size);
-    case KM_IMPORT_KEY:
-        return fake_call(impl_, &keymaster::AndroidKeymaster::ImportKey, in_buf, in_size, out_buf,
-                           out_size);
-    case KM_EXPORT_KEY:
-        return fake_call(impl_, &keymaster::AndroidKeymaster::ExportKey, in_buf, in_size, out_buf,
-                           out_size);
+        case KM_GENERATE_KEY:
+            return fake_call(impl_, &keymaster::AndroidKeymaster::GenerateKey, in_buf, in_size,
+                             out_buf, out_size);
+        case KM_BEGIN_OPERATION:
+            return fake_call(impl_, &keymaster::AndroidKeymaster::BeginOperation, in_buf, in_size,
+                             out_buf, out_size);
+        case KM_UPDATE_OPERATION:
+            return fake_call(impl_, &keymaster::AndroidKeymaster::UpdateOperation, in_buf, in_size,
+                             out_buf, out_size);
+        case KM_FINISH_OPERATION:
+            return fake_call(impl_, &keymaster::AndroidKeymaster::FinishOperation, in_buf, in_size,
+                             out_buf, out_size);
+        case KM_IMPORT_KEY:
+            return fake_call(impl_, &keymaster::AndroidKeymaster::ImportKey, in_buf, in_size,
+                             out_buf, out_size);
+        case KM_EXPORT_KEY:
+            return fake_call(impl_, &keymaster::AndroidKeymaster::ExportKey, in_buf, in_size,
+                             out_buf, out_size);
     }
     return -EINVAL;
-
 }
 
 namespace keymaster {
@@ -127,15 +126,15 @@ class TrustyKeymasterTest : public testing::Test {
 
     size_t dsa_message_len(const keymaster_dsa_keygen_params_t& params) {
         switch (params.key_size) {
-        case 256:
-        case 1024:
-            return 48;
-        case 2048:
-        case 4096:
-            return 72;
-        default:
-            // Oops.
-            return 0;
+            case 256:
+            case 1024:
+                return 48;
+            case 2048:
+            case 4096:
+                return 72;
+            default:
+                // Oops.
+                return 0;
         }
     }
 
@@ -323,9 +322,9 @@ TEST_F(VerificationTest, RsaBadSignature) {
 
     Malloc_Delete sig_deleter(signature);
     signature[siglen / 2]++;
-    EXPECT_EQ(
-        KM_ERROR_VERIFICATION_FAILED,
-        device.verify_data(&sig_params, ptr, size, message.get(), message_len, signature, siglen));
+    EXPECT_EQ(KM_ERROR_VERIFICATION_FAILED,
+              device.verify_data(&sig_params, ptr, size, message.get(), message_len, signature,
+                                 siglen));
 }
 
 TEST_F(VerificationTest, RsaBadMessage) {
@@ -345,9 +344,9 @@ TEST_F(VerificationTest, RsaBadMessage) {
                                             &signature, &siglen));
     Malloc_Delete sig_deleter(signature);
     message[0]++;
-    EXPECT_EQ(
-        KM_ERROR_VERIFICATION_FAILED,
-        device.verify_data(&sig_params, ptr, size, message.get(), message_len, signature, siglen));
+    EXPECT_EQ(KM_ERROR_VERIFICATION_FAILED,
+              device.verify_data(&sig_params, ptr, size, message.get(), message_len, signature,
+                                 siglen));
 }
 
 TEST_F(VerificationTest, RsaShortMessage) {
