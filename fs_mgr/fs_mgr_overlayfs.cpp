@@ -49,12 +49,12 @@ bool fs_mgr_overlayfs_mount_all() {
 }
 
 bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change) {
-    if (change) change = false;
+    if (change) *change = false;
     return false;
 }
 
 bool fs_mgr_overlayfs_teardown(const char*, bool* change) {
-    if (change) change = false;
+    if (change) *change = false;
     return false;
 }
 
