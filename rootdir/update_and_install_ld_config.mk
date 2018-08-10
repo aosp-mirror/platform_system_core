@@ -72,8 +72,9 @@ endif # ifneq ($(lib_list_from_prebuilts),true)
 # $(2): output file with the filtered list of lib names
 $(LOCAL_BUILT_MODULE): private-filter-out-private-libs = \
   paste -sd ":" $(1) > $(2) && \
-  cat $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) | xargs -n 1 -I privatelib bash -c "sed -i 's/privatelib//' $(2)" && \
-  sed -i -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(2)
+  cat $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) | xargs -n 1 -I privatelib bash -c "sed -i.bak 's/privatelib//' $(2)" && \
+  sed -i.bak -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(2) && \
+  rm -f $(2).bak
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_FILE := $(llndk_libraries_file)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SP_LIBRARIES_FILE := $(vndksp_libraries_file)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES_FILE := $(vndkcore_libraries_file)
@@ -90,20 +91,21 @@ $(LOCAL_BUILT_MODULE): $(ld_config_template) $(deps)
 	$(call private-filter-out-private-libs,$(PRIVATE_LLNDK_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)
 	$(hide) sed -e "s?%LLNDK_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)?g" $< >$@
 	$(call private-filter-out-private-libs,$(PRIVATE_VNDK_SP_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)
-	$(hide) sed -i -e "s?%VNDK_SAMEPROCESS_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)?g" $@
+	$(hide) sed -i.bak -e "s?%VNDK_SAMEPROCESS_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)?g" $@
 	$(call private-filter-out-private-libs,$(PRIVATE_VNDK_CORE_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/vndkcore_filtered)
-	$(hide) sed -i -e "s?%VNDK_CORE_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/vndkcore_filtered)?g" $@
+	$(hide) sed -i.bak -e "s?%VNDK_CORE_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/vndkcore_filtered)?g" $@
 
 	$(hide) echo -n > $(PRIVATE_INTERMEDIATES_DIR)/private_llndk && \
 	cat $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) | \
 	xargs -n 1 -I privatelib bash -c "(grep privatelib $(PRIVATE_LLNDK_LIBRARIES_FILE) || true) >> $(PRIVATE_INTERMEDIATES_DIR)/private_llndk" && \
 	paste -sd ":" $(PRIVATE_INTERMEDIATES_DIR)/private_llndk | \
-	sed -i -e "s?%PRIVATE_LLNDK_LIBRARIES%?$$(cat -)?g" $@
+	sed -i.bak -e "s?%PRIVATE_LLNDK_LIBRARIES%?$$(cat -)?g" $@
 
-	$(hide) sed -i -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
-	$(hide) sed -i -e 's?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g' $@
-	$(hide) sed -i -e 's?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g' $@
-	$(hide) sed -i -e 's?%PRODUCTSERVICES%?$(TARGET_COPY_OUT_PRODUCTSERVICES)?g' $@
+	$(hide) sed -i.bak -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
+	$(hide) sed -i.bak -e 's?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g' $@
+	$(hide) sed -i.bak -e 's?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g' $@
+	$(hide) sed -i.bak -e 's?%PRODUCTSERVICES%?$(TARGET_COPY_OUT_PRODUCTSERVICES)?g' $@
+	$(hide) rm -f $@.bak
 
 ld_config_template :=
 vndk_version :=
