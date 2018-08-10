@@ -97,6 +97,9 @@ class ReconnectHandler {
     // Adds the atransport* to the queue of reconnect attempts.
     void TrackTransport(atransport* transport);
 
+    // Wake up the ReconnectHandler thread to have it check for kicked transports.
+    void CheckForKicked();
+
   private:
     // The main thread loop.
     void Run();
@@ -166,6 +169,10 @@ void ReconnectHandler::TrackTransport(atransport* transport) {
     reconnect_cv_.notify_one();
 }
 
+void ReconnectHandler::CheckForKicked() {
+    reconnect_cv_.notify_one();
+}
+
 void ReconnectHandler::Run() {
     while (true) {
         ReconnectAttempt attempt;
@@ -184,10 +191,25 @@ void ReconnectHandler::Run() {
             }
 
             if (!running_) return;
+
+            // Scan the whole list for kicked transports, so that we immediately handle an explicit
+            // disconnect request.
+            bool kicked = false;
+            for (auto it = reconnect_queue_.begin(); it != reconnect_queue_.end();) {
+                if (it->transport->kicked()) {
+                    D("transport %s was kicked. giving up on it.", it->transport->serial.c_str());
+                    remove_transport(it->transport);
+                    it = reconnect_queue_.erase(it);
+                } else {
+                    ++it;
+                }
+                kicked = true;
+            }
+
             if (reconnect_queue_.empty()) continue;
 
-            // Go back to sleep in case |reconnect_cv_| woke up spuriously and we still
-            // have more time to wait for the current attempt.
+            // Go back to sleep if we either woke up spuriously, or we were woken up to remove
+            // a kicked transport, and the first transport isn't ready for reconnection yet.
             auto now = std::chrono::steady_clock::now();
             if (reconnect_queue_.begin()->reconnect_time > now) {
                 continue;
@@ -195,11 +217,6 @@ void ReconnectHandler::Run() {
 
             attempt = *reconnect_queue_.begin();
             reconnect_queue_.erase(reconnect_queue_.begin());
-            if (attempt.transport->kicked()) {
-                D("transport %s was kicked. giving up on it.", attempt.transport->serial.c_str());
-                remove_transport(attempt.transport);
-                continue;
-            }
         }
         D("attempting to reconnect %s", attempt.transport->serial.c_str());
 
@@ -448,6 +465,10 @@ void kick_transport(atransport* t) {
     if (std::find(transport_list.begin(), transport_list.end(), t) != transport_list.end()) {
         t->Kick();
     }
+
+#if ADB_HOST
+    reconnect_handler.CheckForKicked();
+#endif
 }
 
 static int transport_registration_send = -1;
@@ -1276,6 +1297,9 @@ void kick_all_tcp_devices() {
             t->Kick();
         }
     }
+#if ADB_HOST
+    reconnect_handler.CheckForKicked();
+#endif
 }
 
 #endif
