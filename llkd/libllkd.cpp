@@ -285,7 +285,7 @@ struct proc {
           schedUpdate(0),
           nrSwitches(0),
           update(llkUpdate),
-          count(0),
+          count(0ms),
           pid(pid),
           ppid(ppid),
           uid(-1),
@@ -574,15 +574,19 @@ std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
 
 // We only officially support comma separators, but wetware being what they
 // are will take some liberty and I do not believe they should be punished.
-std::unordered_set<std::string> llkSplit(const std::string& s,
-                                         const std::string& delimiters = ", \t:") {
+std::unordered_set<std::string> llkSplit(const std::string& s) {
     std::unordered_set<std::string> result;
 
+    // Special case, allow boolean false to empty the list, otherwise expected
+    // source of input from android::base::GetProperty will supply the default
+    // value on empty content in the property.
+    if (s == "false") return result;
+
     size_t base = 0;
-    size_t found;
-    while (true) {
-        found = s.find_first_of(delimiters, base);
-        result.emplace(s.substr(base, found - base));
+    while (s.size() > base) {
+        auto found = s.find_first_of(", \t:", base);
+        // Only emplace content, empty entries are not an option
+        if (found != base) result.emplace(s.substr(base, found - base));
         if (found == s.npos) break;
         base = found + 1;
     }
