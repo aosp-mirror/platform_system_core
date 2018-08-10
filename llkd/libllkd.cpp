@@ -55,6 +55,7 @@
 
 using namespace std::chrono_literals;
 using namespace std::chrono;
+using namespace std::literals;
 
 namespace {
 
@@ -497,8 +498,7 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state) {
         }
         ::usleep(200000);  // let everything settle
     }
-    llkWriteStringToFile(std::string("SysRq : Trigger a crash : 'livelock,") + state + "'\n",
-                         "/dev/kmsg");
+    llkWriteStringToFile("SysRq : Trigger a crash : 'livelock,"s + state + "'\n", "/dev/kmsg");
     android::base::WriteStringToFd("c", sysrqTriggerFd);
     // NOTREACHED
     // DYB
@@ -1070,7 +1070,7 @@ bool llkInit(const char* threadname) {
         std::to_string(kthreaddPid) + "," + std::to_string(::getpid()) + "," +
         std::to_string(::gettid()) + "," LLK_BLACKLIST_PROCESS_DEFAULT);
     if (threadname) {
-        defaultBlacklistProcess += std::string(",") + threadname;
+        defaultBlacklistProcess += ","s + threadname;
     }
     for (int cpu = 1; cpu < get_nprocs_conf(); ++cpu) {
         defaultBlacklistProcess += ",[watchdog/" + std::to_string(cpu) + "]";
