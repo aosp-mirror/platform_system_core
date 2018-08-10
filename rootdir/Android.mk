@@ -250,9 +250,15 @@ endef
 
 # For VNDK snapshot versions prior to 28, ld.config.txt is installed from the
 # prebuilt under /prebuilts/vndk
-supported_vndk_snapshot_versions := 28
+vndk_snapshots := $(wildcard prebuilts/vndk/*)
+supported_vndk_snapshot_versions := \
+  $(strip $(foreach ver,$(patsubst prebuilts/vndk/v%,%,$(vndk_snapshots)),\
+    $(if $(call math_gt_or_eq,$(ver),28),$(ver),)))
 $(eval $(foreach ver,$(supported_vndk_snapshot_versions),\
   $(call build_versioned_ld_config,$(ver))))
+
+vndk_snapshots :=
+supported_vndk_snapshot_versions :=
 
 #######################################
 # ld.config.vndk_lite.txt
