@@ -27,14 +27,17 @@ cc_binary {
     name: "trusty_keymaster_tipc",
     vendor: true,
     srcs: [
-        "trusty_keymaster_device.cpp",
-        "trusty_keymaster_ipc.cpp",
-        "trusty_keymaster_main.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+        "legacy/trusty_keymaster_device.cpp",
+        "legacy/trusty_keymaster_main.cpp",
     ],
     cflags: [
         "-Wall",
         "-Werror",
     ],
+
+    local_include_dirs: ["include"],
+
     shared_libs: [
         "libcrypto",
         "libcutils",
@@ -52,9 +55,9 @@ cc_library_shared {
     vendor: true,
     relative_install_path: "hw",
     srcs: [
-        "module.cpp",
-        "trusty_keymaster_ipc.cpp",
-        "trusty_keymaster_device.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+        "legacy/module.cpp",
+        "legacy/trusty_keymaster_device.cpp",
     ],
 
     cflags: [
@@ -62,6 +65,8 @@ cc_library_shared {
         "-Wall",
         "-Werror",
     ],
+
+    local_include_dirs: ["include"],
 
     shared_libs: [
         "libcrypto",
