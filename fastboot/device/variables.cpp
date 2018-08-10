@@ -165,3 +165,7 @@ bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string
     }
     return device->WriteFail("Partition not found");
 }
+
+bool GetIsUserspace(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+    return device->WriteOkay("yes");
+}
