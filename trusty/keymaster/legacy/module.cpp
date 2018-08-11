@@ -19,14 +19,15 @@
 #include <hardware/hardware.h>
 #include <hardware/keymaster0.h>
 
-#include "trusty_keymaster_device.h"
+#include <trusty_keymaster/legacy/trusty_keymaster_device.h>
 
 using keymaster::TrustyKeymasterDevice;
 
 /*
  * Generic device handling
  */
-static int trusty_keymaster_open(const hw_module_t* module, const char* name, hw_device_t** device) {
+static int trusty_keymaster_open(const hw_module_t* module, const char* name,
+                                 hw_device_t** device) {
     if (strcmp(name, KEYSTORE_KEYMASTER) != 0) {
         return -EINVAL;
     }
@@ -42,20 +43,20 @@ static int trusty_keymaster_open(const hw_module_t* module, const char* name, hw
 }
 
 static struct hw_module_methods_t keystore_module_methods = {
-    .open = trusty_keymaster_open,
+        .open = trusty_keymaster_open,
 };
 
 struct keystore_module HAL_MODULE_INFO_SYM __attribute__((visibility("default"))) = {
-    .common =
-        {
-            .tag = HARDWARE_MODULE_TAG,
-            .module_api_version = KEYMASTER_MODULE_API_VERSION_2_0,
-            .hal_api_version = HARDWARE_HAL_API_VERSION,
-            .id = KEYSTORE_HARDWARE_MODULE_ID,
-            .name = "Trusty Keymaster HAL",
-            .author = "The Android Open Source Project",
-            .methods = &keystore_module_methods,
-            .dso = 0,
-            .reserved = {},
-        },
+        .common =
+                {
+                        .tag = HARDWARE_MODULE_TAG,
+                        .module_api_version = KEYMASTER_MODULE_API_VERSION_2_0,
+                        .hal_api_version = HARDWARE_HAL_API_VERSION,
+                        .id = KEYSTORE_HARDWARE_MODULE_ID,
+                        .name = "Trusty Keymaster HAL",
+                        .author = "The Android Open Source Project",
+                        .methods = &keystore_module_methods,
+                        .dso = 0,
+                        .reserved = {},
+                },
 };
