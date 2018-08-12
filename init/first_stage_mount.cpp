@@ -35,6 +35,7 @@
 #include "fs_mgr.h"
 #include "fs_mgr_avb.h"
 #include "fs_mgr_dm_linear.h"
+#include "fs_mgr_overlayfs.h"
 #include "uevent.h"
 #include "uevent_listener.h"
 #include "util.h"
@@ -351,6 +352,7 @@ bool FirstStageMount::MountPartitions() {
             return false;
         }
     }
+    fs_mgr_overlayfs_mount_all();
     return true;
 }
 

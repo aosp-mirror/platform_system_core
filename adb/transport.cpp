@@ -33,7 +33,7 @@
 #include <deque>
 #include <list>
 #include <mutex>
-#include <queue>
+#include <set>
 #include <thread>
 
 #include <android-base/logging.h>
@@ -108,9 +108,11 @@ class ReconnectHandler {
         size_t attempts_left;
 
         bool operator<(const ReconnectAttempt& rhs) const {
-            // std::priority_queue returns the largest element first, so we want attempts that have
-            // less time remaining (i.e. smaller time_points) to compare greater.
-            return reconnect_time > rhs.reconnect_time;
+            if (reconnect_time == rhs.reconnect_time) {
+                return reinterpret_cast<uintptr_t>(transport) <
+                       reinterpret_cast<uintptr_t>(rhs.transport);
+            }
+            return reconnect_time < rhs.reconnect_time;
         }
     };
 
@@ -123,7 +125,7 @@ class ReconnectHandler {
     bool running_ GUARDED_BY(reconnect_mutex_) = true;
     std::thread handler_thread_;
     std::condition_variable reconnect_cv_;
-    std::priority_queue<ReconnectAttempt> reconnect_queue_ GUARDED_BY(reconnect_mutex_);
+    std::set<ReconnectAttempt> reconnect_queue_ GUARDED_BY(reconnect_mutex_);
 
     DISALLOW_COPY_AND_ASSIGN(ReconnectHandler);
 };
@@ -145,8 +147,8 @@ void ReconnectHandler::Stop() {
     // Drain the queue to free all resources.
     std::lock_guard<std::mutex> lock(reconnect_mutex_);
     while (!reconnect_queue_.empty()) {
-        ReconnectAttempt attempt = reconnect_queue_.top();
-        reconnect_queue_.pop();
+        ReconnectAttempt attempt = *reconnect_queue_.begin();
+        reconnect_queue_.erase(reconnect_queue_.begin());
         remove_transport(attempt.transport);
     }
 }
@@ -176,7 +178,7 @@ void ReconnectHandler::Run() {
                 //        system_clock as its clock, so we're probably hosed if the clock changes,
                 //        even if we use steady_clock throughout. This problem goes away once we
                 //        switch to libc++.
-                reconnect_cv_.wait_until(lock, reconnect_queue_.top().reconnect_time);
+                reconnect_cv_.wait_until(lock, reconnect_queue_.begin()->reconnect_time);
             } else {
                 reconnect_cv_.wait(lock);
             }
@@ -187,12 +189,12 @@ void ReconnectHandler::Run() {
             // Go back to sleep in case |reconnect_cv_| woke up spuriously and we still
             // have more time to wait for the current attempt.
             auto now = std::chrono::steady_clock::now();
-            if (reconnect_queue_.top().reconnect_time > now) {
+            if (reconnect_queue_.begin()->reconnect_time > now) {
                 continue;
             }
 
-            attempt = reconnect_queue_.top();
-            reconnect_queue_.pop();
+            attempt = *reconnect_queue_.begin();
+            reconnect_queue_.erase(reconnect_queue_.begin());
             if (attempt.transport->kicked()) {
                 D("transport %s was kicked. giving up on it.", attempt.transport->serial.c_str());
                 remove_transport(attempt.transport);
@@ -1190,14 +1192,15 @@ void close_usb_devices() {
 }
 #endif  // ADB_HOST
 
-int register_socket_transport(unique_fd s, std::string serial, int port, int local,
-                              atransport::ReconnectCallback reconnect) {
+bool register_socket_transport(unique_fd s, std::string serial, int port, int local,
+                               atransport::ReconnectCallback reconnect, int* error) {
     atransport* t = new atransport(std::move(reconnect), kCsOffline);
 
     D("transport: %s init'ing for socket %d, on port %d", serial.c_str(), s.get(), port);
     if (init_socket_transport(t, std::move(s), port, local) < 0) {
         delete t;
-        return -1;
+        if (error) *error = errno;
+        return false;
     }
 
     std::unique_lock<std::recursive_mutex> lock(transport_lock);
@@ -1206,7 +1209,8 @@ int register_socket_transport(unique_fd s, std::string serial, int port, int loc
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in pending_list and fails to register";
             delete t;
-            return -EALREADY;
+            if (error) *error = EALREADY;
+            return false;
         }
     }
 
@@ -1215,7 +1219,8 @@ int register_socket_transport(unique_fd s, std::string serial, int port, int loc
             VLOG(TRANSPORT) << "socket transport " << transport->serial
                             << " is already in transport_list and fails to register";
             delete t;
-            return -EALREADY;
+            if (error) *error = EALREADY;
+            return false;
         }
     }
 
@@ -1229,10 +1234,20 @@ int register_socket_transport(unique_fd s, std::string serial, int port, int loc
 
     if (local == 1) {
         // Do not wait for emulator transports.
-        return 0;
+        return true;
     }
 
-    return waitable->WaitForConnection(std::chrono::seconds(10)) ? 0 : -1;
+    if (!waitable->WaitForConnection(std::chrono::seconds(10))) {
+        if (error) *error = ETIMEDOUT;
+        return false;
+    }
+
+    if (t->GetConnectionState() == kCsUnauthorized) {
+        if (error) *error = EPERM;
+        return false;
+    }
+
+    return true;
 }
 
 #if ADB_HOST

@@ -22,10 +22,11 @@
 #include <utility>
 #include <vector>
 
+#include <android/hardware/boot/1.0/IBootControl.h>
+
 #include "commands.h"
 #include "transport.h"
-
-class FastbootDevice;
+#include "variables.h"
 
 class FastbootDevice {
   public:
@@ -36,17 +37,22 @@ class FastbootDevice {
     void ExecuteCommands();
     bool WriteStatus(FastbootResult result, const std::string& message);
     bool HandleData(bool read, std::vector<char>* data);
+    std::string GetCurrentSlot();
 
-    std::vector<char>& get_download_data() { return download_data_; }
-    void set_upload_data(const std::vector<char>& data) { upload_data_ = data; }
-    void set_upload_data(std::vector<char>&& data) { upload_data_ = std::move(data); }
+    // Shortcuts for writing OKAY and FAIL status results.
+    bool WriteOkay(const std::string& message);
+    bool WriteFail(const std::string& message);
+
+    std::vector<char>& download_data() { return download_data_; }
     Transport* get_transport() { return transport_.get(); }
+    android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal() {
+        return boot_control_hal_;
+    }
 
   private:
     const std::unordered_map<std::string, CommandHandler> kCommandMap;
 
     std::unique_ptr<Transport> transport_;
-
+    android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal_;
     std::vector<char> download_data_;
-    std::vector<char> upload_data_;
 };

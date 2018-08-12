@@ -138,9 +138,10 @@ int main(int argc, char** argv) {
     SelinuxSetupKernelLogging();
     SelinuxInitialize();
 
-    // Unneeded?  It's an ext4 file system so shouldn't it have the right domain already?
-    // We're in the kernel domain, so re-exec init to transition to the init domain now
-    // that the SELinux policy has been loaded.
+    // We're in the kernel domain and want to transition to the init domain when we exec second
+    // stage init.  File systems that store SELabels in their xattrs, such as ext4 do not need an
+    // explicit restorecon here, but other file systems do.  In particular, this is needed for
+    // ramdisks such as the recovery image for A/B devices.
     if (selinux_android_restorecon("/system/bin/init", 0) == -1) {
         PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
     }
