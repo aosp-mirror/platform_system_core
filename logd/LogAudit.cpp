@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
@@ -344,8 +345,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
 
         rc = logbuf->log(
             LOG_ID_EVENTS, now, uid, pid, tid, reinterpret_cast<char*>(event),
-            (message_len <= USHRT_MAX) ? (unsigned short)message_len
-                                       : USHRT_MAX);
+            (message_len <= UINT16_MAX) ? (uint16_t)message_len : UINT16_MAX);
         if (rc >= 0) {
             notify |= 1 << LOG_ID_EVENTS;
         }
@@ -399,9 +399,9 @@ int LogAudit::logPrint(const char* fmt, ...) {
         strncpy(newstr + 1 + str_len + prefix_len + suffix_len,
                 denial_metadata.c_str(), denial_metadata.length());
 
-        rc = logbuf->log(LOG_ID_MAIN, now, uid, pid, tid, newstr,
-                         (message_len <= USHRT_MAX) ? (unsigned short)message_len
-                                                    : USHRT_MAX);
+        rc = logbuf->log(
+            LOG_ID_MAIN, now, uid, pid, tid, newstr,
+            (message_len <= UINT16_MAX) ? (uint16_t)message_len : UINT16_MAX);
 
         if (rc >= 0) {
             notify |= 1 << LOG_ID_MAIN;
