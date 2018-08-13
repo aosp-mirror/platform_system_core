@@ -18,6 +18,7 @@
 #define _LOGD_LOG_BUFFER_ELEMENT_H__
 
 #include <stdatomic.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -56,7 +57,7 @@ class __attribute__((packed)) LogBufferElement {
 
    public:
     LogBufferElement(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
-                     pid_t tid, const char* msg, unsigned short len);
+                     pid_t tid, const char* msg, uint16_t len);
     LogBufferElement(const LogBufferElement& elem);
     ~LogBufferElement();
 
@@ -77,11 +78,11 @@ class __attribute__((packed)) LogBufferElement {
         return mTid;
     }
     uint32_t getTag() const;
-    unsigned short getDropped(void) const {
+    uint16_t getDropped(void) const {
         return mDropped ? mDroppedCount : 0;
     }
-    unsigned short setDropped(unsigned short value);
-    unsigned short getMsgLen() const {
+    uint16_t setDropped(uint16_t value);
+    uint16_t getMsgLen() const {
         return mDropped ? 0 : mMsgLen;
     }
     const char* getMsg() const {
