@@ -57,7 +57,7 @@ enum RetCode : int {
 
 class FastBootDriver {
   public:
-    static constexpr int RESP_TIMEOUT = 10;  // 10 seconds
+    static constexpr int RESP_TIMEOUT = 30;  // 30 seconds
     static constexpr uint32_t MAX_DOWNLOAD_SIZE = std::numeric_limits<uint32_t>::max();
     static constexpr size_t TRANSPORT_CHUNK_SIZE = 1024;
 
