@@ -35,7 +35,7 @@ atomic_int_fast64_t LogBufferElement::sequence(1);
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
                                    uid_t uid, pid_t pid, pid_t tid,
-                                   const char* msg, unsigned short len)
+                                   const char* msg, uint16_t len)
     : mUid(uid),
       mPid(pid),
       mTid(tid),
@@ -71,7 +71,7 @@ uint32_t LogBufferElement::getTag() const {
                : 0;
 }
 
-unsigned short LogBufferElement::setDropped(unsigned short value) {
+uint16_t LogBufferElement::setDropped(uint16_t value) {
     // The tag information is saved in mMsg data, if the tag is non-zero
     // save only the information needed to get the tag.
     if (getTag() != 0) {
