@@ -203,6 +203,15 @@ enum {
      * (except disconnect and sending CAMERA_CMD_PING) after getting this.
      */
     CAMERA_ERROR_RELEASED = 2,
+
+    /**
+     * Camera was released because device policy change or the client application
+     * is going to background. The client should call Camera::disconnect
+     * immediately after getting this notification. Otherwise, the camera will be
+     * released by camera service in a short time. The client should not call any
+     * method (except disconnect and sending CAMERA_CMD_PING) after getting this.
+     */
+    CAMERA_ERROR_DISABLED = 3,
     CAMERA_ERROR_SERVER_DIED = 100
 };
 

@@ -25,7 +25,7 @@ namespace fuse {
 
 // The numbers came from sdcard.c.
 // Maximum number of bytes to write/read in one request/one reply.
-constexpr size_t kFuseMaxWrite = 256 * 1024;
+constexpr size_t kFuseMaxWrite = 128 * 1024;
 constexpr size_t kFuseMaxRead = 128 * 1024;
 constexpr int32_t kFuseSuccess = 0;
 

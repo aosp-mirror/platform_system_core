@@ -104,10 +104,10 @@ class ElfInterface {
   bool ReadAllHeaders(uint64_t* load_bias);
 
   template <typename EhdrType, typename PhdrType>
-  bool ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias);
+  void ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias);
 
   template <typename EhdrType, typename ShdrType>
-  bool ReadSectionHeaders(const EhdrType& ehdr);
+  void ReadSectionHeaders(const EhdrType& ehdr);
 
   template <typename DynType>
   bool GetSonameWithTemplate(std::string* soname);

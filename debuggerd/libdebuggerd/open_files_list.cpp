@@ -32,10 +32,12 @@
 
 #include <android-base/file.h>
 #include <log/log.h>
+#include <unwindstack/Memory.h>
 
 #include "libdebuggerd/utility.h"
+#include "private/bionic_fdsan.h"
 
-void populate_open_files_list(pid_t pid, OpenFilesList* list) {
+void populate_open_files_list(OpenFilesList* list, pid_t pid) {
   std::string fd_dir_name = "/proc/" + std::to_string(pid) + "/fd";
   std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(fd_dir_name.c_str()), closedir);
   if (dir == nullptr) {
@@ -53,17 +55,84 @@ void populate_open_files_list(pid_t pid, OpenFilesList* list) {
     std::string path = fd_dir_name + "/" + std::string(de->d_name);
     std::string target;
     if (android::base::Readlink(path, &target)) {
-      list->emplace_back(fd, target);
+      (*list)[fd].path = target;
     } else {
+      (*list)[fd].path = "???";
       ALOGE("failed to readlink %s: %s", path.c_str(), strerror(errno));
-      list->emplace_back(fd, "???");
     }
   }
 }
 
+void populate_fdsan_table(OpenFilesList* list, std::shared_ptr<unwindstack::Memory> memory,
+                          uint64_t fdsan_table_address) {
+  constexpr size_t inline_fds = sizeof(FdTable::entries) / sizeof(*FdTable::entries);
+  static_assert(inline_fds == 128);
+  size_t entry_offset = offsetof(FdTable, entries);
+  for (size_t i = 0; i < inline_fds; ++i) {
+    uint64_t address = fdsan_table_address + entry_offset + sizeof(FdEntry) * i;
+    FdEntry entry;
+    if (!memory->Read(address, &entry, sizeof(entry))) {
+      ALOGE("failed to read fdsan table entry %zu: %s", i, strerror(errno));
+      return;
+    }
+    ALOGE("fd %zu = %#" PRIx64, i, entry.close_tag.load());
+    if (entry.close_tag) {
+      (*list)[i].fdsan_owner = entry.close_tag.load();
+    }
+  }
+
+  size_t overflow_offset = offsetof(FdTable, overflow);
+  uintptr_t overflow = 0;
+  if (!memory->Read(fdsan_table_address + overflow_offset, &overflow, sizeof(overflow))) {
+    ALOGE("failed to read fdsan table overflow pointer: %s", strerror(errno));
+    return;
+  }
+
+  if (!overflow) {
+    return;
+  }
+
+  size_t overflow_length;
+  if (!memory->Read(overflow, &overflow_length, sizeof(overflow_length))) {
+    ALOGE("failed to read fdsan overflow table length: %s", strerror(errno));
+    return;
+  }
+
+  if (overflow_length > 131072) {
+    ALOGE("unreasonable large fdsan overflow table size %zu, bailing out", overflow_length);
+    return;
+  }
+
+  for (size_t i = 0; i < overflow_length; ++i) {
+    int fd = i + inline_fds;
+    uint64_t address = overflow + offsetof(FdTableOverflow, entries) + i * sizeof(FdEntry);
+    FdEntry entry;
+    if (!memory->Read(address, &entry, sizeof(entry))) {
+      ALOGE("failed to read fdsan overflow entry for fd %d: %s", fd, strerror(errno));
+      return;
+    }
+    if (entry.close_tag) {
+      (*list)[fd].fdsan_owner = entry.close_tag;
+    }
+  }
+  return;
+}
+
 void dump_open_files_list(log_t* log, const OpenFilesList& files, const char* prefix) {
-  for (auto& file : files) {
-    _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s\n", prefix, file.first, file.second.c_str());
+  for (auto& [fd, entry] : files) {
+    const std::optional<std::string>& path = entry.path;
+    const std::optional<uint64_t>& fdsan_owner = entry.fdsan_owner;
+    if (path && fdsan_owner) {
+      _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s (owned by %#" PRIx64 ")\n", prefix, fd,
+           path->c_str(), *fdsan_owner);
+    } else if (path && !fdsan_owner) {
+      _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s (unowned)\n", prefix, fd, path->c_str());
+    } else if (!path && fdsan_owner) {
+      _LOG(log, logtype::OPEN_FILES, "%sfd %i: <MISSING> (owned by %#" PRIx64 ")\n", prefix, fd,
+           *fdsan_owner);
+    } else {
+      ALOGE("OpenFilesList contains an entry (fd %d) with no path or owner", fd);
+    }
   }
 }
 

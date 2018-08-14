@@ -136,7 +136,7 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
     if (logbuf != nullptr) {
         int res = logbuf->log(
             logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
-            ((size_t)n <= USHRT_MAX) ? (unsigned short)n : USHRT_MAX);
+            ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
         if (res > 0 && reader != nullptr) {
             reader->notifyNewLog(static_cast<log_mask_t>(1 << logId));
         }

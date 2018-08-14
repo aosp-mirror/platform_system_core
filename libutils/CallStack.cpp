@@ -16,15 +16,14 @@
 
 #define LOG_TAG "CallStack"
 
-#include <utils/CallStack.h>
-
-#include <memory>
-
 #include <utils/Printer.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
 
 #include <backtrace/Backtrace.h>
+
+#define CALLSTACK_WEAK  // Don't generate weak definitions.
+#include <utils/CallStack.h>
 
 namespace android {
 
@@ -75,5 +74,31 @@ void CallStack::print(Printer& printer) const {
         printer.printLine(mFrameLines[i]);
     }
 }
+
+// The following four functions may be used via weak symbol references from libutils.
+// Clients assume that if any of these symbols are available, then deleteStack() is.
+
+#ifdef WEAKS_AVAILABLE
+
+CallStack::CallStackUPtr CallStack::getCurrentInternal(int ignoreDepth) {
+    CallStack::CallStackUPtr stack(new CallStack());
+    stack->update(ignoreDepth + 1);
+    return stack;
+}
+
+void CallStack::logStackInternal(const char* logtag, const CallStack* stack,
+                                 android_LogPriority priority) {
+    stack->log(logtag, priority);
+}
+
+String8 CallStack::stackToStringInternal(const char* prefix, const CallStack* stack) {
+    return stack->toString(prefix);
+}
+
+void CallStack::deleteStack(CallStack* stack) {
+    delete stack;
+}
+
+#endif // WEAKS_AVAILABLE
 
 }; // namespace android

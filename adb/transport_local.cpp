@@ -125,10 +125,12 @@ void connect_device(const std::string& address, std::string* response) {
         return init_socket_transport(t, std::move(fd), port, 0) >= 0;
     };
 
-    int ret = register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect));
-    if (ret < 0) {
-        if (ret == -EALREADY) {
+    int error;
+    if (!register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect), &error)) {
+        if (error == EALREADY) {
             *response = android::base::StringPrintf("already connected to %s", serial.c_str());
+        } else if (error == EPERM) {
+            *response = android::base::StringPrintf("failed to authenticate to %s", serial.c_str());
         } else {
             *response = android::base::StringPrintf("failed to connect to %s", serial.c_str());
         }
@@ -162,7 +164,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
         if (register_socket_transport(std::move(fd), std::move(serial), adb_port, 1,
-                                      [](atransport*) { return false; }) == 0) {
+                                      [](atransport*) { return false; })) {
             return 0;
         }
     }
@@ -453,10 +455,6 @@ static atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
     return it->second;
 }
 
-std::string getEmulatorSerialString(int console_port) {
-    return android::base::StringPrintf("emulator-%d", console_port);
-}
-
 atransport* find_emulator_transport_by_adb_port(int adb_port) {
     std::lock_guard<std::mutex> lock(local_transports_lock);
     return find_emulator_transport_by_adb_port_locked(adb_port);
@@ -466,6 +464,10 @@ atransport* find_emulator_transport_by_console_port(int console_port) {
     return find_transport(getEmulatorSerialString(console_port).c_str());
 }
 #endif
+
+std::string getEmulatorSerialString(int console_port) {
+    return android::base::StringPrintf("emulator-%d", console_port);
+}
 
 int init_socket_transport(atransport* t, unique_fd fd, int adb_port, int local) {
     int fail = 0;

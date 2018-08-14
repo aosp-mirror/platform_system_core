@@ -149,8 +149,8 @@ bool SetupMessageSockets(base::unique_fd (*result)[2]) {
     }
 
     constexpr int kMaxMessageSize = sizeof(FuseBuffer);
-    if (setsockopt(fds[0], SOL_SOCKET, SO_SNDBUFFORCE, &kMaxMessageSize, sizeof(int)) != 0 ||
-        setsockopt(fds[1], SOL_SOCKET, SO_SNDBUFFORCE, &kMaxMessageSize, sizeof(int)) != 0) {
+    if (setsockopt(fds[0], SOL_SOCKET, SO_SNDBUF, &kMaxMessageSize, sizeof(int)) != 0 ||
+        setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, &kMaxMessageSize, sizeof(int)) != 0) {
         PLOG(ERROR) << "Failed to update buffer size for socket";
         return false;
     }

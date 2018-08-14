@@ -23,88 +23,103 @@
 #include <unordered_map>
 #include <vector>
 
-enum uid_stat_t {
-    FOREGROUND = 0,
-    BACKGROUND = 1,
-    UID_STATS = 2
+#include <cutils/multiuser.h>
+#include <utils/Mutex.h>
+
+#include "storaged.pb.h"
+#include "uid_info.h"
+
+#define FRIEND_TEST(test_case_name, test_name) \
+friend class test_case_name##_##test_name##_Test
+
+using namespace std;
+using namespace storaged_proto;
+using namespace android;
+using namespace android::os::storaged;
+
+class uid_info : public UidInfo {
+public:
+    bool parse_uid_io_stats(string&& s);
 };
 
-enum charger_stat_t {
-    CHARGER_OFF = 0,
-    CHARGER_ON = 1,
-    CHARGER_STATS = 2
-};
-
-enum io_type_t {
-    READ = 0,
-    WRITE = 1,
-    IO_TYPES = 2
-};
-
-struct uid_io_stats {
-    uint64_t rchar;                 // characters read
-    uint64_t wchar;                 // characters written
-    uint64_t read_bytes;            // bytes read (from storage layer)
-    uint64_t write_bytes;           // bytes written (to storage layer)
-    uint64_t fsync;                 // number of fsync syscalls
-};
-
-struct uid_info {
-    uint32_t uid;                   // user id
-    std::string name;               // package name
-    struct uid_io_stats io[UID_STATS];    // [0]:foreground [1]:background
+class io_usage {
+public:
+    io_usage() : bytes{{{0}}} {};
+    uint64_t bytes[IO_TYPES][UID_STATS][CHARGER_STATS];
+    bool is_zero() const;
+    io_usage& operator+= (const io_usage& stats) {
+        for (int i = 0; i < IO_TYPES; i++) {
+            for (int j = 0; j < UID_STATS; j++) {
+                for (int k = 0; k < CHARGER_STATS; k++) {
+                    bytes[i][j][k] += stats.bytes[i][j][k];
+                }
+            }
+        }
+        return *this;
+    }
 };
 
 struct uid_io_usage {
-    uint64_t bytes[IO_TYPES][UID_STATS][CHARGER_STATS];
+    userid_t user_id;
+    io_usage uid_ios;
+    // mapped from task comm to task io usage
+    map<string, io_usage> task_ios;
 };
 
 struct uid_record {
-    std::string name;
+    string name;
     struct uid_io_usage ios;
 };
 
 struct uid_records {
     uint64_t start_ts;
-    std::vector<struct uid_record> entries;
+    vector<struct uid_record> entries;
 };
 
 class uid_monitor {
 private:
+    FRIEND_TEST(storaged_test, uid_monitor);
     // last dump from /proc/uid_io/stats, uid -> uid_info
-    std::unordered_map<uint32_t, struct uid_info> last_uid_io_stats;
+    unordered_map<uint32_t, uid_info> last_uid_io_stats;
     // current io usage for next report, app name -> uid_io_usage
-    std::unordered_map<std::string, struct uid_io_usage> curr_io_stats;
+    unordered_map<string, struct uid_io_usage> curr_io_stats;
     // io usage records, end timestamp -> {start timestamp, vector of records}
-    std::map<uint64_t, struct uid_records> records;
+    map<uint64_t, struct uid_records> io_history;
     // charger ON/OFF
     charger_stat_t charger_stat;
     // protects curr_io_stats, last_uid_io_stats, records and charger_stat
-    sem_t um_lock;
+    Mutex uidm_mutex;
     // start time for IO records
     uint64_t start_ts;
+    // true if UID_IO_STATS_PATH is accessible
+    const bool enable;
 
     // reads from /proc/uid_io/stats
-    std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats_locked();
+    unordered_map<uint32_t, uid_info> get_uid_io_stats_locked();
     // flushes curr_io_stats to records
     void add_records_locked(uint64_t curr_ts);
     // updates curr_io_stats and set last_uid_io_stats
     void update_curr_io_stats_locked();
+    // writes io_history to protobuf
+    void update_uid_io_proto(unordered_map<int, StoragedProto>* protos);
 
 public:
     uid_monitor();
-    ~uid_monitor();
     // called by storaged main thread
     void init(charger_stat_t stat);
     // called by storaged -u
-    std::unordered_map<uint32_t, struct uid_info> get_uid_io_stats();
+    unordered_map<uint32_t, uid_info> get_uid_io_stats();
     // called by dumpsys
-    std::map<uint64_t, struct uid_records> dump(
+    map<uint64_t, struct uid_records> dump(
         double hours, uint64_t threshold, bool force_report);
     // called by battery properties listener
     void set_charger_state(charger_stat_t stat);
     // called by storaged periodic_chore or dump with force_report
-    void report();
+    bool enabled() { return enable; };
+    void report(unordered_map<int, StoragedProto>* protos);
+    // restores io_history from protobuf
+    void load_uid_io_proto(const UidIOUsage& proto);
+    void clear_user_history(userid_t user_id);
 };
 
 #endif /* _STORAGED_UID_MONITOR_H_ */

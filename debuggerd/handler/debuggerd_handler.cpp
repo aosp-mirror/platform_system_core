@@ -108,6 +108,7 @@ class ErrnoRestorer {
   int saved_errno_;
 };
 
+extern "C" void* android_fdsan_get_fd_table();
 extern "C" void debuggerd_fallback_handler(siginfo_t*, ucontext_t*, void*);
 
 static debuggerd_callbacks_t g_callbacks;
@@ -286,6 +287,7 @@ struct debugger_thread_info {
   siginfo_t* siginfo;
   void* ucontext;
   uintptr_t abort_msg;
+  uintptr_t fdsan_table;
 };
 
 // Logging and contacting debuggerd requires free file descriptors, which we might not have.
@@ -330,23 +332,23 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   }
 
   // ucontext_t is absurdly large on AArch64, so piece it together manually with writev.
-  uint32_t version = 1;
-  constexpr size_t expected =
-      sizeof(version) + sizeof(siginfo_t) + sizeof(ucontext_t) + sizeof(uintptr_t);
+  uint32_t version = 2;
+  constexpr size_t expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV2);
 
   errno = 0;
   if (fcntl(output_write.get(), F_SETPIPE_SZ, expected) < static_cast<int>(expected)) {
-    fatal_errno("failed to set pipe bufer size");
+    fatal_errno("failed to set pipe buffer size");
   }
 
-  struct iovec iovs[4] = {
+  struct iovec iovs[5] = {
       {.iov_base = &version, .iov_len = sizeof(version)},
       {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
       {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
       {.iov_base = &thread_info->abort_msg, .iov_len = sizeof(uintptr_t)},
+      {.iov_base = &thread_info->fdsan_table, .iov_len = sizeof(uintptr_t)},
   };
 
-  ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, 4));
+  ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, 5));
   if (rc == -1) {
     fatal_errno("failed to write crash info");
   } else if (rc != expected) {
@@ -504,6 +506,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
       .siginfo = info,
       .ucontext = context,
       .abort_msg = reinterpret_cast<uintptr_t>(abort_message),
+      .fdsan_table = reinterpret_cast<uintptr_t>(android_fdsan_get_fd_table()),
   };
 
   // Set PR_SET_DUMPABLE to 1, so that crash_dump can ptrace us.

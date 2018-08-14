@@ -24,21 +24,20 @@
 
 #include "storaged.h"
 
+using namespace android::os::storaged;
+
 // Diskstats
 bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats);
 struct disk_perf get_disk_perf(struct disk_stats* stats);
-struct disk_stats get_inc_disk_stats(struct disk_stats* prev, struct disk_stats* curr);
+void get_inc_disk_stats(const struct disk_stats* prev, const struct disk_stats* curr, struct disk_stats* inc);
 void add_disk_stats(struct disk_stats* src, struct disk_stats* dst);
-bool parse_emmc_ecsd(int ext_csd_fd, struct emmc_info* info);
 
 // UID I/O
-void sort_running_uids_info(std::vector<struct uid_info> &uids);
+map<string, io_usage> merge_io_usage(const vector<uid_record>& entries);
+void sort_running_uids_info(std::vector<UidInfo> &uids);
 
 // Logging
-void log_console_running_uids_info(std::vector<struct uid_info> uids);
+void log_console_running_uids_info(const std::vector<UidInfo>& uids, bool flag_dump_task);
+void log_console_perf_history(const vector<int>& perf_history);
 
-void log_debug_disk_perf(struct disk_perf* perf, const char* type);
-
-void log_event_disk_stats(struct disk_stats* stats, const char* type);
-void log_event_emmc_info(struct emmc_info* info_);
 #endif /* _STORAGED_UTILS_H_ */

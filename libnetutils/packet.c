@@ -218,6 +218,20 @@ int receive_packet(int s, struct dhcp_msg *msg)
      * to construct the pseudo header used in the checksum calculation.
      */
     dhcp_size = ntohs(packet.udp.len) - sizeof(packet.udp);
+    /*
+     * check validity of dhcp_size.
+     * 1) cannot be negative or zero.
+     * 2) src buffer contains enough bytes to copy
+     * 3) cannot exceed destination buffer
+     */
+    if ((dhcp_size <= 0) ||
+        ((int)(nread - sizeof(struct iphdr) - sizeof(struct udphdr)) < dhcp_size) ||
+        ((int)sizeof(struct dhcp_msg) < dhcp_size)) {
+#if VERBOSE
+        ALOGD("Malformed Packet");
+#endif
+        return -1;
+    }
     saddr = packet.ip.saddr;
     daddr = packet.ip.daddr;
     nread = ntohs(packet.ip.tot_len);

@@ -1326,9 +1326,9 @@ static bool _use_legacy_install() {
 }
 
 int adb_commandline(int argc, const char** argv) {
-    int no_daemon = 0;
-    int is_daemon = 0;
-    int is_server = 0;
+    bool no_daemon = false;
+    bool is_daemon = false;
+    bool is_server = false;
     int r;
     TransportType transport_type = kTransportAny;
     int ack_reply_fd = -1;
@@ -1348,12 +1348,12 @@ int adb_commandline(int argc, const char** argv) {
 
     while (argc > 0) {
         if (!strcmp(argv[0],"server")) {
-            is_server = 1;
+            is_server = true;
         } else if (!strcmp(argv[0],"nodaemon")) {
-            no_daemon = 1;
+            no_daemon = true;
         } else if (!strcmp(argv[0], "fork-server")) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
-            is_daemon = 1;
+            is_daemon = true;
         } else if (!strcmp(argv[0], "--reply-fd")) {
             if (argc < 2) return syntax_error("--reply-fd requires an argument");
             const char* reply_fd_str = argv[1];

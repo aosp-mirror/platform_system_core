@@ -45,7 +45,6 @@ class DexFile {
   std::map<uint32_t, std::pair<uint64_t, uint32_t>> method_cache_;  // dex offset to method index.
 
   uint32_t class_def_index_ = 0;
-  std::unique_ptr<art::ClassDataItemIterator> class_it_;
 };
 
 class DexFileFromFile : public DexFile {

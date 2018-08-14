@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef TRUSTY_KEYMASTER_TRUSTY_KEYMASTER_IPC_H_
-#define TRUSTY_KEYMASTER_TRUSTY_KEYMASTER_IPC_H_
+#pragma once
 
-__BEGIN_DECLS
+#include <string>
 
-int trusty_keymaster_connect(void);
-int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out,
-                          uint32_t* out_size);
-void trusty_keymaster_disconnect(void);
+namespace android {
+namespace init {
 
-__END_DECLS
+// Determines whether the system is capable of rebooting. This is conservative,
+// so if any of the attempts to determine this fail, it will still return true.
+bool IsRebootCapable();
+// This is a wrapper around the actual reboot calls.
+void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& reboot_target);
+void InstallRebootSignalHandlers();
 
-#endif  // TRUSTY_KEYMASTER_TRUSTY_KEYMASTER_IPC_H_
+}  // namespace init
+}  // namespace android

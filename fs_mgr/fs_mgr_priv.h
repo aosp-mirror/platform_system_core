@@ -45,7 +45,7 @@
 #define PWARNING PLOG(WARNING) << FS_MGR_TAG
 #define PERROR   PLOG(ERROR) << FS_MGR_TAG
 
-#define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
+#define CRYPTO_TMPFS_OPTIONS "size=512m,mode=0771,uid=1000,gid=1000"
 
 /* fstab has the following format:
  *

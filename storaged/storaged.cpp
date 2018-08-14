@@ -16,184 +16,118 @@
 
 #define LOG_TAG "storaged"
 
+#include <dirent.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <time.h>
 #include <unistd.h>
+#include <zlib.h>
 
+#include <chrono>
+#include <fstream>
+#include <sstream>
+#include <string>
+
+#include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
+#include <android/hidl/manager/1.0/IServiceManager.h>
 #include <batteryservice/BatteryServiceConstants.h>
-#include <batteryservice/IBatteryPropertiesRegistrar.h>
-#include <binder/IPCThreadState.h>
-#include <binder/IServiceManager.h>
 #include <cutils/properties.h>
+#include <healthhalutils/HealthHalUtils.h>
+#include <hidl/HidlTransportSupport.h>
+#include <hwbinder/IPCThreadState.h>
 #include <log/log.h>
 
 #include <storaged.h>
 #include <storaged_utils.h>
 
-/* disk_stats_publisher */
-void disk_stats_publisher::publish(void) {
-    // Logging
-    struct disk_perf perf = get_disk_perf(&mAccumulate);
-    log_debug_disk_perf(&perf, "regular");
-    log_event_disk_stats(&mAccumulate, "regular");
-    // Reset global structures
-    memset(&mAccumulate, 0, sizeof(struct disk_stats));
-}
+using namespace android::base;
+using namespace chrono;
+using namespace google::protobuf::io;
+using namespace storaged_proto;
 
-void disk_stats_publisher::update(void) {
-    struct disk_stats curr;
-    if (parse_disk_stats(DISK_STATS_PATH, &curr)) {
-        struct disk_stats inc = get_inc_disk_stats(&mPrevious, &curr);
-        add_disk_stats(&inc, &mAccumulate);
-#ifdef DEBUG
-//            log_kernel_disk_stats(&mPrevious, "prev stats");
-//            log_kernel_disk_stats(&curr, "curr stats");
-//            log_kernel_disk_stats(&inc, "inc stats");
-//            log_kernel_disk_stats(&mAccumulate, "accumulated stats");
-#endif
-        mPrevious = curr;
-    }
-}
+namespace {
 
-/* disk_stats_monitor */
-void disk_stats_monitor::update_mean() {
-    CHECK(mValid);
-    mMean.read_perf = (uint32_t)mStats.read_perf.get_mean();
-    mMean.read_ios = (uint32_t)mStats.read_ios.get_mean();
-    mMean.write_perf = (uint32_t)mStats.write_perf.get_mean();
-    mMean.write_ios = (uint32_t)mStats.write_ios.get_mean();
-    mMean.queue = (uint32_t)mStats.queue.get_mean();
-}
+/*
+ * The system user is the initial user that is implicitly created on first boot
+ * and hosts most of the system services. Keep this in sync with
+ * frameworks/base/core/java/android/os/UserManager.java
+ */
+constexpr int USER_SYSTEM = 0;
 
-void disk_stats_monitor::update_std() {
-    CHECK(mValid);
-    mStd.read_perf = (uint32_t)mStats.read_perf.get_std();
-    mStd.read_ios = (uint32_t)mStats.read_ios.get_std();
-    mStd.write_perf = (uint32_t)mStats.write_perf.get_std();
-    mStd.write_ios = (uint32_t)mStats.write_ios.get_std();
-    mStd.queue = (uint32_t)mStats.queue.get_std();
-}
+constexpr ssize_t benchmark_unit_size = 16 * 1024;  // 16KB
 
-void disk_stats_monitor::add(struct disk_perf* perf) {
-    mStats.read_perf.add(perf->read_perf);
-    mStats.read_ios.add(perf->read_ios);
-    mStats.write_perf.add(perf->write_perf);
-    mStats.write_ios.add(perf->write_ios);
-    mStats.queue.add(perf->queue);
-}
+constexpr ssize_t min_benchmark_size = 128 * 1024;  // 128KB
 
-void disk_stats_monitor::evict(struct disk_perf* perf) {
-    mStats.read_perf.evict(perf->read_perf);
-    mStats.read_ios.evict(perf->read_ios);
-    mStats.write_perf.evict(perf->write_perf);
-    mStats.write_ios.evict(perf->write_ios);
-    mStats.queue.evict(perf->queue);
-}
+}  // namespace
 
-bool disk_stats_monitor::detect(struct disk_perf* perf) {
-    return ((double)perf->queue >= (double)mMean.queue + mSigma * (double)mStd.queue) &&
-            ((double)perf->read_perf < (double)mMean.read_perf - mSigma * (double)mStd.read_perf) &&
-            ((double)perf->write_perf < (double)mMean.write_perf - mSigma * (double)mStd.write_perf);
-}
+const uint32_t storaged_t::current_version = 4;
 
-void disk_stats_monitor::update(struct disk_stats* stats) {
-    struct disk_stats inc = get_inc_disk_stats(&mPrevious, stats);
-    struct disk_perf perf = get_disk_perf(&inc);
-    // Update internal data structures
-    if (LIKELY(mValid)) {
-        CHECK_EQ(mBuffer.size(), mWindow);
+using android::hardware::interfacesEqual;
+using android::hardware::Return;
+using android::hardware::health::V1_0::BatteryStatus;
+using android::hardware::health::V1_0::toString;
+using android::hardware::health::V2_0::get_health_service;
+using android::hardware::health::V2_0::HealthInfo;
+using android::hardware::health::V2_0::IHealth;
+using android::hardware::health::V2_0::Result;
+using android::hidl::manager::V1_0::IServiceManager;
 
-        if (UNLIKELY(detect(&perf))) {
-            mStall = true;
-            add_disk_stats(&inc, &mAccumulate);
-            log_debug_disk_perf(&mMean, "stalled_mean");
-            log_debug_disk_perf(&mStd, "stalled_std");
-        } else {
-            if (mStall) {
-                struct disk_perf acc_perf = get_disk_perf(&mAccumulate);
-                log_debug_disk_perf(&acc_perf, "stalled");
-                log_event_disk_stats(&mAccumulate, "stalled");
-                mStall = false;
-                memset(&mAccumulate, 0, sizeof(mAccumulate));
-            }
-        }
 
-        evict(&mBuffer.front());
-        mBuffer.pop();
-        add(&perf);
-        mBuffer.push(perf);
-
-        update_mean();
-        update_std();
-
-    } else { /* mValid == false */
-        CHECK_LT(mBuffer.size(), mWindow);
-        add(&perf);
-        mBuffer.push(perf);
-        if (mBuffer.size() == mWindow) {
-            mValid = true;
-            update_mean();
-            update_std();
-        }
-    }
-
-    mPrevious = *stats;
-}
-
-void disk_stats_monitor::update(void) {
-    struct disk_stats curr;
-    if (LIKELY(parse_disk_stats(DISK_STATS_PATH, &curr))) {
-        update(&curr);
-    }
-}
-
-static sp<IBatteryPropertiesRegistrar> get_battery_properties_service() {
-    sp<IServiceManager> sm = defaultServiceManager();
-    if (sm == NULL) return NULL;
-
-    sp<IBinder> binder = sm->getService(String16("batteryproperties"));
-    if (binder == NULL) return NULL;
-
-    sp<IBatteryPropertiesRegistrar> battery_properties =
-        interface_cast<IBatteryPropertiesRegistrar>(binder);
-
-    return battery_properties;
-}
-
-static inline charger_stat_t is_charger_on(int64_t prop) {
-    return (prop == BATTERY_STATUS_CHARGING || prop == BATTERY_STATUS_FULL) ?
+inline charger_stat_t is_charger_on(BatteryStatus prop) {
+    return (prop == BatteryStatus::CHARGING || prop == BatteryStatus::FULL) ?
         CHARGER_ON : CHARGER_OFF;
 }
 
-void storaged_t::batteryPropertiesChanged(struct BatteryProperties props) {
-    mUidm.set_charger_state(is_charger_on(props.batteryStatus));
+Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
+    mUidm.set_charger_state(is_charger_on(props.legacy.batteryStatus));
+    return android::hardware::Void();
 }
 
-void storaged_t::init_battery_service() {
-    if (!mConfig.proc_uid_io_available)
+void storaged_t::init() {
+    init_health_service();
+    mDsm = std::make_unique<disk_stats_monitor>(health);
+    storage_info.reset(storage_info_t::get_storage_info(health));
+}
+
+void storaged_t::init_health_service() {
+    if (!mUidm.enabled())
         return;
 
-    battery_properties = get_battery_properties_service();
-    if (battery_properties == NULL) {
-        LOG_TO(SYSTEM, WARNING) << "failed to find batteryproperties service";
+    health = get_health_service();
+    if (health == NULL) {
+        LOG_TO(SYSTEM, WARNING) << "health: failed to find IHealth service";
         return;
     }
 
-    struct BatteryProperty val;
-    battery_properties->getProperty(BATTERY_PROP_BATTERY_STATUS, &val);
-    mUidm.init(is_charger_on(val.valueInt64));
+    BatteryStatus status = BatteryStatus::UNKNOWN;
+    auto ret = health->getChargeStatus([&](Result r, BatteryStatus v) {
+        if (r != Result::SUCCESS) {
+            LOG_TO(SYSTEM, WARNING)
+                << "health: cannot get battery status " << toString(r);
+            return;
+        }
+        if (v == BatteryStatus::UNKNOWN) {
+            LOG_TO(SYSTEM, WARNING) << "health: invalid battery status";
+        }
+        status = v;
+    });
+    if (!ret.isOk()) {
+        LOG_TO(SYSTEM, WARNING) << "health: get charge status transaction error "
+            << ret.description();
+    }
 
+    mUidm.init(is_charger_on(status));
     // register listener after init uid_monitor
-    battery_properties->registerListener(this);
-    IInterface::asBinder(battery_properties)->linkToDeath(this);
+    health->registerCallback(this);
+    health->linkToDeath(this, 0 /* cookie */);
 }
 
-void storaged_t::binderDied(const wp<IBinder>& who) {
-    if (battery_properties != NULL &&
-        IInterface::asBinder(battery_properties) == who) {
-        LOG_TO(SYSTEM, ERROR) << "batteryproperties service died, exiting";
-        IPCThreadState::self()->stopProcess();
+void storaged_t::serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who) {
+    if (health != NULL && interfacesEqual(health, who.promote())) {
+        LOG_TO(SYSTEM, ERROR) << "health service died, exiting";
+        android::hardware::IPCThreadState::self()->stopProcess();
         exit(1);
     } else {
         LOG_TO(SYSTEM, ERROR) << "unknown service died";
@@ -206,44 +140,195 @@ void storaged_t::report_storage_info() {
 
 /* storaged_t */
 storaged_t::storaged_t(void) {
-    if (access(MMC_DISK_STATS_PATH, R_OK) < 0 && access(SDA_DISK_STATS_PATH, R_OK) < 0) {
-        mConfig.diskstats_available = false;
-    } else {
-        mConfig.diskstats_available = true;
-    }
-
-    mConfig.proc_uid_io_available = (access(UID_IO_STATS_PATH, R_OK) == 0);
-
     mConfig.periodic_chores_interval_unit =
-        property_get_int32("ro.storaged.event.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
+        property_get_int32("ro.storaged.event.interval",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_UNIT);
 
     mConfig.event_time_check_usec =
         property_get_int32("ro.storaged.event.perf_check", 0);
 
     mConfig.periodic_chores_interval_disk_stats_publish =
-        property_get_int32("ro.storaged.disk_stats_pub", DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH);
+        property_get_int32("ro.storaged.disk_stats_pub",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_DISK_STATS_PUBLISH);
 
     mConfig.periodic_chores_interval_uid_io =
-        property_get_int32("ro.storaged.uid_io.interval", DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
+        property_get_int32("ro.storaged.uid_io.interval",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_UID_IO);
 
-    storage_info.reset(storage_info_t::get_storage_info());
+    mConfig.periodic_chores_interval_flush_proto =
+        property_get_int32("ro.storaged.flush_proto.interval",
+                           DEFAULT_PERIODIC_CHORES_INTERVAL_FLUSH_PROTO);
 
     mStarttime = time(NULL);
+    mTimer = 0;
 }
 
-void storaged_t::event(void) {
-    if (mConfig.diskstats_available) {
-        mDiskStats.update();
-        mDsm.update();
-        storage_info->refresh();
-        if (mTimer && (mTimer % mConfig.periodic_chores_interval_disk_stats_publish) == 0) {
-            mDiskStats.publish();
+void storaged_t::add_user_ce(userid_t user_id) {
+    load_proto(user_id);
+    proto_loaded[user_id] = true;
+}
+
+void storaged_t::remove_user_ce(userid_t user_id) {
+    proto_loaded[user_id] = false;
+    mUidm.clear_user_history(user_id);
+    RemoveFileIfExists(proto_path(user_id), nullptr);
+}
+
+void storaged_t::load_proto(userid_t user_id) {
+    string proto_file = proto_path(user_id);
+    ifstream in(proto_file, ofstream::in | ofstream::binary);
+
+    if (!in.good()) return;
+
+    stringstream ss;
+    ss << in.rdbuf();
+    StoragedProto proto;
+    proto.ParseFromString(ss.str());
+
+    const UidIOUsage& uid_io_usage = proto.uid_io_usage();
+    uint32_t computed_crc = crc32(current_version,
+        reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
+        uid_io_usage.ByteSize());
+    if (proto.crc() != computed_crc) {
+        LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << proto_file;
+        return;
+    }
+
+    mUidm.load_uid_io_proto(proto.uid_io_usage());
+
+    if (user_id == USER_SYSTEM) {
+        storage_info->load_perf_history_proto(proto.perf_history());
+    }
+}
+
+char* storaged_t:: prepare_proto(userid_t user_id, StoragedProto* proto) {
+    proto->set_version(current_version);
+
+    const UidIOUsage& uid_io_usage = proto->uid_io_usage();
+    proto->set_crc(crc32(current_version,
+        reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
+        uid_io_usage.ByteSize()));
+
+    uint32_t pagesize = sysconf(_SC_PAGESIZE);
+    if (user_id == USER_SYSTEM) {
+        proto->set_padding("", 1);
+        vector<char> padding;
+        ssize_t size = ROUND_UP(MAX(min_benchmark_size, proto->ByteSize()),
+                                pagesize);
+        padding = vector<char>(size - proto->ByteSize(), 0xFD);
+        proto->set_padding(padding.data(), padding.size());
+        while (!IS_ALIGNED(proto->ByteSize(), pagesize)) {
+            padding.push_back(0xFD);
+            proto->set_padding(padding.data(), padding.size());
         }
     }
 
-    if (mConfig.proc_uid_io_available && mTimer &&
-            (mTimer % mConfig.periodic_chores_interval_uid_io) == 0) {
-         mUidm.report();
+    char* data = nullptr;
+    if (posix_memalign(reinterpret_cast<void**>(&data),
+                       pagesize, proto->ByteSize())) {
+        PLOG_TO(SYSTEM, ERROR) << "Faied to alloc aligned buffer (size: "
+                               << proto->ByteSize() << ")";
+        return data;
+    }
+
+    proto->SerializeToArray(data, proto->ByteSize());
+    return data;
+}
+
+void storaged_t::flush_proto_data(userid_t user_id,
+                                  const char* data, ssize_t size) {
+    string proto_file = proto_path(user_id);
+    string tmp_file = proto_file + "_tmp";
+    unique_fd fd(TEMP_FAILURE_RETRY(open(tmp_file.c_str(),
+                 O_SYNC | O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC |
+                    (user_id == USER_SYSTEM ? O_DIRECT : 0),
+                 S_IRUSR | S_IWUSR)));
+    if (fd == -1) {
+        PLOG_TO(SYSTEM, ERROR) << "Faied to open tmp file: " << tmp_file;
+        return;
+    }
+
+    if (user_id == USER_SYSTEM) {
+        time_point<steady_clock> start, end;
+        uint32_t benchmark_size = 0;
+        uint64_t benchmark_time_ns = 0;
+        ssize_t ret;
+        bool first_write = true;
+
+        while (size > 0) {
+            start = steady_clock::now();
+            ret = write(fd, data, MIN(benchmark_unit_size, size));
+            if (ret <= 0) {
+                PLOG_TO(SYSTEM, ERROR) << "Faied to write tmp file: " << tmp_file;
+                return;
+            }
+            end = steady_clock::now();
+            /*
+            * compute bandwidth after the first write and if write returns
+            * exactly unit size.
+            */
+            if (!first_write && ret == benchmark_unit_size) {
+                benchmark_size += benchmark_unit_size;
+                benchmark_time_ns += duration_cast<nanoseconds>(end - start).count();
+            }
+            size -= ret;
+            data += ret;
+            first_write = false;
+        }
+
+        if (benchmark_size) {
+            int perf = benchmark_size * 1000000LLU / benchmark_time_ns;
+            storage_info->update_perf_history(perf, system_clock::now());
+        }
+    } else {
+        if (!WriteFully(fd, data, size)) {
+            PLOG_TO(SYSTEM, ERROR) << "Faied to write tmp file: " << tmp_file;
+            return;
+        }
+    }
+
+    fd.reset(-1);
+    rename(tmp_file.c_str(), proto_file.c_str());
+}
+
+void storaged_t::flush_proto(userid_t user_id, StoragedProto* proto) {
+    unique_ptr<char> proto_data(prepare_proto(user_id, proto));
+    if (proto_data == nullptr) return;
+
+    flush_proto_data(user_id, proto_data.get(), proto->ByteSize());
+}
+
+void storaged_t::flush_protos(unordered_map<int, StoragedProto>* protos) {
+    for (auto& it : *protos) {
+        /*
+         * Don't flush proto if we haven't attempted to load it from file.
+         */
+        if (proto_loaded[it.first]) {
+            flush_proto(it.first, &it.second);
+        }
+    }
+}
+
+void storaged_t::event(void) {
+    unordered_map<int, StoragedProto> protos;
+
+    if (mDsm->enabled()) {
+        mDsm->update();
+        if (!(mTimer % mConfig.periodic_chores_interval_disk_stats_publish)) {
+            mDsm->publish();
+        }
+    }
+
+    if (!(mTimer % mConfig.periodic_chores_interval_uid_io)) {
+        mUidm.report(&protos);
+    }
+
+    if (storage_info) {
+        storage_info->refresh(protos[USER_SYSTEM].mutable_perf_history());
+    }
+
+    if (!(mTimer % mConfig.periodic_chores_interval_flush_proto)) {
+        flush_protos(&protos);
     }
 
     mTimer += mConfig.periodic_chores_interval_unit;

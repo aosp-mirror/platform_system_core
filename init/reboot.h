@@ -22,25 +22,8 @@
 namespace android {
 namespace init {
 
-// This is a wrapper around the actual reboot calls.  DoReboot() should be preferred in most cases.
-void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget);
-
-/* Reboot / shutdown the system.
- * cmd ANDROID_RB_* as defined in android_reboot.h
- * reason Reason string like "reboot", "shutdown,userrequested"
- * rebootTarget Reboot target string like "bootloader". Otherwise, it should be an
- *              empty string.
- * runFsck Whether to run fsck after umount is done.
- */
-void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
-              bool runFsck) __attribute__((__noreturn__));
-
 // Parses and handles a setprop sys.powerctl message.
 bool HandlePowerctlMessage(const std::string& command);
-
-// Determines whether the system is capable of rebooting. This is conservative,
-// so if any of the attempts to determine this fail, it will still return true.
-bool IsRebootCapable();
 
 }  // namespace init
 }  // namespace android

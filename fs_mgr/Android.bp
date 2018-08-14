@@ -43,6 +43,7 @@ cc_library {
         "fs_mgr_avb.cpp",
         "fs_mgr_avb_ops.cpp",
         "fs_mgr_dm_linear.cpp",
+        "fs_mgr_overlayfs.cpp",
     ],
     shared_libs: [
         "libfec",

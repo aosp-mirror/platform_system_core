@@ -92,6 +92,7 @@ cc_defaults {
 
 cc_library_static {
     name: "libinit",
+    recovery_available: true,
     defaults: ["init_defaults"],
     srcs: [
         "action.cpp",
@@ -115,6 +116,7 @@ cc_library_static {
         "property_service.cpp",
         "property_type.cpp",
         "reboot.cpp",
+        "reboot_utils.cpp",
         "security.cpp",
         "selinux.cpp",
         "service.cpp",
@@ -136,29 +138,21 @@ cc_library_static {
     },
 }
 
-/*
-This is not yet ready, see the below TODOs for what is missing
-
 cc_binary {
-    // TODO: Missing,
-    //LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-    //LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
-
-    name: "init",
+    name: "init_second_stage",
+    recovery_available: true,
+    stem: "init",
     defaults: ["init_defaults"],
+    static_libs: ["libinit"],
     required: [
         "e2fsdroid",
         "mke2fs",
         "sload_f2fs",
         "make_f2fs",
     ],
-    static_executable: true,
     srcs: ["main.cpp"],
-    symlinks: [
-        "sbin/ueventd",
-    ],
+    symlinks: ["ueventd"],
 }
-*/
 
 // Tests
 // ------------------------------------------------------------------------------

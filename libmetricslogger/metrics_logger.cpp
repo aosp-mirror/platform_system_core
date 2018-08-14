@@ -62,6 +62,10 @@ ComplexEventLogger::ComplexEventLogger(int category) : logger(kSysuiMultiActionT
     logger << LOGBUILDER_CATEGORY << category;
 }
 
+void ComplexEventLogger::SetPackageName(const std::string& package_name) {
+    logger << LOGBUILDER_PACKAGENAME << package_name;
+}
+
 void ComplexEventLogger::AddTaggedData(int tag, int32_t value) {
     logger << tag << value;
 }

@@ -81,10 +81,6 @@ enum EventWakeup {
 // Global helper functions
 
 int healthd_register_event(int fd, void (*handler)(uint32_t), EventWakeup wakeup = EVENT_NO_WAKEUP_FD);
-void healthd_battery_update();
-android::status_t healthd_get_property(int id,
-    struct android::BatteryProperty *val);
-void healthd_dump_battery_state(int fd);
 
 struct healthd_mode_ops {
     void (*init)(struct healthd_config *config);
