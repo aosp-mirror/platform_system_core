@@ -123,10 +123,14 @@ bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args) {
     }
     std::string slot_suffix = device->GetCurrentSlot();
     if (slot_suffix.empty()) {
-        return device->WriteFail("Invalid slot");
+        return device->WriteOkay("no");
     }
-    std::string result = (args[0] == "userdata" ? "no" : "yes");
-    return device->WriteOkay(result);
+    std::string partition_name = args[0] + slot_suffix;
+    if (FindPhysicalPartition(partition_name) ||
+        LogicalPartitionExists(partition_name, slot_suffix)) {
+        return device->WriteOkay("yes");
+    }
+    return device->WriteOkay("no");
 }
 
 bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args) {
