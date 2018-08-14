@@ -62,7 +62,7 @@ static inline uint64_t get8LE(const uint8_t* src) {
 static const struct fs_path_config android_dirs[] = {
     // clang-format off
     { 00770, AID_SYSTEM,       AID_CACHE,        0, "cache" },
-    { 00500, AID_ROOT,         AID_ROOT,         0, "config" },
+    { 00555, AID_ROOT,         AID_ROOT,         0, "config" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data/app" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data/app-private" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data/app-ephemeral" },

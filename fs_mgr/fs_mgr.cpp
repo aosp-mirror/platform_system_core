@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "fs_mgr.h"
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -51,6 +53,7 @@
 #include <ext4_utils/ext4_sb.h>
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
+#include <fs_mgr_overlayfs.h>
 #include <libdm/dm.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
@@ -58,7 +61,6 @@
 #include <log/log_properties.h>
 #include <logwrap/logwrap.h>
 
-#include "fs_mgr.h"
 #include "fs_mgr_avb.h"
 #include "fs_mgr_priv.h"
 
@@ -1034,6 +1036,10 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
             continue;
         }
     }
+
+#if ALLOW_ADBD_DISABLE_VERITY == 1  // "userdebug" build
+    fs_mgr_overlayfs_mount_all();
+#endif
 
     if (error_count) {
         return FS_MGR_MNTALL_FAIL;

@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <linux/time.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -41,124 +42,7 @@
 #include <storaged.h>
 #include <storaged_utils.h>
 
-bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats) {
-    // Get time
-    struct timespec ts;
-    // Use monotonic to exclude suspend time so that we measure IO bytes/sec
-    // when system is running.
-    int ret = clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (ret < 0) {
-        PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
-        return false;
-    }
-
-    std::string buffer;
-    if (!android::base::ReadFileToString(disk_stats_path, &buffer)) {
-        PLOG_TO(SYSTEM, ERROR) << disk_stats_path << ": ReadFileToString failed.";
-        return false;
-    }
-
-    // Regular diskstats entries
-    std::stringstream ss(buffer);
-    for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
-        ss >> *((uint64_t*)stats + i);
-    }
-    // Other entries
-    stats->start_time = 0;
-    stats->end_time = (uint64_t)ts.tv_sec * SEC_TO_MSEC +
-        ts.tv_nsec / (MSEC_TO_USEC * USEC_TO_NSEC);
-    stats->counter = 1;
-    stats->io_avg = (double)stats->io_in_flight;
-    return true;
-}
-
-struct disk_perf get_disk_perf(struct disk_stats* stats) {
-    struct disk_perf perf;
-    memset(&perf, 0, sizeof(struct disk_perf));  // initialize
-
-    if (stats->io_ticks) {
-        if (stats->read_ticks) {
-            unsigned long long divisor = stats->read_ticks * stats->io_ticks;
-            perf.read_perf = ((unsigned long long)SECTOR_SIZE *
-                                        stats->read_sectors *
-                                        stats->io_in_queue +
-                                        (divisor >> 1)) /
-                                            divisor;
-            perf.read_ios = ((unsigned long long)SEC_TO_MSEC *
-                                        stats->read_ios *
-                                        stats->io_in_queue +
-                                        (divisor >> 1)) /
-                                            divisor;
-        }
-        if (stats->write_ticks) {
-            unsigned long long divisor = stats->write_ticks * stats->io_ticks;
-                        perf.write_perf = ((unsigned long long)SECTOR_SIZE *
-                                                    stats->write_sectors *
-                                                    stats->io_in_queue +
-                                                    (divisor >> 1)) /
-                                                        divisor;
-                        perf.write_ios = ((unsigned long long)SEC_TO_MSEC *
-                                                    stats->write_ios *
-                                                    stats->io_in_queue +
-                                                    (divisor >> 1)) /
-                                                        divisor;
-        }
-        perf.queue = (stats->io_in_queue + (stats->io_ticks >> 1)) /
-                                stats->io_ticks;
-    }
-    return perf;
-}
-
-struct disk_stats get_inc_disk_stats(struct disk_stats* prev, struct disk_stats* curr) {
-    struct disk_stats inc;
-    for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
-        if (i == DISK_STATS_IO_IN_FLIGHT_IDX) {
-            continue;
-        }
-
-        *((uint64_t*)&inc + i) =
-                *((uint64_t*)curr + i) - *((uint64_t*)prev + i);
-    }
-    // io_in_flight is exception
-    inc.io_in_flight = curr->io_in_flight;
-
-    inc.start_time = prev->end_time;
-    inc.end_time = curr->end_time;
-    inc.io_avg = curr->io_avg;
-    inc.counter = 1;
-
-    return inc;
-}
-
-// Add src to dst
-void add_disk_stats(struct disk_stats* src, struct disk_stats* dst) {
-    if (dst->end_time != 0 && dst->end_time != src->start_time) {
-        LOG_TO(SYSTEM, WARNING) << "Two dis-continuous periods of diskstats"
-            << " are added. dst end with " << dst->end_time
-            << ", src start with " << src->start_time;
-    }
-
-    for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
-        if (i == DISK_STATS_IO_IN_FLIGHT_IDX) {
-            continue;
-        }
-
-        *((uint64_t*)dst + i) += *((uint64_t*)src + i);
-    }
-
-    dst->io_in_flight = src->io_in_flight;
-    if (dst->counter + src->counter) {
-        dst->io_avg = ((dst->io_avg * dst->counter) + (src->io_avg * src->counter)) /
-                        (dst->counter + src->counter);
-    }
-    dst->counter += src->counter;
-    dst->end_time = src->end_time;
-    if (dst->start_time == 0) {
-        dst->start_time = src->start_time;
-    }
-}
-
-static bool cmp_uid_info(struct uid_info l, struct uid_info r) {
+bool cmp_uid_info(const UidInfo& l, const UidInfo& r) {
     // Compare background I/O first.
     for (int i = UID_STATS - 1; i >= 0; i--) {
         uint64_t l_bytes = l.io[i].read_bytes + l.io[i].write_bytes;
@@ -177,56 +61,72 @@ static bool cmp_uid_info(struct uid_info l, struct uid_info r) {
     return l.name < r.name;
 }
 
-void sort_running_uids_info(std::vector<struct uid_info> &uids) {
+void sort_running_uids_info(std::vector<UidInfo> &uids) {
     std::sort(uids.begin(), uids.end(), cmp_uid_info);
 }
 
 // Logging functions
-void log_console_running_uids_info(std::vector<struct uid_info> uids) {
+void log_console_running_uids_info(const std::vector<UidInfo>& uids, bool flag_dump_task) {
     printf("name/uid fg_rchar fg_wchar fg_rbytes fg_wbytes "
            "bg_rchar bg_wchar bg_rbytes bg_wbytes fg_fsync bg_fsync\n");
 
     for (const auto& uid : uids) {
-        printf("%s %ju %ju %ju %ju %ju %ju %ju %ju %ju %ju\n", uid.name.c_str(),
+        printf("%s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+            uid.name.c_str(),
             uid.io[0].rchar, uid.io[0].wchar, uid.io[0].read_bytes, uid.io[0].write_bytes,
             uid.io[1].rchar, uid.io[1].wchar, uid.io[1].read_bytes, uid.io[1].write_bytes,
             uid.io[0].fsync, uid.io[1].fsync);
+        if (flag_dump_task) {
+            for (const auto& task_it : uid.tasks) {
+                const task_info& task = task_it.second;
+                printf("-> %s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                        " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+                    task.comm.c_str(),
+                    task.io[0].rchar, task.io[0].wchar, task.io[0].read_bytes, task.io[0].write_bytes,
+                    task.io[1].rchar, task.io[1].wchar, task.io[1].read_bytes, task.io[1].write_bytes,
+                    task.io[0].fsync, task.io[1].fsync);
+            }
+        }
     }
     fflush(stdout);
 }
 
-#if DEBUG
-void log_debug_disk_perf(struct disk_perf* perf, const char* type) {
-    // skip if the input structure are all zeros
-    if (perf == NULL) return;
-    struct disk_perf zero_cmp;
-    memset(&zero_cmp, 0, sizeof(zero_cmp));
-    if (memcmp(&zero_cmp, perf, sizeof(struct disk_perf)) == 0) return;
+void log_console_perf_history(const vector<int>& perf_history) {
+    if (perf_history.size() < 3 ||
+        perf_history.size() != perf_history[0] +
+                               perf_history[1] +
+                               perf_history[2] + (size_t)3) {
+        return;
+    }
 
-    LOG_TO(SYSTEM, INFO) << "perf(ios) " << type
-              << " rd:" << perf->read_perf << "KB/s(" << perf->read_ios << "/s)"
-              << " wr:" << perf->write_perf << "KB/s(" << perf->write_ios << "/s)"
-              << " q:" << perf->queue;
-}
-#else
-void log_debug_disk_perf(struct disk_perf* /* perf */, const char* /* type */) {}
-#endif
+    printf("\nI/O perf history (KB/s) :  most_recent  <---------  least_recent \n");
 
-void log_event_disk_stats(struct disk_stats* stats, const char* type) {
-    // skip if the input structure are all zeros
-    if (stats == NULL) return;
-    struct disk_stats zero_cmp;
-    memset(&zero_cmp, 0, sizeof(zero_cmp));
-    // skip event logging diskstats when it is zero increment (all first 11 entries are zero)
-    if (memcmp(&zero_cmp, stats, sizeof(uint64_t) * DISK_STATS_SIZE) == 0) return;
+    std::stringstream line;
+    int start = 3;
+    int end = 3 + perf_history[0];
+    std::copy(perf_history.begin() + start, perf_history.begin() + end,
+              std::ostream_iterator<int>(line, " "));
+    printf("last 24 hours : %s\n", line.str().c_str());
 
-    android_log_event_list(EVENTLOGTAG_DISKSTATS)
-        << type << stats->start_time << stats->end_time
-        << stats->read_ios << stats->read_merges
-        << stats->read_sectors << stats->read_ticks
-        << stats->write_ios << stats->write_merges
-        << stats->write_sectors << stats->write_ticks
-        << (uint64_t)stats->io_avg << stats->io_ticks << stats->io_in_queue
-        << LOG_ID_EVENTS;
+    line.str("");
+    start = end;
+    end += perf_history[1];
+    std::copy(perf_history.begin() + start, perf_history.begin() + end,
+              std::ostream_iterator<int>(line, " "));
+    printf("last 7 days   : %s\n", line.str().c_str());
+
+    line.str("");
+    start = end;
+    std::copy(perf_history.begin() + start, perf_history.end(),
+              std::ostream_iterator<int>(line, " "));
+    printf("last 52 weeks : %s\n", line.str().c_str());
 }
 
+map<string, io_usage> merge_io_usage(const vector<uid_record>& entries) {
+    map<string, io_usage> merged_entries;
+    for (const auto& record : entries) {
+        merged_entries[record.name] += record.ios.uid_ios;
+    }
+    return merged_entries;
+}

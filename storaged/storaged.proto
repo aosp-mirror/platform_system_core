@@ -1,0 +1,60 @@
+syntax = "proto2";
+option optimize_for = LITE_RUNTIME;
+package storaged_proto;
+option java_package = "com.android.storaged.proto";
+option java_outer_classname = "Storaged";
+
+message IOUsage {
+  optional uint64 rd_fg_chg_on  = 1;
+  optional uint64 rd_fg_chg_off = 2;
+  optional uint64 rd_bg_chg_on  = 3;
+  optional uint64 rd_bg_chg_off = 4;
+  optional uint64 wr_fg_chg_on  = 5;
+  optional uint64 wr_fg_chg_off = 6;
+  optional uint64 wr_bg_chg_on  = 7;
+  optional uint64 wr_bg_chg_off = 8;
+}
+
+message TaskIOUsage {
+  optional string task_name = 1;
+  optional IOUsage ios = 2;
+}
+
+message UidRecord {
+  optional string uid_name = 1;
+  optional uint32 user_id = 2;
+  optional IOUsage uid_io = 3;
+  repeated TaskIOUsage task_io = 4;
+}
+
+message UidIORecords {
+  optional uint64 start_ts = 1;
+  repeated UidRecord entries = 2;
+}
+
+message UidIOItem {
+  optional uint64 end_ts = 1;
+  optional UidIORecords records = 2;
+}
+
+message UidIOUsage {
+  repeated UidIOItem uid_io_items = 2;
+}
+
+message IOPerfHistory {
+  optional uint64 day_start_sec = 1;
+  repeated uint32 recent_perf = 2;
+  optional uint32 nr_samples = 3;
+  repeated uint32 daily_perf = 4;
+  optional uint32 nr_days = 5;
+  repeated uint32 weekly_perf = 6;
+  optional uint32 nr_weeks = 7;
+}
+
+message StoragedProto {
+  optional uint32 crc = 1;
+  optional uint32 version = 2;
+  optional UidIOUsage uid_io_usage = 3;
+  optional IOPerfHistory perf_history = 4;
+  optional bytes padding = 5;
+}

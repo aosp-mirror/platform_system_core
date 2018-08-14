@@ -137,6 +137,7 @@ uint16_t usb_device_get_vendor_id(struct usb_device *device);
 /* Returns the USB product ID from the device descriptor for the USB device */
 uint16_t usb_device_get_product_id(struct usb_device *device);
 
+/* Returns a pointer to device descriptor */
 const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_device *device);
 
 /* Returns a USB descriptor string for the given string ID.
@@ -155,6 +156,12 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
  */
 int usb_device_get_string_ucs2(struct usb_device* device, int id, int timeout, void** ucs2_out,
                                size_t* response_size);
+
+/* Returns the length in bytes read into the raw descriptors array */
+size_t usb_device_get_descriptors_length(const struct usb_device* device);
+
+/* Returns a pointer to the raw descriptors array */
+const unsigned char* usb_device_get_raw_descriptors(const struct usb_device* device);
 
 /* Returns a USB descriptor string for the given string ID.
  * Used to implement usb_device_get_manufacturer_name,

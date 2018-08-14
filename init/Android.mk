@@ -41,35 +41,35 @@ init_cflags += \
 
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
-LOCAL_SRC_FILES := main.cpp
+LOCAL_SRC_FILES := \
+    devices.cpp \
+    first_stage_mount.cpp \
+    init_first_stage.cpp \
+    reboot_utils.cpp \
+    selinux.cpp \
+    uevent_listener.cpp \
+    util.cpp \
 
-LOCAL_MODULE:= init
+LOCAL_MODULE := init
+
+LOCAL_FORCE_STATIC_EXECUTABLE := true
 
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := \
-    libinit \
-    libbootloader_message \
     libfs_mgr \
     libfec \
     libfec_rs \
-    libhidl-gen-utils \
     libsquashfs_utils \
     liblogwrap \
     libext4_utils \
     libseccomp_policy \
     libcrypto_utils \
     libsparse \
-    libprocessgroup \
     libavb \
     libkeyutils \
-    libprotobuf-cpp-lite \
-    libpropertyinfoserializer \
-    libpropertyinfoparser \
     liblp \
-
-shared_libs := \
     libcutils \
     libbase \
     liblog \
@@ -77,27 +77,11 @@ shared_libs := \
     libdl \
     libz \
     libselinux \
-
-ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
-# init is static executable for non-system-as-root devices, because the dynamic linker
-# and shared libs are not available before /system is mounted, but init has to run
-# before the partition is mounted.
-LOCAL_STATIC_LIBRARIES += $(shared_libs) libc++_static
-LOCAL_FORCE_STATIC_EXECUTABLE := true
-else
-LOCAL_SHARED_LIBRARIES := $(shared_libs) libc++
-endif
-shared_libs :=
+    libcap \
 
 LOCAL_REQUIRED_MODULES := \
-    e2fsdroid \
-    mke2fs \
-    sload_f2fs \
-    make_f2fs \
-
-# Create symlinks.
-LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
-    ln -sf ../init $(TARGET_ROOT_OUT)/sbin/ueventd; \
+    init_second_stage \
+    init_second_stage.recovery \
 
 LOCAL_SANITIZE := signed-integer-overflow
 include $(BUILD_EXECUTABLE)

@@ -167,15 +167,10 @@ bool ElfInterface::ReadAllHeaders(uint64_t* load_bias) {
     return false;
   }
 
-  if (!ReadProgramHeaders<EhdrType, PhdrType>(ehdr, load_bias)) {
-    return false;
-  }
-
-  // We could still potentially unwind without the section header
-  // information, so ignore any errors.
-  if (!ReadSectionHeaders<EhdrType, ShdrType>(ehdr)) {
-    log(0, "Malformed section header found, ignoring...");
-  }
+  // If we have enough information that this is an elf file, then allow
+  // malformed program and section headers.
+  ReadProgramHeaders<EhdrType, PhdrType>(ehdr, load_bias);
+  ReadSectionHeaders<EhdrType, ShdrType>(ehdr);
   return true;
 }
 
@@ -200,14 +195,12 @@ uint64_t ElfInterface::GetLoadBias(Memory* memory) {
 }
 
 template <typename EhdrType, typename PhdrType>
-bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias) {
+void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias) {
   uint64_t offset = ehdr.e_phoff;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
     PhdrType phdr;
     if (!memory_->ReadFully(offset, &phdr, sizeof(phdr))) {
-      last_error_.code = ERROR_MEMORY_INVALID;
-      last_error_.address = offset;
-      return false;
+      return;
     }
 
     switch (phdr.p_type) {
@@ -242,11 +235,10 @@ bool ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
       break;
     }
   }
-  return true;
 }
 
 template <typename EhdrType, typename ShdrType>
-bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
+void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
   uint64_t offset = ehdr.e_shoff;
   uint64_t sec_offset = 0;
   uint64_t sec_size = 0;
@@ -267,9 +259,7 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
   offset += ehdr.e_shentsize;
   for (size_t i = 1; i < ehdr.e_shnum; i++, offset += ehdr.e_shentsize) {
     if (!memory_->Read(offset, &shdr, sizeof(shdr))) {
-      last_error_.code = ERROR_MEMORY_INVALID;
-      last_error_.address = offset;
-      return false;
+      return;
     }
 
     if (shdr.sh_type == SHT_SYMTAB || shdr.sh_type == SHT_DYNSYM) {
@@ -277,18 +267,14 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
       // the string terminated names.
       ShdrType str_shdr;
       if (shdr.sh_link >= ehdr.e_shnum) {
-        last_error_.code = ERROR_UNWIND_INFO;
-        return false;
+        continue;
       }
       uint64_t str_offset = ehdr.e_shoff + shdr.sh_link * ehdr.e_shentsize;
       if (!memory_->Read(str_offset, &str_shdr, sizeof(str_shdr))) {
-        last_error_.code = ERROR_MEMORY_INVALID;
-        last_error_.address = str_offset;
-        return false;
+        continue;
       }
       if (str_shdr.sh_type != SHT_STRTAB) {
-        last_error_.code = ERROR_UNWIND_INFO;
-        return false;
+        continue;
       }
       symbols_.push_back(new Symbols(shdr.sh_offset, shdr.sh_size, shdr.sh_entsize,
                                      str_shdr.sh_offset, str_shdr.sh_size));
@@ -324,7 +310,6 @@ bool ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
                                                             static_cast<uint64_t>(shdr.sh_offset)));
     }
   }
-  return true;
 }
 
 template <typename DynType>
@@ -499,11 +484,13 @@ template void ElfInterface::InitHeadersWithTemplate<uint64_t>(uint64_t);
 template bool ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(uint64_t*);
 template bool ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(uint64_t*);
 
-template bool ElfInterface::ReadProgramHeaders<Elf32_Ehdr, Elf32_Phdr>(const Elf32_Ehdr&, uint64_t*);
-template bool ElfInterface::ReadProgramHeaders<Elf64_Ehdr, Elf64_Phdr>(const Elf64_Ehdr&, uint64_t*);
+template void ElfInterface::ReadProgramHeaders<Elf32_Ehdr, Elf32_Phdr>(const Elf32_Ehdr&,
+                                                                       uint64_t*);
+template void ElfInterface::ReadProgramHeaders<Elf64_Ehdr, Elf64_Phdr>(const Elf64_Ehdr&,
+                                                                       uint64_t*);
 
-template bool ElfInterface::ReadSectionHeaders<Elf32_Ehdr, Elf32_Shdr>(const Elf32_Ehdr&);
-template bool ElfInterface::ReadSectionHeaders<Elf64_Ehdr, Elf64_Shdr>(const Elf64_Ehdr&);
+template void ElfInterface::ReadSectionHeaders<Elf32_Ehdr, Elf32_Shdr>(const Elf32_Ehdr&);
+template void ElfInterface::ReadSectionHeaders<Elf64_Ehdr, Elf64_Shdr>(const Elf64_Ehdr&);
 
 template bool ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(std::string*);
 template bool ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(std::string*);

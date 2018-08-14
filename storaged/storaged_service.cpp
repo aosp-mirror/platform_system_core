@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <inttypes.h>
 #include <stdint.h>
 
 #include <vector>
@@ -29,60 +30,69 @@
 #include <private/android_filesystem_config.h>
 
 #include <storaged.h>
+#include <storaged_utils.h>
 #include <storaged_service.h>
 
+using namespace std;
 using namespace android::base;
 
-extern sp<storaged_t> storaged;
+extern sp<storaged_t> storaged_sp;
 
-std::vector<struct uid_info> BpStoraged::dump_uids(const char* /*option*/) {
-    Parcel data, reply;
-    data.writeInterfaceToken(IStoraged::getInterfaceDescriptor());
-
-    remote()->transact(DUMPUIDS, data, &reply);
-
-    uint32_t res_size = reply.readInt32();
-    std::vector<struct uid_info> res(res_size);
-    for (auto&& uid : res) {
-        uid.uid = reply.readInt32();
-        uid.name = reply.readCString();
-        reply.read(&uid.io, sizeof(uid.io));
-    }
-    return res;
+status_t StoragedService::start() {
+    return BinderService<StoragedService>::publish();
 }
-IMPLEMENT_META_INTERFACE(Storaged, "Storaged");
 
-status_t BnStoraged::onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) {
-    switch(code) {
-        case DUMPUIDS: {
-                if (!data.checkInterface(this))
-                    return BAD_TYPE;
-                std::vector<struct uid_info> res = dump_uids(NULL);
-                reply->writeInt32(res.size());
-                for (auto uid : res) {
-                    reply->writeInt32(uid.uid);
-                    reply->writeCString(uid.name.c_str());
-                    reply->write(&uid.io, sizeof(uid.io));
-                }
-                return NO_ERROR;
-            }
-            break;
-        default:
-            return BBinder::onTransact(code, data, reply, flags);
+void StoragedService::dumpUidRecords(int fd, const vector<uid_record>& entries) {
+    map<string, io_usage> merged_entries = merge_io_usage(entries);
+    for (const auto& rec : merged_entries) {
+        dprintf(fd, "%s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+                rec.first.c_str(),
+                rec.second.bytes[READ][FOREGROUND][CHARGER_OFF],
+                rec.second.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                rec.second.bytes[READ][BACKGROUND][CHARGER_OFF],
+                rec.second.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                rec.second.bytes[READ][FOREGROUND][CHARGER_ON],
+                rec.second.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                rec.second.bytes[READ][BACKGROUND][CHARGER_ON],
+                rec.second.bytes[WRITE][BACKGROUND][CHARGER_ON]);
     }
 }
 
-std::vector<struct uid_info> Storaged::dump_uids(const char* /* option */) {
-    std::vector<struct uid_info> uids_v;
-    std::unordered_map<uint32_t, struct uid_info> uids_m = storaged->get_uids();
+void StoragedService::dumpUidRecordsDebug(int fd, const vector<uid_record>& entries) {
+    for (const auto& record : entries) {
+        const io_usage& uid_usage = record.ios.uid_ios;
+        dprintf(fd, "%s_%d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+                record.name.c_str(), record.ios.user_id,
+                uid_usage.bytes[READ][FOREGROUND][CHARGER_OFF],
+                uid_usage.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                uid_usage.bytes[READ][BACKGROUND][CHARGER_OFF],
+                uid_usage.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                uid_usage.bytes[READ][FOREGROUND][CHARGER_ON],
+                uid_usage.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                uid_usage.bytes[READ][BACKGROUND][CHARGER_ON],
+                uid_usage.bytes[WRITE][BACKGROUND][CHARGER_ON]);
 
-    for (const auto& it : uids_m) {
-        uids_v.push_back(it.second);
+        for (const auto& task_it : record.ios.task_ios) {
+            const io_usage& task_usage = task_it.second;
+            const string& comm = task_it.first;
+            dprintf(fd, "-> %s %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                    " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+                    comm.c_str(),
+                    task_usage.bytes[READ][FOREGROUND][CHARGER_OFF],
+                    task_usage.bytes[WRITE][FOREGROUND][CHARGER_OFF],
+                    task_usage.bytes[READ][BACKGROUND][CHARGER_OFF],
+                    task_usage.bytes[WRITE][BACKGROUND][CHARGER_OFF],
+                    task_usage.bytes[READ][FOREGROUND][CHARGER_ON],
+                    task_usage.bytes[WRITE][FOREGROUND][CHARGER_ON],
+                    task_usage.bytes[READ][BACKGROUND][CHARGER_ON],
+                    task_usage.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+        }
     }
-    return uids_v;
 }
 
-status_t Storaged::dump(int fd, const Vector<String16>& args) {
+status_t StoragedService::dump(int fd, const Vector<String16>& args) {
     IPCThreadState* self = IPCThreadState::self();
     const int pid = self->getCallingPid();
     const int uid = self->getCallingUid();
@@ -96,6 +106,7 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
     int time_window = 0;
     uint64_t threshold = 0;
     bool force_report = false;
+    bool debug = false;
     for (size_t i = 0; i < args.size(); i++) {
         const auto& arg = args[i];
         if (arg == String16("--hours")) {
@@ -123,47 +134,87 @@ status_t Storaged::dump(int fd, const Vector<String16>& args) {
             force_report = true;
             continue;
         }
+        if (arg == String16("--debug")) {
+            debug = true;
+            continue;
+        }
     }
 
     uint64_t last_ts = 0;
-    const std::map<uint64_t, struct uid_records>& records =
-                storaged->get_uid_records(hours, threshold, force_report);
+    map<uint64_t, struct uid_records> records =
+                storaged_sp->get_uid_records(hours, threshold, force_report);
     for (const auto& it : records) {
         if (last_ts != it.second.start_ts) {
-            dprintf(fd, "%llu", (unsigned long long)it.second.start_ts);
+            dprintf(fd, "%" PRIu64, it.second.start_ts);
         }
-        dprintf(fd, ",%llu\n", (unsigned long long)it.first);
+        dprintf(fd, ",%" PRIu64 "\n", it.first);
         last_ts = it.first;
 
-        for (const auto& record : it.second.entries) {
-            dprintf(fd, "%s %ju %ju %ju %ju %ju %ju %ju %ju\n",
-                record.name.c_str(),
-                record.ios.bytes[READ][FOREGROUND][CHARGER_OFF],
-                record.ios.bytes[WRITE][FOREGROUND][CHARGER_OFF],
-                record.ios.bytes[READ][BACKGROUND][CHARGER_OFF],
-                record.ios.bytes[WRITE][BACKGROUND][CHARGER_OFF],
-                record.ios.bytes[READ][FOREGROUND][CHARGER_ON],
-                record.ios.bytes[WRITE][FOREGROUND][CHARGER_ON],
-                record.ios.bytes[READ][BACKGROUND][CHARGER_ON],
-                record.ios.bytes[WRITE][BACKGROUND][CHARGER_ON]);
+        if (!debug) {
+            dumpUidRecords(fd, it.second.entries);
+        } else {
+            dumpUidRecordsDebug(fd, it.second.entries);
         }
     }
 
     if (time_window) {
-        storaged->update_uid_io_interval(time_window);
+        storaged_sp->update_uid_io_interval(time_window);
     }
 
     return NO_ERROR;
 }
 
-sp<IStoraged> get_storaged_service() {
+binder::Status StoragedService::onUserStarted(int32_t userId) {
+    storaged_sp->add_user_ce(userId);
+    return binder::Status::ok();
+}
+
+binder::Status StoragedService::onUserStopped(int32_t userId) {
+    storaged_sp->remove_user_ce(userId);
+    return binder::Status::ok();
+}
+
+binder::Status StoragedService::getRecentPerf(int32_t* _aidl_return) {
+    uint32_t recent_perf = storaged_sp->get_recent_perf();
+    if (recent_perf > INT32_MAX) {
+        *_aidl_return = INT32_MAX;
+    } else {
+        *_aidl_return = static_cast<int32_t>(recent_perf);
+    }
+    return binder::Status::ok();
+}
+
+status_t StoragedPrivateService::start() {
+    return BinderService<StoragedPrivateService>::publish();
+}
+
+binder::Status StoragedPrivateService::dumpUids(
+        vector<::android::os::storaged::UidInfo>* _aidl_return) {
+    unordered_map<uint32_t, uid_info> uids_m = storaged_sp->get_uids();
+
+    for (const auto& it : uids_m) {
+        UidInfo uinfo;
+        uinfo.uid = it.second.uid;
+        uinfo.name = it.second.name;
+        uinfo.tasks = it.second.tasks;
+        memcpy(&uinfo.io, &it.second.io, sizeof(uinfo.io));
+        _aidl_return->push_back(uinfo);
+    }
+    return binder::Status::ok();
+}
+
+binder::Status StoragedPrivateService::dumpPerfHistory(
+        vector<int32_t>* _aidl_return) {
+    *_aidl_return = storaged_sp->get_perf_history();
+    return binder::Status::ok();
+}
+
+sp<IStoragedPrivate> get_storaged_pri_service() {
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) return NULL;
 
-    sp<IBinder> binder = sm->getService(String16("storaged"));
+    sp<IBinder> binder = sm->getService(String16("storaged_pri"));
     if (binder == NULL) return NULL;
 
-    sp<IStoraged> storaged = interface_cast<IStoraged>(binder);
-
-    return storaged;
+    return interface_cast<IStoragedPrivate>(binder);
 }

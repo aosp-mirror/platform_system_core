@@ -118,10 +118,20 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
 
     init_transport_registration();
     init_reconnect_handler();
-    init_mdns_transport_discovery();
 
-    usb_init();
-    local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
+    if (!getenv("ADB_MDNS") || strcmp(getenv("ADB_MDNS"), "0") != 0) {
+        init_mdns_transport_discovery();
+    }
+
+    if (!getenv("ADB_USB") || strcmp(getenv("ADB_USB"), "0") != 0) {
+        usb_init();
+    } else {
+        adb_notify_device_scan_complete();
+    }
+
+    if (!getenv("ADB_EMU") || strcmp(getenv("ADB_EMU"), "0") != 0) {
+        local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
+    }
 
     std::string error;
 

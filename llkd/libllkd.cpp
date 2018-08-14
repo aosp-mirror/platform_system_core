@@ -55,6 +55,7 @@
 
 using namespace std::chrono_literals;
 using namespace std::chrono;
+using namespace std::literals;
 
 namespace {
 
@@ -284,7 +285,7 @@ struct proc {
           schedUpdate(0),
           nrSwitches(0),
           update(llkUpdate),
-          count(0),
+          count(0ms),
           pid(pid),
           ppid(ppid),
           uid(-1),
@@ -497,8 +498,7 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state) {
         }
         ::usleep(200000);  // let everything settle
     }
-    llkWriteStringToFile(std::string("SysRq : Trigger a crash : 'livelock,") + state + "'\n",
-                         "/dev/kmsg");
+    llkWriteStringToFile("SysRq : Trigger a crash : 'livelock,"s + state + "'\n", "/dev/kmsg");
     android::base::WriteStringToFd("c", sysrqTriggerFd);
     // NOTREACHED
     // DYB
@@ -574,15 +574,19 @@ std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
 
 // We only officially support comma separators, but wetware being what they
 // are will take some liberty and I do not believe they should be punished.
-std::unordered_set<std::string> llkSplit(const std::string& s,
-                                         const std::string& delimiters = ", \t:") {
+std::unordered_set<std::string> llkSplit(const std::string& s) {
     std::unordered_set<std::string> result;
 
+    // Special case, allow boolean false to empty the list, otherwise expected
+    // source of input from android::base::GetProperty will supply the default
+    // value on empty content in the property.
+    if (s == "false") return result;
+
     size_t base = 0;
-    size_t found;
-    while (true) {
-        found = s.find_first_of(delimiters, base);
-        result.emplace(s.substr(base, found - base));
+    while (s.size() > base) {
+        auto found = s.find_first_of(", \t:", base);
+        // Only emplace content, empty entries are not an option
+        if (found != base) result.emplace(s.substr(base, found - base));
         if (found == s.npos) break;
         base = found + 1;
     }
@@ -1070,7 +1074,7 @@ bool llkInit(const char* threadname) {
         std::to_string(kthreaddPid) + "," + std::to_string(::getpid()) + "," +
         std::to_string(::gettid()) + "," LLK_BLACKLIST_PROCESS_DEFAULT);
     if (threadname) {
-        defaultBlacklistProcess += std::string(",") + threadname;
+        defaultBlacklistProcess += ","s + threadname;
     }
     for (int cpu = 1; cpu < get_nprocs_conf(); ++cpu) {
         defaultBlacklistProcess += ",[watchdog/" + std::to_string(cpu) + "]";

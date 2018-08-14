@@ -1,0 +1,5 @@
+service health-hal-2-0 /vendor/bin/hw/android.hardware.health@2.0-service
+    class hal
+    user system
+    group system
+    file /dev/kmsg w

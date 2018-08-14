@@ -20,11 +20,9 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <mntent.h>
-#include <sys/capability.h>
 #include <sys/cdefs.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
-#include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -51,9 +49,9 @@
 #include <selinux/selinux.h>
 
 #include "action_manager.h"
-#include "capabilities.h"
 #include "init.h"
 #include "property_service.h"
+#include "reboot_utils.h"
 #include "service.h"
 #include "sigchld_handler.h"
 
@@ -157,54 +155,6 @@ static void ShutdownVold() {
 static void LogShutdownTime(UmountStat stat, Timer* t) {
     LOG(WARNING) << "powerctl_shutdown_time_ms:" << std::to_string(t->duration().count()) << ":"
                  << stat;
-}
-
-bool IsRebootCapable() {
-    if (!CAP_IS_SUPPORTED(CAP_SYS_BOOT)) {
-        PLOG(WARNING) << "CAP_SYS_BOOT is not supported";
-        return true;
-    }
-
-    ScopedCaps caps(cap_get_proc());
-    if (!caps) {
-        PLOG(WARNING) << "cap_get_proc() failed";
-        return true;
-    }
-
-    cap_flag_value_t value = CAP_SET;
-    if (cap_get_flag(caps.get(), CAP_SYS_BOOT, CAP_EFFECTIVE, &value) != 0) {
-        PLOG(WARNING) << "cap_get_flag(CAP_SYS_BOOT, EFFECTIVE) failed";
-        return true;
-    }
-    return value == CAP_SET;
-}
-
-void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
-    LOG(INFO) << "Reboot ending, jumping to kernel";
-
-    if (!IsRebootCapable()) {
-        // On systems where init does not have the capability of rebooting the
-        // device, just exit cleanly.
-        exit(0);
-    }
-
-    switch (cmd) {
-        case ANDROID_RB_POWEROFF:
-            reboot(RB_POWER_OFF);
-            break;
-
-        case ANDROID_RB_RESTART2:
-            syscall(__NR_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-                    LINUX_REBOOT_CMD_RESTART2, rebootTarget.c_str());
-            break;
-
-        case ANDROID_RB_THERMOFF:
-            reboot(RB_POWER_OFF);
-            break;
-    }
-    // In normal case, reboot should not return.
-    PLOG(ERROR) << "reboot call returned";
-    abort();
 }
 
 /* Find all read+write block devices and emulated devices in /proc/mounts
@@ -329,8 +279,15 @@ static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeo
     return stat;
 }
 
-void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
-              bool runFsck) {
+//* Reboot / shutdown the system.
+// cmd ANDROID_RB_* as defined in android_reboot.h
+// reason Reason string like "reboot", "shutdown,userrequested"
+// rebootTarget Reboot target string like "bootloader". Otherwise, it should be an
+//              empty string.
+// runFsck Whether to run fsck after umount is done.
+//
+static void DoReboot(unsigned int cmd, const std::string& reason, const std::string& rebootTarget,
+                     bool runFsck) {
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", rebootTarget: " << rebootTarget;
 

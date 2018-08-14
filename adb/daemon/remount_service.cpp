@@ -30,6 +30,7 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -38,28 +39,30 @@
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr.h>
+#include <fs_mgr_overlayfs.h>
 
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
-#include "fs_mgr.h"
 #include "set_verity_enable_state_service.h"
 
-// Returns the device used to mount a directory in /proc/mounts.
+// Returns the last device used to mount a directory in /proc/mounts.
+// This will find overlayfs entry where upperdir=lowerdir, to make sure
+// remount is associated with the correct directory.
 static std::string find_proc_mount(const char* dir) {
     std::unique_ptr<FILE, int(*)(FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
-    if (!fp) {
-        return "";
-    }
+    std::string mnt_fsname;
+    if (!fp) return mnt_fsname;
 
     mntent* e;
     while ((e = getmntent(fp.get())) != nullptr) {
         if (strcmp(dir, e->mnt_dir) == 0) {
-            return e->mnt_fsname;
+            mnt_fsname = e->mnt_fsname;
         }
     }
-    return "";
+    return mnt_fsname;
 }
 
 // Returns the device used to mount a directory in the fstab.
@@ -81,6 +84,7 @@ static std::string find_mount(const char* dir, bool is_root) {
 }
 
 bool make_block_device_writable(const std::string& dev) {
+    if ((dev == "overlay") || (dev == "overlayfs")) return true;
     int fd = unix_open(dev.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         return false;
@@ -234,6 +238,14 @@ void remount_service(unique_fd fd, const std::string& cmd) {
         partitions.push_back("/system");
     }
 
+    bool verity_enabled = (system_verified || vendor_verified);
+
+    // If we can use overlayfs, lets get it in place first
+    // before we struggle with determining deduplication operations.
+    if (!verity_enabled && fs_mgr_overlayfs_setup() && fs_mgr_overlayfs_mount_all()) {
+        WriteFdExactly(fd.get(), "overlayfs mounted\n");
+    }
+
     // Find partitions that are deduplicated, and can be un-deduplicated.
     std::set<std::string> dedup;
     for (const auto& partition : partitions) {
@@ -245,8 +257,6 @@ void remount_service(unique_fd fd, const std::string& cmd) {
             dedup.emplace(partition);
         }
     }
-
-    bool verity_enabled = (system_verified || vendor_verified);
 
     // Reboot now if the user requested it (and an operation needs a reboot).
     if (user_requested_reboot) {

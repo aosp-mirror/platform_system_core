@@ -199,7 +199,7 @@ static enum match_type identical(LogBufferElement* elem,
 }
 
 int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
-                   pid_t tid, const char* msg, unsigned short len) {
+                   pid_t tid, const char* msg, uint16_t len) {
     if (log_id >= LOG_ID_MAX) {
         return -EINVAL;
     }
@@ -240,7 +240,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     LogBufferElement* currentLast = lastLoggedElements[log_id];
     if (currentLast) {
         LogBufferElement* dropped = droppedElements[log_id];
-        unsigned short count = dropped ? dropped->getDropped() : 0;
+        uint16_t count = dropped ? dropped->getDropped() : 0;
         //
         // State Init
         //     incoming:
@@ -584,13 +584,13 @@ class LogBufferElementLast {
     LogBufferElementMap map;
 
    public:
-    bool coalesce(LogBufferElement* element, unsigned short dropped) {
+    bool coalesce(LogBufferElement* element, uint16_t dropped) {
         LogBufferElementKey key(element->getUid(), element->getPid(),
                                 element->getTid());
         LogBufferElementMap::iterator it = map.find(key.getKey());
         if (it != map.end()) {
             LogBufferElement* found = it->second;
-            unsigned short moreDropped = found->getDropped();
+            uint16_t moreDropped = found->getDropped();
             if ((dropped + moreDropped) > USHRT_MAX) {
                 map.erase(it);
             } else {
@@ -847,7 +847,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            unsigned short dropped = element->getDropped();
+            uint16_t dropped = element->getDropped();
 
             // remove any leading drops
             if (leading && dropped) {
@@ -927,7 +927,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             kick = true;
 
-            unsigned short len = element->getMsgLen();
+            uint16_t len = element->getMsgLen();
 
             // do not create any leading drops
             if (leading) {
@@ -1115,9 +1115,6 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
-        // 3 second limit to continue search for out-of-order entries.
-        log_time min = start - pruneMargin;
-
         // Cap to 300 iterations we look back for out-of-order entries.
         size_t count = 300;
 
@@ -1133,7 +1130,7 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
             } else if (element->getRealTime() == start) {
                 last = ++it;
                 break;
-            } else if (!--count || (element->getRealTime() < min)) {
+            } else if (!--count) {
                 break;
             }
         }

@@ -1,0 +1,4 @@
+service healthd /system/bin/healthd
+    class hal
+    critical
+    group root system wakelock

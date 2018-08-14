@@ -31,7 +31,7 @@ class LogBufferInterface {
     // Handles a log entry when available in LogListener.
     // Returns the size of the handled log message.
     virtual int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
-                    pid_t tid, const char* msg, unsigned short len) = 0;
+                    pid_t tid, const char* msg, uint16_t len) = 0;
 
     virtual uid_t pidToUid(pid_t pid);
     virtual pid_t tidToPid(pid_t tid);

@@ -274,10 +274,6 @@ std::string adb_get_android_dir_path() {
     return android_dir;
 }
 
-void AdbCloser::Close(int fd) {
-    adb_close(fd);
-}
-
 int syntax_error(const char* fmt, ...) {
     fprintf(stderr, "adb: usage: ");
 

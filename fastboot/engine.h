@@ -69,6 +69,9 @@ void fb_queue_download_fd(const std::string& name, int fd, uint32_t sz);
 void fb_queue_upload(const std::string& outfile);
 void fb_queue_notice(const std::string& notice);
 void fb_queue_wait_for_disconnect(void);
+void fb_queue_create_partition(const std::string& partition, const std::string& size);
+void fb_queue_delete_partition(const std::string& partition);
+void fb_queue_resize_partition(const std::string& partition, const std::string& size);
 int64_t fb_execute_queue();
 void fb_set_active(const std::string& slot);
 
