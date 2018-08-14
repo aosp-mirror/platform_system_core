@@ -82,6 +82,7 @@ LOCAL_MODULE_HOST_OS := darwin linux windows
 
 LOCAL_CFLAGS := $(fastboot_cflags)
 LOCAL_CFLAGS_darwin := $(fastboot_cflags_darwin)
+LOCAL_CPP_STD := c++17
 LOCAL_CXX_STL := $(fastboot_stl)
 LOCAL_HEADER_LIBRARIES := bootimg_headers
 LOCAL_LDLIBS_darwin := $(fastboot_ldlibs_darwin)

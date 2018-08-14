@@ -115,7 +115,7 @@ class LogBuffer : public LogBufferInterface {
     }
 
     int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
-            const char* msg, unsigned short len) override;
+            const char* msg, uint16_t len) override;
     // lastTid is an optional context to help detect if the last previous
     // valid message was from the same source so we can differentiate chatty
     // filter types (identical or expired)

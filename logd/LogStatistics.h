@@ -520,7 +520,7 @@ struct TagNameKey {
             return;
         }
         ++msg;
-        unsigned short len = element->getMsgLen();
+        uint16_t len = element->getMsgLen();
         len = (len <= 1) ? 0 : strnlen(msg, len - 1);
         if (!len) {
             name = std::string_view("<NULL>", strlen("<NULL>"));
