@@ -46,6 +46,13 @@ enum keymaster_command : uint32_t {
     KM_ATTEST_KEY                   = (16 << KEYMASTER_REQ_SHIFT),
     KM_UPGRADE_KEY                  = (17 << KEYMASTER_REQ_SHIFT),
     KM_CONFIGURE                    = (18 << KEYMASTER_REQ_SHIFT),
+    KM_GET_HMAC_SHARING_PARAMETERS  = (19 << KEYMASTER_REQ_SHIFT),
+    KM_COMPUTE_SHARED_HMAC          = (20 << KEYMASTER_REQ_SHIFT),
+    KM_VERIFY_AUTHORIZATION         = (21 << KEYMASTER_REQ_SHIFT),
+    KM_DELETE_KEY                   = (22 << KEYMASTER_REQ_SHIFT),
+    KM_DELETE_ALL_KEYS              = (23 << KEYMASTER_REQ_SHIFT),
+    KM_DESTROY_ATTESTATION_IDS      = (24 << KEYMASTER_REQ_SHIFT),
+    KM_IMPORT_WRAPPED_KEY           = (25 << KEYMASTER_REQ_SHIFT),
 };
 
 #ifdef __ANDROID__
