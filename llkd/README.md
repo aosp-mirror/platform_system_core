@@ -60,7 +60,7 @@ kernel instead of deal with more graceful kill operation.
 Android Properties
 ------------------
 
-Android Properties llkd respond to (<prop>_ms parms are in milliseconds):
+Android Properties llkd respond to (*prop*_ms parms are in milliseconds):
 
 #### ro.config.low_ram
 default false, if true do not sysrq t (dump all threads).
@@ -99,19 +99,33 @@ default 2 minutes samples of threads for D or Z.
 #### ro.llk.blacklist.process
 default 0,1,2 (kernel, init and [kthreadd]) plus process names
 init,[kthreadd],[khungtaskd],lmkd,lmkd.llkd,llkd,watchdogd,
-[watchdogd],[watchdogd/0],...,[watchdogd/<get_nprocs-1>].
+[watchdogd],[watchdogd/0],...,[watchdogd/***get_nprocs**-1*].
+The string false is the equivalent to an empty list.
+Do not watch these processes.  A process can be comm, cmdline or pid reference.
+NB: automated default here can be larger than the current maximum property
+size of 92.
+NB: false is a very very very unlikely process to want to blacklist.
 
 #### ro.llk.blacklist.parent
 default 0,2 (kernel and [kthreadd]).
+The string false is the equivalent to an empty list.
+Do not watch processes that have this parent.
+A parent process can be comm, cmdline or pid reference.
 
 #### ro.llk.blacklist.uid
-default <empty>, comma separated list of uid numbers or names.
+default *empty* or false, comma separated list of uid numbers or names.
+The string false is the equivalent to an empty list.
+Do not watch processes that match this uid.
 
 Architectural Concerns
 ----------------------
 
+- built-in [khungtask] daemon is too generic and trips on driver code that
+  sits around in D state too much.  To switch to S instead makes the task(s)
+  killable, so the drivers should be able to resurrect them if needed.
+- Properties are limited to 92 characters.
 - Create kernel module and associated gTest to actually test panic.
-- Create gTest to test out blacklist (ro.llk.blacklist.<properties> generally
+- Create gTest to test out blacklist (ro.llk.blacklist.*properties* generally
   not be inputs).  Could require more test-only interfaces to libllkd.
-- Speed up gTest using something else than ro.llk.<properties>, which should
-  not be inputs.
+- Speed up gTest using something else than ro.llk.*properties*, which should
+  not be inputs as they should be baked into the product.
