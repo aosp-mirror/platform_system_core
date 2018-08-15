@@ -65,11 +65,10 @@ namespace {
 // acceptable overlayfs backing storage
 const auto kOverlayMountPoint = "/cache"s;
 
-// return true if everything is mounted, but before adb is started.  At
-// 'trigger firmware_mounts_complete' after 'trigger load_persist_props_action'.
+// Return true if everything is mounted, but before adb is started.  Right
+// after 'trigger load_persist_props_action' is done.
 bool fs_mgr_boot_completed() {
-    return !android::base::GetProperty("ro.boottime.init", "").empty() &&
-           !!access("/dev/.booting", F_OK);
+    return android::base::GetBoolProperty("ro.persistent_properties.ready", false);
 }
 
 bool fs_mgr_is_dir(const std::string& path) {
@@ -164,7 +163,9 @@ bool fs_mgr_wants_overlayfs() {
     // Overlayfs available in the kernel, and patched for override_creds?
     static signed char overlayfs_in_kernel = -1;  // cache for constant condition
     if (overlayfs_in_kernel == -1) {
+        auto save_errno = errno;
         overlayfs_in_kernel = !access("/sys/module/overlay/parameters/override_creds", F_OK);
+        errno = save_errno;
     }
     return overlayfs_in_kernel;
 }
@@ -430,7 +431,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     const auto newpath = oldpath + ".teardown";
     ret &= fs_mgr_rm_all(newpath);
     auto save_errno = errno;
-    if (rename(oldpath.c_str(), newpath.c_str())) {
+    if (!rename(oldpath.c_str(), newpath.c_str())) {
         if (change) *change = true;
     } else if (errno != ENOENT) {
         ret = false;

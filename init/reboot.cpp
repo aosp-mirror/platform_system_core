@@ -473,7 +473,21 @@ bool HandlePowerctlMessage(const std::string& command) {
                                   "bootloader_message: "
                                << err;
                 }
+            } else if (reboot_target == "sideload" || reboot_target == "sideload-auto-reboot" ||
+                       reboot_target == "fastboot") {
+                std::string arg = reboot_target == "sideload-auto-reboot" ? "sideload_auto_reboot"
+                                                                          : reboot_target;
+                const std::vector<std::string> options = {
+                        "--" + arg,
+                };
+                std::string err;
+                if (!write_bootloader_message(options, &err)) {
+                    LOG(ERROR) << "Failed to set bootloader message: " << err;
+                    return false;
+                }
+                reboot_target = "recovery";
             }
+
             // If there is an additional parameter, pass it along
             if ((cmd_params.size() == 3) && cmd_params[2].size()) {
                 reboot_target += "," + cmd_params[2];
