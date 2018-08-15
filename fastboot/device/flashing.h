@@ -22,3 +22,4 @@
 class FastbootDevice;
 
 int Flash(FastbootDevice* device, const std::string& partition_name);
+bool UpdateSuper(FastbootDevice* device, const std::string& partition_name, bool wipe);
