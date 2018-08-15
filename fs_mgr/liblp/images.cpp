@@ -41,6 +41,23 @@ std::unique_ptr<LpMetadata> ReadFromImageFile(int fd) {
     return ParseMetadata(geometry, fd);
 }
 
+std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes) {
+    if (bytes < LP_METADATA_GEOMETRY_SIZE) {
+        LERROR << __PRETTY_FUNCTION__ << ": " << bytes << " is smaller than geometry header";
+        return nullptr;
+    }
+
+    LpMetadataGeometry geometry;
+    if (!ParseGeometry(data, &geometry)) {
+        return nullptr;
+    }
+
+    const uint8_t* metadata_buffer =
+            reinterpret_cast<const uint8_t*>(data) + LP_METADATA_GEOMETRY_SIZE;
+    size_t metadata_buffer_size = bytes - LP_METADATA_GEOMETRY_SIZE;
+    return ParseMetadata(geometry, metadata_buffer, metadata_buffer_size);
+}
+
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
     android::base::unique_fd fd(open(file, O_RDONLY));
     if (fd < 0) {

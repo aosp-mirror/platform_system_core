@@ -48,9 +48,27 @@ class FileReader final : public Reader {
     int fd_;
 };
 
-// Parse an LpMetadataGeometry from a buffer. The buffer must be at least
-// LP_METADATA_GEOMETRY_SIZE bytes in size.
-static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
+class MemoryReader final : public Reader {
+  public:
+    MemoryReader(const void* buffer, size_t size)
+        : buffer_(reinterpret_cast<const uint8_t*>(buffer)), size_(size), pos_(0) {}
+    bool ReadFully(void* out, size_t length) override {
+        if (size_ - pos_ < length) {
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(out, buffer_ + pos_, length);
+        pos_ += length;
+        return true;
+    }
+
+  private:
+    const uint8_t* buffer_;
+    size_t size_;
+    size_t pos_;
+};
+
+bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
     static_assert(sizeof(*geometry) <= LP_METADATA_GEOMETRY_SIZE);
     memcpy(geometry, buffer, sizeof(*geometry));
 
@@ -252,6 +270,12 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
         metadata->extents.push_back(extent);
     }
     return metadata;
+}
+
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, const void* buffer,
+                                          size_t size) {
+    MemoryReader reader(buffer, size);
+    return ParseMetadata(geometry, &reader);
 }
 
 std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd) {
