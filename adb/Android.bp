@@ -353,7 +353,6 @@ cc_library {
         "libcutils",
         "libext4_utils",
         "libfec",
-        "libfec_rs",
         "libfs_mgr",
         "liblog",
         "libmdnssd",
