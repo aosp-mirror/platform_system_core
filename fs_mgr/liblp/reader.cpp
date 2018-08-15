@@ -30,6 +30,24 @@
 namespace android {
 namespace fs_mgr {
 
+// Helper class for reading descriptors and memory buffers in the same manner.
+class Reader {
+  public:
+    virtual ~Reader(){};
+    virtual bool ReadFully(void* buffer, size_t length) = 0;
+};
+
+class FileReader final : public Reader {
+  public:
+    explicit FileReader(int fd) : fd_(fd) {}
+    bool ReadFully(void* buffer, size_t length) override {
+        return android::base::ReadFully(fd_, buffer, length);
+    }
+
+  private:
+    int fd_;
+};
+
 // Parse an LpMetadataGeometry from a buffer. The buffer must be at least
 // LP_METADATA_GEOMETRY_SIZE bytes in size.
 static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
@@ -171,10 +189,11 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
 
 // Parse and validate all metadata at the current position in the given file
 // descriptor.
-std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd) {
+static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry,
+                                                 Reader* reader) {
     // First read and validate the header.
     std::unique_ptr<LpMetadata> metadata = std::make_unique<LpMetadata>();
-    if (!android::base::ReadFully(fd, &metadata->header, sizeof(metadata->header))) {
+    if (!reader->ReadFully(&metadata->header, sizeof(metadata->header))) {
         PERROR << __PRETTY_FUNCTION__ << "read " << sizeof(metadata->header) << "bytes failed";
         return nullptr;
     }
@@ -192,7 +211,7 @@ std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, in
         LERROR << "Out of memory reading logical partition tables.";
         return nullptr;
     }
-    if (!android::base::ReadFully(fd, buffer.get(), header.tables_size)) {
+    if (!reader->ReadFully(buffer.get(), header.tables_size)) {
         PERROR << __PRETTY_FUNCTION__ << "read " << header.tables_size << "bytes failed";
         return nullptr;
     }
@@ -233,6 +252,11 @@ std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, in
         metadata->extents.push_back(extent);
     }
     return metadata;
+}
+
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd) {
+    FileReader reader(fd);
+    return ParseMetadata(geometry, &reader);
 }
 
 std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
