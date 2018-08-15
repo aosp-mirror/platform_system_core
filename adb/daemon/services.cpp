@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <thread>
@@ -96,41 +98,44 @@ void restart_usb_service(unique_fd fd) {
 
 void reboot_service(unique_fd fd, const std::string& arg) {
     std::string reboot_arg = arg;
-    bool auto_reboot = false;
-
-    if (reboot_arg == "sideload-auto-reboot") {
-        auto_reboot = true;
-        reboot_arg = "sideload";
-    }
-
-    // It reboots into sideload mode by setting "--sideload" or "--sideload_auto_reboot"
-    // in the command file.
-    if (reboot_arg == "sideload") {
-        if (getuid() != 0) {
-            WriteFdExactly(fd.get(), "'adb root' is required for 'adb reboot sideload'.\n");
-            return;
-        }
-
-        const std::vector<std::string> options = {auto_reboot ? "--sideload_auto_reboot"
-                                                              : "--sideload"};
-        std::string err;
-        if (!write_bootloader_message(options, &err)) {
-            D("Failed to set bootloader message: %s", err.c_str());
-            return;
-        }
-
-        reboot_arg = "recovery";
-    }
-
     sync();
 
     if (reboot_arg.empty()) reboot_arg = "adb";
     std::string reboot_string = android::base::StringPrintf("reboot,%s", reboot_arg.c_str());
-    if (!android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_string)) {
-        WriteFdFmt(fd.get(), "reboot (%s) failed\n", reboot_string.c_str());
-        return;
-    }
 
+    if (reboot_arg == "fastboot" && access("/dev/socket/recovery", F_OK) == 0) {
+        LOG(INFO) << "Recovery specific reboot fastboot";
+        /*
+         * The socket is created to allow switching between recovery and
+         * fastboot.
+         */
+        android::base::unique_fd sock(socket(AF_UNIX, SOCK_STREAM, 0));
+        if (sock < 0) {
+            WriteFdFmt(fd, "reboot (%s) create\n", strerror(errno));
+            PLOG(ERROR) << "Creating recovery socket failed";
+            return;
+        }
+
+        sockaddr_un addr = {.sun_family = AF_UNIX};
+        strncpy(addr.sun_path, "/dev/socket/recovery", sizeof(addr.sun_path) - 1);
+        if (connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
+            WriteFdFmt(fd, "reboot (%s) connect\n", strerror(errno));
+            PLOG(ERROR) << "Couldn't connect to recovery socket";
+            return;
+        }
+        const char msg_switch_to_fastboot = 'f';
+        auto ret = adb_write(sock, &msg_switch_to_fastboot, sizeof(msg_switch_to_fastboot));
+        if (ret != sizeof(msg_switch_to_fastboot)) {
+            WriteFdFmt(fd, "reboot (%s) write\n", strerror(errno));
+            PLOG(ERROR) << "Couldn't write message to recovery socket to switch to fastboot";
+            return;
+        }
+    } else {
+        if (!android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_string)) {
+            WriteFdFmt(fd.get(), "reboot (%s) failed\n", reboot_string.c_str());
+            return;
+        }
+    }
     // Don't return early. Give the reboot command time to take effect
     // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
     while (true) {
