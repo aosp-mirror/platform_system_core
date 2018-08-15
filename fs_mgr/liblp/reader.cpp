@@ -171,7 +171,7 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
 
 // Parse and validate all metadata at the current position in the given file
 // descriptor.
-std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd) {
     // First read and validate the header.
     std::unique_ptr<LpMetadata> metadata = std::make_unique<LpMetadata>();
     if (!android::base::ReadFully(fd, &metadata->header, sizeof(metadata->header))) {
@@ -181,6 +181,7 @@ std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
     if (!ValidateMetadataHeader(metadata->header)) {
         return nullptr;
     }
+    metadata->geometry = geometry;
 
     LpMetadataHeader& header = metadata->header;
 
@@ -231,7 +232,6 @@ std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
 
         metadata->extents.push_back(extent);
     }
-
     return metadata;
 }
 
@@ -242,7 +242,7 @@ std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
         return nullptr;
     }
-    return ParseMetadata(fd);
+    return ParseMetadata(geometry, fd);
 }
 
 std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
@@ -252,7 +252,7 @@ std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry&
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
         return nullptr;
     }
-    return ParseMetadata(fd);
+    return ParseMetadata(geometry, fd);
 }
 
 std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
@@ -268,13 +268,10 @@ std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
 
     // Read the priamry copy, and if that fails, try the backup.
     std::unique_ptr<LpMetadata> metadata = ReadPrimaryMetadata(fd, geometry, slot_number);
-    if (!metadata) {
-        metadata = ReadBackupMetadata(fd, geometry, slot_number);
-    }
     if (metadata) {
-        metadata->geometry = geometry;
+        return metadata;
     }
-    return metadata;
+    return ReadBackupMetadata(fd, geometry, slot_number);
 }
 
 std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number) {

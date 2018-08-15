@@ -38,12 +38,7 @@ std::unique_ptr<LpMetadata> ReadFromImageFile(int fd) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << LP_METADATA_GEOMETRY_SIZE;
         return nullptr;
     }
-    std::unique_ptr<LpMetadata> metadata = ParseMetadata(fd);
-    if (!metadata) {
-        return nullptr;
-    }
-    metadata->geometry = geometry;
-    return metadata;
+    return ParseMetadata(geometry, fd);
 }
 
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
