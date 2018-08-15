@@ -31,6 +31,8 @@ cc_defaults {
 }
 
 cc_library {
+    // Do not ever allow this library to be vendor_available as a shared library.
+    // It does not have a stable interface.
     name: "libfs_mgr",
     defaults: ["fs_mgr_defaults"],
     recovery_available: true,
@@ -90,6 +92,8 @@ cc_library {
 }
 
 cc_library_static {
+    // Do not ever make this a shared library as long as it is vendor_available.
+    // It does not have a stable interface.
     name: "libfstab",
     vendor_available: true,
     recovery_available: true,
