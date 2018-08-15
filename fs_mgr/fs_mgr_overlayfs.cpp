@@ -65,11 +65,10 @@ namespace {
 // acceptable overlayfs backing storage
 const auto kOverlayMountPoint = "/cache"s;
 
-// return true if everything is mounted, but before adb is started.  At
-// 'trigger firmware_mounts_complete' after 'trigger load_persist_props_action'.
+// Return true if everything is mounted, but before adb is started.  Right
+// after 'trigger load_persist_props_action' is done.
 bool fs_mgr_boot_completed() {
-    return !android::base::GetProperty("ro.boottime.init", "").empty() &&
-           !!access("/dev/.booting", F_OK);
+    return android::base::GetBoolProperty("ro.persistent_properties.ready", false);
 }
 
 bool fs_mgr_is_dir(const std::string& path) {
