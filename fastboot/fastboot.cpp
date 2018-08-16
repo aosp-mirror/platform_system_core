@@ -104,9 +104,10 @@ struct fastboot_buffer {
     void* data;
     int64_t sz;
     int fd;
+    int64_t image_size;
 };
 
-static struct {
+struct Image {
     const char* nickname;
     const char* img_name;
     const char* sig_name;
@@ -114,7 +115,9 @@ static struct {
     bool optional_if_no_image;
     bool optional_if_no_partition;
     bool IsSecondary() const { return nickname == nullptr; }
-} images[] = {
+};
+
+static Image images[] = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, false },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  false },
@@ -128,7 +131,6 @@ static struct {
                                                       "product_services",
                                                                   true,  true  },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
-    { "super",    "super.img",        "super.sig",    "super",    true,  true  },
     { "system",   "system.img",       "system.sig",   "system",   false, true  },
     { nullptr,    "system_other.img", "system.sig",   "system",   true,  false },
     { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false },
@@ -773,6 +775,13 @@ static bool load_buf_fd(int fd, struct fastboot_buffer* buf) {
         return false;
     }
 
+    if (sparse_file* s = sparse_file_import_auto(fd, false, false)) {
+        buf->image_size = sparse_file_len(s, false, false);
+        sparse_file_destroy(s);
+    } else {
+        buf->image_size = sz;
+    }
+
     lseek64(fd, 0, SEEK_SET);
     int64_t limit = get_sparse_limit(sz);
     if (limit) {
@@ -1044,6 +1053,11 @@ static void set_active(const std::string& slot_override) {
     }
 }
 
+static bool is_userspace_fastboot() {
+    std::string value;
+    return fb_getvar("is-userspace", &value) && value == "yes";
+}
+
 static bool if_partition_exists(const std::string& partition, const std::string& slot) {
     std::string has_slot;
     std::string partition_name = partition;
@@ -1158,7 +1172,42 @@ static void do_send_signature(const std::string& fn) {
     fb_queue_command("signature", "installing signature");
 }
 
-static void do_flashall(const std::string& slot_override, bool skip_secondary) {
+static bool is_logical(const std::string& partition) {
+    std::string value;
+    return fb_getvar("is-logical:" + partition, &value) && value == "yes";
+}
+
+static void update_super_partition(bool force_wipe) {
+    if (!if_partition_exists("super", "")) {
+        return;
+    }
+    std::string image = find_item_given_name("super_empty.img");
+    if (access(image.c_str(), R_OK) < 0) {
+        return;
+    }
+
+    if (!is_userspace_fastboot()) {
+        die("Must have userspace fastboot to flash logical partitions");
+    }
+
+    int fd = open(image.c_str(), O_RDONLY);
+    if (fd < 0) {
+        die("could not open '%s': %s", image.c_str(), strerror(errno));
+    }
+    fb_queue_download_fd("super", fd, get_file_size(fd));
+
+    std::string command = "update-super:super";
+    if (force_wipe) {
+        command += ":wipe";
+    }
+    fb_queue_command(command, "Updating super partition");
+
+    // We need these commands to have finished before proceeding, since
+    // otherwise "getvar is-logical" may not return a correct answer below.
+    fb_execute_queue();
+}
+
+static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
     std::string fname;
     queue_info_dump();
 
@@ -1188,6 +1237,10 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary) {
         }
     }
 
+    update_super_partition(wipe);
+
+    // List of partitions to flash and their slots.
+    std::vector<std::pair<const Image*, std::string>> entries;
     for (size_t i = 0; i < arraysize(images); i++) {
         const char* slot = NULL;
         if (images[i].IsSecondary()) {
@@ -1196,21 +1249,38 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary) {
             slot = slot_override.c_str();
         }
         if (!slot) continue;
-        fname = find_item_given_name(images[i].img_name);
+        entries.emplace_back(&images[i], slot);
+
+        // Resize any logical partition to 0, so each partition is reset to 0
+        // extents, and will achieve more optimal allocation.
+        auto resize_partition = [](const std::string& partition) -> void {
+            if (is_logical(partition)) {
+                fb_queue_resize_partition(partition, "0");
+            }
+        };
+        do_for_partitions(images[i].part_name, slot, resize_partition, false);
+    }
+
+    // Flash each partition in the list if it has a corresponding image.
+    for (const auto& [image, slot] : entries) {
+        fname = find_item_given_name(image->img_name);
         fastboot_buffer buf;
         if (!load_buf(fname.c_str(), &buf)) {
-            if (images[i].optional_if_no_image) continue;
-            die("could not load '%s': %s", images[i].img_name, strerror(errno));
+            if (image->optional_if_no_image) continue;
+            die("could not load '%s': %s", image->img_name, strerror(errno));
         }
-        if (images[i].optional_if_no_partition &&
-            !if_partition_exists(images[i].part_name, slot)) {
+        if (image->optional_if_no_partition &&
+            !if_partition_exists(image->part_name, slot)) {
             continue;
         }
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname.c_str());
+            if (is_logical(partition)) {
+                fb_queue_resize_partition(partition, std::to_string(buf.image_size));
+            }
             flash_buf(partition.c_str(), &buf);
         };
-        do_for_partitions(images[i].part_name, slot, flashall, false);
+        do_for_partitions(image->part_name, slot, flashall, false);
     }
 
     if (slot_override == "all") {
@@ -1648,9 +1718,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == "flashall") {
             if (slot_override == "all") {
                 fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
-                do_flashall(slot_override, true);
+                do_flashall(slot_override, true, wants_wipe);
             } else {
-                do_flashall(slot_override, skip_secondary);
+                do_flashall(slot_override, skip_secondary, wants_wipe);
             }
             wants_reboot = true;
         } else if (command == "update") {
