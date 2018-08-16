@@ -20,10 +20,18 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 
 namespace android {
 namespace dm {
+
+DeviceMapper::DeviceMapper() : fd_(-1) {
+    fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
+    if (fd_ < 0) {
+        PLOG(ERROR) << "Failed to open device-mapper";
+    }
+}
 
 DeviceMapper& DeviceMapper::Instance() {
     static DeviceMapper instance;
