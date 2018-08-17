@@ -173,7 +173,7 @@ void HealthdDraw::draw_percent(const animation* anim) {
         cur_level = 100;
     }
 
-    if (cur_level <= 0) return;
+    if (cur_level < 0) return;
 
     const animation::text_field& field = anim->text_percent;
     if (field.font == nullptr || field.font->char_width == 0 || field.font->char_height == 0) {
