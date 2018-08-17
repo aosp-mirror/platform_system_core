@@ -228,8 +228,10 @@ void sp<T>::force_set(T* other) {
 
 template<typename T>
 void sp<T>::clear() {
-    if (m_ptr) {
-        m_ptr->decStrong(this);
+    T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
+    if (oldPtr) {
+        oldPtr->decStrong(this);
+        if (oldPtr != *const_cast<T* volatile*>(&m_ptr)) sp_report_race();
         m_ptr = nullptr;
     }
 }
