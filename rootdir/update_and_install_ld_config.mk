@@ -104,7 +104,7 @@ $(LOCAL_BUILT_MODULE): $(ld_config_template) $(deps)
 	$(hide) sed -i.bak -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
 	$(hide) sed -i.bak -e 's?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g' $@
 	$(hide) sed -i.bak -e 's?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g' $@
-	$(hide) sed -i.bak -e 's?%PRODUCTSERVICES%?$(TARGET_COPY_OUT_PRODUCTSERVICES)?g' $@
+	$(hide) sed -i.bak -e 's?%PRODUCT_SERVICES%?$(TARGET_COPY_OUT_PRODUCT_SERVICES)?g' $@
 	$(hide) rm -f $@.bak
 
 ld_config_template :=
