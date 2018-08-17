@@ -114,8 +114,8 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         if (!parser.ParseConfig("/product/etc/init")) {
             late_import_paths.emplace_back("/product/etc/init");
         }
-        if (!parser.ParseConfig("/product-services/etc/init")) {
-            late_import_paths.emplace_back("/product-services/etc/init");
+        if (!parser.ParseConfig("/product_services/etc/init")) {
+            late_import_paths.emplace_back("/product_services/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
