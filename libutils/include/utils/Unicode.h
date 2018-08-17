@@ -40,9 +40,6 @@ char16_t *strstr16(const char16_t*, const char16_t*);
 // equivalent result as strcmp16 (unlike strncmp16).
 int strzcmp16(const char16_t *s1, size_t n1, const char16_t *s2, size_t n2);
 
-// Version of strzcmp16 for comparing strings in different endianness.
-int strzcmp16_h_n(const char16_t *s1H, size_t n1, const char16_t *s2N, size_t n2);
-
 // Standard string functions on char32_t strings.
 size_t strlen32(const char32_t *);
 size_t strnlen32(const char32_t *, size_t);
