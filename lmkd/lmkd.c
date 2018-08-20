@@ -125,6 +125,7 @@ static bool kill_heaviest_task;
 static unsigned long kill_timeout_ms;
 static bool use_minfree_levels;
 static bool per_app_memcg;
+static int swap_free_low_percentage;
 
 static android_log_context ctx;
 
@@ -205,6 +206,7 @@ enum meminfo_field {
     MI_BUFFERS,
     MI_SHMEM,
     MI_UNEVICTABLE,
+    MI_TOTAL_SWAP,
     MI_FREE_SWAP,
     MI_ACTIVE_ANON,
     MI_INACTIVE_ANON,
@@ -227,6 +229,7 @@ static const char* const meminfo_field_names[MI_FIELD_COUNT] = {
     "Buffers:",
     "Shmem:",
     "Unevictable:",
+    "SwapTotal:",
     "SwapFree:",
     "Active(anon):",
     "Inactive(anon):",
@@ -249,6 +252,7 @@ union meminfo {
         int64_t buffers;
         int64_t shmem;
         int64_t unevictable;
+        int64_t total_swap;
         int64_t free_swap;
         int64_t active_anon;
         int64_t inactive_anon;
@@ -1353,20 +1357,24 @@ static void mp_event_common(int data, uint32_t events __unused) {
         }
     }
 
-    // If the pressure is larger than downgrade_pressure lmk will not
-    // kill any process, since enough memory is available.
-    if (mem_pressure > downgrade_pressure) {
-        if (debug_process_killing) {
-            ALOGI("Ignore %s memory pressure", level_name[level]);
+    // If we still have enough swap space available, check if we want to
+    // ignore/downgrade pressure events.
+    if (mi.field.free_swap >=
+        mi.field.total_swap * swap_free_low_percentage / 100) {
+        // If the pressure is larger than downgrade_pressure lmk will not
+        // kill any process, since enough memory is available.
+        if (mem_pressure > downgrade_pressure) {
+            if (debug_process_killing) {
+                ALOGI("Ignore %s memory pressure", level_name[level]);
+            }
+            return;
+        } else if (level == VMPRESS_LEVEL_CRITICAL && mem_pressure > upgrade_pressure) {
+            if (debug_process_killing) {
+                ALOGI("Downgrade critical memory pressure");
+            }
+            // Downgrade event, since enough memory available.
+            level = downgrade_level(level);
         }
-        return;
-    } else if (level == VMPRESS_LEVEL_CRITICAL &&
-               mem_pressure > upgrade_pressure) {
-        if (debug_process_killing) {
-            ALOGI("Downgrade critical memory pressure");
-        }
-        // Downgrade event, since enough memory available.
-        level = downgrade_level(level);
     }
 
 do_kill:
@@ -1642,6 +1650,8 @@ int main(int argc __unused, char **argv __unused) {
         property_get_bool("ro.lmk.use_minfree_levels", false);
     per_app_memcg =
         property_get_bool("ro.config.per_app_memcg", low_ram_device);
+    swap_free_low_percentage =
+        property_get_int32("ro.lmk.swap_free_low_percentage", 10);
 
     ctx = create_android_logger(MEMINFO_LOG_TAG);
 
