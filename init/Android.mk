@@ -81,7 +81,6 @@ LOCAL_STATIC_LIBRARIES := \
 
 LOCAL_REQUIRED_MODULES := \
     init_second_stage \
-    init_second_stage.recovery \
 
 LOCAL_SANITIZE := signed-integer-overflow
 include $(BUILD_EXECUTABLE)

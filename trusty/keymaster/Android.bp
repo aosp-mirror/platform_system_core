@@ -77,3 +77,34 @@ cc_library_shared {
     ],
     header_libs: ["libhardware_headers"],
 }
+
+cc_binary {
+    name: "android.hardware.keymaster@3.0-service.trusty",
+    defaults: ["hidl_defaults"],
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["3.0/android.hardware.keymaster@3.0-service.trusty.rc"],
+    srcs: [
+        "3.0/service.cpp",
+        "3.0/TrustyKeymaster3Device.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+        "TrustyKeymaster.cpp",
+    ],
+
+    local_include_dirs: ["include"],
+
+    shared_libs: [
+        "liblog",
+        "libcutils",
+        "libdl",
+        "libbase",
+        "libutils",
+        "libhardware",
+        "libhidlbase",
+        "libhidltransport",
+        "libtrusty",
+        "libkeymaster_messages",
+        "libkeymaster3device",
+        "android.hardware.keymaster@3.0"
+    ],
+}

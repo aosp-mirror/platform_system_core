@@ -2,11 +2,6 @@
 
 cc_library {
     name: "libsuspend",
-    vendor_available: true,
-    vndk: {
-        enabled: true,
-    },
-
     srcs: [
         "autosuspend.c",
         "autosuspend_wakeup_count.cpp",
