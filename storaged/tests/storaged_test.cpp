@@ -443,8 +443,9 @@ TEST(storaged_test, storage_info_t_proto) {
 
 TEST(storaged_test, uid_monitor) {
     uid_monitor uidm;
+    auto& io_history = uidm.io_history();
 
-    uidm.io_history[200] = {
+    io_history[200] = {
         .start_ts = 100,
         .entries = {
             { "app1", {
@@ -466,7 +467,7 @@ TEST(storaged_test, uid_monitor) {
         },
     };
 
-    uidm.io_history[300] = {
+    io_history[300] = {
         .start_ts = 200,
         .entries = {
             { "app1", {
@@ -526,9 +527,9 @@ TEST(storaged_test, uid_monitor) {
     EXPECT_EQ(user_1_item_1.records().entries(0).user_id(), 1UL);
     EXPECT_EQ(user_1_item_1.records().entries(0).uid_io().wr_fg_chg_off(), 1000UL);
 
-    uidm.io_history.clear();
+    io_history.clear();
 
-    uidm.io_history[300] = {
+    io_history[300] = {
         .start_ts = 200,
         .entries = {
             { "app1", {
@@ -539,7 +540,7 @@ TEST(storaged_test, uid_monitor) {
         },
     };
 
-    uidm.io_history[400] = {
+    io_history[400] = {
         .start_ts = 300,
         .entries = {
             { "app1", {
@@ -550,16 +551,16 @@ TEST(storaged_test, uid_monitor) {
         },
     };
 
-    uidm.load_uid_io_proto(protos[0].uid_io_usage());
-    uidm.load_uid_io_proto(protos[1].uid_io_usage());
+    uidm.load_uid_io_proto(0, protos[0].uid_io_usage());
+    uidm.load_uid_io_proto(1, protos[1].uid_io_usage());
 
-    EXPECT_EQ(uidm.io_history.size(), 3UL);
-    EXPECT_EQ(uidm.io_history.count(200), 1UL);
-    EXPECT_EQ(uidm.io_history.count(300), 1UL);
-    EXPECT_EQ(uidm.io_history.count(400), 1UL);
+    EXPECT_EQ(io_history.size(), 3UL);
+    EXPECT_EQ(io_history.count(200), 1UL);
+    EXPECT_EQ(io_history.count(300), 1UL);
+    EXPECT_EQ(io_history.count(400), 1UL);
 
-    EXPECT_EQ(uidm.io_history[200].start_ts, 100UL);
-    const vector<struct uid_record>& entries_0 = uidm.io_history[200].entries;
+    EXPECT_EQ(io_history[200].start_ts, 100UL);
+    const vector<struct uid_record>& entries_0 = io_history[200].entries;
     EXPECT_EQ(entries_0.size(), 3UL);
     EXPECT_EQ(entries_0[0].name, "app1");
     EXPECT_EQ(entries_0[0].ios.user_id, 0UL);
@@ -572,8 +573,8 @@ TEST(storaged_test, uid_monitor) {
     EXPECT_EQ(entries_0[2].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON], 1000UL);
     EXPECT_EQ(entries_0[2].ios.uid_ios.bytes[READ][FOREGROUND][CHARGER_ON], 1000UL);
 
-    EXPECT_EQ(uidm.io_history[300].start_ts, 200UL);
-    const vector<struct uid_record>& entries_1 = uidm.io_history[300].entries;
+    EXPECT_EQ(io_history[300].start_ts, 200UL);
+    const vector<struct uid_record>& entries_1 = io_history[300].entries;
     EXPECT_EQ(entries_1.size(), 3UL);
     EXPECT_EQ(entries_1[0].name, "app1");
     EXPECT_EQ(entries_1[0].ios.user_id, 0UL);
@@ -585,8 +586,8 @@ TEST(storaged_test, uid_monitor) {
     EXPECT_EQ(entries_1[2].ios.user_id, 1UL);
     EXPECT_EQ(entries_1[2].ios.uid_ios.bytes[WRITE][FOREGROUND][CHARGER_OFF], 1000UL);
 
-    EXPECT_EQ(uidm.io_history[400].start_ts, 300UL);
-    const vector<struct uid_record>& entries_2 = uidm.io_history[400].entries;
+    EXPECT_EQ(io_history[400].start_ts, 300UL);
+    const vector<struct uid_record>& entries_2 = io_history[400].entries;
     EXPECT_EQ(entries_2.size(), 1UL);
     EXPECT_EQ(entries_2[0].name, "app1");
     EXPECT_EQ(entries_2[0].ios.user_id, 0UL);
@@ -615,14 +616,71 @@ TEST(storaged_test, uid_monitor) {
 
     uidm.clear_user_history(0);
 
-    EXPECT_EQ(uidm.io_history.size(), 2UL);
-    EXPECT_EQ(uidm.io_history.count(200), 1UL);
-    EXPECT_EQ(uidm.io_history.count(300), 1UL);
+    EXPECT_EQ(io_history.size(), 2UL);
+    EXPECT_EQ(io_history.count(200), 1UL);
+    EXPECT_EQ(io_history.count(300), 1UL);
 
-    EXPECT_EQ(uidm.io_history[200].entries.size(), 1UL);
-    EXPECT_EQ(uidm.io_history[300].entries.size(), 1UL);
+    EXPECT_EQ(io_history[200].entries.size(), 1UL);
+    EXPECT_EQ(io_history[300].entries.size(), 1UL);
 
     uidm.clear_user_history(1);
 
-    EXPECT_EQ(uidm.io_history.size(), 0UL);
+    EXPECT_EQ(io_history.size(), 0UL);
+}
+
+TEST(storaged_test, load_uid_io_proto) {
+    uid_monitor uidm;
+    auto& io_history = uidm.io_history();
+
+    static const uint64_t kProtoTime = 200;
+    io_history[kProtoTime] = {
+        .start_ts = 100,
+        .entries = {
+            { "app1", {
+                .user_id = 0,
+                .uid_ios.bytes[WRITE][FOREGROUND][CHARGER_ON] = 1000,
+              }
+            },
+            { "app2", {
+                .user_id = 0,
+                .uid_ios.bytes[READ][FOREGROUND][CHARGER_OFF] = 2000,
+              }
+            },
+            { "app3", {
+                .user_id = 0,
+                .uid_ios.bytes[READ][FOREGROUND][CHARGER_OFF] = 3000,
+              }
+            },
+        },
+    };
+
+    unordered_map<int, StoragedProto> protos;
+    uidm.update_uid_io_proto(&protos);
+    ASSERT_EQ(protos.size(), size_t(1));
+
+    // Loading the same proto many times should not add duplicate entries.
+    UidIOUsage user_0 = protos[0].uid_io_usage();
+    for (size_t i = 0; i < 10000; i++) {
+        uidm.load_uid_io_proto(0, user_0);
+    }
+    ASSERT_EQ(io_history.size(), size_t(1));
+    ASSERT_EQ(io_history[kProtoTime].entries.size(), size_t(3));
+
+    // Create duplicate entries until we go over the limit.
+    auto record = io_history[kProtoTime];
+    io_history.clear();
+    for (size_t i = 0; i < uid_monitor::MAX_UID_RECORDS_SIZE * 2; i++) {
+        if (i == kProtoTime) {
+            continue;
+        }
+        io_history[i] = record;
+    }
+    ASSERT_GT(io_history.size(), size_t(uid_monitor::MAX_UID_RECORDS_SIZE));
+
+    // After loading, the history should be truncated.
+    for (auto& item : *user_0.mutable_uid_io_items()) {
+        item.set_end_ts(io_history.size());
+    }
+    uidm.load_uid_io_proto(0, user_0);
+    ASSERT_LE(io_history.size(), size_t(uid_monitor::MAX_UID_RECORDS_SIZE));
 }
