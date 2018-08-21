@@ -38,6 +38,7 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/test_utils.h>
 
 static bool _use_legacy_install() {
     FeatureSet features;
@@ -128,27 +129,6 @@ static int delete_device_patch_file(const char* apkPath) {
     return delete_device_file(patchDevicePath);
 }
 
-std::string get_temp_host_filename() {
-#ifdef _WIN32
-    CHAR temp_path[MAX_PATH];
-    CHAR temp_file_path[MAX_PATH];
-    DWORD temp_path_result = GetTempPathA(MAX_PATH, temp_path);
-    if (temp_path_result == 0) {
-        printf("Error determining temp path\n");
-        return std::string("");
-    } else {
-        DWORD temp_file_name_result = GetTempFileNameA(temp_path, "", 0, temp_file_path);
-        if (temp_file_name_result == 0) {
-            printf("Error determining temp filename\n");
-            return std::string("");
-        }
-        return std::string(temp_file_path);
-    }
-#else
-    return std::tmpnam(nullptr);
-#endif
-}
-
 static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy,
                                 bool use_localagent, const char* adb_path) {
     printf("Performing Streamed Install\n");
@@ -160,10 +140,10 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     }
 
     if (use_fastdeploy == true) {
-        std::string metadataTmpPath = get_temp_host_filename();
-        std::string patchTmpPath = get_temp_host_filename();
+        TemporaryFile metadataTmpFile;
+        TemporaryFile patchTmpFile;
 
-        FILE* metadataFile = fopen(metadataTmpPath.c_str(), "wb");
+        FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
         int metadata_len = extract_metadata(file, metadataFile);
         fclose(metadataFile);
 
@@ -172,8 +152,8 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
             printf("failed to extract metadata %d\n", metadata_len);
             return 1;
         } else {
-            int create_patch_result = create_patch(file, metadataTmpPath.c_str(),
-                                                   patchTmpPath.c_str(), use_localagent, adb_path);
+            int create_patch_result = create_patch(file, metadataTmpFile.path, patchTmpFile.path,
+                                                   use_localagent, adb_path);
             if (create_patch_result != 0) {
                 printf("Patch creation failure, error code: %d\n", create_patch_result);
                 result = create_patch_result;
@@ -186,7 +166,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
                     pm_args.push_back(argv[i]);
                 }
                 int apply_patch_result =
-                        install_patch(file, patchTmpPath.c_str(), pm_args.size(), pm_args.data());
+                        install_patch(file, patchTmpFile.path, pm_args.size(), pm_args.data());
                 if (apply_patch_result != 0) {
                     printf("Patch application failure, error code: %d\n", apply_patch_result);
                     result = apply_patch_result;
@@ -197,8 +177,6 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
 
     cleanup_streamed_apk:
         delete_device_patch_file(file);
-        delete_host_file(metadataTmpPath);
-        delete_host_file(patchTmpPath);
         return result;
     } else {
         struct stat sb;
@@ -279,11 +257,11 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, 
     std::string apk_dest =
             android::base::StringPrintf(where, android::base::Basename(argv[last_apk]).c_str());
 
-    std::string metadataTmpPath = get_temp_host_filename();
-    std::string patchTmpPath = get_temp_host_filename();
+    TemporaryFile metadataTmpFile;
+    TemporaryFile patchTmpFile;
 
     if (use_fastdeploy == true) {
-        FILE* metadataFile = fopen(metadataTmpPath.c_str(), "wb");
+        FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
         int metadata_len = extract_metadata(apk_file[0], metadataFile);
         fclose(metadataFile);
 
@@ -291,15 +269,15 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, 
             printf("failed to extract metadata %d\n", metadata_len);
             return 1;
         } else {
-            int create_patch_result = create_patch(apk_file[0], metadataTmpPath.c_str(),
-                                                   patchTmpPath.c_str(), use_localagent, adb_path);
+            int create_patch_result = create_patch(apk_file[0], metadataTmpFile.path,
+                                                   patchTmpFile.path, use_localagent, adb_path);
             if (create_patch_result != 0) {
                 printf("Patch creation failure, error code: %d\n", create_patch_result);
                 result = create_patch_result;
                 goto cleanup_apk;
             } else {
                 int apply_patch_result =
-                        apply_patch_on_device(apk_file[0], patchTmpPath.c_str(), apk_dest.c_str());
+                        apply_patch_on_device(apk_file[0], patchTmpFile.path, apk_dest.c_str());
                 if (apply_patch_result != 0) {
                     printf("Patch application failure, error code: %d\n", apply_patch_result);
                     result = apply_patch_result;
@@ -317,8 +295,6 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, 
 cleanup_apk:
     delete_device_patch_file(apk_file[0]);
     delete_device_file(apk_dest);
-    delete_host_file(metadataTmpPath);
-    delete_host_file(patchTmpPath);
     return result;
 }
 
