@@ -79,8 +79,8 @@ namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
 namespace.default.asan.search.paths += /data/asan/product/${LIB}
 namespace.default.asan.search.paths +=           /product/${LIB}
-namespace.default.asan.search.paths += /data/asan/product-services/${LIB}
-namespace.default.asan.search.paths +=           /product-services/${LIB}
+namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.default.asan.search.paths +=           /product_services/${LIB}
 
 namespace.default.asan.permitted.paths  = /data
 namespace.default.asan.permitted.paths += /system/${LIB}/drm
