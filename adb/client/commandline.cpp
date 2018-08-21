@@ -52,22 +52,18 @@
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_client.h"
+#include "adb_install.h"
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "bugreport.h"
 #include "client/file_sync_client.h"
 #include "commandline.h"
+#include "fastdeploy.h"
 #include "services.h"
 #include "shell_protocol.h"
 #include "sysdeps/chrono.h"
 #include "sysdeps/memory.h"
-
-static int install_app(int argc, const char** argv);
-static int install_multiple_app(int argc, const char** argv);
-static int uninstall_app(int argc, const char** argv);
-static int install_app_legacy(int argc, const char** argv);
-static int uninstall_app_legacy(int argc, const char** argv);
 
 extern int gListenAll;
 
@@ -160,6 +156,17 @@ static void help() {
         "     -p: partial application install (install-multiple only)\n"
         "     -g: grant all runtime permissions\n"
         "     --instant: cause the app to be installed as an ephemeral install app\n"
+        "     --no-streaming: always push APK to device and invoke Package Manager as separate steps\n"
+        "     --streaming: force streaming APK directly into Package Manager\n"
+        "     -f/--fastdeploy: use fast deploy (only valid with -r)\n"
+        "     --no-fastdeploy: prevent use of fast deploy (only valid with -r)\n"
+        "     --force-agent: force update of deployment agent when using fast deploy\n"
+        "     --date-check-agent: update deployment agent when local version is newer and using fast deploy\n"
+        "     --version-check-agent: update deployment agent when local version has different version code and using fast deploy\n"
+#ifndef _WIN32
+        "     --local-agent: locate agent files from local source build (instead of SDK location)\n"
+#endif
+        //TODO--installlog <filename>
         " uninstall [-k] PACKAGE\n"
         "     remove this app package from the device\n"
         "     '-k': keep the data and cache directories\n"
@@ -306,21 +313,6 @@ int read_and_dump(int fd, bool use_shell_protocol = false,
     return callback->Done(exit_code);
 }
 
-static void read_status_line(int fd, char* buf, size_t count)
-{
-    count--;
-    while (count > 0) {
-        int len = adb_read(fd, buf, count);
-        if (len <= 0) {
-            break;
-        }
-
-        buf += len;
-        count -= len;
-    }
-    *buf = '\0';
-}
-
 static void stdinout_raw_prologue(int inFd, int outFd, int& old_stdin_mode, int& old_stdout_mode) {
     if (inFd == STDIN_FILENO) {
         stdin_raw_init();
@@ -361,7 +353,7 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 #endif
 }
 
-static void copy_to_file(int inFd, int outFd) {
+void copy_to_file(int inFd, int outFd) {
     constexpr size_t BUFSIZE = 32 * 1024;
     std::vector<char> buf(BUFSIZE);
     int len;
@@ -1315,16 +1307,6 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #endif
 }
 
-static bool _use_legacy_install() {
-    FeatureSet features;
-    std::string error;
-    if (!adb_get_feature_set(&features, &error)) {
-        fprintf(stderr, "error: %s\n", error.c_str());
-        return true;
-    }
-    return !CanUseFeature(features, kFeatureCmd);
-}
-
 int adb_commandline(int argc, const char** argv) {
     bool no_daemon = false;
     bool is_daemon = false;
@@ -1706,9 +1688,6 @@ int adb_commandline(int argc, const char** argv) {
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return syntax_error("install requires an argument");
-        if (_use_legacy_install()) {
-            return install_app_legacy(argc, argv);
-        }
         return install_app(argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
@@ -1717,9 +1696,6 @@ int adb_commandline(int argc, const char** argv) {
     }
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return syntax_error("uninstall requires an argument");
-        if (_use_legacy_install()) {
-            return uninstall_app_legacy(argc, argv);
-        }
         return uninstall_app(argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
@@ -1843,271 +1819,4 @@ int adb_commandline(int argc, const char** argv) {
 
     syntax_error("unknown command %s", argv[0]);
     return 1;
-}
-
-static int uninstall_app(int argc, const char** argv) {
-    // 'adb uninstall' takes the same arguments as 'cmd package uninstall' on device
-    std::string cmd = "cmd package";
-    while (argc-- > 0) {
-        // deny the '-k' option until the remaining data/cache can be removed with adb/UI
-        if (strcmp(*argv, "-k") == 0) {
-            printf(
-                "The -k option uninstalls the application while retaining the data/cache.\n"
-                "At the moment, there is no way to remove the remaining data.\n"
-                "You will have to reinstall the application with the same signature, and fully uninstall it.\n"
-                "If you truly wish to continue, execute 'adb shell cmd package uninstall -k'.\n");
-            return EXIT_FAILURE;
-        }
-        cmd += " " + escape_arg(*argv++);
-    }
-
-    return send_shell_command(cmd);
-}
-
-static int install_app(int argc, const char** argv) {
-    // The last argument must be the APK file
-    const char* file = argv[argc - 1];
-    if (!android::base::EndsWithIgnoreCase(file, ".apk")) {
-        return syntax_error("filename doesn't end .apk: %s", file);
-    }
-
-    struct stat sb;
-    if (stat(file, &sb) == -1) {
-        fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
-        return 1;
-    }
-
-    int localFd = adb_open(file, O_RDONLY);
-    if (localFd < 0) {
-        fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
-        return 1;
-    }
-
-    std::string error;
-    std::string cmd = "exec:cmd package";
-
-    // don't copy the APK name, but, copy the rest of the arguments as-is
-    while (argc-- > 1) {
-        cmd += " " + escape_arg(std::string(*argv++));
-    }
-
-    // add size parameter [required for streaming installs]
-    // do last to override any user specified value
-    cmd += " " + android::base::StringPrintf("-S %" PRIu64, static_cast<uint64_t>(sb.st_size));
-
-    int remoteFd = adb_connect(cmd, &error);
-    if (remoteFd < 0) {
-        fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-        adb_close(localFd);
-        return 1;
-    }
-
-    char buf[BUFSIZ];
-    copy_to_file(localFd, remoteFd);
-    read_status_line(remoteFd, buf, sizeof(buf));
-
-    adb_close(localFd);
-    adb_close(remoteFd);
-
-    if (!strncmp("Success", buf, 7)) {
-        fputs(buf, stdout);
-        return 0;
-    }
-    fprintf(stderr, "adb: failed to install %s: %s", file, buf);
-    return 1;
-}
-
-static int install_multiple_app(int argc, const char** argv) {
-    // Find all APK arguments starting at end.
-    // All other arguments passed through verbatim.
-    int first_apk = -1;
-    uint64_t total_size = 0;
-    for (int i = argc - 1; i >= 0; i--) {
-        const char* file = argv[i];
-
-        if (android::base::EndsWithIgnoreCase(file, ".apk") ||
-            android::base::EndsWithIgnoreCase(file, ".dm")) {
-            struct stat sb;
-            if (stat(file, &sb) != -1) total_size += sb.st_size;
-            first_apk = i;
-        } else {
-            break;
-        }
-    }
-
-    if (first_apk == -1) return syntax_error("need APK file on command line");
-
-    std::string install_cmd;
-    if (_use_legacy_install()) {
-        install_cmd = "exec:pm";
-    } else {
-        install_cmd = "exec:cmd package";
-    }
-
-    std::string cmd = android::base::StringPrintf("%s install-create -S %" PRIu64, install_cmd.c_str(), total_size);
-    for (int i = 1; i < first_apk; i++) {
-        cmd += " " + escape_arg(argv[i]);
-    }
-
-    // Create install session
-    std::string error;
-    int fd = adb_connect(cmd, &error);
-    if (fd < 0) {
-        fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
-        return EXIT_FAILURE;
-    }
-    char buf[BUFSIZ];
-    read_status_line(fd, buf, sizeof(buf));
-    adb_close(fd);
-
-    int session_id = -1;
-    if (!strncmp("Success", buf, 7)) {
-        char* start = strrchr(buf, '[');
-        char* end = strrchr(buf, ']');
-        if (start && end) {
-            *end = '\0';
-            session_id = strtol(start + 1, nullptr, 10);
-        }
-    }
-    if (session_id < 0) {
-        fprintf(stderr, "adb: failed to create session\n");
-        fputs(buf, stderr);
-        return EXIT_FAILURE;
-    }
-
-    // Valid session, now stream the APKs
-    int success = 1;
-    for (int i = first_apk; i < argc; i++) {
-        const char* file = argv[i];
-        struct stat sb;
-        if (stat(file, &sb) == -1) {
-            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
-            success = 0;
-            goto finalize_session;
-        }
-
-        std::string cmd = android::base::StringPrintf(
-            "%s install-write -S %" PRIu64 " %d %s -", install_cmd.c_str(),
-            static_cast<uint64_t>(sb.st_size), session_id, android::base::Basename(file).c_str());
-
-        int localFd = adb_open(file, O_RDONLY);
-        if (localFd < 0) {
-            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
-            success = 0;
-            goto finalize_session;
-        }
-
-        std::string error;
-        int remoteFd = adb_connect(cmd, &error);
-        if (remoteFd < 0) {
-            fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-            adb_close(localFd);
-            success = 0;
-            goto finalize_session;
-        }
-
-        copy_to_file(localFd, remoteFd);
-        read_status_line(remoteFd, buf, sizeof(buf));
-
-        adb_close(localFd);
-        adb_close(remoteFd);
-
-        if (strncmp("Success", buf, 7)) {
-            fprintf(stderr, "adb: failed to write %s\n", file);
-            fputs(buf, stderr);
-            success = 0;
-            goto finalize_session;
-        }
-    }
-
-finalize_session:
-    // Commit session if we streamed everything okay; otherwise abandon
-    std::string service =
-            android::base::StringPrintf("%s install-%s %d",
-                                        install_cmd.c_str(), success ? "commit" : "abandon", session_id);
-    fd = adb_connect(service, &error);
-    if (fd < 0) {
-        fprintf(stderr, "adb: connect error for finalize: %s\n", error.c_str());
-        return EXIT_FAILURE;
-    }
-    read_status_line(fd, buf, sizeof(buf));
-    adb_close(fd);
-
-    if (!strncmp("Success", buf, 7)) {
-        fputs(buf, stdout);
-        return 0;
-    }
-    fprintf(stderr, "adb: failed to finalize session\n");
-    fputs(buf, stderr);
-    return EXIT_FAILURE;
-}
-
-static int pm_command(int argc, const char** argv) {
-    std::string cmd = "pm";
-
-    while (argc-- > 0) {
-        cmd += " " + escape_arg(*argv++);
-    }
-
-    return send_shell_command(cmd);
-}
-
-static int uninstall_app_legacy(int argc, const char** argv) {
-    /* if the user choose the -k option, we refuse to do it until devices are
-       out with the option to uninstall the remaining data somehow (adb/ui) */
-    int i;
-    for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-k")) {
-            printf(
-                "The -k option uninstalls the application while retaining the data/cache.\n"
-                "At the moment, there is no way to remove the remaining data.\n"
-                "You will have to reinstall the application with the same signature, and fully uninstall it.\n"
-                "If you truly wish to continue, execute 'adb shell pm uninstall -k'\n.");
-            return EXIT_FAILURE;
-        }
-    }
-
-    /* 'adb uninstall' takes the same arguments as 'pm uninstall' on device */
-    return pm_command(argc, argv);
-}
-
-static int delete_file(const std::string& filename) {
-    std::string cmd = "rm -f " + escape_arg(filename);
-    return send_shell_command(cmd);
-}
-
-static int install_app_legacy(int argc, const char** argv) {
-    static const char *const DATA_DEST = "/data/local/tmp/%s";
-    static const char *const SD_DEST = "/sdcard/tmp/%s";
-    const char* where = DATA_DEST;
-
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-s")) {
-            where = SD_DEST;
-        }
-    }
-
-    // Find last APK argument.
-    // All other arguments passed through verbatim.
-    int last_apk = -1;
-    for (int i = argc - 1; i >= 0; i--) {
-        if (android::base::EndsWithIgnoreCase(argv[i], ".apk")) {
-            last_apk = i;
-            break;
-        }
-    }
-
-    if (last_apk == -1) return syntax_error("need APK file on command line");
-
-    int result = -1;
-    std::vector<const char*> apk_file = {argv[last_apk]};
-    std::string apk_dest = android::base::StringPrintf(
-        where, android::base::Basename(argv[last_apk]).c_str());
-    if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
-    argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
-    result = pm_command(argc, argv);
-
-cleanup_apk:
-    delete_file(apk_dest);
-    return result;
 }
