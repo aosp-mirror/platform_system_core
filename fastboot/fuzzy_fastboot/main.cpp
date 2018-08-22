@@ -80,6 +80,9 @@ std::vector<std::pair<std::string, extension::Configuration::PartitionInfo>>
 std::vector<std::pair<std::string, extension::Configuration::PackedInfoTest>>
         PACKED_XML_SUCCESS_TESTS;
 std::vector<std::pair<std::string, extension::Configuration::PackedInfoTest>> PACKED_XML_FAIL_TESTS;
+// This only has 1 or zero elements so it will disappear from gtest when empty
+std::vector<std::pair<std::string, extension::Configuration::PartitionInfo>>
+        SINGLE_PARTITION_XML_WRITE_HASHABLE;
 
 const std::string DEFAULT_OUPUT_NAME = "out.img";
 // const char scratch_partition[] = "userdata";
@@ -133,6 +136,22 @@ bool PartitionHash(FastBootDriver* fb, const std::string& part, std::string* has
     }
 
     return true;
+}
+
+bool SparseToBuf(sparse_file* sf, std::vector<char>* out, bool with_crc = false) {
+    int64_t len = sparse_file_len(sf, true, with_crc);
+    if (len <= 0) {
+        return false;
+    }
+    out->clear();
+    auto cb = [](void* priv, const void* data, size_t len) {
+        auto vec = static_cast<std::vector<char>*>(priv);
+        const char* cbuf = static_cast<const char*>(data);
+        vec->insert(vec->end(), cbuf, cbuf + len);
+        return 0;
+    };
+
+    return !sparse_file_callback(sf, true, with_crc, cb, out);
 }
 
 // Only allow alphanumeric, _, -, and .
@@ -524,6 +543,42 @@ TEST_F(Conformance, SparseDownload3) {
     EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
 }
 
+TEST_F(Conformance, SparseVersionCheck) {
+    SparseWrapper sparse(4096, 4096);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    std::vector<char> buf;
+    ASSERT_TRUE(SparseToBuf(*sparse, &buf)) << "Sparse buffer creation failed";
+    // Invalid, right after magic
+    buf[4] = 0xff;
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing an invalid sparse version should fail " << sparse.Rep();
+    }
+}
+
+TEST_F(Conformance, SparseCRCCheck) {
+    SparseWrapper sparse(4096, 4096);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    std::vector<char> buf = RandomBuf(4096);
+    ASSERT_EQ(sparse_file_add_data(*sparse, buf.data(), buf.size(), 0), 0)
+            << "Adding data failed to sparse file: " << sparse.Rep();
+    ASSERT_TRUE(SparseToBuf(*sparse, &buf, true)) << "Sparse buffer creation failed";
+    // Flip a bit in the crc
+    buf.back() = buf.back() ^ 0x01;
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+    printf("%02x\n", (unsigned char)buf.back());
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing an invalid sparse version should fail " << sparse.Rep();
+    }
+}
+
 TEST_F(UnlockPermissions, Download) {
     std::vector<char> buf{'a', 'o', 's', 'p'};
     EXPECT_EQ(fb->Download(buf), SUCCESS) << "Download 4-byte payload failed";
@@ -764,6 +819,47 @@ TEST_F(Fuzz, CommandMissingArgs) {
         std::string resp;
         EXPECT_EQ(fb->GetVar("product", &resp), SUCCESS)
                 << "Device is unresponsive to getvar command";
+    }
+}
+
+TEST_F(Fuzz, SparseZeroLength) {
+    SparseWrapper sparse(4096, 0);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    RetCode ret = fb->Download(*sparse);
+    // Two ways to handle it
+    if (ret != DEVICE_FAIL) {  // if lazily parsed it better fail on a flash
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing zero length sparse image did not fail: " << sparse.Rep();
+    }
+    ret = fb->Download(*sparse, true);
+    if (ret != DEVICE_FAIL) {  // if lazily parsed it better fail on a flash
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing zero length sparse image did not fail " << sparse.Rep();
+    }
+}
+
+TEST_F(Fuzz, SparseTooManyChunks) {
+    SparseWrapper sparse(4096, 4096);  // 1 block, but we send two chunks that will use 2 blocks
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    std::vector<char> buf = RandomBuf(4096);
+    ASSERT_EQ(sparse_file_add_data(*sparse, buf.data(), buf.size(), 0), 0)
+            << "Adding data failed to sparse file: " << sparse.Rep();
+    // We take advantage of the fact the sparse library does not check this
+    ASSERT_EQ(sparse_file_add_fill(*sparse, 0xdeadbeef, 4096, 1), 0)
+            << "Adding fill to sparse file failed: " << sparse.Rep();
+
+    RetCode ret = fb->Download(*sparse);
+    // Two ways to handle it
+    if (ret != DEVICE_FAIL) {  // if lazily parsed it better fail on a flash
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing sparse image with 'total_blks' in header 1 too small did not fail "
+                << sparse.Rep();
+    }
+    ret = fb->Download(*sparse, true);
+    if (ret != DEVICE_FAIL) {  // if lazily parsed it better fail on a flash
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing sparse image with 'total_blks' in header 1 too small did not fail "
+                << sparse.Rep();
     }
 }
 
@@ -1379,6 +1475,109 @@ TEST_P(ExtensionsOemConformance, RunOEMTest) {
 
 INSTANTIATE_TEST_CASE_P(XMLOEM, ExtensionsOemConformance, ::testing::ValuesIn(OEM_XML_TESTS));
 
+// Sparse Tests
+TEST_P(SparseTestPartition, SparseSingleBlock) {
+    const std::string name = GetParam().first;
+    auto part_info = GetParam().second;
+    const std::string part_name = name + (part_info.slots ? "_a" : "");
+    SparseWrapper sparse(4096, 4096);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    std::vector<char> buf = RandomBuf(4096);
+    ASSERT_EQ(sparse_file_add_data(*sparse, buf.data(), buf.size(), 0), 0)
+            << "Adding data failed to sparse file: " << sparse.Rep();
+
+    EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
+    EXPECT_EQ(fb->Flash(part_name), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
+    std::string hash, hash_new, err_msg;
+    int retcode;
+    ASSERT_TRUE(PartitionHash(fb.get(), part_name, &hash, &retcode, &err_msg)) << err_msg;
+    ASSERT_EQ(retcode, 0) << err_msg;
+    // Now flash it the non-sparse way
+    EXPECT_EQ(fb->FlashPartition(part_name, buf), SUCCESS) << "Flashing image failed: ";
+    ASSERT_TRUE(PartitionHash(fb.get(), part_name, &hash_new, &retcode, &err_msg)) << err_msg;
+    ASSERT_EQ(retcode, 0) << err_msg;
+
+    EXPECT_EQ(hash, hash_new) << "Flashing a random buffer of 4096 using sparse and non-sparse "
+                                 "methods did not result in the same hash";
+}
+
+TEST_P(SparseTestPartition, SparseFill) {
+    const std::string name = GetParam().first;
+    auto part_info = GetParam().second;
+    const std::string part_name = name + (part_info.slots ? "_a" : "");
+    int64_t size = (max_dl / 4096) * 4096;
+    SparseWrapper sparse(4096, size);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    ASSERT_EQ(sparse_file_add_fill(*sparse, 0xdeadbeef, size, 0), 0)
+            << "Adding data failed to sparse file: " << sparse.Rep();
+
+    EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
+    EXPECT_EQ(fb->Flash(part_name), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
+    std::string hash, hash_new, err_msg;
+    int retcode;
+    ASSERT_TRUE(PartitionHash(fb.get(), part_name, &hash, &retcode, &err_msg)) << err_msg;
+    ASSERT_EQ(retcode, 0) << err_msg;
+    // Now flash it the non-sparse way
+    std::vector<char> buf(size);
+    for (auto iter = buf.begin(); iter < buf.end(); iter += 4) {
+        iter[0] = 0xef;
+        iter[1] = 0xbe;
+        iter[2] = 0xad;
+        iter[3] = 0xde;
+    }
+    EXPECT_EQ(fb->FlashPartition(part_name, buf), SUCCESS) << "Flashing image failed: ";
+    ASSERT_TRUE(PartitionHash(fb.get(), part_name, &hash_new, &retcode, &err_msg)) << err_msg;
+    ASSERT_EQ(retcode, 0) << err_msg;
+
+    EXPECT_EQ(hash, hash_new) << "Flashing a random buffer of 4096 using sparse and non-sparse "
+                                 "methods did not result in the same hash";
+}
+
+// This tests to make sure it does not overwrite previous flashes
+TEST_P(SparseTestPartition, SparseMultiple) {
+    const std::string name = GetParam().first;
+    auto part_info = GetParam().second;
+    const std::string part_name = name + (part_info.slots ? "_a" : "");
+    int64_t size = (max_dl / 4096) * 4096;
+    SparseWrapper sparse(4096, size / 2);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    ASSERT_EQ(sparse_file_add_fill(*sparse, 0xdeadbeef, size / 2, 0), 0)
+            << "Adding data failed to sparse file: " << sparse.Rep();
+    EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
+    EXPECT_EQ(fb->Flash(part_name), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
+
+    SparseWrapper sparse2(4096, size / 2);
+    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
+    std::vector<char> buf = RandomBuf(size / 2);
+    ASSERT_EQ(sparse_file_add_data(*sparse2, buf.data(), buf.size(), (size / 2) / 4096), 0)
+            << "Adding data failed to sparse file: " << sparse2.Rep();
+    EXPECT_EQ(fb->Download(*sparse2), SUCCESS) << "Download sparse failed: " << sparse2.Rep();
+    EXPECT_EQ(fb->Flash(part_name), SUCCESS) << "Flashing sparse failed: " << sparse2.Rep();
+
+    std::string hash, hash_new, err_msg;
+    int retcode;
+    ASSERT_TRUE(PartitionHash(fb.get(), part_name, &hash, &retcode, &err_msg)) << err_msg;
+    ASSERT_EQ(retcode, 0) << err_msg;
+    // Now flash it the non-sparse way
+    std::vector<char> fbuf(size);
+    for (auto iter = fbuf.begin(); iter < fbuf.begin() + size / 2; iter += 4) {
+        iter[0] = 0xef;
+        iter[1] = 0xbe;
+        iter[2] = 0xad;
+        iter[3] = 0xde;
+    }
+    fbuf.assign(buf.begin(), buf.end());
+    EXPECT_EQ(fb->FlashPartition(part_name, fbuf), SUCCESS) << "Flashing image failed: ";
+    ASSERT_TRUE(PartitionHash(fb.get(), part_name, &hash_new, &retcode, &err_msg)) << err_msg;
+    ASSERT_EQ(retcode, 0) << err_msg;
+
+    EXPECT_EQ(hash, hash_new) << "Flashing a random buffer of 4096 using sparse and non-sparse "
+                                 "methods did not result in the same hash";
+}
+
+INSTANTIATE_TEST_CASE_P(XMLSparseTest, SparseTestPartition,
+                        ::testing::ValuesIn(SINGLE_PARTITION_XML_WRITE_HASHABLE));
+
 void GenerateXmlTests(const extension::Configuration& config) {
     // Build the getvar tests
     for (const auto it : config.getvars) {
@@ -1428,6 +1627,10 @@ void GenerateXmlTests(const extension::Configuration& config) {
         part_info->second.test == extension::Configuration::PartitionInfo::YES) {
         PARTITION_XML_USERDATA_CHECKSUM_WRITEABLE.push_back(
                 std::make_tuple(part_info->first, part_info->second));
+    }
+
+    if (!PARTITION_XML_WRITE_HASHABLE.empty()) {
+        SINGLE_PARTITION_XML_WRITE_HASHABLE.push_back(PARTITION_XML_WRITE_HASHABLE.front());
     }
 
     // Build oem tests
