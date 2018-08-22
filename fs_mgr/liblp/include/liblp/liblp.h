@@ -42,8 +42,7 @@ struct LpMetadata {
 // existing geometry, and should not be used for normal partition table
 // updates. False can be returned if the geometry is incompatible with the
 // block device or an I/O error occurs.
-bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                         uint32_t slot_number);
+bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata);
 
 // Update the partition table for a given metadata slot number. False is
 // returned if an error occurs, which can include:
