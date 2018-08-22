@@ -63,6 +63,7 @@ bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t bl
                        const std::map<std::string, std::string>& images);
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file);
+std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 
 // Helper to extract safe C++ strings from partition info.
 std::string GetPartitionName(const LpMetadataPartition& partition);
