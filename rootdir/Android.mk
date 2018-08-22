@@ -289,7 +289,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := ld.config.recovery.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_SRC_FILES := etc/ld.config.recovery.txt
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/etc
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/etc
 LOCAL_MODULE_STEM := ld.config.txt
 include $(BUILD_PREBUILT)
 
