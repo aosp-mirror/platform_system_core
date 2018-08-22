@@ -75,7 +75,6 @@ void populate_fdsan_table(OpenFilesList* list, std::shared_ptr<unwindstack::Memo
       ALOGE("failed to read fdsan table entry %zu: %s", i, strerror(errno));
       return;
     }
-    ALOGE("fd %zu = %#" PRIx64, i, entry.close_tag.load());
     if (entry.close_tag) {
       (*list)[i].fdsan_owner = entry.close_tag.load();
     }
