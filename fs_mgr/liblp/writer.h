@@ -30,7 +30,7 @@ std::string SerializeMetadata(const LpMetadata& input);
 
 // These variants are for testing only. The path-based functions should be used
 // for actual operation, so that open() is called with the correct flags.
-bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
+bool FlashPartitionTable(int fd, const LpMetadata& metadata);
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number);
 
 bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
