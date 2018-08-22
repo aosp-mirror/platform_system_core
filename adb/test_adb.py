@@ -27,6 +27,7 @@ import select
 import socket
 import struct
 import subprocess
+import sys
 import threading
 import time
 import unittest
@@ -129,10 +130,19 @@ def adb_server():
     subprocess.check_output(["adb", "-P", str(port), "kill-server"],
                             stderr=subprocess.STDOUT)
     read_pipe, write_pipe = os.pipe()
-    os.set_inheritable(write_pipe, True)
+
+    if sys.platform == "win32":
+        import msvcrt
+        write_handle = msvcrt.get_osfhandle(write_pipe)
+        os.set_handle_inheritable(write_handle, True)
+        reply_fd = str(write_handle)
+    else:
+        os.set_inheritable(write_pipe, True)
+        reply_fd = str(write_pipe)
+
     proc = subprocess.Popen(["adb", "-L", "tcp:localhost:{}".format(port),
                              "fork-server", "server",
-                             "--reply-fd", str(write_pipe)], close_fds=False)
+                             "--reply-fd", reply_fd], close_fds=False)
     try:
         os.close(write_pipe)
         greeting = os.read(read_pipe, 1024)
