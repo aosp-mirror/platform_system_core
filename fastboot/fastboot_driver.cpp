@@ -220,10 +220,10 @@ RetCode FastBootDriver::Download(const char* buf, uint32_t size, std::string* re
     return HandleResponse(response, info);
 }
 
-RetCode FastBootDriver::Download(sparse_file* s, std::string* response,
+RetCode FastBootDriver::Download(sparse_file* s, bool use_crc, std::string* response,
                                  std::vector<std::string>* info) {
     error_ = "";
-    int64_t size = sparse_file_len(s, true, false);
+    int64_t size = sparse_file_len(s, true, use_crc);
     if (size <= 0 || size > MAX_DOWNLOAD_SIZE) {
         error_ = "Sparse file is too large or invalid";
         return BAD_ARG;
@@ -247,7 +247,7 @@ RetCode FastBootDriver::Download(sparse_file* s, std::string* response,
         return data->self->SparseWriteCallback(data->tpbuf, cbuf, len);
     };
 
-    if (sparse_file_callback(s, true, false, cb, &cb_priv) < 0) {
+    if (sparse_file_callback(s, true, use_crc, cb, &cb_priv) < 0) {
         error_ = "Error reading sparse file";
         return IO_ERROR;
     }
