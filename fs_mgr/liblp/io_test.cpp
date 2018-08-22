@@ -394,6 +394,27 @@ TEST(liblp, ImageFiles) {
     ASSERT_NE(imported, nullptr);
 }
 
+// Test that we can read images from buffers.
+TEST(liblp, ImageFilesInMemory) {
+    unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+    unique_ptr<LpMetadata> exported = builder->Export();
+
+    unique_fd fd(syscall(__NR_memfd_create, "image_file", 0));
+    ASSERT_GE(fd, 0);
+    ASSERT_TRUE(WriteToImageFile(fd, *exported.get()));
+
+    int64_t offset = SeekFile64(fd, 0, SEEK_CUR);
+    ASSERT_GE(offset, 0);
+    ASSERT_EQ(SeekFile64(fd, 0, SEEK_SET), 0);
+
+    size_t bytes = static_cast<size_t>(offset);
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(bytes);
+    ASSERT_TRUE(android::base::ReadFully(fd, buffer.get(), bytes));
+    ASSERT_NE(ReadFromImageBlob(buffer.get(), bytes), nullptr);
+}
+
 class BadWriter {
   public:
     // When requested, write garbage instead of the requested bytes, then
