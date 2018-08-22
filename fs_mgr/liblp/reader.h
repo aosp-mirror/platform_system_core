@@ -26,11 +26,16 @@
 namespace android {
 namespace fs_mgr {
 
-std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number);
+// Parse an LpMetadataGeometry from a buffer. The buffer must be at least
+// LP_METADATA_GEOMETRY_SIZE bytes in size.
+bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry);
 
 // Helper functions for manually reading geometry and metadata.
+std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number);
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd);
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, const void* buffer,
+                                          size_t size);
 bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry);
-std::unique_ptr<LpMetadata> ParseMetadata(int fd);
 
 // These functions assume a valid geometry and slot number.
 std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
