@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
 #include <libdm/dm.h>
