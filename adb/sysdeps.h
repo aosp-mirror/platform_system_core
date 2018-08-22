@@ -493,21 +493,7 @@ inline int network_local_server(const char* name, int namespace_id, int type, st
     return _fd_set_error_str(socket_local_server(name, namespace_id, type), error);
 }
 
-inline int network_connect(const std::string& host, int port, int type,
-                           int timeout, std::string* error) {
-  int getaddrinfo_error = 0;
-  int fd = socket_network_client_timeout(host.c_str(), port, type, timeout,
-                                         &getaddrinfo_error);
-  if (fd != -1) {
-    return fd;
-  }
-  if (getaddrinfo_error != 0) {
-    *error = gai_strerror(getaddrinfo_error);
-  } else {
-    *error = strerror(errno);
-  }
-  return -1;
-}
+int network_connect(const std::string& host, int port, int type, int timeout, std::string* error);
 
 static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {
