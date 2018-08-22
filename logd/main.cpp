@@ -104,7 +104,8 @@ static int drop_privs(bool klogd, bool auditd) {
         return -1;
     }
 
-    if (__android_logger_property_get_bool("ro.debuggable", BOOL_DEFAULT_FALSE) &&
+    if (!__android_logger_property_get_bool("ro.debuggable",
+                                            BOOL_DEFAULT_FALSE) &&
         prctl(PR_SET_DUMPABLE, 0) == -1) {
         android::prdebug("failed to clear PR_SET_DUMPABLE");
         return -1;
