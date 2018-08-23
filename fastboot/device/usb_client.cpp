@@ -187,18 +187,9 @@ static struct DescV2 v2_descriptor = {
 
 // Reimplementing since usb_ffs_close() does not close the control FD.
 static void CloseFunctionFs(usb_handle* h) {
-    if (h->bulk_in > 0) {
-        close(h->bulk_in);
-        h->bulk_in = -1;
-    }
-    if (h->bulk_out > 0) {
-        close(h->bulk_out);
-        h->bulk_out = -1;
-    }
-    if (h->control > 0) {
-        close(h->control);
-        h->control = -1;
-    }
+    h->bulk_in.reset();
+    h->bulk_out.reset();
+    h->control.reset();
 }
 
 static bool InitFunctionFs(usb_handle* h) {
@@ -206,19 +197,19 @@ static bool InitFunctionFs(usb_handle* h) {
 
     if (h->control < 0) {  // might have already done this before
         LOG(INFO) << "opening control endpoint " << kUsbFfsFastbootEp0;
-        h->control = open(kUsbFfsFastbootEp0, O_RDWR);
+        h->control.reset(open(kUsbFfsFastbootEp0, O_RDWR));
         if (h->control < 0) {
             PLOG(ERROR) << "cannot open control endpoint " << kUsbFfsFastbootEp0;
             goto err;
         }
 
-        auto ret = write(h->control, &v2_descriptor, sizeof(v2_descriptor));
+        auto ret = write(h->control.get(), &v2_descriptor, sizeof(v2_descriptor));
         if (ret < 0) {
             PLOG(ERROR) << "cannot write descriptors " << kUsbFfsFastbootEp0;
             goto err;
         }
 
-        ret = write(h->control, &strings, sizeof(strings));
+        ret = write(h->control.get(), &strings, sizeof(strings));
         if (ret < 0) {
             PLOG(ERROR) << "cannot write strings " << kUsbFfsFastbootEp0;
             goto err;
@@ -227,20 +218,20 @@ static bool InitFunctionFs(usb_handle* h) {
         android::base::SetProperty("sys.usb.ffs.ready", "1");
     }
 
-    h->bulk_out = open(kUsbFfsFastbootOut, O_RDONLY);
+    h->bulk_out.reset(open(kUsbFfsFastbootOut, O_RDONLY));
     if (h->bulk_out < 0) {
         PLOG(ERROR) << "cannot open bulk-out endpoint " << kUsbFfsFastbootOut;
         goto err;
     }
 
-    h->bulk_in = open(kUsbFfsFastbootIn, O_WRONLY);
+    h->bulk_in.reset(open(kUsbFfsFastbootIn, O_WRONLY));
     if (h->bulk_in < 0) {
         PLOG(ERROR) << "cannot open bulk-in endpoint " << kUsbFfsFastbootIn;
         goto err;
     }
 
-    h->read_aiob.fd = h->bulk_out;
-    h->write_aiob.fd = h->bulk_in;
+    h->read_aiob.fd = h->bulk_out.get();
+    h->write_aiob.fd = h->bulk_in.get();
     h->reads_zero_packets = false;
     return true;
 
