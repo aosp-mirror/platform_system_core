@@ -8,7 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#ifndef WIN32
+#ifndef _WIN32
 #include <sys/wait.h>
 #else
 #include <tchar.h>
@@ -27,7 +27,7 @@ using android::base::GetExecutableDirectory;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
-#ifdef WIN32
+#ifdef _WIN32
 static int exec_cmd(const char* path, const char** argv, const char** envp) {
     std::string cmd;
     int i = 0;
