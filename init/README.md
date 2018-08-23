@@ -506,6 +506,7 @@ Commands
   _resource_ is best specified using its text representation ('cpu', 'rtio', etc
   or 'RLIM_CPU', 'RLIM_RTIO', etc). It also may be specified as the int value
   that the resource enum corresponds to.
+  _cur_ and _max_ can be 'unlimited' or '-1' to indicate an infinite rlimit.
 
 `start <service>`
 > Start a service running if it is not already running.
