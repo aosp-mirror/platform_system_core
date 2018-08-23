@@ -51,7 +51,7 @@ int get_device_api_level() {
 
     int statusCode = capture_shell_command("getprop ro.build.version.sdk", &sdkVersionOutputBuffer,
                                            &sdkVersionErrorBuffer);
-    if (statusCode == 0 && statusCode == 0 && sdkVersionOutputBuffer.size() > 0) {
+    if (statusCode == 0 && sdkVersionOutputBuffer.size() > 0) {
         api_level = strtol((char*)sdkVersionOutputBuffer.data(), NULL, 10);
     }
 
@@ -107,7 +107,7 @@ static bool deploy_agent(bool checkTimeStamps, bool use_localagent, const char* 
         const char* kChmodCommandPattern = "chmod 777 %sdeployagent.sh";
         std::string chmodCommand =
                 android::base::StringPrintf(kChmodCommandPattern, kDeviceAgentPath);
-        int ret = send_shell_command(chmodCommand.c_str());
+        int ret = send_shell_command(chmodCommand);
         return (ret == 0);
     } else {
         return false;
@@ -248,7 +248,7 @@ int extract_metadata(const char* apkPath, FILE* outputFp) {
     std::vector<char> extractErrorBuffer;
     int statusCode;
     DeployAgentFileCallback cb(outputFp, &extractErrorBuffer, &statusCode);
-    int ret = send_shell_command(extractCommand.c_str(), false, &cb);
+    int ret = send_shell_command(extractCommand, false, &cb);
 
     if (ret == 0) {
         return cb.getBytesWritten();
