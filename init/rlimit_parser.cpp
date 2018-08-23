@@ -65,12 +65,18 @@ Result<std::pair<int, rlimit>> ParseRlimit(const std::vector<std::string>& args)
     }
 
     rlimit limit;
-    if (!ParseUint(args[2], &limit.rlim_cur)) {
+    if (args[2] == "-1" || args[2] == "unlimited") {
+        limit.rlim_cur = RLIM_INFINITY;
+    } else if (!ParseUint(args[2], &limit.rlim_cur)) {
         return Error() << "Could not parse soft limit '" << args[2] << "'";
     }
-    if (!ParseUint(args[3], &limit.rlim_max)) {
+
+    if (args[3] == "-1" || args[3] == "unlimited") {
+        limit.rlim_max = RLIM_INFINITY;
+    } else if (!ParseUint(args[3], &limit.rlim_max)) {
         return Error() << "Could not parse hard limit '" << args[3] << "'";
     }
+
     return {resource, limit};
 }
 
