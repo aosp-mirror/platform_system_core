@@ -33,6 +33,14 @@ namespace base {
 template <typename T>
 bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
                bool allow_suffixes = false) {
+  while (isspace(*s)) {
+    s++;
+  }
+
+  if (s[0] == '-') {
+    return false;
+  }
+
   int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
@@ -79,6 +87,10 @@ template <typename T>
 bool ParseInt(const char* s, T* out,
               T min = std::numeric_limits<T>::min(),
               T max = std::numeric_limits<T>::max()) {
+  while (isspace(*s)) {
+    s++;
+  }
+
   int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
