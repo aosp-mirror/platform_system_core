@@ -35,10 +35,6 @@
 #include <backtrace/BacktraceMap.h>
 #include <unwindstack/Memory.h>
 
-// Definitions of prctl arguments to set a vma name in Android kernels.
-#define ANDROID_PR_SET_VMA 0x53564d41
-#define ANDROID_PR_SET_VMA_ANON_NAME 0
-
 constexpr size_t kNumMaps = 2000;
 
 static bool CountMaps(pid_t pid, size_t* num_maps) {
@@ -93,10 +89,11 @@ static void CreateMap(benchmark::State& state, BacktraceMap* (*map_func)(pid_t, 
         exit(1);
       }
       memset(memory, 0x1, PAGE_SIZE);
-      if (prctl(ANDROID_PR_SET_VMA, ANDROID_PR_SET_VMA_ANON_NAME, memory, PAGE_SIZE, "test_map") ==
-          -1) {
+#if defined(PR_SET_VMA)
+      if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, memory, PAGE_SIZE, "test_map") == -1) {
         fprintf(stderr, "Failed: %s\n", strerror(errno));
       }
+#endif
       maps.push_back(memory);
     }
 
