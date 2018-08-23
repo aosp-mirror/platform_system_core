@@ -196,7 +196,7 @@ static bool DefaultWriter(int fd, const std::string& blob) {
     return android::base::WriteFully(fd, blob.data(), blob.size());
 }
 
-bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
+bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
     // Before writing geometry and/or logical partition tables, perform some
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
@@ -224,8 +224,11 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numbe
         return false;
     }
 
-    // Write metadata to the correct slot, now that geometry is in place.
-    return WriteMetadata(fd, metadata.geometry, slot_number, metadata_blob, DefaultWriter);
+    bool ok = true;
+    for (size_t i = 0; i < metadata.geometry.metadata_slot_count; i++) {
+        ok &= WriteMetadata(fd, metadata.geometry, i, metadata_blob, DefaultWriter);
+    }
+    return ok;
 }
 
 static bool CompareMetadata(const LpMetadata& a, const LpMetadata& b) {
@@ -297,14 +300,13 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
     return WriteMetadata(fd, geometry, slot_number, blob, writer);
 }
 
-bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                         uint32_t slot_number) {
+bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata) {
     android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
         return false;
     }
-    if (!FlashPartitionTable(fd, metadata, slot_number)) {
+    if (!FlashPartitionTable(fd, metadata)) {
         return false;
     }
     LWARN << "Flashed new logical partition geometry to " << block_device;

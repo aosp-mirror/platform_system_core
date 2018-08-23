@@ -23,8 +23,6 @@
 #include <string>
 #include <vector>
 
-#include <android-base/logging.h>
-
 namespace android {
 namespace dm {
 

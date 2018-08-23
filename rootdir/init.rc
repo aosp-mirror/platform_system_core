@@ -49,6 +49,10 @@ on init
     copy /proc/cmdline /dev/urandom
     copy /default.prop /dev/urandom
 
+    symlink /proc/self/fd/0 /dev/stdin
+    symlink /proc/self/fd/1 /dev/stdout
+    symlink /proc/self/fd/2 /dev/stderr
+
     symlink /system/bin /bin
     symlink /system/etc /etc
 

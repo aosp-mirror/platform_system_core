@@ -74,6 +74,7 @@ std::tuple<unique_fd, int, std::string> tcp_connect(const std::string& address,
     std::string host;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
     if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
+        D("failed to parse address: '%s'", address.c_str());
         return std::make_tuple(unique_fd(), port, serial);
     }
 
@@ -103,6 +104,7 @@ void connect_device(const std::string& address, std::string* response) {
         return;
     }
 
+    D("connection requested to '%s'", address.c_str());
     unique_fd fd;
     int port;
     std::string serial;

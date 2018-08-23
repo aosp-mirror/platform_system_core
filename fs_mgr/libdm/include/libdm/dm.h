@@ -29,8 +29,6 @@
 #include <utility>
 #include <vector>
 
-#include <android-base/logging.h>
-
 #include "dm_table.h"
 
 // The minimum expected device mapper major.minor version
@@ -144,12 +142,7 @@ class DeviceMapper final {
 
     void InitIo(struct dm_ioctl* io, const std::string& name = std::string()) const;
 
-    DeviceMapper() : fd_(-1) {
-        fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
-        if (fd_ < 0) {
-            PLOG(ERROR) << "Failed to open device-mapper";
-        }
-    }
+    DeviceMapper();
 
     // Creates a device mapper device with given name.
     // Return 'true' on success and 'false' on failure to

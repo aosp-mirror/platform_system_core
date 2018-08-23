@@ -103,7 +103,7 @@ static unique_fd CreateFlashedDisk() {
     if (!exported) {
         return {};
     }
-    if (!FlashPartitionTable(fd, *exported.get(), 0)) {
+    if (!FlashPartitionTable(fd, *exported.get())) {
         return {};
     }
     return fd;
@@ -132,7 +132,7 @@ TEST(liblp, ExportDiskTooSmall) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    EXPECT_FALSE(FlashPartitionTable(fd, *exported.get(), 0));
+    EXPECT_FALSE(FlashPartitionTable(fd, *exported.get()));
 }
 
 // Test the basics of flashing a partition and reading it back.
@@ -147,7 +147,7 @@ TEST(liblp, FlashAndReadback) {
     // Export and flash.
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get(), 0));
+    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get()));
 
     // Read back. Note that some fields are only filled in during
     // serialization, so exported and imported will not be identical. For
@@ -354,8 +354,7 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_GE(fd, 0);
 
     // Check that we are able to write our table.
-    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get(), 0));
-    ASSERT_TRUE(UpdatePartitionTable(fd, *exported.get(), 1));
+    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get()));
 
     // Check that adding one more partition overflows the metadata allotment.
     partition = builder->AddPartition("final", TEST_GUID, LP_PARTITION_ATTR_NONE);
@@ -393,6 +392,27 @@ TEST(liblp, ImageFiles) {
 
     unique_ptr<LpMetadata> imported = ReadFromImageFile(fd);
     ASSERT_NE(imported, nullptr);
+}
+
+// Test that we can read images from buffers.
+TEST(liblp, ImageFilesInMemory) {
+    unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+    unique_ptr<LpMetadata> exported = builder->Export();
+
+    unique_fd fd(syscall(__NR_memfd_create, "image_file", 0));
+    ASSERT_GE(fd, 0);
+    ASSERT_TRUE(WriteToImageFile(fd, *exported.get()));
+
+    int64_t offset = SeekFile64(fd, 0, SEEK_CUR);
+    ASSERT_GE(offset, 0);
+    ASSERT_EQ(SeekFile64(fd, 0, SEEK_SET), 0);
+
+    size_t bytes = static_cast<size_t>(offset);
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(bytes);
+    ASSERT_TRUE(android::base::ReadFully(fd, buffer.get(), bytes));
+    ASSERT_NE(ReadFromImageBlob(buffer.get(), bytes), nullptr);
 }
 
 class BadWriter {
