@@ -24,6 +24,7 @@
 
 #include <sys/cdefs.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 
 #include <cmath>
 #include <cstddef>
@@ -35,7 +36,6 @@
 
 #include "Allocator.h"
 #include "LinkedList.h"
-#include "anon_vma_naming.h"
 
 namespace android {
 
@@ -153,10 +153,10 @@ static void* MapAligned(size_t size, size_t align) {
     munmap(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) + size), map_size - size);
   }
 
-#define PR_SET_VMA 0x53564d41
-#define PR_SET_VMA_ANON_NAME 0
+#if defined(PR_SET_VMA)
   prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, reinterpret_cast<uintptr_t>(ptr), size,
         "leak_detector_malloc");
+#endif
 
   return ptr;
 }
