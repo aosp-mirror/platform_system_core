@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<config>
+<!-- All the device getvar variables should be listed here -->
+<getvar>
+	<var key="product" assert="superphone2000"/>
+	<var key="secure" assert="no|yes"/>
+</getvar>
+
+<!-- All the device partitions should be listed here -->
+<partitions>
+	<part value="boot" slots="yes" test="yes" hashable="yes" parsed="yes"/>
+	<part value="modem" slots="yes" test="yes" hashable="yes"/>
+	<part value="userdata" slots="no" test="yes" hashable="no"/>
+
+	<!-- Bootloader partitions -->
+	<part value="foo1" slots="yes" test="no" hashable="yes"/>
+	<part value="foo2" slots="yes" test="no" hashable="yes"/>
+	<part value="bar3" slots="yes" test="no" hashable="yes"/>
+</partitions>
+
+<!-- All the device packed partitions should be listed here -->
+<packed>
+	<part value="bootloader" slots="yes">
+		<!-- We list the real partitions it is composed of -->
+		<child>foo1</child>
+		<child>foo2</child>
+		<child>bar3</child>
+		<!-- We list tests, expect defaults to 'okay' -->
+		<test packed="bootloader.img" unpacked="unpacked"/>
+		<test packed="bootloader_garbage.img" expect="fail"/>
+	</part>
+</packed>
+
+<!-- All the oem commands should be listed here -->
+<oem>
+	<!-- The 'oem self_destruct' command requires an unlocked bootloader -->
+	<command value="self_destruct" permissions="unlocked">
+		<!-- This will test that "oem self_destruct now" returns 'okay' -->
+		<test value="now" expect="okay"/>
+		<test value="yesterday" expect="fail" />
+	</command>
+
+	<!-- Test a fictional 'oem get' command -->
+	<command value="get" permissions="none">
+		<test value="batch_id" expect="okay" assert="[[:digit:]]+"/>
+		<test value="device_color" expect="okay" assert="green|blue"/>
+		<test value="build_num" expect="okay" assert="[\w\-.]+"/>
+		<test value="garbage" expect="fail" assert="Invalid var '[\w ]+'"/>
+	</command>
+
+	<!-- Some oem commands might require staging or downloading data, or both -->
+	<command value="foobar" permissions="unlocked">
+		<!-- FF will first stage test_image.img before running 'oem foobar use_staged' -->
+		<test value="use_staged" expect="okay" input="test_image.img" />
+		<!-- FF will run 'oem foobar send_response', upload data from device, then run the validator script -->
+		<test value="send_response" expect="fail" validate="python validator.py"/>
+	</command>
+</oem>
+
+<!-- If there is a custom oem checksum command to hash partitions, add it here -->
+<checksum value="oem sha1sum"/>
+</config>
