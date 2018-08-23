@@ -21,6 +21,7 @@
 #include <mutex>
 #include <vector>
 
+#include <android-base/unique_fd.h>
 #include <asyncio/AsyncIO.h>
 
 struct aio_block {
@@ -47,11 +48,11 @@ struct usb_handle {
     void (*close)(usb_handle* h);
 
     // FunctionFS
-    int control = -1;
-    int bulk_out = -1; /* "out" from the host's perspective => source for adbd */
-    int bulk_in = -1;  /* "in" from the host's perspective => sink for adbd */
+    android::base::unique_fd control;
+    android::base::unique_fd bulk_out;  // "out" from the host's perspective => source for adbd
+    android::base::unique_fd bulk_in;   // "in" from the host's perspective => sink for adbd
 
-    // Access to these blocks is very not thread safe. Have one block for both the
+    // Access to these blocks is very not thread safe. Have one block for each of the
     // read and write threads.
     struct aio_block read_aiob;
     struct aio_block write_aiob;
