@@ -1302,6 +1302,37 @@ class DeviceOfflineTest(DeviceTest):
                 self.assertEqual(length, len(stdout) - 4)
                 self.assertEqual(stdout, "\0" * length + "foo\n")
 
+    def test_zero_packet(self):
+        """Test for http://b/113070258
+
+        Make sure that we don't blow up when sending USB transfers that line up
+        exactly with the USB packet size.
+        """
+
+        local_port = int(self.device.forward("tcp:0", "tcp:12345"))
+        try:
+            for size in [512, 1024]:
+                def listener():
+                    cmd = ["echo foo | nc -l -p 12345; echo done"]
+                    rc, stdout, stderr = self.device.shell_nocheck(cmd)
+
+                thread = threading.Thread(target=listener)
+                thread.start()
+
+                # Wait a bit to let the shell command start.
+                time.sleep(0.25)
+
+                sock = socket.create_connection(("localhost", local_port))
+                with contextlib.closing(sock):
+                    bytesWritten = sock.send("a" * size)
+                    self.assertEqual(size, bytesWritten)
+                    readBytes = sock.recv(4096)
+                    self.assertEqual("foo\n", readBytes)
+
+                thread.join()
+        finally:
+            self.device.forward_remove("tcp:{}".format(local_port))
+
 
 def main():
     random.seed(0)
