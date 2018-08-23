@@ -121,7 +121,7 @@ TEST(parseint, untouched_on_failure) {
   ASSERT_EQ(123, i);
 
   unsigned int u = 123u;
-  ASSERT_FALSE(android::base::ParseInt("456x", &u));
+  ASSERT_FALSE(android::base::ParseUint("456x", &u));
   ASSERT_EQ(123u, u);
 }
 
