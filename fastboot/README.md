@@ -186,10 +186,45 @@ The various currently defined names are:
                         bootloader requiring a signature before
                         it will install or boot images.
 
+    is-userspace        If the value is "yes", the device is running
+                        fastbootd. Otherwise, it is running fastboot
+                        in the bootloader.
+
 Names starting with a lowercase character are reserved by this
 specification.  OEM-specific names should not start with lowercase
 characters.
 
+## Logical Partitions
+
+There are a number of commands to interact with logical partitions:
+
+    update-super:%s:%s  Write the previously downloaded image to a super
+                        partition. Unlike the "flash" command, this has
+                        special rules. The image must have been created by
+                        the lpmake command, and must not be a sparse image.
+                        If the last argument is "wipe", then all existing
+                        logical partitions are deleted. If no final argument
+                        is specified, the partition tables are merged. Any
+                        partition in the new image that does not exist in the
+                        old image is created with a zero size.
+
+                        In all cases, this will cause the temporary "scratch"
+                        partition to be deleted if it exists.
+
+    create-logical-partition:%s:%d
+                        Create a logical partition with the given name and
+                        size, in the super partition.
+
+    delete-logical-partition:%s
+                        Delete a logical partition with the given name.
+
+    resize-logical-partition:%s:%d
+                        Change the size of the named logical partition.
+
+In addition, there is a variable to test whether a partition is logical:
+
+    is-logical:%s       If the value is "yes", the partition is logical.
+                        Otherwise the partition is physical.
 
 ## TCP Protocol v1
 
