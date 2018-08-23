@@ -336,3 +336,11 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
     }
     return device->WriteOkay("Partition resized");
 }
+
+bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteFail("Invalid arguments");
+    }
+    bool wipe = (args.size() >= 3 && args[2] == "wipe");
+    return UpdateSuper(device, args[1], wipe);
+}

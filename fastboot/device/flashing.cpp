@@ -25,6 +25,8 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <liblp/builder.h>
+#include <liblp/liblp.h>
 #include <sparse/sparse.h>
 
 #include "fastboot_device.h"
@@ -35,6 +37,8 @@ namespace {
 constexpr uint32_t SPARSE_HEADER_MAGIC = 0xed26ff3a;
 
 }  // namespace
+
+using namespace android::fs_mgr;
 
 int FlashRawDataChunk(int fd, const char* data, size_t len) {
     size_t ret = 0;
@@ -98,4 +102,75 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
         return -EOVERFLOW;
     }
     return FlashBlockDevice(handle.fd(), data);
+}
+
+bool UpdateSuper(FastbootDevice* device, const std::string& partition_name, bool wipe) {
+    std::optional<std::string> super = FindPhysicalPartition(partition_name);
+    if (!super) {
+        return device->WriteFail("Could not find partition: " + partition_name);
+    }
+
+    std::vector<char> data = std::move(device->download_data());
+    if (data.empty()) {
+        return device->WriteFail("No data available");
+    }
+
+    std::unique_ptr<LpMetadata> new_metadata = ReadFromImageBlob(data.data(), data.size());
+    if (!new_metadata) {
+        return device->WriteFail("Data is not a valid logical partition metadata image");
+    }
+
+    // If we are unable to read the existing metadata, then the super partition
+    // is corrupt. In this case we reflash the whole thing using the provided
+    // image.
+    std::string slot_suffix = device->GetCurrentSlot();
+    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    std::unique_ptr<LpMetadata> metadata = ReadMetadata(super->c_str(), slot_number);
+    if (!metadata || wipe) {
+        if (!FlashPartitionTable(super.value(), *new_metadata.get())) {
+            return device->WriteFail("Unable to flash new partition table");
+        }
+        return device->WriteOkay("Successfully flashed partition table");
+    }
+
+    // There's a working super partition, and we don't want to wipe it - it may
+    // may contain partitions created for the user. Instead, we create a zero-
+    // sized partition for each entry in the new partition table. It is then
+    // the host's responsibility to size it correctly via resize-logical-partition.
+    std::unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(*metadata.get());
+    if (!builder) {
+        return device->WriteFail("Unable to create a metadata builder");
+    }
+    for (const auto& partition : new_metadata->partitions) {
+        std::string name = GetPartitionName(partition);
+        if (builder->FindPartition(name)) {
+            continue;
+        }
+        std::string guid = GetPartitionGuid(partition);
+        if (!builder->AddPartition(name, guid, partition.attributes)) {
+            return device->WriteFail("Unable to add partition: " + name);
+        }
+    }
+
+    // The scratch partition may exist as temporary storage, created for
+    // use by adb remount for overlayfs. If we're performing a flashall
+    // operation then we want to start over with a clean slate, so we
+    // remove the scratch partition until it is requested again.
+    builder->RemovePartition("scratch");
+
+    new_metadata = builder->Export();
+    if (!new_metadata) {
+        return device->WriteFail("Unable to export new partition table");
+    }
+
+    // Write the new table to every metadata slot.
+    bool ok = true;
+    for (size_t i = 0; i < new_metadata->geometry.metadata_slot_count; i++) {
+        ok &= UpdatePartitionTable(super.value(), *new_metadata.get(), i);
+    }
+
+    if (!ok) {
+        return device->WriteFail("Unable to write new partition table");
+    }
+    return device->WriteOkay("Successfully updated partition table");
 }

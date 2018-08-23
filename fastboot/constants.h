@@ -33,6 +33,7 @@
 #define FB_CMD_CREATE_PARTITION "create-logical-partition"
 #define FB_CMD_DELETE_PARTITION "delete-logical-partition"
 #define FB_CMD_RESIZE_PARTITION "resize-logical-partition"
+#define FB_CMD_UPDATE_SUPER "update-super"
 
 #define RESPONSE_OKAY "OKAY"
 #define RESPONSE_FAIL "FAIL"
