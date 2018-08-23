@@ -357,7 +357,8 @@ int usb_write(usb_handle* handle, const void* data, int len) {
 
     if (handle->zero_mask && (len & handle->zero_mask) == 0) {
         // Send a zero length packet
-        if (!AdbWriteEndpointSync(handle->adb_write_pipe, (void*)data, 0, &written, time_out)) {
+        unsigned long dummy;
+        if (!AdbWriteEndpointSync(handle->adb_write_pipe, (void*)data, 0, &dummy, time_out)) {
             D("AdbWriteEndpointSync of zero length packet failed: %s",
               android::base::SystemErrorCodeToString(GetLastError()).c_str());
             err = EIO;
