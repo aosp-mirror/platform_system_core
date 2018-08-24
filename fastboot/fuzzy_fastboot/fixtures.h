@@ -133,4 +133,6 @@ class FuzzAnyPartitionLocked : public ExtensionsPartition<false> {};
 
 class UserdataPartition : public ExtensionsPartition<true> {};
 
+class SparseTestPartition : public ExtensionsPartition<true> {};
+
 }  // end namespace fastboot
