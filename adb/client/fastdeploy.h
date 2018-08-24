@@ -24,10 +24,7 @@ enum FastDeploy_AgentUpdateStrategy {
     FastDeploy_AgentUpdateDifferentVersion
 };
 
-static constexpr int kFastDeployMinApi = 24;
-
-void fastdeploy_init(bool use_localagent);
-
+void fastdeploy_set_local_agent(bool use_localagent);
 int get_device_api_level();
 bool update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy);
 int extract_metadata(const char* apkPath, FILE* outputFp);
