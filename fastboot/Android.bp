@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This is required because no Android.bp can include a library defined in an
+// Android.mk. Eventually should kill libfastboot (defined in Android.mk)
 cc_library_host_static {
     name: "libfastboot2",
 
@@ -55,6 +57,23 @@ cc_library_host_static {
     target: {
       linux: {
         srcs: ["usb_linux.cpp"],
+      },
+
+      darwin: {
+        srcs: ["usb_osx.cpp"],
+
+        host_ldlibs: [
+            "-framework CoreFoundation",
+            "-framework IOKit",
+        ],
+      },
+
+      windows: {
+        srcs: ["usb_windows.cpp"],
+
+        host_ldlibs: [
+            "-lws2_32",
+        ],
       },
     },
 
