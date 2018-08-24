@@ -151,6 +151,7 @@ cc_binary {
 cc_test {
     name: "init_tests",
     defaults: ["init_defaults"],
+    compile_multilib: "first",
     srcs: [
         "devices_test.cpp",
         "init_test.cpp",
