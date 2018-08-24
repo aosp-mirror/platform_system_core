@@ -1,4 +1,4 @@
-12c00000-2ac00000 rw-p 00000000 00:05 10267643                           /dev/ashmem/dalvik-main space (region space) (deleted)
+12c00000-2ac00000 rw-p 00000000 00:05 10267643                           [anon:dalvik-main space (region space)]
 6fb5d000-6fd6e000 rw-p 00000000 103:1d 639511                            /data/dalvik-cache/arm64/system@framework@boot.art
 6fd6e000-6fd82000 r--p 00211000 103:1d 639511                            /data/dalvik-cache/arm64/system@framework@boot.art
 6fd82000-6fe47000 rw-p 00000000 103:1d 639514                            /data/dalvik-cache/arm64/system@framework@boot-core-libart.art
@@ -121,12 +121,12 @@
 73b88000-73b89000 r--s 00000000 fc:00 884                                /system/framework/boot-com.google.vr.platform.vdex
 73b89000-73b8a000 r--p 00004000 fc:00 899                                /system/framework/arm64/boot-com.google.vr.platform.oat
 73b8a000-73b8b000 rw-p 00005000 fc:00 899                                /system/framework/arm64/boot-com.google.vr.platform.oat
-73b8b000-73b93000 rw-p 00000000 00:05 10267640                           /dev/ashmem/dalvik-non moving space (deleted)
-73b93000-77b8b000 ---p 00008000 00:05 10267640                           /dev/ashmem/dalvik-non moving space (deleted)
-77b8b000-97b8b000 rw-p 00000000 00:05 10267645                           /dev/ashmem/dalvik-free list large object space (deleted)
-97b8b000-99b8b000 rw-p 00000000 00:05 10270989                           /dev/ashmem/dalvik-data-code-cache (deleted)
-99b8b000-9bb8b000 r-xp 00000000 00:05 10270990                           /dev/ashmem/dalvik-jit-code-cache (deleted)
-ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/ashmem/dalvik-Sentinel fault page (deleted)
+73b8b000-73b93000 rw-p 00000000 00:05 10267640                           [anon:dalvik-non moving space]
+73b93000-77b8b000 ---p 00008000 00:05 10267640                           [anon:dalvik-non moving space]
+77b8b000-97b8b000 rw-p 00000000 00:05 10267645                           [anon:dalvik-free list large object space]
+97b8b000-99b8b000 rw-p 00000000 00:05 10270989                           [anon:dalvik-data-code-cache]
+99b8b000-9bb8b000 r-xp 00000000 00:05 10270990                           [anon:dalvik-jit-code-cache]
+ebad6000-ebad7000 ---p 00000000 00:05 10269717                           [anon:dalvik-Sentinel fault page]
 7ffb6e000-7ffb76000 rw-s 000e5000 00:10 20630                            /dev/kgsl-3d0
 7ffb76000-7ffb78000 rw-s 000e0000 00:10 20630                            /dev/kgsl-3d0
 7ffbc3000-7ffbc4000 rw-s 000e8000 00:10 20630                            /dev/kgsl-3d0
@@ -453,7 +453,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 7058043000-7058044000 r--p 0002f000 fc:00 2354                           /system/lib64/libcompiler_rt.so
 7058044000-7058045000 rw-p 00030000 fc:00 2354                           /system/lib64/libcompiler_rt.so
 7058045000-70580b2000 rw-p 00000000 00:00 0                              [anon:.bss]
-70580bd000-70580dd000 rw-p 00000000 00:05 10265386                       /dev/ashmem/dalvik-LinearAlloc (deleted)
+70580bd000-70580dd000 rw-p 00000000 00:05 10265386                       [anon:dalvik-LinearAlloc]
 70580dd000-70580df000 r-xp 00000000 fc:00 2597                           /system/lib64/vndk-sp-28/libhardware.so
 70580df000-70580fc000 ---p 00000000 00:00 0 
 70580fc000-70580fd000 r--p 0000f000 fc:00 2597                           /system/lib64/vndk-sp-28/libhardware.so
@@ -568,9 +568,9 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 705fe4c000-705fe4d000 ---p 00000000 00:00 0                              [anon:thread stack guard]
 705fe4d000-705fe4e000 ---p 00000000 00:00 0 
 705fe4e000-705ff4a000 rw-p 00000000 00:00 0 
-705ff4a000-705ff4b000 ---p 00000000 00:05 10270991                       /dev/ashmem/dalvik-Jit thread pool worker thread 0 (deleted)
-705ff4b000-705ff4c000 ---p 00001000 00:05 10270991                       /dev/ashmem/dalvik-Jit thread pool worker thread 0 (deleted)
-705ff4c000-706004b000 rw-p 00002000 00:05 10270991                       /dev/ashmem/dalvik-Jit thread pool worker thread 0 (deleted)
+705ff4a000-705ff4b000 ---p 00000000 00:05 10270991                       [anon:dalvik-Jit thread pool worker thread 0]
+705ff4b000-705ff4c000 ---p 00001000 00:05 10270991                       [anon:dalvik-Jit thread pool worker thread 0]
+705ff4c000-706004b000 rw-p 00002000 00:05 10270991                       [anon:dalvik-Jit thread pool worker thread 0]
 706004b000-706010f000 r-xp 00000000 fc:00 2390                           /system/lib64/libvixl-arm64.so
 706010f000-7060120000 ---p 00000000 00:00 0 
 7060120000-7060125000 r--p 000cb000 fc:00 2390                           /system/lib64/libvixl-arm64.so
@@ -635,12 +635,12 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 7062003000-706201f000 ---p 00000000 00:00 0 
 706201f000-7062020000 r--p 0000f000 fc:00 2447                           /system/lib64/libtextclassifier_hash.so
 7062020000-7062021000 rw-p 00010000 fc:00 2447                           /system/lib64/libtextclassifier_hash.so
-7062022000-7062042000 rw-p 00000000 00:05 10269731                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+7062022000-7062042000 rw-p 00000000 00:05 10269731                       [anon:dalvik-CompilerMetadata]
 7062042000-7062077000 r-xp 00000000 fc:00 2372                           /system/lib64/android.hardware.neuralnetworks@1.0.so
 7062077000-7062095000 ---p 00000000 00:00 0 
 7062095000-706209b000 r--p 0003a000 fc:00 2372                           /system/lib64/android.hardware.neuralnetworks@1.0.so
 706209b000-706209c000 rw-p 00040000 fc:00 2372                           /system/lib64/android.hardware.neuralnetworks@1.0.so
-70620a9000-70620c9000 rw-p 00000000 00:05 10269730                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70620a9000-70620c9000 rw-p 00000000 00:05 10269730                       [anon:dalvik-CompilerMetadata]
 70620c9000-70620e3000 r-xp 00000000 fc:00 2956                           /system/lib64/android.hardware.neuralnetworks@1.1.so
 70620e3000-70620f4000 ---p 00000000 00:00 0 
 70620f4000-70620f7000 r--p 0001d000 fc:00 2956                           /system/lib64/android.hardware.neuralnetworks@1.1.so
@@ -659,7 +659,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70623e0000-70623f7000 ---p 00000000 00:00 0 
 70623f7000-70623f8000 r--p 0001f000 fc:00 2662                           /system/lib64/libGLESv3.so
 70623f8000-70623f9000 rw-p 00020000 fc:00 2662                           /system/lib64/libGLESv3.so
-70623fc000-706241c000 rw-p 00000000 00:05 10269729                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70623fc000-706241c000 rw-p 00000000 00:05 10269729                       [anon:dalvik-CompilerMetadata]
 706241c000-7062444000 r-xp 00000000 fc:00 2603                           /system/lib64/libexif.so
 7062444000-706245f000 ---p 00000000 00:00 0 
 706245f000-7062472000 r--p 0002d000 fc:00 2603                           /system/lib64/libexif.so
@@ -674,7 +674,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 7062508000-7062522000 ---p 00000000 00:00 0 
 7062522000-7062525000 r--p 0003d000 fc:00 2401                           /system/lib64/libmtp.so
 7062525000-706252c000 rw-p 00040000 fc:00 2401                           /system/lib64/libmtp.so
-7062530000-7062550000 rw-p 00000000 00:05 10269728                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+7062530000-7062550000 rw-p 00000000 00:05 10269728                       [anon:dalvik-CompilerMetadata]
 7062550000-7062572000 r--s 00000000 fc:00 234                            /system/fonts/NotoSerifMyanmar-Regular.otf
 7062572000-706259e000 r-xp 00000000 fc:00 2620                           /system/lib64/libmediandk.so
 706259e000-70625b9000 ---p 00000000 00:00 0 
@@ -688,7 +688,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 7062621000-706263d000 ---p 00000000 00:00 0 
 706263d000-706263f000 r--p 0002e000 fc:00 2366                           /system/lib64/libmediadrmmetrics_lite.so
 706263f000-7062640000 rw-p 00030000 fc:00 2366                           /system/lib64/libmediadrmmetrics_lite.so
-706264b000-706266b000 rw-p 00000000 00:05 10269727                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+706264b000-706266b000 rw-p 00000000 00:05 10269727                       [anon:dalvik-CompilerMetadata]
 706266b000-70626d4000 r-xp 00000000 fc:00 2727                           /system/lib64/libmedia_jni.so
 70626d4000-70626eb000 ---p 00000000 00:00 0 
 70626eb000-70626f2000 r--p 00069000 fc:00 2727                           /system/lib64/libmedia_jni.so
@@ -697,7 +697,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 7062732000-7062748000 ---p 00000000 00:00 0 
 7062748000-706274b000 r--p 0003d000 fc:00 2399                           /system/lib64/libcamera2ndk.so
 706274b000-7062750000 rw-p 00040000 fc:00 2399                           /system/lib64/libcamera2ndk.so
-7062768000-7062788000 rw-p 00000000 00:05 10269726                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+7062768000-7062788000 rw-p 00000000 00:05 10269726                       [anon:dalvik-CompilerMetadata]
 7062788000-70627ee000 r-xp 00000000 fc:00 2974                           /system/lib64/android.hardware.drm@1.0.so
 70627ee000-7062805000 ---p 00000000 00:00 0 
 7062805000-706280d000 r--p 00068000 fc:00 2974                           /system/lib64/android.hardware.drm@1.0.so
@@ -737,17 +737,17 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70629f9000-70629fc000 rw-p 00000000 00:00 0                              [anon:bionic TLS]
 70629fc000-70629fd000 ---p 00000000 00:00 0                              [anon:bionic TLS guard]
 70629fd000-7062a3e000 r--s 00000000 fc:00 216                            /system/fonts/NotoSerif-BoldItalic.ttf
-7062a3e000-7062b06000 rw-p 00000000 00:05 10270984                       /dev/ashmem/dalvik-indirect ref table (deleted)
-7062b06000-7062bce000 rw-p 00000000 00:05 10270983                       /dev/ashmem/dalvik-indirect ref table (deleted)
-7062bce000-7062dce000 rw-p 00000000 00:05 10270726                       /dev/ashmem/dalvik-rb copying gc mark stack (deleted)
-7062dce000-70635ce000 rw-p 00000000 00:05 10270725                       /dev/ashmem/dalvik-concurrent copying gc mark stack (deleted)
-70635ce000-7063dcf000 rw-p 00000000 00:05 10270724                       /dev/ashmem/dalvik-live stack (deleted)
-7063dcf000-70645d0000 rw-p 00000000 00:05 10270723                       /dev/ashmem/dalvik-allocation stack (deleted)
-70645d0000-70649d1000 rw-p 00000000 00:05 10270721                       /dev/ashmem/dalvik-card table (deleted)
-70649d1000-7064ad1000 rw-p 00000000 00:05 10267648                       /dev/ashmem/dalvik-large object free list space allocation info map (deleted)
-7064ad1000-7065ad1000 rw-p 00000000 00:05 10267644                       /dev/ashmem/dalvik-region space live bitmap (deleted)
-7065ad1000-7065bd1000 rw-p 00000000 00:05 10267642                       /dev/ashmem/dalvik-allocspace zygote / non moving space mark-bitmap 0 (deleted)
-7065bd1000-7065cd1000 rw-p 00000000 00:05 10267641                       /dev/ashmem/dalvik-allocspace zygote / non moving space live-bitmap 0 (deleted)
+7062a3e000-7062b06000 rw-p 00000000 00:05 10270984                       [anon:dalvik-indirect ref table]
+7062b06000-7062bce000 rw-p 00000000 00:05 10270983                       [anon:dalvik-indirect ref table]
+7062bce000-7062dce000 rw-p 00000000 00:05 10270726                       [anon:dalvik-rb copying gc mark stack]
+7062dce000-70635ce000 rw-p 00000000 00:05 10270725                       [anon:dalvik-concurrent copying gc mark stack]
+70635ce000-7063dcf000 rw-p 00000000 00:05 10270724                       [anon:dalvik-live stack]
+7063dcf000-70645d0000 rw-p 00000000 00:05 10270723                       [anon:dalvik-allocation stack]
+70645d0000-70649d1000 rw-p 00000000 00:05 10270721                       [anon:dalvik-card table]
+70649d1000-7064ad1000 rw-p 00000000 00:05 10267648                       [anon:dalvik-large object free list space allocation info map]
+7064ad1000-7065ad1000 rw-p 00000000 00:05 10267644                       [anon:dalvik-region space live bitmap]
+7065ad1000-7065bd1000 rw-p 00000000 00:05 10267642                       [anon:dalvik-allocspace zygote / non moving space mark-bitmap 0]
+7065bd1000-7065cd1000 rw-p 00000000 00:05 10267641                       [anon:dalvik-allocspace zygote / non moving space live-bitmap 0]
 7065cd1000-7065cd2000 r-xp 00000000 fc:00 2946                           /system/lib64/libsigchain.so
 7065cd2000-7065cf0000 ---p 00000000 00:00 0 
 7065cf0000-7065cf1000 r--p 0000f000 fc:00 2946                           /system/lib64/libsigchain.so
@@ -769,7 +769,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 706638d000-706639e000 r--p 005ef000 fc:00 2671                           /system/lib64/libart.so
 706639e000-70663a1000 rw-p 00600000 fc:00 2671                           /system/lib64/libart.so
 70663a1000-70663a4000 rw-p 00000000 00:00 0                              [anon:.bss]
-70663a6000-70663c6000 rw-p 00000000 00:05 10269725                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70663a6000-70663c6000 rw-p 00000000 00:05 10269725                       [anon:dalvik-CompilerMetadata]
 70663c6000-70663c8000 r-xp 00000000 fc:00 2673                           /system/lib64/libmetricslogger.so
 70663c8000-70663e5000 ---p 00000000 00:00 0 
 70663e5000-70663e6000 r--p 0000f000 fc:00 2673                           /system/lib64/libmetricslogger.so
@@ -801,8 +801,8 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e688e000-70e68ab000 ---p 00000000 00:00 0 
 70e68ab000-70e68ac000 r--p 0000f000 fc:00 2943                           /system/lib64/libion.so
 70e68ac000-70e68ad000 rw-p 00010000 fc:00 2943                           /system/lib64/libion.so
-70e68ad000-70e68af000 rw-p 00000000 00:05 10282496                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70e68af000-70e68b1000 rw-p 00000000 00:05 10282493                       /dev/ashmem/dalvik-indirect ref table (deleted)
+70e68ad000-70e68af000 rw-p 00000000 00:05 10282496                       [anon:dalvik-indirect ref table]
+70e68af000-70e68b1000 rw-p 00000000 00:05 10282493                       [anon:dalvik-indirect ref table]
 70e68b1000-70e68ee000 r--s 00000000 fc:00 256                            /system/fonts/NotoSerif-Italic.ttf
 70e68ee000-70e6910000 r-xp 00000000 fc:00 2502                           /system/lib64/libhidlbase.so
 70e6910000-70e692c000 ---p 00000000 00:00 0 
@@ -821,7 +821,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e69e1000-70e69fa000 ---p 00000000 00:00 0 
 70e69fa000-70e69fb000 r--p 0001f000 fc:00 2537                           /system/lib64/liblog.so
 70e69fb000-70e69fc000 rw-p 00020000 fc:00 2537                           /system/lib64/liblog.so
-70e69fc000-70e69fe000 rw-p 00000000 00:05 10266158                       /dev/ashmem/dalvik-indirect ref table (deleted)
+70e69fc000-70e69fe000 rw-p 00000000 00:05 10266158                       [anon:dalvik-indirect ref table]
 70e69fe000-70e69ff000 ---p 00000000 00:00 0                              [anon:bionic TLS guard]
 70e69ff000-70e6a02000 rw-p 00000000 00:00 0                              [anon:bionic TLS]
 70e6a02000-70e6a03000 ---p 00000000 00:00 0                              [anon:bionic TLS guard]
@@ -854,7 +854,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e6b61000-70e6b73000 ---p 00000000 00:00 0 
 70e6b73000-70e6b75000 r--p 0003e000 fc:00 2695                           /system/lib64/libdexfile.so
 70e6b75000-70e6b76000 rw-p 00040000 fc:00 2695                           /system/lib64/libdexfile.so
-70e6b76000-70e6b78000 rw-p 00000000 00:05 10253452                       /dev/ashmem/dalvik-indirect ref table (deleted)
+70e6b76000-70e6b78000 rw-p 00000000 00:05 10253452                       [anon:dalvik-indirect ref table]
 70e6b78000-70e6b85000 r--s 00000000 fc:00 1080                           /system/usr/hyphen-data/hyph-cu.hyb
 70e6b85000-70e6b96000 r-xp 00000000 fc:00 2957                           /system/lib64/libaudioutils.so
 70e6b96000-70e6bb4000 ---p 00000000 00:00 0 
@@ -1258,7 +1258,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e96dd000-70e96f8000 ---p 00000000 00:00 0 
 70e96f8000-70e96f9000 r--p 0000f000 fc:00 2386                           /system/lib64/libusbhost.so
 70e96f9000-70e96fa000 rw-p 00010000 fc:00 2386                           /system/lib64/libusbhost.so
-70e96fa000-70e96fb000 r--p 00000000 00:05 10266154                       /dev/ashmem/dalvik-classes.dex extracted in memory from /data/app/com.google.sample.tunnel-HGGRU03Gu1Mwkf_-RnFmvw==/base.apk (deleted)
+70e96fa000-70e96fb000 r--p 00000000 00:05 10266154                       [anon:dalvik-classes.dex extracted in memory from /data/app/com.google.sample.tunnel-HGGRU03Gu1Mwkf_-RnFmvw==/base.apk]
 70e96fb000-70e9701000 r--s 00000000 fc:00 280                            /system/fonts/NotoSansCoptic-Regular.ttf
 70e9701000-70e9720000 r-xp 00000000 fc:00 2490                           /system/lib64/libstagefright_bufferqueue_helper.so
 70e9720000-70e973b000 ---p 00000000 00:00 0 
@@ -1291,7 +1291,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e98e7000-70e98e8000 rw-p 00010000 fc:00 2952                           /system/lib64/libETC1.so
 70e98e8000-70e98e9000 r--s 00000000 fc:00 1121                           /system/usr/hyphen-data/hyph-und-ethi.hyb
 70e98e9000-70e98ef000 r--s 00000000 fc:00 64                             /system/fonts/NotoSansBrahmi-Regular.ttf
-70e98ef000-70e990f000 rw-p 00000000 00:05 10271012                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70e98ef000-70e990f000 rw-p 00000000 00:05 10271012                       [anon:dalvik-CompilerMetadata]
 70e990f000-70e9926000 r-xp 00000000 fc:00 2526                           /system/lib64/libbacktrace.so
 70e9926000-70e993e000 ---p 00000000 00:00 0 
 70e993e000-70e993f000 r--p 0001f000 fc:00 2526                           /system/lib64/libbacktrace.so
@@ -1304,7 +1304,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e99d0000-70e99d1000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70e99d1000-70e99d3000 r--s 00000000 fc:00 200                            /system/fonts/NotoSansOldItalic-Regular.ttf
 70e99d3000-70e99e1000 r--s 00000000 fc:00 153                            /system/fonts/NotoSansMalayalam-Regular.ttf
-70e99e1000-70e9a01000 rw-p 00000000 00:05 10271011                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70e99e1000-70e9a01000 rw-p 00000000 00:05 10271011                       [anon:dalvik-CompilerMetadata]
 70e9a01000-70e9a1e000 r-xp 00000000 fc:00 2542                           /system/lib64/libimg_utils.so
 70e9a1e000-70e9a39000 ---p 00000000 00:00 0 
 70e9a39000-70e9a3c000 r--p 0001d000 fc:00 2542                           /system/lib64/libimg_utils.so
@@ -1330,7 +1330,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e9b0b000-70e9b0c000 rw-p 00030000 fc:00 2950                           /system/lib64/libmemunreachable.so
 70e9b0c000-70e9b0d000 r--s 00000000 fc:00 1088                           /system/usr/hyphen-data/hyph-ta.hyb
 70e9b0d000-70e9b0f000 r--s 00000000 fc:00 72                             /system/fonts/NotoSansOlChiki-Regular.ttf
-70e9b0f000-70e9b2f000 rw-p 00000000 00:05 10271010                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70e9b0f000-70e9b2f000 rw-p 00000000 00:05 10271010                       [anon:dalvik-CompilerMetadata]
 70e9b2f000-70e9b4f000 r--s 00000000 00:10 16633                          /dev/__properties__/u:object_r:persist_debug_prop:s0
 70e9b4f000-70e9b65000 r-xp 00000000 fc:00 2920                           /system/lib64/android.hardware.cas.native@1.0.so
 70e9b65000-70e9b7b000 ---p 00000000 00:00 0 
@@ -1363,13 +1363,13 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70e9d01000-70e9d1e000 ---p 00000000 00:00 0 
 70e9d1e000-70e9d2e000 r--p 00080000 fc:00 2665                           /system/lib64/libbinder.so
 70e9d2e000-70e9d2f000 rw-p 00090000 fc:00 2665                           /system/lib64/libbinder.so
-70e9d2f000-70e9d4f000 rw-p 00000000 00:05 10271009                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70e9d2f000-70e9d4f000 rw-p 00000000 00:05 10271009                       [anon:dalvik-CompilerMetadata]
 70e9d4f000-70e9d53000 r-xp 00000000 fc:00 2454                           /system/lib64/libaudiomanager.so
 70e9d53000-70e9d6e000 ---p 00000000 00:00 0 
 70e9d6e000-70e9d6f000 r--p 0000f000 fc:00 2454                           /system/lib64/libaudiomanager.so
 70e9d6f000-70e9d70000 rw-p 00010000 fc:00 2454                           /system/lib64/libaudiomanager.so
 70e9d70000-70e9d71000 r--s 00000000 fc:00 1087                           /system/usr/hyphen-data/hyph-or.hyb
-70e9d71000-70e9d91000 rw-p 00000000 00:05 10271008                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70e9d71000-70e9d91000 rw-p 00000000 00:05 10271008                       [anon:dalvik-CompilerMetadata]
 70e9d91000-70e9e21000 r-xp 00000000 fc:00 2627                           /system/lib64/libft2.so
 70e9e21000-70e9e37000 ---p 00000000 00:00 0 
 70e9e37000-70e9e3c000 r--p 0009b000 fc:00 2627                           /system/lib64/libft2.so
@@ -1437,15 +1437,15 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70eaa12000-70eaa16000 r--s 00000000 fc:00 87                             /system/fonts/NotoSansThaana-Regular.ttf
 70eaa16000-70eaa1b000 r--s 00000000 fc:00 218                            /system/fonts/NotoSansGeorgian-Bold.ttf
 70eaa1b000-70eaa20000 r--s 00000000 fc:00 125                            /system/fonts/NotoSansGeorgian-Regular.ttf
-70eaa20000-70eaa40000 rw-p 00000000 00:05 10271007                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70eaa20000-70eaa40000 rw-p 00000000 00:05 10271007                       [anon:dalvik-CompilerMetadata]
 70eaa40000-70eaaa0000 r-xp 00000000 fc:00 2384                           /system/lib64/libhidltransport.so
 70eaaa0000-70eaabe000 ---p 00000000 00:00 0 
 70eaabe000-70eaac6000 r--p 00068000 fc:00 2384                           /system/lib64/libhidltransport.so
 70eaac6000-70eaac7000 rw-p 00070000 fc:00 2384                           /system/lib64/libhidltransport.so
 70eaac7000-70eaacb000 r--s 00000000 fc:00 192                            /system/fonts/NotoSerifArmenian-Bold.ttf
 70eaacb000-70eaad0000 r--s 00000000 fc:00 210                            /system/fonts/NotoSansThaiUI-Bold.ttf
-70eaad0000-70eaaf0000 rw-p 00000000 00:05 10271006                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
-70eaaf0000-70eab10000 rw-p 00000000 00:05 10271005                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70eaad0000-70eaaf0000 rw-p 00000000 00:05 10271006                       [anon:dalvik-CompilerMetadata]
+70eaaf0000-70eab10000 rw-p 00000000 00:05 10271005                       [anon:dalvik-CompilerMetadata]
 70eab10000-70eab57000 r-xp 00000000 fc:00 2546                           /system/lib64/libmedia_omx.so
 70eab57000-70eab6d000 ---p 00000000 00:00 0 
 70eab6d000-70eab7a000 r--p 00053000 fc:00 2546                           /system/lib64/libmedia_omx.so
@@ -1453,7 +1453,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70eab7f000-70eab80000 r--s 00000000 fc:00 1119                           /system/usr/hyphen-data/hyph-kn.hyb
 70eab80000-70eab86000 r--s 00000000 fc:00 224                            /system/fonts/NotoSansThaiUI-Regular.ttf
 70eab86000-70eab8b000 r--s 00000000 fc:00 300                            /system/fonts/NotoSerifThai-Bold.ttf
-70eab8b000-70eabab000 rw-p 00000000 00:05 10271004                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70eab8b000-70eabab000 rw-p 00000000 00:05 10271004                       [anon:dalvik-CompilerMetadata]
 70eabab000-70eac21000 r-xp 00000000 fc:00 2385                           /system/lib64/libvintf.so
 70eac21000-70eac31000 ---p 00000000 00:00 0 
 70eac31000-70eac36000 r--p 0007b000 fc:00 2385                           /system/lib64/libvintf.so
@@ -1468,7 +1468,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70eacd8000-70eacd9000 rw-p 00080000 fc:00 2606                           /system/lib64/android.hardware.media.omx@1.0.so
 70eacd9000-70eacdf000 r--s 00000000 fc:00 169                            /system/fonts/NotoSansThai-Regular.ttf
 70eacdf000-70eace9000 r--s 00000000 fc:00 140                            /system/fonts/CarroisGothicSC-Regular.ttf
-70eace9000-70ead09000 rw-p 00000000 00:05 10271003                       /dev/ashmem/dalvik-CompilerMetadata (deleted)
+70eace9000-70ead09000 rw-p 00000000 00:05 10271003                       [anon:dalvik-CompilerMetadata]
 70ead09000-70ead22000 r-xp 00000000 fc:00 2539                           /system/lib64/android.hardware.graphics.mapper@2.1.so
 70ead22000-70ead34000 ---p 00000000 00:00 0 
 70ead34000-70ead37000 r--p 0001d000 fc:00 2539                           /system/lib64/android.hardware.graphics.mapper@2.1.so
@@ -1503,7 +1503,7 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70eae5f000-70eae62000 r--s 00000000 fc:00 103                            /system/fonts/NotoSansLimbu-Regular.ttf
 70eae62000-70eae67000 r--s 00000000 fc:00 236                            /system/fonts/NotoSansHebrew-Bold.ttf
 70eae67000-70eae84000 r--s 001c2000 fc:00 990                            /system/framework/ext.jar
-70eae84000-70eaea4000 rw-p 00000000 00:05 10269720                       /dev/ashmem/dalvik-LinearAlloc (deleted)
+70eae84000-70eaea4000 rw-p 00000000 00:05 10269720                       [anon:dalvik-LinearAlloc]
 70eaea4000-70eaede000 r-xp 00000000 fc:00 2924                           /system/lib64/libwilhelm.so
 70eaede000-70eaefa000 ---p 00000000 00:00 0 
 70eaefa000-70eaeff000 r--p 0003b000 fc:00 2924                           /system/lib64/libwilhelm.so
@@ -1579,395 +1579,395 @@ ebad6000-ebad7000 ---p 00000000 00:05 10269717                           /dev/as
 70eb0ca000-70eb0cb000 ---p 00000000 00:00 0                              [anon:bionic TLS guard]
 70eb0cb000-70eb0ce000 rw-p 00000000 00:00 0                              [anon:bionic TLS]
 70eb0ce000-70eb0cf000 ---p 00000000 00:00 0                              [anon:bionic TLS guard]
-70eb0cf000-70eb0ef000 rw-p 00000000 00:05 10270988                       /dev/ashmem/dalvik-LinearAlloc (deleted)
+70eb0cf000-70eb0ef000 rw-p 00000000 00:05 10270988                       [anon:dalvik-LinearAlloc]
 70eb0ef000-70eb5bb000 r-xp 00000000 fc:00 2374                           /system/lib64/libpdfium.so
 70eb5bb000-70eb5cf000 ---p 00000000 00:00 0 
 70eb5cf000-70eb5e6000 r--p 004d9000 fc:00 2374                           /system/lib64/libpdfium.so
 70eb5e6000-70eb5ea000 rw-p 004f0000 fc:00 2374                           /system/lib64/libpdfium.so
 70eb5ea000-70eb5f1000 rw-p 00000000 00:00 0                              [anon:.bss]
 70eb5f1000-70eb5f2000 r--s 00000000 fc:00 1094                           /system/usr/hyphen-data/hyph-hi.hyb
-70eb5f2000-70eb5f6000 rw-p 00000000 00:05 10270982                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb5f6000-70eb5fa000 rw-p 00000000 00:05 10270981                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb5fa000-70eb5fe000 rw-p 00000000 00:05 10270980                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb5fe000-70eb602000 rw-p 00000000 00:05 10270979                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb602000-70eb606000 rw-p 00000000 00:05 10270978                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb606000-70eb60a000 rw-p 00000000 00:05 10270977                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb60a000-70eb60e000 rw-p 00000000 00:05 10270976                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb60e000-70eb612000 rw-p 00000000 00:05 10270975                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb612000-70eb616000 rw-p 00000000 00:05 10270974                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb5f2000-70eb5f6000 rw-p 00000000 00:05 10270982                       [anon:dalvik-thread local mark stack]
+70eb5f6000-70eb5fa000 rw-p 00000000 00:05 10270981                       [anon:dalvik-thread local mark stack]
+70eb5fa000-70eb5fe000 rw-p 00000000 00:05 10270980                       [anon:dalvik-thread local mark stack]
+70eb5fe000-70eb602000 rw-p 00000000 00:05 10270979                       [anon:dalvik-thread local mark stack]
+70eb602000-70eb606000 rw-p 00000000 00:05 10270978                       [anon:dalvik-thread local mark stack]
+70eb606000-70eb60a000 rw-p 00000000 00:05 10270977                       [anon:dalvik-thread local mark stack]
+70eb60a000-70eb60e000 rw-p 00000000 00:05 10270976                       [anon:dalvik-thread local mark stack]
+70eb60e000-70eb612000 rw-p 00000000 00:05 10270975                       [anon:dalvik-thread local mark stack]
+70eb612000-70eb616000 rw-p 00000000 00:05 10270974                       [anon:dalvik-thread local mark stack]
 70eb616000-70eb61a000 r-xp 00000000 fc:00 2479                           /system/lib64/libspeexresampler.so
 70eb61a000-70eb635000 ---p 00000000 00:00 0 
 70eb635000-70eb636000 r--p 0000f000 fc:00 2479                           /system/lib64/libspeexresampler.so
 70eb636000-70eb637000 rw-p 00010000 fc:00 2479                           /system/lib64/libspeexresampler.so
 70eb637000-70eb639000 r--s 00000000 fc:00 299                            /system/fonts/NotoSansImperialAramaic-Regular.ttf
-70eb639000-70eb63d000 rw-p 00000000 00:05 10270973                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb63d000-70eb641000 rw-p 00000000 00:05 10270972                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb641000-70eb645000 rw-p 00000000 00:05 10270971                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb645000-70eb649000 rw-p 00000000 00:05 10270970                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb649000-70eb64d000 rw-p 00000000 00:05 10270969                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb64d000-70eb651000 rw-p 00000000 00:05 10270968                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb651000-70eb655000 rw-p 00000000 00:05 10270967                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb655000-70eb659000 rw-p 00000000 00:05 10270966                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb659000-70eb65d000 rw-p 00000000 00:05 10270965                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb65d000-70eb661000 rw-p 00000000 00:05 10270964                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb639000-70eb63d000 rw-p 00000000 00:05 10270973                       [anon:dalvik-thread local mark stack]
+70eb63d000-70eb641000 rw-p 00000000 00:05 10270972                       [anon:dalvik-thread local mark stack]
+70eb641000-70eb645000 rw-p 00000000 00:05 10270971                       [anon:dalvik-thread local mark stack]
+70eb645000-70eb649000 rw-p 00000000 00:05 10270970                       [anon:dalvik-thread local mark stack]
+70eb649000-70eb64d000 rw-p 00000000 00:05 10270969                       [anon:dalvik-thread local mark stack]
+70eb64d000-70eb651000 rw-p 00000000 00:05 10270968                       [anon:dalvik-thread local mark stack]
+70eb651000-70eb655000 rw-p 00000000 00:05 10270967                       [anon:dalvik-thread local mark stack]
+70eb655000-70eb659000 rw-p 00000000 00:05 10270966                       [anon:dalvik-thread local mark stack]
+70eb659000-70eb65d000 rw-p 00000000 00:05 10270965                       [anon:dalvik-thread local mark stack]
+70eb65d000-70eb661000 rw-p 00000000 00:05 10270964                       [anon:dalvik-thread local mark stack]
 70eb661000-70eb6c5000 r-xp 00000000 fc:00 2461                           /system/lib64/libhidl-gen-utils.so
 70eb6c5000-70eb6df000 ---p 00000000 00:00 0 
 70eb6df000-70eb6e1000 r--p 0006e000 fc:00 2461                           /system/lib64/libhidl-gen-utils.so
 70eb6e1000-70eb6e2000 rw-p 00070000 fc:00 2461                           /system/lib64/libhidl-gen-utils.so
-70eb6e2000-70eb6e6000 rw-p 00000000 00:05 10270963                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6e6000-70eb6ea000 rw-p 00000000 00:05 10270962                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6ea000-70eb6ee000 rw-p 00000000 00:05 10270961                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6ee000-70eb6f2000 rw-p 00000000 00:05 10270960                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6f2000-70eb6f6000 rw-p 00000000 00:05 10270959                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6f6000-70eb6fa000 rw-p 00000000 00:05 10270958                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6fa000-70eb6fe000 rw-p 00000000 00:05 10270957                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb6fe000-70eb702000 rw-p 00000000 00:05 10270956                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb702000-70eb706000 rw-p 00000000 00:05 10270955                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb706000-70eb70a000 rw-p 00000000 00:05 10270954                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb70a000-70eb70e000 rw-p 00000000 00:05 10270953                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb70e000-70eb712000 rw-p 00000000 00:05 10270952                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb6e2000-70eb6e6000 rw-p 00000000 00:05 10270963                       [anon:dalvik-thread local mark stack]
+70eb6e6000-70eb6ea000 rw-p 00000000 00:05 10270962                       [anon:dalvik-thread local mark stack]
+70eb6ea000-70eb6ee000 rw-p 00000000 00:05 10270961                       [anon:dalvik-thread local mark stack]
+70eb6ee000-70eb6f2000 rw-p 00000000 00:05 10270960                       [anon:dalvik-thread local mark stack]
+70eb6f2000-70eb6f6000 rw-p 00000000 00:05 10270959                       [anon:dalvik-thread local mark stack]
+70eb6f6000-70eb6fa000 rw-p 00000000 00:05 10270958                       [anon:dalvik-thread local mark stack]
+70eb6fa000-70eb6fe000 rw-p 00000000 00:05 10270957                       [anon:dalvik-thread local mark stack]
+70eb6fe000-70eb702000 rw-p 00000000 00:05 10270956                       [anon:dalvik-thread local mark stack]
+70eb702000-70eb706000 rw-p 00000000 00:05 10270955                       [anon:dalvik-thread local mark stack]
+70eb706000-70eb70a000 rw-p 00000000 00:05 10270954                       [anon:dalvik-thread local mark stack]
+70eb70a000-70eb70e000 rw-p 00000000 00:05 10270953                       [anon:dalvik-thread local mark stack]
+70eb70e000-70eb712000 rw-p 00000000 00:05 10270952                       [anon:dalvik-thread local mark stack]
 70eb712000-70eb71a000 r-xp 00000000 fc:00 2652                           /system/lib64/libcamera_metadata.so
 70eb71a000-70eb72f000 ---p 00000000 00:00 0 
 70eb72f000-70eb730000 r--p 0000f000 fc:00 2652                           /system/lib64/libcamera_metadata.so
 70eb730000-70eb732000 rw-p 00010000 fc:00 2652                           /system/lib64/libcamera_metadata.so
 70eb732000-70eb734000 r--s 00000000 fc:00 131                            /system/fonts/NotoSansHanunoo-Regular.ttf
-70eb734000-70eb738000 rw-p 00000000 00:05 10270951                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb738000-70eb73c000 rw-p 00000000 00:05 10270950                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb73c000-70eb740000 rw-p 00000000 00:05 10270949                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb740000-70eb744000 rw-p 00000000 00:05 10270948                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb744000-70eb748000 rw-p 00000000 00:05 10270947                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb748000-70eb74c000 rw-p 00000000 00:05 10270946                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb74c000-70eb750000 rw-p 00000000 00:05 10270945                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb750000-70eb754000 rw-p 00000000 00:05 10270944                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb754000-70eb758000 rw-p 00000000 00:05 10270943                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb758000-70eb75c000 rw-p 00000000 00:05 10270942                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb75c000-70eb760000 rw-p 00000000 00:05 10270941                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb760000-70eb764000 rw-p 00000000 00:05 10270940                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb734000-70eb738000 rw-p 00000000 00:05 10270951                       [anon:dalvik-thread local mark stack]
+70eb738000-70eb73c000 rw-p 00000000 00:05 10270950                       [anon:dalvik-thread local mark stack]
+70eb73c000-70eb740000 rw-p 00000000 00:05 10270949                       [anon:dalvik-thread local mark stack]
+70eb740000-70eb744000 rw-p 00000000 00:05 10270948                       [anon:dalvik-thread local mark stack]
+70eb744000-70eb748000 rw-p 00000000 00:05 10270947                       [anon:dalvik-thread local mark stack]
+70eb748000-70eb74c000 rw-p 00000000 00:05 10270946                       [anon:dalvik-thread local mark stack]
+70eb74c000-70eb750000 rw-p 00000000 00:05 10270945                       [anon:dalvik-thread local mark stack]
+70eb750000-70eb754000 rw-p 00000000 00:05 10270944                       [anon:dalvik-thread local mark stack]
+70eb754000-70eb758000 rw-p 00000000 00:05 10270943                       [anon:dalvik-thread local mark stack]
+70eb758000-70eb75c000 rw-p 00000000 00:05 10270942                       [anon:dalvik-thread local mark stack]
+70eb75c000-70eb760000 rw-p 00000000 00:05 10270941                       [anon:dalvik-thread local mark stack]
+70eb760000-70eb764000 rw-p 00000000 00:05 10270940                       [anon:dalvik-thread local mark stack]
 70eb764000-70eb767000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb767000-70eb768000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb768000-70eb76c000 rw-p 00000000 00:05 10270939                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb76c000-70eb770000 rw-p 00000000 00:05 10270938                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb768000-70eb76c000 rw-p 00000000 00:05 10270939                       [anon:dalvik-thread local mark stack]
+70eb76c000-70eb770000 rw-p 00000000 00:05 10270938                       [anon:dalvik-thread local mark stack]
 70eb770000-70eb771000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb771000-70eb774000 r--s 00000000 fc:00 231                            /system/fonts/NotoSansDeseret-Regular.ttf
-70eb774000-70eb778000 rw-p 00000000 00:05 10270937                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb778000-70eb77c000 rw-p 00000000 00:05 10270936                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb77c000-70eb780000 rw-p 00000000 00:05 10270935                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb780000-70eb784000 rw-p 00000000 00:05 10270934                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb784000-70eb788000 rw-p 00000000 00:05 10270933                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb788000-70eb78c000 rw-p 00000000 00:05 10270932                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb78c000-70eb790000 rw-p 00000000 00:05 10270931                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb790000-70eb794000 rw-p 00000000 00:05 10270930                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb794000-70eb798000 rw-p 00000000 00:05 10270929                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb798000-70eb79c000 rw-p 00000000 00:05 10270928                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb79c000-70eb7a0000 rw-p 00000000 00:05 10270927                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb774000-70eb778000 rw-p 00000000 00:05 10270937                       [anon:dalvik-thread local mark stack]
+70eb778000-70eb77c000 rw-p 00000000 00:05 10270936                       [anon:dalvik-thread local mark stack]
+70eb77c000-70eb780000 rw-p 00000000 00:05 10270935                       [anon:dalvik-thread local mark stack]
+70eb780000-70eb784000 rw-p 00000000 00:05 10270934                       [anon:dalvik-thread local mark stack]
+70eb784000-70eb788000 rw-p 00000000 00:05 10270933                       [anon:dalvik-thread local mark stack]
+70eb788000-70eb78c000 rw-p 00000000 00:05 10270932                       [anon:dalvik-thread local mark stack]
+70eb78c000-70eb790000 rw-p 00000000 00:05 10270931                       [anon:dalvik-thread local mark stack]
+70eb790000-70eb794000 rw-p 00000000 00:05 10270930                       [anon:dalvik-thread local mark stack]
+70eb794000-70eb798000 rw-p 00000000 00:05 10270929                       [anon:dalvik-thread local mark stack]
+70eb798000-70eb79c000 rw-p 00000000 00:05 10270928                       [anon:dalvik-thread local mark stack]
+70eb79c000-70eb7a0000 rw-p 00000000 00:05 10270927                       [anon:dalvik-thread local mark stack]
 70eb7a0000-70eb7a1000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7a1000-70eb7a3000 r--s 00000000 fc:00 176                            /system/fonts/NotoSansGothic-Regular.ttf
-70eb7a3000-70eb7a7000 rw-p 00000000 00:05 10270926                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb7a3000-70eb7a7000 rw-p 00000000 00:05 10270926                       [anon:dalvik-thread local mark stack]
 70eb7a7000-70eb7a8000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7a8000-70eb7a9000 r--s 00000000 fc:00 1109                           /system/usr/hyphen-data/hyph-gu.hyb
-70eb7a9000-70eb7ad000 rw-p 00000000 00:05 10270925                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb7a9000-70eb7ad000 rw-p 00000000 00:05 10270925                       [anon:dalvik-thread local mark stack]
 70eb7ad000-70eb7ae000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7ae000-70eb7af000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7af000-70eb7b0000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7b0000-70eb7b2000 r--s 00000000 fc:00 191                            /system/fonts/NotoSansCypriot-Regular.ttf
-70eb7b2000-70eb7b6000 rw-p 00000000 00:05 10270924                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7b6000-70eb7ba000 rw-p 00000000 00:05 10270923                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7ba000-70eb7be000 rw-p 00000000 00:05 10270922                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7be000-70eb7c2000 rw-p 00000000 00:05 10270921                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7c2000-70eb7c6000 rw-p 00000000 00:05 10270920                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7c6000-70eb7ca000 rw-p 00000000 00:05 10270919                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7ca000-70eb7ce000 rw-p 00000000 00:05 10270918                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7ce000-70eb7d2000 rw-p 00000000 00:05 10270917                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7d2000-70eb7d6000 rw-p 00000000 00:05 10270916                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb7b2000-70eb7b6000 rw-p 00000000 00:05 10270924                       [anon:dalvik-thread local mark stack]
+70eb7b6000-70eb7ba000 rw-p 00000000 00:05 10270923                       [anon:dalvik-thread local mark stack]
+70eb7ba000-70eb7be000 rw-p 00000000 00:05 10270922                       [anon:dalvik-thread local mark stack]
+70eb7be000-70eb7c2000 rw-p 00000000 00:05 10270921                       [anon:dalvik-thread local mark stack]
+70eb7c2000-70eb7c6000 rw-p 00000000 00:05 10270920                       [anon:dalvik-thread local mark stack]
+70eb7c6000-70eb7ca000 rw-p 00000000 00:05 10270919                       [anon:dalvik-thread local mark stack]
+70eb7ca000-70eb7ce000 rw-p 00000000 00:05 10270918                       [anon:dalvik-thread local mark stack]
+70eb7ce000-70eb7d2000 rw-p 00000000 00:05 10270917                       [anon:dalvik-thread local mark stack]
+70eb7d2000-70eb7d6000 rw-p 00000000 00:05 10270916                       [anon:dalvik-thread local mark stack]
 70eb7d6000-70eb7d7000 rw-p 00000000 00:00 0                              [anon:linker_alloc_small_objects]
-70eb7d7000-70eb7db000 rw-p 00000000 00:05 10270915                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7db000-70eb7df000 rw-p 00000000 00:05 10270914                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7df000-70eb7e3000 rw-p 00000000 00:05 10270913                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7e3000-70eb7e7000 rw-p 00000000 00:05 10270912                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb7d7000-70eb7db000 rw-p 00000000 00:05 10270915                       [anon:dalvik-thread local mark stack]
+70eb7db000-70eb7df000 rw-p 00000000 00:05 10270914                       [anon:dalvik-thread local mark stack]
+70eb7df000-70eb7e3000 rw-p 00000000 00:05 10270913                       [anon:dalvik-thread local mark stack]
+70eb7e3000-70eb7e7000 rw-p 00000000 00:05 10270912                       [anon:dalvik-thread local mark stack]
 70eb7e7000-70eb7e8000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7e8000-70eb7ea000 r--s 00000000 fc:00 174                            /system/fonts/NotoSansCarian-Regular.ttf
-70eb7ea000-70eb7ee000 rw-p 00000000 00:05 10270911                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7ee000-70eb7f2000 rw-p 00000000 00:05 10270910                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7f2000-70eb7f6000 rw-p 00000000 00:05 10270909                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb7ea000-70eb7ee000 rw-p 00000000 00:05 10270911                       [anon:dalvik-thread local mark stack]
+70eb7ee000-70eb7f2000 rw-p 00000000 00:05 10270910                       [anon:dalvik-thread local mark stack]
+70eb7f2000-70eb7f6000 rw-p 00000000 00:05 10270909                       [anon:dalvik-thread local mark stack]
 70eb7f6000-70eb7f7000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb7f7000-70eb7f8000 r--s 00000000 fc:00 1096                           /system/usr/hyphen-data/hyph-eu.hyb
-70eb7f8000-70eb7fc000 rw-p 00000000 00:05 10270908                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb7fc000-70eb800000 rw-p 00000000 00:05 10270907                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb800000-70eb804000 rw-p 00000000 00:05 10270906                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb804000-70eb808000 rw-p 00000000 00:05 10270905                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb808000-70eb80c000 rw-p 00000000 00:05 10270904                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb80c000-70eb810000 rw-p 00000000 00:05 10270903                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb810000-70eb814000 rw-p 00000000 00:05 10270902                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb7f8000-70eb7fc000 rw-p 00000000 00:05 10270908                       [anon:dalvik-thread local mark stack]
+70eb7fc000-70eb800000 rw-p 00000000 00:05 10270907                       [anon:dalvik-thread local mark stack]
+70eb800000-70eb804000 rw-p 00000000 00:05 10270906                       [anon:dalvik-thread local mark stack]
+70eb804000-70eb808000 rw-p 00000000 00:05 10270905                       [anon:dalvik-thread local mark stack]
+70eb808000-70eb80c000 rw-p 00000000 00:05 10270904                       [anon:dalvik-thread local mark stack]
+70eb80c000-70eb810000 rw-p 00000000 00:05 10270903                       [anon:dalvik-thread local mark stack]
+70eb810000-70eb814000 rw-p 00000000 00:05 10270902                       [anon:dalvik-thread local mark stack]
 70eb814000-70eb815000 rw-p 00000000 00:00 0                              [anon:linker_alloc_vector]
-70eb815000-70eb819000 rw-p 00000000 00:05 10270901                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb819000-70eb81d000 rw-p 00000000 00:05 10270900                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb815000-70eb819000 rw-p 00000000 00:05 10270901                       [anon:dalvik-thread local mark stack]
+70eb819000-70eb81d000 rw-p 00000000 00:05 10270900                       [anon:dalvik-thread local mark stack]
 70eb81d000-70eb81e000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70eb81e000-70eb822000 rw-p 00000000 00:05 10270899                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb822000-70eb826000 rw-p 00000000 00:05 10270898                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb826000-70eb82a000 rw-p 00000000 00:05 10270897                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb82a000-70eb82e000 rw-p 00000000 00:05 10270896                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb82e000-70eb832000 rw-p 00000000 00:05 10270895                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb832000-70eb836000 rw-p 00000000 00:05 10270894                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb81e000-70eb822000 rw-p 00000000 00:05 10270899                       [anon:dalvik-thread local mark stack]
+70eb822000-70eb826000 rw-p 00000000 00:05 10270898                       [anon:dalvik-thread local mark stack]
+70eb826000-70eb82a000 rw-p 00000000 00:05 10270897                       [anon:dalvik-thread local mark stack]
+70eb82a000-70eb82e000 rw-p 00000000 00:05 10270896                       [anon:dalvik-thread local mark stack]
+70eb82e000-70eb832000 rw-p 00000000 00:05 10270895                       [anon:dalvik-thread local mark stack]
+70eb832000-70eb836000 rw-p 00000000 00:05 10270894                       [anon:dalvik-thread local mark stack]
 70eb836000-70eb837000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb837000-70eb83b000 rw-p 00000000 00:05 10270893                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb83b000-70eb83f000 rw-p 00000000 00:05 10270892                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb83f000-70eb843000 rw-p 00000000 00:05 10270891                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb843000-70eb847000 rw-p 00000000 00:05 10270890                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb847000-70eb84b000 rw-p 00000000 00:05 10270889                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb84b000-70eb84f000 rw-p 00000000 00:05 10270888                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb837000-70eb83b000 rw-p 00000000 00:05 10270893                       [anon:dalvik-thread local mark stack]
+70eb83b000-70eb83f000 rw-p 00000000 00:05 10270892                       [anon:dalvik-thread local mark stack]
+70eb83f000-70eb843000 rw-p 00000000 00:05 10270891                       [anon:dalvik-thread local mark stack]
+70eb843000-70eb847000 rw-p 00000000 00:05 10270890                       [anon:dalvik-thread local mark stack]
+70eb847000-70eb84b000 rw-p 00000000 00:05 10270889                       [anon:dalvik-thread local mark stack]
+70eb84b000-70eb84f000 rw-p 00000000 00:05 10270888                       [anon:dalvik-thread local mark stack]
 70eb84f000-70eb850000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70eb850000-70eb854000 rw-p 00000000 00:05 10270887                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb854000-70eb858000 rw-p 00000000 00:05 10270886                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb858000-70eb85c000 rw-p 00000000 00:05 10270885                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb85c000-70eb860000 rw-p 00000000 00:05 10270884                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb860000-70eb864000 rw-p 00000000 00:05 10270883                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb864000-70eb868000 rw-p 00000000 00:05 10270882                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb850000-70eb854000 rw-p 00000000 00:05 10270887                       [anon:dalvik-thread local mark stack]
+70eb854000-70eb858000 rw-p 00000000 00:05 10270886                       [anon:dalvik-thread local mark stack]
+70eb858000-70eb85c000 rw-p 00000000 00:05 10270885                       [anon:dalvik-thread local mark stack]
+70eb85c000-70eb860000 rw-p 00000000 00:05 10270884                       [anon:dalvik-thread local mark stack]
+70eb860000-70eb864000 rw-p 00000000 00:05 10270883                       [anon:dalvik-thread local mark stack]
+70eb864000-70eb868000 rw-p 00000000 00:05 10270882                       [anon:dalvik-thread local mark stack]
 70eb868000-70eb869000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb869000-70eb86d000 rw-p 00000000 00:05 10270881                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb86d000-70eb871000 rw-p 00000000 00:05 10270880                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb871000-70eb875000 rw-p 00000000 00:05 10270879                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb875000-70eb879000 rw-p 00000000 00:05 10270878                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb879000-70eb87d000 rw-p 00000000 00:05 10270877                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb87d000-70eb881000 rw-p 00000000 00:05 10270876                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb881000-70eb885000 rw-p 00000000 00:05 10270875                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb885000-70eb889000 rw-p 00000000 00:05 10270874                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb889000-70eb88d000 rw-p 00000000 00:05 10270873                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb88d000-70eb891000 rw-p 00000000 00:05 10270872                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb869000-70eb86d000 rw-p 00000000 00:05 10270881                       [anon:dalvik-thread local mark stack]
+70eb86d000-70eb871000 rw-p 00000000 00:05 10270880                       [anon:dalvik-thread local mark stack]
+70eb871000-70eb875000 rw-p 00000000 00:05 10270879                       [anon:dalvik-thread local mark stack]
+70eb875000-70eb879000 rw-p 00000000 00:05 10270878                       [anon:dalvik-thread local mark stack]
+70eb879000-70eb87d000 rw-p 00000000 00:05 10270877                       [anon:dalvik-thread local mark stack]
+70eb87d000-70eb881000 rw-p 00000000 00:05 10270876                       [anon:dalvik-thread local mark stack]
+70eb881000-70eb885000 rw-p 00000000 00:05 10270875                       [anon:dalvik-thread local mark stack]
+70eb885000-70eb889000 rw-p 00000000 00:05 10270874                       [anon:dalvik-thread local mark stack]
+70eb889000-70eb88d000 rw-p 00000000 00:05 10270873                       [anon:dalvik-thread local mark stack]
+70eb88d000-70eb891000 rw-p 00000000 00:05 10270872                       [anon:dalvik-thread local mark stack]
 70eb891000-70eb892000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb892000-70eb896000 rw-p 00000000 00:05 10270871                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb896000-70eb89a000 rw-p 00000000 00:05 10270870                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb892000-70eb896000 rw-p 00000000 00:05 10270871                       [anon:dalvik-thread local mark stack]
+70eb896000-70eb89a000 rw-p 00000000 00:05 10270870                       [anon:dalvik-thread local mark stack]
 70eb89a000-70eb89b000 rw-p 00000000 00:00 0                              [anon:linker_alloc_vector]
 70eb89b000-70eb89c000 rw-p 00000000 00:00 0                              [anon:linker_alloc_small_objects]
-70eb89c000-70eb8a0000 rw-p 00000000 00:05 10270869                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8a0000-70eb8a4000 rw-p 00000000 00:05 10270868                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb89c000-70eb8a0000 rw-p 00000000 00:05 10270869                       [anon:dalvik-thread local mark stack]
+70eb8a0000-70eb8a4000 rw-p 00000000 00:05 10270868                       [anon:dalvik-thread local mark stack]
 70eb8a4000-70eb8a5000 r--p 00000000 00:00 0                              [anon:atexit handlers]
-70eb8a5000-70eb8a9000 rw-p 00000000 00:05 10270867                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8a9000-70eb8ad000 rw-p 00000000 00:05 10270866                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8ad000-70eb8b1000 rw-p 00000000 00:05 10270865                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8b1000-70eb8b5000 rw-p 00000000 00:05 10270864                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8b5000-70eb8b9000 rw-p 00000000 00:05 10270863                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8b9000-70eb8bd000 rw-p 00000000 00:05 10270862                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb8a5000-70eb8a9000 rw-p 00000000 00:05 10270867                       [anon:dalvik-thread local mark stack]
+70eb8a9000-70eb8ad000 rw-p 00000000 00:05 10270866                       [anon:dalvik-thread local mark stack]
+70eb8ad000-70eb8b1000 rw-p 00000000 00:05 10270865                       [anon:dalvik-thread local mark stack]
+70eb8b1000-70eb8b5000 rw-p 00000000 00:05 10270864                       [anon:dalvik-thread local mark stack]
+70eb8b5000-70eb8b9000 rw-p 00000000 00:05 10270863                       [anon:dalvik-thread local mark stack]
+70eb8b9000-70eb8bd000 rw-p 00000000 00:05 10270862                       [anon:dalvik-thread local mark stack]
 70eb8bd000-70eb8be000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb8be000-70eb8c1000 r--s 00000000 fc:00 168                            /system/fonts/NotoSansAvestan-Regular.ttf
-70eb8c1000-70eb8c5000 rw-p 00000000 00:05 10270861                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8c5000-70eb8c9000 rw-p 00000000 00:05 10270860                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8c9000-70eb8cd000 rw-p 00000000 00:05 10270859                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8cd000-70eb8d1000 rw-p 00000000 00:05 10270858                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8d1000-70eb8d5000 rw-p 00000000 00:05 10270857                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb8c1000-70eb8c5000 rw-p 00000000 00:05 10270861                       [anon:dalvik-thread local mark stack]
+70eb8c5000-70eb8c9000 rw-p 00000000 00:05 10270860                       [anon:dalvik-thread local mark stack]
+70eb8c9000-70eb8cd000 rw-p 00000000 00:05 10270859                       [anon:dalvik-thread local mark stack]
+70eb8cd000-70eb8d1000 rw-p 00000000 00:05 10270858                       [anon:dalvik-thread local mark stack]
+70eb8d1000-70eb8d5000 rw-p 00000000 00:05 10270857                       [anon:dalvik-thread local mark stack]
 70eb8d5000-70eb8d7000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb8d7000-70eb8db000 rw-p 00000000 00:05 10270856                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8db000-70eb8df000 rw-p 00000000 00:05 10270855                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8df000-70eb8e3000 rw-p 00000000 00:05 10270854                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8e3000-70eb8e7000 rw-p 00000000 00:05 10270853                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8e7000-70eb8eb000 rw-p 00000000 00:05 10270852                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb8d7000-70eb8db000 rw-p 00000000 00:05 10270856                       [anon:dalvik-thread local mark stack]
+70eb8db000-70eb8df000 rw-p 00000000 00:05 10270855                       [anon:dalvik-thread local mark stack]
+70eb8df000-70eb8e3000 rw-p 00000000 00:05 10270854                       [anon:dalvik-thread local mark stack]
+70eb8e3000-70eb8e7000 rw-p 00000000 00:05 10270853                       [anon:dalvik-thread local mark stack]
+70eb8e7000-70eb8eb000 rw-p 00000000 00:05 10270852                       [anon:dalvik-thread local mark stack]
 70eb8eb000-70eb8ec000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb8ec000-70eb8ed000 r--s 00000000 fc:00 1099                           /system/usr/hyphen-data/hyph-bn.hyb
-70eb8ed000-70eb8f1000 rw-p 00000000 00:05 10270851                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8f1000-70eb8f5000 rw-p 00000000 00:05 10270850                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8f5000-70eb8f9000 rw-p 00000000 00:05 10270849                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8f9000-70eb8fd000 rw-p 00000000 00:05 10270848                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb8fd000-70eb901000 rw-p 00000000 00:05 10270847                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb901000-70eb905000 rw-p 00000000 00:05 10270846                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb905000-70eb909000 rw-p 00000000 00:05 10270845                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb909000-70eb90d000 rw-p 00000000 00:05 10270844                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb90d000-70eb911000 rw-p 00000000 00:05 10270843                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb911000-70eb915000 rw-p 00000000 00:05 10270842                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb8ed000-70eb8f1000 rw-p 00000000 00:05 10270851                       [anon:dalvik-thread local mark stack]
+70eb8f1000-70eb8f5000 rw-p 00000000 00:05 10270850                       [anon:dalvik-thread local mark stack]
+70eb8f5000-70eb8f9000 rw-p 00000000 00:05 10270849                       [anon:dalvik-thread local mark stack]
+70eb8f9000-70eb8fd000 rw-p 00000000 00:05 10270848                       [anon:dalvik-thread local mark stack]
+70eb8fd000-70eb901000 rw-p 00000000 00:05 10270847                       [anon:dalvik-thread local mark stack]
+70eb901000-70eb905000 rw-p 00000000 00:05 10270846                       [anon:dalvik-thread local mark stack]
+70eb905000-70eb909000 rw-p 00000000 00:05 10270845                       [anon:dalvik-thread local mark stack]
+70eb909000-70eb90d000 rw-p 00000000 00:05 10270844                       [anon:dalvik-thread local mark stack]
+70eb90d000-70eb911000 rw-p 00000000 00:05 10270843                       [anon:dalvik-thread local mark stack]
+70eb911000-70eb915000 rw-p 00000000 00:05 10270842                       [anon:dalvik-thread local mark stack]
 70eb915000-70eb916000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb916000-70eb917000 r--s 00000000 fc:00 1114                           /system/usr/hyphen-data/hyph-bg.hyb
-70eb917000-70eb91b000 rw-p 00000000 00:05 10270841                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb917000-70eb91b000 rw-p 00000000 00:05 10270841                       [anon:dalvik-thread local mark stack]
 70eb91b000-70eb91c000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb91c000-70eb91d000 r--s 00000000 fc:00 1133                           /system/usr/hyphen-data/hyph-as.hyb
-70eb91d000-70eb921000 rw-p 00000000 00:05 10270840                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb921000-70eb925000 rw-p 00000000 00:05 10270839                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb91d000-70eb921000 rw-p 00000000 00:05 10270840                       [anon:dalvik-thread local mark stack]
+70eb921000-70eb925000 rw-p 00000000 00:05 10270839                       [anon:dalvik-thread local mark stack]
 70eb925000-70eb926000 rw-p 00000000 00:00 0                              [anon:linker_alloc_small_objects]
 70eb926000-70eb927000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb927000-70eb929000 r--s 00000000 fc:00 203                            /system/fonts/NotoSansBuhid-Regular.ttf
-70eb929000-70eb92d000 rw-p 00000000 00:05 10270838                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb92d000-70eb931000 rw-p 00000000 00:05 10270837                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb931000-70eb935000 rw-p 00000000 00:05 10270836                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb935000-70eb939000 rw-p 00000000 00:05 10270835                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb939000-70eb93d000 rw-p 00000000 00:05 10270834                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb93d000-70eb941000 rw-p 00000000 00:05 10270833                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb941000-70eb945000 rw-p 00000000 00:05 10270832                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb945000-70eb949000 rw-p 00000000 00:05 10270831                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb949000-70eb94d000 rw-p 00000000 00:05 10270830                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb94d000-70eb951000 rw-p 00000000 00:05 10270829                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb951000-70eb991000 rw-p 00000000 00:05 10270722                       /dev/ashmem/dalvik-mark stack (deleted)
+70eb929000-70eb92d000 rw-p 00000000 00:05 10270838                       [anon:dalvik-thread local mark stack]
+70eb92d000-70eb931000 rw-p 00000000 00:05 10270837                       [anon:dalvik-thread local mark stack]
+70eb931000-70eb935000 rw-p 00000000 00:05 10270836                       [anon:dalvik-thread local mark stack]
+70eb935000-70eb939000 rw-p 00000000 00:05 10270835                       [anon:dalvik-thread local mark stack]
+70eb939000-70eb93d000 rw-p 00000000 00:05 10270834                       [anon:dalvik-thread local mark stack]
+70eb93d000-70eb941000 rw-p 00000000 00:05 10270833                       [anon:dalvik-thread local mark stack]
+70eb941000-70eb945000 rw-p 00000000 00:05 10270832                       [anon:dalvik-thread local mark stack]
+70eb945000-70eb949000 rw-p 00000000 00:05 10270831                       [anon:dalvik-thread local mark stack]
+70eb949000-70eb94d000 rw-p 00000000 00:05 10270830                       [anon:dalvik-thread local mark stack]
+70eb94d000-70eb951000 rw-p 00000000 00:05 10270829                       [anon:dalvik-thread local mark stack]
+70eb951000-70eb991000 rw-p 00000000 00:05 10270722                       [anon:dalvik-mark stack]
 70eb991000-70eb992000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70eb992000-70eb996000 rw-p 00000000 00:05 10270828                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb996000-70eb99a000 rw-p 00000000 00:05 10270827                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb99a000-70eb99e000 rw-p 00000000 00:05 10270826                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb99e000-70eb9a2000 rw-p 00000000 00:05 10270825                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb992000-70eb996000 rw-p 00000000 00:05 10270828                       [anon:dalvik-thread local mark stack]
+70eb996000-70eb99a000 rw-p 00000000 00:05 10270827                       [anon:dalvik-thread local mark stack]
+70eb99a000-70eb99e000 rw-p 00000000 00:05 10270826                       [anon:dalvik-thread local mark stack]
+70eb99e000-70eb9a2000 rw-p 00000000 00:05 10270825                       [anon:dalvik-thread local mark stack]
 70eb9a2000-70eb9a4000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb9a4000-70eb9a8000 rw-p 00000000 00:05 10270824                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9a8000-70eb9ac000 rw-p 00000000 00:05 10270823                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9ac000-70eb9b0000 rw-p 00000000 00:05 10270822                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb9a4000-70eb9a8000 rw-p 00000000 00:05 10270824                       [anon:dalvik-thread local mark stack]
+70eb9a8000-70eb9ac000 rw-p 00000000 00:05 10270823                       [anon:dalvik-thread local mark stack]
+70eb9ac000-70eb9b0000 rw-p 00000000 00:05 10270822                       [anon:dalvik-thread local mark stack]
 70eb9b0000-70eb9b1000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eb9b1000-70eb9b2000 r--s 00021000 fc:01 1180                           /vendor/overlay/framework-res__auto_generated_rro.apk
-70eb9b2000-70eb9b6000 rw-p 00000000 00:05 10270821                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9b6000-70eb9ba000 rw-p 00000000 00:05 10270820                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9ba000-70eb9be000 rw-p 00000000 00:05 10270819                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9be000-70eb9c2000 rw-p 00000000 00:05 10270818                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9c2000-70eb9c6000 rw-p 00000000 00:05 10270817                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9c6000-70eb9ca000 rw-p 00000000 00:05 10270816                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9ca000-70eb9ce000 rw-p 00000000 00:05 10270815                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb9b2000-70eb9b6000 rw-p 00000000 00:05 10270821                       [anon:dalvik-thread local mark stack]
+70eb9b6000-70eb9ba000 rw-p 00000000 00:05 10270820                       [anon:dalvik-thread local mark stack]
+70eb9ba000-70eb9be000 rw-p 00000000 00:05 10270819                       [anon:dalvik-thread local mark stack]
+70eb9be000-70eb9c2000 rw-p 00000000 00:05 10270818                       [anon:dalvik-thread local mark stack]
+70eb9c2000-70eb9c6000 rw-p 00000000 00:05 10270817                       [anon:dalvik-thread local mark stack]
+70eb9c6000-70eb9ca000 rw-p 00000000 00:05 10270816                       [anon:dalvik-thread local mark stack]
+70eb9ca000-70eb9ce000 rw-p 00000000 00:05 10270815                       [anon:dalvik-thread local mark stack]
 70eb9ce000-70eb9cf000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eb9cf000-70eb9d1000 r--s 00000000 fc:00 213                            /system/fonts/NotoSansBuginese-Regular.ttf
-70eb9d1000-70eb9d5000 rw-p 00000000 00:05 10270814                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9d5000-70eb9d9000 rw-p 00000000 00:05 10270813                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9d9000-70eb9dd000 rw-p 00000000 00:05 10270812                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9dd000-70eb9e1000 rw-p 00000000 00:05 10270811                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9e1000-70eb9e5000 rw-p 00000000 00:05 10270810                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9e5000-70eb9e9000 rw-p 00000000 00:05 10270809                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9e9000-70eb9ed000 rw-p 00000000 00:05 10270808                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9ed000-70eb9f1000 rw-p 00000000 00:05 10270807                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eb9f1000-70eb9f5000 rw-p 00000000 00:05 10270806                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb9d1000-70eb9d5000 rw-p 00000000 00:05 10270814                       [anon:dalvik-thread local mark stack]
+70eb9d5000-70eb9d9000 rw-p 00000000 00:05 10270813                       [anon:dalvik-thread local mark stack]
+70eb9d9000-70eb9dd000 rw-p 00000000 00:05 10270812                       [anon:dalvik-thread local mark stack]
+70eb9dd000-70eb9e1000 rw-p 00000000 00:05 10270811                       [anon:dalvik-thread local mark stack]
+70eb9e1000-70eb9e5000 rw-p 00000000 00:05 10270810                       [anon:dalvik-thread local mark stack]
+70eb9e5000-70eb9e9000 rw-p 00000000 00:05 10270809                       [anon:dalvik-thread local mark stack]
+70eb9e9000-70eb9ed000 rw-p 00000000 00:05 10270808                       [anon:dalvik-thread local mark stack]
+70eb9ed000-70eb9f1000 rw-p 00000000 00:05 10270807                       [anon:dalvik-thread local mark stack]
+70eb9f1000-70eb9f5000 rw-p 00000000 00:05 10270806                       [anon:dalvik-thread local mark stack]
 70eb9f5000-70eb9f6000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70eb9f6000-70eb9f8000 rw-p 00000000 00:05 10271002                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70eb9f8000-70eb9fc000 rw-p 00000000 00:05 10270805                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eb9f6000-70eb9f8000 rw-p 00000000 00:05 10271002                       [anon:dalvik-indirect ref table]
+70eb9f8000-70eb9fc000 rw-p 00000000 00:05 10270805                       [anon:dalvik-thread local mark stack]
 70eb9fc000-70eb9fd000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70eb9fd000-70eb9ff000 rw-p 00000000 00:05 10270999                       /dev/ashmem/dalvik-indirect ref table (deleted)
+70eb9fd000-70eb9ff000 rw-p 00000000 00:05 10270999                       [anon:dalvik-indirect ref table]
 70eb9ff000-70eba00000 r--s 00000000 fc:00 983                            /system/framework/com.google.vr.platform.jar
-70eba00000-70eba04000 rw-p 00000000 00:05 10270804                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba04000-70eba08000 rw-p 00000000 00:05 10270803                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba08000-70eba0c000 rw-p 00000000 00:05 10270802                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba0c000-70eba10000 rw-p 00000000 00:05 10270801                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba10000-70eba14000 rw-p 00000000 00:05 10270800                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba14000-70eba18000 rw-p 00000000 00:05 10270799                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba18000-70eba1c000 rw-p 00000000 00:05 10270798                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba1c000-70eba20000 rw-p 00000000 00:05 10270797                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba20000-70eba24000 rw-p 00000000 00:05 10270796                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba24000-70eba28000 rw-p 00000000 00:05 10270795                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba28000-70eba2c000 rw-p 00000000 00:05 10270794                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eba00000-70eba04000 rw-p 00000000 00:05 10270804                       [anon:dalvik-thread local mark stack]
+70eba04000-70eba08000 rw-p 00000000 00:05 10270803                       [anon:dalvik-thread local mark stack]
+70eba08000-70eba0c000 rw-p 00000000 00:05 10270802                       [anon:dalvik-thread local mark stack]
+70eba0c000-70eba10000 rw-p 00000000 00:05 10270801                       [anon:dalvik-thread local mark stack]
+70eba10000-70eba14000 rw-p 00000000 00:05 10270800                       [anon:dalvik-thread local mark stack]
+70eba14000-70eba18000 rw-p 00000000 00:05 10270799                       [anon:dalvik-thread local mark stack]
+70eba18000-70eba1c000 rw-p 00000000 00:05 10270798                       [anon:dalvik-thread local mark stack]
+70eba1c000-70eba20000 rw-p 00000000 00:05 10270797                       [anon:dalvik-thread local mark stack]
+70eba20000-70eba24000 rw-p 00000000 00:05 10270796                       [anon:dalvik-thread local mark stack]
+70eba24000-70eba28000 rw-p 00000000 00:05 10270795                       [anon:dalvik-thread local mark stack]
+70eba28000-70eba2c000 rw-p 00000000 00:05 10270794                       [anon:dalvik-thread local mark stack]
 70eba2c000-70eba2d000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eba2d000-70eba2e000 r--s 00000000 fc:00 881                            /system/framework/android.test.base.jar
 70eba2e000-70eba2f000 r--s 00000000 fc:00 707                            /system/framework/framework-oahl-backward-compatibility.jar
 70eba2f000-70eba30000 r--s 00000000 fc:00 705                            /system/framework/android.hidl.manager-V1.0-java.jar
-70eba30000-70eba34000 rw-p 00000000 00:05 10270793                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba34000-70eba38000 rw-p 00000000 00:05 10270792                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba38000-70eba3c000 rw-p 00000000 00:05 10270791                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba3c000-70eba40000 rw-p 00000000 00:05 10270790                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba40000-70eba44000 rw-p 00000000 00:05 10270789                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba44000-70eba48000 rw-p 00000000 00:05 10270788                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba48000-70eba4c000 rw-p 00000000 00:05 10270787                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba4c000-70eba50000 rw-p 00000000 00:05 10270786                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eba30000-70eba34000 rw-p 00000000 00:05 10270793                       [anon:dalvik-thread local mark stack]
+70eba34000-70eba38000 rw-p 00000000 00:05 10270792                       [anon:dalvik-thread local mark stack]
+70eba38000-70eba3c000 rw-p 00000000 00:05 10270791                       [anon:dalvik-thread local mark stack]
+70eba3c000-70eba40000 rw-p 00000000 00:05 10270790                       [anon:dalvik-thread local mark stack]
+70eba40000-70eba44000 rw-p 00000000 00:05 10270789                       [anon:dalvik-thread local mark stack]
+70eba44000-70eba48000 rw-p 00000000 00:05 10270788                       [anon:dalvik-thread local mark stack]
+70eba48000-70eba4c000 rw-p 00000000 00:05 10270787                       [anon:dalvik-thread local mark stack]
+70eba4c000-70eba50000 rw-p 00000000 00:05 10270786                       [anon:dalvik-thread local mark stack]
 70eba50000-70eba52000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70eba52000-70eba53000 r--s 00000000 fc:00 971                            /system/framework/android.hidl.base-V1.0-java.jar
-70eba53000-70eba57000 rw-p 00000000 00:05 10270785                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba57000-70eba5b000 rw-p 00000000 00:05 10270784                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba5b000-70eba5f000 rw-p 00000000 00:05 10270783                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba5f000-70eba63000 rw-p 00000000 00:05 10270782                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70eba53000-70eba57000 rw-p 00000000 00:05 10270785                       [anon:dalvik-thread local mark stack]
+70eba57000-70eba5b000 rw-p 00000000 00:05 10270784                       [anon:dalvik-thread local mark stack]
+70eba5b000-70eba5f000 rw-p 00000000 00:05 10270783                       [anon:dalvik-thread local mark stack]
+70eba5f000-70eba63000 rw-p 00000000 00:05 10270782                       [anon:dalvik-thread local mark stack]
 70eba63000-70eba64000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70eba64000-70eba65000 r--s 00000000 fc:00 889                            /system/framework/ims-common.jar
-70eba65000-70eba69000 rw-p 00000000 00:05 10270781                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba69000-70eba6d000 rw-p 00000000 00:05 10270780                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba6d000-70eba71000 rw-p 00000000 00:05 10270779                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba71000-70eba75000 rw-p 00000000 00:05 10270778                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70eba75000-70eba95000 rw-p 00000000 00:05 10267647                       /dev/ashmem/dalvik-large marked objects (deleted)
-70eba95000-70ebab5000 rw-p 00000000 00:05 10267646                       /dev/ashmem/dalvik-large live objects (deleted)
+70eba65000-70eba69000 rw-p 00000000 00:05 10270781                       [anon:dalvik-thread local mark stack]
+70eba69000-70eba6d000 rw-p 00000000 00:05 10270780                       [anon:dalvik-thread local mark stack]
+70eba6d000-70eba71000 rw-p 00000000 00:05 10270779                       [anon:dalvik-thread local mark stack]
+70eba71000-70eba75000 rw-p 00000000 00:05 10270778                       [anon:dalvik-thread local mark stack]
+70eba75000-70eba95000 rw-p 00000000 00:05 10267647                       [anon:dalvik-large marked objects]
+70eba95000-70ebab5000 rw-p 00000000 00:05 10267646                       [anon:dalvik-large live objects]
 70ebab5000-70ebab6000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebab6000-70ebab7000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70ebab7000-70ebabb000 rw-p 00000000 00:05 10270777                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebab7000-70ebabb000 rw-p 00000000 00:05 10270777                       [anon:dalvik-thread local mark stack]
 70ebabb000-70ebadb000 r--s 00000000 00:10 16603                          /dev/__properties__/u:object_r:exported_fingerprint_prop:s0
 70ebadb000-70ebadc000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebadc000-70ebadd000 r--s 00000000 fc:00 878                            /system/framework/voip-common.jar
-70ebadd000-70ebadf000 rw-p 00000000 00:05 10270995                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70ebadf000-70ebae3000 rw-p 00000000 00:05 10270776                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebae3000-70ebae7000 rw-p 00000000 00:05 10270775                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebae7000-70ebaeb000 rw-p 00000000 00:05 10270774                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebaeb000-70ebaef000 rw-p 00000000 00:05 10270773                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebadd000-70ebadf000 rw-p 00000000 00:05 10270995                       [anon:dalvik-indirect ref table]
+70ebadf000-70ebae3000 rw-p 00000000 00:05 10270776                       [anon:dalvik-thread local mark stack]
+70ebae3000-70ebae7000 rw-p 00000000 00:05 10270775                       [anon:dalvik-thread local mark stack]
+70ebae7000-70ebaeb000 rw-p 00000000 00:05 10270774                       [anon:dalvik-thread local mark stack]
+70ebaeb000-70ebaef000 rw-p 00000000 00:05 10270773                       [anon:dalvik-thread local mark stack]
 70ebaef000-70ebb0f000 r--s 00000000 00:10 16582                          /dev/__properties__/u:object_r:debug_prop:s0
 70ebb0f000-70ebb10000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70ebb10000-70ebb11000 r--s 00000000 fc:00 703                            /system/framework/telephony-common.jar
-70ebb11000-70ebb13000 rw-p 00000000 00:05 10270994                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70ebb13000-70ebb17000 rw-p 00000000 00:05 10270772                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebb11000-70ebb13000 rw-p 00000000 00:05 10270994                       [anon:dalvik-indirect ref table]
+70ebb13000-70ebb17000 rw-p 00000000 00:05 10270772                       [anon:dalvik-thread local mark stack]
 70ebb17000-70ebb19000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70ebb19000-70ebb1d000 rw-p 00000000 00:05 10270771                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebb19000-70ebb1d000 rw-p 00000000 00:05 10270771                       [anon:dalvik-thread local mark stack]
 70ebb1d000-70ebb3d000 r--s 00000000 00:10 16600                          /dev/__properties__/u:object_r:exported_default_prop:s0
 70ebb3d000-70ebb5d000 r--s 00000000 00:10 16650                          /dev/__properties__/u:object_r:system_prop:s0
 70ebb5d000-70ebb7d000 r--s 00000000 00:10 16610                          /dev/__properties__/u:object_r:exported_vold_prop:s0
 70ebb7d000-70ebb9d000 r--s 00000000 00:10 16598                          /dev/__properties__/u:object_r:exported_config_prop:s0
 70ebb9d000-70ebb9e000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70ebb9e000-70ebba2000 rw-p 00000000 00:05 10270770                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebba2000-70ebba6000 rw-p 00000000 00:05 10270769                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebb9e000-70ebba2000 rw-p 00000000 00:05 10270770                       [anon:dalvik-thread local mark stack]
+70ebba2000-70ebba6000 rw-p 00000000 00:05 10270769                       [anon:dalvik-thread local mark stack]
 70ebba6000-70ebba7000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebba7000-70ebba8000 r--s 00000000 fc:00 1004                           /system/framework/framework.jar
-70ebba8000-70ebbac000 rw-p 00000000 00:05 10270768                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbac000-70ebbb0000 rw-p 00000000 00:05 10270767                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbb0000-70ebbb4000 rw-p 00000000 00:05 10270766                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbb4000-70ebbb8000 rw-p 00000000 00:05 10270765                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbb8000-70ebbbc000 rw-p 00000000 00:05 10270764                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbbc000-70ebbc0000 rw-p 00000000 00:05 10270763                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbc0000-70ebbc4000 rw-p 00000000 00:05 10270762                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebba8000-70ebbac000 rw-p 00000000 00:05 10270768                       [anon:dalvik-thread local mark stack]
+70ebbac000-70ebbb0000 rw-p 00000000 00:05 10270767                       [anon:dalvik-thread local mark stack]
+70ebbb0000-70ebbb4000 rw-p 00000000 00:05 10270766                       [anon:dalvik-thread local mark stack]
+70ebbb4000-70ebbb8000 rw-p 00000000 00:05 10270765                       [anon:dalvik-thread local mark stack]
+70ebbb8000-70ebbbc000 rw-p 00000000 00:05 10270764                       [anon:dalvik-thread local mark stack]
+70ebbbc000-70ebbc0000 rw-p 00000000 00:05 10270763                       [anon:dalvik-thread local mark stack]
+70ebbc0000-70ebbc4000 rw-p 00000000 00:05 10270762                       [anon:dalvik-thread local mark stack]
 70ebbc4000-70ebbe4000 r--s 00000000 00:10 16581                          /dev/__properties__/u:object_r:dalvik_prop:s0
 70ebbe4000-70ebbe5000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70ebbe5000-70ebbe6000 r--s 00004000 fc:00 877                            /system/framework/apache-xml.jar
-70ebbe6000-70ebbe8000 rw-p 00000000 00:05 10270993                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70ebbe8000-70ebbec000 rw-p 00000000 00:05 10270761                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbec000-70ebbf0000 rw-p 00000000 00:05 10270760                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbf0000-70ebbf4000 rw-p 00000000 00:05 10270759                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebbf4000-70ebbf8000 rw-p 00000000 00:05 10270758                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebbe6000-70ebbe8000 rw-p 00000000 00:05 10270993                       [anon:dalvik-indirect ref table]
+70ebbe8000-70ebbec000 rw-p 00000000 00:05 10270761                       [anon:dalvik-thread local mark stack]
+70ebbec000-70ebbf0000 rw-p 00000000 00:05 10270760                       [anon:dalvik-thread local mark stack]
+70ebbf0000-70ebbf4000 rw-p 00000000 00:05 10270759                       [anon:dalvik-thread local mark stack]
+70ebbf4000-70ebbf8000 rw-p 00000000 00:05 10270758                       [anon:dalvik-thread local mark stack]
 70ebbf8000-70ebbf9000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebbf9000-70ebbfa000 r--s 00000000 fc:00 968                            /system/framework/bouncycastle.jar
-70ebbfa000-70ebbfc000 rw-p 00000000 00:05 10270992                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70ebbfc000-70ebc00000 rw-p 00000000 00:05 10270757                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc00000-70ebc04000 rw-p 00000000 00:05 10270756                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc04000-70ebc08000 rw-p 00000000 00:05 10270755                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc08000-70ebc0c000 rw-p 00000000 00:05 10270754                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc0c000-70ebc10000 rw-p 00000000 00:05 10270753                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc10000-70ebc14000 rw-p 00000000 00:05 10270752                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebbfa000-70ebbfc000 rw-p 00000000 00:05 10270992                       [anon:dalvik-indirect ref table]
+70ebbfc000-70ebc00000 rw-p 00000000 00:05 10270757                       [anon:dalvik-thread local mark stack]
+70ebc00000-70ebc04000 rw-p 00000000 00:05 10270756                       [anon:dalvik-thread local mark stack]
+70ebc04000-70ebc08000 rw-p 00000000 00:05 10270755                       [anon:dalvik-thread local mark stack]
+70ebc08000-70ebc0c000 rw-p 00000000 00:05 10270754                       [anon:dalvik-thread local mark stack]
+70ebc0c000-70ebc10000 rw-p 00000000 00:05 10270753                       [anon:dalvik-thread local mark stack]
+70ebc10000-70ebc14000 rw-p 00000000 00:05 10270752                       [anon:dalvik-thread local mark stack]
 70ebc14000-70ebc15000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70ebc15000-70ebc16000 r--s 00000000 fc:00 960                            /system/framework/okhttp.jar
-70ebc16000-70ebc1a000 rw-p 00000000 00:05 10270751                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc1a000-70ebc1e000 rw-p 00000000 00:05 10270750                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebc16000-70ebc1a000 rw-p 00000000 00:05 10270751                       [anon:dalvik-thread local mark stack]
+70ebc1a000-70ebc1e000 rw-p 00000000 00:05 10270750                       [anon:dalvik-thread local mark stack]
 70ebc1e000-70ebc3e000 r--s 00000000 00:10 16584                          /dev/__properties__/u:object_r:default_prop:s0
 70ebc3e000-70ebc3f000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebc3f000-70ebc40000 r--s 00000000 fc:00 974                            /system/framework/conscrypt.jar
-70ebc40000-70ebc42000 rw-p 00000000 00:05 10269719                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70ebc42000-70ebc46000 rw-p 00000000 00:05 10270749                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc46000-70ebc4a000 rw-p 00000000 00:05 10270748                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc4a000-70ebc4e000 rw-p 00000000 00:05 10270747                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebc40000-70ebc42000 rw-p 00000000 00:05 10269719                       [anon:dalvik-indirect ref table]
+70ebc42000-70ebc46000 rw-p 00000000 00:05 10270749                       [anon:dalvik-thread local mark stack]
+70ebc46000-70ebc4a000 rw-p 00000000 00:05 10270748                       [anon:dalvik-thread local mark stack]
+70ebc4a000-70ebc4e000 rw-p 00000000 00:05 10270747                       [anon:dalvik-thread local mark stack]
 70ebc4e000-70ebc4f000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70ebc4f000-70ebc51000 rw-p 00000000 00:05 10269718                       /dev/ashmem/dalvik-indirect ref table (deleted)
-70ebc51000-70ebc55000 rw-p 00000000 00:05 10270746                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc55000-70ebc59000 rw-p 00000000 00:05 10270745                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc59000-70ebc5d000 rw-p 00000000 00:05 10270744                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebc4f000-70ebc51000 rw-p 00000000 00:05 10269718                       [anon:dalvik-indirect ref table]
+70ebc51000-70ebc55000 rw-p 00000000 00:05 10270746                       [anon:dalvik-thread local mark stack]
+70ebc55000-70ebc59000 rw-p 00000000 00:05 10270745                       [anon:dalvik-thread local mark stack]
+70ebc59000-70ebc5d000 rw-p 00000000 00:05 10270744                       [anon:dalvik-thread local mark stack]
 70ebc5d000-70ebc7d000 r--s 00000000 00:10 16599                          /dev/__properties__/u:object_r:exported_dalvik_prop:s0
 70ebc7d000-70ebc7e000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70ebc7e000-70ebc7f000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebc7f000-70ebc80000 r--s 00004000 fc:00 963                            /system/framework/core-libart.jar
 70ebc80000-70ebc81000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70ebc81000-70ebc85000 rw-p 00000000 00:05 10270743                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc85000-70ebc89000 rw-p 00000000 00:05 10270742                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebc81000-70ebc85000 rw-p 00000000 00:05 10270743                       [anon:dalvik-thread local mark stack]
+70ebc85000-70ebc89000 rw-p 00000000 00:05 10270742                       [anon:dalvik-thread local mark stack]
 70ebc89000-70ebc8a000 rw-p 00000000 00:00 0                              [anon:linker_alloc_small_objects]
 70ebc8a000-70ebc8c000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebc8c000-70ebc8d000 r--s 0001e000 fc:00 699                            /system/framework/core-oj.jar
-70ebc8d000-70ebc91000 rw-p 00000000 00:05 10270741                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc91000-70ebc95000 rw-p 00000000 00:05 10270740                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebc95000-70ebc99000 rw-p 00000000 00:05 10270739                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebc8d000-70ebc91000 rw-p 00000000 00:05 10270741                       [anon:dalvik-thread local mark stack]
+70ebc91000-70ebc95000 rw-p 00000000 00:05 10270740                       [anon:dalvik-thread local mark stack]
+70ebc95000-70ebc99000 rw-p 00000000 00:05 10270739                       [anon:dalvik-thread local mark stack]
 70ebc99000-70ebc9b000 r--p 00000000 00:00 0                              [anon:linker_alloc]
 70ebc9b000-70ebc9c000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70ebc9c000-70ebca0000 rw-p 00000000 00:05 10270738                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebca0000-70ebca4000 rw-p 00000000 00:05 10270737                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebca4000-70ebca8000 rw-p 00000000 00:05 10270736                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebca8000-70ebcac000 rw-p 00000000 00:05 10270735                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebcac000-70ebcb0000 rw-p 00000000 00:05 10270734                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebc9c000-70ebca0000 rw-p 00000000 00:05 10270738                       [anon:dalvik-thread local mark stack]
+70ebca0000-70ebca4000 rw-p 00000000 00:05 10270737                       [anon:dalvik-thread local mark stack]
+70ebca4000-70ebca8000 rw-p 00000000 00:05 10270736                       [anon:dalvik-thread local mark stack]
+70ebca8000-70ebcac000 rw-p 00000000 00:05 10270735                       [anon:dalvik-thread local mark stack]
+70ebcac000-70ebcb0000 rw-p 00000000 00:05 10270734                       [anon:dalvik-thread local mark stack]
 70ebcb0000-70ebcd0000 r--s 00000000 00:10 16592                          /dev/__properties__/u:object_r:exported2_system_prop:s0
 70ebcd0000-70ebcd1000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
-70ebcd1000-70ebcd5000 rw-p 00000000 00:05 10270733                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebcd5000-70ebcd9000 rw-p 00000000 00:05 10270732                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebcd9000-70ebcdd000 rw-p 00000000 00:05 10270731                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebcdd000-70ebce1000 rw-p 00000000 00:05 10270730                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebce1000-70ebce5000 rw-p 00000000 00:05 10270729                       /dev/ashmem/dalvik-thread local mark stack (deleted)
-70ebce5000-70ebce9000 rw-p 00000000 00:05 10270728                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebcd1000-70ebcd5000 rw-p 00000000 00:05 10270733                       [anon:dalvik-thread local mark stack]
+70ebcd5000-70ebcd9000 rw-p 00000000 00:05 10270732                       [anon:dalvik-thread local mark stack]
+70ebcd9000-70ebcdd000 rw-p 00000000 00:05 10270731                       [anon:dalvik-thread local mark stack]
+70ebcdd000-70ebce1000 rw-p 00000000 00:05 10270730                       [anon:dalvik-thread local mark stack]
+70ebce1000-70ebce5000 rw-p 00000000 00:05 10270729                       [anon:dalvik-thread local mark stack]
+70ebce5000-70ebce9000 rw-p 00000000 00:05 10270728                       [anon:dalvik-thread local mark stack]
 70ebce9000-70ebcea000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70ebcea000-70ebcec000 rw-p 00000000 00:05 10270987                       /dev/ashmem/dalvik-indirect ref table (deleted)
+70ebcea000-70ebcec000 rw-p 00000000 00:05 10270987                       [anon:dalvik-indirect ref table]
 70ebcec000-70ebcf9000 r--p 00646000 103:1d 639532                        /data/dalvik-cache/arm64/system@framework@boot-framework.art
 70ebcf9000-70ebd19000 r--s 00000000 00:10 16620                          /dev/__properties__/u:object_r:log_tag_prop:s0
 70ebd19000-70ebd39000 r--s 00000000 00:10 16621                          /dev/__properties__/u:object_r:logd_prop:s0
 70ebd39000-70ebd3a000 rw-p 00000000 00:00 0                              [anon:linker_alloc]
 70ebd3a000-70ebd3b000 r--p 00000000 00:00 0                              [anon:linker_alloc]
-70ebd3b000-70ebd3f000 rw-p 00000000 00:05 10270727                       /dev/ashmem/dalvik-thread local mark stack (deleted)
+70ebd3b000-70ebd3f000 rw-p 00000000 00:05 10270727                       [anon:dalvik-thread local mark stack]
 70ebd3f000-70ebd40000 r--p 00002000 103:1d 639556                        /data/dalvik-cache/arm64/system@framework@boot-com.google.vr.platform.art
 70ebd40000-70ebd41000 r--p 00005000 103:1d 639553                        /data/dalvik-cache/arm64/system@framework@boot-android.test.base.art
 70ebd41000-70ebd42000 r--p 00000000 00:00 0                              [anon:linker_alloc]
