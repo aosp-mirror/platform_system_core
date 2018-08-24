@@ -28,4 +28,14 @@ cc_test_host {
     "libsparse",
   ],
 
+  // Static libs (libfastboot2) shared library dependencies are not transitively included
+  // This is needed to avoid link time errors when building for mac
+  target: {
+    darwin: {
+      host_ldlibs: [
+          "-framework CoreFoundation",
+          "-framework IOKit",
+      ],
+    },
+  }
 }
