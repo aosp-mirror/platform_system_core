@@ -18,7 +18,10 @@
 
 #include <fstab/fstab.h>
 
+#include <string>
+
 bool fs_mgr_overlayfs_mount_all();
 bool fs_mgr_overlayfs_setup(const char* backing = nullptr, const char* mount_point = nullptr,
                             bool* change = nullptr);
 bool fs_mgr_overlayfs_teardown(const char* mount_point = nullptr, bool* change = nullptr);
+bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string& dev);
