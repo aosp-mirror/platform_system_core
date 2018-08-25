@@ -321,7 +321,7 @@ static int open_device(const char *device, int print_flags)
     char idstr[80];
     struct input_id id;
 
-    fd = open(device, O_RDWR);
+    fd = open(device, O_RDONLY | O_CLOEXEC);
     if(fd < 0) {
         if(print_flags & PRINT_DEVICE_ERRORS)
             fprintf(stderr, "could not open %s, %s\n", device, strerror(errno));
