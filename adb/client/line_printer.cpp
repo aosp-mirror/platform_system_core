@@ -67,7 +67,11 @@ static void Out(const std::string& s) {
 
 void LinePrinter::Print(string to_print, LineType type) {
   if (!smart_terminal_) {
-    Out(to_print + "\n");
+    if (type == LineType::INFO) {
+        info_line_ = to_print + "\n";
+    } else {
+        Out(to_print + "\n");
+    }
     return;
   }
 
@@ -123,6 +127,11 @@ void LinePrinter::Print(string to_print, LineType type) {
 }
 
 void LinePrinter::KeepInfoLine() {
-  if (!have_blank_line_) Out("\n");
-  have_blank_line_ = true;
+  if (smart_terminal_) {
+      if (!have_blank_line_) Out("\n");
+      have_blank_line_ = true;
+  } else {
+      Out(info_line_);
+      info_line_.clear();
+  }
 }

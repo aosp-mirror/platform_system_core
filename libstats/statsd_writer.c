@@ -38,6 +38,7 @@
 #define min(x, y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
+static atomic_int dropped = 0;
 
 void statsd_writer_init_lock() {
     /*
@@ -59,14 +60,16 @@ static int statsdAvailable();
 static int statsdOpen();
 static void statsdClose();
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr);
+static void statsdNoteDrop();
 
 struct android_log_transport_write statsdLoggerWrite = {
-    .name = "statsd",
-    .sock = -EBADF,
-    .available = statsdAvailable,
-    .open = statsdOpen,
-    .close = statsdClose,
-    .write = statsdWrite,
+        .name = "statsd",
+        .sock = -EBADF,
+        .available = statsdAvailable,
+        .open = statsdOpen,
+        .close = statsdClose,
+        .write = statsdWrite,
+        .noteDrop = statsdNoteDrop,
 };
 
 /* log_init_lock assumed */
@@ -131,6 +134,10 @@ static int statsdAvailable() {
     return 1;
 }
 
+static void statsdNoteDrop() {
+    atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
+}
+
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
     ssize_t ret;
     int sock;
@@ -138,7 +145,6 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
     struct iovec newVec[nr + headerLength];
     android_log_header_t header;
     size_t i, payloadSize;
-    static atomic_int dropped;
 
     sock = atomic_load(&statsdLoggerWrite.sock);
     if (sock < 0) switch (sock) {
@@ -252,8 +258,6 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
 
     if (ret > (ssize_t)sizeof(header)) {
         ret -= sizeof(header);
-    } else if (ret == -EAGAIN) {
-        atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
     }
 
     return ret;
