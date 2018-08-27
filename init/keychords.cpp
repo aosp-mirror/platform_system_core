@@ -192,7 +192,7 @@ bool Keychords::GeteventEnable(int fd) {
 
 void Keychords::GeteventOpenDevice(const std::string& device) {
     if (registration_.count(device)) return;
-    auto fd = TEMP_FAILURE_RETRY(::open(device.c_str(), O_RDWR | O_CLOEXEC));
+    auto fd = TEMP_FAILURE_RETRY(::open(device.c_str(), O_RDONLY | O_CLOEXEC));
     if (fd == -1) {
         PLOG(ERROR) << "Can not open " << device;
         return;
