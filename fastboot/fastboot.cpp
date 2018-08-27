@@ -114,28 +114,30 @@ struct Image {
     const char* part_name;
     bool optional_if_no_image;
     bool optional_if_no_partition;
+    bool flashall;
     bool IsSecondary() const { return nickname == nullptr; }
 };
 
 static Image images[] = {
         // clang-format off
-    { "boot",     "boot.img",         "boot.sig",     "boot",     false, false },
-    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  false },
-    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false },
-    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false },
-    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false },
-    { "product",  "product.img",      "product.sig",  "product",  true,  false },
+    { "boot",     "boot.img",         "boot.sig",     "boot",     false, false, true, },
+    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  false, true, },
+    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false, true, },
+    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false, true, },
+    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false, true, },
+    { "product",  "product.img",      "product.sig",  "product",  true,  false, true, },
     { "product_services",
                   "product_services.img",
                                       "product_services.sig",
                                                       "product_services",
-                                                                  true,  true  },
-    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false },
-    { "system",   "system.img",       "system.sig",   "system",   false, true  },
-    { nullptr,    "system_other.img", "system.sig",   "system",   true,  false },
-    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false },
-    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  true  },
-    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  false },
+                                                                  true,  true,  true, },
+    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false, true, },
+    { "system",   "system.img",       "system.sig",   "system",   false, true,  true, },
+    { nullptr,    "system_other.img", "system.sig",   "system",   true,  false, true, },
+    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false, true, },
+    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  true,  true, },
+    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  false, true, },
+    { "super",    "super.img",        "super.sig",    "super",    true,  true, false, },
         // clang-format on
 };
 
@@ -1242,6 +1244,7 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary, b
     // List of partitions to flash and their slots.
     std::vector<std::pair<const Image*, std::string>> entries;
     for (size_t i = 0; i < arraysize(images); i++) {
+        if (!images[i].flashall) continue;
         const char* slot = NULL;
         if (images[i].IsSecondary()) {
             if (!skip_secondary) slot = secondary.c_str();
