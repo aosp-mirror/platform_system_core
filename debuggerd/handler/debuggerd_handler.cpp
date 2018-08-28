@@ -457,14 +457,14 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     info = nullptr;
   }
 
-  struct siginfo si = {};
+  struct siginfo dummy_info = {};
   if (!info) {
-    memset(&si, 0, sizeof(si));
-    si.si_signo = signal_number;
-    si.si_code = SI_USER;
-    si.si_pid = __getpid();
-    si.si_uid = getuid();
-    info = &si;
+    memset(&dummy_info, 0, sizeof(dummy_info));
+    dummy_info.si_signo = signal_number;
+    dummy_info.si_code = SI_USER;
+    dummy_info.si_pid = __getpid();
+    dummy_info.si_uid = getuid();
+    info = &dummy_info;
   } else if (info->si_code >= 0 || info->si_code == SI_TKILL) {
     // rt_tgsigqueueinfo(2)'s documentation appears to be incorrect on kernels
     // that contain commit 66dd34a (3.9+). The manpage claims to only allow
@@ -473,8 +473,18 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   void* abort_message = nullptr;
-  if (signal_number != DEBUGGER_SIGNAL && g_callbacks.get_abort_message) {
-    abort_message = g_callbacks.get_abort_message();
+  if (signal_number == DEBUGGER_SIGNAL) {
+    if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
+      // Allow for the abort message to be explicitly specified via the sigqueue value.
+      // Keep the bottom bit intact for representing whether we want a backtrace or a tombstone.
+      uintptr_t value = reinterpret_cast<uintptr_t>(info->si_ptr);
+      abort_message = reinterpret_cast<void*>(value & ~1);
+      info->si_ptr = reinterpret_cast<void*>(value & 1);
+    }
+  } else {
+    if (g_callbacks.get_abort_message) {
+      abort_message = g_callbacks.get_abort_message();
+    }
   }
 
   // If sival_int is ~0, it means that the fallback handler has been called
