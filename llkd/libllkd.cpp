@@ -738,6 +738,8 @@ void llkLogConfig(void) {
 }
 
 void* llkThread(void* obj) {
+    prctl(PR_SET_DUMPABLE, 0);
+
     LOG(INFO) << "started";
 
     std::string name = std::to_string(::gettid());
