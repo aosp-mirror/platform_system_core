@@ -18,20 +18,20 @@
 
 #include "adb.h"
 
-typedef enum EFastDeploy_AgentUpdateStrategy {
+enum FastDeploy_AgentUpdateStrategy {
     FastDeploy_AgentUpdateAlways,
     FastDeploy_AgentUpdateNewerTimeStamp,
     FastDeploy_AgentUpdateDifferentVersion
-} FastDeploy_AgentUpdateStrategy;
+};
 
 static constexpr int kFastDeployMinApi = 24;
 
+void fastdeploy_init(bool use_localagent);
+
 int get_device_api_level();
-bool update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy, bool use_localagent,
-                  const char* adb_path);
+bool update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy);
 int extract_metadata(const char* apkPath, FILE* outputFp);
-int create_patch(const char* apkPath, const char* metadataPath, const char* patchPath,
-                 bool use_localagent, const char* adb_path);
+int create_patch(const char* apkPath, const char* metadataPath, const char* patchPath);
 int apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath);
 int install_patch(const char* apkPath, const char* patchPath, int argc, const char** argv);
 std::string get_patch_path(const char* apkPath);
