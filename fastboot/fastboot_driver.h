@@ -66,6 +66,7 @@ class FastBootDriver {
     FastBootDriver(Transport* transport,
                    std::function<void(std::string&)> info = [](std::string&) {},
                    bool no_checks = false);
+    ~FastBootDriver();
 
     RetCode Boot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode Continue(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
@@ -87,6 +88,8 @@ class FastBootDriver {
     RetCode GetVarAll(std::vector<std::string>* response);
     RetCode Powerdown(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode Reboot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
+    RetCode RebootTo(std::string target, std::string* response = nullptr,
+                     std::vector<std::string>* info = nullptr);
     RetCode SetActive(const std::string& part, std::string* response = nullptr,
                       std::vector<std::string>* info = nullptr);
     RetCode Upload(const std::string& outfile, std::string* response = nullptr,
@@ -108,6 +111,10 @@ class FastBootDriver {
     static const std::string RCString(RetCode rc);
     std::string Error();
     RetCode WaitForDisconnect();
+
+    // Note: changing the transport will close and delete the existing one.
+    void set_transport(Transport* transport);
+    Transport* transport() const { return transport_; }
 
     // This is temporarily public for engine.cpp
     RetCode RawCommand(const std::string& cmd, std::string* response = nullptr,
@@ -136,7 +143,7 @@ class FastBootDriver {
         static const std::string VERIFY;
     };
 
-    Transport* const transport;
+    Transport* transport_;
 
   private:
     RetCode SendBuffer(int fd, size_t size);

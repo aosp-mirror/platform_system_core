@@ -52,9 +52,13 @@ namespace fastboot {
 /*************************** PUBLIC *******************************/
 FastBootDriver::FastBootDriver(Transport* transport, std::function<void(std::string&)> info,
                                bool no_checks)
-    : transport(transport) {
+    : transport_(transport) {
     info_cb_ = info;
     disable_checks_ = no_checks;
+}
+
+FastBootDriver::~FastBootDriver() {
+    set_transport(nullptr);
 }
 
 RetCode FastBootDriver::Boot(std::string* response, std::vector<std::string>* info) {
@@ -91,6 +95,11 @@ RetCode FastBootDriver::Powerdown(std::string* response, std::vector<std::string
 
 RetCode FastBootDriver::Reboot(std::string* response, std::vector<std::string>* info) {
     return RawCommand(Commands::REBOOT, response, info);
+}
+
+RetCode FastBootDriver::RebootTo(std::string target, std::string* response,
+                                 std::vector<std::string>* info) {
+    return RawCommand("reboot-" + target, response, info);
 }
 
 RetCode FastBootDriver::SetActive(const std::string& part, std::string* response,
@@ -332,7 +341,7 @@ std::string FastBootDriver::Error() {
 }
 
 RetCode FastBootDriver::WaitForDisconnect() {
-    return transport->WaitForDisconnect() ? IO_ERROR : SUCCESS;
+    return transport_->WaitForDisconnect() ? IO_ERROR : SUCCESS;
 }
 
 /****************************** PROTECTED *************************************/
@@ -344,7 +353,7 @@ RetCode FastBootDriver::RawCommand(const std::string& cmd, std::string* response
         return BAD_ARG;
     }
 
-    if (transport->Write(cmd.c_str(), cmd.size()) != static_cast<int>(cmd.size())) {
+    if (transport_->Write(cmd.c_str(), cmd.size()) != static_cast<int>(cmd.size())) {
         error_ = ErrnoStr("Write to device failed");
         return IO_ERROR;
     }
@@ -378,7 +387,7 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
     // erase response
     set_response("");
     while ((std::chrono::system_clock::now() - start) < std::chrono::seconds(RESP_TIMEOUT)) {
-        int r = transport->Read(status, FB_RESPONSE_SZ);
+        int r = transport_->Read(status, FB_RESPONSE_SZ);
         if (r < 0) {
             error_ = ErrnoStr("Status read failed");
             return IO_ERROR;
@@ -472,7 +481,7 @@ RetCode FastBootDriver::SendBuffer(const void* buf, size_t size) {
         return BAD_ARG;
     }
     // Write the buffer
-    ssize_t tmp = transport->Write(buf, size);
+    ssize_t tmp = transport_->Write(buf, size);
 
     if (tmp < 0) {
         error_ = ErrnoStr("Write to device failed in SendBuffer()");
@@ -493,7 +502,7 @@ RetCode FastBootDriver::ReadBuffer(std::vector<char>& buf) {
 
 RetCode FastBootDriver::ReadBuffer(void* buf, size_t size) {
     // Read the buffer
-    ssize_t tmp = transport->Read(buf, size);
+    ssize_t tmp = transport_->Read(buf, size);
 
     if (tmp < 0) {
         error_ = ErrnoStr("Read from device failed in ReadBuffer()");
@@ -537,6 +546,14 @@ int FastBootDriver::SparseWriteCallback(std::vector<char>& tpbuf, const char* da
     }
 
     return 0;
+}
+
+void FastBootDriver::set_transport(Transport* transport) {
+    if (transport_) {
+        transport_->Close();
+        delete transport_;
+    }
+    transport_ = transport;
 }
 
 }  // End namespace fastboot

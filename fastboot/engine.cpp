@@ -79,10 +79,16 @@ struct Action {
 static std::vector<std::unique_ptr<Action>> action_list;
 static fastboot::FastBootDriver* fb = nullptr;
 
+static constexpr char kStatusFormat[] = "%-50s ";
+
 void fb_init(fastboot::FastBootDriver& fbi) {
     fb = &fbi;
     auto cb = [](std::string& info) { fprintf(stderr, "(bootloader) %s\n", info.c_str()); };
     fb->SetInfoCallback(cb);
+}
+
+void fb_reinit(Transport* transport) {
+    fb->set_transport(transport);
 }
 
 const std::string fb_get_error() {
@@ -332,7 +338,7 @@ int64_t fb_execute_queue() {
     for (auto& a : action_list) {
         a->start = now();
         if (!a->msg.empty()) {
-            fprintf(stderr, "%-50s ", a->msg.c_str());
+            fprintf(stderr, kStatusFormat, a->msg.c_str());
             verbose("\n");
         }
         if (a->op == OP_DOWNLOAD) {
@@ -371,4 +377,21 @@ int64_t fb_execute_queue() {
     }
     action_list.clear();
     return status;
+}
+
+bool fb_reboot_to_userspace() {
+    // First ensure that the queue is flushed.
+    fb_execute_queue();
+
+    fprintf(stderr, kStatusFormat, "Rebooting to userspace fastboot");
+    verbose("\n");
+
+    if (fb->RebootTo("fastboot") != fastboot::RetCode::SUCCESS) {
+        fprintf(stderr, "FAILED (%s)\n", fb->Error().c_str());
+        return false;
+    }
+    fprintf(stderr, "OKAY\n");
+
+    fb->set_transport(nullptr);
+    return true;
 }
