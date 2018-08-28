@@ -50,6 +50,7 @@ const std::string fb_get_error();
 /* engine.c - high level command queue engine */
 
 void fb_init(fastboot::FastBootDriver& fbi);
+void fb_reinit(Transport* transport);
 
 bool fb_getvar(const std::string& key, std::string* value);
 void fb_queue_flash(const std::string& partition, void* data, uint32_t sz);
@@ -74,6 +75,7 @@ void fb_queue_delete_partition(const std::string& partition);
 void fb_queue_resize_partition(const std::string& partition, const std::string& size);
 int64_t fb_execute_queue();
 void fb_set_active(const std::string& slot);
+bool fb_reboot_to_userspace();
 
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
