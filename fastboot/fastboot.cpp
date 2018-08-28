@@ -246,12 +246,7 @@ static int list_devices_callback(usb_ifc_info* info) {
 // The returned Transport is a singleton, so multiple calls to this function will return the same
 // object, and the caller should not attempt to delete the returned Transport.
 static Transport* open_device() {
-    static Transport* transport = nullptr;
     bool announce = true;
-
-    if (transport != nullptr) {
-        return transport;
-    }
 
     Socket::Protocol protocol = Socket::Protocol::kTcp;
     std::string host;
@@ -277,6 +272,7 @@ static Transport* open_device() {
         }
     }
 
+    Transport* transport = nullptr;
     while (true) {
         if (!host.empty()) {
             std::string error;
@@ -1179,6 +1175,17 @@ static bool is_logical(const std::string& partition) {
     return fb_getvar("is-logical:" + partition, &value) && value == "yes";
 }
 
+static void reboot_to_userspace_fastboot() {
+    if (!fb_reboot_to_userspace()) {
+        die("Must reboot to userspace fastboot to flash logical partitions");
+    }
+
+    // Give the current connection time to close.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+    fb_reinit(open_device());
+}
+
 static void update_super_partition(bool force_wipe) {
     if (!if_partition_exists("super", "")) {
         return;
@@ -1189,7 +1196,7 @@ static void update_super_partition(bool force_wipe) {
     }
 
     if (!is_userspace_fastboot()) {
-        die("Must have userspace fastboot to flash logical partitions");
+        reboot_to_userspace_fastboot();
     }
 
     int fd = open(image.c_str(), O_RDONLY);
