@@ -29,6 +29,7 @@
 #include <regex>
 #include <thread>
 
+#include <android/fdsan.h>
 #include <android/set_abort_message.h>
 
 #include <android-base/file.h>
@@ -799,6 +800,31 @@ TEST_F(CrasherTest, competing_tracer) {
 
   ASSERT_EQ(0, ptrace(PTRACE_DETACH, crasher_pid, 0, SIGABRT));
   AssertDeath(SIGABRT);
+}
+
+TEST_F(CrasherTest, fdsan_warning_abort_message) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  StartProcess([]() {
+    android_fdsan_set_error_level(ANDROID_FDSAN_ERROR_LEVEL_WARN_ONCE);
+    unique_fd fd(open("/dev/null", O_RDONLY | O_CLOEXEC));
+    if (fd == -1) {
+      abort();
+    }
+    close(fd.get());
+    _exit(0);
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, "Abort message: 'attempted to close");
 }
 
 TEST(crash_dump, zombie) {
