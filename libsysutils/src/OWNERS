@@ -1,2 +1,1 @@
-per-file Netlink* = ek@google.com
-per-file Netlink* = lorenzo@google.com
+per-file OWNERS,Netlink* = ek@google.com,lorenzo@google.com
