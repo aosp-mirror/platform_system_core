@@ -107,47 +107,56 @@ struct fastboot_buffer {
     int64_t image_size;
 };
 
+enum class ImageType {
+    // Must be flashed for device to boot into the kernel.
+    BootCritical,
+    // Normal partition to be flashed during "flashall".
+    Normal,
+    // Partition that is never flashed during "flashall".
+    Extra
+};
+
 struct Image {
     const char* nickname;
     const char* img_name;
     const char* sig_name;
     const char* part_name;
     bool optional_if_no_image;
-    bool optional_if_no_partition;
-    bool flashall;
-    bool needed_for_fastbootd;
+    ImageType type;
     bool IsSecondary() const { return nickname == nullptr; }
 };
 
 static Image images[] = {
         // clang-format off
-    { "boot",     "boot.img",         "boot.sig",     "boot",     false, false, true,  true,  },
-    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  false, true,  false, },
-    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false, true,  true,  },
-    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false, true,  true,  },
-    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false, true,  false, },
-    { "product",  "product.img",      "product.sig",  "product",  true,  false, true,  false, },
+    { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  ImageType::Normal },
+    { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
+    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
+    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  ImageType::BootCritical },
+    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  ImageType::Normal },
+    { "product",  "product.img",      "product.sig",  "product",  true,  ImageType::Normal },
     { "product_services",
                   "product_services.img",
                                       "product_services.sig",
                                                       "product_services",
-                                                                  true,  true,  true,  false, },
-    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false, true,  true,  },
-    { "system",   "system.img",       "system.sig",   "system",   false, true,  true,  false, },
-    { nullptr,    "system_other.img", "system.sig",   "system",   true,  false, true,  false, },
-    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false, true,  true,  },
-    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  true,  true,  false, },
-    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  false, true,  false, },
-    { "super",    "super.img",        "super.sig",    "super",    true,  true,  false, false, },
+                                                                  true,  ImageType::Normal },
+    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  ImageType::BootCritical },
+    { "super",    "super.img",        "super.sig",    "super",    true,  ImageType::Extra },
+    { "system",   "system.img",       "system.sig",   "system",   false, ImageType::Normal },
+    { nullptr,    "system_other.img", "system.sig",   "system",   true,  ImageType::Normal },
+    { "userdata", "userdata.img",     "userdata.sig", "userdata", true,  ImageType::Extra },
+    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  ImageType::BootCritical },
+    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
+    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  ImageType::Normal },
         // clang-format on
 };
 
-static std::string find_item_given_name(const char* img_name) {
+static std::string find_item_given_name(const std::string& img_name) {
     char* dir = getenv("ANDROID_PRODUCT_OUT");
     if (dir == nullptr || dir[0] == '\0') {
         die("ANDROID_PRODUCT_OUT not set");
     }
-    return android::base::StringPrintf("%s/%s", dir, img_name);
+    return std::string(dir) + "/" + img_name;
 }
 
 static std::string find_item(const std::string& item) {
@@ -156,9 +165,6 @@ static std::string find_item(const std::string& item) {
             return find_item_given_name(images[i].img_name);
         }
     }
-
-    if (item == "userdata") return find_item_given_name("userdata.img");
-    if (item == "cache") return find_item_given_name("cache.img");
 
     fprintf(stderr, "unknown partition '%s'\n", item.c_str());
     return "";
@@ -639,8 +645,7 @@ static void check_requirement(char* line) {
     // "require partition-exists=x" is a special case, added because of the trouble we had when
     // Pixel 2 shipped with new partitions and users used old versions of fastboot to flash them,
     // missing out new partitions. A device with new partitions can use "partition-exists" to
-    // override the fields `optional_if_no_image` and 'optional_if_no_partition' in the `images`
-    // array.
+    // override the fields `optional_if_no_image` in the `images` array.
     if (!strcmp(name, "partition-exists")) {
         const char* partition_name = val[0];
         std::string has_slot;
@@ -652,7 +657,6 @@ static void check_requirement(char* line) {
         for (size_t i = 0; i < arraysize(images); ++i) {
             if (images[i].nickname && !strcmp(images[i].nickname, partition_name)) {
                 images[i].optional_if_no_image = false;
-                images[i].optional_if_no_partition = false;
                 known_partition = true;
             }
         }
@@ -1127,11 +1131,6 @@ static void do_update(const char* filename, const std::string& slot_override, bo
             die("non-optional file %s missing", images[i].img_name);
         }
 
-        if (images[i].optional_if_no_partition &&
-            !if_partition_exists(images[i].part_name, slot)) {
-            continue;
-        }
-
         fastboot_buffer buf;
         if (!load_buf_fd(fd, &buf)) {
             die("cannot load %s from flash: %s", images[i].img_name, strerror(errno));
@@ -1226,10 +1225,6 @@ static void flash_images(const std::vector<std::pair<const Image*, std::string>>
             if (image->optional_if_no_image) continue;
             die("could not load '%s': %s", image->img_name, strerror(errno));
         }
-        if (image->optional_if_no_partition &&
-            !if_partition_exists(image->part_name, slot)) {
-            continue;
-        }
         auto flashall = [&](const std::string &partition) {
             do_send_signature(fname.c_str());
             if (is_logical(partition)) {
@@ -1275,7 +1270,6 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary, b
     std::vector<std::pair<const Image*, std::string>> boot_images;
     std::vector<std::pair<const Image*, std::string>> os_images;
     for (size_t i = 0; i < arraysize(images); i++) {
-        if (!images[i].flashall) continue;
         const char* slot = NULL;
         if (images[i].IsSecondary()) {
             if (!skip_secondary) slot = secondary.c_str();
@@ -1283,9 +1277,9 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary, b
             slot = slot_override.c_str();
         }
         if (!slot) continue;
-        if (images[i].needed_for_fastbootd) {
+        if (images[i].type == ImageType::BootCritical) {
             boot_images.emplace_back(&images[i], slot);
-        } else {
+        } else if (images[i].type == ImageType::Normal) {
             os_images.emplace_back(&images[i], slot);
         }
     }
