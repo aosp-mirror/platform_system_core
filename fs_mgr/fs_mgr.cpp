@@ -79,7 +79,8 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
-using DeviceMapper = android::dm::DeviceMapper;
+using android::dm::DeviceMapper;
+using android::dm::DmDeviceState;
 
 // record fs stat
 enum FsStatFlags {
@@ -1400,8 +1401,12 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
             mount_point = basename(fstab->recs[i].mount_point);
         }
 
-        const char* status = nullptr;
+        if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
+            PERROR << "Could not find verity device for mount point: " << mount_point;
+            continue;
+        }
 
+        const char* status = nullptr;
         std::vector<DeviceMapper::TargetInfo> table;
         if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
             if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
