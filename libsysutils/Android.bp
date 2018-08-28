@@ -27,3 +27,16 @@ cc_library_shared {
 
     export_include_dirs: ["include"],
 }
+
+cc_test {
+    name: "libsysutils_tests",
+    test_suites: ["device-tests"],
+    srcs: [
+        "src/SocketListener_test.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libsysutils",
+    ],
+}
