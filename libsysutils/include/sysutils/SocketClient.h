@@ -1,8 +1,6 @@
 #ifndef _SOCKET_CLIENT_H
 #define _SOCKET_CLIENT_H
 
-#include "List.h"
-
 #include <pthread.h>
 #include <cutils/atomic.h>
 #include <sys/types.h>
@@ -35,7 +33,7 @@ public:
     SocketClient(int sock, bool owned, bool useCmdNum);
     virtual ~SocketClient();
 
-    int getSocket() { return mSocket; }
+    int getSocket() const { return mSocket; }
     pid_t getPid() const { return mPid; }
     uid_t getUid() const { return mUid; }
     gid_t getGid() const { return mGid; }
@@ -84,5 +82,4 @@ private:
     int sendDataLockedv(struct iovec *iov, int iovcnt);
 };
 
-typedef android::sysutils::List<SocketClient *> SocketClientCollection;
 #endif
