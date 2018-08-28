@@ -360,6 +360,34 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
     return false;
 }
 
+std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
+                                               const char* mount_point = nullptr) {
+    std::vector<std::string> mounts;
+    if (!fstab) return mounts;
+
+    for (auto i = 0; i < fstab->num_entries; i++) {
+        const auto fsrec = &fstab->recs[i];
+        if (!fs_mgr_wants_overlayfs(fsrec)) continue;
+        std::string new_mount_point(fs_mgr_mount_point(fstab, fsrec->mount_point));
+        if (mount_point && (new_mount_point != mount_point)) continue;
+        auto duplicate_or_more_specific = false;
+        for (auto it = mounts.begin(); it != mounts.end();) {
+            if ((*it == new_mount_point) ||
+                (android::base::StartsWith(new_mount_point, *it + "/"))) {
+                duplicate_or_more_specific = true;
+                break;
+            }
+            if (android::base::StartsWith(*it, new_mount_point + "/")) {
+                it = mounts.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (!duplicate_or_more_specific) mounts.emplace_back(new_mount_point);
+    }
+    return mounts;
+}
+
 }  // namespace
 
 bool fs_mgr_overlayfs_mount_all() {
@@ -371,10 +399,7 @@ bool fs_mgr_overlayfs_mount_all() {
                                                                       fs_mgr_free_fstab);
     if (!fstab) return ret;
 
-    for (auto i = 0; i < fstab->num_entries; i++) {
-        const auto fsrec = &fstab->recs[i];
-        if (!fs_mgr_wants_overlayfs(fsrec)) continue;
-        std::string mount_point(fs_mgr_mount_point(fstab.get(), fsrec->mount_point));
+    for (const auto& mount_point : fs_mgr_candidate_list(fstab.get())) {
         if (fs_mgr_overlayfs_already_mounted(mount_point)) continue;
         if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
     }
@@ -399,20 +424,9 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
 
     std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
                                                                       fs_mgr_free_fstab);
-    std::vector<std::string> mounts;
-    mount_point = fs_mgr_mount_point(fstab.get(), mount_point);
-    if (fstab) {
-        if (!fs_mgr_get_entry_for_mount_point(fstab.get(), kOverlayMountPoint)) return ret;
-        for (auto i = 0; i < fstab->num_entries; i++) {
-            const auto fsrec = &fstab->recs[i];
-            auto fsrec_mount_point = fs_mgr_mount_point(fstab.get(), fsrec->mount_point);
-            if (!fsrec_mount_point) continue;
-            if (mount_point && strcmp(fsrec_mount_point, mount_point)) continue;
-            if (!fs_mgr_wants_overlayfs(fsrec)) continue;
-            mounts.emplace_back(fsrec_mount_point);
-        }
-        if (mounts.empty()) return ret;
-    }
+    if (fstab && !fs_mgr_get_entry_for_mount_point(fstab.get(), kOverlayMountPoint)) return ret;
+    auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(fstab.get(), mount_point));
+    if (fstab && mounts.empty()) return ret;
 
     auto overlay = kOverlayMountPoint + "/overlay/";
     auto save_errno = errno;
