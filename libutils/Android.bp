@@ -58,7 +58,6 @@ cc_defaults {
         "-Wall",
         "-Werror",
     ],
-    include_dirs: ["external/safe-iop/include"],
     header_libs: [
         "libutils_headers",
     ],
