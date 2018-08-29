@@ -137,7 +137,7 @@ void FastbootDevice::ExecuteCommands() {
         std::string cmd_name;
         if (android::base::StartsWith(command, "oem ")) {
             args = {command};
-            cmd_name = "oem";
+            cmd_name = FB_CMD_OEM;
         } else {
             args = android::base::Split(command, ":");
             cmd_name = args[0];

@@ -64,6 +64,7 @@
 #include <ziparchive/zip_archive.h>
 
 #include "bootimg_utils.h"
+#include "constants.h"
 #include "diagnose_usb.h"
 #include "fastboot_driver.h"
 #include "fs.h"
@@ -1697,10 +1698,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
     while (!args.empty()) {
         std::string command = next_arg(&args);
 
-        if (command == "getvar") {
+        if (command == FB_CMD_GETVAR) {
             std::string variable = next_arg(&args);
             DisplayVarOrError(variable, variable);
-        } else if (command == "erase") {
+        } else if (command == FB_CMD_ERASE) {
             std::string partition = next_arg(&args);
             auto erase = [&](const std::string& partition) {
                 std::string partition_type;
@@ -1742,7 +1743,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (data.size() != 256) die("signature must be 256 bytes (got %zu)", data.size());
             fb->Download("signature", data);
             fb->RawCommand("signature", "installing signature");
-        } else if (command == "reboot") {
+        } else if (command == FB_CMD_REBOOT) {
             wants_reboot = true;
 
             if (args.size() == 1) {
@@ -1762,15 +1763,15 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
             }
             if (!args.empty()) syntax_error("junk after reboot command");
-        } else if (command == "reboot-bootloader") {
+        } else if (command == FB_CMD_REBOOT_BOOTLOADER) {
             wants_reboot_bootloader = true;
-        } else if (command == "reboot-recovery") {
+        } else if (command == FB_CMD_REBOOT_RECOVERY) {
             wants_reboot_recovery = true;
-        } else if (command == "reboot-fastboot") {
+        } else if (command == FB_CMD_REBOOT_FASTBOOT) {
             wants_reboot_fastboot = true;
-        } else if (command == "continue") {
+        } else if (command == FB_CMD_CONTINUE) {
             fb->Continue();
-        } else if (command == "boot") {
+        } else if (command == FB_CMD_BOOT) {
             std::string kernel = next_arg(&args);
             std::string ramdisk;
             if (!args.empty()) ramdisk = next_arg(&args);
@@ -1780,7 +1781,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             auto data = LoadBootableImage(kernel, ramdisk, second_stage);
             fb->Download("boot.img", data);
             fb->Boot();
-        } else if (command == "flash") {
+        } else if (command == FB_CMD_FLASH) {
             std::string pname = next_arg(&args);
 
             std::string fname;
@@ -1827,7 +1828,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             do_update(filename.c_str(), slot_override, skip_secondary || slot_all);
             wants_reboot = true;
-        } else if (command == "set_active") {
+        } else if (command == FB_CMD_SET_ACTIVE) {
             std::string slot = verify_slot(next_arg(&args), false);
             fb->SetActive(slot);
         } else if (command == "stage") {
@@ -1841,8 +1842,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == "get_staged") {
             std::string filename = next_arg(&args);
             fb->Upload(filename);
-        } else if (command == "oem") {
-            do_oem_command("oem", &args);
+        } else if (command == FB_CMD_OEM) {
+            do_oem_command(FB_CMD_OEM, &args);
         } else if (command == "flashing") {
             if (args.empty()) {
                 syntax_error("missing 'flashing' command");
@@ -1854,14 +1855,14 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 syntax_error("unknown 'flashing' command %s", args[0].c_str());
             }
-        } else if (command == "create-logical-partition") {
+        } else if (command == FB_CMD_CREATE_PARTITION) {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
             fb->CreatePartition(partition, size);
-        } else if (command == "delete-logical-partition") {
+        } else if (command == FB_CMD_DELETE_PARTITION) {
             std::string partition = next_arg(&args);
             fb->DeletePartition(partition);
-        } else if (command == "resize-logical-partition") {
+        } else if (command == FB_CMD_RESIZE_PARTITION) {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
             fb->ResizePartition(partition, size);
