@@ -791,7 +791,8 @@ static bool call_vdc(const std::vector<std::string>& args) {
         argv.emplace_back(arg.c_str());
     }
     LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
-    int ret = android_fork_execvp(4, const_cast<char**>(argv.data()), nullptr, false, true);
+    int ret =
+            android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), nullptr, false, true);
     if (ret != 0) {
         LOG(ERROR) << "vdc returned error code: " << ret;
         return false;
