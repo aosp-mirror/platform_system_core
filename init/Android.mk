@@ -47,6 +47,7 @@ LOCAL_SRC_FILES := \
     init_first_stage.cpp \
     reboot_utils.cpp \
     selinux.cpp \
+    switch_root.cpp \
     uevent_listener.cpp \
     util.cpp \
 
@@ -54,8 +55,15 @@ LOCAL_MODULE := init
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
-LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
+LOCAL_MODULE_PATH := $(TARGET_RAMDISK_OUT)
+LOCAL_UNSTRIPPED_PATH := $(TARGET_RAMDISK_OUT_UNSTRIPPED)
+
+# Set up the same mount points on the ramdisk that system-as-root contains.
+LOCAL_POST_INSTALL_CMD := \
+    mkdir -p $(TARGET_RAMDISK_OUT)/dev \
+    mkdir -p $(TARGET_RAMDISK_OUT)/mnt \
+    mkdir -p $(TARGET_RAMDISK_OUT)/proc \
+    mkdir -p $(TARGET_RAMDISK_OUT)/sys \
 
 LOCAL_STATIC_LIBRARIES := \
     libfs_mgr \
