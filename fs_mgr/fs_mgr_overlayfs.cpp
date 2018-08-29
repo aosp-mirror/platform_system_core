@@ -590,6 +590,7 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
 
 // Mount kScratchMountPoint
 bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::string mnt_type) {
+    if (!fs_mgr_rw_access(device_path)) return false;
     if (setfscreatecon(kOverlayfsFileContext)) {
         PERROR << "setfscreatecon " << kOverlayfsFileContext;
     }
@@ -826,6 +827,19 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (change) *change = false;
     mount_point = fs_mgr_mount_point(mount_point);
     auto ret = true;
+    // If scratch exists, but is not mounted, lets gain access to clean
+    // specific override entries.
+    if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
+        auto scratch_device = fs_mgr_overlayfs_scratch_device();
+        if (scratch_device.empty()) {
+            auto slot_number = fs_mgr_overlayfs_slot_number();
+            auto super_device = fs_mgr_overlayfs_super_device(slot_number);
+            const auto partition_name = android::base::Basename(kScratchMountPoint);
+            CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
+                                   &scratch_device);
+        }
+        fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type());
+    }
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         ret &= fs_mgr_overlayfs_teardown_one(overlay_mount_point, mount_point ?: "", change);
     }
