@@ -265,10 +265,17 @@ bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
     return ret;
 }
 
+constexpr char overlayfs_file_context[] = "u:object_r:overlayfs_file:s0";
+
 bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& mount_point,
                                 bool* change) {
     auto ret = true;
     auto fsrec_mount_point = overlay + android::base::Basename(mount_point) + "/";
+
+    if (setfscreatecon(overlayfs_file_context)) {
+        ret = false;
+        PERROR << "overlayfs setfscreatecon " << overlayfs_file_context;
+    }
     auto save_errno = errno;
     if (!mkdir(fsrec_mount_point.c_str(), 0755)) {
         if (change) *change = true;
@@ -288,6 +295,7 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
     } else {
         errno = save_errno;
     }
+    setfscreatecon(nullptr);
 
     auto new_context = fs_mgr_get_context(mount_point);
     if (!new_context.empty() && setfscreatecon(new_context.c_str())) {
@@ -428,6 +436,9 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(fstab.get(), mount_point));
     if (fstab && mounts.empty()) return ret;
 
+    if (setfscreatecon(overlayfs_file_context)) {
+        PERROR << "overlayfs setfscreatecon " << overlayfs_file_context;
+    }
     auto overlay = kOverlayMountPoint + "/overlay/";
     auto save_errno = errno;
     if (!mkdir(overlay.c_str(), 0755)) {
@@ -437,6 +448,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     } else {
         errno = save_errno;
     }
+    setfscreatecon(nullptr);
     if (!fstab && mount_point && fs_mgr_overlayfs_setup_one(overlay, mount_point, change)) {
         ret = true;
     }
