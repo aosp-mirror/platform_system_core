@@ -29,18 +29,21 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <fs_mgr.h>
+#include <fs_mgr_avb.h>
+#include <fs_mgr_dm_linear.h>
+#include <fs_mgr_overlayfs.h>
 #include <liblp/metadata_format.h>
 
 #include "devices.h"
-#include "fs_mgr.h"
-#include "fs_mgr_avb.h"
-#include "fs_mgr_dm_linear.h"
-#include "fs_mgr_overlayfs.h"
+#include "switch_root.h"
 #include "uevent.h"
 #include "uevent_listener.h"
 #include "util.h"
 
 using android::base::Timer;
+
+using namespace std::literals;
 
 namespace android {
 namespace init {
@@ -63,6 +66,7 @@ class FirstStageMount {
     bool InitRequiredDevices();
     bool InitMappedDevice(const std::string& verity_device);
     bool CreateLogicalPartitions();
+    bool MountPartition(fstab_rec* fstab_rec);
     bool MountPartitions();
     bool GetBackingDmLinearDevices();
 
@@ -333,26 +337,51 @@ bool FirstStageMount::InitMappedDevice(const std::string& dm_device) {
     return true;
 }
 
-bool FirstStageMount::MountPartitions() {
-    for (auto fstab_rec : mount_fstab_recs_) {
-        if (fs_mgr_is_logical(fstab_rec)) {
-            if (!fs_mgr_update_logical_partition(fstab_rec)) {
-                return false;
-            }
-            if (!InitMappedDevice(fstab_rec->blk_device)) {
-                return false;
-            }
-        }
-        if (!SetUpDmVerity(fstab_rec)) {
-            PLOG(ERROR) << "Failed to setup verity for '" << fstab_rec->mount_point << "'";
+bool FirstStageMount::MountPartition(fstab_rec* fstab_rec) {
+    if (fs_mgr_is_logical(fstab_rec)) {
+        if (!fs_mgr_update_logical_partition(fstab_rec)) {
             return false;
         }
-        if (fs_mgr_do_mount_one(fstab_rec)) {
-            PLOG(ERROR) << "Failed to mount '" << fstab_rec->mount_point << "'";
+        if (!InitMappedDevice(fstab_rec->blk_device)) {
             return false;
         }
     }
+    if (!SetUpDmVerity(fstab_rec)) {
+        PLOG(ERROR) << "Failed to setup verity for '" << fstab_rec->mount_point << "'";
+        return false;
+    }
+    if (fs_mgr_do_mount_one(fstab_rec)) {
+        PLOG(ERROR) << "Failed to mount '" << fstab_rec->mount_point << "'";
+        return false;
+    }
+    return true;
+}
+
+bool FirstStageMount::MountPartitions() {
+    // If system is in the fstab then we're not a system-as-root device, and in
+    // this case, we mount system first then pivot to it.  From that point on,
+    // we are effectively identical to a system-as-root device.
+    auto system_partition =
+            std::find_if(mount_fstab_recs_.begin(), mount_fstab_recs_.end(),
+                         [](const auto& rec) { return rec->mount_point == "/system"s; });
+    if (system_partition != mount_fstab_recs_.end()) {
+        if (!MountPartition(*system_partition)) {
+            return false;
+        }
+
+        SwitchRoot("/system");
+
+        mount_fstab_recs_.erase(system_partition);
+    }
+
+    for (auto fstab_rec : mount_fstab_recs_) {
+        if (!MountPartition(fstab_rec)) {
+            return false;
+        }
+    }
+
     fs_mgr_overlayfs_mount_all();
+
     return true;
 }
 
