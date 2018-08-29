@@ -142,6 +142,8 @@ cc_library_host_static {
         "client/fastdeploycallbacks.cpp",
     ],
 
+    generated_headers: ["platform_tools_version"],
+
     target: {
         linux: {
             srcs: ["client/usb_linux.cpp"],
@@ -310,6 +312,8 @@ cc_library_static {
     local_include_dirs: [
         "daemon/include",
     ],
+
+    generated_headers: ["platform_tools_version"],
 
     static_libs: [
         "libdiagnose_usb",

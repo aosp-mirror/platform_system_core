@@ -21,67 +21,66 @@ cc_library_host_static {
 
     compile_multilib: "first",
     srcs: [
-      "bootimg_utils.cpp",
-      "fs.cpp",
-      "socket.cpp",
-      "tcp.cpp",
-      "udp.cpp",
-      "util.cpp",
-      "fastboot_driver.cpp",
+        "bootimg_utils.cpp",
+        "fs.cpp",
+        "socket.cpp",
+        "tcp.cpp",
+        "udp.cpp",
+        "util.cpp",
+        "fastboot_driver.cpp",
     ],
 
     static_libs: [
-      "libziparchive",
-      "libsparse",
-      "libutils",
-      "liblog",
-      "libz",
-      "libdiagnose_usb",
-      "libbase",
-      "libcutils",
-      "libgtest",
-      "libgtest_main",
-      "libbase",
-      "libadb_host"
+        "libziparchive",
+        "libsparse",
+        "libutils",
+        "liblog",
+        "libz",
+        "libdiagnose_usb",
+        "libbase",
+        "libcutils",
+        "libgtest",
+        "libgtest_main",
+        "libbase",
+        "libadb_host",
     ],
 
     header_libs: [
-      "bootimg_headers"
+        "bootimg_headers",
     ],
 
     export_header_lib_headers: [
-      "bootimg_headers"
+        "bootimg_headers",
     ],
 
-
     target: {
-      linux: {
-        srcs: ["usb_linux.cpp"],
-      },
+        linux: {
+            srcs: ["usb_linux.cpp"],
+        },
 
-      darwin: {
-        srcs: ["usb_osx.cpp"],
+        darwin: {
+            srcs: ["usb_osx.cpp"],
 
-        host_ldlibs: [
-            "-framework CoreFoundation",
-            "-framework IOKit",
-        ],
-      },
+            host_ldlibs: [
+                "-framework CoreFoundation",
+                "-framework IOKit",
+            ],
+        },
 
-      windows: {
-        srcs: ["usb_windows.cpp"],
+        windows: {
+            srcs: ["usb_windows.cpp"],
 
-        host_ldlibs: [
-            "-lws2_32",
-        ],
-      },
+            host_ldlibs: [
+                "-lws2_32",
+            ],
+        },
     },
 
     cflags: [
-      "-Wall",
-      "-Wextra",
-      "-Werror",
-      "-Wunreachable-code",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wunreachable-code",
     ],
 
     export_include_dirs: ["."],
@@ -140,4 +139,156 @@ cc_binary {
     ],
 
     cpp_std: "c++17",
+}
+
+cc_defaults {
+    name: "fastboot_host_defaults",
+
+    use_version_lib: true,
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wunreachable-code",
+    ],
+
+    target: {
+        darwin: {
+            cflags: ["-Wno-unused-parameter"],
+            host_ldlibs: [
+                "-lpthread",
+                "-framework CoreFoundation",
+                "-framework IOKit",
+                "-framework Carbon",
+            ],
+        },
+        windows: {
+            enabled: true,
+
+            host_ldlibs: ["-lws2_32"],
+        },
+    },
+
+    stl: "libc++_static",
+
+    // Don't add anything here, we don't want additional shared dependencies
+    // on the host fastboot tool, and shared libraries that link against libc++
+    // will violate ODR.
+    shared_libs: [],
+
+    header_libs: ["bootimg_headers"],
+    static_libs: [
+        "libziparchive",
+        "libsparse",
+        "libutils",
+        "liblog",
+        "libz",
+        "libdiagnose_usb",
+        "libbase",
+        "libcutils",
+        "libgtest_host",
+    ],
+}
+
+//
+// Build host libfastboot.
+//
+
+cc_library_host_static {
+    name: "libfastboot",
+    defaults: ["fastboot_host_defaults"],
+
+    cpp_std: "c++17",
+    srcs: [
+        "bootimg_utils.cpp",
+        "engine.cpp",
+        "fastboot.cpp",
+        "fs.cpp",
+        "socket.cpp",
+        "tcp.cpp",
+        "udp.cpp",
+        "util.cpp",
+        "fastboot_driver.cpp",
+    ],
+
+    // Only version the final binaries
+    use_version_lib: false,
+    static_libs: ["libbuildversion"],
+
+    generated_headers: ["platform_tools_version"],
+
+    target: {
+        windows: {
+            srcs: ["usb_windows.cpp"],
+
+            include_dirs: ["development/host/windows/usb/api"],
+        },
+        darwin: {
+            srcs: ["usb_osx.cpp"],
+        },
+        linux_glibc: {
+            srcs: ["usb_linux.cpp"],
+        },
+    },
+}
+
+//
+// Build host fastboot / fastboot.exe
+//
+
+cc_binary_host {
+    name: "fastboot",
+    defaults: ["fastboot_host_defaults"],
+
+    srcs: ["main.cpp"],
+    static_libs: ["libfastboot"],
+
+    required: [
+        "mke2fs",
+        "make_f2fs",
+    ],
+
+    target: {
+        not_windows: {
+            required: [
+                "e2fsdroid",
+                "mke2fs.conf",
+                "sload_f2fs",
+            ],
+        },
+        windows: {
+            required: ["AdbWinUsbApi"],
+            shared_libs: ["AdbWinApi"],
+        },
+    },
+}
+
+//
+// Build host fastboot_test.
+//
+
+cc_test_host {
+    name: "fastboot_test",
+    defaults: ["fastboot_host_defaults"],
+
+    srcs: [
+        "fastboot_test.cpp",
+        "socket_mock.cpp",
+        "socket_test.cpp",
+        "tcp_test.cpp",
+        "udp_test.cpp",
+    ],
+
+    static_libs: ["libfastboot"],
+
+    target: {
+        windows: {
+            shared_libs: ["AdbWinApi"],
+        },
+        windows_x86_64: {
+            // Avoid trying to build for win64
+            enabled: false,
+        },
+    },
 }

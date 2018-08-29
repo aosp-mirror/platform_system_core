@@ -55,6 +55,8 @@
 #include <android-base/strings.h>
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
+#include <build/version.h>
+#include <platform_tools_version.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
 
@@ -1538,7 +1540,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 setvbuf(stdout, nullptr, _IONBF, 0);
                 setvbuf(stderr, nullptr, _IONBF, 0);
             } else if (name == "version") {
-                fprintf(stdout, "fastboot version %s\n", FASTBOOT_VERSION);
+                fprintf(stdout, "fastboot version %s-%s\n", PLATFORM_TOOLS_VERSION, android::build::GetBuildNumber().c_str());
                 fprintf(stdout, "Installed as %s\n", android::base::GetExecutablePath().c_str());
                 return 0;
 #if !defined(_WIN32)
