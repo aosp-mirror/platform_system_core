@@ -24,8 +24,6 @@
 
 #include <log/log.h>
 
-#include <safe_iop.h>
-
 #include "SharedBuffer.h"
 
 /*****************************************************************************/
@@ -342,7 +340,7 @@ ssize_t VectorImpl::setCapacity(size_t new_capacity)
     }
 
     size_t new_allocation_size = 0;
-    LOG_ALWAYS_FATAL_IF(!safe_mul(&new_allocation_size, new_capacity, mItemSize));
+    LOG_ALWAYS_FATAL_IF(__builtin_mul_overflow(new_capacity, mItemSize, &new_allocation_size));
     SharedBuffer* sb = SharedBuffer::alloc(new_allocation_size);
     if (sb) {
         void* array = sb->data();
@@ -386,7 +384,7 @@ void* VectorImpl::_grow(size_t where, size_t amount)
             this, (int)where, (int)amount, (int)mCount); // caller already checked
 
     size_t new_size;
-    LOG_ALWAYS_FATAL_IF(!safe_add(&new_size, mCount, amount), "new_size overflow");
+    LOG_ALWAYS_FATAL_IF(__builtin_add_overflow(mCount, amount, &new_size), "new_size overflow");
 
     if (capacity() < new_size) {
         // NOTE: This implementation used to resize vectors as per ((3*x + 1) / 2)
@@ -397,17 +395,18 @@ void* VectorImpl::_grow(size_t where, size_t amount)
         //
         // This approximates the old calculation, using (x + (x/2) + 1) instead.
         size_t new_capacity = 0;
-        LOG_ALWAYS_FATAL_IF(!safe_add(&new_capacity, new_size, (new_size / 2)),
+        LOG_ALWAYS_FATAL_IF(__builtin_add_overflow(new_size, (new_size / 2), &new_capacity),
                             "new_capacity overflow");
-        LOG_ALWAYS_FATAL_IF(!safe_add(&new_capacity, new_capacity, static_cast<size_t>(1u)),
-                            "new_capacity overflow");
+        LOG_ALWAYS_FATAL_IF(
+                __builtin_add_overflow(new_capacity, static_cast<size_t>(1u), &new_capacity),
+                "new_capacity overflow");
         new_capacity = max(kMinVectorCapacity, new_capacity);
 
         size_t new_alloc_size = 0;
-        LOG_ALWAYS_FATAL_IF(!safe_mul(&new_alloc_size, new_capacity, mItemSize),
+        LOG_ALWAYS_FATAL_IF(__builtin_mul_overflow(new_capacity, mItemSize, &new_alloc_size),
                             "new_alloc_size overflow");
 
-//        ALOGV("grow vector %p, new_capacity=%d", this, (int)new_capacity);
+        // ALOGV("grow vector %p, new_capacity=%d", this, (int)new_capacity);
         if ((mStorage) &&
             (mCount==where) &&
             (mFlags & HAS_TRIVIAL_COPY) &&
@@ -464,7 +463,7 @@ void VectorImpl::_shrink(size_t where, size_t amount)
             this, (int)where, (int)amount, (int)mCount); // caller already checked
 
     size_t new_size;
-    LOG_ALWAYS_FATAL_IF(!safe_sub(&new_size, mCount, amount));
+    LOG_ALWAYS_FATAL_IF(__builtin_sub_overflow(mCount, amount, &new_size));
 
     if (new_size < (capacity() / 2)) {
         // NOTE: (new_size * 2) is safe because capacity didn't overflow and
