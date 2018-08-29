@@ -29,7 +29,6 @@
 #define FB_CMD_REBOOT_BOOTLOADER "reboot-bootloader"
 #define FB_CMD_REBOOT_RECOVERY "reboot-recovery"
 #define FB_CMD_REBOOT_FASTBOOT "reboot-fastboot"
-#define FB_CMD_POWERDOWN "powerdown"
 #define FB_CMD_CREATE_PARTITION "create-logical-partition"
 #define FB_CMD_DELETE_PARTITION "delete-logical-partition"
 #define FB_CMD_RESIZE_PARTITION "resize-logical-partition"

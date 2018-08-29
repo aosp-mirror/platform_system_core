@@ -159,8 +159,6 @@ The various currently defined commands are:
                        the bootloader and then upgrading other partitions
                        using the new bootloader.
 
-    powerdown          Power off the device.
-
 
 
 ## Client Variables

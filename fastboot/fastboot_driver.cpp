@@ -89,10 +89,6 @@ RetCode FastBootDriver::GetVarAll(std::vector<std::string>* response) {
     return GetVar("all", &tmp, response);
 }
 
-RetCode FastBootDriver::Powerdown(std::string* response, std::vector<std::string>* info) {
-    return RawCommand(Commands::POWERDOWN, response, info);
-}
-
 RetCode FastBootDriver::Reboot(std::string* response, std::vector<std::string>* info) {
     return RawCommand(Commands::REBOOT, response, info);
 }
@@ -436,7 +432,6 @@ const std::string FastBootDriver::Commands::DOWNLOAD = "download:";
 const std::string FastBootDriver::Commands::ERASE = "erase:";
 const std::string FastBootDriver::Commands::FLASH = "flash:";
 const std::string FastBootDriver::Commands::GET_VAR = "getvar:";
-const std::string FastBootDriver::Commands::POWERDOWN = "powerdown";
 const std::string FastBootDriver::Commands::REBOOT = "reboot";
 const std::string FastBootDriver::Commands::SET_ACTIVE = "set_active:";
 const std::string FastBootDriver::Commands::UPLOAD = "upload";

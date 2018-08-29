@@ -86,7 +86,6 @@ class FastBootDriver {
     RetCode GetVar(const std::string& key, std::string* val,
                    std::vector<std::string>* info = nullptr);
     RetCode GetVarAll(std::vector<std::string>* response);
-    RetCode Powerdown(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode Reboot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode RebootTo(std::string target, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
@@ -136,7 +135,6 @@ class FastBootDriver {
         static const std::string ERASE;
         static const std::string FLASH;
         static const std::string GET_VAR;
-        static const std::string POWERDOWN;
         static const std::string REBOOT;
         static const std::string SET_ACTIVE;
         static const std::string UPLOAD;
