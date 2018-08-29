@@ -18,6 +18,7 @@
 
 #include "libdebuggerd/open_files_list.h"
 
+#include <android/fdsan.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
@@ -122,8 +123,10 @@ void dump_open_files_list(log_t* log, const OpenFilesList& files, const char* pr
     const std::optional<std::string>& path = entry.path;
     const std::optional<uint64_t>& fdsan_owner = entry.fdsan_owner;
     if (path && fdsan_owner) {
-      _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s (owned by %#" PRIx64 ")\n", prefix, fd,
-           path->c_str(), *fdsan_owner);
+      const char* type = android_fdsan_get_tag_type(*fdsan_owner);
+      uint64_t value = android_fdsan_get_tag_value(*fdsan_owner);
+      _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s (owned by %s %#" PRIx64 ")\n", prefix, fd,
+           path->c_str(), type, value);
     } else if (path && !fdsan_owner) {
       _LOG(log, logtype::OPEN_FILES, "%sfd %i: %s (unowned)\n", prefix, fd, path->c_str());
     } else if (!path && fdsan_owner) {
