@@ -141,14 +141,13 @@ constexpr char lowerdir_option[] = "lowerdir=";
 constexpr char upperdir_option[] = "upperdir=";
 
 // default options for mount_point, returns empty string for none available.
-std::string fs_mgr_get_overlayfs_options(const char* mount_point) {
-    auto fsrec_mount_point = std::string(mount_point);
-    auto candidate = fs_mgr_get_overlayfs_candidate(fsrec_mount_point);
+std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
+    auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
     if (candidate.empty()) return "";
 
-    auto context = fs_mgr_get_context(fsrec_mount_point);
+    auto context = fs_mgr_get_context(mount_point);
     if (!context.empty()) context = ",rootcontext="s + context;
-    return "override_creds=off,"s + lowerdir_option + fsrec_mount_point + "," + upperdir_option +
+    return "override_creds=off,"s + lowerdir_option + mount_point + "," + upperdir_option +
            candidate + upper_name + ",workdir=" + candidate + work_name + context;
 }
 
@@ -167,10 +166,11 @@ bool fs_mgr_system_root_image(const fstab* fstab) {
     return true;
 }
 
-std::string fs_mgr_get_overlayfs_options(const fstab* fstab, const char* mount_point) {
-    if (fs_mgr_system_root_image(fstab) && ("/"s == mount_point)) mount_point = "/system";
-
-    return fs_mgr_get_overlayfs_options(mount_point);
+const char* fs_mgr_mount_point(const fstab* fstab, const char* mount_point) {
+    if (!mount_point) return mount_point;
+    if ("/"s != mount_point) return mount_point;
+    if (!fs_mgr_system_root_image(fstab)) return mount_point;
+    return "/system";
 }
 
 // return true if system supports overlayfs
@@ -196,7 +196,7 @@ bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
     if (!fsrec) return false;
 
     auto fsrec_mount_point = fsrec->mount_point;
-    if (!fsrec_mount_point) return false;
+    if (!fsrec_mount_point || !fsrec_mount_point[0]) return false;
     if (!fsrec->blk_device) return false;
 
     if (!fsrec->fs_type) return false;
@@ -309,15 +309,12 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
     return ret;
 }
 
-bool fs_mgr_overlayfs_mount(const fstab* fstab, const fstab_rec* fsrec) {
-    if (!fs_mgr_wants_overlayfs(fsrec)) return false;
-    auto fsrec_mount_point = fsrec->mount_point;
-    if (!fsrec_mount_point || !fsrec_mount_point[0]) return false;
-    auto options = fs_mgr_get_overlayfs_options(fstab, fsrec_mount_point);
+bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
+    auto options = fs_mgr_get_overlayfs_options(mount_point);
     if (options.empty()) return false;
 
     // hijack __mount() report format to help triage
-    auto report = "__mount(source=overlay,target="s + fsrec_mount_point + ",type=overlay";
+    auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
     const auto opt_list = android::base::Split(options, ",");
     for (const auto opt : opt_list) {
         if (android::base::StartsWith(opt, upperdir_option)) {
@@ -327,7 +324,7 @@ bool fs_mgr_overlayfs_mount(const fstab* fstab, const fstab_rec* fsrec) {
     }
     report = report + ")=";
 
-    auto ret = mount("overlay", fsrec_mount_point, "overlay", MS_RDONLY | MS_RELATIME,
+    auto ret = mount("overlay", mount_point.c_str(), "overlay", MS_RDONLY | MS_RELATIME,
                      options.c_str());
     if (ret) {
         PERROR << report << ret;
@@ -338,8 +335,7 @@ bool fs_mgr_overlayfs_mount(const fstab* fstab, const fstab_rec* fsrec) {
     }
 }
 
-bool fs_mgr_overlayfs_already_mounted(const char* mount_point) {
-    if (!mount_point) return false;
+bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
     std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(
             fs_mgr_read_fstab("/proc/mounts"), fs_mgr_free_fstab);
     if (!fstab) return false;
@@ -351,7 +347,7 @@ bool fs_mgr_overlayfs_already_mounted(const char* mount_point) {
         if (("overlay"s != fs_type) && ("overlayfs"s != fs_type)) continue;
         auto fsrec_mount_point = fsrec->mount_point;
         if (!fsrec_mount_point) continue;
-        if (strcmp(fsrec_mount_point, mount_point)) continue;
+        if (mount_point != fsrec_mount_point) continue;
         const auto fs_options = fsrec->fs_options;
         if (!fs_options) continue;
         const auto options = android::base::Split(fs_options, ",");
@@ -362,6 +358,34 @@ bool fs_mgr_overlayfs_already_mounted(const char* mount_point) {
         }
     }
     return false;
+}
+
+std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
+                                               const char* mount_point = nullptr) {
+    std::vector<std::string> mounts;
+    if (!fstab) return mounts;
+
+    for (auto i = 0; i < fstab->num_entries; i++) {
+        const auto fsrec = &fstab->recs[i];
+        if (!fs_mgr_wants_overlayfs(fsrec)) continue;
+        std::string new_mount_point(fs_mgr_mount_point(fstab, fsrec->mount_point));
+        if (mount_point && (new_mount_point != mount_point)) continue;
+        auto duplicate_or_more_specific = false;
+        for (auto it = mounts.begin(); it != mounts.end();) {
+            if ((*it == new_mount_point) ||
+                (android::base::StartsWith(new_mount_point, *it + "/"))) {
+                duplicate_or_more_specific = true;
+                break;
+            }
+            if (android::base::StartsWith(*it, new_mount_point + "/")) {
+                it = mounts.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (!duplicate_or_more_specific) mounts.emplace_back(new_mount_point);
+    }
+    return mounts;
 }
 
 }  // namespace
@@ -375,13 +399,9 @@ bool fs_mgr_overlayfs_mount_all() {
                                                                       fs_mgr_free_fstab);
     if (!fstab) return ret;
 
-    for (auto i = 0; i < fstab->num_entries; i++) {
-        const auto fsrec = &fstab->recs[i];
-        auto fsrec_mount_point = fsrec->mount_point;
-        if (!fsrec_mount_point) continue;
-        if (fs_mgr_overlayfs_already_mounted(fsrec_mount_point)) continue;
-
-        if (fs_mgr_overlayfs_mount(fstab.get(), fsrec)) ret = true;
+    for (const auto& mount_point : fs_mgr_candidate_list(fstab.get())) {
+        if (fs_mgr_overlayfs_already_mounted(mount_point)) continue;
+        if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
     }
     return ret;
 }
@@ -404,23 +424,10 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
 
     std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
                                                                       fs_mgr_free_fstab);
-    std::vector<std::string> mounts;
-    if (fstab) {
-        if (!fs_mgr_get_entry_for_mount_point(fstab.get(), kOverlayMountPoint)) return ret;
-        for (auto i = 0; i < fstab->num_entries; i++) {
-            const auto fsrec = &fstab->recs[i];
-            auto fsrec_mount_point = fsrec->mount_point;
-            if (!fsrec_mount_point) continue;
-            if (mount_point && strcmp(fsrec_mount_point, mount_point)) continue;
-            if (!fs_mgr_wants_overlayfs(fsrec)) continue;
-            mounts.emplace_back(fsrec_mount_point);
-        }
-        if (mounts.empty()) return ret;
-    }
+    if (fstab && !fs_mgr_get_entry_for_mount_point(fstab.get(), kOverlayMountPoint)) return ret;
+    auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(fstab.get(), mount_point));
+    if (fstab && mounts.empty()) return ret;
 
-    if (mount_point && ("/"s == mount_point) && fs_mgr_system_root_image(fstab.get())) {
-        mount_point = "/system";
-    }
     auto overlay = kOverlayMountPoint + "/overlay/";
     auto save_errno = errno;
     if (!mkdir(overlay.c_str(), 0755)) {
@@ -443,11 +450,10 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
 // If something is altered, set *change.
 bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (change) *change = false;
-    if (mount_point && ("/"s == mount_point)) {
-        std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(
-                fs_mgr_read_fstab_default(), fs_mgr_free_fstab);
-        if (fs_mgr_system_root_image(fstab.get())) mount_point = "/system";
-    }
+    mount_point = fs_mgr_mount_point(std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)>(
+                                             fs_mgr_read_fstab_default(), fs_mgr_free_fstab)
+                                             .get(),
+                                     mount_point);
     auto ret = true;
     const auto overlay = kOverlayMountPoint + "/overlay";
     const auto oldpath = overlay + (mount_point ?: "");

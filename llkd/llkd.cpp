@@ -17,6 +17,7 @@
 #include "llkd.h"
 
 #include <sched.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 #include <chrono>
@@ -26,6 +27,8 @@
 using namespace std::chrono;
 
 int main(int, char**) {
+    prctl(PR_SET_DUMPABLE, 0);
+
     LOG(INFO) << "started";
 
     bool enabled = llkInit();

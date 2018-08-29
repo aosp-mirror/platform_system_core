@@ -79,7 +79,7 @@ class DeviceMapper final {
     // Returns the current state of the underlying device mapper device
     // with given name.
     // One of INVALID, SUSPENDED or ACTIVE.
-    DmDeviceState state(const std::string& name) const;
+    DmDeviceState GetState(const std::string& name) const;
 
     // Creates a device, loads the given table, and activates it. If the device
     // is not able to be activated, it is destroyed, and false is returned.
