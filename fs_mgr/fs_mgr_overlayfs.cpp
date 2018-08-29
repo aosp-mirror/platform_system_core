@@ -53,6 +53,10 @@ bool fs_mgr_overlayfs_mount_all(const fstab*) {
     return false;
 }
 
+std::vector<std::string> fs_mgr_overlayfs_required_devices(const fstab*) {
+    return {};
+}
+
 bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change) {
     if (change) *change = false;
     return false;
@@ -465,6 +469,10 @@ bool fs_mgr_overlayfs_mount_all(const fstab* fstab) {
         if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
     }
     return ret;
+}
+
+std::vector<std::string> fs_mgr_overlayfs_required_devices(const fstab*) {
+    return {};
 }
 
 // Returns false if setup not permitted, errno set to last error.
