@@ -556,17 +556,11 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
         return mounts;
     }
 
-    // Manually check dm state because stunted fstab (w/o system as root) borken
-    auto& dm = DeviceMapper::Instance();
-    auto found = false;
-    for (auto& system : {"system", "vroot"}) {
-        if (dm.GetState(system) == DmDeviceState::INVALID) continue;
-        std::vector<DeviceMapper::TargetInfo> table;
-        found = !dm.GetTableStatus(system, &table) || table.empty() || table[0].data.empty() ||
-                (table[0].data[0] == 'C') || (table[0].data[0] == 'V');
-        if (found) break;
-    }
-    if (!found) mounts.emplace_back("/system");
+    // We have a stunted fstab (w/o system or / ) passed in by the caller,
+    // verity claims are assumed accurate because they are collected internally
+    // from fs_mgr_fstab_default() from within fs_mgr_update_verity_state(),
+    // Can (re)evaluate /system with impunity since we know it is ever-present.
+    mounts.emplace_back("/system");
     return mounts;
 }
 
