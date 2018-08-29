@@ -471,6 +471,7 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
     if ((std::find(mounts.begin(), mounts.end(), "/system") == mounts.end()) &&
         !fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/") &&
         !fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/system") &&
+        (!mount_point || ("/system"s == mount_point)) &&
         !fs_mgr_overlayfs_verity_enabled("system")) {
         mounts.emplace_back("/system");
     }
