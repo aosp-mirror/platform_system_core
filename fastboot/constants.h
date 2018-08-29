@@ -18,7 +18,6 @@
 #define FB_CMD_GETVAR "getvar"
 #define FB_CMD_DOWNLOAD "download"
 #define FB_CMD_UPLOAD "upload"
-#define FB_CMD_VERIFY "verify"
 #define FB_CMD_FLASH "flash"
 #define FB_CMD_ERASE "erase"
 #define FB_CMD_BOOT "boot"

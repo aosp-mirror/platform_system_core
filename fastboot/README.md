@@ -136,10 +136,6 @@ The various currently defined commands are:
                        should not support "upload" unless it supports an
                        oem command that requires "upload" capabilities.
 
-    verify:%08x        Send a digital signature to verify the downloaded
-                       data.  Required if the bootloader is "secure"
-                       otherwise "flash" and "boot" will be ignored.
-
     flash:%s           Write the previously downloaded image to the
                        named partition (if possible).
 

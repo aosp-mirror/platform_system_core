@@ -87,7 +87,7 @@ std::vector<std::pair<std::string, extension::Configuration::PartitionInfo>>
 const std::string DEFAULT_OUPUT_NAME = "out.img";
 // const char scratch_partition[] = "userdata";
 const std::vector<std::string> CMDS{"boot",    "continue", "download:",   "erase:", "flash:",
-                                    "getvar:", "reboot",   "set_active:", "upload", "verify"};
+                                    "getvar:", "reboot",   "set_active:", "upload"};
 
 // For pretty printing we need all these overloads
 ::std::ostream& operator<<(::std::ostream& os, const RetCode& ret) {

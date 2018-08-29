@@ -93,8 +93,6 @@ class FastBootDriver {
                       std::vector<std::string>* info = nullptr);
     RetCode Upload(const std::string& outfile, std::string* response = nullptr,
                    std::vector<std::string>* info = nullptr);
-    RetCode Verify(uint32_t num, std::string* response = nullptr,
-                   std::vector<std::string>* info = nullptr);
 
     /* HIGHER LEVEL COMMANDS -- Composed of the commands above */
     RetCode FlashPartition(const std::string& part, const std::vector<char>& data);
@@ -138,7 +136,6 @@ class FastBootDriver {
         static const std::string REBOOT;
         static const std::string SET_ACTIVE;
         static const std::string UPLOAD;
-        static const std::string VERIFY;
     };
 
     Transport* transport_;
