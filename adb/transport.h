@@ -193,6 +193,12 @@ class ConnectionWaitable {
     DISALLOW_COPY_AND_ASSIGN(ConnectionWaitable);
 };
 
+enum class ReconnectResult {
+    Retry,
+    Success,
+    Abort,
+};
+
 class atransport {
   public:
     // TODO(danalbert): We expose waaaaaaay too much stuff because this was
@@ -200,7 +206,7 @@ class atransport {
     // class in one go is a very large change. Given how bad our testing is,
     // it's better to do this piece by piece.
 
-    using ReconnectCallback = std::function<bool(atransport*)>;
+    using ReconnectCallback = std::function<ReconnectResult(atransport*)>;
 
     atransport(ReconnectCallback reconnect, ConnectionState state)
         : id(NextTransportId()),
@@ -215,7 +221,7 @@ class atransport {
         max_payload = MAX_PAYLOAD;
     }
     atransport(ConnectionState state = kCsOffline)
-        : atransport([](atransport*) { return false; }, state) {}
+        : atransport([](atransport*) { return ReconnectResult::Abort; }, state) {}
     virtual ~atransport();
 
     int Write(apacket* p);
@@ -295,9 +301,8 @@ class atransport {
     // Gets a shared reference to the ConnectionWaitable.
     std::shared_ptr<ConnectionWaitable> connection_waitable() { return connection_waitable_; }
 
-    // Attempts to reconnect with the underlying Connection. Returns true if the
-    // reconnection attempt succeeded.
-    bool Reconnect();
+    // Attempts to reconnect with the underlying Connection.
+    ReconnectResult Reconnect();
 
   private:
     std::atomic<bool> kicked_;
