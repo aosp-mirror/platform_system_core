@@ -107,46 +107,56 @@ struct fastboot_buffer {
     int64_t image_size;
 };
 
+enum class ImageType {
+    // Must be flashed for device to boot into the kernel.
+    BootCritical,
+    // Normal partition to be flashed during "flashall".
+    Normal,
+    // Partition that is never flashed during "flashall".
+    Extra
+};
+
 struct Image {
     const char* nickname;
     const char* img_name;
     const char* sig_name;
     const char* part_name;
     bool optional_if_no_image;
-    bool optional_if_no_partition;
-    bool flashall;
+    ImageType type;
     bool IsSecondary() const { return nickname == nullptr; }
 };
 
 static Image images[] = {
         // clang-format off
-    { "boot",     "boot.img",         "boot.sig",     "boot",     false, false, true, },
-    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  false, true, },
-    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  false, true, },
-    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  false, true, },
-    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  false, true, },
-    { "product",  "product.img",      "product.sig",  "product",  true,  false, true, },
+    { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  ImageType::Normal },
+    { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
+    { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
+    { "dts",      "dt.img",           "dt.sig",       "dts",      true,  ImageType::BootCritical },
+    { "odm",      "odm.img",          "odm.sig",      "odm",      true,  ImageType::Normal },
+    { "product",  "product.img",      "product.sig",  "product",  true,  ImageType::Normal },
     { "product_services",
                   "product_services.img",
                                       "product_services.sig",
                                                       "product_services",
-                                                                  true,  true,  true, },
-    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  false, true, },
-    { "system",   "system.img",       "system.sig",   "system",   false, true,  true, },
-    { nullptr,    "system_other.img", "system.sig",   "system",   true,  false, true, },
-    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  false, true, },
-    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  true,  true, },
-    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  false, true, },
-    { "super",    "super.img",        "super.sig",    "super",    true,  true, false, },
+                                                                  true,  ImageType::Normal },
+    { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  ImageType::BootCritical },
+    { "super",    "super.img",        "super.sig",    "super",    true,  ImageType::Extra },
+    { "system",   "system.img",       "system.sig",   "system",   false, ImageType::Normal },
+    { nullptr,    "system_other.img", "system.sig",   "system",   true,  ImageType::Normal },
+    { "userdata", "userdata.img",     "userdata.sig", "userdata", true,  ImageType::Extra },
+    { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  ImageType::BootCritical },
+    { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
+    { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  ImageType::Normal },
         // clang-format on
 };
 
-static std::string find_item_given_name(const char* img_name) {
+static std::string find_item_given_name(const std::string& img_name) {
     char* dir = getenv("ANDROID_PRODUCT_OUT");
     if (dir == nullptr || dir[0] == '\0') {
         die("ANDROID_PRODUCT_OUT not set");
     }
-    return android::base::StringPrintf("%s/%s", dir, img_name);
+    return std::string(dir) + "/" + img_name;
 }
 
 static std::string find_item(const std::string& item) {
@@ -155,9 +165,6 @@ static std::string find_item(const std::string& item) {
             return find_item_given_name(images[i].img_name);
         }
     }
-
-    if (item == "userdata") return find_item_given_name("userdata.img");
-    if (item == "cache") return find_item_given_name("cache.img");
 
     fprintf(stderr, "unknown partition '%s'\n", item.c_str());
     return "";
@@ -638,8 +645,7 @@ static void check_requirement(char* line) {
     // "require partition-exists=x" is a special case, added because of the trouble we had when
     // Pixel 2 shipped with new partitions and users used old versions of fastboot to flash them,
     // missing out new partitions. A device with new partitions can use "partition-exists" to
-    // override the fields `optional_if_no_image` and 'optional_if_no_partition' in the `images`
-    // array.
+    // override the fields `optional_if_no_image` in the `images` array.
     if (!strcmp(name, "partition-exists")) {
         const char* partition_name = val[0];
         std::string has_slot;
@@ -651,7 +657,6 @@ static void check_requirement(char* line) {
         for (size_t i = 0; i < arraysize(images); ++i) {
             if (images[i].nickname && !strcmp(images[i].nickname, partition_name)) {
                 images[i].optional_if_no_image = false;
-                images[i].optional_if_no_partition = false;
                 known_partition = true;
             }
         }
@@ -1126,11 +1131,6 @@ static void do_update(const char* filename, const std::string& slot_override, bo
             die("non-optional file %s missing", images[i].img_name);
         }
 
-        if (images[i].optional_if_no_partition &&
-            !if_partition_exists(images[i].part_name, slot)) {
-            continue;
-        }
-
         fastboot_buffer buf;
         if (!load_buf_fd(fd, &buf)) {
             die("cannot load %s from flash: %s", images[i].img_name, strerror(errno));
@@ -1216,6 +1216,26 @@ static void update_super_partition(bool force_wipe) {
     fb_execute_queue();
 }
 
+static void flash_images(const std::vector<std::pair<const Image*, std::string>>& images) {
+    // Flash each partition in the list if it has a corresponding image.
+    for (const auto& [image, slot] : images) {
+        auto fname = find_item_given_name(image->img_name);
+        fastboot_buffer buf;
+        if (!load_buf(fname.c_str(), &buf)) {
+            if (image->optional_if_no_image) continue;
+            die("could not load '%s': %s", image->img_name, strerror(errno));
+        }
+        auto flashall = [&](const std::string &partition) {
+            do_send_signature(fname.c_str());
+            if (is_logical(partition)) {
+                fb_queue_resize_partition(partition, std::to_string(buf.image_size));
+            }
+            flash_buf(partition.c_str(), &buf);
+        };
+        do_for_partitions(image->part_name, slot, flashall, false);
+    }
+}
+
 static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
     std::string fname;
     queue_info_dump();
@@ -1246,12 +1266,10 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary, b
         }
     }
 
-    update_super_partition(wipe);
-
     // List of partitions to flash and their slots.
-    std::vector<std::pair<const Image*, std::string>> entries;
+    std::vector<std::pair<const Image*, std::string>> boot_images;
+    std::vector<std::pair<const Image*, std::string>> os_images;
     for (size_t i = 0; i < arraysize(images); i++) {
-        if (!images[i].flashall) continue;
         const char* slot = NULL;
         if (images[i].IsSecondary()) {
             if (!skip_secondary) slot = secondary.c_str();
@@ -1259,39 +1277,33 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary, b
             slot = slot_override.c_str();
         }
         if (!slot) continue;
-        entries.emplace_back(&images[i], slot);
+        if (images[i].type == ImageType::BootCritical) {
+            boot_images.emplace_back(&images[i], slot);
+        } else if (images[i].type == ImageType::Normal) {
+            os_images.emplace_back(&images[i], slot);
+        }
+    }
 
-        // Resize any logical partition to 0, so each partition is reset to 0
-        // extents, and will achieve more optimal allocation.
+    // First flash boot partitions. We allow this to happen either in userspace
+    // or in bootloader fastboot.
+    flash_images(boot_images);
+
+    // Sync the super partition. This will reboot to userspace fastboot if needed.
+    update_super_partition(wipe);
+
+    // Resize any logical partition to 0, so each partition is reset to 0
+    // extents, and will achieve more optimal allocation.
+    for (const auto& [image, slot] : os_images) {
         auto resize_partition = [](const std::string& partition) -> void {
             if (is_logical(partition)) {
                 fb_queue_resize_partition(partition, "0");
             }
         };
-        do_for_partitions(images[i].part_name, slot, resize_partition, false);
+        do_for_partitions(image->part_name, slot, resize_partition, false);
     }
 
-    // Flash each partition in the list if it has a corresponding image.
-    for (const auto& [image, slot] : entries) {
-        fname = find_item_given_name(image->img_name);
-        fastboot_buffer buf;
-        if (!load_buf(fname.c_str(), &buf)) {
-            if (image->optional_if_no_image) continue;
-            die("could not load '%s': %s", image->img_name, strerror(errno));
-        }
-        if (image->optional_if_no_partition &&
-            !if_partition_exists(image->part_name, slot)) {
-            continue;
-        }
-        auto flashall = [&](const std::string &partition) {
-            do_send_signature(fname.c_str());
-            if (is_logical(partition)) {
-                fb_queue_resize_partition(partition, std::to_string(buf.image_size));
-            }
-            flash_buf(partition.c_str(), &buf);
-        };
-        do_for_partitions(image->part_name, slot, flashall, false);
-    }
+    // Flash OS images, resizing logical partitions as needed.
+    flash_images(os_images);
 
     if (slot_override == "all") {
         set_active("a");

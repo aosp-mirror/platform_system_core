@@ -791,7 +791,8 @@ static bool call_vdc(const std::vector<std::string>& args) {
         argv.emplace_back(arg.c_str());
     }
     LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
-    int ret = android_fork_execvp(4, const_cast<char**>(argv.data()), nullptr, false, true);
+    int ret =
+            android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), nullptr, false, true);
     if (ret != 0) {
         LOG(ERROR) << "vdc returned error code: " << ret;
         return false;
@@ -853,7 +854,8 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         }
 
         /* Skip mounting the root partition, as it will already have been mounted */
-        if (!strcmp(fstab->recs[i].mount_point, "/")) {
+        if (!strcmp(fstab->recs[i].mount_point, "/") ||
+            !strcmp(fstab->recs[i].mount_point, "/system")) {
             if ((fstab->recs[i].fs_mgr_flags & MS_RDONLY) != 0) {
                 fs_mgr_set_blk_ro(fstab->recs[i].blk_device);
             }

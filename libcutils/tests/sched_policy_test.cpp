@@ -67,6 +67,21 @@ static void AssertPolicy(SchedPolicy expected_policy) {
 }
 
 TEST(SchedPolicy, set_sched_policy) {
+    if (!schedboost_enabled()) {
+        // schedboost_enabled() (i.e. CONFIG_CGROUP_SCHEDTUNE) is optional;
+        // it's only needed on devices using energy-aware scheduler.
+        GTEST_LOG_(INFO) << "skipping test that requires CONFIG_CGROUP_SCHEDTUNE";
+        return;
+    }
+
+    ASSERT_EQ(0, set_sched_policy(0, SP_BACKGROUND));
+    AssertPolicy(SP_BACKGROUND);
+
+    ASSERT_EQ(0, set_sched_policy(0, SP_FOREGROUND));
+    AssertPolicy(SP_FOREGROUND);
+}
+
+TEST(SchedPolicy, set_sched_policy_timerslack) {
     if (!hasCapSysNice()) {
         GTEST_LOG_(INFO) << "skipping test that requires CAP_SYS_NICE";
         return;
@@ -82,11 +97,9 @@ TEST(SchedPolicy, set_sched_policy) {
     const unsigned int BG_FG_SLACK_FACTOR = 100;
 
     ASSERT_EQ(0, set_sched_policy(0, SP_BACKGROUND));
-    AssertPolicy(SP_BACKGROUND);
     auto bgSleepTime = medianSleepTime();
 
     ASSERT_EQ(0, set_sched_policy(0, SP_FOREGROUND));
-    AssertPolicy(SP_FOREGROUND);
     auto fgSleepTime = medianSleepTime();
     ASSERT_GT(bgSleepTime, fgSleepTime * BG_FG_SLACK_FACTOR);
 }
