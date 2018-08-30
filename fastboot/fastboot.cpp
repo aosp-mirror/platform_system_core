@@ -574,6 +574,7 @@ static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
+        errno = ENOENT;
         return -1;
     }
 
@@ -1033,14 +1034,6 @@ static void do_flash(const char* pname, const char* fname) {
     flash_buf(pname, &buf);
 }
 
-static void do_update_signature(ZipArchiveHandle zip, const char* filename) {
-    int64_t sz;
-    void* data = unzip_to_memory(zip, filename, &sz);
-    if (data == nullptr) return;
-    fb_queue_download("signature", data, sz);
-    fb_queue_command("signature", "installing signature");
-}
-
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
 static void set_active(const std::string& slot_override) {
@@ -1080,96 +1073,6 @@ static bool if_partition_exists(const std::string& partition, const std::string&
     return fb_getvar("partition-size:" + partition_name, &partition_size);
 }
 
-static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary) {
-    queue_info_dump();
-
-    fb_queue_query_save("product", cur_product, sizeof(cur_product));
-
-    ZipArchiveHandle zip;
-    int error = OpenArchive(filename, &zip);
-    if (error != 0) {
-        die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
-    }
-
-    int64_t sz;
-    void* data = unzip_to_memory(zip, "android-info.txt", &sz);
-    if (data == nullptr) {
-        die("update package '%s' has no android-info.txt", filename);
-    }
-
-    check_requirements(reinterpret_cast<char*>(data), sz);
-
-    std::string secondary;
-    if (!skip_secondary) {
-        if (slot_override != "") {
-            secondary = get_other_slot(slot_override);
-        } else {
-            secondary = get_other_slot();
-        }
-        if (secondary == "") {
-            if (supports_AB()) {
-                fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
-            }
-            skip_secondary = true;
-        }
-    }
-    for (size_t i = 0; i < arraysize(images); ++i) {
-        const char* slot = slot_override.c_str();
-        if (images[i].IsSecondary()) {
-            if (!skip_secondary) {
-                slot = secondary.c_str();
-            } else {
-                continue;
-            }
-        }
-
-        int fd = unzip_to_file(zip, images[i].img_name);
-        if (fd == -1) {
-            if (images[i].optional_if_no_image) {
-                continue; // An optional file is missing, so ignore it.
-            }
-            die("non-optional file %s missing", images[i].img_name);
-        }
-
-        fastboot_buffer buf;
-        if (!load_buf_fd(fd, &buf)) {
-            die("cannot load %s from flash: %s", images[i].img_name, strerror(errno));
-        }
-
-        auto update = [&](const std::string& partition) {
-            do_update_signature(zip, images[i].sig_name);
-            flash_buf(partition.c_str(), &buf);
-            /* not closing the fd here since the sparse code keeps the fd around
-             * but hasn't mmaped data yet. The temporary file will get cleaned up when the
-             * program exits.
-             */
-        };
-        do_for_partitions(images[i].part_name, slot, update, false);
-    }
-
-    if (slot_override == "all") {
-        set_active("a");
-    } else {
-        set_active(slot_override);
-    }
-
-    CloseArchive(zip);
-}
-
-static void do_send_signature(const std::string& fn) {
-    std::size_t extension_loc = fn.find(".img");
-    if (extension_loc == std::string::npos) return;
-
-    std::string fs_sig = fn.substr(0, extension_loc) + ".sig";
-
-    int64_t sz;
-    void* data = load_file(fs_sig.c_str(), &sz);
-    if (data == nullptr) return;
-
-    fb_queue_download("signature", data, sz);
-    fb_queue_command("signature", "installing signature");
-}
-
 static bool is_logical(const std::string& partition) {
     std::string value;
     return fb_getvar("is-logical:" + partition, &value) && value == "yes";
@@ -1186,114 +1089,58 @@ static void reboot_to_userspace_fastboot() {
     fb_reinit(open_device());
 }
 
-static void update_super_partition(bool force_wipe) {
-    if (!if_partition_exists("super", "")) {
-        return;
-    }
-    std::string image = find_item_given_name("super_empty.img");
-    if (access(image.c_str(), R_OK) < 0) {
-        return;
-    }
+class ImageSource {
+  public:
+    virtual void* ReadFile(const std::string& name, int64_t* size) const = 0;
+    virtual int OpenFile(const std::string& name) const = 0;
+};
 
-    if (!is_userspace_fastboot()) {
-        reboot_to_userspace_fastboot();
-    }
+class FlashAllTool {
+  public:
+    FlashAllTool(const ImageSource& source, const std::string& slot_override, bool skip_secondary, bool wipe);
 
-    int fd = open(image.c_str(), O_RDONLY);
-    if (fd < 0) {
-        die("could not open '%s': %s", image.c_str(), strerror(errno));
-    }
-    fb_queue_download_fd("super", fd, get_file_size(fd));
+    void Flash();
 
-    std::string command = "update-super:super";
-    if (force_wipe) {
-        command += ":wipe";
-    }
-    fb_queue_command(command, "Updating super partition");
+  private:
+    void CheckRequirements();
+    void DetermineSecondarySlot();
+    void CollectImages();
+    void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
+    void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
+    void UpdateSuperPartition();
 
-    // We need these commands to have finished before proceeding, since
-    // otherwise "getvar is-logical" may not return a correct answer below.
-    fb_execute_queue();
+    const ImageSource& source_;
+    std::string slot_override_;
+    bool skip_secondary_;
+    bool wipe_;
+    std::string secondary_slot_;
+    std::vector<std::pair<const Image*, std::string>> boot_images_;
+    std::vector<std::pair<const Image*, std::string>> os_images_;
+};
+
+FlashAllTool::FlashAllTool(const ImageSource& source, const std::string& slot_override, bool skip_secondary, bool wipe)
+   : source_(source),
+     slot_override_(slot_override),
+     skip_secondary_(skip_secondary),
+     wipe_(wipe)
+{
 }
 
-static void flash_images(const std::vector<std::pair<const Image*, std::string>>& images) {
-    // Flash each partition in the list if it has a corresponding image.
-    for (const auto& [image, slot] : images) {
-        auto fname = find_item_given_name(image->img_name);
-        fastboot_buffer buf;
-        if (!load_buf(fname.c_str(), &buf)) {
-            if (image->optional_if_no_image) continue;
-            die("could not load '%s': %s", image->img_name, strerror(errno));
-        }
-        auto flashall = [&](const std::string &partition) {
-            do_send_signature(fname.c_str());
-            if (is_logical(partition)) {
-                fb_queue_resize_partition(partition, std::to_string(buf.image_size));
-            }
-            flash_buf(partition.c_str(), &buf);
-        };
-        do_for_partitions(image->part_name, slot, flashall, false);
-    }
-}
-
-static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
-    std::string fname;
-    queue_info_dump();
-
-    fb_queue_query_save("product", cur_product, sizeof(cur_product));
-
-    fname = find_item_given_name("android-info.txt");
-    if (fname.empty()) die("cannot find android-info.txt");
-
-    int64_t sz;
-    void* data = load_file(fname.c_str(), &sz);
-    if (data == nullptr) die("could not load android-info.txt: %s", strerror(errno));
-
-    check_requirements(reinterpret_cast<char*>(data), sz);
-
-    std::string secondary;
-    if (!skip_secondary) {
-        if (slot_override != "") {
-            secondary = get_other_slot(slot_override);
-        } else {
-            secondary = get_other_slot();
-        }
-        if (secondary == "") {
-            if (supports_AB()) {
-                fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
-            }
-            skip_secondary = true;
-        }
-    }
-
-    // List of partitions to flash and their slots.
-    std::vector<std::pair<const Image*, std::string>> boot_images;
-    std::vector<std::pair<const Image*, std::string>> os_images;
-    for (size_t i = 0; i < arraysize(images); i++) {
-        const char* slot = NULL;
-        if (images[i].IsSecondary()) {
-            if (!skip_secondary) slot = secondary.c_str();
-        } else {
-            slot = slot_override.c_str();
-        }
-        if (!slot) continue;
-        if (images[i].type == ImageType::BootCritical) {
-            boot_images.emplace_back(&images[i], slot);
-        } else if (images[i].type == ImageType::Normal) {
-            os_images.emplace_back(&images[i], slot);
-        }
-    }
+void FlashAllTool::Flash() {
+    CheckRequirements();
+    DetermineSecondarySlot();
+    CollectImages();
 
     // First flash boot partitions. We allow this to happen either in userspace
     // or in bootloader fastboot.
-    flash_images(boot_images);
+    FlashImages(boot_images_);
 
     // Sync the super partition. This will reboot to userspace fastboot if needed.
-    update_super_partition(wipe);
+    UpdateSuperPartition();
 
     // Resize any logical partition to 0, so each partition is reset to 0
     // extents, and will achieve more optimal allocation.
-    for (const auto& [image, slot] : os_images) {
+    for (const auto& [image, slot] : os_images_) {
         auto resize_partition = [](const std::string& partition) -> void {
             if (is_logical(partition)) {
                 fb_queue_resize_partition(partition, "0");
@@ -1303,13 +1150,176 @@ static void do_flashall(const std::string& slot_override, bool skip_secondary, b
     }
 
     // Flash OS images, resizing logical partitions as needed.
-    flash_images(os_images);
+    FlashImages(os_images_);
 
-    if (slot_override == "all") {
+    if (slot_override_ == "all") {
         set_active("a");
     } else {
-        set_active(slot_override);
+        set_active(slot_override_);
     }
+}
+
+void FlashAllTool::CheckRequirements() {
+    int64_t sz;
+    void* data = source_.ReadFile("android-info.txt", &sz);
+    if (data == nullptr) {
+        die("could not read android-info.txt");
+    }
+    check_requirements(reinterpret_cast<char*>(data), sz);
+}
+
+void FlashAllTool::DetermineSecondarySlot() {
+    if (skip_secondary_) {
+        return;
+    }
+    if (slot_override_ != "") {
+        secondary_slot_ = get_other_slot(slot_override_);
+    } else {
+        secondary_slot_ = get_other_slot();
+    }
+    if (secondary_slot_ == "") {
+        if (supports_AB()) {
+            fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
+        }
+        skip_secondary_ = true;
+    }
+}
+
+void FlashAllTool::CollectImages() {
+    for (size_t i = 0; i < arraysize(images); ++i) {
+        std::string slot = slot_override_;
+        if (images[i].IsSecondary()) {
+            if (skip_secondary_) {
+                continue;
+            }
+            slot = secondary_slot_;
+        }
+        if (images[i].type == ImageType::BootCritical) {
+            boot_images_.emplace_back(&images[i], slot);
+        } else if (images[i].type == ImageType::Normal) {
+            os_images_.emplace_back(&images[i], slot);
+        }
+    }
+}
+
+void FlashAllTool::FlashImages(const std::vector<std::pair<const Image*, std::string>>& images) {
+    for (const auto& [image, slot] : images) {
+        fastboot_buffer buf;
+        int fd = source_.OpenFile(image->img_name);
+        if (fd < 0 || !load_buf_fd(fd, &buf)) {
+            if (image->optional_if_no_image) {
+                continue;
+            }
+            die("could not load '%s': %s", image->img_name, strerror(errno));
+        }
+        FlashImage(*image, slot, &buf);
+    }
+}
+
+void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf) {
+    auto flash = [&, this](const std::string& partition_name) {
+        int64_t sz;
+        void* data = source_.ReadFile(image.sig_name, &sz);
+        if (data) {
+            fb_queue_download("signature", data, sz);
+            fb_queue_command("signature", "installing signature");
+        }
+
+        if (is_logical(partition_name)) {
+            fb_queue_resize_partition(partition_name, std::to_string(buf->image_size));
+        }
+        flash_buf(partition_name.c_str(), buf);
+    };
+    do_for_partitions(image.part_name, slot, flash, false);
+}
+
+void FlashAllTool::UpdateSuperPartition() {
+    if (!if_partition_exists("super", "")) {
+        return;
+    }
+
+    int fd = source_.OpenFile("super_empty.img");
+    if (fd < 0) {
+        return;
+    }
+    if (!is_userspace_fastboot()) {
+        reboot_to_userspace_fastboot();
+    }
+    fb_queue_download_fd("super", fd, get_file_size(fd));
+
+    std::string command = "update-super:super";
+    if (wipe_) {
+        command += ":wipe";
+    }
+    fb_queue_command(command, "Updating super partition");
+
+    // We need these commands to have finished before proceeding, since
+    // otherwise "getvar is-logical" may not return a correct answer below.
+    fb_execute_queue();
+}
+
+class ZipImageSource final : public ImageSource {
+  public:
+    explicit ZipImageSource(ZipArchiveHandle zip) : zip_(zip) {}
+    void* ReadFile(const std::string& name, int64_t* size) const override;
+    int OpenFile(const std::string& name) const override;
+
+  private:
+    ZipArchiveHandle zip_;
+};
+
+void* ZipImageSource::ReadFile(const std::string& name, int64_t* size) const {
+    return unzip_to_memory(zip_, name.c_str(), size);
+}
+
+int ZipImageSource::OpenFile(const std::string& name) const {
+    return unzip_to_file(zip_, name.c_str());
+}
+
+static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary) {
+    queue_info_dump();
+
+    fb_queue_query_save("product", cur_product, sizeof(cur_product));
+
+    ZipArchiveHandle zip;
+    int error = OpenArchive(filename, &zip);
+    if (error != 0) {
+        die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
+    }
+
+    FlashAllTool tool(ZipImageSource(zip), slot_override, skip_secondary, false);
+    tool.Flash();
+
+    CloseArchive(zip);
+}
+
+class LocalImageSource final : public ImageSource {
+  public:
+    void* ReadFile(const std::string& name, int64_t* size) const override;
+    int OpenFile(const std::string& name) const override;
+};
+
+void* LocalImageSource::ReadFile(const std::string& name, int64_t* size) const {
+    auto path = find_item_given_name(name);
+    if (path.empty()) {
+        return nullptr;
+    }
+    return load_file(path.c_str(), size);
+}
+
+int LocalImageSource::OpenFile(const std::string& name) const {
+    auto path = find_item_given_name(name);
+    return open(path.c_str(), O_RDONLY);
+}
+
+static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
+    std::string fname;
+    queue_info_dump();
+
+    fb_queue_query_save("product", cur_product, sizeof(cur_product));
+
+    FlashAllTool tool(LocalImageSource(), slot_override, skip_secondary, wipe);
+    tool.Flash();
 }
 
 static std::string next_arg(std::vector<std::string>* args) {
