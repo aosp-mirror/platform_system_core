@@ -44,7 +44,7 @@ TEST(process_map, smoke) {
   ASSERT_EQ(maps[0].end, 0x2ac00000ULL);
   ASSERT_EQ(maps[0].flags, PROT_READ | PROT_WRITE);
   ASSERT_EQ(maps[0].pgoff, 0ULL);
-  ASSERT_EQ(maps[0].name, "/dev/ashmem/dalvik-main space (region space) (deleted)");
+  ASSERT_EQ(maps[0].name, "[anon:dalvik-main space (region space)]");
   ASSERT_EQ(maps[876].start, 0x70e6c4f000ULL);
   ASSERT_EQ(maps[876].end, 0x70e6c6b000ULL);
   ASSERT_EQ(maps[876].flags, PROT_READ | PROT_EXEC);
@@ -55,6 +55,6 @@ TEST(process_map, smoke) {
   ASSERT_EQ(maps[1260].flags, PROT_READ);
   ASSERT_EQ(maps[1260].pgoff, 0ULL);
   ASSERT_EQ(maps[1260].name,
-            "/dev/ashmem/dalvik-classes.dex extracted in memory from "
-            "/data/app/com.google.sample.tunnel-HGGRU03Gu1Mwkf_-RnFmvw==/base.apk (deleted)");
+            "[anon:dalvik-classes.dex extracted in memory from "
+            "/data/app/com.google.sample.tunnel-HGGRU03Gu1Mwkf_-RnFmvw==/base.apk]");
 }
