@@ -86,15 +86,12 @@ class FastBootDriver {
     RetCode GetVar(const std::string& key, std::string* val,
                    std::vector<std::string>* info = nullptr);
     RetCode GetVarAll(std::vector<std::string>* response);
-    RetCode Powerdown(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode Reboot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode RebootTo(std::string target, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
     RetCode SetActive(const std::string& part, std::string* response = nullptr,
                       std::vector<std::string>* info = nullptr);
     RetCode Upload(const std::string& outfile, std::string* response = nullptr,
-                   std::vector<std::string>* info = nullptr);
-    RetCode Verify(uint32_t num, std::string* response = nullptr,
                    std::vector<std::string>* info = nullptr);
 
     /* HIGHER LEVEL COMMANDS -- Composed of the commands above */
@@ -136,11 +133,9 @@ class FastBootDriver {
         static const std::string ERASE;
         static const std::string FLASH;
         static const std::string GET_VAR;
-        static const std::string POWERDOWN;
         static const std::string REBOOT;
         static const std::string SET_ACTIVE;
         static const std::string UPLOAD;
-        static const std::string VERIFY;
     };
 
     Transport* transport_;
