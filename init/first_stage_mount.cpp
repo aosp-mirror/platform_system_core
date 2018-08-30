@@ -375,7 +375,7 @@ bool FirstStageMount::MountPartitions() {
     }
 
     for (auto fstab_rec : mount_fstab_recs_) {
-        if (!MountPartition(fstab_rec)) {
+        if (!MountPartition(fstab_rec) && !fs_mgr_is_nofail(fstab_rec)) {
             return false;
         }
     }
