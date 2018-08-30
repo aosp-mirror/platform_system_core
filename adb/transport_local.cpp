@@ -117,14 +117,15 @@ void connect_device(const std::string& address, std::string* response) {
         std::tie(fd, port, serial) = tcp_connect(address, &response);
         if (fd == -1) {
             D("reconnect failed: %s", response.c_str());
-            return false;
+            return ReconnectResult::Retry;
         }
 
         // This invokes the part of register_socket_transport() that needs to be
         // invoked if the atransport* has already been setup. This eventually
         // calls atransport->SetConnection() with a newly created Connection*
         // that will in turn send the CNXN packet.
-        return init_socket_transport(t, std::move(fd), port, 0) >= 0;
+        return init_socket_transport(t, std::move(fd), port, 0) >= 0 ? ReconnectResult::Success
+                                                                     : ReconnectResult::Retry;
     };
 
     int error;
@@ -166,7 +167,7 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
         if (register_socket_transport(std::move(fd), std::move(serial), adb_port, 1,
-                                      [](atransport*) { return false; })) {
+                                      [](atransport*) { return ReconnectResult::Abort; })) {
             return 0;
         }
     }
@@ -269,7 +270,7 @@ static void server_socket_thread(int port) {
             disable_tcp_nagle(fd.get());
             std::string serial = android::base::StringPrintf("host-%d", fd.get());
             register_socket_transport(std::move(fd), std::move(serial), port, 1,
-                                      [](atransport*) { return false; });
+                                      [](atransport*) { return ReconnectResult::Abort; });
         }
     }
     D("transport: server_socket_thread() exiting");
@@ -366,7 +367,7 @@ static void qemu_socket_thread(int port) {
                 std::string serial = android::base::StringPrintf("host-%d", fd.get());
                 WriteFdExactly(fd.get(), _start_req, strlen(_start_req));
                 register_socket_transport(std::move(fd), std::move(serial), port, 1,
-                                          [](atransport*) { return false; });
+                                          [](atransport*) { return ReconnectResult::Abort; });
             }
 
             /* Prepare for accepting of the next ADB host connection. */
