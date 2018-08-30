@@ -49,7 +49,7 @@
  *      upper 16-bit pixels in DREG into FB
  *
  *
- * clobbered: w6, w7, w16, w17, w18
+ * clobbered: w6, w7, w15, w16, w17
  *
  */
 
@@ -73,8 +73,8 @@
     add     w16, w6, w16, lsr #8
     cmp     w16, #0x1F
     orr     w17, \FB, #(0x1F<<(16 + 11))
-    orr     w18, \FB, w16, lsl #(16 + 11)
-    csel    \FB, w17, w18, hi
+    orr     w15, \FB, w16, lsl #(16 + 11)
+    csel    \FB, w17, w15, hi
         // green
         and     w6, \DREG, #(0x3F<<(16 + 5))
         lsr     w17,w6,#(16+5)
@@ -84,8 +84,8 @@
         add     w6, w16, w6, lsr #8
         cmp     w6, #0x3F
         orr     w17, \FB, #(0x3F<<(16 + 5))
-        orr     w18, \FB, w6, lsl #(16 + 5)
-        csel    \FB, w17, w18, hi
+        orr     w15, \FB, w6, lsl #(16 + 5)
+        csel    \FB, w17, w15, hi
             // blue
             and     w16, \DREG, #(0x1F << 16)
             lsr     w17,w16,#16
@@ -95,8 +95,8 @@
             add     w16, w6, w16, lsr #8
             cmp     w16, #0x1F
             orr     w17, \FB, #(0x1F << 16)
-            orr     w18, \FB, w16, lsl #16
-            csel    \FB, w17, w18, hi
+            orr     w15, \FB, w16, lsl #16
+            csel    \FB, w17, w15, hi
 
 .else //Blending even pixel present in bottom 16 bits of DREG register
 
@@ -109,8 +109,8 @@
     add     w16, w6, w16, lsr #8
     cmp     w16, #0x1F
     mov     w17, #(0x1F<<11)
-    lsl     w18, w16, #11
-    csel    \FB, w17, w18, hi
+    lsl     w15, w16, #11
+    csel    \FB, w17, w15, hi
 
 
         // green
@@ -121,8 +121,8 @@
         add     w6, w16, w6, lsr #(5+8)
         cmp     w6, #0x3F
         orr     w17, \FB, #(0x3F<<5)
-        orr     w18, \FB, w6, lsl #5
-        csel    \FB, w17, w18, hi
+        orr     w15, \FB, w6, lsl #5
+        csel    \FB, w17, w15, hi
 
             // blue
             and     w16, \DREG, #0x1F
@@ -132,8 +132,8 @@
             add     w16, w6, w16, lsr #8
             cmp     w16, #0x1F
             orr     w17, \FB, #0x1F
-            orr     w18, \FB, w16
-            csel    \FB, w17, w18, hi
+            orr     w15, \FB, w16
+            csel    \FB, w17, w15, hi
 
 .endif // End of blending even pixel
 
