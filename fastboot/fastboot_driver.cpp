@@ -89,10 +89,6 @@ RetCode FastBootDriver::GetVarAll(std::vector<std::string>* response) {
     return GetVar("all", &tmp, response);
 }
 
-RetCode FastBootDriver::Powerdown(std::string* response, std::vector<std::string>* info) {
-    return RawCommand(Commands::POWERDOWN, response, info);
-}
-
 RetCode FastBootDriver::Reboot(std::string* response, std::vector<std::string>* info) {
     return RawCommand(Commands::REBOOT, response, info);
 }
@@ -105,11 +101,6 @@ RetCode FastBootDriver::RebootTo(std::string target, std::string* response,
 RetCode FastBootDriver::SetActive(const std::string& part, std::string* response,
                                   std::vector<std::string>* info) {
     return RawCommand(Commands::SET_ACTIVE + part, response, info);
-}
-
-RetCode FastBootDriver::Verify(uint32_t num, std::string* response, std::vector<std::string>* info) {
-    std::string cmd = android::base::StringPrintf("%s%08" PRIx32, Commands::VERIFY.c_str(), num);
-    return RawCommand(cmd, response, info);
 }
 
 RetCode FastBootDriver::FlashPartition(const std::string& part, const std::vector<char>& data) {
@@ -436,11 +427,9 @@ const std::string FastBootDriver::Commands::DOWNLOAD = "download:";
 const std::string FastBootDriver::Commands::ERASE = "erase:";
 const std::string FastBootDriver::Commands::FLASH = "flash:";
 const std::string FastBootDriver::Commands::GET_VAR = "getvar:";
-const std::string FastBootDriver::Commands::POWERDOWN = "powerdown";
 const std::string FastBootDriver::Commands::REBOOT = "reboot";
 const std::string FastBootDriver::Commands::SET_ACTIVE = "set_active:";
 const std::string FastBootDriver::Commands::UPLOAD = "upload";
-const std::string FastBootDriver::Commands::VERIFY = "verify:";
 
 /******************************* PRIVATE **************************************/
 RetCode FastBootDriver::SendBuffer(int fd, size_t size) {
