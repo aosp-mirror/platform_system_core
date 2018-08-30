@@ -45,6 +45,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <build/version.h>
+#include <platform_tools_version.h>
 
 #include "adb_auth.h"
 #include "adb_io.h"
@@ -65,10 +66,11 @@ std::string adb_version() {
     // Don't change the format of this --- it's parsed by ddmlib.
     return android::base::StringPrintf(
         "Android Debug Bridge version %d.%d.%d\n"
-        "Version %s\n"
+        "Version %s-%s\n"
         "Installed as %s\n",
         ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
-        android::build::GetBuildNumber().c_str(), android::base::GetExecutablePath().c_str());
+        PLATFORM_TOOLS_VERSION, android::build::GetBuildNumber().c_str(),
+        android::base::GetExecutablePath().c_str());
 }
 
 void fatal(const char *fmt, ...) {
