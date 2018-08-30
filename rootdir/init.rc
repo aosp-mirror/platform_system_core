@@ -716,12 +716,12 @@ on property:vold.decrypt=trigger_restart_min_framework
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
-    stop surfaceflinger
-    start surfaceflinger
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
     class_start main
     class_start late_start
+    setprop service.bootanim.exit 0
+    start bootanim
 
 on property:vold.decrypt=trigger_shutdown_framework
     class_reset late_start
