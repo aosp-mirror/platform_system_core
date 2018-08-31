@@ -39,9 +39,10 @@ class FastbootDevice {
     bool HandleData(bool read, std::vector<char>* data);
     std::string GetCurrentSlot();
 
-    // Shortcuts for writing OKAY and FAIL status results.
+    // Shortcuts for writing status results.
     bool WriteOkay(const std::string& message);
     bool WriteFail(const std::string& message);
+    bool WriteInfo(const std::string& message);
 
     std::vector<char>& download_data() { return download_data_; }
     Transport* get_transport() { return transport_.get(); }

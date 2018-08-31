@@ -42,26 +42,66 @@ using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
 using namespace android::fs_mgr;
 
+struct VariableHandlers {
+    // Callback to retrieve the value of a single variable.
+    std::function<bool(FastbootDevice*, const std::vector<std::string>&, std::string*)> get;
+    // Callback to retrieve all possible argument combinations, for getvar all.
+    std::function<std::vector<std::vector<std::string>>(FastbootDevice*)> get_all_args;
+};
+
+static void GetAllVars(FastbootDevice* device, const std::string& name,
+                       const VariableHandlers& handlers) {
+    if (!handlers.get_all_args) {
+        std::string message;
+        if (!handlers.get(device, std::vector<std::string>(), &message)) {
+            return;
+        }
+        device->WriteInfo(android::base::StringPrintf("%s:%s", name.c_str(), message.c_str()));
+        return;
+    }
+
+    auto all_args = handlers.get_all_args(device);
+    for (const auto& args : all_args) {
+        std::string message;
+        if (!handlers.get(device, args, &message)) {
+            continue;
+        }
+        std::string arg_string = android::base::Join(args, ":");
+        device->WriteInfo(android::base::StringPrintf("%s:%s:%s", name.c_str(), arg_string.c_str(),
+                                                      message.c_str()));
+    }
+}
+
 bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    using VariableHandler =
-            std::function<bool(FastbootDevice*, const std::vector<std::string>&, std::string*)>;
-    const std::unordered_map<std::string, VariableHandler> kVariableMap = {
-            {FB_VAR_VERSION, GetVersion},
-            {FB_VAR_VERSION_BOOTLOADER, GetBootloaderVersion},
-            {FB_VAR_VERSION_BASEBAND, GetBasebandVersion},
-            {FB_VAR_PRODUCT, GetProduct},
-            {FB_VAR_SERIALNO, GetSerial},
-            {FB_VAR_SECURE, GetSecure},
-            {FB_VAR_UNLOCKED, GetUnlocked},
-            {FB_VAR_MAX_DOWNLOAD_SIZE, GetMaxDownloadSize},
-            {FB_VAR_CURRENT_SLOT, ::GetCurrentSlot},
-            {FB_VAR_SLOT_COUNT, GetSlotCount},
-            {FB_VAR_HAS_SLOT, GetHasSlot},
-            {FB_VAR_SLOT_SUCCESSFUL, GetSlotSuccessful},
-            {FB_VAR_SLOT_UNBOOTABLE, GetSlotUnbootable},
-            {FB_VAR_PARTITION_SIZE, GetPartitionSize},
-            {FB_VAR_IS_LOGICAL, GetPartitionIsLogical},
-            {FB_VAR_IS_USERSPACE, GetIsUserspace}};
+    const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
+            {FB_VAR_VERSION, {GetVersion, nullptr}},
+            {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
+            {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
+            {FB_VAR_PRODUCT, {GetProduct, nullptr}},
+            {FB_VAR_SERIALNO, {GetSerial, nullptr}},
+            {FB_VAR_SECURE, {GetSecure, nullptr}},
+            {FB_VAR_UNLOCKED, {GetUnlocked, nullptr}},
+            {FB_VAR_MAX_DOWNLOAD_SIZE, {GetMaxDownloadSize, nullptr}},
+            {FB_VAR_CURRENT_SLOT, {::GetCurrentSlot, nullptr}},
+            {FB_VAR_SLOT_COUNT, {GetSlotCount, nullptr}},
+            {FB_VAR_HAS_SLOT, {GetHasSlot, GetAllPartitionArgsNoSlot}},
+            {FB_VAR_SLOT_SUCCESSFUL, {GetSlotSuccessful, nullptr}},
+            {FB_VAR_SLOT_UNBOOTABLE, {GetSlotUnbootable, nullptr}},
+            {FB_VAR_PARTITION_SIZE, {GetPartitionSize, GetAllPartitionArgsWithSlot}},
+            {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
+            {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}}};
+
+    if (args.size() < 2) {
+        return device->WriteFail("Missing argument");
+    }
+
+    // Special case: return all variables that we can.
+    if (args[1] == "all") {
+        for (const auto& [name, handlers] : kVariableMap) {
+            GetAllVars(device, name, handlers);
+        }
+        return device->WriteOkay("");
+    }
 
     // args[0] is command name, args[1] is variable.
     auto found_variable = kVariableMap.find(args[1]);
@@ -71,7 +111,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
 
     std::string message;
     std::vector<std::string> getvar_args(args.begin() + 2, args.end());
-    if (!found_variable->second(device, getvar_args, &message)) {
+    if (!found_variable->second.get(device, getvar_args, &message)) {
         return device->WriteFail(message);
     }
     return device->WriteOkay(message);
