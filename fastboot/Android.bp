@@ -160,7 +160,6 @@ cc_defaults {
                 "-lpthread",
                 "-framework CoreFoundation",
                 "-framework IOKit",
-                "-framework Carbon",
             ],
         },
         windows: {
