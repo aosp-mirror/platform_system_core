@@ -244,7 +244,7 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
     } else if (mapping_name == "[anon:libc_malloc]") {
       // named malloc mapping
       heap_mappings.emplace_back(*it);
-    } else if (has_prefix(mapping_name, "/dev/ashmem/dalvik")) {
+    } else if (has_prefix(mapping_name, "[anon:dalvik-")) {
       // named dalvik heap mapping
       globals_mappings.emplace_back(*it);
     } else if (has_prefix(mapping_name, "[stack")) {
