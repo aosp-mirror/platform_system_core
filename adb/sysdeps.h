@@ -72,12 +72,7 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '\\' || c == '/';
 }
 
-static __inline__ int adb_thread_setname(const std::string& name) {
-    // TODO: See https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx for how to set
-    // the thread name in Windows. Unfortunately, it only works during debugging, but
-    // our build process doesn't generate PDB files needed for debugging.
-    return 0;
-}
+extern int adb_thread_setname(const std::string& name);
 
 static __inline__ void  close_on_exec(int  fd)
 {
