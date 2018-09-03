@@ -129,6 +129,13 @@ static __inline__  int  unix_write(int  fd, const void*  buf, size_t  len)
 #undef   write
 #define  write  ___xxx_write
 
+// See the comments for the !defined(_WIN32) version of unix_lseek().
+static __inline__ int unix_lseek(int fd, int pos, int where) {
+    return lseek(fd, pos, where);
+}
+#undef lseek
+#define lseek ___xxx_lseek
+
 // See the comments for the !defined(_WIN32) version of adb_open_mode().
 static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 {
@@ -523,6 +530,7 @@ inline int adb_socket_get_local_port(int fd) {
 // via _setmode()).
 #define  unix_read   adb_read
 #define  unix_write  adb_write
+#define unix_lseek adb_lseek
 #define  unix_close  adb_close
 
 static __inline__ int adb_thread_setname(const std::string& name) {
