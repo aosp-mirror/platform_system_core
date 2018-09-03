@@ -89,17 +89,10 @@ cc_library {
                 "libbase",
                 "liblog",
                 "libunwindstack",
-                "libdexfile",
             ],
 
             static_libs: [
                 "libprocinfo",
-            ],
-
-            // libdexfile will eventually properly export headers, for now
-            // include these directly.
-            include_dirs: [
-                "art/runtime",
             ],
         },
         android: {
@@ -107,11 +100,9 @@ cc_library {
         },
         vendor: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
-            exclude_shared_libs: ["libdexfile"],
         },
         recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
-            exclude_shared_libs: ["libdexfile"],
         },
     },
     whole_static_libs: ["libdemangle"],
@@ -154,7 +145,6 @@ cc_test {
     shared_libs: [
         "libbacktrace_test",
         "libbacktrace",
-        "libdexfile",
         "libbase",
         "liblog",
         "libunwindstack",
@@ -173,12 +163,6 @@ cc_test {
             static_libs: ["libutils"],
         },
     },
-
-    // libdexfile will eventually properly export headers, for now
-    // include these directly.
-    include_dirs: [
-        "art/runtime",
-    ],
 
     test_suites: ["device-tests"],
     data: [
