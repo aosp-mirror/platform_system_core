@@ -158,4 +158,5 @@ cc_binary {
         "libbase",
         "libziparchive",
     ],
+    recovery_available: true,
 }
