@@ -222,3 +222,37 @@ bool GetIsUserspace(FastbootDevice* /* device */, const std::vector<std::string>
     *message = "yes";
     return true;
 }
+
+std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device) {
+    std::vector<std::vector<std::string>> args;
+    auto partitions = ListPartitions(device);
+    for (const auto& partition : partitions) {
+        args.emplace_back(std::initializer_list<std::string>{partition});
+    }
+    return args;
+}
+
+std::vector<std::vector<std::string>> GetAllPartitionArgsNoSlot(FastbootDevice* device) {
+    auto partitions = ListPartitions(device);
+
+    std::string slot_suffix = device->GetCurrentSlot();
+    if (!slot_suffix.empty()) {
+        auto names = std::move(partitions);
+        for (const auto& name : names) {
+            std::string slotless_name = name;
+            if (android::base::EndsWith(name, "_a") || android::base::EndsWith(name, "_b")) {
+                slotless_name = name.substr(0, name.rfind("_"));
+            }
+            if (std::find(partitions.begin(), partitions.end(), slotless_name) ==
+                partitions.end()) {
+                partitions.emplace_back(slotless_name);
+            }
+        }
+    }
+
+    std::vector<std::vector<std::string>> args;
+    for (const auto& partition : partitions) {
+        args.emplace_back(std::initializer_list<std::string>{partition});
+    }
+    return args;
+}
