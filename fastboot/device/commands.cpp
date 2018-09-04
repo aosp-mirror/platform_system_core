@@ -43,7 +43,8 @@ using ::android::hardware::boot::V1_0::Slot;
 using namespace android::fs_mgr;
 
 bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    using VariableHandler = std::function<bool(FastbootDevice*, const std::vector<std::string>&)>;
+    using VariableHandler =
+            std::function<bool(FastbootDevice*, const std::vector<std::string>&, std::string*)>;
     const std::unordered_map<std::string, VariableHandler> kVariableMap = {
             {FB_VAR_VERSION, GetVersion},
             {FB_VAR_VERSION_BOOTLOADER, GetBootloaderVersion},
@@ -65,11 +66,15 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
     // args[0] is command name, args[1] is variable.
     auto found_variable = kVariableMap.find(args[1]);
     if (found_variable == kVariableMap.end()) {
-        return device->WriteStatus(FastbootResult::FAIL, "Unknown variable");
+        return device->WriteFail("Unknown variable");
     }
 
+    std::string message;
     std::vector<std::string> getvar_args(args.begin() + 2, args.end());
-    return found_variable->second(device, getvar_args);
+    if (!found_variable->second(device, getvar_args, &message)) {
+        return device->WriteFail(message);
+    }
+    return device->WriteOkay(message);
 }
 
 bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) {
