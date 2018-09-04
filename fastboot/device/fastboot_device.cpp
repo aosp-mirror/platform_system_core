@@ -137,3 +137,7 @@ bool FastbootDevice::WriteOkay(const std::string& message) {
 bool FastbootDevice::WriteFail(const std::string& message) {
     return WriteStatus(FastbootResult::FAIL, message);
 }
+
+bool FastbootDevice::WriteInfo(const std::string& message) {
+    return WriteStatus(FastbootResult::INFO, message);
+}
