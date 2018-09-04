@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #endif
 
+#include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -197,6 +198,17 @@ inline bool Socketpair(int domain, int type, int protocol, unique_fd_impl<Closer
 template <typename Closer>
 inline bool Socketpair(int type, unique_fd_impl<Closer>* left, unique_fd_impl<Closer>* right) {
   return Socketpair(AF_UNIX, type, 0, left, right);
+}
+
+// Using fdopen with unique_fd correctly is more annoying than it should be,
+// because fdopen doesn't close the file descriptor received upon failure.
+inline FILE* Fdopen(unique_fd&& ufd, const char* mode) {
+  int fd = ufd.release();
+  FILE* file = fdopen(fd, mode);
+  if (!file) {
+    close(fd);
+  }
+  return file;
 }
 
 #endif  // !defined(_WIN32)
