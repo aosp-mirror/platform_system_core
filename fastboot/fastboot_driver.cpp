@@ -126,7 +126,7 @@ RetCode FastBootDriver::FlashPartition(const std::string& part, sparse_file* s) 
     return RawCommand(Commands::FLASH + part);
 }
 
-RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint32_t>>* parts) {
+RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>>* parts) {
     std::vector<std::string> all;
     RetCode ret;
     if ((ret = GetVarAll(&all))) {
@@ -140,7 +140,7 @@ RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint32_t>
         if (std::regex_match(s, sm, reg)) {
             std::string m1(sm[1]);
             std::string m2(sm[2]);
-            uint32_t tmp = strtol(m2.c_str(), 0, 16);
+            uint64_t tmp = strtoll(m2.c_str(), 0, 16);
             parts->push_back(std::make_tuple(m1, tmp));
         }
     }
