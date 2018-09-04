@@ -88,7 +88,9 @@ void fb_init(fastboot::FastBootDriver& fbi) {
 }
 
 void fb_reinit(Transport* transport) {
-    fb->set_transport(transport);
+    if (Transport* old_transport = fb->set_transport(transport)) {
+        delete old_transport;
+    }
 }
 
 const std::string fb_get_error() {
@@ -392,6 +394,6 @@ bool fb_reboot_to_userspace() {
     }
     fprintf(stderr, "OKAY\n");
 
-    fb->set_transport(nullptr);
+    fb_reinit(nullptr);
     return true;
 }

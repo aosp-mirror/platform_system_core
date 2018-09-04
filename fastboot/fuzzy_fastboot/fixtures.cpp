@@ -133,7 +133,6 @@ void FastBootTest::TearDown() {
     fb.reset();
 
     if (transport) {
-        transport->Close();
         transport.reset();
     }
 
@@ -188,7 +187,6 @@ void FastBootTest::SetLockState(bool unlock, bool assert_change) {
         ASSERT_EQ(fb->RawCommand("flashing " + cmd, &resp), SUCCESS)
                 << "Attempting to change locked state, but 'flashing" + cmd + "' command failed";
         fb.reset();
-        transport->Close();
         transport.reset();
         printf("PLEASE RESPOND TO PROMPT FOR '%sing' BOOTLOADER ON DEVICE\n", cmd.c_str());
         while (UsbStillAvailible())
@@ -249,7 +247,6 @@ void Fuzz::TearDown() {
     }
 
     if (transport) {
-        transport->Close();
         transport.reset();
     }
 
