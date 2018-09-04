@@ -21,19 +21,30 @@
 
 class FastbootDevice;
 
-bool GetVersion(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetProduct(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetSerial(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetSecure(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args);
-bool GetIsUserspace(FastbootDevice* device, const std::vector<std::string>& args);
+bool GetVersion(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>& args,
+                          std::string* message);
+bool GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& args,
+                        std::string* message);
+bool GetProduct(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetSerial(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetSecure(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& args,
+                    std::string* message);
+bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& args,
+                  std::string* message);
+bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args,
+                       std::string* message);
+bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args,
+                       std::string* message);
+bool GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& args,
+                        std::string* message);
+bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& args,
+                 std::string* message);
+bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message);
+bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args,
+                           std::string* message);
+bool GetIsUserspace(FastbootDevice* device, const std::vector<std::string>& args,
+                    std::string* message);
