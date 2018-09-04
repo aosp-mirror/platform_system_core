@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -81,9 +83,12 @@ seconds llkdSleepPeriod(char state) {
         (GetUintProperty(LLK_CHECK_MS_PROPERTY,
                          LLK_TIMEOUT_MS_DEFAULT / LLK_CHECKS_PER_TIMEOUT_DEFAULT) !=
          duration_cast<milliseconds>(10s))) {
-        execute("stop llkd");
+        execute("stop llkd-0");
+        execute("stop llkd-1");
         rest();
         std::string setprop("setprop ");
+        execute((setprop + LLK_CHECK_STACK_PROPERTY + " SyS_openat").c_str());
+        rest();
         execute((setprop + LLK_ENABLE_WRITEABLE_PROPERTY + " false").c_str());
         rest();
         execute((setprop + LLK_TIMEOUT_MS_PROPERTY + " 120000").c_str());
@@ -92,8 +97,10 @@ seconds llkdSleepPeriod(char state) {
         rest();
         execute((setprop + LLK_CHECK_MS_PROPERTY + " 10000").c_str());
         rest();
-        execute((setprop + LLK_ENABLE_PROPERTY + " true").c_str());
-        rest();
+        if (!default_enable) {
+            execute((setprop + LLK_ENABLE_PROPERTY + " true").c_str());
+            rest();
+        }
         execute((setprop + LLK_ENABLE_WRITEABLE_PROPERTY + " true").c_str());
         rest();
     }
@@ -104,7 +111,7 @@ seconds llkdSleepPeriod(char state) {
     }
     default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, default_enable);
     if (default_enable) {
-        execute("start llkd");
+        execute("start llkd-1");
         rest();
         GTEST_LOG_INFO << "llkd enabled\n";
     } else {
@@ -123,8 +130,10 @@ seconds llkdSleepPeriod(char state) {
         llkTimeoutMs = LLK_TIMEOUT_MS_MINIMUM;
     }
     milliseconds llkCheckMs = llkTimeoutMs / LLK_CHECKS_PER_TIMEOUT_DEFAULT;
-    auto timeout = GetUintProperty(
-        (state == 'Z') ? LLK_Z_TIMEOUT_MS_PROPERTY : LLK_D_TIMEOUT_MS_PROPERTY, llkTimeoutMs);
+    auto timeout = GetUintProperty((state == 'Z') ? LLK_Z_TIMEOUT_MS_PROPERTY
+                                                  : (state == 'S') ? LLK_STACK_TIMEOUT_MS_PROPERTY
+                                                                   : LLK_D_TIMEOUT_MS_PROPERTY,
+                                   llkTimeoutMs);
     if (timeout < LLK_TIMEOUT_MS_MINIMUM) {
         timeout = LLK_TIMEOUT_MS_MINIMUM;
     }
@@ -284,4 +293,42 @@ TEST(llkd, driver) {
     }
 
     waitForPid(child_pid);
+}
+
+TEST(llkd, sleep) {
+    if (checkKill("kernel_panic,sysrq,livelock,sleeping")) {
+        return;
+    }
+    if (!android::base::GetBoolProperty("ro.debuggable", false)) {
+        GTEST_LOG_WARNING << "Features not available on user builds\n";
+    }
+
+    const auto period = llkdSleepPeriod('S');
+
+    /* Create a Persistent SyS_openat for single-ended pipe */
+    static constexpr char stack_pipe_file[] = "/dev/stack_pipe_file";
+    unlink(stack_pipe_file);
+    auto pipe_ret = mknod(stack_pipe_file, S_IFIFO | 0666, 0);
+    ASSERT_LE(0, pipe_ret);
+
+    auto child_pid = fork();
+    ASSERT_LE(0, child_pid);
+    if (!child_pid) {
+        child_pid = fork();
+        ASSERT_LE(0, child_pid);
+        if (!child_pid) {
+            sleep(period.count());
+            auto fd = open(stack_pipe_file, O_RDONLY | O_CLOEXEC);
+            close(fd);
+            exit(0);
+        } else {
+            auto fd = open(stack_pipe_file, O_WRONLY | O_CLOEXEC);
+            close(fd);
+            exit(42);
+        }
+    }
+
+    waitForPid(child_pid);
+
+    unlink(stack_pipe_file);
 }
