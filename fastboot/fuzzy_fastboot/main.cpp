@@ -310,7 +310,7 @@ TEST_F(Conformance, PartitionInfo) {
             << "getvar:all did not report any partition-size: through INFO responses";
     std::set<std::string> allowed{"ext4", "f2fs", "raw"};
     for (const auto p : parts) {
-        EXPECT_GT(std::get<1>(p), 0);
+        EXPECT_GE(std::get<1>(p), 0);
         std::string part(std::get<0>(p));
         std::set<std::string> allowed{"ext4", "f2fs", "raw"};
         std::string resp;
