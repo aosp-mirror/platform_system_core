@@ -354,8 +354,7 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 }
 
 void copy_to_file(int inFd, int outFd) {
-    constexpr size_t BUFSIZE = 32 * 1024;
-    std::vector<char> buf(BUFSIZE);
+    std::vector<char> buf(32 * 1024);
     int len;
     long total = 0;
     int old_stdin_mode = -1;
@@ -367,9 +366,9 @@ void copy_to_file(int inFd, int outFd) {
 
     while (true) {
         if (inFd == STDIN_FILENO) {
-            len = unix_read(inFd, buf.data(), BUFSIZE);
+            len = unix_read(inFd, buf.data(), buf.size());
         } else {
-            len = adb_read(inFd, buf.data(), BUFSIZE);
+            len = adb_read(inFd, buf.data(), buf.size());
         }
         if (len == 0) {
             D("copy_to_file() : read 0 bytes; exiting");
