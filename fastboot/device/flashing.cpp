@@ -72,7 +72,7 @@ int WriteCallback(void* priv, const void* data, size_t len) {
 }
 
 int FlashSparseData(int fd, std::vector<char>& downloaded_data) {
-    struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(), true, false);
+    struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(), true, true);
     if (!file) {
         return -ENOENT;
     }
