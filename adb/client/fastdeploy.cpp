@@ -25,9 +25,9 @@
 #include "fastdeploycallbacks.h"
 #include "utils/String16.h"
 
-const long kRequiredAgentVersion = 0x00000001;
+static constexpr long kRequiredAgentVersion = 0x00000001;
 
-const char* kDeviceAgentPath = "/data/local/tmp/";
+static constexpr const char* kDeviceAgentPath = "/data/local/tmp/";
 
 long get_agent_version() {
     std::vector<char> versionOutputBuffer;
