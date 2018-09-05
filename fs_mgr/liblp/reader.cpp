@@ -314,7 +314,7 @@ std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
         return nullptr;
     }
 
-    // Read the priamry copy, and if that fails, try the backup.
+    // Read the primary copy, and if that fails, try the backup.
     std::unique_ptr<LpMetadata> metadata = ReadPrimaryMetadata(fd, geometry, slot_number);
     if (metadata) {
         return metadata;
