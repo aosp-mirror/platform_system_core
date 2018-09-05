@@ -56,5 +56,5 @@ std::optional<std::string> FindPhysicalPartition(const std::string& name);
 bool LogicalPartitionExists(const std::string& name, const std::string& slot_suffix,
                             bool* is_zero_length = nullptr);
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle);
-
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
+std::vector<std::string> ListPartitions(FastbootDevice* device);

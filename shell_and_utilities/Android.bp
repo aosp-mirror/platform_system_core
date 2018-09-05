@@ -21,6 +21,7 @@ phony {
         "tcpdump",
         "toolbox",
         "toybox",
+        "unzip",
     ],
 }
 
@@ -31,6 +32,7 @@ phony {
         "sh.recovery",
         "toolbox.recovery",
         "toybox.recovery",
+        "unzip.recovery",
     ],
 }
 
