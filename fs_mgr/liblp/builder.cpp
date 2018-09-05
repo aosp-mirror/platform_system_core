@@ -386,6 +386,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     }
 
     const uint64_t sectors_per_block = device_info_.logical_block_size / LP_SECTOR_SIZE;
+    CHECK_NE(sectors_per_block, 0);
     CHECK(sectors_needed % sectors_per_block == 0);
 
     // Find gaps that we can use for new extents. Note we store new extents in a
