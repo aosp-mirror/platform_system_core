@@ -570,7 +570,6 @@ TEST_F(Conformance, SparseCRCCheck) {
     buf.back() = buf.back() ^ 0x01;
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
-    printf("%02x\n", (unsigned char)buf.back());
     // It can either reject this download or reject it during flash
     if (HandleResponse() != DEVICE_FAIL) {
         EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
