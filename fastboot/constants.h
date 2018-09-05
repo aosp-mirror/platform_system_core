@@ -53,6 +53,7 @@
 #define FB_VAR_HAS_SLOT "has-slot"
 #define FB_VAR_SLOT_COUNT "slot-count"
 #define FB_VAR_PARTITION_SIZE "partition-size"
+#define FB_VAR_PARTITION_TYPE "partition-type"
 #define FB_VAR_SLOT_SUCCESSFUL "slot-successful"
 #define FB_VAR_SLOT_UNBOOTABLE "slot-unbootable"
 #define FB_VAR_IS_LOGICAL "is-logical"
