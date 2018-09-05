@@ -191,7 +191,7 @@ bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& ar
         return false;
     }
     uint64_t size = get_block_device_size(handle.fd());
-    *message = android::base::StringPrintf("%" PRIX64, size);
+    *message = android::base::StringPrintf("0x%" PRIX64, size);
     return true;
 }
 
