@@ -187,8 +187,8 @@ static void PollAllLocalPortsForEmulator() {
 }
 
 // Retry the disconnected local port for 60 times, and sleep 1 second between two retries.
-constexpr uint32_t LOCAL_PORT_RETRY_COUNT = 60;
-constexpr auto LOCAL_PORT_RETRY_INTERVAL = 1s;
+static constexpr uint32_t LOCAL_PORT_RETRY_COUNT = 60;
+static constexpr auto LOCAL_PORT_RETRY_INTERVAL = 1s;
 
 struct RetryPort {
     int port;
