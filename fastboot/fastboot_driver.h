@@ -109,8 +109,8 @@ class FastBootDriver {
     std::string Error();
     RetCode WaitForDisconnect();
 
-    // Note: changing the transport will close and delete the existing one.
-    void set_transport(Transport* transport);
+    // Note: set_transport will return the previous transport.
+    Transport* set_transport(Transport* transport);
     Transport* transport() const { return transport_; }
 
     // This is temporarily public for engine.cpp
