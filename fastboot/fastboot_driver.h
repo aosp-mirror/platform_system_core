@@ -99,7 +99,7 @@ class FastBootDriver {
     RetCode FlashPartition(const std::string& part, int fd, uint32_t sz);
     RetCode FlashPartition(const std::string& part, sparse_file* s);
 
-    RetCode Partitions(std::vector<std::tuple<std::string, uint32_t>>* parts);
+    RetCode Partitions(std::vector<std::tuple<std::string, uint64_t>>* parts);
     RetCode Require(const std::string& var, const std::vector<std::string>& allowed, bool* reqmet,
                     bool invert = false);
 
