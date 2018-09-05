@@ -1040,12 +1040,6 @@ size_t atransport::get_max_payload() const {
     return max_payload;
 }
 
-namespace {
-
-constexpr char kFeatureStringDelimiter = ',';
-
-}  // namespace
-
 const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
@@ -1059,7 +1053,7 @@ const FeatureSet& supported_features() {
 }
 
 std::string FeatureSetToString(const FeatureSet& features) {
-    return android::base::Join(features, kFeatureStringDelimiter);
+    return android::base::Join(features, ',');
 }
 
 FeatureSet StringToFeatureSet(const std::string& features_string) {
@@ -1067,7 +1061,7 @@ FeatureSet StringToFeatureSet(const std::string& features_string) {
         return FeatureSet();
     }
 
-    auto names = android::base::Split(features_string, {kFeatureStringDelimiter});
+    auto names = android::base::Split(features_string, ",");
     return FeatureSet(names.begin(), names.end());
 }
 

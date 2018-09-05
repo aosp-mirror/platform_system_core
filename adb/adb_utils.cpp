@@ -49,9 +49,9 @@
 
 
 #if defined(_WIN32)
-constexpr char kNullFileName[] = "NUL";
+static constexpr char kNullFileName[] = "NUL";
 #else
-constexpr char kNullFileName[] = "/dev/null";
+static constexpr char kNullFileName[] = "/dev/null";
 #endif
 
 void close_stdin() {
