@@ -304,7 +304,7 @@ TEST_F(Conformance, UnlockAbility) {
 }
 
 TEST_F(Conformance, PartitionInfo) {
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     EXPECT_GT(parts.size(), 0)
             << "getvar:all did not report any partition-size: through INFO responses";
@@ -340,7 +340,7 @@ TEST_F(Conformance, Slots) {
     // Can't run out of alphabet letters...
     ASSERT_LE(num_slots, 26) << "What?! You can't have more than 26 slots";
 
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
 
     std::map<std::string, std::set<char>> part_slots;
@@ -587,14 +587,14 @@ TEST_F(UnlockPermissions, DownloadFlash) {
     std::vector<char> buf{'a', 'o', 's', 'p'};
     EXPECT_EQ(fb->Download(buf), SUCCESS) << "Download failed in unlocked mode";
     ;
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed in unlocked mode";
 }
 
 TEST_F(LockPermissions, DownloadFlash) {
     std::vector<char> buf{'a', 'o', 's', 'p'};
     EXPECT_EQ(fb->Download(buf), SUCCESS) << "Download failed in locked mode";
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed in locked mode";
     std::string resp;
     for (const auto tup : parts) {
@@ -607,7 +607,7 @@ TEST_F(LockPermissions, DownloadFlash) {
 }
 
 TEST_F(LockPermissions, Erase) {
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     std::string resp;
     for (const auto tup : parts) {
@@ -619,7 +619,7 @@ TEST_F(LockPermissions, Erase) {
 }
 
 TEST_F(LockPermissions, SetActive) {
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
 
     std::string resp;
@@ -916,7 +916,7 @@ INSTANTIATE_TEST_CASE_P(XMLGetVar, ExtensionsGetVarConformance,
 
 TEST_P(AnyPartition, ReportedGetVarAll) {
     // As long as the partition is reported in INFO, it would be tested by generic Conformance
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     ASSERT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     const std::string name = GetParam().first;
     if (GetParam().second.slots) {
