@@ -56,15 +56,6 @@ static void setup_daemon_logging() {
     LOG(INFO) << adb_version();
 }
 
-#if defined(_WIN32)
-static BOOL WINAPI ctrlc_handler(DWORD type) {
-    // TODO: Consider trying to kill a starting up adb server (if we're in
-    // launch_server) by calling GenerateConsoleCtrlEvent().
-    exit(STATUS_CONTROL_C_EXIT);
-    return TRUE;
-}
-#endif
-
 void adb_server_cleanup() {
     // Upon exit, we want to clean up in the following order:
     //   1. close_smartsockets, so that we don't get any new clients
@@ -97,12 +88,16 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         }
     }
 
-    SetConsoleCtrlHandler(ctrlc_handler, TRUE);
-#else
+    // TODO: On Ctrl-C, consider trying to kill a starting up adb server (if we're in
+    // launch_server) by calling GenerateConsoleCtrlEvent().
+
+    // On Windows, SIGBREAK is when Ctrl-Break is pressed or the console window is closed. It should
+    // act like Ctrl-C.
+    signal(SIGBREAK, [](int) { raise(SIGINT); });
+#endif
     signal(SIGINT, [](int) {
         fdevent_run_on_main_thread([]() { exit(0); });
     });
-#endif
 
     char* leak = getenv("ADB_LEAK");
     if (leak && strcmp(leak, "1") == 0) {
