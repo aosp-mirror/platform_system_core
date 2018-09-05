@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+
 #include "android-base/test_utils.h"
 
 #include <gtest/gtest-spi.h>
@@ -40,6 +42,44 @@ TEST(TestUtilsTest, ExpectMatch) {
 TEST(TestUtilsTest, ExpectNotMatch) {
   EXPECT_NOT_MATCH("foobar", R"(foobaz)");
   EXPECT_NONFATAL_FAILURE(EXPECT_NOT_MATCH("foobar", R"(foobar)"), "regex mismatch");
+}
+
+TEST(TestUtilsTest, CaptureStdout_smoke) {
+  CapturedStdout cap;
+  printf("This should be captured.\n");
+  cap.Stop();
+  printf("This will not be captured.\n");
+  ASSERT_EQ("This should be captured.\n", cap.str());
+
+  cap.Start();
+  printf("And this text should be captured too.\n");
+  cap.Stop();
+  ASSERT_EQ("This should be captured.\nAnd this text should be captured too.\n", cap.str());
+
+  printf("Still not going to be captured.\n");
+  cap.Reset();
+  cap.Start();
+  printf("Only this will be captured.\n");
+  ASSERT_EQ("Only this will be captured.\n", cap.str());
+}
+
+TEST(TestUtilsTest, CaptureStderr_smoke) {
+  CapturedStderr cap;
+  fprintf(stderr, "This should be captured.\n");
+  cap.Stop();
+  fprintf(stderr, "This will not be captured.\n");
+  ASSERT_EQ("This should be captured.\n", cap.str());
+
+  cap.Start();
+  fprintf(stderr, "And this text should be captured too.\n");
+  cap.Stop();
+  ASSERT_EQ("This should be captured.\nAnd this text should be captured too.\n", cap.str());
+
+  fprintf(stderr, "Still not going to be captured.\n");
+  cap.Reset();
+  cap.Start();
+  fprintf(stderr, "Only this will be captured.\n");
+  ASSERT_EQ("Only this will be captured.\n", cap.str());
 }
 
 }  // namespace base

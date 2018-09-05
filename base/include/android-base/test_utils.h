@@ -62,16 +62,18 @@ class CapturedStdFd {
   CapturedStdFd(int std_fd);
   ~CapturedStdFd();
 
-  int fd() const;
   std::string str();
 
- private:
-  void Init();
+  void Start();
+  void Stop();
   void Reset();
+
+ private:
+  int fd() const;
 
   TemporaryFile temp_file_;
   int std_fd_;
-  int old_fd_;
+  int old_fd_ = -1;
 
   DISALLOW_COPY_AND_ASSIGN(CapturedStdFd);
 };
