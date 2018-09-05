@@ -58,7 +58,6 @@ FastBootDriver::FastBootDriver(Transport* transport, std::function<void(std::str
 }
 
 FastBootDriver::~FastBootDriver() {
-    set_transport(nullptr);
 }
 
 RetCode FastBootDriver::Boot(std::string* response, std::vector<std::string>* info) {
@@ -537,12 +536,9 @@ int FastBootDriver::SparseWriteCallback(std::vector<char>& tpbuf, const char* da
     return 0;
 }
 
-void FastBootDriver::set_transport(Transport* transport) {
-    if (transport_) {
-        transport_->Close();
-        delete transport_;
-    }
-    transport_ = transport;
+Transport* FastBootDriver::set_transport(Transport* transport) {
+    std::swap(transport_, transport);
+    return transport;
 }
 
 }  // End namespace fastboot

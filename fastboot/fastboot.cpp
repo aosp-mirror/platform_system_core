@@ -1847,6 +1847,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
     int status = fb_execute_queue() ? EXIT_FAILURE : EXIT_SUCCESS;
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
+
+    if (Transport* old_transport = fb.set_transport(nullptr)) {
+        delete old_transport;
+    }
     return status;
 }
 
