@@ -80,7 +80,7 @@ bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHan
 
 std::optional<std::string> FindPhysicalPartition(const std::string& name) {
     std::string path = "/dev/block/by-name/" + name;
-    if (access(path.c_str(), R_OK | W_OK) < 0) {
+    if (access(path.c_str(), W_OK) < 0) {
         return {};
     }
     return path;
