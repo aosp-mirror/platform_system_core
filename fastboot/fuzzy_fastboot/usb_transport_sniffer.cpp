@@ -12,6 +12,10 @@ UsbTransportSniffer::UsbTransportSniffer(std::unique_ptr<UsbTransport> transport
                                          const int serial_fd)
     : transport_(std::move(transport)), serial_fd_(serial_fd) {}
 
+UsbTransportSniffer::~UsbTransportSniffer() {
+    Close();
+}
+
 ssize_t UsbTransportSniffer::Read(void* data, size_t len) {
     ProcessSerial();
 
