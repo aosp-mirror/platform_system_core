@@ -130,7 +130,7 @@ static void help() {
         " pull [-a] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        " sync [all|data|odm|oem|product|system|vendor]\n"
+        " sync [all|data|odm|oem|product_services|product|system|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
         "     -l: list but don't copy\n"
         "\n"
@@ -1713,7 +1713,8 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         if (src.empty()) src = "all";
-        std::vector<std::string> partitions{"data", "odm", "oem", "product", "system", "vendor"};
+        std::vector<std::string> partitions{"data",   "odm",   "oem", "product", "product_services",
+                                            "system", "vendor"};
         bool found = false;
         for (const auto& partition : partitions) {
             if (src == "all" || src == partition) {
