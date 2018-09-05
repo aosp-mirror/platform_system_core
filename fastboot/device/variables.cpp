@@ -139,7 +139,7 @@ bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& a
 
 bool GetMaxDownloadSize(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                         std::string* message) {
-    *message = std::to_string(kMaxDownloadSizeDefault);
+    *message = android::base::StringPrintf("0x%X", kMaxDownloadSizeDefault);
     return true;
 }
 
