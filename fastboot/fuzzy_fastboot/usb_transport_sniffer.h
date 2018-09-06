@@ -72,7 +72,7 @@ class UsbTransportSniffer : public UsbTransport {
 
     virtual ssize_t Read(void* data, size_t len) override;
     virtual ssize_t Write(const void* data, size_t len) override;
-    virtual int Close() override;
+    virtual int Close() override final;  // note usage in destructor
     virtual int Reset() override;
 
     const std::vector<Event> Transfers();
