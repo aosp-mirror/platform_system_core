@@ -89,7 +89,7 @@ class FastBootDriver {
     RetCode Reboot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode RebootTo(std::string target, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
-    RetCode SetActive(const std::string& part, std::string* response = nullptr,
+    RetCode SetActive(const std::string& slot, std::string* response = nullptr,
                       std::vector<std::string>* info = nullptr);
     RetCode Upload(const std::string& outfile, std::string* response = nullptr,
                    std::vector<std::string>* info = nullptr);
