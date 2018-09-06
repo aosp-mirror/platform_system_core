@@ -14,22 +14,15 @@
 // limitations under the License.
 //
 
-java_library {
+java_binary {
     name: "deployagent",
     sdk_version: "24",
     srcs: ["deployagent/src/**/*.java", "deploylib/src/**/*.java", "proto/**/*.proto"],
     static_libs: ["apkzlib_zip"],
+    wrapper: "deployagent/deployagent.sh",
     proto: {
         type: "lite",
     }
-}
-
-cc_prebuilt_binary {
-    name: "deployagent.sh",
-
-    srcs: ["deployagent/deployagent.sh"],
-    required: ["deployagent"],
-    device_supported: true,
 }
 
 java_binary_host {
