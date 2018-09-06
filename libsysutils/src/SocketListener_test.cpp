@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <sysutils/FrameworkCommand.h>
 #include <sysutils/FrameworkListener.h>
 
 #include <poll.h>
