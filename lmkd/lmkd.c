@@ -31,6 +31,7 @@
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
@@ -38,6 +39,7 @@
 #include <lmkd.h>
 #include <log/log.h>
 #include <log/log_event_list.h>
+#include <log/log_time.h>
 
 #ifdef LMKD_LOG_STATS
 #include "statslog.h"
@@ -82,6 +84,10 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 #define EIGHT_MEGA (1 << 23)
+
+#define TARGET_UPDATE_MIN_INTERVAL_MS 1000
+
+#define NS_PER_MS (NS_PER_SEC / MS_PER_SEC)
 
 /* Defined as ProcessList.SYSTEM_ADJ in ProcessList.java */
 #define SYSTEM_ADJ (-900)
@@ -494,6 +500,12 @@ static bool writefilestring(const char *path, const char *s,
     return true;
 }
 
+static inline long get_time_diff_ms(struct timespec *from,
+                                    struct timespec *to) {
+    return (to->tv_sec - from->tv_sec) * (long)MS_PER_SEC +
+           (to->tv_nsec - from->tv_nsec) / (long)NS_PER_MS;
+}
+
 static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
     char path[80];
@@ -604,17 +616,51 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
 static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
     int i;
     struct lmk_target target;
+    char minfree_str[PROPERTY_VALUE_MAX];
+    char *pstr = minfree_str;
+    char *pend = minfree_str + sizeof(minfree_str);
+    static struct timespec last_req_tm;
+    struct timespec curr_tm;
 
-    if (ntargets > (int)ARRAY_SIZE(lowmem_adj))
+    if (ntargets < 1 || ntargets > (int)ARRAY_SIZE(lowmem_adj))
         return;
+
+    /*
+     * Ratelimit minfree updates to once per TARGET_UPDATE_MIN_INTERVAL_MS
+     * to prevent DoS attacks
+     */
+    if (clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm) != 0) {
+        ALOGE("Failed to get current time");
+        return;
+    }
+
+    if (get_time_diff_ms(&last_req_tm, &curr_tm) <
+        TARGET_UPDATE_MIN_INTERVAL_MS) {
+        ALOGE("Ignoring frequent updated to lmkd limits");
+        return;
+    }
+
+    last_req_tm = curr_tm;
 
     for (i = 0; i < ntargets; i++) {
         lmkd_pack_get_target(packet, i, &target);
         lowmem_minfree[i] = target.minfree;
         lowmem_adj[i] = target.oom_adj_score;
+
+        pstr += snprintf(pstr, pend - pstr, "%d:%d,", target.minfree,
+            target.oom_adj_score);
+        if (pstr >= pend) {
+            /* if no more space in the buffer then terminate the loop */
+            pstr = pend;
+            break;
+        }
     }
 
     lowmem_targets_size = ntargets;
+
+    /* Override the last extra comma */
+    pstr[-1] = '\0';
+    property_set("sys.lmk.minfree_levels", minfree_str);
 
     if (has_inkernel_module) {
         char minfreestr[128];
@@ -1228,12 +1274,6 @@ enum vmpressure_level downgrade_level(enum vmpressure_level level) {
         level - 1 : level);
 }
 
-static inline unsigned long get_time_diff_ms(struct timeval *from,
-                                             struct timeval *to) {
-    return (to->tv_sec - from->tv_sec) * 1000 +
-           (to->tv_usec - from->tv_usec) / 1000;
-}
-
 static void mp_event_common(int data, uint32_t events __unused) {
     int ret;
     unsigned long long evcount;
@@ -1242,8 +1282,8 @@ static void mp_event_common(int data, uint32_t events __unused) {
     enum vmpressure_level lvl;
     union meminfo mi;
     union zoneinfo zi;
-    static struct timeval last_report_tm;
-    static unsigned long skip_count = 0;
+    static struct timespec last_kill_tm;
+    static unsigned long kill_skip_count = 0;
     enum vmpressure_level level = (enum vmpressure_level)data;
     long other_free = 0, other_file = 0;
     int min_score_adj;
@@ -1273,18 +1313,23 @@ static void mp_event_common(int data, uint32_t events __unused) {
     }
 
     if (kill_timeout_ms) {
-        struct timeval curr_tm;
-        gettimeofday(&curr_tm, NULL);
-        if (get_time_diff_ms(&last_report_tm, &curr_tm) < kill_timeout_ms) {
-            skip_count++;
+        struct timespec curr_tm;
+
+        if (clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm) != 0) {
+            ALOGE("Failed to get current time");
+            return;
+        }
+
+        if (get_time_diff_ms(&last_kill_tm, &curr_tm) < kill_timeout_ms) {
+            kill_skip_count++;
             return;
         }
     }
 
-    if (skip_count > 0) {
+    if (kill_skip_count > 0) {
         ALOGI("%lu memory pressure events were skipped after a kill!",
-              skip_count);
-        skip_count = 0;
+              kill_skip_count);
+        kill_skip_count = 0;
     }
 
     if (meminfo_parse(&mi) < 0 || zoneinfo_parse(&zi) < 0) {
@@ -1432,7 +1477,10 @@ do_kill:
         } else {
             ALOGI("Reclaimed enough memory (pages to free=%d, pages freed=%d)",
                   pages_to_free, pages_freed);
-            gettimeofday(&last_report_tm, NULL);
+            if (clock_gettime(CLOCK_MONOTONIC_COARSE, &last_kill_tm) != 0) {
+                ALOGE("Failed to get current time");
+                return;
+            }
         }
         if (pages_freed > 0) {
             meminfo_log(&mi);
