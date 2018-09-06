@@ -278,7 +278,7 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
     struct dm_ioctl io;
     InitIo(&io, name);
     if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
-        PLOG(ERROR) << "DM_DEV_STATUS failed for " << name;
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
         return false;
     }
 
