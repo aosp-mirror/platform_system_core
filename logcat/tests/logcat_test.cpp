@@ -1230,7 +1230,7 @@ TEST(logcat, blocking_clear) {
         }
 
         int size, consumed, max, payload;
-        char size_mult[3], consumed_mult[3];
+        char size_mult[4], consumed_mult[4];
         size = consumed = max = payload = 0;
         if (6 == sscanf(buffer,
                         "events: ring buffer is %d %3s (%d %3s consumed),"
