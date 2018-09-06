@@ -57,3 +57,4 @@
 #define FB_VAR_SLOT_UNBOOTABLE "slot-unbootable"
 #define FB_VAR_IS_LOGICAL "is-logical"
 #define FB_VAR_IS_USERSPACE "is-userspace"
+#define FB_VAR_HW_REVISION "hw-revision"
