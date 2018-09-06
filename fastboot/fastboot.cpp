@@ -688,7 +688,7 @@ static void check_requirement(char* line) {
         out[i] = xstrdup(strip(val[i]));
     }
 
-    fb_queue_require(product, var, invert, count, out);
+    fb_require(product, var, invert, count, out);
 }
 
 static void check_requirements(char* data, int64_t sz) {
@@ -702,15 +702,14 @@ static void check_requirements(char* data, int64_t sz) {
             s++;
         }
     }
-    if (fb_execute_queue()) die("requirements not met!");
 }
 
-static void queue_info_dump() {
-    fb_queue_notice("--------------------------------------------");
-    fb_queue_display("Bootloader Version...", "version-bootloader");
-    fb_queue_display("Baseband Version.....", "version-baseband");
-    fb_queue_display("Serial Number........", "serialno");
-    fb_queue_notice("--------------------------------------------");
+static void dump_info() {
+    fb_notice("--------------------------------------------");
+    fb_display("Bootloader Version...", "version-bootloader");
+    fb_display("Baseband Version.....", "version-baseband");
+    fb_display("Serial Number........", "serialno");
+    fb_notice("--------------------------------------------");
 }
 
 static struct sparse_file** load_sparse_files(int fd, int64_t max_size) {
@@ -883,12 +882,12 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
 
             for (size_t i = 0; i < sparse_files.size(); ++i) {
                 const auto& pair = sparse_files[i];
-                fb_queue_flash_sparse(partition, pair.first, pair.second, i + 1, sparse_files.size());
+                fb_flash_sparse(partition, pair.first, pair.second, i + 1, sparse_files.size());
             }
             break;
         }
         case FB_BUFFER_FD:
-            fb_queue_flash_fd(partition, buf->fd, buf->sz);
+            fb_flash_fd(partition, buf->fd, buf->sz);
             break;
         default:
             die("unknown buffer type: %d", buf->type);
@@ -1145,7 +1144,7 @@ void FlashAllTool::Flash() {
     for (const auto& [image, slot] : os_images_) {
         auto resize_partition = [](const std::string& partition) -> void {
             if (is_logical(partition)) {
-                fb_queue_resize_partition(partition, "0");
+                fb_resize_partition(partition, "0");
             }
         };
         do_for_partitions(image->part_name, slot, resize_partition, false);
@@ -1223,12 +1222,12 @@ void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastb
         int64_t sz;
         void* data = source_.ReadFile(image.sig_name, &sz);
         if (data) {
-            fb_queue_download("signature", data, sz);
-            fb_queue_command("signature", "installing signature");
+            fb_download("signature", data, sz);
+            fb_command("signature", "installing signature");
         }
 
         if (is_logical(partition_name)) {
-            fb_queue_resize_partition(partition_name, std::to_string(buf->image_size));
+            fb_resize_partition(partition_name, std::to_string(buf->image_size));
         }
         flash_buf(partition_name.c_str(), buf);
     };
@@ -1247,17 +1246,13 @@ void FlashAllTool::UpdateSuperPartition() {
     if (!is_userspace_fastboot()) {
         reboot_to_userspace_fastboot();
     }
-    fb_queue_download_fd("super", fd, get_file_size(fd));
+    fb_download_fd("super", fd, get_file_size(fd));
 
     std::string command = "update-super:super";
     if (wipe_) {
         command += ":wipe";
     }
-    fb_queue_command(command, "Updating super partition");
-
-    // We need these commands to have finished before proceeding, since
-    // otherwise "getvar is-logical" may not return a correct answer below.
-    fb_execute_queue();
+    fb_command(command, "Updating super partition");
 }
 
 class ZipImageSource final : public ImageSource {
@@ -1279,9 +1274,9 @@ int ZipImageSource::OpenFile(const std::string& name) const {
 }
 
 static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary) {
-    queue_info_dump();
+    dump_info();
 
-    fb_queue_query_save("product", cur_product, sizeof(cur_product));
+    fb_query_save("product", cur_product, sizeof(cur_product));
 
     ZipArchiveHandle zip;
     int error = OpenArchive(filename, &zip);
@@ -1316,9 +1311,9 @@ int LocalImageSource::OpenFile(const std::string& name) const {
 
 static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
     std::string fname;
-    queue_info_dump();
+    dump_info();
 
-    fb_queue_query_save("product", cur_product, sizeof(cur_product));
+    fb_query_save("product", cur_product, sizeof(cur_product));
 
     FlashAllTool tool(LocalImageSource(), slot_override, skip_secondary, wipe);
     tool.Flash();
@@ -1338,7 +1333,7 @@ static void do_oem_command(const std::string& cmd, std::vector<std::string>* arg
     while (!args->empty()) {
         command += " " + next_arg(args);
     }
-    fb_queue_command(command, "");
+    fb_command(command, "");
 }
 
 static std::string fb_fix_numeric_var(std::string var) {
@@ -1641,7 +1636,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
         if (command == "getvar") {
             std::string variable = next_arg(&args);
-            fb_queue_display(variable, variable);
+            fb_display(variable, variable);
         } else if (command == "erase") {
             std::string partition = next_arg(&args);
             auto erase = [&](const std::string& partition) {
@@ -1653,7 +1648,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                             partition_type.c_str());
                 }
 
-                fb_queue_erase(partition);
+                fb_erase(partition);
             };
             do_for_partitions(partition, slot_override, erase, true);
         } else if (android::base::StartsWith(command, "format")) {
@@ -1681,8 +1676,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
             data = load_file(filename.c_str(), &sz);
             if (data == nullptr) die("could not load '%s': %s", filename.c_str(), strerror(errno));
             if (sz != 256) die("signature must be 256 bytes (got %" PRId64 ")", sz);
-            fb_queue_download("signature", data, sz);
-            fb_queue_command("signature", "installing signature");
+            fb_download("signature", data, sz);
+            fb_command("signature", "installing signature");
         } else if (command == "reboot") {
             wants_reboot = true;
 
@@ -1710,7 +1705,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == "reboot-fastboot") {
             wants_reboot_fastboot = true;
         } else if (command == "continue") {
-            fb_queue_command("continue", "resuming boot");
+            fb_command("continue", "resuming boot");
         } else if (command == "boot") {
             std::string kernel = next_arg(&args);
             std::string ramdisk;
@@ -1719,8 +1714,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!args.empty()) second_stage = next_arg(&args);
 
             data = load_bootable_image(kernel, ramdisk, second_stage, &sz);
-            fb_queue_download("boot.img", data, sz);
-            fb_queue_command("boot", "booting");
+            fb_download("boot.img", data, sz);
+            fb_command("boot", "booting");
         } else if (command == "flash") {
             std::string pname = next_arg(&args);
 
@@ -1746,7 +1741,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
             data = load_bootable_image(kernel, ramdisk, second_stage, &sz);
             auto flashraw = [&](const std::string& partition) {
-                fb_queue_flash(partition, data, sz);
+                fb_flash(partition, data, sz);
             };
             do_for_partitions(partition, slot_override, flashraw, true);
         } else if (command == "flashall") {
@@ -1778,10 +1773,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!load_buf(filename.c_str(), &buf) || buf.type != FB_BUFFER_FD) {
                 die("cannot load '%s'", filename.c_str());
             }
-            fb_queue_download_fd(filename, buf.fd, buf.sz);
+            fb_download_fd(filename, buf.fd, buf.sz);
         } else if (command == "get_staged") {
             std::string filename = next_arg(&args);
-            fb_queue_upload(filename);
+            fb_upload(filename);
         } else if (command == "oem") {
             do_oem_command("oem", &args);
         } else if (command == "flashing") {
@@ -1798,14 +1793,14 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == "create-logical-partition") {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
-            fb_queue_create_partition(partition, size);
+            fb_create_partition(partition, size);
         } else if (command == "delete-logical-partition") {
             std::string partition = next_arg(&args);
-            fb_queue_delete_partition(partition);
+            fb_delete_partition(partition);
         } else if (command == "resize-logical-partition") {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
-            fb_queue_resize_partition(partition, size);
+            fb_resize_partition(partition, size);
         } else {
             syntax_error("unknown command %s", command.c_str());
         }
@@ -1817,7 +1812,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string partition_type;
             if (!fb_getvar(std::string{"partition-type:"} + partition, &partition_type)) continue;
             if (partition_type.empty()) continue;
-            fb_queue_erase(partition);
+            fb_erase(partition);
             if (partition == "userdata" && set_fbe_marker) {
                 fprintf(stderr, "setting FBE marker on initial userdata...\n");
                 std::string initial_userdata_dir = create_fbemarker_tmpdir();
@@ -1832,26 +1827,25 @@ int FastBootTool::Main(int argc, char* argv[]) {
         fb_set_active(next_active);
     }
     if (wants_reboot && !skip_reboot) {
-        fb_queue_reboot();
-        fb_queue_wait_for_disconnect();
+        fb_reboot();
+        fb_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
-        fb_queue_command("reboot-bootloader", "rebooting into bootloader");
-        fb_queue_wait_for_disconnect();
+        fb_command("reboot-bootloader", "rebooting into bootloader");
+        fb_wait_for_disconnect();
     } else if (wants_reboot_recovery) {
-        fb_queue_command("reboot-recovery", "rebooting into recovery");
-        fb_queue_wait_for_disconnect();
+        fb_command("reboot-recovery", "rebooting into recovery");
+        fb_wait_for_disconnect();
     } else if (wants_reboot_fastboot) {
-        fb_queue_command("reboot-fastboot", "rebooting into fastboot");
-        fb_queue_wait_for_disconnect();
+        fb_command("reboot-fastboot", "rebooting into fastboot");
+        fb_wait_for_disconnect();
     }
 
-    int status = fb_execute_queue() ? EXIT_FAILURE : EXIT_SUCCESS;
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
 
     if (Transport* old_transport = fb.set_transport(nullptr)) {
         delete old_transport;
     }
-    return status;
+    return 0;
 }
 
 void FastBootTool::ParseOsPatchLevel(boot_img_hdr_v1* hdr, const char* arg) {
