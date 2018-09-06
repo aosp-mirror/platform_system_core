@@ -17,8 +17,10 @@
 #define _FRAMEWORKSOCKETLISTENER_H
 
 #include "SocketListener.h"
-#include "FrameworkCommand.h"
 
+#include <vector>
+
+class FrameworkCommand;
 class SocketClient;
 
 class FrameworkListener : public SocketListener {
@@ -31,7 +33,7 @@ public:
 private:
     int mCommandCount;
     bool mWithSeq;
-    FrameworkCommandCollection *mCommands;
+    std::vector<FrameworkCommand*> mCommands;
     bool mSkipToNextNullByte;
 
 public:
