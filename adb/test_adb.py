@@ -490,6 +490,58 @@ class DisconnectionTest(unittest.TestCase):
                 self.assertEqual(_devices(server_port), [])
 
 
+@unittest.skipUnless(sys.platform == "win32", "requires Windows")
+class PowerTest(unittest.TestCase):
+    def test_resume_usb_kick(self):
+        """Resuming from sleep/hibernate should kick USB devices."""
+        try:
+            usb_serial = subprocess.check_output(["adb", "-d", "get-serialno"]).strip()
+        except subprocess.CalledProcessError:
+            # If there are multiple USB devices, we don't have a way to check whether the selected
+            # device is USB.
+            raise unittest.SkipTest('requires single USB device')
+
+        try:
+            serial = subprocess.check_output(["adb", "get-serialno"]).strip()
+        except subprocess.CalledProcessError:
+            # Did you forget to select a device with $ANDROID_SERIAL?
+            raise unittest.SkipTest('requires $ANDROID_SERIAL set to a USB device')
+
+        # Test only works with USB devices because adb _power_notification_thread does not kick
+        # non-USB devices on resume event.
+        if serial != usb_serial:
+            raise unittest.SkipTest('requires USB device')
+
+        # Run an adb shell command in the background that takes a while to complete.
+        proc = subprocess.Popen(['adb', 'shell', 'sleep', '5'])
+
+        # Wait for startup of adb server's _power_notification_thread.
+        time.sleep(0.1)
+
+        # Simulate resuming from sleep/hibernation by sending Windows message.
+        import ctypes
+        from ctypes import wintypes
+        HWND_BROADCAST = 0xffff
+        WM_POWERBROADCAST = 0x218
+        PBT_APMRESUMEAUTOMATIC = 0x12
+
+        PostMessageW = ctypes.windll.user32.PostMessageW
+        PostMessageW.restype = wintypes.BOOL
+        PostMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+        result = PostMessageW(HWND_BROADCAST, WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC, 0)
+        if not result:
+            raise ctypes.WinError()
+
+        # Wait for connection to adb shell to be broken by _power_notification_thread detecting the
+        # Windows message.
+        start = time.time()
+        proc.wait()
+        end = time.time()
+
+        # If the power event was detected, the adb shell command should be broken very quickly.
+        self.assertLess(end - start, 2)
+
+
 def main():
     """Main entrypoint."""
     random.seed(0)
