@@ -95,7 +95,7 @@ class LinuxUsbTransport : public UsbTransport {
   public:
     explicit LinuxUsbTransport(std::unique_ptr<usb_handle> handle, uint32_t ms_timeout = 0)
         : handle_(std::move(handle)), ms_timeout_(ms_timeout) {}
-    ~LinuxUsbTransport() override = default;
+    ~LinuxUsbTransport() override;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
@@ -385,6 +385,10 @@ static std::unique_ptr<usb_handle> find_usb_device(const char* base, ifc_match_f
     }
 
     return usb;
+}
+
+LinuxUsbTransport::~LinuxUsbTransport() {
+    Close();
 }
 
 ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)

@@ -304,13 +304,13 @@ TEST_F(Conformance, UnlockAbility) {
 }
 
 TEST_F(Conformance, PartitionInfo) {
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     EXPECT_GT(parts.size(), 0)
             << "getvar:all did not report any partition-size: through INFO responses";
     std::set<std::string> allowed{"ext4", "f2fs", "raw"};
     for (const auto p : parts) {
-        EXPECT_GT(std::get<1>(p), 0);
+        EXPECT_GE(std::get<1>(p), 0);
         std::string part(std::get<0>(p));
         std::set<std::string> allowed{"ext4", "f2fs", "raw"};
         std::string resp;
@@ -340,7 +340,7 @@ TEST_F(Conformance, Slots) {
     // Can't run out of alphabet letters...
     ASSERT_LE(num_slots, 26) << "What?! You can't have more than 26 slots";
 
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
 
     std::map<std::string, std::set<char>> part_slots;
@@ -570,7 +570,6 @@ TEST_F(Conformance, SparseCRCCheck) {
     buf.back() = buf.back() ^ 0x01;
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
-    printf("%02x\n", (unsigned char)buf.back());
     // It can either reject this download or reject it during flash
     if (HandleResponse() != DEVICE_FAIL) {
         EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
@@ -587,14 +586,14 @@ TEST_F(UnlockPermissions, DownloadFlash) {
     std::vector<char> buf{'a', 'o', 's', 'p'};
     EXPECT_EQ(fb->Download(buf), SUCCESS) << "Download failed in unlocked mode";
     ;
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed in unlocked mode";
 }
 
 TEST_F(LockPermissions, DownloadFlash) {
     std::vector<char> buf{'a', 'o', 's', 'p'};
     EXPECT_EQ(fb->Download(buf), SUCCESS) << "Download failed in locked mode";
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed in locked mode";
     std::string resp;
     for (const auto tup : parts) {
@@ -607,7 +606,7 @@ TEST_F(LockPermissions, DownloadFlash) {
 }
 
 TEST_F(LockPermissions, Erase) {
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     std::string resp;
     for (const auto tup : parts) {
@@ -619,7 +618,7 @@ TEST_F(LockPermissions, Erase) {
 }
 
 TEST_F(LockPermissions, SetActive) {
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
 
     std::string resp;
@@ -916,7 +915,7 @@ INSTANTIATE_TEST_CASE_P(XMLGetVar, ExtensionsGetVarConformance,
 
 TEST_P(AnyPartition, ReportedGetVarAll) {
     // As long as the partition is reported in INFO, it would be tested by generic Conformance
-    std::vector<std::tuple<std::string, uint32_t>> parts;
+    std::vector<std::tuple<std::string, uint64_t>> parts;
     ASSERT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     const std::string name = GetParam().first;
     if (GetParam().second.slots) {

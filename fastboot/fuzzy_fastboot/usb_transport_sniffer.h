@@ -68,6 +68,7 @@ class UsbTransportSniffer : public UsbTransport {
     };
 
     UsbTransportSniffer(std::unique_ptr<UsbTransport> transport, const int serial_fd = 0);
+    ~UsbTransportSniffer() override;
 
     virtual ssize_t Read(void* data, size_t len) override;
     virtual ssize_t Write(const void* data, size_t len) override;

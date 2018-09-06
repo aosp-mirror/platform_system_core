@@ -24,7 +24,7 @@
 
 #include <android-base/macros.h>
 
-int syntax_error(const char*, ...);
+int syntax_error(const char*, ...) __attribute__((__format__(__printf__, 1, 2)));
 
 void close_stdin();
 

@@ -70,7 +70,7 @@ class OsxUsbTransport : public UsbTransport {
     // A timeout of 0 is blocking
     OsxUsbTransport(std::unique_ptr<usb_handle> handle, uint32_t ms_timeout = 0)
         : handle_(std::move(handle)), ms_timeout_(ms_timeout) {}
-    ~OsxUsbTransport() override = default;
+    ~OsxUsbTransport() override;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
@@ -469,6 +469,10 @@ UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms) {
     }
 
     return new OsxUsbTransport(std::move(handle), timeout_ms);
+}
+
+OsxUsbTransport::~OsxUsbTransport() {
+    Close();
 }
 
 int OsxUsbTransport::Close() {

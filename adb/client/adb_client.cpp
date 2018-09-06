@@ -185,6 +185,11 @@ bool adb_kill_server() {
         return false;
     }
 
+    // The server might send OKAY, so consume that.
+    char buf[4];
+    ReadFdExactly(fd, buf, 4);
+    // Now that no more data is expected, wait for socket orderly shutdown or error, indicating
+    // server death.
     ReadOrderlyShutdown(fd);
     return true;
 }

@@ -58,7 +58,6 @@ FastBootDriver::FastBootDriver(Transport* transport, std::function<void(std::str
 }
 
 FastBootDriver::~FastBootDriver() {
-    set_transport(nullptr);
 }
 
 RetCode FastBootDriver::Boot(std::string* response, std::vector<std::string>* info) {
@@ -127,7 +126,7 @@ RetCode FastBootDriver::FlashPartition(const std::string& part, sparse_file* s) 
     return RawCommand(Commands::FLASH + part);
 }
 
-RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint32_t>>* parts) {
+RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>>* parts) {
     std::vector<std::string> all;
     RetCode ret;
     if ((ret = GetVarAll(&all))) {
@@ -141,7 +140,7 @@ RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint32_t>
         if (std::regex_match(s, sm, reg)) {
             std::string m1(sm[1]);
             std::string m2(sm[2]);
-            uint32_t tmp = strtol(m2.c_str(), 0, 16);
+            uint64_t tmp = strtoll(m2.c_str(), 0, 16);
             parts->push_back(std::make_tuple(m1, tmp));
         }
     }
@@ -537,12 +536,9 @@ int FastBootDriver::SparseWriteCallback(std::vector<char>& tpbuf, const char* da
     return 0;
 }
 
-void FastBootDriver::set_transport(Transport* transport) {
-    if (transport_) {
-        transport_->Close();
-        delete transport_;
-    }
-    transport_ = transport;
+Transport* FastBootDriver::set_transport(Transport* transport) {
+    std::swap(transport_, transport);
+    return transport;
 }
 
 }  // End namespace fastboot

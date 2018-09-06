@@ -99,7 +99,7 @@ class FastBootDriver {
     RetCode FlashPartition(const std::string& part, int fd, uint32_t sz);
     RetCode FlashPartition(const std::string& part, sparse_file* s);
 
-    RetCode Partitions(std::vector<std::tuple<std::string, uint32_t>>* parts);
+    RetCode Partitions(std::vector<std::tuple<std::string, uint64_t>>* parts);
     RetCode Require(const std::string& var, const std::vector<std::string>& allowed, bool* reqmet,
                     bool invert = false);
 
@@ -109,8 +109,8 @@ class FastBootDriver {
     std::string Error();
     RetCode WaitForDisconnect();
 
-    // Note: changing the transport will close and delete the existing one.
-    void set_transport(Transport* transport);
+    // Note: set_transport will return the previous transport.
+    Transport* set_transport(Transport* transport);
     Transport* transport() const { return transport_; }
 
     // This is temporarily public for engine.cpp
