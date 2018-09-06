@@ -89,7 +89,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_SLOT_UNBOOTABLE, {GetSlotUnbootable, nullptr}},
             {FB_VAR_PARTITION_SIZE, {GetPartitionSize, GetAllPartitionArgsWithSlot}},
             {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
-            {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}}};
+            {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
+            {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");
