@@ -306,11 +306,11 @@ on late-init
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
 
-    # Now we can start zygote for devices with file based encryption
-    trigger zygote-start
-
     # Load persist properties and override properties (if enabled) from /data.
     trigger load_persist_props_action
+
+    # Now we can start zygote for devices with file based encryption
+    trigger zygote-start
 
     # Remove a file to wake up anything waiting for firmware.
     trigger firmware_mounts_complete
