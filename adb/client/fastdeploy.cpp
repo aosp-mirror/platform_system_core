@@ -30,20 +30,13 @@ static constexpr long kRequiredAgentVersion = 0x00000001;
 
 static constexpr const char* kDeviceAgentPath = "/data/local/tmp/";
 
-struct TFastDeployConfig {
-    bool use_localagent;
-};
-
-static TFastDeployConfig& get_fastdeploy_config() {
-    TFastDeployConfig& instance = *new TFastDeployConfig;
-    return instance;
-}
+static bool use_localagent = false;
 
 long get_agent_version() {
     std::vector<char> versionOutputBuffer;
     std::vector<char> versionErrorBuffer;
 
-    int statusCode = capture_shell_command("/data/local/tmp/deployagent.sh version",
+    int statusCode = capture_shell_command("/data/local/tmp/deployagent version",
                                            &versionOutputBuffer, &versionErrorBuffer);
     long version = -1;
 
@@ -68,8 +61,8 @@ int get_device_api_level() {
     return api_level;
 }
 
-void fastdeploy_init(bool use_localagent) {
-    get_fastdeploy_config().use_localagent = use_localagent;
+void fastdeploy_set_local_agent(bool set_use_localagent) {
+    use_localagent = set_use_localagent;
 }
 
 // local_path - must start with a '/' and be relative to $ANDROID_PRODUCT_OUT
@@ -80,7 +73,7 @@ static bool get_agent_component_host_path(const char* local_path, const char* sd
         return false;
     }
 
-    if (get_fastdeploy_config().use_localagent) {
+    if (use_localagent) {
         const char* product_out = getenv("ANDROID_PRODUCT_OUT");
         if (product_out == nullptr) {
             return false;
@@ -105,8 +98,7 @@ static bool deploy_agent(bool checkTimeStamps) {
     }
 
     std::string agent_sh_path;
-    if (get_agent_component_host_path("/system/bin/deployagent.sh", "/deployagent.sh",
-                                      &agent_sh_path)) {
+    if (get_agent_component_host_path("/system/bin/deployagent", "/deployagent", &agent_sh_path)) {
         srcs.push_back(agent_sh_path.c_str());
     } else {
         return false;
@@ -115,7 +107,7 @@ static bool deploy_agent(bool checkTimeStamps) {
     if (do_sync_push(srcs, kDeviceAgentPath, checkTimeStamps)) {
         // on windows the shell script might have lost execute permission
         // so need to set this explicitly
-        const char* kChmodCommandPattern = "chmod 777 %sdeployagent.sh";
+        const char* kChmodCommandPattern = "chmod 777 %sdeployagent";
         std::string chmodCommand =
                 android::base::StringPrintf(kChmodCommandPattern, kDeviceAgentPath);
         int ret = send_shell_command(chmodCommand);
@@ -158,7 +150,7 @@ bool update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy) {
 }
 
 static std::string get_aapt2_path() {
-    if (get_fastdeploy_config().use_localagent) {
+    if (use_localagent) {
         // This should never happen on a Windows machine
         const char* host_out = getenv("ANDROID_HOST_OUT");
         if (host_out == nullptr) {
@@ -214,7 +206,7 @@ int extract_metadata(const char* apkPath, FILE* outputFp) {
         return -1;
     }
 
-    const char* kAgentExtractCommandPattern = "/data/local/tmp/deployagent.sh extract %s";
+    const char* kAgentExtractCommandPattern = "/data/local/tmp/deployagent extract %s";
     std::string extractCommand =
             android::base::StringPrintf(kAgentExtractCommandPattern, packageName.c_str());
 
@@ -231,7 +223,7 @@ int extract_metadata(const char* apkPath, FILE* outputFp) {
 }
 
 static std::string get_patch_generator_command() {
-    if (get_fastdeploy_config().use_localagent) {
+    if (use_localagent) {
         // This should never happen on a Windows machine
         const char* host_out = getenv("ANDROID_HOST_OUT");
         if (host_out == nullptr) {
@@ -269,8 +261,7 @@ std::string get_patch_path(const char* apkPath) {
 }
 
 int apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath) {
-    const std::string kAgentApplyCommandPattern =
-            "/data/local/tmp/deployagent.sh apply %s %s -o %s";
+    const std::string kAgentApplyCommandPattern = "/data/local/tmp/deployagent apply %s %s -o %s";
 
     std::string packageName;
     if (get_packagename_from_apk(apkPath, &packageName) == false) {
@@ -294,8 +285,7 @@ int apply_patch_on_device(const char* apkPath, const char* patchPath, const char
 }
 
 int install_patch(const char* apkPath, const char* patchPath, int argc, const char** argv) {
-    const std::string kAgentApplyCommandPattern =
-            "/data/local/tmp/deployagent.sh apply %s %s -pm %s";
+    const std::string kAgentApplyCommandPattern = "/data/local/tmp/deployagent apply %s %s -pm %s";
 
     std::string packageName;
     if (get_packagename_from_apk(apkPath, &packageName) == false) {

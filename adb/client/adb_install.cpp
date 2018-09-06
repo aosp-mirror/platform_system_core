@@ -40,6 +40,8 @@
 #include <android-base/strings.h>
 #include <android-base/test_utils.h>
 
+static constexpr int kFastDeployMinApi = 24;
+
 static bool _use_legacy_install() {
     FeatureSet features;
     std::string error;
@@ -380,7 +382,7 @@ int install_app(int argc, const char** argv) {
     }
 
     if (use_fastdeploy == true) {
-        fastdeploy_init(use_localagent);
+        fastdeploy_set_local_agent(use_localagent);
 
         bool agent_up_to_date = update_agent(agent_update_strategy);
         if (agent_up_to_date == false) {
