@@ -170,6 +170,13 @@ static int32_t AddToHash(ZipString* hash_table, const uint64_t hash_table_size,
   return 0;
 }
 
+#if defined(__BIONIC__)
+uint64_t GetOwnerTag(const ZipArchive* archive) {
+  return android_fdsan_create_owner_tag(ANDROID_FDSAN_OWNER_TYPE_ZIPARCHIVE,
+                                        reinterpret_cast<uint64_t>(archive));
+}
+#endif
+
 ZipArchive::ZipArchive(const int fd, bool assume_ownership)
     : mapped_zip(fd),
       close_file(assume_ownership),
@@ -181,7 +188,7 @@ ZipArchive::ZipArchive(const int fd, bool assume_ownership)
       hash_table(nullptr) {
 #if defined(__BIONIC__)
   if (assume_ownership) {
-    android_fdsan_exchange_owner_tag(fd, 0, reinterpret_cast<uint64_t>(this));
+    android_fdsan_exchange_owner_tag(fd, 0, GetOwnerTag(this));
   }
 #endif
 }
@@ -199,7 +206,7 @@ ZipArchive::ZipArchive(void* address, size_t length)
 ZipArchive::~ZipArchive() {
   if (close_file && mapped_zip.GetFileDescriptor() >= 0) {
 #if defined(__BIONIC__)
-    android_fdsan_close_with_tag(mapped_zip.GetFileDescriptor(), reinterpret_cast<uint64_t>(this));
+    android_fdsan_close_with_tag(mapped_zip.GetFileDescriptor(), GetOwnerTag(this));
 #else
     close(mapped_zip.GetFileDescriptor());
 #endif
