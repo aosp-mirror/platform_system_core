@@ -119,9 +119,13 @@
 
 using namespace std::chrono_literals;
 
-int fs_mgr_set_blk_ro(const char *blockdev);
+enum class FileWaitMode { Exists, DoesNotExist };
+
 bool fs_mgr_wait_for_file(const std::string& filename,
-                          const std::chrono::milliseconds relative_timeout);
+                          const std::chrono::milliseconds relative_timeout,
+                          FileWaitMode wait_mode = FileWaitMode::Exists);
+
+int fs_mgr_set_blk_ro(const char* blockdev);
 bool fs_mgr_update_for_slotselect(struct fstab *fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
