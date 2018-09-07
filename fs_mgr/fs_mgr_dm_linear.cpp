@@ -81,7 +81,7 @@ static bool CreateDmTable(const std::string& block_device, const LpMetadata& met
 
 static bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
                                    const LpMetadataPartition& partition, bool force_writable,
-                                   std::string* path) {
+                                   const std::chrono::milliseconds& timeout_ms, std::string* path) {
     DeviceMapper& dm = DeviceMapper::Instance();
 
     DmTable table;
@@ -97,6 +97,13 @@ static bool CreateLogicalPartition(const std::string& block_device, const LpMeta
     }
     if (!dm.GetDmDevicePathByName(name, path)) {
         return false;
+    }
+    if (timeout_ms > std::chrono::milliseconds::zero()) {
+        if (!fs_mgr_wait_for_file(*path, timeout_ms, FileWaitMode::Exists)) {
+            DestroyLogicalPartition(name, {});
+            LERROR << "Timed out waiting for device path: " << *path;
+            return false;
+        }
     }
     LINFO << "Created logical partition " << name << " on device " << *path;
     return true;
@@ -115,7 +122,7 @@ bool CreateLogicalPartitions(const std::string& block_device) {
             continue;
         }
         std::string path;
-        if (!CreateLogicalPartition(block_device, *metadata.get(), partition, false, &path)) {
+        if (!CreateLogicalPartition(block_device, *metadata.get(), partition, false, {}, &path)) {
             LERROR << "Could not create logical partition: " << GetPartitionName(partition);
             return false;
         }
@@ -125,7 +132,7 @@ bool CreateLogicalPartitions(const std::string& block_device) {
 
 bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
                             const std::string& partition_name, bool force_writable,
-                            std::string* path) {
+                            const std::chrono::milliseconds& timeout_ms, std::string* path) {
     auto metadata = ReadMetadata(block_device.c_str(), metadata_slot);
     if (!metadata) {
         LOG(ERROR) << "Could not read partition table.";
@@ -134,16 +141,24 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
     for (const auto& partition : metadata->partitions) {
         if (GetPartitionName(partition) == partition_name) {
             return CreateLogicalPartition(block_device, *metadata.get(), partition, force_writable,
-                                          path);
+                                          timeout_ms, path);
         }
     }
     LERROR << "Could not find any partition with name: " << partition_name;
     return false;
 }
 
-bool DestroyLogicalPartition(const std::string& name) {
+bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
     DeviceMapper& dm = DeviceMapper::Instance();
+    std::string path;
+    if (timeout_ms > std::chrono::milliseconds::zero()) {
+        dm.GetDmDevicePathByName(name, &path);
+    }
     if (!dm.DeleteDevice(name)) {
+        return false;
+    }
+    if (!path.empty() && !fs_mgr_wait_for_file(path, timeout_ms, FileWaitMode::DoesNotExist)) {
+        LERROR << "Timed out waiting for device path to unlink: " << path;
         return false;
     }
     LINFO << "Unmapped logical partition " << name;

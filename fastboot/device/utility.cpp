@@ -28,6 +28,7 @@
 #include "fastboot_device.h"
 
 using namespace android::fs_mgr;
+using namespace std::chrono_literals;
 using android::base::unique_fd;
 using android::hardware::boot::V1_0::Slot;
 
@@ -48,11 +49,11 @@ static bool OpenLogicalPartition(const std::string& name, const std::string& slo
     }
     uint32_t slot_number = SlotNumberForSlotSuffix(slot);
     std::string dm_path;
-    if (!CreateLogicalPartition(path->c_str(), slot_number, name, true, &dm_path)) {
+    if (!CreateLogicalPartition(path->c_str(), slot_number, name, true, 5s, &dm_path)) {
         LOG(ERROR) << "Could not map partition: " << name;
         return false;
     }
-    auto closer = [name]() -> void { DestroyLogicalPartition(name); };
+    auto closer = [name]() -> void { DestroyLogicalPartition(name, 5s); };
     *handle = PartitionHandle(dm_path, std::move(closer));
     return true;
 }
