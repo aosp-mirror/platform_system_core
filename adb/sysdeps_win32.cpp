@@ -2742,3 +2742,26 @@ char* adb_getcwd(char* buf, int size) {
 
     return buf;
 }
+
+// The SetThreadDescription API was brought in version 1607 of Windows 10.
+typedef HRESULT(WINAPI* SetThreadDescription)(HANDLE hThread, PCWSTR lpThreadDescription);
+
+// Based on PlatformThread::SetName() from
+// https://cs.chromium.org/chromium/src/base/threading/platform_thread_win.cc
+int adb_thread_setname(const std::string& name) {
+    // The SetThreadDescription API works even if no debugger is attached.
+    auto set_thread_description_func = reinterpret_cast<SetThreadDescription>(
+            ::GetProcAddress(::GetModuleHandleW(L"Kernel32.dll"), "SetThreadDescription"));
+    if (set_thread_description_func) {
+        std::wstring name_wide;
+        if (!android::base::UTF8ToWide(name.c_str(), &name_wide)) {
+            return errno;
+        }
+        set_thread_description_func(::GetCurrentThread(), name_wide.c_str());
+    }
+
+    // Don't use the thread naming SEH exception because we're compiled with -fno-exceptions.
+    // https://docs.microsoft.com/en-us/visualstudio/debugger/how-to-set-a-thread-name-in-native-code?view=vs-2017
+
+    return 0;
+}
