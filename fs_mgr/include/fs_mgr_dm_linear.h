@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -43,12 +44,16 @@ bool CreateLogicalPartitions(const std::string& block_device);
 // the partition name. On success, a path to the partition's block device is
 // returned. If |force_writable| is true, the "readonly" flag will be ignored
 // so the partition can be flashed.
+//
+// If |timeout_ms| is non-zero, then CreateLogicalPartition will block for the
+// given amount of time until the path returned in |path| is available.
 bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
                             const std::string& partition_name, bool force_writable,
-                            std::string* path);
+                            const std::chrono::milliseconds& timeout_ms, std::string* path);
 
-// Destroy the block device for a logical partition, by name.
-bool DestroyLogicalPartition(const std::string& name);
+// Destroy the block device for a logical partition, by name. If |timeout_ms|
+// is non-zero, then this will block until the device path has been unlinked.
+bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 
 }  // namespace fs_mgr
 }  // namespace android
