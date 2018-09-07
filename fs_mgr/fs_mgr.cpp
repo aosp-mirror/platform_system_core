@@ -102,12 +102,16 @@ enum FsStatFlags {
 
 // TODO: switch to inotify()
 bool fs_mgr_wait_for_file(const std::string& filename,
-                          const std::chrono::milliseconds relative_timeout) {
+                          const std::chrono::milliseconds relative_timeout,
+                          FileWaitMode file_wait_mode) {
     auto start_time = std::chrono::steady_clock::now();
 
     while (true) {
-        if (!access(filename.c_str(), F_OK) || errno != ENOENT) {
-            return true;
+        int rv = access(filename.c_str(), F_OK);
+        if (file_wait_mode == FileWaitMode::Exists) {
+            if (!rv || errno != ENOENT) return true;
+        } else if (file_wait_mode == FileWaitMode::DoesNotExist) {
+            if (rv && errno == ENOENT) return true;
         }
 
         std::this_thread::sleep_for(50ms);
