@@ -192,6 +192,10 @@ class MetadataBuilder {
 
   private:
     MetadataBuilder();
+    MetadataBuilder(const MetadataBuilder&) = delete;
+    MetadataBuilder(MetadataBuilder&&) = delete;
+    MetadataBuilder& operator=(const MetadataBuilder&) = delete;
+    MetadataBuilder& operator=(MetadataBuilder&&) = delete;
     bool Init(const BlockDeviceInfo& info, uint32_t metadata_max_size, uint32_t metadata_slot_count);
     bool Init(const LpMetadata& metadata);
     bool GrowPartition(Partition* partition, uint64_t aligned_size);
