@@ -121,6 +121,7 @@ cc_binary {
 
     shared_libs: [
         "android.hardware.boot@1.0",
+        "android.hardware.fastboot@1.0",
         "libadbd",
         "libasyncio",
         "libbase",
