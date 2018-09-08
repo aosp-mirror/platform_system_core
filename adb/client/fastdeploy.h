@@ -26,7 +26,7 @@ enum FastDeploy_AgentUpdateStrategy {
 
 void fastdeploy_set_local_agent(bool use_localagent);
 int get_device_api_level();
-bool update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy);
+void update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy);
 int extract_metadata(const char* apkPath, FILE* outputFp);
 int create_patch(const char* apkPath, const char* metadataPath, const char* patchPath);
 int apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath);

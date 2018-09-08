@@ -158,7 +158,7 @@ static void help() {
         "     --instant: cause the app to be installed as an ephemeral install app\n"
         "     --no-streaming: always push APK to device and invoke Package Manager as separate steps\n"
         "     --streaming: force streaming APK directly into Package Manager\n"
-        "     -f/--fastdeploy: use fast deploy (only valid with -r)\n"
+        "     --fastdeploy: use fast deploy (only valid with -r)\n"
         "     --no-fastdeploy: prevent use of fast deploy (only valid with -r)\n"
         "     --force-agent: force update of deployment agent when using fast deploy\n"
         "     --date-check-agent: update deployment agent when local version is newer and using fast deploy\n"

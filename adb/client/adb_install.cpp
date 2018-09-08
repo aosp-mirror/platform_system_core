@@ -177,7 +177,9 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         }
 
     cleanup_streamed_apk:
-        delete_device_patch_file(file);
+        if (use_fastdeploy == true) {
+            delete_device_patch_file(file);
+        }
         return result;
     } else {
         struct stat sb;
@@ -258,10 +260,10 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
     std::string apk_dest =
             android::base::StringPrintf(where, android::base::Basename(argv[last_apk]).c_str());
 
-    TemporaryFile metadataTmpFile;
-    TemporaryFile patchTmpFile;
-
     if (use_fastdeploy == true) {
+        TemporaryFile metadataTmpFile;
+        TemporaryFile patchTmpFile;
+
         FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
         int metadata_len = extract_metadata(apk_file[0], metadataFile);
         fclose(metadataFile);
@@ -294,7 +296,9 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
     result = pm_command(argc, argv);
 
 cleanup_apk:
-    delete_device_patch_file(apk_file[0]);
+    if (use_fastdeploy == true) {
+        delete_device_patch_file(apk_file[0]);
+    }
     delete_device_file(apk_dest);
     return result;
 }
@@ -328,9 +332,6 @@ int install_app(int argc, const char** argv) {
         } else if (!strcmp(argv[i], "--no-fastdeploy")) {
             processedArgIndicies.push_back(i);
             use_fastdeploy = false;
-        } else if (!strcmp(argv[i], "-f")) {
-            processedArgIndicies.push_back(i);
-            use_fastdeploy = true;
         } else if (!strcmp(argv[i], "--force-agent")) {
             processedArgIndicies.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateAlways;
@@ -383,12 +384,7 @@ int install_app(int argc, const char** argv) {
 
     if (use_fastdeploy == true) {
         fastdeploy_set_local_agent(use_localagent);
-
-        bool agent_up_to_date = update_agent(agent_update_strategy);
-        if (agent_up_to_date == false) {
-            printf("Failed to update agent, exiting\n");
-            return 1;
-        }
+        update_agent(agent_update_strategy);
     }
 
     switch (installMode) {
@@ -532,20 +528,4 @@ finalize_session:
 int delete_device_file(const std::string& filename) {
     std::string cmd = "rm -f " + escape_arg(filename);
     return send_shell_command(cmd);
-}
-
-int delete_host_file(const std::string& filename) {
-#ifdef _WIN32
-    BOOL delete_return = DeleteFileA(filename.c_str());
-    if (delete_return != 0) {
-        return 0;
-    } else {
-        DWORD last_error = GetLastError();
-        printf("Error [%ld] deleting: %s\n", last_error, filename.c_str());
-        return delete_return;
-    }
-#else
-    std::string cmd = "rm -f " + escape_arg(filename);
-    return system(cmd.c_str());
-#endif
 }
