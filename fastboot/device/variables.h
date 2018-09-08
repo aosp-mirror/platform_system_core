@@ -44,6 +44,8 @@ bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& args,
 bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
 bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args,
                       std::string* message);
+bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message);
 bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args,
                            std::string* message);
 bool GetIsUserspace(FastbootDevice* device, const std::vector<std::string>& args,
