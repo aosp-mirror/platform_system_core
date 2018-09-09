@@ -31,6 +31,9 @@
 
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::fastboot::V1_0::FileSystemType;
+using ::android::hardware::fastboot::V1_0::Result;
+using ::android::hardware::fastboot::V1_0::Status;
 
 constexpr int kMaxDownloadSizeDefault = 0x20000000;
 constexpr char kFastbootProtocolVersion[] = "0.4";
@@ -195,6 +198,47 @@ bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& ar
     return true;
 }
 
+bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message) {
+    if (args.size() < 1) {
+        *message = "Missing argument";
+        return false;
+    }
+    std::string partition_name = args[0];
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    FileSystemType type;
+    Result ret;
+    auto ret_val =
+            fastboot_hal->getPartitionType(args[0], [&](FileSystemType fs_type, Result result) {
+                type = fs_type;
+                ret = result;
+            });
+    if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
+        *message = "Unable to retrieve partition type";
+    } else {
+        switch (type) {
+            case FileSystemType::RAW:
+                *message = "raw";
+                return true;
+            case FileSystemType::EXT4:
+                *message = "ext4";
+                return true;
+            case FileSystemType::F2FS:
+                *message = "f2fs";
+                return true;
+            default:
+                *message = "Unknown file system type";
+        }
+    }
+
+    return false;
+}
+
 bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args,
                            std::string* message) {
     if (args.size() < 1) {
@@ -255,4 +299,10 @@ std::vector<std::vector<std::string>> GetAllPartitionArgsNoSlot(FastbootDevice* 
         args.emplace_back(std::initializer_list<std::string>{partition});
     }
     return args;
+}
+
+bool GetHardwareRevision(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                         std::string* message) {
+    *message = android::base::GetProperty("ro.revision", "");
+    return true;
 }

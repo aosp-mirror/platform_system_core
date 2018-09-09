@@ -70,6 +70,11 @@ void verbose(const char* fmt, ...) {
     fprintf(stderr, "\n");
 }
 
+void Status(const std::string& message) {
+    static constexpr char kStatusFormat[] = "%-50s ";
+    fprintf(stderr, kStatusFormat, message.c_str());
+}
+
 char* xstrdup(const char* s) {
     char* result = strdup(s);
     if (!result) die("out of memory");

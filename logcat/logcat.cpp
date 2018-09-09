@@ -41,6 +41,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/file.h>
@@ -565,23 +566,14 @@ static int setLogFormat(android_logcat_context_internal* context,
     return android_log_setPrintFormat(context->logformat, format);
 }
 
-static const char multipliers[][2] = { { "" }, { "K" }, { "M" }, { "G" } };
-
-static unsigned long value_of_size(unsigned long value) {
-    for (unsigned i = 0;
-         (i < sizeof(multipliers) / sizeof(multipliers[0])) && (value >= 1024);
-         value /= 1024, ++i)
-        ;
-    return value;
-}
-
-static const char* multiplier_of_size(unsigned long value) {
-    unsigned i;
+static std::pair<unsigned long, const char*> format_of_size(unsigned long value) {
+    static const char multipliers[][3] = {{""}, {"Ki"}, {"Mi"}, {"Gi"}};
+    size_t i;
     for (i = 0;
          (i < sizeof(multipliers) / sizeof(multipliers[0])) && (value >= 1024);
          value /= 1024, ++i)
         ;
-    return multipliers[i];
+    return std::make_pair(value, multipliers[i]);
 }
 
 // String to unsigned int, returns -1 if it fails
@@ -1472,12 +1464,14 @@ static int __logcat(android_logcat_context_internal* context) {
             if ((size < 0) || (readable < 0)) {
                 reportErrorName(&getSizeFail, dev->device, allSelected);
             } else {
+                auto size_format = format_of_size(size);
+                auto readable_format = format_of_size(readable);
                 std::string str = android::base::StringPrintf(
-                       "%s: ring buffer is %ld%sb (%ld%sb consumed),"
-                         " max entry is %db, max payload is %db\n",
+                       "%s: ring buffer is %lu %sB (%lu %sB consumed),"
+                         " max entry is %d B, max payload is %d B\n",
                        dev->device,
-                       value_of_size(size), multiplier_of_size(size),
-                       value_of_size(readable), multiplier_of_size(readable),
+                       size_format.first, size_format.second,
+                       readable_format.first, readable_format.second,
                        (int)LOGGER_ENTRY_MAX_LEN,
                        (int)LOGGER_ENTRY_MAX_PAYLOAD);
                 TEMP_FAILURE_RETRY(write(context->output_fd,

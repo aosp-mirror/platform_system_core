@@ -19,7 +19,7 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
-
+#include <android/hardware/fastboot/1.0/IFastboot.h>
 #include <algorithm>
 
 #include "constants.h"
@@ -29,6 +29,7 @@
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::IBootControl;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::fastboot::V1_0::IFastboot;
 namespace sph = std::placeholders;
 
 FastbootDevice::FastbootDevice()
@@ -49,7 +50,8 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_UPDATE_SUPER, UpdateSuperHandler},
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
-      boot_control_hal_(IBootControl::getService()) {}
+      boot_control_hal_(IBootControl::getService()),
+      fastboot_hal_(IFastboot::getService()) {}
 
 FastbootDevice::~FastbootDevice() {
     CloseDevice();

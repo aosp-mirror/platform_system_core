@@ -97,9 +97,9 @@ RetCode FastBootDriver::RebootTo(std::string target, std::string* response,
     return RawCommand("reboot-" + target, response, info);
 }
 
-RetCode FastBootDriver::SetActive(const std::string& part, std::string* response,
+RetCode FastBootDriver::SetActive(const std::string& slot, std::string* response,
                                   std::vector<std::string>* info) {
-    return RawCommand(Commands::SET_ACTIVE + part, response, info);
+    return RawCommand(Commands::SET_ACTIVE + slot, response, info);
 }
 
 RetCode FastBootDriver::FlashPartition(const std::string& part, const std::vector<char>& data) {

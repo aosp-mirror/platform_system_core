@@ -557,20 +557,17 @@ static int get_groups(const char* cmd) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         int size, consumed, max, payload;
-        char size_mult[3], consumed_mult[3];
+        char size_mult[4], consumed_mult[4];
         long full_size, full_consumed;
 
         size = consumed = max = payload = 0;
         // NB: crash log can be very small, not hit a Kb of consumed space
         //     doubly lucky we are not including it.
-        if (6 != sscanf(buffer,
-                        "%*s ring buffer is %d%2s (%d%2s consumed),"
-                        " max entry is %db, max payload is %db",
-                        &size, size_mult, &consumed, consumed_mult, &max,
-                        &payload)) {
-            fprintf(stderr, "WARNING: Parse error: %s", buffer);
-            continue;
-        }
+        EXPECT_EQ(6, sscanf(buffer,
+                            "%*s ring buffer is %d %3s (%d %3s consumed),"
+                            " max entry is %d B, max payload is %d B",
+                            &size, size_mult, &consumed, consumed_mult, &max, &payload))
+                << "Parse error on: " << buffer;
         full_size = size;
         switch (size_mult[0]) {
             case 'G':
@@ -582,8 +579,10 @@ static int get_groups(const char* cmd) {
             case 'K':
                 full_size *= 1024;
             /* FALLTHRU */
-            case 'b':
+            case 'B':
                 break;
+            default:
+                ADD_FAILURE() << "Parse error on multiplier: " << size_mult;
         }
         full_consumed = consumed;
         switch (consumed_mult[0]) {
@@ -596,8 +595,10 @@ static int get_groups(const char* cmd) {
             case 'K':
                 full_consumed *= 1024;
             /* FALLTHRU */
-            case 'b':
+            case 'B':
                 break;
+            default:
+                ADD_FAILURE() << "Parse error on multiplier: " << consumed_mult;
         }
         EXPECT_GT((full_size * 9) / 4, full_consumed);
         EXPECT_GT(full_size, max);
@@ -1229,13 +1230,12 @@ TEST(logcat, blocking_clear) {
         }
 
         int size, consumed, max, payload;
-        char size_mult[3], consumed_mult[3];
+        char size_mult[4], consumed_mult[4];
         size = consumed = max = payload = 0;
         if (6 == sscanf(buffer,
-                        "events: ring buffer is %d%2s (%d%2s consumed),"
-                        " max entry is %db, max payload is %db",
-                        &size, size_mult, &consumed, consumed_mult, &max,
-                        &payload)) {
+                        "events: ring buffer is %d %3s (%d %3s consumed),"
+                        " max entry is %d B, max payload is %d B",
+                        &size, size_mult, &consumed, consumed_mult, &max, &payload)) {
             long full_size = size, full_consumed = consumed;
 
             switch (size_mult[0]) {
@@ -1248,7 +1248,7 @@ TEST(logcat, blocking_clear) {
                 case 'K':
                     full_size *= 1024;
                 /* FALLTHRU */
-                case 'b':
+                case 'B':
                     break;
             }
             switch (consumed_mult[0]) {
@@ -1261,7 +1261,7 @@ TEST(logcat, blocking_clear) {
                 case 'K':
                     full_consumed *= 1024;
                 /* FALLTHRU */
-                case 'b':
+                case 'B':
                     break;
             }
             EXPECT_GT(full_size, full_consumed);

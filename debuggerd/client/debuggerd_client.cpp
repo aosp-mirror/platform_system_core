@@ -143,12 +143,16 @@ bool debuggerd_trigger_dump(pid_t pid, DebuggerdDumpType dump_type, unsigned int
   ssize_t rc =
       TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
-    LOG(ERROR) << "libdebuggerd_client: failed to read response from tombstoned: timeout reached?";
+    LOG(ERROR) << "libdebuggerd_client: failed to read initial response from tombstoned: "
+               << "timeout reached?";
+    return false;
+  } else if (rc == -1) {
+    PLOG(ERROR) << "libdebuggerd_client: failed to read initial response from tombstoned";
     return false;
   } else if (rc != sizeof(response)) {
-    LOG(ERROR)
-        << "libdebuggerd_client: received packet of unexpected length from tombstoned: expected "
-        << sizeof(response) << ", received " << rc;
+    LOG(ERROR) << "libdebuggerd_client: received packet of unexpected length from tombstoned while "
+                  "reading initial response: expected "
+               << sizeof(response) << ", received " << rc;
     return false;
   }
 
@@ -164,12 +168,16 @@ bool debuggerd_trigger_dump(pid_t pid, DebuggerdDumpType dump_type, unsigned int
 
   rc = TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
-    LOG(ERROR) << "libdebuggerd_client: failed to read response from tombstoned: timeout reached?";
+    LOG(ERROR) << "libdebuggerd_client: failed to read status response from tombstoned: "
+                  "timeout reached?";
+    return false;
+  } else if (rc == -1) {
+    PLOG(ERROR) << "libdebuggerd_client: failed to read status response from tombstoned";
     return false;
   } else if (rc != sizeof(response)) {
-    LOG(ERROR)
-      << "libdebuggerd_client: received packet of unexpected length from tombstoned: expected "
-      << sizeof(response) << ", received " << rc;
+    LOG(ERROR) << "libdebuggerd_client: received packet of unexpected length from tombstoned while "
+                  "reading confirmation response: expected "
+               << sizeof(response) << ", received " << rc;
     return false;
   }
 

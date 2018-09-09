@@ -40,6 +40,8 @@
 #include <android-base/strings.h>
 #include <android-base/test_utils.h>
 
+static constexpr int kFastDeployMinApi = 24;
+
 static bool _use_legacy_install() {
     FeatureSet features;
     std::string error;
@@ -130,7 +132,7 @@ static int delete_device_patch_file(const char* apkPath) {
 }
 
 static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy,
-                                bool use_localagent, const char* adb_path) {
+                                bool use_localagent) {
     printf("Performing Streamed Install\n");
 
     // The last argument must be the APK file
@@ -152,8 +154,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
             printf("failed to extract metadata %d\n", metadata_len);
             return 1;
         } else {
-            int create_patch_result = create_patch(file, metadataTmpFile.path, patchTmpFile.path,
-                                                   use_localagent, adb_path);
+            int create_patch_result = create_patch(file, metadataTmpFile.path, patchTmpFile.path);
             if (create_patch_result != 0) {
                 printf("Patch creation failure, error code: %d\n", create_patch_result);
                 result = create_patch_result;
@@ -176,7 +177,9 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         }
 
     cleanup_streamed_apk:
-        delete_device_patch_file(file);
+        if (use_fastdeploy == true) {
+            delete_device_patch_file(file);
+        }
         return result;
     } else {
         struct stat sb;
@@ -226,8 +229,8 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     }
 }
 
-static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, bool use_localagent,
-                              const char* adb_path) {
+static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
+                              bool use_localagent) {
     static const char* const DATA_DEST = "/data/local/tmp/%s";
     static const char* const SD_DEST = "/sdcard/tmp/%s";
     const char* where = DATA_DEST;
@@ -257,10 +260,10 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, 
     std::string apk_dest =
             android::base::StringPrintf(where, android::base::Basename(argv[last_apk]).c_str());
 
-    TemporaryFile metadataTmpFile;
-    TemporaryFile patchTmpFile;
-
     if (use_fastdeploy == true) {
+        TemporaryFile metadataTmpFile;
+        TemporaryFile patchTmpFile;
+
         FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
         int metadata_len = extract_metadata(apk_file[0], metadataFile);
         fclose(metadataFile);
@@ -269,8 +272,8 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, 
             printf("failed to extract metadata %d\n", metadata_len);
             return 1;
         } else {
-            int create_patch_result = create_patch(apk_file[0], metadataTmpFile.path,
-                                                   patchTmpFile.path, use_localagent, adb_path);
+            int create_patch_result =
+                    create_patch(apk_file[0], metadataTmpFile.path, patchTmpFile.path);
             if (create_patch_result != 0) {
                 printf("Patch creation failure, error code: %d\n", create_patch_result);
                 result = create_patch_result;
@@ -293,7 +296,9 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy, 
     result = pm_command(argc, argv);
 
 cleanup_apk:
-    delete_device_patch_file(apk_file[0]);
+    if (use_fastdeploy == true) {
+        delete_device_patch_file(apk_file[0]);
+    }
     delete_device_file(apk_dest);
     return result;
 }
@@ -327,9 +332,6 @@ int install_app(int argc, const char** argv) {
         } else if (!strcmp(argv[i], "--no-fastdeploy")) {
             processedArgIndicies.push_back(i);
             use_fastdeploy = false;
-        } else if (!strcmp(argv[i], "-f")) {
-            processedArgIndicies.push_back(i);
-            use_fastdeploy = true;
         } else if (!strcmp(argv[i], "--force-agent")) {
             processedArgIndicies.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateAlways;
@@ -380,27 +382,18 @@ int install_app(int argc, const char** argv) {
         }
     }
 
-    std::string adb_path = android::base::GetExecutablePath();
-
-    if (adb_path.length() == 0) {
-        return 1;
-    }
     if (use_fastdeploy == true) {
-        bool agent_up_to_date =
-                update_agent(agent_update_strategy, use_localagent, adb_path.c_str());
-        if (agent_up_to_date == false) {
-            printf("Failed to update agent, exiting\n");
-            return 1;
-        }
+        fastdeploy_set_local_agent(use_localagent);
+        update_agent(agent_update_strategy);
     }
 
     switch (installMode) {
         case INSTALL_PUSH:
             return install_app_legacy(passthrough_argv.size(), passthrough_argv.data(),
-                                      use_fastdeploy, use_localagent, adb_path.c_str());
+                                      use_fastdeploy, use_localagent);
         case INSTALL_STREAM:
             return install_app_streamed(passthrough_argv.size(), passthrough_argv.data(),
-                                        use_fastdeploy, use_localagent, adb_path.c_str());
+                                        use_fastdeploy, use_localagent);
         case INSTALL_DEFAULT:
         default:
             return 1;
@@ -535,20 +528,4 @@ finalize_session:
 int delete_device_file(const std::string& filename) {
     std::string cmd = "rm -f " + escape_arg(filename);
     return send_shell_command(cmd);
-}
-
-int delete_host_file(const std::string& filename) {
-#ifdef _WIN32
-    BOOL delete_return = DeleteFileA(filename.c_str());
-    if (delete_return != 0) {
-        return 0;
-    } else {
-        DWORD last_error = GetLastError();
-        printf("Error [%ld] deleting: %s\n", last_error, filename.c_str());
-        return delete_return;
-    }
-#else
-    std::string cmd = "rm -f " + escape_arg(filename);
-    return system(cmd.c_str());
-#endif
 }
