@@ -1,3 +1,5 @@
+firmware_directories /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/
+
 subsystem adf
     devname uevent_devname
 

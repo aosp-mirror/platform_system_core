@@ -215,39 +215,6 @@ void ColdBoot::Run() {
     LOG(INFO) << "Coldboot took " << cold_boot_timer.duration().count() / 1000.0f << " seconds";
 }
 
-DeviceHandler CreateDeviceHandler() {
-    Parser parser;
-
-    std::vector<Subsystem> subsystems;
-    parser.AddSectionParser("subsystem", std::make_unique<SubsystemParser>(&subsystems));
-
-    using namespace std::placeholders;
-    std::vector<SysfsPermissions> sysfs_permissions;
-    std::vector<Permissions> dev_permissions;
-    parser.AddSingleLineParser("/sys/",
-                               std::bind(ParsePermissionsLine, _1, &sysfs_permissions, nullptr));
-    parser.AddSingleLineParser("/dev/",
-                               std::bind(ParsePermissionsLine, _1, nullptr, &dev_permissions));
-
-    parser.ParseConfig("/ueventd.rc");
-    parser.ParseConfig("/vendor/ueventd.rc");
-    parser.ParseConfig("/odm/ueventd.rc");
-
-    /*
-     * keep the current product name base configuration so
-     * we remain backwards compatible and allow it to override
-     * everything
-     * TODO: cleanup platform ueventd.rc to remove vendor specific
-     * device node entries (b/34968103)
-     */
-    std::string hardware = android::base::GetProperty("ro.hardware", "");
-    parser.ParseConfig("/ueventd." + hardware + ".rc");
-
-    auto boot_devices = fs_mgr_get_boot_devices();
-    return DeviceHandler(std::move(dev_permissions), std::move(sysfs_permissions),
-                         std::move(subsystems), std::move(boot_devices), true);
-}
-
 int ueventd_main(int argc, char** argv) {
     /*
      * init sets the umask to 077 for forked processes. We need to
@@ -263,8 +230,26 @@ int ueventd_main(int argc, char** argv) {
     SelinuxSetupKernelLogging();
     SelabelInitialize();
 
-    DeviceHandler device_handler = CreateDeviceHandler();
+    DeviceHandler device_handler;
     UeventListener uevent_listener;
+
+    {
+        // Keep the current product name base configuration so we remain backwards compatible and
+        // allow it to override everything.
+        // TODO: cleanup platform ueventd.rc to remove vendor specific device node entries (b/34968103)
+        auto hardware = android::base::GetProperty("ro.hardware", "");
+
+        auto ueventd_configuration =
+                ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc", "/odm/ueventd.rc",
+                             "/ueventd." + hardware + ".rc"});
+
+        device_handler = DeviceHandler{std::move(ueventd_configuration.dev_permissions),
+                                       std::move(ueventd_configuration.sysfs_permissions),
+                                       std::move(ueventd_configuration.subsystems),
+                                       fs_mgr_get_boot_devices(), true};
+
+        firmware_directories = ueventd_configuration.firmware_directories;
+    }
 
     if (access(COLDBOOT_DONE, F_OK) != 0) {
         ColdBoot cold_boot(uevent_listener, device_handler);

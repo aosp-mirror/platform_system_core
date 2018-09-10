@@ -21,30 +21,18 @@
 #include <vector>
 
 #include "devices.h"
-#include "parser.h"
 
 namespace android {
 namespace init {
 
-class SubsystemParser : public SectionParser {
-  public:
-    SubsystemParser(std::vector<Subsystem>* subsystems) : subsystems_(subsystems) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
-    Result<Success> EndSection() override;
-
-  private:
-    Result<Success> ParseDevName(std::vector<std::string>&& args);
-    Result<Success> ParseDirName(std::vector<std::string>&& args);
-
-    Subsystem subsystem_;
-    std::vector<Subsystem>* subsystems_;
+struct UeventdConfiguration {
+    std::vector<Subsystem> subsystems;
+    std::vector<SysfsPermissions> sysfs_permissions;
+    std::vector<Permissions> dev_permissions;
+    std::vector<std::string> firmware_directories;
 };
 
-Result<Success> ParsePermissionsLine(std::vector<std::string>&& args,
-                                     std::vector<SysfsPermissions>* out_sysfs_permissions,
-                                     std::vector<Permissions>* out_dev_permissions);
+UeventdConfiguration ParseConfig(const std::vector<std::string>& configs);
 
 }  // namespace init
 }  // namespace android

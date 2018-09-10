@@ -602,6 +602,9 @@ int main(int argc, char** argv) {
         // /mnt/vendor is used to mount vendor-specific partitions that can not be
         // part of the vendor partition, e.g. because they are mounted read-write.
         mkdir("/mnt/vendor", 0755);
+        // /mnt/product is used to mount product-specific partitions that can not be
+        // part of the product partition, e.g. because they are mounted read-write.
+        mkdir("/mnt/product", 0755);
 
         // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
         // talk to the outside world...

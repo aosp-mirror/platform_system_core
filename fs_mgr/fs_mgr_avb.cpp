@@ -139,38 +139,23 @@ class FsManagerAvbVerifier {
 };
 
 std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
-    std::string cmdline;
-    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
-        PERROR << "Failed to read /proc/cmdline";
-        return nullptr;
-    }
-
     std::unique_ptr<FsManagerAvbVerifier> avb_verifier(new FsManagerAvbVerifier());
     if (!avb_verifier) {
         LERROR << "Failed to create unique_ptr<FsManagerAvbVerifier>";
         return nullptr;
     }
 
-    std::string digest;
-    std::string hash_alg;
-    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
-        std::vector<std::string> pieces = android::base::Split(entry, "=");
-        const std::string& key = pieces[0];
-        const std::string& value = pieces[1];
-
-        if (key == "androidboot.vbmeta.hash_alg") {
-            hash_alg = value;
-        } else if (key == "androidboot.vbmeta.size") {
-            if (!android::base::ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
-                return nullptr;
-            }
-        } else if (key == "androidboot.vbmeta.digest") {
-            digest = value;
-        }
+    std::string value;
+    if (!fs_mgr_get_boot_config("vbmeta.size", &value) ||
+        !android::base::ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
+        LERROR << "Invalid hash size: " << value.c_str();
+        return nullptr;
     }
 
     // Reads hash algorithm.
     size_t expected_digest_size = 0;
+    std::string hash_alg;
+    fs_mgr_get_boot_config("vbmeta.hash_alg", &hash_alg);
     if (hash_alg == "sha256") {
         expected_digest_size = SHA256_DIGEST_LENGTH * 2;
         avb_verifier->hash_alg_ = kSHA256;
@@ -183,6 +168,8 @@ std::unique_ptr<FsManagerAvbVerifier> FsManagerAvbVerifier::Create() {
     }
 
     // Reads digest.
+    std::string digest;
+    fs_mgr_get_boot_config("vbmeta.digest", &digest);
     if (digest.size() != expected_digest_size) {
         LERROR << "Unexpected digest size: " << digest.size()
                << " (expected: " << expected_digest_size << ")";
