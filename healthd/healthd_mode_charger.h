@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,6 @@
  * limitations under the License.
  */
 
-#include "healthd_mode_charger.h"
-#include "healthd_mode_charger_nops.h"
+#pragma once
 
-int main(int argc, char** argv) {
-#ifdef CHARGER_NO_UI
-    return healthd_charger_nops(argc, argv);
-#else
-    return healthd_charger_main(argc, argv);
-#endif
-}
+int healthd_charger_main(int argc, char** argv);

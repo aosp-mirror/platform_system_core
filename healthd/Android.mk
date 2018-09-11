@@ -97,6 +97,7 @@ CHARGER_STATIC_LIBRARIES := \
     libhealthstoragedefault \
     libvndksupport \
     libhealthd_charger \
+    libhealthd_charger_nops \
     libhealthd_draw \
     libbatterymonitor \
 
@@ -107,19 +108,19 @@ CHARGER_SHARED_LIBRARIES := \
     libjsoncpp \
     libprocessgroup \
     liblog \
-    libpng \
     libutils \
 
-LOCAL_STATIC_LIBRARIES := $(CHARGER_STATIC_LIBRARIES)
-LOCAL_SHARED_LIBRARIES := $(CHARGER_SHARED_LIBRARIES)
-
 ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
-LOCAL_STATIC_LIBRARIES += libminui
+CHARGER_STATIC_LIBRARIES += libminui
+CHARGER_SHARED_LIBRARIES += libpng
 endif
 
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
-LOCAL_SHARED_LIBRARIES += libsuspend
+CHARGER_SHARED_LIBRARIES += libsuspend
 endif
+
+LOCAL_STATIC_LIBRARIES := $(CHARGER_STATIC_LIBRARIES)
+LOCAL_SHARED_LIBRARIES := $(CHARGER_SHARED_LIBRARIES)
 
 LOCAL_HAL_STATIC_LIBRARIES := libhealthd
 
@@ -129,15 +130,56 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT) \
 
 include $(BUILD_EXECUTABLE)
 
+### charger.recovery ###
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := \
+    charger.cpp \
+
+LOCAL_MODULE := charger.recovery
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/bin
+LOCAL_MODULE_STEM := charger
+
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_CFLAGS := -Wall -Werror
+LOCAL_CFLAGS += -DCHARGER_NO_UI
+
+# charger.recovery doesn't link against libhealthd_{charger,draw} or libminui, since it doesn't need
+# any UI support.
+LOCAL_STATIC_LIBRARIES := \
+    android.hardware.health@2.0-impl \
+    android.hardware.health@1.0-convert \
+    libbinderthreadstate \
+    libhidltransport \
+    libhidlbase \
+    libhwbinder_noltopgo \
+    libhealthstoragedefault \
+    libvndksupport \
+    libhealthd_charger_nops \
+    libbatterymonitor \
+
+# These shared libs will be installed to recovery image because of the dependency in `recovery`
+# module.
+LOCAL_SHARED_LIBRARIES := \
+    android.hardware.health@2.0 \
+    libbase \
+    libcutils \
+    liblog \
+    libutils \
+
+# The use of LOCAL_HAL_STATIC_LIBRARIES prevents from building this module with Android.bp.
+LOCAL_HAL_STATIC_LIBRARIES := libhealthd
+
+include $(BUILD_EXECUTABLE)
+
 ### charger_test ###
 include $(CLEAR_VARS)
 LOCAL_MODULE := charger_test
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_CFLAGS := -Wall -Werror -DCHARGER_TEST -DCHARGER_NO_UI
+LOCAL_CFLAGS := -Wall -Werror -DCHARGER_NO_UI
 LOCAL_STATIC_LIBRARIES := $(CHARGER_STATIC_LIBRARIES)
 LOCAL_SHARED_LIBRARIES := $(CHARGER_SHARED_LIBRARIES)
 LOCAL_SRC_FILES := \
-    charger.cpp \
     charger_test.cpp \
 
 include $(BUILD_EXECUTABLE)
