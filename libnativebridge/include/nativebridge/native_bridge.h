@@ -99,7 +99,7 @@ bool NativeBridgeError();
 bool NativeBridgeNameAcceptable(const char* native_bridge_library_filename);
 
 // Decrements the reference count on the dynamic library handler. If the reference count drops
-// to zero then the dynamic library is unloaded.
+// to zero then the dynamic library is unloaded. Returns 0 on success and non-zero on error.
 int NativeBridgeUnloadLibrary(void* handle);
 
 // Get last error message of native bridge when fail to load library or search symbol.
