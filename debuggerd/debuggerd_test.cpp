@@ -37,6 +37,7 @@
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
@@ -1052,4 +1053,43 @@ TEST(tombstoned, intercept_any) {
   char outbuf[sizeof(any)];
   ASSERT_TRUE(android::base::ReadFully(output_fd.get(), outbuf, sizeof(outbuf)));
   ASSERT_STREQ("any", outbuf);
+}
+
+TEST(tombstoned, interceptless_backtrace) {
+  // Generate 50 backtraces, and then check to see that we haven't created 50 new tombstones.
+  auto get_tombstone_timestamps = []() -> std::map<int, time_t> {
+    std::map<int, time_t> result;
+    for (int i = 0; i < 99; ++i) {
+      std::string path = android::base::StringPrintf("/data/tombstones/tombstone_%02d", i);
+      struct stat st;
+      if (stat(path.c_str(), &st) == 0) {
+        result[i] = st.st_mtim.tv_sec;
+      }
+    }
+    return result;
+  };
+
+  auto before = get_tombstone_timestamps();
+  for (int i = 0; i < 50; ++i) {
+    raise_debugger_signal(kDebuggerdNativeBacktrace);
+  }
+  auto after = get_tombstone_timestamps();
+
+  int diff = 0;
+  for (int i = 0; i < 99; ++i) {
+    if (after.count(i) == 0) {
+      continue;
+    }
+    if (before.count(i) == 0) {
+      ++diff;
+      continue;
+    }
+    if (before[i] != after[i]) {
+      ++diff;
+    }
+  }
+
+  // We can't be sure that nothing's crash looping in the background.
+  // This should be good enough, though...
+  ASSERT_LT(diff, 10) << "too many new tombstones; is something crashing in the background?";
 }
