@@ -79,6 +79,8 @@
 #define STRINGIFY(x) STRINGIFY_INTERNAL(x)
 #define STRINGIFY_INTERNAL(x) #x
 
+#define FAIL_REPORT_RLIMIT_MS 1000
+
 /* default to old in-kernel interface if no memory pressure events */
 static int use_inkernel_interface = 1;
 static bool has_inkernel_module;
@@ -956,8 +958,7 @@ static struct proc *proc_get_heaviest(int oomadj) {
 }
 
 /* Kill one process specified by procp.  Returns the size of the process killed */
-static int kill_one_process(struct proc* procp, int min_score_adj,
-                            enum vmpressure_level level) {
+static int kill_one_process(struct proc* procp) {
     int pid = procp->pid;
     uid_t uid = procp->uid;
     char *taskname;
@@ -990,11 +991,8 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
     TRACE_KILL_START(pid);
 
     r = kill(pid, SIGKILL);
-    ALOGI(
-        "Killing '%s' (%d), uid %d, adj %d\n"
-        "   to free %ldkB because system is under %s memory pressure oom_adj %d\n",
-        taskname, pid, uid, procp->oomadj, tasksize * page_k,
-        level_name[level], min_score_adj);
+    ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB",
+        taskname, pid, uid, procp->oomadj, tasksize * page_k);
     pid_remove(pid);
 
     TRACE_KILL_END();
@@ -1021,8 +1019,7 @@ static int kill_one_process(struct proc* procp, int min_score_adj,
  * If pages_to_free is set to 0 only one process will be killed.
  * Returns the size of the killed processes.
  */
-static int find_and_kill_processes(enum vmpressure_level level,
-                                   int min_score_adj, int pages_to_free) {
+static int find_and_kill_processes(int min_score_adj, int pages_to_free) {
     int i;
     int killed_size;
     int pages_freed = 0;
@@ -1041,7 +1038,7 @@ static int find_and_kill_processes(enum vmpressure_level level,
             if (!procp)
                 break;
 
-            killed_size = kill_one_process(procp, min_score_adj, level);
+            killed_size = kill_one_process(procp);
             if (killed_size >= 0) {
 #ifdef LMKD_LOG_STATS
                 if (enable_stats_log && !lmk_state_change_start) {
@@ -1146,8 +1143,9 @@ static void mp_event_common(int data, uint32_t events __unused) {
     enum vmpressure_level lvl;
     union meminfo mi;
     union zoneinfo zi;
-    static struct timeval last_report_tm;
-    static unsigned long skip_count = 0;
+    struct timeval curr_tm;
+    static struct timeval last_kill_tm;
+    static unsigned long kill_skip_count = 0;
     enum vmpressure_level level = (enum vmpressure_level)data;
     long other_free = 0, other_file = 0;
     int min_score_adj;
@@ -1176,19 +1174,18 @@ static void mp_event_common(int data, uint32_t events __unused) {
         }
     }
 
+    gettimeofday(&curr_tm, NULL);
     if (kill_timeout_ms) {
-        struct timeval curr_tm;
-        gettimeofday(&curr_tm, NULL);
-        if (get_time_diff_ms(&last_report_tm, &curr_tm) < kill_timeout_ms) {
-            skip_count++;
+        if (get_time_diff_ms(&last_kill_tm, &curr_tm) < kill_timeout_ms) {
+            kill_skip_count++;
             return;
         }
     }
 
-    if (skip_count > 0) {
+    if (kill_skip_count > 0) {
         ALOGI("%lu memory pressure events were skipped after a kill!",
-              skip_count);
-        skip_count = 0;
+              kill_skip_count);
+        kill_skip_count = 0;
     }
 
     if (meminfo_parse(&mi) < 0 || zoneinfo_parse(&zi) < 0) {
@@ -1280,13 +1277,15 @@ static void mp_event_common(int data, uint32_t events __unused) {
 do_kill:
     if (low_ram_device) {
         /* For Go devices kill only one task */
-        if (find_and_kill_processes(level, level_oomadj[level], 0) == 0) {
+        if (find_and_kill_processes(level_oomadj[level], 0) == 0) {
             if (debug_process_killing) {
                 ALOGI("Nothing to kill");
             }
         }
     } else {
         int pages_freed;
+        static struct timeval last_report_tm;
+        static unsigned long report_skip_count = 0;
 
         if (!use_minfree_levels) {
             /* If pressure level is less than critical and enough free swap then ignore */
@@ -1314,24 +1313,39 @@ do_kill:
             min_score_adj = level_oomadj[level];
         }
 
-        pages_freed = find_and_kill_processes(level, min_score_adj, pages_to_free);
+        pages_freed = find_and_kill_processes(min_score_adj, pages_to_free);
+
+        if (pages_freed == 0) {
+            /* Rate limit kill reports when nothing was reclaimed */
+            if (get_time_diff_ms(&last_report_tm, &curr_tm) < FAIL_REPORT_RLIMIT_MS) {
+                report_skip_count++;
+                return;
+            }
+        }
+
+        if (pages_freed >= pages_to_free) {
+            /* Reset kill time only if reclaimed enough memory */
+            last_kill_tm = curr_tm;
+        }
 
         if (use_minfree_levels) {
-            ALOGI("Killing because cache %ldkB is below "
-                  "limit %ldkB for oom_adj %d\n"
-                  "   Free memory is %ldkB %s reserved",
-                  other_file * page_k, minfree * page_k, min_score_adj,
-                  other_free * page_k, other_free >= 0 ? "above" : "below");
+            ALOGI("Killing to reclaim %ldkB, reclaimed %ldkB, cache(%ldkB) and "
+                "free(%" PRId64 "kB)-reserved(%" PRId64 "kB) below min(%ldkB) for oom_adj %d",
+                pages_to_free * page_k, pages_freed * page_k,
+                other_file * page_k, mi.field.nr_free_pages * page_k,
+                zi.field.totalreserve_pages * page_k,
+                minfree * page_k, min_score_adj);
+        } else {
+            ALOGI("Killing to reclaim %ldkB, reclaimed %ldkB at oom_adj %d",
+                pages_to_free * page_k, pages_freed * page_k, min_score_adj);
         }
 
-        if (pages_freed < pages_to_free) {
-            ALOGI("Unable to free enough memory (pages to free=%d, pages freed=%d)",
-                  pages_to_free, pages_freed);
-        } else {
-            ALOGI("Reclaimed enough memory (pages to free=%d, pages freed=%d)",
-                  pages_to_free, pages_freed);
-            gettimeofday(&last_report_tm, NULL);
+        if (report_skip_count > 0) {
+            ALOGI("Suppressed %lu failed kill reports", report_skip_count);
+            report_skip_count = 0;
         }
+
+        last_report_tm = curr_tm;
     }
 }
 
