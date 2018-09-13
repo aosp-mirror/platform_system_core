@@ -587,9 +587,28 @@ static const char* const kDebuggerdSeccompPolicy =
     "/system/etc/seccomp_policy/crash_dump." ABI_STRING ".policy";
 
 static pid_t seccomp_fork_impl(void (*prejail)()) {
-  unique_fd policy_fd(open(kDebuggerdSeccompPolicy, O_RDONLY | O_CLOEXEC));
-  if (policy_fd == -1) {
-    LOG(FATAL) << "failed to open policy " << kDebuggerdSeccompPolicy;
+  std::string policy;
+  if (!android::base::ReadFileToString(kDebuggerdSeccompPolicy, &policy)) {
+    PLOG(FATAL) << "failed to read policy file";
+  }
+
+  // Allow a bunch of syscalls used by the tests.
+  policy += "\nclone: 1";
+  policy += "\nsigaltstack: 1";
+  policy += "\nnanosleep: 1";
+
+  FILE* tmp_file = tmpfile();
+  if (!tmp_file) {
+    PLOG(FATAL) << "tmpfile failed";
+  }
+
+  unique_fd tmp_fd(dup(fileno(tmp_file)));
+  if (!android::base::WriteStringToFd(policy, tmp_fd.get())) {
+    PLOG(FATAL) << "failed to write policy to tmpfile";
+  }
+
+  if (lseek(tmp_fd.get(), 0, SEEK_SET) != 0) {
+    PLOG(FATAL) << "failed to seek tmp_fd";
   }
 
   ScopedMinijail jail{minijail_new()};
@@ -600,7 +619,7 @@ static pid_t seccomp_fork_impl(void (*prejail)()) {
   minijail_no_new_privs(jail.get());
   minijail_log_seccomp_filter_failures(jail.get());
   minijail_use_seccomp_filter(jail.get());
-  minijail_parse_seccomp_filters_from_fd(jail.get(), policy_fd.release());
+  minijail_parse_seccomp_filters_from_fd(jail.get(), tmp_fd.release());
 
   pid_t result = fork();
   if (result == -1) {
@@ -735,6 +754,16 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
 }
 
+extern "C" void foo() {
+  LOG(INFO) << "foo";
+  std::this_thread::sleep_for(1s);
+}
+
+extern "C" void bar() {
+  LOG(INFO) << "bar";
+  std::this_thread::sleep_for(1s);
+}
+
 TEST_F(CrasherTest, seccomp_backtrace) {
   int intercept_result;
   unique_fd output_fd;
@@ -742,6 +771,11 @@ TEST_F(CrasherTest, seccomp_backtrace) {
   static const auto dump_type = kDebuggerdNativeBacktrace;
   StartProcess(
       []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
         raise_debugger_signal(dump_type);
         _exit(0);
       },
@@ -756,6 +790,8 @@ TEST_F(CrasherTest, seccomp_backtrace) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
 }
 
 TEST_F(CrasherTest, seccomp_crash_logcat) {
