@@ -68,6 +68,7 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
+        "libbinder",
         "libbootloader_message",
         "libcutils",
         "libdl",
@@ -78,6 +79,7 @@ cc_defaults {
         "liblog",
         "liblogwrap",
         "libselinux",
+        "libutils",
     ],
 }
 
@@ -127,6 +129,13 @@ cc_library_static {
         type: "lite",
         export_proto_headers: true,
     },
+
+    target: {
+        recovery: {
+            cflags: ["-DRECOVERY"],
+            exclude_shared_libs: ["libbinder", "libutils"],
+        },
+    },
 }
 
 cc_binary {
@@ -143,6 +152,12 @@ cc_binary {
     ],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
+    target: {
+        recovery: {
+            cflags: ["-DRECOVERY"],
+            exclude_shared_libs: ["libbinder", "libutils"],
+        },
+    },
 }
 
 // Tests
