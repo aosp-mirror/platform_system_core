@@ -18,6 +18,8 @@
 
 #include <assert.h>
 
+#include <android-base/macros.h>
+
 #include "buffer.h"
 
 namespace android {
@@ -266,8 +268,11 @@ uint32_t ggl_pack_color(context_t* c, int32_t format,
     p = downshift_component(p, b,   hbits, lbits,  f->bh, f->bl, 0, 1, -1);
     p = downshift_component(p, a,   hbits, lbits,  f->ah, f->al, 0, 1, -1);
     switch (f->size) {
-    case 1: p |= p << 8;    // fallthrough
-    case 2: p |= p << 16;
+        case 1:
+            p |= p << 8;
+            FALLTHROUGH_INTENDED;
+        case 2:
+            p |= p << 16;
     }
     return p;
 }
