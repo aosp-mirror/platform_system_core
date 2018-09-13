@@ -47,6 +47,7 @@
 #include <unwindstack/Regs.h>
 
 #include "debuggerd/handler.h"
+#include "handler/fallback.h"
 #include "tombstoned/tombstoned.h"
 #include "util.h"
 
@@ -187,7 +188,7 @@ static std::pair<pid_t, int> unpack_thread_fd(uint64_t value) {
 static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
   static std::atomic<uint64_t> trace_output(pack_thread_fd(-1, -1));
 
-  if (info->si_value.sival_int == ~0) {
+  if (info->si_value.sival_ptr == kDebuggerdFallbackSivalPtrRequestDump) {
     // Asked to dump by the original signal recipient.
     uint64_t val = trace_output.load();
     auto [tid, fd] = unpack_thread_fd(val);
@@ -259,7 +260,7 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
 
         siginfo_t siginfo = {};
         siginfo.si_code = SI_QUEUE;
-        siginfo.si_value.sival_int = ~0;
+        siginfo.si_value.sival_ptr = kDebuggerdFallbackSivalPtrRequestDump;
         siginfo.si_pid = getpid();
         siginfo.si_uid = getuid();
 
@@ -331,7 +332,7 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
 
 extern "C" void debuggerd_fallback_handler(siginfo_t* info, ucontext_t* ucontext,
                                            void* abort_message) {
-  if (info->si_signo == DEBUGGER_SIGNAL && info->si_value.sival_int != 0) {
+  if (info->si_signo == DEBUGGER_SIGNAL && info->si_value.sival_ptr != nullptr) {
     return trace_handler(info, ucontext);
   } else {
     return crash_handler(info, ucontext, abort_message);
