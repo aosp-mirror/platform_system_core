@@ -174,6 +174,12 @@ cc_library_host_static {
         "libdiagnose_usb",
         "libmdnssd",
         "libusb",
+        "libandroidfw",
+        "libziparchive",
+        "libz",
+        "libutils",
+        "liblog",
+        "libcutils",
     ],
 }
 
@@ -256,6 +262,12 @@ cc_binary_host {
         "liblog",
         "libmdnssd",
         "libusb",
+        "libandroidfw",
+        "libziparchive",
+        "libz",
+        "libutils",
+        "liblog",
+        "libcutils",
     ],
 
     stl: "libc++_static",
