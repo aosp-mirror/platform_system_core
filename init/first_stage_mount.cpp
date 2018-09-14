@@ -120,8 +120,14 @@ static inline bool IsDtVbmetaCompatible() {
     return is_android_dt_value_expected("vbmeta/compatible", "android,vbmeta");
 }
 
-static bool inline IsRecoveryMode() {
-    return access("/system/bin/recovery", F_OK) == 0;
+static bool IsRecoveryMode() {
+    static bool force_normal_boot = []() {
+        std::string cmdline;
+        android::base::ReadFileToString("/proc/cmdline", &cmdline);
+        return cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
+    }();
+
+    return !force_normal_boot && access("/system/bin/recovery", F_OK) == 0;
 }
 
 static inline bool IsDmLinearEnabled() {
@@ -362,14 +368,16 @@ bool FirstStageMount::MountPartitions() {
     // this case, we mount system first then pivot to it.  From that point on,
     // we are effectively identical to a system-as-root device.
     auto system_partition =
-            std::find_if(mount_fstab_recs_.begin(), mount_fstab_recs_.end(),
-                         [](const auto& rec) { return rec->mount_point == "/system"s; });
+            std::find_if(mount_fstab_recs_.begin(), mount_fstab_recs_.end(), [](const auto& rec) {
+                return rec->mount_point == "/system"s ||
+                       rec->mount_point == "/system_recovery_mount"s;
+            });
     if (system_partition != mount_fstab_recs_.end()) {
         if (!MountPartition(*system_partition)) {
             return false;
         }
 
-        SwitchRoot("/system");
+        SwitchRoot((*system_partition)->mount_point);
 
         mount_fstab_recs_.erase(system_partition);
     }
