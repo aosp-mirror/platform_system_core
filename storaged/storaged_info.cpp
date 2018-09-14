@@ -370,8 +370,12 @@ void ufs_info_t::report()
 
 void health_storage_info_t::report() {
     auto ret = mHealth->getStorageInfo([this](auto result, const auto& halInfos) {
+        if (result == Result::NOT_SUPPORTED) {
+            LOG_TO(SYSTEM, DEBUG) << "getStorageInfo is not supported on health HAL.";
+            return;
+        }
         if (result != Result::SUCCESS || halInfos.size() == 0) {
-            LOG_TO(SYSTEM, DEBUG) << "getStorageInfo failed with result " << toString(result)
+            LOG_TO(SYSTEM, ERROR) << "getStorageInfo failed with result " << toString(result)
                                   << " and size " << halInfos.size();
             return;
         }
@@ -380,7 +384,7 @@ void health_storage_info_t::report() {
     });
 
     if (!ret.isOk()) {
-        LOG_TO(SYSTEM, DEBUG) << "getStorageInfo failed with " << ret.description();
+        LOG_TO(SYSTEM, ERROR) << "getStorageInfo failed with " << ret.description();
     }
 }
 
