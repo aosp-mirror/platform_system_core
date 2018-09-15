@@ -349,10 +349,6 @@ cc_library {
         "libavb_user",
         "libdiagnose_usb",
         "libqemu_pipe",
-
-        // `daemon/shell_service.cpp` uses selinux_android_setcon(), which is not exposed by
-        // libselinux.
-        "libselinux",
     ],
 
     shared_libs: [
@@ -367,6 +363,7 @@ cc_library {
         "libfs_mgr",
         "liblog",
         "libmdnssd",
+        "libselinux",
     ],
 }
 
