@@ -209,12 +209,8 @@ void remount_service(unique_fd fd, const std::string& cmd) {
     bool system_verified = !(android::base::GetProperty("partition.system.verified", "").empty());
     bool vendor_verified = !(android::base::GetProperty("partition.vendor.verified", "").empty());
 
-    std::vector<std::string> partitions{"/odm", "/oem", "/product_services", "/product", "/vendor"};
-    if (android::base::GetBoolProperty("ro.build.system_root_image", false)) {
-        partitions.push_back("/");
-    } else {
-        partitions.push_back("/system");
-    }
+    std::vector<std::string> partitions{"/",        "/odm",   "/oem", "/product_services",
+                                        "/product", "/vendor"};
 
     bool verity_enabled = (system_verified || vendor_verified);
 
