@@ -62,7 +62,7 @@ cc_library_static {
         "uid_info.cpp",
         "storaged.proto",
         ":storaged_aidl",
-        "binder/android/os/storaged/IStoragedPrivate.aidl",
+        ":storaged_aidl_private",
     ],
 
     static_libs: ["libhealthhalutils"],
@@ -116,4 +116,13 @@ filegroup {
     srcs: [
         "binder/android/os/IStoraged.aidl",
     ],
+    path: "binder",
+}
+
+filegroup {
+    name: "storaged_aidl_private",
+    srcs: [
+        "binder/android/os/storaged/IStoragedPrivate.aidl",
+    ],
+    path: "binder",
 }
