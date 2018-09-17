@@ -19,6 +19,8 @@
 
 #include <memory>
 
+#include <android-base/macros.h>
+
 #include <utils/RefBase.h>
 
 #include <utils/CallStack.h>
@@ -479,7 +481,7 @@ void RefBase::forceIncStrong(const void* id) const
     case INITIAL_STRONG_VALUE:
         refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE,
                 std::memory_order_relaxed);
-        // fall through...
+        FALLTHROUGH_INTENDED;
     case 0:
         refs->mBase->onFirstRef();
     }
