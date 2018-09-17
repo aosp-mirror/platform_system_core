@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 
 #include <unwindstack/DwarfError.h>
@@ -154,13 +155,15 @@ std::string DwarfCfa<AddressType>::GetOperandString(uint8_t operand, uint64_t va
       break;
     case DwarfCfaInfo::DWARF_DISPLAY_ADVANCE_LOC:
       *cur_pc += value;
-    // Fall through to log the value.
+      FALLTHROUGH_INTENDED;
+      // Fall through to log the value.
     case DwarfCfaInfo::DWARF_DISPLAY_NUMBER:
       string += " " + std::to_string(value);
       break;
     case DwarfCfaInfo::DWARF_DISPLAY_SET_LOC:
       *cur_pc = value;
-    // Fall through to log the value.
+      FALLTHROUGH_INTENDED;
+      // Fall through to log the value.
     case DwarfCfaInfo::DWARF_DISPLAY_ADDRESS:
       if (std::is_same<AddressType, uint32_t>::value) {
         string += android::base::StringPrintf(" 0x%" PRIx32, static_cast<uint32_t>(value));
