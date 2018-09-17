@@ -31,6 +31,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
 #include <log/event_tag_map.h>
@@ -572,13 +573,13 @@ static int get_groups(const char* cmd) {
         switch (size_mult[0]) {
             case 'G':
                 full_size *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'M':
                 full_size *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'K':
                 full_size *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'B':
                 break;
             default:
@@ -588,13 +589,13 @@ static int get_groups(const char* cmd) {
         switch (consumed_mult[0]) {
             case 'G':
                 full_consumed *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'M':
                 full_consumed *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'K':
                 full_consumed *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'B':
                 break;
             default:
@@ -1241,26 +1242,26 @@ TEST(logcat, blocking_clear) {
             switch (size_mult[0]) {
                 case 'G':
                     full_size *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'M':
                     full_size *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'K':
                     full_size *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'B':
                     break;
             }
             switch (consumed_mult[0]) {
                 case 'G':
                     full_consumed *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'M':
                     full_consumed *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'K':
                     full_consumed *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'B':
                     break;
             }
