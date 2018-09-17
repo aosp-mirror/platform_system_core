@@ -27,6 +27,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/file.h>
+#include <android-base/macros.h>
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
 
@@ -145,7 +147,8 @@ char *SocketClient::quoteArg(const char *arg) {
         switch (*arg) {
         case '\\':
         case '"':
-            *(current++) = '\\'; // fallthrough
+            *(current++) = '\\';
+            FALLTHROUGH_INTENDED;
         default:
             *(current++) = *(arg++);
         }

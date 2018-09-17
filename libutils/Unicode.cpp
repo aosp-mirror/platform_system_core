@@ -16,8 +16,9 @@
 
 #define LOG_TAG "unicode"
 
-#include <utils/Unicode.h>
+#include <android-base/macros.h>
 #include <limits.h>
+#include <utils/Unicode.h>
 
 #include <log/log.h>
 
@@ -105,8 +106,11 @@ static inline void utf32_codepoint_to_utf8(uint8_t* dstP, char32_t srcChar, size
     switch (bytes)
     {   /* note: everything falls through. */
         case 4: *--dstP = (uint8_t)((srcChar | kByteMark) & kByteMask); srcChar >>= 6;
+            FALLTHROUGH_INTENDED;
         case 3: *--dstP = (uint8_t)((srcChar | kByteMark) & kByteMask); srcChar >>= 6;
+            FALLTHROUGH_INTENDED;
         case 2: *--dstP = (uint8_t)((srcChar | kByteMark) & kByteMask); srcChar >>= 6;
+            FALLTHROUGH_INTENDED;
         case 1: *--dstP = (uint8_t)(srcChar | kFirstByteMark[bytes]);
     }
 }
