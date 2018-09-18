@@ -23,11 +23,21 @@ cc_defaults {
         "-D_FILE_OFFSET_BITS=64",
     ],
     cppflags: [
-        "-Wold-style-cast",
         // Incorrectly warns when C++11 empty brace {} initializer is used.
         // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61489
         "-Wno-missing-field-initializers",
     ],
+
+    // Enable -Wold-style-cast only for non-Windows targets.  _islower_l,
+    // _isupper_l etc. in MinGW locale_win32.h (included from
+    // libcxx/include/__locale) has an old-style-cast.
+    target: {
+        not_windows: {
+            cppflags: [
+                "-Wold-style-cast",
+            ],
+        },
+    },
 }
 
 cc_defaults {
