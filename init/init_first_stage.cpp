@@ -15,7 +15,6 @@
  */
 
 #include <paths.h>
-#include <seccomp_policy.h>
 #include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -30,26 +29,15 @@
 #include <android-base/logging.h>
 #include <cutils/android_reboot.h>
 #include <private/android_filesystem_config.h>
-#include <selinux/android.h>
 
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
-#include "selinux.h"
 #include "util.h"
 
 using android::base::boot_clock;
 
 namespace android {
 namespace init {
-
-static void GlobalSeccomp() {
-    import_kernel_cmdline(false, [](const std::string& key, const std::string& value,
-                                    bool in_qemu) {
-        if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
-            LOG(FATAL) << "Failed to globally enable seccomp!";
-        }
-    });
-}
 
 int main(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
@@ -129,22 +117,6 @@ int main(int argc, char** argv) {
     }
 
     SetInitAvbVersionInRecovery();
-
-    // Does this need to be done in first stage init or can it be done later?
-    // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
-    GlobalSeccomp();
-
-    // Set up SELinux, loading the SELinux policy.
-    SelinuxSetupKernelLogging();
-    SelinuxInitialize();
-
-    // We're in the kernel domain and want to transition to the init domain when we exec second
-    // stage init.  File systems that store SELabels in their xattrs, such as ext4 do not need an
-    // explicit restorecon here, but other file systems do.  In particular, this is needed for
-    // ramdisks such as the recovery image for A/B devices.
-    if (selinux_android_restorecon("/system/bin/init", 0) == -1) {
-        PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
-    }
 
     static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
     uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
