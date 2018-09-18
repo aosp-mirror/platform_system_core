@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <seccomp_policy.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,6 +41,7 @@
 #include <cutils/android_reboot.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
+#include <selinux/android.h>
 
 #ifndef RECOVERY
 #include <binder/ProcessState.h>
@@ -585,6 +587,43 @@ static void InitKernelLogging(char* argv[]) {
     android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
+static void GlobalSeccomp() {
+    import_kernel_cmdline(false, [](const std::string& key, const std::string& value,
+                                    bool in_qemu) {
+        if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
+            LOG(FATAL) << "Failed to globally enable seccomp!";
+        }
+    });
+}
+
+static void SetupSelinux(char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger, [](const char*) {
+        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+    });
+
+    // Set up SELinux, loading the SELinux policy.
+    SelinuxSetupKernelLogging();
+    SelinuxInitialize();
+
+    // We're in the kernel domain and want to transition to the init domain.  File systems that
+    // store SELabels in their xattrs, such as ext4 do not need an explicit restorecon here,
+    // but other file systems do.  In particular, this is needed for ramdisks such as the
+    // recovery image for A/B devices.
+    if (selinux_android_restorecon("/system/bin/init", 0) == -1) {
+        PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
+    }
+
+    setenv("SELINUX_INITIALIZED", "true", 1);
+
+    const char* path = "/system/bin/init";
+    const char* args[] = {path, nullptr};
+    execv(path, const_cast<char**>(args));
+
+    // execv() only returns if an error happened, in which case we
+    // panic and never return from this function.
+    PLOG(FATAL) << "execv(\"" << path << "\") failed";
+}
+
 int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
@@ -600,8 +639,15 @@ int main(int argc, char** argv) {
         InstallRebootSignalHandlers();
     }
 
+    if (getenv("SELINUX_INITIALIZED") == nullptr) {
+        SetupSelinux(argv);
+    }
+
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
+
+    // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
+    GlobalSeccomp();
 
     // Set up a session keyring that all processes will have access to. It
     // will hold things like FBE encryption keys. No process should override
@@ -631,6 +677,7 @@ int main(int argc, char** argv) {
     if (avb_version) property_set("ro.boot.avb_version", avb_version);
 
     // Clean up our environment.
+    unsetenv("SELINUX_INITIALIZED");
     unsetenv("INIT_STARTED_AT");
     unsetenv("INIT_SELINUX_TOOK");
     unsetenv("INIT_AVB_VERSION");
