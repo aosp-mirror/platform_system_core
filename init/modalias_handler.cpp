@@ -50,7 +50,7 @@ Result<Success> ModaliasHandler::ParseDepCallback(std::vector<std::string>&& arg
     }
 
     // Key is striped module name to match names in alias file
-    std::size_t start = args[0].find_last_of("/");
+    std::size_t start = args[0].find_last_of('/');
     std::size_t end = args[0].find(".ko:");
     if ((end - start) <= 1) return Error() << "malformed dependency line";
     auto mod_name = args[0].substr(start + 1, (end - start) - 1);
