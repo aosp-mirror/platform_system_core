@@ -30,6 +30,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #ifdef __ANDROID__  // includes sys/properties.h which does not exist outside
 #include <cutils/properties.h>
@@ -2516,7 +2517,7 @@ static int android_log_buffer_to_string(const char* msg, size_t len,
 #endif
         elem.data.string = const_cast<char*>("<unknown>");
         elem.len = strlen(elem.data.string);
-      /* FALLTHRU */
+        FALLTHROUGH_INTENDED;
       case EVENT_TYPE_STRING:
         if (elem.len <= strOutLen) {
           memcpy(strOut, elem.data.string, elem.len);

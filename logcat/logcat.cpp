@@ -16,6 +16,7 @@
 
 #include "logcat.h"
 
+#include <android-base/macros.h>
 #include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
@@ -959,7 +960,7 @@ static int __logcat(android_logcat_context_internal* context) {
             case 't':
                 got_t = true;
                 mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
-            // FALLTHRU
+                FALLTHROUGH_INTENDED;
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
                     char* cp = parseTime(tail_time, optarg);
@@ -1009,7 +1010,7 @@ static int __logcat(android_logcat_context_internal* context) {
                     getLogSize = true;
                     break;
                 }
-            // FALLTHRU
+                FALLTHROUGH_INTENDED;
 
             case 'G': {
                 char* cp;
@@ -1023,15 +1024,15 @@ static int __logcat(android_logcat_context_internal* context) {
                     case 'g':
                     case 'G':
                         setLogSize *= 1024;
-                    // FALLTHRU
+                        FALLTHROUGH_INTENDED;
                     case 'm':
                     case 'M':
                         setLogSize *= 1024;
-                    // FALLTHRU
+                        FALLTHROUGH_INTENDED;
                     case 'k':
                     case 'K':
                         setLogSize *= 1024;
-                    // FALLTHRU
+                        FALLTHROUGH_INTENDED;
                     case '\0':
                         break;
 
@@ -1051,7 +1052,7 @@ static int __logcat(android_logcat_context_internal* context) {
                     getPruneList = true;
                     break;
                 }
-            // FALLTHRU
+                FALLTHROUGH_INTENDED;
 
             case 'P':
                 setPruneList = optarg;

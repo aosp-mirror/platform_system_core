@@ -59,6 +59,7 @@ cc_defaults {
         "-Werror",
     ],
     header_libs: [
+        "libbase_headers",
         "libutils_headers",
     ],
     export_header_lib_headers: [

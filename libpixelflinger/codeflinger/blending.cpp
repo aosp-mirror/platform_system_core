@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <android-base/macros.h>
 #include <log/log.h>
 
 #include "GGLAssembler.h"
@@ -301,7 +302,7 @@ void GGLAssembler::build_blend_factor(
                 return;
             }                
         }
-        // fall-through...
+        FALLTHROUGH_INTENDED;
     case GGL_ONE_MINUS_DST_COLOR:
     case GGL_DST_COLOR:
     case GGL_ONE_MINUS_SRC_COLOR:

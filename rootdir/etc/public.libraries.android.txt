@@ -2,6 +2,7 @@
 libandroid.so
 libaaudio.so
 libamidi.so
+libbinder_ndk.so
 libc.so
 libcamera2ndk.so
 libdl.so
