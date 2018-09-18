@@ -34,6 +34,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -282,6 +283,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
   switch (crash_info->header.version) {
     case 2:
       *fdsan_table_address = crash_info->data.v2.fdsan_table_address;
+      FALLTHROUGH_INTENDED;
     case 1:
       *abort_msg_address = crash_info->data.v1.abort_msg_address;
       *siginfo = crash_info->data.v1.siginfo;
