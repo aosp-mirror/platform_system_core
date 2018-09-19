@@ -148,6 +148,11 @@ static Image images[] = {
     { nullptr,    "system_other.img", "system.sig",   "system",   true,  ImageType::Normal },
     { "userdata", "userdata.img",     "userdata.sig", "userdata", true,  ImageType::Extra },
     { "vbmeta",   "vbmeta.img",       "vbmeta.sig",   "vbmeta",   true,  ImageType::BootCritical },
+    { "vbmeta_mainline",
+                  "vbmeta_mainline.img",
+                                      "vbmeta_mainline.sig",
+                                                      "vbmeta_mainline",
+                                                                  true,  ImageType::BootCritical },
     { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
     { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  ImageType::Normal },
         // clang-format on
