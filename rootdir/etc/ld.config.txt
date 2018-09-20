@@ -8,7 +8,6 @@
 dir.system = /system/bin/
 dir.system = /system/xbin/
 dir.system = /%PRODUCT%/bin/
-dir.system = /%PRODUCT_SERVICES%/bin/
 
 dir.vendor = /odm/bin/
 dir.vendor = /vendor/bin/
@@ -346,6 +345,8 @@ namespace.system.asan.search.paths  = /data/asan/system/${LIB}
 namespace.system.asan.search.paths +=           /system/${LIB}
 namespace.system.asan.search.paths += /data/asan/product/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT%/${LIB}
+namespace.system.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
