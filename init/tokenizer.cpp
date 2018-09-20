@@ -1,5 +1,7 @@
 #include "tokenizer.h"
 
+#include <android-base/macros.h>
+
 namespace android {
 namespace init {
 
@@ -106,6 +108,7 @@ textresume:
                     continue;
                 }
                 x++;
+                FALLTHROUGH_INTENDED;
             case '\n':
                     /* \ <lf> -> line continuation */
                 state->line++;
