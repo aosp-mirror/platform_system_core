@@ -461,6 +461,7 @@ bool DwarfSectionImpl<AddressType>::EvalRegister(const DwarfLocation* loc, uint3
       if (reg == eval_info->cie->return_address_register) {
         eval_info->return_address_undefined = true;
       }
+      break;
     default:
       break;
   }
