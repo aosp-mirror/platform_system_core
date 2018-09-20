@@ -49,7 +49,7 @@ using namespace std::literals;
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
 
-bool fs_mgr_overlayfs_mount_all() {
+bool fs_mgr_overlayfs_mount_all(const fstab*) {
     return false;
 }
 
@@ -195,8 +195,8 @@ bool fs_mgr_wants_overlayfs() {
 }
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(
-            fs_mgr_read_fstab("/proc/mounts"), fs_mgr_free_fstab);
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab("/proc/mounts"),
+                                                               fs_mgr_free_fstab);
     if (!fstab) return false;
     const auto lowerdir = kLowerdirOption + mount_point;
     for (auto i = 0; i < fstab->num_entries; ++i) {
@@ -400,16 +400,14 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
 
 }  // namespace
 
-bool fs_mgr_overlayfs_mount_all() {
+bool fs_mgr_overlayfs_mount_all(const fstab* fstab) {
     auto ret = false;
 
     if (!fs_mgr_wants_overlayfs()) return ret;
 
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                                      fs_mgr_free_fstab);
     if (!fstab) return ret;
 
-    for (const auto& mount_point : fs_mgr_candidate_list(fstab.get())) {
+    for (const auto& mount_point : fs_mgr_candidate_list(fstab)) {
         if (fs_mgr_overlayfs_already_mounted(mount_point)) continue;
         if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
     }
@@ -432,8 +430,8 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
         return ret;
     }
 
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                                      fs_mgr_free_fstab);
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
     if (fstab && !fs_mgr_get_entry_for_mount_point(fstab.get(), kOverlayMountPoint)) return ret;
     auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(fstab.get(), mount_point));
     if (fstab && mounts.empty()) return ret;
@@ -464,7 +462,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
 // If something is altered, set *change.
 bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (change) *change = false;
-    mount_point = fs_mgr_mount_point(std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)>(
+    mount_point = fs_mgr_mount_point(std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)>(
                                              fs_mgr_read_fstab_default(), fs_mgr_free_fstab)
                                              .get(),
                                      mount_point);
