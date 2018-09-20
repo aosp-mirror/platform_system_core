@@ -7,7 +7,7 @@
 # absolute path of an executable is selected.
 dir.system = /system/bin/
 dir.system = /system/xbin/
-dir.system = /product/bin/
+dir.system = /%PRODUCT%/bin/
 
 dir.vendor = /odm/bin/
 dir.vendor = /vendor/bin/
@@ -41,7 +41,8 @@ namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /odm/${LIB}
 namespace.default.search.paths += /vendor/${LIB}
-namespace.default.search.paths += /product/${LIB}
+namespace.default.search.paths += /%PRODUCT%/${LIB}
+namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
@@ -50,7 +51,9 @@ namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
 namespace.default.asan.search.paths += /data/asan/product/${LIB}
-namespace.default.asan.search.paths +=           /product/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 ###############################################################################
 # "sphal" namespace
@@ -209,7 +212,8 @@ namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}
-namespace.default.search.paths += /product/${LIB}
+namespace.default.search.paths += /%PRODUCT%/${LIB}
+namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
@@ -230,7 +234,9 @@ namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER
 namespace.default.asan.search.paths += /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
 namespace.default.asan.search.paths += /data/asan/product/${LIB}
-namespace.default.asan.search.paths +=           /product/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
@@ -243,4 +249,5 @@ namespace.default.asan.search.paths +=           /product/${LIB}
 [postinstall]
 namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
-namespace.default.search.paths += /product/${LIB}
+namespace.default.search.paths += /%PRODUCT%/${LIB}
+namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
