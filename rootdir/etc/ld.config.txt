@@ -78,9 +78,9 @@ namespace.default.permitted.paths += /mnt/expand
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
 namespace.default.asan.search.paths += /data/asan/product/${LIB}
-namespace.default.asan.search.paths +=           /product/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
-namespace.default.asan.search.paths +=           /product_services/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.permitted.paths  = /data
 namespace.default.asan.permitted.paths += /system/${LIB}/drm
@@ -345,7 +345,7 @@ namespace.system.search.paths += /%PRODUCT_SERVICES%/${LIB}
 namespace.system.asan.search.paths  = /data/asan/system/${LIB}
 namespace.system.asan.search.paths +=           /system/${LIB}
 namespace.system.asan.search.paths += /data/asan/product/${LIB}
-namespace.system.asan.search.paths +=           /product/${LIB}
+namespace.system.asan.search.paths +=           /%PRODUCT%/${LIB}
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
