@@ -94,7 +94,8 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     }
     // Make sure we're writing within the space reserved.
     if (blob->size() > geometry.metadata_max_size) {
-        LERROR << "Logical partition metadata is too large.";
+        LERROR << "Logical partition metadata is too large. " << blob->size() << " > "
+               << geometry.metadata_max_size;
         return false;
     }
 
