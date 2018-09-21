@@ -109,9 +109,9 @@ bool fs_mgr_filesystem_has_space(const char* mount_point) {
     struct statvfs vst;
     if (statvfs(mount_point, &vst)) return true;
 
-    static constexpr int percent = 1;  // 1%
+    static constexpr int kPercentThreshold = 1;  // 1%
 
-    return (vst.f_bfree >= (vst.f_blocks * percent / 100));
+    return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100));
 }
 
 bool fs_mgr_overlayfs_enabled(const struct fstab_rec* fsrec) {
@@ -123,22 +123,24 @@ bool fs_mgr_overlayfs_enabled(const struct fstab_rec* fsrec) {
            !fs_mgr_filesystem_has_space(fsrec->mount_point);
 }
 
-constexpr char upper_name[] = "upper";
-constexpr char work_name[] = "work";
+const auto kUpperName = "upper"s;
+const auto kWorkName = "work"s;
+const auto kOverlayTopDir = "/overlay"s;
 
 std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
     if (!fs_mgr_is_dir(mount_point)) return "";
-    auto dir = kOverlayMountPoint + "/overlay/" + android::base::Basename(mount_point) + "/";
-    auto upper = dir + upper_name;
+    auto dir =
+            kOverlayMountPoint + kOverlayTopDir + "/" + android::base::Basename(mount_point) + "/";
+    auto upper = dir + kUpperName;
     if (!fs_mgr_is_dir(upper)) return "";
-    auto work = dir + work_name;
+    auto work = dir + kWorkName;
     if (!fs_mgr_is_dir(work)) return "";
     if (!fs_mgr_dir_is_writable(work)) return "";
     return dir;
 }
 
-constexpr char lowerdir_option[] = "lowerdir=";
-constexpr char upperdir_option[] = "upperdir=";
+const auto kLowerdirOption = "lowerdir="s;
+const auto kUpperdirOption = "upperdir="s;
 
 // default options for mount_point, returns empty string for none available.
 std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
@@ -147,8 +149,8 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
 
     auto context = fs_mgr_get_context(mount_point);
     if (!context.empty()) context = ",rootcontext="s + context;
-    return "override_creds=off,"s + lowerdir_option + mount_point + "," + upperdir_option +
-           candidate + upper_name + ",workdir=" + candidate + work_name + context;
+    return "override_creds=off,"s + kLowerdirOption + mount_point + "," + kUpperdirOption +
+           candidate + kUpperName + ",workdir=" + candidate + kWorkName + context;
 }
 
 bool fs_mgr_system_root_image(const fstab* fstab) {
@@ -265,16 +267,16 @@ bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
     return ret;
 }
 
-constexpr char overlayfs_file_context[] = "u:object_r:overlayfs_file:s0";
+constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
 
 bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& mount_point,
                                 bool* change) {
     auto ret = true;
-    auto fsrec_mount_point = overlay + android::base::Basename(mount_point) + "/";
+    auto fsrec_mount_point = overlay + "/" + android::base::Basename(mount_point) + "/";
 
-    if (setfscreatecon(overlayfs_file_context)) {
+    if (setfscreatecon(kOverlayfsFileContext)) {
         ret = false;
-        PERROR << "overlayfs setfscreatecon " << overlayfs_file_context;
+        PERROR << "overlayfs setfscreatecon " << kOverlayfsFileContext;
     }
     auto save_errno = errno;
     if (!mkdir(fsrec_mount_point.c_str(), 0755)) {
@@ -287,11 +289,11 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
     }
 
     save_errno = errno;
-    if (!mkdir((fsrec_mount_point + work_name).c_str(), 0755)) {
+    if (!mkdir((fsrec_mount_point + kWorkName).c_str(), 0755)) {
         if (change) *change = true;
     } else if (errno != EEXIST) {
         ret = false;
-        PERROR << "overlayfs mkdir " << fsrec_mount_point << work_name;
+        PERROR << "overlayfs mkdir " << fsrec_mount_point << kWorkName;
     } else {
         errno = save_errno;
     }
@@ -302,7 +304,7 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
         ret = false;
         PERROR << "overlayfs setfscreatecon " << new_context;
     }
-    auto upper = fsrec_mount_point + upper_name;
+    auto upper = fsrec_mount_point + kUpperName;
     save_errno = errno;
     if (!mkdir(upper.c_str(), 0755)) {
         if (change) *change = true;
@@ -325,7 +327,7 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
     auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
     const auto opt_list = android::base::Split(options, ",");
     for (const auto opt : opt_list) {
-        if (android::base::StartsWith(opt, upperdir_option)) {
+        if (android::base::StartsWith(opt, kUpperdirOption)) {
             report = report + "," + opt;
             break;
         }
@@ -347,7 +349,7 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
     std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(
             fs_mgr_read_fstab("/proc/mounts"), fs_mgr_free_fstab);
     if (!fstab) return false;
-    const auto lowerdir = std::string(lowerdir_option) + mount_point;
+    const auto lowerdir = kLowerdirOption + mount_point;
     for (auto i = 0; i < fstab->num_entries; ++i) {
         const auto fsrec = &fstab->recs[i];
         const auto fs_type = fsrec->fs_type;
@@ -436,10 +438,10 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(fstab.get(), mount_point));
     if (fstab && mounts.empty()) return ret;
 
-    if (setfscreatecon(overlayfs_file_context)) {
-        PERROR << "overlayfs setfscreatecon " << overlayfs_file_context;
+    if (setfscreatecon(kOverlayfsFileContext)) {
+        PERROR << "overlayfs setfscreatecon " << kOverlayfsFileContext;
     }
-    auto overlay = kOverlayMountPoint + "/overlay/";
+    auto overlay = kOverlayMountPoint + kOverlayTopDir;
     auto save_errno = errno;
     if (!mkdir(overlay.c_str(), 0755)) {
         if (change) *change = true;
@@ -467,8 +469,8 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
                                              .get(),
                                      mount_point);
     auto ret = true;
-    const auto overlay = kOverlayMountPoint + "/overlay";
-    const auto oldpath = overlay + (mount_point ?: "");
+    const auto overlay = kOverlayMountPoint + kOverlayTopDir;
+    const auto oldpath = overlay + (mount_point ? "/"s + mount_point : ""s);
     const auto newpath = oldpath + ".teardown";
     ret &= fs_mgr_rm_all(newpath);
     auto save_errno = errno;
