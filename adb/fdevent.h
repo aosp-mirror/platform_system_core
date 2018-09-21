@@ -50,10 +50,11 @@ struct fdevent {
 */
 fdevent *fdevent_create(int fd, fd_func func, void *arg);
 
-/* Uninitialize and deallocate an fdevent object that was
-** created by fdevent_create()
-*/
+// Deallocate an fdevent object that was created by fdevent_create.
 void fdevent_destroy(fdevent *fde);
+
+// fdevent_destroy, except releasing the file descriptor previously owned by the fdevent.
+unique_fd fdevent_release(fdevent* fde);
 
 /* Change which events should cause notifications
 */

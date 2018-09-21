@@ -147,24 +147,34 @@ fdevent* fdevent_create(int fd, fd_func func, void* arg) {
     return fde;
 }
 
-void fdevent_destroy(fdevent* fde) {
+unique_fd fdevent_release(fdevent* fde) {
     check_main_thread();
-    if (fde == nullptr) return;
+    if (!fde) {
+        return {};
+    }
+
     if (!(fde->state & FDE_CREATED)) {
         LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
     }
 
+    unique_fd result = std::move(fde->fd);
     if (fde->state & FDE_ACTIVE) {
-        g_poll_node_map.erase(fde->fd.get());
+        g_poll_node_map.erase(result.get());
+
         if (fde->state & FDE_PENDING) {
             g_pending_list.remove(fde);
         }
-        fde->fd.reset();
         fde->state = 0;
         fde->events = 0;
     }
 
     delete fde;
+    return result;
+}
+
+void fdevent_destroy(fdevent* fde) {
+    // Release, and then let unique_fd's destructor cleanup.
+    fdevent_release(fde);
 }
 
 static void fdevent_update(fdevent* fde, unsigned events) {
