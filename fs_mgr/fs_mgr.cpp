@@ -840,7 +840,7 @@ bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
 }
 
 bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
-    if (fs_mgr_is_checkpoint(rec)) {
+    if (fs_mgr_is_checkpoint_fs(rec)) {
         if (!strcmp(rec->fs_type, "f2fs")) {
             std::string opts(rec->fs_options);
 
@@ -850,9 +850,42 @@ bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
         } else {
             LERROR << rec->fs_type << " does not implement checkpoints.";
         }
-    } else if (rec->fs_mgr_flags & MF_CHECKPOINT_BLK) {
-        LERROR << "Block based checkpoint not implemented.";
-        return false;
+    } else if (fs_mgr_is_checkpoint_blk(rec)) {
+        call_vdc({"checkpoint", "restoreCheckpoint", rec->blk_device});
+
+        android::base::unique_fd fd(
+                TEMP_FAILURE_RETRY(open(rec->blk_device, O_RDONLY | O_CLOEXEC)));
+        if (!fd) {
+            PERROR << "Cannot open device " << rec->blk_device;
+            return false;
+        }
+
+        uint64_t size = get_block_device_size(fd) / 512;
+        if (!size) {
+            PERROR << "Cannot get device size";
+            return false;
+        }
+
+        android::dm::DmTable table;
+        if (!table.AddTarget(
+                    std::make_unique<android::dm::DmTargetBow>(0, size, rec->blk_device))) {
+            LERROR << "Failed to add Bow target";
+            return false;
+        }
+
+        DeviceMapper& dm = DeviceMapper::Instance();
+        if (!dm.CreateDevice("bow", table)) {
+            PERROR << "Failed to create bow device";
+            return false;
+        }
+
+        std::string name;
+        if (!dm.GetDmDevicePathByName("bow", &name)) {
+            PERROR << "Failed to get bow device name";
+            return false;
+        }
+
+        rec->blk_device = strdup(name.c_str());
     }
     return true;
 }
