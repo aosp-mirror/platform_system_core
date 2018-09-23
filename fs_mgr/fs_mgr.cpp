@@ -805,6 +805,23 @@ static bool call_vdc(const std::vector<std::string>& args) {
     return true;
 }
 
+static bool call_vdc_ret(const std::vector<std::string>& args, int* ret) {
+    std::vector<char const*> argv;
+    argv.emplace_back("/system/bin/vdc");
+    for (auto& arg : args) {
+        argv.emplace_back(arg.c_str());
+    }
+    LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
+    int err = android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), ret, false, true);
+    if (err != 0) {
+        LOG(ERROR) << "vdc call failed with error code: " << err;
+        return false;
+    }
+    LOG(DEBUG) << "vdc finished successfully";
+    *ret = WEXITSTATUS(*ret);
+    return true;
+}
+
 bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
     // Logical partitions are specified with a named partition rather than a
     // block device, so if the block device is a path, then it has already
@@ -823,6 +840,24 @@ bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
     return true;
 }
 
+bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
+    if (fs_mgr_is_checkpoint(rec)) {
+        if (!strcmp(rec->fs_type, "f2fs")) {
+            std::string opts(rec->fs_options);
+
+            opts += ",checkpoint=disable";
+            free(rec->fs_options);
+            rec->fs_options = strdup(opts.c_str());
+        } else {
+            LERROR << rec->fs_type << " does not implement checkpoints.";
+        }
+    } else if (rec->fs_mgr_flags & MF_CHECKPOINT_BLK) {
+        LERROR << "Block based checkpoint not implemented.";
+        return false;
+    }
+    return true;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -836,6 +871,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     int mret = -1;
     int mount_errno = 0;
     int attempted_idx = -1;
+    int need_checkpoint = -1;
     FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
@@ -878,6 +914,18 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
         if ((fstab->recs[i].fs_mgr_flags & MF_LOGICAL)) {
             if (!fs_mgr_update_logical_partition(&fstab->recs[i])) {
                 LERROR << "Could not set up logical partition, skipping!";
+                continue;
+            }
+        }
+
+        if (fs_mgr_is_checkpoint(&fstab->recs[i])) {
+            if (need_checkpoint == -1 &&
+                !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &need_checkpoint)) {
+                LERROR << "Failed to find if checkpointing is needed. Assuming no.";
+                need_checkpoint = 0;
+            }
+            if (need_checkpoint == 1 && !fs_mgr_update_checkpoint_partition(&fstab->recs[i])) {
+                LERROR << "Could not set up checkpoint partition, skipping!";
                 continue;
             }
         }
@@ -1081,9 +1129,8 @@ int fs_mgr_do_mount_one(struct fstab_rec *rec)
  * If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
  * in turn, and stop on 1st success, or no more match.
  */
-int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
-                    char *tmp_mount_point)
-{
+static int fs_mgr_do_mount_helper(struct fstab* fstab, const char* n_name, char* n_blk_device,
+                                  char* tmp_mount_point, int need_checkpoint) {
     int i = 0;
     int mount_errors = 0;
     int first_mount_errno = 0;
@@ -1112,6 +1159,18 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         if ((fstab->recs[i].fs_mgr_flags & MF_LOGICAL)) {
             if (!fs_mgr_update_logical_partition(&fstab->recs[i])) {
                 LERROR << "Could not set up logical partition, skipping!";
+                continue;
+            }
+        }
+
+        if (fs_mgr_is_checkpoint(&fstab->recs[i])) {
+            if (need_checkpoint == -1 &&
+                !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &need_checkpoint)) {
+                LERROR << "Failed to find if checkpointing is needed. Assuming no.";
+                need_checkpoint = 0;
+            }
+            if (need_checkpoint == 1 && !fs_mgr_update_checkpoint_partition(&fstab->recs[i])) {
+                LERROR << "Could not set up checkpoint partition, skipping!";
                 continue;
             }
         }
@@ -1183,6 +1242,16 @@ int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
         LERROR << "Cannot find mount point " << n_name << " in fstab";
     }
     return FS_MGR_DOMNT_FAILED;
+}
+
+int fs_mgr_do_mount(struct fstab* fstab, const char* n_name, char* n_blk_device,
+                    char* tmp_mount_point) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
+}
+
+int fs_mgr_do_mount(struct fstab* fstab, const char* n_name, char* n_blk_device,
+                    char* tmp_mount_point, bool needs_cp) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_cp);
 }
 
 /*
