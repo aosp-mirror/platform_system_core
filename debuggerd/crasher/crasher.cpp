@@ -224,7 +224,7 @@ noinline int do_action(const char* arg) {
     // Prefixes.
     if (!strncmp(arg, "wait-", strlen("wait-"))) {
       char buf[1];
-      TEMP_FAILURE_RETRY(read(STDIN_FILENO, buf, sizeof(buf)));
+      UNUSED(TEMP_FAILURE_RETRY(read(STDIN_FILENO, buf, sizeof(buf))));
       return do_action(arg + strlen("wait-"));
     } else if (!strncmp(arg, "exhaustfd-", strlen("exhaustfd-"))) {
       errno = 0;
@@ -258,10 +258,14 @@ noinline int do_action(const char* arg) {
       __assert("some_file.c", 123, "false");
     } else if (!strcasecmp(arg, "assert2")) {
       __assert2("some_file.c", 123, "some_function", "false");
+#if !defined(__clang_analyzer__)
     } else if (!strcasecmp(arg, "fortify")) {
+      // FORTIFY is disabled when running clang-tidy and other tools, so this
+      // shouldn't depend on internal implementation details of it.
       char buf[10];
       __read_chk(-1, buf, 32, 10);
       while (true) pause();
+#endif
     } else if (!strcasecmp(arg, "fdsan_file")) {
       FILE* f = fopen("/dev/null", "r");
       close(fileno(f));
