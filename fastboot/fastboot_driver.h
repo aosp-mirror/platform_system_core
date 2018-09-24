@@ -74,9 +74,6 @@ class FastBootDriver {
                      std::vector<std::string>* info = nullptr);
     RetCode Download(const std::vector<char>& buf, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
-    // This will be removed after fastboot is modified to use a vector
-    RetCode Download(const char* buf, uint32_t size, std::string* response = nullptr,
-                     std::vector<std::string>* info = nullptr);
     RetCode Download(sparse_file* s, bool use_crc = false, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
     RetCode Erase(const std::string& part, std::string* response = nullptr,
