@@ -159,6 +159,12 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Flashing is not allowed on locked devices");
+    }
+
     int ret = Flash(device, args[1]);
     if (ret < 0) {
         return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
@@ -304,6 +310,10 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition name and size");
     }
 
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
+    }
+
     uint64_t partition_size;
     std::string partition_name = args[1];
     if (!android::base::ParseUint(args[2].c_str(), &partition_size)) {
@@ -344,6 +354,10 @@ bool DeletePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition name and size");
     }
 
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
+    }
+
     PartitionBuilder builder(device);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
@@ -358,6 +372,10 @@ bool DeletePartitionHandler(FastbootDevice* device, const std::vector<std::strin
 bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 3) {
         return device->WriteFail("Invalid partition name and size");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
     }
 
     uint64_t partition_size;
@@ -388,6 +406,11 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
     if (args.size() < 2) {
         return device->WriteFail("Invalid arguments");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
+    }
+
     bool wipe = (args.size() >= 3 && args[2] == "wipe");
     return UpdateSuper(device, args[1], wipe);
 }
