@@ -39,27 +39,27 @@ void bootimg_set_cmdline(boot_img_hdr_v1* h, const std::string& cmdline) {
     strcpy(reinterpret_cast<char*>(h->cmdline), cmdline.c_str());
 }
 
-boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, void* ramdisk, int64_t ramdisk_size,
-                           void* second, int64_t second_size, size_t base,
-                           const boot_img_hdr_v1& src, int64_t* bootimg_size) {
+boot_img_hdr_v1* mkbootimg(const std::vector<char>& kernel, const std::vector<char>& ramdisk,
+                           const std::vector<char>& second, size_t base, const boot_img_hdr_v1& src,
+                           std::vector<char>* out) {
     const size_t page_mask = src.page_size - 1;
 
     int64_t header_actual = (sizeof(boot_img_hdr_v1) + page_mask) & (~page_mask);
-    int64_t kernel_actual = (kernel_size + page_mask) & (~page_mask);
-    int64_t ramdisk_actual = (ramdisk_size + page_mask) & (~page_mask);
-    int64_t second_actual = (second_size + page_mask) & (~page_mask);
+    int64_t kernel_actual = (kernel.size() + page_mask) & (~page_mask);
+    int64_t ramdisk_actual = (ramdisk.size() + page_mask) & (~page_mask);
+    int64_t second_actual = (second.size() + page_mask) & (~page_mask);
 
-    *bootimg_size = header_actual + kernel_actual + ramdisk_actual + second_actual;
+    int64_t bootimg_size = header_actual + kernel_actual + ramdisk_actual + second_actual;
+    out->resize(bootimg_size);
 
-    boot_img_hdr_v1* hdr = reinterpret_cast<boot_img_hdr_v1*>(calloc(*bootimg_size, 1));
-    if (hdr == nullptr) die("couldn't allocate boot image: %" PRId64 " bytes", *bootimg_size);
+    boot_img_hdr_v1* hdr = reinterpret_cast<boot_img_hdr_v1*>(out->data());
 
     *hdr = src;
     memcpy(hdr->magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
 
-    hdr->kernel_size =  kernel_size;
-    hdr->ramdisk_size = ramdisk_size;
-    hdr->second_size =  second_size;
+    hdr->kernel_size = kernel.size();
+    hdr->ramdisk_size = ramdisk.size();
+    hdr->second_size = second.size();
 
     hdr->kernel_addr += base;
     hdr->ramdisk_addr += base;
@@ -70,8 +70,9 @@ boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, void* ramdisk, int
         hdr->header_size = sizeof(boot_img_hdr_v1);
     }
 
-    memcpy(hdr->magic + hdr->page_size, kernel, kernel_size);
-    memcpy(hdr->magic + hdr->page_size + kernel_actual, ramdisk, ramdisk_size);
-    memcpy(hdr->magic + hdr->page_size + kernel_actual + ramdisk_actual, second, second_size);
+    memcpy(hdr->magic + hdr->page_size, kernel.data(), kernel.size());
+    memcpy(hdr->magic + hdr->page_size + kernel_actual, ramdisk.data(), ramdisk.size());
+    memcpy(hdr->magic + hdr->page_size + kernel_actual + ramdisk_actual, second.data(),
+           second.size());
     return hdr;
 }

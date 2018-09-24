@@ -103,9 +103,9 @@ void fb_flash_fd(const std::string& partition, int fd, uint32_t sz) {
     RUN_COMMAND(fb->Flash(partition));
 }
 
-void fb_flash(const std::string& partition, void* data, uint32_t sz) {
-    Status(StringPrintf("Sending '%s' (%u KB)", partition.c_str(), sz / 1024));
-    RUN_COMMAND(fb->Download(static_cast<char*>(data), sz));
+void fb_flash(const std::string& partition, const std::vector<char>& data) {
+    Status(StringPrintf("Sending '%s' (%zu KB)", partition.c_str(), data.size() / 1024));
+    RUN_COMMAND(fb->Download(data));
 
     Status("Writing '" + partition + "'");
     RUN_COMMAND(fb->Flash(partition));
@@ -233,9 +233,9 @@ void fb_command(const std::string& cmd, const std::string& msg) {
     RUN_COMMAND(fb->RawCommand(cmd));
 }
 
-void fb_download(const std::string& name, void* data, uint32_t size) {
+void fb_download(const std::string& name, const std::vector<char>& data) {
     Status("Downloading '" + name + "'");
-    RUN_COMMAND(fb->Download(static_cast<char*>(data), size));
+    RUN_COMMAND(fb->Download(data));
 }
 
 void fb_download_fd(const std::string& name, int fd, uint32_t sz) {

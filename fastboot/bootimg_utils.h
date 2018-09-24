@@ -33,8 +33,9 @@
 #include <sys/types.h>
 
 #include <string>
+#include <vector>
 
-boot_img_hdr_v1* mkbootimg(void* kernel, int64_t kernel_size, void* ramdisk, int64_t ramdisk_size,
-                           void* second, int64_t second_size, size_t base,
-                           const boot_img_hdr_v1& src, int64_t* bootimg_size);
+boot_img_hdr_v1* mkbootimg(const std::vector<char>& kernel, const std::vector<char>& ramdisk,
+                           const std::vector<char>& second, size_t base, const boot_img_hdr_v1& src,
+                           std::vector<char>* out);
 void bootimg_set_cmdline(boot_img_hdr_v1* h, const std::string& cmdline);
