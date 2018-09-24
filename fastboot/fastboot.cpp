@@ -69,6 +69,7 @@
 #include "udp.h"
 #include "usb.h"
 
+using android::base::ReadFully;
 using android::base::unique_fd;
 
 #ifndef O_BINARY
@@ -179,38 +180,22 @@ static std::string find_item(const std::string& item) {
 
 static int64_t get_file_size(int fd) {
     struct stat sb;
-    return fstat(fd, &sb) == -1 ? -1 : sb.st_size;
+    if (fstat(fd, &sb) == -1) {
+        die("could not get file size");
+    }
+    return sb.st_size;
 }
 
-static void* load_fd(int fd, int64_t* sz) {
-    int errno_tmp;
-    char* data = nullptr;
+bool ReadFileToVector(const std::string& file, std::vector<char>* out) {
+    out->clear();
 
-    *sz = get_file_size(fd);
-    if (*sz < 0) {
-        goto oops;
+    unique_fd fd(TEMP_FAILURE_RETRY(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_BINARY)));
+    if (fd == -1) {
+        return false;
     }
 
-    data = (char*) malloc(*sz);
-    if (data == nullptr) goto oops;
-
-    if(read(fd, data, *sz) != *sz) goto oops;
-    close(fd);
-
-    return data;
-
-oops:
-    errno_tmp = errno;
-    close(fd);
-    if(data != 0) free(data);
-    errno = errno_tmp;
-    return 0;
-}
-
-static void* load_file(const std::string& path, int64_t* sz) {
-    int fd = open(path.c_str(), O_RDONLY | O_BINARY);
-    if (fd == -1) return nullptr;
-    return load_fd(fd, sz);
+    out->resize(get_file_size(fd));
+    return ReadFully(fd, out->data(), out->size());
 }
 
 static int match_fastboot_with_serial(usb_ifc_info* info, const char* local_serial) {
@@ -418,70 +403,71 @@ static int show_help() {
     return 0;
 }
 
-static void* load_bootable_image(const std::string& kernel, const std::string& ramdisk,
-                                 const std::string& second_stage, int64_t* sz) {
-    int64_t ksize;
-    void* kdata = load_file(kernel.c_str(), &ksize);
-    if (kdata == nullptr) die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
+static std::vector<char> LoadBootableImage(const std::string& kernel, const std::string& ramdisk,
+                                           const std::string& second_stage) {
+    std::vector<char> kernel_data;
+    if (!ReadFileToVector(kernel, &kernel_data)) {
+        die("cannot load '%s': %s", kernel.c_str(), strerror(errno));
+    }
 
     // Is this actually a boot image?
-    if (ksize < static_cast<int64_t>(sizeof(boot_img_hdr_v1))) {
+    if (kernel_data.size() < sizeof(boot_img_hdr_v1)) {
         die("cannot load '%s': too short", kernel.c_str());
     }
-    if (!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
+    if (!memcmp(kernel_data.data(), BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
         if (!g_cmdline.empty()) {
-            bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kdata), g_cmdline);
+            bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kernel_data.data()), g_cmdline);
         }
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
 
-        *sz = ksize;
-        return kdata;
+        return kernel_data;
     }
 
-    void* rdata = nullptr;
-    int64_t rsize = 0;
+    std::vector<char> ramdisk_data;
     if (!ramdisk.empty()) {
-        rdata = load_file(ramdisk.c_str(), &rsize);
-        if (rdata == nullptr) die("cannot load '%s': %s", ramdisk.c_str(), strerror(errno));
+        if (!ReadFileToVector(ramdisk, &ramdisk_data)) {
+            die("cannot load '%s': %s", ramdisk.c_str(), strerror(errno));
+        }
     }
 
-    void* sdata = nullptr;
-    int64_t ssize = 0;
+    std::vector<char> second_stage_data;
     if (!second_stage.empty()) {
-        sdata = load_file(second_stage.c_str(), &ssize);
-        if (sdata == nullptr) die("cannot load '%s': %s", second_stage.c_str(), strerror(errno));
+        if (!ReadFileToVector(second_stage, &second_stage_data)) {
+            die("cannot load '%s': %s", second_stage.c_str(), strerror(errno));
+        }
     }
-
     fprintf(stderr,"creating boot image...\n");
-    boot_img_hdr_v1* bdata = mkbootimg(kdata, ksize, rdata, rsize, sdata, ssize,
-                                       g_base_addr, g_boot_img_hdr, sz);
-    if (bdata == nullptr) die("failed to create boot.img");
 
-    if (!g_cmdline.empty()) bootimg_set_cmdline(bdata, g_cmdline);
-    fprintf(stderr, "creating boot image - %" PRId64 " bytes\n", *sz);
+    std::vector<char> out;
+    boot_img_hdr_v1* boot_image_data = mkbootimg(kernel_data, ramdisk_data, second_stage_data,
+                                                 g_base_addr, g_boot_img_hdr, &out);
 
-    return bdata;
+    if (!g_cmdline.empty()) bootimg_set_cmdline(boot_image_data, g_cmdline);
+    fprintf(stderr, "creating boot image - %zu bytes\n", out.size());
+
+    return out;
 }
 
-static void* unzip_to_memory(ZipArchiveHandle zip, const char* entry_name, int64_t* sz) {
-    ZipString zip_entry_name(entry_name);
+static bool UnzipToMemory(ZipArchiveHandle zip, const std::string& entry_name,
+                          std::vector<char>* out) {
+    ZipString zip_entry_name(entry_name.c_str());
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
-        fprintf(stderr, "archive does not contain '%s'\n", entry_name);
-        return nullptr;
+        fprintf(stderr, "archive does not contain '%s'\n", entry_name.c_str());
+        return false;
     }
 
-    *sz = zip_entry.uncompressed_length;
+    out->resize(zip_entry.uncompressed_length);
 
-    fprintf(stderr, "extracting %s (%" PRId64 " MB) to RAM...\n", entry_name, *sz / 1024 / 1024);
-    uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
-    if (data == nullptr) die("failed to allocate %" PRId64 " bytes for '%s'", *sz, entry_name);
+    fprintf(stderr, "extracting %s (%zu MB) to RAM...\n", entry_name.c_str(),
+            out->size() / 1024 / 1024);
 
-    int error = ExtractToMemory(zip, &zip_entry, data, zip_entry.uncompressed_length);
-    if (error != 0) die("failed to extract '%s': %s", entry_name, ErrorCodeString(error));
+    int error = ExtractToMemory(zip, &zip_entry, reinterpret_cast<uint8_t*>(out->data()),
+                                out->size());
+    if (error != 0) die("failed to extract '%s': %s", entry_name.c_str(), ErrorCodeString(error));
 
-    return data;
+    return true;
 }
 
 #if defined(_WIN32)
@@ -1097,7 +1083,7 @@ static void reboot_to_userspace_fastboot() {
 
 class ImageSource {
   public:
-    virtual void* ReadFile(const std::string& name, int64_t* size) const = 0;
+    virtual bool ReadFile(const std::string& name, std::vector<char>* out) const = 0;
     virtual int OpenFile(const std::string& name) const = 0;
 };
 
@@ -1166,12 +1152,11 @@ void FlashAllTool::Flash() {
 }
 
 void FlashAllTool::CheckRequirements() {
-    int64_t sz;
-    void* data = source_.ReadFile("android-info.txt", &sz);
-    if (data == nullptr) {
+    std::vector<char> contents;
+    if (!source_.ReadFile("android-info.txt", &contents)) {
         die("could not read android-info.txt");
     }
-    check_requirements(reinterpret_cast<char*>(data), sz);
+    check_requirements(reinterpret_cast<char*>(contents.data()), contents.size());
 }
 
 void FlashAllTool::DetermineSecondarySlot() {
@@ -1224,10 +1209,9 @@ void FlashAllTool::FlashImages(const std::vector<std::pair<const Image*, std::st
 
 void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf) {
     auto flash = [&, this](const std::string& partition_name) {
-        int64_t sz;
-        void* data = source_.ReadFile(image.sig_name, &sz);
-        if (data) {
-            fb_download("signature", data, sz);
+        std::vector<char> signature_data;
+        if (source_.ReadFile(image.sig_name, &signature_data)) {
+            fb_download("signature", signature_data);
             fb_command("signature", "installing signature");
         }
 
@@ -1263,15 +1247,15 @@ void FlashAllTool::UpdateSuperPartition() {
 class ZipImageSource final : public ImageSource {
   public:
     explicit ZipImageSource(ZipArchiveHandle zip) : zip_(zip) {}
-    void* ReadFile(const std::string& name, int64_t* size) const override;
+    bool ReadFile(const std::string& name, std::vector<char>* out) const override;
     int OpenFile(const std::string& name) const override;
 
   private:
     ZipArchiveHandle zip_;
 };
 
-void* ZipImageSource::ReadFile(const std::string& name, int64_t* size) const {
-    return unzip_to_memory(zip_, name.c_str(), size);
+bool ZipImageSource::ReadFile(const std::string& name, std::vector<char>* out) const {
+    return UnzipToMemory(zip_, name, out);
 }
 
 int ZipImageSource::OpenFile(const std::string& name) const {
@@ -1297,16 +1281,16 @@ static void do_update(const char* filename, const std::string& slot_override, bo
 
 class LocalImageSource final : public ImageSource {
   public:
-    void* ReadFile(const std::string& name, int64_t* size) const override;
+    bool ReadFile(const std::string& name, std::vector<char>* out) const override;
     int OpenFile(const std::string& name) const override;
 };
 
-void* LocalImageSource::ReadFile(const std::string& name, int64_t* size) const {
+bool LocalImageSource::ReadFile(const std::string& name, std::vector<char>* out) const {
     auto path = find_item_given_name(name);
     if (path.empty()) {
-        return nullptr;
+        return false;
     }
-    return load_file(path.c_str(), size);
+    return ReadFileToVector(path, out);
 }
 
 int LocalImageSource::OpenFile(const std::string& name) const {
@@ -1473,8 +1457,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     bool wants_set_active = false;
     bool skip_secondary = false;
     bool set_fbe_marker = false;
-    void *data;
-    int64_t sz;
     int longindex;
     std::string slot_override;
     std::string next_active;
@@ -1678,10 +1660,12 @@ int FastBootTool::Main(int argc, char* argv[]) {
             do_for_partitions(partition.c_str(), slot_override, format, true);
         } else if (command == "signature") {
             std::string filename = next_arg(&args);
-            data = load_file(filename.c_str(), &sz);
-            if (data == nullptr) die("could not load '%s': %s", filename.c_str(), strerror(errno));
-            if (sz != 256) die("signature must be 256 bytes (got %" PRId64 ")", sz);
-            fb_download("signature", data, sz);
+            std::vector<char> data;
+            if (!ReadFileToVector(filename, &data)) {
+                die("could not load '%s': %s", filename.c_str(), strerror(errno));
+            }
+            if (data.size() != 256) die("signature must be 256 bytes (got %zu)", data.size());
+            fb_download("signature", data);
             fb_command("signature", "installing signature");
         } else if (command == "reboot") {
             wants_reboot = true;
@@ -1718,8 +1702,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz);
-            fb_download("boot.img", data, sz);
+            auto data = LoadBootableImage(kernel, ramdisk, second_stage);
+            fb_download("boot.img", data);
             fb_command("boot", "booting");
         } else if (command == "flash") {
             std::string pname = next_arg(&args);
@@ -1744,9 +1728,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
 
-            data = load_bootable_image(kernel, ramdisk, second_stage, &sz);
-            auto flashraw = [&](const std::string& partition) {
-                fb_flash(partition, data, sz);
+            auto data = LoadBootableImage(kernel, ramdisk, second_stage);
+            auto flashraw = [&data](const std::string& partition) {
+                fb_flash(partition, data);
             };
             do_for_partitions(partition, slot_override, flashraw, true);
         } else if (command == "flashall") {

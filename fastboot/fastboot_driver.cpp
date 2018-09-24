@@ -194,24 +194,19 @@ RetCode FastBootDriver::Download(int fd, size_t size, std::string* response,
 
 RetCode FastBootDriver::Download(const std::vector<char>& buf, std::string* response,
                                  std::vector<std::string>* info) {
-    return Download(buf.data(), buf.size(), response, info);
-}
-
-RetCode FastBootDriver::Download(const char* buf, uint32_t size, std::string* response,
-                                 std::vector<std::string>* info) {
     RetCode ret;
     error_ = "";
-    if ((size == 0 || size > MAX_DOWNLOAD_SIZE) && !disable_checks_) {
+    if ((buf.size() == 0 || buf.size() > MAX_DOWNLOAD_SIZE) && !disable_checks_) {
         error_ = "Buffer is too large or 0 bytes";
         return BAD_ARG;
     }
 
-    if ((ret = DownloadCommand(size, response, info))) {
+    if ((ret = DownloadCommand(buf.size(), response, info))) {
         return ret;
     }
 
     // Write the buffer
-    if ((ret = SendBuffer(buf, size))) {
+    if ((ret = SendBuffer(buf))) {
         return ret;
     }
 
