@@ -48,6 +48,7 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_DELETE_PARTITION, DeletePartitionHandler},
               {FB_CMD_RESIZE_PARTITION, ResizePartitionHandler},
               {FB_CMD_UPDATE_SUPER, UpdateSuperHandler},
+              {FB_CMD_OEM, OemCmdHandler},
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()),
@@ -120,10 +121,20 @@ void FastbootDevice::ExecuteCommands() {
         command[bytes_read] = '\0';
 
         LOG(INFO) << "Fastboot command: " << command;
-        auto args = android::base::Split(command, ":");
-        auto found_command = kCommandMap.find(args[0]);
+
+        std::vector<std::string> args;
+        std::string cmd_name;
+        if (android::base::StartsWith(command, "oem ")) {
+            args = {command};
+            cmd_name = "oem";
+        } else {
+            args = android::base::Split(command, ":");
+            cmd_name = args[0];
+        }
+
+        auto found_command = kCommandMap.find(cmd_name);
         if (found_command == kCommandMap.end()) {
-            WriteStatus(FastbootResult::FAIL, "Unrecognized command");
+            WriteStatus(FastbootResult::FAIL, "Unrecognized command " + args[0]);
             continue;
         }
         if (!found_command->second(this, args)) {
