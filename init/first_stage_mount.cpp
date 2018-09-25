@@ -388,7 +388,7 @@ bool FirstStageMount::MountPartitions() {
         }
     }
 
-    fs_mgr_overlayfs_mount_all();
+    fs_mgr_overlayfs_mount_all(device_tree_fstab_.get());
 
     return true;
 }
