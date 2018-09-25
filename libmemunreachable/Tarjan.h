@@ -38,7 +38,7 @@ class Node {
 
   Node(T* ptr, Allocator<Node> allocator)
       : references_in(allocator), references_out(allocator), ptr(ptr){};
-  Node(Node&& rhs) = default;
+  Node(Node&& rhs) noexcept = default;
   void Edge(Node<T>* ref) {
     references_out.emplace(ref);
     ref->references_in.emplace(this);

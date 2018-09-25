@@ -72,7 +72,7 @@ class MapString {
   explicit MapString(const std::string& str)
       : alloc(new std::string(str)), str(alloc->data(), alloc->length()) {
   }
-  MapString(MapString&& rval)
+  MapString(MapString&& rval) noexcept
       : alloc(rval.alloc), str(rval.data(), rval.length()) {
     rval.alloc = NULL;
   }

@@ -112,7 +112,8 @@ class KmParamSet : public keymaster_key_param_set_t {
             }
         }
     }
-    KmParamSet(KmParamSet&& other) : keymaster_key_param_set_t{other.params, other.length} {
+    KmParamSet(KmParamSet&& other) noexcept
+        : keymaster_key_param_set_t{other.params, other.length} {
         other.length = 0;
         other.params = nullptr;
     }
