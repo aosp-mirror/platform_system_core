@@ -68,6 +68,7 @@ class FirstStageMount {
     bool CreateLogicalPartitions();
     bool MountPartition(fstab_rec* fstab_rec);
     bool MountPartitions();
+    bool IsDmLinearEnabled();
     bool GetBackingDmLinearDevices();
 
     virtual ListenerAction UeventCallback(const Uevent& uevent);
@@ -130,22 +131,6 @@ static bool IsRecoveryMode() {
     return !force_normal_boot && access("/system/bin/recovery", F_OK) == 0;
 }
 
-static inline bool IsDmLinearEnabled() {
-    static bool checked = false;
-    static bool enabled = false;
-    if (checked) {
-        return enabled;
-    }
-    import_kernel_cmdline(false,
-                          [](const std::string& key, const std::string& value, bool in_qemu) {
-                              if (key == "androidboot.logical_partitions" && value == "1") {
-                                  enabled = true;
-                              }
-                          });
-    checked = true;
-    return enabled;
-}
-
 // Class Definitions
 // -----------------
 FirstStageMount::FirstStageMount()
@@ -192,6 +177,13 @@ bool FirstStageMount::DoFirstStageMount() {
 
 bool FirstStageMount::InitDevices() {
     return GetBackingDmLinearDevices() && GetDmVerityDevices() && InitRequiredDevices();
+}
+
+bool FirstStageMount::IsDmLinearEnabled() {
+    for (auto fstab_rec : mount_fstab_recs_) {
+        if (fs_mgr_is_logical(fstab_rec)) return true;
+    }
+    return false;
 }
 
 bool FirstStageMount::GetBackingDmLinearDevices() {
