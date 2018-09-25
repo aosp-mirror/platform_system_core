@@ -103,7 +103,9 @@ void reboot_service(unique_fd fd, const std::string& arg) {
     if (reboot_arg.empty()) reboot_arg = "adb";
     std::string reboot_string = android::base::StringPrintf("reboot,%s", reboot_arg.c_str());
 
-    if (reboot_arg == "fastboot" && access("/dev/socket/recovery", F_OK) == 0) {
+    if (reboot_arg == "fastboot" &&
+        android::base::GetBoolProperty("ro.boot.logical_partitions", false) &&
+        access("/dev/socket/recovery", F_OK) == 0) {
         LOG(INFO) << "Recovery specific reboot fastboot";
         /*
          * The socket is created to allow switching between recovery and
