@@ -569,8 +569,7 @@ static int fs_match(const char *in1, const char *in2)
  *   -1 on failure with errno set to match the 1st mount failure.
  *   0 on success.
  */
-static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_idx, int *attempted_idx)
-{
+static int mount_with_alternatives(fstab* fstab, int start_idx, int* end_idx, int* attempted_idx) {
     int i;
     int mount_errno = 0;
     int mounted = 0;
@@ -863,8 +862,7 @@ bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
  * first successful mount.
  * Returns -1 on error, and  FS_MGR_MNTALL_* otherwise.
  */
-int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
-{
+int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
     int i = 0;
     int encryptable = FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
     int error_count = 0;
@@ -1093,7 +1091,7 @@ int fs_mgr_mount_all(struct fstab *fstab, int mount_mode)
     }
 
 #if ALLOW_ADBD_DISABLE_VERITY == 1  // "userdebug" build
-    fs_mgr_overlayfs_mount_all();
+    fs_mgr_overlayfs_mount_all(fstab);
 #endif
 
     if (error_count) {
@@ -1129,7 +1127,7 @@ int fs_mgr_do_mount_one(struct fstab_rec *rec)
  * If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
  * in turn, and stop on 1st success, or no more match.
  */
-static int fs_mgr_do_mount_helper(struct fstab* fstab, const char* n_name, char* n_blk_device,
+static int fs_mgr_do_mount_helper(fstab* fstab, const char* n_name, char* n_blk_device,
                                   char* tmp_mount_point, int need_checkpoint) {
     int i = 0;
     int mount_errors = 0;
@@ -1244,13 +1242,12 @@ static int fs_mgr_do_mount_helper(struct fstab* fstab, const char* n_name, char*
     return FS_MGR_DOMNT_FAILED;
 }
 
-int fs_mgr_do_mount(struct fstab* fstab, const char* n_name, char* n_blk_device,
-                    char* tmp_mount_point) {
+int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
     return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
 }
 
-int fs_mgr_do_mount(struct fstab* fstab, const char* n_name, char* n_blk_device,
-                    char* tmp_mount_point, bool needs_cp) {
+int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
+                    bool needs_cp) {
     return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_cp);
 }
 
@@ -1276,8 +1273,7 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
 /* This must be called after mount_all, because the mkswap command needs to be
  * available.
  */
-int fs_mgr_swapon_all(struct fstab *fstab)
-{
+int fs_mgr_swapon_all(fstab* fstab) {
     int i = 0;
     int flags = 0;
     int err = 0;
@@ -1367,7 +1363,7 @@ int fs_mgr_swapon_all(struct fstab *fstab)
     return ret;
 }
 
-struct fstab_rec const* fs_mgr_get_crypt_entry(struct fstab const* fstab) {
+struct fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab) {
     int i;
 
     if (!fstab) {
@@ -1391,7 +1387,7 @@ struct fstab_rec const* fs_mgr_get_crypt_entry(struct fstab const* fstab) {
  *
  * real_blk_device must be at least PROPERTY_VALUE_MAX bytes long
  */
-void fs_mgr_get_crypt_info(struct fstab* fstab, char* key_loc, char* real_blk_device, size_t size) {
+void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size) {
     struct fstab_rec const* rec = fs_mgr_get_crypt_entry(fstab);
     if (key_loc) {
         if (rec) {
