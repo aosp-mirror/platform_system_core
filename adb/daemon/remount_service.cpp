@@ -146,6 +146,10 @@ static bool remount_partition(int fd, const char* dir) {
         return true;
     }
     bool is_root = strcmp(dir, "/") == 0;
+    if (is_root && !find_mount("/system", false).empty()) {
+        dir = "/system";
+        is_root = false;
+    }
     std::string dev = find_mount(dir, is_root);
     // Even if the device for the root is not found, we still try to remount it
     // as rw. This typically only happens when running Android in a container:
@@ -226,7 +230,9 @@ void remount_service(unique_fd fd, const std::string& cmd) {
 
     // Find partitions that are deduplicated, and can be un-deduplicated.
     std::set<std::string> dedup;
-    for (const auto& partition : partitions) {
+    for (const auto& part : partitions) {
+        auto partition = part;
+        if ((part == "/") && !find_mount("/system", false).empty()) partition = "/system";
         std::string dev = find_mount(partition.c_str(), partition == "/");
         if (dev.empty() || !fs_mgr_has_shared_blocks(partition, dev)) {
             continue;
