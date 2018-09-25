@@ -194,6 +194,31 @@ bool fs_mgr_wants_overlayfs() {
     return overlayfs_in_kernel;
 }
 
+bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
+    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(
+            fs_mgr_read_fstab("/proc/mounts"), fs_mgr_free_fstab);
+    if (!fstab) return false;
+    const auto lowerdir = kLowerdirOption + mount_point;
+    for (auto i = 0; i < fstab->num_entries; ++i) {
+        const auto fsrec = &fstab->recs[i];
+        const auto fs_type = fsrec->fs_type;
+        if (!fs_type) continue;
+        if (("overlay"s != fs_type) && ("overlayfs"s != fs_type)) continue;
+        auto fsrec_mount_point = fsrec->mount_point;
+        if (!fsrec_mount_point) continue;
+        if (mount_point != fsrec_mount_point) continue;
+        const auto fs_options = fsrec->fs_options;
+        if (!fs_options) continue;
+        const auto options = android::base::Split(fs_options, ",");
+        for (const auto& opt : options) {
+            if (opt == lowerdir) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
     if (!fsrec) return false;
 
@@ -343,31 +368,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
         LINFO << report << ret;
         return true;
     }
-}
-
-bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
-    std::unique_ptr<struct fstab, decltype(&fs_mgr_free_fstab)> fstab(
-            fs_mgr_read_fstab("/proc/mounts"), fs_mgr_free_fstab);
-    if (!fstab) return false;
-    const auto lowerdir = kLowerdirOption + mount_point;
-    for (auto i = 0; i < fstab->num_entries; ++i) {
-        const auto fsrec = &fstab->recs[i];
-        const auto fs_type = fsrec->fs_type;
-        if (!fs_type) continue;
-        if (("overlay"s != fs_type) && ("overlayfs"s != fs_type)) continue;
-        auto fsrec_mount_point = fsrec->mount_point;
-        if (!fsrec_mount_point) continue;
-        if (mount_point != fsrec_mount_point) continue;
-        const auto fs_options = fsrec->fs_options;
-        if (!fs_options) continue;
-        const auto options = android::base::Split(fs_options, ",");
-        for (const auto opt : options) {
-            if (opt == lowerdir) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
