@@ -110,25 +110,25 @@ typedef struct boot_img_hdr_v0 boot_img_hdr;
  */
 
 struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
-    uint32_t recovery_dtbo_size;   /* size in bytes for recovery DTBO image */
-    uint64_t recovery_dtbo_offset; /* offset to recovery dtbo in boot image */
+    uint32_t recovery_dtbo_size;   /* size in bytes for recovery DTBO/ACPIO image */
+    uint64_t recovery_dtbo_offset; /* offset to recovery dtbo/acpio in boot image */
     uint32_t header_size;
 } __attribute__((packed));
 
 /* When the boot image header has a version of 1, the structure of the boot
  * image is as follows:
  *
- * +-----------------+
- * | boot header     | 1 page
- * +-----------------+
- * | kernel          | n pages
- * +-----------------+
- * | ramdisk         | m pages
- * +-----------------+
- * | second stage    | o pages
- * +-----------------+
- * | recovery dtbo   | p pages
- * +-----------------+
+ * +---------------------+
+ * | boot header         | 1 page
+ * +---------------------+
+ * | kernel              | n pages
+ * +---------------------+
+ * | ramdisk             | m pages
+ * +---------------------+
+ * | second stage        | o pages
+ * +---------------------+
+ * | recovery dtbo/acpio | p pages
+ * +---------------------+
  * n = (kernel_size + page_size - 1) / page_size
  * m = (ramdisk_size + page_size - 1) / page_size
  * o = (second_size + page_size - 1) / page_size
@@ -136,13 +136,14 @@ struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
  *
  * 0. all entities are page_size aligned in flash
  * 1. kernel and ramdisk are required (size != 0)
- * 2. recovery_dtbo is required for recovery.img in non-A/B devices(recovery_dtbo_size != 0)
+ * 2. recovery_dtbo/recovery_acpio is required for recovery.img in non-A/B
+ *    devices(recovery_dtbo_size != 0)
  * 3. second is optional (second_size == 0 -> no second)
  * 4. load each element (kernel, ramdisk, second) at
  *    the specified physical address (kernel_addr, etc)
- * 5. If booting to recovery mode in a non-A/B device, extract recovery dtbo and
- *    apply the correct set of overlays on the base device tree depending on the
- *    hardware/product revision.
+ * 5. If booting to recovery mode in a non-A/B device, extract recovery
+ *    dtbo/acpio and apply the correct set of overlays on the base device tree
+ *    depending on the hardware/product revision.
  * 6. prepare tags at tag_addr.  kernel_args[] is
  *    appended to the kernel commandline in the tags.
  * 7. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
