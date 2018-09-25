@@ -43,6 +43,7 @@
 
 #include <chrono>
 #include <functional>
+#include <regex>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -70,13 +71,13 @@
 #include "usb.h"
 
 using android::base::ReadFully;
+using android::base::Split;
+using android::base::Trim;
 using android::base::unique_fd;
 
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
-
-char cur_product[FB_RESPONSE_SZ + 1];
 
 static const char* serial = nullptr;
 
@@ -588,109 +589,145 @@ static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     return fd.release();
 }
 
-static char* strip(char* s) {
-    while (*s && isspace(*s)) s++;
+static void CheckRequirement(const std::string& cur_product, const std::string& var,
+                             const std::string& product, bool invert,
+                             const std::vector<std::string>& options) {
+    Status("Checking '" + var + "'");
 
-    int n = strlen(s);
-    while (n-- > 0) {
-        if (!isspace(s[n])) break;
-        s[n] = 0;
+    double start = now();
+
+    if (!product.empty()) {
+        if (product != cur_product) {
+            double split = now();
+            fprintf(stderr, "IGNORE, product is %s required only for %s [%7.3fs]\n",
+                    cur_product.c_str(), product.c_str(), (split - start));
+            return;
+        }
     }
-    return s;
+
+    std::string var_value;
+    if (!fb_getvar(var, &var_value)) {
+        fprintf(stderr, "FAILED\n\n");
+        fprintf(stderr, "Could not getvar for '%s' (%s)\n\n", var.c_str(), fb_get_error().c_str());
+        die("requirements not met!");
+    }
+
+    bool match = false;
+    for (const auto& option : options) {
+        if (option == var_value || (option.back() == '*' &&
+                                    !var_value.compare(0, option.length() - 1, option, 0,
+                                                       option.length() - 1))) {
+            match = true;
+            break;
+        }
+    }
+
+    if (invert) {
+        match = !match;
+    }
+
+    if (match) {
+        double split = now();
+        fprintf(stderr, "OKAY [%7.3fs]\n", (split - start));
+        return;
+    }
+
+    fprintf(stderr, "FAILED\n\n");
+    fprintf(stderr, "Device %s is '%s'.\n", var.c_str(), var_value.c_str());
+    fprintf(stderr, "Update %s '%s'", invert ? "rejects" : "requires", options[0].c_str());
+    for (auto it = std::next(options.begin()); it != options.end(); ++it) {
+        fprintf(stderr, " or '%s'", it->c_str());
+    }
+    fprintf(stderr, ".\n\n");
+    die("requirements not met!");
 }
 
-#define MAX_OPTIONS 32
-static void check_requirement(char* line) {
-    char *val[MAX_OPTIONS];
-    unsigned count;
-    char *x;
-    int invert = 0;
-
+bool ParseRequirementLine(const std::string& line, std::string* name, std::string* product,
+                          bool* invert, std::vector<std::string>* options) {
     // "require product=alpha|beta|gamma"
     // "require version-bootloader=1234"
     // "require-for-product:gamma version-bootloader=istanbul|constantinople"
     // "require partition-exists=vendor"
+    *product = "";
+    *invert = false;
 
-    char* name = line;
-    const char* product = "";
-    if (!strncmp(name, "reject ", 7)) {
-        name += 7;
-        invert = 1;
-    } else if (!strncmp(name, "require ", 8)) {
-        name += 8;
-        invert = 0;
-    } else if (!strncmp(name, "require-for-product:", 20)) {
-        // Get the product and point name past it
-        product = name + 20;
-        name = strchr(name, ' ');
-        if (!name) die("android-info.txt syntax error: %s", line);
-        *name = 0;
-        name += 1;
-        invert = 0;
+    auto require_reject_regex = std::regex{"(require\\s+|reject\\s+)?\\s*(\\S+)\\s*=\\s*(.*)"};
+    auto require_product_regex =
+            std::regex{"require-for-product:\\s*(\\S+)\\s+(\\S+)\\s*=\\s*(.*)"};
+    std::smatch match_results;
+
+    if (std::regex_match(line, match_results, require_reject_regex)) {
+        *invert = Trim(match_results[1]) == "reject";
+    } else if (std::regex_match(line, match_results, require_product_regex)) {
+        *product = match_results[1];
+    } else {
+        return false;
     }
 
-    x = strchr(name, '=');
-    if (x == 0) return;
-    *x = 0;
-    val[0] = x + 1;
-
-    name = strip(name);
-
-    // "require partition-exists=x" is a special case, added because of the trouble we had when
-    // Pixel 2 shipped with new partitions and users used old versions of fastboot to flash them,
-    // missing out new partitions. A device with new partitions can use "partition-exists" to
-    // override the fields `optional_if_no_image` in the `images` array.
-    if (!strcmp(name, "partition-exists")) {
-        const char* partition_name = val[0];
-        std::string has_slot;
-        if (!fb_getvar(std::string("has-slot:") + partition_name, &has_slot) ||
-            (has_slot != "yes" && has_slot != "no")) {
-            die("device doesn't have required partition %s!", partition_name);
-        }
-        bool known_partition = false;
-        for (size_t i = 0; i < arraysize(images); ++i) {
-            if (images[i].nickname && !strcmp(images[i].nickname, partition_name)) {
-                images[i].optional_if_no_image = false;
-                known_partition = true;
-            }
-        }
-        if (!known_partition) {
-            die("device requires partition %s which is not known to this version of fastboot",
-                partition_name);
-        }
-        return;
-    }
-
-    for(count = 1; count < MAX_OPTIONS; count++) {
-        x = strchr(val[count - 1],'|');
-        if (x == 0) break;
-        *x = 0;
-        val[count] = x + 1;
-    }
-
+    *name = match_results[2];
     // Work around an unfortunate name mismatch.
-    const char* var = name;
-    if (!strcmp(name, "board")) var = "product";
-
-    const char** out = reinterpret_cast<const char**>(malloc(sizeof(char*) * count));
-    if (out == nullptr) die("out of memory");
-
-    for (size_t i = 0; i < count; ++i) {
-        out[i] = xstrdup(strip(val[i]));
+    if (*name == "board") {
+        *name = "product";
     }
 
-    fb_require(product, var, invert, count, out);
+    auto raw_options = Split(match_results[3], "|");
+    for (const auto& option : raw_options) {
+        auto trimmed_option = Trim(option);
+        options->emplace_back(trimmed_option);
+    }
+
+    return true;
 }
 
-static void check_requirements(char* data, int64_t sz) {
-    char* s = data;
-    while (sz-- > 0) {
-        if (*s == '\n') {
-            *s++ = 0;
-            check_requirement(data);
-            data = s;
+// "require partition-exists=x" is a special case, added because of the trouble we had when
+// Pixel 2 shipped with new partitions and users used old versions of fastboot to flash them,
+// missing out new partitions. A device with new partitions can use "partition-exists" to
+// override the fields `optional_if_no_image` in the `images` array.
+static void HandlePartitionExists(const std::vector<std::string>& options) {
+    const std::string& partition_name = options[0];
+    std::string has_slot;
+    if (!fb_getvar("has-slot:" + partition_name, &has_slot) ||
+        (has_slot != "yes" && has_slot != "no")) {
+        die("device doesn't have required partition %s!", partition_name.c_str());
+    }
+    bool known_partition = false;
+    for (size_t i = 0; i < arraysize(images); ++i) {
+        if (images[i].nickname && images[i].nickname == partition_name) {
+            images[i].optional_if_no_image = false;
+            known_partition = true;
+        }
+    }
+    if (!known_partition) {
+        die("device requires partition %s which is not known to this version of fastboot",
+            partition_name.c_str());
+    }
+}
+
+static void CheckRequirements(const std::string& data) {
+    std::string cur_product;
+    if (!fb_getvar("product", &cur_product)) {
+        fprintf(stderr, "getvar:product FAILED (%s)\n", fb_get_error().c_str());
+    }
+
+    auto lines = Split(data, "\n");
+    for (const auto& line : lines) {
+        if (line.empty()) {
+            continue;
+        }
+
+        std::string name;
+        std::string product;
+        bool invert;
+        std::vector<std::string> options;
+
+        if (!ParseRequirementLine(line, &name, &product, &invert, &options)) {
+            fprintf(stderr, "android-info.txt syntax error: %s\n", line.c_str());
+            continue;
+        }
+        if (name == "partition-exists") {
+            HandlePartitionExists(options);
         } else {
-            s++;
+            CheckRequirement(cur_product, name, product, invert, options);
         }
     }
 }
@@ -1156,7 +1193,7 @@ void FlashAllTool::CheckRequirements() {
     if (!source_.ReadFile("android-info.txt", &contents)) {
         die("could not read android-info.txt");
     }
-    check_requirements(reinterpret_cast<char*>(contents.data()), contents.size());
+    ::CheckRequirements({contents.data(), contents.size()});
 }
 
 void FlashAllTool::DetermineSecondarySlot() {
@@ -1265,8 +1302,6 @@ int ZipImageSource::OpenFile(const std::string& name) const {
 static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary) {
     dump_info();
 
-    fb_query_save("product", cur_product, sizeof(cur_product));
-
     ZipArchiveHandle zip;
     int error = OpenArchive(filename, &zip);
     if (error != 0) {
@@ -1301,8 +1336,6 @@ int LocalImageSource::OpenFile(const std::string& name) const {
 static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
     std::string fname;
     dump_info();
-
-    fb_query_save("product", cur_product, sizeof(cur_product));
 
     FlashAllTool tool(LocalImageSource(), slot_override, skip_secondary, wipe);
     tool.Flash();

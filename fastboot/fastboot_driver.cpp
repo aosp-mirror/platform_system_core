@@ -147,28 +147,6 @@ RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>
     return SUCCESS;
 }
 
-RetCode FastBootDriver::Require(const std::string& var, const std::vector<std::string>& allowed,
-                                bool* reqmet, bool invert) {
-    *reqmet = invert;
-    RetCode ret;
-    std::string response;
-    if ((ret = GetVar(var, &response))) {
-        return ret;
-    }
-
-    // Now check if we have a match
-    for (const auto s : allowed) {
-        // If it ends in *, and starting substring match
-        if (response == s || (s.length() && s.back() == '*' &&
-                              !response.compare(0, s.length() - 1, s, 0, s.length() - 1))) {
-            *reqmet = !invert;
-            break;
-        }
-    }
-
-    return SUCCESS;
-}
-
 RetCode FastBootDriver::Download(int fd, size_t size, std::string* response,
                                  std::vector<std::string>* info) {
     RetCode ret;

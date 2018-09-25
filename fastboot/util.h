@@ -9,7 +9,6 @@
 
 /* util stuff */
 double now();
-char* xstrdup(const char*);
 void set_verbose();
 
 void Status(const std::string& message);
