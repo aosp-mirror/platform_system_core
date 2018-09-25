@@ -103,9 +103,9 @@ void fb_flash_fd(const std::string& partition, int fd, uint32_t sz) {
     RUN_COMMAND(fb->Flash(partition));
 }
 
-void fb_flash(const std::string& partition, void* data, uint32_t sz) {
-    Status(StringPrintf("Sending '%s' (%u KB)", partition.c_str(), sz / 1024));
-    RUN_COMMAND(fb->Download(static_cast<char*>(data), sz));
+void fb_flash(const std::string& partition, const std::vector<char>& data) {
+    Status(StringPrintf("Sending '%s' (%zu KB)", partition.c_str(), data.size() / 1024));
+    RUN_COMMAND(fb->Download(data));
 
     Status("Writing '" + partition + "'");
     RUN_COMMAND(fb->Flash(partition));
@@ -136,69 +136,6 @@ void fb_resize_partition(const std::string& partition, const std::string& size) 
     RUN_COMMAND(fb->RawCommand(FB_CMD_RESIZE_PARTITION ":" + partition + ":" + size));
 }
 
-static int match(const char* str, const char** value, unsigned count) {
-    unsigned n;
-
-    for (n = 0; n < count; n++) {
-        const char *val = value[n];
-        int len = strlen(val);
-        int match;
-
-        if ((len > 1) && (val[len-1] == '*')) {
-            len--;
-            match = !strncmp(val, str, len);
-        } else {
-            match = !strcmp(val, str);
-        }
-
-        if (match) return 1;
-    }
-
-    return 0;
-}
-
-void fb_require(const std::string& product, const std::string& var, bool invert, size_t count,
-                const char** values) {
-    Status("Checking '" + var + "'");
-
-    double start = now();
-
-    std::string var_value;
-    auto status = fb->GetVar(var, &var_value);
-
-    if (status) {
-        fprintf(stderr, "getvar:%s FAILED (%s)\n", var.c_str(), fb->Error().c_str());
-        die("requirements not met!");
-    }
-
-    if (!product.empty()) {
-        if (product != cur_product) {
-            double split = now();
-            fprintf(stderr, "IGNORE, product is %s required only for %s [%7.3fs]\n", cur_product,
-                    product.c_str(), (split - start));
-            return;
-        }
-    }
-
-    int yes = match(var_value.c_str(), values, count);
-    if (invert) yes = !yes;
-
-    if (yes) {
-        double split = now();
-        fprintf(stderr, "OKAY [%7.3fs]\n", (split - start));
-        return;
-    }
-
-    fprintf(stderr, "FAILED\n\n");
-    fprintf(stderr, "Device %s is '%s'.\n", var.c_str(), var_value.c_str());
-    fprintf(stderr, "Update %s '%s'", invert ? "rejects" : "requires", values[0]);
-    for (size_t n = 1; n < count; n++) {
-        fprintf(stderr, " or '%s'", values[n]);
-    }
-    fprintf(stderr, ".\n\n");
-    die("requirements not met!");
-}
-
 void fb_display(const std::string& label, const std::string& var) {
     std::string value;
     auto status = fb->GetVar(var, &value);
@@ -208,18 +145,6 @@ void fb_display(const std::string& label, const std::string& var) {
         return;
     }
     fprintf(stderr, "%s: %s\n", label.c_str(), value.c_str());
-}
-
-void fb_query_save(const std::string& var, char* dest, uint32_t dest_size) {
-    std::string value;
-    auto status = fb->GetVar(var, &value);
-
-    if (status) {
-        fprintf(stderr, "getvar:%s FAILED (%s)\n", var.c_str(), fb->Error().c_str());
-        return;
-    }
-
-    strncpy(dest, value.c_str(), dest_size);
 }
 
 void fb_reboot() {
@@ -233,9 +158,9 @@ void fb_command(const std::string& cmd, const std::string& msg) {
     RUN_COMMAND(fb->RawCommand(cmd));
 }
 
-void fb_download(const std::string& name, void* data, uint32_t size) {
+void fb_download(const std::string& name, const std::vector<char>& data) {
     Status("Downloading '" + name + "'");
-    RUN_COMMAND(fb->Download(static_cast<char*>(data), size));
+    RUN_COMMAND(fb->Download(data));
 }
 
 void fb_download_fd(const std::string& name, int fd, uint32_t sz) {
