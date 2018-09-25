@@ -117,6 +117,9 @@ TEST(liblp, CreateFakeDisk) {
     uint64_t size;
     ASSERT_TRUE(GetDescriptorSize(fd, &size));
     ASSERT_EQ(size, kDiskSize);
+
+    // Verify that we can't read unwritten metadata.
+    ASSERT_EQ(ReadMetadata(fd, 1), nullptr);
 }
 
 // Flashing metadata should not work if the metadata was created for a larger
@@ -190,9 +193,6 @@ TEST(liblp, UpdateAnyMetadataSlot) {
     ASSERT_NE(imported, nullptr);
     ASSERT_EQ(imported->partitions.size(), 1);
     EXPECT_EQ(GetPartitionName(imported->partitions[0]), "system");
-
-    // Verify that we can't read unwritten metadata.
-    ASSERT_EQ(ReadMetadata(fd, 1), nullptr);
 
     // Change the name before writing to the next slot.
     strncpy(imported->partitions[0].name, "vendor", sizeof(imported->partitions[0].name));
