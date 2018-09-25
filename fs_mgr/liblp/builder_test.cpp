@@ -202,14 +202,28 @@ TEST(liblp, InternalPartitionAlignment) {
 }
 
 TEST(liblp, UseAllDiskSpace) {
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
-    EXPECT_EQ(builder->AllocatableSpace(), 1036288);
+    static constexpr uint64_t total = 1024 * 1024;
+    static constexpr uint64_t metadata = 1024;
+    static constexpr uint64_t slots = 2;
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(total, metadata, slots);
+    // We reserve a geometry block (4KB) plus space for each copy of the
+    // maximum size of a metadata blob. Then, we double that space since
+    // we store a backup copy of everything.
+    static constexpr uint64_t geometry = 4 * 1024;
+    static constexpr uint64_t allocatable = total - (metadata * slots + geometry) * 2;
+    EXPECT_EQ(builder->AllocatableSpace(), allocatable);
+    EXPECT_EQ(builder->UsedSpace(), 0);
 
     Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
-    EXPECT_EQ(builder->ResizePartition(system, 1036288), true);
-    EXPECT_EQ(system->size(), 1036288);
-    EXPECT_EQ(builder->ResizePartition(system, 1036289), false);
+    EXPECT_EQ(builder->ResizePartition(system, allocatable), true);
+    EXPECT_EQ(system->size(), allocatable);
+    EXPECT_EQ(builder->UsedSpace(), allocatable);
+    EXPECT_EQ(builder->AllocatableSpace(), allocatable);
+    EXPECT_EQ(builder->ResizePartition(system, allocatable + 1), false);
+    EXPECT_EQ(system->size(), allocatable);
+    EXPECT_EQ(builder->UsedSpace(), allocatable);
+    EXPECT_EQ(builder->AllocatableSpace(), allocatable);
 }
 
 TEST(liblp, BuildComplex) {

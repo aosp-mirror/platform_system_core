@@ -184,6 +184,7 @@ class MetadataBuilder {
 
     // Amount of space that can be allocated to logical partitions.
     uint64_t AllocatableSpace() const;
+    uint64_t UsedSpace() const;
 
     // Merge new block device information into previous values. Alignment values
     // are only overwritten if the new values are non-zero.
