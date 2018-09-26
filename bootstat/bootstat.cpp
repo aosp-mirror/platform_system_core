@@ -236,7 +236,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,rescueparty", 90},
     {"charge", 91},
     {"oem_tz_crash", 92},
-    {"uvlo", 93},
+    {"uvlo", 93},  // aliasReasons converts to reboot,undervoltage
     {"oem_ps_hold", 94},
     {"abnormal_reset", 95},
     {"oemerr_unknown", 96},
@@ -263,7 +263,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"oem_crash_on_the_lk", 117},
     {"oem_rpm_reset", 118},
     {"REUSE1", 119},  // Former dupe, can be re-used
-    {"REUSE2", 120},  // Former dupe, can be re-used
+    {"reboot,undervoltage", 120},
     {"factory_cable", 121},
     {"oem_ar6320_failed_to_powerup", 122},
     {"watchdog_rpm_bite", 123},
@@ -840,6 +840,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"reboot,tool", "tool_by_pass_pwk"},
         {"!reboot,longkey", "reboot_longkey"},
         {"!reboot,longkey", "kpdpwr"},
+        {"!reboot,undervoltage", "uvlo"},
         {"bootloader", ""},
     };
 
