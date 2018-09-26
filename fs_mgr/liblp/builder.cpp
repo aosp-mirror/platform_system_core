@@ -482,6 +482,14 @@ uint64_t MetadataBuilder::AllocatableSpace() const {
     return (geometry_.last_logical_sector - geometry_.first_logical_sector + 1) * LP_SECTOR_SIZE;
 }
 
+uint64_t MetadataBuilder::UsedSpace() const {
+    uint64_t size = 0;
+    for (const auto& partition : partitions_) {
+        size += partition->size();
+    }
+    return size;
+}
+
 uint64_t MetadataBuilder::AlignSector(uint64_t sector) {
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.

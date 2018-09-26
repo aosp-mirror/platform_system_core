@@ -161,7 +161,10 @@ def parse_cmdline():
                         required=True)
     parser.add_argument('--ramdisk', help='path to the ramdisk', type=FileType('rb'))
     parser.add_argument('--second', help='path to the 2nd bootloader', type=FileType('rb'))
-    parser.add_argument('--recovery_dtbo', help='path to the recovery DTBO', type=FileType('rb'))
+    recovery_dtbo_group = parser.add_mutually_exclusive_group()
+    recovery_dtbo_group.add_argument('--recovery_dtbo', help='path to the recovery DTBO', type=FileType('rb'))
+    recovery_dtbo_group.add_argument('--recovery_acpio', help='path to the recovery ACPIO',
+                                     type=FileType('rb'), metavar='RECOVERY_ACPIO', dest='recovery_dtbo')
     parser.add_argument('--cmdline', help='extra arguments to be passed on the '
                         'kernel command line', default='', action=ValidateStrLenAction, maxlen=1536)
     parser.add_argument('--base', help='base address', type=parse_int, default=0x10000000)
