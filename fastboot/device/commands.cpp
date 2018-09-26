@@ -40,6 +40,9 @@ using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::fastboot::V1_0::Result;
+using ::android::hardware::fastboot::V1_0::Status;
+
 using namespace android::fs_mgr;
 
 struct VariableHandlers {
@@ -131,6 +134,24 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
         return device->WriteStatus(FastbootResult::OKAY, "Erasing succeeded");
     }
     return device->WriteStatus(FastbootResult::FAIL, "Erasing failed");
+}
+
+bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        return device->WriteStatus(FastbootResult::FAIL, "Unable to open fastboot HAL");
+    }
+
+    Result ret;
+    auto ret_val = fastboot_hal->doOemCommand(args[0], [&](Result result) { ret = result; });
+    if (!ret_val.isOk()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Unable to do OEM command");
+    }
+    if (ret.status != Status::SUCCESS) {
+        return device->WriteStatus(FastbootResult::FAIL, ret.message);
+    }
+
+    return device->WriteStatus(FastbootResult::OKAY, ret.message);
 }
 
 bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& args) {
