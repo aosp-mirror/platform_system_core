@@ -31,34 +31,3 @@ cc_library {
     header_libs: ["libmkbootimg_abi_headers"],
     export_header_lib_headers: ["libmkbootimg_abi_headers"],
 }
-
-python_defaults {
-    name: "mkbootimg_defaults",
-
-    version: {
-        py2: {
-            enabled: true,
-            embedded_launcher: true,
-        },
-        py3: {
-            enabled: false,
-            embedded_launcher: false,
-        },
-    },
-}
-
-python_binary_host {
-    name: "mkbootimg",
-    defaults: ["mkbootimg_defaults"],
-    srcs: [
-        "mkbootimg.py",
-    ],
-}
-
-python_binary_host {
-    name: "unpack_bootimg",
-    defaults: ["mkbootimg_defaults"],
-    srcs: [
-        "unpack_bootimg.py",
-    ],
-}
