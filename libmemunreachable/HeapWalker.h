@@ -52,7 +52,7 @@ class HeapWalker {
         allocation_bytes_(0),
         roots_(allocator),
         root_vals_(allocator),
-        segv_handler_(allocator),
+        segv_handler_(),
         walking_ptr_(0) {
     valid_allocations_range_.end = 0;
     valid_allocations_range_.begin = ~valid_allocations_range_.end;
