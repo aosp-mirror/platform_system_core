@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <fs_mgr_dm_linear.h>
 #include <liblp/liblp.h>
@@ -158,4 +159,10 @@ std::vector<std::string> ListPartitions(FastbootDevice* device) {
         }
     }
     return partitions;
+}
+
+bool GetDeviceLockStatus() {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    return cmdline.find("androidboot.verifiedbootstate=orange") == std::string::npos;
 }
