@@ -148,7 +148,7 @@ bool GetMaxDownloadSize(FastbootDevice* /* device */, const std::vector<std::str
 
 bool GetUnlocked(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                  std::string* message) {
-    *message = "yes";
+    *message = GetDeviceLockStatus() ? "no" : "yes";
     return true;
 }
 
