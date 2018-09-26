@@ -248,9 +248,9 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"watchdog_nonsec", 102},
     {"watchdog_apps_bark", 103},
     {"reboot_dmverity_corrupted", 104},
-    {"reboot_smpl", 105},
+    {"reboot_smpl", 105},  // aliasReasons converts to reboot,powerloss
     {"watchdog_sdi_apps_reset", 106},
-    {"smpl", 107},
+    {"smpl", 107},  // aliasReasons converts to reboot,powerloss
     {"oem_modem_failed_to_powerup", 108},
     {"reboot_normal", 109},
     {"oem_lpass_cfg", 110},
@@ -262,7 +262,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"oem_rpm_undef_error", 116},
     {"oem_crash_on_the_lk", 117},
     {"oem_rpm_reset", 118},
-    {"REUSE1", 119},  // Former dupe, can be re-used
+    {"reboot,powerloss", 119},
     {"reboot,undervoltage", 120},
     {"factory_cable", 121},
     {"oem_ar6320_failed_to_powerup", 122},
@@ -841,6 +841,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
         {"!reboot,longkey", "reboot_longkey"},
         {"!reboot,longkey", "kpdpwr"},
         {"!reboot,undervoltage", "uvlo"},
+        {"!reboot,powerloss", "smpl"},
         {"bootloader", ""},
     };
 
