@@ -32,15 +32,14 @@ class ScopedSignalHandler {
  public:
   using Fn = std::function<void(ScopedSignalHandler&, int, siginfo_t*, void*)>;
 
-  explicit ScopedSignalHandler(Allocator<Fn> allocator) : allocator_(allocator), signal_(-1) {}
+  explicit ScopedSignalHandler() : signal_(-1) {}
   ~ScopedSignalHandler() { reset(); }
 
   template <class F>
   void install(int signal, F&& f) {
     if (signal_ != -1) MEM_LOG_ALWAYS_FATAL("ScopedSignalHandler already installed");
 
-    handler_ = SignalFn(std::allocator_arg, allocator_,
-                        [=](int signal, siginfo_t* si, void* uctx) { f(*this, signal, si, uctx); });
+    handler_ = SignalFn([=](int signal, siginfo_t* si, void* uctx) { f(*this, signal, si, uctx); });
 
     struct sigaction act {};
     act.sa_sigaction = [](int signal, siginfo_t* si, void* uctx) { handler_(signal, si, uctx); };
@@ -68,7 +67,6 @@ class ScopedSignalHandler {
  private:
   using SignalFn = std::function<void(int, siginfo_t*, void*)>;
   DISALLOW_COPY_AND_ASSIGN(ScopedSignalHandler);
-  Allocator<Fn> allocator_;
   int signal_;
   struct sigaction old_act_;
   // TODO(ccross): to support multiple ScopedSignalHandlers handler_ would need
