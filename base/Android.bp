@@ -56,6 +56,7 @@ cc_defaults {
         "test_utils.cpp",
     ],
 
+    cppflags: ["-Wexit-time-destructors"],
     shared_libs: ["liblog"],
     target: {
         android: {
@@ -68,13 +69,11 @@ cc_defaults {
             srcs: [
                 "errors_unix.cpp",
             ],
-            cppflags: ["-Wexit-time-destructors"],
         },
         darwin: {
             srcs: [
                 "errors_unix.cpp",
             ],
-            cppflags: ["-Wexit-time-destructors"],
         },
         linux_bionic: {
             enabled: true,
