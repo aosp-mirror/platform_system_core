@@ -187,23 +187,34 @@ void property_changed(const std::string& name, const std::string& value) {
     }
 }
 
-static std::optional<boot_clock::time_point> RestartProcesses() {
-    std::optional<boot_clock::time_point> next_process_restart_time;
+static std::optional<boot_clock::time_point> HandleProcessActions() {
+    std::optional<boot_clock::time_point> next_process_action_time;
     for (const auto& s : ServiceList::GetInstance()) {
+        if ((s->flags() & SVC_RUNNING) && s->timeout_period()) {
+            auto timeout_time = s->time_started() + *s->timeout_period();
+            if (boot_clock::now() > timeout_time) {
+                s->Timeout();
+            } else {
+                if (!next_process_action_time || timeout_time < *next_process_action_time) {
+                    next_process_action_time = timeout_time;
+                }
+            }
+        }
+
         if (!(s->flags() & SVC_RESTARTING)) continue;
 
-        auto restart_time = s->time_started() + 5s;
+        auto restart_time = s->time_started() + s->restart_period();
         if (boot_clock::now() > restart_time) {
             if (auto result = s->Start(); !result) {
                 LOG(ERROR) << "Could not restart process '" << s->name() << "': " << result.error();
             }
         } else {
-            if (!next_process_restart_time || restart_time < *next_process_restart_time) {
-                next_process_restart_time = restart_time;
+            if (!next_process_action_time || restart_time < *next_process_action_time) {
+                next_process_action_time = restart_time;
             }
         }
     }
-    return next_process_restart_time;
+    return next_process_action_time;
 }
 
 static Result<Success> DoControlStart(Service* service) {
@@ -770,12 +781,12 @@ int main(int argc, char** argv) {
         }
         if (!(waiting_for_prop || Service::is_exec_service_running())) {
             if (!shutting_down) {
-                auto next_process_restart_time = RestartProcesses();
+                auto next_process_action_time = HandleProcessActions();
 
                 // If there's a process that needs restarting, wake up in time for that.
-                if (next_process_restart_time) {
+                if (next_process_action_time) {
                     epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
-                        *next_process_restart_time - boot_clock::now());
+                            *next_process_action_time - boot_clock::now());
                     if (*epoll_timeout < 0ms) epoll_timeout = 0ms;
                 }
             }
