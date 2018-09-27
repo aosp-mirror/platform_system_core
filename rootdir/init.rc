@@ -407,6 +407,9 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
+    # Start apexd as soon as we can
+    start apexd
+
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
 

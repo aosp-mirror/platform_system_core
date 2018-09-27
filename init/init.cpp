@@ -346,12 +346,12 @@ static void export_oem_lock_status() {
     if (!android::base::GetBoolProperty("ro.oem_unlock_supported", false)) {
         return;
     }
-
-    std::string value = GetProperty("ro.boot.verifiedbootstate", "");
-
-    if (!value.empty()) {
-        property_set("ro.boot.flash.locked", value == "orange" ? "0" : "1");
-    }
+    import_kernel_cmdline(
+            false, [](const std::string& key, const std::string& value, bool in_qemu) {
+                if (key == "androidboot.verifiedbootstate") {
+                    property_set("ro.boot.flash.locked", value == "orange" ? "0" : "1");
+                }
+            });
 }
 
 static void export_kernel_boot_props() {

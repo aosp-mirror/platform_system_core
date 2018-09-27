@@ -751,7 +751,7 @@ class FileOperationsTest(DeviceTest):
                 shutil.rmtree(host_dir)
 
     def test_push_empty(self):
-        """Push a directory containing an empty directory to the device."""
+        """Push an empty directory to the device."""
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
         self.device.shell(['mkdir', self.DEVICE_TEMP_DIR])
 
@@ -767,9 +767,10 @@ class FileOperationsTest(DeviceTest):
 
             self.device.push(empty_dir_path, self.DEVICE_TEMP_DIR)
 
-            test_empty_cmd = ['[', '-d',
-                              os.path.join(self.DEVICE_TEMP_DIR, 'empty')]
+            remote_path = os.path.join(self.DEVICE_TEMP_DIR, "empty")
+            test_empty_cmd = ["[", "-d", remote_path, "]"]
             rc, _, _ = self.device.shell_nocheck(test_empty_cmd)
+
             self.assertEqual(rc, 0)
             self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
         finally:
