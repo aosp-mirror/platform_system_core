@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/properties.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
@@ -47,6 +48,8 @@
 #include "adb_utils.h"
 #include "set_verity_enable_state_service.h"
 
+using android::base::Realpath;
+
 // Returns the last device used to mount a directory in /proc/mounts.
 // This will find overlayfs entry where upperdir=lowerdir, to make sure
 // remount is associated with the correct directory.
@@ -55,9 +58,15 @@ static std::string find_proc_mount(const char* dir) {
     std::string mnt_fsname;
     if (!fp) return mnt_fsname;
 
+    // dir might be a symlink, e.g., /product -> /system/product in GSI.
+    std::string canonical_path;
+    if (!Realpath(dir, &canonical_path)) {
+        PLOG(ERROR) << "Realpath failed: " << dir;
+    }
+
     mntent* e;
     while ((e = getmntent(fp.get())) != nullptr) {
-        if (strcmp(dir, e->mnt_dir) == 0) {
+        if (canonical_path == e->mnt_dir) {
             mnt_fsname = e->mnt_fsname;
         }
     }
