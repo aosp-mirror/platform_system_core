@@ -60,3 +60,4 @@
 #define FB_VAR_IS_LOGICAL "is-logical"
 #define FB_VAR_IS_USERSPACE "is-userspace"
 #define FB_VAR_HW_REVISION "hw-revision"
+#define FB_VAR_VARIANT "variant"
