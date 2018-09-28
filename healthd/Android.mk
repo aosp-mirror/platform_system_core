@@ -97,7 +97,6 @@ CHARGER_STATIC_LIBRARIES := \
     android.hardware.health@2.0 \
     android.hardware.health@1.0 \
     android.hardware.health@1.0-convert \
-    libbinderthreadstate \
     libhidltransport \
     libhidlbase \
     libhwbinder_noltopgo \
