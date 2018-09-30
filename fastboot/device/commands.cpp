@@ -82,6 +82,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
             {FB_VAR_PRODUCT, {GetProduct, nullptr}},
             {FB_VAR_SERIALNO, {GetSerial, nullptr}},
+            {FB_VAR_VARIANT, {GetVariant, nullptr}},
             {FB_VAR_SECURE, {GetSecure, nullptr}},
             {FB_VAR_UNLOCKED, {GetUnlocked, nullptr}},
             {FB_VAR_MAX_DOWNLOAD_SIZE, {GetMaxDownloadSize, nullptr}},
@@ -94,6 +95,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_PARTITION_TYPE, {GetPartitionType, GetAllPartitionArgsWithSlot}},
             {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
             {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
+            {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}}};
 
     if (args.size() < 2) {

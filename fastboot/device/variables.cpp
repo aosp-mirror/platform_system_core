@@ -74,6 +74,49 @@ bool GetSecure(FastbootDevice* /* device */, const std::vector<std::string>& /* 
     return true;
 }
 
+bool GetVariant(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                std::string* message) {
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = fastboot_hal->getVariant([&](std::string device_variant, Result result) {
+        *message = device_variant;
+        ret = result;
+    });
+    if (!ret_val.isOk() || ret.status != Status::SUCCESS) {
+        *message = "Unable to get device variant";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                           std::string* message) {
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val =
+            fastboot_hal->getOffModeChargeState([&](bool off_mode_charging_state, Result result) {
+                *message = off_mode_charging_state ? "1" : "0";
+                ret = result;
+            });
+    if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
+        *message = "Unable to get off mode charge state";
+        return false;
+    }
+
+    return true;
+}
+
 bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& /* args */,
                     std::string* message) {
     std::string suffix = device->GetCurrentSlot();
