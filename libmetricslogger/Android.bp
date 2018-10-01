@@ -54,12 +54,12 @@ cc_library_shared {
 // -----------------------------------------------------------------------------
 cc_test {
     name: "metricslogger_tests",
+    isolated: true,
     defaults: ["metricslogger_defaults"],
     shared_libs: [
         "libbase",
         "libmetricslogger_debug",
     ],
-    static_libs: ["libBionicGtestMain"],
     srcs: [
         "metrics_logger_test.cpp",
     ],
