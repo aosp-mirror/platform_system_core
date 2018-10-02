@@ -147,10 +147,8 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
     if (candidate.empty()) return "";
 
-    auto context = fs_mgr_get_context(mount_point);
-    if (!context.empty()) context = ",rootcontext="s + context;
     return "override_creds=off,"s + kLowerdirOption + mount_point + "," + kUpperdirOption +
-           candidate + kUpperName + ",workdir=" + candidate + kWorkName + context;
+           candidate + kUpperName + ",workdir=" + candidate + kWorkName;
 }
 
 bool fs_mgr_system_root_image(const fstab* fstab) {
