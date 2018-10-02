@@ -122,6 +122,7 @@ cc_binary {
     shared_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.fastboot@1.0",
+        "android.hardware.health@2.0",
         "libadbd",
         "libasyncio",
         "libbase",
@@ -137,6 +138,10 @@ cc_binary {
         "liblp",
         "libsparse",
         "libutils",
+    ],
+
+    static_libs: [
+        "libhealthhalutils",
     ],
 
     cpp_std: "c++17",

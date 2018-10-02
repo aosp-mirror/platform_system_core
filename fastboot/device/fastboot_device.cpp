@@ -20,6 +20,8 @@
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <android/hardware/fastboot/1.0/IFastboot.h>
+#include <healthhalutils/HealthHalUtils.h>
+
 #include <algorithm>
 
 #include "constants.h"
@@ -30,6 +32,8 @@ using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::IBootControl;
 using ::android::hardware::boot::V1_0::Slot;
 using ::android::hardware::fastboot::V1_0::IFastboot;
+using ::android::hardware::health::V2_0::get_health_service;
+
 namespace sph = std::placeholders;
 
 FastbootDevice::FastbootDevice()
@@ -52,6 +56,7 @@ FastbootDevice::FastbootDevice()
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()),
+      health_hal_(get_health_service()),
       fastboot_hal_(IFastboot::getService()) {}
 
 FastbootDevice::~FastbootDevice() {
