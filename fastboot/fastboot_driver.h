@@ -55,6 +55,12 @@ enum RetCode : int {
     TIMEOUT,
 };
 
+struct DriverCallbacks {
+    std::function<void(const std::string&)> prolog = [](const std::string&) {};
+    std::function<void(int)> epilog = [](int) {};
+    std::function<void(const std::string&)> info = [](const std::string&) {};
+};
+
 class FastBootDriver {
     friend class FastBootTest;
 
@@ -63,22 +69,30 @@ class FastBootDriver {
     static constexpr uint32_t MAX_DOWNLOAD_SIZE = std::numeric_limits<uint32_t>::max();
     static constexpr size_t TRANSPORT_CHUNK_SIZE = 1024;
 
-    FastBootDriver(Transport* transport,
-                   std::function<void(std::string&)> info = [](std::string&) {},
+    FastBootDriver(Transport* transport, DriverCallbacks driver_callbacks = {},
                    bool no_checks = false);
     ~FastBootDriver();
 
     RetCode Boot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode Continue(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
+    RetCode CreatePartition(const std::string& partition, const std::string& size);
+    RetCode DeletePartition(const std::string& partition);
+    RetCode Download(const std::string& name, int fd, size_t size, std::string* response = nullptr,
+                     std::vector<std::string>* info = nullptr);
     RetCode Download(int fd, size_t size, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
+    RetCode Download(const std::string& name, const std::vector<char>& buf,
+                     std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode Download(const std::vector<char>& buf, std::string* response = nullptr,
+                     std::vector<std::string>* info = nullptr);
+    RetCode Download(const std::string& partition, struct sparse_file* s, uint32_t sz,
+                     size_t current, size_t total, bool use_crc, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
     RetCode Download(sparse_file* s, bool use_crc = false, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
-    RetCode Erase(const std::string& part, std::string* response = nullptr,
+    RetCode Erase(const std::string& partition, std::string* response = nullptr,
                   std::vector<std::string>* info = nullptr);
-    RetCode Flash(const std::string& part, std::string* response = nullptr,
+    RetCode Flash(const std::string& partition, std::string* response = nullptr,
                   std::vector<std::string>* info = nullptr);
     RetCode GetVar(const std::string& key, std::string* val,
                    std::vector<std::string>* info = nullptr);
@@ -86,22 +100,24 @@ class FastBootDriver {
     RetCode Reboot(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode RebootTo(std::string target, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
+    RetCode ResizePartition(const std::string& partition, const std::string& size);
     RetCode SetActive(const std::string& slot, std::string* response = nullptr,
                       std::vector<std::string>* info = nullptr);
     RetCode Upload(const std::string& outfile, std::string* response = nullptr,
                    std::vector<std::string>* info = nullptr);
 
     /* HIGHER LEVEL COMMANDS -- Composed of the commands above */
-    RetCode FlashPartition(const std::string& part, const std::vector<char>& data);
-    RetCode FlashPartition(const std::string& part, int fd, uint32_t sz);
-    RetCode FlashPartition(const std::string& part, sparse_file* s);
+    RetCode FlashPartition(const std::string& partition, const std::vector<char>& data);
+    RetCode FlashPartition(const std::string& partition, int fd, uint32_t sz);
+    RetCode FlashPartition(const std::string& partition, sparse_file* s, uint32_t sz,
+                           size_t current, size_t total);
 
-    RetCode Partitions(std::vector<std::tuple<std::string, uint64_t>>* parts);
+    RetCode Partitions(std::vector<std::tuple<std::string, uint64_t>>* partitions);
     RetCode Require(const std::string& var, const std::vector<std::string>& allowed, bool* reqmet,
                     bool invert = false);
 
     /* HELPERS */
-    void SetInfoCallback(std::function<void(std::string&)> info);
+    void SetInfoCallback(std::function<void(const std::string&)> info);
     static const std::string RCString(RetCode rc);
     std::string Error();
     RetCode WaitForDisconnect();
@@ -110,7 +126,10 @@ class FastBootDriver {
     Transport* set_transport(Transport* transport);
     Transport* transport() const { return transport_; }
 
-    // This is temporarily public for engine.cpp
+    RetCode RawCommand(const std::string& cmd, const std::string& message,
+                       std::string* response = nullptr, std::vector<std::string>* info = nullptr,
+                       int* dsize = nullptr);
+
     RetCode RawCommand(const std::string& cmd, std::string* response = nullptr,
                        std::vector<std::string>* info = nullptr, int* dsize = nullptr);
 
@@ -122,19 +141,6 @@ class FastBootDriver {
 
     std::string ErrnoStr(const std::string& msg);
 
-    // More like a namespace...
-    struct Commands {
-        static const std::string BOOT;
-        static const std::string CONTINUE;
-        static const std::string DOWNLOAD;
-        static const std::string ERASE;
-        static const std::string FLASH;
-        static const std::string GET_VAR;
-        static const std::string REBOOT;
-        static const std::string SET_ACTIVE;
-        static const std::string UPLOAD;
-    };
-
     Transport* transport_;
 
   private:
@@ -145,10 +151,15 @@ class FastBootDriver {
     RetCode ReadBuffer(std::vector<char>& buf);
     RetCode ReadBuffer(void* buf, size_t size);
 
+    RetCode UploadInner(const std::string& outfile, std::string* response = nullptr,
+                        std::vector<std::string>* info = nullptr);
+
     int SparseWriteCallback(std::vector<char>& tpbuf, const char* data, size_t len);
 
     std::string error_;
-    std::function<void(std::string&)> info_cb_;
+    std::function<void(const std::string&)> prolog_;
+    std::function<void(int)> epilog_;
+    std::function<void(const std::string&)> info_;
     bool disable_checks_;
 };
 

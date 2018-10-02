@@ -25,6 +25,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
 #include "fastboot_driver.h"
 
 #include <errno.h>
@@ -44,43 +45,56 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <utils/FileMap.h>
-#include "fastboot_driver.h"
+
+#include "constants.h"
 #include "transport.h"
+
+using android::base::StringPrintf;
 
 namespace fastboot {
 
 /*************************** PUBLIC *******************************/
-FastBootDriver::FastBootDriver(Transport* transport, std::function<void(std::string&)> info,
+FastBootDriver::FastBootDriver(Transport* transport, DriverCallbacks driver_callbacks,
                                bool no_checks)
-    : transport_(transport) {
-    info_cb_ = info;
-    disable_checks_ = no_checks;
-}
+    : transport_(transport),
+      prolog_(std::move(driver_callbacks.prolog)),
+      epilog_(std::move(driver_callbacks.epilog)),
+      info_(std::move(driver_callbacks.info)),
+      disable_checks_(no_checks) {}
 
 FastBootDriver::~FastBootDriver() {
 }
 
 RetCode FastBootDriver::Boot(std::string* response, std::vector<std::string>* info) {
-    return RawCommand(Commands::BOOT, response, info);
+    return RawCommand(FB_CMD_BOOT, "Booting", response, info);
 }
 
 RetCode FastBootDriver::Continue(std::string* response, std::vector<std::string>* info) {
-    return RawCommand(Commands::CONTINUE, response, info);
+    return RawCommand(FB_CMD_CONTINUE, "Resuming boot", response, info);
 }
 
-RetCode FastBootDriver::Erase(const std::string& part, std::string* response,
-                              std::vector<std::string>* info) {
-    return RawCommand(Commands::ERASE + part, response, info);
+RetCode FastBootDriver::CreatePartition(const std::string& partition, const std::string& size) {
+    return RawCommand(FB_CMD_CREATE_PARTITION ":" + partition + ":" + size,
+                      "Creating '" + partition + "'");
 }
 
-RetCode FastBootDriver::Flash(const std::string& part, std::string* response,
+RetCode FastBootDriver::DeletePartition(const std::string& partition) {
+    return RawCommand(FB_CMD_DELETE_PARTITION ":" + partition, "Deleting '" + partition + "'");
+}
+
+RetCode FastBootDriver::Erase(const std::string& partition, std::string* response,
                               std::vector<std::string>* info) {
-    return RawCommand(Commands::FLASH + part, response, info);
+    return RawCommand(FB_CMD_ERASE ":" + partition, "Erasing '" + partition + "'", response, info);
+}
+
+RetCode FastBootDriver::Flash(const std::string& partition, std::string* response,
+                              std::vector<std::string>* info) {
+    return RawCommand(FB_CMD_FLASH ":" + partition, "Writing '" + partition + "'", response, info);
 }
 
 RetCode FastBootDriver::GetVar(const std::string& key, std::string* val,
                                std::vector<std::string>* info) {
-    return RawCommand(Commands::GET_VAR + key, val, info);
+    return RawCommand(FB_CMD_GETVAR ":" + key, val, info);
 }
 
 RetCode FastBootDriver::GetVarAll(std::vector<std::string>* response) {
@@ -89,44 +103,52 @@ RetCode FastBootDriver::GetVarAll(std::vector<std::string>* response) {
 }
 
 RetCode FastBootDriver::Reboot(std::string* response, std::vector<std::string>* info) {
-    return RawCommand(Commands::REBOOT, response, info);
+    return RawCommand(FB_CMD_REBOOT, "Rebooting", response, info);
 }
 
 RetCode FastBootDriver::RebootTo(std::string target, std::string* response,
                                  std::vector<std::string>* info) {
-    return RawCommand("reboot-" + target, response, info);
+    return RawCommand("reboot-" + target, "Rebooting into " + target, response, info);
+}
+
+RetCode FastBootDriver::ResizePartition(const std::string& partition, const std::string& size) {
+    return RawCommand(FB_CMD_RESIZE_PARTITION ":" + partition + ":" + size,
+                      "Resizing '" + partition + "'");
 }
 
 RetCode FastBootDriver::SetActive(const std::string& slot, std::string* response,
                                   std::vector<std::string>* info) {
-    return RawCommand(Commands::SET_ACTIVE + slot, response, info);
+    return RawCommand(FB_CMD_SET_ACTIVE ":" + slot, "Setting current slot to '" + slot + "'",
+                      response, info);
 }
 
-RetCode FastBootDriver::FlashPartition(const std::string& part, const std::vector<char>& data) {
+RetCode FastBootDriver::FlashPartition(const std::string& partition,
+                                       const std::vector<char>& data) {
     RetCode ret;
-    if ((ret = Download(data))) {
+    if ((ret = Download(partition, data))) {
         return ret;
     }
-    return RawCommand(Commands::FLASH + part);
+    return Flash(partition);
 }
 
-RetCode FastBootDriver::FlashPartition(const std::string& part, int fd, uint32_t sz) {
+RetCode FastBootDriver::FlashPartition(const std::string& partition, int fd, uint32_t size) {
     RetCode ret;
-    if ((ret = Download(fd, sz))) {
+    if ((ret = Download(partition, fd, size))) {
         return ret;
     }
-    return RawCommand(Commands::FLASH + part);
+    return Flash(partition);
 }
 
-RetCode FastBootDriver::FlashPartition(const std::string& part, sparse_file* s) {
+RetCode FastBootDriver::FlashPartition(const std::string& partition, sparse_file* s, uint32_t size,
+                                       size_t current, size_t total) {
     RetCode ret;
-    if ((ret = Download(s))) {
+    if ((ret = Download(partition, s, size, current, total, false))) {
         return ret;
     }
-    return RawCommand(Commands::FLASH + part);
+    return Flash(partition);
 }
 
-RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>>* parts) {
+RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>>* partitions) {
     std::vector<std::string> all;
     RetCode ret;
     if ((ret = GetVarAll(&all))) {
@@ -141,10 +163,18 @@ RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>
             std::string m1(sm[1]);
             std::string m2(sm[2]);
             uint64_t tmp = strtoll(m2.c_str(), 0, 16);
-            parts->push_back(std::make_tuple(m1, tmp));
+            partitions->push_back(std::make_tuple(m1, tmp));
         }
     }
     return SUCCESS;
+}
+
+RetCode FastBootDriver::Download(const std::string& name, int fd, size_t size,
+                                 std::string* response, std::vector<std::string>* info) {
+    prolog_(StringPrintf("Sending '%s' (%zu KB)", name.c_str(), size / 1024));
+    auto result = Download(fd, size, response, info);
+    epilog_(result);
+    return result;
 }
 
 RetCode FastBootDriver::Download(int fd, size_t size, std::string* response,
@@ -170,6 +200,14 @@ RetCode FastBootDriver::Download(int fd, size_t size, std::string* response,
     return HandleResponse(response, info);
 }
 
+RetCode FastBootDriver::Download(const std::string& name, const std::vector<char>& buf,
+                                 std::string* response, std::vector<std::string>* info) {
+    prolog_(StringPrintf("Sending '%s' (%zu KB)", name.c_str(), buf.size() / 1024));
+    auto result = Download(buf, response, info);
+    epilog_(result);
+    return result;
+}
+
 RetCode FastBootDriver::Download(const std::vector<char>& buf, std::string* response,
                                  std::vector<std::string>* info) {
     RetCode ret;
@@ -190,6 +228,16 @@ RetCode FastBootDriver::Download(const std::vector<char>& buf, std::string* resp
 
     // Wait for response
     return HandleResponse(response, info);
+}
+
+RetCode FastBootDriver::Download(const std::string& partition, struct sparse_file* s, uint32_t size,
+                                 size_t current, size_t total, bool use_crc, std::string* response,
+                                 std::vector<std::string>* info) {
+    prolog_(StringPrintf("Sending sparse '%s' %zu/%zu (%u KB)", partition.c_str(), current, total,
+                         size / 1024));
+    auto result = Download(s, use_crc, response, info);
+    epilog_(result);
+    return result;
 }
 
 RetCode FastBootDriver::Download(sparse_file* s, bool use_crc, std::string* response,
@@ -234,9 +282,17 @@ RetCode FastBootDriver::Download(sparse_file* s, bool use_crc, std::string* resp
 
 RetCode FastBootDriver::Upload(const std::string& outfile, std::string* response,
                                std::vector<std::string>* info) {
+    prolog_("Uploading '" + outfile + "'");
+    auto result = UploadInner(outfile, response, info);
+    epilog_(result);
+    return result;
+}
+
+RetCode FastBootDriver::UploadInner(const std::string& outfile, std::string* response,
+                                    std::vector<std::string>* info) {
     RetCode ret;
     int dsize;
-    if ((ret = RawCommand(Commands::UPLOAD, response, info, &dsize))) {
+    if ((ret = RawCommand(FB_CMD_UPLOAD, response, info, &dsize))) {
         error_ = "Upload request failed: " + error_;
         return ret;
     }
@@ -270,8 +326,8 @@ RetCode FastBootDriver::Upload(const std::string& outfile, std::string* response
 }
 
 // Helpers
-void FastBootDriver::SetInfoCallback(std::function<void(std::string&)> info) {
-    info_cb_ = info;
+void FastBootDriver::SetInfoCallback(std::function<void(const std::string&)> info) {
+    info_ = info;
 }
 
 const std::string FastBootDriver::RCString(RetCode rc) {
@@ -308,6 +364,15 @@ RetCode FastBootDriver::WaitForDisconnect() {
 }
 
 /****************************** PROTECTED *************************************/
+RetCode FastBootDriver::RawCommand(const std::string& cmd, const std::string& message,
+                                   std::string* response, std::vector<std::string>* info,
+                                   int* dsize) {
+    prolog_(message);
+    auto result = RawCommand(cmd, response, info, dsize);
+    epilog_(result);
+    return result;
+}
+
 RetCode FastBootDriver::RawCommand(const std::string& cmd, std::string* response,
                                    std::vector<std::string>* info, int* dsize) {
     error_ = "";  // Clear any pending error
@@ -327,7 +392,7 @@ RetCode FastBootDriver::RawCommand(const std::string& cmd, std::string* response
 
 RetCode FastBootDriver::DownloadCommand(uint32_t size, std::string* response,
                                         std::vector<std::string>* info) {
-    std::string cmd(android::base::StringPrintf("%s%08" PRIx32, Commands::DOWNLOAD.c_str(), size));
+    std::string cmd(android::base::StringPrintf("%s:%08" PRIx32, FB_CMD_DOWNLOAD, size));
     RetCode ret;
     if ((ret = RawCommand(cmd, response, info))) {
         return ret;
@@ -360,7 +425,7 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
         std::string input(status);
         if (android::base::StartsWith(input, "INFO")) {
             std::string tmp = input.substr(strlen("INFO"));
-            info_cb_(tmp);
+            info_(tmp);
             add_info(std::move(tmp));
         } else if (android::base::StartsWith(input, "OKAY")) {
             set_response(input.substr(strlen("OKAY")));
@@ -392,16 +457,6 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
 std::string FastBootDriver::ErrnoStr(const std::string& msg) {
     return android::base::StringPrintf("%s (%s)", msg.c_str(), strerror(errno));
 }
-
-const std::string FastBootDriver::Commands::BOOT = "boot";
-const std::string FastBootDriver::Commands::CONTINUE = "continue";
-const std::string FastBootDriver::Commands::DOWNLOAD = "download:";
-const std::string FastBootDriver::Commands::ERASE = "erase:";
-const std::string FastBootDriver::Commands::FLASH = "flash:";
-const std::string FastBootDriver::Commands::GET_VAR = "getvar:";
-const std::string FastBootDriver::Commands::REBOOT = "reboot";
-const std::string FastBootDriver::Commands::SET_ACTIVE = "set_active:";
-const std::string FastBootDriver::Commands::UPLOAD = "upload";
 
 /******************************* PRIVATE **************************************/
 RetCode FastBootDriver::SendBuffer(int fd, size_t size) {

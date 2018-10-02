@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "engine.h"
+#include "fastboot.h"
 
 #include <gtest/gtest.h>
 
