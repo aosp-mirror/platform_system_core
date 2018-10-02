@@ -316,6 +316,18 @@ size_t MemoryRange::Read(uint64_t addr, void* dst, size_t size) {
   return memory_->Read(read_addr, dst, read_length);
 }
 
+void MemoryRanges::Insert(MemoryRange* memory) {
+  maps_.emplace(memory->offset() + memory->length(), memory);
+}
+
+size_t MemoryRanges::Read(uint64_t addr, void* dst, size_t size) {
+  auto entry = maps_.upper_bound(addr);
+  if (entry != maps_.end()) {
+    return entry->second->Read(addr, dst, size);
+  }
+  return 0;
+}
+
 bool MemoryOffline::Init(const std::string& file, uint64_t offset) {
   auto memory_file = std::make_shared<MemoryFileAtOffset>();
   if (!memory_file->Init(file, offset)) {

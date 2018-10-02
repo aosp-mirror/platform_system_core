@@ -297,7 +297,7 @@ TEST_F(ElfTest, rel_pc) {
   elf.FakeSetInterface(interface);
 
   elf.FakeSetValid(true);
-  MapInfo map_info(0x1000, 0x2000);
+  MapInfo map_info(nullptr, 0x1000, 0x2000);
 
   ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
 
