@@ -24,6 +24,7 @@
 
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <android/hardware/fastboot/1.0/IFastboot.h>
+#include <android/hardware/health/2.0/IHealth.h>
 
 #include "commands.h"
 #include "transport.h"
@@ -53,12 +54,14 @@ class FastbootDevice {
     android::sp<android::hardware::fastboot::V1_0::IFastboot> fastboot_hal() {
         return fastboot_hal_;
     }
+    android::sp<android::hardware::health::V2_0::IHealth> health_hal() { return health_hal_; }
 
   private:
     const std::unordered_map<std::string, CommandHandler> kCommandMap;
 
     std::unique_ptr<Transport> transport_;
     android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal_;
+    android::sp<android::hardware::health::V2_0::IHealth> health_hal_;
     android::sp<android::hardware::fastboot::V1_0::IFastboot> fastboot_hal_;
     std::vector<char> download_data_;
 };
