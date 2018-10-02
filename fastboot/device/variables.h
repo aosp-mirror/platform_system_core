@@ -55,7 +55,8 @@ bool GetHardwareRevision(FastbootDevice* device, const std::vector<std::string>&
 bool GetVariant(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
 bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string>& args,
                            std::string* message);
-
+bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& args,
+                       std::string* message);
 // Helpers for getvar all.
 std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device);
 std::vector<std::vector<std::string>> GetAllPartitionArgsNoSlot(FastbootDevice* device);

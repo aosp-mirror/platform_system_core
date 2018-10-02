@@ -96,6 +96,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
             {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
             {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
+            {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}}};
 
     if (args.size() < 2) {
