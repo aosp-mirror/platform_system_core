@@ -84,6 +84,9 @@ int main(int argc, char** argv) {
     CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
     CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
 
+    // These below mounts are done in first stage init so that first stage mount can mount
+    // subdirectories of /mnt/{vendor,product}/.  Other mounts, not required by first stage mount,
+    // should be done in rc files.
     // Mount staging areas for devices managed by vold
     // See storage config details at http://source.android.com/devices/storage/
     CHECKCALL(mount("tmpfs", "/mnt", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
