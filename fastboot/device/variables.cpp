@@ -24,6 +24,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <healthhalutils/HealthHalUtils.h>
 
 #include "fastboot_device.h"
 #include "flashing.h"
@@ -111,6 +112,30 @@ bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string
             });
     if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
         *message = "Unable to get off mode charge state";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                       std::string* message) {
+    using android::hardware::health::V2_0::HealthInfo;
+    using android::hardware::health::V2_0::Result;
+
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        *message = "Health HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = health_hal->getHealthInfo([&](Result result, HealthInfo info) {
+        *message = std::to_string(info.legacy.batteryVoltage);
+        ret = result;
+    });
+    if (!ret_val.isOk() || (ret != Result::SUCCESS)) {
+        *message = "Unable to get battery voltage";
         return false;
     }
 
