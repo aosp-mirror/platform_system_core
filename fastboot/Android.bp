@@ -207,7 +207,6 @@ cc_library_host_static {
     cpp_std: "c++17",
     srcs: [
         "bootimg_utils.cpp",
-        "engine.cpp",
         "fastboot.cpp",
         "fs.cpp",
         "socket.cpp",

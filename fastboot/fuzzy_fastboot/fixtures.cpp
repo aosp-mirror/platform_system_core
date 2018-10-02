@@ -121,8 +121,7 @@ void FastBootTest::SetUp() {
     } else {
         ASSERT_EQ(device_path, cb_scratch);  // The path can not change
     }
-    fb = std::unique_ptr<FastBootDriver>(
-            new FastBootDriver(transport.get(), [](std::string&) {}, true));
+    fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
 }
 
 void FastBootTest::TearDown() {
@@ -204,8 +203,7 @@ void FastBootTest::SetLockState(bool unlock, bool assert_change) {
             putchar('.');
         }
         device_path = cb_scratch;
-        fb = std::unique_ptr<FastBootDriver>(
-                new FastBootDriver(transport.get(), [](std::string&) {}, true));
+        fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
         if (assert_change) {
             ASSERT_EQ(fb->GetVar("unlocked", &resp), SUCCESS) << "getvar:unlocked failed";
             ASSERT_EQ(resp, unlock ? "yes" : "no")
