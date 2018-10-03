@@ -147,10 +147,8 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
     if (candidate.empty()) return "";
 
-    auto context = fs_mgr_get_context(mount_point);
-    if (!context.empty()) context = ",rootcontext="s + context;
     return "override_creds=off,"s + kLowerdirOption + mount_point + "," + kUpperdirOption +
-           candidate + kUpperName + ",workdir=" + candidate + kWorkName + context;
+           candidate + kUpperName + ",workdir=" + candidate + kWorkName;
 }
 
 bool fs_mgr_system_root_image(const fstab* fstab) {
@@ -219,6 +217,15 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
     return false;
 }
 
+bool fs_mgr_overlayfs_verity_enabled(const std::string& basename_mount_point) {
+    auto found = false;
+    fs_mgr_update_verity_state(
+            [&basename_mount_point, &found](fstab_rec*, const char* mount_point, int, int) {
+                if (mount_point && (basename_mount_point == mount_point)) found = true;
+            });
+    return found;
+}
+
 bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
     if (!fsrec) return false;
 
@@ -242,14 +249,7 @@ bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
 
     if (!fs_mgr_overlayfs_enabled(fsrec)) return false;
 
-    // Verity enabled?
-    const auto basename_mount_point(android::base::Basename(fsrec_mount_point));
-    auto found = false;
-    fs_mgr_update_verity_state(
-            [&basename_mount_point, &found](fstab_rec*, const char* mount_point, int, int) {
-                if (mount_point && (basename_mount_point == mount_point)) found = true;
-            });
-    return !found;
+    return !fs_mgr_overlayfs_verity_enabled(android::base::Basename(fsrec_mount_point));
 }
 
 bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
@@ -394,6 +394,15 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
             }
         }
         if (!duplicate_or_more_specific) mounts.emplace_back(new_mount_point);
+    }
+    // if not itemized /system or /, system as root, fake up
+    // fs_mgr_wants_overlayfs evaluation of /system as candidate.
+
+    if ((std::find(mounts.begin(), mounts.end(), "/system") == mounts.end()) &&
+        !fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/") &&
+        !fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/system") &&
+        !fs_mgr_overlayfs_verity_enabled("system")) {
+        mounts.emplace_back("/system");
     }
     return mounts;
 }
