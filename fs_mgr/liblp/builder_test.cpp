@@ -495,3 +495,28 @@ TEST(liblp, AlignedFreeSpace) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 512, 1);
     ASSERT_EQ(builder, nullptr);
 }
+
+TEST(liblp, HasDefaultGroup) {
+    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+
+    EXPECT_FALSE(builder->AddGroup("default", 0));
+}
+
+TEST(liblp, GroupSizeLimits) {
+    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("google", 16384));
+
+    Partition* partition = builder->AddPartition("system", "google", TEST_GUID, 0);
+    ASSERT_NE(partition, nullptr);
+    EXPECT_TRUE(builder->ResizePartition(partition, 8192));
+    EXPECT_EQ(partition->size(), 8192);
+    EXPECT_TRUE(builder->ResizePartition(partition, 16384));
+    EXPECT_EQ(partition->size(), 16384);
+    EXPECT_FALSE(builder->ResizePartition(partition, 32768));
+    EXPECT_EQ(partition->size(), 16384);
+}

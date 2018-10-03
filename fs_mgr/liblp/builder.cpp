@@ -79,8 +79,9 @@ void ZeroExtent::AddTo(LpMetadata* out) const {
     out->extents.push_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0});
 }
 
-Partition::Partition(const std::string& name, const std::string& guid, uint32_t attributes)
-    : name_(name), guid_(guid), attributes_(attributes), size_(0) {}
+Partition::Partition(const std::string& name, const std::string& group_name,
+                     const std::string& guid, uint32_t attributes)
+    : name_(name), group_name_(group_name), guid_(guid), attributes_(attributes), size_(0) {}
 
 void Partition::AddExtent(std::unique_ptr<Extent>&& extent) {
     size_ += extent->num_sectors() * LP_SECTOR_SIZE;
@@ -126,6 +127,17 @@ void Partition::ShrinkTo(uint64_t aligned_size) {
         extents_.pop_back();
     }
     DCHECK(size_ == aligned_size);
+}
+
+uint64_t Partition::BytesOnDisk() const {
+    uint64_t sectors = 0;
+    for (const auto& extent : extents_) {
+        if (!extent->AsLinearExtent()) {
+            continue;
+        }
+        sectors += extent->num_sectors();
+    }
+    return sectors * LP_SECTOR_SIZE;
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& block_device,
@@ -175,14 +187,23 @@ MetadataBuilder::MetadataBuilder() {
     header_.header_size = sizeof(header_);
     header_.partitions.entry_size = sizeof(LpMetadataPartition);
     header_.extents.entry_size = sizeof(LpMetadataExtent);
+    header_.groups.entry_size = sizeof(LpMetadataPartitionGroup);
 }
 
 bool MetadataBuilder::Init(const LpMetadata& metadata) {
     geometry_ = metadata.geometry;
 
+    for (const auto& group : metadata.groups) {
+        std::string group_name = GetPartitionGroupName(group);
+        if (!AddGroup(group_name, group.maximum_size)) {
+            return false;
+        }
+    }
+
     for (const auto& partition : metadata.partitions) {
-        Partition* builder = AddPartition(GetPartitionName(partition), GetPartitionGuid(partition),
-                                          partition.attributes);
+        std::string group_name = GetPartitionGroupName(metadata.groups[partition.group_index]);
+        Partition* builder = AddPartition(GetPartitionName(partition), group_name,
+                                          GetPartitionGuid(partition), partition.attributes);
         if (!builder) {
             return false;
         }
@@ -292,11 +313,29 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     geometry_.alignment_offset = device_info_.alignment_offset;
     geometry_.block_device_size = device_info_.size;
     geometry_.logical_block_size = device_info.logical_block_size;
+
+    if (!AddGroup("default", 0)) {
+        return false;
+    }
+    return true;
+}
+
+bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_size) {
+    if (FindGroup(group_name)) {
+        LERROR << "Group already exists: " << group_name;
+        return false;
+    }
+    groups_.push_back(std::make_unique<PartitionGroup>(group_name, maximum_size));
     return true;
 }
 
 Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& guid,
                                          uint32_t attributes) {
+    return AddPartition(name, "default", guid, attributes);
+}
+
+Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& group_name,
+                                         const std::string& guid, uint32_t attributes) {
     if (name.empty()) {
         LERROR << "Partition must have a non-empty name.";
         return nullptr;
@@ -305,7 +344,11 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
         LERROR << "Attempting to create duplication partition with name: " << name;
         return nullptr;
     }
-    partitions_.push_back(std::make_unique<Partition>(name, guid, attributes));
+    if (!FindGroup(group_name)) {
+        LERROR << "Could not find partition group: " << group_name;
+        return nullptr;
+    }
+    partitions_.push_back(std::make_unique<Partition>(name, group_name, guid, attributes));
     return partitions_.back().get();
 }
 
@@ -318,6 +361,26 @@ Partition* MetadataBuilder::FindPartition(const std::string& name) {
     return nullptr;
 }
 
+PartitionGroup* MetadataBuilder::FindGroup(const std::string& group_name) const {
+    for (const auto& group : groups_) {
+        if (group->name() == group_name) {
+            return group.get();
+        }
+    }
+    return nullptr;
+}
+
+uint64_t MetadataBuilder::TotalSizeOfGroup(PartitionGroup* group) const {
+    uint64_t total = 0;
+    for (const auto& partition : partitions_) {
+        if (partition->group_name() != group->name()) {
+            continue;
+        }
+        total += partition->BytesOnDisk();
+    }
+    return total;
+}
+
 void MetadataBuilder::RemovePartition(const std::string& name) {
     for (auto iter = partitions_.begin(); iter != partitions_.end(); iter++) {
         if ((*iter)->name() == name) {
@@ -328,8 +391,23 @@ void MetadataBuilder::RemovePartition(const std::string& name) {
 }
 
 bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
-    // Figure out how much we need to allocate.
+    PartitionGroup* group = FindGroup(partition->group_name());
+    CHECK(group);
+
+    // Figure out how much we need to allocate, and whether our group has
+    // enough space remaining.
     uint64_t space_needed = aligned_size - partition->size();
+    if (group->maximum_size() > 0) {
+        uint64_t group_size = TotalSizeOfGroup(group);
+        if (group_size >= group->maximum_size() ||
+            group->maximum_size() - group_size < space_needed) {
+            LERROR << "Partition " << partition->name() << " is part of group " << group->name()
+                   << " which does not have enough space free (" << space_needed << "requested, "
+                   << group_size << " used out of " << group->maximum_size();
+            return false;
+        }
+    }
+
     uint64_t sectors_needed = space_needed / LP_SECTOR_SIZE;
     DCHECK(sectors_needed * LP_SECTOR_SIZE == space_needed);
 
@@ -441,6 +519,20 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
     metadata->header = header_;
     metadata->geometry = geometry_;
 
+    std::map<std::string, size_t> group_indices;
+    for (const auto& group : groups_) {
+        LpMetadataPartitionGroup out = {};
+
+        if (group->name().size() > sizeof(out.name)) {
+            LERROR << "Partition group name is too long: " << group->name();
+            return nullptr;
+        }
+        strncpy(out.name, group->name().c_str(), sizeof(out.name));
+        out.maximum_size = group->maximum_size();
+
+        metadata->groups.push_back(out);
+    }
+
     // Flatten the partition and extent structures into an LpMetadata, which
     // makes it very easy to validate, serialize, or pass on to device-mapper.
     for (const auto& partition : partitions_) {
@@ -475,6 +567,7 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
 
     metadata->header.partitions.num_entries = static_cast<uint32_t>(metadata->partitions.size());
     metadata->header.extents.num_entries = static_cast<uint32_t>(metadata->extents.size());
+    metadata->header.groups.num_entries = static_cast<uint32_t>(metadata->groups.size());
     return metadata;
 }
 
@@ -530,8 +623,10 @@ bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_s
         ShrinkPartition(partition, aligned_size);
     }
 
-    LINFO << "Partition " << partition->name() << " will resize from " << old_size << " bytes to "
-          << aligned_size << " bytes";
+    if (partition->size() != old_size) {
+        LINFO << "Partition " << partition->name() << " will resize from " << old_size
+              << " bytes to " << aligned_size << " bytes";
+    }
     return true;
 }
 
