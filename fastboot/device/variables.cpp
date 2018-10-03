@@ -96,6 +96,56 @@ bool GetVariant(FastbootDevice* device, const std::vector<std::string>& /* args 
     return true;
 }
 
+bool GetBatteryVoltageHelper(FastbootDevice* device, int32_t* battery_voltage) {
+    using android::hardware::health::V2_0::HealthInfo;
+    using android::hardware::health::V2_0::Result;
+
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = health_hal->getHealthInfo([&](Result result, HealthInfo info) {
+        *battery_voltage = info.legacy.batteryVoltage;
+        ret = result;
+    });
+    if (!ret_val.isOk() || (ret != Result::SUCCESS)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                     std::string* message) {
+    int32_t battery_voltage = 0;
+    if (!GetBatteryVoltageHelper(device, &battery_voltage)) {
+        *message = "Unable to read battery voltage";
+        return false;
+    }
+
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = fastboot_hal->getBatteryVoltageFlashingThreshold(
+            [&](int32_t voltage_threshold, Result result) {
+                *message = battery_voltage >= voltage_threshold ? "yes" : "no";
+                ret = result;
+            });
+
+    if (!ret_val.isOk() || ret.status != Status::SUCCESS) {
+        *message = "Unable to get battery voltage flashing threshold";
+        return false;
+    }
+
+    return true;
+}
+
 bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string>& /* args */,
                            std::string* message) {
     auto fastboot_hal = device->fastboot_hal();
@@ -120,26 +170,13 @@ bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string
 
 bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& /* args */,
                        std::string* message) {
-    using android::hardware::health::V2_0::HealthInfo;
-    using android::hardware::health::V2_0::Result;
-
-    auto health_hal = device->health_hal();
-    if (!health_hal) {
-        *message = "Health HAL not found";
-        return false;
+    int32_t battery_voltage = 0;
+    if (GetBatteryVoltageHelper(device, &battery_voltage)) {
+        *message = std::to_string(battery_voltage);
+        return true;
     }
-
-    Result ret;
-    auto ret_val = health_hal->getHealthInfo([&](Result result, HealthInfo info) {
-        *message = std::to_string(info.legacy.batteryVoltage);
-        ret = result;
-    });
-    if (!ret_val.isOk() || (ret != Result::SUCCESS)) {
-        *message = "Unable to get battery voltage";
-        return false;
-    }
-
-    return true;
+    *message = "Unable to get battery voltage";
+    return false;
 }
 
 bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& /* args */,
