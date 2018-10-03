@@ -23,7 +23,6 @@
 #include <android-base/file.h>
 #include <ext4_utils/ext4_utils.h>
 #include <openssl/sha.h>
-#include <uuid/uuid.h>
 
 #include "utility.h"
 
@@ -78,15 +77,6 @@ void SHA256(const void* data, size_t length, uint8_t out[32]) {
     SHA256_Init(&c);
     SHA256_Update(&c, data, length);
     SHA256_Final(out, &c);
-}
-
-std::string GetPartitionGuid(const LpMetadataPartition& partition) {
-    // 32 hex characters, four hyphens. Unfortunately libext2_uuid provides no
-    // macro to assist with buffer sizing.
-    static const size_t kGuidLen = 36;
-    char buffer[kGuidLen + 1];
-    uuid_unparse_upper(partition.guid, buffer);
-    return buffer;
 }
 
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix) {

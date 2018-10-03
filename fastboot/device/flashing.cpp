@@ -146,8 +146,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& partition_name, bool
         if (builder->FindPartition(name)) {
             continue;
         }
-        std::string guid = GetPartitionGuid(partition);
-        if (!builder->AddPartition(name, guid, partition.attributes)) {
+        if (!builder->AddPartition(name, partition.attributes)) {
             return device->WriteFail("Unable to add partition: " + name);
         }
     }

@@ -35,7 +35,6 @@ cc_library {
         "libcrypto",
         "libcrypto_utils",
         "libsparse",
-        "libext2_uuid",
         "libext4_utils",
         "libz",
     ],
