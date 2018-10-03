@@ -52,10 +52,11 @@
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <utime.h>
-#include <winsock2.h>
 #include <windows.h>
+#include <winsock2.h>
 #include <ws2tcpip.h>
 
 #include <memory>   // unique_ptr
@@ -92,7 +93,7 @@ extern int adb_open(const char* path, int options);
 extern int adb_creat(const char* path, int mode);
 extern int adb_read(int fd, void* buf, int len);
 extern int adb_write(int fd, const void* buf, int len);
-extern int adb_lseek(int fd, int pos, int where);
+extern int64_t adb_lseek(int fd, int64_t pos, int where);
 extern int adb_shutdown(int fd, int direction = SHUT_RDWR);
 extern int adb_close(int fd);
 extern int adb_register_socket(SOCKET s);
@@ -315,24 +316,23 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include <cutils/sockets.h>
 #include <fcntl.h>
-#include <poll.h>
-#include <signal.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-
-#include <pthread.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdarg.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <string>
+
+#include <cutils/sockets.h>
 
 #define OS_PATH_SEPARATORS "/"
 #define OS_PATH_SEPARATOR '/'
@@ -443,12 +443,15 @@ static __inline__  int  adb_write(int  fd, const void*  buf, size_t  len)
 #undef   write
 #define  write  ___xxx_write
 
-static __inline__ int   adb_lseek(int  fd, int  pos, int  where)
-{
+static __inline__ int64_t adb_lseek(int fd, int64_t pos, int where) {
+#if defined(__APPLE__)
     return lseek(fd, pos, where);
+#else
+    return lseek64(fd, pos, where);
+#endif
 }
-#undef   lseek
-#define  lseek   ___xxx_lseek
+#undef lseek
+#define lseek ___xxx_lseek
 
 static __inline__  int    adb_unlink(const char*  path)
 {
