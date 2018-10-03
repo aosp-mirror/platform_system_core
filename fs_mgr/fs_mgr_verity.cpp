@@ -89,24 +89,21 @@ static RSA *load_key(const char *path)
 {
     uint8_t key_data[ANDROID_PUBKEY_ENCODED_SIZE];
 
-    FILE* f = fopen(path, "r");
+    auto f = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path, "re"), fclose};
     if (!f) {
         LERROR << "Can't open " << path;
-        return NULL;
+        return nullptr;
     }
 
-    if (!fread(key_data, sizeof(key_data), 1, f)) {
+    if (!fread(key_data, sizeof(key_data), 1, f.get())) {
         LERROR << "Could not read key!";
-        fclose(f);
-        return NULL;
+        return nullptr;
     }
 
-    fclose(f);
-
-    RSA* key = NULL;
+    RSA* key = nullptr;
     if (!android_pubkey_decode(key_data, sizeof(key_data), &key)) {
         LERROR << "Could not parse key!";
-        return NULL;
+        return nullptr;
     }
 
     return key;
@@ -368,7 +365,6 @@ static int metadata_add(FILE *fp, long start, const char *tag,
 static int metadata_find(const char *fname, const char *stag,
         unsigned int slength, off64_t *offset)
 {
-    FILE *fp = NULL;
     char tag[METADATA_TAG_MAX_LENGTH + 1];
     int rc = -1;
     int n;
@@ -380,75 +376,64 @@ static int metadata_find(const char *fname, const char *stag,
         return -1;
     }
 
-    fp = fopen(fname, "r+");
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(fname, "re+"), fclose};
 
     if (!fp) {
         PERROR << "Failed to open " << fname;
-        goto out;
+        return -1;
     }
 
     /* check magic */
-    if (fseek(fp, start, SEEK_SET) < 0 ||
-        fread(&magic, sizeof(magic), 1, fp) != 1) {
+    if (fseek(fp.get(), start, SEEK_SET) < 0 || fread(&magic, sizeof(magic), 1, fp.get()) != 1) {
         PERROR << "Failed to read magic from " << fname;
-        goto out;
+        return -1;
     }
 
     if (magic != METADATA_MAGIC) {
         magic = METADATA_MAGIC;
 
-        if (fseek(fp, start, SEEK_SET) < 0 ||
-            fwrite(&magic, sizeof(magic), 1, fp) != 1) {
+        if (fseek(fp.get(), start, SEEK_SET) < 0 ||
+            fwrite(&magic, sizeof(magic), 1, fp.get()) != 1) {
             PERROR << "Failed to write magic to " << fname;
-            goto out;
+            return -1;
         }
 
-        rc = metadata_add(fp, start + sizeof(magic), stag, slength, offset);
+        rc = metadata_add(fp.get(), start + sizeof(magic), stag, slength, offset);
         if (rc < 0) {
             PERROR << "Failed to add metadata to " << fname;
         }
 
-        goto out;
+        return rc;
     }
 
     start += sizeof(magic);
 
     while (1) {
-        n = fscanf(fp, "%" STRINGIFY(METADATA_TAG_MAX_LENGTH) "s %u\n",
-                tag, &length);
+        n = fscanf(fp.get(), "%" STRINGIFY(METADATA_TAG_MAX_LENGTH) "s %u\n", tag, &length);
 
         if (n == 2 && strcmp(tag, METADATA_EOD)) {
             /* found a tag */
-            start = ftell(fp);
+            start = ftell(fp.get());
 
             if (!strcmp(tag, stag) && length == slength) {
                 *offset = start;
-                rc = 0;
-                goto out;
+                return 0;
             }
 
             start += length;
 
-            if (fseek(fp, length, SEEK_CUR) < 0) {
+            if (fseek(fp.get(), length, SEEK_CUR) < 0) {
                 PERROR << "Failed to seek " << fname;
-                goto out;
+                return -1;
             }
         } else {
-            rc = metadata_add(fp, start, stag, slength, offset);
+            rc = metadata_add(fp.get(), start, stag, slength, offset);
             if (rc < 0) {
                 PERROR << "Failed to write metadata to " << fname;
             }
-            goto out;
+            return rc;
         }
-   }
-
-out:
-    if (fp) {
-        fflush(fp);
-        fclose(fp);
     }
-
-    return rc;
 }
 
 static int write_verity_state(const char *fname, off64_t offset, int32_t mode)
