@@ -139,7 +139,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
     auto fstab = fs_mgr_read_fstab("/proc/mounts");
     ASSERT_NE(fstab, nullptr);
 
-    std::unique_ptr<std::FILE, int (*)(std::FILE*)> mounts(setmntent("/proc/mounts", "r"),
+    std::unique_ptr<std::FILE, int (*)(std::FILE*)> mounts(setmntent("/proc/mounts", "re"),
                                                            endmntent);
     ASSERT_NE(mounts, nullptr);
 
