@@ -52,12 +52,11 @@ extern void fatal(const char *fmt, ...);
 
 typedef const struct FHClassRec_* FHClass;
 typedef struct FHRec_* FH;
-typedef struct EventHookRec_* EventHook;
 
 typedef struct FHClassRec_ {
     void (*_fh_init)(FH);
     int (*_fh_close)(FH);
-    int (*_fh_lseek)(FH, int, int);
+    int64_t (*_fh_lseek)(FH, int64_t, int);
     int (*_fh_read)(FH, void*, int);
     int (*_fh_write)(FH, const void*, int);
     int (*_fh_writev)(FH, const adb_iovec*, int);
@@ -65,7 +64,7 @@ typedef struct FHClassRec_ {
 
 static void _fh_file_init(FH);
 static int _fh_file_close(FH);
-static int _fh_file_lseek(FH, int, int);
+static int64_t _fh_file_lseek(FH, int64_t, int);
 static int _fh_file_read(FH, void*, int);
 static int _fh_file_write(FH, const void*, int);
 static int _fh_file_writev(FH, const adb_iovec*, int);
@@ -81,7 +80,7 @@ static const FHClassRec _fh_file_class = {
 
 static void _fh_socket_init(FH);
 static int _fh_socket_close(FH);
-static int _fh_socket_lseek(FH, int, int);
+static int64_t _fh_socket_lseek(FH, int64_t, int);
 static int _fh_socket_read(FH, void*, int);
 static int _fh_socket_write(FH, const void*, int);
 static int _fh_socket_writev(FH, const adb_iovec*, int);
@@ -318,10 +317,8 @@ static int _fh_file_writev(FH f, const adb_iovec* iov, int iovcnt) {
     return wrote_bytes;
 }
 
-static int _fh_file_lseek(FH f, int pos, int origin) {
+static int64_t _fh_file_lseek(FH f, int64_t pos, int origin) {
     DWORD method;
-    DWORD result;
-
     switch (origin) {
         case SEEK_SET:
             method = FILE_BEGIN;
@@ -337,14 +334,13 @@ static int _fh_file_lseek(FH f, int pos, int origin) {
             return -1;
     }
 
-    result = SetFilePointer(f->fh_handle, pos, nullptr, method);
-    if (result == INVALID_SET_FILE_POINTER) {
+    LARGE_INTEGER li = {.QuadPart = pos};
+    if (!SetFilePointerEx(f->fh_handle, li, &li, method)) {
         errno = EIO;
         return -1;
-    } else {
-        f->eof = 0;
     }
-    return (int)result;
+    f->eof = 0;
+    return li.QuadPart;
 }
 
 /**************************************************************************/
@@ -491,14 +487,12 @@ ssize_t adb_writev(int fd, const adb_iovec* iov, int iovcnt) {
     return f->clazz->_fh_writev(f, iov, iovcnt);
 }
 
-int adb_lseek(int fd, int pos, int where) {
+int64_t adb_lseek(int fd, int64_t pos, int where) {
     FH f = _fh_from_int(fd, __func__);
-
     if (!f) {
         errno = EBADF;
         return -1;
     }
-
     return f->clazz->_fh_lseek(f, pos, where);
 }
 
@@ -644,7 +638,7 @@ static int _fh_socket_close(FH f) {
     return 0;
 }
 
-static int _fh_socket_lseek(FH f, int pos, int origin) {
+static int64_t _fh_socket_lseek(FH f, int64_t pos, int origin) {
     errno = EPIPE;
     return -1;
 }
