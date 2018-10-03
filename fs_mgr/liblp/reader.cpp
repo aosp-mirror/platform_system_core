@@ -188,7 +188,8 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
         return false;
     }
     if (!ValidateTableBounds(header, header.partitions) ||
-        !ValidateTableBounds(header, header.extents)) {
+        !ValidateTableBounds(header, header.extents) ||
+        !ValidateTableBounds(header, header.groups)) {
         LERROR << "Logical partition metadata has invalid table bounds.";
         return false;
     }
@@ -200,6 +201,10 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
     }
     if (header.extents.entry_size != sizeof(LpMetadataExtent)) {
         LERROR << "Logical partition metadata has invalid extent table entry size.";
+        return false;
+    }
+    if (header.groups.entry_size != sizeof(LpMetadataPartitionGroup)) {
+        LERROR << "Logical partition metadata has invalid group table entry size.";
         return false;
     }
     return true;
@@ -257,6 +262,10 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
             LERROR << "Logical partition has invalid extent list.";
             return nullptr;
         }
+        if (partition.group_index >= header.groups.num_entries) {
+            LERROR << "Logical partition has invalid group index.";
+            return nullptr;
+        }
 
         metadata->partitions.push_back(partition);
     }
@@ -269,6 +278,16 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
 
         metadata->extents.push_back(extent);
     }
+
+    cursor = buffer.get() + header.groups.offset;
+    for (size_t i = 0; i < header.groups.num_entries; i++) {
+        LpMetadataPartitionGroup group = {};
+        memcpy(&group, cursor, sizeof(group));
+        cursor += header.groups.entry_size;
+
+        metadata->groups.push_back(group);
+    }
+
     return metadata;
 }
 
@@ -343,6 +362,10 @@ static std::string NameFromFixedArray(const char* name, size_t buffer_size) {
 
 std::string GetPartitionName(const LpMetadataPartition& partition) {
     return NameFromFixedArray(partition.name, sizeof(partition.name));
+}
+
+std::string GetPartitionGroupName(const LpMetadataPartitionGroup& group) {
+    return NameFromFixedArray(group.name, sizeof(group.name));
 }
 
 }  // namespace fs_mgr
