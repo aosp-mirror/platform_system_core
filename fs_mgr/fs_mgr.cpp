@@ -529,8 +529,18 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     errno = 0;
     ret = mount(source, target, rec->fs_type, mountflags, rec->fs_options);
     save_errno = errno;
-    PINFO << __FUNCTION__ << "(source=" << source << ",target=" << target
-          << ",type=" << rec->fs_type << ")=" << ret;
+    const char* target_missing = "";
+    const char* source_missing = "";
+    if (save_errno == ENOENT) {
+        if (access(target, F_OK)) {
+            target_missing = "(missing)";
+        } else if (access(source, F_OK)) {
+            source_missing = "(missing)";
+        }
+        errno = save_errno;
+    }
+    PINFO << __FUNCTION__ << "(source=" << source << source_missing << ",target=" << target
+          << target_missing << ",type=" << rec->fs_type << ")=" << ret;
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
