@@ -730,21 +730,19 @@ static std::set<std::string> extract_boot_devices(const fstab& fstab) {
 
 struct fstab *fs_mgr_read_fstab(const char *fstab_path)
 {
-    FILE *fstab_file;
     struct fstab *fstab;
 
-    fstab_file = fopen(fstab_path, "r");
+    auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(fstab_path, "re"), fclose};
     if (!fstab_file) {
         PERROR << __FUNCTION__<< "(): cannot open file: '" << fstab_path << "'";
         return nullptr;
     }
 
-    fstab = fs_mgr_read_fstab_file(fstab_file, !strcmp("/proc/mounts", fstab_path));
+    fstab = fs_mgr_read_fstab_file(fstab_file.get(), !strcmp("/proc/mounts", fstab_path));
     if (!fstab) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << fstab_path << "'";
     }
 
-    fclose(fstab_file);
     return fstab;
 }
 

@@ -1235,29 +1235,25 @@ int fs_mgr_swapon_all(struct fstab *fstab)
              * on a system (all the memory comes from the same pool) so
              * we can assume the device number is 0.
              */
-            FILE *zram_fp;
-            FILE *zram_mcs_fp;
-
             if (fstab->recs[i].max_comp_streams >= 0) {
-               zram_mcs_fp = fopen(ZRAM_CONF_MCS, "r+");
-              if (zram_mcs_fp == NULL) {
-                LERROR << "Unable to open zram conf comp device "
-                       << ZRAM_CONF_MCS;
-                ret = -1;
-                continue;
-              }
-              fprintf(zram_mcs_fp, "%d\n", fstab->recs[i].max_comp_streams);
-              fclose(zram_mcs_fp);
+                auto zram_mcs_fp = std::unique_ptr<FILE, decltype(&fclose)>{
+                        fopen(ZRAM_CONF_MCS, "re"), fclose};
+                if (zram_mcs_fp == NULL) {
+                    LERROR << "Unable to open zram conf comp device " << ZRAM_CONF_MCS;
+                    ret = -1;
+                    continue;
+                }
+                fprintf(zram_mcs_fp.get(), "%d\n", fstab->recs[i].max_comp_streams);
             }
 
-            zram_fp = fopen(ZRAM_CONF_DEV, "r+");
+            auto zram_fp =
+                    std::unique_ptr<FILE, decltype(&fclose)>{fopen(ZRAM_CONF_DEV, "re+"), fclose};
             if (zram_fp == NULL) {
                 LERROR << "Unable to open zram conf device " << ZRAM_CONF_DEV;
                 ret = -1;
                 continue;
             }
-            fprintf(zram_fp, "%u\n", fstab->recs[i].zram_size);
-            fclose(zram_fp);
+            fprintf(zram_fp.get(), "%u\n", fstab->recs[i].zram_size);
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_WAIT &&
