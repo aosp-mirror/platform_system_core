@@ -400,6 +400,7 @@ on post-fs-data
 
     # Make sure we have the device encryption key.
     start vold
+    exec - system system -- /system/bin/vdc checkpoint prepareDriveForCheckpoint /data
     installkey /data
 
     # Start bootcharting as soon as possible after the data partition is

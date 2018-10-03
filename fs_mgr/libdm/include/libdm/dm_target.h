@@ -156,6 +156,20 @@ class DmTargetVerityString final : public DmTarget {
     std::string target_string_;
 };
 
+// dm-bow is the backup on write target that can provide checkpoint capability
+// for file systems that do not support checkpoints natively
+class DmTargetBow final : public DmTarget {
+  public:
+    DmTargetBow(uint64_t start, uint64_t length, const std::string& target_string)
+        : DmTarget(start, length), target_string_(target_string) {}
+
+    std::string name() const override { return "bow"; }
+    std::string GetParameterString() const override { return target_string_; }
+
+  private:
+    std::string target_string_;
+};
+
 }  // namespace dm
 }  // namespace android
 
