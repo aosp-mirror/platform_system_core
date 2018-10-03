@@ -441,9 +441,6 @@ TEST_F(Conformance, SparseBlockSupport0) {
         ASSERT_TRUE(*sparse) << "Sparse file creation failed on: " << bs;
         EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
         EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
-        EXPECT_EQ(fb->Download(*sparse, true), SUCCESS)
-                << "Download sparse with crc failed: " << sparse.Rep();
-        EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
     }
 }
 
@@ -462,9 +459,6 @@ TEST_F(Conformance, SparseBlockSupport1) {
                 << "Adding data failed to sparse file: " << sparse.Rep();
         EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
         EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
-        EXPECT_EQ(fb->Download(*sparse, true), SUCCESS)
-                << "Download sparse with crc failed: " << sparse.Rep();
-        EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
     }
 }
 
@@ -473,9 +467,6 @@ TEST_F(Conformance, SparseDownload0) {
     SparseWrapper sparse(4096, 4096);
     ASSERT_TRUE(*sparse) << "Sparse image creation failed";
     EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Download(*sparse, true), SUCCESS)
-            << "Download sparse with crc failed: " << sparse.Rep();
     EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
 }
 
@@ -486,9 +477,6 @@ TEST_F(Conformance, SparseDownload1) {
     ASSERT_EQ(sparse_file_add_data(*sparse, buf.data(), buf.size(), 9), 0)
             << "Adding data failed to sparse file: " << sparse.Rep();
     EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Download(*sparse, true), SUCCESS)
-            << "Download sparse with crc failed: " << sparse.Rep();
     EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
 }
 
@@ -502,9 +490,6 @@ TEST_F(Conformance, SparseDownload2) {
     ASSERT_EQ(sparse_file_add_data(*sparse, buf.data(), buf.size(), 1), 0)
             << "Adding data failed to sparse file: " << sparse.Rep();
     EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Download(*sparse, true), SUCCESS)
-            << "Download sparse with crc failed: " << sparse.Rep();
     EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
 }
 
@@ -537,9 +522,6 @@ TEST_F(Conformance, SparseDownload3) {
     }
     EXPECT_EQ(fb->Download(*sparse), SUCCESS) << "Download sparse failed: " << sparse.Rep();
     EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Download(*sparse, true), SUCCESS)
-            << "Download sparse with crc failed: " << sparse.Rep();
-    EXPECT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed: " << sparse.Rep();
 }
 
 TEST_F(Conformance, SparseVersionCheck) {
@@ -552,24 +534,6 @@ TEST_F(Conformance, SparseVersionCheck) {
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
 
-    // It can either reject this download or reject it during flash
-    if (HandleResponse() != DEVICE_FAIL) {
-        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
-                << "Flashing an invalid sparse version should fail " << sparse.Rep();
-    }
-}
-
-TEST_F(Conformance, SparseCRCCheck) {
-    SparseWrapper sparse(4096, 4096);
-    ASSERT_TRUE(*sparse) << "Sparse image creation failed";
-    std::vector<char> buf = RandomBuf(4096);
-    ASSERT_EQ(sparse_file_add_data(*sparse, buf.data(), buf.size(), 0), 0)
-            << "Adding data failed to sparse file: " << sparse.Rep();
-    ASSERT_TRUE(SparseToBuf(*sparse, &buf, true)) << "Sparse buffer creation failed";
-    // Flip a bit in the crc
-    buf.back() = buf.back() ^ 0x01;
-    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
-    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
     // It can either reject this download or reject it during flash
     if (HandleResponse() != DEVICE_FAIL) {
         EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
