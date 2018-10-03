@@ -343,9 +343,6 @@ TEST(liblp, TooManyPartitions) {
         ASSERT_NE(partition, nullptr);
     }
     ASSERT_NE(partition, nullptr);
-    // Add one extent to any partition to fill up more space - we're at 508
-    // bytes after this, out of 512.
-    ASSERT_TRUE(builder->ResizePartition(partition, 1024));
 
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
