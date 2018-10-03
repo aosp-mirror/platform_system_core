@@ -162,7 +162,7 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
  */
 static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
                                    std::vector<MountEntry>* emulatedPartitions, bool dump) {
-    std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
+    std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "re"), endmntent);
     if (fp == nullptr) {
         PLOG(ERROR) << "Failed to open /proc/mounts";
         return false;
