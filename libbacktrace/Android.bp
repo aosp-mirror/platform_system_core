@@ -27,15 +27,6 @@ cc_defaults {
             enabled: false,
         },
     },
-
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
 }
 
 libbacktrace_sources = [
@@ -108,7 +99,7 @@ cc_library {
     whole_static_libs: ["libdemangle"],
 }
 
-cc_library_shared {
+cc_test_library {
     name: "libbacktrace_test",
     defaults: ["libbacktrace_common"],
     host_supported: true,
@@ -121,6 +112,21 @@ cc_library_shared {
     shared_libs: [
         "libunwindstack",
     ],
+    relative_install_path: "backtrace_test_libs",
+
+    target: {
+        linux_glibc: {
+            // The host uses rosegment, which isn't supported yet.
+            ldflags: [
+                "-Wl,--no-rosegment",
+            ],
+            // This forces the creation of eh_frame with unwind information
+            // for host.
+            cflags: [
+                "-fcxx-exceptions"
+            ],
+        },
+    },
 }
 
 //-------------------------------------------------------------------------
@@ -128,12 +134,12 @@ cc_library_shared {
 //-------------------------------------------------------------------------
 cc_test {
     name: "backtrace_test",
+    isolated: true,
     defaults: ["libbacktrace_common"],
     host_supported: true,
     srcs: [
         "backtrace_offline_test.cpp",
         "backtrace_test.cpp",
-        "GetPss.cpp",
     ],
 
     cflags: [
@@ -143,7 +149,6 @@ cc_test {
     ],
 
     shared_libs: [
-        "libbacktrace_test",
         "libbacktrace",
         "libbase",
         "liblog",
@@ -152,17 +157,10 @@ cc_test {
 
     group_static_libs: true,
 
-    target: {
-        android: {
-            cflags: ["-DENABLE_PSS_TESTS"],
-            shared_libs: [
-                "libutils",
-            ],
-        },
-        linux_glibc: {
-            static_libs: ["libutils"],
-        },
-    },
+    // So that the dlopen can find the libbacktrace_test.so.
+    ldflags: [
+        "-Wl,--rpath,${ORIGIN}/../backtrace_test_libs",
+    ],
 
     test_suites: ["device-tests"],
     data: [
