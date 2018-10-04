@@ -102,7 +102,54 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   if (!(flags & PROT_READ)) {
     return nullptr;
   }
-  return new MemoryRange(process_memory, start, end - start, 0);
+
+  // Need to verify that this elf is valid. It's possible that
+  // only part of the elf file to be mapped into memory is in the executable
+  // map. In this case, there will be another read-only map that includes the
+  // first part of the elf file. This is done if the linker rosegment
+  // option is used.
+  std::unique_ptr<MemoryRange> memory(new MemoryRange(process_memory, start, end - start, 0));
+  bool valid;
+  uint64_t max_size;
+  Elf::GetInfo(memory.get(), &valid, &max_size);
+  if (valid) {
+    // Valid elf, we are done.
+    return memory.release();
+  }
+
+  if (name.empty() || maps_ == nullptr) {
+    return nullptr;
+  }
+
+  // Find the read-only map that has the same name and has an offset closest
+  // to the current offset but less than the offset of the current map.
+  // For shared libraries, there should be a r-x map that has a non-zero
+  // offset and then a r-- map that has a zero offset.
+  // For shared libraries loaded from an apk, there should be a r-x map that
+  // has a non-zero offset and then a r-- map that has a non-zero offset less
+  // than the offset from the r-x map.
+  uint64_t closest_offset = 0;
+  MapInfo* ro_map_info = nullptr;
+  for (auto map_info : *maps_) {
+    if (map_info->flags == PROT_READ && map_info->name == name && map_info->offset < offset &&
+        map_info->offset >= closest_offset) {
+      ro_map_info = map_info;
+      closest_offset = ro_map_info->offset;
+    }
+  }
+
+  if (ro_map_info != nullptr) {
+    // Make sure that relative pc values are corrected properly.
+    elf_offset = offset - closest_offset;
+
+    MemoryRanges* ranges = new MemoryRanges;
+    ranges->Insert(new MemoryRange(process_memory, ro_map_info->start,
+                                   ro_map_info->end - ro_map_info->start, 0));
+    ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
+
+    return ranges;
+  }
+  return nullptr;
 }
 
 Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {
