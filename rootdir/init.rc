@@ -269,6 +269,12 @@ on init
     # that they can be chown'd to system:system later on boot
     write /sys/class/leds/vibrator/trigger "transient"
 
+    # Setup APEX mount point and its security context
+    mount tmpfs tmpfs /apex nodev noexec nosuid
+    chmod 0755 /apex
+    chown root root /apex
+    restorecon /apex
+
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
 on property:sys.boot_from_charger_mode=1
@@ -523,6 +529,8 @@ on post-fs-data
     mkdir /data/mediadrm 0770 mediadrm mediadrm
 
     mkdir /data/anr 0775 system system
+
+    mkdir /data/apex 0770 root root
 
     # NFC: create data/nfc for nv storage
     mkdir /data/nfc 0770 nfc nfc
