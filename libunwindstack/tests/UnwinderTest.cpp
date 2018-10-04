@@ -58,51 +58,54 @@ class UnwinderTest : public ::testing::Test {
  protected:
   static void SetUpTestCase() {
     maps_.FakeClear();
-    MapInfo* info = new MapInfo(0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so");
+    MapInfo* info =
+        new MapInfo(&maps_, 0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so");
     ElfFake* elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x10000, 0x12000, 0, PROT_READ | PROT_WRITE, "[stack]");
+    info = new MapInfo(&maps_, 0x10000, 0x12000, 0, PROT_READ | PROT_WRITE, "[stack]");
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x13000, 0x15000, 0, PROT_READ | PROT_WRITE | MAPS_FLAGS_DEVICE_MAP,
+    info = new MapInfo(&maps_, 0x13000, 0x15000, 0, PROT_READ | PROT_WRITE | MAPS_FLAGS_DEVICE_MAP,
                        "/dev/fake_device");
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x20000, 0x22000, 0, PROT_READ | PROT_WRITE, "/system/fake/libunwind.so");
+    info = new MapInfo(&maps_, 0x20000, 0x22000, 0, PROT_READ | PROT_WRITE,
+                       "/system/fake/libunwind.so");
     elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x23000, 0x24000, 0, PROT_READ | PROT_WRITE, "/fake/libanother.so");
+    info = new MapInfo(&maps_, 0x23000, 0x24000, 0, PROT_READ | PROT_WRITE, "/fake/libanother.so");
     elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so");
+    info = new MapInfo(&maps_, 0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so");
     elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk");
+    info = new MapInfo(&maps_, 0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk");
     elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
+    info = new MapInfo(&maps_, 0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.vdex");
+    info = new MapInfo(&maps_, 0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       "/fake/fake.vdex");
     info->load_bias = 0;
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0xa5000, 0xa6000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+    info = new MapInfo(&maps_, 0xa5000, 0xa6000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
                        "/fake/fake_load_bias.so");
     elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
@@ -110,7 +113,7 @@ class UnwinderTest : public ::testing::Test {
     elf->FakeSetLoadBias(0x5000);
     maps_.FakeAddMapInfo(info);
 
-    info = new MapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+    info = new MapInfo(&maps_, 0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
                        "/fake/fake_offset.oat");
     elf = new ElfFake(new MemoryFake);
     info->elf.reset(elf);
