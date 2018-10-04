@@ -77,7 +77,7 @@ endif
 #
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    sbin dev proc sys system data odm oem acct config storage mnt $(BOARD_ROOT_EXTRA_FOLDERS)); \
+    sbin dev proc sys system data odm oem acct config storage mnt apex $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/bin $(TARGET_ROOT_OUT)/bin; \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
