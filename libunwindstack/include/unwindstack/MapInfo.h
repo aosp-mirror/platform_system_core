@@ -29,26 +29,33 @@
 namespace unwindstack {
 
 // Forward declarations.
+class Maps;
 class Memory;
 
 struct MapInfo {
-  MapInfo() = default;
-  MapInfo(uint64_t start, uint64_t end) : start(start), end(end) {}
-  MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const char* name)
-      : start(start),
+  MapInfo(Maps* maps) : maps_(maps) {}
+  MapInfo(Maps* maps, uint64_t start, uint64_t end) : maps_(maps), start(start), end(end) {}
+  MapInfo(Maps* maps, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+          const char* name)
+      : maps_(maps),
+        start(start),
         end(end),
         offset(offset),
         flags(flags),
         name(name),
         load_bias(static_cast<uint64_t>(-1)) {}
-  MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const std::string& name)
-      : start(start),
+  MapInfo(Maps* maps, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+          const std::string& name)
+      : maps_(maps),
+        start(start),
         end(end),
         offset(offset),
         flags(flags),
         name(name),
         load_bias(static_cast<uint64_t>(-1)) {}
   ~MapInfo() = default;
+
+  Maps* maps_ = nullptr;
 
   uint64_t start = 0;
   uint64_t end = 0;
@@ -69,13 +76,13 @@ struct MapInfo {
 
   uint64_t GetLoadBias(const std::shared_ptr<Memory>& process_memory);
 
+  Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
+
  private:
   MapInfo(const MapInfo&) = delete;
   void operator=(const MapInfo&) = delete;
 
   Memory* GetFileMemory();
-
-  Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
 
   // Protect the creation of the elf object.
   std::mutex mutex_;
