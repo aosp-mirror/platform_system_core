@@ -841,14 +841,19 @@ static int adb_sideload_host(const char* filename) {
         return -1;
     }
 
-    std::string service = android::base::StringPrintf(
-        "sideload-host:%d:%d", static_cast<int>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
+    std::string service =
+            android::base::StringPrintf("sideload-host:%" PRId64 ":%d",
+                                        static_cast<int64_t>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
     unique_fd device_fd(adb_connect(service, &error));
     if (device_fd < 0) {
-        // Try falling back to the older (<= K) sideload method. Maybe this
-        // is an older device that doesn't support sideload-host.
         fprintf(stderr, "adb: sideload connection failed: %s\n", error.c_str());
+
+        // If this is a small enough package, maybe this is an older device that doesn't
+        // support sideload-host. Try falling back to the older (<= K) sideload method.
+        if (sb.st_size > INT_MAX) {
+            return -1;
+        }
         fprintf(stderr, "adb: trying pre-KitKat sideload method...\n");
         return adb_sideload_legacy(filename, package_fd, static_cast<int>(sb.st_size));
     }
@@ -858,7 +863,7 @@ static int adb_sideload_host(const char* filename) {
 
     char buf[SIDELOAD_HOST_BLOCK_SIZE];
 
-    size_t xfer = 0;
+    int64_t xfer = 0;
     int last_percent = -1;
     while (true) {
         if (!ReadFdExactly(device_fd, buf, 8)) {
@@ -874,20 +879,22 @@ static int adb_sideload_host(const char* filename) {
             return 0;
         }
 
-        int block = strtol(buf, nullptr, 10);
-
-        size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
-        if (offset >= static_cast<size_t>(sb.st_size)) {
-            fprintf(stderr, "adb: failed to read block %d past end\n", block);
+        int64_t block = strtoll(buf, nullptr, 10);
+        int64_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
+        if (offset >= static_cast<int64_t>(sb.st_size)) {
+            fprintf(stderr,
+                    "adb: failed to read block %" PRId64 " at offset %" PRId64 ", past end %" PRId64
+                    "\n",
+                    block, offset, static_cast<int64_t>(sb.st_size));
             return -1;
         }
 
         size_t to_write = SIDELOAD_HOST_BLOCK_SIZE;
-        if ((offset + SIDELOAD_HOST_BLOCK_SIZE) > static_cast<size_t>(sb.st_size)) {
+        if ((offset + SIDELOAD_HOST_BLOCK_SIZE) > static_cast<int64_t>(sb.st_size)) {
             to_write = sb.st_size - offset;
         }
 
-        if (adb_lseek(package_fd, offset, SEEK_SET) != static_cast<int>(offset)) {
+        if (adb_lseek(package_fd, offset, SEEK_SET) != offset) {
             fprintf(stderr, "adb: failed to seek to package block: %s\n", strerror(errno));
             return -1;
         }

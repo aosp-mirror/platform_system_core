@@ -36,6 +36,7 @@ struct LpMetadata {
     LpMetadataHeader header;
     std::vector<LpMetadataPartition> partitions;
     std::vector<LpMetadataExtent> extents;
+    std::vector<LpMetadataPartitionGroup> groups;
 };
 
 // Place an initial partition table on the device. This will overwrite the
@@ -68,6 +69,7 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 // Helper to extract safe C++ strings from partition info.
 std::string GetPartitionName(const LpMetadataPartition& partition);
 std::string GetPartitionGuid(const LpMetadataPartition& partition);
+std::string GetPartitionGroupName(const LpMetadataPartitionGroup& group);
 
 // Helper to return a slot number for a slot suffix.
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix);

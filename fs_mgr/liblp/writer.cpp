@@ -56,14 +56,17 @@ std::string SerializeMetadata(const LpMetadata& input) {
                            metadata.partitions.size() * sizeof(LpMetadataPartition));
     std::string extents(reinterpret_cast<const char*>(metadata.extents.data()),
                         metadata.extents.size() * sizeof(LpMetadataExtent));
+    std::string groups(reinterpret_cast<const char*>(metadata.groups.data()),
+                       metadata.groups.size() * sizeof(LpMetadataPartitionGroup));
 
     // Compute positions of tables.
     header.partitions.offset = 0;
     header.extents.offset = header.partitions.offset + partitions.size();
-    header.tables_size = header.extents.offset + extents.size();
+    header.groups.offset = header.extents.offset + extents.size();
+    header.tables_size = header.groups.offset + groups.size();
 
     // Compute payload checksum.
-    std::string tables = partitions + extents;
+    std::string tables = partitions + extents + groups;
     SHA256(tables.data(), tables.size(), header.tables_checksum);
 
     // Compute header checksum.

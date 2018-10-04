@@ -529,8 +529,18 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     errno = 0;
     ret = mount(source, target, rec->fs_type, mountflags, rec->fs_options);
     save_errno = errno;
-    PINFO << __FUNCTION__ << "(source=" << source << ",target=" << target
-          << ",type=" << rec->fs_type << ")=" << ret;
+    const char* target_missing = "";
+    const char* source_missing = "";
+    if (save_errno == ENOENT) {
+        if (access(target, F_OK)) {
+            target_missing = "(missing)";
+        } else if (access(source, F_OK)) {
+            source_missing = "(missing)";
+        }
+        errno = save_errno;
+    }
+    PINFO << __FUNCTION__ << "(source=" << source << source_missing << ",target=" << target
+          << target_missing << ",type=" << rec->fs_type << ")=" << ret;
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
@@ -840,7 +850,7 @@ bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
 }
 
 bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
-    if (fs_mgr_is_checkpoint(rec)) {
+    if (fs_mgr_is_checkpoint_fs(rec)) {
         if (!strcmp(rec->fs_type, "f2fs")) {
             std::string opts(rec->fs_options);
 
@@ -850,9 +860,42 @@ bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
         } else {
             LERROR << rec->fs_type << " does not implement checkpoints.";
         }
-    } else if (rec->fs_mgr_flags & MF_CHECKPOINT_BLK) {
-        LERROR << "Block based checkpoint not implemented.";
-        return false;
+    } else if (fs_mgr_is_checkpoint_blk(rec)) {
+        call_vdc({"checkpoint", "restoreCheckpoint", rec->blk_device});
+
+        android::base::unique_fd fd(
+                TEMP_FAILURE_RETRY(open(rec->blk_device, O_RDONLY | O_CLOEXEC)));
+        if (!fd) {
+            PERROR << "Cannot open device " << rec->blk_device;
+            return false;
+        }
+
+        uint64_t size = get_block_device_size(fd) / 512;
+        if (!size) {
+            PERROR << "Cannot get device size";
+            return false;
+        }
+
+        android::dm::DmTable table;
+        if (!table.AddTarget(
+                    std::make_unique<android::dm::DmTargetBow>(0, size, rec->blk_device))) {
+            LERROR << "Failed to add Bow target";
+            return false;
+        }
+
+        DeviceMapper& dm = DeviceMapper::Instance();
+        if (!dm.CreateDevice("bow", table)) {
+            PERROR << "Failed to create bow device";
+            return false;
+        }
+
+        std::string name;
+        if (!dm.GetDmDevicePathByName("bow", &name)) {
+            PERROR << "Failed to get bow device name";
+            return false;
+        }
+
+        rec->blk_device = strdup(name.c_str());
     }
     return true;
 }
@@ -1300,29 +1343,25 @@ int fs_mgr_swapon_all(fstab* fstab) {
              * on a system (all the memory comes from the same pool) so
              * we can assume the device number is 0.
              */
-            FILE *zram_fp;
-            FILE *zram_mcs_fp;
-
             if (fstab->recs[i].max_comp_streams >= 0) {
-               zram_mcs_fp = fopen(ZRAM_CONF_MCS, "r+");
-              if (zram_mcs_fp == NULL) {
-                LERROR << "Unable to open zram conf comp device "
-                       << ZRAM_CONF_MCS;
-                ret = -1;
-                continue;
-              }
-              fprintf(zram_mcs_fp, "%d\n", fstab->recs[i].max_comp_streams);
-              fclose(zram_mcs_fp);
+                auto zram_mcs_fp = std::unique_ptr<FILE, decltype(&fclose)>{
+                        fopen(ZRAM_CONF_MCS, "re"), fclose};
+                if (zram_mcs_fp == NULL) {
+                    LERROR << "Unable to open zram conf comp device " << ZRAM_CONF_MCS;
+                    ret = -1;
+                    continue;
+                }
+                fprintf(zram_mcs_fp.get(), "%d\n", fstab->recs[i].max_comp_streams);
             }
 
-            zram_fp = fopen(ZRAM_CONF_DEV, "r+");
+            auto zram_fp =
+                    std::unique_ptr<FILE, decltype(&fclose)>{fopen(ZRAM_CONF_DEV, "re+"), fclose};
             if (zram_fp == NULL) {
                 LERROR << "Unable to open zram conf device " << ZRAM_CONF_DEV;
                 ret = -1;
                 continue;
             }
-            fprintf(zram_fp, "%u\n", fstab->recs[i].zram_size);
-            fclose(zram_fp);
+            fprintf(zram_fp.get(), "%u\n", fstab->recs[i].zram_size);
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_WAIT &&

@@ -42,6 +42,7 @@ using DmTarget = ::android::dm::DmTarget;
 using DmTargetLinear = ::android::dm::DmTargetLinear;
 using DmTargetZero = ::android::dm::DmTargetZero;
 using DmTargetAndroidVerity = ::android::dm::DmTargetAndroidVerity;
+using DmTargetBow = ::android::dm::DmTargetBow;
 using DmTargetTypeInfo = ::android::dm::DmTargetTypeInfo;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
@@ -108,6 +109,13 @@ class TargetParser final {
             std::string block_device = NextArg();
             return std::make_unique<DmTargetAndroidVerity>(start_sector, num_sectors, keyid,
                                                            block_device);
+        } else if (target_type == "bow") {
+            if (!HasArgs(1)) {
+                std::cerr << "Expected \"bow\" <block_device>" << std::endl;
+                return nullptr;
+            }
+            std::string block_device = NextArg();
+            return std::make_unique<DmTargetBow>(start_sector, num_sectors, block_device);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
