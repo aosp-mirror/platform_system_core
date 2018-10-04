@@ -23,6 +23,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
 #include <liblp/liblp.h>
 
@@ -44,7 +45,7 @@ static bool OpenPhysicalPartition(const std::string& name, PartitionHandle* hand
 
 static bool OpenLogicalPartition(const std::string& name, const std::string& slot,
                                  PartitionHandle* handle) {
-    std::optional<std::string> path = FindPhysicalPartition(LP_METADATA_PARTITION_NAME);
+    std::optional<std::string> path = FindPhysicalPartition(fs_mgr_get_super_partition_name());
     if (!path) {
         return false;
     }
@@ -100,7 +101,7 @@ static const LpMetadataPartition* FindLogicalPartition(const LpMetadata& metadat
 
 bool LogicalPartitionExists(const std::string& name, const std::string& slot_suffix,
                             bool* is_zero_length) {
-    auto path = FindPhysicalPartition(LP_METADATA_PARTITION_NAME);
+    auto path = FindPhysicalPartition(fs_mgr_get_super_partition_name());
     if (!path) {
         return false;
     }
@@ -149,7 +150,7 @@ std::vector<std::string> ListPartitions(FastbootDevice* device) {
     }
 
     // Next get logical partitions.
-    if (auto path = FindPhysicalPartition(LP_METADATA_PARTITION_NAME)) {
+    if (auto path = FindPhysicalPartition(fs_mgr_get_super_partition_name())) {
         uint32_t slot_number = SlotNumberForSlotSuffix(device->GetCurrentSlot());
         if (auto metadata = ReadMetadata(path->c_str(), slot_number)) {
             for (const auto& partition : metadata->partitions) {
