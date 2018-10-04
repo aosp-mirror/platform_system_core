@@ -55,6 +55,7 @@
 #include <ext4_utils/wipe.h>
 #include <fs_mgr_overlayfs.h>
 #include <libdm/dm.h>
+#include <liblp/metadata_format.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <linux/magic.h>
@@ -1539,4 +1540,8 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
     }
 
     return true;
+}
+
+std::string fs_mgr_get_super_partition_name(int /* slot */) {
+    return LP_METADATA_DEFAULT_PARTITION_NAME;
 }

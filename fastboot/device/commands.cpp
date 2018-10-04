@@ -27,6 +27,7 @@
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
+#include <fs_mgr.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <uuid/uuid.h>
@@ -310,7 +311,7 @@ class PartitionBuilder {
 };
 
 PartitionBuilder::PartitionBuilder(FastbootDevice* device) {
-    auto super_device = FindPhysicalPartition(LP_METADATA_PARTITION_NAME);
+    auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name());
     if (!super_device) {
         return;
     }
