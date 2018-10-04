@@ -570,23 +570,6 @@ static void InitAborter(const char* abort_message) {
     RebootSystem(ANDROID_RB_RESTART2, "bootloader");
 }
 
-static void InitKernelLogging(char* argv[]) {
-    // Make stdin/stdout/stderr all point to /dev/null.
-    int fd = open("/sys/fs/selinux/null", O_RDWR);
-    if (fd == -1) {
-        int saved_errno = errno;
-        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
-        errno = saved_errno;
-        PLOG(FATAL) << "Couldn't open /sys/fs/selinux/null";
-    }
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    if (fd > 2) close(fd);
-
-    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
-}
-
 static void GlobalSeccomp() {
     import_kernel_cmdline(false, [](const std::string& key, const std::string& value,
                                     bool in_qemu) {
@@ -643,7 +626,8 @@ int main(int argc, char** argv) {
         SetupSelinux(argv);
     }
 
-    InitKernelLogging(argv);
+    // We need to set up stdin/stdout/stderr again now that we're running in init's context.
+    InitKernelLogging(argv, InitAborter);
     LOG(INFO) << "init second stage started!";
 
     // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
