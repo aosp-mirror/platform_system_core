@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -119,11 +120,27 @@ class MemoryRange : public Memory {
 
   size_t Read(uint64_t addr, void* dst, size_t size) override;
 
+  uint64_t offset() { return offset_; }
+  uint64_t length() { return length_; }
+
  private:
   std::shared_ptr<Memory> memory_;
   uint64_t begin_;
   uint64_t length_;
   uint64_t offset_;
+};
+
+class MemoryRanges : public Memory {
+ public:
+  MemoryRanges() = default;
+  virtual ~MemoryRanges() = default;
+
+  void Insert(MemoryRange* memory);
+
+  size_t Read(uint64_t addr, void* dst, size_t size) override;
+
+ private:
+  std::map<uint64_t, std::unique_ptr<MemoryRange>> maps_;
 };
 
 class MemoryOffline : public Memory {
