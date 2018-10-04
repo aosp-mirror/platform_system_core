@@ -344,6 +344,50 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
     return ret;
 }
 
+bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string& mount_point,
+                                   bool* change) {
+    const auto top = overlay + kOverlayTopDir;
+    auto save_errno = errno;
+    auto missing = access(top.c_str(), F_OK);
+    errno = save_errno;
+    if (missing) return false;
+
+    const auto oldpath = top + (mount_point.empty() ? "" : ("/"s + mount_point));
+    const auto newpath = oldpath + ".teardown";
+    auto ret = fs_mgr_rm_all(newpath);
+    save_errno = errno;
+    if (!rename(oldpath.c_str(), newpath.c_str())) {
+        if (change) *change = true;
+    } else if (errno != ENOENT) {
+        ret = false;
+        PERROR << "mv " << oldpath << " " << newpath;
+    } else {
+        errno = save_errno;
+    }
+    ret &= fs_mgr_rm_all(newpath, change);
+    save_errno = errno;
+    if (!rmdir(newpath.c_str())) {
+        if (change) *change = true;
+    } else if (errno != ENOENT) {
+        ret = false;
+        PERROR << "rmdir " << newpath;
+    } else {
+        errno = save_errno;
+    }
+    if (!mount_point.empty()) {
+        save_errno = errno;
+        if (!rmdir(top.c_str())) {
+            if (change) *change = true;
+        } else if ((errno != ENOENT) && (errno != ENOTEMPTY)) {
+            ret = false;
+            PERROR << "rmdir " << top;
+        } else {
+            errno = save_errno;
+        }
+    }
+    return ret;
+}
+
 bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
     auto options = fs_mgr_get_overlayfs_options(mount_point);
     if (options.empty()) return false;
@@ -475,41 +519,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
                                              fs_mgr_read_fstab_default(), fs_mgr_free_fstab)
                                              .get(),
                                      mount_point);
-    auto ret = true;
-    const auto overlay = kOverlayMountPoint + kOverlayTopDir;
-    const auto oldpath = overlay + (mount_point ? "/"s + mount_point : ""s);
-    const auto newpath = oldpath + ".teardown";
-    ret &= fs_mgr_rm_all(newpath);
-    auto save_errno = errno;
-    if (!rename(oldpath.c_str(), newpath.c_str())) {
-        if (change) *change = true;
-    } else if (errno != ENOENT) {
-        ret = false;
-        PERROR << "mv " << oldpath << " " << newpath;
-    } else {
-        errno = save_errno;
-    }
-    ret &= fs_mgr_rm_all(newpath, change);
-    save_errno = errno;
-    if (!rmdir(newpath.c_str())) {
-        if (change) *change = true;
-    } else if (errno != ENOENT) {
-        ret = false;
-        PERROR << "rmdir " << newpath;
-    } else {
-        errno = save_errno;
-    }
-    if (mount_point) {
-        save_errno = errno;
-        if (!rmdir(overlay.c_str())) {
-            if (change) *change = true;
-        } else if ((errno != ENOENT) && (errno != ENOTEMPTY)) {
-            ret = false;
-            PERROR << "rmdir " << overlay;
-        } else {
-            errno = save_errno;
-        }
-    }
+    auto ret = fs_mgr_overlayfs_teardown_one(kOverlayMountPoint, mount_point ?: "", change);
     if (!fs_mgr_wants_overlayfs()) {
         // After obligatory teardown to make sure everything is clean, but if
         // we didn't want overlayfs in the the first place, we do not want to
