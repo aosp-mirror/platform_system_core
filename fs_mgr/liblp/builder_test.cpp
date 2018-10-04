@@ -22,16 +22,12 @@
 using namespace std;
 using namespace android::fs_mgr;
 
-static const char* TEST_GUID = "A799D1D6-669F-41D8-A3F0-EBB7572D8302";
-static const char* TEST_GUID2 = "A799D1D6-669F-41D8-A3F0-EBB7572D8303";
-
 TEST(liblp, BuildBasic) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
-    Partition* partition = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    Partition* partition = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(partition, nullptr);
     EXPECT_EQ(partition->name(), "system");
-    EXPECT_EQ(partition->guid(), TEST_GUID);
     EXPECT_EQ(partition->attributes(), LP_PARTITION_ATTR_READONLY);
     EXPECT_EQ(partition->size(), 0);
     EXPECT_EQ(builder->FindPartition("system"), partition);
@@ -43,7 +39,7 @@ TEST(liblp, BuildBasic) {
 TEST(liblp, ResizePartition) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
-    Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     EXPECT_EQ(builder->ResizePartition(system, 65536), true);
     EXPECT_EQ(system->size(), 65536);
@@ -94,7 +90,7 @@ TEST(liblp, PartitionAlignment) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
     // Test that we align up to one sector.
-    Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     EXPECT_EQ(builder->ResizePartition(system, 10000), true);
     EXPECT_EQ(system->size(), 12288);
@@ -171,9 +167,9 @@ TEST(liblp, InternalPartitionAlignment) {
     BlockDeviceInfo device_info(512 * 1024 * 1024, 768 * 1024, 753664, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 32 * 1024, 2);
 
-    Partition* a = builder->AddPartition("a", TEST_GUID, 0);
+    Partition* a = builder->AddPartition("a", 0);
     ASSERT_NE(a, nullptr);
-    Partition* b = builder->AddPartition("b", TEST_GUID2, 0);
+    Partition* b = builder->AddPartition("b", 0);
     ASSERT_NE(b, nullptr);
 
     // Add a bunch of small extents to each, interleaving.
@@ -214,7 +210,7 @@ TEST(liblp, UseAllDiskSpace) {
     EXPECT_EQ(builder->AllocatableSpace(), allocatable);
     EXPECT_EQ(builder->UsedSpace(), 0);
 
-    Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     EXPECT_EQ(builder->ResizePartition(system, allocatable), true);
     EXPECT_EQ(system->size(), allocatable);
@@ -229,8 +225,8 @@ TEST(liblp, UseAllDiskSpace) {
 TEST(liblp, BuildComplex) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
-    Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
-    Partition* vendor = builder->AddPartition("vendor", TEST_GUID2, LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
+    Partition* vendor = builder->AddPartition("vendor", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     ASSERT_NE(vendor, nullptr);
     EXPECT_EQ(builder->ResizePartition(system, 65536), true);
@@ -263,15 +259,15 @@ TEST(liblp, BuildComplex) {
 TEST(liblp, AddInvalidPartition) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
-    Partition* partition = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    Partition* partition = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(partition, nullptr);
 
     // Duplicate name.
-    partition = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    partition = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     EXPECT_EQ(partition, nullptr);
 
     // Empty name.
-    partition = builder->AddPartition("", TEST_GUID, LP_PARTITION_ATTR_READONLY);
+    partition = builder->AddPartition("", LP_PARTITION_ATTR_READONLY);
     EXPECT_EQ(partition, nullptr);
 }
 
@@ -282,8 +278,8 @@ TEST(liblp, BuilderExport) {
     unique_ptr<MetadataBuilder> builder =
             MetadataBuilder::New(kDiskSize, kMetadataSize, kMetadataSlots);
 
-    Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
-    Partition* vendor = builder->AddPartition("vendor", TEST_GUID2, LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
+    Partition* vendor = builder->AddPartition("vendor", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     ASSERT_NE(vendor, nullptr);
     EXPECT_EQ(builder->ResizePartition(system, 65536), true);
@@ -322,7 +318,6 @@ TEST(liblp, BuilderExport) {
     for (const auto& partition : exported->partitions) {
         Partition* original = builder->FindPartition(GetPartitionName(partition));
         ASSERT_NE(original, nullptr);
-        EXPECT_EQ(original->guid(), GetPartitionGuid(partition));
         for (size_t i = 0; i < partition.num_extents; i++) {
             const auto& extent = exported->extents[partition.first_extent_index + i];
             LinearExtent* original_extent = original->extents()[i]->AsLinearExtent();
@@ -337,8 +332,8 @@ TEST(liblp, BuilderExport) {
 TEST(liblp, BuilderImport) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
-    Partition* system = builder->AddPartition("system", TEST_GUID, LP_PARTITION_ATTR_READONLY);
-    Partition* vendor = builder->AddPartition("vendor", TEST_GUID2, LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
+    Partition* vendor = builder->AddPartition("vendor", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
     ASSERT_NE(vendor, nullptr);
     EXPECT_EQ(builder->ResizePartition(system, 65536), true);
@@ -357,11 +352,9 @@ TEST(liblp, BuilderImport) {
 
     EXPECT_EQ(system->size(), 98304);
     ASSERT_EQ(system->extents().size(), 2);
-    EXPECT_EQ(system->guid(), TEST_GUID);
     EXPECT_EQ(system->attributes(), LP_PARTITION_ATTR_READONLY);
     EXPECT_EQ(vendor->size(), 32768);
     ASSERT_EQ(vendor->extents().size(), 1);
-    EXPECT_EQ(vendor->guid(), TEST_GUID2);
     EXPECT_EQ(vendor->attributes(), LP_PARTITION_ATTR_READONLY);
 
     LinearExtent* system1 = system->extents()[0]->AsLinearExtent();
@@ -378,17 +371,7 @@ TEST(liblp, ExportNameTooLong) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
 
     std::string name = "abcdefghijklmnopqrstuvwxyz0123456789";
-    Partition* system = builder->AddPartition(name + name, TEST_GUID, LP_PARTITION_ATTR_READONLY);
-    EXPECT_NE(system, nullptr);
-
-    unique_ptr<LpMetadata> exported = builder->Export();
-    EXPECT_EQ(exported, nullptr);
-}
-
-TEST(liblp, ExportInvalidGuid) {
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
-
-    Partition* system = builder->AddPartition("system", "bad", LP_PARTITION_ATTR_READONLY);
+    Partition* system = builder->AddPartition(name + name, LP_PARTITION_ATTR_READONLY);
     EXPECT_NE(system, nullptr);
 
     unique_ptr<LpMetadata> exported = builder->Export();
@@ -483,7 +466,7 @@ TEST(liblp, AlignedExtentSize) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
-    Partition* partition = builder->AddPartition("system", TEST_GUID, 0);
+    Partition* partition = builder->AddPartition("system", 0);
     ASSERT_NE(partition, nullptr);
     ASSERT_TRUE(builder->ResizePartition(partition, 512));
     EXPECT_EQ(partition->size(), 4096);
@@ -511,7 +494,7 @@ TEST(liblp, GroupSizeLimits) {
 
     ASSERT_TRUE(builder->AddGroup("google", 16384));
 
-    Partition* partition = builder->AddPartition("system", "google", TEST_GUID, 0);
+    Partition* partition = builder->AddPartition("system", "google", 0);
     ASSERT_NE(partition, nullptr);
     EXPECT_TRUE(builder->ResizePartition(partition, 8192));
     EXPECT_EQ(partition->size(), 8192);
