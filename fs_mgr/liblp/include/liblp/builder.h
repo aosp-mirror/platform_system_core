@@ -112,8 +112,7 @@ class Partition final {
     friend class MetadataBuilder;
 
   public:
-    Partition(const std::string& name, const std::string& group_name, const std::string& guid,
-              uint32_t attributes);
+    Partition(const std::string& name, const std::string& group_name, uint32_t attributes);
 
     // Add a raw extent.
     void AddExtent(std::unique_ptr<Extent>&& extent);
@@ -128,7 +127,6 @@ class Partition final {
     const std::string& name() const { return name_; }
     const std::string& group_name() const { return group_name_; }
     uint32_t attributes() const { return attributes_; }
-    const std::string& guid() const { return guid_; }
     const std::vector<std::unique_ptr<Extent>>& extents() const { return extents_; }
     uint64_t size() const { return size_; }
 
@@ -137,7 +135,6 @@ class Partition final {
 
     std::string name_;
     std::string group_name_;
-    std::string guid_;
     std::vector<std::unique_ptr<Extent>> extents_;
     uint32_t attributes_;
     uint64_t size_;
@@ -190,11 +187,11 @@ class MetadataBuilder {
     // Add a partition, returning a handle so it can be sized as needed. If a
     // partition with the given name already exists, nullptr is returned.
     Partition* AddPartition(const std::string& name, const std::string& group_name,
-                            const std::string& guid, uint32_t attributes);
+                            uint32_t attributes);
 
     // Same as AddPartition above, but uses the default partition group which
     // has no size restrictions.
-    Partition* AddPartition(const std::string& name, const std::string& guid, uint32_t attributes);
+    Partition* AddPartition(const std::string& name, uint32_t attributes);
 
     // Delete a partition by name if it exists.
     void RemovePartition(const std::string& name);
