@@ -353,13 +353,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Partition already exists");
     }
 
-    // Make a random UUID, since they're not currently used.
-    uuid_t uuid;
-    char uuid_str[37];
-    uuid_generate_random(uuid);
-    uuid_unparse(uuid, uuid_str);
-
-    Partition* partition = builder->AddPartition(partition_name, uuid_str, 0);
+    Partition* partition = builder->AddPartition(partition_name, 0);
     if (!partition) {
         return device->WriteFail("Failed to add partition");
     }
