@@ -289,6 +289,12 @@ TEST_F(Conformance, GetVarAll) {
 TEST_F(Conformance, UnlockAbility) {
     std::string resp;
     std::vector<std::string> info;
+    // Userspace fastboot implementations do not have a way to get this
+    // information.
+    if (UserSpaceFastboot()) {
+        GTEST_LOG_(INFO) << "This test is skipped for userspace fastboot.";
+        return;
+    }
     EXPECT_EQ(fb->RawCommand("flashing get_unlock_ability", &resp, &info), SUCCESS)
             << "'flashing get_unlock_ability' failed";
     // There are two ways this can be reported, through info or the actual response
@@ -412,6 +418,10 @@ TEST_F(Conformance, LockAndUnlockPrompt) {
     ASSERT_TRUE(resp == "yes" || resp == "no")
             << "Device did not respond with 'yes' or 'no' for getvar:unlocked";
     bool curr = resp == "yes";
+    if (UserSpaceFastboot()) {
+        GTEST_LOG_(INFO) << "This test is skipped for userspace fastboot.";
+        return;
+    }
 
     for (int i = 0; i < 2; i++) {
         std::string action = !curr ? "unlock" : "lock";
