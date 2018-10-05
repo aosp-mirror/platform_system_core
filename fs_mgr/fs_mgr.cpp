@@ -37,6 +37,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <android-base/file.h>
@@ -1500,16 +1501,17 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
     bool system_root = android::base::GetProperty("ro.build.system_root_image", "") == "true";
 
     for (int i = 0; i < fstab->num_entries; i++) {
-        if (!fs_mgr_is_verified(&fstab->recs[i]) && !fs_mgr_is_avb(&fstab->recs[i])) {
+        auto fsrec = &fstab->recs[i];
+        if (!fs_mgr_is_verified(fsrec) && !fs_mgr_is_avb(fsrec)) {
             continue;
         }
 
         std::string mount_point;
-        if (system_root && !strcmp(fstab->recs[i].mount_point, "/")) {
+        if (system_root && !strcmp(fsrec->mount_point, "/")) {
             // In AVB, the dm device name is vroot instead of system.
-            mount_point = fs_mgr_is_avb(&fstab->recs[i]) ? "vroot" : "system";
+            mount_point = fs_mgr_is_avb(fsrec) ? "vroot" : "system";
         } else {
-            mount_point = basename(fstab->recs[i].mount_point);
+            mount_point = basename(fsrec->mount_point);
         }
 
         if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
@@ -1517,15 +1519,14 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
             continue;
         }
 
-        const char* status = nullptr;
+        const char* status;
         std::vector<DeviceMapper::TargetInfo> table;
         if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
-            if (fstab->recs[i].fs_mgr_flags & MF_VERIFYATBOOT) {
-                status = "V";
-            } else {
-                PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point.c_str();
+            if (!fs_mgr_is_verifyatboot(fsrec)) {
+                PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point;
                 continue;
             }
+            status = "V";
         } else {
             status = table[0].data.c_str();
         }
@@ -1535,7 +1536,7 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         // instead of [partition.vroot.verified].
         if (mount_point == "vroot") mount_point = "system";
         if (*status == 'C' || *status == 'V') {
-            callback(&fstab->recs[i], mount_point.c_str(), mode, *status);
+            callback(fsrec, mount_point.c_str(), mode, *status);
         }
     }
 
