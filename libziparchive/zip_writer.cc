@@ -97,7 +97,7 @@ ZipWriter::ZipWriter(FILE* f)
   }
 }
 
-ZipWriter::ZipWriter(ZipWriter&& writer)
+ZipWriter::ZipWriter(ZipWriter&& writer) noexcept
     : file_(writer.file_),
       seekable_(writer.seekable_),
       current_offset_(writer.current_offset_),
@@ -109,7 +109,7 @@ ZipWriter::ZipWriter(ZipWriter&& writer)
   writer.state_ = State::kError;
 }
 
-ZipWriter& ZipWriter::operator=(ZipWriter&& writer) {
+ZipWriter& ZipWriter::operator=(ZipWriter&& writer) noexcept {
   file_ = writer.file_;
   seekable_ = writer.seekable_;
   current_offset_ = writer.current_offset_;

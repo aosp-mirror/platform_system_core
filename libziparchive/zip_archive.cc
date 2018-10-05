@@ -903,7 +903,7 @@ class FileWriter : public zip_archive::Writer {
     return FileWriter(fd, declared_length);
   }
 
-  FileWriter(FileWriter&& other)
+  FileWriter(FileWriter&& other) noexcept
       : fd_(other.fd_),
         declared_length_(other.declared_length_),
         total_bytes_written_(other.total_bytes_written_) {

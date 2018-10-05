@@ -62,11 +62,17 @@ FileMap::FileMap(void)
 }
 
 // Move Constructor.
-FileMap::FileMap(FileMap&& other)
-    : mFileName(other.mFileName), mBasePtr(other.mBasePtr), mBaseLength(other.mBaseLength),
-      mDataOffset(other.mDataOffset), mDataPtr(other.mDataPtr), mDataLength(other.mDataLength)
+FileMap::FileMap(FileMap&& other) noexcept
+    : mFileName(other.mFileName),
+      mBasePtr(other.mBasePtr),
+      mBaseLength(other.mBaseLength),
+      mDataOffset(other.mDataOffset),
+      mDataPtr(other.mDataPtr),
+      mDataLength(other.mDataLength)
 #if defined(__MINGW32__)
-      , mFileHandle(other.mFileHandle), mFileMapping(other.mFileMapping)
+      ,
+      mFileHandle(other.mFileHandle),
+      mFileMapping(other.mFileMapping)
 #endif
 {
     other.mFileName = nullptr;
@@ -79,7 +85,7 @@ FileMap::FileMap(FileMap&& other)
 }
 
 // Move assign operator.
-FileMap& FileMap::operator=(FileMap&& other) {
+FileMap& FileMap::operator=(FileMap&& other) noexcept {
     mFileName = other.mFileName;
     mBasePtr = other.mBasePtr;
     mBaseLength = other.mBaseLength;

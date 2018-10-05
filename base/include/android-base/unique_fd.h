@@ -90,8 +90,8 @@ class unique_fd_impl final {
   explicit unique_fd_impl(int fd) { reset(fd); }
   ~unique_fd_impl() { reset(); }
 
-  unique_fd_impl(unique_fd_impl&& other) { reset(other.release()); }
-  unique_fd_impl& operator=(unique_fd_impl&& s) {
+  unique_fd_impl(unique_fd_impl&& other) noexcept { reset(other.release()); }
+  unique_fd_impl& operator=(unique_fd_impl&& s) noexcept {
     int fd = s.fd_;
     s.fd_ = -1;
     reset(fd, &s);

@@ -91,10 +91,10 @@ class ZipWriter {
   explicit ZipWriter(FILE* f);
 
   // Move constructor.
-  ZipWriter(ZipWriter&& zipWriter);
+  ZipWriter(ZipWriter&& zipWriter) noexcept;
 
   // Move assignment.
-  ZipWriter& operator=(ZipWriter&& zipWriter);
+  ZipWriter& operator=(ZipWriter&& zipWriter) noexcept;
 
   /**
    * Starts a new zip entry with the given path and flags.
