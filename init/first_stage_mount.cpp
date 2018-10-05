@@ -391,6 +391,12 @@ bool FirstStageMount::MountPartitions() {
         }
     }
 
+    // heads up for instantiating required device(s) for overlayfs logic
+    const auto devices = fs_mgr_overlayfs_required_devices(device_tree_fstab_.get());
+    for (auto const& device : devices) {
+        InitMappedDevice(device);
+    }
+
     fs_mgr_overlayfs_mount_all(device_tree_fstab_.get());
 
     return true;
