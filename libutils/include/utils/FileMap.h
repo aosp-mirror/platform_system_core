@@ -52,8 +52,8 @@ class FileMap {
 public:
     FileMap(void);
 
-    FileMap(FileMap&& f);
-    FileMap& operator=(FileMap&& f);
+    FileMap(FileMap&& f) noexcept;
+    FileMap& operator=(FileMap&& f) noexcept;
 
     /*
      * Create a new mapping on an open file.
