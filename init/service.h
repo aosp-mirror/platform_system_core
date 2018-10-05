@@ -21,7 +21,9 @@
 #include <sys/resource.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -81,6 +83,7 @@ class Service {
     void Reset();
     void Stop();
     void Terminate();
+    void Timeout();
     void Restart();
     void Reap(const siginfo_t& siginfo);
     void DumpState() const;
@@ -117,6 +120,8 @@ class Service {
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
     void set_sigstop(bool value) { sigstop_ = value; }
+    std::chrono::seconds restart_period() const { return restart_period_; }
+    std::optional<std::chrono::seconds> timeout_period() const { return timeout_period_; }
     const std::vector<std::string>& args() const { return args_; }
 
   private:
@@ -153,11 +158,13 @@ class Service {
     Result<Success> ParseMemcgSwappiness(const std::vector<std::string>& args);
     Result<Success> ParseNamespace(const std::vector<std::string>& args);
     Result<Success> ParseProcessRlimit(const std::vector<std::string>& args);
+    Result<Success> ParseRestartPeriod(const std::vector<std::string>& args);
     Result<Success> ParseSeclabel(const std::vector<std::string>& args);
     Result<Success> ParseSetenv(const std::vector<std::string>& args);
     Result<Success> ParseShutdown(const std::vector<std::string>& args);
     Result<Success> ParseSigstop(const std::vector<std::string>& args);
     Result<Success> ParseSocket(const std::vector<std::string>& args);
+    Result<Success> ParseTimeoutPeriod(const std::vector<std::string>& args);
     Result<Success> ParseFile(const std::vector<std::string>& args);
     Result<Success> ParseUser(const std::vector<std::string>& args);
     Result<Success> ParseWritepid(const std::vector<std::string>& args);
@@ -219,6 +226,9 @@ class Service {
     std::vector<std::pair<int, rlimit>> rlimits_;
 
     bool sigstop_ = false;
+
+    std::chrono::seconds restart_period_ = 5s;
+    std::optional<std::chrono::seconds> timeout_period_;
 
     std::vector<std::string> args_;
 
