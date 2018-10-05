@@ -102,9 +102,11 @@ int main(int argc, char** argv) {
 
     // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
     // talk to the outside world...
-    android::base::InitLogging(argv, &android::base::KernelLogger, [](const char*) {
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
-    });
+    // We need to set up stdin/stdout/stderr for child processes forked from first
+    // stage init as part of the mount process.  This closes /dev/console if the
+    // kernel had previously opened it.
+    auto reboot_bootloader = [](const char*) { RebootSystem(ANDROID_RB_RESTART2, "bootloader"); };
+    InitKernelLogging(argv, reboot_bootloader);
 
     if (!errors.empty()) {
         for (const auto& [error_string, error_errno] : errors) {
