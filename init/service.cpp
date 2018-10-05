@@ -627,6 +627,15 @@ Result<Success> Service::ParseProcessRlimit(const std::vector<std::string>& args
     return Success();
 }
 
+Result<Success> Service::ParseRestartPeriod(const std::vector<std::string>& args) {
+    int period;
+    if (!ParseInt(args[1], &period, 5)) {
+        return Error() << "restart_period value must be an integer >= 5";
+    }
+    restart_period_ = std::chrono::seconds(period);
+    return Success();
+}
+
 Result<Success> Service::ParseSeclabel(const std::vector<std::string>& args) {
     seclabel_ = args[1];
     return Success();
@@ -648,6 +657,15 @@ Result<Success> Service::ParseShutdown(const std::vector<std::string>& args) {
         return Success();
     }
     return Error() << "Invalid shutdown option";
+}
+
+Result<Success> Service::ParseTimeoutPeriod(const std::vector<std::string>& args) {
+    int period;
+    if (!ParseInt(args[1], &period, 1)) {
+        return Error() << "timeout_period value must be an integer >= 1";
+    }
+    timeout_period_ = std::chrono::seconds(period);
+    return Success();
 }
 
 template <typename T>
@@ -757,12 +775,16 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
                         {1,     1,    &Service::ParseOomScoreAdjust}},
         {"override",    {0,     0,    &Service::ParseOverride}},
         {"priority",    {1,     1,    &Service::ParsePriority}},
+        {"restart_period",
+                        {1,     1,    &Service::ParseRestartPeriod}},
         {"rlimit",      {3,     3,    &Service::ParseProcessRlimit}},
         {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
         {"setenv",      {2,     2,    &Service::ParseSetenv}},
         {"shutdown",    {1,     1,    &Service::ParseShutdown}},
         {"sigstop",     {0,     0,    &Service::ParseSigstop}},
         {"socket",      {3,     6,    &Service::ParseSocket}},
+        {"timeout_period",
+                        {1,     1,    &Service::ParseTimeoutPeriod}},
         {"user",        {1,     1,    &Service::ParseUser}},
         {"writepid",    {1,     kMax, &Service::ParseWritepid}},
     };
@@ -1018,6 +1040,18 @@ void Service::Terminate() {
     flags_ |= SVC_DISABLED;
     if (pid_) {
         KillProcessGroup(SIGTERM);
+        NotifyStateChange("stopping");
+    }
+}
+
+void Service::Timeout() {
+    // All process state flags will be taken care of in Reap(), we really just want to kill the
+    // process here when it times out.  Oneshot processes will transition to be disabled, and
+    // all other processes will transition to be restarting.
+    LOG(INFO) << "Service '" << name_ << "' expired its timeout of " << timeout_period_->count()
+              << " seconds and will now be killed";
+    if (pid_) {
+        KillProcessGroup(SIGKILL);
         NotifyStateChange("stopping");
     }
 }

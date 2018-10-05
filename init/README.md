@@ -262,6 +262,13 @@ runs the service.
 > Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().
 
+`restart_period <seconds>`
+> If a non-oneshot service exits, it will be restarted at its start time plus
+  this period. It defaults to 5s to rate limit crashing services.
+  This can be increased for services that are meant to run periodically. For
+  example, it may be set to 3600 to indicate that the service should run every hour
+  or 86400 to indicate that the service should run every day.
+
 `rlimit <resource> <cur> <max>`
 > This applies the given rlimit to the service. rlimits are inherited by child
   processes, so this effectively applies the given rlimit to the process tree
@@ -297,6 +304,12 @@ runs the service.
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
+
+`timeout_period <seconds>`
+> Provide a timeout after which point the service will be killed. The oneshot keyword is respected
+  here, so oneshot services do not automatically restart, however all other services will.
+  This is particularly useful for creating a periodic service combined with the restart_period
+  option described above.
 
 `user <username>`
 > Change to 'username' before exec'ing this service.
