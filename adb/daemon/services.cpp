@@ -202,6 +202,27 @@ unique_fd ShellService(const std::string& args, const atransport* transport) {
     return StartSubprocess(command.c_str(), terminal_type.c_str(), type, protocol);
 }
 
+static void spin_service(unique_fd fd) {
+    if (!__android_log_is_debuggable()) {
+        WriteFdExactly(fd.get(), "refusing to spin on non-debuggable build\n");
+        return;
+    }
+
+    // A service that creates an fdevent that's always pending, and then ignores it.
+    unique_fd pipe_read, pipe_write;
+    if (!Pipe(&pipe_read, &pipe_write)) {
+        WriteFdExactly(fd.get(), "failed to create pipe\n");
+        return;
+    }
+
+    fdevent_run_on_main_thread([fd = pipe_read.release()]() {
+        fdevent* fde = fdevent_create(fd, [](int, unsigned, void*) {}, nullptr);
+        fdevent_add(fde, FDE_READ);
+    });
+
+    WriteFdExactly(fd.get(), "spinning\n");
+}
+
 unique_fd daemon_service_to_fd(const char* name, atransport* transport) {
     if (!strncmp("dev:", name, 4)) {
         return unique_fd{unix_open(name + 4, O_RDWR | O_CLOEXEC)};
@@ -254,6 +275,9 @@ unique_fd daemon_service_to_fd(const char* name, atransport* transport) {
     } else if (!strcmp(name, "reconnect")) {
         return create_service_thread(
                 "reconnect", std::bind(reconnect_service, std::placeholders::_1, transport));
+    } else if (!strcmp(name, "spin")) {
+        return create_service_thread("spin", spin_service);
     }
+
     return unique_fd{};
 }
