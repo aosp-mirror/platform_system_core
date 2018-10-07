@@ -265,7 +265,7 @@ uid_t llkProcGetUid(pid_t tid) {
     }
     content.erase(pos);
     uid_t ret;
-    if (!android::base::ParseInt(content, &ret, uid_t(0))) {
+    if (!android::base::ParseUint(content, &ret, uid_t(0))) {
         return -1;
     }
     return ret;
