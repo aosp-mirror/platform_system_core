@@ -531,7 +531,7 @@ struct TagNameKey {
         name = std::string_view(alloc->c_str(), alloc->size());
     }
 
-    explicit TagNameKey(TagNameKey&& rval)
+    explicit TagNameKey(TagNameKey&& rval) noexcept
         : alloc(rval.alloc), name(rval.name.data(), rval.name.length()) {
         rval.alloc = nullptr;
     }

@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 2
+#define LP_METADATA_MAJOR_VERSION 3
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -67,7 +67,7 @@ extern "C" {
  *     | Geometry Backup    |
  *     +--------------------+
  */
-#define LP_METADATA_PARTITION_NAME "super"
+#define LP_METADATA_DEFAULT_PARTITION_NAME "super"
 
 /* Size of a sector is always 512 bytes for compatibility with the Linux kernel. */
 #define LP_SECTOR_SIZE 512
@@ -232,23 +232,20 @@ typedef struct LpMetadataPartition {
      */
     char name[36];
 
-    /* 36: Globally unique identifier (GUID) of this partition. */
-    uint8_t guid[16];
-
-    /* 52: Attributes for the partition (see LP_PARTITION_ATTR_* flags above). */
+    /* 36: Attributes for the partition (see LP_PARTITION_ATTR_* flags above). */
     uint32_t attributes;
 
-    /* 56: Index of the first extent owned by this partition. The extent will
+    /* 40: Index of the first extent owned by this partition. The extent will
      * start at logical sector 0. Gaps between extents are not allowed.
      */
     uint32_t first_extent_index;
 
-    /* 60: Number of extents in the partition. Every partition must have at
+    /* 44: Number of extents in the partition. Every partition must have at
      * least one extent.
      */
     uint32_t num_extents;
 
-    /* 64: Group this partition belongs to. */
+    /* 48: Group this partition belongs to. */
     uint32_t group_index;
 } __attribute__((packed)) LpMetadataPartition;
 

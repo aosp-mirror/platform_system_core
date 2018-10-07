@@ -27,6 +27,7 @@
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
+#include <fs_mgr.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <uuid/uuid.h>
@@ -97,6 +98,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
             {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
             {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
+            {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}}};
 
     if (args.size() < 2) {
@@ -310,7 +312,7 @@ class PartitionBuilder {
 };
 
 PartitionBuilder::PartitionBuilder(FastbootDevice* device) {
-    auto super_device = FindPhysicalPartition(LP_METADATA_PARTITION_NAME);
+    auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name());
     if (!super_device) {
         return;
     }
@@ -353,13 +355,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Partition already exists");
     }
 
-    // Make a random UUID, since they're not currently used.
-    uuid_t uuid;
-    char uuid_str[37];
-    uuid_generate_random(uuid);
-    uuid_unparse(uuid, uuid_str);
-
-    Partition* partition = builder->AddPartition(partition_name, uuid_str, 0);
+    Partition* partition = builder->AddPartition(partition_name, 0);
     if (!partition) {
         return device->WriteFail("Failed to add partition");
     }

@@ -56,7 +56,7 @@ public:
 
     sp(T* other);  // NOLINT(implicit)
     sp(const sp<T>& other);
-    sp(sp<T>&& other);
+    sp(sp<T>&& other) noexcept;
     template<typename U> sp(U* other);  // NOLINT(implicit)
     template<typename U> sp(const sp<U>& other);  // NOLINT(implicit)
     template<typename U> sp(sp<U>&& other);  // NOLINT(implicit)
@@ -67,7 +67,7 @@ public:
 
     sp& operator = (T* other);
     sp& operator = (const sp<T>& other);
-    sp& operator = (sp<T>&& other);
+    sp& operator=(sp<T>&& other) noexcept;
 
     template<typename U> sp& operator = (const sp<U>& other);
     template<typename U> sp& operator = (sp<U>&& other);
@@ -125,9 +125,8 @@ sp<T>::sp(const sp<T>& other)
         m_ptr->incStrong(this);
 }
 
-template<typename T>
-sp<T>::sp(sp<T>&& other)
-        : m_ptr(other.m_ptr) {
+template <typename T>
+sp<T>::sp(sp<T>&& other) noexcept : m_ptr(other.m_ptr) {
     other.m_ptr = nullptr;
 }
 
@@ -169,8 +168,8 @@ sp<T>& sp<T>::operator =(const sp<T>& other) {
     return *this;
 }
 
-template<typename T>
-sp<T>& sp<T>::operator =(sp<T>&& other) {
+template <typename T>
+sp<T>& sp<T>::operator=(sp<T>&& other) noexcept {
     T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
     if (oldPtr) oldPtr->decStrong(this);
     if (oldPtr != *const_cast<T* volatile*>(&m_ptr)) sp_report_race();

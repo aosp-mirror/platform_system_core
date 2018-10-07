@@ -116,10 +116,6 @@ cc_test_library {
 
     target: {
         linux_glibc: {
-            // The host uses rosegment, which isn't supported yet.
-            ldflags: [
-                "-Wl,--no-rosegment",
-            ],
             // This forces the creation of eh_frame with unwind information
             // for host.
             cflags: [

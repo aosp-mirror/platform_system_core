@@ -79,8 +79,8 @@ void ElfCacheTest::VerifySameMap(bool cache_enabled) {
 
   uint64_t start = 0x1000;
   uint64_t end = 0x20000;
-  MapInfo info1(start, end, 0, 0x5, tf.path);
-  MapInfo info2(start, end, 0, 0x5, tf.path);
+  MapInfo info1(nullptr, start, end, 0, 0x5, tf.path);
+  MapInfo info2(nullptr, start, end, 0, 0x5, tf.path);
 
   Elf* elf1 = info1.GetElf(memory_, true);
   ASSERT_TRUE(elf1->valid());
@@ -120,17 +120,17 @@ void ElfCacheTest::VerifyWithinSameMap(bool cache_enabled) {
   uint64_t start = 0x1000;
   uint64_t end = 0x20000;
   // Will have an elf at offset 0 in file.
-  MapInfo info0_1(start, end, 0, 0x5, tf.path);
-  MapInfo info0_2(start, end, 0, 0x5, tf.path);
+  MapInfo info0_1(nullptr, start, end, 0, 0x5, tf.path);
+  MapInfo info0_2(nullptr, start, end, 0, 0x5, tf.path);
   // Will have an elf at offset 0x100 in file.
-  MapInfo info100_1(start, end, 0x100, 0x5, tf.path);
-  MapInfo info100_2(start, end, 0x100, 0x5, tf.path);
+  MapInfo info100_1(nullptr, start, end, 0x100, 0x5, tf.path);
+  MapInfo info100_2(nullptr, start, end, 0x100, 0x5, tf.path);
   // Will have an elf at offset 0x200 in file.
-  MapInfo info200_1(start, end, 0x200, 0x5, tf.path);
-  MapInfo info200_2(start, end, 0x200, 0x5, tf.path);
+  MapInfo info200_1(nullptr, start, end, 0x200, 0x5, tf.path);
+  MapInfo info200_2(nullptr, start, end, 0x200, 0x5, tf.path);
   // Will have an elf at offset 0 in file.
-  MapInfo info300_1(start, end, 0x300, 0x5, tf.path);
-  MapInfo info300_2(start, end, 0x300, 0x5, tf.path);
+  MapInfo info300_1(nullptr, start, end, 0x300, 0x5, tf.path);
+  MapInfo info300_2(nullptr, start, end, 0x300, 0x5, tf.path);
 
   Elf* elf0_1 = info0_1.GetElf(memory_, true);
   ASSERT_TRUE(elf0_1->valid());
@@ -217,10 +217,10 @@ void ElfCacheTest::VerifyWithinSameMapNeverReadAtZero(bool cache_enabled) {
   uint64_t start = 0x1000;
   uint64_t end = 0x20000;
   // Multiple info sections at different offsets will have non-zero elf offsets.
-  MapInfo info300_1(start, end, 0x300, 0x5, tf.path);
-  MapInfo info300_2(start, end, 0x300, 0x5, tf.path);
-  MapInfo info400_1(start, end, 0x400, 0x5, tf.path);
-  MapInfo info400_2(start, end, 0x400, 0x5, tf.path);
+  MapInfo info300_1(nullptr, start, end, 0x300, 0x5, tf.path);
+  MapInfo info300_2(nullptr, start, end, 0x300, 0x5, tf.path);
+  MapInfo info400_1(nullptr, start, end, 0x400, 0x5, tf.path);
+  MapInfo info400_2(nullptr, start, end, 0x400, 0x5, tf.path);
 
   Elf* elf300_1 = info300_1.GetElf(memory_, true);
   ASSERT_TRUE(elf300_1->valid());

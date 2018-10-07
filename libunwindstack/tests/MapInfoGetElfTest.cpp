@@ -69,7 +69,7 @@ class MapInfoGetElfTest : public ::testing::Test {
 };
 
 TEST_F(MapInfoGetElfTest, invalid) {
-  MapInfo info(0x1000, 0x2000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x1000, 0x2000, 0, PROT_READ, "");
 
   // The map is empty, but this should still create an invalid elf object.
   Elf* elf = info.GetElf(process_memory_, false);
@@ -78,7 +78,7 @@ TEST_F(MapInfoGetElfTest, invalid) {
 }
 
 TEST_F(MapInfoGetElfTest, valid32) {
-  MapInfo info(0x3000, 0x4000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x3000, 0x4000, 0, PROT_READ, "");
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
@@ -92,7 +92,7 @@ TEST_F(MapInfoGetElfTest, valid32) {
 }
 
 TEST_F(MapInfoGetElfTest, valid64) {
-  MapInfo info(0x8000, 0x9000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x8000, 0x9000, 0, PROT_READ, "");
 
   Elf64_Ehdr ehdr;
   TestInitEhdr<Elf64_Ehdr>(&ehdr, ELFCLASS64, EM_AARCH64);
@@ -106,7 +106,7 @@ TEST_F(MapInfoGetElfTest, valid64) {
 }
 
 TEST_F(MapInfoGetElfTest, gnu_debugdata_do_not_init32) {
-  MapInfo info(0x4000, 0x8000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x4000, 0x8000, 0, PROT_READ, "");
 
   TestInitGnuDebugdata<Elf32_Ehdr, Elf32_Shdr>(ELFCLASS32, EM_ARM, false,
                                                [&](uint64_t offset, const void* ptr, size_t size) {
@@ -122,7 +122,7 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_do_not_init32) {
 }
 
 TEST_F(MapInfoGetElfTest, gnu_debugdata_do_not_init64) {
-  MapInfo info(0x6000, 0x8000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x6000, 0x8000, 0, PROT_READ, "");
 
   TestInitGnuDebugdata<Elf64_Ehdr, Elf64_Shdr>(ELFCLASS64, EM_AARCH64, false,
                                                [&](uint64_t offset, const void* ptr, size_t size) {
@@ -138,7 +138,7 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_do_not_init64) {
 }
 
 TEST_F(MapInfoGetElfTest, gnu_debugdata_init32) {
-  MapInfo info(0x2000, 0x3000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x2000, 0x3000, 0, PROT_READ, "");
 
   TestInitGnuDebugdata<Elf32_Ehdr, Elf32_Shdr>(ELFCLASS32, EM_ARM, true,
                                                [&](uint64_t offset, const void* ptr, size_t size) {
@@ -154,7 +154,7 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_init32) {
 }
 
 TEST_F(MapInfoGetElfTest, gnu_debugdata_init64) {
-  MapInfo info(0x5000, 0x8000, 0, PROT_READ, "");
+  MapInfo info(nullptr, 0x5000, 0x8000, 0, PROT_READ, "");
 
   TestInitGnuDebugdata<Elf64_Ehdr, Elf64_Shdr>(ELFCLASS64, EM_AARCH64, true,
                                                [&](uint64_t offset, const void* ptr, size_t size) {
@@ -170,7 +170,7 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_init64) {
 }
 
 TEST_F(MapInfoGetElfTest, end_le_start) {
-  MapInfo info(0x1000, 0x1000, 0, PROT_READ, elf_.path);
+  MapInfo info(nullptr, 0x1000, 0x1000, 0, PROT_READ, elf_.path);
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
@@ -197,7 +197,7 @@ TEST_F(MapInfoGetElfTest, end_le_start) {
 // Verify that if the offset is non-zero but there is no elf at the offset,
 // that the full file is used.
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_full_file) {
-  MapInfo info(0x1000, 0x2000, 0x100, PROT_READ, elf_.path);
+  MapInfo info(nullptr, 0x1000, 0x2000, 0x100, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x1000);
   memset(buffer.data(), 0, buffer.size());
@@ -226,7 +226,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_full_file) {
 // Verify that if the offset is non-zero and there is an elf at that
 // offset, that only part of the file is used.
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file) {
-  MapInfo info(0x1000, 0x2000, 0x2000, PROT_READ, elf_.path);
+  MapInfo info(nullptr, 0x1000, 0x2000, 0x2000, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x4000);
   memset(buffer.data(), 0, buffer.size());
@@ -256,7 +256,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file) {
 // embedded elf is bigger than the initial map, the new object is larger
 // than the original map size. Do this for a 32 bit elf and a 64 bit elf.
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf32) {
-  MapInfo info(0x5000, 0x6000, 0x1000, PROT_READ, elf_.path);
+  MapInfo info(nullptr, 0x5000, 0x6000, 0x1000, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x4000);
   memset(buffer.data(), 0, buffer.size());
@@ -284,7 +284,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf32) 
 }
 
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) {
-  MapInfo info(0x7000, 0x8000, 0x1000, PROT_READ, elf_.path);
+  MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x4000);
   memset(buffer.data(), 0, buffer.size());
@@ -312,7 +312,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) 
 }
 
 TEST_F(MapInfoGetElfTest, process_memory_not_read_only) {
-  MapInfo info(0x9000, 0xa000, 0x1000, 0, "");
+  MapInfo info(nullptr, 0x9000, 0xa000, 0x1000, 0, "");
 
   // Create valid elf data in process memory only.
   Elf64_Ehdr ehdr;
@@ -333,7 +333,8 @@ TEST_F(MapInfoGetElfTest, process_memory_not_read_only) {
 }
 
 TEST_F(MapInfoGetElfTest, check_device_maps) {
-  MapInfo info(0x7000, 0x8000, 0x1000, PROT_READ | MAPS_FLAGS_DEVICE_MAP, "/dev/something");
+  MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ | MAPS_FLAGS_DEVICE_MAP,
+               "/dev/something");
 
   // Create valid elf data in process memory for this to verify that only
   // the name is causing invalid elf data.
@@ -378,7 +379,7 @@ TEST_F(MapInfoGetElfTest, multiple_thread_get_elf) {
   wait = true;
   // Create all of the threads and have them do the GetElf at the same time
   // to make it likely that a race will occur.
-  MapInfo info(0x7000, 0x8000, 0x1000, PROT_READ, "");
+  MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ, "");
   for (size_t i = 0; i < kNumConcurrentThreads; i++) {
     std::thread* thread = new std::thread([i, this, &wait, &info, &elf_in_threads]() {
       while (wait)

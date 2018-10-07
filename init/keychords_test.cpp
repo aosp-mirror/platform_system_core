@@ -47,9 +47,9 @@ class EventHandler {
   public:
     EventHandler();
     EventHandler(const EventHandler&) = delete;
-    EventHandler(EventHandler&&);
+    EventHandler(EventHandler&&) noexcept;
     EventHandler& operator=(const EventHandler&) = delete;
-    EventHandler& operator=(EventHandler&&);
+    EventHandler& operator=(EventHandler&&) noexcept;
     ~EventHandler() noexcept;
 
     bool init();
@@ -64,11 +64,11 @@ class EventHandler {
 
 EventHandler::EventHandler() : fd_(-1) {}
 
-EventHandler::EventHandler(EventHandler&& rval) : fd_(rval.fd_) {
+EventHandler::EventHandler(EventHandler&& rval) noexcept : fd_(rval.fd_) {
     rval.fd_ = -1;
 }
 
-EventHandler& EventHandler::operator=(EventHandler&& rval) {
+EventHandler& EventHandler::operator=(EventHandler&& rval) noexcept {
     fd_ = rval.fd_;
     rval.fd_ = -1;
     return *this;

@@ -25,7 +25,6 @@
 #include <algorithm>
 
 #include <android-base/unique_fd.h>
-#include <uuid/uuid.h>
 
 #include "liblp/liblp.h"
 #include "reader.h"
@@ -79,9 +78,8 @@ void ZeroExtent::AddTo(LpMetadata* out) const {
     out->extents.push_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0});
 }
 
-Partition::Partition(const std::string& name, const std::string& group_name,
-                     const std::string& guid, uint32_t attributes)
-    : name_(name), group_name_(group_name), guid_(guid), attributes_(attributes), size_(0) {}
+Partition::Partition(const std::string& name, const std::string& group_name, uint32_t attributes)
+    : name_(name), group_name_(group_name), attributes_(attributes), size_(0) {}
 
 void Partition::AddExtent(std::unique_ptr<Extent>&& extent) {
     size_ += extent->num_sectors() * LP_SECTOR_SIZE;
@@ -202,8 +200,8 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
 
     for (const auto& partition : metadata.partitions) {
         std::string group_name = GetPartitionGroupName(metadata.groups[partition.group_index]);
-        Partition* builder = AddPartition(GetPartitionName(partition), group_name,
-                                          GetPartitionGuid(partition), partition.attributes);
+        Partition* builder =
+                AddPartition(GetPartitionName(partition), group_name, partition.attributes);
         if (!builder) {
             return false;
         }
@@ -329,13 +327,12 @@ bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_s
     return true;
 }
 
-Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& guid,
-                                         uint32_t attributes) {
-    return AddPartition(name, "default", guid, attributes);
+Partition* MetadataBuilder::AddPartition(const std::string& name, uint32_t attributes) {
+    return AddPartition(name, "default", attributes);
 }
 
 Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& group_name,
-                                         const std::string& guid, uint32_t attributes) {
+                                         uint32_t attributes) {
     if (name.empty()) {
         LERROR << "Partition must have a non-empty name.";
         return nullptr;
@@ -348,7 +345,7 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
         LERROR << "Could not find partition group: " << group_name;
         return nullptr;
     }
-    partitions_.push_back(std::make_unique<Partition>(name, group_name, guid, attributes));
+    partitions_.push_back(std::make_unique<Partition>(name, group_name, attributes));
     return partitions_.back().get();
 }
 
@@ -549,12 +546,6 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         }
 
         strncpy(part.name, partition->name().c_str(), sizeof(part.name));
-        if (uuid_parse(partition->guid().c_str(), part.guid) != 0) {
-            LERROR << "Could not parse guid " << partition->guid() << " for partition "
-                   << partition->name();
-            return nullptr;
-        }
-
         part.first_extent_index = static_cast<uint32_t>(metadata->extents.size());
         part.num_extents = static_cast<uint32_t>(partition->extents().size());
         part.attributes = partition->attributes();

@@ -83,6 +83,7 @@ class FirstStageMount {
     std::string lp_metadata_partition_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
+    std::string super_partition_name_;
     std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;
 };
@@ -153,6 +154,8 @@ FirstStageMount::FirstStageMount()
     device_handler_ = std::make_unique<DeviceHandler>(
             std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
             std::move(boot_devices), false);
+
+    super_partition_name_ = fs_mgr_get_super_partition_name();
 }
 
 std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
@@ -196,7 +199,7 @@ bool FirstStageMount::GetBackingDmLinearDevices() {
         return true;
     }
 
-    required_devices_partition_names_.emplace(LP_METADATA_PARTITION_NAME);
+    required_devices_partition_names_.emplace(super_partition_name_);
     return true;
 }
 
@@ -262,7 +265,7 @@ bool FirstStageMount::CreateLogicalPartitions() {
 
     if (lp_metadata_partition_.empty()) {
         LOG(ERROR) << "Could not locate logical partition tables in partition "
-                   << LP_METADATA_PARTITION_NAME;
+                   << super_partition_name_;
         return false;
     }
     return android::fs_mgr::CreateLogicalPartitions(lp_metadata_partition_);
@@ -275,7 +278,7 @@ ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const
     auto iter = required_devices_partition_names_.find(name);
     if (iter != required_devices_partition_names_.end()) {
         LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
-        if (IsDmLinearEnabled() && name == LP_METADATA_PARTITION_NAME) {
+        if (IsDmLinearEnabled() && name == super_partition_name_) {
             std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
             lp_metadata_partition_ = links[0];
         }
@@ -386,6 +389,12 @@ bool FirstStageMount::MountPartitions() {
         if (!MountPartition(fstab_rec) && !fs_mgr_is_nofail(fstab_rec)) {
             return false;
         }
+    }
+
+    // heads up for instantiating required device(s) for overlayfs logic
+    const auto devices = fs_mgr_overlayfs_required_devices(device_tree_fstab_.get());
+    for (auto const& device : devices) {
+        InitMappedDevice(device);
     }
 
     fs_mgr_overlayfs_mount_all(device_tree_fstab_.get());

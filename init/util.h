@@ -64,6 +64,8 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
 
 bool IsLegalPropertyName(const std::string& name);
 
+void InitKernelLogging(char** argv, std::function<void(const char*)> abort_function);
+
 }  // namespace init
 }  // namespace android
 
