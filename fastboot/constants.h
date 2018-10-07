@@ -63,3 +63,4 @@
 #define FB_VAR_VARIANT "variant"
 #define FB_VAR_OFF_MODE_CHARGE_STATE "off-mode-charge"
 #define FB_VAR_BATTERY_VOLTAGE "battery-voltage"
+#define FB_VAR_BATTERY_SOC_OK "battery-soc-ok"
