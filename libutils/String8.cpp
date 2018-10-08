@@ -230,7 +230,7 @@ status_t String8::setTo(const char* other)
     const char *newString = allocFromUTF8(other, strlen(other));
     SharedBuffer::bufferFromData(mString)->release();
     mString = newString;
-    if (mString) return NO_ERROR;
+    if (mString) return OK;
 
     mString = getEmptyString();
     return NO_MEMORY;
@@ -241,7 +241,7 @@ status_t String8::setTo(const char* other, size_t len)
     const char *newString = allocFromUTF8(other, len);
     SharedBuffer::bufferFromData(mString)->release();
     mString = newString;
-    if (mString) return NO_ERROR;
+    if (mString) return OK;
 
     mString = getEmptyString();
     return NO_MEMORY;
@@ -252,7 +252,7 @@ status_t String8::setTo(const char16_t* other, size_t len)
     const char *newString = allocFromUTF16(other, len);
     SharedBuffer::bufferFromData(mString)->release();
     mString = newString;
-    if (mString) return NO_ERROR;
+    if (mString) return OK;
 
     mString = getEmptyString();
     return NO_MEMORY;
@@ -263,7 +263,7 @@ status_t String8::setTo(const char32_t* other, size_t len)
     const char *newString = allocFromUTF32(other, len);
     SharedBuffer::bufferFromData(mString)->release();
     mString = newString;
-    if (mString) return NO_ERROR;
+    if (mString) return OK;
 
     mString = getEmptyString();
     return NO_MEMORY;
@@ -274,9 +274,9 @@ status_t String8::append(const String8& other)
     const size_t otherLen = other.bytes();
     if (bytes() == 0) {
         setTo(other);
-        return NO_ERROR;
+        return OK;
     } else if (otherLen == 0) {
-        return NO_ERROR;
+        return OK;
     }
 
     return real_append(other.string(), otherLen);
@@ -292,7 +292,7 @@ status_t String8::append(const char* other, size_t otherLen)
     if (bytes() == 0) {
         return setTo(other, otherLen);
     } else if (otherLen == 0) {
-        return NO_ERROR;
+        return OK;
     }
 
     return real_append(other, otherLen);
@@ -311,7 +311,7 @@ status_t String8::appendFormat(const char* fmt, ...)
 
 status_t String8::appendFormatV(const char* fmt, va_list args)
 {
-    int n, result = NO_ERROR;
+    int n, result = OK;
     va_list tmp_args;
 
     /* args is undefined after vsnprintf.
@@ -346,7 +346,7 @@ status_t String8::real_append(const char* other, size_t otherLen)
         str += myLen;
         memcpy(str, other, otherLen);
         str[otherLen] = '\0';
-        return NO_ERROR;
+        return OK;
     }
     return NO_MEMORY;
 }
@@ -382,7 +382,7 @@ status_t String8::unlockBuffer(size_t size)
         mString = str;
     }
 
-    return NO_ERROR;
+    return OK;
 }
 
 ssize_t String8::find(const char* other, size_t start) const
