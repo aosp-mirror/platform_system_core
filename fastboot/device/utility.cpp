@@ -23,6 +23,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
 #include <liblp/liblp.h>
@@ -82,6 +83,10 @@ bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHan
 }
 
 std::optional<std::string> FindPhysicalPartition(const std::string& name) {
+    // Check for an invalid file name
+    if (android::base::StartsWith(name, "../") || name.find("/../") != std::string::npos) {
+        return {};
+    }
     std::string path = "/dev/block/by-name/" + name;
     if (access(path.c_str(), W_OK) < 0) {
         return {};
@@ -164,6 +169,9 @@ std::vector<std::string> ListPartitions(FastbootDevice* device) {
 
 bool GetDeviceLockStatus() {
     std::string cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    // Return lock status true if unable to read kernel command line.
+    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        return true;
+    }
     return cmdline.find("androidboot.verifiedbootstate=orange") == std::string::npos;
 }
