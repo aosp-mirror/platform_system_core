@@ -313,8 +313,8 @@ cc_library_static {
     srcs: libadb_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
-        "daemon/usb.cpp",
         "daemon/usb_ffs.cpp",
+        "daemon/usb_legacy.cpp",
     ],
 
     local_include_dirs: [

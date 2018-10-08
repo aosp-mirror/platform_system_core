@@ -94,7 +94,7 @@ static bool init_functionfs(struct usb_handle* h) {
     return true;
 }
 
-static void usb_ffs_open_thread(usb_handle *usb) {
+static void usb_ffs_open_thread(usb_handle* usb) {
     adb_thread_setname("usb ffs open");
 
     while (true) {
@@ -265,7 +265,7 @@ static void usb_ffs_close(usb_handle* h) {
     h->notify.notify_one();
 }
 
-usb_handle *create_usb_handle(unsigned num_bufs, unsigned io_size) {
+usb_handle* create_usb_handle(unsigned num_bufs, unsigned io_size) {
     usb_handle* h = new usb_handle();
 
     if (android::base::GetBoolProperty("sys.usb.ffs.aio_compat", false)) {
@@ -290,7 +290,8 @@ void usb_init() {
     dummy_fd.reset(adb_open("/dev/null", O_WRONLY | O_CLOEXEC));
     CHECK_NE(-1, dummy_fd.get());
 
-    std::thread(usb_ffs_open_thread, create_usb_handle(USB_FFS_NUM_BUFS, USB_FFS_BULK_SIZE)).detach();
+    std::thread(usb_ffs_open_thread, create_usb_handle(USB_FFS_NUM_BUFS, USB_FFS_BULK_SIZE))
+            .detach();
 }
 
 int usb_write(usb_handle* h, const void* data, int len) {
