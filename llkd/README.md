@@ -127,7 +127,7 @@ Only active on userdebug and eng builds.
 default 2 minutes samples of threads for D or Z.
 
 #### ro.llk.stack
-default *empty* or false, comma separated list of kernel symbols.
+default cma_alloc,__get_user_pages, comma separated list of kernel symbols.
 The string "*false*" is the equivalent to an *empty* list.
 Look for kernel stack symbols that if ever persistently present can
 indicate a subsystem is locked up.
