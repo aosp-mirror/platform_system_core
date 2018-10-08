@@ -36,7 +36,6 @@ using ::android::hardware::fastboot::V1_0::FileSystemType;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
 
-constexpr int kMaxDownloadSizeDefault = 0x20000000;
 constexpr char kFastbootProtocolVersion[] = "0.4";
 
 bool GetVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
