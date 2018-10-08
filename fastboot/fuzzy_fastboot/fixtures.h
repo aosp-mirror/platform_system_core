@@ -47,6 +47,7 @@ class FastBootTest : public testing::Test {
 
     static int MatchFastboot(usb_ifc_info* info, const char* local_serial = nullptr);
     bool UsbStillAvailible();
+    bool UserSpaceFastboot();
 
   protected:
     RetCode DownloadCommand(uint32_t size, std::string* response = nullptr,
