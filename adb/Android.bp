@@ -314,6 +314,7 @@ cc_library_static {
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
         "daemon/usb.cpp",
+        "daemon/usb_ffs.cpp",
     ],
 
     local_include_dirs: [
