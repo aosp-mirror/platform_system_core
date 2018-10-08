@@ -165,7 +165,7 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
     }
     // arg[0] is the command name, arg[1] contains size of data to be downloaded
     unsigned int size;
-    if (!android::base::ParseUint("0x" + args[1], &size, UINT_MAX)) {
+    if (!android::base::ParseUint("0x" + args[1], &size, kMaxDownloadSizeDefault)) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid size");
     }
     device->download_data().resize(size);
