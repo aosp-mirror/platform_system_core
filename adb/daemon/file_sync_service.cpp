@@ -32,6 +32,10 @@
 #include <unistd.h>
 #include <utime.h>
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -47,6 +51,7 @@
 #include "security_log_tags.h"
 #include "sysdeps/errno.h"
 
+using android::base::Dirname;
 using android::base::StringPrintf;
 
 static bool should_use_fs_config(const std::string& path) {
@@ -219,7 +224,7 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
     }
 
     if (fd < 0 && errno == ENOENT) {
-        if (!secure_mkdirs(android::base::Dirname(path))) {
+        if (!secure_mkdirs(Dirname(path))) {
             SendSyncFailErrno(s, "secure_mkdirs failed");
             goto fail;
         }
@@ -327,8 +332,6 @@ extern bool handle_send_link(int s, const std::string& path, std::vector<char>& 
 #else
 static bool handle_send_link(int s, const std::string& path, std::vector<char>& buffer) {
     syncmsg msg;
-    unsigned int len;
-    int ret;
 
     if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
 
@@ -337,24 +340,28 @@ static bool handle_send_link(int s, const std::string& path, std::vector<char>& 
         return false;
     }
 
-    len = msg.data.size;
+    unsigned int len = msg.data.size;
     if (len > buffer.size()) { // TODO: resize buffer?
         SendSyncFail(s, "oversize data message");
         return false;
     }
     if (!ReadFdExactly(s, &buffer[0], len)) return false;
 
-    ret = symlink(&buffer[0], path.c_str());
-    if (ret && errno == ENOENT) {
-        if (!secure_mkdirs(android::base::Dirname(path))) {
-            SendSyncFailErrno(s, "secure_mkdirs failed");
+    std::string buf_link;
+    if (!android::base::Readlink(path, &buf_link) || (buf_link != &buffer[0])) {
+        adb_unlink(path.c_str());
+        auto ret = symlink(&buffer[0], path.c_str());
+        if (ret && errno == ENOENT) {
+            if (!secure_mkdirs(Dirname(path))) {
+                SendSyncFailErrno(s, "secure_mkdirs failed");
+                return false;
+            }
+            ret = symlink(&buffer[0], path.c_str());
+        }
+        if (ret) {
+            SendSyncFailErrno(s, "symlink failed");
             return false;
         }
-        ret = symlink(&buffer[0], path.c_str());
-    }
-    if (ret) {
-        SendSyncFailErrno(s, "symlink failed");
-        return false;
     }
 
     if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
@@ -391,7 +398,8 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
 
     // Don't delete files before copying if they are not "regular" or symlinks.
     struct stat st;
-    bool do_unlink = (lstat(path.c_str(), &st) == -1) || S_ISREG(st.st_mode) || S_ISLNK(st.st_mode);
+    bool do_unlink = (lstat(path.c_str(), &st) == -1) || S_ISREG(st.st_mode) ||
+                     (S_ISLNK(st.st_mode) && !S_ISLNK(mode));
     if (do_unlink) {
         adb_unlink(path.c_str());
     }
