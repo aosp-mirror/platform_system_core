@@ -22,6 +22,7 @@
 
 #include <limits>
 #include <string>
+#include <type_traits>
 
 namespace android {
 namespace base {
@@ -33,6 +34,7 @@ namespace base {
 template <typename T>
 bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
                bool allow_suffixes = false) {
+  static_assert(std::is_unsigned<T>::value, "ParseUint can only be used with unsigned types");
   while (isspace(*s)) {
     s++;
   }
@@ -96,6 +98,7 @@ template <typename T>
 bool ParseInt(const char* s, T* out,
               T min = std::numeric_limits<T>::min(),
               T max = std::numeric_limits<T>::max()) {
+  static_assert(std::is_signed<T>::value, "ParseInt can only be used with signed types");
   while (isspace(*s)) {
     s++;
   }
