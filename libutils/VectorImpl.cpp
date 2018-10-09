@@ -61,7 +61,7 @@ VectorImpl::~VectorImpl()
         "[%p] subclasses of VectorImpl must call finish_vector()"
         " in their destructor. Leaking %d bytes.",
         this, (int)(mCount*mItemSize));
-    // We can't call _do_destroy() here because the vtable is already gone. 
+    // We can't call _do_destroy() here because the vtable is already gone.
 }
 
 VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
@@ -197,7 +197,7 @@ status_t VectorImpl::sort(VectorImpl::compar_r_t cmp, void* state)
                 _do_copy(temp, item, 1);
 
                 ssize_t j = i-1;
-                void* next = reinterpret_cast<char*>(array) + mItemSize*(i);                    
+                void* next = reinterpret_cast<char*>(array) + mItemSize*(i);
                 do {
                     _do_destroy(next, 1);
                     _do_copy(next, curr, 1);
@@ -214,13 +214,13 @@ status_t VectorImpl::sort(VectorImpl::compar_r_t cmp, void* state)
             }
             i++;
         }
-        
+
         if (temp) {
             _do_destroy(temp, 1);
             free(temp);
         }
     }
-    return NO_ERROR;
+    return OK;
 }
 
 void VectorImpl::pop()
@@ -354,7 +354,7 @@ ssize_t VectorImpl::setCapacity(size_t new_capacity)
 }
 
 ssize_t VectorImpl::resize(size_t size) {
-    ssize_t result = NO_ERROR;
+    ssize_t result = OK;
     if (size > mCount) {
         result = insertAt(mCount, size - mCount);
     } else if (size < mCount) {
@@ -370,7 +370,7 @@ void VectorImpl::release_storage()
         if (sb->release(SharedBuffer::eKeepStorage) == 1) {
             _do_destroy(mStorage, mCount);
             SharedBuffer::dealloc(sb);
-        } 
+        }
     }
 }
 
@@ -644,13 +644,13 @@ ssize_t SortedVectorImpl::merge(const VectorImpl& vector)
             }
         }
     }
-    return NO_ERROR;
+    return OK;
 }
 
 ssize_t SortedVectorImpl::merge(const SortedVectorImpl& vector)
 {
     // we've merging a sorted vector... nice!
-    ssize_t err = NO_ERROR;
+    ssize_t err = OK;
     if (!vector.isEmpty()) {
         // first take care of the case where the vectors are sorted together
         if (do_compare(vector.itemLocation(vector.size()-1), arrayImpl()) <= 0) {
@@ -677,4 +677,3 @@ ssize_t SortedVectorImpl::remove(const void* item)
 /*****************************************************************************/
 
 }; // namespace android
-

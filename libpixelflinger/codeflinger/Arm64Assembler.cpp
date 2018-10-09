@@ -325,7 +325,7 @@ int ArmToArm64Assembler::generate(const char* name)
         printf(format, name, int(pc()-base()), base(), pc(), duration);
         disassemble(name);
     }
-    return NO_ERROR;
+    return OK;
 }
 
 uint32_t* ArmToArm64Assembler::pcForLabel(const char* label)
@@ -1238,4 +1238,3 @@ uint32_t ArmToArm64Assembler::A64_EXTR_W(uint32_t Rd, uint32_t Rn,
 }
 
 }; // namespace android
-

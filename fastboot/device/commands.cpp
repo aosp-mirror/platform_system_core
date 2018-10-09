@@ -131,6 +131,11 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Erase is not allowed on locked devices");
+    }
+
     PartitionHandle handle;
     if (!OpenPartition(device, args[1], &handle)) {
         return device->WriteStatus(FastbootResult::FAIL, "Partition doesn't exist");
@@ -163,9 +168,15 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "size argument unspecified");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Download is not allowed on locked devices");
+    }
+
     // arg[0] is the command name, arg[1] contains size of data to be downloaded
     unsigned int size;
-    if (!android::base::ParseUint("0x" + args[1], &size, UINT_MAX)) {
+    if (!android::base::ParseUint("0x" + args[1], &size, kMaxDownloadSizeDefault)) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid size");
     }
     device->download_data().resize(size);
@@ -201,6 +212,11 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
 bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Missing slot argument");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "set_active command is not allowed on locked devices");
     }
 
     // Slot suffix needs to be between 'a' and 'z'.

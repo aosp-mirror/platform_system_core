@@ -48,7 +48,7 @@ unsigned llkCheckMilliseconds(void);
 /* LLK_CHECK_MS_DEFAULT = actual timeout_ms / LLK_CHECKS_PER_TIMEOUT_DEFAULT */
 #define LLK_CHECKS_PER_TIMEOUT_DEFAULT 5
 #define LLK_CHECK_STACK_PROPERTY       "ro.llk.stack"
-#define LLK_CHECK_STACK_DEFAULT        ""
+#define LLK_CHECK_STACK_DEFAULT        "cma_alloc,__get_user_pages"
 #define LLK_BLACKLIST_PROCESS_PROPERTY "ro.llk.blacklist.process"
 #define LLK_BLACKLIST_PROCESS_DEFAULT  \
     "0,1,2,init,[kthreadd],[khungtaskd],lmkd,lmkd.llkd,llkd,watchdogd,[watchdogd],[watchdogd/0]"
@@ -57,7 +57,7 @@ unsigned llkCheckMilliseconds(void);
 #define LLK_BLACKLIST_UID_PROPERTY     "ro.llk.blacklist.uid"
 #define LLK_BLACKLIST_UID_DEFAULT      ""
 #define LLK_BLACKLIST_STACK_PROPERTY   "ro.llk.blacklist.process.stack"
-#define LLK_BLACKLIST_STACK_DEFAULT    "init,lmkd.llkd,llkd,keystore,/system/bin/keystore"
+#define LLK_BLACKLIST_STACK_DEFAULT    "init,lmkd.llkd,llkd,keystore,/system/bin/keystore,ueventd"
 /* clang-format on */
 
 __END_DECLS
