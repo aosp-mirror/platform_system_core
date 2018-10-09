@@ -288,7 +288,7 @@ bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& ar
     bool is_zero_length;
     if (LogicalPartitionExists(args[0], device->GetCurrentSlot(), &is_zero_length) &&
         is_zero_length) {
-        *message = "0";
+        *message = "0x0";
         return true;
     }
     // Otherwise, open the partition as normal.
