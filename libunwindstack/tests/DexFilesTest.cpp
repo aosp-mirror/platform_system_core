@@ -46,17 +46,17 @@ class DexFilesTest : public ::testing::Test {
     maps_.reset(
         new BufferMaps("1000-4000 ---s 00000000 00:00 0\n"
                        "4000-6000 r--s 00000000 00:00 0\n"
-                       "6000-8000 -w-s 00000000 00:00 0\n"
-                       "a000-c000 r-xp 00000000 00:00 0\n"
-                       "c000-f000 rwxp 00000000 00:00 0\n"
-                       "f000-11000 r-xp 00000000 00:00 0\n"
+                       "6000-8000 -wxs 00000000 00:00 0\n"
+                       "a000-c000 r--p 00000000 00:00 0\n"
+                       "c000-f000 rw-p 00000000 00:00 0\n"
+                       "f000-11000 r--p 00000000 00:00 0\n"
                        "100000-110000 rw-p 0000000 00:00 0\n"
                        "200000-210000 rw-p 0000000 00:00 0\n"
                        "300000-400000 rw-p 0000000 00:00 0\n"));
     ASSERT_TRUE(maps_->Parse());
 
-    // Global variable in a section that is not readable/executable.
-    MapInfo* map_info = maps_->Get(kMapGlobalNonReadableExectable);
+    // Global variable in a section that is not readable.
+    MapInfo* map_info = maps_->Get(kMapGlobalNonReadable);
     ASSERT_TRUE(map_info != nullptr);
     MemoryFake* memory = new MemoryFake;
     ElfFake* elf = new ElfFake(memory);
@@ -95,7 +95,7 @@ class DexFilesTest : public ::testing::Test {
   void WriteEntry64(uint64_t entry_addr, uint64_t next, uint64_t prev, uint64_t dex_file);
   void WriteDex(uint64_t dex_file);
 
-  static constexpr size_t kMapGlobalNonReadableExectable = 3;
+  static constexpr size_t kMapGlobalNonReadable = 2;
   static constexpr size_t kMapGlobalSetToZero = 4;
   static constexpr size_t kMapGlobal = 5;
   static constexpr size_t kMapDexFileEntries = 7;
