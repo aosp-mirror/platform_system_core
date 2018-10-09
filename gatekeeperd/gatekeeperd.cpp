@@ -386,7 +386,7 @@ public:
             write(fd, result, strlen(result) + 1);
         }
 
-        return NO_ERROR;
+        return OK;
     }
 
 private:

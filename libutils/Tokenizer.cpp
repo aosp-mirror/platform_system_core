@@ -48,7 +48,7 @@ Tokenizer::~Tokenizer() {
 status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
     *outTokenizer = nullptr;
 
-    int result = NO_ERROR;
+    int result = OK;
     int fd = ::open(filename.string(), O_RDONLY);
     if (fd < 0) {
         result = -errno;

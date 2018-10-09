@@ -379,7 +379,7 @@ status_t Mutex::lock()
 {
     DWORD dwWaitResult;
     dwWaitResult = WaitForSingleObject((HANDLE) mState, INFINITE);
-    return dwWaitResult != WAIT_OBJECT_0 ? -1 : NO_ERROR;
+    return dwWaitResult != WAIT_OBJECT_0 ? -1 : OK;
 }
 
 void Mutex::unlock()
@@ -506,7 +506,7 @@ typedef struct WinCondition {
         ReleaseMutex(condState->internalMutex);
         WaitForSingleObject(hMutex, INFINITE);
 
-        return res == WAIT_OBJECT_0 ? NO_ERROR : -1;
+        return res == WAIT_OBJECT_0 ? OK : -1;
     }
 } WinCondition;
 
@@ -639,13 +639,15 @@ void Condition::broadcast()
  */
 
 Thread::Thread(bool canCallJava)
-    :   mCanCallJava(canCallJava),
-        mThread(thread_id_t(-1)),
-        mLock("Thread::mLock"),
-        mStatus(NO_ERROR),
-        mExitPending(false), mRunning(false)
+    : mCanCallJava(canCallJava),
+      mThread(thread_id_t(-1)),
+      mLock("Thread::mLock"),
+      mStatus(OK),
+      mExitPending(false),
+      mRunning(false)
 #if defined(__ANDROID__)
-        , mTid(-1)
+      ,
+      mTid(-1)
 #endif
 {
 }
@@ -656,7 +658,7 @@ Thread::~Thread()
 
 status_t Thread::readyToRun()
 {
-    return NO_ERROR;
+    return OK;
 }
 
 status_t Thread::run(const char* name, int32_t priority, size_t stack)
@@ -672,7 +674,7 @@ status_t Thread::run(const char* name, int32_t priority, size_t stack)
 
     // reset status and exitPending to their default value, so we can
     // try again after an error happened (either below, or in readyToRun())
-    mStatus = NO_ERROR;
+    mStatus = OK;
     mExitPending = false;
     mThread = thread_id_t(-1);
 
@@ -700,10 +702,10 @@ status_t Thread::run(const char* name, int32_t priority, size_t stack)
     }
 
     // Do not refer to mStatus here: The thread is already running (may, in fact
-    // already have exited with a valid mStatus result). The NO_ERROR indication
+    // already have exited with a valid mStatus result). The OK indication
     // here merely indicates successfully starting the thread and does not
     // imply successful termination/execution.
-    return NO_ERROR;
+    return OK;
 
     // Exiting scope of mLock is a memory barrier and allows new thread to run
 }
@@ -728,7 +730,7 @@ int Thread::_threadLoop(void* user)
         if (first) {
             first = false;
             self->mStatus = self->readyToRun();
-            result = (self->mStatus == NO_ERROR);
+            result = (self->mStatus == OK);
 
             if (result && !self->exitPending()) {
                 // Binder threads (and maybe others) rely on threadLoop

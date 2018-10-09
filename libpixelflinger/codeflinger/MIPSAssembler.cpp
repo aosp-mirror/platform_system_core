@@ -1421,7 +1421,7 @@ int MIPSAssembler::generate(const char* name)
         disassemble(name);
     }
 
-    return NO_ERROR;
+    return OK;
 }
 
 uint32_t* MIPSAssembler::pcForLabel(const char* label)
@@ -1953,5 +1953,3 @@ void MIPSAssembler::UNIMPL(void)
 
 
 }; // namespace android:
-
-
