@@ -158,8 +158,8 @@ enum {
      *
      * When any camera method returns error, the client can use ping command
      * to see if the camera has been taken away by other clients. If the result
-     * is NO_ERROR, it means the camera hardware is not released. If the result
-     * is not NO_ERROR, the camera has been released and the existing client
+     * is OK, it means the camera hardware is not released. If the result
+     * is not OK, the camera has been released and the existing client
      * can silently finish itself or show a dialog.
      */
     CAMERA_CMD_PING = 9,

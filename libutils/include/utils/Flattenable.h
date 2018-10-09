@@ -190,11 +190,11 @@ public:
     inline status_t flatten(void* buffer, size_t size) const {
         if (size < sizeof(T)) return NO_MEMORY;
         memcpy(buffer, static_cast<T const*>(this), sizeof(T));
-        return NO_ERROR;
+        return OK;
     }
     inline status_t unflatten(void const* buffer, size_t) {
         memcpy(static_cast<T*>(this), buffer, sizeof(T));
-        return NO_ERROR;
+        return OK;
     }
 };
 
