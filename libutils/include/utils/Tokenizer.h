@@ -37,7 +37,7 @@ public:
     /**
      * Opens a file and maps it into memory.
      *
-     * Returns NO_ERROR and a tokenizer for the file, if successful.
+     * Returns OK and a tokenizer for the file, if successful.
      * Otherwise returns an error and sets outTokenizer to NULL.
      */
     static status_t open(const String8& filename, Tokenizer** outTokenizer);
@@ -45,7 +45,7 @@ public:
     /**
      * Prepares to tokenize the contents of a string.
      *
-     * Returns NO_ERROR and a tokenizer for the string, if successful.
+     * Returns OK and a tokenizer for the string, if successful.
      * Otherwise returns an error and sets outTokenizer to NULL.
      */
     static status_t fromContents(const String8& filename,
