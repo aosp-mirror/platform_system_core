@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+constexpr unsigned int kMaxDownloadSizeDefault = 0x20000000;
+
 class FastbootDevice;
 
 enum class FastbootResult {
