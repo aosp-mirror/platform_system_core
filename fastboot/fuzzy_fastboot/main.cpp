@@ -43,6 +43,7 @@
 #include <thread>
 #include <vector>
 
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
 #include <sparse/sparse.h>
@@ -331,8 +332,9 @@ TEST_F(Conformance, PartitionInfo) {
                 << cmd + " responded with a string with leading whitespace";
         EXPECT_FALSE(resp.compare(0, 2, "0x"))
                 << cmd + "responded with a string that does not start with 0x...";
-        int64_t size = strtoll(resp.c_str(), nullptr, 16);
-        EXPECT_GT(size, 0) << "'" + resp + "' is not a valid response from " + cmd;
+        uint64_t size;
+        ASSERT_TRUE(android::base::ParseUint(resp, &size))
+                << "'" + resp + "' is not a valid response from " + cmd;
     }
 }
 
