@@ -171,7 +171,7 @@ int ARMAssembler::generate(const char* name)
     }
 
     mAssembly->resize( int(pc()-base())*4 );
-    
+
     // the instruction cache is flushed by CodeCache
     const int64_t duration = ggl_system_time() - mDuration;
     const char * const format = "generated %s (%d ins) at [%p:%p] in %lld ns\n";
@@ -183,8 +183,8 @@ int ARMAssembler::generate(const char* name)
         printf(format, name, int(pc()-base()), base(), pc(), duration);
         disassemble(name);
     }
-    
-    return NO_ERROR;
+
+    return OK;
 }
 
 uint32_t* ARMAssembler::pcForLabel(const char* label)
@@ -213,14 +213,14 @@ void ARMAssembler::dataProcessing(int opcode, int cc,
 // multiply...
 void ARMAssembler::MLA(int cc, int s,
         int Rd, int Rm, int Rs, int Rn) {
-    if (Rd == Rm) { int t = Rm; Rm=Rs; Rs=t; } 
+    if (Rd == Rm) { int t = Rm; Rm=Rs; Rs=t; }
     LOG_FATAL_IF(Rd==Rm, "MLA(r%u,r%u,r%u,r%u)", Rd,Rm,Rs,Rn);
     *mPC++ =    (cc<<28) | (1<<21) | (s<<20) |
                 (Rd<<16) | (Rn<<12) | (Rs<<8) | 0x90 | Rm;
 }
 void ARMAssembler::MUL(int cc, int s,
         int Rd, int Rm, int Rs) {
-    if (Rd == Rm) { int t = Rm; Rm=Rs; Rs=t; } 
+    if (Rd == Rm) { int t = Rm; Rm=Rs; Rs=t; }
     LOG_FATAL_IF(Rd==Rm, "MUL(r%u,r%u,r%u)", Rd,Rm,Rs);
     *mPC++ = (cc<<28) | (s<<20) | (Rd<<16) | (Rs<<8) | 0x90 | Rm;
 }
@@ -577,4 +577,3 @@ uint32_t ARMAssembler::reg_post(int Rm)
 }
 
 }; // namespace android
-

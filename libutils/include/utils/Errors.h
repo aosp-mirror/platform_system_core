@@ -43,8 +43,8 @@ typedef int32_t     status_t;
 #endif
 
 enum {
-    OK                = 0,    // Everything's swell.
-    NO_ERROR          = 0,    // No errors.
+    OK                = 0,    // Preferred constant for checking success.
+    NO_ERROR          = OK,   // Deprecated synonym for `OK`. Prefer `OK` because it doesn't conflict with Windows.
 
     UNKNOWN_ERROR       = (-2147483647-1), // INT32_MIN value
 
