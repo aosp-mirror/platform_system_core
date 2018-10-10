@@ -619,6 +619,31 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     pid_remove(params.pid);
 }
 
+static void cmd_procpurge() {
+    int i;
+    struct proc *procp;
+    struct proc *next;
+
+    if (use_inkernel_interface) {
+        return;
+    }
+
+    for (i = 0; i <= ADJTOSLOT(OOM_SCORE_ADJ_MAX); i++) {
+        procadjslot_list[i].next = &procadjslot_list[i];
+        procadjslot_list[i].prev = &procadjslot_list[i];
+    }
+
+    for (i = 0; i < PIDHASH_SZ; i++) {
+        procp = pidhash[i];
+        while (procp) {
+            next = procp->pidhash_next;
+            free(procp);
+            procp = next;
+        }
+    }
+    memset(&pidhash[0], 0, sizeof(pidhash));
+}
+
 static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
     int i;
     struct lmk_target target;
@@ -760,6 +785,11 @@ static void ctrl_command_handler(int dsock_idx) {
         if (nargs != 1)
             goto wronglen;
         cmd_procremove(packet);
+        break;
+    case LMK_PROCPURGE:
+        if (nargs != 0)
+            goto wronglen;
+        cmd_procpurge();
         break;
     default:
         ALOGE("Received unknown command code %d", cmd);

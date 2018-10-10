@@ -30,6 +30,7 @@ enum lmk_cmd {
     LMK_TARGET = 0,  /* Associate minfree with oom_adj_score */
     LMK_PROCPRIO,    /* Register a process and set its oom_adj_score */
     LMK_PROCREMOVE,  /* Unregister a process */
+    LMK_PROCPURGE,   /* Purge all registered processes */
 };
 
 /*
@@ -140,6 +141,15 @@ inline size_t lmkd_pack_set_procremove(LMKD_CTRL_PACKET packet,
     packet[0] = htonl(LMK_PROCREMOVE);
     packet[1] = htonl(params->pid);
     return 2 * sizeof(int);
+}
+
+/*
+ * Prepare LMK_PROCPURGE packet and return packet size in bytes.
+ * Warning: no checks performed, caller should ensure valid parameters.
+ */
+inline size_t lmkd_pack_set_procpurge(LMKD_CTRL_PACKET packet) {
+    packet[0] = htonl(LMK_PROCPURGE);
+    return sizeof(int);
 }
 
 __END_DECLS
