@@ -25,7 +25,7 @@
 
 #include <cutils/properties.h>
 
-static int only_one_char(char *buf, int len, char c)
+static int only_one_char(uint8_t *buf, int len, uint8_t c)
 {
     int i, ret;
 
@@ -41,7 +41,7 @@ static int only_one_char(char *buf, int len, char c)
 
 int partition_wiped(char *source)
 {
-    char buf[4096];
+    uint8_t buf[4096];
     int fd, ret;
 
     if ((fd = open(source, O_RDONLY)) < 0) {
