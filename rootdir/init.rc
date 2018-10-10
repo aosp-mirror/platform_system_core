@@ -398,6 +398,10 @@ on late-fs
     class_start early_hal
 
 on post-fs-data
+    # Start checkpoint before we touch data
+    start vold
+    exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
+
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
@@ -405,8 +409,6 @@ on post-fs-data
     restorecon /data
 
     # Make sure we have the device encryption key.
-    start vold
-    exec - system system -- /system/bin/vdc checkpoint prepareDriveForCheckpoint /data
     installkey /data
 
     # Start bootcharting as soon as possible after the data partition is
