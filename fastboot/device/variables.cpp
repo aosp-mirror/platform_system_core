@@ -308,7 +308,14 @@ bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& ar
         *message = "Missing argument";
         return false;
     }
+
     std::string partition_name = args[0];
+    if (!FindPhysicalPartition(partition_name) &&
+        !LogicalPartitionExists(partition_name, device->GetCurrentSlot())) {
+        *message = "Invalid partition";
+        return false;
+    }
+
     auto fastboot_hal = device->fastboot_hal();
     if (!fastboot_hal) {
         *message = "Fastboot HAL not found";
