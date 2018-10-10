@@ -174,7 +174,7 @@ void JitDebug::Init(Maps* maps) {
 
   const std::string descriptor_name("__jit_debug_descriptor");
   for (MapInfo* info : *maps) {
-    if (!(info->flags & PROT_EXEC) || !(info->flags & PROT_READ) || info->offset != 0) {
+    if (!(info->flags & PROT_READ) || info->offset != 0) {
       continue;
     }
 
@@ -194,10 +194,9 @@ void JitDebug::Init(Maps* maps) {
 
     Elf* elf = info->GetElf(memory_, true);
     uint64_t descriptor_addr;
-    if (elf->GetGlobalVariable(descriptor_name, &descriptor_addr)) {
-      // Search for the first non-zero entry.
-      descriptor_addr += info->start;
-      entry_addr_ = (this->*read_descriptor_func_)(descriptor_addr);
+    // Find first non-empty entry (libart might be loaded multiple times).
+    if (elf->GetGlobalVariable(descriptor_name, &descriptor_addr) && descriptor_addr != 0) {
+      entry_addr_ = (this->*read_descriptor_func_)(descriptor_addr + info->start);
       if (entry_addr_ != 0) {
         break;
       }

@@ -126,7 +126,7 @@ void DexFiles::Init(Maps* maps) {
 
   const std::string dex_debug_name("__dex_debug_descriptor");
   for (MapInfo* info : *maps) {
-    if (!(info->flags & PROT_EXEC) || !(info->flags & PROT_READ) || info->offset != 0) {
+    if (!(info->flags & PROT_READ) || info->offset != 0) {
       continue;
     }
 
