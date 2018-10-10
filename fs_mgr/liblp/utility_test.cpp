@@ -42,15 +42,17 @@ TEST(liblp, GetMetadataOffset) {
                                    0,
                                    1024 * 1024,
                                    4096};
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), 4096);
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 1), 4096 + 16384);
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 2), 4096 + 16384 * 2);
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 3), 4096 + 16384 * 3);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), 8192);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 1), 8192 + 16384);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 2), 8192 + 16384 * 2);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 3), 8192 + 16384 * 3);
 
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 3), -4096 - 16384 * 1);
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 2), -4096 - 16384 * 2);
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 1), -4096 - 16384 * 3);
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 0), -4096 - 16384 * 4);
+    static const uint64_t backup_start = 8192 + 16384 * 4;
+
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 3), backup_start + 16384 * 3);
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 2), backup_start + 16384 * 2);
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 1), backup_start + 16384 * 1);
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 0), backup_start + 16384 * 0);
 }
 
 TEST(liblp, AlignTo) {

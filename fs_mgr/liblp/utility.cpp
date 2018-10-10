@@ -56,10 +56,18 @@ int64_t SeekFile64(int fd, int64_t offset, int whence) {
     return lseek(fd, offset, whence);
 }
 
+int64_t GetPrimaryGeometryOffset() {
+    return 0;
+}
+
+int64_t GetBackupGeometryOffset() {
+    return LP_METADATA_GEOMETRY_SIZE;
+}
+
 int64_t GetPrimaryMetadataOffset(const LpMetadataGeometry& geometry, uint32_t slot_number) {
     CHECK(slot_number < geometry.metadata_slot_count);
 
-    int64_t offset = LP_METADATA_GEOMETRY_SIZE + geometry.metadata_max_size * slot_number;
+    int64_t offset = (LP_METADATA_GEOMETRY_SIZE * 2) + geometry.metadata_max_size * slot_number;
     CHECK(offset + geometry.metadata_max_size <=
           int64_t(geometry.first_logical_sector * LP_SECTOR_SIZE));
     return offset;
@@ -67,7 +75,7 @@ int64_t GetPrimaryMetadataOffset(const LpMetadataGeometry& geometry, uint32_t sl
 
 int64_t GetBackupMetadataOffset(const LpMetadataGeometry& geometry, uint32_t slot_number) {
     CHECK(slot_number < geometry.metadata_slot_count);
-    int64_t start = int64_t(-LP_METADATA_GEOMETRY_SIZE) -
+    int64_t start = LP_METADATA_GEOMETRY_SIZE * 2 +
                     int64_t(geometry.metadata_max_size) * geometry.metadata_slot_count;
     return start + int64_t(geometry.metadata_max_size * slot_number);
 }

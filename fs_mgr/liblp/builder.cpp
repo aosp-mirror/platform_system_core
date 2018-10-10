@@ -273,14 +273,15 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     }
 
     // Compute the first free sector, factoring in alignment.
-    uint64_t free_area = AlignTo(reserved, device_info_.alignment, device_info_.alignment_offset);
+    uint64_t free_area =
+            AlignTo(total_reserved, device_info_.alignment, device_info_.alignment_offset);
     uint64_t first_sector = free_area / LP_SECTOR_SIZE;
 
     // Compute the last free sector, which is inclusive. We subtract 1 to make
     // sure that logical partitions won't overlap with the same sector as the
     // backup metadata, which could happen if the block device was not aligned
     // to LP_SECTOR_SIZE.
-    uint64_t last_sector = ((device_info_.size - reserved) / LP_SECTOR_SIZE) - 1;
+    uint64_t last_sector = (device_info_.size / LP_SECTOR_SIZE) - 1;
 
     // If this check fails, it means either (1) we did not have free space to
     // allocate a single sector, or (2) we did, but the alignment was high
