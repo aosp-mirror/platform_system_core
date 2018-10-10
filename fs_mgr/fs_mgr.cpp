@@ -851,56 +851,115 @@ bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
     return true;
 }
 
-bool fs_mgr_update_checkpoint_partition(struct fstab_rec* rec) {
-    if (fs_mgr_is_checkpoint_fs(rec)) {
-        if (!strcmp(rec->fs_type, "f2fs")) {
-            std::string opts(rec->fs_options);
+class CheckpointManager {
+  public:
+    CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
 
-            opts += ",checkpoint=disable";
-            free(rec->fs_options);
-            rec->fs_options = strdup(opts.c_str());
-        } else {
-            LERROR << rec->fs_type << " does not implement checkpoints.";
+    bool Update(struct fstab_rec* rec) {
+        if (!fs_mgr_is_checkpoint(rec)) {
+            return true;
         }
-    } else if (fs_mgr_is_checkpoint_blk(rec)) {
-        call_vdc({"checkpoint", "restoreCheckpoint", rec->blk_device});
 
-        android::base::unique_fd fd(
-                TEMP_FAILURE_RETRY(open(rec->blk_device, O_RDONLY | O_CLOEXEC)));
-        if (!fd) {
-            PERROR << "Cannot open device " << rec->blk_device;
+        if (fs_mgr_is_checkpoint_blk(rec)) {
+            call_vdc({"checkpoint", "restoreCheckpoint", rec->blk_device});
+        }
+
+        if (needs_checkpoint_ == UNKNOWN &&
+            !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &needs_checkpoint_)) {
+            LERROR << "Failed to find if checkpointing is needed. Assuming no.";
+            needs_checkpoint_ = NO;
+        }
+
+        if (needs_checkpoint_ != YES) {
+            return true;
+        }
+
+        if (!UpdateCheckpointPartition(rec)) {
+            LERROR << "Could not set up checkpoint partition, skipping!";
             return false;
         }
 
-        uint64_t size = get_block_device_size(fd) / 512;
-        if (!size) {
-            PERROR << "Cannot get device size";
-            return false;
+        return true;
+    }
+
+    bool Revert(struct fstab_rec* rec) {
+        if (!fs_mgr_is_checkpoint(rec)) {
+            return true;
         }
 
-        android::dm::DmTable table;
-        if (!table.AddTarget(
-                    std::make_unique<android::dm::DmTargetBow>(0, size, rec->blk_device))) {
-            LERROR << "Failed to add Bow target";
-            return false;
+        if (device_map_.find(rec->blk_device) == device_map_.end()) {
+            return true;
         }
+
+        std::string bow_device = rec->blk_device;
+        free(rec->blk_device);
+        rec->blk_device = strdup(device_map_[bow_device].c_str());
+        device_map_.erase(bow_device);
 
         DeviceMapper& dm = DeviceMapper::Instance();
-        if (!dm.CreateDevice("bow", table)) {
-            PERROR << "Failed to create bow device";
-            return false;
+        if (!dm.DeleteDevice("bow")) {
+            PERROR << "Failed to remove bow device";
         }
 
-        std::string name;
-        if (!dm.GetDmDevicePathByName("bow", &name)) {
-            PERROR << "Failed to get bow device name";
-            return false;
-        }
-
-        rec->blk_device = strdup(name.c_str());
+        return true;
     }
-    return true;
-}
+
+  private:
+    bool UpdateCheckpointPartition(struct fstab_rec* rec) {
+        if (fs_mgr_is_checkpoint_fs(rec)) {
+            if (!strcmp(rec->fs_type, "f2fs")) {
+                std::string opts(rec->fs_options);
+
+                opts += ",checkpoint=disable";
+                free(rec->fs_options);
+                rec->fs_options = strdup(opts.c_str());
+            } else {
+                LERROR << rec->fs_type << " does not implement checkpoints.";
+            }
+        } else if (fs_mgr_is_checkpoint_blk(rec)) {
+            android::base::unique_fd fd(
+                    TEMP_FAILURE_RETRY(open(rec->blk_device, O_RDONLY | O_CLOEXEC)));
+            if (!fd) {
+                PERROR << "Cannot open device " << rec->blk_device;
+                return false;
+            }
+
+            uint64_t size = get_block_device_size(fd) / 512;
+            if (!size) {
+                PERROR << "Cannot get device size";
+                return false;
+            }
+
+            android::dm::DmTable table;
+            if (!table.AddTarget(
+                        std::make_unique<android::dm::DmTargetBow>(0, size, rec->blk_device))) {
+                LERROR << "Failed to add bow target";
+                return false;
+            }
+
+            DeviceMapper& dm = DeviceMapper::Instance();
+            if (!dm.CreateDevice("bow", table)) {
+                PERROR << "Failed to create bow device";
+                return false;
+            }
+
+            std::string name;
+            if (!dm.GetDmDevicePathByName("bow", &name)) {
+                PERROR << "Failed to get bow device name";
+                return false;
+            }
+
+            device_map_[name] = rec->blk_device;
+            free(rec->blk_device);
+            rec->blk_device = strdup(name.c_str());
+        }
+        return true;
+    }
+
+    enum { UNKNOWN = -1, NO = 0, YES = 1 };
+    int needs_checkpoint_;
+    std::map<std::string, std::string> device_map_;
+};
 
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
@@ -914,7 +973,7 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
     int mret = -1;
     int mount_errno = 0;
     int attempted_idx = -1;
-    int need_checkpoint = -1;
+    CheckpointManager checkpoint_manager;
     FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
@@ -961,16 +1020,8 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
             }
         }
 
-        if (fs_mgr_is_checkpoint(&fstab->recs[i])) {
-            if (need_checkpoint == -1 &&
-                !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &need_checkpoint)) {
-                LERROR << "Failed to find if checkpointing is needed. Assuming no.";
-                need_checkpoint = 0;
-            }
-            if (need_checkpoint == 1 && !fs_mgr_update_checkpoint_partition(&fstab->recs[i])) {
-                LERROR << "Could not set up checkpoint partition, skipping!";
-                continue;
-            }
+        if (!checkpoint_manager.Update(&fstab->recs[i])) {
+            continue;
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_WAIT &&
@@ -1053,6 +1104,9 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
                    << " is wiped and " << fstab->recs[top_idx].mount_point
                    << " " << fstab->recs[top_idx].fs_type
                    << " is formattable. Format it.";
+
+            checkpoint_manager.Revert(&fstab->recs[top_idx]);
+
             if (fs_mgr_is_encryptable(&fstab->recs[top_idx]) &&
                 strcmp(fstab->recs[top_idx].key_loc, KEY_IN_FOOTER)) {
                 int fd = open(fstab->recs[top_idx].key_loc, O_WRONLY);
@@ -1173,11 +1227,12 @@ int fs_mgr_do_mount_one(struct fstab_rec *rec)
  * in turn, and stop on 1st success, or no more match.
  */
 static int fs_mgr_do_mount_helper(fstab* fstab, const char* n_name, char* n_blk_device,
-                                  char* tmp_mount_point, int need_checkpoint) {
+                                  char* tmp_mount_point, int needs_checkpoint) {
     int i = 0;
     int mount_errors = 0;
     int first_mount_errno = 0;
     char* mount_point;
+    CheckpointManager checkpoint_manager(needs_checkpoint);
     FsManagerAvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
@@ -1206,16 +1261,9 @@ static int fs_mgr_do_mount_helper(fstab* fstab, const char* n_name, char* n_blk_
             }
         }
 
-        if (fs_mgr_is_checkpoint(&fstab->recs[i])) {
-            if (need_checkpoint == -1 &&
-                !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &need_checkpoint)) {
-                LERROR << "Failed to find if checkpointing is needed. Assuming no.";
-                need_checkpoint = 0;
-            }
-            if (need_checkpoint == 1 && !fs_mgr_update_checkpoint_partition(&fstab->recs[i])) {
-                LERROR << "Could not set up checkpoint partition, skipping!";
-                continue;
-            }
+        if (!checkpoint_manager.Update(&fstab->recs[i])) {
+            LERROR << "Could not set up checkpoint partition, skipping!";
+            continue;
         }
 
         /* First check the filesystem if requested */
@@ -1292,8 +1340,8 @@ int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* 
 }
 
 int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool needs_cp) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_cp);
+                    bool needs_checkpoint) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint);
 }
 
 /*
