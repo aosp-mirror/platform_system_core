@@ -194,26 +194,26 @@ bool Elf::IsValidElf(Memory* memory) {
   return true;
 }
 
-void Elf::GetInfo(Memory* memory, bool* valid, uint64_t* size) {
+bool Elf::GetInfo(Memory* memory, uint64_t* size) {
   if (!IsValidElf(memory)) {
-    *valid = false;
-    return;
+    return false;
   }
   *size = 0;
-  *valid = true;
 
-  // Now read the section header information.
   uint8_t class_type;
   if (!memory->ReadFully(EI_CLASS, &class_type, 1)) {
-    return;
+    return false;
   }
+
+  // Get the maximum size of the elf data from the header.
   if (class_type == ELFCLASS32) {
     ElfInterface32::GetMaxSize(memory, size);
   } else if (class_type == ELFCLASS64) {
     ElfInterface64::GetMaxSize(memory, size);
   } else {
-    *valid = false;
+    return false;
   }
+  return true;
 }
 
 bool Elf::IsValidPc(uint64_t pc) {
