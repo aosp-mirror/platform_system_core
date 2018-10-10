@@ -29,6 +29,7 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -42,10 +43,12 @@
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
+#include <libdm/dm.h>
 
 #include "fs_mgr_priv.h"
 
 using namespace std::literals;
+using namespace android::dm;
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
 
@@ -222,13 +225,12 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point) {
     return false;
 }
 
-bool fs_mgr_overlayfs_verity_enabled(const std::string& basename_mount_point) {
-    auto found = false;
-    fs_mgr_update_verity_state(
-            [&basename_mount_point, &found](fstab_rec*, const char* mount_point, int, int) {
-                if (mount_point && (basename_mount_point == mount_point)) found = true;
-            });
-    return found;
+std::vector<std::string> fs_mgr_overlayfs_verity_enabled_list() {
+    std::vector<std::string> ret;
+    fs_mgr_update_verity_state([&ret](fstab_rec*, const char* mount_point, int, int) {
+        ret.emplace_back(mount_point);
+    });
+    return ret;
 }
 
 bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
@@ -254,7 +256,7 @@ bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
 
     if (!fs_mgr_overlayfs_enabled(fsrec)) return false;
 
-    return !fs_mgr_overlayfs_verity_enabled(android::base::Basename(fsrec_mount_point));
+    return true;
 }
 
 bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
@@ -445,11 +447,16 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
     std::vector<std::string> mounts;
     if (!fstab) return mounts;
 
+    auto verity = fs_mgr_overlayfs_verity_enabled_list();
     for (auto i = 0; i < fstab->num_entries; i++) {
         const auto fsrec = &fstab->recs[i];
         if (!fs_mgr_wants_overlayfs(fsrec)) continue;
         std::string new_mount_point(fs_mgr_mount_point(fstab, fsrec->mount_point));
         if (mount_point && (new_mount_point != mount_point)) continue;
+        if (std::find(verity.begin(), verity.end(), android::base::Basename(new_mount_point)) !=
+            verity.end()) {
+            continue;
+        }
         auto duplicate_or_more_specific = false;
         for (auto it = mounts.begin(); it != mounts.end();) {
             if ((*it == new_mount_point) ||
@@ -465,16 +472,35 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
         }
         if (!duplicate_or_more_specific) mounts.emplace_back(new_mount_point);
     }
-    // if not itemized /system or /, system as root, fake up
-    // fs_mgr_wants_overlayfs evaluation of /system as candidate.
 
-    if ((std::find(mounts.begin(), mounts.end(), "/system") == mounts.end()) &&
-        !fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/") &&
-        !fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/system") &&
-        (!mount_point || ("/system"s == mount_point)) &&
-        !fs_mgr_overlayfs_verity_enabled("system")) {
-        mounts.emplace_back("/system");
+    // if not itemized /system or /, system as root, fake one up?
+
+    // do we want or need to?
+    if (mount_point && ("/system"s != mount_point)) return mounts;
+    if (std::find(mounts.begin(), mounts.end(), "/system") != mounts.end()) return mounts;
+
+    // fs_mgr_overlayfs_verity_enabled_list says not to?
+    if (std::find(verity.begin(), verity.end(), "system") != verity.end()) return mounts;
+
+    // confirm that fstab is missing system
+    if (fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/")) {
+        return mounts;
     }
+    if (fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), "/system")) {
+        return mounts;
+    }
+
+    // Manually check dm state because stunted fstab (w/o system as root) borken
+    auto& dm = DeviceMapper::Instance();
+    auto found = false;
+    for (auto& system : {"system", "vroot"}) {
+        if (dm.GetState(system) == DmDeviceState::INVALID) continue;
+        std::vector<DeviceMapper::TargetInfo> table;
+        found = !dm.GetTableStatus(system, &table) || table.empty() || table[0].data.empty() ||
+                (table[0].data[0] == 'C') || (table[0].data[0] == 'V');
+        if (found) break;
+    }
+    if (!found) mounts.emplace_back("/system");
     return mounts;
 }
 
