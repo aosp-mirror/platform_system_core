@@ -435,22 +435,37 @@ TEST(liblp, UpdateBlockDeviceInfo) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
-    EXPECT_EQ(builder->block_device_info().size, device_info.size);
-    EXPECT_EQ(builder->block_device_info().alignment, device_info.alignment);
-    EXPECT_EQ(builder->block_device_info().alignment_offset, device_info.alignment_offset);
-    EXPECT_EQ(builder->block_device_info().logical_block_size, device_info.logical_block_size);
+    BlockDeviceInfo new_info;
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+
+    EXPECT_EQ(new_info.size, device_info.size);
+    EXPECT_EQ(new_info.alignment, device_info.alignment);
+    EXPECT_EQ(new_info.alignment_offset, device_info.alignment_offset);
+    EXPECT_EQ(new_info.logical_block_size, device_info.logical_block_size);
 
     device_info.alignment = 0;
     device_info.alignment_offset = 2048;
-    builder->set_block_device_info(device_info);
-    EXPECT_EQ(builder->block_device_info().alignment, 4096);
-    EXPECT_EQ(builder->block_device_info().alignment_offset, device_info.alignment_offset);
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo(device_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.alignment, 4096);
+    EXPECT_EQ(new_info.alignment_offset, device_info.alignment_offset);
 
     device_info.alignment = 8192;
     device_info.alignment_offset = 0;
-    builder->set_block_device_info(device_info);
-    EXPECT_EQ(builder->block_device_info().alignment, 8192);
-    EXPECT_EQ(builder->block_device_info().alignment_offset, 2048);
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo(device_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.alignment, 8192);
+    EXPECT_EQ(new_info.alignment_offset, 2048);
+
+    new_info.size += 4096;
+    ASSERT_FALSE(builder->UpdateBlockDeviceInfo(new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.size, 1024 * 1024);
+
+    new_info.logical_block_size = 512;
+    ASSERT_FALSE(builder->UpdateBlockDeviceInfo(new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.logical_block_size, 4096);
 }
 
 TEST(liblp, InvalidBlockSize) {
