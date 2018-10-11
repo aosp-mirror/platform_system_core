@@ -1018,7 +1018,11 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
             if (e4crypt_is_native()) {
                 LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
-                reboot_into_recovery({"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                if (auto result = reboot_into_recovery(
+                            {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                    !result) {
+                    LOG(FATAL) << "Could not reboot into recovery: " << result.error();
+                }
             } else {
                 LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
             }
