@@ -51,8 +51,8 @@ enum mount_mode {
 };
 
 // Callback function for verity status
-typedef void fs_mgr_verity_state_callback(struct fstab_rec* fstab, const char* mount_point,
-                                          int mode, int status);
+typedef void fs_mgr_verity_state_callback(fstab_rec* fstab, const char* mount_point, int mode,
+                                          int status);
 
 #define FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED 7
 #define FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION 6
@@ -63,32 +63,31 @@ typedef void fs_mgr_verity_state_callback(struct fstab_rec* fstab, const char* m
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
-int fs_mgr_mount_all(struct fstab *fstab, int mount_mode);
+int fs_mgr_mount_all(fstab* fstab, int mount_mode);
 
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
 #define FS_MGR_DOMNT_SUCCESS 0
 
-int fs_mgr_do_mount(struct fstab *fstab, const char *n_name, char *n_blk_device,
-                    char *tmp_mount_point);
-int fs_mgr_do_mount(struct fstab* fstab, const char* n_name, char* n_blk_device,
-                    char* tmp_mount_point, bool need_cp);
-int fs_mgr_do_mount_one(struct fstab_rec *rec);
+int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point);
+int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
+                    bool need_cp);
+int fs_mgr_do_mount_one(fstab_rec* rec);
 int fs_mgr_do_tmpfs_mount(const char *n_name);
-struct fstab_rec const* fs_mgr_get_crypt_entry(struct fstab const* fstab);
-void fs_mgr_get_crypt_info(struct fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
+fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab);
+void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
 bool fs_mgr_load_verity_state(int* mode);
 bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback);
 int fs_mgr_swapon_all(struct fstab *fstab);
 bool fs_mgr_update_logical_partition(struct fstab_rec* rec);
 
-int fs_mgr_do_format(struct fstab_rec *fstab, bool reserve_footer);
+int fs_mgr_do_format(fstab_rec* fstab, bool reserve_footer);
 
 #define FS_MGR_SETUP_VERITY_SKIPPED  (-3)
 #define FS_MGR_SETUP_VERITY_DISABLED (-2)
 #define FS_MGR_SETUP_VERITY_FAIL (-1)
 #define FS_MGR_SETUP_VERITY_SUCCESS 0
-int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev);
+int fs_mgr_setup_verity(fstab_rec* fstab, bool wait_for_verity_dev);
 
 // Return the name of the super partition if it exists. If a slot number is
 // specified, the super partition for the corresponding metadata slot will be
