@@ -142,7 +142,9 @@ static void TurnOffBacklight() {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
         return;
     }
-    service->Start();
+    if (auto result = service->Start(); !result) {
+        LOG(WARNING) << "Could not start blank_screen service: " << result.error();
+    }
 }
 
 static void ShutdownVold() {
