@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-#include <libgen.h>
+#include "fastdeploy.h"
+
 #include <algorithm>
 #include <array>
+#include <memory>
 
 #include "android-base/file.h"
 #include "android-base/strings.h"
+#include "androidfw/ResourceTypes.h"
+#include "androidfw/ZipFileRO.h"
 #include "client/file_sync_client.h"
 #include "commandline.h"
-#include "fastdeploy.h"
 #include "fastdeploycallbacks.h"
 #include "utils/String16.h"
 
@@ -138,60 +141,82 @@ void update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy) {
     }
 }
 
-static std::string get_aapt2_path() {
-    if (g_use_localagent) {
-        // This should never happen on a Windows machine
-        const char* host_out = getenv("ANDROID_HOST_OUT");
-        if (host_out == nullptr) {
-            fatal("Could not locate aapt2 because $ANDROID_HOST_OUT is not defined");
-        }
-        return android::base::StringPrintf("%s/bin/aapt2", host_out);
+static std::string get_string_from_utf16(const char16_t* input, int input_len) {
+    ssize_t utf8_length = utf16_to_utf8_length(input, input_len);
+    if (utf8_length <= 0) {
+        return {};
     }
-
-    std::string adb_dir = android::base::GetExecutableDirectory();
-    if (adb_dir.empty()) {
-        fatal("Could not locate aapt2");
-    }
-    return adb_dir + "/aapt2";
+    std::string utf8;
+    utf8.resize(utf8_length);
+    utf16_to_utf8(input, input_len, &*utf8.begin(), utf8_length + 1);
+    return utf8;
 }
 
-static int system_capture(const char* cmd, std::string& output) {
-    FILE* pipe = popen(cmd, "re");
-    int fd = -1;
-
-    if (pipe != nullptr) {
-        fd = fileno(pipe);
-    }
-
-    if (fd == -1) {
-        fatal_errno("Could not create pipe for process '%s'", cmd);
-    }
-
-    if (!android::base::ReadFdToString(fd, &output)) {
-        fatal_errno("Error reading from process '%s'", cmd);
-    }
-
-    return pclose(pipe);
-}
-
-// output is required to point to a valid output string (non-null)
 static std::string get_packagename_from_apk(const char* apkPath) {
-    const char* kAapt2DumpNameCommandPattern = R"(%s dump packagename "%s")";
-    std::string aapt2_path_string = get_aapt2_path();
-    std::string getPackagenameCommand = android::base::StringPrintf(
-            kAapt2DumpNameCommandPattern, aapt2_path_string.c_str(), apkPath);
-
-    std::string package_name;
-    int exit_code = system_capture(getPackagenameCommand.c_str(), package_name);
-    if (exit_code != 0) {
-        fatal("Error executing '%s' exitcode: %d", getPackagenameCommand.c_str(), exit_code);
+    std::unique_ptr<android::ZipFileRO> zipFile(android::ZipFileRO::open(apkPath));
+    if (zipFile == nullptr) {
+        fatal("Could not open %s", apkPath);
     }
-
-    // strip any line end characters from the output
-    return android::base::Trim(package_name);
+    android::ZipEntryRO entry = zipFile->findEntryByName("AndroidManifest.xml");
+    if (entry == nullptr) {
+        fatal("Could not find AndroidManifest.xml inside %s", apkPath);
+    }
+    uint32_t manifest_len = 0;
+    if (!zipFile->getEntryInfo(entry, NULL, &manifest_len, NULL, NULL, NULL, NULL)) {
+        fatal("Could not read AndroidManifest.xml inside %s", apkPath);
+    }
+    std::vector<char> manifest_data(manifest_len);
+    if (!zipFile->uncompressEntry(entry, manifest_data.data(), manifest_len)) {
+        fatal("Could not uncompress AndroidManifest.xml inside %s", apkPath);
+    }
+    android::ResXMLTree tree;
+    android::status_t setto_status = tree.setTo(manifest_data.data(), manifest_len, true);
+    if (setto_status != android::OK) {
+        fatal("Could not parse AndroidManifest.xml inside %s", apkPath);
+    }
+    android::ResXMLParser::event_code_t code;
+    while ((code = tree.next()) != android::ResXMLParser::BAD_DOCUMENT &&
+           code != android::ResXMLParser::END_DOCUMENT) {
+        switch (code) {
+            case android::ResXMLParser::START_TAG: {
+                size_t element_name_length;
+                const char16_t* element_name = tree.getElementName(&element_name_length);
+                if (element_name == nullptr) {
+                    continue;
+                }
+                std::u16string element_name_string(element_name, element_name_length);
+                if (element_name_string == u"manifest") {
+                    for (size_t i = 0; i < tree.getAttributeCount(); i++) {
+                        size_t attribute_name_length;
+                        const char16_t* attribute_name_text =
+                                tree.getAttributeName(i, &attribute_name_length);
+                        if (attribute_name_text == nullptr) {
+                            continue;
+                        }
+                        std::u16string attribute_name_string(attribute_name_text,
+                                                             attribute_name_length);
+                        if (attribute_name_string == u"package") {
+                            size_t attribute_value_length;
+                            const char16_t* attribute_value_text =
+                                    tree.getAttributeStringValue(i, &attribute_value_length);
+                            if (attribute_value_text == nullptr) {
+                                continue;
+                            }
+                            return get_string_from_utf16(attribute_value_text,
+                                                         attribute_value_length);
+                        }
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    fatal("Could not find package name tag in AndroidManifest.xml inside %s", apkPath);
 }
 
-int extract_metadata(const char* apkPath, FILE* outputFp) {
+void extract_metadata(const char* apkPath, FILE* outputFp) {
     std::string packageName = get_packagename_from_apk(apkPath);
     const char* kAgentExtractCommandPattern = "/data/local/tmp/deployagent extract %s";
     std::string extractCommand =
@@ -200,13 +225,10 @@ int extract_metadata(const char* apkPath, FILE* outputFp) {
     std::vector<char> extractErrorBuffer;
     int statusCode;
     DeployAgentFileCallback cb(outputFp, &extractErrorBuffer, &statusCode);
-    int ret = send_shell_command(extractCommand, false, &cb);
-
-    if (ret == 0) {
-        return cb.getBytesWritten();
+    int returnCode = send_shell_command(extractCommand, false, &cb);
+    if (returnCode != 0) {
+        fatal("Executing %s returned %d\n", extractCommand.c_str(), returnCode);
     }
-
-    return ret;
 }
 
 static std::string get_patch_generator_command() {
@@ -229,11 +251,14 @@ static std::string get_patch_generator_command() {
                                        adb_dir.c_str());
 }
 
-int create_patch(const char* apkPath, const char* metadataPath, const char* patchPath) {
+void create_patch(const char* apkPath, const char* metadataPath, const char* patchPath) {
     std::string generatePatchCommand = android::base::StringPrintf(
             R"(%s "%s" "%s" > "%s")", get_patch_generator_command().c_str(), apkPath, metadataPath,
             patchPath);
-    return system(generatePatchCommand.c_str());
+    int returnCode = system(generatePatchCommand.c_str());
+    if (returnCode != 0) {
+        fatal("Executing %s returned %d\n", generatePatchCommand.c_str(), returnCode);
+    }
 }
 
 std::string get_patch_path(const char* apkPath) {
@@ -243,36 +268,38 @@ std::string get_patch_path(const char* apkPath) {
     return patchDevicePath;
 }
 
-int apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath) {
+void apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath) {
     const std::string kAgentApplyCommandPattern = "/data/local/tmp/deployagent apply %s %s -o %s";
     std::string packageName = get_packagename_from_apk(apkPath);
     std::string patchDevicePath = get_patch_path(apkPath);
 
     std::vector<const char*> srcs = {patchPath};
     bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
-
     if (!push_ok) {
-        return -1;
+        fatal("Error pushing %s to %s returned\n", patchPath, patchDevicePath.c_str());
     }
 
     std::string applyPatchCommand =
             android::base::StringPrintf(kAgentApplyCommandPattern.c_str(), packageName.c_str(),
                                         patchDevicePath.c_str(), outputPath);
 
-    return send_shell_command(applyPatchCommand);
+    int returnCode = send_shell_command(applyPatchCommand);
+    if (returnCode != 0) {
+        fatal("Executing %s returned %d\n", applyPatchCommand.c_str(), returnCode);
+    }
 }
 
-int install_patch(const char* apkPath, const char* patchPath, int argc, const char** argv) {
+void install_patch(const char* apkPath, const char* patchPath, int argc, const char** argv) {
     const std::string kAgentApplyCommandPattern = "/data/local/tmp/deployagent apply %s %s -pm %s";
     std::string packageName = get_packagename_from_apk(apkPath);
-    std::vector<const char*> srcs;
+
     std::string patchDevicePath =
             android::base::StringPrintf("%s%s.patch", kDeviceAgentPath, packageName.c_str());
-    srcs.push_back(patchPath);
-    bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
 
+    std::vector<const char*> srcs{patchPath};
+    bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
     if (!push_ok) {
-        return -1;
+        fatal("Error pushing %s to %s returned\n", patchPath, patchDevicePath.c_str());
     }
 
     std::vector<unsigned char> applyOutputBuffer;
@@ -287,5 +314,8 @@ int install_patch(const char* apkPath, const char* patchPath, int argc, const ch
     std::string applyPatchCommand =
             android::base::StringPrintf(kAgentApplyCommandPattern.c_str(), packageName.c_str(),
                                         patchDevicePath.c_str(), argsString.c_str());
-    return send_shell_command(applyPatchCommand);
+    int returnCode = send_shell_command(applyPatchCommand);
+    if (returnCode != 0) {
+        fatal("Executing %s returned %d\n", applyPatchCommand.c_str(), returnCode);
+    }
 }
