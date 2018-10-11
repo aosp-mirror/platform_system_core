@@ -16,8 +16,9 @@
 
 #define TRACE_TAG TRANSPORT
 
+#include <memory>
+
 #include "sysdeps.h"
-#include "sysdeps/memory.h"
 #include "transport.h"
 
 #include <stdio.h>
