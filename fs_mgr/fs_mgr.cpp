@@ -1546,8 +1546,6 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    bool system_root = android::base::GetProperty("ro.build.system_root_image", "") == "true";
-
     for (int i = 0; i < fstab->num_entries; i++) {
         auto fsrec = &fstab->recs[i];
         if (!fs_mgr_is_verified(fsrec) && !fs_mgr_is_avb(fsrec)) {
@@ -1555,7 +1553,7 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         }
 
         std::string mount_point;
-        if (system_root && !strcmp(fsrec->mount_point, "/")) {
+        if (!strcmp(fsrec->mount_point, "/")) {
             // In AVB, the dm device name is vroot instead of system.
             mount_point = fs_mgr_is_avb(fsrec) ? "vroot" : "system";
         } else {
