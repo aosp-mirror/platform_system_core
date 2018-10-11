@@ -57,7 +57,8 @@ FastbootDevice::FastbootDevice()
       transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()),
       health_hal_(get_health_service()),
-      fastboot_hal_(IFastboot::getService()) {}
+      fastboot_hal_(IFastboot::getService()),
+      active_slot_("") {}
 
 FastbootDevice::~FastbootDevice() {
     CloseDevice();
@@ -68,6 +69,11 @@ void FastbootDevice::CloseDevice() {
 }
 
 std::string FastbootDevice::GetCurrentSlot() {
+    // Check if a set_active ccommand was issued earlier since the boot control HAL
+    // returns the slot that is currently booted into.
+    if (!active_slot_.empty()) {
+        return active_slot_;
+    }
     // Non-A/B devices must not have boot control HALs.
     if (!boot_control_hal_) {
         return "";
