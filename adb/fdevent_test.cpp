@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <memory>
 #include <queue>
 #include <string>
 #include <thread>
@@ -26,7 +27,6 @@
 
 #include "adb_io.h"
 #include "fdevent_test.h"
-#include "sysdeps/memory.h"
 
 class FdHandler {
   public:
