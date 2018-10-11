@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -45,7 +46,6 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "sysdeps/chrono.h"
-#include "sysdeps/memory.h"
 
 #if ADB_HOST
 

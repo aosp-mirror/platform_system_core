@@ -17,7 +17,6 @@
 #define TRACE_TAG TRANSPORT
 
 #include "sysdeps.h"
-#include "sysdeps/memory.h"
 
 #include "transport.h"
 
@@ -32,6 +31,7 @@
 #include <algorithm>
 #include <deque>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <thread>

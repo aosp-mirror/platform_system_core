@@ -63,7 +63,6 @@
 #include "services.h"
 #include "shell_protocol.h"
 #include "sysdeps/chrono.h"
-#include "sysdeps/memory.h"
 
 extern int gListenAll;
 

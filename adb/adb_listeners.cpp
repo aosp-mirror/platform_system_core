@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <list>
+#include <memory>
 
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -29,7 +30,6 @@
 
 #include "socket_spec.h"
 #include "sysdeps.h"
-#include "sysdeps/memory.h"
 #include "transport.h"
 
 // A listener is an entity which binds to a local port and, upon receiving a connection on that
