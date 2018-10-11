@@ -374,6 +374,7 @@ bool NetlinkEvent::parseRtMessage(const struct nlmsghdr *nh) {
                     continue;
                 if (!if_indextoname(* (int *) RTA_DATA(rta), dev))
                     return false;
+                continue;
             default:
                 continue;
         }
