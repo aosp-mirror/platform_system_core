@@ -52,7 +52,6 @@
 #include "fdevent.h"
 #include "sysdeps/chrono.h"
 
-static void register_transport(atransport* transport);
 static void remove_transport(atransport* transport);
 static void transport_unref(atransport* transport);
 
@@ -671,7 +670,7 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
             return true;
         });
         t->connection()->SetErrorCallback([t](Connection*, const std::string& error) {
-            D("%s: connection terminated: %s", t->serial.c_str(), error.c_str());
+            LOG(INFO) << t->serial_name() << ": connection terminated: " << error;
             fdevent_run_on_main_thread([t]() {
                 handle_offline(t);
                 transport_unref(t);
@@ -730,7 +729,7 @@ void kick_all_transports() {
 }
 
 /* the fdevent select pump is single threaded */
-static void register_transport(atransport* transport) {
+void register_transport(atransport* transport) {
     tmsg m;
     m.transport = transport;
     m.action = 1;
@@ -758,6 +757,7 @@ static void transport_unref(atransport* t) {
     CHECK_GT(t->ref_count, 0u);
     t->ref_count--;
     if (t->ref_count == 0) {
+        LOG(INFO) << "destroying transport " << t->serial_name();
         t->connection()->Stop();
 #if ADB_HOST
         if (t->IsTcpDevice() && !t->kicked()) {
@@ -1293,6 +1293,7 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
     register_transport(t);
 }
 
+#if ADB_HOST
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle* usb) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
@@ -1304,6 +1305,7 @@ void unregister_usb_transport(usb_handle* usb) {
         return false;
     });
 }
+#endif
 
 bool check_header(apacket* p, atransport* t) {
     if (p->msg.magic != (p->msg.command ^ 0xffffffff)) {

@@ -94,8 +94,8 @@ static bool init_functionfs(struct usb_handle* h) {
     return true;
 }
 
-static void usb_ffs_open_thread(usb_handle* usb) {
-    adb_thread_setname("usb ffs open");
+static void usb_legacy_ffs_open_thread(usb_handle* usb) {
+    adb_thread_setname("usb legacy ffs open");
 
     while (true) {
         // wait until the USB device needs opening
@@ -285,12 +285,12 @@ usb_handle* create_usb_handle(unsigned num_bufs, unsigned io_size) {
     return h;
 }
 
-void usb_init() {
-    D("[ usb_init - using FunctionFS ]");
+void usb_init_legacy() {
+    D("[ usb_init - using legacy FunctionFS ]");
     dummy_fd.reset(adb_open("/dev/null", O_WRONLY | O_CLOEXEC));
     CHECK_NE(-1, dummy_fd.get());
 
-    std::thread(usb_ffs_open_thread, create_usb_handle(USB_FFS_NUM_BUFS, USB_FFS_BULK_SIZE))
+    std::thread(usb_legacy_ffs_open_thread, create_usb_handle(USB_FFS_NUM_BUFS, USB_FFS_BULK_SIZE))
             .detach();
 }
 
