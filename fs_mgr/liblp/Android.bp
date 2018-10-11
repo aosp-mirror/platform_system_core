@@ -51,6 +51,7 @@ cc_test {
         "liblp",
         "libbase",
         "libfs_mgr",
+        "libsparse",
     ],
     srcs: [
         "builder_test.cpp",
