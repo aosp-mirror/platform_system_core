@@ -21,10 +21,15 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
+#include <string>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr_overlayfs.h>
+#include <fstab/fstab.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <sparse/sparse.h>
@@ -32,13 +37,35 @@
 #include "fastboot_device.h"
 #include "utility.h"
 
+using namespace android::fs_mgr;
+using namespace std::literals;
+
 namespace {
 
 constexpr uint32_t SPARSE_HEADER_MAGIC = 0xed26ff3a;
 
-}  // namespace
+void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partition_name) {
+    // May be called, in the case of sparse data, multiple times so cache/skip.
+    static std::set<std::string> wiped;
+    if (wiped.find(partition_name) != wiped.end()) return;
+    wiped.insert(partition_name);
+    // Following appears to have a first time 2% impact on flashing speeds.
 
-using namespace android::fs_mgr;
+    // Convert partition_name to a validated mount point and wipe.
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    for (auto i = 0; i < fstab->num_entries; i++) {
+        const auto mount_point = fstab->recs[i].mount_point;
+        if (!mount_point) continue;
+        auto partition = android::base::Basename(mount_point);
+        if ("/"s == mount_point) partition = "system";
+        if ((partition + device->GetCurrentSlot()) == partition_name) {
+            fs_mgr_overlayfs_teardown(mount_point);
+        }
+    }
+}
+
+}  // namespace
 
 int FlashRawDataChunk(int fd, const char* data, size_t len) {
     size_t ret = 0;
@@ -101,6 +128,7 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
     } else if (data.size() > get_block_device_size(handle.fd())) {
         return -EOVERFLOW;
     }
+    WipeOverlayfsForPartition(device, partition_name);
     return FlashBlockDevice(handle.fd(), data);
 }
 
