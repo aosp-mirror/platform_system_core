@@ -167,16 +167,12 @@ bool SparseBuilder::Build() {
     std::string metadata_blob = SerializeMetadata(metadata_);
     metadata_blob.resize(geometry_.metadata_max_size);
 
-    std::string all_metadata;
-    for (size_t i = 0; i < geometry_.metadata_slot_count; i++) {
-        all_metadata += metadata_blob;
+    // Two copies of geometry, then two copies of each metadata slot.
+    all_metadata_ += geometry_blob + geometry_blob;
+    for (size_t i = 0; i < geometry_.metadata_slot_count * 2; i++) {
+        all_metadata_ += metadata_blob;
     }
-
-    // Metadata immediately follows geometry, and we write the same metadata
-    // to all slots. Note that we don't bother trying to write skip chunks
-    // here since it's a small amount of data.
-    primary_blob_ = geometry_blob + all_metadata;
-    if (!AddData(primary_blob_, 0)) {
+    if (!AddData(all_metadata_, 0)) {
         return false;
     }
 
@@ -193,17 +189,6 @@ bool SparseBuilder::Build() {
 
     if (!images_.empty()) {
         LERROR << "Partition image was specified but no partition was found.";
-        return false;
-    }
-
-    // The backup area contains all metadata slots, and then geometry. Similar
-    // to before we write the metadata to every slot.
-    int64_t backup_offset = GetBackupMetadataOffset(geometry_, 0);
-    int64_t backups_start = static_cast<int64_t>(geometry_.block_device_size) + backup_offset;
-    int64_t backup_sector = backups_start / LP_SECTOR_SIZE;
-
-    backup_blob_ = all_metadata + geometry_blob;
-    if (!AddData(backup_blob_, backup_sector)) {
         return false;
     }
     return true;

@@ -290,13 +290,13 @@ TEST(liblp, ReadBackupGeometry) {
     char corruption[LP_METADATA_GEOMETRY_SIZE];
     memset(corruption, 0xff, sizeof(corruption));
 
-    // Corrupt the first 4096 bytes of the disk.
-    ASSERT_GE(lseek(fd, 0, SEEK_SET), 0);
+    // Corrupt the primary geometry.
+    ASSERT_GE(lseek(fd, GetPrimaryGeometryOffset(), SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_NE(ReadMetadata(fd, 0), nullptr);
 
-    // Corrupt the last 4096 bytes too.
-    ASSERT_GE(lseek(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END), 0);
+    // Corrupt the backup geometry.
+    ASSERT_GE(lseek(fd, GetBackupGeometryOffset(), SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_EQ(ReadMetadata(fd, 0), nullptr);
 }
@@ -310,14 +310,16 @@ TEST(liblp, ReadBackupMetadata) {
     char corruption[kMetadataSize];
     memset(corruption, 0xff, sizeof(corruption));
 
-    ASSERT_GE(lseek(fd, LP_METADATA_GEOMETRY_SIZE, SEEK_SET), 0);
+    off_t offset = GetPrimaryMetadataOffset(metadata->geometry, 0);
+
+    ASSERT_GE(lseek(fd, offset, SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_NE(ReadMetadata(fd, 0), nullptr);
 
-    off_t offset = LP_METADATA_GEOMETRY_SIZE + kMetadataSize * 2;
+    offset = GetBackupMetadataOffset(metadata->geometry, 0);
 
     // Corrupt the backup metadata.
-    ASSERT_GE(lseek(fd, -offset, SEEK_END), 0);
+    ASSERT_GE(lseek(fd, offset, SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_EQ(ReadMetadata(fd, 0), nullptr);
 }

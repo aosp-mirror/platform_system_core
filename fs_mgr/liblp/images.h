@@ -56,8 +56,7 @@ class SparseBuilder {
     const LpMetadataGeometry& geometry_;
     uint32_t block_size_;
     std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)> file_;
-    std::string primary_blob_;
-    std::string backup_blob_;
+    std::string all_metadata_;
     std::map<std::string, std::string> images_;
     std::vector<android::base::unique_fd> temp_fds_;
 };
