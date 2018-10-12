@@ -612,6 +612,10 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     }
 
     lmkd_pack_get_procremove(packet, &params);
+    /*
+     * WARNING: After pid_remove() procp is freed and can't be used!
+     * Therefore placed at the end of the function.
+     */
     pid_remove(params.pid);
 }
 
@@ -1135,6 +1139,7 @@ static int kill_one_process(struct proc* procp) {
     char *taskname;
     int tasksize;
     int r;
+    int result = -1;
 
 #ifdef LMKD_LOG_STATS
     struct memory_stat mem_st = {};
@@ -1143,14 +1148,12 @@ static int kill_one_process(struct proc* procp) {
 
     taskname = proc_get_name(pid);
     if (!taskname) {
-        pid_remove(pid);
-        return -1;
+        goto out;
     }
 
     tasksize = proc_get_size(pid);
     if (tasksize <= 0) {
-        pid_remove(pid);
-        return -1;
+        goto out;
     }
 
 #ifdef LMKD_LOG_STATS
@@ -1169,13 +1172,12 @@ static int kill_one_process(struct proc* procp) {
     r = kill(pid, SIGKILL);
     ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB",
         taskname, pid, uid, procp->oomadj, tasksize * page_k);
-    pid_remove(pid);
 
     TRACE_KILL_END();
 
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
-        return -1;
+        goto out;
     } else {
 #ifdef LMKD_LOG_STATS
         if (memory_stat_parse_result == 0) {
@@ -1187,10 +1189,16 @@ static int kill_one_process(struct proc* procp) {
                                           -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1);
         }
 #endif
-        return tasksize;
+        result = tasksize;
     }
 
-    return tasksize;
+out:
+    /*
+     * WARNING: After pid_remove() procp is freed and can't be used!
+     * Therefore placed at the end of the function.
+     */
+    pid_remove(pid);
+    return result;
 }
 
 /*
