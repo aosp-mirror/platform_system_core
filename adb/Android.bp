@@ -24,7 +24,6 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wvla",
     ],
-    cpp_std: "gnu++17",
     rtti: true,
 
     use_version_lib: true,
