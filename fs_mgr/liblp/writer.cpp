@@ -106,13 +106,11 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     // metadata.
     uint64_t reserved_size = LP_METADATA_GEOMETRY_SIZE +
                              uint64_t(geometry.metadata_max_size) * geometry.metadata_slot_count;
-    if (reserved_size > blockdevice_size ||
-        reserved_size > geometry.first_logical_sector * LP_SECTOR_SIZE) {
+    uint64_t total_reserved = reserved_size * 2;
+
+    if (total_reserved > blockdevice_size ||
+        total_reserved > geometry.first_logical_sector * LP_SECTOR_SIZE) {
         LERROR << "Not enough space to store all logical partition metadata slots.";
-        return false;
-    }
-    if (blockdevice_size - reserved_size < (geometry.last_logical_sector + 1) * LP_SECTOR_SIZE) {
-        LERROR << "Not enough space to backup all logical partition metadata slots.";
         return false;
     }
     if (blockdevice_size != metadata.geometry.block_device_size) {
@@ -162,12 +160,12 @@ static bool WriteBackupMetadata(int fd, const LpMetadataGeometry& geometry, uint
                                 const std::string& blob,
                                 const std::function<bool(int, const std::string&)>& writer) {
     int64_t backup_offset = GetBackupMetadataOffset(geometry, slot_number);
-    int64_t abs_offset = SeekFile64(fd, backup_offset, SEEK_END);
+    int64_t abs_offset = SeekFile64(fd, backup_offset, SEEK_SET);
     if (abs_offset == (int64_t)-1) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << backup_offset;
         return false;
     }
-    if (abs_offset < int64_t((geometry.last_logical_sector + 1) * LP_SECTOR_SIZE)) {
+    if (abs_offset >= int64_t(geometry.first_logical_sector) * LP_SECTOR_SIZE) {
         PERROR << __PRETTY_FUNCTION__ << "backup offset " << abs_offset
                << " is within logical partition bounds, sector " << geometry.last_logical_sector;
         return false;
@@ -211,7 +209,7 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
 
     // Write geometry to the first and last 4096 bytes of the device.
     std::string blob = SerializeGeometry(metadata.geometry);
-    if (SeekFile64(fd, 0, SEEK_SET) < 0) {
+    if (SeekFile64(fd, GetPrimaryGeometryOffset(), SEEK_SET) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset 0";
         return false;
     }
@@ -219,7 +217,7 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
         PERROR << __PRETTY_FUNCTION__ << "write " << blob.size() << " bytes failed";
         return false;
     }
-    if (SeekFile64(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END) < 0) {
+    if (SeekFile64(fd, GetBackupGeometryOffset(), SEEK_SET) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << -LP_METADATA_GEOMETRY_SIZE;
         return false;
     }

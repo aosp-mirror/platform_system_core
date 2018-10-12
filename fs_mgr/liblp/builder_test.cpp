@@ -48,8 +48,8 @@ TEST(liblp, ResizePartition) {
     LinearExtent* extent = system->extents()[0]->AsLinearExtent();
     ASSERT_NE(extent, nullptr);
     EXPECT_EQ(extent->num_sectors(), 65536 / LP_SECTOR_SIZE);
-    // The first logical sector will be (4096+1024*2)/512 = 12.
-    EXPECT_EQ(extent->physical_sector(), 12);
+    // The first logical sector will be (8192+1024*4)/512 = 12.
+    EXPECT_EQ(extent->physical_sector(), 24);
 
     // Test resizing to the same size.
     EXPECT_EQ(builder->ResizePartition(system, 65536), true);
@@ -78,7 +78,7 @@ TEST(liblp, ResizePartition) {
     extent = system->extents()[0]->AsLinearExtent();
     ASSERT_NE(extent, nullptr);
     EXPECT_EQ(extent->num_sectors(), 32768 / LP_SECTOR_SIZE);
-    EXPECT_EQ(extent->physical_sector(), 12);
+    EXPECT_EQ(extent->physical_sector(), 24);
 
     // Test shrinking to 0.
     builder->ResizePartition(system, 0);
@@ -127,7 +127,7 @@ TEST(liblp, InternalAlignment) {
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.first_logical_sector, 1536);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2031);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2047);
 
     // Test a large alignment offset thrown in.
     device_info.alignment_offset = 753664;
@@ -136,7 +136,7 @@ TEST(liblp, InternalAlignment) {
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.first_logical_sector, 1472);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2031);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2047);
 
     // Alignment offset without alignment doesn't mean anything.
     device_info.alignment = 0;
@@ -150,8 +150,8 @@ TEST(liblp, InternalAlignment) {
     ASSERT_NE(builder, nullptr);
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 78);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 1973);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 150);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2045);
 
     // Test a small alignment with no alignment offset.
     device_info.alignment = 11 * 1024;
@@ -159,8 +159,8 @@ TEST(liblp, InternalAlignment) {
     ASSERT_NE(builder, nullptr);
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 72);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 1975);
+    EXPECT_EQ(exported->geometry.first_logical_sector, 160);
+    EXPECT_EQ(exported->geometry.last_logical_sector, 2047);
 }
 
 TEST(liblp, InternalPartitionAlignment) {
@@ -247,11 +247,11 @@ TEST(liblp, BuildComplex) {
     ASSERT_NE(system2, nullptr);
     ASSERT_NE(vendor1, nullptr);
     EXPECT_EQ(system1->num_sectors(), 65536 / LP_SECTOR_SIZE);
-    EXPECT_EQ(system1->physical_sector(), 12);
+    EXPECT_EQ(system1->physical_sector(), 24);
     EXPECT_EQ(system2->num_sectors(), 32768 / LP_SECTOR_SIZE);
-    EXPECT_EQ(system2->physical_sector(), 204);
+    EXPECT_EQ(system2->physical_sector(), 216);
     EXPECT_EQ(vendor1->num_sectors(), 32768 / LP_SECTOR_SIZE);
-    EXPECT_EQ(vendor1->physical_sector(), 140);
+    EXPECT_EQ(vendor1->physical_sector(), 152);
     EXPECT_EQ(system1->physical_sector() + system1->num_sectors(), vendor1->physical_sector());
     EXPECT_EQ(vendor1->physical_sector() + vendor1->num_sectors(), system2->physical_sector());
 }
@@ -297,13 +297,11 @@ TEST(liblp, BuilderExport) {
     EXPECT_EQ(geometry.struct_size, sizeof(geometry));
     EXPECT_EQ(geometry.metadata_max_size, 1024);
     EXPECT_EQ(geometry.metadata_slot_count, 2);
-    EXPECT_EQ(geometry.first_logical_sector, 12);
-    EXPECT_EQ(geometry.last_logical_sector, 2035);
+    EXPECT_EQ(geometry.first_logical_sector, 24);
+    EXPECT_EQ(geometry.last_logical_sector, 2047);
 
     static const size_t kMetadataSpace =
-            (kMetadataSize * kMetadataSlots) + LP_METADATA_GEOMETRY_SIZE;
-    uint64_t space_at_end = kDiskSize - (geometry.last_logical_sector + 1) * LP_SECTOR_SIZE;
-    EXPECT_GE(space_at_end, kMetadataSpace);
+            ((kMetadataSize * kMetadataSlots) + LP_METADATA_GEOMETRY_SIZE) * 2;
     EXPECT_GE(geometry.first_logical_sector * LP_SECTOR_SIZE, kMetadataSpace);
 
     // Verify header.
@@ -361,9 +359,9 @@ TEST(liblp, BuilderImport) {
     LinearExtent* system2 = system->extents()[1]->AsLinearExtent();
     LinearExtent* vendor1 = vendor->extents()[0]->AsLinearExtent();
     EXPECT_EQ(system1->num_sectors(), 65536 / LP_SECTOR_SIZE);
-    EXPECT_EQ(system1->physical_sector(), 12);
+    EXPECT_EQ(system1->physical_sector(), 24);
     EXPECT_EQ(system2->num_sectors(), 32768 / LP_SECTOR_SIZE);
-    EXPECT_EQ(system2->physical_sector(), 204);
+    EXPECT_EQ(system2->physical_sector(), 216);
     EXPECT_EQ(vendor1->num_sectors(), 32768 / LP_SECTOR_SIZE);
 }
 
@@ -437,22 +435,37 @@ TEST(liblp, UpdateBlockDeviceInfo) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
-    EXPECT_EQ(builder->block_device_info().size, device_info.size);
-    EXPECT_EQ(builder->block_device_info().alignment, device_info.alignment);
-    EXPECT_EQ(builder->block_device_info().alignment_offset, device_info.alignment_offset);
-    EXPECT_EQ(builder->block_device_info().logical_block_size, device_info.logical_block_size);
+    BlockDeviceInfo new_info;
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+
+    EXPECT_EQ(new_info.size, device_info.size);
+    EXPECT_EQ(new_info.alignment, device_info.alignment);
+    EXPECT_EQ(new_info.alignment_offset, device_info.alignment_offset);
+    EXPECT_EQ(new_info.logical_block_size, device_info.logical_block_size);
 
     device_info.alignment = 0;
     device_info.alignment_offset = 2048;
-    builder->set_block_device_info(device_info);
-    EXPECT_EQ(builder->block_device_info().alignment, 4096);
-    EXPECT_EQ(builder->block_device_info().alignment_offset, device_info.alignment_offset);
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo(device_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.alignment, 4096);
+    EXPECT_EQ(new_info.alignment_offset, device_info.alignment_offset);
 
     device_info.alignment = 8192;
     device_info.alignment_offset = 0;
-    builder->set_block_device_info(device_info);
-    EXPECT_EQ(builder->block_device_info().alignment, 8192);
-    EXPECT_EQ(builder->block_device_info().alignment_offset, 2048);
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo(device_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.alignment, 8192);
+    EXPECT_EQ(new_info.alignment_offset, 2048);
+
+    new_info.size += 4096;
+    ASSERT_FALSE(builder->UpdateBlockDeviceInfo(new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.size, 1024 * 1024);
+
+    new_info.logical_block_size = 512;
+    ASSERT_FALSE(builder->UpdateBlockDeviceInfo(new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    EXPECT_EQ(new_info.logical_block_size, 4096);
 }
 
 TEST(liblp, InvalidBlockSize) {
