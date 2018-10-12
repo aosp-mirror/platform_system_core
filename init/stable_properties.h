@@ -31,6 +31,7 @@ static constexpr const char* kPartnerPrefixes[] = {
 static const std::set<std::string> kExportedActionableProperties = {
     "dev.bootcomplete",
     "init.svc.console",
+    "init.svc.dumpstatez",
     "init.svc.mediadrm",
     "init.svc.surfaceflinger",
     "init.svc.zygote",
