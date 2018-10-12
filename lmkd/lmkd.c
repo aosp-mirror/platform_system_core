@@ -559,7 +559,7 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
         } else if (params.oomadj >= 300) {
             soft_limit_mult = 1;
         } else if (params.oomadj >= 200) {
-            soft_limit_mult = 2;
+            soft_limit_mult = 8;
         } else if (params.oomadj >= 100) {
             soft_limit_mult = 10;
         } else if (params.oomadj >=   0) {
