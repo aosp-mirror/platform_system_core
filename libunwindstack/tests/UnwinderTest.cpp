@@ -946,6 +946,33 @@ TEST_F(UnwinderTest, dex_pc_multiple_frames) {
   EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
 
+TEST_F(UnwinderTest, dex_pc_max_frames) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
+  regs_.FakeSetDexPc(0xa3400);
+
+  Unwinder unwinder(1, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_MAX_FRAMES_EXCEEDED, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x400U, frame->rel_pc);
+  EXPECT_EQ(0xa3400U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.vdex", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0xa3000U, frame->map_start);
+  EXPECT_EQ(0xa4000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+}
+
 // Verify format frame code.
 TEST_F(UnwinderTest, format_frame_static) {
   FrameData frame;
