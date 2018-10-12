@@ -150,7 +150,7 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& block_d
     }
     BlockDeviceInfo device_info;
     if (fs_mgr::GetBlockDeviceInfo(block_device, &device_info)) {
-        builder->set_block_device_info(device_info);
+        builder->UpdateBlockDeviceInfo(device_info);
     }
     return builder;
 }
@@ -217,10 +217,6 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
             }
         }
     }
-
-    device_info_.alignment = geometry_.alignment;
-    device_info_.alignment_offset = geometry_.alignment_offset;
-    device_info_.logical_block_size = geometry_.logical_block_size;
     return true;
 }
 
@@ -239,24 +235,23 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     metadata_max_size = AlignTo(metadata_max_size, LP_SECTOR_SIZE);
 
     // Check that device properties are sane.
-    device_info_ = device_info;
-    if (device_info_.size % LP_SECTOR_SIZE != 0) {
+    if (device_info.size % LP_SECTOR_SIZE != 0) {
         LERROR << "Block device size must be a multiple of 512.";
         return false;
     }
-    if (device_info_.logical_block_size % LP_SECTOR_SIZE != 0) {
+    if (device_info.logical_block_size % LP_SECTOR_SIZE != 0) {
         LERROR << "Logical block size must be a multiple of 512.";
         return false;
     }
-    if (device_info_.alignment_offset % LP_SECTOR_SIZE != 0) {
+    if (device_info.alignment_offset % LP_SECTOR_SIZE != 0) {
         LERROR << "Alignment offset is not sector-aligned.";
         return false;
     }
-    if (device_info_.alignment % LP_SECTOR_SIZE != 0) {
+    if (device_info.alignment % LP_SECTOR_SIZE != 0) {
         LERROR << "Partition alignment is not sector-aligned.";
         return false;
     }
-    if (device_info_.alignment_offset > device_info_.alignment) {
+    if (device_info.alignment_offset > device_info.alignment) {
         LERROR << "Partition alignment offset is greater than its alignment.";
         return false;
     }
@@ -267,20 +262,21 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     uint64_t reserved =
             LP_METADATA_GEOMETRY_SIZE + (uint64_t(metadata_max_size) * metadata_slot_count);
     uint64_t total_reserved = reserved * 2;
-    if (device_info_.size < total_reserved) {
+    if (device_info.size < total_reserved) {
         LERROR << "Attempting to create metadata on a block device that is too small.";
         return false;
     }
 
     // Compute the first free sector, factoring in alignment.
-    uint64_t free_area = AlignTo(reserved, device_info_.alignment, device_info_.alignment_offset);
+    uint64_t free_area =
+            AlignTo(total_reserved, device_info.alignment, device_info.alignment_offset);
     uint64_t first_sector = free_area / LP_SECTOR_SIZE;
 
     // Compute the last free sector, which is inclusive. We subtract 1 to make
     // sure that logical partitions won't overlap with the same sector as the
     // backup metadata, which could happen if the block device was not aligned
     // to LP_SECTOR_SIZE.
-    uint64_t last_sector = ((device_info_.size - reserved) / LP_SECTOR_SIZE) - 1;
+    uint64_t last_sector = (device_info.size / LP_SECTOR_SIZE) - 1;
 
     // If this check fails, it means either (1) we did not have free space to
     // allocate a single sector, or (2) we did, but the alignment was high
@@ -296,7 +292,7 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     // computation, then we abort. Note that the last sector is inclusive,
     // so we have to account for that.
     uint64_t num_free_sectors = last_sector - first_sector + 1;
-    uint64_t sectors_per_block = device_info_.logical_block_size / LP_SECTOR_SIZE;
+    uint64_t sectors_per_block = device_info.logical_block_size / LP_SECTOR_SIZE;
     if (num_free_sectors < sectors_per_block) {
         LERROR << "Not enough space to allocate any partition tables.";
         return false;
@@ -307,9 +303,9 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     geometry_.last_logical_sector = last_sector;
     geometry_.metadata_max_size = metadata_max_size;
     geometry_.metadata_slot_count = metadata_slot_count;
-    geometry_.alignment = device_info_.alignment;
-    geometry_.alignment_offset = device_info_.alignment_offset;
-    geometry_.block_device_size = device_info_.size;
+    geometry_.alignment = device_info.alignment;
+    geometry_.alignment_offset = device_info.alignment_offset;
+    geometry_.block_device_size = device_info.size;
     geometry_.logical_block_size = device_info.logical_block_size;
 
     if (!AddGroup("default", 0)) {
@@ -460,7 +456,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         free_regions.emplace_back(last_free_extent_start, geometry_.last_logical_sector + 1);
     }
 
-    const uint64_t sectors_per_block = device_info_.logical_block_size / LP_SECTOR_SIZE;
+    const uint64_t sectors_per_block = geometry_.logical_block_size / LP_SECTOR_SIZE;
     CHECK_NE(sectors_per_block, 0);
     CHECK(sectors_needed % sectors_per_block == 0);
 
@@ -578,32 +574,44 @@ uint64_t MetadataBuilder::AlignSector(uint64_t sector) {
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.
     uint64_t lba = sector * LP_SECTOR_SIZE;
-    uint64_t aligned = AlignTo(lba, device_info_.alignment, device_info_.alignment_offset);
+    uint64_t aligned = AlignTo(lba, geometry_.alignment, geometry_.alignment_offset);
     return AlignTo(aligned, LP_SECTOR_SIZE) / LP_SECTOR_SIZE;
 }
 
-void MetadataBuilder::set_block_device_info(const BlockDeviceInfo& device_info) {
-    device_info_.size = device_info.size;
+bool MetadataBuilder::GetBlockDeviceInfo(BlockDeviceInfo* info) const {
+    info->size = geometry_.block_device_size;
+    info->alignment = geometry_.alignment;
+    info->alignment_offset = geometry_.alignment_offset;
+    info->logical_block_size = geometry_.logical_block_size;
+    return true;
+}
 
-    // Note that if the logical block size changes, we're probably in trouble:
-    // we could have already built extents that will only work on the previous
-    // size.
-    DCHECK(partitions_.empty() ||
-           device_info_.logical_block_size == device_info.logical_block_size);
+bool MetadataBuilder::UpdateBlockDeviceInfo(const BlockDeviceInfo& device_info) {
+    if (device_info.size != geometry_.block_device_size) {
+        LERROR << "Device size does not match (got " << device_info.size << ", expected "
+               << geometry_.block_device_size << ")";
+        return false;
+    }
+    if (device_info.logical_block_size != geometry_.logical_block_size) {
+        LERROR << "Device logical block size does not match (got " << device_info.logical_block_size
+               << ", expected " << geometry_.logical_block_size << ")";
+        return false;
+    }
 
     // The kernel does not guarantee these values are present, so we only
     // replace existing values if the new values are non-zero.
     if (device_info.alignment) {
-        device_info_.alignment = device_info.alignment;
+        geometry_.alignment = device_info.alignment;
     }
     if (device_info.alignment_offset) {
-        device_info_.alignment_offset = device_info.alignment_offset;
+        geometry_.alignment_offset = device_info.alignment_offset;
     }
+    return true;
 }
 
 bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size) {
     // Align the space needed up to the nearest sector.
-    uint64_t aligned_size = AlignTo(requested_size, device_info_.logical_block_size);
+    uint64_t aligned_size = AlignTo(requested_size, geometry_.logical_block_size);
     uint64_t old_size = partition->size();
 
     if (aligned_size > old_size) {
