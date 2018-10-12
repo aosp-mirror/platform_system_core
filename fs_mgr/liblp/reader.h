@@ -36,6 +36,8 @@ std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, in
 std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, const void* buffer,
                                           size_t size);
 bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry);
+bool ReadPrimaryGeometry(int fd, LpMetadataGeometry* geometry);
+bool ReadBackupGeometry(int fd, LpMetadataGeometry* geometry);
 
 // These functions assume a valid geometry and slot number.
 std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
