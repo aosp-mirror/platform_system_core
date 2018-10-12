@@ -535,3 +535,36 @@ TEST(liblp, UpdateMetadataCleanFailure) {
     ASSERT_GE(new_table->partitions.size(), 1);
     ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
 }
+
+// Test that writing a sparse image can be read back.
+TEST(liblp, FlashSparseImage) {
+    unique_fd fd = CreateFakeDisk();
+    ASSERT_GE(fd, 0);
+
+    BlockDeviceInfo device_info(kDiskSize, 0, 0, 512);
+    unique_ptr<MetadataBuilder> builder =
+            MetadataBuilder::New(device_info, kMetadataSize, kMetadataSlots);
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+
+    // Build the sparse file.
+    SparseBuilder sparse(*exported.get(), 512, {});
+    ASSERT_TRUE(sparse.IsValid());
+    sparse_file_verbose(sparse.file());
+    ASSERT_TRUE(sparse.Build());
+
+    // Write it to the fake disk.
+    ASSERT_NE(lseek(fd.get(), 0, SEEK_SET), -1);
+    int ret = sparse_file_write(sparse.file(), fd.get(), false, false, false);
+    ASSERT_EQ(ret, 0);
+
+    // Verify that we can read both sets of metadata.
+    LpMetadataGeometry geometry;
+    ASSERT_TRUE(ReadPrimaryGeometry(fd.get(), &geometry));
+    ASSERT_TRUE(ReadBackupGeometry(fd.get(), &geometry));
+    ASSERT_NE(ReadPrimaryMetadata(fd.get(), geometry, 0), nullptr);
+    ASSERT_NE(ReadBackupMetadata(fd.get(), geometry, 0), nullptr);
+}
