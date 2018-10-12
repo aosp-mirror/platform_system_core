@@ -41,7 +41,10 @@ cc_defaults {
 
     target: {
         android: {
-            cflags: ["-DADB_HOST=0"],
+            cflags: [
+                "-DADB_HOST=0",
+                "-Wthread-safety",
+            ],
         },
 
         host: {
