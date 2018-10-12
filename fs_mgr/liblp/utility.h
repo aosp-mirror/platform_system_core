@@ -38,6 +38,10 @@ namespace fs_mgr {
 // error. After calling this, the position of |fd| may have changed.
 bool GetDescriptorSize(int fd, uint64_t* size);
 
+// Return the offset of the primary or backup geometry.
+int64_t GetPrimaryGeometryOffset();
+int64_t GetBackupGeometryOffset();
+
 // Return the offset of a primary metadata slot, relative to the start of the
 // device.
 int64_t GetPrimaryMetadataOffset(const LpMetadataGeometry& geometry, uint32_t slot_number);

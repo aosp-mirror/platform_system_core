@@ -215,10 +215,8 @@ class MetadataBuilder {
     uint64_t AllocatableSpace() const;
     uint64_t UsedSpace() const;
 
-    // Merge new block device information into previous values. Alignment values
-    // are only overwritten if the new values are non-zero.
-    void set_block_device_info(const BlockDeviceInfo& device_info);
-    const BlockDeviceInfo& block_device_info() const { return device_info_; }
+    bool GetBlockDeviceInfo(BlockDeviceInfo* info) const;
+    bool UpdateBlockDeviceInfo(const BlockDeviceInfo& info);
 
   private:
     MetadataBuilder();
@@ -238,7 +236,6 @@ class MetadataBuilder {
     LpMetadataHeader header_;
     std::vector<std::unique_ptr<Partition>> partitions_;
     std::vector<std::unique_ptr<PartitionGroup>> groups_;
-    BlockDeviceInfo device_info_;
 };
 
 // Read BlockDeviceInfo for a given block device. This always returns false
