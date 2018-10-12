@@ -37,6 +37,7 @@ struct LpMetadata {
     std::vector<LpMetadataPartition> partitions;
     std::vector<LpMetadataExtent> extents;
     std::vector<LpMetadataPartitionGroup> groups;
+    std::vector<LpMetadataBlockDevice> block_devices;
 };
 
 // Place an initial partition table on the device. This will overwrite the
@@ -69,6 +70,14 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 // Helper to extract safe C++ strings from partition info.
 std::string GetPartitionName(const LpMetadataPartition& partition);
 std::string GetPartitionGroupName(const LpMetadataPartitionGroup& group);
+std::string GetBlockDevicePartitionName(const LpMetadataBlockDevice& block_device);
+
+// Return the block device that houses the super partition metadata; returns
+// null on failure.
+const LpMetadataBlockDevice* GetMetadataSuperBlockDevice(const LpMetadata& metadata);
+
+// Return the total size of all partitions comprising the super partition.
+uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata);
 
 // Helper to return a slot number for a slot suffix.
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix);
