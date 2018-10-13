@@ -190,6 +190,12 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         FillInDexFrame();
         // Clear the dex pc so that we don't repeat this frame later.
         regs_->set_dex_pc(0);
+
+        // Make sure there is enough room for the real frame.
+        if (frames_.size() == max_frames_) {
+          last_error_.code = ERROR_MAX_FRAMES_EXCEEDED;
+          break;
+        }
       }
 
       FillInFrame(map_info, elf, rel_pc, step_pc, pc_adjustment);
