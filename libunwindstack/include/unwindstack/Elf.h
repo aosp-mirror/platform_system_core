@@ -94,7 +94,7 @@ class Elf {
 
   static bool IsValidElf(Memory* memory);
 
-  static void GetInfo(Memory* memory, bool* valid, uint64_t* size);
+  static bool GetInfo(Memory* memory, uint64_t* size);
 
   static uint64_t GetLoadBias(Memory* memory);
 
