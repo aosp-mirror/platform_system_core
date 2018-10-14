@@ -167,25 +167,9 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
            candidate + kUpperName + ",workdir=" + candidate + kWorkName;
 }
 
-bool fs_mgr_system_root_image(const fstab* fstab) {
-    if (!fstab) {  // can not happen?
-        // This will return empty on init first_stage_mount,
-        // hence why we prefer checking the fstab instead.
-        return android::base::GetBoolProperty("ro.build.system_root_image", false);
-    }
-    for (auto i = 0; i < fstab->num_entries; i++) {
-        const auto fsrec = &fstab->recs[i];
-        auto fsrec_mount_point = fsrec->mount_point;
-        if (!fsrec_mount_point) continue;
-        if ("/system"s == fsrec_mount_point) return false;
-    }
-    return true;
-}
-
-const char* fs_mgr_mount_point(const fstab* fstab, const char* mount_point) {
+const char* fs_mgr_mount_point(const char* mount_point) {
     if (!mount_point) return mount_point;
     if ("/"s != mount_point) return mount_point;
-    if (!fs_mgr_system_root_image(fstab)) return mount_point;
     return "/system";
 }
 
@@ -533,7 +517,7 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
     for (auto i = 0; i < fstab->num_entries; i++) {
         const auto fsrec = &fstab->recs[i];
         if (!fs_mgr_wants_overlayfs(fsrec)) continue;
-        std::string new_mount_point(fs_mgr_mount_point(fstab, fsrec->mount_point));
+        std::string new_mount_point(fs_mgr_mount_point(fsrec->mount_point));
         if (mount_point && (new_mount_point != mount_point)) continue;
         if (std::find(verity.begin(), verity.end(), android::base::Basename(new_mount_point)) !=
             verity.end()) {
@@ -572,17 +556,11 @@ std::vector<std::string> fs_mgr_candidate_list(const fstab* fstab,
         return mounts;
     }
 
-    // Manually check dm state because stunted fstab (w/o system as root) borken
-    auto& dm = DeviceMapper::Instance();
-    auto found = false;
-    for (auto& system : {"system", "vroot"}) {
-        if (dm.GetState(system) == DmDeviceState::INVALID) continue;
-        std::vector<DeviceMapper::TargetInfo> table;
-        found = !dm.GetTableStatus(system, &table) || table.empty() || table[0].data.empty() ||
-                (table[0].data[0] == 'C') || (table[0].data[0] == 'V');
-        if (found) break;
-    }
-    if (!found) mounts.emplace_back("/system");
+    // We have a stunted fstab (w/o system or / ) passed in by the caller,
+    // verity claims are assumed accurate because they are collected internally
+    // from fs_mgr_fstab_default() from within fs_mgr_update_verity_state(),
+    // Can (re)evaluate /system with impunity since we know it is ever-present.
+    mounts.emplace_back("/system");
     return mounts;
 }
 
@@ -776,7 +754,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
                                                                fs_mgr_free_fstab);
     if (!fstab) return ret;
-    auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(fstab.get(), mount_point));
+    auto mounts = fs_mgr_candidate_list(fstab.get(), fs_mgr_mount_point(mount_point));
     if (mounts.empty()) return ret;
 
     std::string dir;
@@ -811,10 +789,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
 // If something is altered, set *change.
 bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (change) *change = false;
-    mount_point = fs_mgr_mount_point(std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)>(
-                                             fs_mgr_read_fstab_default(), fs_mgr_free_fstab)
-                                             .get(),
-                                     mount_point);
+    mount_point = fs_mgr_mount_point(mount_point);
     auto ret = true;
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         ret &= fs_mgr_overlayfs_teardown_one(overlay_mount_point, mount_point ?: "", change);

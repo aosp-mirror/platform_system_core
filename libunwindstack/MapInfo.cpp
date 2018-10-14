@@ -53,10 +53,8 @@ Memory* MapInfo::GetFileMemory() {
     return nullptr;
   }
 
-  bool valid;
   uint64_t max_size;
-  Elf::GetInfo(memory.get(), &valid, &max_size);
-  if (!valid) {
+  if (!Elf::GetInfo(memory.get(), &max_size)) {
     // Init as if the whole file is an elf.
     if (memory->Init(name, 0)) {
       elf_offset = offset;
@@ -109,11 +107,7 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   // first part of the elf file. This is done if the linker rosegment
   // option is used.
   std::unique_ptr<MemoryRange> memory(new MemoryRange(process_memory, start, end - start, 0));
-  bool valid;
-  uint64_t max_size;
-  Elf::GetInfo(memory.get(), &valid, &max_size);
-  if (valid) {
-    // Valid elf, we are done.
+  if (Elf::IsValidElf(memory.get())) {
     return memory.release();
   }
 

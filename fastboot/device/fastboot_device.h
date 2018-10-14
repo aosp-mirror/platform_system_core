@@ -56,6 +56,8 @@ class FastbootDevice {
     }
     android::sp<android::hardware::health::V2_0::IHealth> health_hal() { return health_hal_; }
 
+    void set_active_slot(const std::string& active_slot) { active_slot_ = active_slot; }
+
   private:
     const std::unordered_map<std::string, CommandHandler> kCommandMap;
 
@@ -64,4 +66,5 @@ class FastbootDevice {
     android::sp<android::hardware::health::V2_0::IHealth> health_hal_;
     android::sp<android::hardware::fastboot::V1_0::IFastboot> fastboot_hal_;
     std::vector<char> download_data_;
+    std::string active_slot_;
 };

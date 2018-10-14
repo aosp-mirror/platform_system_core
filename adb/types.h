@@ -25,7 +25,6 @@
 
 #include <android-base/logging.h>
 
-#include "sysdeps/memory.h"
 #include "sysdeps/uio.h"
 
 // Essentially std::vector<char>, except without zero initialization or reallocation.

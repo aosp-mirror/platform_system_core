@@ -63,7 +63,6 @@
 #include "services.h"
 #include "shell_protocol.h"
 #include "sysdeps/chrono.h"
-#include "sysdeps/memory.h"
 
 extern int gListenAll;
 
@@ -1580,15 +1579,20 @@ int adb_commandline(int argc, const char** argv) {
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
     }
+    // clang-format off
     else if (!strcmp(argv[0], "remount") ||
              !strcmp(argv[0], "reboot") ||
              !strcmp(argv[0], "reboot-bootloader") ||
+             !strcmp(argv[0], "reboot-fastboot") ||
              !strcmp(argv[0], "usb") ||
              !strcmp(argv[0], "disable-verity") ||
              !strcmp(argv[0], "enable-verity")) {
+        // clang-format on
         std::string command;
         if (!strcmp(argv[0], "reboot-bootloader")) {
             command = "reboot:bootloader";
+        } else if (!strcmp(argv[0], "reboot-fastboot")) {
+            command = "reboot:fastboot";
         } else if (argc > 1) {
             command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
         } else {

@@ -237,7 +237,13 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
     CommandResult ret;
     auto cb = [&ret](CommandResult result) { ret = result; };
     auto result = boot_control_hal->setActiveBootSlot(slot, cb);
-    if (result.isOk() && ret.success) return device->WriteStatus(FastbootResult::OKAY, "");
+    if (result.isOk() && ret.success) {
+        // Save as slot suffix to match the suffix format as returned from
+        // the boot control HAL.
+        auto current_slot = "_" + args[1];
+        device->set_active_slot(current_slot);
+        return device->WriteStatus(FastbootResult::OKAY, "");
+    }
     return device->WriteStatus(FastbootResult::FAIL, "Unable to set slot");
 }
 

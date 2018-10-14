@@ -290,13 +290,13 @@ TEST(liblp, ReadBackupGeometry) {
     char corruption[LP_METADATA_GEOMETRY_SIZE];
     memset(corruption, 0xff, sizeof(corruption));
 
-    // Corrupt the first 4096 bytes of the disk.
-    ASSERT_GE(lseek(fd, 0, SEEK_SET), 0);
+    // Corrupt the primary geometry.
+    ASSERT_GE(lseek(fd, GetPrimaryGeometryOffset(), SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_NE(ReadMetadata(fd, 0), nullptr);
 
-    // Corrupt the last 4096 bytes too.
-    ASSERT_GE(lseek(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END), 0);
+    // Corrupt the backup geometry.
+    ASSERT_GE(lseek(fd, GetBackupGeometryOffset(), SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_EQ(ReadMetadata(fd, 0), nullptr);
 }
@@ -310,14 +310,16 @@ TEST(liblp, ReadBackupMetadata) {
     char corruption[kMetadataSize];
     memset(corruption, 0xff, sizeof(corruption));
 
-    ASSERT_GE(lseek(fd, LP_METADATA_GEOMETRY_SIZE, SEEK_SET), 0);
+    off_t offset = GetPrimaryMetadataOffset(metadata->geometry, 0);
+
+    ASSERT_GE(lseek(fd, offset, SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_NE(ReadMetadata(fd, 0), nullptr);
 
-    off_t offset = LP_METADATA_GEOMETRY_SIZE + kMetadataSize * 2;
+    offset = GetBackupMetadataOffset(metadata->geometry, 0);
 
     // Corrupt the backup metadata.
-    ASSERT_GE(lseek(fd, -offset, SEEK_END), 0);
+    ASSERT_GE(lseek(fd, offset, SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
     EXPECT_EQ(ReadMetadata(fd, 0), nullptr);
 }
@@ -534,4 +536,37 @@ TEST(liblp, UpdateMetadataCleanFailure) {
     ASSERT_NE(imported, nullptr);
     ASSERT_GE(new_table->partitions.size(), 1);
     ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
+}
+
+// Test that writing a sparse image can be read back.
+TEST(liblp, FlashSparseImage) {
+    unique_fd fd = CreateFakeDisk();
+    ASSERT_GE(fd, 0);
+
+    BlockDeviceInfo device_info(kDiskSize, 0, 0, 512);
+    unique_ptr<MetadataBuilder> builder =
+            MetadataBuilder::New(device_info, kMetadataSize, kMetadataSlots);
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+
+    // Build the sparse file.
+    SparseBuilder sparse(*exported.get(), 512, {});
+    ASSERT_TRUE(sparse.IsValid());
+    sparse_file_verbose(sparse.file());
+    ASSERT_TRUE(sparse.Build());
+
+    // Write it to the fake disk.
+    ASSERT_NE(lseek(fd.get(), 0, SEEK_SET), -1);
+    int ret = sparse_file_write(sparse.file(), fd.get(), false, false, false);
+    ASSERT_EQ(ret, 0);
+
+    // Verify that we can read both sets of metadata.
+    LpMetadataGeometry geometry;
+    ASSERT_TRUE(ReadPrimaryGeometry(fd.get(), &geometry));
+    ASSERT_TRUE(ReadBackupGeometry(fd.get(), &geometry));
+    ASSERT_NE(ReadPrimaryMetadata(fd.get(), geometry, 0), nullptr);
+    ASSERT_NE(ReadBackupMetadata(fd.get(), geometry, 0), nullptr);
 }

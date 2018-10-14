@@ -213,7 +213,7 @@ TestFrame::TestFrame(const std::vector<const std::vector<int>>& chords, EventHan
 }
 
 void TestFrame::RelaxForMs(std::chrono::milliseconds wait) {
-    epoll_.Wait(wait);
+    epoll_.Wait(wait).IgnoreError();
 }
 
 void TestFrame::SetChord(int key, bool value) {

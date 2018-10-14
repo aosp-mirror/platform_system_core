@@ -151,7 +151,7 @@ inline Error ErrnoError() {
 }
 
 template <typename T>
-class Result {
+class [[nodiscard]] Result {
   public:
     Result() {}
 
@@ -169,6 +169,8 @@ class Result {
     Result(ResultError&& result_error)
         : contents_(std::in_place_index_t<1>(), std::move(result_error.error_string),
                     result_error.error_errno) {}
+
+    void IgnoreError() const {}
 
     bool has_value() const { return contents_.index() == 0; }
 

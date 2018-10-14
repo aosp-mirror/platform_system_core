@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 3
+#define LP_METADATA_MAJOR_VERSION 4
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -58,13 +58,13 @@ extern "C" {
  *     +--------------------+
  *     | Disk Geometry      |
  *     +--------------------+
- *     | Metadata           |
+ *     | Geometry Backup    |
  *     +--------------------+
- *     | Logical Partitions |
+ *     | Metadata           |
  *     +--------------------+
  *     | Backup Metadata    |
  *     +--------------------+
- *     | Geometry Backup    |
+ *     | Logical Partitions |
  *     +--------------------+
  */
 #define LP_METADATA_DEFAULT_PARTITION_NAME "super"
@@ -72,8 +72,8 @@ extern "C" {
 /* Size of a sector is always 512 bytes for compatibility with the Linux kernel. */
 #define LP_SECTOR_SIZE 512
 
-/* This structure is stored at sector 0 in the first 4096 bytes of the
- * partition, and again in the very last 4096 bytes. It is never modified and
+/* This structure is stored at block 0 in the first 4096 bytes of the
+ * partition, and again in the following block. It is never modified and
  * describes how logical partition information can be located.
  */
 typedef struct LpMetadataGeometry {
@@ -99,8 +99,8 @@ typedef struct LpMetadataGeometry {
     uint32_t metadata_slot_count;
 
     /* 48: First usable sector for allocating logical partitions. this will be
-     * the first sector after the initial 4096 geometry block, followed by the
-     * space consumed by metadata_max_size*metadata_slot_count.
+     * the first sector after the initial geometry blocks, followed by the
+     * space consumed by metadata_max_size*metadata_slot_count*2.
      */
     uint64_t first_logical_sector;
 

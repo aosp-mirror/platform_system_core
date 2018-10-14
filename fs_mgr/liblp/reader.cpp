@@ -120,13 +120,9 @@ bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
     return true;
 }
 
-// Read and validate geometry information from a block device that holds
-// logical partitions. If the information is corrupted, this will attempt
-// to read it from a secondary backup location.
-bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
-    // Read the first 4096 bytes.
+bool ReadPrimaryGeometry(int fd, LpMetadataGeometry* geometry) {
     std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
-    if (SeekFile64(fd, 0, SEEK_SET) < 0) {
+    if (SeekFile64(fd, GetPrimaryGeometryOffset(), SEEK_SET) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed";
         return false;
     }
@@ -134,12 +130,12 @@ bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
         PERROR << __PRETTY_FUNCTION__ << "read " << LP_METADATA_GEOMETRY_SIZE << " bytes failed";
         return false;
     }
-    if (ParseGeometry(buffer.get(), geometry)) {
-        return true;
-    }
+    return ParseGeometry(buffer.get(), geometry);
+}
 
-    // Try the backup copy in the last 4096 bytes.
-    if (SeekFile64(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END) < 0) {
+bool ReadBackupGeometry(int fd, LpMetadataGeometry* geometry) {
+    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
+    if (SeekFile64(fd, GetBackupGeometryOffset(), SEEK_SET) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed, offset " << -LP_METADATA_GEOMETRY_SIZE;
         return false;
     }
@@ -149,6 +145,16 @@ bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
         return false;
     }
     return ParseGeometry(buffer.get(), geometry);
+}
+
+// Read and validate geometry information from a block device that holds
+// logical partitions. If the information is corrupted, this will attempt
+// to read it from a secondary backup location.
+bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
+    if (ReadPrimaryGeometry(fd, geometry)) {
+        return true;
+    }
+    return ReadBackupGeometry(fd, geometry);
 }
 
 static bool ValidateTableBounds(const LpMetadataHeader& header,
@@ -315,7 +321,7 @@ std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry
 std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
                                                uint32_t slot_number) {
     int64_t offset = GetBackupMetadataOffset(geometry, slot_number);
-    if (SeekFile64(fd, offset, SEEK_END) < 0) {
+    if (SeekFile64(fd, offset, SEEK_SET) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
         return nullptr;
     }
