@@ -30,11 +30,7 @@ pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
                            bool nonBlock, unsigned long tail, log_mask_t logMask,
                            pid_t pid, log_time start, uint64_t timeout)
-    : mRefCount(1),
-      mRelease(false),
-      mError(false),
-      threadRunning(false),
-      leadingDropped(false),
+    : leadingDropped(false),
       mReader(reader),
       mLogMask(logMask),
       mPid(pid),
@@ -52,65 +48,21 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
     cleanSkip_Locked();
 }
 
-void LogTimeEntry::startReader_Locked(void) {
+bool LogTimeEntry::startReader_Locked() {
     pthread_attr_t attr;
-
-    threadRunning = true;
 
     if (!pthread_attr_init(&attr)) {
         if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
             if (!pthread_create(&mThread, &attr, LogTimeEntry::threadStart,
                                 this)) {
                 pthread_attr_destroy(&attr);
-                return;
+                return true;
             }
         }
         pthread_attr_destroy(&attr);
     }
-    threadRunning = false;
-    if (mClient) {
-        mClient->decRef();
-    }
-    decRef_Locked();
-}
 
-void LogTimeEntry::threadStop(void* obj) {
-    LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
-
-    wrlock();
-
-    if (me->mNonBlock) {
-        me->error_Locked();
-    }
-
-    SocketClient* client = me->mClient;
-
-    if (me->isError_Locked()) {
-        LogReader& reader = me->mReader;
-        LastLogTimes& times = reader.logbuf().mTimes;
-
-        LastLogTimes::iterator it = times.begin();
-        while (it != times.end()) {
-            if (*it == me) {
-                times.erase(it);
-                me->release_nodelete_Locked();
-                break;
-            }
-            it++;
-        }
-
-        me->mClient = nullptr;
-        reader.release(client);
-    }
-
-    if (client) {
-        client->decRef();
-    }
-
-    me->threadRunning = false;
-    me->decRef_Locked();
-
-    unlock();
+    return false;
 }
 
 void* LogTimeEntry::threadStart(void* obj) {
@@ -118,13 +70,7 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
 
-    pthread_cleanup_push(threadStop, obj);
-
     SocketClient* client = me->mClient;
-    if (!client) {
-        me->error();
-        return nullptr;
-    }
 
     LogBuffer& logbuf = me->mReader.logbuf();
 
@@ -137,14 +83,14 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     log_time start = me->mStart;
 
-    while (me->threadRunning && !me->isError_Locked()) {
+    while (!me->mRelease) {
         if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
             if (pthread_cond_timedwait(&me->threadTriggeredCondition,
                                        &timesLock, &me->mTimeout) == ETIMEDOUT) {
                 me->mTimeout.tv_sec = 0;
                 me->mTimeout.tv_nsec = 0;
             }
-            if (!me->threadRunning || me->isError_Locked()) {
+            if (me->mRelease) {
                 break;
             }
         }
@@ -162,13 +108,12 @@ void* LogTimeEntry::threadStart(void* obj) {
         wrlock();
 
         if (start == LogBufferElement::FLUSH_ERROR) {
-            me->error_Locked();
             break;
         }
 
         me->mStart = start + log_time(0, 1);
 
-        if (me->mNonBlock || !me->threadRunning || me->isError_Locked()) {
+        if (me->mNonBlock || me->mRelease) {
             break;
         }
 
@@ -179,9 +124,21 @@ void* LogTimeEntry::threadStart(void* obj) {
         }
     }
 
-    unlock();
+    LogReader& reader = me->mReader;
+    reader.release(client);
 
-    pthread_cleanup_pop(true);
+    client->decRef();
+
+    LastLogTimes& times = reader.logbuf().mTimes;
+    auto it =
+        std::find_if(times.begin(), times.end(),
+                     [&me](const auto& other) { return other.get() == me; });
+
+    if (it != times.end()) {
+        times.erase(it);
+    }
+
+    unlock();
 
     return nullptr;
 }
@@ -245,10 +202,6 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
 
     if (me->mPid && (me->mPid != element->getPid())) {
         goto skip;
-    }
-
-    if (me->isError_Locked()) {
-        goto stop;
     }
 
     if (!me->mTail) {
