@@ -22,6 +22,7 @@
 #include <time.h>
 
 #include <list>
+#include <memory>
 
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
@@ -33,16 +34,12 @@ class LogBufferElement;
 
 class LogTimeEntry {
     static pthread_mutex_t timesLock;
-    unsigned int mRefCount;
-    bool mRelease;
-    bool mError;
-    bool threadRunning;
+    bool mRelease = false;
     bool leadingDropped;
     pthread_cond_t threadTriggeredCondition;
     pthread_t mThread;
     LogReader& mReader;
     static void* threadStart(void* me);
-    static void threadStop(void* me);
     const log_mask_t mLogMask;
     const pid_t mPid;
     unsigned int skipAhead[LOG_ID_MAX];
@@ -73,11 +70,8 @@ class LogTimeEntry {
         pthread_mutex_unlock(&timesLock);
     }
 
-    void startReader_Locked(void);
+    bool startReader_Locked();
 
-    bool runningReader_Locked(void) const {
-        return threadRunning || mRelease || mError || mNonBlock;
-    }
     void triggerReader_Locked(void) {
         pthread_cond_signal(&threadTriggeredCondition);
     }
@@ -87,54 +81,11 @@ class LogTimeEntry {
     }
     void cleanSkip_Locked(void);
 
-    // These called after LogTimeEntry removed from list, lock implicitly held
-    void release_nodelete_Locked(void) {
-        mRelease = true;
-        pthread_cond_signal(&threadTriggeredCondition);
-        // assumes caller code path will call decRef_Locked()
-    }
-
     void release_Locked(void) {
         mRelease = true;
         pthread_cond_signal(&threadTriggeredCondition);
-        if (mRefCount || threadRunning) {
-            return;
-        }
-        // No one else is holding a reference to this
-        delete this;
     }
 
-    // Called to mark socket in jeopardy
-    void error_Locked(void) {
-        mError = true;
-    }
-    void error(void) {
-        wrlock();
-        error_Locked();
-        unlock();
-    }
-
-    bool isError_Locked(void) const {
-        return mRelease || mError;
-    }
-
-    // Mark Used
-    //  Locking implied, grabbed when protection around loop iteration
-    void incRef_Locked(void) {
-        ++mRefCount;
-    }
-
-    bool owned_Locked(void) const {
-        return mRefCount != 0;
-    }
-
-    void decRef_Locked(void) {
-        if ((mRefCount && --mRefCount) || !mRelease || threadRunning) {
-            return;
-        }
-        // No one else is holding a reference to this
-        delete this;
-    }
     bool isWatching(log_id_t id) const {
         return mLogMask & (1 << id);
     }
@@ -146,6 +97,6 @@ class LogTimeEntry {
     static int FilterSecondPass(const LogBufferElement* element, void* me);
 };
 
-typedef std::list<LogTimeEntry*> LastLogTimes;
+typedef std::list<std::unique_ptr<LogTimeEntry>> LastLogTimes;
 
 #endif  // _LOGD_LOG_TIMES_H__
