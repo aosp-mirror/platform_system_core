@@ -57,7 +57,7 @@ unsigned llkCheckMilliseconds(void);
 #define LLK_BLACKLIST_UID_PROPERTY     "ro.llk.blacklist.uid"
 #define LLK_BLACKLIST_UID_DEFAULT      ""
 #define LLK_BLACKLIST_STACK_PROPERTY   "ro.llk.blacklist.process.stack"
-#define LLK_BLACKLIST_STACK_DEFAULT    "init,lmkd.llkd,llkd,keystore,/system/bin/keystore,ueventd"
+#define LLK_BLACKLIST_STACK_DEFAULT    "init,lmkd.llkd,llkd,keystore,/system/bin/keystore,ueventd,apexd"
 /* clang-format on */
 
 __END_DECLS
