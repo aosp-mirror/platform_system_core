@@ -213,7 +213,8 @@ runs the service.
 `interface <interface name> <instance name>`
 > Associates this service with a list of the HIDL services that it provides. The interface name
   must be a fully-qualified name and not a value name. This is used to allow hwservicemanager to
-  lazily start services.
+  lazily start services. When multiple interfaces are served, this tag should be used multiple
+  times.
   For example: interface vendor.foo.bar@1.0::IBaz default
 
 `ioprio <class> <priority>`
