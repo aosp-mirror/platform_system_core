@@ -43,7 +43,7 @@
 #define SVC_RUNNING 0x004         // currently active
 #define SVC_RESTARTING 0x008      // waiting to restart
 #define SVC_CONSOLE 0x010         // requires console
-#define SVC_CRITICAL 0x020        // will reboot into recovery if keeps crashing
+#define SVC_CRITICAL 0x020        // will reboot into bootloader if keeps crashing
 #define SVC_RESET 0x040           // Use when stopping a process,
                                   // but not disabling so it can be restarted with its class.
 #define SVC_RC_DISABLED 0x080     // Remember if the disabled flag was set in the rc script.
