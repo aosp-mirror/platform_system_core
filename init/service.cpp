@@ -60,6 +60,7 @@ using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::ParseInt;
+using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -543,15 +544,32 @@ Result<Success> Service::ParseIoprio(std::vector<std::string>&& args) {
 }
 
 Result<Success> Service::ParseKeycodes(std::vector<std::string>&& args) {
-    for (std::size_t i = 1; i < args.size(); i++) {
+    auto it = args.begin() + 1;
+    if (args.size() == 2 && StartsWith(args[1], "$")) {
+        std::string expanded;
+        if (!expand_props(args[1], &expanded)) {
+            return Error() << "Could not expand property '" << args[1] << "'";
+        }
+
+        // If the property is not set, it defaults to none, in which case there are no keycodes
+        // for this service.
+        if (expanded == "none") {
+            return Success();
+        }
+
+        args = Split(expanded, ",");
+        it = args.begin();
+    }
+
+    for (; it != args.end(); ++it) {
         int code;
-        if (ParseInt(args[i], &code, 0, KEY_MAX)) {
+        if (ParseInt(*it, &code, 0, KEY_MAX)) {
             for (auto& key : keycodes_) {
-                if (key == code) return Error() << "duplicate keycode: " << args[i];
+                if (key == code) return Error() << "duplicate keycode: " << *it;
             }
             keycodes_.insert(std::upper_bound(keycodes_.begin(), keycodes_.end(), code), code);
         } else {
-            return Error() << "invalid keycode: " << args[i];
+            return Error() << "invalid keycode: " << *it;
         }
     }
     return Success();
