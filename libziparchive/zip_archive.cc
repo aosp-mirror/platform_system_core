@@ -517,8 +517,7 @@ int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debug_fi
 /*
  * Close a ZipArchive, closing the file and freeing the contents.
  */
-void CloseArchive(ZipArchiveHandle handle) {
-  ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
+void CloseArchive(ZipArchiveHandle archive) {
   ALOGV("Closing archive %p", archive);
   delete archive;
 }
@@ -745,10 +744,8 @@ struct IterationHandle {
   }
 };
 
-int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr, const ZipString* optional_prefix,
-                       const ZipString* optional_suffix) {
-  ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
-
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       const ZipString* optional_prefix, const ZipString* optional_suffix) {
   if (archive == NULL || archive->hash_table == NULL) {
     ALOGW("Zip: Invalid ZipArchiveHandle");
     return kInvalidHandle;
@@ -766,8 +763,7 @@ void EndIteration(void* cookie) {
   delete reinterpret_cast<IterationHandle*>(cookie);
 }
 
-int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName, ZipEntry* data) {
-  const ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
+int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data) {
   if (entryName.name_length == 0) {
     ALOGW("Zip: Invalid filename %.*s", entryName.name_length, entryName.name);
     return kInvalidEntryName;
@@ -1116,8 +1112,7 @@ static int32_t CopyEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entr
   return 0;
 }
 
-int32_t ExtractToWriter(ZipArchiveHandle handle, ZipEntry* entry, zip_archive::Writer* writer) {
-  ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
+int32_t ExtractToWriter(ZipArchiveHandle archive, ZipEntry* entry, zip_archive::Writer* writer) {
   const uint16_t method = entry->method;
 
   // this should default to kUnknownCompressionMethod.
@@ -1145,18 +1140,18 @@ int32_t ExtractToWriter(ZipArchiveHandle handle, ZipEntry* entry, zip_archive::W
   return return_value;
 }
 
-int32_t ExtractToMemory(ZipArchiveHandle handle, ZipEntry* entry, uint8_t* begin, uint32_t size) {
+int32_t ExtractToMemory(ZipArchiveHandle archive, ZipEntry* entry, uint8_t* begin, uint32_t size) {
   MemoryWriter writer(begin, size);
-  return ExtractToWriter(handle, entry, &writer);
+  return ExtractToWriter(archive, entry, &writer);
 }
 
-int32_t ExtractEntryToFile(ZipArchiveHandle handle, ZipEntry* entry, int fd) {
+int32_t ExtractEntryToFile(ZipArchiveHandle archive, ZipEntry* entry, int fd) {
   auto writer = FileWriter::Create(fd, entry);
   if (!writer.IsValid()) {
     return kIoError;
   }
 
-  return ExtractToWriter(handle, entry, &writer);
+  return ExtractToWriter(archive, entry, &writer);
 }
 
 const char* ErrorCodeString(int32_t error_code) {
@@ -1173,8 +1168,8 @@ const char* ErrorCodeString(int32_t error_code) {
   return "Unknown return code";
 }
 
-int GetFileDescriptor(const ZipArchiveHandle handle) {
-  return reinterpret_cast<ZipArchive*>(handle)->mapped_zip.GetFileDescriptor();
+int GetFileDescriptor(const ZipArchiveHandle archive) {
+  return archive->mapped_zip.GetFileDescriptor();
 }
 
 ZipString::ZipString(const char* entry_name) : name(reinterpret_cast<const uint8_t*>(entry_name)) {
@@ -1198,10 +1193,10 @@ class ProcessWriter : public zip_archive::Writer {
   void* cookie_;
 };
 
-int32_t ProcessZipEntryContents(ZipArchiveHandle handle, ZipEntry* entry,
+int32_t ProcessZipEntryContents(ZipArchiveHandle archive, ZipEntry* entry,
                                 ProcessZipEntryFunction func, void* cookie) {
   ProcessWriter writer(func, cookie);
-  return ExtractToWriter(handle, entry, &writer);
+  return ExtractToWriter(archive, entry, &writer);
 }
 
 #endif  //! defined(_WIN32)
