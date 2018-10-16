@@ -127,7 +127,6 @@ TEST(liblp, InternalAlignment) {
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.first_logical_sector, 1536);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2047);
 
     // Test a large alignment offset thrown in.
     device_info.alignment_offset = 753664;
@@ -136,7 +135,6 @@ TEST(liblp, InternalAlignment) {
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.first_logical_sector, 1472);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2047);
 
     // Alignment offset without alignment doesn't mean anything.
     device_info.alignment = 0;
@@ -151,7 +149,6 @@ TEST(liblp, InternalAlignment) {
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.first_logical_sector, 150);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2045);
 
     // Test a small alignment with no alignment offset.
     device_info.alignment = 11 * 1024;
@@ -160,7 +157,6 @@ TEST(liblp, InternalAlignment) {
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.first_logical_sector, 160);
-    EXPECT_EQ(exported->geometry.last_logical_sector, 2047);
 }
 
 TEST(liblp, InternalPartitionAlignment) {
@@ -298,7 +294,6 @@ TEST(liblp, BuilderExport) {
     EXPECT_EQ(geometry.metadata_max_size, 1024);
     EXPECT_EQ(geometry.metadata_slot_count, 2);
     EXPECT_EQ(geometry.first_logical_sector, 24);
-    EXPECT_EQ(geometry.last_logical_sector, 2047);
 
     static const size_t kMetadataSpace =
             ((kMetadataSize * kMetadataSlots) + LP_METADATA_GEOMETRY_SIZE) * 2;

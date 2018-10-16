@@ -161,7 +161,6 @@ TEST(liblp, FlashAndReadback) {
     EXPECT_EQ(exported->geometry.metadata_max_size, imported->geometry.metadata_max_size);
     EXPECT_EQ(exported->geometry.metadata_slot_count, imported->geometry.metadata_slot_count);
     EXPECT_EQ(exported->geometry.first_logical_sector, imported->geometry.first_logical_sector);
-    EXPECT_EQ(exported->geometry.last_logical_sector, imported->geometry.last_logical_sector);
     EXPECT_EQ(exported->header.major_version, imported->header.major_version);
     EXPECT_EQ(exported->header.minor_version, imported->header.minor_version);
     EXPECT_EQ(exported->header.header_size, imported->header.header_size);
@@ -207,13 +206,14 @@ TEST(liblp, UpdateAnyMetadataSlot) {
     ASSERT_EQ(imported->partitions.size(), 1);
     EXPECT_EQ(GetPartitionName(imported->partitions[0]), "vendor");
 
+    uint64_t last_sector = imported->geometry.block_device_size / LP_SECTOR_SIZE;
+
     // Verify that we didn't overwrite anything in the logical paritition area.
     // We expect the disk to be filled with 0xcc on creation so we can read
     // this back and compare it.
     char expected[LP_SECTOR_SIZE];
     memset(expected, 0xcc, sizeof(expected));
-    for (uint64_t i = imported->geometry.first_logical_sector;
-         i <= imported->geometry.last_logical_sector; i++) {
+    for (uint64_t i = imported->geometry.first_logical_sector; i < last_sector; i++) {
         char buffer[LP_SECTOR_SIZE];
         ASSERT_GE(lseek(fd, i * LP_SECTOR_SIZE, SEEK_SET), 0);
         ASSERT_TRUE(android::base::ReadFully(fd, buffer, sizeof(buffer)));
@@ -261,8 +261,6 @@ TEST(liblp, NoChangingGeometry) {
 
     imported = ReadMetadata(fd, 0);
     ASSERT_NE(imported, nullptr);
-    imported->geometry.last_logical_sector--;
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
 }
 
 // Test that changing one bit of metadata is enough to break the checksum.
@@ -368,9 +366,6 @@ TEST(liblp, TooManyPartitions) {
     memset(expected, 0xcc, sizeof(expected));
     char buffer[LP_SECTOR_SIZE];
     ASSERT_GE(lseek(fd, exported->geometry.first_logical_sector * LP_SECTOR_SIZE, SEEK_SET), 0);
-    ASSERT_TRUE(android::base::ReadFully(fd, buffer, sizeof(buffer)));
-    EXPECT_EQ(memcmp(expected, buffer, LP_SECTOR_SIZE), 0);
-    ASSERT_GE(lseek(fd, exported->geometry.last_logical_sector * LP_SECTOR_SIZE, SEEK_SET), 0);
     ASSERT_TRUE(android::base::ReadFully(fd, buffer, sizeof(buffer)));
     EXPECT_EQ(memcmp(expected, buffer, LP_SECTOR_SIZE), 0);
 }
