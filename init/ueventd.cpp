@@ -175,7 +175,7 @@ void ColdBoot::WaitForSubProcesses() {
     //
     // When a subprocess crashes, we fatally abort from ueventd.  init will restart ueventd when
     // init reaps it, and the cold boot process will start again.  If this continues to fail, then
-    // since ueventd is marked as a critical service, init will reboot to recovery.
+    // since ueventd is marked as a critical service, init will reboot to bootloader.
     //
     // When a subprocess gets stuck, keep ueventd spinning waiting for it.  init has a timeout for
     // cold boot and will reboot to the bootloader if ueventd does not complete in time.
