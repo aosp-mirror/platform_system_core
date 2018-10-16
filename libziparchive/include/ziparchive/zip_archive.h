@@ -103,7 +103,8 @@ struct ZipEntry {
   off64_t offset;
 };
 
-typedef void* ZipArchiveHandle;
+struct ZipArchive;
+typedef ZipArchive* ZipArchiveHandle;
 
 /*
  * Open a Zip archive, and sets handle to the value of the opaque
@@ -144,7 +145,7 @@ int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFil
  * this handle for any further operations without an intervening
  * call to one of the OpenArchive variants.
  */
-void CloseArchive(ZipArchiveHandle handle);
+void CloseArchive(ZipArchiveHandle archive);
 
 /*
  * Find an entry in the Zip archive, by name. |entryName| must be a null
@@ -162,7 +163,7 @@ void CloseArchive(ZipArchiveHandle handle);
  * On non-Windows platforms this method does not modify internal state and
  * can be called concurrently.
  */
-int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName, ZipEntry* data);
+int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data);
 
 /*
  * Start iterating over all entries of a zip file. The order of iteration
@@ -177,8 +178,8 @@ int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName, Zip
  *
  * Returns 0 on success and negative values on failure.
  */
-int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr, const ZipString* optional_prefix,
-                       const ZipString* optional_suffix);
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       const ZipString* optional_prefix, const ZipString* optional_suffix);
 
 /*
  * Advance to the next element in the zipfile in iteration order.
@@ -203,7 +204,7 @@ void EndIteration(void* cookie);
  *
  * Returns 0 on success and negative values on failure.
  */
-int32_t ExtractEntryToFile(ZipArchiveHandle handle, ZipEntry* entry, int fd);
+int32_t ExtractEntryToFile(ZipArchiveHandle archive, ZipEntry* entry, int fd);
 
 /**
  * Uncompress a given zip entry to the memory region at |begin| and of
@@ -213,9 +214,9 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle, ZipEntry* entry, int fd);
  *
  * Returns 0 on success and negative values on failure.
  */
-int32_t ExtractToMemory(ZipArchiveHandle handle, ZipEntry* entry, uint8_t* begin, uint32_t size);
+int32_t ExtractToMemory(ZipArchiveHandle archive, ZipEntry* entry, uint8_t* begin, uint32_t size);
 
-int GetFileDescriptor(const ZipArchiveHandle handle);
+int GetFileDescriptor(const ZipArchiveHandle archive);
 
 const char* ErrorCodeString(int32_t error_code);
 
@@ -226,7 +227,7 @@ typedef bool (*ProcessZipEntryFunction)(const uint8_t* buf, size_t buf_size, voi
  * Stream the uncompressed data through the supplied function,
  * passing cookie to it each time it gets called.
  */
-int32_t ProcessZipEntryContents(ZipArchiveHandle handle, ZipEntry* entry,
+int32_t ProcessZipEntryContents(ZipArchiveHandle archive, ZipEntry* entry,
                                 ProcessZipEntryFunction func, void* cookie);
 #endif
 
