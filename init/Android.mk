@@ -51,7 +51,8 @@ LOCAL_SRC_FILES := \
     uevent_listener.cpp \
     util.cpp \
 
-LOCAL_MODULE := init
+LOCAL_MODULE := init_first_stage
+LOCAL_MODULE_STEM := init
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
@@ -87,8 +88,32 @@ LOCAL_STATIC_LIBRARIES := \
     libselinux \
     libcap \
 
-LOCAL_REQUIRED_MODULES := \
-    init_second_stage \
-
 LOCAL_SANITIZE := signed-integer-overflow
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := init_system
+ifeq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
+LOCAL_REQUIRED_MODULES := \
+   init_first_stage \
+   init_second_stage \
+
+else
+LOCAL_REQUIRED_MODULES := \
+   init_second_stage \
+
+endif
+include $(BUILD_PHONY_PACKAGE)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := init_vendor
+ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
+LOCAL_REQUIRED_MODULES := \
+   init_first_stage \
+
+endif
+include $(BUILD_PHONY_PACKAGE)
+
+
