@@ -37,7 +37,6 @@ TEST(liblp, GetMetadataOffset) {
                                    16384,
                                    4,
                                    10000,
-                                   80000,
                                    0,
                                    0,
                                    1024 * 1024,
