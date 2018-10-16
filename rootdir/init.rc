@@ -336,6 +336,8 @@ on post-fs
     start servicemanager
     start hwservicemanager
     start vndservicemanager
+    start vold
+    exec - system system -- /system/bin/vdc checkpoint markBootAttempt
 
     # Once everything is setup, no need to modify /.
     # The bind+remount combination allows this to work in containers.
