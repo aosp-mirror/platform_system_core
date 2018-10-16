@@ -189,7 +189,7 @@ runs the service.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
-  four minutes, the device will reboot into recovery mode.
+  four minutes, the device will reboot into bootloader.
 
 `disabled`
 > This service will not automatically start with its class.
