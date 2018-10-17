@@ -125,6 +125,7 @@ void note_log_drop() {
 
 void stats_log_close() {
     statsd_writer_init_lock();
+    write_to_statsd = __write_to_statsd_init;
     if (statsdLoggerWrite.close) {
         (*statsdLoggerWrite.close)();
     }
