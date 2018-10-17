@@ -31,6 +31,7 @@ import sys
 import threading
 import time
 import unittest
+import warnings
 
 
 @contextlib.contextmanager
@@ -229,6 +230,10 @@ class ServerTest(unittest.TestCase):
                                 stderr=subprocess.STDOUT)
 
         try:
+            # We get warnings for unclosed files for the subprocess's pipes,
+            # and it's somewhat cumbersome to close them, so just ignore this.
+            warnings.simplefilter("ignore", ResourceWarning)
+
             # Run the adb client and have it start the adb server.
             proc = subprocess.Popen(["adb", "-P", str(port), "start-server"],
                                     stdin=subprocess.PIPE,
