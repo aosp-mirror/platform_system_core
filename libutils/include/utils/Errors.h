@@ -14,22 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_ERRORS_H
-#define ANDROID_ERRORS_H
+#pragma once
 
-#include <sys/types.h>
 #include <errno.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 namespace android {
 
-// use this type to return error codes
-#ifdef _WIN32
-typedef int         status_t;
-#else
-typedef int32_t     status_t;
-#endif
-
-/* the MS C runtime lacks a few error codes */
+/**
+ * The type used to return success/failure from frameworks APIs.
+ * See the anonymous enum below for valid values.
+ */
+typedef int32_t status_t;
 
 /*
  * Error codes. 
@@ -82,7 +79,3 @@ enum {
 #endif
 
 }  // namespace android
-
-// ---------------------------------------------------------------------------
-    
-#endif // ANDROID_ERRORS_H
