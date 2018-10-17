@@ -47,6 +47,28 @@ LOCAL_POST_INSTALL_CMD += ; ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OU
 include $(BUILD_PREBUILT)
 
 #######################################
+# cgroups.json
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := cgroups.json
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+
+include $(BUILD_PREBUILT)
+
+#######################################
+# task_profiles.json
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := task_profiles.json
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+
+include $(BUILD_PREBUILT)
+
+#######################################
 # asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 
