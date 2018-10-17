@@ -505,6 +505,7 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         strncpy(out.name, group->name().c_str(), sizeof(out.name));
         out.maximum_size = group->maximum_size();
 
+        group_indices[group->name()] = metadata->groups.size();
         metadata->groups.push_back(out);
     }
 
@@ -527,6 +528,14 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         part.first_extent_index = static_cast<uint32_t>(metadata->extents.size());
         part.num_extents = static_cast<uint32_t>(partition->extents().size());
         part.attributes = partition->attributes();
+
+        auto iter = group_indices.find(partition->group_name());
+        if (iter == group_indices.end()) {
+            LERROR << "Partition " << partition->name() << " is a member of unknown group "
+                   << partition->group_name();
+            return nullptr;
+        }
+        part.group_index = iter->second;
 
         for (const auto& extent : partition->extents()) {
             extent->AddTo(metadata.get());
