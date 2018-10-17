@@ -275,6 +275,13 @@ on init
     chown root root /apex
     restorecon /apex
 
+    # Start logd before any other services run to ensure we capture all of their logs.
+    start logd
+    # Start essential services.
+    start servicemanager
+    start hwservicemanager
+    start vndservicemanager
+
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
 on property:sys.boot_from_charger_mode=1
@@ -331,11 +338,6 @@ on post-fs
     #     /vendor/build.prop and
     #     /factory/factory.prop
     load_system_props
-    # start essential services
-    start logd
-    start servicemanager
-    start hwservicemanager
-    start vndservicemanager
     start vold
     exec - system system -- /system/bin/vdc checkpoint markBootAttempt
 
