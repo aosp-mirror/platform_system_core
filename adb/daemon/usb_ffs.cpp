@@ -230,7 +230,7 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
 
     if (out_control->get() < 0) {  // might have already done this before
         LOG(INFO) << "opening control endpoint " << USB_FFS_ADB_EP0;
-        control.reset(adb_open(USB_FFS_ADB_EP0, O_WRONLY));
+        control.reset(adb_open(USB_FFS_ADB_EP0, O_RDWR));
         if (control < 0) {
             PLOG(ERROR) << "cannot open control endpoint " << USB_FFS_ADB_EP0;
             return false;
