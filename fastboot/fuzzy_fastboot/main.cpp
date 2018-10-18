@@ -747,7 +747,7 @@ TEST_F(Fuzz, GetVarAllSpam) {
 }
 
 TEST_F(Fuzz, BadCommandTooLarge) {
-    std::string s = RandomString(fastboot::FB_COMMAND_SZ + 1, rand_legal);
+    std::string s = RandomString(FB_COMMAND_SZ + 1, rand_legal);
     EXPECT_EQ(fb->RawCommand(s), DEVICE_FAIL)
             << "Device did not respond with failure after sending length " << s.size()
             << " string of random ASCII chars";
