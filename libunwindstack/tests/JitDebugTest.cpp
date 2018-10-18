@@ -43,15 +43,16 @@ class JitDebugTest : public ::testing::Test {
     jit_debug_->SetArch(ARCH_ARM);
 
     maps_.reset(
-        new BufferMaps("1000-4000 ---s 00000000 00:00 0\n"
-                       "4000-6000 r--s 00000000 00:00 0\n"
-                       "6000-8000 -wxs 00000000 00:00 0\n"
-                       "a000-c000 --xp 00000000 00:00 0\n"
-                       "c000-f000 rw-p 00000000 00:00 0\n"
-                       "f000-11000 r--p 00000000 00:00 0\n"
-                       "12000-14000 r--p 00000000 00:00 0\n"
-                       "100000-110000 rw-p 0000000 00:00 0\n"
-                       "200000-210000 rw-p 0000000 00:00 0\n"));
+        new BufferMaps("1000-4000 ---s 00000000 00:00 0 /fake/elf1\n"
+                       "4000-6000 r--s 00000000 00:00 0 /fake/elf1\n"
+                       "6000-8000 -wxs 00000000 00:00 0 /fake/elf1\n"
+                       "a000-c000 --xp 00000000 00:00 0 /fake/elf2\n"
+                       "c000-f000 rw-p 00001000 00:00 0 /fake/elf2\n"
+                       "f000-11000 r--p 00000000 00:00 0 /fake/elf3\n"
+                       "11000-12000 rw-p 00001000 00:00 0 /fake/elf3\n"
+                       "12000-14000 r--p 00000000 00:00 0 /fake/elf4\n"
+                       "100000-110000 rw-p 0001000 00:00 0 /fake/elf4\n"
+                       "200000-210000 rw-p 0002000 00:00 0 /fake/elf4\n"));
     ASSERT_TRUE(maps_->Parse());
 
     MapInfo* map_info = maps_->Get(3);
@@ -74,7 +75,7 @@ class JitDebugTest : public ::testing::Test {
     interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
     map_info->elf.reset(elf);
 
-    map_info = maps_->Get(6);
+    map_info = maps_->Get(7);
     ASSERT_TRUE(map_info != nullptr);
     memory = new MemoryFake;
     elf = new ElfFake(memory);
@@ -396,6 +397,8 @@ TEST_F(JitDebugTest, get_elf_search_libs) {
 
   // Change the name of the map that includes the value and verify this works.
   MapInfo* map_info = maps_->Get(5);
+  map_info->name = "/system/lib/libart.so";
+  map_info = maps_->Get(6);
   map_info->name = "/system/lib/libart.so";
   jit_debug_.reset(new JitDebug(process_memory_, libs));
   // Make sure that clearing our copy of the libs doesn't affect the

@@ -69,10 +69,10 @@ struct JITDescriptor64 {
   uint64_t first_entry;
 };
 
-JitDebug::JitDebug(std::shared_ptr<Memory>& memory) : memory_(memory) {}
+JitDebug::JitDebug(std::shared_ptr<Memory>& memory) : Global(memory) {}
 
 JitDebug::JitDebug(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs)
-    : memory_(memory), search_libs_(search_libs) {}
+    : Global(memory, search_libs) {}
 
 JitDebug::~JitDebug() {
   for (auto* elf : elf_list_) {
@@ -165,6 +165,11 @@ void JitDebug::SetArch(ArchEnum arch) {
   }
 }
 
+bool JitDebug::ReadVariableData(uint64_t ptr) {
+  entry_addr_ = (this->*read_descriptor_func_)(ptr);
+  return entry_addr_ != 0;
+}
+
 void JitDebug::Init(Maps* maps) {
   if (initialized_) {
     return;
@@ -172,36 +177,7 @@ void JitDebug::Init(Maps* maps) {
   // Regardless of what happens below, consider the init finished.
   initialized_ = true;
 
-  const std::string descriptor_name("__jit_debug_descriptor");
-  for (MapInfo* info : *maps) {
-    if (!(info->flags & PROT_READ) || info->offset != 0) {
-      continue;
-    }
-
-    if (!search_libs_.empty()) {
-      bool found = false;
-      const char* lib = basename(info->name.c_str());
-      for (std::string& name : search_libs_) {
-        if (strcmp(name.c_str(), lib) == 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        continue;
-      }
-    }
-
-    Elf* elf = info->GetElf(memory_, true);
-    uint64_t descriptor_addr;
-    // Find first non-empty entry (libart might be loaded multiple times).
-    if (elf->GetGlobalVariable(descriptor_name, &descriptor_addr) && descriptor_addr != 0) {
-      entry_addr_ = (this->*read_descriptor_func_)(descriptor_addr + info->start);
-      if (entry_addr_ != 0) {
-        break;
-      }
-    }
-  }
+  FindAndReadVariable(maps, "__jit_debug_descriptor");
 }
 
 Elf* JitDebug::GetElf(Maps* maps, uint64_t pc) {

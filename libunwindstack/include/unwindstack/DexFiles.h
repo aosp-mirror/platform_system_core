@@ -25,16 +25,18 @@
 #include <unordered_map>
 #include <vector>
 
+#include <unwindstack/Global.h>
+#include <unwindstack/Memory.h>
+
 namespace unwindstack {
 
 // Forward declarations.
 class DexFile;
 class Maps;
 struct MapInfo;
-class Memory;
 enum ArchEnum : uint8_t;
 
-class DexFiles {
+class DexFiles : public Global {
  public:
   explicit DexFiles(std::shared_ptr<Memory>& memory);
   DexFiles(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs);
@@ -60,8 +62,7 @@ class DexFiles {
 
   bool ReadEntry64();
 
-  std::shared_ptr<Memory> memory_;
-  std::vector<std::string> search_libs_;
+  bool ReadVariableData(uint64_t ptr_offset) override;
 
   std::mutex lock_;
   bool initialized_ = false;
