@@ -261,7 +261,7 @@ bool fs_mgr_wants_overlayfs(const fstab_rec* fsrec) {
     return true;
 }
 
-bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
+bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr, int level = 0) {
     auto save_errno = errno;
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(path.c_str()), closedir);
     if (!dir) {
@@ -269,7 +269,11 @@ bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
             errno = save_errno;
             return true;
         }
-        PERROR << "opendir " << path;
+        PERROR << "opendir " << path << " depth=" << level;
+        if ((errno == EPERM) && (level != 0)) {
+            errno = save_errno;
+            return true;
+        }
         return false;
     }
     dirent* entry;
@@ -279,23 +283,25 @@ bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr) {
         auto file = path + "/" + entry->d_name;
         if (entry->d_type == DT_UNKNOWN) {
             struct stat st;
+            save_errno = errno;
             if (!lstat(file.c_str(), &st) && (st.st_mode & S_IFDIR)) entry->d_type = DT_DIR;
+            errno = save_errno;
         }
         if (entry->d_type == DT_DIR) {
-            ret &= fs_mgr_rm_all(file, change);
+            ret &= fs_mgr_rm_all(file, change, level + 1);
             if (!rmdir(file.c_str())) {
                 if (change) *change = true;
             } else {
-                ret = false;
-                PERROR << "rmdir " << file;
+                if (errno != ENOENT) ret = false;
+                PERROR << "rmdir " << file << " depth=" << level;
             }
             continue;
         }
         if (!unlink(file.c_str())) {
             if (change) *change = true;
         } else {
-            ret = false;
-            PERROR << "rm " << file;
+            if (errno != ENOENT) ret = false;
+            PERROR << "rm " << file << " depth=" << level;
         }
     }
     return ret;
