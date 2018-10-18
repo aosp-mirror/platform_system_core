@@ -339,7 +339,7 @@ Partition* MetadataBuilder::FindPartition(const std::string& name) {
     return nullptr;
 }
 
-PartitionGroup* MetadataBuilder::FindGroup(const std::string& group_name) const {
+PartitionGroup* MetadataBuilder::FindGroup(const std::string& group_name) {
     for (const auto& group : groups_) {
         if (group->name() == group_name) {
             return group.get();
@@ -622,6 +622,37 @@ bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_s
               << " bytes to " << aligned_size << " bytes";
     }
     return true;
+}
+
+std::vector<std::string> MetadataBuilder::ListGroups() const {
+    std::vector<std::string> names;
+    for (const auto& group : groups_) {
+        names.emplace_back(group->name());
+    }
+    return names;
+}
+
+void MetadataBuilder::RemoveGroupAndPartitions(const std::string& group_name) {
+    if (group_name == "default") {
+        // Cannot remove the default group.
+        return;
+    }
+    std::vector<std::string> partition_names;
+    for (const auto& partition : partitions_) {
+        if (partition->group_name() == group_name) {
+            partition_names.emplace_back(partition->name());
+        }
+    }
+
+    for (const auto& partition_name : partition_names) {
+        RemovePartition(partition_name);
+    }
+    for (auto iter = groups_.begin(); iter != groups_.end(); iter++) {
+        if ((*iter)->name() == group_name) {
+            groups_.erase(iter);
+            break;
+        }
+    }
 }
 
 }  // namespace fs_mgr

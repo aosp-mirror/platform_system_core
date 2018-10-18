@@ -47,6 +47,9 @@ cc_test {
     cppflags: [
         "-Wno-unused-parameter",
     ],
+    static_libs: [
+        "libgmock",
+    ],
     shared_libs: [
         "liblp",
         "libbase",
