@@ -589,8 +589,18 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     fsrec->fs_type = strdup(mnt_type.c_str());
     fsrec->flags = MS_RELATIME;
     fsrec->fs_options = strdup("");
-    auto mounted = fs_mgr_do_mount_one(fsrec) == 0;
     auto save_errno = errno;
+    auto mounted = fs_mgr_do_mount_one(fsrec) == 0;
+    if (!mounted) {
+        free(fsrec->fs_type);
+        if (mnt_type == "f2fs") {
+            fsrec->fs_type = strdup("ext4");
+        } else {
+            fsrec->fs_type = strdup("f2fs");
+        }
+        mounted = fs_mgr_do_mount_one(fsrec) == 0;
+        if (!mounted) save_errno = errno;
+    }
     setfscreatecon(nullptr);
     if (!mounted) rmdir(kScratchMountPoint.c_str());
     errno = save_errno;
@@ -600,6 +610,7 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
 const std::string kMkF2fs("/system/bin/make_f2fs");
 const std::string kMkExt4("/system/bin/mke2fs");
 
+// Only a suggestion for _first_ try during mounting
 std::string fs_mgr_overlayfs_scratch_mount_type() {
     if (!access(kMkF2fs.c_str(), X_OK)) return "f2fs";
     if (!access(kMkExt4.c_str(), X_OK)) return "ext4";
