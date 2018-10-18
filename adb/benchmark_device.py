@@ -60,8 +60,6 @@ def benchmark_push(device=None, file_size_mb=100):
     if device == None:
         device = adb.get_device()
 
-    lock_max(device)
-
     remote_path = "/dev/null"
     local_path = "/tmp/adb_benchmark_temp"
 
@@ -69,7 +67,7 @@ def benchmark_push(device=None, file_size_mb=100):
         f.truncate(file_size_mb * 1024 * 1024)
 
     speeds = list()
-    for _ in range(0, 5):
+    for _ in range(0, 10):
         begin = time.time()
         device.push(local=local_path, remote=remote_path)
         end = time.time()
@@ -81,15 +79,13 @@ def benchmark_pull(device=None, file_size_mb=100):
     if device == None:
         device = adb.get_device()
 
-    lock_max(device)
-
     remote_path = "/data/local/tmp/adb_benchmark_temp"
     local_path = "/tmp/adb_benchmark_temp"
 
     device.shell(["dd", "if=/dev/zero", "of=" + remote_path, "bs=1m",
                   "count=" + str(file_size_mb)])
     speeds = list()
-    for _ in range(0, 5):
+    for _ in range(0, 10):
         begin = time.time()
         device.pull(remote=remote_path, local=local_path)
         end = time.time()
@@ -101,10 +97,8 @@ def benchmark_shell(device=None, file_size_mb=100):
     if device == None:
         device = adb.get_device()
 
-    lock_max(device)
-
     speeds = list()
-    for _ in range(0, 5):
+    for _ in range(0, 10):
         begin = time.time()
         device.shell(["dd", "if=/dev/zero", "bs=1m",
                       "count=" + str(file_size_mb)])
@@ -114,7 +108,10 @@ def benchmark_shell(device=None, file_size_mb=100):
     analyze("shell %dMiB" % file_size_mb, speeds)
 
 def main():
-    benchmark_pull()
+    device = adb.get_device()
+    unlock(device)
+    benchmark_push(device)
+    benchmark_pull(device)
 
 if __name__ == "__main__":
     main()

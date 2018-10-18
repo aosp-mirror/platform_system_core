@@ -24,6 +24,8 @@
 
 #include <android-base/macros.h>
 
+#include "adb.h"
+
 int syntax_error(const char*, ...) __attribute__((__format__(__printf__, 1, 2)));
 
 void close_stdin();
@@ -42,6 +44,8 @@ bool mkdirs(const std::string& path);
 std::string escape_arg(const std::string& s);
 
 std::string dump_hex(const void* ptr, size_t byte_count);
+std::string dump_header(const amessage* msg);
+std::string dump_packet(const char* name, const char* func, const apacket* p);
 
 std::string perror_str(const char* msg);
 
