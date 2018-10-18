@@ -37,14 +37,13 @@
 #include <bootimg.h>
 #include <inttypes.h>
 #include <sparse/sparse.h>
+
+#include "constants.h"
 #include "transport.h"
 
 class Transport;
 
 namespace fastboot {
-
-static constexpr int FB_COMMAND_SZ = 64;
-static constexpr int FB_RESPONSE_SZ = 64;
 
 enum RetCode : int {
     SUCCESS = 0,
