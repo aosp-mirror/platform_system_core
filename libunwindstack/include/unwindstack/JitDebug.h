@@ -24,15 +24,17 @@
 #include <string>
 #include <vector>
 
+#include <unwindstack/Global.h>
+#include <unwindstack/Memory.h>
+
 namespace unwindstack {
 
 // Forward declarations.
 class Elf;
 class Maps;
-class Memory;
 enum ArchEnum : uint8_t;
 
-class JitDebug {
+class JitDebug : public Global {
  public:
   explicit JitDebug(std::shared_ptr<Memory>& memory);
   JitDebug(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs);
@@ -45,11 +47,9 @@ class JitDebug {
  private:
   void Init(Maps* maps);
 
-  std::shared_ptr<Memory> memory_;
   uint64_t entry_addr_ = 0;
   bool initialized_ = false;
   std::vector<Elf*> elf_list_;
-  std::vector<std::string> search_libs_;
 
   std::mutex lock_;
 
@@ -62,6 +62,8 @@ class JitDebug {
   uint64_t ReadEntry32Pack(uint64_t* start, uint64_t* size);
   uint64_t ReadEntry32Pad(uint64_t* start, uint64_t* size);
   uint64_t ReadEntry64(uint64_t* start, uint64_t* size);
+
+  bool ReadVariableData(uint64_t ptr_offset) override;
 };
 
 }  // namespace unwindstack

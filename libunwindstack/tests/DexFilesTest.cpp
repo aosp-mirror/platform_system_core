@@ -44,15 +44,15 @@ class DexFilesTest : public ::testing::Test {
     dex_files_->SetArch(ARCH_ARM);
 
     maps_.reset(
-        new BufferMaps("1000-4000 ---s 00000000 00:00 0\n"
-                       "4000-6000 r--s 00000000 00:00 0\n"
-                       "6000-8000 -wxs 00000000 00:00 0\n"
-                       "a000-c000 r--p 00000000 00:00 0\n"
-                       "c000-f000 rw-p 00000000 00:00 0\n"
-                       "f000-11000 r--p 00000000 00:00 0\n"
-                       "100000-110000 rw-p 0000000 00:00 0\n"
-                       "200000-210000 rw-p 0000000 00:00 0\n"
-                       "300000-400000 rw-p 0000000 00:00 0\n"));
+        new BufferMaps("1000-4000 ---s 00000000 00:00 0 /fake/elf\n"
+                       "4000-6000 r--s 00000000 00:00 0 /fake/elf\n"
+                       "6000-8000 -wxs 00000000 00:00 0 /fake/elf\n"
+                       "a000-c000 r--p 00000000 00:00 0 /fake/elf2\n"
+                       "c000-f000 rw-p 00001000 00:00 0 /fake/elf2\n"
+                       "f000-11000 r--p 00000000 00:00 0 /fake/elf3\n"
+                       "100000-110000 rw-p 0001000 00:00 0 /fake/elf3\n"
+                       "200000-210000 rw-p 0002000 00:00 0 /fake/elf3\n"
+                       "300000-400000 rw-p 0003000 00:00 0 /fake/elf3\n"));
     ASSERT_TRUE(maps_->Parse());
 
     // Global variable in a section that is not readable.
@@ -96,8 +96,9 @@ class DexFilesTest : public ::testing::Test {
   void WriteDex(uint64_t dex_file);
 
   static constexpr size_t kMapGlobalNonReadable = 2;
-  static constexpr size_t kMapGlobalSetToZero = 4;
+  static constexpr size_t kMapGlobalSetToZero = 3;
   static constexpr size_t kMapGlobal = 5;
+  static constexpr size_t kMapGlobalRw = 6;
   static constexpr size_t kMapDexFileEntries = 7;
   static constexpr size_t kMapDexFiles = 8;
 
@@ -256,6 +257,9 @@ TEST_F(DexFilesTest, get_method_information_search_libs) {
   map_info->name = "/system/lib/libart.so";
   dex_files_.reset(new DexFiles(process_memory_, libs));
   dex_files_->SetArch(ARCH_ARM);
+  // Set the rw map to the same name or this will not scan this entry.
+  map_info = maps_->Get(kMapGlobalRw);
+  map_info->name = "/system/lib/libart.so";
   // Make sure that clearing out copy of the libs doesn't affect the
   // DexFiles object.
   libs.clear();
@@ -271,7 +275,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   // First global variable found, but value is zero.
-  WriteDescriptor32(0xc800, 0);
+  WriteDescriptor32(0xa800, 0);
 
   WriteDescriptor32(0xf800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
@@ -286,7 +290,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
   dex_files_->SetArch(ARCH_ARM);
   method_name = "fail";
   method_offset = 0x123;
-  WriteDescriptor32(0xc800, 0x100000);
+  WriteDescriptor32(0xa800, 0x100000);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);
@@ -298,7 +302,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   // First global variable found, but value is zero.
-  WriteDescriptor64(0xc800, 0);
+  WriteDescriptor64(0xa800, 0);
 
   WriteDescriptor64(0xf800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x300000);
@@ -314,7 +318,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   dex_files_->SetArch(ARCH_ARM64);
   method_name = "fail";
   method_offset = 0x123;
-  WriteDescriptor64(0xc800, 0x100000);
+  WriteDescriptor64(0xa800, 0x100000);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);
