@@ -163,7 +163,7 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
     if (candidate.empty()) return "";
 
-    return "override_creds=off,"s + kLowerdirOption + mount_point + "," + kUpperdirOption +
+    return "override_creds=off," + kLowerdirOption + mount_point + "," + kUpperdirOption +
            candidate + kUpperName + ",workdir=" + candidate + kWorkName;
 }
 
@@ -443,7 +443,7 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
     if (!fs_mgr_access(top)) return false;
 
     auto cleanup_all = mount_point.empty();
-    const auto oldpath = top + (cleanup_all ? "" : ("/"s + mount_point));
+    const auto oldpath = top + (cleanup_all ? "" : ("/" + mount_point));
     const auto newpath = oldpath + ".teardown";
     auto ret = fs_mgr_rm_all(newpath);
     auto save_errno = errno;
@@ -671,7 +671,7 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
 
     auto ret = system((mnt_type == "f2fs")
                               ? ((kMkF2fs + " -d1 " + scratch_device).c_str())
-                              : ((kMkExt4 + " -b 4096 -t ext4 -m 0 -M "s + kScratchMountPoint +
+                              : ((kMkExt4 + " -b 4096 -t ext4 -m 0 -M " + kScratchMountPoint +
                                   " -O has_journal " + scratch_device)
                                          .c_str()));
     if (ret) {
