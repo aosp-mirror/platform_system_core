@@ -43,8 +43,9 @@ std::string SerializeGeometry(const LpMetadataGeometry& input) {
 static bool CompareGeometry(const LpMetadataGeometry& g1, const LpMetadataGeometry& g2) {
     return g1.metadata_max_size == g2.metadata_max_size &&
            g1.metadata_slot_count == g2.metadata_slot_count &&
-           g1.first_logical_sector == g2.first_logical_sector &&
-           g1.last_logical_sector == g2.last_logical_sector;
+           g1.block_device_size == g2.block_device_size &&
+           g1.logical_block_size == g2.logical_block_size &&
+           g1.first_logical_sector == g2.first_logical_sector;
 }
 
 std::string SerializeMetadata(const LpMetadata& input) {
@@ -86,15 +87,11 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
         return false;
     }
 
-    *blob = SerializeMetadata(metadata);
-
     const LpMetadataHeader& header = metadata.header;
     const LpMetadataGeometry& geometry = metadata.geometry;
-    // Validate the usable sector range.
-    if (geometry.first_logical_sector > geometry.last_logical_sector) {
-        LERROR << "Logical partition metadata has invalid sector range.";
-        return false;
-    }
+
+    *blob = SerializeMetadata(metadata);
+
     // Make sure we're writing within the space reserved.
     if (blob->size() > geometry.metadata_max_size) {
         LERROR << "Logical partition metadata is too large. " << blob->size() << " > "
@@ -128,11 +125,12 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     }
 
     // Make sure all linear extents have a valid range.
+    uint64_t last_sector = geometry.block_device_size / LP_SECTOR_SIZE;
     for (const auto& extent : metadata.extents) {
         if (extent.target_type == LP_TARGET_TYPE_LINEAR) {
             uint64_t physical_sector = extent.target_data;
             if (physical_sector < geometry.first_logical_sector ||
-                physical_sector + extent.num_sectors > geometry.last_logical_sector) {
+                physical_sector + extent.num_sectors > last_sector) {
                 LERROR << "Extent table entry is out of bounds.";
                 return false;
             }
@@ -167,7 +165,7 @@ static bool WriteBackupMetadata(int fd, const LpMetadataGeometry& geometry, uint
     }
     if (abs_offset >= int64_t(geometry.first_logical_sector) * LP_SECTOR_SIZE) {
         PERROR << __PRETTY_FUNCTION__ << "backup offset " << abs_offset
-               << " is within logical partition bounds, sector " << geometry.last_logical_sector;
+               << " is within logical partition bounds, sector " << geometry.first_logical_sector;
         return false;
     }
     if (!writer(fd, blob)) {

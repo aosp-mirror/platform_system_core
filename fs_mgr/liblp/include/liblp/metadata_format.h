@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 4
+#define LP_METADATA_MAJOR_VERSION 5
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -103,12 +103,6 @@ typedef struct LpMetadataGeometry {
      * space consumed by metadata_max_size*metadata_slot_count*2.
      */
     uint64_t first_logical_sector;
-
-    /* 56: Last usable sector, inclusive, for allocating logical partitions.
-     * At the end of this sector will follow backup metadata slots and the
-     * backup geometry block at the very end.
-     */
-    uint64_t last_logical_sector;
 
     /* 64: Alignment for defining partitions or partition extents. For example,
      * an alignment of 1MiB will require that all partitions have a size evenly

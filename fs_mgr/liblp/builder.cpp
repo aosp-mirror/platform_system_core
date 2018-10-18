@@ -268,39 +268,19 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     }
 
     // Compute the first free sector, factoring in alignment.
-    uint64_t free_area =
+    uint64_t free_area_start =
             AlignTo(total_reserved, device_info.alignment, device_info.alignment_offset);
-    uint64_t first_sector = free_area / LP_SECTOR_SIZE;
+    uint64_t first_sector = free_area_start / LP_SECTOR_SIZE;
 
-    // Compute the last free sector, which is inclusive. We subtract 1 to make
-    // sure that logical partitions won't overlap with the same sector as the
-    // backup metadata, which could happen if the block device was not aligned
-    // to LP_SECTOR_SIZE.
-    uint64_t last_sector = (device_info.size / LP_SECTOR_SIZE) - 1;
-
-    // If this check fails, it means either (1) we did not have free space to
-    // allocate a single sector, or (2) we did, but the alignment was high
-    // enough to bump the first sector out of range. Either way, we cannot
-    // continue.
-    if (first_sector > last_sector) {
-        LERROR << "Not enough space to allocate any partition tables.";
+    // There must be one logical block of free space remaining (enough for one partition).
+    uint64_t minimum_disk_size = (first_sector * LP_SECTOR_SIZE) + device_info.logical_block_size;
+    if (device_info.size < minimum_disk_size) {
+        LERROR << "Device must be at least " << minimum_disk_size << " bytes, only has "
+               << device_info.size;
         return false;
     }
-
-    // Finally, the size of the allocatable space must be a multiple of the
-    // logical block size. If we have no more free space after this
-    // computation, then we abort. Note that the last sector is inclusive,
-    // so we have to account for that.
-    uint64_t num_free_sectors = last_sector - first_sector + 1;
-    uint64_t sectors_per_block = device_info.logical_block_size / LP_SECTOR_SIZE;
-    if (num_free_sectors < sectors_per_block) {
-        LERROR << "Not enough space to allocate any partition tables.";
-        return false;
-    }
-    last_sector = first_sector + (num_free_sectors / sectors_per_block) * sectors_per_block - 1;
 
     geometry_.first_logical_sector = first_sector;
-    geometry_.last_logical_sector = last_sector;
     geometry_.metadata_max_size = metadata_max_size;
     geometry_.metadata_slot_count = metadata_slot_count;
     geometry_.alignment = device_info.alignment;
@@ -452,8 +432,10 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     uint64_t last_free_extent_start =
             extents.empty() ? geometry_.first_logical_sector : extents.back().end;
     last_free_extent_start = AlignSector(last_free_extent_start);
-    if (last_free_extent_start <= geometry_.last_logical_sector) {
-        free_regions.emplace_back(last_free_extent_start, geometry_.last_logical_sector + 1);
+
+    uint64_t last_sector = geometry_.block_device_size / LP_SECTOR_SIZE;
+    if (last_free_extent_start < last_sector) {
+        free_regions.emplace_back(last_free_extent_start, last_sector);
     }
 
     const uint64_t sectors_per_block = geometry_.logical_block_size / LP_SECTOR_SIZE;
@@ -523,6 +505,7 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         strncpy(out.name, group->name().c_str(), sizeof(out.name));
         out.maximum_size = group->maximum_size();
 
+        group_indices[group->name()] = metadata->groups.size();
         metadata->groups.push_back(out);
     }
 
@@ -546,6 +529,14 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         part.num_extents = static_cast<uint32_t>(partition->extents().size());
         part.attributes = partition->attributes();
 
+        auto iter = group_indices.find(partition->group_name());
+        if (iter == group_indices.end()) {
+            LERROR << "Partition " << partition->name() << " is a member of unknown group "
+                   << partition->group_name();
+            return nullptr;
+        }
+        part.group_index = iter->second;
+
         for (const auto& extent : partition->extents()) {
             extent->AddTo(metadata.get());
         }
@@ -559,7 +550,7 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
 }
 
 uint64_t MetadataBuilder::AllocatableSpace() const {
-    return (geometry_.last_logical_sector - geometry_.first_logical_sector + 1) * LP_SECTOR_SIZE;
+    return geometry_.block_device_size - (geometry_.first_logical_sector * LP_SECTOR_SIZE);
 }
 
 uint64_t MetadataBuilder::UsedSpace() const {
