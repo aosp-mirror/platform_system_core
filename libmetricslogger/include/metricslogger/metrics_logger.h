@@ -15,7 +15,6 @@
  */
 
 #include <log/log_event_list.h>
-#include <stats_event_list.h>
 #include <cstdint>
 #include <string>
 
@@ -44,7 +43,6 @@ void LogMultiAction(int32_t category, int32_t field, const std::string& value);
 class ComplexEventLogger {
   private:
     android_log_event_list logger;
-    stats_event_list stats_logger;
 
   public:
     // Create a complex event with category|category|.
