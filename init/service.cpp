@@ -60,6 +60,7 @@ using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::ParseInt;
+using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -400,7 +401,7 @@ void Service::DumpState() const {
                   [] (const auto& info) { LOG(INFO) << *info; });
 }
 
-Result<Success> Service::ParseCapabilities(const std::vector<std::string>& args) {
+Result<Success> Service::ParseCapabilities(std::vector<std::string>&& args) {
     capabilities_ = 0;
 
     if (!CapAmbientSupported()) {
@@ -429,29 +430,29 @@ Result<Success> Service::ParseCapabilities(const std::vector<std::string>& args)
     return Success();
 }
 
-Result<Success> Service::ParseClass(const std::vector<std::string>& args) {
+Result<Success> Service::ParseClass(std::vector<std::string>&& args) {
     classnames_ = std::set<std::string>(args.begin() + 1, args.end());
     return Success();
 }
 
-Result<Success> Service::ParseConsole(const std::vector<std::string>& args) {
+Result<Success> Service::ParseConsole(std::vector<std::string>&& args) {
     flags_ |= SVC_CONSOLE;
     console_ = args.size() > 1 ? "/dev/" + args[1] : "";
     return Success();
 }
 
-Result<Success> Service::ParseCritical(const std::vector<std::string>& args) {
+Result<Success> Service::ParseCritical(std::vector<std::string>&& args) {
     flags_ |= SVC_CRITICAL;
     return Success();
 }
 
-Result<Success> Service::ParseDisabled(const std::vector<std::string>& args) {
+Result<Success> Service::ParseDisabled(std::vector<std::string>&& args) {
     flags_ |= SVC_DISABLED;
     flags_ |= SVC_RC_DISABLED;
     return Success();
 }
 
-Result<Success> Service::ParseEnterNamespace(const std::vector<std::string>& args) {
+Result<Success> Service::ParseEnterNamespace(std::vector<std::string>&& args) {
     if (args[1] != "net") {
         return Error() << "Init only supports entering network namespaces";
     }
@@ -461,11 +462,11 @@ Result<Success> Service::ParseEnterNamespace(const std::vector<std::string>& arg
     // Network namespaces require that /sys is remounted, otherwise the old adapters will still be
     // present. Therefore, they also require mount namespaces.
     namespace_flags_ |= CLONE_NEWNS;
-    namespaces_to_enter_.emplace_back(CLONE_NEWNET, args[2]);
+    namespaces_to_enter_.emplace_back(CLONE_NEWNET, std::move(args[2]));
     return Success();
 }
 
-Result<Success> Service::ParseGroup(const std::vector<std::string>& args) {
+Result<Success> Service::ParseGroup(std::vector<std::string>&& args) {
     auto gid = DecodeUid(args[1]);
     if (!gid) {
         return Error() << "Unable to decode GID for '" << args[1] << "': " << gid.error();
@@ -482,7 +483,7 @@ Result<Success> Service::ParseGroup(const std::vector<std::string>& args) {
     return Success();
 }
 
-Result<Success> Service::ParsePriority(const std::vector<std::string>& args) {
+Result<Success> Service::ParsePriority(std::vector<std::string>&& args) {
     priority_ = 0;
     if (!ParseInt(args[1], &priority_,
                   static_cast<int>(ANDROID_PRIORITY_HIGHEST), // highest is negative
@@ -493,7 +494,7 @@ Result<Success> Service::ParsePriority(const std::vector<std::string>& args) {
     return Success();
 }
 
-Result<Success> Service::ParseInterface(const std::vector<std::string>& args) {
+Result<Success> Service::ParseInterface(std::vector<std::string>&& args) {
     const std::string& interface_name = args[1];
     const std::string& instance_name = args[2];
 
@@ -524,7 +525,7 @@ Result<Success> Service::ParseInterface(const std::vector<std::string>& args) {
     return Success();
 }
 
-Result<Success> Service::ParseIoprio(const std::vector<std::string>& args) {
+Result<Success> Service::ParseIoprio(std::vector<std::string>&& args) {
     if (!ParseInt(args[2], &ioprio_pri_, 0, 7)) {
         return Error() << "priority value must be range 0 - 7";
     }
@@ -542,36 +543,53 @@ Result<Success> Service::ParseIoprio(const std::vector<std::string>& args) {
     return Success();
 }
 
-Result<Success> Service::ParseKeycodes(const std::vector<std::string>& args) {
-    for (std::size_t i = 1; i < args.size(); i++) {
+Result<Success> Service::ParseKeycodes(std::vector<std::string>&& args) {
+    auto it = args.begin() + 1;
+    if (args.size() == 2 && StartsWith(args[1], "$")) {
+        std::string expanded;
+        if (!expand_props(args[1], &expanded)) {
+            return Error() << "Could not expand property '" << args[1] << "'";
+        }
+
+        // If the property is not set, it defaults to none, in which case there are no keycodes
+        // for this service.
+        if (expanded == "none") {
+            return Success();
+        }
+
+        args = Split(expanded, ",");
+        it = args.begin();
+    }
+
+    for (; it != args.end(); ++it) {
         int code;
-        if (ParseInt(args[i], &code, 0, KEY_MAX)) {
+        if (ParseInt(*it, &code, 0, KEY_MAX)) {
             for (auto& key : keycodes_) {
-                if (key == code) return Error() << "duplicate keycode: " << args[i];
+                if (key == code) return Error() << "duplicate keycode: " << *it;
             }
             keycodes_.insert(std::upper_bound(keycodes_.begin(), keycodes_.end(), code), code);
         } else {
-            return Error() << "invalid keycode: " << args[i];
+            return Error() << "invalid keycode: " << *it;
         }
     }
     return Success();
 }
 
-Result<Success> Service::ParseOneshot(const std::vector<std::string>& args) {
+Result<Success> Service::ParseOneshot(std::vector<std::string>&& args) {
     flags_ |= SVC_ONESHOT;
     return Success();
 }
 
-Result<Success> Service::ParseOnrestart(const std::vector<std::string>& args) {
-    std::vector<std::string> str_args(args.begin() + 1, args.end());
+Result<Success> Service::ParseOnrestart(std::vector<std::string>&& args) {
+    args.erase(args.begin());
     int line = onrestart_.NumCommands() + 1;
-    if (auto result = onrestart_.AddCommand(str_args, line); !result) {
+    if (auto result = onrestart_.AddCommand(std::move(args), line); !result) {
         return Error() << "cannot add Onrestart command: " << result.error();
     }
     return Success();
 }
 
-Result<Success> Service::ParseNamespace(const std::vector<std::string>& args) {
+Result<Success> Service::ParseNamespace(std::vector<std::string>&& args) {
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "pid") {
             namespace_flags_ |= CLONE_NEWPID;
@@ -586,40 +604,40 @@ Result<Success> Service::ParseNamespace(const std::vector<std::string>& args) {
     return Success();
 }
 
-Result<Success> Service::ParseOomScoreAdjust(const std::vector<std::string>& args) {
+Result<Success> Service::ParseOomScoreAdjust(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &oom_score_adjust_, -1000, 1000)) {
         return Error() << "oom_score_adjust value must be in range -1000 - +1000";
     }
     return Success();
 }
 
-Result<Success> Service::ParseOverride(const std::vector<std::string>& args) {
+Result<Success> Service::ParseOverride(std::vector<std::string>&& args) {
     override_ = true;
     return Success();
 }
 
-Result<Success> Service::ParseMemcgSwappiness(const std::vector<std::string>& args) {
+Result<Success> Service::ParseMemcgSwappiness(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &swappiness_, 0)) {
         return Error() << "swappiness value must be equal or greater than 0";
     }
     return Success();
 }
 
-Result<Success> Service::ParseMemcgLimitInBytes(const std::vector<std::string>& args) {
+Result<Success> Service::ParseMemcgLimitInBytes(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &limit_in_bytes_, 0)) {
         return Error() << "limit_in_bytes value must be equal or greater than 0";
     }
     return Success();
 }
 
-Result<Success> Service::ParseMemcgSoftLimitInBytes(const std::vector<std::string>& args) {
+Result<Success> Service::ParseMemcgSoftLimitInBytes(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &soft_limit_in_bytes_, 0)) {
         return Error() << "soft_limit_in_bytes value must be equal or greater than 0";
     }
     return Success();
 }
 
-Result<Success> Service::ParseProcessRlimit(const std::vector<std::string>& args) {
+Result<Success> Service::ParseProcessRlimit(std::vector<std::string>&& args) {
     auto rlimit = ParseRlimit(args);
     if (!rlimit) return rlimit.error();
 
@@ -627,7 +645,7 @@ Result<Success> Service::ParseProcessRlimit(const std::vector<std::string>& args
     return Success();
 }
 
-Result<Success> Service::ParseRestartPeriod(const std::vector<std::string>& args) {
+Result<Success> Service::ParseRestartPeriod(std::vector<std::string>&& args) {
     int period;
     if (!ParseInt(args[1], &period, 5)) {
         return Error() << "restart_period value must be an integer >= 5";
@@ -636,22 +654,22 @@ Result<Success> Service::ParseRestartPeriod(const std::vector<std::string>& args
     return Success();
 }
 
-Result<Success> Service::ParseSeclabel(const std::vector<std::string>& args) {
-    seclabel_ = args[1];
+Result<Success> Service::ParseSeclabel(std::vector<std::string>&& args) {
+    seclabel_ = std::move(args[1]);
     return Success();
 }
 
-Result<Success> Service::ParseSigstop(const std::vector<std::string>& args) {
+Result<Success> Service::ParseSigstop(std::vector<std::string>&& args) {
     sigstop_ = true;
     return Success();
 }
 
-Result<Success> Service::ParseSetenv(const std::vector<std::string>& args) {
-    environment_vars_.emplace_back(args[1], args[2]);
+Result<Success> Service::ParseSetenv(std::vector<std::string>&& args) {
+    environment_vars_.emplace_back(std::move(args[1]), std::move(args[2]));
     return Success();
 }
 
-Result<Success> Service::ParseShutdown(const std::vector<std::string>& args) {
+Result<Success> Service::ParseShutdown(std::vector<std::string>&& args) {
     if (args[1] == "critical") {
         flags_ |= SVC_SHUTDOWN_CRITICAL;
         return Success();
@@ -659,7 +677,7 @@ Result<Success> Service::ParseShutdown(const std::vector<std::string>& args) {
     return Error() << "Invalid shutdown option";
 }
 
-Result<Success> Service::ParseTimeoutPeriod(const std::vector<std::string>& args) {
+Result<Success> Service::ParseTimeoutPeriod(std::vector<std::string>&& args) {
     int period;
     if (!ParseInt(args[1], &period, 1)) {
         return Error() << "timeout_period value must be an integer >= 1";
@@ -669,7 +687,7 @@ Result<Success> Service::ParseTimeoutPeriod(const std::vector<std::string>& args
 }
 
 template <typename T>
-Result<Success> Service::AddDescriptor(const std::vector<std::string>& args) {
+Result<Success> Service::AddDescriptor(std::vector<std::string>&& args) {
     int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
     Result<uid_t> uid = 0;
     Result<gid_t> gid = 0;
@@ -704,26 +722,26 @@ Result<Success> Service::AddDescriptor(const std::vector<std::string>& args) {
 }
 
 // name type perm [ uid gid context ]
-Result<Success> Service::ParseSocket(const std::vector<std::string>& args) {
+Result<Success> Service::ParseSocket(std::vector<std::string>&& args) {
     if (!StartsWith(args[2], "dgram") && !StartsWith(args[2], "stream") &&
         !StartsWith(args[2], "seqpacket")) {
         return Error() << "socket type must be 'dgram', 'stream' or 'seqpacket'";
     }
-    return AddDescriptor<SocketInfo>(args);
+    return AddDescriptor<SocketInfo>(std::move(args));
 }
 
 // name type perm [ uid gid context ]
-Result<Success> Service::ParseFile(const std::vector<std::string>& args) {
+Result<Success> Service::ParseFile(std::vector<std::string>&& args) {
     if (args[2] != "r" && args[2] != "w" && args[2] != "rw") {
         return Error() << "file type must be 'r', 'w' or 'rw'";
     }
     if ((args[1][0] != '/') || (args[1].find("../") != std::string::npos)) {
         return Error() << "file name must not be relative";
     }
-    return AddDescriptor<FileInfo>(args);
+    return AddDescriptor<FileInfo>(std::move(args));
 }
 
-Result<Success> Service::ParseUser(const std::vector<std::string>& args) {
+Result<Success> Service::ParseUser(std::vector<std::string>&& args) {
     auto uid = DecodeUid(args[1]);
     if (!uid) {
         return Error() << "Unable to find UID for '" << args[1] << "': " << uid.error();
@@ -732,8 +750,9 @@ Result<Success> Service::ParseUser(const std::vector<std::string>& args) {
     return Success();
 }
 
-Result<Success> Service::ParseWritepid(const std::vector<std::string>& args) {
-    writepid_files_.assign(args.begin() + 1, args.end());
+Result<Success> Service::ParseWritepid(std::vector<std::string>&& args) {
+    args.erase(args.begin());
+    writepid_files_ = std::move(args);
     return Success();
 }
 
@@ -792,13 +811,13 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     return option_parsers;
 }
 
-Result<Success> Service::ParseLine(const std::vector<std::string>& args) {
+Result<Success> Service::ParseLine(std::vector<std::string>&& args) {
     static const OptionParserMap parser_map;
     auto parser = parser_map.FindFunction(args);
 
     if (!parser) return parser.error();
 
-    return std::invoke(*parser, this, args);
+    return std::invoke(*parser, this, std::move(args));
 }
 
 Result<Success> Service::ExecStart() {
