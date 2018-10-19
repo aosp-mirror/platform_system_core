@@ -11,11 +11,7 @@ cc_defaults {
 
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
-    shared_libs: [
-        "libbase",
-        "liblog",
-        "libstatssocket",
-    ],
+    shared_libs: ["liblog"],
     whole_static_libs: ["libgtest_prod"],
 
     cflags: [
@@ -27,20 +23,17 @@ cc_defaults {
 
 // metricslogger shared library
 // -----------------------------------------------------------------------------
-cc_library {
+cc_library_shared {
     name: "libmetricslogger",
     srcs: metricslogger_lib_src_files,
     defaults: ["metricslogger_defaults"],
-    export_shared_lib_headers: ["libstatssocket"],
 }
 
 // static version of libmetricslogger, needed by a few art static binaries
-// TODO(b/117829226): Remove once dependencies are cleaned up.
 cc_library_static {
     name: "libmetricslogger_static",
     srcs: metricslogger_lib_src_files,
     defaults: ["metricslogger_defaults"],
-    export_shared_lib_headers: ["libstatssocket"],
 }
 
 // metricslogger shared library, debug
