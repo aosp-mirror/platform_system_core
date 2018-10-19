@@ -746,7 +746,7 @@ void load_recovery_id_prop() {
         return;
     }
 
-    int fd = open(rec->blk_device, O_RDONLY);
+    int fd = open(rec->blk_device, O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         PLOG(ERROR) << "error opening block device " << rec->blk_device;
         return;
