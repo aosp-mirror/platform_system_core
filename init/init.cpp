@@ -61,6 +61,10 @@
 #include "ueventd.h"
 #include "util.h"
 
+#if __has_feature(address_sanitizer)
+#include <sanitizer/asan_interface.h>
+#endif
+
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
@@ -73,6 +77,25 @@ using android::base::Trim;
 
 namespace android {
 namespace init {
+
+#if __has_feature(address_sanitizer)
+// Load asan.options if it exists since these are not yet in the environment.
+// Always ensure detect_container_overflow=0 as there are false positives with this check.
+// Always ensure abort_on_error=1 to ensure we reboot to bootloader for development builds.
+extern "C" const char* __asan_default_options() {
+    return "include_if_exists=/system/asan.options:detect_container_overflow=0:abort_on_error=1";
+}
+
+__attribute__((no_sanitize("address", "memory", "thread", "undefined"))) extern "C" void
+__sanitizer_report_error_summary(const char* summary) {
+    LOG(ERROR) << "Main stage (error summary): " << summary;
+}
+
+__attribute__((no_sanitize("address", "memory", "thread", "undefined"))) static void
+AsanReportCallback(const char* str) {
+    LOG(ERROR) << "Main stage: " << str;
+}
+#endif
 
 static int property_triggers_enabled = 0;
 
@@ -619,6 +642,10 @@ static void SetupSelinux(char** argv) {
 }
 
 int main(int argc, char** argv) {
+#if __has_feature(address_sanitizer)
+    __asan_set_error_report_callback(AsanReportCallback);
+#endif
+
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
     }
