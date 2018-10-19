@@ -144,11 +144,11 @@ static bool WritePrimaryMetadata(int fd, const LpMetadataGeometry& geometry, uin
                                  const std::function<bool(int, const std::string&)>& writer) {
     int64_t primary_offset = GetPrimaryMetadataOffset(geometry, slot_number);
     if (SeekFile64(fd, primary_offset, SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << primary_offset;
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << primary_offset;
         return false;
     }
     if (!writer(fd, blob)) {
-        PERROR << __PRETTY_FUNCTION__ << "write " << blob.size() << " bytes failed";
+        PERROR << __PRETTY_FUNCTION__ << " write " << blob.size() << " bytes failed";
         return false;
     }
     return true;
@@ -160,16 +160,16 @@ static bool WriteBackupMetadata(int fd, const LpMetadataGeometry& geometry, uint
     int64_t backup_offset = GetBackupMetadataOffset(geometry, slot_number);
     int64_t abs_offset = SeekFile64(fd, backup_offset, SEEK_SET);
     if (abs_offset == (int64_t)-1) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << backup_offset;
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << backup_offset;
         return false;
     }
     if (abs_offset >= int64_t(geometry.first_logical_sector) * LP_SECTOR_SIZE) {
-        PERROR << __PRETTY_FUNCTION__ << "backup offset " << abs_offset
+        PERROR << __PRETTY_FUNCTION__ << " backup offset " << abs_offset
                << " is within logical partition bounds, sector " << geometry.first_logical_sector;
         return false;
     }
     if (!writer(fd, blob)) {
-        PERROR << __PRETTY_FUNCTION__ << "backup write " << blob.size() << " bytes failed";
+        PERROR << __PRETTY_FUNCTION__ << " backup write " << blob.size() << " bytes failed";
         return false;
     }
     return true;
@@ -205,22 +205,33 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
         return false;
     }
 
-    // Write geometry to the first and last 4096 bytes of the device.
+    // Write zeroes to the first block.
+    std::string zeroes(LP_PARTITION_RESERVED_BYTES, 0);
+    if (SeekFile64(fd, 0, SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset 0";
+        return false;
+    }
+    if (!android::base::WriteFully(fd, zeroes.data(), zeroes.size())) {
+        PERROR << __PRETTY_FUNCTION__ << " write " << zeroes.size() << " bytes failed";
+        return false;
+    }
+
+    // Write geometry to the primary and backup locations.
     std::string blob = SerializeGeometry(metadata.geometry);
     if (SeekFile64(fd, GetPrimaryGeometryOffset(), SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset 0";
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: primary geometry";
         return false;
     }
     if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
-        PERROR << __PRETTY_FUNCTION__ << "write " << blob.size() << " bytes failed";
+        PERROR << __PRETTY_FUNCTION__ << " write " << blob.size() << " bytes failed";
         return false;
     }
     if (SeekFile64(fd, GetBackupGeometryOffset(), SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << -LP_METADATA_GEOMETRY_SIZE;
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: backup geometry";
         return false;
     }
     if (!android::base::WriteFully(fd, blob.data(), blob.size())) {
-        PERROR << __PRETTY_FUNCTION__ << "backup write " << blob.size() << " bytes failed";
+        PERROR << __PRETTY_FUNCTION__ << " backup write " << blob.size() << " bytes failed";
         return false;
     }
 
@@ -303,7 +314,7 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
 bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata) {
     android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
     if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
         return false;
     }
     if (!FlashPartitionTable(fd, metadata)) {
@@ -317,7 +328,7 @@ bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& met
                           uint32_t slot_number) {
     android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
     if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
         return false;
     }
     if (!UpdatePartitionTable(fd, metadata, slot_number)) {
