@@ -449,8 +449,10 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
     if (!fs_mgr_access(top)) return fs_mgr_overlayfs_teardown_scratch(overlay, change);
 
     auto cleanup_all = mount_point.empty();
-    const auto oldpath = top + (cleanup_all ? "" : ("/" + mount_point));
-    const auto newpath = oldpath + ".teardown";
+    const auto partition_name = android::base::Basename(mount_point);
+    const auto oldpath = top + (cleanup_all ? "" : ("/" + partition_name));
+    const auto newpath = cleanup_all ? overlay + "/." + kOverlayTopDir.substr(1) + ".teardown"
+                                     : top + "/." + partition_name + ".teardown";
     auto ret = fs_mgr_rm_all(newpath);
     auto save_errno = errno;
     if (!rename(oldpath.c_str(), newpath.c_str())) {
@@ -476,12 +478,28 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
         if (!rmdir(top.c_str())) {
             if (change) *change = true;
             cleanup_all = true;
-        } else if ((errno != ENOENT) && (errno != ENOTEMPTY)) {
+        } else if (errno == ENOTEMPTY) {
+            cleanup_all = true;
+            // cleanup all if the content is all hidden (leading .)
+            std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(top.c_str()), closedir);
+            if (!dir) {
+                PERROR << "opendir " << top;
+            } else {
+                dirent* entry;
+                while ((entry = readdir(dir.get()))) {
+                    if (entry->d_name[0] != '.') {
+                        cleanup_all = false;
+                        break;
+                    }
+                }
+            }
+            errno = save_errno;
+        } else if (errno == ENOENT) {
+            cleanup_all = true;
+            errno = save_errno;
+        } else {
             ret = false;
             PERROR << "rmdir " << top;
-        } else {
-            errno = save_errno;
-            cleanup_all = true;
         }
     }
     if (cleanup_all) ret &= fs_mgr_overlayfs_teardown_scratch(overlay, change);
