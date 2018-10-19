@@ -446,7 +446,7 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
                                    bool* change) {
     const auto top = overlay + kOverlayTopDir;
 
-    if (!fs_mgr_access(top)) return false;
+    if (!fs_mgr_access(top)) return fs_mgr_overlayfs_teardown_scratch(overlay, change);
 
     auto cleanup_all = mount_point.empty();
     const auto oldpath = top + (cleanup_all ? "" : ("/" + mount_point));
