@@ -47,9 +47,7 @@ void ActionManager::QueueAllPropertyActions() {
 void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
     auto action = std::make_unique<Action>(true, nullptr, "<Builtin Action>", 0, name,
                                            std::map<std::string, std::string>{});
-    std::vector<std::string> name_vector{name};
-
-    action->AddCommand(func, name_vector, 0);
+    action->AddCommand(func, {name}, 0);
 
     event_queue_.emplace(action.get());
     actions_.emplace_back(std::move(action));

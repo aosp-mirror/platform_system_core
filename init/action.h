@@ -36,7 +36,7 @@ Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
 
 class Command {
   public:
-    Command(BuiltinFunction f, bool execute_in_subcontext, const std::vector<std::string>& args,
+    Command(BuiltinFunction f, bool execute_in_subcontext, std::vector<std::string>&& args,
             int line);
 
     Result<Success> InvokeFunc(Subcontext* subcontext) const;
@@ -61,8 +61,8 @@ class Action {
            const std::string& event_trigger,
            const std::map<std::string, std::string>& property_triggers);
 
-    Result<Success> AddCommand(const std::vector<std::string>& args, int line);
-    void AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line);
+    Result<Success> AddCommand(std::vector<std::string>&& args, int line);
+    void AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line);
     std::size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
