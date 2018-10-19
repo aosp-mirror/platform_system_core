@@ -27,10 +27,10 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/mapped_file.h>
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
-#include <utils/FileMap.h>
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 
@@ -416,11 +416,10 @@ TEST(ziparchive, OpenFromMemory) {
   ASSERT_EQ(0, fstat(fd, &sb));
 
   // Memory map the file first and open the archive from the memory region.
-  android::FileMap file_map;
-  file_map.create(zip_path.c_str(), fd, 0 /*offset*/, sb.st_size, true);
+  auto file_map{android::base::MappedFile::FromFd(fd, 0, sb.st_size, PROT_READ)};
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFromMemory(file_map.getDataPtr(), file_map.getDataLength(),
-                                     zip_path.c_str(), &handle));
+  ASSERT_EQ(0,
+            OpenArchiveFromMemory(file_map->data(), file_map->size(), zip_path.c_str(), &handle));
 
   // Assert one entry can be found and extracted correctly.
   std::string BINARY_PATH("META-INF/com/google/android/update-binary");
