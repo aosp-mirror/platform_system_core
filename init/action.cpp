@@ -44,9 +44,12 @@ Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
     return function(builtin_arguments);
 }
 
-Command::Command(BuiltinFunction f, bool execute_in_subcontext,
-                 const std::vector<std::string>& args, int line)
-    : func_(std::move(f)), execute_in_subcontext_(execute_in_subcontext), args_(args), line_(line) {}
+Command::Command(BuiltinFunction f, bool execute_in_subcontext, std::vector<std::string>&& args,
+                 int line)
+    : func_(std::move(f)),
+      execute_in_subcontext_(execute_in_subcontext),
+      args_(std::move(args)),
+      line_(line) {}
 
 Result<Success> Command::InvokeFunc(Subcontext* subcontext) const {
     if (subcontext) {
@@ -80,7 +83,7 @@ Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename
 
 const KeywordFunctionMap* Action::function_map_ = nullptr;
 
-Result<Success> Action::AddCommand(const std::vector<std::string>& args, int line) {
+Result<Success> Action::AddCommand(std::vector<std::string>&& args, int line) {
     if (!function_map_) {
         return Error() << "no function map available";
     }
@@ -88,12 +91,12 @@ Result<Success> Action::AddCommand(const std::vector<std::string>& args, int lin
     auto function = function_map_->FindFunction(args);
     if (!function) return Error() << function.error();
 
-    commands_.emplace_back(function->second, function->first, args, line);
+    commands_.emplace_back(function->second, function->first, std::move(args), line);
     return Success();
 }
 
-void Action::AddCommand(BuiltinFunction f, const std::vector<std::string>& args, int line) {
-    commands_.emplace_back(f, false, args, line);
+void Action::AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line) {
+    commands_.emplace_back(f, false, std::move(args), line);
 }
 
 std::size_t Action::NumCommands() const {
