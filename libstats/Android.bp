@@ -17,13 +17,12 @@
 // ==========================================================
 // Native library to write stats log to statsd socket
 // ==========================================================
-cc_library {
+cc_library_static {
     name: "libstatssocket",
     srcs: [
         "stats_event_list.c",
         "statsd_writer.c",
     ],
-    host_supported: true,
     cflags: [
         "-Wall",
         "-Werror",
@@ -33,7 +32,6 @@ cc_library {
     ],
     export_include_dirs: ["include"],
     shared_libs: [
-        "libcutils",
         "liblog",
     ],
 }
