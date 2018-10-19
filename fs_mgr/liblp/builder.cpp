@@ -261,7 +261,7 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     // we store a backup copy of everything.
     uint64_t reserved =
             LP_METADATA_GEOMETRY_SIZE + (uint64_t(metadata_max_size) * metadata_slot_count);
-    uint64_t total_reserved = reserved * 2;
+    uint64_t total_reserved = LP_PARTITION_RESERVED_BYTES + reserved * 2;
     if (device_info.size < total_reserved) {
         LERROR << "Attempting to create metadata on a block device that is too small.";
         return false;
