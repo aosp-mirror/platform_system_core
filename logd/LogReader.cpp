@@ -212,6 +212,10 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail,
         logMask, (int)pid, sequence.nsec(), timeout);
 
+    if (sequence == log_time::EPOCH) {
+        timeout = 0;
+    }
+
     LogTimeEntry::wrlock();
     auto entry = std::make_unique<LogTimeEntry>(
         *this, cli, nonBlock, tail, logMask, pid, sequence, timeout);
