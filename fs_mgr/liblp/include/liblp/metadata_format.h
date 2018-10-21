@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 5
+#define LP_METADATA_MAJOR_VERSION 6
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -71,6 +71,11 @@ extern "C" {
 
 /* Size of a sector is always 512 bytes for compatibility with the Linux kernel. */
 #define LP_SECTOR_SIZE 512
+
+/* Amount of space reserved at the start of every super partition to avoid
+ * creating an accidental boot sector.
+ */
+#define LP_PARTITION_RESERVED_BYTES 4096
 
 /* This structure is stored at block 0 in the first 4096 bytes of the
  * partition, and again in the following block. It is never modified and

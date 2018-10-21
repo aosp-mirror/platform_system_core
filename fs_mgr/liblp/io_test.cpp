@@ -376,6 +376,7 @@ TEST(liblp, ImageFiles) {
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
     unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
 
     unique_fd fd(syscall(__NR_memfd_create, "image_file", 0));
     ASSERT_GE(fd, 0);

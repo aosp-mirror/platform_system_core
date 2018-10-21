@@ -261,15 +261,20 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
     // we store a backup copy of everything.
     uint64_t reserved =
             LP_METADATA_GEOMETRY_SIZE + (uint64_t(metadata_max_size) * metadata_slot_count);
-    uint64_t total_reserved = reserved * 2;
+    uint64_t total_reserved = LP_PARTITION_RESERVED_BYTES + reserved * 2;
     if (device_info.size < total_reserved) {
         LERROR << "Attempting to create metadata on a block device that is too small.";
         return false;
     }
 
     // Compute the first free sector, factoring in alignment.
-    uint64_t free_area_start =
-            AlignTo(total_reserved, device_info.alignment, device_info.alignment_offset);
+    uint64_t free_area_start = total_reserved;
+    if (device_info.alignment || device_info.alignment_offset) {
+        free_area_start =
+                AlignTo(free_area_start, device_info.alignment, device_info.alignment_offset);
+    } else {
+        free_area_start = AlignTo(free_area_start, device_info.logical_block_size);
+    }
     uint64_t first_sector = free_area_start / LP_SECTOR_SIZE;
 
     // There must be one logical block of free space remaining (enough for one partition).

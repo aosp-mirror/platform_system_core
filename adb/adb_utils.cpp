@@ -186,6 +186,48 @@ std::string dump_hex(const void* data, size_t byte_count) {
     return line;
 }
 
+std::string dump_header(const amessage* msg) {
+    unsigned command = msg->command;
+    int len = msg->data_length;
+    char cmd[9];
+    char arg0[12], arg1[12];
+    int n;
+
+    for (n = 0; n < 4; n++) {
+        int b = (command >> (n * 8)) & 255;
+        if (b < 32 || b >= 127) break;
+        cmd[n] = (char)b;
+    }
+    if (n == 4) {
+        cmd[4] = 0;
+    } else {
+        // There is some non-ASCII name in the command, so dump the hexadecimal value instead
+        snprintf(cmd, sizeof cmd, "%08x", command);
+    }
+
+    if (msg->arg0 < 256U)
+        snprintf(arg0, sizeof arg0, "%d", msg->arg0);
+    else
+        snprintf(arg0, sizeof arg0, "0x%x", msg->arg0);
+
+    if (msg->arg1 < 256U)
+        snprintf(arg1, sizeof arg1, "%d", msg->arg1);
+    else
+        snprintf(arg1, sizeof arg1, "0x%x", msg->arg1);
+
+    return android::base::StringPrintf("[%s] arg0=%s arg1=%s (len=%d) ", cmd, arg0, arg1, len);
+}
+
+std::string dump_packet(const char* name, const char* func, const apacket* p) {
+    std::string result = name;
+    result += ": ";
+    result += func;
+    result += ": ";
+    result += dump_header(&p->msg);
+    result += dump_hex(p->payload.data(), p->payload.size());
+    return result;
+}
+
 std::string perror_str(const char* msg) {
     return android::base::StringPrintf("%s: %s", msg, strerror(errno));
 }
