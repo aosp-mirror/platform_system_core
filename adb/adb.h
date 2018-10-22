@@ -124,9 +124,6 @@ inline bool ConnectionStateIsOnline(ConnectionState state) {
 
 void print_packet(const char* label, apacket* p);
 
-void fatal(const char* fmt, ...) __attribute__((noreturn, format(__printf__, 1, 2)));
-void fatal_errno(const char* fmt, ...) __attribute__((noreturn, format(__printf__, 1, 2)));
-
 void handle_packet(apacket* p, atransport* t);
 
 int launch_server(const std::string& socket_spec);

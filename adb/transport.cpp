@@ -420,7 +420,7 @@ void send_packet(apacket* p, atransport* t) {
     VLOG(TRANSPORT) << dump_packet(t->serial.c_str(), "to remote", p);
 
     if (t == nullptr) {
-        fatal("Transport is null");
+        LOG(FATAL) << "Transport is null";
     }
 
     if (t->Write(p) != 0) {
@@ -526,7 +526,7 @@ static void device_tracker_ready(asocket* socket) {
 
 asocket* create_device_tracker(bool long_output) {
     device_tracker* tracker = new device_tracker();
-    if (tracker == nullptr) fatal("cannot allocate device tracker");
+    if (tracker == nullptr) LOG(FATAL) << "cannot allocate device tracker";
 
     D("device tracker %p created", tracker);
 
@@ -632,7 +632,7 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
     }
 
     if (transport_read_action(_fd, &m)) {
-        fatal_errno("cannot read transport registration socket");
+        PLOG(FATAL) << "cannot read transport registration socket";
     }
 
     t = m.transport;
@@ -706,7 +706,7 @@ void init_transport_registration(void) {
     int s[2];
 
     if (adb_socketpair(s)) {
-        fatal_errno("cannot open transport registration socketpair");
+        PLOG(FATAL) << "cannot open transport registration socketpair";
     }
     D("socketpair: (%d,%d)", s[0], s[1]);
 
@@ -736,7 +736,7 @@ static void register_transport(atransport* transport) {
     m.action = 1;
     D("transport: %s registered", transport->serial.c_str());
     if (transport_write_action(transport_registration_send, &m)) {
-        fatal_errno("cannot write transport registration socket\n");
+        PLOG(FATAL) << "cannot write transport registration socket";
     }
 }
 
@@ -746,7 +746,7 @@ static void remove_transport(atransport* transport) {
     m.action = 0;
     D("transport: %s removed", transport->serial.c_str());
     if (transport_write_action(transport_registration_send, &m)) {
-        fatal_errno("cannot write transport registration socket\n");
+        PLOG(FATAL) << "cannot write transport registration socket";
     }
 }
 

@@ -136,7 +136,7 @@ struct JdwpProcess {
         this->fde = fdevent_create(socket, jdwp_process_event, this);
 
         if (!this->fde) {
-            fatal("could not create fdevent for new JDWP process");
+            LOG(FATAL) << "could not create fdevent for new JDWP process";
         }
 
         /* start by waiting for the PID */
@@ -200,7 +200,7 @@ static size_t jdwp_process_list_msg(char* buffer, size_t bufferlen) {
     // Message is length-prefixed with 4 hex digits in ASCII.
     static constexpr size_t header_len = 4;
     if (bufferlen < header_len) {
-        fatal("invalid JDWP process list buffer size: %zu", bufferlen);
+        LOG(FATAL) << "invalid JDWP process list buffer size: " << bufferlen;
     }
 
     char head[header_len + 1];
@@ -395,7 +395,7 @@ static void jdwp_control_event(int fd, unsigned events, void* _control) {
 
         auto proc = std::make_unique<JdwpProcess>(s);
         if (!proc) {
-            fatal("failed to allocate JdwpProcess");
+            LOG(FATAL) << "failed to allocate JdwpProcess";
         }
 
         _jdwp_list.emplace_back(std::move(proc));
@@ -454,7 +454,7 @@ asocket* create_jdwp_service_socket(void) {
     JdwpSocket* s = new JdwpSocket();
 
     if (!s) {
-        fatal("failed to allocate JdwpSocket");
+        LOG(FATAL) << "failed to allocate JdwpSocket";
     }
 
     install_local_socket(s);
@@ -531,7 +531,7 @@ static int jdwp_tracker_enqueue(asocket* s, apacket::payload_type) {
 asocket* create_jdwp_tracker_service_socket(void) {
     auto t = std::make_unique<JdwpTracker>();
     if (!t) {
-        fatal("failed to allocate JdwpTracker");
+        LOG(FATAL) << "failed to allocate JdwpTracker";
     }
 
     memset(t.get(), 0, sizeof(asocket));
