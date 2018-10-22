@@ -478,10 +478,10 @@ static void show_help(android_logcat_context_internal* context) {
                     "  -G <size>, --buffer-size=<size>\n"
                     "                  Set size of log ring buffer, may suffix with K or M.\n"
                     "  -L, --last      Dump logs from prior to last reboot\n"
-                    // Leave security (Device Owner only installations) and
-                    // kernel (userdebug and eng) buffers undocumented.
                     "  -b <buffer>, --buffer=<buffer>         Request alternate ring buffer, 'main',\n"
                     "                  'system', 'radio', 'events', 'crash', 'default' or 'all'.\n"
+                    "                  Additionally, 'kernel' for userdebug and eng builds, and\n"
+                    "                  'security' for Device Owner installations.\n"
                     "                  Multiple -b parameters or comma separated list of buffers are\n"
                     "                  allowed. Buffers interleaved. Default -b main,system,crash.\n"
                     "  -B, --binary    Output the log in binary.\n"
