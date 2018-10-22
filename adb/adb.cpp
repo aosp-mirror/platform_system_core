@@ -73,39 +73,6 @@ std::string adb_version() {
         android::base::GetExecutablePath().c_str());
 }
 
-void fatal(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    char buf[1024];
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-
-#if ADB_HOST
-    fprintf(stderr, "error: %s\n", buf);
-#else
-    LOG(ERROR) << "error: " << buf;
-#endif
-
-    va_end(ap);
-    abort();
-}
-
-void fatal_errno(const char* fmt, ...) {
-    int err = errno;
-    va_list ap;
-    va_start(ap, fmt);
-    char buf[1024];
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-
-#if ADB_HOST
-    fprintf(stderr, "error: %s: %s\n", buf, strerror(err));
-#else
-    LOG(ERROR) << "error: " << buf << ": " << strerror(err);
-#endif
-
-    va_end(ap);
-    abort();
-}
-
 uint32_t calculate_apacket_checksum(const apacket* p) {
     uint32_t sum = 0;
     for (size_t i = 0; i < p->msg.data_length; ++i) {
@@ -118,7 +85,7 @@ apacket* get_apacket(void)
 {
     apacket* p = new apacket();
     if (p == nullptr) {
-      fatal("failed to allocate an apacket");
+        LOG(FATAL) << "failed to allocate an apacket";
     }
 
     memset(&p->msg, 0, sizeof(p->msg));

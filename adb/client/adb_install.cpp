@@ -134,7 +134,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     // The last argument must be the APK file
     const char* file = argv[argc - 1];
     if (!android::base::EndsWithIgnoreCase(file, ".apk")) {
-        return syntax_error("filename doesn't end .apk: %s", file);
+        error(1, 0, "filename doesn't end .apk: %s", file);
     }
 
     if (use_fastdeploy == true) {
@@ -224,7 +224,7 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
         }
     }
 
-    if (last_apk == -1) return syntax_error("need APK file on command line");
+    if (last_apk == -1) error(1, 0, "need APK file on command line");
 
     int result = -1;
     std::vector<const char*> apk_file = {argv[last_apk]};
@@ -311,7 +311,7 @@ int install_app(int argc, const char** argv) {
     }
 
     if (installMode == INSTALL_STREAM && _use_legacy_install() == true) {
-        return syntax_error("Attempting to use streaming install on unsupported deivce.");
+        error(1, 0, "Attempting to use streaming install on unsupported device");
     }
 
     if (use_fastdeploy == true && is_reinstall == false) {
@@ -370,7 +370,7 @@ int install_multiple_app(int argc, const char** argv) {
         }
     }
 
-    if (first_apk == -1) return syntax_error("need APK file on command line");
+    if (first_apk == -1) error(1, 0, "need APK file on command line");
 
     std::string install_cmd;
     if (_use_legacy_install()) {
