@@ -25,6 +25,7 @@ cc_defaults {
         "-Wvla",
     ],
     rtti: true,
+    cpp_std: "gnu++17",
 
     use_version_lib: true,
 
@@ -314,6 +315,8 @@ cc_library_static {
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
         "daemon/usb.cpp",
+        "daemon/usb_ffs.cpp",
+        "daemon/usb_legacy.cpp",
     ],
 
     local_include_dirs: [
