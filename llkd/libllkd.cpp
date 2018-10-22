@@ -712,6 +712,7 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
     if (llkSkipName(std::to_string(procp->pid), llkBlacklistStack)) return false;
     if (llkSkipName(procp->getComm(), llkBlacklistStack)) return false;
     if (llkSkipName(procp->getCmdline(), llkBlacklistStack)) return false;
+    if (llkSkipName(android::base::Basename(procp->getCmdline()), llkBlacklistStack)) return false;
 
     auto kernel_stack = ReadFile(piddir + "/stack");
     if (kernel_stack.empty()) {
@@ -995,13 +996,18 @@ milliseconds llkCheck(bool checkRunning) {
             if (llkSkipName(procp->getCmdline())) {
                 break;
             }
+            if (llkSkipName(android::base::Basename(procp->getCmdline()))) {
+                break;
+            }
 
             auto pprocp = llkTidLookup(ppid);
             if (pprocp == nullptr) {
                 pprocp = llkTidAlloc(ppid, ppid, 0, "", 0, '?');
             }
-            if ((pprocp != nullptr) && (llkSkipName(pprocp->getComm(), llkBlacklistParent) ||
-                                        llkSkipName(pprocp->getCmdline(), llkBlacklistParent))) {
+            if ((pprocp != nullptr) &&
+                (llkSkipName(pprocp->getComm(), llkBlacklistParent) ||
+                 llkSkipName(pprocp->getCmdline(), llkBlacklistParent) ||
+                 llkSkipName(android::base::Basename(pprocp->getCmdline()), llkBlacklistParent))) {
                 break;
             }
 
