@@ -62,3 +62,5 @@ struct usb_handle {
 };
 
 usb_handle *create_usb_handle(unsigned num_bufs, unsigned io_size);
+bool open_functionfs(android::base::unique_fd* control, android::base::unique_fd* bulk_out,
+                     android::base::unique_fd* bulk_in);
