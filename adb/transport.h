@@ -362,6 +362,7 @@ atransport* find_transport(const char* serial);
 void kick_all_tcp_devices();
 void kick_all_transports();
 
+void register_transport(atransport* transport);
 void register_usb_transport(usb_handle* h, const char* serial,
                             const char* devpath, unsigned writeable);
 
