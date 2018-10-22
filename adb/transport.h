@@ -57,10 +57,12 @@ extern const char* const kFeatureCmd;
 extern const char* const kFeatureStat2;
 // The server is running with libusb enabled.
 extern const char* const kFeatureLibusb;
-// The server supports `push --sync`.
+// adbd supports `push --sync`.
 extern const char* const kFeaturePushSync;
-// The server supports installing .apex packages.
+// adbd supports installing .apex packages.
 extern const char* const kFeatureApex;
+// adbd has b/110953234 fixed.
+extern const char* const kFeatureFixedPushMkdir;
 
 TransportId NextTransportId();
 
