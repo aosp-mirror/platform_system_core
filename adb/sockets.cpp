@@ -78,7 +78,7 @@ void install_local_socket(asocket* s) {
 
     // Socket ids should never be 0.
     if (local_socket_next_id == 0) {
-        fatal("local socket id overflow");
+        LOG(FATAL) << "local socket id overflow";
     }
 
     local_socket_list.push_back(s);
@@ -451,7 +451,7 @@ static void remote_socket_close(asocket* s) {
 // Returns a new non-NULL asocket handle.
 asocket* create_remote_socket(unsigned id, atransport* t) {
     if (id == 0) {
-        fatal("invalid remote socket id (0)");
+        LOG(FATAL) << "invalid remote socket id (0)";
     }
     asocket* s = new asocket();
     s->id = id;
@@ -477,9 +477,7 @@ void connect_to_remote(asocket* s, const char* destination) {
     p->payload.assign(destination, destination + strlen(destination) + 1);
     p->msg.data_length = p->payload.size();
 
-    if (p->msg.data_length > s->get_max_payload()) {
-        fatal("destination oversized");
-    }
+    CHECK_LE(p->msg.data_length, s->get_max_payload());
 
     send_packet(p, s->transport);
 }

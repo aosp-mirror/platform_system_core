@@ -57,11 +57,11 @@ static constexpr char kNullFileName[] = "/dev/null";
 void close_stdin() {
     int fd = unix_open(kNullFileName, O_RDONLY);
     if (fd == -1) {
-        fatal_errno("failed to open %s", kNullFileName);
+        PLOG(FATAL) << "failed to open " << kNullFileName;
     }
 
     if (TEMP_FAILURE_RETRY(dup2(fd, STDIN_FILENO)) == -1) {
-        fatal_errno("failed to redirect stdin to %s", kNullFileName);
+        PLOG(FATAL) << "failed to redirect stdin to " << kNullFileName;
     }
     unix_close(fd);
 }
@@ -316,18 +316,6 @@ std::string adb_get_android_dir_path() {
     return android_dir;
 }
 
-int syntax_error(const char* fmt, ...) {
-    fprintf(stderr, "adb: usage: ");
-
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-
-    fprintf(stderr, "\n");
-    return 1;
-}
-
 std::string GetLogFilePath() {
 #if defined(_WIN32)
     const char log_name[] = "adb.log";
@@ -337,13 +325,13 @@ std::string GetLogFilePath() {
     DWORD nchars = GetTempPathW(arraysize(temp_path), temp_path);
     if (nchars >= arraysize(temp_path) || nchars == 0) {
         // If string truncation or some other error.
-        fatal("cannot retrieve temporary file path: %s\n",
-              android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        LOG(FATAL) << "cannot retrieve temporary file path: "
+                   << android::base::SystemErrorCodeToString(GetLastError());
     }
 
     std::string temp_path_utf8;
     if (!android::base::WideToUTF8(temp_path, &temp_path_utf8)) {
-        fatal_errno("cannot convert temporary file path from UTF-16 to UTF-8");
+        PLOG(FATAL) << "cannot convert temporary file path from UTF-16 to UTF-8";
     }
 
     return temp_path_utf8 + log_name;
