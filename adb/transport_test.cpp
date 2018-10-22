@@ -19,13 +19,16 @@
 #include <gtest/gtest.h>
 
 #include "adb.h"
+#include "fdevent_test.h"
+
+struct TransportTest : public FdeventTest {};
 
 static void DisconnectFunc(void* arg, atransport*) {
     int* count = reinterpret_cast<int*>(arg);
     ++*count;
 }
 
-TEST(transport, RunDisconnects) {
+TEST_F(TransportTest, RunDisconnects) {
     atransport t;
     // RunDisconnects() can be called with an empty atransport.
     t.RunDisconnects();
@@ -49,7 +52,7 @@ TEST(transport, RunDisconnects) {
     ASSERT_EQ(0, count);
 }
 
-TEST(transport, SetFeatures) {
+TEST_F(TransportTest, SetFeatures) {
     atransport t;
     ASSERT_EQ(0U, t.features().size());
 
@@ -77,8 +80,7 @@ TEST(transport, SetFeatures) {
     ASSERT_EQ(0U, t.features().size());
 }
 
-TEST(transport, parse_banner_no_features) {
-    set_main_thread();
+TEST_F(TransportTest, parse_banner_no_features) {
     atransport t;
 
     parse_banner("host::", &t);
@@ -91,7 +93,7 @@ TEST(transport, parse_banner_no_features) {
     ASSERT_EQ(std::string(), t.device);
 }
 
-TEST(transport, parse_banner_product_features) {
+TEST_F(TransportTest, parse_banner_product_features) {
     atransport t;
 
     const char banner[] =
@@ -107,9 +109,8 @@ TEST(transport, parse_banner_product_features) {
     ASSERT_EQ(std::string("baz"), t.device);
 }
 
-TEST(transport, parse_banner_features) {
+TEST_F(TransportTest, parse_banner_features) {
     atransport t;
-
     const char banner[] =
         "host::ro.product.name=foo;ro.product.model=bar;ro.product.device=baz;"
         "features=woodly,doodly";
@@ -126,7 +127,7 @@ TEST(transport, parse_banner_features) {
     ASSERT_EQ(std::string("baz"), t.device);
 }
 
-TEST(transport, test_matches_target) {
+TEST_F(TransportTest, test_matches_target) {
     std::string serial = "foo";
     std::string devpath = "/path/to/bar";
     std::string product = "test_product";
@@ -157,7 +158,7 @@ TEST(transport, test_matches_target) {
     }
 }
 
-TEST(transport, test_matches_target_local) {
+TEST_F(TransportTest, test_matches_target_local) {
     std::string serial = "100.100.100.100:5555";
 
     atransport t;
