@@ -20,7 +20,7 @@
 #include <inttypes.h>
 #include <string>
 
-struct GRSurface;
+class GRSurface;
 struct GRFont;
 
 namespace android {
