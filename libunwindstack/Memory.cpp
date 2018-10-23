@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
