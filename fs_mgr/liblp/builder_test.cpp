@@ -515,3 +515,30 @@ TEST(liblp, GroupSizeLimits) {
     EXPECT_FALSE(builder->ResizePartition(partition, 32768));
     EXPECT_EQ(partition->size(), 16384);
 }
+
+constexpr unsigned long long operator"" _GiB(unsigned long long x) {  // NOLINT
+    return x << 30;
+}
+
+TEST(liblp, RemoveAndAddFirstPartition) {
+    auto builder = MetadataBuilder::New(10_GiB, 65536, 2);
+    ASSERT_NE(nullptr, builder);
+    ASSERT_TRUE(builder->AddGroup("foo_a", 5_GiB));
+    ASSERT_TRUE(builder->AddGroup("foo_b", 5_GiB));
+    android::fs_mgr::Partition* p;
+    p = builder->AddPartition("system_a", "foo_a", 0);
+    ASSERT_TRUE(p && builder->ResizePartition(p, 2_GiB));
+    p = builder->AddPartition("vendor_a", "foo_a", 0);
+    ASSERT_TRUE(p && builder->ResizePartition(p, 1_GiB));
+    p = builder->AddPartition("system_b", "foo_b", 0);
+    ASSERT_TRUE(p && builder->ResizePartition(p, 2_GiB));
+    p = builder->AddPartition("vendor_b", "foo_b", 0);
+    ASSERT_TRUE(p && builder->ResizePartition(p, 1_GiB));
+
+    builder->RemovePartition("system_a");
+    builder->RemovePartition("vendor_a");
+    p = builder->AddPartition("system_a", "foo_a", 0);
+    ASSERT_TRUE(p && builder->ResizePartition(p, 3_GiB));
+    p = builder->AddPartition("vendor_a", "foo_a", 0);
+    ASSERT_TRUE(p && builder->ResizePartition(p, 1_GiB));
+}
