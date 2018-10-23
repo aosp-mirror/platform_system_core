@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
   }
 
   unwindstack::Elf elf(memory);
-  if (!elf.Init(true) || !elf.valid()) {
+  if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", argv[1]);
     return 1;
   }
