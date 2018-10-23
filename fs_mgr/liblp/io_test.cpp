@@ -128,7 +128,7 @@ TEST(liblp, CreateFakeDisk) {
 // Flashing metadata should not work if the metadata was created for a larger
 // disk than the destination disk.
 TEST(liblp, ExportDiskTooSmall) {
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(kDiskSize + 1024, 512, 2);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(kDiskSize + 4096, 512, 2);
     ASSERT_NE(builder, nullptr);
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
@@ -581,7 +581,7 @@ TEST(liblp, FlashSparseImage) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    BlockDeviceInfo device_info(kDiskSize, 0, 0, 512);
+    BlockDeviceInfo device_info("super", kDiskSize, 0, 0, 512);
     unique_ptr<MetadataBuilder> builder =
             MetadataBuilder::New(device_info, kMetadataSize, kMetadataSlots);
     ASSERT_NE(builder, nullptr);

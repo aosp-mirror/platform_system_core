@@ -41,7 +41,7 @@ class Extent {
     explicit Extent(uint64_t num_sectors) : num_sectors_(num_sectors) {}
     virtual ~Extent() {}
 
-    virtual void AddTo(LpMetadata* out) const = 0;
+    virtual bool AddTo(LpMetadata* out) const = 0;
     virtual LinearExtent* AsLinearExtent() { return nullptr; }
 
     uint64_t num_sectors() const { return num_sectors_; }
@@ -54,16 +54,18 @@ class Extent {
 // This corresponds to a dm-linear target.
 class LinearExtent final : public Extent {
   public:
-    LinearExtent(uint64_t num_sectors, uint64_t physical_sector)
-        : Extent(num_sectors), physical_sector_(physical_sector) {}
+    LinearExtent(uint64_t num_sectors, uint32_t device_index, uint64_t physical_sector)
+        : Extent(num_sectors), device_index_(device_index), physical_sector_(physical_sector) {}
 
-    void AddTo(LpMetadata* metadata) const override;
+    bool AddTo(LpMetadata* metadata) const override;
     LinearExtent* AsLinearExtent() override { return this; }
 
     uint64_t physical_sector() const { return physical_sector_; }
     uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
+    uint32_t device_index() const { return device_index_; }
 
   private:
+    uint32_t device_index_;
     uint64_t physical_sector_;
 };
 
@@ -72,7 +74,7 @@ class ZeroExtent final : public Extent {
   public:
     explicit ZeroExtent(uint64_t num_sectors) : Extent(num_sectors) {}
 
-    void AddTo(LpMetadata* out) const override;
+    bool AddTo(LpMetadata* out) const override;
 };
 
 class PartitionGroup final {
@@ -122,15 +124,17 @@ class Partition final {
 
 class MetadataBuilder {
   public:
-    // Construct an empty logical partition table builder. The block device size
-    // and maximum metadata size must be specified, as this will determine which
-    // areas of the physical partition can be flashed for metadata vs for logical
-    // partitions.
+    // Construct an empty logical partition table builder given the specified
+    // map of partitions that are available for storing logical partitions.
+    //
+    // At least one partition in the list must be the "super" device, where
+    // metadata will be stored.
     //
     // If the parameters would yield invalid metadata, nullptr is returned. This
-    // could happen if the block device size is too small to store the metadata
-    // and backup copies.
-    static std::unique_ptr<MetadataBuilder> New(const BlockDeviceInfo& device_info,
+    // could happen if the super device is too small to store all required
+    // metadata.
+    static std::unique_ptr<MetadataBuilder> New(const std::vector<BlockDeviceInfo>& block_devices,
+                                                const std::string& super_partition,
                                                 uint32_t metadata_max_size,
                                                 uint32_t metadata_slot_count);
 
@@ -150,11 +154,20 @@ class MetadataBuilder {
     // This method is for testing or changing off-line tables.
     static std::unique_ptr<MetadataBuilder> New(const LpMetadata& metadata);
 
+    // Helper function for a single super partition, for tests.
+    static std::unique_ptr<MetadataBuilder> New(const BlockDeviceInfo& device_info,
+                                                uint32_t metadata_max_size,
+                                                uint32_t metadata_slot_count) {
+        return New({device_info}, device_info.partition_name, metadata_max_size,
+                   metadata_slot_count);
+    }
+
     // Wrapper around New() with a BlockDeviceInfo that only specifies a device
     // size. This is a convenience method for tests.
     static std::unique_ptr<MetadataBuilder> New(uint64_t blockdev_size, uint32_t metadata_max_size,
                                                 uint32_t metadata_slot_count) {
-        BlockDeviceInfo device_info(blockdev_size, 0, 0, kDefaultBlockSize);
+        BlockDeviceInfo device_info(LP_METADATA_DEFAULT_PARTITION_NAME, blockdev_size, 0, 0,
+                                    kDefaultBlockSize);
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 
@@ -209,8 +222,8 @@ class MetadataBuilder {
     // Remove all partitions belonging to a group, then remove the group.
     void RemoveGroupAndPartitions(const std::string& group_name);
 
-    bool GetBlockDeviceInfo(BlockDeviceInfo* info) const;
-    bool UpdateBlockDeviceInfo(const BlockDeviceInfo& info);
+    bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
+    bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
   private:
     MetadataBuilder();
@@ -218,19 +231,27 @@ class MetadataBuilder {
     MetadataBuilder(MetadataBuilder&&) = delete;
     MetadataBuilder& operator=(const MetadataBuilder&) = delete;
     MetadataBuilder& operator=(MetadataBuilder&&) = delete;
-    bool Init(const BlockDeviceInfo& info, uint32_t metadata_max_size, uint32_t metadata_slot_count);
+    bool Init(const std::vector<BlockDeviceInfo>& block_devices, const std::string& super_partition,
+              uint32_t metadata_max_size, uint32_t metadata_slot_count);
     bool Init(const LpMetadata& metadata);
     bool GrowPartition(Partition* partition, uint64_t aligned_size);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
-    uint64_t AlignSector(uint64_t sector) const;
+    uint64_t AlignSector(const LpMetadataBlockDevice& device, uint64_t sector) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
+    bool UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& info);
+    bool FindBlockDeviceByName(const std::string& partition_name, uint32_t* index) const;
 
     struct Interval {
+        uint32_t device_index;
         uint64_t start;
         uint64_t end;
 
-        Interval(uint64_t start, uint64_t end) : start(start), end(end) {}
+        Interval(uint32_t device_index, uint64_t start, uint64_t end)
+            : device_index(device_index), start(start), end(end) {}
         uint64_t length() const { return end - start; }
+
+        // Note: the device index is not included in sorting (intervals are
+        // sorted in per-device lists).
         bool operator<(const Interval& other) const {
             return (start == other.start) ? end < other.end : start < other.start;
         }
@@ -238,9 +259,6 @@ class MetadataBuilder {
     std::vector<Interval> GetFreeRegions() const;
     void ExtentsToFreeList(const std::vector<Interval>& extents,
                            std::vector<Interval>* free_regions) const;
-
-    const LpMetadataBlockDevice& super_device() const { return block_devices_[0]; }
-    LpMetadataBlockDevice& super_device() { return block_devices_[0]; }
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
