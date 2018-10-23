@@ -25,6 +25,7 @@ cc_library {
     srcs: [
         "builder.cpp",
         "images.cpp",
+        "partition_opener.cpp",
         "reader.cpp",
         "utility.cpp",
         "writer.cpp",
@@ -59,6 +60,7 @@ cc_test {
     srcs: [
         "builder_test.cpp",
         "io_test.cpp",
+        "test_partition_opener.cpp",
         "utility_test.cpp",
     ],
 }
