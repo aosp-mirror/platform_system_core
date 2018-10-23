@@ -894,7 +894,8 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     //
     // TODO(b/25457350): We don't preserve permissions on directories.
     // TODO: Find all of the leaves and `mkdir -p` them instead?
-    if (CanUseFeature(sc.Features(), kFeatureShell2)) {
+    if (!CanUseFeature(sc.Features(), kFeatureFixedPushMkdir) &&
+        CanUseFeature(sc.Features(), kFeatureShell2)) {
         SilentStandardStreamsCallbackInterface cb;
         std::string cmd = "mkdir";
         for (const auto& dir : directory_list) {

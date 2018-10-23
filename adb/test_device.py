@@ -750,7 +750,7 @@ class FileOperationsTest(DeviceTest):
             if host_dir is not None:
                 shutil.rmtree(host_dir)
 
-    def test_push_empty(self):
+    def disabled_test_push_empty(self):
         """Push an empty directory to the device."""
         self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
         self.device.shell(['mkdir', self.DEVICE_TEMP_DIR])
