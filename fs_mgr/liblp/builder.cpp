@@ -368,6 +368,57 @@ void MetadataBuilder::RemovePartition(const std::string& name) {
     }
 }
 
+void MetadataBuilder::ExtentsToFreeList(const std::vector<Interval>& extents,
+                                        std::vector<Interval>* free_regions) const {
+    // Convert the extent list into a list of gaps between the extents; i.e.,
+    // the list of ranges that are free on the disk.
+    for (size_t i = 1; i < extents.size(); i++) {
+        const Interval& previous = extents[i - 1];
+        const Interval& current = extents[i];
+
+        uint64_t aligned = AlignSector(previous.end);
+        if (aligned >= current.start) {
+            // There is no gap between these two extents, try the next one.
+            // Note that we check with >= instead of >, since alignment may
+            // bump the ending sector past the beginning of the next extent.
+            continue;
+        }
+
+        // The new interval represents the free space starting at the end of
+        // the previous interval, and ending at the start of the next interval.
+        free_regions->emplace_back(aligned, current.start);
+    }
+}
+
+auto MetadataBuilder::GetFreeRegions() const -> std::vector<Interval> {
+    std::vector<Interval> free_regions;
+
+    // Collect all extents in the partition table, then sort them by starting
+    // sector.
+    std::vector<Interval> extents;
+    for (const auto& partition : partitions_) {
+        for (const auto& extent : partition->extents()) {
+            LinearExtent* linear = extent->AsLinearExtent();
+            if (!linear) {
+                continue;
+            }
+            extents.emplace_back(linear->physical_sector(),
+                                 linear->physical_sector() + extent->num_sectors());
+        }
+    }
+
+    // Add 0-length intervals for the first and last sectors. This will cause
+    // ExtentsToFreeList() to treat the space in between as available.
+    uint64_t last_sector = geometry_.block_device_size / LP_SECTOR_SIZE;
+    extents.emplace_back(geometry_.first_logical_sector, geometry_.first_logical_sector);
+    extents.emplace_back(last_sector, last_sector);
+
+    std::sort(extents.begin(), extents.end());
+
+    ExtentsToFreeList(extents, &free_regions);
+    return free_regions;
+}
+
 bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
     PartitionGroup* group = FindGroup(partition->group_name());
     CHECK(group);
@@ -389,59 +440,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     uint64_t sectors_needed = space_needed / LP_SECTOR_SIZE;
     DCHECK(sectors_needed * LP_SECTOR_SIZE == space_needed);
 
-    struct Interval {
-        uint64_t start;
-        uint64_t end;
-
-        Interval(uint64_t start, uint64_t end) : start(start), end(end) {}
-        uint64_t length() const { return end - start; }
-        bool operator<(const Interval& other) const { return start < other.start; }
-    };
-
-    // Collect all extents in the partition table, then sort them by starting
-    // sector.
-    std::vector<Interval> extents;
-    for (const auto& partition : partitions_) {
-        for (const auto& extent : partition->extents()) {
-            LinearExtent* linear = extent->AsLinearExtent();
-            if (!linear) {
-                continue;
-            }
-            extents.emplace_back(linear->physical_sector(),
-                                 linear->physical_sector() + extent->num_sectors());
-        }
-    }
-    std::sort(extents.begin(), extents.end());
-
-    // Convert the extent list into a list of gaps between the extents; i.e.,
-    // the list of ranges that are free on the disk.
-    std::vector<Interval> free_regions;
-    for (size_t i = 1; i < extents.size(); i++) {
-        const Interval& previous = extents[i - 1];
-        const Interval& current = extents[i];
-
-        uint64_t aligned = AlignSector(previous.end);
-        if (aligned >= current.start) {
-            // There is no gap between these two extents, try the next one.
-            // Note that we check with >= instead of >, since alignment may
-            // bump the ending sector past the beginning of the next extent.
-            continue;
-        }
-
-        // The new interval represents the free space starting at the end of
-        // the previous interval, and ending at the start of the next interval.
-        free_regions.emplace_back(aligned, current.start);
-    }
-
-    // Add a final interval representing the remainder of the free space.
-    uint64_t last_free_extent_start =
-            extents.empty() ? geometry_.first_logical_sector : extents.back().end;
-    last_free_extent_start = AlignSector(last_free_extent_start);
-
-    uint64_t last_sector = geometry_.block_device_size / LP_SECTOR_SIZE;
-    if (last_free_extent_start < last_sector) {
-        free_regions.emplace_back(last_free_extent_start, last_sector);
-    }
+    std::vector<Interval> free_regions = GetFreeRegions();
 
     const uint64_t sectors_per_block = geometry_.logical_block_size / LP_SECTOR_SIZE;
     CHECK_NE(sectors_per_block, 0);
@@ -566,7 +565,7 @@ uint64_t MetadataBuilder::UsedSpace() const {
     return size;
 }
 
-uint64_t MetadataBuilder::AlignSector(uint64_t sector) {
+uint64_t MetadataBuilder::AlignSector(uint64_t sector) const {
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.
     uint64_t lba = sector * LP_SECTOR_SIZE;
