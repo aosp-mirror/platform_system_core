@@ -82,4 +82,11 @@ TEST(RegsInfoTest, all) {
   }
 }
 
+TEST(RegsInfoTest, invalid_register) {
+  RegsImplFake<uint64_t> regs(64);
+  RegsInfo<uint64_t> info(&regs);
+
+  EXPECT_DEATH(info.Save(RegsInfo<uint64_t>::MAX_REGISTERS), "");
+}
+
 }  // namespace unwindstack
