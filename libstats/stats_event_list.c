@@ -17,6 +17,7 @@
 #include "include/stats_event_list.h"
 
 #include <string.h>
+#include <sys/time.h>
 #include "statsd_writer.h"
 
 #define MAX_EVENT_PAYLOAD (LOGGER_ENTRY_MAX_PAYLOAD - sizeof(int32_t))
@@ -156,7 +157,14 @@ static int __write_to_stats_daemon(struct iovec* vec, size_t nr) {
     }
 
     save_errno = errno;
+#if defined(__ANDROID__)
     clock_gettime(CLOCK_REALTIME, &ts);
+#else
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    ts.tv_sec = tv.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000;
+#endif
 
     int ret = (int)(*statsdLoggerWrite.write)(&ts, vec, nr);
     errno = save_errno;
