@@ -228,9 +228,23 @@ class MetadataBuilder {
     bool Init(const LpMetadata& metadata);
     bool GrowPartition(Partition* partition, uint64_t aligned_size);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
-    uint64_t AlignSector(uint64_t sector);
+    uint64_t AlignSector(uint64_t sector) const;
     PartitionGroup* FindGroup(const std::string& group_name) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
+
+    struct Interval {
+        uint64_t start;
+        uint64_t end;
+
+        Interval(uint64_t start, uint64_t end) : start(start), end(end) {}
+        uint64_t length() const { return end - start; }
+        bool operator<(const Interval& other) const {
+            return (start == other.start) ? end < other.end : start < other.start;
+        }
+    };
+    std::vector<Interval> GetFreeRegions() const;
+    void ExtentsToFreeList(const std::vector<Interval>& extents,
+                           std::vector<Interval>* free_regions) const;
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
