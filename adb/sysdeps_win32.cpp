@@ -2756,24 +2756,3 @@ int adb_thread_setname(const std::string& name) {
 
     return 0;
 }
-
-void error(int status, int error, const char* fmt, ...) {
-    fflush(stdout);
-    fprintf(stderr, "%s: ", android::base::Basename(android::base::GetExecutablePath()).c_str());
-
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-
-    if (error != 0) {
-        fprintf(stderr, ": %s", strerror(error));
-    }
-
-    putc('\n', stderr);
-    fflush(stderr);
-
-    if (status != 0) {
-        exit(status);
-    }
-}
