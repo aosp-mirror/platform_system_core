@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _ADB_UTILS_H_
-#define _ADB_UTILS_H_
+#pragma once
 
 #include <condition_variable>
 #include <mutex>
@@ -47,9 +46,12 @@ std::string dump_packet(const char* name, const char* func, const apacket* p);
 
 std::string perror_str(const char* msg);
 
+[[noreturn]] void error_exit(const char* fmt, ...) __attribute__((__format__(__printf__, 1, 2)));
+[[noreturn]] void perror_exit(const char* fmt, ...) __attribute__((__format__(__printf__, 1, 2)));
+
 bool set_file_block_mode(int fd, bool block);
 
-extern int adb_close(int fd);
+int adb_close(int fd);
 
 // Given forward/reverse targets, returns true if they look sane. If an error is found, fills
 // |error| and returns false.
@@ -92,5 +94,3 @@ class BlockingQueue {
 };
 
 std::string GetLogFilePath();
-
-#endif

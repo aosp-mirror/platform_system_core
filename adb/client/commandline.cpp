@@ -71,7 +71,7 @@ DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK(nullptr, nullpt
 static std::string product_file(const std::string& file) {
     const char* ANDROID_PRODUCT_OUT = getenv("ANDROID_PRODUCT_OUT");
     if (ANDROID_PRODUCT_OUT == nullptr) {
-        error(1, 0, "product directory not specified; set $ANDROID_PRODUCT_OUT");
+        error_exit("product directory not specified; set $ANDROID_PRODUCT_OUT");
     }
     return std::string{ANDROID_PRODUCT_OUT} + OS_PATH_SEPARATOR_STR + file;
 }
@@ -684,7 +684,7 @@ static int adb_shell(int argc, const char** argv) {
         switch (opt) {
             case 'e':
                 if (!(strlen(optarg) == 1 || strcmp(optarg, "none") == 0)) {
-                    error(1, 0, "-e requires a single-character argument or 'none'");
+                    error_exit("-e requires a single-character argument or 'none'");
                 }
                 escape_char = (strcmp(optarg, "none") == 0) ? 0 : optarg[0];
                 break;
@@ -932,21 +932,21 @@ static int adb_sideload_host(const char* filename) {
  */
 static int ppp(int argc, const char** argv) {
 #if defined(_WIN32)
-    error(1, 0, "adb %s not implemented on Win32", argv[0]);
+    error_exit("adb %s not implemented on Win32", argv[0]);
     __builtin_unreachable();
 #else
-    if (argc < 2) error(1, 0, "usage: adb %s <adb service name> [ppp opts]", argv[0]);
+    if (argc < 2) error_exit("usage: adb %s <adb service name> [ppp opts]", argv[0]);
 
     const char* adb_service_name = argv[1];
     std::string error_message;
     int fd = adb_connect(adb_service_name, &error_message);
     if (fd < 0) {
-        error(1, 0, "could not open adb service %s: %s", adb_service_name, error_message.c_str());
+        error_exit("could not open adb service %s: %s", adb_service_name, error_message.c_str());
     }
 
     pid_t pid = fork();
     if (pid == -1) {
-        error(1, errno, "fork failed");
+        perror_exit("fork failed");
     }
 
     if (pid == 0) {
@@ -968,7 +968,7 @@ static int ppp(int argc, const char** argv) {
         adb_close(fd);
 
         execvp("pppd", (char* const*)ppp_args);
-        error(1, errno, "exec pppd failed");
+        perror_exit("exec pppd failed");
     }
 
     // parent side
@@ -1151,7 +1151,7 @@ static int backup(int argc, const char** argv) {
     /* find, extract, and use any -f argument */
     for (int i = 1; i < argc; i++) {
         if (!strcmp("-f", argv[i])) {
-            if (i == argc - 1) error(1, 0, "backup -f passed with no filename");
+            if (i == argc - 1) error_exit("backup -f passed with no filename");
             filename = argv[i+1];
             for (int j = i+2; j <= argc; ) {
                 argv[i++] = argv[j++];
@@ -1163,7 +1163,7 @@ static int backup(int argc, const char** argv) {
 
     // Bare "adb backup" or "adb backup -f filename" are not valid invocations ---
     // a list of packages is required.
-    if (argc < 2) error(1, 0, "backup either needs a list of packages or -all/-shared");
+    if (argc < 2) error_exit("backup either needs a list of packages or -all/-shared");
 
     adb_unlink(filename);
     int outFd = adb_creat(filename, 0640);
@@ -1199,7 +1199,7 @@ static int backup(int argc, const char** argv) {
 }
 
 static int restore(int argc, const char** argv) {
-    if (argc != 2) error(1, 0, "restore requires an argument");
+    if (argc != 2) error_exit("restore requires an argument");
 
     const char* filename = argv[1];
     int tarFd = adb_open(filename, O_RDONLY);
@@ -1253,7 +1253,7 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
             } else if (!strcmp(*arg, "--")) {
                 ignore_flags = true;
             } else {
-                error(1, 0, "unrecognized option '%s'", *arg);
+                error_exit("unrecognized option '%s'", *arg);
             }
         }
         ++arg;
@@ -1331,7 +1331,7 @@ int adb_commandline(int argc, const char** argv) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
             is_daemon = true;
         } else if (!strcmp(argv[0], "--reply-fd")) {
-            if (argc < 2) error(1, 0, "--reply-fd requires an argument");
+            if (argc < 2) error_exit("--reply-fd requires an argument");
             const char* reply_fd_str = argv[1];
             argc--;
             argv++;
@@ -1344,7 +1344,7 @@ int adb_commandline(int argc, const char** argv) {
             if (isdigit(argv[0][2])) {
                 serial = argv[0] + 2;
             } else {
-                if (argc < 2 || argv[0][2] != '\0') error(1, 0, "-s requires an argument");
+                if (argc < 2 || argv[0][2] != '\0') error_exit("-s requires an argument");
                 serial = argv[1];
                 argc--;
                 argv++;
@@ -1360,7 +1360,7 @@ int adb_commandline(int argc, const char** argv) {
             }
             transport_id = strtoll(id, const_cast<char**>(&id), 10);
             if (*id != '\0') {
-                error(1, 0, "invalid transport id");
+                error_exit("invalid transport id");
             }
         } else if (!strcmp(argv[0],"-d")) {
             transport_type = kTransportUsb;
@@ -1370,7 +1370,7 @@ int adb_commandline(int argc, const char** argv) {
             gListenAll = 1;
         } else if (!strncmp(argv[0], "-H", 2)) {
             if (argv[0][2] == '\0') {
-                if (argc < 2) error(1, 0, "-H requires an argument");
+                if (argc < 2) error_exit("-H requires an argument");
                 server_host_str = argv[1];
                 argc--;
                 argv++;
@@ -1379,7 +1379,7 @@ int adb_commandline(int argc, const char** argv) {
             }
         } else if (!strncmp(argv[0], "-P", 2)) {
             if (argv[0][2] == '\0') {
-                if (argc < 2) error(1, 0, "-P requires an argument");
+                if (argc < 2) error_exit("-P requires an argument");
                 server_port_str = argv[1];
                 argc--;
                 argv++;
@@ -1387,7 +1387,7 @@ int adb_commandline(int argc, const char** argv) {
                 server_port_str = argv[0] + 2;
             }
         } else if (!strcmp(argv[0], "-L")) {
-            if (argc < 2) error(1, 0, "-L requires an argument");
+            if (argc < 2) error_exit("-L requires an argument");
             server_socket_str = argv[1];
             argc--;
             argv++;
@@ -1400,7 +1400,7 @@ int adb_commandline(int argc, const char** argv) {
     }
 
     if ((server_host_str || server_port_str) && server_socket_str) {
-        error(1, 0, "-L is incompatible with -H or -P");
+        error_exit("-L is incompatible with -H or -P");
     }
 
     // If -L, -H, or -P are specified, ignore environment variables.
@@ -1417,10 +1417,10 @@ int adb_commandline(int argc, const char** argv) {
         server_port_str = server_port_str ? server_port_str : getenv("ANDROID_ADB_SERVER_PORT");
         if (server_port_str && strlen(server_port_str) > 0) {
             if (!android::base::ParseInt(server_port_str, &server_port, 1, 65535)) {
-                error(1, 0,
-                      "$ANDROID_ADB_SERVER_PORT must be a positive number less than 65535: "
-                      "got \"%s\"",
-                      server_port_str);
+                error_exit(
+                        "$ANDROID_ADB_SERVER_PORT must be a positive number less than 65535: "
+                        "got \"%s\"",
+                        server_port_str);
             }
         }
 
@@ -1494,7 +1494,7 @@ int adb_commandline(int argc, const char** argv) {
         } else if (argc == 2 && !strcmp(argv[1], "-l")) {
             listopt = argv[1];
         } else {
-            error(1, 0, "adb devices [-l]");
+            error_exit("adb devices [-l]");
         }
 
         std::string query = android::base::StringPrintf("host:%s%s", argv[0], listopt);
@@ -1502,13 +1502,13 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        if (argc != 2) error(1, 0, "usage: adb connect <host>[:<port>]");
+        if (argc != 2) error_exit("usage: adb connect <host>[:<port>]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "disconnect")) {
-        if (argc > 2) error(1, 0, "usage: adb disconnect [<host>[:<port>]]");
+        if (argc > 2) error_exit("usage: adb disconnect [<host>[:<port>]]");
 
         std::string query = android::base::StringPrintf("host:disconnect:%s",
                                                         (argc == 2) ? argv[1] : "");
@@ -1523,7 +1523,7 @@ int adb_commandline(int argc, const char** argv) {
     else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
         int exec_in = !strcmp(argv[0], "exec-in");
 
-        if (argc < 2) error(1, 0, "usage: adb %s command", argv[0]);
+        if (argc < 2) error_exit("usage: adb %s command", argv[0]);
 
         std::string cmd = "exec:";
         cmd += argv[1];
@@ -1553,17 +1553,17 @@ int adb_commandline(int argc, const char** argv) {
         return adb_kill_server() ? 0 : 1;
     }
     else if (!strcmp(argv[0], "sideload")) {
-        if (argc != 2) error(1, 0, "sideload requires an argument");
+        if (argc != 2) error_exit("sideload requires an argument");
         if (adb_sideload_host(argv[1])) {
             return 1;
         } else {
             return 0;
         }
     } else if (!strcmp(argv[0], "tcpip")) {
-        if (argc != 2) error(1, 0, "tcpip requires an argument");
+        if (argc != 2) error_exit("tcpip requires an argument");
         int port;
         if (!android::base::ParseInt(argv[1], &port, 1, 65535)) {
-            error(1, 0, "tcpip: invalid port: %s", argv[1]);
+            error_exit("tcpip: invalid port: %s", argv[1]);
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
     }
@@ -1595,7 +1595,7 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         bool reverse = !strcmp(argv[0], "reverse");
         --argc;
-        if (argc < 1) error(1, 0, "%s requires an argument", argv[0]);
+        if (argc < 1) error_exit("%s requires an argument", argv[0]);
         ++argv;
 
         // Determine the <host-prefix> for this command.
@@ -1616,37 +1616,37 @@ int adb_commandline(int argc, const char** argv) {
 
         std::string cmd, error_message;
         if (strcmp(argv[0], "--list") == 0) {
-            if (argc != 1) error(1, 0, "--list doesn't take any arguments");
+            if (argc != 1) error_exit("--list doesn't take any arguments");
             return adb_query_command(host_prefix + ":list-forward");
         } else if (strcmp(argv[0], "--remove-all") == 0) {
-            if (argc != 1) error(1, 0, "--remove-all doesn't take any arguments");
+            if (argc != 1) error_exit("--remove-all doesn't take any arguments");
             cmd = host_prefix + ":killforward-all";
         } else if (strcmp(argv[0], "--remove") == 0) {
             // forward --remove <local>
-            if (argc != 2) error(1, 0, "--remove requires an argument");
+            if (argc != 2) error_exit("--remove requires an argument");
             cmd = host_prefix + ":killforward:" + argv[1];
         } else if (strcmp(argv[0], "--no-rebind") == 0) {
             // forward --no-rebind <local> <remote>
-            if (argc != 3) error(1, 0, "--no-rebind takes two arguments");
+            if (argc != 3) error_exit("--no-rebind takes two arguments");
             if (forward_targets_are_valid(argv[1], argv[2], &error_message)) {
                 cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
             }
         } else {
             // forward <local> <remote>
-            if (argc != 2) error(1, 0, "forward takes two arguments");
+            if (argc != 2) error_exit("forward takes two arguments");
             if (forward_targets_are_valid(argv[0], argv[1], &error_message)) {
                 cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
             }
         }
 
         if (!error_message.empty()) {
-            error(1, 0, "error: %s", error_message.c_str());
+            error_exit("error: %s", error_message.c_str());
         }
 
         int fd = adb_connect(cmd, &error_message);
         if (fd < 0 || !adb_status(fd, &error_message)) {
             adb_close(fd);
-            error(1, 0, "error: %s", error_message.c_str());
+            error_exit("error: %s", error_message.c_str());
         }
 
         // Server or device may optionally return a resolved TCP port number.
@@ -1660,7 +1660,7 @@ int adb_commandline(int argc, const char** argv) {
     }
     /* do_sync_*() commands */
     else if (!strcmp(argv[0], "ls")) {
-        if (argc != 2) error(1, 0, "ls requires an argument");
+        if (argc != 2) error_exit("ls requires an argument");
         return do_sync_ls(argv[1]) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "push")) {
@@ -1670,7 +1670,7 @@ int adb_commandline(int argc, const char** argv) {
         const char* dst = nullptr;
 
         parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync);
-        if (srcs.empty() || !dst) error(1, 0, "push requires an argument");
+        if (srcs.empty() || !dst) error_exit("push requires an argument");
         return do_sync_push(srcs, dst, sync) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "pull")) {
@@ -1679,19 +1679,19 @@ int adb_commandline(int argc, const char** argv) {
         const char* dst = ".";
 
         parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr);
-        if (srcs.empty()) error(1, 0, "pull requires an argument");
+        if (srcs.empty()) error_exit("pull requires an argument");
         return do_sync_pull(srcs, dst, copy_attrs) ? 0 : 1;
     }
     else if (!strcmp(argv[0], "install")) {
-        if (argc < 2) error(1, 0, "install requires an argument");
+        if (argc < 2) error_exit("install requires an argument");
         return install_app(argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
-        if (argc < 2) error(1, 0, "install-multiple requires an argument");
+        if (argc < 2) error_exit("install-multiple requires an argument");
         return install_multiple_app(argc, argv);
     }
     else if (!strcmp(argv[0], "uninstall")) {
-        if (argc < 2) error(1, 0, "uninstall requires an argument");
+        if (argc < 2) error_exit("uninstall requires an argument");
         return uninstall_app(argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
@@ -1705,7 +1705,7 @@ int adb_commandline(int argc, const char** argv) {
         } else if (argc == 2) {
             src = argv[1];
         } else {
-            error(1, 0, "usage: adb sync [-l] [PARTITION]");
+            error_exit("usage: adb sync [-l] [PARTITION]");
         }
 
         if (src.empty()) src = "all";
@@ -1720,7 +1720,7 @@ int adb_commandline(int argc, const char** argv) {
                 if (!do_sync_sync(src_dir, "/" + partition, list_only)) return 1;
             }
         }
-        if (!found) error(1, 0, "don't know how to sync %s partition", src.c_str());
+        if (!found) error_exit("don't know how to sync %s partition", src.c_str());
         return 0;
     }
     /* passthrough commands */
@@ -1752,7 +1752,7 @@ int adb_commandline(int argc, const char** argv) {
         return restore(argc, argv);
     }
     else if (!strcmp(argv[0], "keygen")) {
-        if (argc != 2) error(1, 0, "keygen requires an argument");
+        if (argc != 2) error_exit("keygen requires an argument");
         // Always print key generation information for keygen command.
         adb_trace_enable(AUTH);
         return adb_auth_keygen(argv[1]);
@@ -1767,7 +1767,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_connect_command("host:track-devices");
     } else if (!strcmp(argv[0], "raw")) {
         if (argc != 2) {
-            error(1, 0, "usage: adb raw SERVICE");
+            error_exit("usage: adb raw SERVICE");
         }
         return adb_connect_command(argv[1]);
     }
@@ -1810,11 +1810,11 @@ int adb_commandline(int argc, const char** argv) {
                 std::string err;
                 return adb_query_command("host:reconnect-offline");
             } else {
-                error(1, 0, "usage: adb reconnect [device|offline]");
+                error_exit("usage: adb reconnect [device|offline]");
             }
         }
     }
 
-    error(1, 0, "unknown command %s", argv[0]);
+    error_exit("unknown command %s", argv[0]);
     __builtin_unreachable();
 }
