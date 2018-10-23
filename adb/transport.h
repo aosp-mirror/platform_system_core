@@ -59,6 +59,8 @@ extern const char* const kFeatureStat2;
 extern const char* const kFeatureLibusb;
 // The server supports `push --sync`.
 extern const char* const kFeaturePushSync;
+// The server supports installing .apex packages.
+extern const char* const kFeatureApex;
 
 TransportId NextTransportId();
 
