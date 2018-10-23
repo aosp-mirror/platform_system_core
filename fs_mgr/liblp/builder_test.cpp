@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
+#include <fs_mgr.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
-#include "fs_mgr.h"
+
 #include "utility.h"
 
 using namespace std;
 using namespace android::fs_mgr;
+using ::testing::ElementsAre;
 
 TEST(liblp, BuildBasic) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
@@ -541,4 +544,31 @@ TEST(liblp, RemoveAndAddFirstPartition) {
     ASSERT_TRUE(p && builder->ResizePartition(p, 3_GiB));
     p = builder->AddPartition("vendor_a", "foo_a", 0);
     ASSERT_TRUE(p && builder->ResizePartition(p, 1_GiB));
+}
+
+TEST(liblp, ListGroups) {
+    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(builder->AddGroup("example", 0));
+
+    std::vector<std::string> groups = builder->ListGroups();
+    ASSERT_THAT(groups, ElementsAre("default", "example"));
+}
+
+TEST(liblp, RemoveGroupAndPartitions) {
+    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(builder->AddGroup("example", 0));
+    ASSERT_NE(builder->AddPartition("system", "default", 0), nullptr);
+    ASSERT_NE(builder->AddPartition("vendor", "example", 0), nullptr);
+
+    builder->RemoveGroupAndPartitions("example");
+    ASSERT_NE(builder->FindPartition("system"), nullptr);
+    ASSERT_EQ(builder->FindPartition("vendor"), nullptr);
+    ASSERT_THAT(builder->ListGroups(), ElementsAre("default"));
+
+    builder->RemoveGroupAndPartitions("default");
+    ASSERT_NE(builder->FindPartition("system"), nullptr);
 }
