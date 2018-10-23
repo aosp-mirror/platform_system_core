@@ -32,6 +32,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "fdevent.h"
 
 /* TODO:
@@ -78,7 +79,7 @@ void framebuffer_service(unique_fd fd) {
         const char* command = "screencap";
         const char *args[2] = {command, nullptr};
         execvp(command, (char**)args);
-        error(1, errno, "exec screencap failed");
+        perror_exit("exec screencap failed");
     }
 
     adb_close(fds[1]);

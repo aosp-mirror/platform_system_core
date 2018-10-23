@@ -28,7 +28,8 @@
 #include "commandline.h"
 #include "fastdeploycallbacks.h"
 #include "sysdeps.h"
-#include "utils/String16.h"
+
+#include "adb_utils.h"
 
 static constexpr long kRequiredAgentVersion = 0x00000001;
 
@@ -73,14 +74,14 @@ void fastdeploy_set_local_agent(bool use_localagent) {
 static std::string get_agent_component_host_path(const char* local_path, const char* sdk_path) {
     std::string adb_dir = android::base::GetExecutableDirectory();
     if (adb_dir.empty()) {
-        error(1, 0, "Could not determine location of adb!");
+        error_exit("Could not determine location of adb!");
     }
 
     if (g_use_localagent) {
         const char* product_out = getenv("ANDROID_PRODUCT_OUT");
         if (product_out == nullptr) {
-            error(1, 0, "Could not locate %s because $ANDROID_PRODUCT_OUT is not defined",
-                  local_path);
+            error_exit("Could not locate %s because $ANDROID_PRODUCT_OUT is not defined",
+                       local_path);
         }
         return android::base::StringPrintf("%s%s", product_out, local_path);
     } else {
@@ -105,10 +106,10 @@ static bool deploy_agent(bool checkTimeStamps) {
                 android::base::StringPrintf(kChmodCommandPattern, kDeviceAgentPath);
         int ret = send_shell_command(chmodCommand);
         if (ret != 0) {
-            error(1, 0, "Error executing %s returncode: %d", chmodCommand.c_str(), ret);
+            error_exit("Error executing %s returncode: %d", chmodCommand.c_str(), ret);
         }
     } else {
-        error(1, 0, "Error pushing agent files to device");
+        error_exit("Error pushing agent files to device");
     }
 
     return true;
@@ -138,8 +139,8 @@ void update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy) {
 
     agent_version = get_agent_version();
     if (agent_version != kRequiredAgentVersion) {
-        error(1, 0, "After update agent version remains incorrect! Expected %ld but version is %ld",
-              kRequiredAgentVersion, agent_version);
+        error_exit("After update agent version remains incorrect! Expected %ld but version is %ld",
+                   kRequiredAgentVersion, agent_version);
     }
 }
 
@@ -159,24 +160,24 @@ static std::string get_packagename_from_apk(const char* apkPath) {
     std::unique_ptr<android::ZipFileRO> zipFile(android::ZipFileRO::open(apkPath));
 #define open ___xxx_unix_open
     if (zipFile == nullptr) {
-        error(1, errno, "Could not open %s", apkPath);
+        perror_exit("Could not open %s", apkPath);
     }
     android::ZipEntryRO entry = zipFile->findEntryByName("AndroidManifest.xml");
     if (entry == nullptr) {
-        error(1, 0, "Could not find AndroidManifest.xml inside %s", apkPath);
+        error_exit("Could not find AndroidManifest.xml inside %s", apkPath);
     }
     uint32_t manifest_len = 0;
     if (!zipFile->getEntryInfo(entry, NULL, &manifest_len, NULL, NULL, NULL, NULL)) {
-        error(1, 0, "Could not read AndroidManifest.xml inside %s", apkPath);
+        error_exit("Could not read AndroidManifest.xml inside %s", apkPath);
     }
     std::vector<char> manifest_data(manifest_len);
     if (!zipFile->uncompressEntry(entry, manifest_data.data(), manifest_len)) {
-        error(1, 0, "Could not uncompress AndroidManifest.xml inside %s", apkPath);
+        error_exit("Could not uncompress AndroidManifest.xml inside %s", apkPath);
     }
     android::ResXMLTree tree;
     android::status_t setto_status = tree.setTo(manifest_data.data(), manifest_len, true);
     if (setto_status != android::OK) {
-        error(1, 0, "Could not parse AndroidManifest.xml inside %s", apkPath);
+        error_exit("Could not parse AndroidManifest.xml inside %s", apkPath);
     }
     android::ResXMLParser::event_code_t code;
     while ((code = tree.next()) != android::ResXMLParser::BAD_DOCUMENT &&
@@ -217,8 +218,7 @@ static std::string get_packagename_from_apk(const char* apkPath) {
                 break;
         }
     }
-    error(1, 0, "Could not find package name tag in AndroidManifest.xml inside %s", apkPath);
-    __builtin_unreachable();
+    error_exit("Could not find package name tag in AndroidManifest.xml inside %s", apkPath);
 }
 
 void extract_metadata(const char* apkPath, FILE* outputFp) {
@@ -232,7 +232,7 @@ void extract_metadata(const char* apkPath, FILE* outputFp) {
     DeployAgentFileCallback cb(outputFp, &extractErrorBuffer, &statusCode);
     int returnCode = send_shell_command(extractCommand, false, &cb);
     if (returnCode != 0) {
-        error(1, 0, "Executing %s returned %d", extractCommand.c_str(), returnCode);
+        error_exit("Executing %s returned %d", extractCommand.c_str(), returnCode);
     }
 }
 
@@ -241,9 +241,9 @@ static std::string get_patch_generator_command() {
         // This should never happen on a Windows machine
         const char* host_out = getenv("ANDROID_HOST_OUT");
         if (host_out == nullptr) {
-            error(1, 0,
-                  "Could not locate deploypatchgenerator.jar because $ANDROID_HOST_OUT "
-                  "is not defined");
+            error_exit(
+                    "Could not locate deploypatchgenerator.jar because $ANDROID_HOST_OUT "
+                    "is not defined");
         }
         return android::base::StringPrintf("java -jar %s/framework/deploypatchgenerator.jar",
                                            host_out);
@@ -251,7 +251,7 @@ static std::string get_patch_generator_command() {
 
     std::string adb_dir = android::base::GetExecutableDirectory();
     if (adb_dir.empty()) {
-        error(1, 0, "Could not locate deploypatchgenerator.jar");
+        error_exit("Could not locate deploypatchgenerator.jar");
     }
     return android::base::StringPrintf(R"(java -jar "%s/deploypatchgenerator.jar")",
                                        adb_dir.c_str());
@@ -263,7 +263,7 @@ void create_patch(const char* apkPath, const char* metadataPath, const char* pat
             patchPath);
     int returnCode = system(generatePatchCommand.c_str());
     if (returnCode != 0) {
-        error(1, 0, "Executing %s returned %d", generatePatchCommand.c_str(), returnCode);
+        error_exit("Executing %s returned %d", generatePatchCommand.c_str(), returnCode);
     }
 }
 
@@ -282,7 +282,7 @@ void apply_patch_on_device(const char* apkPath, const char* patchPath, const cha
     std::vector<const char*> srcs = {patchPath};
     bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
     if (!push_ok) {
-        error(1, 0, "Error pushing %s to %s returned", patchPath, patchDevicePath.c_str());
+        error_exit("Error pushing %s to %s returned", patchPath, patchDevicePath.c_str());
     }
 
     std::string applyPatchCommand =
@@ -291,7 +291,7 @@ void apply_patch_on_device(const char* apkPath, const char* patchPath, const cha
 
     int returnCode = send_shell_command(applyPatchCommand);
     if (returnCode != 0) {
-        error(1, 0, "Executing %s returned %d", applyPatchCommand.c_str(), returnCode);
+        error_exit("Executing %s returned %d", applyPatchCommand.c_str(), returnCode);
     }
 }
 
@@ -305,7 +305,7 @@ void install_patch(const char* apkPath, const char* patchPath, int argc, const c
     std::vector<const char*> srcs{patchPath};
     bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
     if (!push_ok) {
-        error(1, 0, "Error pushing %s to %s returned", patchPath, patchDevicePath.c_str());
+        error_exit("Error pushing %s to %s returned", patchPath, patchDevicePath.c_str());
     }
 
     std::vector<unsigned char> applyOutputBuffer;
@@ -322,6 +322,6 @@ void install_patch(const char* apkPath, const char* patchPath, int argc, const c
                                         patchDevicePath.c_str(), argsString.c_str());
     int returnCode = send_shell_command(applyPatchCommand);
     if (returnCode != 0) {
-        error(1, 0, "Executing %s returned %d", applyPatchCommand.c_str(), returnCode);
+        error_exit("Executing %s returned %d", applyPatchCommand.c_str(), returnCode);
     }
 }
