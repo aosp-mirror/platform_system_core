@@ -29,9 +29,11 @@ test_src_files := \
 
 shared_libraries := \
     liblog \
-    libbase \
     libnativebridge \
     libnativebridge-dummy
+
+header_libraries := \
+    libbase_headers
 
 libnativebridge_tests_common_cflags := \
     -Wall \
@@ -40,6 +42,7 @@ libnativebridge_tests_common_cflags := \
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \
     $(eval LOCAL_SHARED_LIBRARIES := $(shared_libraries)) \
+    $(eval LOCAL_HEADER_LIBRARIES := $(header_libraries)) \
     $(eval LOCAL_SRC_FILES := $(file)) \
     $(eval LOCAL_CFLAGS := $(libnativebridge_tests_common_cflags)) \
     $(eval LOCAL_MODULE := $(notdir $(file:%.cpp=%))) \
@@ -49,6 +52,7 @@ $(foreach file,$(test_src_files), \
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \
     $(eval LOCAL_SHARED_LIBRARIES := $(shared_libraries)) \
+    $(eval LOCAL_HEADER_LIBRARIES := $(header_libraries)) \
     $(eval LOCAL_SRC_FILES := $(file)) \
     $(eval LOCAL_CFLAGS := $(libnativebridge_tests_common_cflags)) \
     $(eval LOCAL_MODULE := $(notdir $(file:%.cpp=%))) \
