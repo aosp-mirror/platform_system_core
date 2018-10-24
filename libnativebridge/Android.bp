@@ -10,9 +10,11 @@ cc_library {
 
     host_supported: true,
     srcs: ["native_bridge.cc"],
+    header_libs: [
+        "libbase_headers",
+    ],
     shared_libs: [
         "liblog",
-        "libbase",
     ],
 
     export_include_dirs: ["include"],
