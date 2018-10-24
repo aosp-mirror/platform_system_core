@@ -59,7 +59,7 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 std::string adb_version();
 
 // Increment this when we want to force users to start a new adb server.
-#define ADB_SERVER_VERSION 40
+#define ADB_SERVER_VERSION 41
 
 using TransportId = uint64_t;
 class atransport;

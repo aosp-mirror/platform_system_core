@@ -197,7 +197,7 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
 };
 
 int Bugreport::DoIt(int argc, const char** argv) {
-    if (argc > 2) error(1, 0, "usage: adb bugreport [PATH]");
+    if (argc > 2) error_exit("usage: adb bugreport [PATH]");
 
     // Gets bugreportz version.
     std::string bugz_stdout, bugz_stderr;

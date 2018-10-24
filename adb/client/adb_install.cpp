@@ -38,14 +38,22 @@
 
 static constexpr int kFastDeployMinApi = 24;
 
-static bool _use_legacy_install() {
+static bool can_use_feature(const char* feature) {
     FeatureSet features;
     std::string error;
     if (!adb_get_feature_set(&features, &error)) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return true;
     }
-    return !CanUseFeature(features, kFeatureCmd);
+    return CanUseFeature(features, feature);
+}
+
+static bool use_legacy_install() {
+    return !can_use_feature(kFeatureCmd);
+}
+
+static bool is_apex_supported() {
+    return can_use_feature(kFeatureApex);
 }
 
 static int pm_command(int argc, const char** argv) {
@@ -102,7 +110,7 @@ static int uninstall_app_legacy(int argc, const char** argv) {
 }
 
 int uninstall_app(int argc, const char** argv) {
-    if (_use_legacy_install()) {
+    if (use_legacy_install()) {
         return uninstall_app_legacy(argc, argv);
     }
     return uninstall_app_streamed(argc, argv);
@@ -133,8 +141,21 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
 
     // The last argument must be the APK file
     const char* file = argv[argc - 1];
-    if (!android::base::EndsWithIgnoreCase(file, ".apk")) {
-        error(1, 0, "filename doesn't end .apk: %s", file);
+    if (!android::base::EndsWithIgnoreCase(file, ".apk") &&
+        !android::base::EndsWithIgnoreCase(file, ".apex")) {
+        error_exit("filename doesn't end .apk or .apex: %s", file);
+    }
+
+    bool is_apex = false;
+    if (android::base::EndsWithIgnoreCase(file, ".apex")) {
+        is_apex = true;
+    }
+    if (is_apex && !is_apex_supported()) {
+        error_exit(".apex is not supported on the target device");
+    }
+
+    if (is_apex && use_fastdeploy) {
+        error_exit("--fastdeploy doesn't support .apex files");
     }
 
     if (use_fastdeploy == true) {
@@ -177,6 +198,10 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         // do last to override any user specified value
         cmd += " " + android::base::StringPrintf("-S %" PRIu64, static_cast<uint64_t>(sb.st_size));
 
+        if (is_apex) {
+            cmd += " --apex";
+        }
+
         int remoteFd = adb_connect(cmd, &error);
         if (remoteFd < 0) {
             fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
@@ -218,13 +243,16 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
     // All other arguments passed through verbatim.
     int last_apk = -1;
     for (int i = argc - 1; i >= 0; i--) {
+        if (android::base::EndsWithIgnoreCase(argv[i], ".apex")) {
+            error_exit("APEX packages are only compatible with Streamed Install");
+        }
         if (android::base::EndsWithIgnoreCase(argv[i], ".apk")) {
             last_apk = i;
             break;
         }
     }
 
-    if (last_apk == -1) error(1, 0, "need APK file on command line");
+    if (last_apk == -1) error_exit("need APK file on command line");
 
     int result = -1;
     std::vector<const char*> apk_file = {argv[last_apk]};
@@ -303,15 +331,15 @@ int install_app(int argc, const char** argv) {
     }
 
     if (installMode == INSTALL_DEFAULT) {
-        if (_use_legacy_install()) {
+        if (use_legacy_install()) {
             installMode = INSTALL_PUSH;
         } else {
             installMode = INSTALL_STREAM;
         }
     }
 
-    if (installMode == INSTALL_STREAM && _use_legacy_install() == true) {
-        error(1, 0, "Attempting to use streaming install on unsupported device");
+    if (installMode == INSTALL_STREAM && use_legacy_install() == true) {
+        error_exit("Attempting to use streaming install on unsupported device");
     }
 
     if (use_fastdeploy == true && is_reinstall == false) {
@@ -359,6 +387,9 @@ int install_multiple_app(int argc, const char** argv) {
     uint64_t total_size = 0;
     for (int i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
+        if (android::base::EndsWithIgnoreCase(argv[i], ".apex")) {
+            error_exit("APEX packages are not compatible with install-multiple");
+        }
 
         if (android::base::EndsWithIgnoreCase(file, ".apk") ||
             android::base::EndsWithIgnoreCase(file, ".dm")) {
@@ -370,10 +401,10 @@ int install_multiple_app(int argc, const char** argv) {
         }
     }
 
-    if (first_apk == -1) error(1, 0, "need APK file on command line");
+    if (first_apk == -1) error_exit("need APK file on command line");
 
     std::string install_cmd;
-    if (_use_legacy_install()) {
+    if (use_legacy_install()) {
         install_cmd = "exec:pm";
     } else {
         install_cmd = "exec:cmd package";

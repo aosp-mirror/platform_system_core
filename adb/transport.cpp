@@ -66,6 +66,8 @@ const char* const kFeatureCmd = "cmd";
 const char* const kFeatureStat2 = "stat_v2";
 const char* const kFeatureLibusb = "libusb";
 const char* const kFeaturePushSync = "push_sync";
+const char* const kFeatureApex = "apex";
+const char* const kFeatureFixedPushMkdir = "fixed_push_mkdir";
 
 namespace {
 
@@ -1007,7 +1009,10 @@ size_t atransport::get_max_payload() const {
 const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
-        kFeatureShell2, kFeatureCmd, kFeatureStat2,
+        kFeatureShell2, kFeatureCmd, kFeatureStat2, kFeatureFixedPushMkdir,
+#if ADB_HOST
+                kFeatureApex
+#endif
         // Increment ADB_SERVER_VERSION whenever the feature list changes to
         // make sure that the adb client and server features stay in sync
         // (http://b/24370690).

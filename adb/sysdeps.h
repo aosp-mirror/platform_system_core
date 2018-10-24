@@ -25,7 +25,6 @@
 #endif
 
 #include <errno.h>
-#include <error.h>
 
 #include <string>
 #include <vector>
@@ -69,8 +68,6 @@
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
 #define ENV_PATH_SEPARATOR_STR ";"
-
-void error(int status, int error, const char* fmt, ...) __attribute__((__format__(printf, 3, 4)));
 
 static __inline__ bool adb_is_separator(char c) {
     return c == '\\' || c == '/';

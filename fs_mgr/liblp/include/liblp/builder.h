@@ -199,6 +199,9 @@ class MetadataBuilder {
     // Find a partition by name. If no partition is found, nullptr is returned.
     Partition* FindPartition(const std::string& name);
 
+    // Find a group by name. If no group is found, nullptr is returned.
+    PartitionGroup* FindGroup(const std::string& name);
+
     // Grow or shrink a partition to the requested size. This size will be
     // rounded UP to the nearest block (512 bytes).
     //
@@ -215,6 +218,12 @@ class MetadataBuilder {
     uint64_t AllocatableSpace() const;
     uint64_t UsedSpace() const;
 
+    // Return a list of all group names.
+    std::vector<std::string> ListGroups() const;
+
+    // Remove all partitions belonging to a group, then remove the group.
+    void RemoveGroupAndPartitions(const std::string& group_name);
+
     bool GetBlockDeviceInfo(BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const BlockDeviceInfo& info);
 
@@ -229,7 +238,6 @@ class MetadataBuilder {
     bool GrowPartition(Partition* partition, uint64_t aligned_size);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
     uint64_t AlignSector(uint64_t sector) const;
-    PartitionGroup* FindGroup(const std::string& group_name) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
 
     struct Interval {
