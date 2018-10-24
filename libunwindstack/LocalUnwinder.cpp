@@ -100,7 +100,7 @@ bool LocalUnwinder::Unwind(std::vector<LocalFrameData>* frame_info, size_t max_f
       break;
     }
 
-    Elf* elf = map_info->GetElf(process_memory_, true);
+    Elf* elf = map_info->GetElf(process_memory_);
     uint64_t rel_pc = elf->GetRelPc(cur_pc, map_info);
     uint64_t step_pc = rel_pc;
     uint64_t pc_adjustment;
