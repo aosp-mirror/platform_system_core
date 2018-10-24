@@ -84,14 +84,6 @@ cc_library {
         "libz",
     ],
     target: {
-        android: {
-            shared_libs: [
-                "libutils",
-            ],
-        },
-        host: {
-            static_libs: ["libutils"],
-        },
         linux_bionic: {
             enabled: true,
         },
