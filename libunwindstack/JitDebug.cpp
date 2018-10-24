@@ -201,7 +201,7 @@ Elf* JitDebug::GetElf(Maps* maps, uint64_t pc) {
     entry_addr_ = (this->*read_entry_func_)(&start, &size);
 
     Elf* elf = new Elf(new MemoryRange(memory_, start, size, 0));
-    elf->Init(true);
+    elf->Init();
     if (!elf->valid()) {
       // The data is not formatted in a way we understand, do not attempt
       // to process any other entries.
