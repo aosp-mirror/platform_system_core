@@ -111,6 +111,22 @@ void property_init() {
         LOG(FATAL) << "Failed to load serialized property info file";
     }
 }
+
+bool CanReadProperty(const std::string& source_context, const std::string& name) {
+    const char* target_context = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), &target_context, nullptr);
+
+    PropertyAuditData audit_data;
+
+    audit_data.name = name.c_str();
+
+    ucred cr = {.pid = 0, .uid = 0, .gid = 0};
+    audit_data.cr = &cr;
+
+    return selinux_check_access(source_context.c_str(), target_context, "file", "read",
+                                &audit_data) == 0;
+}
+
 static bool CheckMacPerms(const std::string& name, const char* target_context,
                           const char* source_context, const ucred& cr) {
     if (!target_context || !source_context) {
