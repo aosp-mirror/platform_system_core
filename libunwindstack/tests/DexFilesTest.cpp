@@ -36,12 +36,20 @@ namespace unwindstack {
 
 class DexFilesTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    memory_ = new MemoryFake;
-    process_memory_.reset(memory_);
+  void CreateFakeElf(MapInfo* map_info) {
+    MemoryFake* memory = new MemoryFake;
+    ElfFake* elf = new ElfFake(memory);
+    elf->FakeSetValid(true);
+    ElfInterfaceFake* interface = new ElfInterfaceFake(memory);
+    elf->FakeSetInterface(interface);
 
+    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
+    map_info->elf.reset(elf);
+  }
+
+  void Init(ArchEnum arch) {
     dex_files_.reset(new DexFiles(process_memory_));
-    dex_files_->SetArch(ARCH_ARM);
+    dex_files_->SetArch(arch);
 
     maps_.reset(
         new BufferMaps("1000-4000 ---s 00000000 00:00 0 /fake/elf\n"
@@ -58,35 +66,24 @@ class DexFilesTest : public ::testing::Test {
     // Global variable in a section that is not readable.
     MapInfo* map_info = maps_->Get(kMapGlobalNonReadable);
     ASSERT_TRUE(map_info != nullptr);
-    MemoryFake* memory = new MemoryFake;
-    ElfFake* elf = new ElfFake(memory);
-    elf->FakeSetValid(true);
-    ElfInterfaceFake* interface = new ElfInterfaceFake(memory);
-    elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
-    map_info->elf.reset(elf);
+    CreateFakeElf(map_info);
 
     // Global variable not set by default.
     map_info = maps_->Get(kMapGlobalSetToZero);
     ASSERT_TRUE(map_info != nullptr);
-    memory = new MemoryFake;
-    elf = new ElfFake(memory);
-    elf->FakeSetValid(true);
-    interface = new ElfInterfaceFake(memory);
-    elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
-    map_info->elf.reset(elf);
+    CreateFakeElf(map_info);
 
     // Global variable set in this map.
     map_info = maps_->Get(kMapGlobal);
     ASSERT_TRUE(map_info != nullptr);
-    memory = new MemoryFake;
-    elf = new ElfFake(memory);
-    elf->FakeSetValid(true);
-    interface = new ElfInterfaceFake(memory);
-    elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
-    map_info->elf.reset(elf);
+    CreateFakeElf(map_info);
+  }
+
+  void SetUp() override {
+    memory_ = new MemoryFake;
+    process_memory_.reset(memory_);
+
+    Init(ARCH_ARM);
   }
 
   void WriteDescriptor32(uint64_t addr, uint32_t head);
@@ -169,11 +166,12 @@ TEST_F(DexFilesTest, get_method_information_32) {
 }
 
 TEST_F(DexFilesTest, get_method_information_64) {
+  Init(ARCH_ARM64);
+
   std::string method_name = "nothing";
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  dex_files_->SetArch(ARCH_ARM64);
   WriteDescriptor64(0xf800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x301000);
   WriteDex(0x301000);
@@ -199,11 +197,12 @@ TEST_F(DexFilesTest, get_method_information_not_first_entry_32) {
 }
 
 TEST_F(DexFilesTest, get_method_information_not_first_entry_64) {
+  Init(ARCH_ARM64);
+
   std::string method_name = "nothing";
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  dex_files_->SetArch(ARCH_ARM64);
   WriteDescriptor64(0xf800, 0x200000);
   WriteEntry64(0x200000, 0x200100, 0, 0x100000);
   WriteEntry64(0x200100, 0, 0x200000, 0x300000);
@@ -297,6 +296,8 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
 }
 
 TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
+  Init(ARCH_ARM64);
+
   std::string method_name = "nothing";
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
@@ -308,7 +309,6 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   WriteEntry64(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
-  dex_files_->SetArch(ARCH_ARM64);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("Main.<init>", method_name);
   EXPECT_EQ(0U, method_offset);

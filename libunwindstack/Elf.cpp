@@ -88,6 +88,11 @@ void Elf::InitGnuDebugdata() {
   }
 }
 
+void Elf::Invalidate() {
+  interface_.reset(nullptr);
+  valid_ = false;
+}
+
 bool Elf::GetSoname(std::string* name) {
   std::lock_guard<std::mutex> guard(lock_);
   return valid_ && interface_->GetSoname(name);
