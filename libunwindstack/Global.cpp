@@ -46,7 +46,7 @@ uint64_t Global::GetVariableOffset(MapInfo* info, const std::string& variable) {
     }
   }
 
-  Elf* elf = info->GetElf(memory_, true);
+  Elf* elf = info->GetElf(memory_);
   uint64_t ptr;
   // Find first non-empty list (libraries might be loaded multiple times).
   if (elf->GetGlobalVariable(variable, &ptr) && ptr != 0) {

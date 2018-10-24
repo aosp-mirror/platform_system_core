@@ -146,7 +146,7 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   return nullptr;
 }
 
-Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {
+Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory) {
   // Make sure no other thread is trying to add the elf to this map.
   std::lock_guard<std::mutex> guard(mutex_);
 
@@ -175,7 +175,7 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   elf.reset(new Elf(memory));
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
-  elf->Init(init_gnu_debugdata);
+  elf->Init();
 
   if (locked) {
     Elf::CacheAdd(this);
