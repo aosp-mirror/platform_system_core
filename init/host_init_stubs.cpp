@@ -30,6 +30,9 @@ namespace init {
 std::string default_console = "/dev/console";
 
 // property_service.h
+bool CanReadProperty(const std::string& source_context, const std::string& name) {
+    return true;
+}
 uint32_t SetProperty(const std::string& key, const std::string& value) {
     android::base::SetProperty(key, value);
     return 0;
