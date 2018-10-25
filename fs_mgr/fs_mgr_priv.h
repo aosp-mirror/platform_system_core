@@ -118,6 +118,8 @@
 #define MF_LOGICAL        0x10000000
 #define MF_CHECKPOINT_BLK 0x20000000
 #define MF_CHECKPOINT_FS  0x40000000
+#define MF_FIRST_STAGE_MOUNT \
+                          0x80000000
 // clang-format on
 
 #define DM_BUF_SIZE 4096

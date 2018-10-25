@@ -22,10 +22,9 @@
 #include <vector>
 
 bool fs_mgr_overlayfs_mount_all(fstab* fstab);
-bool fs_mgr_overlayfs_mount_all(const std::vector<const fstab_rec*>& fstab);
+bool fs_mgr_overlayfs_mount_all(const std::vector<fstab_rec*>& fstab);
 std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab* fstab);
-std::vector<std::string> fs_mgr_overlayfs_required_devices(
-        const std::vector<const fstab_rec*>& fstab);
+std::vector<std::string> fs_mgr_overlayfs_required_devices(const std::vector<fstab_rec*>& fstab);
 bool fs_mgr_overlayfs_setup(const char* backing = nullptr, const char* mount_point = nullptr,
                             bool* change = nullptr);
 bool fs_mgr_overlayfs_teardown(const char* mount_point = nullptr, bool* change = nullptr);
