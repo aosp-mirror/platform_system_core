@@ -293,6 +293,9 @@ std::string adb_get_homedir_path() {
     struct passwd pwent;
     struct passwd* result;
     int pwent_max = sysconf(_SC_GETPW_R_SIZE_MAX);
+    if (pwent_max == -1) {
+        pwent_max = 16384;
+    }
     std::vector<char> buf(pwent_max);
     int rc = getpwuid_r(getuid(), &pwent, buf.data(), buf.size(), &result);
     if (rc == 0 && result) {
