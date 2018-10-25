@@ -16,7 +16,6 @@
 
 #include <fcntl.h>
 #include <stdint.h>
-#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -66,11 +65,8 @@ int64_t GetBackupGeometryOffset() {
 
 int64_t GetPrimaryMetadataOffset(const LpMetadataGeometry& geometry, uint32_t slot_number) {
     CHECK(slot_number < geometry.metadata_slot_count);
-
     int64_t offset = LP_PARTITION_RESERVED_BYTES + (LP_METADATA_GEOMETRY_SIZE * 2) +
                      geometry.metadata_max_size * slot_number;
-    CHECK(offset + geometry.metadata_max_size <=
-          int64_t(geometry.first_logical_sector * LP_SECTOR_SIZE));
     return offset;
 }
 
@@ -79,6 +75,18 @@ int64_t GetBackupMetadataOffset(const LpMetadataGeometry& geometry, uint32_t slo
     int64_t start = LP_PARTITION_RESERVED_BYTES + (LP_METADATA_GEOMETRY_SIZE * 2) +
                     int64_t(geometry.metadata_max_size) * geometry.metadata_slot_count;
     return start + int64_t(geometry.metadata_max_size * slot_number);
+}
+
+uint64_t GetTotalMetadataSize(uint32_t metadata_max_size, uint32_t max_slots) {
+    return LP_PARTITION_RESERVED_BYTES +
+           (LP_METADATA_GEOMETRY_SIZE + metadata_max_size * max_slots) * 2;
+}
+
+const LpMetadataBlockDevice* GetMetadataSuperBlockDevice(const LpMetadata& metadata) {
+    if (metadata.block_devices.empty()) {
+        return nullptr;
+    }
+    return &metadata.block_devices[0];
 }
 
 void SHA256(const void* data, size_t length, uint8_t out[32]) {
@@ -98,6 +106,14 @@ uint32_t SlotNumberForSlotSuffix(const std::string& suffix) {
         return 0;
     }
     return suffix[1] - 'a';
+}
+
+uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata) {
+    uint64_t size = 0;
+    for (const auto& block_device : metadata.block_devices) {
+        size += block_device.size;
+    }
+    return size;
 }
 
 }  // namespace fs_mgr

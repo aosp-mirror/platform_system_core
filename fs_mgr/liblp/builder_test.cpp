@@ -132,7 +132,9 @@ TEST(liblp, InternalAlignment) {
     ASSERT_NE(builder, nullptr);
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 1536);
+    auto super_device = GetMetadataSuperBlockDevice(*exported.get());
+    ASSERT_NE(super_device, nullptr);
+    EXPECT_EQ(super_device->first_logical_sector, 1536);
 
     // Test a large alignment offset thrown in.
     device_info.alignment_offset = 753664;
@@ -140,7 +142,9 @@ TEST(liblp, InternalAlignment) {
     ASSERT_NE(builder, nullptr);
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 1472);
+    super_device = GetMetadataSuperBlockDevice(*exported.get());
+    ASSERT_NE(super_device, nullptr);
+    EXPECT_EQ(super_device->first_logical_sector, 1472);
 
     // Alignment offset without alignment doesn't mean anything.
     device_info.alignment = 0;
@@ -154,7 +158,9 @@ TEST(liblp, InternalAlignment) {
     ASSERT_NE(builder, nullptr);
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 174);
+    super_device = GetMetadataSuperBlockDevice(*exported.get());
+    ASSERT_NE(super_device, nullptr);
+    EXPECT_EQ(super_device->first_logical_sector, 174);
 
     // Test a small alignment with no alignment offset.
     device_info.alignment = 11 * 1024;
@@ -162,7 +168,9 @@ TEST(liblp, InternalAlignment) {
     ASSERT_NE(builder, nullptr);
     exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    EXPECT_EQ(exported->geometry.first_logical_sector, 160);
+    super_device = GetMetadataSuperBlockDevice(*exported.get());
+    ASSERT_NE(super_device, nullptr);
+    EXPECT_EQ(super_device->first_logical_sector, 160);
 }
 
 TEST(liblp, InternalPartitionAlignment) {
@@ -292,6 +300,9 @@ TEST(liblp, BuilderExport) {
     unique_ptr<LpMetadata> exported = builder->Export();
     EXPECT_NE(exported, nullptr);
 
+    auto super_device = GetMetadataSuperBlockDevice(*exported.get());
+    ASSERT_NE(super_device, nullptr);
+
     // Verify geometry. Some details of this may change if we change the
     // metadata structures. So in addition to checking the exact values, we
     // also check that they are internally consistent after.
@@ -300,11 +311,11 @@ TEST(liblp, BuilderExport) {
     EXPECT_EQ(geometry.struct_size, sizeof(geometry));
     EXPECT_EQ(geometry.metadata_max_size, 1024);
     EXPECT_EQ(geometry.metadata_slot_count, 2);
-    EXPECT_EQ(geometry.first_logical_sector, 32);
+    EXPECT_EQ(super_device->first_logical_sector, 32);
 
     static const size_t kMetadataSpace =
             ((kMetadataSize * kMetadataSlots) + LP_METADATA_GEOMETRY_SIZE) * 2;
-    EXPECT_GE(geometry.first_logical_sector * LP_SECTOR_SIZE, kMetadataSpace);
+    EXPECT_GE(super_device->first_logical_sector * LP_SECTOR_SIZE, kMetadataSpace);
 
     // Verify header.
     const LpMetadataHeader& header = exported->header;
@@ -413,13 +424,10 @@ TEST(liblp, block_device_info) {
                                                                fs_mgr_free_fstab);
     ASSERT_NE(fstab, nullptr);
 
-    // This should read from the "super" partition once we have a well-defined
-    // way to access it.
-    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), "/data");
-    ASSERT_NE(rec, nullptr);
+    PartitionOpener opener;
 
     BlockDeviceInfo device_info;
-    ASSERT_TRUE(GetBlockDeviceInfo(rec->blk_device, &device_info));
+    ASSERT_TRUE(opener.GetInfo(fs_mgr_get_super_partition_name(), &device_info));
 
     // Sanity check that the device doesn't give us some weird inefficient
     // alignment.

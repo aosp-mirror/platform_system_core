@@ -14,27 +14,29 @@
  * limitations under the License.
  */
 
-#ifndef LIBLP_WRITER_H
-#define LIBLP_WRITER_H
+#pragma once
 
-#include <functional>
+#include <map>
 #include <string>
 
-#include <liblp/liblp.h>
+#include <android-base/unique_fd.h>
+#include <liblp/partition_opener.h>
 
 namespace android {
 namespace fs_mgr {
 
-std::string SerializeGeometry(const LpMetadataGeometry& input);
-std::string SerializeMetadata(const LpMetadata& input);
+class TestPartitionOpener : public PartitionOpener {
+  public:
+    explicit TestPartitionOpener(const std::map<std::string, int>& partition_map,
+                                 const std::map<std::string, BlockDeviceInfo>& partition_info = {});
 
-// These variants are for testing only. The path-based functions should be used
-// for actual operation, so that open() is called with the correct flags.
-bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
-                          const LpMetadata& metadata, uint32_t slot_number,
-                          const std::function<bool(int, const std::string&)>& writer);
+    android::base::unique_fd Open(const std::string& partition_name, int flags) const override;
+    bool GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const override;
+
+  private:
+    std::map<std::string, int> partition_map_;
+    std::map<std::string, BlockDeviceInfo> partition_info_;
+};
 
 }  // namespace fs_mgr
 }  // namespace android
-
-#endif /* LIBLP_WRITER_H */

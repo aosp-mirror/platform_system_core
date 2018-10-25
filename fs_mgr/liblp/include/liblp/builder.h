@@ -24,6 +24,7 @@
 #include <memory>
 
 #include "liblp.h"
+#include "partition_opener.h"
 
 namespace android {
 namespace fs_mgr {
@@ -33,27 +34,6 @@ class LinearExtent;
 // By default, partitions are aligned on a 1MiB boundary.
 static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
 static const uint32_t kDefaultBlockSize = 4096;
-
-struct BlockDeviceInfo {
-    BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0), logical_block_size(0) {}
-    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset,
-                    uint32_t logical_block_size)
-        : size(size),
-          alignment(alignment),
-          alignment_offset(alignment_offset),
-          logical_block_size(logical_block_size) {}
-    // Size of the block device, in bytes.
-    uint64_t size;
-    // Optimal target alignment, in bytes. Partition extents will be aligned to
-    // this value by default. This value must be 0 or a multiple of 512.
-    uint32_t alignment;
-    // Alignment offset to parent device (if any), in bytes. The sector at
-    // |alignment_offset| on the target device is correctly aligned on its
-    // parent device. This value must be 0 or a multiple of 512.
-    uint32_t alignment_offset;
-    // Block size, for aligning extent sizes and partition sizes.
-    uint32_t logical_block_size;
-};
 
 // Abstraction around dm-targets that can be encoded into logical partition tables.
 class Extent {
@@ -157,7 +137,12 @@ class MetadataBuilder {
     // Import an existing table for modification. This reads metadata off the
     // given block device and imports it. It also adjusts alignment information
     // based on run-time values in the operating system.
-    static std::unique_ptr<MetadataBuilder> New(const std::string& block_device,
+    static std::unique_ptr<MetadataBuilder> New(const IPartitionOpener& opener,
+                                                const std::string& super_partition,
+                                                uint32_t slot_number);
+
+    // Same as above, but use the default PartitionOpener.
+    static std::unique_ptr<MetadataBuilder> New(const std::string& super_partition,
                                                 uint32_t slot_number);
 
     // Import an existing table for modification. If the table is not valid, for
@@ -254,10 +239,14 @@ class MetadataBuilder {
     void ExtentsToFreeList(const std::vector<Interval>& extents,
                            std::vector<Interval>* free_regions) const;
 
+    const LpMetadataBlockDevice& super_device() const { return block_devices_[0]; }
+    LpMetadataBlockDevice& super_device() { return block_devices_[0]; }
+
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
     std::vector<std::unique_ptr<Partition>> partitions_;
     std::vector<std::unique_ptr<PartitionGroup>> groups_;
+    std::vector<LpMetadataBlockDevice> block_devices_;
 };
 
 // Read BlockDeviceInfo for a given block device. This always returns false
