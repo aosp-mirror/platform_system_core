@@ -99,11 +99,12 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
       block_size_(block_size),
       file_(nullptr, sparse_file_destroy),
       images_(images) {
+    uint64_t total_size = GetTotalSuperPartitionSize(metadata);
     if (block_size % LP_SECTOR_SIZE != 0) {
         LERROR << "Block size must be a multiple of the sector size, " << LP_SECTOR_SIZE;
         return;
     }
-    if (metadata.geometry.block_device_size % block_size != 0) {
+    if (total_size % block_size != 0) {
         LERROR << "Device size must be a multiple of the block size, " << block_size;
         return;
     }
@@ -120,7 +121,7 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
         return;
     }
 
-    uint64_t num_blocks = metadata.geometry.block_device_size % block_size;
+    uint64_t num_blocks = total_size % block_size;
     if (num_blocks >= UINT_MAX) {
         // libsparse counts blocks in unsigned 32-bit integers, so we check to
         // make sure we're not going to overflow.
@@ -128,7 +129,10 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
         return;
     }
 
-    file_.reset(sparse_file_new(block_size_, geometry_.block_device_size));
+    file_.reset(sparse_file_new(block_size_, total_size));
+    if (!file_) {
+        LERROR << "Could not allocate sparse file of size " << total_size;
+    }
 }
 
 bool SparseBuilder::Export(const char* file) {
@@ -333,14 +337,7 @@ int SparseBuilder::OpenImageFile(const std::string& file) {
 bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
                        const std::map<std::string, std::string>& images) {
     SparseBuilder builder(metadata, block_size, images);
-    if (!builder.IsValid()) {
-        LERROR << "Could not allocate sparse file of size " << metadata.geometry.block_device_size;
-        return false;
-    }
-    if (!builder.Build()) {
-        return false;
-    }
-    return builder.Export(file);
+    return builder.IsValid() && builder.Build() && builder.Export(file);
 }
 
 }  // namespace fs_mgr

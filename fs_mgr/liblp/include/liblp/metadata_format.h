@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 6
+#define LP_METADATA_MAJOR_VERSION 7
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -103,42 +103,10 @@ typedef struct LpMetadataGeometry {
      */
     uint32_t metadata_slot_count;
 
-    /* 48: First usable sector for allocating logical partitions. this will be
-     * the first sector after the initial geometry blocks, followed by the
-     * space consumed by metadata_max_size*metadata_slot_count*2.
-     */
-    uint64_t first_logical_sector;
-
-    /* 64: Alignment for defining partitions or partition extents. For example,
-     * an alignment of 1MiB will require that all partitions have a size evenly
-     * divisible by 1MiB, and that the smallest unit the partition can grow by
-     * is 1MiB.
-     *
-     * Alignment is normally determined at runtime when growing or adding
-     * partitions. If for some reason the alignment cannot be determined, then
-     * this predefined alignment in the geometry is used instead. By default
-     * it is set to 1MiB.
-     */
-    uint32_t alignment;
-
-    /* 68: Alignment offset for "stacked" devices. For example, if the "super"
-     * partition itself is not aligned within the parent block device's
-     * partition table, then we adjust for this in deciding where to place
-     * |first_logical_sector|.
-     *
-     * Similar to |alignment|, this will be derived from the operating system.
-     * If it cannot be determined, it is assumed to be 0.
-     */
-    uint32_t alignment_offset;
-
-    /* 72: Block device size, as specified when the metadata was created. This
-     * can be used to verify the geometry against a target device.
-     */
-    uint64_t block_device_size;
-
-    /* 76: Logical block size of the super partition block device. This is the
-     * minimal alignment for partition and extent sizes, and it must be a
-     * multiple of LP_SECTOR_SIZE.
+    /* 48: Logical block size. This is the minimal alignment for partition and
+     * extent sizes, and it must be a multiple of LP_SECTOR_SIZE. Note that
+     * this must be equal across all LUNs that comprise the super partition,
+     * and thus this field is stored in the geometry, not per-device.
      */
     uint32_t logical_block_size;
 } __attribute__((packed)) LpMetadataGeometry;
@@ -217,6 +185,8 @@ typedef struct LpMetadataHeader {
     LpMetadataTableDescriptor extents;
     /* 104: Updateable group descriptor. */
     LpMetadataTableDescriptor groups;
+    /* 116: Block device table. */
+    LpMetadataTableDescriptor block_devices;
 } __attribute__((packed)) LpMetadataHeader;
 
 /* This struct defines a logical partition entry, similar to what would be
@@ -284,6 +254,47 @@ typedef struct LpMetadataPartitionGroup {
     /* 36: Maximum size in bytes. If 0, the group has no maximum size. */
     uint64_t maximum_size;
 } LpMetadataPartitionGroup;
+
+/* This struct defines an entry in the block_devices table. There must be
+ * exactly one device, corresponding to the super partition.
+ */
+typedef struct LpMetadataBlockDevice {
+    /* 0: First usable sector for allocating logical partitions. this will be
+     * the first sector after the initial geometry blocks, followed by the
+     * space consumed by metadata_max_size*metadata_slot_count*2.
+     */
+    uint64_t first_logical_sector;
+
+    /* 8: Alignment for defining partitions or partition extents. For example,
+     * an alignment of 1MiB will require that all partitions have a size evenly
+     * divisible by 1MiB, and that the smallest unit the partition can grow by
+     * is 1MiB.
+     *
+     * Alignment is normally determined at runtime when growing or adding
+     * partitions. If for some reason the alignment cannot be determined, then
+     * this predefined alignment in the geometry is used instead. By default
+     * it is set to 1MiB.
+     */
+    uint32_t alignment;
+
+    /* 12: Alignment offset for "stacked" devices. For example, if the "super"
+     * partition itself is not aligned within the parent block device's
+     * partition table, then we adjust for this in deciding where to place
+     * |first_logical_sector|.
+     *
+     * Similar to |alignment|, this will be derived from the operating system.
+     * If it cannot be determined, it is assumed to be 0.
+     */
+    uint32_t alignment_offset;
+
+    /* 16: Block device size, as specified when the metadata was created. This
+     * can be used to verify the geometry against a target device.
+     */
+    uint64_t size;
+
+    /* 24: Partition name in the GPT. Any unused characters must be 0. */
+    char partition_name[36];
+} LpMetadataBlockDevice;
 
 #ifdef __cplusplus
 } /* extern "C" */

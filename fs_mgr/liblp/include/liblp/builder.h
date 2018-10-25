@@ -254,10 +254,14 @@ class MetadataBuilder {
     void ExtentsToFreeList(const std::vector<Interval>& extents,
                            std::vector<Interval>* free_regions) const;
 
+    const LpMetadataBlockDevice& super_device() const { return block_devices_[0]; }
+    LpMetadataBlockDevice& super_device() { return block_devices_[0]; }
+
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
     std::vector<std::unique_ptr<Partition>> partitions_;
     std::vector<std::unique_ptr<PartitionGroup>> groups_;
+    std::vector<LpMetadataBlockDevice> block_devices_;
 };
 
 // Read BlockDeviceInfo for a given block device. This always returns false
