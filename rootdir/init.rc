@@ -489,6 +489,8 @@ on post-fs-data
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
 
+    mkdir /data/preloads 0775 system system
+
     mkdir /data/vendor 0771 root root
     mkdir /data/vendor_ce 0771 root root
     mkdir /data/vendor_de 0771 root root
