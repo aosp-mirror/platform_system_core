@@ -155,7 +155,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
       }
-      elf = map_info->GetElf(process_memory_, true);
+      elf = map_info->GetElf(process_memory_);
       step_pc = regs_->pc();
       rel_pc = elf->GetRelPc(step_pc, map_info);
       // Everyone except elf data in gdb jit debug maps uses the relative pc.

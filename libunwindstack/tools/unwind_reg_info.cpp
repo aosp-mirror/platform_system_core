@@ -173,7 +173,7 @@ int GetInfo(const char* file, uint64_t pc) {
   }
 
   Elf elf(memory);
-  if (!elf.Init(true) || !elf.valid()) {
+  if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;
   }
