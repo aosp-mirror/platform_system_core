@@ -218,7 +218,14 @@ static bool DefaultWriter(int fd, const std::string& blob) {
     return android::base::WriteFully(fd, blob.data(), blob.size());
 }
 
-bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
+bool FlashPartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                         const LpMetadata& metadata) {
+    android::base::unique_fd fd = opener.Open(super_partition, O_RDWR | O_SYNC);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << super_partition;
+        return false;
+    }
+
     // Before writing geometry and/or logical partition tables, perform some
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
@@ -237,6 +244,8 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
         PERROR << __PRETTY_FUNCTION__ << " write " << zeroes.size() << " bytes failed";
         return false;
     }
+
+    LWARN << "Flashing new logical partition geometry to " << super_partition;
 
     // Write geometry to the primary and backup locations.
     std::string blob = SerializeGeometry(metadata.geometry);
@@ -264,13 +273,24 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
     return ok;
 }
 
+bool FlashPartitionTable(const std::string& super_partition, const LpMetadata& metadata) {
+    return FlashPartitionTable(PartitionOpener(), super_partition, metadata);
+}
+
 static bool CompareMetadata(const LpMetadata& a, const LpMetadata& b) {
     return !memcmp(a.header.header_checksum, b.header.header_checksum,
                    sizeof(a.header.header_checksum));
 }
 
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
+bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                          const LpMetadata& metadata, uint32_t slot_number,
                           const std::function<bool(int, const std::string&)>& writer) {
+    android::base::unique_fd fd = opener.Open(super_partition, O_RDWR | O_SYNC);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << super_partition;
+        return false;
+    }
+
     // Before writing geometry and/or logical partition tables, perform some
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
@@ -330,39 +350,24 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
     }
 
     // Both copies should now be in sync, so we can continue the update.
-    return WriteMetadata(fd, metadata, slot_number, blob, writer);
-}
+    if (!WriteMetadata(fd, metadata, slot_number, blob, writer)) {
+        return false;
+    }
 
-bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata) {
-    android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
-        return false;
-    }
-    if (!FlashPartitionTable(fd, metadata)) {
-        return false;
-    }
-    LWARN << "Flashed new logical partition geometry to " << block_device;
-    return true;
-}
-
-bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                          uint32_t slot_number) {
-    android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
-        return false;
-    }
-    if (!UpdatePartitionTable(fd, metadata, slot_number)) {
-        return false;
-    }
     LINFO << "Updated logical partition table at slot " << slot_number << " on device "
-          << block_device;
+          << super_partition;
     return true;
 }
 
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
-    return UpdatePartitionTable(fd, metadata, slot_number, DefaultWriter);
+bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                          const LpMetadata& metadata, uint32_t slot_number) {
+    return UpdatePartitionTable(opener, super_partition, metadata, slot_number, DefaultWriter);
+}
+
+bool UpdatePartitionTable(const std::string& super_partition, const LpMetadata& metadata,
+                          uint32_t slot_number) {
+    PartitionOpener opener;
+    return UpdatePartitionTable(opener, super_partition, metadata, slot_number, DefaultWriter);
 }
 
 }  // namespace fs_mgr

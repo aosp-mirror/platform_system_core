@@ -16,11 +16,7 @@
 
 #include "liblp/builder.h"
 
-#if defined(__linux__)
-#include <linux/fs.h>
-#endif
 #include <string.h>
-#include <sys/ioctl.h>
 
 #include <algorithm>
 
@@ -32,43 +28,6 @@
 
 namespace android {
 namespace fs_mgr {
-
-bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {
-#if defined(__linux__)
-    android::base::unique_fd fd(open(block_device.c_str(), O_RDONLY));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open '" << block_device << "' failed";
-        return false;
-    }
-    if (!GetDescriptorSize(fd, &device_info->size)) {
-        return false;
-    }
-    if (ioctl(fd, BLKIOMIN, &device_info->alignment) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
-        return false;
-    }
-
-    int alignment_offset;
-    if (ioctl(fd, BLKALIGNOFF, &alignment_offset) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
-        return false;
-    }
-    int logical_block_size;
-    if (ioctl(fd, BLKSSZGET, &logical_block_size) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "BLKSSZGET failed";
-        return false;
-    }
-
-    device_info->alignment_offset = static_cast<uint32_t>(alignment_offset);
-    device_info->logical_block_size = static_cast<uint32_t>(logical_block_size);
-    return true;
-#else
-    (void)block_device;
-    (void)device_info;
-    LERROR << __PRETTY_FUNCTION__ << ": Not supported on this operating system.";
-    return false;
-#endif
-}
 
 void LinearExtent::AddTo(LpMetadata* out) const {
     out->extents.push_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_LINEAR, physical_sector_});
@@ -138,9 +97,10 @@ uint64_t Partition::BytesOnDisk() const {
     return sectors * LP_SECTOR_SIZE;
 }
 
-std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& block_device,
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const IPartitionOpener& opener,
+                                                      const std::string& super_partition,
                                                       uint32_t slot_number) {
-    std::unique_ptr<LpMetadata> metadata = ReadMetadata(block_device.c_str(), slot_number);
+    std::unique_ptr<LpMetadata> metadata = ReadMetadata(opener, super_partition, slot_number);
     if (!metadata) {
         return nullptr;
     }
@@ -149,10 +109,15 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& block_d
         return nullptr;
     }
     BlockDeviceInfo device_info;
-    if (fs_mgr::GetBlockDeviceInfo(block_device, &device_info)) {
+    if (opener.GetInfo(super_partition, &device_info)) {
         builder->UpdateBlockDeviceInfo(device_info);
     }
     return builder;
+}
+
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& super_partition,
+                                                      uint32_t slot_number) {
+    return New(PartitionOpener(), super_partition, slot_number);
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const BlockDeviceInfo& device_info,
