@@ -32,34 +32,6 @@
 
 #include "android_get_control_env.h"
 
-#if defined(__ANDROID__)
-/* For the socket trust (credentials) check */
-#include <private/android_filesystem_config.h>
-#define __android_unused
-#else
-#define __android_unused __attribute__((__unused__))
-#endif
-
-bool socket_peer_is_trusted(int fd __android_unused) {
-#if defined(__ANDROID__)
-    ucred cr;
-    socklen_t len = sizeof(cr);
-    int n = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
-
-    if (n != 0) {
-        ALOGE("could not get socket credentials: %s\n", strerror(errno));
-        return false;
-    }
-
-    if ((cr.uid != AID_ROOT) && (cr.uid != AID_SHELL)) {
-        ALOGE("untrusted userid on other end of socket: userid %d\n", cr.uid);
-        return false;
-    }
-#endif
-
-    return true;
-}
-
 int socket_close(int sock) {
     return close(sock);
 }
