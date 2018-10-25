@@ -342,7 +342,14 @@ std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry&
     return ParseMetadata(geometry, fd);
 }
 
-std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
+std::unique_ptr<LpMetadata> ReadMetadata(const IPartitionOpener& opener,
+                                         const std::string& super_partition, uint32_t slot_number) {
+    android::base::unique_fd fd = opener.Open(super_partition, O_RDONLY);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << super_partition;
+        return nullptr;
+    }
+
     LpMetadataGeometry geometry;
     if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
         return nullptr;
@@ -361,13 +368,8 @@ std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
     return ReadBackupMetadata(fd, geometry, slot_number);
 }
 
-std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number) {
-    android::base::unique_fd fd(open(block_device, O_RDONLY));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
-        return nullptr;
-    }
-    return ReadMetadata(fd, slot_number);
+std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uint32_t slot_number) {
+    return ReadMetadata(PartitionOpener(), super_partition, slot_number);
 }
 
 static std::string NameFromFixedArray(const char* name, size_t buffer_size) {

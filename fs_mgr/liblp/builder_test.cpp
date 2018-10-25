@@ -424,13 +424,10 @@ TEST(liblp, block_device_info) {
                                                                fs_mgr_free_fstab);
     ASSERT_NE(fstab, nullptr);
 
-    // This should read from the "super" partition once we have a well-defined
-    // way to access it.
-    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), "/data");
-    ASSERT_NE(rec, nullptr);
+    PartitionOpener opener;
 
     BlockDeviceInfo device_info;
-    ASSERT_TRUE(GetBlockDeviceInfo(rec->blk_device, &device_info));
+    ASSERT_TRUE(opener.GetInfo(fs_mgr_get_super_partition_name(), &device_info));
 
     // Sanity check that the device doesn't give us some weird inefficient
     // alignment.
