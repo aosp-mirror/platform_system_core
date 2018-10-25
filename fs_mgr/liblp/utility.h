@@ -23,7 +23,7 @@
 
 #include <android-base/logging.h>
 
-#include "liblp/metadata_format.h"
+#include "liblp/liblp.h"
 
 #define LP_TAG "[liblp]"
 #define LWARN LOG(WARNING) << LP_TAG
@@ -49,6 +49,10 @@ int64_t GetPrimaryMetadataOffset(const LpMetadataGeometry& geometry, uint32_t sl
 // Return the offset of a backup metadata slot, relative to the end of the
 // device.
 int64_t GetBackupMetadataOffset(const LpMetadataGeometry& geometry, uint32_t slot_number);
+
+// Return the total space at the start of the super partition that must be set
+// aside from headers/metadata and backups.
+uint64_t GetTotalMetadataSize(uint32_t metadata_max_size, uint32_t max_slots);
 
 // Cross-platform helper for lseek64().
 int64_t SeekFile64(int fd, int64_t offset, int whence);

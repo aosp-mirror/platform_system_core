@@ -36,10 +36,6 @@ TEST(liblp, GetMetadataOffset) {
                                    {0},
                                    16384,
                                    4,
-                                   10000,
-                                   0,
-                                   0,
-                                   1024 * 1024,
                                    4096};
     static const uint64_t start = LP_PARTITION_RESERVED_BYTES;
     EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), start + 8192);
