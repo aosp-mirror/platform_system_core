@@ -1312,6 +1312,9 @@ void FlashAllTool::UpdateSuperPartition() {
     if (!is_userspace_fastboot()) {
         reboot_to_userspace_fastboot();
     }
+    if (!is_userspace_fastboot()) {
+        die("Failed to boot into userspace; one or more components might be unbootable.");
+    }
     fb->Download("super", fd, get_file_size(fd));
 
     std::string command = "update-super:super";
