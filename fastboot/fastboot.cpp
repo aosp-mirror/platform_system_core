@@ -79,10 +79,6 @@ using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
 
-#if defined(_WIN32)
-#define O_CLOEXEC O_NOINHERIT
-#endif
-
 static const char* serial = nullptr;
 
 static bool g_long_listing = false;
