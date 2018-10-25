@@ -41,10 +41,10 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/mapped_file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <utils/FileMap.h>
 
 #include "constants.h"
 #include "transport.h"
@@ -467,15 +467,14 @@ RetCode FastBootDriver::SendBuffer(int fd, size_t size) {
 
     while (remaining) {
         // Memory map the file
-        android::FileMap filemap;
         size_t len = std::min(remaining, MAX_MAP_SIZE);
-
-        if (!filemap.create(NULL, fd, offset, len, true)) {
+        auto mapping{android::base::MappedFile::FromFd(fd, offset, len, PROT_READ)};
+        if (!mapping) {
             error_ = "Creating filemap failed";
             return IO_ERROR;
         }
 
-        if ((ret = SendBuffer(filemap.getDataPtr(), len))) {
+        if ((ret = SendBuffer(mapping->data(), mapping->size()))) {
             return ret;
         }
 

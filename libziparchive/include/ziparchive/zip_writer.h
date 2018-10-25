@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef LIBZIPARCHIVE_ZIPWRITER_H_
-#define LIBZIPARCHIVE_ZIPWRITER_H_
+#pragma once
 
 #include <cstdio>
 #include <ctime>
@@ -25,7 +24,6 @@
 #include <vector>
 
 #include "android-base/macros.h"
-#include "utils/Compat.h"
 
 struct z_stream_s;
 typedef struct z_stream_s z_stream;
@@ -183,5 +181,3 @@ class ZipWriter {
   std::unique_ptr<z_stream, void (*)(z_stream*)> z_stream_;
   std::vector<uint8_t> buffer_;
 };
-
-#endif /* LIBZIPARCHIVE_ZIPWRITER_H_ */
