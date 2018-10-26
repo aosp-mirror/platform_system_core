@@ -40,6 +40,18 @@ bool IsActionableProperty(Subcontext* subcontext, const std::string& prop_name) 
         return true;
     }
 
+    static constexpr const char* kPartnerPrefixes[] = {
+            "init.svc.vendor.", "ro.vendor.",    "persist.vendor.",
+            "vendor.",          "init.svc.odm.", "ro.odm.",
+            "persist.odm.",     "odm.",          "ro.boot.",
+    };
+
+    for (const auto& prefix : kPartnerPrefixes) {
+        if (android::base::StartsWith(prop_name, prefix)) {
+            return true;
+        }
+    }
+
     return CanReadProperty(subcontext->context(), prop_name);
 }
 
