@@ -20,6 +20,8 @@
 #include <sys/types.h>
 #include <string>
 
+#include "android-base/off64_t.h"
+
 #if !defined(_WIN32) && !defined(O_BINARY)
 /** Windows needs O_BINARY, but Unix never mangles line endings. */
 #define O_BINARY 0
@@ -28,11 +30,6 @@
 #if defined(_WIN32) && !defined(O_CLOEXEC)
 /** Windows has O_CLOEXEC but calls it O_NOINHERIT for some reason. */
 #define O_CLOEXEC O_NOINHERIT
-#endif
-
-#if defined(__APPLE__)
-/** Mac OS has always had a 64-bit off_t, so it doesn't have off64_t. */
-typedef off_t off64_t;
 #endif
 
 namespace android {

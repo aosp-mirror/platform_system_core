@@ -16,12 +16,8 @@
 
 #pragma once
 
-#if __APPLE__
-/* Temporary Mac build fix for off64_t. TODO: refactor into `portability.h`. */
-#include "android-base/file.h"
-#endif
-
 #include "android-base/macros.h"
+#include "android-base/off64_t.h"
 
 #include <sys/types.h>
 
