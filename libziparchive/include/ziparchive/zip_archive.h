@@ -25,6 +25,8 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
+#include "android-base/off64_t.h"
+
 /* Zip compression methods we support */
 enum {
   kCompressStored = 0,    // no compression
