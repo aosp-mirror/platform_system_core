@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "android-base/macros.h"
+#include "android-base/off64_t.h"
 
 struct z_stream_s;
 typedef struct z_stream_s z_stream;
