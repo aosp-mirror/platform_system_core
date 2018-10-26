@@ -27,8 +27,8 @@
 #include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/sysinfo.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
@@ -957,6 +957,8 @@ static struct proc *proc_get_heaviest(int oomadj) {
     return maxprocp;
 }
 
+static int last_killed_pid = -1;
+
 /* Kill one process specified by procp.  Returns the size of the process killed */
 static int kill_one_process(struct proc* procp) {
     int pid = procp->pid;
@@ -996,6 +998,8 @@ static int kill_one_process(struct proc* procp) {
     pid_remove(pid);
 
     TRACE_KILL_END();
+
+    last_killed_pid = pid;
 
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
@@ -1135,6 +1139,22 @@ static inline unsigned long get_time_diff_ms(struct timeval *from,
            (to->tv_usec - from->tv_usec) / 1000;
 }
 
+static bool is_kill_pending(void) {
+    char buf[24];
+    if (last_killed_pid < 0) {
+        return false;
+    }
+
+    snprintf(buf, sizeof(buf), "/proc/%d/", last_killed_pid);
+    if (access(buf, F_OK) == 0) {
+        return true;
+    }
+
+    // reset last killed PID because there's nothing pending
+    last_killed_pid = -1;
+    return false;
+}
+
 static void mp_event_common(int data, uint32_t events __unused) {
     int ret;
     unsigned long long evcount;
@@ -1176,7 +1196,11 @@ static void mp_event_common(int data, uint32_t events __unused) {
 
     gettimeofday(&curr_tm, NULL);
     if (kill_timeout_ms) {
-        if (get_time_diff_ms(&last_kill_tm, &curr_tm) < kill_timeout_ms) {
+        // If we're within the timeout, see if there's pending reclaim work
+        // from the last killed process. If there is (as evidenced by
+        // /proc/<pid> continuing to exist), skip killing for now.
+        if ((get_time_diff_ms(&last_kill_tm, &curr_tm) < kill_timeout_ms) &&
+            (low_ram_device || is_kill_pending())) {
             kill_skip_count++;
             return;
         }
@@ -1313,7 +1337,7 @@ do_kill:
             min_score_adj = level_oomadj[level];
         }
 
-        pages_freed = find_and_kill_processes(min_score_adj, pages_to_free);
+        pages_freed = find_and_kill_processes(min_score_adj, 0);
 
         if (pages_freed == 0) {
             /* Rate limit kill reports when nothing was reclaimed */
@@ -1321,10 +1345,8 @@ do_kill:
                 report_skip_count++;
                 return;
             }
-        }
-
-        if (pages_freed >= pages_to_free) {
-            /* Reset kill time only if reclaimed enough memory */
+        } else {
+            /* If we killed anything, update the last killed timestamp. */
             last_kill_tm = curr_tm;
         }
 
