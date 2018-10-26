@@ -15,12 +15,13 @@
  */
 
 // Read-only stream access to Zip archives entries.
-#ifndef LIBZIPARCHIVE_ZIPARCHIVESTREAMENTRY_H_
-#define LIBZIPARCHIVE_ZIPARCHIVESTREAMENTRY_H_
+#pragma once
+
+#include <ziparchive/zip_archive.h>
 
 #include <vector>
 
-#include <ziparchive/zip_archive.h>
+#include "android-base/off64_t.h"
 
 class ZipArchiveStreamEntry {
  public:
@@ -43,5 +44,3 @@ class ZipArchiveStreamEntry {
   off64_t offset_ = 0;
   uint32_t crc32_ = 0u;
 };
-
-#endif  // LIBZIPARCHIVE_ZIPARCHIVESTREAMENTRY_H_

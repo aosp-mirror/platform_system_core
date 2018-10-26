@@ -852,7 +852,7 @@ static bool load_buf_fd(int fd, struct fastboot_buffer* buf) {
         buf->image_size = sz;
     }
 
-    lseek64(fd, 0, SEEK_SET);
+    lseek(fd, 0, SEEK_SET);
     int64_t limit = get_sparse_limit(sz);
     if (limit) {
         sparse_file** s = load_sparse_files(fd, limit);
