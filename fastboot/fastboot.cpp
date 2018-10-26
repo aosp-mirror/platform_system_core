@@ -1092,11 +1092,19 @@ static void do_for_partitions(const std::string& part, const std::string& slot,
     }
 }
 
+static bool is_logical(const std::string& partition) {
+    std::string value;
+    return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
+}
+
 static void do_flash(const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
     if (!load_buf(fname, &buf)) {
         die("cannot load '%s': %s", fname, strerror(errno));
+    }
+    if (is_logical(pname)) {
+        fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
     flash_buf(pname, &buf);
 }
@@ -1138,11 +1146,6 @@ static bool if_partition_exists(const std::string& partition, const std::string&
     }
     std::string partition_size;
     return fb->GetVar("partition-size:" + partition_name, &partition_size) == fastboot::SUCCESS;
-}
-
-static bool is_logical(const std::string& partition) {
-    std::string value;
-    return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
 }
 
 static void reboot_to_userspace_fastboot() {
