@@ -34,6 +34,10 @@
 #include <memory>
 #include <vector>
 
+#if defined(__APPLE__)
+#define lseek64 lseek
+#endif
+
 #if defined(__BIONIC__)
 #include <android/fdsan.h>
 #endif
