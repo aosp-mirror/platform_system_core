@@ -53,7 +53,12 @@ void Parser::ParseData(const std::string& filename, std::string* data) {
     int section_start_line = -1;
     std::vector<std::string> args;
 
+    // If we encounter a bad section start, there is no valid parser object to parse the subsequent
+    // sections, so we must suppress errors until the next valid section is found.
+    bool bad_section_found = false;
+
     auto end_section = [&] {
+        bad_section_found = false;
         if (section_parser == nullptr) return;
 
         if (auto result = section_parser->EndSection(); !result) {
@@ -101,6 +106,7 @@ void Parser::ParseData(const std::string& filename, std::string* data) {
                         parse_error_count_++;
                         LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                         section_parser = nullptr;
+                        bad_section_found = true;
                     }
                 } else if (section_parser) {
                     if (auto result = section_parser->ParseLineSection(std::move(args), state.line);
@@ -108,7 +114,7 @@ void Parser::ParseData(const std::string& filename, std::string* data) {
                         parse_error_count_++;
                         LOG(ERROR) << filename << ": " << state.line << ": " << result.error();
                     }
-                } else {
+                } else if (!bad_section_found) {
                     parse_error_count_++;
                     LOG(ERROR) << filename << ": " << state.line
                                << ": Invalid section keyword found";
