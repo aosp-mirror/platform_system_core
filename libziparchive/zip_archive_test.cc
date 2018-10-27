@@ -348,7 +348,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   // Read the file back to a buffer and make sure the contents are
   // the same as the memory buffer we extracted directly to.
   std::vector<uint8_t> file_contents(kAbUncompressedSize);
-  ASSERT_EQ(0, lseek64(tmp_output_file.fd, 0, SEEK_SET));
+  ASSERT_EQ(0, lseek(tmp_output_file.fd, 0, SEEK_SET));
   ASSERT_TRUE(android::base::ReadFully(tmp_output_file.fd, &file_contents[0], file_contents.size()));
   ASSERT_EQ(file_contents, buffer);
 
@@ -392,7 +392,7 @@ TEST(ziparchive, ExtractToFile) {
 
   // Assert that the first 8 bytes of the file haven't been clobbered.
   uint8_t read_buffer[data_size];
-  ASSERT_EQ(0, lseek64(tmp_file.fd, 0, SEEK_SET));
+  ASSERT_EQ(0, lseek(tmp_file.fd, 0, SEEK_SET));
   ASSERT_TRUE(android::base::ReadFully(tmp_file.fd, read_buffer, data_size));
   ASSERT_EQ(0, memcmp(read_buffer, data, data_size));
 
@@ -404,7 +404,7 @@ TEST(ziparchive, ExtractToFile) {
 
   // Assert that the total length of the file is sane
   ASSERT_EQ(static_cast<ssize_t>(data_size + kATxtContents.size()),
-            lseek64(tmp_file.fd, 0, SEEK_END));
+            lseek(tmp_file.fd, 0, SEEK_END));
 }
 
 #if !defined(_WIN32)
