@@ -313,7 +313,20 @@ static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
 
 #define ADJTOSLOT(adj) ((adj) + -OOM_SCORE_ADJ_MIN)
-static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1];
+#define ADJTOSLOT_COUNT (ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1)
+static struct adjslot_list procadjslot_list[ADJTOSLOT_COUNT];
+
+#define MAX_DISTINCT_OOM_ADJ 32
+#define KILLCNT_INVALID_IDX 0xFF
+/*
+ * Because killcnt array is sparse a two-level indirection is used
+ * to keep the size small. killcnt_idx stores index of the element in
+ * killcnt array. Index KILLCNT_INVALID_IDX indicates an unused slot.
+ */
+static uint8_t killcnt_idx[ADJTOSLOT_COUNT];
+static uint16_t killcnt[MAX_DISTINCT_OOM_ADJ];
+static int killcnt_free_idx = 0;
+static uint32_t killcnt_total = 0;
 
 /* PAGE_SIZE / 1024 */
 static long page_k;
@@ -644,6 +657,67 @@ static void cmd_procpurge() {
     memset(&pidhash[0], 0, sizeof(pidhash));
 }
 
+static void inc_killcnt(int oomadj) {
+    int slot = ADJTOSLOT(oomadj);
+    uint8_t idx = killcnt_idx[slot];
+
+    if (idx == KILLCNT_INVALID_IDX) {
+        /* index is not assigned for this oomadj */
+        if (killcnt_free_idx < MAX_DISTINCT_OOM_ADJ) {
+            killcnt_idx[slot] = killcnt_free_idx;
+            killcnt[killcnt_free_idx] = 1;
+            killcnt_free_idx++;
+        } else {
+            ALOGW("Number of distinct oomadj levels exceeds %d",
+                MAX_DISTINCT_OOM_ADJ);
+        }
+    } else {
+        /*
+         * wraparound is highly unlikely and is detectable using total
+         * counter because it has to be equal to the sum of all counters
+         */
+        killcnt[idx]++;
+    }
+    /* increment total kill counter */
+    killcnt_total++;
+}
+
+static int get_killcnt(int min_oomadj, int max_oomadj) {
+    int slot;
+    int count = 0;
+
+    if (min_oomadj > max_oomadj)
+        return 0;
+
+    /* special case to get total kill count */
+    if (min_oomadj > OOM_SCORE_ADJ_MAX)
+        return killcnt_total;
+
+    while (min_oomadj <= max_oomadj &&
+           (slot = ADJTOSLOT(min_oomadj)) < ADJTOSLOT_COUNT) {
+        uint8_t idx = killcnt_idx[slot];
+        if (idx != KILLCNT_INVALID_IDX) {
+            count += killcnt[idx];
+        }
+        min_oomadj++;
+    }
+
+    return count;
+}
+
+static int cmd_getkillcnt(LMKD_CTRL_PACKET packet) {
+    struct lmk_getkillcnt params;
+
+    if (use_inkernel_interface) {
+        /* kernel driver does not expose this information */
+        return 0;
+    }
+
+    lmkd_pack_get_getkillcnt(packet, &params);
+
+    return get_killcnt(params.min_oomadj, params.max_oomadj);
+}
+
 static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
     int i;
     struct lmk_target target;
@@ -748,12 +822,28 @@ static int ctrl_data_read(int dsock_idx, char *buf, size_t bufsz) {
     return ret;
 }
 
+static int ctrl_data_write(int dsock_idx, char *buf, size_t bufsz) {
+    int ret = 0;
+
+    ret = TEMP_FAILURE_RETRY(write(data_sock[dsock_idx].sock, buf, bufsz));
+
+    if (ret == -1) {
+        ALOGE("control data socket write failed; errno=%d", errno);
+    } else if (ret == 0) {
+        ALOGE("Got EOF on control data socket");
+        ret = -1;
+    }
+
+    return ret;
+}
+
 static void ctrl_command_handler(int dsock_idx) {
     LMKD_CTRL_PACKET packet;
     int len;
     enum lmk_cmd cmd;
     int nargs;
     int targets;
+    int kill_cnt;
 
     len = ctrl_data_read(dsock_idx, (char *)packet, CTRL_PACKET_MAX_SIZE);
     if (len <= 0)
@@ -790,6 +880,14 @@ static void ctrl_command_handler(int dsock_idx) {
         if (nargs != 0)
             goto wronglen;
         cmd_procpurge();
+        break;
+    case LMK_GETKILLCNT:
+        if (nargs != 2)
+            goto wronglen;
+        kill_cnt = cmd_getkillcnt(packet);
+        len = lmkd_pack_set_getkillcnt_repl(packet, kill_cnt);
+        if (ctrl_data_write(dsock_idx, (char *)packet, len) != len)
+            return;
         break;
     default:
         ALOGE("Received unknown command code %d", cmd);
@@ -1200,6 +1298,7 @@ static int kill_one_process(struct proc* procp) {
 
     /* CAP_KILL required */
     r = kill(pid, SIGKILL);
+    inc_killcnt(procp->oomadj);
     ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB",
         taskname, pid, uid, procp->oomadj, tasksize * page_k);
 
@@ -1699,6 +1798,8 @@ static int init(void) {
         procadjslot_list[i].next = &procadjslot_list[i];
         procadjslot_list[i].prev = &procadjslot_list[i];
     }
+
+    memset(killcnt_idx, KILLCNT_INVALID_IDX, sizeof(killcnt_idx));
 
     return 0;
 }

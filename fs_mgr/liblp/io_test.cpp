@@ -26,6 +26,7 @@
 
 #include "images.h"
 #include "reader.h"
+#include "test_partition_opener.h"
 #include "utility.h"
 #include "writer.h"
 
@@ -101,7 +102,9 @@ static unique_fd CreateFlashedDisk() {
     if (!exported) {
         return {};
     }
-    if (!FlashPartitionTable(fd, *exported.get())) {
+
+    TestPartitionOpener opener({{"super", fd}});
+    if (!FlashPartitionTable(opener, "super", *exported.get())) {
         return {};
     }
     return fd;
@@ -116,8 +119,10 @@ TEST(liblp, CreateFakeDisk) {
     ASSERT_TRUE(GetDescriptorSize(fd, &size));
     ASSERT_EQ(size, kDiskSize);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     // Verify that we can't read unwritten metadata.
-    ASSERT_EQ(ReadMetadata(fd, 1), nullptr);
+    ASSERT_EQ(ReadMetadata(opener, "super", 1), nullptr);
 }
 
 // Flashing metadata should not work if the metadata was created for a larger
@@ -133,7 +138,9 @@ TEST(liblp, ExportDiskTooSmall) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    EXPECT_FALSE(FlashPartitionTable(fd, *exported.get()));
+    TestPartitionOpener opener({{"super", fd}});
+
+    EXPECT_FALSE(FlashPartitionTable(opener, "super", *exported.get()));
 }
 
 // Test the basics of flashing a partition and reading it back.
@@ -145,22 +152,23 @@ TEST(liblp, FlashAndReadback) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     // Export and flash.
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get()));
+    ASSERT_TRUE(FlashPartitionTable(opener, "super", *exported.get()));
 
     // Read back. Note that some fields are only filled in during
     // serialization, so exported and imported will not be identical. For
     // example, table sizes and checksums are computed in WritePartitionTable.
     // Therefore we check on a field-by-field basis.
-    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
 
     // Check geometry and header.
     EXPECT_EQ(exported->geometry.metadata_max_size, imported->geometry.metadata_max_size);
     EXPECT_EQ(exported->geometry.metadata_slot_count, imported->geometry.metadata_slot_count);
-    EXPECT_EQ(exported->geometry.first_logical_sector, imported->geometry.first_logical_sector);
     EXPECT_EQ(exported->header.major_version, imported->header.major_version);
     EXPECT_EQ(exported->header.minor_version, imported->header.minor_version);
     EXPECT_EQ(exported->header.header_size, imported->header.header_size);
@@ -178,6 +186,11 @@ TEST(liblp, FlashAndReadback) {
     EXPECT_EQ(exported->extents[0].num_sectors, imported->extents[0].num_sectors);
     EXPECT_EQ(exported->extents[0].target_type, imported->extents[0].target_type);
     EXPECT_EQ(exported->extents[0].target_data, imported->extents[0].target_data);
+
+    // Check block devices table.
+    ASSERT_EQ(exported->block_devices.size(), imported->block_devices.size());
+    EXPECT_EQ(exported->block_devices[0].first_logical_sector,
+              imported->block_devices[0].first_logical_sector);
 }
 
 // Test that we can update metadata slots without disturbing others.
@@ -185,35 +198,40 @@ TEST(liblp, UpdateAnyMetadataSlot) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    TestPartitionOpener opener({{"super", fd}});
+
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
     ASSERT_EQ(imported->partitions.size(), 1);
     EXPECT_EQ(GetPartitionName(imported->partitions[0]), "system");
 
     // Change the name before writing to the next slot.
     strncpy(imported->partitions[0].name, "vendor", sizeof(imported->partitions[0].name));
-    ASSERT_TRUE(UpdatePartitionTable(fd, *imported.get(), 1));
+    ASSERT_TRUE(UpdatePartitionTable(opener, "super", *imported.get(), 1));
 
     // Read back the original slot, make sure it hasn't changed.
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
     ASSERT_EQ(imported->partitions.size(), 1);
     EXPECT_EQ(GetPartitionName(imported->partitions[0]), "system");
 
     // Now read back the new slot, and verify that it has a different name.
-    imported = ReadMetadata(fd, 1);
+    imported = ReadMetadata(opener, "super", 1);
     ASSERT_NE(imported, nullptr);
     ASSERT_EQ(imported->partitions.size(), 1);
     EXPECT_EQ(GetPartitionName(imported->partitions[0]), "vendor");
 
-    uint64_t last_sector = imported->geometry.block_device_size / LP_SECTOR_SIZE;
+    auto super_device = GetMetadataSuperBlockDevice(*imported.get());
+    ASSERT_NE(super_device, nullptr);
+
+    uint64_t last_sector = super_device->size / LP_SECTOR_SIZE;
 
     // Verify that we didn't overwrite anything in the logical paritition area.
     // We expect the disk to be filled with 0xcc on creation so we can read
     // this back and compare it.
     char expected[LP_SECTOR_SIZE];
     memset(expected, 0xcc, sizeof(expected));
-    for (uint64_t i = imported->geometry.first_logical_sector; i < last_sector; i++) {
+    for (uint64_t i = super_device->first_logical_sector; i < last_sector; i++) {
         char buffer[LP_SECTOR_SIZE];
         ASSERT_GE(lseek(fd, i * LP_SECTOR_SIZE, SEEK_SET), 0);
         ASSERT_TRUE(android::base::ReadFully(fd, buffer, sizeof(buffer)));
@@ -225,15 +243,17 @@ TEST(liblp, InvalidMetadataSlot) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     // Make sure all slots are filled.
-    unique_ptr<LpMetadata> metadata = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> metadata = ReadMetadata(opener, "super", 0);
     ASSERT_NE(metadata, nullptr);
     for (uint32_t i = 1; i < kMetadataSlots; i++) {
-        ASSERT_TRUE(UpdatePartitionTable(fd, *metadata.get(), i));
+        ASSERT_TRUE(UpdatePartitionTable(opener, "super", *metadata.get(), i));
     }
 
     // Verify that we can't read unavailable slots.
-    EXPECT_EQ(ReadMetadata(fd, kMetadataSlots), nullptr);
+    EXPECT_EQ(ReadMetadata(opener, "super", kMetadataSlots), nullptr);
 }
 
 // Test that updating a metadata slot does not allow it to be computed based
@@ -242,24 +262,27 @@ TEST(liblp, NoChangingGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    TestPartitionOpener opener({{"super", fd}});
+
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
-    ASSERT_TRUE(UpdatePartitionTable(fd, *imported.get(), 1));
+    ASSERT_TRUE(UpdatePartitionTable(opener, "super", *imported.get(), 1));
 
     imported->geometry.metadata_max_size += LP_SECTOR_SIZE;
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 1));
 
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
     imported->geometry.metadata_slot_count++;
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 1));
 
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
-    imported->geometry.first_logical_sector++;
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 1));
+    ASSERT_EQ(imported->block_devices.size(), 1);
+    imported->block_devices[0].first_logical_sector++;
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 1));
 
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
 }
 
@@ -267,6 +290,8 @@ TEST(liblp, NoChangingGeometry) {
 TEST(liblp, BitFlipGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
+
+    TestPartitionOpener opener({{"super", fd}});
 
     LpMetadataGeometry geometry;
     ASSERT_GE(lseek(fd, 0, SEEK_SET), 0);
@@ -276,7 +301,7 @@ TEST(liblp, BitFlipGeometry) {
     bad_geometry.metadata_slot_count++;
     ASSERT_TRUE(android::base::WriteFully(fd, &bad_geometry, sizeof(bad_geometry)));
 
-    unique_ptr<LpMetadata> metadata = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> metadata = ReadMetadata(opener, "super", 0);
     ASSERT_NE(metadata, nullptr);
     EXPECT_EQ(metadata->geometry.metadata_slot_count, 2);
 }
@@ -285,25 +310,29 @@ TEST(liblp, ReadBackupGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     char corruption[LP_METADATA_GEOMETRY_SIZE];
     memset(corruption, 0xff, sizeof(corruption));
 
     // Corrupt the primary geometry.
     ASSERT_GE(lseek(fd, GetPrimaryGeometryOffset(), SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
-    EXPECT_NE(ReadMetadata(fd, 0), nullptr);
+    EXPECT_NE(ReadMetadata(opener, "super", 0), nullptr);
 
     // Corrupt the backup geometry.
     ASSERT_GE(lseek(fd, GetBackupGeometryOffset(), SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
-    EXPECT_EQ(ReadMetadata(fd, 0), nullptr);
+    EXPECT_EQ(ReadMetadata(opener, "super", 0), nullptr);
 }
 
 TEST(liblp, ReadBackupMetadata) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    unique_ptr<LpMetadata> metadata = ReadMetadata(fd, 0);
+    TestPartitionOpener opener({{"super", fd}});
+
+    unique_ptr<LpMetadata> metadata = ReadMetadata(opener, "super", 0);
 
     char corruption[kMetadataSize];
     memset(corruption, 0xff, sizeof(corruption));
@@ -312,14 +341,14 @@ TEST(liblp, ReadBackupMetadata) {
 
     ASSERT_GE(lseek(fd, offset, SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
-    EXPECT_NE(ReadMetadata(fd, 0), nullptr);
+    EXPECT_NE(ReadMetadata(opener, "super", 0), nullptr);
 
     offset = GetBackupMetadataOffset(metadata->geometry, 0);
 
     // Corrupt the backup metadata.
     ASSERT_GE(lseek(fd, offset, SEEK_SET), 0);
     ASSERT_TRUE(android::base::WriteFully(fd, corruption, sizeof(corruption)));
-    EXPECT_EQ(ReadMetadata(fd, 0), nullptr);
+    EXPECT_EQ(ReadMetadata(opener, "super", 0), nullptr);
 }
 
 // Test that we don't attempt to write metadata if it would overflow its
@@ -329,9 +358,11 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_NE(builder, nullptr);
 
     // Compute the maximum number of partitions we can fit in 512 bytes of
-    // metadata. By default there is the header, and one partition group.
-    static const size_t kMaxPartitionTableSize =
-            kMetadataSize - sizeof(LpMetadataHeader) - sizeof(LpMetadataPartitionGroup);
+    // metadata. By default there is the header, one partition group, and a
+    // block device entry.
+    static const size_t kMaxPartitionTableSize = kMetadataSize - sizeof(LpMetadataHeader) -
+                                                 sizeof(LpMetadataPartitionGroup) -
+                                                 sizeof(LpMetadataBlockDevice);
     size_t max_partitions = kMaxPartitionTableSize / sizeof(LpMetadataPartition);
 
     // Add this number of partitions.
@@ -347,8 +378,10 @@ TEST(liblp, TooManyPartitions) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     // Check that we are able to write our table.
-    ASSERT_TRUE(FlashPartitionTable(fd, *exported.get()));
+    ASSERT_TRUE(FlashPartitionTable(opener, "super", *exported.get()));
 
     // Check that adding one more partition overflows the metadata allotment.
     partition = builder->AddPartition("final", LP_PARTITION_ATTR_NONE);
@@ -358,14 +391,17 @@ TEST(liblp, TooManyPartitions) {
     ASSERT_NE(exported, nullptr);
 
     // The new table should be too large to be written.
-    ASSERT_FALSE(UpdatePartitionTable(fd, *exported.get(), 1));
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *exported.get(), 1));
+
+    auto super_device = GetMetadataSuperBlockDevice(*exported.get());
+    ASSERT_NE(super_device, nullptr);
 
     // Check that the first and last logical sectors weren't touched when we
     // wrote this almost-full metadata.
     char expected[LP_SECTOR_SIZE];
     memset(expected, 0xcc, sizeof(expected));
     char buffer[LP_SECTOR_SIZE];
-    ASSERT_GE(lseek(fd, exported->geometry.first_logical_sector * LP_SECTOR_SIZE, SEEK_SET), 0);
+    ASSERT_GE(lseek(fd, super_device->first_logical_sector * LP_SECTOR_SIZE, SEEK_SET), 0);
     ASSERT_TRUE(android::base::ReadFully(fd, buffer, sizeof(buffer)));
     EXPECT_EQ(memcmp(expected, buffer, LP_SECTOR_SIZE), 0);
 }
@@ -451,23 +487,25 @@ TEST(liblp, UpdatePrimaryMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     BadWriter writer;
 
     // Read and write it back.
     writer.FailOnWrite(1);
-    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 0, writer));
 
     // We should still be able to read the backup copy.
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
 
     // Flash again, this time fail the backup copy. We should still be able
     // to read the primary.
     writer.FailOnWrite(3);
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
-    imported = ReadMetadata(fd, 0);
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 0, writer));
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
 }
 
@@ -477,23 +515,25 @@ TEST(liblp, UpdateBackupMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     BadWriter writer;
 
     // Read and write it back.
     writer.FailOnWrite(2);
-    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 0, writer));
 
     // We should still be able to read the primary copy.
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
 
     // Flash again, this time fail the primary copy. We should still be able
     // to read the primary.
     writer.FailOnWrite(2);
-    ASSERT_FALSE(UpdatePartitionTable(fd, *imported.get(), 0, writer));
-    imported = ReadMetadata(fd, 0);
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *imported.get(), 0, writer));
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
 }
 
@@ -504,20 +544,22 @@ TEST(liblp, UpdateMetadataCleanFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
+    TestPartitionOpener opener({{"super", fd}});
+
     BadWriter writer;
 
     // Change the name of the existing partition.
-    unique_ptr<LpMetadata> new_table = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> new_table = ReadMetadata(opener, "super", 0);
     ASSERT_NE(new_table, nullptr);
     ASSERT_GE(new_table->partitions.size(), 1);
     new_table->partitions[0].name[0]++;
 
     // Flash it, but fail to write the backup copy.
     writer.FailAfterWrite(2);
-    ASSERT_FALSE(UpdatePartitionTable(fd, *new_table.get(), 0, writer));
+    ASSERT_FALSE(UpdatePartitionTable(opener, "super", *new_table.get(), 0, writer));
 
     // When we read back, we should get the updated primary copy.
-    unique_ptr<LpMetadata> imported = ReadMetadata(fd, 0);
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
     ASSERT_GE(new_table->partitions.size(), 1);
     ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));
@@ -526,9 +568,9 @@ TEST(liblp, UpdateMetadataCleanFailure) {
     // Note that the sync step should have used the primary to sync, not
     // the backup.
     writer.Reset();
-    ASSERT_TRUE(UpdatePartitionTable(fd, *new_table.get(), 0, writer));
+    ASSERT_TRUE(UpdatePartitionTable(opener, "super", *new_table.get(), 0, writer));
 
-    imported = ReadMetadata(fd, 0);
+    imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
     ASSERT_GE(new_table->partitions.size(), 1);
     ASSERT_EQ(GetPartitionName(new_table->partitions[0]), GetPartitionName(imported->partitions[0]));

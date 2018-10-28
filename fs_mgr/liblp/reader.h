@@ -31,7 +31,6 @@ namespace fs_mgr {
 bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry);
 
 // Helper functions for manually reading geometry and metadata.
-std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number);
 std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd);
 std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, const void* buffer,
                                           size_t size);

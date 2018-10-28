@@ -43,9 +43,7 @@ std::string SerializeGeometry(const LpMetadataGeometry& input) {
 static bool CompareGeometry(const LpMetadataGeometry& g1, const LpMetadataGeometry& g2) {
     return g1.metadata_max_size == g2.metadata_max_size &&
            g1.metadata_slot_count == g2.metadata_slot_count &&
-           g1.block_device_size == g2.block_device_size &&
-           g1.logical_block_size == g2.logical_block_size &&
-           g1.first_logical_sector == g2.first_logical_sector;
+           g1.logical_block_size == g2.logical_block_size;
 }
 
 std::string SerializeMetadata(const LpMetadata& input) {
@@ -59,15 +57,18 @@ std::string SerializeMetadata(const LpMetadata& input) {
                         metadata.extents.size() * sizeof(LpMetadataExtent));
     std::string groups(reinterpret_cast<const char*>(metadata.groups.data()),
                        metadata.groups.size() * sizeof(LpMetadataPartitionGroup));
+    std::string block_devices(reinterpret_cast<const char*>(metadata.block_devices.data()),
+                              metadata.block_devices.size() * sizeof(LpMetadataBlockDevice));
 
     // Compute positions of tables.
     header.partitions.offset = 0;
     header.extents.offset = header.partitions.offset + partitions.size();
     header.groups.offset = header.extents.offset + extents.size();
-    header.tables_size = header.groups.offset + groups.size();
+    header.block_devices.offset = header.groups.offset + groups.size();
+    header.tables_size = header.block_devices.offset + block_devices.size();
 
     // Compute payload checksum.
-    std::string tables = partitions + extents + groups;
+    std::string tables = partitions + extents + groups + block_devices;
     SHA256(tables.data(), tables.size(), header.tables_checksum);
 
     // Compute header checksum.
@@ -105,14 +106,20 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
                              uint64_t(geometry.metadata_max_size) * geometry.metadata_slot_count;
     uint64_t total_reserved = reserved_size * 2;
 
+    const LpMetadataBlockDevice* super_device = GetMetadataSuperBlockDevice(metadata);
+    if (!super_device) {
+        LERROR << "Logical partition metadata does not have a super block device.";
+        return false;
+    }
+
     if (total_reserved > blockdevice_size ||
-        total_reserved > geometry.first_logical_sector * LP_SECTOR_SIZE) {
+        total_reserved > super_device->first_logical_sector * LP_SECTOR_SIZE) {
         LERROR << "Not enough space to store all logical partition metadata slots.";
         return false;
     }
-    if (blockdevice_size != metadata.geometry.block_device_size) {
+    if (blockdevice_size != super_device->size) {
         LERROR << "Block device size " << blockdevice_size
-               << " does not match metadata requested size " << metadata.geometry.block_device_size;
+               << " does not match metadata requested size " << super_device->size;
         return false;
     }
 
@@ -125,11 +132,11 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     }
 
     // Make sure all linear extents have a valid range.
-    uint64_t last_sector = geometry.block_device_size / LP_SECTOR_SIZE;
+    uint64_t last_sector = super_device->size / LP_SECTOR_SIZE;
     for (const auto& extent : metadata.extents) {
         if (extent.target_type == LP_TARGET_TYPE_LINEAR) {
             uint64_t physical_sector = extent.target_data;
-            if (physical_sector < geometry.first_logical_sector ||
+            if (physical_sector < super_device->first_logical_sector ||
                 physical_sector + extent.num_sectors > last_sector) {
                 LERROR << "Extent table entry is out of bounds.";
                 return false;
@@ -139,10 +146,28 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     return true;
 }
 
-static bool WritePrimaryMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t slot_number,
+// Check that the given region is within metadata bounds.
+static bool ValidateMetadataRegion(const LpMetadata& metadata, uint64_t start, size_t size) {
+    const LpMetadataBlockDevice* super_device = GetMetadataSuperBlockDevice(metadata);
+    if (!super_device) {
+        LERROR << __PRETTY_FUNCTION__ << " could not locate super block device in metadata";
+        return false;
+    }
+    if (start + size >= super_device->first_logical_sector * LP_SECTOR_SIZE) {
+        LERROR << __PRETTY_FUNCTION__ << " write of " << size << " bytes at " << start
+               << " overlaps with logical partition contents";
+        return false;
+    }
+    return true;
+}
+
+static bool WritePrimaryMetadata(int fd, const LpMetadata& metadata, uint32_t slot_number,
                                  const std::string& blob,
                                  const std::function<bool(int, const std::string&)>& writer) {
-    int64_t primary_offset = GetPrimaryMetadataOffset(geometry, slot_number);
+    int64_t primary_offset = GetPrimaryMetadataOffset(metadata.geometry, slot_number);
+    if (!ValidateMetadataRegion(metadata, primary_offset, blob.size())) {
+        return false;
+    }
     if (SeekFile64(fd, primary_offset, SEEK_SET) < 0) {
         PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << primary_offset;
         return false;
@@ -154,18 +179,15 @@ static bool WritePrimaryMetadata(int fd, const LpMetadataGeometry& geometry, uin
     return true;
 }
 
-static bool WriteBackupMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t slot_number,
+static bool WriteBackupMetadata(int fd, const LpMetadata& metadata, uint32_t slot_number,
                                 const std::string& blob,
                                 const std::function<bool(int, const std::string&)>& writer) {
-    int64_t backup_offset = GetBackupMetadataOffset(geometry, slot_number);
-    int64_t abs_offset = SeekFile64(fd, backup_offset, SEEK_SET);
-    if (abs_offset == (int64_t)-1) {
-        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << backup_offset;
+    int64_t backup_offset = GetBackupMetadataOffset(metadata.geometry, slot_number);
+    if (!ValidateMetadataRegion(metadata, backup_offset, blob.size())) {
         return false;
     }
-    if (abs_offset >= int64_t(geometry.first_logical_sector) * LP_SECTOR_SIZE) {
-        PERROR << __PRETTY_FUNCTION__ << " backup offset " << abs_offset
-               << " is within logical partition bounds, sector " << geometry.first_logical_sector;
+    if (SeekFile64(fd, backup_offset, SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << backup_offset;
         return false;
     }
     if (!writer(fd, blob)) {
@@ -175,18 +197,18 @@ static bool WriteBackupMetadata(int fd, const LpMetadataGeometry& geometry, uint
     return true;
 }
 
-static bool WriteMetadata(int fd, const LpMetadataGeometry& geometry, uint32_t slot_number,
+static bool WriteMetadata(int fd, const LpMetadata& metadata, uint32_t slot_number,
                           const std::string& blob,
                           const std::function<bool(int, const std::string&)>& writer) {
     // Make sure we're writing to a valid metadata slot.
-    if (slot_number >= geometry.metadata_slot_count) {
+    if (slot_number >= metadata.geometry.metadata_slot_count) {
         LERROR << "Invalid logical partition metadata slot number.";
         return false;
     }
-    if (!WritePrimaryMetadata(fd, geometry, slot_number, blob, writer)) {
+    if (!WritePrimaryMetadata(fd, metadata, slot_number, blob, writer)) {
         return false;
     }
-    if (!WriteBackupMetadata(fd, geometry, slot_number, blob, writer)) {
+    if (!WriteBackupMetadata(fd, metadata, slot_number, blob, writer)) {
         return false;
     }
     return true;
@@ -196,7 +218,14 @@ static bool DefaultWriter(int fd, const std::string& blob) {
     return android::base::WriteFully(fd, blob.data(), blob.size());
 }
 
-bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
+bool FlashPartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                         const LpMetadata& metadata) {
+    android::base::unique_fd fd = opener.Open(super_partition, O_RDWR | O_SYNC);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << super_partition;
+        return false;
+    }
+
     // Before writing geometry and/or logical partition tables, perform some
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
@@ -215,6 +244,8 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
         PERROR << __PRETTY_FUNCTION__ << " write " << zeroes.size() << " bytes failed";
         return false;
     }
+
+    LWARN << "Flashing new logical partition geometry to " << super_partition;
 
     // Write geometry to the primary and backup locations.
     std::string blob = SerializeGeometry(metadata.geometry);
@@ -237,9 +268,13 @@ bool FlashPartitionTable(int fd, const LpMetadata& metadata) {
 
     bool ok = true;
     for (size_t i = 0; i < metadata.geometry.metadata_slot_count; i++) {
-        ok &= WriteMetadata(fd, metadata.geometry, i, metadata_blob, DefaultWriter);
+        ok &= WriteMetadata(fd, metadata, i, metadata_blob, DefaultWriter);
     }
     return ok;
+}
+
+bool FlashPartitionTable(const std::string& super_partition, const LpMetadata& metadata) {
+    return FlashPartitionTable(PartitionOpener(), super_partition, metadata);
 }
 
 static bool CompareMetadata(const LpMetadata& a, const LpMetadata& b) {
@@ -247,8 +282,15 @@ static bool CompareMetadata(const LpMetadata& a, const LpMetadata& b) {
                    sizeof(a.header.header_checksum));
 }
 
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number,
+bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                          const LpMetadata& metadata, uint32_t slot_number,
                           const std::function<bool(int, const std::string&)>& writer) {
+    android::base::unique_fd fd = opener.Open(super_partition, O_RDWR | O_SYNC);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << super_partition;
+        return false;
+    }
+
     // Before writing geometry and/or logical partition tables, perform some
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
@@ -289,7 +331,7 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
             LERROR << "Error serializing primary metadata to repair corrupted backup";
             return false;
         }
-        if (!WriteBackupMetadata(fd, geometry, slot_number, old_blob, writer)) {
+        if (!WriteBackupMetadata(fd, metadata, slot_number, old_blob, writer)) {
             LERROR << "Error writing primary metadata to repair corrupted backup";
             return false;
         }
@@ -301,46 +343,31 @@ bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_numb
             LERROR << "Error serializing primary metadata to repair corrupted backup";
             return false;
         }
-        if (!WritePrimaryMetadata(fd, geometry, slot_number, old_blob, writer)) {
+        if (!WritePrimaryMetadata(fd, metadata, slot_number, old_blob, writer)) {
             LERROR << "Error writing primary metadata to repair corrupted backup";
             return false;
         }
     }
 
     // Both copies should now be in sync, so we can continue the update.
-    return WriteMetadata(fd, geometry, slot_number, blob, writer);
-}
+    if (!WriteMetadata(fd, metadata, slot_number, blob, writer)) {
+        return false;
+    }
 
-bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata) {
-    android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
-        return false;
-    }
-    if (!FlashPartitionTable(fd, metadata)) {
-        return false;
-    }
-    LWARN << "Flashed new logical partition geometry to " << block_device;
-    return true;
-}
-
-bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                          uint32_t slot_number) {
-    android::base::unique_fd fd(open(block_device.c_str(), O_RDWR | O_SYNC));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << block_device;
-        return false;
-    }
-    if (!UpdatePartitionTable(fd, metadata, slot_number)) {
-        return false;
-    }
     LINFO << "Updated logical partition table at slot " << slot_number << " on device "
-          << block_device;
+          << super_partition;
     return true;
 }
 
-bool UpdatePartitionTable(int fd, const LpMetadata& metadata, uint32_t slot_number) {
-    return UpdatePartitionTable(fd, metadata, slot_number, DefaultWriter);
+bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                          const LpMetadata& metadata, uint32_t slot_number) {
+    return UpdatePartitionTable(opener, super_partition, metadata, slot_number, DefaultWriter);
+}
+
+bool UpdatePartitionTable(const std::string& super_partition, const LpMetadata& metadata,
+                          uint32_t slot_number) {
+    PartitionOpener opener;
+    return UpdatePartitionTable(opener, super_partition, metadata, slot_number, DefaultWriter);
 }
 
 }  // namespace fs_mgr

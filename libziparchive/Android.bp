@@ -73,6 +73,7 @@ cc_library {
         enabled: true,
     },
     double_loadable: true,
+    export_shared_lib_headers: ["libbase"],
 
     defaults: [
         "libziparchive_defaults",
@@ -84,14 +85,6 @@ cc_library {
         "libz",
     ],
     target: {
-        android: {
-            shared_libs: [
-                "libutils",
-            ],
-        },
-        host: {
-            static_libs: ["libutils"],
-        },
         linux_bionic: {
             enabled: true,
         },

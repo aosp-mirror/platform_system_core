@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
+#pragma once
+
 /*
  * Read-only access to Zip archives, with minimal heap allocation.
  */
-#ifndef LIBZIPARCHIVE_ZIPARCHIVE_H_
-#define LIBZIPARCHIVE_ZIPARCHIVE_H_
 
 #include <stdint.h>
 #include <string.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <utils/Compat.h>
+
+#include "android-base/off64_t.h"
 
 /* Zip compression methods we support */
 enum {
@@ -273,5 +274,3 @@ class Reader {
 int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
                 const uint32_t uncompressed_length, Writer* writer, uint64_t* crc_out);
 }  // namespace zip_archive
-
-#endif  // LIBZIPARCHIVE_ZIPARCHIVE_H_

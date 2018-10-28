@@ -14,12 +14,27 @@
  * limitations under the License.
  */
 
-#pragma once
+#include "android-base/mapped_file.h"
+
+#include <gtest/gtest.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <string>
-#include <vector>
 
-class FastbootDevice;
+#include "android-base/file.h"
+#include "android-base/test_utils.h"
+#include "android-base/unique_fd.h"
 
-int Flash(FastbootDevice* device, const std::string& partition_name);
-bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wipe);
+TEST(mapped_file, smoke) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_TRUE(android::base::WriteStringToFd("hello world", tf.fd));
+
+  auto m = android::base::MappedFile::FromFd(tf.fd, 3, 2, PROT_READ);
+  ASSERT_EQ(2u, m->size());
+  ASSERT_EQ('l', m->data()[0]);
+  ASSERT_EQ('o', m->data()[1]);
+}

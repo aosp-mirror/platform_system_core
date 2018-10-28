@@ -251,8 +251,33 @@ adb_root &&
   B="`adb_cat /vendor/hello`" ||
   die "re-read vendor hello after reboot"
 check_eq "${A}" "${B}" vendor after reboot
+
+adb reboot-fastboot &&
+  fastboot flash vendor &&
+  fastboot reboot ||
+  die "fastbootd flash vendor"
+adb_wait &&
+  adb_root &&
+  adb_wait &&
+  adb_sh df -k </dev/null | head -1 &&
+  adb_sh df -k </dev/null | grep "^overlay " &&
+  adb_sh df -k </dev/null | grep "^overlay .* /system\$" >/dev/null ||
+  die  "overlay system takeover after flash vendor"
+adb_sh df -k </dev/null | grep "^overlay .* /vendor\$" >/dev/null &&
+  die  "overlay minus vendor takeover after flash vendor"
+B="`adb_cat /system/hello`" ||
+  die "re-read system hello after flash vendor"
+check_eq "${A}" "${B}" system after flash vendor
+adb_root &&
+  adb_wait ||
+  die "adb root"
+B="`adb_cat /vendor/hello`" &&
+  die "re-read vendor hello after flash vendor"
+check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
+
 adb remount &&
-  adb_sh rm /system/hello /vendor/hello </dev/null ||
+  ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
+  adb_sh rm /system/hello </dev/null ||
   die "cleanup hello"
 B="`adb_cat /system/hello`" &&
   die "re-read system hello after rm"

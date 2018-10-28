@@ -24,7 +24,10 @@
 #include <memory>
 #include <string>
 
+#include <android-base/unique_fd.h>
+
 #include "metadata_format.h"
+#include "partition_opener.h"
 
 namespace android {
 namespace fs_mgr {
@@ -37,13 +40,15 @@ struct LpMetadata {
     std::vector<LpMetadataPartition> partitions;
     std::vector<LpMetadataExtent> extents;
     std::vector<LpMetadataPartitionGroup> groups;
+    std::vector<LpMetadataBlockDevice> block_devices;
 };
 
 // Place an initial partition table on the device. This will overwrite the
 // existing geometry, and should not be used for normal partition table
 // updates. False can be returned if the geometry is incompatible with the
 // block device or an I/O error occurs.
-bool FlashPartitionTable(const std::string& block_device, const LpMetadata& metadata);
+bool FlashPartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                         const LpMetadata& metadata);
 
 // Update the partition table for a given metadata slot number. False is
 // returned if an error occurs, which can include:
@@ -51,12 +56,19 @@ bool FlashPartitionTable(const std::string& block_device, const LpMetadata& meta
 //  - I/O error.
 //  - Corrupt or missing metadata geometry on disk.
 //  - Incompatible geometry.
-bool UpdatePartitionTable(const std::string& block_device, const LpMetadata& metadata,
-                          uint32_t slot_number);
+bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
+                          const LpMetadata& metadata, uint32_t slot_number);
 
 // Read logical partition metadata from its predetermined location on a block
 // device. If readback fails, we also attempt to load from a backup copy.
-std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number);
+std::unique_ptr<LpMetadata> ReadMetadata(const IPartitionOpener& opener,
+                                         const std::string& super_partition, uint32_t slot_number);
+
+// Helper functions that use the default PartitionOpener.
+bool FlashPartitionTable(const std::string& super_partition, const LpMetadata& metadata);
+bool UpdatePartitionTable(const std::string& super_partition, const LpMetadata& metadata,
+                          uint32_t slot_number);
+std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uint32_t slot_number);
 
 // Read/Write logical partition metadata to an image file, for diagnostics or
 // flashing.
@@ -69,6 +81,14 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 // Helper to extract safe C++ strings from partition info.
 std::string GetPartitionName(const LpMetadataPartition& partition);
 std::string GetPartitionGroupName(const LpMetadataPartitionGroup& group);
+std::string GetBlockDevicePartitionName(const LpMetadataBlockDevice& block_device);
+
+// Return the block device that houses the super partition metadata; returns
+// null on failure.
+const LpMetadataBlockDevice* GetMetadataSuperBlockDevice(const LpMetadata& metadata);
+
+// Return the total size of all partitions comprising the super partition.
+uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata);
 
 // Helper to return a slot number for a slot suffix.
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix);

@@ -15,8 +15,9 @@
  */
 #include "statsd_writer.h"
 
+#include <cutils/fs.h>
 #include <cutils/sockets.h>
-#include <endian.h>
+#include <cutils/threads.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -36,6 +37,14 @@
 
 /* branchless on many architectures. */
 #define min(x, y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
+
+#ifndef htole32
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define htole32(x) (x)
+#else
+#define htole32(x) __bswap_32(x)
+#endif
+#endif
 
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_int dropped = 0;
@@ -78,7 +87,14 @@ static int statsdOpen() {
 
     i = atomic_load(&statsdLoggerWrite.sock);
     if (i < 0) {
-        int sock = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+        int flags = SOCK_DGRAM;
+#ifdef SOCK_CLOEXEC
+        flags |= SOCK_CLOEXEC;
+#endif
+#ifdef SOCK_NONBLOCK
+        flags |= SOCK_NONBLOCK;
+#endif
+        int sock = TEMP_FAILURE_RETRY(socket(PF_UNIX, flags, 0));
         if (sock < 0) {
             ret = -errno;
         } else {

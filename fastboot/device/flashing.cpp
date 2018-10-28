@@ -21,10 +21,15 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
+#include <string>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr_overlayfs.h>
+#include <fstab/fstab.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <sparse/sparse.h>
@@ -32,13 +37,35 @@
 #include "fastboot_device.h"
 #include "utility.h"
 
+using namespace android::fs_mgr;
+using namespace std::literals;
+
 namespace {
 
 constexpr uint32_t SPARSE_HEADER_MAGIC = 0xed26ff3a;
 
-}  // namespace
+void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partition_name) {
+    // May be called, in the case of sparse data, multiple times so cache/skip.
+    static std::set<std::string> wiped;
+    if (wiped.find(partition_name) != wiped.end()) return;
+    wiped.insert(partition_name);
+    // Following appears to have a first time 2% impact on flashing speeds.
 
-using namespace android::fs_mgr;
+    // Convert partition_name to a validated mount point and wipe.
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    for (auto i = 0; i < fstab->num_entries; i++) {
+        const auto mount_point = fstab->recs[i].mount_point;
+        if (!mount_point) continue;
+        auto partition = android::base::Basename(mount_point);
+        if ("/"s == mount_point) partition = "system";
+        if ((partition + device->GetCurrentSlot()) == partition_name) {
+            fs_mgr_overlayfs_teardown(mount_point);
+        }
+    }
+}
+
+}  // namespace
 
 int FlashRawDataChunk(int fd, const char* data, size_t len) {
     size_t ret = 0;
@@ -101,15 +128,11 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
     } else if (data.size() > get_block_device_size(handle.fd())) {
         return -EOVERFLOW;
     }
+    WipeOverlayfsForPartition(device, partition_name);
     return FlashBlockDevice(handle.fd(), data);
 }
 
-bool UpdateSuper(FastbootDevice* device, const std::string& partition_name, bool wipe) {
-    std::optional<std::string> super = FindPhysicalPartition(partition_name);
-    if (!super) {
-        return device->WriteFail("Could not find partition: " + partition_name);
-    }
-
+bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wipe) {
     std::vector<char> data = std::move(device->download_data());
     if (data.empty()) {
         return device->WriteFail("No data available");
@@ -125,47 +148,17 @@ bool UpdateSuper(FastbootDevice* device, const std::string& partition_name, bool
     // image.
     std::string slot_suffix = device->GetCurrentSlot();
     uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
-    std::unique_ptr<LpMetadata> metadata = ReadMetadata(super->c_str(), slot_number);
-    if (!metadata || wipe) {
-        if (!FlashPartitionTable(super.value(), *new_metadata.get())) {
+    if (wipe || !ReadMetadata(super_name, slot_number)) {
+        if (!FlashPartitionTable(super_name, *new_metadata.get())) {
             return device->WriteFail("Unable to flash new partition table");
         }
         return device->WriteOkay("Successfully flashed partition table");
     }
 
-    // There's a working super partition, and we don't want to wipe it - it may
-    // may contain partitions created for the user. Instead, we create a zero-
-    // sized partition for each entry in the new partition table. It is then
-    // the host's responsibility to size it correctly via resize-logical-partition.
-    std::unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(*metadata.get());
-    if (!builder) {
-        return device->WriteFail("Unable to create a metadata builder");
-    }
-    for (const auto& partition : new_metadata->partitions) {
-        std::string name = GetPartitionName(partition);
-        if (builder->FindPartition(name)) {
-            continue;
-        }
-        if (!builder->AddPartition(name, partition.attributes)) {
-            return device->WriteFail("Unable to add partition: " + name);
-        }
-    }
-
-    // The scratch partition may exist as temporary storage, created for
-    // use by adb remount for overlayfs. If we're performing a flashall
-    // operation then we want to start over with a clean slate, so we
-    // remove the scratch partition until it is requested again.
-    builder->RemovePartition("scratch");
-
-    new_metadata = builder->Export();
-    if (!new_metadata) {
-        return device->WriteFail("Unable to export new partition table");
-    }
-
     // Write the new table to every metadata slot.
     bool ok = true;
     for (size_t i = 0; i < new_metadata->geometry.metadata_slot_count; i++) {
-        ok &= UpdatePartitionTable(super.value(), *new_metadata.get(), i);
+        ok &= UpdatePartitionTable(super_name, *new_metadata.get(), i);
     }
 
     if (!ok) {

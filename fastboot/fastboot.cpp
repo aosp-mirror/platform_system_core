@@ -79,10 +79,6 @@ using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
 
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-
 static const char* serial = nullptr;
 
 static bool g_long_listing = false;
@@ -856,7 +852,7 @@ static bool load_buf_fd(int fd, struct fastboot_buffer* buf) {
         buf->image_size = sz;
     }
 
-    lseek64(fd, 0, SEEK_SET);
+    lseek(fd, 0, SEEK_SET);
     int64_t limit = get_sparse_limit(sz);
     if (limit) {
         sparse_file** s = load_sparse_files(fd, limit);
@@ -1096,11 +1092,19 @@ static void do_for_partitions(const std::string& part, const std::string& slot,
     }
 }
 
+static bool is_logical(const std::string& partition) {
+    std::string value;
+    return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
+}
+
 static void do_flash(const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
     if (!load_buf(fname, &buf)) {
         die("cannot load '%s': %s", fname, strerror(errno));
+    }
+    if (is_logical(pname)) {
+        fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
     flash_buf(pname, &buf);
 }
@@ -1142,11 +1146,6 @@ static bool if_partition_exists(const std::string& partition, const std::string&
     }
     std::string partition_size;
     return fb->GetVar("partition-size:" + partition_name, &partition_size) == fastboot::SUCCESS;
-}
-
-static bool is_logical(const std::string& partition) {
-    std::string value;
-    return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
 }
 
 static void reboot_to_userspace_fastboot() {
@@ -1315,6 +1314,9 @@ void FlashAllTool::UpdateSuperPartition() {
     }
     if (!is_userspace_fastboot()) {
         reboot_to_userspace_fastboot();
+    }
+    if (!is_userspace_fastboot()) {
+        die("Failed to boot into userspace; one or more components might be unbootable.");
     }
     fb->Download("super", fd, get_file_size(fd));
 

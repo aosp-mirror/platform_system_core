@@ -16,10 +16,7 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-
-class FastbootDevice;
-
-int Flash(FastbootDevice* device, const std::string& partition_name);
-bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wipe);
+#if defined(__APPLE__)
+/** Mac OS has always had a 64-bit off_t, so it doesn't have off64_t. */
+typedef off_t off64_t;
+#endif

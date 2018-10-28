@@ -20,7 +20,8 @@
 
 #define LOG_TAG "ziparchive"
 
-#include <assert.h>
+#include "ziparchive/zip_archive.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -33,6 +34,10 @@
 #include <memory>
 #include <vector>
 
+#if defined(__APPLE__)
+#define lseek64 lseek
+#endif
+
 #if defined(__BIONIC__)
 #include <android/fdsan.h>
 #endif
@@ -40,12 +45,10 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
+#include <android-base/mapped_file.h>
 #include <android-base/memory.h>
 #include <android-base/utf8.h>
 #include <log/log.h>
-#include <utils/Compat.h>
-#include <utils/FileMap.h>
-#include "ziparchive/zip_archive.h"
 #include "zlib.h"
 
 #include "entry_name_utils-inl.h"
@@ -57,12 +60,6 @@ using android::base::get_unaligned;
 // Used to turn on crc checks - verify that the content CRC matches the values
 // specified in the local file header and the central directory.
 static const bool kCrcChecksEnabled = false;
-
-// This is for windows. If we don't open a file in binary mode, weird
-// things will happen.
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
 
 // The maximum number of bytes to scan backwards for the EOCD start.
 static const uint32_t kMaxEOCDSearch = kMaxCommentLen + sizeof(EocdRecord);
@@ -196,7 +193,7 @@ ZipArchive::ZipArchive(const int fd, bool assume_ownership)
       close_file(assume_ownership),
       directory_offset(0),
       central_directory(),
-      directory_map(new android::FileMap()),
+      directory_map(),
       num_entries(0),
       hash_table_size(0),
       hash_table(nullptr) {
@@ -212,7 +209,7 @@ ZipArchive::ZipArchive(void* address, size_t length)
       close_file(false),
       directory_offset(0),
       central_directory(),
-      directory_map(new android::FileMap()),
+      directory_map(),
       num_entries(0),
       hash_table_size(0),
       hash_table(nullptr) {}
@@ -303,8 +300,7 @@ static int32_t MapCentralDirectory0(const char* debug_file_name, ZipArchive* arc
    * in archive.
    */
 
-  if (!archive->InitializeCentralDirectory(debug_file_name,
-                                           static_cast<off64_t>(eocd->cd_start_offset),
+  if (!archive->InitializeCentralDirectory(static_cast<off64_t>(eocd->cd_start_offset),
                                            static_cast<size_t>(eocd->cd_size))) {
     ALOGE("Zip: failed to intialize central directory.\n");
     return kMmapFailed;
@@ -823,7 +819,7 @@ class MemoryWriter : public zip_archive::Writer {
 
   virtual bool Append(uint8_t* buf, size_t buf_size) override {
     if (bytes_written_ + buf_size > size_) {
-      ALOGW("Zip: Unexpected size " ZD " (declared) vs " ZD " (actual)", size_,
+      ALOGW("Zip: Unexpected size %zu (declared) vs %zu (actual)", size_,
             bytes_written_ + buf_size);
       return false;
     }
@@ -910,7 +906,7 @@ class FileWriter : public zip_archive::Writer {
 
   virtual bool Append(uint8_t* buf, size_t buf_size) override {
     if (total_bytes_written_ + buf_size > declared_length_) {
-      ALOGW("Zip: Unexpected size " ZD " (declared) vs " ZD " (actual)", declared_length_,
+      ALOGW("Zip: Unexpected size %zu (declared) vs %zu (actual)", declared_length_,
             total_bytes_written_ + buf_size);
       return false;
     }
@@ -919,7 +915,7 @@ class FileWriter : public zip_archive::Writer {
     if (result) {
       total_bytes_written_ += buf_size;
     } else {
-      ALOGW("Zip: unable to write " ZD " bytes to file; %s", buf_size, strerror(errno));
+      ALOGW("Zip: unable to write %zu bytes to file; %s", buf_size, strerror(errno));
     }
 
     return result;
@@ -1048,7 +1044,7 @@ int32_t Inflate(const Reader& reader, const uint32_t compressed_length,
     }
   } while (zerr == Z_OK);
 
-  assert(zerr == Z_STREAM_END); /* other errors should've been caught */
+  CHECK_EQ(zerr, Z_STREAM_END); /* other errors should've been caught */
 
   // NOTE: zstream.adler is always set to 0, because we're using the -MAX_WBITS
   // "feature" of zlib to tell it there won't be a zlib file header. zlib
@@ -1255,16 +1251,14 @@ void CentralDirectory::Initialize(void* map_base_ptr, off64_t cd_start_offset, s
   length_ = cd_size;
 }
 
-bool ZipArchive::InitializeCentralDirectory(const char* debug_file_name, off64_t cd_start_offset,
-                                            size_t cd_size) {
+bool ZipArchive::InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size) {
   if (mapped_zip.HasFd()) {
-    if (!directory_map->create(debug_file_name, mapped_zip.GetFileDescriptor(), cd_start_offset,
-                               cd_size, true /* read only */)) {
-      return false;
-    }
+    directory_map = android::base::MappedFile::FromFd(mapped_zip.GetFileDescriptor(),
+                                                      cd_start_offset, cd_size, PROT_READ);
+    if (!directory_map) return false;
 
-    CHECK_EQ(directory_map->getDataLength(), cd_size);
-    central_directory.Initialize(directory_map->getDataPtr(), 0 /*offset*/, cd_size);
+    CHECK_EQ(directory_map->size(), cd_size);
+    central_directory.Initialize(directory_map->data(), 0 /*offset*/, cd_size);
   } else {
     if (mapped_zip.GetBasePtr() == nullptr) {
       ALOGE("Zip: Failed to map central directory, bad mapped_zip base pointer\n");

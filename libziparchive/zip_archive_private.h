@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_
-#define LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_
+#pragma once
+
+#include <ziparchive/zip_archive.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -24,9 +25,8 @@
 #include <memory>
 #include <vector>
 
-#include <utils/FileMap.h>
-#include <ziparchive/zip_archive.h>
 #include "android-base/macros.h"
+#include "android-base/mapped_file.h"
 
 static const char* kErrorMessages[] = {
     "Success",
@@ -164,7 +164,7 @@ struct ZipArchive {
   // mapped central directory area
   off64_t directory_offset;
   CentralDirectory central_directory;
-  std::unique_ptr<android::FileMap> directory_map;
+  std::unique_ptr<android::base::MappedFile> directory_map;
 
   // number of entries in the Zip archive
   uint16_t num_entries;
@@ -180,8 +180,5 @@ struct ZipArchive {
   ZipArchive(void* address, size_t length);
   ~ZipArchive();
 
-  bool InitializeCentralDirectory(const char* debug_file_name, off64_t cd_start_offset,
-                                  size_t cd_size);
+  bool InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size);
 };
-
-#endif  // LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_
