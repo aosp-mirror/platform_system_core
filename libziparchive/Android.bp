@@ -125,6 +125,7 @@ cc_test {
             enabled: true,
         },
     },
+    test_suites: ["device-tests"],
 }
 
 // Performance benchmarks.
