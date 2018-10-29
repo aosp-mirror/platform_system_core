@@ -29,12 +29,19 @@
 namespace android {
 namespace fs_mgr {
 
-void LinearExtent::AddTo(LpMetadata* out) const {
-    out->extents.push_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_LINEAR, physical_sector_});
+bool LinearExtent::AddTo(LpMetadata* out) const {
+    if (device_index_ >= out->block_devices.size()) {
+        LERROR << "Extent references unknown block device.";
+        return false;
+    }
+    out->extents.emplace_back(
+            LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_LINEAR, physical_sector_, device_index_});
+    return true;
 }
 
-void ZeroExtent::AddTo(LpMetadata* out) const {
-    out->extents.push_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0});
+bool ZeroExtent::AddTo(LpMetadata* out) const {
+    out->extents.emplace_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0, 0});
+    return true;
 }
 
 Partition::Partition(const std::string& name, const std::string& group_name, uint32_t attributes)
@@ -44,15 +51,17 @@ void Partition::AddExtent(std::unique_ptr<Extent>&& extent) {
     size_ += extent->num_sectors() * LP_SECTOR_SIZE;
 
     if (LinearExtent* new_extent = extent->AsLinearExtent()) {
-        if (!extents_.empty() && extents_.back()->AsLinearExtent() &&
-            extents_.back()->AsLinearExtent()->end_sector() == new_extent->physical_sector()) {
-            // If the previous extent can be merged into this new one, do so
-            // to avoid creating unnecessary extents.
+        if (!extents_.empty() && extents_.back()->AsLinearExtent()) {
             LinearExtent* prev_extent = extents_.back()->AsLinearExtent();
-            extent = std::make_unique<LinearExtent>(
-                    prev_extent->num_sectors() + new_extent->num_sectors(),
-                    prev_extent->physical_sector());
-            extents_.pop_back();
+            if (prev_extent->end_sector() == new_extent->physical_sector() &&
+                prev_extent->device_index() == new_extent->device_index()) {
+                // If the previous extent can be merged into this new one, do so
+                // to avoid creating unnecessary extents.
+                extent = std::make_unique<LinearExtent>(
+                        prev_extent->num_sectors() + new_extent->num_sectors(),
+                        prev_extent->device_index(), prev_extent->physical_sector());
+                extents_.pop_back();
+            }
         }
     }
     extents_.push_back(std::move(extent));
@@ -108,9 +117,12 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const IPartitionOpener& op
     if (!builder) {
         return nullptr;
     }
-    BlockDeviceInfo device_info;
-    if (opener.GetInfo(super_partition, &device_info)) {
-        builder->UpdateBlockDeviceInfo(device_info);
+    for (size_t i = 0; i < builder->block_devices_.size(); i++) {
+        std::string partition_name = GetBlockDevicePartitionName(builder->block_devices_[i]);
+        BlockDeviceInfo device_info;
+        if (opener.GetInfo(partition_name, &device_info)) {
+            builder->UpdateBlockDeviceInfo(i, device_info);
+        }
     }
     return builder;
 }
@@ -120,11 +132,11 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& super_p
     return New(PartitionOpener(), super_partition, slot_number);
 }
 
-std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const BlockDeviceInfo& device_info,
-                                                      uint32_t metadata_max_size,
-                                                      uint32_t metadata_slot_count) {
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(
+        const std::vector<BlockDeviceInfo>& block_devices, const std::string& super_partition,
+        uint32_t metadata_max_size, uint32_t metadata_slot_count) {
     std::unique_ptr<MetadataBuilder> builder(new MetadataBuilder());
-    if (!builder->Init(device_info, metadata_max_size, metadata_slot_count)) {
+    if (!builder->Init(block_devices, super_partition, metadata_max_size, metadata_slot_count)) {
         return nullptr;
     }
     return builder;
@@ -156,16 +168,13 @@ MetadataBuilder::MetadataBuilder() {
 
 bool MetadataBuilder::Init(const LpMetadata& metadata) {
     geometry_ = metadata.geometry;
+    block_devices_ = metadata.block_devices;
 
     for (const auto& group : metadata.groups) {
         std::string group_name = GetPartitionGroupName(group);
         if (!AddGroup(group_name, group.maximum_size)) {
             return false;
         }
-    }
-
-    for (const auto& block_device : metadata.block_devices) {
-        block_devices_.push_back(block_device);
     }
 
     for (const auto& partition : metadata.partitions) {
@@ -179,7 +188,8 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
         for (size_t i = 0; i < partition.num_extents; i++) {
             const LpMetadataExtent& extent = metadata.extents[partition.first_extent_index + i];
             if (extent.target_type == LP_TARGET_TYPE_LINEAR) {
-                auto copy = std::make_unique<LinearExtent>(extent.num_sectors, extent.target_data);
+                auto copy = std::make_unique<LinearExtent>(extent.num_sectors, extent.target_source,
+                                                           extent.target_data);
                 builder->AddExtent(std::move(copy));
             } else if (extent.target_type == LP_TARGET_TYPE_ZERO) {
                 auto copy = std::make_unique<ZeroExtent>(extent.num_sectors);
@@ -190,7 +200,37 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
     return true;
 }
 
-bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata_max_size,
+static bool VerifyDeviceProperties(const BlockDeviceInfo& device_info) {
+    if (device_info.logical_block_size % LP_SECTOR_SIZE != 0) {
+        LERROR << "Block device " << device_info.partition_name
+               << " logical block size must be a multiple of 512.";
+        return false;
+    }
+    if (device_info.size % device_info.logical_block_size != 0) {
+        LERROR << "Block device " << device_info.partition_name
+               << " size must be a multiple of its block size.";
+        return false;
+    }
+    if (device_info.alignment_offset % LP_SECTOR_SIZE != 0) {
+        LERROR << "Block device " << device_info.partition_name
+               << " alignment offset is not sector-aligned.";
+        return false;
+    }
+    if (device_info.alignment % LP_SECTOR_SIZE != 0) {
+        LERROR << "Block device " << device_info.partition_name
+               << " partition alignment is not sector-aligned.";
+        return false;
+    }
+    if (device_info.alignment_offset > device_info.alignment) {
+        LERROR << "Block device " << device_info.partition_name
+               << " partition alignment offset is greater than its alignment.";
+        return false;
+    }
+    return true;
+}
+
+bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
+                           const std::string& super_partition, uint32_t metadata_max_size,
                            uint32_t metadata_slot_count) {
     if (metadata_max_size < sizeof(LpMetadataHeader)) {
         LERROR << "Invalid metadata maximum size.";
@@ -200,70 +240,102 @@ bool MetadataBuilder::Init(const BlockDeviceInfo& device_info, uint32_t metadata
         LERROR << "Invalid metadata slot count.";
         return false;
     }
+    if (block_devices.empty()) {
+        LERROR << "No block devices were specified.";
+        return false;
+    }
 
     // Align the metadata size up to the nearest sector.
     metadata_max_size = AlignTo(metadata_max_size, LP_SECTOR_SIZE);
 
-    // Check that device properties are sane.
-    if (device_info.size % LP_SECTOR_SIZE != 0) {
-        LERROR << "Block device size must be a multiple of 512.";
+    // Validate and build the block device list.
+    uint32_t logical_block_size = 0;
+    for (const auto& device_info : block_devices) {
+        if (!VerifyDeviceProperties(device_info)) {
+            return false;
+        }
+
+        if (!logical_block_size) {
+            logical_block_size = device_info.logical_block_size;
+        }
+        if (logical_block_size != device_info.logical_block_size) {
+            LERROR << "All partitions must have the same logical block size.";
+            return false;
+        }
+
+        LpMetadataBlockDevice out = {};
+        out.alignment = device_info.alignment;
+        out.alignment_offset = device_info.alignment_offset;
+        out.size = device_info.size;
+        if (device_info.partition_name.size() >= sizeof(out.partition_name)) {
+            LERROR << "Partition name " << device_info.partition_name << " exceeds maximum length.";
+            return false;
+        }
+        strncpy(out.partition_name, device_info.partition_name.c_str(), sizeof(out.partition_name));
+
+        // In the case of the super partition, this field will be adjusted
+        // later. For all partitions, the first 512 bytes are considered
+        // untouched to be compatible code that looks for an MBR. Thus we
+        // start counting free sectors at sector 1, not 0.
+        uint64_t free_area_start = LP_SECTOR_SIZE;
+        if (out.alignment || out.alignment_offset) {
+            free_area_start = AlignTo(free_area_start, out.alignment, out.alignment_offset);
+        } else {
+            free_area_start = AlignTo(free_area_start, logical_block_size);
+        }
+        out.first_logical_sector = free_area_start / LP_SECTOR_SIZE;
+
+        // There must be one logical block of space available.
+        uint64_t minimum_size = out.first_logical_sector * LP_SECTOR_SIZE + logical_block_size;
+        if (device_info.size < minimum_size) {
+            LERROR << "Block device " << device_info.partition_name
+                   << " is too small to hold any logical partitions.";
+            return false;
+        }
+
+        // The "root" of the super partition is always listed first.
+        if (device_info.partition_name == super_partition) {
+            block_devices_.emplace(block_devices_.begin(), out);
+        } else {
+            block_devices_.emplace_back(out);
+        }
+    }
+    if (GetBlockDevicePartitionName(block_devices_[0]) != super_partition) {
+        LERROR << "No super partition was specified.";
         return false;
     }
-    if (device_info.logical_block_size % LP_SECTOR_SIZE != 0) {
-        LERROR << "Logical block size must be a multiple of 512.";
-        return false;
-    }
-    if (device_info.alignment_offset % LP_SECTOR_SIZE != 0) {
-        LERROR << "Alignment offset is not sector-aligned.";
-        return false;
-    }
-    if (device_info.alignment % LP_SECTOR_SIZE != 0) {
-        LERROR << "Partition alignment is not sector-aligned.";
-        return false;
-    }
-    if (device_info.alignment_offset > device_info.alignment) {
-        LERROR << "Partition alignment offset is greater than its alignment.";
-        return false;
-    }
+
+    LpMetadataBlockDevice& super = block_devices_[0];
 
     // We reserve a geometry block (4KB) plus space for each copy of the
     // maximum size of a metadata blob. Then, we double that space since
     // we store a backup copy of everything.
     uint64_t total_reserved = GetTotalMetadataSize(metadata_max_size, metadata_slot_count);
-    if (device_info.size < total_reserved) {
+    if (super.size < total_reserved) {
         LERROR << "Attempting to create metadata on a block device that is too small.";
         return false;
     }
 
     // Compute the first free sector, factoring in alignment.
     uint64_t free_area_start = total_reserved;
-    if (device_info.alignment || device_info.alignment_offset) {
-        free_area_start =
-                AlignTo(free_area_start, device_info.alignment, device_info.alignment_offset);
+    if (super.alignment || super.alignment_offset) {
+        free_area_start = AlignTo(free_area_start, super.alignment, super.alignment_offset);
     } else {
-        free_area_start = AlignTo(free_area_start, device_info.logical_block_size);
+        free_area_start = AlignTo(free_area_start, logical_block_size);
     }
-    uint64_t first_sector = free_area_start / LP_SECTOR_SIZE;
+    super.first_logical_sector = free_area_start / LP_SECTOR_SIZE;
 
     // There must be one logical block of free space remaining (enough for one partition).
-    uint64_t minimum_disk_size = (first_sector * LP_SECTOR_SIZE) + device_info.logical_block_size;
-    if (device_info.size < minimum_disk_size) {
+    uint64_t minimum_disk_size = (super.first_logical_sector * LP_SECTOR_SIZE) + logical_block_size;
+    if (super.size < minimum_disk_size) {
         LERROR << "Device must be at least " << minimum_disk_size << " bytes, only has "
-               << device_info.size;
+               << super.size;
         return false;
     }
 
-    block_devices_.push_back(LpMetadataBlockDevice{
-            first_sector,
-            device_info.alignment,
-            device_info.alignment_offset,
-            device_info.size,
-            "super",
-    });
-
     geometry_.metadata_max_size = metadata_max_size;
     geometry_.metadata_slot_count = metadata_slot_count;
-    geometry_.logical_block_size = device_info.logical_block_size;
+    geometry_.logical_block_size = logical_block_size;
 
     if (!AddGroup("default", 0)) {
         return false;
@@ -347,8 +419,9 @@ void MetadataBuilder::ExtentsToFreeList(const std::vector<Interval>& extents,
     for (size_t i = 1; i < extents.size(); i++) {
         const Interval& previous = extents[i - 1];
         const Interval& current = extents[i];
+        DCHECK(previous.device_index == current.device_index);
 
-        uint64_t aligned = AlignSector(previous.end);
+        uint64_t aligned = AlignSector(block_devices_[current.device_index], previous.end);
         if (aligned >= current.start) {
             // There is no gap between these two extents, try the next one.
             // Note that we check with >= instead of >, since alignment may
@@ -358,37 +431,43 @@ void MetadataBuilder::ExtentsToFreeList(const std::vector<Interval>& extents,
 
         // The new interval represents the free space starting at the end of
         // the previous interval, and ending at the start of the next interval.
-        free_regions->emplace_back(aligned, current.start);
+        free_regions->emplace_back(current.device_index, aligned, current.start);
     }
 }
 
 auto MetadataBuilder::GetFreeRegions() const -> std::vector<Interval> {
     std::vector<Interval> free_regions;
 
-    // Collect all extents in the partition table, then sort them by starting
-    // sector.
-    std::vector<Interval> extents;
+    // Collect all extents in the partition table, per-device, then sort them
+    // by starting sector.
+    std::vector<std::vector<Interval>> device_extents(block_devices_.size());
     for (const auto& partition : partitions_) {
         for (const auto& extent : partition->extents()) {
             LinearExtent* linear = extent->AsLinearExtent();
             if (!linear) {
                 continue;
             }
-            extents.emplace_back(linear->physical_sector(),
+            CHECK(linear->device_index() < device_extents.size());
+            auto& extents = device_extents[linear->device_index()];
+            extents.emplace_back(linear->device_index(), linear->physical_sector(),
                                  linear->physical_sector() + extent->num_sectors());
         }
     }
 
     // Add 0-length intervals for the first and last sectors. This will cause
     // ExtentToFreeList() to treat the space in between as available.
-    uint64_t first_sector = super_device().first_logical_sector;
-    uint64_t last_sector = super_device().size / LP_SECTOR_SIZE;
-    extents.emplace_back(first_sector, first_sector);
-    extents.emplace_back(last_sector, last_sector);
+    for (size_t i = 0; i < device_extents.size(); i++) {
+        auto& extents = device_extents[i];
+        const auto& block_device = block_devices_[i];
 
-    std::sort(extents.begin(), extents.end());
+        uint64_t first_sector = block_device.first_logical_sector;
+        uint64_t last_sector = block_device.size / LP_SECTOR_SIZE;
+        extents.emplace_back(i, first_sector, first_sector);
+        extents.emplace_back(i, last_sector, last_sector);
 
-    ExtentsToFreeList(extents, &free_regions);
+        std::sort(extents.begin(), extents.end());
+        ExtentsToFreeList(extents, &free_regions);
+    }
     return free_regions;
 }
 
@@ -443,7 +522,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         uint64_t sectors = std::min(sectors_needed, region.length());
         CHECK(sectors % sectors_per_block == 0);
 
-        auto extent = std::make_unique<LinearExtent>(sectors, region.start);
+        auto extent = std::make_unique<LinearExtent>(sectors, region.device_index, region.start);
         new_extents.push_back(std::move(extent));
         sectors_needed -= sectors;
         if (!sectors_needed) {
@@ -470,6 +549,9 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
     std::unique_ptr<LpMetadata> metadata = std::make_unique<LpMetadata>();
     metadata->header = header_;
     metadata->geometry = geometry_;
+
+    // Assign this early so the extent table can read it.
+    metadata->block_devices = block_devices_;
 
     std::map<std::string, size_t> group_indices;
     for (const auto& group : groups_) {
@@ -515,12 +597,12 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         part.group_index = iter->second;
 
         for (const auto& extent : partition->extents()) {
-            extent->AddTo(metadata.get());
+            if (!extent->AddTo(metadata.get())) {
+                return nullptr;
+            }
         }
         metadata->partitions.push_back(part);
     }
-
-    metadata->block_devices = block_devices_;
 
     metadata->header.partitions.num_entries = static_cast<uint32_t>(metadata->partitions.size());
     metadata->header.extents.num_entries = static_cast<uint32_t>(metadata->extents.size());
@@ -531,7 +613,11 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
 }
 
 uint64_t MetadataBuilder::AllocatableSpace() const {
-    return super_device().size - (super_device().first_logical_sector * LP_SECTOR_SIZE);
+    uint64_t total_size = 0;
+    for (const auto& block_device : block_devices_) {
+        total_size += block_device.size - (block_device.first_logical_sector * LP_SECTOR_SIZE);
+    }
+    return total_size;
 }
 
 uint64_t MetadataBuilder::UsedSpace() const {
@@ -542,26 +628,58 @@ uint64_t MetadataBuilder::UsedSpace() const {
     return size;
 }
 
-uint64_t MetadataBuilder::AlignSector(uint64_t sector) const {
+uint64_t MetadataBuilder::AlignSector(const LpMetadataBlockDevice& block_device,
+                                      uint64_t sector) const {
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.
     uint64_t lba = sector * LP_SECTOR_SIZE;
-    uint64_t aligned = AlignTo(lba, super_device().alignment, super_device().alignment_offset);
+    uint64_t aligned = AlignTo(lba, block_device.alignment, block_device.alignment_offset);
     return AlignTo(aligned, LP_SECTOR_SIZE) / LP_SECTOR_SIZE;
 }
 
-bool MetadataBuilder::GetBlockDeviceInfo(BlockDeviceInfo* info) const {
-    info->size = super_device().size;
-    info->alignment = super_device().alignment;
-    info->alignment_offset = super_device().alignment_offset;
+bool MetadataBuilder::FindBlockDeviceByName(const std::string& partition_name,
+                                            uint32_t* index) const {
+    for (size_t i = 0; i < block_devices_.size(); i++) {
+        if (GetBlockDevicePartitionName(block_devices_[i]) == partition_name) {
+            *index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MetadataBuilder::GetBlockDeviceInfo(const std::string& partition_name,
+                                         BlockDeviceInfo* info) const {
+    uint32_t index;
+    if (!FindBlockDeviceByName(partition_name, &index)) {
+        LERROR << "No device named " << partition_name;
+        return false;
+    }
+    info->size = block_devices_[index].size;
+    info->alignment = block_devices_[index].alignment;
+    info->alignment_offset = block_devices_[index].alignment_offset;
     info->logical_block_size = geometry_.logical_block_size;
+    info->partition_name = partition_name;
     return true;
 }
 
-bool MetadataBuilder::UpdateBlockDeviceInfo(const BlockDeviceInfo& device_info) {
-    if (device_info.size != super_device().size) {
+bool MetadataBuilder::UpdateBlockDeviceInfo(const std::string& partition_name,
+                                            const BlockDeviceInfo& device_info) {
+    uint32_t index;
+    if (!FindBlockDeviceByName(partition_name, &index)) {
+        LERROR << "No device named " << partition_name;
+        return false;
+    }
+    return UpdateBlockDeviceInfo(index, device_info);
+}
+
+bool MetadataBuilder::UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& device_info) {
+    CHECK(index < block_devices_.size());
+
+    LpMetadataBlockDevice& block_device = block_devices_[index];
+    if (device_info.size != block_device.size) {
         LERROR << "Device size does not match (got " << device_info.size << ", expected "
-               << super_device().size << ")";
+               << block_device.size << ")";
         return false;
     }
     if (device_info.logical_block_size != geometry_.logical_block_size) {
@@ -573,10 +691,10 @@ bool MetadataBuilder::UpdateBlockDeviceInfo(const BlockDeviceInfo& device_info) 
     // The kernel does not guarantee these values are present, so we only
     // replace existing values if the new values are non-zero.
     if (device_info.alignment) {
-        super_device().alignment = device_info.alignment;
+        block_device.alignment = device_info.alignment;
     }
     if (device_info.alignment_offset) {
-        super_device().alignment_offset = device_info.alignment_offset;
+        block_device.alignment_offset = device_info.alignment_offset;
     }
     return true;
 }

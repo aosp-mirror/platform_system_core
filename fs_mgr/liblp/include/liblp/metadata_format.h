@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 7
+#define LP_METADATA_MAJOR_VERSION 8
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -240,6 +240,13 @@ typedef struct LpMetadataExtent {
      * ZERO: This field must be 0.
      */
     uint64_t target_data;
+
+    /* 20: Contents depends on target_type.
+     *
+     * LINEAR: Must be an index into the block devices table.
+     * ZERO: This field must be 0.
+     */
+    uint32_t target_source;
 } __attribute__((packed)) LpMetadataExtent;
 
 /* This struct defines an entry in the groups table. Each group has a maximum
@@ -255,8 +262,9 @@ typedef struct LpMetadataPartitionGroup {
     uint64_t maximum_size;
 } LpMetadataPartitionGroup;
 
-/* This struct defines an entry in the block_devices table. There must be
- * exactly one device, corresponding to the super partition.
+/* This struct defines an entry in the block_devices table. There must be at
+ * least one device, and the first device must represent the partition holding
+ * the super metadata.
  */
 typedef struct LpMetadataBlockDevice {
     /* 0: First usable sector for allocating logical partitions. this will be

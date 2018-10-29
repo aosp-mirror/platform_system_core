@@ -274,6 +274,12 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
         memcpy(&extent, cursor, sizeof(extent));
         cursor += header.extents.entry_size;
 
+        if (extent.target_type == LP_TARGET_TYPE_LINEAR &&
+            extent.target_source >= header.block_devices.num_entries) {
+            LERROR << "Logical partition extent has invalid block device.";
+            return nullptr;
+        }
+
         metadata->extents.push_back(extent);
     }
 
