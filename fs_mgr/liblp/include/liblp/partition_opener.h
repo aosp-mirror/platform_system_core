@@ -27,12 +27,13 @@ namespace fs_mgr {
 
 struct BlockDeviceInfo {
     BlockDeviceInfo() : size(0), alignment(0), alignment_offset(0), logical_block_size(0) {}
-    BlockDeviceInfo(uint64_t size, uint32_t alignment, uint32_t alignment_offset,
-                    uint32_t logical_block_size)
+    BlockDeviceInfo(const std::string& partition_name, uint64_t size, uint32_t alignment,
+                    uint32_t alignment_offset, uint32_t logical_block_size)
         : size(size),
           alignment(alignment),
           alignment_offset(alignment_offset),
-          logical_block_size(logical_block_size) {}
+          logical_block_size(logical_block_size),
+          partition_name(partition_name) {}
     // Size of the block device, in bytes.
     uint64_t size;
     // Optimal target alignment, in bytes. Partition extents will be aligned to
@@ -44,6 +45,9 @@ struct BlockDeviceInfo {
     uint32_t alignment_offset;
     // Block size, for aligning extent sizes and partition sizes.
     uint32_t logical_block_size;
+    // The physical partition name for this block device, as it would appear in
+    // the GPT or under /dev/block/by-name.
+    std::string partition_name;
 };
 
 // Test-friendly interface for interacting with partitions.

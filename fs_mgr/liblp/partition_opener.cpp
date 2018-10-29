@@ -24,6 +24,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/file.h>
+
 #include "utility.h"
 
 namespace android {
@@ -68,6 +70,7 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
 
     device_info->alignment_offset = static_cast<uint32_t>(alignment_offset);
     device_info->logical_block_size = static_cast<uint32_t>(logical_block_size);
+    device_info->partition_name = android::base::Basename(block_device);
     return true;
 #else
     (void)block_device;
