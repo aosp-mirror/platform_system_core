@@ -50,7 +50,6 @@
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
 #include <ext4_utils/ext4.h>
-#include <ext4_utils/ext4_crypt_init_extensions.h>
 #include <ext4_utils/ext4_sb.h>
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
