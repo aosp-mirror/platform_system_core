@@ -75,14 +75,9 @@ static bool CreateDmTable(const LpMetadata& metadata, const LpMetadataPartition&
                 target = std::make_unique<DmTargetZero>(sector, extent.num_sectors);
                 break;
             case LP_TARGET_TYPE_LINEAR: {
-                auto block_device = GetMetadataSuperBlockDevice(metadata);
-                if (!block_device) {
-                    LOG(ERROR) << "Could not identify the super block device";
-                    return false;
-                }
-
+                const auto& block_device = metadata.block_devices[extent.target_source];
                 std::string path;
-                if (!GetPhysicalPartitionDevicePath(*block_device, &path)) {
+                if (!GetPhysicalPartitionDevicePath(block_device, &path)) {
                     LOG(ERROR) << "Unable to complete device-mapper table, unknown block device";
                     return false;
                 }
