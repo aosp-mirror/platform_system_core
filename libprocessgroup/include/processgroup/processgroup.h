@@ -31,8 +31,10 @@ int killProcessGroup(uid_t uid, int initialPid, int signal);
 // that it only returns 0 in the case that the cgroup exists and it contains no processes.
 int killProcessGroupOnce(uid_t uid, int initialPid, int signal);
 
-int createProcessGroup(uid_t uid, int initialPid);
+int createProcessGroup(uid_t uid, int initialPid, bool memControl = false);
 
+// Set various properties of a process group. For these functions to work, the process group must
+// have been created by passing memControl=true to createProcessGroup.
 bool setProcessGroupSwappiness(uid_t uid, int initialPid, int swappiness);
 bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInBytes);
 bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);

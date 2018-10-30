@@ -154,6 +154,8 @@ class Service {
     Result<Success> ParseOomScoreAdjust(std::vector<std::string>&& args);
     Result<Success> ParseOverride(std::vector<std::string>&& args);
     Result<Success> ParseMemcgLimitInBytes(std::vector<std::string>&& args);
+    Result<Success> ParseMemcgLimitPercent(std::vector<std::string>&& args);
+    Result<Success> ParseMemcgLimitProperty(std::vector<std::string>&& args);
     Result<Success> ParseMemcgSoftLimitInBytes(std::vector<std::string>&& args);
     Result<Success> ParseMemcgSwappiness(std::vector<std::string>&& args);
     Result<Success> ParseNamespace(std::vector<std::string>&& args);
@@ -213,9 +215,12 @@ class Service {
 
     int oom_score_adjust_;
 
-    int swappiness_;
-    int soft_limit_in_bytes_;
-    int limit_in_bytes_;
+    int swappiness_ = -1;
+    int soft_limit_in_bytes_ = -1;
+
+    int limit_in_bytes_ = -1;
+    int limit_percent_ = -1;
+    std::string limit_property_;
 
     bool process_cgroup_empty_ = false;
 
