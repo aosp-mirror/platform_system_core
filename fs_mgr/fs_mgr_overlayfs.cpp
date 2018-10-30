@@ -57,11 +57,11 @@ using namespace android::fs_mgr;
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
 
-bool fs_mgr_overlayfs_mount_all(const fstab*) {
+bool fs_mgr_overlayfs_mount_all(fstab*) {
     return false;
 }
 
-std::vector<std::string> fs_mgr_overlayfs_required_devices(const fstab*) {
+std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab*) {
     return {};
 }
 
