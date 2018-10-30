@@ -250,11 +250,12 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
         }
 
         uint64_t expected = pack_thread_fd(-1, -1);
-        if (!trace_output.compare_exchange_strong(expected,
-                                                  pack_thread_fd(tid, pipe_write.release()))) {
+        int sent_fd = pipe_write.release();
+        if (!trace_output.compare_exchange_strong(expected, pack_thread_fd(tid, sent_fd))) {
           auto [tid, fd] = unpack_thread_fd(expected);
           async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                                 "thread %d is already outputting to fd %d?", tid, fd);
+          close(sent_fd);
           return false;
         }
 
