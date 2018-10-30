@@ -27,6 +27,7 @@ using ::testing::ElementsAre;
 
 TEST(liblp, BuildBasic) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
 
     Partition* partition = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(partition, nullptr);
@@ -41,6 +42,7 @@ TEST(liblp, BuildBasic) {
 
 TEST(liblp, ResizePartition) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
 
     Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system, nullptr);
@@ -94,6 +96,7 @@ TEST(liblp, ResizePartition) {
 
 TEST(liblp, PartitionAlignment) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
 
     // Test that we align up to one sector.
     Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
@@ -120,6 +123,7 @@ TEST(liblp, DiskAlignment) {
 TEST(liblp, MetadataAlignment) {
     // Make sure metadata sizes get aligned up.
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1000, 2);
+    ASSERT_NE(builder, nullptr);
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
     EXPECT_EQ(exported->geometry.metadata_max_size, 1024);
@@ -127,7 +131,7 @@ TEST(liblp, MetadataAlignment) {
 
 TEST(liblp, InternalAlignment) {
     // Test the metadata fitting within alignment.
-    BlockDeviceInfo device_info(1024 * 1024, 768 * 1024, 0, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 768 * 1024, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 2);
     ASSERT_NE(builder, nullptr);
     unique_ptr<LpMetadata> exported = builder->Export();
@@ -174,7 +178,7 @@ TEST(liblp, InternalAlignment) {
 }
 
 TEST(liblp, InternalPartitionAlignment) {
-    BlockDeviceInfo device_info(512 * 1024 * 1024, 768 * 1024, 753664, 4096);
+    BlockDeviceInfo device_info("super", 512 * 1024 * 1024, 768 * 1024, 753664, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 32 * 1024, 2);
 
     Partition* a = builder->AddPartition("a", 0);
@@ -394,7 +398,7 @@ TEST(liblp, MetadataTooLarge) {
     static const size_t kMetadataSize = 64 * 1024;
 
     // No space to store metadata + geometry.
-    BlockDeviceInfo device_info(kDiskSize, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", kDiskSize, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
 
@@ -441,12 +445,12 @@ TEST(liblp, block_device_info) {
 }
 
 TEST(liblp, UpdateBlockDeviceInfo) {
-    BlockDeviceInfo device_info(1024 * 1024, 4096, 1024, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 4096, 1024, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
     BlockDeviceInfo new_info;
-    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
 
     EXPECT_EQ(new_info.size, device_info.size);
     EXPECT_EQ(new_info.alignment, device_info.alignment);
@@ -455,37 +459,37 @@ TEST(liblp, UpdateBlockDeviceInfo) {
 
     device_info.alignment = 0;
     device_info.alignment_offset = 2048;
-    ASSERT_TRUE(builder->UpdateBlockDeviceInfo(device_info));
-    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo("super", device_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
     EXPECT_EQ(new_info.alignment, 4096);
     EXPECT_EQ(new_info.alignment_offset, device_info.alignment_offset);
 
     device_info.alignment = 8192;
     device_info.alignment_offset = 0;
-    ASSERT_TRUE(builder->UpdateBlockDeviceInfo(device_info));
-    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo("super", device_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
     EXPECT_EQ(new_info.alignment, 8192);
     EXPECT_EQ(new_info.alignment_offset, 2048);
 
     new_info.size += 4096;
-    ASSERT_FALSE(builder->UpdateBlockDeviceInfo(new_info));
-    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    ASSERT_FALSE(builder->UpdateBlockDeviceInfo("super", new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
     EXPECT_EQ(new_info.size, 1024 * 1024);
 
     new_info.logical_block_size = 512;
-    ASSERT_FALSE(builder->UpdateBlockDeviceInfo(new_info));
-    ASSERT_TRUE(builder->GetBlockDeviceInfo(&new_info));
+    ASSERT_FALSE(builder->UpdateBlockDeviceInfo("super", new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
     EXPECT_EQ(new_info.logical_block_size, 4096);
 }
 
 TEST(liblp, InvalidBlockSize) {
-    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 513);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 513);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     EXPECT_EQ(builder, nullptr);
 }
 
 TEST(liblp, AlignedExtentSize) {
-    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
@@ -497,13 +501,13 @@ TEST(liblp, AlignedExtentSize) {
 
 TEST(liblp, AlignedFreeSpace) {
     // Only one sector free - at least one block is required.
-    BlockDeviceInfo device_info(10240, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", 10240, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 512, 1);
     ASSERT_EQ(builder, nullptr);
 }
 
 TEST(liblp, HasDefaultGroup) {
-    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
@@ -511,7 +515,7 @@ TEST(liblp, HasDefaultGroup) {
 }
 
 TEST(liblp, GroupSizeLimits) {
-    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
 
@@ -529,6 +533,9 @@ TEST(liblp, GroupSizeLimits) {
 
 constexpr unsigned long long operator"" _GiB(unsigned long long x) {  // NOLINT
     return x << 30;
+}
+constexpr unsigned long long operator"" _MiB(unsigned long long x) {  // NOLINT
+    return x << 20;
 }
 
 TEST(liblp, RemoveAndAddFirstPartition) {
@@ -555,7 +562,7 @@ TEST(liblp, RemoveAndAddFirstPartition) {
 }
 
 TEST(liblp, ListGroups) {
-    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(builder->AddGroup("example", 0));
@@ -565,7 +572,7 @@ TEST(liblp, ListGroups) {
 }
 
 TEST(liblp, RemoveGroupAndPartitions) {
-    BlockDeviceInfo device_info(1024 * 1024, 0, 0, 4096);
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(builder->AddGroup("example", 0));
@@ -579,4 +586,49 @@ TEST(liblp, RemoveGroupAndPartitions) {
 
     builder->RemoveGroupAndPartitions("default");
     ASSERT_NE(builder->FindPartition("system"), nullptr);
+}
+
+TEST(liblp, MultipleBlockDevices) {
+    std::vector<BlockDeviceInfo> partitions = {
+            BlockDeviceInfo("system_a", 256_MiB, 786432, 229376, 4096),
+            BlockDeviceInfo("vendor_a", 128_MiB, 786432, 753664, 4096),
+            BlockDeviceInfo("product_a", 64_MiB, 786432, 753664, 4096),
+    };
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(partitions, "system_a", 65536, 2);
+    ASSERT_NE(builder, nullptr);
+    EXPECT_EQ(builder->AllocatableSpace(), 467238912);
+
+    // Create a partition that spans 3 devices.
+    Partition* p = builder->AddPartition("system_a", 0);
+    ASSERT_NE(p, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(p, 466976768));
+
+    unique_ptr<LpMetadata> metadata = builder->Export();
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->block_devices.size(), 3);
+    EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[0]), "system_a");
+    EXPECT_EQ(metadata->block_devices[0].size, 256_MiB);
+    EXPECT_EQ(metadata->block_devices[0].alignment, 786432);
+    EXPECT_EQ(metadata->block_devices[0].alignment_offset, 229376);
+    EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[1]), "vendor_a");
+    EXPECT_EQ(metadata->block_devices[1].size, 128_MiB);
+    EXPECT_EQ(metadata->block_devices[1].alignment, 786432);
+    EXPECT_EQ(metadata->block_devices[1].alignment_offset, 753664);
+    EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[2]), "product_a");
+    EXPECT_EQ(metadata->block_devices[2].size, 64_MiB);
+    EXPECT_EQ(metadata->block_devices[2].alignment, 786432);
+    EXPECT_EQ(metadata->block_devices[2].alignment_offset, 753664);
+    ASSERT_EQ(metadata->extents.size(), 3);
+    EXPECT_EQ(metadata->extents[0].num_sectors, 522304);
+    EXPECT_EQ(metadata->extents[0].target_type, LP_TARGET_TYPE_LINEAR);
+    EXPECT_EQ(metadata->extents[0].target_data, 1984);
+    EXPECT_EQ(metadata->extents[0].target_source, 0);
+    EXPECT_EQ(metadata->extents[1].num_sectors, 260672);
+    EXPECT_EQ(metadata->extents[1].target_type, LP_TARGET_TYPE_LINEAR);
+    EXPECT_EQ(metadata->extents[1].target_data, 1472);
+    EXPECT_EQ(metadata->extents[1].target_source, 1);
+    EXPECT_EQ(metadata->extents[2].num_sectors, 129088);
+    EXPECT_EQ(metadata->extents[2].target_type, LP_TARGET_TYPE_LINEAR);
+    EXPECT_EQ(metadata->extents[2].target_data, 1472);
+    EXPECT_EQ(metadata->extents[2].target_source, 2);
 }

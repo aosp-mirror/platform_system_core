@@ -50,9 +50,9 @@
 #include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
-#include <ext4_utils/ext4_crypt.h>
-#include <ext4_utils/ext4_crypt_init_extensions.h>
 #include <fs_mgr.h>
+#include <fscrypt/fscrypt.h>
+#include <fscrypt/fscrypt_init_extensions.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
@@ -307,8 +307,8 @@ static Result<Success> do_mkdir(const BuiltinArguments& args) {
         }
     }
 
-    if (e4crypt_is_native()) {
-        if (e4crypt_set_directory_policy(args[1].c_str())) {
+    if (fscrypt_is_native()) {
+        if (fscrypt_set_directory_policy(args[1].c_str())) {
             return reboot_into_recovery(
                 {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
         }
@@ -517,8 +517,8 @@ static Result<Success> queue_fs_event(int code) {
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (e4crypt_install_keyring()) {
-            return Error() << "e4crypt_install_keyring() failed";
+        if (fscrypt_install_keyring()) {
+            return Error() << "fscrypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -528,8 +528,8 @@ static Result<Success> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (e4crypt_install_keyring()) {
-            return Error() << "e4crypt_install_keyring() failed";
+        if (fscrypt_install_keyring()) {
+            return Error() << "fscrypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -539,8 +539,8 @@ static Result<Success> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (e4crypt_install_keyring()) {
-            return Error() << "e4crypt_install_keyring() failed";
+        if (fscrypt_install_keyring()) {
+            return Error() << "fscrypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -1016,7 +1016,7 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
     }
     service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
-            if (e4crypt_is_native()) {
+            if (fscrypt_is_native()) {
                 LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
                 if (auto result = reboot_into_recovery(
                             {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
@@ -1038,7 +1038,7 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
 static Result<Success> do_installkey(const BuiltinArguments& args) {
     if (!is_file_crypto()) return Success();
 
-    auto unencrypted_dir = args[1] + e4crypt_unencrypted_folder;
+    auto unencrypted_dir = args[1] + fscrypt_unencrypted_folder;
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         return ErrnoError() << "Failed to create " << unencrypted_dir;
     }

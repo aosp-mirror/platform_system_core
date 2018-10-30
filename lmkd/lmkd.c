@@ -1260,6 +1260,8 @@ static struct proc *proc_get_heaviest(int oomadj) {
     return maxprocp;
 }
 
+static int last_killed_pid = -1;
+
 /* Kill one process specified by procp.  Returns the size of the process killed */
 static int kill_one_process(struct proc* procp) {
     int pid = procp->pid;
@@ -1304,6 +1306,8 @@ static int kill_one_process(struct proc* procp) {
 
     TRACE_KILL_END();
 
+    last_killed_pid = pid;
+
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
         goto out;
@@ -1331,14 +1335,12 @@ out:
 }
 
 /*
- * Find processes to kill to free required number of pages.
- * If pages_to_free is set to 0 only one process will be killed.
- * Returns the size of the killed processes.
+ * Find one process to kill at or above the given oom_adj level.
+ * Returns size of the killed process.
  */
-static int find_and_kill_processes(int min_score_adj, int pages_to_free) {
+static int find_and_kill_process(int min_score_adj) {
     int i;
-    int killed_size;
-    int pages_freed = 0;
+    int killed_size = 0;
 
 #ifdef LMKD_LOG_STATS
     bool lmk_state_change_start = false;
@@ -1363,19 +1365,11 @@ static int find_and_kill_processes(int min_score_adj, int pages_to_free) {
                                                   LMK_STATE_CHANGE_START);
                 }
 #endif
-
-                pages_freed += killed_size;
-                if (pages_freed >= pages_to_free) {
-
-#ifdef LMKD_LOG_STATS
-                    if (enable_stats_log && lmk_state_change_start) {
-                        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
-                                LMK_STATE_CHANGE_STOP);
-                    }
-#endif
-                    return pages_freed;
-                }
+                break;
             }
+        }
+        if (killed_size) {
+            break;
         }
     }
 
@@ -1385,7 +1379,7 @@ static int find_and_kill_processes(int min_score_adj, int pages_to_free) {
     }
 #endif
 
-    return pages_freed;
+    return killed_size;
 }
 
 static int64_t get_memory_usage(struct reread_data *file_data) {
@@ -1445,6 +1439,23 @@ enum vmpressure_level downgrade_level(enum vmpressure_level level) {
         level - 1 : level);
 }
 
+static bool is_kill_pending(void) {
+    char buf[24];
+
+    if (last_killed_pid < 0) {
+        return false;
+    }
+
+    snprintf(buf, sizeof(buf), "/proc/%d/", last_killed_pid);
+    if (access(buf, F_OK) == 0) {
+        return true;
+    }
+
+    // reset last killed PID because there's nothing pending
+    last_killed_pid = -1;
+    return false;
+}
+
 static void mp_event_common(int data, uint32_t events __unused) {
     int ret;
     unsigned long long evcount;
@@ -1459,7 +1470,6 @@ static void mp_event_common(int data, uint32_t events __unused) {
     enum vmpressure_level level = (enum vmpressure_level)data;
     long other_free = 0, other_file = 0;
     int min_score_adj;
-    int pages_to_free = 0;
     int minfree = 0;
     static struct reread_data mem_usage_file_data = {
         .filename = MEMCG_MEMORY_USAGE,
@@ -1490,7 +1500,11 @@ static void mp_event_common(int data, uint32_t events __unused) {
     }
 
     if (kill_timeout_ms) {
-        if (get_time_diff_ms(&last_kill_tm, &curr_tm) < kill_timeout_ms) {
+        // If we're within the timeout, see if there's pending reclaim work
+        // from the last killed process. If there is (as evidenced by
+        // /proc/<pid> continuing to exist), skip killing for now.
+        if ((get_time_diff_ms(&last_kill_tm, &curr_tm) < kill_timeout_ms) &&
+            (low_ram_device || is_kill_pending())) {
             kill_skip_count++;
             return;
         }
@@ -1537,9 +1551,6 @@ static void mp_event_common(int data, uint32_t events __unused) {
             return;
         }
 
-        /* Free up enough pages to push over the highest minfree level */
-        pages_to_free = lowmem_minfree[lowmem_targets_size - 1] -
-            ((other_free < other_file) ? other_free : other_file);
         goto do_kill;
     }
 
@@ -1595,7 +1606,7 @@ static void mp_event_common(int data, uint32_t events __unused) {
 do_kill:
     if (low_ram_device) {
         /* For Go devices kill only one task */
-        if (find_and_kill_processes(level_oomadj[level], 0) == 0) {
+        if (find_and_kill_process(level_oomadj[level]) == 0) {
             if (debug_process_killing) {
                 ALOGI("Nothing to kill");
             }
@@ -1619,10 +1630,7 @@ do_kill:
                 return;
             }
             /* Free up enough memory to downgrate the memory pressure to low level */
-            if (mi.field.nr_free_pages < low_pressure_mem.max_nr_free_pages) {
-                pages_to_free = low_pressure_mem.max_nr_free_pages -
-                    mi.field.nr_free_pages;
-            } else {
+            if (mi.field.nr_free_pages >= low_pressure_mem.max_nr_free_pages) {
                 if (debug_process_killing) {
                     ALOGI("Ignoring pressure since more memory is "
                         "available (%" PRId64 ") than watermark (%" PRId64 ")",
@@ -1633,7 +1641,7 @@ do_kill:
             min_score_adj = level_oomadj[level];
         }
 
-        pages_freed = find_and_kill_processes(min_score_adj, pages_to_free);
+        pages_freed = find_and_kill_process(min_score_adj);
 
         if (pages_freed == 0) {
             /* Rate limit kill reports when nothing was reclaimed */
@@ -1641,25 +1649,24 @@ do_kill:
                 report_skip_count++;
                 return;
             }
+        } else {
+            /* If we killed anything, update the last killed timestamp. */
+            last_kill_tm = curr_tm;
         }
 
         /* Log meminfo whenever we kill or when report rate limit allows */
         meminfo_log(&mi);
-        if (pages_freed >= pages_to_free) {
-            /* Reset kill time only if reclaimed enough memory */
-            last_kill_tm = curr_tm;
-        }
 
         if (use_minfree_levels) {
-            ALOGI("Killing to reclaim %ldkB, reclaimed %ldkB, cache(%ldkB) and "
+            ALOGI("Reclaimed %ldkB, cache(%ldkB) and "
                 "free(%" PRId64 "kB)-reserved(%" PRId64 "kB) below min(%ldkB) for oom_adj %d",
-                pages_to_free * page_k, pages_freed * page_k,
+                pages_freed * page_k,
                 other_file * page_k, mi.field.nr_free_pages * page_k,
                 zi.field.totalreserve_pages * page_k,
                 minfree * page_k, min_score_adj);
         } else {
-            ALOGI("Killing to reclaim %ldkB, reclaimed %ldkB at oom_adj %d",
-                pages_to_free * page_k, pages_freed * page_k, min_score_adj);
+            ALOGI("Reclaimed %ldkB at oom_adj %d",
+                pages_freed * page_k, min_score_adj);
         }
 
         if (report_skip_count > 0) {
