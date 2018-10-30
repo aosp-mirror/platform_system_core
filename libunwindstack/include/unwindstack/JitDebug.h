@@ -42,16 +42,8 @@ class JitDebug : public Global {
 
   Elf* GetElf(Maps* maps, uint64_t pc);
 
-  void SetArch(ArchEnum arch);
-
  private:
   void Init(Maps* maps);
-
-  uint64_t entry_addr_ = 0;
-  bool initialized_ = false;
-  std::vector<Elf*> elf_list_;
-
-  std::mutex lock_;
 
   uint64_t (JitDebug::*read_descriptor_func_)(uint64_t) = nullptr;
   uint64_t (JitDebug::*read_entry_func_)(uint64_t*, uint64_t*) = nullptr;
@@ -64,6 +56,14 @@ class JitDebug : public Global {
   uint64_t ReadEntry64(uint64_t* start, uint64_t* size);
 
   bool ReadVariableData(uint64_t ptr_offset) override;
+
+  void ProcessArch() override;
+
+  uint64_t entry_addr_ = 0;
+  bool initialized_ = false;
+  std::vector<Elf*> elf_list_;
+
+  std::mutex lock_;
 };
 
 }  // namespace unwindstack
