@@ -88,6 +88,7 @@ MapInfo* LocalUnwinder::GetMapInfo(uint64_t pc) {
 bool LocalUnwinder::Unwind(std::vector<LocalFrameData>* frame_info, size_t max_frames) {
   std::unique_ptr<unwindstack::Regs> regs(unwindstack::Regs::CreateFromLocal());
   unwindstack::RegsGetLocal(regs.get());
+  ArchEnum arch = regs->Arch();
 
   size_t num_frames = 0;
   bool adjust_pc = false;
@@ -100,7 +101,7 @@ bool LocalUnwinder::Unwind(std::vector<LocalFrameData>* frame_info, size_t max_f
       break;
     }
 
-    Elf* elf = map_info->GetElf(process_memory_);
+    Elf* elf = map_info->GetElf(process_memory_, arch);
     uint64_t rel_pc = elf->GetRelPc(cur_pc, map_info);
     uint64_t step_pc = rel_pc;
     uint64_t pc_adjustment;

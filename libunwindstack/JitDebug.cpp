@@ -141,8 +141,8 @@ uint64_t JitDebug::ReadEntry64(uint64_t* start, uint64_t* size) {
   return code.next;
 }
 
-void JitDebug::SetArch(ArchEnum arch) {
-  switch (arch) {
+void JitDebug::ProcessArch() {
+  switch (arch()) {
     case ARCH_X86:
       read_descriptor_func_ = &JitDebug::ReadDescriptor32;
       read_entry_func_ = &JitDebug::ReadEntry32Pack;

@@ -47,8 +47,6 @@ class DexFiles : public Global {
   void GetMethodInformation(Maps* maps, MapInfo* info, uint64_t dex_pc, std::string* method_name,
                             uint64_t* method_offset);
 
-  void SetArch(ArchEnum arch);
-
  private:
   void Init(Maps* maps);
 
@@ -63,6 +61,8 @@ class DexFiles : public Global {
   bool ReadEntry64();
 
   bool ReadVariableData(uint64_t ptr_offset) override;
+
+  void ProcessArch() override;
 
   std::mutex lock_;
   bool initialized_ = false;

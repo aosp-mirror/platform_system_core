@@ -135,6 +135,8 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
 
+  ArchEnum arch = regs_->Arch();
+
   bool return_address_attempt = false;
   bool adjust_pc = false;
   std::unique_ptr<JitDebug> jit_debug;
@@ -155,7 +157,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
       }
-      elf = map_info->GetElf(process_memory_);
+      elf = map_info->GetElf(process_memory_, arch);
       step_pc = regs_->pc();
       rel_pc = elf->GetRelPc(step_pc, map_info);
       // Everyone except elf data in gdb jit debug maps uses the relative pc.
