@@ -392,7 +392,8 @@ int install_multiple_app(int argc, const char** argv) {
         }
 
         if (android::base::EndsWithIgnoreCase(file, ".apk") ||
-            android::base::EndsWithIgnoreCase(file, ".dm")) {
+            android::base::EndsWithIgnoreCase(file, ".dm") ||
+            android::base::EndsWithIgnoreCase(file, ".fsv_sig")) {
             struct stat sb;
             if (stat(file, &sb) != -1) total_size += sb.st_size;
             first_apk = i;
