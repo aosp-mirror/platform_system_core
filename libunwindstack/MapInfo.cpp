@@ -146,7 +146,7 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   return nullptr;
 }
 
-Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory) {
+Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch) {
   // Make sure no other thread is trying to add the elf to this map.
   std::lock_guard<std::mutex> guard(mutex_);
 
@@ -176,6 +176,10 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory) {
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
   elf->Init();
+  if (elf->valid() && expected_arch != elf->arch()) {
+    // Make the elf invalid, mismatch between arch and expected arch.
+    elf->Invalidate();
+  }
 
   if (locked) {
     Elf::CacheAdd(this);

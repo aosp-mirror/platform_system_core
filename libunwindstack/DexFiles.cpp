@@ -54,8 +54,8 @@ DexFiles::~DexFiles() {
   }
 }
 
-void DexFiles::SetArch(ArchEnum arch) {
-  switch (arch) {
+void DexFiles::ProcessArch() {
+  switch (arch()) {
     case ARCH_ARM:
     case ARCH_MIPS:
     case ARCH_X86:

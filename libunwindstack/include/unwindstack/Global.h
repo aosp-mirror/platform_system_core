@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <unwindstack/Elf.h>
 #include <unwindstack/Memory.h>
 
 namespace unwindstack {
@@ -39,11 +40,19 @@ class Global {
   Global(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs);
   virtual ~Global() = default;
 
+  void SetArch(ArchEnum arch);
+
+  ArchEnum arch() { return arch_; }
+
  protected:
   uint64_t GetVariableOffset(MapInfo* info, const std::string& variable);
   void FindAndReadVariable(Maps* maps, const char* variable);
 
   virtual bool ReadVariableData(uint64_t offset) = 0;
+
+  virtual void ProcessArch() = 0;
+
+  ArchEnum arch_ = ARCH_UNKNOWN;
 
   std::shared_ptr<Memory> memory_;
   std::vector<std::string> search_libs_;
