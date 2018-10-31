@@ -57,6 +57,8 @@ class Elf {
 
   void InitGnuDebugdata();
 
+  void Invalidate();
+
   bool GetSoname(std::string* name);
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);

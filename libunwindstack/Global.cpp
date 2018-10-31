@@ -31,6 +31,13 @@ Global::Global(std::shared_ptr<Memory>& memory) : memory_(memory) {}
 Global::Global(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs)
     : memory_(memory), search_libs_(search_libs) {}
 
+void Global::SetArch(ArchEnum arch) {
+  if (arch_ == ARCH_UNKNOWN) {
+    arch_ = arch;
+    ProcessArch();
+  }
+}
+
 uint64_t Global::GetVariableOffset(MapInfo* info, const std::string& variable) {
   if (!search_libs_.empty()) {
     bool found = false;
@@ -46,7 +53,7 @@ uint64_t Global::GetVariableOffset(MapInfo* info, const std::string& variable) {
     }
   }
 
-  Elf* elf = info->GetElf(memory_);
+  Elf* elf = info->GetElf(memory_, arch());
   uint64_t ptr;
   // Find first non-empty list (libraries might be loaded multiple times).
   if (elf->GetGlobalVariable(variable, &ptr) && ptr != 0) {

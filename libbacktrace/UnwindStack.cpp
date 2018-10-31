@@ -49,6 +49,7 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
   unwindstack::Unwinder unwinder(MAX_BACKTRACE_FRAMES + num_ignore_frames, stack_map->stack_maps(),
                                  regs, stack_map->process_memory());
   unwinder.SetResolveNames(stack_map->ResolveNames());
+  stack_map->SetArch(regs->Arch());
   if (stack_map->GetJitDebug() != nullptr) {
     unwinder.SetJitDebug(stack_map->GetJitDebug(), regs->Arch());
   }
