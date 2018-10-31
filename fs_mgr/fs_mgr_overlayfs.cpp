@@ -61,7 +61,15 @@ bool fs_mgr_overlayfs_mount_all(fstab*) {
     return false;
 }
 
+bool fs_mgr_overlayfs_mount_all(const std::vector<const fstab_rec*>&) {
+    return false;
+}
+
 std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab*) {
+    return {};
+}
+
+std::vector<std::string> fs_mgr_overlayfs_required_devices(const std::vector<const fstab_rec*>&) {
     return {};
 }
 
@@ -764,6 +772,13 @@ bool fs_mgr_overlayfs_mount_all(fstab* fstab) {
     return ret;
 }
 
+bool fs_mgr_overlayfs_mount_all(const std::vector<const fstab_rec*>& fsrecs) {
+    std::vector<fstab_rec> recs;
+    for (const auto& rec : fsrecs) recs.push_back(*rec);
+    fstab fstab = {static_cast<int>(fsrecs.size()), &recs[0]};
+    return fs_mgr_overlayfs_mount_all(&fstab);
+}
+
 std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab* fstab) {
     if (fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), kScratchMountPoint)) {
         return {};
@@ -776,6 +791,14 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab* fstab) {
         return {device};
     }
     return {};
+}
+
+std::vector<std::string> fs_mgr_overlayfs_required_devices(
+        const std::vector<const fstab_rec*>& fsrecs) {
+    std::vector<fstab_rec> recs;
+    for (const auto& rec : fsrecs) recs.push_back(*rec);
+    fstab fstab = {static_cast<int>(fsrecs.size()), &recs[0]};
+    return fs_mgr_overlayfs_required_devices(&fstab);
 }
 
 // Returns false if setup not permitted, errno set to last error.
