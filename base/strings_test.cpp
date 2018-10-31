@@ -198,6 +198,12 @@ TEST(strings, StartsWithIgnoreCase_contains_prefix) {
   ASSERT_FALSE(android::base::StartsWithIgnoreCase("foobar", "BAR"));
 }
 
+TEST(strings, StartsWith_char) {
+  ASSERT_FALSE(android::base::StartsWith("", 'f'));
+  ASSERT_TRUE(android::base::StartsWith("foo", 'f'));
+  ASSERT_FALSE(android::base::StartsWith("foo", 'o'));
+}
+
 TEST(strings, EndsWith_empty) {
   ASSERT_FALSE(android::base::EndsWith("", "foo"));
   ASSERT_TRUE(android::base::EndsWith("", ""));
@@ -271,6 +277,12 @@ TEST(strings, EndsWith_std_string) {
 TEST(strings, EndsWithIgnoreCase_std_string) {
   ASSERT_TRUE(android::base::EndsWithIgnoreCase("HeLlO", std::string{"lo"}));
   ASSERT_FALSE(android::base::EndsWithIgnoreCase("GoOdByE", std::string{"lo"}));
+}
+
+TEST(strings, EndsWith_char) {
+  ASSERT_FALSE(android::base::EndsWith("", 'o'));
+  ASSERT_TRUE(android::base::EndsWith("foo", 'o'));
+  ASSERT_FALSE(android::base::EndsWith("foo", "f"));
 }
 
 TEST(strings, EqualsIgnoreCase) {
