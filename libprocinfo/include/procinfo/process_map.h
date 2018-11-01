@@ -22,6 +22,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 #include <android-base/file.h>
 
@@ -145,6 +146,24 @@ inline bool ReadProcessMaps(
     pid_t pid,
     const std::function<void(uint64_t, uint64_t, uint16_t, uint64_t, const char*)>& callback) {
   return ReadMapFile("/proc/" + std::to_string(pid) + "/maps", callback);
+}
+
+struct MapInfo {
+  uint64_t start;
+  uint64_t end;
+  uint16_t flags;
+  uint64_t pgoff;
+  std::string name;
+
+  MapInfo(uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name)
+      : start(start), end(end), flags(flags), pgoff(pgoff), name(name) {}
+};
+
+inline bool ReadProcessMaps(pid_t pid, std::vector<MapInfo>* maps) {
+  return ReadProcessMaps(
+      pid, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name) {
+        maps->emplace_back(start, end, flags, pgoff, name);
+      });
 }
 
 } /* namespace procinfo */
