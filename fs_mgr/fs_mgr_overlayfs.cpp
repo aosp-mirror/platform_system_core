@@ -55,6 +55,13 @@ using namespace std::literals;
 using namespace android::dm;
 using namespace android::fs_mgr;
 
+static bool fs_mgr_access(const std::string& path) {
+    auto save_errno = errno;
+    auto ret = access(path.c_str(), F_OK) == 0;
+    errno = save_errno;
+    return ret;
+}
+
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
 
 bool fs_mgr_overlayfs_mount_all(fstab*) {
@@ -219,13 +226,6 @@ const char* fs_mgr_mount_point(const char* mount_point) {
     if (!mount_point) return mount_point;
     if ("/"s != mount_point) return mount_point;
     return "/system";
-}
-
-bool fs_mgr_access(const std::string& path) {
-    auto save_errno = errno;
-    auto ret = access(path.c_str(), F_OK) == 0;
-    errno = save_errno;
-    return ret;
 }
 
 bool fs_mgr_rw_access(const std::string& path) {
