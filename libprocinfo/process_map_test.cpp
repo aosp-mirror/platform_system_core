@@ -22,20 +22,9 @@
 
 #include <gtest/gtest.h>
 
-struct MapInfo {
-  uint64_t start;
-  uint64_t end;
-  uint16_t flags;
-  uint64_t pgoff;
-  const std::string name;
-
-  MapInfo(uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name)
-      : start(start), end(end), flags(flags), pgoff(pgoff), name(name) {}
-};
-
-TEST(process_map, smoke) {
+TEST(process_map, ReadMapFile) {
   std::string map_file = android::base::GetExecutableDirectory() + "/testdata/maps";
-  std::vector<MapInfo> maps;
+  std::vector<android::procinfo::MapInfo> maps;
   ASSERT_TRUE(android::procinfo::ReadMapFile(
       map_file, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff,
                     const char* name) { maps.emplace_back(start, end, flags, pgoff, name); }));
@@ -57,4 +46,15 @@ TEST(process_map, smoke) {
   ASSERT_EQ(maps[1260].name,
             "[anon:dalvik-classes.dex extracted in memory from "
             "/data/app/com.google.sample.tunnel-HGGRU03Gu1Mwkf_-RnFmvw==/base.apk]");
+}
+
+TEST(process_map, ReadProcessMaps) {
+  std::vector<android::procinfo::MapInfo> maps;
+  ASSERT_TRUE(android::procinfo::ReadProcessMaps(
+      getpid(), [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff,
+                    const char* name) { maps.emplace_back(start, end, flags, pgoff, name); }));
+  ASSERT_GT(maps.size(), 0u);
+  maps.clear();
+  ASSERT_TRUE(android::procinfo::ReadProcessMaps(getpid(), &maps));
+  ASSERT_GT(maps.size(), 0u);
 }
