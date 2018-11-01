@@ -235,9 +235,6 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       ioprio_pri_(0),
       priority_(0),
       oom_score_adjust_(-1000),
-      swappiness_(-1),
-      soft_limit_in_bytes_(-1),
-      limit_in_bytes_(-1),
       start_order_(0),
       args_(args) {}
 
@@ -630,6 +627,18 @@ Result<Success> Service::ParseMemcgLimitInBytes(std::vector<std::string>&& args)
     return Success();
 }
 
+Result<Success> Service::ParseMemcgLimitPercent(std::vector<std::string>&& args) {
+    if (!ParseInt(args[1], &limit_percent_, 0)) {
+        return Error() << "limit_percent value must be equal or greater than 0";
+    }
+    return Success();
+}
+
+Result<Success> Service::ParseMemcgLimitProperty(std::vector<std::string>&& args) {
+    limit_property_ = std::move(args[1]);
+    return Success();
+}
+
 Result<Success> Service::ParseMemcgSoftLimitInBytes(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &soft_limit_in_bytes_, 0)) {
         return Error() << "soft_limit_in_bytes value must be equal or greater than 0";
@@ -783,6 +792,10 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
         {"memcg.limit_in_bytes",
                         {1,     1,    &Service::ParseMemcgLimitInBytes}},
+        {"memcg.limit_percent",
+                        {1,     1,    &Service::ParseMemcgLimitPercent}},
+        {"memcg.limit_property",
+                        {1,     1,    &Service::ParseMemcgLimitProperty}},
         {"memcg.soft_limit_in_bytes",
                         {1,     1,    &Service::ParseMemcgSoftLimitInBytes}},
         {"memcg.swappiness",
@@ -1001,11 +1014,13 @@ Result<Success> Service::Start() {
     start_order_ = next_start_order_++;
     process_cgroup_empty_ = false;
 
-    errno = -createProcessGroup(uid_, pid_);
+    bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
+                      limit_percent_ != -1 || !limit_property_.empty();
+    errno = -createProcessGroup(uid_, pid_, use_memcg);
     if (errno != 0) {
         PLOG(ERROR) << "createProcessGroup(" << uid_ << ", " << pid_ << ") failed for service '"
                     << name_ << "'";
-    } else {
+    } else if (use_memcg) {
         if (swappiness_ != -1) {
             if (!setProcessGroupSwappiness(uid_, pid_, swappiness_)) {
                 PLOG(ERROR) << "setProcessGroupSwappiness failed";
@@ -1018,8 +1033,29 @@ Result<Success> Service::Start() {
             }
         }
 
-        if (limit_in_bytes_ != -1) {
-            if (!setProcessGroupLimit(uid_, pid_, limit_in_bytes_)) {
+        size_t computed_limit_in_bytes = limit_in_bytes_;
+        if (limit_percent_ != -1) {
+            long page_size = sysconf(_SC_PAGESIZE);
+            long num_pages = sysconf(_SC_PHYS_PAGES);
+            if (page_size > 0 && num_pages > 0) {
+                size_t max_mem = SIZE_MAX;
+                if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
+                    max_mem = size_t(num_pages) * size_t(page_size);
+                }
+                computed_limit_in_bytes =
+                        std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
+            }
+        }
+
+        if (!limit_property_.empty()) {
+            // This ends up overwriting computed_limit_in_bytes but only if the
+            // property is defined.
+            computed_limit_in_bytes = android::base::GetUintProperty(
+                    limit_property_, computed_limit_in_bytes, SIZE_MAX);
+        }
+
+        if (computed_limit_in_bytes != size_t(-1)) {
+            if (!setProcessGroupLimit(uid_, pid_, computed_limit_in_bytes)) {
                 PLOG(ERROR) << "setProcessGroupLimit failed";
             }
         }
