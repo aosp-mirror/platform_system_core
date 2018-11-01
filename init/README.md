@@ -235,9 +235,16 @@ runs the service.
   to "123,124,125". Since keycodes are handled very early in init,
   only PRODUCT_DEFAULT_PROPERTY_OVERRIDES properties can be used.
 
-`memcg.limit_in_bytes <value>`
-> Sets the child's memory.limit_in_bytes to the specified value (only if memcg is mounted),
-  which must be equal or greater than 0.
+`memcg.limit_in_bytes <value>` and `memcg.limit_percent <value>`
+> Sets the child's memory.limit_in_bytes to the minimum of `limit_in_bytes`
+  bytes and `limit_percent` which is interpreted as a percentage of the size
+  of the device's physical memory (only if memcg is mounted).
+  Values must be equal or greater than 0.
+
+`memcg.limit_property <value>`
+> Sets the child's memory.limit_in_bytes to the value of the specified property
+  (only if memcg is mounted). This property will override the values specified
+  via `memcg.limit_in_bytes` and `memcg.limit_percent`.
 
 `memcg.soft_limit_in_bytes <value>`
 > Sets the child's memory.soft_limit_in_bytes to the specified value (only if memcg is mounted),
