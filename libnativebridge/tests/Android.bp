@@ -44,3 +44,45 @@ cc_library_shared {
     srcs: ["DummyNativeBridge3.cpp"],
     defaults: ["libnativebridge-dummy-defaults"],
 }
+
+// Build the unit tests.
+cc_test {
+    name: "libnativebridge-tests",
+    host_supported: true,
+    test_per_src: true,
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    srcs: [
+        "CodeCacheCreate_test.cpp",
+        "CodeCacheExists_test.cpp",
+        "CodeCacheStatFail_test.cpp",
+        "CompleteFlow_test.cpp",
+        "InvalidCharsNativeBridge_test.cpp",
+        "NativeBridge2Signal_test.cpp",
+        "NativeBridgeVersion_test.cpp",
+        "NeedsNativeBridge_test.cpp",
+        "PreInitializeNativeBridge_test.cpp",
+        "PreInitializeNativeBridgeFail1_test.cpp",
+        "PreInitializeNativeBridgeFail2_test.cpp",
+        "ReSetupNativeBridge_test.cpp",
+        "UnavailableNativeBridge_test.cpp",
+        "ValidNameNativeBridge_test.cpp",
+        "NativeBridge3UnloadLibrary_test.cpp",
+        "NativeBridge3GetError_test.cpp",
+        "NativeBridge3IsPathSupported_test.cpp",
+        "NativeBridge3InitAnonymousNamespace_test.cpp",
+        "NativeBridge3CreateNamespace_test.cpp",
+        "NativeBridge3LoadLibraryExt_test.cpp",
+    ],
+
+    shared_libs: [
+        "liblog",
+        "libnativebridge",
+        "libnativebridge-dummy",
+    ],
+    header_libs: ["libbase_headers"],
+}
