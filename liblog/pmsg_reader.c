@@ -269,6 +269,14 @@ static void pmsgClose(struct android_log_logger_list* logger_list __unused,
   }
 }
 
+static void* realloc_or_free(void* ptr, size_t new_size) {
+  void* result = realloc(ptr, new_size);
+  if (!result) {
+    free(ptr);
+  }
+  return result;
+}
+
 LIBLOG_ABI_PRIVATE ssize_t
 __android_log_pmsg_file_read(log_id_t logId, char prio, const char* prefix,
                              __android_log_pmsg_file_read_fn fn, void* arg) {
@@ -541,7 +549,7 @@ __android_log_pmsg_file_read(log_id_t logId, char prio, const char* prefix,
       /* Missing sequence numbers */
       while (sequence < content->entry.nsec) {
         /* plus space for enforced nul */
-        buf = realloc(buf, len + sizeof(char) + sizeof(char));
+        buf = realloc_or_free(buf, len + sizeof(char) + sizeof(char));
         if (!buf) {
           break;
         }
@@ -556,7 +564,7 @@ __android_log_pmsg_file_read(log_id_t logId, char prio, const char* prefix,
         continue;
       }
       /* plus space for enforced nul */
-      buf = realloc(buf, len + add_len + sizeof(char));
+      buf = realloc_or_free(buf, len + add_len + sizeof(char));
       if (!buf) {
         ret = -ENOMEM;
         list_remove(content_node);
