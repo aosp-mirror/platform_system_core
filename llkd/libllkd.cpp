@@ -726,7 +726,8 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
     char match = -1;
     for (const auto& stack : llkCheckStackSymbols) {
         if (++idx < 0) break;
-        if (kernel_stack.find(" "s + stack + "+0x") != std::string::npos) {
+        if ((kernel_stack.find(" "s + stack + "+0x") != std::string::npos) ||
+            (kernel_stack.find(" "s + stack + ".cfi+0x") != std::string::npos)) {
             match = idx;
             break;
         }
