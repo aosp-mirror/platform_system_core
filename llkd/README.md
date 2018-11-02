@@ -89,7 +89,14 @@ Android Properties
 Android Properties llkd respond to (*prop*_ms parms are in milliseconds):
 
 #### ro.config.low_ram
-default false, if true do not sysrq t (dump all threads).
+device is configured with limited memory.
+
+#### ro.debuggable
+device is configured for userdebug or eng build.
+
+#### ro.llk.sysrq_t
+default not ro.config.low_ram, or ro.debuggable if property is "eng".
+if true do sysrq t (dump all threads).
 
 #### ro.llk.enable
 default false, allow live-lock daemon to be enabled.
