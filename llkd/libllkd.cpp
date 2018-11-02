@@ -85,6 +85,7 @@ milliseconds llkStateTimeoutMs[llkNumStates];        // timeout override for eac
 milliseconds llkCheckMs;                             // checking interval to inspect any
                                                      // persistent live-locked states
 bool llkLowRam;                                      // ro.config.low_ram
+bool llkEnableSysrqT = LLK_ENABLE_SYSRQ_T_DEFAULT;   // sysrq stack trace dump
 bool khtEnable = LLK_ENABLE_DEFAULT;                 // [khungtaskd] panic
 // [khungtaskd] should have a timeout beyond the granularity of llkTimeoutMs.
 // Provides a wide angle of margin b/c khtTimeout is also its granularity.
@@ -525,7 +526,7 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state) {
         android::base::WriteStringToFd("d", sysrqTriggerFd);
         // This can trigger hardware watchdog, that is somewhat _ok_.
         // But useless if pstore configured for <256KB, low ram devices ...
-        if (!llkLowRam) {
+        if (llkEnableSysrqT) {
             android::base::WriteStringToFd("t", sysrqTriggerFd);
         }
         ::usleep(200000);  // let everything settle
@@ -799,6 +800,7 @@ void llkCheckSchedUpdate(proc* procp, const std::string& piddir) {
 
 void llkLogConfig(void) {
     LOG(INFO) << "ro.config.low_ram=" << llkFormat(llkLowRam) << "\n"
+              << LLK_ENABLE_SYSRQ_T_PROPERTY "=" << llkFormat(llkEnableSysrqT) << "\n"
               << LLK_ENABLE_PROPERTY "=" << llkFormat(llkEnable) << "\n"
               << KHT_ENABLE_PROPERTY "=" << llkFormat(khtEnable) << "\n"
               << LLK_MLOCKALL_PROPERTY "=" << llkFormat(llkMlockall) << "\n"
@@ -1150,13 +1152,22 @@ unsigned llkCheckMilliseconds() {
     return duration_cast<milliseconds>(llkCheck()).count();
 }
 
+bool llkCheckEng(const std::string& property) {
+    return android::base::GetProperty(property, "eng") == "eng";
+}
+
 bool llkInit(const char* threadname) {
     auto debuggable = android::base::GetBoolProperty("ro.debuggable", false);
     llkLowRam = android::base::GetBoolProperty("ro.config.low_ram", false);
-    if (!LLK_ENABLE_DEFAULT && debuggable) {
-        llkEnable = android::base::GetProperty(LLK_ENABLE_PROPERTY, "eng") == "eng";
-        khtEnable = android::base::GetProperty(KHT_ENABLE_PROPERTY, "eng") == "eng";
+    llkEnableSysrqT &= !llkLowRam;
+    if (debuggable) {
+        llkEnableSysrqT |= llkCheckEng(LLK_ENABLE_SYSRQ_T_PROPERTY);
+        if (!LLK_ENABLE_DEFAULT) {  // NB: default is currently true ...
+            llkEnable |= llkCheckEng(LLK_ENABLE_PROPERTY);
+            khtEnable |= llkCheckEng(KHT_ENABLE_PROPERTY);
+        }
     }
+    llkEnableSysrqT = android::base::GetBoolProperty(LLK_ENABLE_SYSRQ_T_PROPERTY, llkEnableSysrqT);
     llkEnable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, llkEnable);
     if (llkEnable && !llkTopDirectory.reset(procdir)) {
         // Most likely reason we could be here is llkd was started
