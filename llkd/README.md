@@ -44,7 +44,8 @@ then have a confirmed live-lock condition and need to panic.  There is no
 ABA detection since forward scheduling progress is allowed, thus the condition
 for the symbols are:
 
-- Check is looking for " " + __symbol__+ "0x" in /proc/<pid>/stack.
+- Check is looking for " __symbol__+0x" or " __symbol__.cfi+0x" in
+  /proc/__pid__/stack.
 - The __symbol__ should be rare and short lived enough that on a typical
   system the function is seen at most only once in a sample over the timeout
   period of ro.llk.stack.timeout_ms, samples occur every ro.llk.check_ms. This
@@ -121,14 +122,14 @@ default ro.llk.timeout_ms, Z maximum timelimit.
 #### ro.llk.stack.timeout_ms
 default ro.llk.timeout_ms,
 checking for persistent stack symbols maximum timelimit.
-Only active on userdebug and eng builds.
+Only active on userdebug or eng builds.
 
 #### ro.llk.check_ms
 default 2 minutes samples of threads for D or Z.
 
 #### ro.llk.stack
-default cma_alloc,__get_user_pages, comma separated list of kernel symbols.
-The string "*false*" is the equivalent to an *empty* list.
+default cma_alloc,__get_user_pages,bit_wait_io comma separated list of kernel
+symbols.  The string "*false*" is the equivalent to an *empty* list.
 Look for kernel stack symbols that if ever persistently present can
 indicate a subsystem is locked up.
 Beware, check does not on purpose do forward scheduling ABA except by polling
@@ -136,11 +137,14 @@ every ro.llk_check_ms over the period ro.llk.stack.timeout_ms, so stack symbol
 should be exceptionally rare and fleeting.
 One must be convinced that it is virtually *impossible* for symbol to show up
 persistently in all samples of the stack.
-Only active on userdebug and eng builds.
+Again, looks for a match for either " **symbol**+0x" or " **symbol**.cfi+0x"
+in stack expansion.
+Only available on userdebug or eng builds, limited privileges due to security
+concerns on user builds prevents this checking.
 
 #### ro.llk.blacklist.process
 default 0,1,2 (kernel, init and [kthreadd]) plus process names
-init,[kthreadd],[khungtaskd],lmkd,lmkd.llkd,llkd,watchdogd,
+init,[kthreadd],[khungtaskd],lmkd,llkd,watchdogd,
 [watchdogd],[watchdogd/0],...,[watchdogd/***get_nprocs**-1*].
 The string "*false*" is the equivalent to an *empty* list.
 Do not watch these processes.  A process can be comm, cmdline or pid reference.
@@ -160,7 +164,7 @@ The string "*false*" is the equivalent to an *empty* list.
 Do not watch processes that match this uid.
 
 #### ro.llk.blacklist.process.stack
-default process names init,lmkd,lmkd.llkd,llkd,keystore,logd.
+default process names init,lmkd.llkd,llkd,keystore,ueventd,apexd,logd.
 The string "*false*" is the equivalent to an *empty* list.
 This subset of processes are not monitored for live lock stack signatures.
 Also prevents the sepolicy violation associated with processes that block
