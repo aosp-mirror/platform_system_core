@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <selinux/selinux.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/param.h>
@@ -692,13 +693,21 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
         errno = 0;
     }
 
-    auto ret = system((mnt_type == "f2fs")
-                              ? ((kMkF2fs + " -d1 " + scratch_device).c_str())
-                              : ((kMkExt4 + " -b 4096 -t ext4 -m 0 -M " + kScratchMountPoint +
-                                  " -O has_journal " + scratch_device)
-                                         .c_str()));
+    // Force mkfs by design for overlay support of adb remount, simplify and
+    // thus do not rely on fsck to correct problems that could creep in.
+    auto command = ""s;
+    if (mnt_type == "f2fs") {
+        command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
+    } else if (mnt_type == "ext4") {
+        command = kMkExt4 + " -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
+    } else {
+        LERROR << mnt_type << " has no mkfs cookbook";
+        return false;
+    }
+    command += " " + scratch_device;
+    auto ret = system(command.c_str());
     if (ret) {
-        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " error=" << ret;
+        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
         return false;
     }
 
