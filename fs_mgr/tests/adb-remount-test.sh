@@ -198,39 +198,80 @@ isDebuggable || die "device not a debug build"
 
 # Do something
 adb_wait || die "wait for device failed"
-adb_sh ls -d /sys/module/overlay </dev/null || die "overlay module not present"
-adb_su ls /sys/module/overlay/parameters/override_creds </dev/null ||
+adb_sh ls -d /sys/module/overlay </dev/null >/dev/null &&
+  echo "${GREEN}[       OK ]${NORMAL} overlay module present" >&2 ||
+  die "overlay module not present"
+adb_su ls /sys/module/overlay/parameters/override_creds </dev/null >/dev/null &&
+  echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
   die "overlay module can not be used on ANDROID"
 adb_root &&
-  adb_wait &&
-  D=`adb disable-verity 2>&1` ||
-    die "setup for overlay"
+  adb_wait ||
+  die "initial setup"
+reboot=false
+OVERLAYFS_BACKING="cache mnt/scratch"
+for d in ${OVERLAYFS_BACKING}; do
+  if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>&1; then
+    echo "${ORANGE}[  WARNING ]${NORMAL} /${d}/overlay is setup, wiping" >&2
+    adb_sh rm -rf /${d}/overlay </dev/null ||
+      die "/${d}/overlay wipe"
+    reboot=true
+  fi
+done
+if ${reboot}; then
+  echo "${ORANGE}[  WARNING ]${NORMAL} rebooting before test" >&2
+  adb_reboot &&
+    adb_wait 2m &&
+    adb_root &&
+    adb_wait ||
+    die "reboot after wipe"
+fi
+D=`adb_sh df -k </dev/null` &&
+  H=`echo "${D}" | head -1` &&
+  D=`echo "${D}" | grep "^overlay "` &&
+  echo "${H}" &&
+  echo "${D}" &&
+  echo "${ORANGE}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
+  echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
+
+D=`adb disable-verity 2>&1` ||
+  die "setup for overlay ${D}"
 echo "${D}"
 if [ X"${D}" != X"${D##*using overlayfs}" ]; then
   echo "${GREEN}[       OK ]${NORMAL} using overlayfs" >&2
 fi
-if adb_sh ls -d /data/overlay </dev/null >/dev/null 2>&1; then
-  echo "/data/overlay setup, clearing out" >&2
-  adb_sh rm -rf /data/overlay </dev/null ||
-    die "/data/overlay removal"
-fi
-adb_sh ls -d /cache/overlay </dev/null >/dev/null 2>&1 ||
-  adb_sh ls -d /mnt/scratch/overlay </dev/null >/dev/null 2>&1 ||
-  die "overlay directory setup"
 adb_reboot &&
   adb_wait &&
-  adb_sh df -k </dev/null | head -1 &&
-  adb_sh df -k </dev/null | grep "^overlay " ||
+  D=`adb_sh df -k </dev/null` &&
+  H=`echo "${D}" | head -1` &&
+  D=`echo "${D}" | grep "^overlay "` &&
+  echo "${H}" &&
+  echo "${D}" ||
   die "overlay takeover failed"
-adb_sh df -k </dev/null | grep "^overlay .* /system\$" >/dev/null ||
+echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
   echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover before remount not complete" >&2
 
 adb_root &&
   adb_wait &&
   adb remount &&
-  adb_sh df -k </dev/null | head -1 &&
-  adb_sh df -k </dev/null | grep "^overlay " &&
-  adb_sh df -k </dev/null | grep "^overlay .* /system\$" >/dev/null ||
+  D=`adb_sh df -k </dev/null` ||
+  die "can not collect filesystem data"
+if echo "${D}" | grep " /mnt/scratch" >/dev/null; then
+  echo "${ORANGE}[     INFO ]${NORMAL} using scratch dynamic partition for overrides" >&2
+  H=`adb_sh cat /proc/mounts | sed -n 's@\([^ ]*\) /mnt/scratch \([^ ]*\) .*@\2 on \1@p'`
+  [ -n "${H}" ] &&
+    echo "${ORANGE}[     INFO ]${NORMAL} scratch filesystem ${H}"
+fi
+for d in ${OVERLAYFS_BACKING}; do
+  if adb_sh ls -d /${d}/overlay/system/upper </dev/null >/dev/null 2>&1; then
+    echo "${ORANGE}[     INFO ]${NORMAL} /${d}/overlay is setup" >&2
+  fi
+done
+
+H=`echo "${D}" | head -1` &&
+  D=`echo "${D}" | grep "^overlay "` &&
+  echo "${H}" &&
+  echo "${D}" &&
+  echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
   die  "overlay takeover after remount"
 !(adb_sh grep "^overlay " /proc/mounts </dev/null | grep " overlay ro,") &&
   !(adb_sh grep " rw," /proc/mounts </dev/null |
@@ -275,11 +316,14 @@ adb reboot-fastboot &&
 adb_wait &&
   adb_root &&
   adb_wait &&
-  adb_sh df -k </dev/null | head -1 &&
-  adb_sh df -k </dev/null | grep "^overlay " &&
-  adb_sh df -k </dev/null | grep "^overlay .* /system\$" >/dev/null ||
+  D=`adb_sh df -k </dev/null` &&
+  H=`echo "${D}" | head -1` &&
+  D=`echo "${D}" | grep "^overlay "` &&
+  echo "${H}" &&
+  echo "${D}" &&
+  echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
   die  "overlay system takeover after flash vendor"
-adb_sh df -k </dev/null | grep "^overlay .* /vendor\$" >/dev/null &&
+echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
   die  "overlay minus vendor takeover after flash vendor"
 B="`adb_cat /system/hello`" ||
   die "re-read system hello after flash vendor"
