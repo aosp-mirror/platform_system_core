@@ -19,6 +19,7 @@
 #include <fcntl.h>
 
 #if !defined(_WIN32)
+#include <dirent.h>
 #include <sys/socket.h>
 #endif
 
@@ -209,6 +210,17 @@ inline FILE* Fdopen(unique_fd&& ufd, const char* mode) {
     close(fd);
   }
   return file;
+}
+
+// Using fdopendir with unique_fd correctly is more annoying than it should be,
+// because fdopen doesn't close the file descriptor received upon failure.
+inline DIR* Fdopendir(unique_fd&& ufd) {
+  int fd = ufd.release();
+  DIR* dir = fdopendir(fd);
+  if (dir == nullptr) {
+    close(fd);
+  }
+  return dir;
 }
 
 #endif  // !defined(_WIN32)
