@@ -510,8 +510,10 @@ bool llkWriteStringToFileConfirm(const std::string& string, const std::string& f
     return android::base::Trim(content) == string;
 }
 
-void llkPanicKernel(bool dump, pid_t tid, const char* state) __noreturn;
-void llkPanicKernel(bool dump, pid_t tid, const char* state) {
+void llkPanicKernel(bool dump, pid_t tid, const char* state,
+                    const std::string& message = "") __noreturn;
+void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& message) {
+    if (!message.empty()) LOG(ERROR) << message;
     auto sysrqTriggerFd = llkFileToWriteFd("/proc/sysrq-trigger");
     if (sysrqTriggerFd < 0) {
         // DYB
@@ -524,14 +526,24 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state) {
     if (dump) {
         // Show all locks that are held
         android::base::WriteStringToFd("d", sysrqTriggerFd);
+        // Show all waiting tasks
+        android::base::WriteStringToFd("w", sysrqTriggerFd);
         // This can trigger hardware watchdog, that is somewhat _ok_.
         // But useless if pstore configured for <256KB, low ram devices ...
         if (llkEnableSysrqT) {
             android::base::WriteStringToFd("t", sysrqTriggerFd);
+            // Show all locks that are held (in case 't' overflows ramoops)
+            android::base::WriteStringToFd("d", sysrqTriggerFd);
+            // Show all waiting tasks (in case 't' overflows ramoops)
+            android::base::WriteStringToFd("w", sysrqTriggerFd);
         }
         ::usleep(200000);  // let everything settle
     }
-    llkWriteStringToFile("SysRq : Trigger a crash : 'livelock,"s + state + "'\n", "/dev/kmsg");
+    // SysRq message matches kernel format, and propagates through bootstat
+    // ultimately to the boot reason into panic,livelock,<state>.
+    llkWriteStringToFile(message + (message.empty() ? "" : "\n") +
+                                 "SysRq : Trigger a crash : 'livelock,"s + state + "'\n",
+                         "/dev/kmsg");
     android::base::WriteStringToFd("c", sysrqTriggerFd);
     // NOTREACHED
     // DYB
@@ -1092,10 +1104,12 @@ milliseconds llkCheck(bool checkRunning) {
                 }
             }
             // We are here because we have confirmed kernel live-lock
-            LOG(ERROR) << state << ' ' << llkFormat(procp->count) << ' ' << ppid << "->" << pid
-                       << "->" << tid << ' ' << procp->getComm() << " [panic]";
+            const auto message = state + " "s + llkFormat(procp->count) + " " +
+                                 std::to_string(ppid) + "->" + std::to_string(pid) + "->" +
+                                 std::to_string(tid) + " " + procp->getComm() + " [panic]";
             llkPanicKernel(true, tid,
-                           (state == 'Z') ? "zombie" : (state == 'D') ? "driver" : "sleeping");
+                           (state == 'Z') ? "zombie" : (state == 'D') ? "driver" : "sleeping",
+                           message);
         }
         LOG(VERBOSE) << "+closedir()";
     }
