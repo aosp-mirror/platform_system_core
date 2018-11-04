@@ -35,6 +35,8 @@ unsigned llkCheckMilliseconds(void);
 #define LLK_ENABLE_DEFAULT             false /* "eng" and userdebug true */
 #define KHT_ENABLE_WRITEABLE_PROPERTY  "khungtask.enable"
 #define KHT_ENABLE_PROPERTY            "ro." KHT_ENABLE_WRITEABLE_PROPERTY
+#define LLK_ENABLE_SYSRQ_T_PROPERTY    "ro.llk.sysrq_t"
+#define LLK_ENABLE_SYSRQ_T_DEFAULT     true
 #define LLK_MLOCKALL_PROPERTY          "ro.llk.mlockall"
 #define LLK_MLOCKALL_DEFAULT           true
 #define LLK_KILLTEST_PROPERTY          "ro.llk.killtest"
@@ -48,7 +50,7 @@ unsigned llkCheckMilliseconds(void);
 /* LLK_CHECK_MS_DEFAULT = actual timeout_ms / LLK_CHECKS_PER_TIMEOUT_DEFAULT */
 #define LLK_CHECKS_PER_TIMEOUT_DEFAULT 5
 #define LLK_CHECK_STACK_PROPERTY       "ro.llk.stack"
-#define LLK_CHECK_STACK_DEFAULT        "cma_alloc,__get_user_pages"
+#define LLK_CHECK_STACK_DEFAULT        "cma_alloc,__get_user_pages,bit_wait_io"
 #define LLK_BLACKLIST_PROCESS_PROPERTY "ro.llk.blacklist.process"
 #define LLK_BLACKLIST_PROCESS_DEFAULT  \
     "0,1,2,init,[kthreadd],[khungtaskd],lmkd,llkd,watchdogd,[watchdogd],[watchdogd/0]"

@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <selinux/selinux.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/param.h>
@@ -54,6 +55,13 @@
 using namespace std::literals;
 using namespace android::dm;
 using namespace android::fs_mgr;
+
+static bool fs_mgr_access(const std::string& path) {
+    auto save_errno = errno;
+    auto ret = access(path.c_str(), F_OK) == 0;
+    errno = save_errno;
+    return ret;
+}
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
 
@@ -110,17 +118,6 @@ bool fs_mgr_dir_is_writable(const std::string& path) {
     rmdir(test_directory.c_str());
     auto ret = !mkdir(test_directory.c_str(), 0700);
     return ret | !rmdir(test_directory.c_str());
-}
-
-std::string fs_mgr_get_context(const std::string& mount_point) {
-    char* ctx = nullptr;
-    auto len = getfilecon(mount_point.c_str(), &ctx);
-    if ((len > 0) && ctx) {
-        std::string context(ctx, len);
-        free(ctx);
-        return context;
-    }
-    return "";
 }
 
 // At less than 1% free space return value of false,
@@ -232,32 +229,12 @@ const char* fs_mgr_mount_point(const char* mount_point) {
     return "/system";
 }
 
-bool fs_mgr_access(const std::string& path) {
-    auto save_errno = errno;
-    auto ret = access(path.c_str(), F_OK) == 0;
-    errno = save_errno;
-    return ret;
-}
-
 bool fs_mgr_rw_access(const std::string& path) {
     if (path.empty()) return false;
     auto save_errno = errno;
     auto ret = access(path.c_str(), R_OK | W_OK) == 0;
     errno = save_errno;
     return ret;
-}
-
-// return true if system supports overlayfs
-bool fs_mgr_wants_overlayfs() {
-    // Properties will return empty on init first_stage_mount, so speculative
-    // determination, empty (unset) _or_ "1" is true which differs from the
-    // official ro.debuggable policy.  ALLOW_ADBD_DISABLE_VERITY == 0 should
-    // protect us from false in any case, so this is insurance.
-    auto debuggable = android::base::GetProperty("ro.debuggable", "1");
-    if (debuggable != "1") return false;
-
-    // Overlayfs available in the kernel, and patched for override_creds?
-    return fs_mgr_access("/sys/module/overlay/parameters/override_creds");
 }
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true) {
@@ -716,13 +693,21 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
         errno = 0;
     }
 
-    auto ret = system((mnt_type == "f2fs")
-                              ? ((kMkF2fs + " -d1 " + scratch_device).c_str())
-                              : ((kMkExt4 + " -b 4096 -t ext4 -m 0 -M " + kScratchMountPoint +
-                                  " -O has_journal " + scratch_device)
-                                         .c_str()));
+    // Force mkfs by design for overlay support of adb remount, simplify and
+    // thus do not rely on fsck to correct problems that could creep in.
+    auto command = ""s;
+    if (mnt_type == "f2fs") {
+        command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
+    } else if (mnt_type == "ext4") {
+        command = kMkExt4 + " -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
+    } else {
+        LERROR << mnt_type << " has no mkfs cookbook";
+        return false;
+    }
+    command += " " + scratch_device;
+    auto ret = system(command.c_str());
     if (ret) {
-        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " error=" << ret;
+        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
         return false;
     }
 
@@ -748,7 +733,7 @@ bool fs_mgr_overlayfs_scratch_can_be_mounted(const std::string& scratch_device) 
 bool fs_mgr_overlayfs_mount_all(fstab* fstab) {
     auto ret = false;
 
-    if (!fs_mgr_wants_overlayfs()) return ret;
+    if (!fs_mgr_overlayfs_supports_override_creds()) return ret;
 
     if (!fstab) return ret;
 
@@ -806,7 +791,7 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(
 bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* change) {
     if (change) *change = false;
     auto ret = false;
-    if (!fs_mgr_wants_overlayfs()) return ret;
+    if (!fs_mgr_overlayfs_supports_override_creds()) return ret;
     if (!fs_mgr_boot_completed()) {
         errno = EBUSY;
         PERROR << "setup";
@@ -869,7 +854,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         ret &= fs_mgr_overlayfs_teardown_one(overlay_mount_point, mount_point ?: "", change);
     }
-    if (!fs_mgr_wants_overlayfs()) {
+    if (!fs_mgr_overlayfs_supports_override_creds()) {
         // After obligatory teardown to make sure everything is clean, but if
         // we didn't want overlayfs in the the first place, we do not want to
         // waste time on a reboot (or reboot request message).
@@ -907,4 +892,20 @@ bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string&
     if (ext4_parse_sb(&sb, &info) < 0) return false;
 
     return (info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS) != 0;
+}
+
+std::string fs_mgr_get_context(const std::string& mount_point) {
+    char* ctx = nullptr;
+    if (getfilecon(mount_point.c_str(), &ctx) == -1) {
+        return "";
+    }
+
+    std::string context(ctx);
+    free(ctx);
+    return context;
+}
+
+bool fs_mgr_overlayfs_supports_override_creds() {
+    // Overlayfs available in the kernel, and patched for override_creds?
+    return fs_mgr_access("/sys/module/overlay/parameters/override_creds");
 }

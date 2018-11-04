@@ -419,7 +419,7 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
 }
 
 void DeviceHandler::ColdbootDone() {
-    skip_restorecon_ = true;
+    skip_restorecon_ = false;
 }
 
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,

@@ -14,25 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _ANDROID_LOG_H
-#define _ANDROID_LOG_H
-
-/******************************************************************
- *
- * IMPORTANT NOTICE:
- *
- *   This file is part of Android's set of stable system headers
- *   exposed by the Android NDK (Native Development Kit) since
- *   platform release 1.5
- *
- *   Third-party source AND binary code relies on the definitions
- *   here to be FROZEN ON ALL UPCOMING PLATFORM RELEASES.
- *
- *   - DO NOT MODIFY ENUMS (EXCEPT IF YOU ADD NEW 32-BIT VALUES)
- *   - DO NOT MODIFY CONSTANTS OR FUNCTIONAL MACROS
- *   - DO NOT CHANGE THE SIGNATURE OF FUNCTIONS IN ANY WAY
- *   - DO NOT CHANGE THE LAYOUT OR SIZE OF STRUCTURES
- */
+#pragma once
 
 /**
  * @addtogroup Logging
@@ -154,27 +136,51 @@ void __android_log_assert(const char* cond, const char* tag, const char* fmt,
 
 #ifndef log_id_t_defined
 #define log_id_t_defined
+/**
+ * Identifies a specific log buffer for __android_log_buf_write()
+ * and __android_log_buf_print().
+ */
 typedef enum log_id {
   LOG_ID_MIN = 0,
 
+  /** The main log buffer. This is the only log buffer available to apps. */
   LOG_ID_MAIN = 0,
+  /** The radio log buffer. */
   LOG_ID_RADIO = 1,
+  /** The event log buffer. */
   LOG_ID_EVENTS = 2,
+  /** The system log buffer. */
   LOG_ID_SYSTEM = 3,
+  /** The crash log buffer. */
   LOG_ID_CRASH = 4,
+  /** The statistics log buffer. */
   LOG_ID_STATS = 5,
+  /** The security log buffer. */
   LOG_ID_SECURITY = 6,
-  LOG_ID_KERNEL = 7, /* place last, third-parties can not use it */
+  /** The kernel log buffer. */
+  LOG_ID_KERNEL = 7,
 
   LOG_ID_MAX
 } log_id_t;
 #endif
 
-/*
- * Send a simple string to the log.
+/**
+ * Writes the constant string `text` to the log buffer `id`,
+ * with priority `prio` and tag `tag`.
+ *
+ * Apps should use __android_log_write() instead.
  */
 int __android_log_buf_write(int bufID, int prio, const char* tag,
                             const char* text);
+
+/**
+ * Writes a formatted string to log buffer `id`,
+ * with priority `prio` and tag `tag`.
+ * The details of formatting are the same as for
+ * [printf(3)](http://man7.org/linux/man-pages/man3/printf.3.html).
+ *
+ * Apps should use __android_log_print() instead.
+ */
 int __android_log_buf_print(int bufID, int prio, const char* tag,
                             const char* fmt, ...)
 #if defined(__GNUC__)
@@ -187,5 +193,3 @@ int __android_log_buf_print(int bufID, int prio, const char* tag,
 #endif
 
 /** @} */
-
-#endif /* _ANDROID_LOG_H */

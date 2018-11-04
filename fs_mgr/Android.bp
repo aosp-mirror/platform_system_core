@@ -46,6 +46,7 @@ cc_library {
         "fs_mgr_avb_ops.cpp",
         "fs_mgr_dm_linear.cpp",
         "fs_mgr_overlayfs.cpp",
+        "fs_mgr_vendor_overlay.cpp",
     ],
     shared_libs: [
         "libbase",

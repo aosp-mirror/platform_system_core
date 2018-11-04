@@ -9,5 +9,3 @@ LOCAL_MODULE_TAGS := debug
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
 
 include $(BUILD_PREBUILT)
-
-include $(call first-makefiles-under,$(LOCAL_PATH))

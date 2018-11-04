@@ -53,49 +53,31 @@ using android::base::WriteStringToFile;
 
 using namespace std::chrono_literals;
 
-#define MEM_CGROUP_PATH "/dev/memcg/apps"
-#define MEM_CGROUP_TASKS "/dev/memcg/apps/tasks"
-#define ACCT_CGROUP_PATH "/acct"
+static const char kCpuacctCgroup[] = "/acct";
+static const char kMemoryCgroup[] = "/dev/memcg/apps";
 
 #define PROCESSGROUP_CGROUP_PROCS_FILE "/cgroup.procs"
 
-std::once_flag init_path_flag;
-
-static const std::string& GetCgroupRootPath() {
-    static std::string cgroup_root_path;
-    std::call_once(init_path_flag, [&]() {
-        // low-ram devices use per-app memcg by default, unlike high-end ones
-        bool low_ram_device = GetBoolProperty("ro.config.low_ram", false);
-        bool per_app_memcg =
-            GetBoolProperty("ro.config.per_app_memcg", low_ram_device);
-        if (per_app_memcg) {
-            // Check if mem cgroup is mounted, only then check for
-            // write-access to avoid SELinux denials
-            cgroup_root_path =
-                (access(MEM_CGROUP_TASKS, F_OK) || access(MEM_CGROUP_PATH, W_OK) ?
-                ACCT_CGROUP_PATH : MEM_CGROUP_PATH);
-        } else {
-            cgroup_root_path = ACCT_CGROUP_PATH;
-        }
-    });
-    return cgroup_root_path;
+static bool isMemoryCgroupSupported() {
+    static bool memcg_supported = !access("/dev/memcg/memory.limit_in_bytes", F_OK);
+    return memcg_supported;
 }
 
-static std::string ConvertUidToPath(uid_t uid) {
-    return StringPrintf("%s/uid_%d", GetCgroupRootPath().c_str(), uid);
+static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
+    return StringPrintf("%s/uid_%d", cgroup, uid);
 }
 
-static std::string ConvertUidPidToPath(uid_t uid, int pid) {
-    return StringPrintf("%s/uid_%d/pid_%d", GetCgroupRootPath().c_str(), uid, pid);
+static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
+    return StringPrintf("%s/uid_%d/pid_%d", cgroup, uid, pid);
 }
 
-static int RemoveProcessGroup(uid_t uid, int pid) {
+static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid) {
     int ret;
 
-    auto uid_pid_path = ConvertUidPidToPath(uid, pid);
+    auto uid_pid_path = ConvertUidPidToPath(cgroup, uid, pid);
     ret = rmdir(uid_pid_path.c_str());
 
-    auto uid_path = ConvertUidToPath(uid);
+    auto uid_path = ConvertUidToPath(cgroup, uid);
     rmdir(uid_path.c_str());
 
     return ret;
@@ -124,25 +106,26 @@ static void RemoveUidProcessGroups(const std::string& uid_path) {
 void removeAllProcessGroups()
 {
     LOG(VERBOSE) << "removeAllProcessGroups()";
-    const auto& cgroup_root_path = GetCgroupRootPath();
-    std::unique_ptr<DIR, decltype(&closedir)> root(opendir(cgroup_root_path.c_str()), closedir);
-    if (root == NULL) {
-        PLOG(ERROR) << "Failed to open " << cgroup_root_path;
-    } else {
-        dirent* dir;
-        while ((dir = readdir(root.get())) != nullptr) {
-            if (dir->d_type != DT_DIR) {
-                continue;
-            }
+    for (const char* cgroup_root_path : {kCpuacctCgroup, kMemoryCgroup}) {
+        std::unique_ptr<DIR, decltype(&closedir)> root(opendir(cgroup_root_path), closedir);
+        if (root == NULL) {
+            PLOG(ERROR) << "Failed to open " << cgroup_root_path;
+        } else {
+            dirent* dir;
+            while ((dir = readdir(root.get())) != nullptr) {
+                if (dir->d_type != DT_DIR) {
+                    continue;
+                }
 
-            if (!StartsWith(dir->d_name, "uid_")) {
-                continue;
-            }
+                if (!StartsWith(dir->d_name, "uid_")) {
+                    continue;
+                }
 
-            auto path = StringPrintf("%s/%s", cgroup_root_path.c_str(), dir->d_name);
-            RemoveUidProcessGroups(path);
-            LOG(VERBOSE) << "Removing " << path;
-            if (rmdir(path.c_str()) == -1) PLOG(WARNING) << "Failed to remove " << path;
+                auto path = StringPrintf("%s/%s", cgroup_root_path, dir->d_name);
+                RemoveUidProcessGroups(path);
+                LOG(VERBOSE) << "Removing " << path;
+                if (rmdir(path.c_str()) == -1) PLOG(WARNING) << "Failed to remove " << path;
+            }
         }
     }
 }
@@ -150,8 +133,8 @@ void removeAllProcessGroups()
 // Returns number of processes killed on success
 // Returns 0 if there are no processes in the process cgroup left to kill
 // Returns -1 on error
-static int DoKillProcessGroupOnce(uid_t uid, int initialPid, int signal) {
-    auto path = ConvertUidPidToPath(uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
+static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid, int signal) {
+    auto path = ConvertUidPidToPath(cgroup, uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
     std::unique_ptr<FILE, decltype(&fclose)> fd(fopen(path.c_str(), "re"), fclose);
     if (!fd) {
         PLOG(WARNING) << "Failed to open process cgroup uid " << uid << " pid " << initialPid;
@@ -217,11 +200,16 @@ static int DoKillProcessGroupOnce(uid_t uid, int initialPid, int signal) {
 }
 
 static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) {
+    const char* cgroup =
+            (!access(ConvertUidPidToPath(kCpuacctCgroup, uid, initialPid).c_str(), F_OK))
+                    ? kCpuacctCgroup
+                    : kMemoryCgroup;
+
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
     int retry = retries;
     int processes;
-    while ((processes = DoKillProcessGroupOnce(uid, initialPid, signal)) > 0) {
+    while ((processes = DoKillProcessGroupOnce(cgroup, uid, initialPid, signal)) > 0) {
         LOG(VERBOSE) << "Killed " << processes << " processes for processgroup " << initialPid;
         if (retry > 0) {
             std::this_thread::sleep_for(5ms);
@@ -251,7 +239,7 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
             LOG(INFO) << "Successfully killed process cgroup uid " << uid << " pid " << initialPid
                       << " in " << static_cast<int>(ms) << "ms";
         }
-        return RemoveProcessGroup(uid, initialPid);
+        return RemoveProcessGroup(cgroup, uid, initialPid);
     } else {
         if (retries > 0) {
             LOG(ERROR) << "Failed to kill process cgroup uid " << uid << " pid " << initialPid
@@ -285,16 +273,29 @@ static bool MkdirAndChown(const std::string& path, mode_t mode, uid_t uid, gid_t
     return true;
 }
 
-int createProcessGroup(uid_t uid, int initialPid)
+static bool isPerAppMemcgEnabled() {
+    static bool per_app_memcg =
+            GetBoolProperty("ro.config.per_app_memcg", GetBoolProperty("ro.config.low_ram", false));
+    return per_app_memcg;
+}
+
+int createProcessGroup(uid_t uid, int initialPid, bool memControl)
 {
-    auto uid_path = ConvertUidToPath(uid);
+    const char* cgroup;
+    if (isMemoryCgroupSupported() && (memControl || isPerAppMemcgEnabled())) {
+        cgroup = kMemoryCgroup;
+    } else {
+        cgroup = kCpuacctCgroup;
+    }
+
+    auto uid_path = ConvertUidToPath(cgroup, uid);
 
     if (!MkdirAndChown(uid_path, 0750, AID_SYSTEM, AID_SYSTEM)) {
         PLOG(ERROR) << "Failed to make and chown " << uid_path;
         return -errno;
     }
 
-    auto uid_pid_path = ConvertUidPidToPath(uid, initialPid);
+    auto uid_pid_path = ConvertUidPidToPath(cgroup, uid, initialPid);
 
     if (!MkdirAndChown(uid_pid_path, 0750, AID_SYSTEM, AID_SYSTEM)) {
         PLOG(ERROR) << "Failed to make and chown " << uid_pid_path;
@@ -313,12 +314,12 @@ int createProcessGroup(uid_t uid, int initialPid)
 }
 
 static bool SetProcessGroupValue(uid_t uid, int pid, const std::string& file_name, int64_t value) {
-    if (GetCgroupRootPath() != MEM_CGROUP_PATH) {
+    if (!isMemoryCgroupSupported()) {
         PLOG(ERROR) << "Memcg is not mounted.";
         return false;
     }
 
-    auto path = ConvertUidPidToPath(uid, pid) + file_name;
+    auto path = ConvertUidPidToPath(kMemoryCgroup, uid, pid) + file_name;
 
     if (!WriteStringToFile(std::to_string(value), path)) {
         PLOG(ERROR) << "Failed to write '" << value << "' to " << path;
