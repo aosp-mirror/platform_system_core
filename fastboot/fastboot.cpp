@@ -1200,6 +1200,15 @@ FlashAllTool::FlashAllTool(const ImageSource& source, const std::string& slot_ov
 void FlashAllTool::Flash() {
     DumpInfo();
     CheckRequirements();
+
+    // Change the slot first, so we boot into the correct recovery image when
+    // using fastbootd.
+    if (slot_override_ == "all") {
+        set_active("a");
+    } else {
+        set_active(slot_override_);
+    }
+
     DetermineSecondarySlot();
     CollectImages();
 
@@ -1223,12 +1232,6 @@ void FlashAllTool::Flash() {
 
     // Flash OS images, resizing logical partitions as needed.
     FlashImages(os_images_);
-
-    if (slot_override_ == "all") {
-        set_active("a");
-    } else {
-        set_active(slot_override_);
-    }
 }
 
 void FlashAllTool::CheckRequirements() {
@@ -1243,7 +1246,7 @@ void FlashAllTool::DetermineSecondarySlot() {
     if (skip_secondary_) {
         return;
     }
-    if (slot_override_ != "") {
+    if (slot_override_ != "" && slot_override_ != "all") {
         secondary_slot_ = get_other_slot(slot_override_);
     } else {
         secondary_slot_ = get_other_slot();
