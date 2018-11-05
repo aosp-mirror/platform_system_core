@@ -74,16 +74,21 @@ bool fs_mgr_vendor_overlay_mount(const std::string& overlay_top, const std::stri
     const auto vendor_mount_point = kVendorTopDir + mount_point;
     LINFO << "vendor overlay mount on " << vendor_mount_point;
 
-    auto context = fs_mgr_get_context(vendor_mount_point);
-    if (!context.empty()) {
-        context = ",rootcontext="s + context;
-    } else {
-        PERROR << " result: cannot find the mount point";
+    const auto target_context = fs_mgr_get_context(vendor_mount_point);
+    if (target_context.empty()) {
+        PERROR << " failed: cannot find the target vendor mount point";
+        return false;
+    }
+    const auto source_directory = overlay_top + "/" + mount_point;
+    const auto source_context = fs_mgr_get_context(source_directory);
+    if (target_context != source_context) {
+        LERROR << " failed: source and target contexts do not match (source:" << source_context
+               << ", target:" << target_context << ")";
         return false;
     }
 
-    auto options = "override_creds=off,"s + kLowerdirOption + overlay_top + "/" + mount_point +
-                   ":" + vendor_mount_point + context;
+    auto options =
+            "override_creds=off,"s + kLowerdirOption + source_directory + ":" + vendor_mount_point;
     auto report = "__mount(source=overlay,target="s + vendor_mount_point + ",type=overlay," +
                   options + ")=";
     auto ret = mount("overlay", vendor_mount_point.c_str(), "overlay", MS_RDONLY | MS_RELATIME,
