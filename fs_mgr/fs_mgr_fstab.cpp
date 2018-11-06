@@ -403,10 +403,13 @@ const std::string& get_android_dt_dir() {
 static bool is_dt_fstab_compatible() {
     std::string dt_value;
     std::string file_name = get_android_dt_dir() + "/fstab/compatible";
-    if (read_dt_file(file_name, &dt_value)) {
-        if (dt_value == "android,fstab") {
-            return true;
-        }
+
+    if (read_dt_file(file_name, &dt_value) && dt_value == "android,fstab") {
+        // If there's no status property or its set to "ok" or "okay", then we use the DT fstab.
+        std::string status_value;
+        std::string status_file_name = get_android_dt_dir() + "/fstab/status";
+        return !read_dt_file(status_file_name, &status_value) || status_value == "ok" ||
+               status_value == "okay";
     }
 
     return false;
