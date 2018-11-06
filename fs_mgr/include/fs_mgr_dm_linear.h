@@ -33,11 +33,20 @@
 #include <vector>
 
 #include <libdm/dm.h>
-#include <liblp/metadata_format.h>
+#include <liblp/liblp.h>
 
 namespace android {
 namespace fs_mgr {
 
+// Read metadata from the current slot.
+std::unique_ptr<LpMetadata> ReadCurrentMetadata(const std::string& block_device);
+
+// Create block devices for all logical partitions in the given metadata. The
+// metadata must have been read from the current slot.
+bool CreateLogicalPartitions(const LpMetadata& metadata);
+
+// Create block devices for all logical partitions. This is a convenience
+// method for ReadMetadata and CreateLogicalPartitions.
 bool CreateLogicalPartitions(const std::string& block_device);
 
 // Create a block device for a single logical partition, given metadata and
