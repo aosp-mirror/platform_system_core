@@ -116,5 +116,13 @@ uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata) {
     return size;
 }
 
+std::vector<std::string> GetBlockDevicePartitionNames(const LpMetadata& metadata) {
+    std::vector<std::string> list;
+    for (const auto& block_device : metadata.block_devices) {
+        list.emplace_back(GetBlockDevicePartitionName(block_device));
+    }
+    return list;
+}
+
 }  // namespace fs_mgr
 }  // namespace android
