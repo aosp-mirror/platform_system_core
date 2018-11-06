@@ -632,3 +632,64 @@ TEST(liblp, MultipleBlockDevices) {
     EXPECT_EQ(metadata->extents[2].target_data, 1472);
     EXPECT_EQ(metadata->extents[2].target_source, 2);
 }
+
+TEST(liblp, ImportPartitionsOk) {
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
+    Partition* vendor = builder->AddPartition("vendor", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system, nullptr);
+    ASSERT_NE(vendor, nullptr);
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
+    EXPECT_EQ(builder->ResizePartition(vendor, 32768), true);
+    EXPECT_EQ(builder->ResizePartition(system, 98304), true);
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+
+    builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->ImportPartitions(*exported.get(), {"vendor"}));
+    EXPECT_NE(builder->FindPartition("vendor"), nullptr);
+    EXPECT_EQ(builder->FindPartition("system"), nullptr);
+
+    unique_ptr<LpMetadata> new_metadata = builder->Export();
+    ASSERT_NE(new_metadata, nullptr);
+
+    ASSERT_EQ(exported->partitions.size(), static_cast<size_t>(2));
+    ASSERT_EQ(GetPartitionName(exported->partitions[1]), "vendor");
+    ASSERT_EQ(new_metadata->partitions.size(), static_cast<size_t>(1));
+    ASSERT_EQ(GetPartitionName(new_metadata->partitions[0]), "vendor");
+
+    const LpMetadataExtent& extent_a =
+            exported->extents[exported->partitions[1].first_extent_index];
+    const LpMetadataExtent& extent_b =
+            new_metadata->extents[new_metadata->partitions[0].first_extent_index];
+    EXPECT_EQ(extent_a.num_sectors, extent_b.num_sectors);
+    EXPECT_EQ(extent_a.target_type, extent_b.target_type);
+    EXPECT_EQ(extent_a.target_data, extent_b.target_data);
+    EXPECT_EQ(extent_a.target_source, extent_b.target_source);
+}
+
+TEST(liblp, ImportPartitionsFail) {
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+
+    Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_READONLY);
+    Partition* vendor = builder->AddPartition("vendor", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system, nullptr);
+    ASSERT_NE(vendor, nullptr);
+    EXPECT_EQ(builder->ResizePartition(system, 65536), true);
+    EXPECT_EQ(builder->ResizePartition(vendor, 32768), true);
+    EXPECT_EQ(builder->ResizePartition(system, 98304), true);
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+
+    // Different device size.
+    builder = MetadataBuilder::New(1024 * 2048, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+    EXPECT_FALSE(builder->ImportPartitions(*exported.get(), {"system"}));
+}
