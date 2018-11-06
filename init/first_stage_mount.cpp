@@ -33,7 +33,7 @@
 #include <fs_mgr_avb.h>
 #include <fs_mgr_dm_linear.h>
 #include <fs_mgr_overlayfs.h>
-#include <liblp/metadata_format.h>
+#include <liblp/liblp.h>
 
 #include "devices.h"
 #include "switch_root.h"
@@ -69,7 +69,8 @@ class FirstStageMount {
     bool MountPartition(fstab_rec* fstab_rec);
     bool MountPartitions();
     bool IsDmLinearEnabled();
-    bool GetBackingDmLinearDevices();
+    bool GetDmLinearMetadataDevice();
+    bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
 
     virtual ListenerAction UeventCallback(const Uevent& uevent);
 
@@ -183,7 +184,7 @@ bool FirstStageMount::DoFirstStageMount() {
 }
 
 bool FirstStageMount::InitDevices() {
-    return GetBackingDmLinearDevices() && GetDmVerityDevices() && InitRequiredDevices();
+    return GetDmLinearMetadataDevice() && GetDmVerityDevices() && InitRequiredDevices();
 }
 
 bool FirstStageMount::IsDmLinearEnabled() {
@@ -193,7 +194,7 @@ bool FirstStageMount::IsDmLinearEnabled() {
     return false;
 }
 
-bool FirstStageMount::GetBackingDmLinearDevices() {
+bool FirstStageMount::GetDmLinearMetadataDevice() {
     // Add any additional devices required for dm-linear mappings.
     if (!IsDmLinearEnabled()) {
         return true;
@@ -258,17 +259,48 @@ bool FirstStageMount::InitRequiredDevices() {
     return true;
 }
 
+bool FirstStageMount::InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata) {
+    auto partition_names = GetBlockDevicePartitionNames(metadata);
+    for (const auto& partition_name : partition_names) {
+        if (partition_name == lp_metadata_partition_) {
+            continue;
+        }
+        required_devices_partition_names_.emplace(partition_name);
+    }
+    if (required_devices_partition_names_.empty()) {
+        return true;
+    }
+
+    auto uevent_callback = [this](const Uevent& uevent) { return UeventCallback(uevent); };
+    uevent_listener_.RegenerateUevents(uevent_callback);
+
+    if (!required_devices_partition_names_.empty()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found after polling timeout: "
+                   << android::base::Join(required_devices_partition_names_, ", ");
+        return false;
+    }
+    return true;
+}
+
 bool FirstStageMount::CreateLogicalPartitions() {
     if (!IsDmLinearEnabled()) {
         return true;
     }
-
     if (lp_metadata_partition_.empty()) {
         LOG(ERROR) << "Could not locate logical partition tables in partition "
                    << super_partition_name_;
         return false;
     }
-    return android::fs_mgr::CreateLogicalPartitions(lp_metadata_partition_);
+
+    auto metadata = android::fs_mgr::ReadCurrentMetadata(lp_metadata_partition_);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read logical partition metadata from " << lp_metadata_partition_;
+        return false;
+    }
+    if (!InitDmLinearBackingDevices(*metadata.get())) {
+        return false;
+    }
+    return android::fs_mgr::CreateLogicalPartitions(*metadata.get());
 }
 
 ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const Uevent& uevent) {
