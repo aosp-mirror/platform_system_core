@@ -24,10 +24,12 @@ using namespace android::fs_mgr;
 
 TEST(liblp, SlotNumberForSlotSuffix) {
     EXPECT_EQ(SlotNumberForSlotSuffix(""), 0);
+    EXPECT_EQ(SlotNumberForSlotSuffix("a"), 0);
     EXPECT_EQ(SlotNumberForSlotSuffix("_a"), 0);
+    EXPECT_EQ(SlotNumberForSlotSuffix("b"), 1);
     EXPECT_EQ(SlotNumberForSlotSuffix("_b"), 1);
-    EXPECT_EQ(SlotNumberForSlotSuffix("_c"), 2);
-    EXPECT_EQ(SlotNumberForSlotSuffix("_d"), 3);
+    EXPECT_EQ(SlotNumberForSlotSuffix("_c"), 0);
+    EXPECT_EQ(SlotNumberForSlotSuffix("_d"), 0);
 }
 
 TEST(liblp, GetMetadataOffset) {
