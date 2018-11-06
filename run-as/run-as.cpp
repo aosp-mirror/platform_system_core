@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
   // Some devices can disable running run-as, such as Chrome OS when running in
   // non-developer mode.
   if (android::base::GetBoolProperty("ro.boot.disable_runas", false)) {
-      error(1, 0, "run-as is disabled from the kernel commandline");
+    error(1, 0, "run-as is disabled from the kernel commandline");
   }
 
   char* pkgname = argv[1];
