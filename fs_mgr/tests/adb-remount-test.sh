@@ -274,9 +274,8 @@ H=`echo "${D}" | head -1` &&
   echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
   die  "overlay takeover after remount"
 !(adb_sh grep "^overlay " /proc/mounts </dev/null | grep " overlay ro,") &&
-  !(adb_sh grep " rw," /proc/mounts </dev/null |
-  skip_administrative_mounts) ||
-    die "remount overlayfs missed a spot"
+  !(adb_sh grep " rw," /proc/mounts </dev/null | skip_administrative_mounts) ||
+  die "remount overlayfs missed a spot (ro)"
 
 adb_su "sed -n '1,/overlay \\/system/p' /proc/mounts" </dev/null |
   skip_administrative_mounts |
