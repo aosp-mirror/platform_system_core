@@ -184,20 +184,24 @@ bool MetadataBuilder::Init(const LpMetadata& metadata) {
         if (!builder) {
             return false;
         }
-
-        for (size_t i = 0; i < partition.num_extents; i++) {
-            const LpMetadataExtent& extent = metadata.extents[partition.first_extent_index + i];
-            if (extent.target_type == LP_TARGET_TYPE_LINEAR) {
-                auto copy = std::make_unique<LinearExtent>(extent.num_sectors, extent.target_source,
-                                                           extent.target_data);
-                builder->AddExtent(std::move(copy));
-            } else if (extent.target_type == LP_TARGET_TYPE_ZERO) {
-                auto copy = std::make_unique<ZeroExtent>(extent.num_sectors);
-                builder->AddExtent(std::move(copy));
-            }
-        }
+        ImportExtents(builder, metadata, partition);
     }
     return true;
+}
+
+void MetadataBuilder::ImportExtents(Partition* dest, const LpMetadata& metadata,
+                                    const LpMetadataPartition& source) {
+    for (size_t i = 0; i < source.num_extents; i++) {
+        const LpMetadataExtent& extent = metadata.extents[source.first_extent_index + i];
+        if (extent.target_type == LP_TARGET_TYPE_LINEAR) {
+            auto copy = std::make_unique<LinearExtent>(extent.num_sectors, extent.target_source,
+                                                       extent.target_data);
+            dest->AddExtent(std::move(copy));
+        } else if (extent.target_type == LP_TARGET_TYPE_ZERO) {
+            auto copy = std::make_unique<ZeroExtent>(extent.num_sectors);
+            dest->AddExtent(std::move(copy));
+        }
+    }
 }
 
 static bool VerifyDeviceProperties(const BlockDeviceInfo& device_info) {
@@ -471,13 +475,18 @@ auto MetadataBuilder::GetFreeRegions() const -> std::vector<Interval> {
     return free_regions;
 }
 
-bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
+bool MetadataBuilder::ValidatePartitionSizeChange(Partition* partition, uint64_t old_size,
+                                                  uint64_t new_size) {
     PartitionGroup* group = FindGroup(partition->group_name());
     CHECK(group);
 
+    if (new_size <= old_size) {
+        return true;
+    }
+
     // Figure out how much we need to allocate, and whether our group has
     // enough space remaining.
-    uint64_t space_needed = aligned_size - partition->size();
+    uint64_t space_needed = new_size - old_size;
     if (group->maximum_size() > 0) {
         uint64_t group_size = TotalSizeOfGroup(group);
         if (group_size >= group->maximum_size() ||
@@ -488,7 +497,11 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
             return false;
         }
     }
+    return true;
+}
 
+bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
+    uint64_t space_needed = aligned_size - partition->size();
     uint64_t sectors_needed = space_needed / LP_SECTOR_SIZE;
     DCHECK(sectors_needed * LP_SECTOR_SIZE == space_needed);
 
@@ -704,6 +717,10 @@ bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_s
     uint64_t aligned_size = AlignTo(requested_size, geometry_.logical_block_size);
     uint64_t old_size = partition->size();
 
+    if (!ValidatePartitionSizeChange(partition, old_size, aligned_size)) {
+        return false;
+    }
+
     if (aligned_size > old_size) {
         if (!GrowPartition(partition, aligned_size)) {
             return false;
@@ -748,6 +765,75 @@ void MetadataBuilder::RemoveGroupAndPartitions(const std::string& group_name) {
             break;
         }
     }
+}
+
+static bool CompareBlockDevices(const LpMetadataBlockDevice& first,
+                                const LpMetadataBlockDevice& second) {
+    // Note: we don't compare alignment, since it's a performance thing and
+    // won't affect whether old extents continue to work.
+    return first.first_logical_sector == second.first_logical_sector && first.size == second.size &&
+           GetBlockDevicePartitionName(first) == GetBlockDevicePartitionName(second);
+}
+
+bool MetadataBuilder::ImportPartitions(const LpMetadata& metadata,
+                                       const std::set<std::string>& partition_names) {
+    // The block device list must be identical. We do not try to be clever and
+    // allow ordering changes or changes that don't affect partitions. This
+    // process is designed to allow the most common flashing scenarios and more
+    // complex ones should require a wipe.
+    if (metadata.block_devices.size() != block_devices_.size()) {
+        LINFO << "Block device tables does not match.";
+        return false;
+    }
+    for (size_t i = 0; i < metadata.block_devices.size(); i++) {
+        const LpMetadataBlockDevice& old_device = metadata.block_devices[i];
+        const LpMetadataBlockDevice& new_device = block_devices_[i];
+        if (!CompareBlockDevices(old_device, new_device)) {
+            LINFO << "Block device tables do not match";
+            return false;
+        }
+    }
+
+    // Import named partitions. Note that we do not attempt to merge group
+    // information here. If the device changed its group names, the old
+    // partitions will fail to merge. The same could happen if the group
+    // allocation sizes change.
+    for (const auto& partition : metadata.partitions) {
+        std::string partition_name = GetPartitionName(partition);
+        if (partition_names.find(partition_name) == partition_names.end()) {
+            continue;
+        }
+        if (!ImportPartition(metadata, partition)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool MetadataBuilder::ImportPartition(const LpMetadata& metadata,
+                                      const LpMetadataPartition& source) {
+    std::string partition_name = GetPartitionName(source);
+    Partition* partition = FindPartition(partition_name);
+    if (!partition) {
+        std::string group_name = GetPartitionGroupName(metadata.groups[source.group_index]);
+        partition = AddPartition(partition_name, group_name, source.attributes);
+        if (!partition) {
+            return false;
+        }
+    }
+    if (partition->size() > 0) {
+        LINFO << "Importing partition table would overwrite non-empty partition: "
+              << partition_name;
+        return false;
+    }
+
+    ImportExtents(partition, metadata, source);
+
+    if (!ValidatePartitionSizeChange(partition, 0, partition->size())) {
+        partition->RemoveExtents();
+        return false;
+    }
+    return true;
 }
 
 }  // namespace fs_mgr
