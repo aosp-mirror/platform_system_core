@@ -82,12 +82,8 @@ std::string SerializeMetadata(const LpMetadata& input) {
 
 // Perform sanity checks so we don't accidentally overwrite valid metadata
 // with potentially invalid metadata, or random partition data with metadata.
-static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std::string* blob) {
-    uint64_t blockdevice_size;
-    if (!GetDescriptorSize(fd, &blockdevice_size)) {
-        return false;
-    }
-
+static bool ValidateAndSerializeMetadata(const IPartitionOpener& opener, const LpMetadata& metadata,
+                                         std::string* blob) {
     const LpMetadataHeader& header = metadata.header;
     const LpMetadataGeometry& geometry = metadata.geometry;
 
@@ -104,7 +100,7 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
     // metadata.
     uint64_t reserved_size = LP_METADATA_GEOMETRY_SIZE +
                              uint64_t(geometry.metadata_max_size) * geometry.metadata_slot_count;
-    uint64_t total_reserved = reserved_size * 2;
+    uint64_t total_reserved = LP_PARTITION_RESERVED_BYTES + reserved_size * 2;
 
     const LpMetadataBlockDevice* super_device = GetMetadataSuperBlockDevice(metadata);
     if (!super_device) {
@@ -112,15 +108,27 @@ static bool ValidateAndSerializeMetadata(int fd, const LpMetadata& metadata, std
         return false;
     }
 
-    if (total_reserved > blockdevice_size ||
-        total_reserved > super_device->first_logical_sector * LP_SECTOR_SIZE) {
+    if (total_reserved > super_device->first_logical_sector * LP_SECTOR_SIZE) {
         LERROR << "Not enough space to store all logical partition metadata slots.";
         return false;
     }
-    if (blockdevice_size != super_device->size) {
-        LERROR << "Block device size " << blockdevice_size
-               << " does not match metadata requested size " << super_device->size;
-        return false;
+    for (const auto& block_device : metadata.block_devices) {
+        std::string partition_name = GetBlockDevicePartitionName(block_device);
+        if ((block_device.first_logical_sector + 1) * LP_SECTOR_SIZE > block_device.size) {
+            LERROR << "Block device " << partition_name << " has invalid first sector "
+                   << block_device.first_logical_sector << " for size " << block_device.size;
+            return false;
+        }
+        BlockDeviceInfo info;
+        if (!opener.GetInfo(partition_name, &info)) {
+            PERROR << partition_name << ": ioctl";
+            return false;
+        }
+        if (info.size != block_device.size) {
+            LERROR << "Block device " << partition_name << " size mismatch (expected"
+                   << block_device.size << ", got " << info.size << ")";
+            return false;
+        }
     }
 
     // Make sure all partition entries reference valid extents.
@@ -230,7 +238,7 @@ bool FlashPartitionTable(const IPartitionOpener& opener, const std::string& supe
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
     std::string metadata_blob;
-    if (!ValidateAndSerializeMetadata(fd, metadata, &metadata_blob)) {
+    if (!ValidateAndSerializeMetadata(opener, metadata, &metadata_blob)) {
         return false;
     }
 
@@ -295,7 +303,7 @@ bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& sup
     // basic checks that the geometry and tables are coherent, and will fit
     // on the given block device.
     std::string blob;
-    if (!ValidateAndSerializeMetadata(fd, metadata, &blob)) {
+    if (!ValidateAndSerializeMetadata(opener, metadata, &blob)) {
         return false;
     }
 
@@ -327,7 +335,7 @@ bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& sup
         // synchronize the backup copy. This guarantees that a partial write
         // still leaves one copy intact.
         std::string old_blob;
-        if (!ValidateAndSerializeMetadata(fd, *primary.get(), &old_blob)) {
+        if (!ValidateAndSerializeMetadata(opener, *primary.get(), &old_blob)) {
             LERROR << "Error serializing primary metadata to repair corrupted backup";
             return false;
         }
@@ -339,7 +347,7 @@ bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& sup
         // The backup copy is coherent, and the primary is not. Sync it for
         // safety.
         std::string old_blob;
-        if (!ValidateAndSerializeMetadata(fd, *backup.get(), &old_blob)) {
+        if (!ValidateAndSerializeMetadata(opener, *backup.get(), &old_blob)) {
             LERROR << "Error serializing primary metadata to repair corrupted backup";
             return false;
         }
