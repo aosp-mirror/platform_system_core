@@ -99,7 +99,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
             {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
             {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
-            {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}}};
+            {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
+            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");

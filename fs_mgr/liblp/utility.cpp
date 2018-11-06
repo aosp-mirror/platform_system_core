@@ -97,15 +97,15 @@ void SHA256(const void* data, size_t length, uint8_t out[32]) {
 }
 
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix) {
-    if (suffix.empty()) {
+    if (suffix.empty() || suffix == "a" || suffix == "_a") {
         return 0;
-    }
-    if (suffix.size() != 2 || suffix[0] != '_' || suffix[1] < 'a') {
+    } else if (suffix == "b" || suffix == "_b") {
+        return 1;
+    } else {
         LERROR << __PRETTY_FUNCTION__ << "slot '" << suffix
                << "' does not have a recognized format.";
         return 0;
     }
-    return suffix[1] - 'a';
 }
 
 uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata) {
