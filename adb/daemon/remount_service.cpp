@@ -97,8 +97,12 @@ static std::string find_mount(const char* dir, bool is_root) {
     }
 }
 
+bool dev_is_overlayfs(const std::string& dev) {
+    return (dev == "overlay") || (dev == "overlayfs");
+}
+
 bool make_block_device_writable(const std::string& dev) {
-    if ((dev == "overlay") || (dev == "overlayfs")) return true;
+    if (dev_is_overlayfs(dev)) return true;
     int fd = unix_open(dev.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         return false;
@@ -161,6 +165,10 @@ static bool remount_partition(int fd, const char* dir) {
         return true;
     }
     bool is_root = strcmp(dir, "/") == 0;
+    if (is_root && dev_is_overlayfs(find_mount("/system", false))) {
+        dir = "/system";
+        is_root = false;
+    }
     std::string dev = find_mount(dir, is_root);
     if (is_root && dev.empty()) {
         // The fstab entry will be /system if the device switched roots during
