@@ -90,6 +90,9 @@ const LpMetadataBlockDevice* GetMetadataSuperBlockDevice(const LpMetadata& metad
 // Return the total size of all partitions comprising the super partition.
 uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata);
 
+// Get the list of block device names required by the given metadata.
+std::vector<std::string> GetBlockDevicePartitionNames(const LpMetadata& metadata);
+
 // Helper to return a slot number for a slot suffix.
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix);
 

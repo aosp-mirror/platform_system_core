@@ -137,13 +137,22 @@ bool CreateLogicalPartitions(const std::string& block_device) {
         LOG(ERROR) << "Could not read partition table.";
         return true;
     }
-    for (const auto& partition : metadata->partitions) {
+    return CreateLogicalPartitions(*metadata.get());
+}
+
+std::unique_ptr<LpMetadata> ReadCurrentMetadata(const std::string& block_device) {
+    uint32_t slot = SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
+    return ReadMetadata(block_device.c_str(), slot);
+}
+
+bool CreateLogicalPartitions(const LpMetadata& metadata) {
+    for (const auto& partition : metadata.partitions) {
         if (!partition.num_extents) {
             LINFO << "Skipping zero-length logical partition: " << GetPartitionName(partition);
             continue;
         }
         std::string path;
-        if (!CreateLogicalPartition(*metadata.get(), partition, false, {}, &path)) {
+        if (!CreateLogicalPartition(metadata, partition, false, {}, &path)) {
             LERROR << "Could not create logical partition: " << GetPartitionName(partition);
             return false;
         }
