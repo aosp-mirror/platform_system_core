@@ -24,7 +24,9 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr.h>
 #include <healthhalutils/HealthHalUtils.h>
+#include <liblp/liblp.h>
 
 #include "fastboot_device.h"
 #include "flashing.h"
@@ -35,6 +37,7 @@ using ::android::hardware::boot::V1_0::Slot;
 using ::android::hardware::fastboot::V1_0::FileSystemType;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
+using namespace android::fs_mgr;
 
 constexpr char kFastbootProtocolVersion[] = "0.4";
 
@@ -415,5 +418,12 @@ std::vector<std::vector<std::string>> GetAllPartitionArgsNoSlot(FastbootDevice* 
 bool GetHardwareRevision(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                          std::string* message) {
     *message = android::base::GetProperty("ro.revision", "");
+    return true;
+}
+
+bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                           std::string* message) {
+    uint32_t slot_number = SlotNumberForSlotSuffix(device->GetCurrentSlot());
+    *message = fs_mgr_get_super_partition_name(slot_number);
     return true;
 }
