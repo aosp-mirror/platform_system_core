@@ -148,11 +148,38 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     // image.
     std::string slot_suffix = device->GetCurrentSlot();
     uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
-    if (wipe || !ReadMetadata(super_name, slot_number)) {
+    std::unique_ptr<LpMetadata> old_metadata = ReadMetadata(super_name, slot_number);
+    if (wipe || !old_metadata) {
         if (!FlashPartitionTable(super_name, *new_metadata.get())) {
             return device->WriteFail("Unable to flash new partition table");
         }
         return device->WriteOkay("Successfully flashed partition table");
+    }
+
+    std::set<std::string> partitions_to_keep;
+    for (const auto& partition : old_metadata->partitions) {
+        // Preserve partitions in the other slot, but not the current slot.
+        std::string partition_name = GetPartitionName(partition);
+        if (!slot_suffix.empty() && GetPartitionSlotSuffix(partition_name) == slot_suffix) {
+            continue;
+        }
+        partitions_to_keep.emplace(partition_name);
+    }
+
+    // Do not preserve the scratch partition.
+    partitions_to_keep.erase("scratch");
+
+    if (!partitions_to_keep.empty()) {
+        std::unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(*new_metadata.get());
+        if (!builder->ImportPartitions(*old_metadata.get(), partitions_to_keep)) {
+            return device->WriteFail(
+                    "Old partitions are not compatible with the new super layout; wipe needed");
+        }
+
+        new_metadata = builder->Export();
+        if (!new_metadata) {
+            return device->WriteFail("Unable to build new partition table; wipe needed");
+        }
     }
 
     // Write the new table to every metadata slot.

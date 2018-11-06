@@ -60,3 +60,11 @@ TEST(liblp, AlignTo) {
     EXPECT_EQ(AlignTo(32, 32, 30), 62);
     EXPECT_EQ(AlignTo(17, 32, 30), 30);
 }
+
+TEST(liblp, GetPartitionSlotSuffix) {
+    EXPECT_EQ(GetPartitionSlotSuffix("system"), "");
+    EXPECT_EQ(GetPartitionSlotSuffix("_"), "");
+    EXPECT_EQ(GetPartitionSlotSuffix("_a"), "");
+    EXPECT_EQ(GetPartitionSlotSuffix("system_a"), "_a");
+    EXPECT_EQ(GetPartitionSlotSuffix("system_b"), "_b");
+}
