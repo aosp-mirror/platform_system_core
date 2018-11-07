@@ -87,8 +87,10 @@ bool fs_mgr_vendor_overlay_mount(const std::string& overlay_top, const std::stri
         return false;
     }
 
-    auto options =
-            "override_creds=off,"s + kLowerdirOption + source_directory + ":" + vendor_mount_point;
+    auto options = kLowerdirOption + source_directory + ":" + vendor_mount_point;
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
+        options += ",override_creds=off";
+    }
     auto report = "__mount(source=overlay,target="s + vendor_mount_point + ",type=overlay," +
                   options + ")=";
     auto ret = mount("overlay", vendor_mount_point.c_str(), "overlay", MS_RDONLY | MS_RELATIME,
@@ -117,7 +119,7 @@ bool fs_mgr_vendor_overlay_mount_all() {
     }
     const auto vendor_overlay_dirs = fs_mgr_get_vendor_overlay_dirs(overlay_top);
     if (vendor_overlay_dirs.empty()) return true;
-    if (!fs_mgr_overlayfs_supports_override_creds()) {
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
         LINFO << "vendor overlay: kernel does not support overlayfs";
         return false;
     }
