@@ -95,6 +95,7 @@ std::vector<std::string> GetBlockDevicePartitionNames(const LpMetadata& metadata
 
 // Slot suffix helpers.
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix);
+std::string SlotSuffixForSlotNumber(uint32_t slot_number);
 std::string GetPartitionSlotSuffix(const std::string& partition_name);
 
 }  // namespace fs_mgr
