@@ -97,15 +97,15 @@ void SHA256(const void* data, size_t length, uint8_t out[32]) {
 }
 
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix) {
-    if (suffix.empty()) {
+    if (suffix.empty() || suffix == "a" || suffix == "_a") {
         return 0;
-    }
-    if (suffix.size() != 2 || suffix[0] != '_' || suffix[1] < 'a') {
+    } else if (suffix == "b" || suffix == "_b") {
+        return 1;
+    } else {
         LERROR << __PRETTY_FUNCTION__ << "slot '" << suffix
                << "' does not have a recognized format.";
         return 0;
     }
-    return suffix[1] - 'a';
 }
 
 uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata) {
@@ -114,6 +114,22 @@ uint64_t GetTotalSuperPartitionSize(const LpMetadata& metadata) {
         size += block_device.size;
     }
     return size;
+}
+
+std::vector<std::string> GetBlockDevicePartitionNames(const LpMetadata& metadata) {
+    std::vector<std::string> list;
+    for (const auto& block_device : metadata.block_devices) {
+        list.emplace_back(GetBlockDevicePartitionName(block_device));
+    }
+    return list;
+}
+
+std::string GetPartitionSlotSuffix(const std::string& partition_name) {
+    if (partition_name.size() <= 2) {
+        return "";
+    }
+    std::string suffix = partition_name.substr(partition_name.size() - 2);
+    return (suffix == "_a" || suffix == "_b") ? suffix : "";
 }
 
 }  // namespace fs_mgr

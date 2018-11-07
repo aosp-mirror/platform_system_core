@@ -22,6 +22,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 
 #include "liblp.h"
 #include "partition_opener.h"
@@ -225,6 +226,11 @@ class MetadataBuilder {
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
+    // Attempt to preserve the named partitions from an older metadata. If this
+    // is not possible (for example, the block device list has changed) then
+    // false is returned.
+    bool ImportPartitions(const LpMetadata& metadata, const std::set<std::string>& partition_names);
+
   private:
     MetadataBuilder();
     MetadataBuilder(const MetadataBuilder&) = delete;
@@ -240,6 +246,10 @@ class MetadataBuilder {
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
     bool UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& info);
     bool FindBlockDeviceByName(const std::string& partition_name, uint32_t* index) const;
+    bool ValidatePartitionSizeChange(Partition* partition, uint64_t old_size, uint64_t new_size);
+    void ImportExtents(Partition* dest, const LpMetadata& metadata,
+                       const LpMetadataPartition& source);
+    bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
 
     struct Interval {
         uint32_t device_index;

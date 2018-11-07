@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
   // Some devices can disable running run-as, such as Chrome OS when running in
   // non-developer mode.
   if (android::base::GetBoolProperty("ro.boot.disable_runas", false)) {
-      error(1, 0, "run-as is disabled from the kernel commandline");
+    error(1, 0, "run-as is disabled from the kernel commandline");
   }
 
   char* pkgname = argv[1];
@@ -167,6 +167,15 @@ int main(int argc, char* argv[]) {
   if (!packagelist_parse(packagelist_parse_callback, &info)) {
     error(1, errno, "packagelist_parse failed");
   }
+
+  // Handle a multi-user data path
+  if (userId > 0) {
+    free(info.data_dir);
+    if (asprintf(&info.data_dir, "/data/user/%d/%s", userId, pkgname) == -1) {
+      error(1, errno, "asprintf failed");
+    }
+  }
+
   if (info.uid == 0) {
     error(1, 0, "unknown package: %s", pkgname);
   }
