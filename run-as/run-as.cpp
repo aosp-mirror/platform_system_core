@@ -25,6 +25,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <string>
+
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
@@ -214,7 +216,8 @@ int main(int argc, char* argv[]) {
   minijail_keep_supplementary_gids(j.get());
   minijail_enter(j.get());
 
-  if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {
+  std::string seinfo = std::string(info.seinfo) + ":fromRunAs";
+  if (selinux_android_setcontext(uid, 0, seinfo.c_str(), pkgname) < 0) {
     error(1, errno, "couldn't set SELinux security context");
   }
 
