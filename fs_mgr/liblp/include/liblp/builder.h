@@ -223,6 +223,9 @@ class MetadataBuilder {
     // Remove all partitions belonging to a group, then remove the group.
     void RemoveGroupAndPartitions(const std::string& group_name);
 
+    // Set the LP_METADATA_AUTO_SLOT_SUFFIXING flag.
+    void SetAutoSlotSuffixing();
+
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
@@ -275,6 +278,7 @@ class MetadataBuilder {
     std::vector<std::unique_ptr<Partition>> partitions_;
     std::vector<std::unique_ptr<PartitionGroup>> groups_;
     std::vector<LpMetadataBlockDevice> block_devices_;
+    bool auto_slot_suffixing_;
 };
 
 // Read BlockDeviceInfo for a given block device. This always returns false
