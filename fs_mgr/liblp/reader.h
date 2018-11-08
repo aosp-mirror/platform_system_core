@@ -38,7 +38,9 @@ bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry);
 bool ReadPrimaryGeometry(int fd, LpMetadataGeometry* geometry);
 bool ReadBackupGeometry(int fd, LpMetadataGeometry* geometry);
 
-// These functions assume a valid geometry and slot number.
+// These functions assume a valid geometry and slot number, and do not obey
+// auto-slot-suffixing. They are used for tests and for checking whether
+// the metadata is coherent across primary and backup copies.
 std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
                                                 uint32_t slot_number);
 std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,

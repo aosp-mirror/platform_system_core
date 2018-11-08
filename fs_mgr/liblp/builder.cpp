@@ -150,7 +150,7 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const LpMetadata& metadata
     return builder;
 }
 
-MetadataBuilder::MetadataBuilder() {
+MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
     memset(&geometry_, 0, sizeof(geometry_));
     geometry_.magic = LP_METADATA_GEOMETRY_MAGIC;
     geometry_.struct_size = sizeof(geometry_);
@@ -564,7 +564,12 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
     metadata->geometry = geometry_;
 
     // Assign this early so the extent table can read it.
-    metadata->block_devices = block_devices_;
+    for (const auto& block_device : block_devices_) {
+        metadata->block_devices.emplace_back(block_device);
+        if (auto_slot_suffixing_) {
+            metadata->block_devices.back().flags |= LP_BLOCK_DEVICE_SLOT_SUFFIXED;
+        }
+    }
 
     std::map<std::string, size_t> group_indices;
     for (const auto& group : groups_) {
@@ -600,6 +605,9 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         part.first_extent_index = static_cast<uint32_t>(metadata->extents.size());
         part.num_extents = static_cast<uint32_t>(partition->extents().size());
         part.attributes = partition->attributes();
+        if (auto_slot_suffixing_) {
+            part.attributes |= LP_PARTITION_ATTR_SLOT_SUFFIXED;
+        }
 
         auto iter = group_indices.find(partition->group_name());
         if (iter == group_indices.end()) {
@@ -834,6 +842,10 @@ bool MetadataBuilder::ImportPartition(const LpMetadata& metadata,
         return false;
     }
     return true;
+}
+
+void MetadataBuilder::SetAutoSlotSuffixing() {
+    auto_slot_suffixing_ = true;
 }
 
 }  // namespace fs_mgr

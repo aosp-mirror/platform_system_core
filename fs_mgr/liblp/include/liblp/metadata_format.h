@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 8
+#define LP_METADATA_MAJOR_VERSION 9
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -47,10 +47,19 @@ extern "C" {
  * device mapper, the block device will be created as read-only.
  */
 #define LP_PARTITION_ATTR_NONE 0x0
-#define LP_PARTITION_ATTR_READONLY 0x1
+#define LP_PARTITION_ATTR_READONLY (1 << 0)
+
+/* This flag is only intended to be used with super_empty.img and super.img on
+ * retrofit devices. On these devices there are A and B super partitions, and
+ * we don't know ahead of time which slot the image will be applied to.
+ *
+ * If set, the partition name needs a slot suffix applied. The slot suffix is
+ * determined by the metadata slot number (0 = _a, 1 = _b).
+ */
+#define LP_PARTITION_ATTR_SLOT_SUFFIXED (1 << 1)
 
 /* Mask that defines all valid attributes. */
-#define LP_PARTITION_ATTRIBUTE_MASK (LP_PARTITION_ATTR_READONLY)
+#define LP_PARTITION_ATTRIBUTE_MASK (LP_PARTITION_ATTR_READONLY | LP_PARTITION_ATTR_SLOT_SUFFIXED)
 
 /* Default name of the physical partition that holds logical partition entries.
  * The layout of this partition will look like:
@@ -302,7 +311,20 @@ typedef struct LpMetadataBlockDevice {
 
     /* 24: Partition name in the GPT. Any unused characters must be 0. */
     char partition_name[36];
+
+    /* 60: Flags (see LP_BLOCK_DEVICE_* flags below). */
+    uint32_t flags;
 } LpMetadataBlockDevice;
+
+/* This flag is only intended to be used with super_empty.img and super.img on
+ * retrofit devices. On these devices there are A and B super partitions, and
+ * we don't know ahead of time which slot the image will be applied to.
+ *
+ * If set, the block device needs a slot suffix applied before being used with
+ * IPartitionOpener. The slot suffix is determined by the metadata slot number
+ * (0 = _a, 1 = _b).
+ */
+#define LP_BLOCK_DEVICE_SLOT_SUFFIXED (1 << 0)
 
 #ifdef __cplusplus
 } /* extern "C" */
