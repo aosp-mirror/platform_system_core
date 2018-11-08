@@ -88,10 +88,13 @@ static bool AddDefaultPartitions(MetadataBuilder* builder) {
 }
 
 // Create a temporary disk and flash it with the default partition setup.
-static unique_fd CreateFlashedDisk() {
+static unique_fd CreateFlashedDisk(bool auto_slot_suffix = false) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     if (!builder || !AddDefaultPartitions(builder.get())) {
         return {};
+    }
+    if (auto_slot_suffix) {
+        builder->SetAutoSlotSuffixing();
     }
     unique_fd fd = CreateFakeDisk();
     if (fd < 0) {
@@ -607,4 +610,25 @@ TEST(liblp, FlashSparseImage) {
     ASSERT_TRUE(ReadBackupGeometry(fd.get(), &geometry));
     ASSERT_NE(ReadPrimaryMetadata(fd.get(), geometry, 0), nullptr);
     ASSERT_NE(ReadBackupMetadata(fd.get(), geometry, 0), nullptr);
+}
+
+TEST(liblp, AutoSlotSuffixing) {
+    auto fd = CreateFlashedDisk(true);
+    ASSERT_GE(fd, 0);
+
+    TestPartitionOpener opener({{"super", fd}});
+
+    auto metadata = ReadMetadata(opener, "super", 1);
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->partitions.size(), static_cast<size_t>(1));
+    EXPECT_EQ(GetPartitionName(metadata->partitions[0]), "system_b");
+    ASSERT_EQ(metadata->block_devices.size(), static_cast<size_t>(1));
+    EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[0]), "super_b");
+
+    metadata = ReadMetadata(opener, "super", 0);
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->partitions.size(), static_cast<size_t>(1));
+    EXPECT_EQ(GetPartitionName(metadata->partitions[0]), "system_a");
+    ASSERT_EQ(metadata->block_devices.size(), static_cast<size_t>(1));
+    EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[0]), "super_a");
 }

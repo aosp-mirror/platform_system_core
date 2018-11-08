@@ -132,5 +132,10 @@ std::string GetPartitionSlotSuffix(const std::string& partition_name) {
     return (suffix == "_a" || suffix == "_b") ? suffix : "";
 }
 
+std::string SlotSuffixForSlotNumber(uint32_t slot_number) {
+    CHECK(slot_number == 0 || slot_number == 1);
+    return (slot_number == 0) ? "_a" : "_b";
+}
+
 }  // namespace fs_mgr
 }  // namespace android
