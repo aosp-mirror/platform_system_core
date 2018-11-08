@@ -275,6 +275,10 @@ runs the service.
   since it has some peculiarities for backwards compatibility reasons. The 'imports' section of
   this file has more details on the order.
 
+`parse_apex_configs`
+  Parses config file(s) from the mounted APEXes. Intented to be used only once
+  when apexd notifies the mount event by setting apexd.status to ready.
+
 `priority <priority>`
 > Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().

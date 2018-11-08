@@ -132,6 +132,14 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     return parser;
 }
 
+// parser that only accepts new services
+Parser CreateServiceOnlyParser(ServiceList& service_list) {
+    Parser parser;
+
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, subcontexts));
+    return parser;
+}
+
 static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser = CreateParser(action_manager, service_list);
 

@@ -801,3 +801,6 @@ on property:ro.debuggable=1
 service flash_recovery /system/bin/install-recovery.sh
     class main
     oneshot
+
+on property:apexd.status=ready
+    parse_apex_configs
