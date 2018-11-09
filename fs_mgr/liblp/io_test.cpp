@@ -596,12 +596,14 @@ TEST(liblp, FlashSparseImage) {
     // Build the sparse file.
     SparseBuilder sparse(*exported.get(), 512, {});
     ASSERT_TRUE(sparse.IsValid());
-    sparse_file_verbose(sparse.file());
     ASSERT_TRUE(sparse.Build());
+
+    const auto& images = sparse.device_images();
+    ASSERT_EQ(images.size(), static_cast<size_t>(1));
 
     // Write it to the fake disk.
     ASSERT_NE(lseek(fd.get(), 0, SEEK_SET), -1);
-    int ret = sparse_file_write(sparse.file(), fd.get(), false, false, false);
+    int ret = sparse_file_write(images[0].get(), fd.get(), false, false, false);
     ASSERT_EQ(ret, 0);
 
     // Verify that we can read both sets of metadata.
