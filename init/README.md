@@ -813,3 +813,42 @@ during build time, among them are the below.
 SELinux would permit the operation, or if the UIDs and GIDs resolve.
 2) No checking if a service exists or has a valid SELinux domain defined
 3) No checking if a service has not been previously defined in a different init script.
+
+Early Init Boot Sequence
+------------------------
+The early init boot sequence is broken up into three stages: first stage init, SELinux setup, and
+second stage init.
+
+First stage init is responsible for setting up the bare minimum requirements to load the rest of the
+system. Specifically this includes mounting /dev, /proc, mounting 'early mount' partitions (which
+needs to include all partitions that contain system code, for example system and vendor), and moving
+the system.img mount to / for devices with a ramdisk.
+
+Note that in Android Q, system.img always contains TARGET_ROOT_OUT and always is mounted at / by the
+time first stage init finishes. Android Q will also require dynamic partitions and therefore will
+require using a ramdisk to boot Android. The recovery ramdisk can be used to boot to Android instead
+of a dedicated ramdisk as well.
+
+First stage init has three variations depending on the device configuration:
+1) For system-as-root devices, first stage init is part of /system/bin/init and a symlink at /init
+points to /system/bin/init for backwards compatibility. These devices do not need to do anything to
+mount system.img, since it is by definition already mounted as the rootfs by the kernel.
+
+2) For devices with a ramdisk, first stage init is a static executable located at /init. These
+devices mount system.img as /system then perform a switch root operation to move the mount at
+/system to /. The contents of the ramdisk are freed after mounting has completed.
+
+3) For devices that use recovery as a ramdisk, first stage init it contained within the shared init
+located at /init within the recovery ramdisk. These devices first switch root to
+/first_stage_ramdisk to remove the recovery components from the environment, then proceed the same
+as 2). Note that the decision to boot normally into Android instead of booting
+into recovery mode is made if androidboot.force_normal_boot=1 is present in the
+kernel commandline.
+
+Once first stage init finishes it execs /system/bin/init with the "selinux_setup" argument. This
+phase is where SELinux is optionally compiled and loaded onto the system. selinux.cpp contains more
+information on the specifics of this process.
+
+Lastly once that phase finishes, it execs /system/bin/init again with the "second_stage"
+argument. At this point the main phase of init runs and continues the boot process via the init.rc
+scripts.
