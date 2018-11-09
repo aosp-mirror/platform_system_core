@@ -150,10 +150,24 @@ class MetadataBuilder {
     static std::unique_ptr<MetadataBuilder> New(const std::string& super_partition,
                                                 uint32_t slot_number);
 
+    // This is when performing an A/B update. The source partition must be a
+    // super partition. On a normal device, the metadata for the source slot
+    // is imported and the target slot is ignored. On a retrofit device, the
+    // metadata may not have the target slot's devices listed yet, in which
+    // case, it is automatically upgraded to include all available block
+    // devices.
+    static std::unique_ptr<MetadataBuilder> NewForUpdate(const IPartitionOpener& opener,
+                                                         const std::string& source_partition,
+                                                         uint32_t source_slot_number,
+                                                         uint32_t target_slot_number);
+
     // Import an existing table for modification. If the table is not valid, for
     // example it contains duplicate partition names, then nullptr is returned.
-    // This method is for testing or changing off-line tables.
-    static std::unique_ptr<MetadataBuilder> New(const LpMetadata& metadata);
+    //
+    // If an IPartitionOpener is specified, then block device informatiom will
+    // be updated.
+    static std::unique_ptr<MetadataBuilder> New(const LpMetadata& metadata,
+                                                const IPartitionOpener* opener = nullptr);
 
     // Helper function for a single super partition, for tests.
     static std::unique_ptr<MetadataBuilder> New(const BlockDeviceInfo& device_info,

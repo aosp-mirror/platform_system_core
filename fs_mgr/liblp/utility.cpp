@@ -137,5 +137,13 @@ std::string SlotSuffixForSlotNumber(uint32_t slot_number) {
     return (slot_number == 0) ? "_a" : "_b";
 }
 
+bool UpdateBlockDevicePartitionName(LpMetadataBlockDevice* device, const std::string& name) {
+    if (name.size() > sizeof(device->partition_name)) {
+        return false;
+    }
+    strncpy(device->partition_name, name.c_str(), sizeof(device->partition_name));
+    return true;
+}
+
 }  // namespace fs_mgr
 }  // namespace android

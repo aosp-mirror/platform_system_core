@@ -649,3 +649,42 @@ TEST(liblp, AutoSlotSuffixing) {
     ASSERT_EQ(metadata->block_devices.size(), static_cast<size_t>(1));
     EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[0]), "super_a");
 }
+
+TEST(liblp, UpdateRetrofit) {
+    unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+    builder->SetAutoSlotSuffixing();
+
+    auto fd = CreateFakeDisk();
+    ASSERT_GE(fd, 0);
+
+    // Note: we bind the same fd to both names, since we want to make sure the
+    // exact same bits are getting read back in each test.
+    TestPartitionOpener opener({{"super_a", fd}, {"super_b", fd}},
+                               {{"super_a", kSuperInfo}, {"super_b", kSuperInfo}});
+    auto exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    ASSERT_TRUE(FlashPartitionTable(opener, "super_a", *exported.get()));
+
+    builder = MetadataBuilder::NewForUpdate(opener, "super_a", 0, 1);
+    ASSERT_NE(builder, nullptr);
+    auto updated = builder->Export();
+    ASSERT_NE(updated, nullptr);
+    ASSERT_EQ(updated->block_devices.size(), static_cast<size_t>(2));
+    EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super_a");
+    EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[1]), "super_b");
+}
+
+TEST(liblp, UpdateNonRetrofit) {
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    DefaultPartitionOpener opener(fd);
+    auto builder = MetadataBuilder::NewForUpdate(opener, "super", 0, 1);
+    ASSERT_NE(builder, nullptr);
+    auto updated = builder->Export();
+    ASSERT_NE(updated, nullptr);
+    ASSERT_EQ(updated->block_devices.size(), static_cast<size_t>(1));
+    EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super");
+}
