@@ -21,7 +21,7 @@
 namespace android {
 namespace init {
 
-void SwitchRoot(const std::string& new_root);
+void SwitchRoot(const std::string& new_root, bool move_root_mount);
 
 }  // namespace init
 }  // namespace android
