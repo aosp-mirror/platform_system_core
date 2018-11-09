@@ -136,8 +136,8 @@ AndroidInterfaceAdded(io_iterator_t iterator)
     io_service_t             usbDevice;
     io_service_t             usbInterface;
     IOCFPlugInInterface      **plugInInterface = NULL;
-    IOUSBInterfaceInterface220  **iface = NULL;
-    IOUSBDeviceInterface197  **dev = NULL;
+    IOUSBInterfaceInterface500  **iface = NULL;
+    IOUSBDeviceInterface500  **dev = NULL;
     HRESULT                  result;
     SInt32                   score;
     uint32_t                 locationId;
@@ -163,7 +163,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         //* This gets us the interface object
         result = (*plugInInterface)->QueryInterface(
             plugInInterface,
-            CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID), (LPVOID*)&iface);
+            CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID500), (LPVOID*)&iface);
         //* We only needed the plugin to get the interface, so discard it
         (*plugInInterface)->Release(plugInInterface);
         if (result || !iface) {
@@ -209,7 +209,7 @@ AndroidInterfaceAdded(io_iterator_t iterator)
         }
 
         result = (*plugInInterface)->QueryInterface(plugInInterface,
-            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID*)&dev);
+            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID500), (LPVOID*)&dev);
         //* only needed this to query the plugin
         (*plugInInterface)->Release(plugInInterface);
         if (result || !dev) {
