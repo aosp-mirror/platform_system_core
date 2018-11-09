@@ -38,6 +38,7 @@ using unique_fd = android::base::unique_fd;
 static const size_t kDiskSize = 131072;
 static const size_t kMetadataSize = 512;
 static const size_t kMetadataSlots = 2;
+static const BlockDeviceInfo kSuperInfo{"super", kDiskSize, 0, 0, 4096};
 
 // Helper function for creating an in-memory file descriptor. This lets us
 // simulate read/writing logical partition metadata as if we had a block device
@@ -79,6 +80,12 @@ static unique_ptr<MetadataBuilder> CreateDefaultBuilder() {
     return builder;
 }
 
+class DefaultPartitionOpener final : public TestPartitionOpener {
+  public:
+    explicit DefaultPartitionOpener(int fd)
+        : TestPartitionOpener({{"super", fd}}, {{"super", kSuperInfo}}) {}
+};
+
 static bool AddDefaultPartitions(MetadataBuilder* builder) {
     Partition* system = builder->AddPartition("system", LP_PARTITION_ATTR_NONE);
     if (!system) {
@@ -88,13 +95,10 @@ static bool AddDefaultPartitions(MetadataBuilder* builder) {
 }
 
 // Create a temporary disk and flash it with the default partition setup.
-static unique_fd CreateFlashedDisk(bool auto_slot_suffix = false) {
+static unique_fd CreateFlashedDisk() {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     if (!builder || !AddDefaultPartitions(builder.get())) {
         return {};
-    }
-    if (auto_slot_suffix) {
-        builder->SetAutoSlotSuffixing();
     }
     unique_fd fd = CreateFakeDisk();
     if (fd < 0) {
@@ -106,7 +110,7 @@ static unique_fd CreateFlashedDisk(bool auto_slot_suffix = false) {
         return {};
     }
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
     if (!FlashPartitionTable(opener, "super", *exported.get())) {
         return {};
     }
@@ -122,7 +126,7 @@ TEST(liblp, CreateFakeDisk) {
     ASSERT_TRUE(GetDescriptorSize(fd, &size));
     ASSERT_EQ(size, kDiskSize);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     // Verify that we can't read unwritten metadata.
     ASSERT_EQ(ReadMetadata(opener, "super", 1), nullptr);
@@ -141,7 +145,7 @@ TEST(liblp, ExportDiskTooSmall) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     EXPECT_FALSE(FlashPartitionTable(opener, "super", *exported.get()));
 }
@@ -155,7 +159,7 @@ TEST(liblp, FlashAndReadback) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     // Export and flash.
     unique_ptr<LpMetadata> exported = builder->Export();
@@ -201,7 +205,7 @@ TEST(liblp, UpdateAnyMetadataSlot) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
@@ -246,7 +250,7 @@ TEST(liblp, InvalidMetadataSlot) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     // Make sure all slots are filled.
     unique_ptr<LpMetadata> metadata = ReadMetadata(opener, "super", 0);
@@ -265,7 +269,7 @@ TEST(liblp, NoChangingGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
     ASSERT_NE(imported, nullptr);
@@ -294,7 +298,7 @@ TEST(liblp, BitFlipGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     LpMetadataGeometry geometry;
     ASSERT_GE(lseek(fd, 0, SEEK_SET), 0);
@@ -313,7 +317,7 @@ TEST(liblp, ReadBackupGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     char corruption[LP_METADATA_GEOMETRY_SIZE];
     memset(corruption, 0xff, sizeof(corruption));
@@ -333,7 +337,7 @@ TEST(liblp, ReadBackupMetadata) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     unique_ptr<LpMetadata> metadata = ReadMetadata(opener, "super", 0);
 
@@ -381,7 +385,7 @@ TEST(liblp, TooManyPartitions) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     // Check that we are able to write our table.
     ASSERT_TRUE(FlashPartitionTable(opener, "super", *exported.get()));
@@ -490,7 +494,7 @@ TEST(liblp, UpdatePrimaryMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     BadWriter writer;
 
@@ -518,7 +522,7 @@ TEST(liblp, UpdateBackupMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     BadWriter writer;
 
@@ -547,7 +551,7 @@ TEST(liblp, UpdateMetadataCleanFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    DefaultPartitionOpener opener(fd);
 
     BadWriter writer;
 
@@ -615,19 +619,30 @@ TEST(liblp, FlashSparseImage) {
 }
 
 TEST(liblp, AutoSlotSuffixing) {
-    auto fd = CreateFlashedDisk(true);
+    unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+    builder->SetAutoSlotSuffixing();
+
+    auto fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
-    TestPartitionOpener opener({{"super", fd}});
+    // Note: we bind the same fd to both names, since we want to make sure the
+    // exact same bits are getting read back in each test.
+    TestPartitionOpener opener({{"super_a", fd}, {"super_b", fd}},
+                               {{"super_a", kSuperInfo}, {"super_b", kSuperInfo}});
+    auto exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    ASSERT_TRUE(FlashPartitionTable(opener, "super_a", *exported.get()));
 
-    auto metadata = ReadMetadata(opener, "super", 1);
+    auto metadata = ReadMetadata(opener, "super_b", 1);
     ASSERT_NE(metadata, nullptr);
     ASSERT_EQ(metadata->partitions.size(), static_cast<size_t>(1));
     EXPECT_EQ(GetPartitionName(metadata->partitions[0]), "system_b");
     ASSERT_EQ(metadata->block_devices.size(), static_cast<size_t>(1));
     EXPECT_EQ(GetBlockDevicePartitionName(metadata->block_devices[0]), "super_b");
 
-    metadata = ReadMetadata(opener, "super", 0);
+    metadata = ReadMetadata(opener, "super_a", 0);
     ASSERT_NE(metadata, nullptr);
     ASSERT_EQ(metadata->partitions.size(), static_cast<size_t>(1));
     EXPECT_EQ(GetPartitionName(metadata->partitions[0]), "system_a");
