@@ -61,7 +61,7 @@ struct usb_handle
 
     UInt8 bulkIn;
     UInt8 bulkOut;
-    IOUSBInterfaceInterface190 **interface;
+    IOUSBInterfaceInterface500** interface;
     unsigned int zero_mask;
 };
 
@@ -86,13 +86,13 @@ class OsxUsbTransport : public UsbTransport {
 
 /** Try out all the interfaces and see if there's a match. Returns 0 on
  * success, -1 on failure. */
-static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
+static int try_interfaces(IOUSBDeviceInterface500** dev, usb_handle* handle) {
     IOReturn kr;
     IOUSBFindInterfaceRequest request;
     io_iterator_t iterator;
     io_service_t usbInterface;
     IOCFPlugInInterface **plugInInterface;
-    IOUSBInterfaceInterface190 **interface = NULL;
+    IOUSBInterfaceInterface500** interface = NULL;
     HRESULT result;
     SInt32 score;
     UInt8 interfaceNumEndpoints;
@@ -128,10 +128,10 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
         }
 
         // Now create the interface interface for the interface
-        result = (*plugInInterface)->QueryInterface(
-                plugInInterface,
-                CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID),
-                (LPVOID*) &interface);
+        result = (*plugInInterface)
+                         ->QueryInterface(plugInInterface,
+                                          CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID500),
+                                          (LPVOID*)&interface);
 
         // No longer need the intermediate plugin
         (*plugInInterface)->Release(plugInInterface);
@@ -270,7 +270,7 @@ next_interface:
 static int try_device(io_service_t device, usb_handle *handle) {
     kern_return_t kr;
     IOCFPlugInInterface **plugin = NULL;
-    IOUSBDeviceInterface182 **dev = NULL;
+    IOUSBDeviceInterface500** dev = NULL;
     SInt32 score;
     HRESULT result;
     UInt8 serialIndex;
@@ -287,8 +287,8 @@ static int try_device(io_service_t device, usb_handle *handle) {
     }
 
     // Now create the device interface.
-    result = (*plugin)->QueryInterface(plugin,
-            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID*) &dev);
+    result = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID500),
+                                       (LPVOID*)&dev);
     if ((result != 0) || (dev == NULL)) {
         ERR("Couldn't create a device interface (%08x)\n", (int) result);
         goto error;
