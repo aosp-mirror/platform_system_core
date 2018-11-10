@@ -44,6 +44,8 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->pss += from.pss;
     to->uss += from.uss;
 
+    to->swap += from.swap;
+
     to->private_clean += from.private_clean;
     to->private_dirty += from.private_dirty;
 
@@ -74,6 +76,10 @@ const MemUsage& ProcMemInfo::Wss() {
     }
 
     return wss_;
+}
+
+const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() const {
+    return swap_offsets_;
 }
 
 bool ProcMemInfo::WssReset() {
@@ -115,8 +121,8 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
 
     for (auto& vma : maps_) {
         if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss)) {
-            LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start
-                       << "-" << vma.end << "]";
+            LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
+                       << vma.end << "]";
             maps_.clear();
             return false;
         }
@@ -153,7 +159,8 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
         if (!PAGE_PRESENT(p) && !PAGE_SWAPPED(p)) continue;
 
         if (PAGE_SWAPPED(p)) {
-            // TODO: do what's needed for swapped pages
+            vma.usage.swap += pagesz;
+            swap_offsets_.emplace_back(PAGE_SWAP_OFFSET(p));
             continue;
         }
 

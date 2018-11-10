@@ -37,9 +37,11 @@ namespace android {
 namespace meminfo {
 
 const std::vector<std::string> SysMemInfo::kDefaultSysMemInfoTags = {
-    "MemTotal:", "MemFree:",      "Buffers:",     "Cached:",     "Shmem:",
-    "Slab:",     "SReclaimable:", "SUnreclaim:",  "SwapTotal:",  "SwapFree:",
-    "ZRam:",     "Mapped:",       "VmallocUsed:", "PageTables:", "KernelStack:",
+        SysMemInfo::kMemTotal,       SysMemInfo::kMemFree,       SysMemInfo::kMemBuffers,
+        SysMemInfo::kMemCached,      SysMemInfo::kMemShmem,      SysMemInfo::kMemSlab,
+        SysMemInfo::kMemSReclaim,    SysMemInfo::kMemSUnreclaim, SysMemInfo::kMemSwapTotal,
+        SysMemInfo::kMemSwapFree,    SysMemInfo::kMemZram,       SysMemInfo::kMemMapped,
+        SysMemInfo::kMemVmallocUsed, SysMemInfo::kMemPageTables, SysMemInfo::kMemKernelStack,
 };
 
 bool SysMemInfo::ReadMemInfo(const std::string& path) {
@@ -99,6 +101,7 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
     buffer[len] = '\0';
     char* p = buffer;
     uint32_t found = 0;
+    uint32_t lineno = 0;
     while (*p && found < tags.size()) {
         for (auto& tag : tags) {
             if (strncmp(p, tag.c_str(), tag.size()) == 0) {
@@ -107,7 +110,7 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
                 char* endptr = nullptr;
                 mem_in_kb_[tag] = strtoull(p, &endptr, 10);
                 if (p == endptr) {
-                    PLOG(ERROR) << "Failed to parse line in file: " << path;
+                    PLOG(ERROR) << "Failed to parse line:" << lineno + 1 << " in file: " << path;
                     return false;
                 }
                 p = endptr;
@@ -119,6 +122,7 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
             p++;
         }
         if (*p) p++;
+        lineno++;
     }
 
     return true;

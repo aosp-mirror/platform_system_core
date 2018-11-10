@@ -34,6 +34,7 @@ class ProcMemInfo final {
     const std::vector<Vma>& Maps();
     const MemUsage& Usage();
     const MemUsage& Wss();
+    const std::vector<uint16_t>& SwapOffsets() const;
 
     bool WssReset();
     ~ProcMemInfo() = default;
@@ -49,6 +50,7 @@ class ProcMemInfo final {
 
     MemUsage usage_;
     MemUsage wss_;
+    std::vector<uint16_t> swap_offsets_;
 };
 
 }  // namespace meminfo

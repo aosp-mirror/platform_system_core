@@ -73,7 +73,7 @@ TEST_F(ValidateProcMemInfo, TestMapsEquality) {
     }
 }
 
-TEST_F(ValidateProcMemInfo, TestMapsUsage) {
+TEST_F(ValidateProcMemInfo, TestMaps) {
     const std::vector<Vma>& maps = proc_mem->Maps();
     ASSERT_FALSE(maps.empty());
     ASSERT_EQ(proc->num_maps, maps.size());
@@ -94,6 +94,30 @@ TEST_F(ValidateProcMemInfo, TestMapsUsage) {
     EXPECT_EQ(proc_usage.rss, proc_mem->Usage().rss);
     EXPECT_EQ(proc_usage.pss, proc_mem->Usage().pss);
     EXPECT_EQ(proc_usage.uss, proc_mem->Usage().uss);
+}
+
+TEST_F(ValidateProcMemInfo, TestSwapUsage) {
+    const std::vector<Vma>& maps = proc_mem->Maps();
+    ASSERT_FALSE(maps.empty());
+    ASSERT_EQ(proc->num_maps, maps.size());
+
+    pm_memusage_t map_usage, proc_usage;
+    pm_memusage_zero(&map_usage);
+    pm_memusage_zero(&proc_usage);
+    for (size_t i = 0; i < maps.size(); i++) {
+        ASSERT_EQ(0, pm_map_usage(proc->maps[i], &map_usage));
+        EXPECT_EQ(map_usage.swap, maps[i].usage.swap) << "SWAP mismatch for map: " << maps[i].name;
+        pm_memusage_add(&proc_usage, &map_usage);
+    }
+
+    EXPECT_EQ(proc_usage.swap, proc_mem->Usage().swap);
+}
+
+TEST_F(ValidateProcMemInfo, TestSwapOffsets) {
+    const MemUsage& proc_usage = proc_mem->Usage();
+    const std::vector<uint16_t>& swap_offsets = proc_mem->SwapOffsets();
+
+    EXPECT_EQ(proc_usage.swap / getpagesize(), swap_offsets.size());
 }
 
 class ValidateProcMemInfoWss : public ::testing::Test {
