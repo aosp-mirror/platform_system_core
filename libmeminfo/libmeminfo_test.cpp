@@ -312,6 +312,17 @@ TEST(SysMemInfoParser, TestEmptyFile) {
     EXPECT_EQ(mi.mem_total_kb(), 0);
 }
 
+TEST(SysMemInfoParse, TestZramTotal) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+
+    SysMemInfo mi;
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    EXPECT_EQ(mi.mem_zram_kb(zram_mmstat_dir), 30504);
+
+    std::string zram_memused_dir = exec_dir + "/testdata2/";
+    EXPECT_EQ(mi.mem_zram_kb(zram_memused_dir), 30504);
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     if (argc <= 1) {

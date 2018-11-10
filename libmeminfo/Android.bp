@@ -54,6 +54,11 @@ cc_test {
     srcs: [
         "libmeminfo_test.cpp"
     ],
+
+    data: [
+        "testdata1/*",
+        "testdata2/*"
+    ],
 }
 
 cc_benchmark {
@@ -66,5 +71,9 @@ cc_benchmark {
         "liblog",
         "libmeminfo",
         "libprocinfo",
+    ],
+
+    data: [
+        "testdata1/*",
     ],
 }

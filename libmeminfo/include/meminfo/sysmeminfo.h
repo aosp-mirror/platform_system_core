@@ -38,7 +38,6 @@ class SysMemInfo final {
     static constexpr const char* kMemSUnreclaim = "SUnreclaim:";
     static constexpr const char* kMemSwapTotal = "SwapTotal:";
     static constexpr const char* kMemSwapFree = "SwapFree:";
-    static constexpr const char* kMemZram = "Zram:";
     static constexpr const char* kMemMapped = "Mapped:";
     static constexpr const char* kMemVmallocUsed = "VmallocUsed:";
     static constexpr const char* kMemPageTables = "PageTables:";
@@ -64,14 +63,15 @@ class SysMemInfo final {
     uint64_t mem_slab_unreclaimable_kb() { return mem_in_kb_[kMemSUnreclaim]; }
     uint64_t mem_swap_kb() { return mem_in_kb_[kMemSwapTotal]; }
     uint64_t mem_swap_free_kb() { return mem_in_kb_[kMemSwapFree]; }
-    uint64_t mem_zram_kb() { return mem_in_kb_[kMemZram]; }
     uint64_t mem_mapped_kb() { return mem_in_kb_[kMemMapped]; }
     uint64_t mem_vmalloc_used_kb() { return mem_in_kb_[kMemVmallocUsed]; }
     uint64_t mem_page_tables_kb() { return mem_in_kb_[kMemPageTables]; }
     uint64_t mem_kernel_stack_kb() { return mem_in_kb_[kMemPageTables]; }
+    uint64_t mem_zram_kb(const std::string& zram_dev = "");
 
   private:
     std::map<std::string, uint64_t> mem_in_kb_;
+    bool MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_dev);
 };
 
 }  // namespace meminfo
