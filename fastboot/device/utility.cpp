@@ -23,9 +23,11 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
+#include <liblp/builder.h>
 #include <liblp/liblp.h>
 
 #include "fastboot_device.h"
@@ -35,7 +37,9 @@ using namespace std::chrono_literals;
 using android::base::unique_fd;
 using android::hardware::boot::V1_0::Slot;
 
-static bool OpenPhysicalPartition(const std::string& name, PartitionHandle* handle) {
+namespace {
+
+bool OpenPhysicalPartition(const std::string& name, PartitionHandle* handle) {
     std::optional<std::string> path = FindPhysicalPartition(name);
     if (!path) {
         return false;
@@ -44,28 +48,31 @@ static bool OpenPhysicalPartition(const std::string& name, PartitionHandle* hand
     return true;
 }
 
-static bool OpenLogicalPartition(const std::string& name, const std::string& slot,
-                                 PartitionHandle* handle) {
-    std::optional<std::string> path = FindPhysicalPartition(fs_mgr_get_super_partition_name());
+bool OpenLogicalPartition(FastbootDevice* device, const std::string& partition_name,
+                          PartitionHandle* handle) {
+    std::string slot_suffix = GetSuperSlotSuffix(device, partition_name);
+    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    auto path = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number));
     if (!path) {
         return false;
     }
-    uint32_t slot_number = SlotNumberForSlotSuffix(slot);
     std::string dm_path;
-    if (!CreateLogicalPartition(path->c_str(), slot_number, name, true, 5s, &dm_path)) {
-        LOG(ERROR) << "Could not map partition: " << name;
+    if (!CreateLogicalPartition(path->c_str(), slot_number, partition_name, true, 5s, &dm_path)) {
+        LOG(ERROR) << "Could not map partition: " << partition_name;
         return false;
     }
-    auto closer = [name]() -> void { DestroyLogicalPartition(name, 5s); };
+    auto closer = [partition_name]() -> void { DestroyLogicalPartition(partition_name, 5s); };
     *handle = PartitionHandle(dm_path, std::move(closer));
     return true;
 }
 
+}  // namespace
+
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle) {
     // We prioritize logical partitions over physical ones, and do this
     // consistently for other partition operations (like getvar:partition-size).
-    if (LogicalPartitionExists(name, device->GetCurrentSlot())) {
-        if (!OpenLogicalPartition(name, device->GetCurrentSlot(), handle)) {
+    if (LogicalPartitionExists(device, name)) {
+        if (!OpenLogicalPartition(device, name, handle)) {
             return false;
         }
     } else if (!OpenPhysicalPartition(name, handle)) {
@@ -104,14 +111,14 @@ static const LpMetadataPartition* FindLogicalPartition(const LpMetadata& metadat
     return nullptr;
 }
 
-bool LogicalPartitionExists(const std::string& name, const std::string& slot_suffix,
-                            bool* is_zero_length) {
-    auto path = FindPhysicalPartition(fs_mgr_get_super_partition_name());
+bool LogicalPartitionExists(FastbootDevice* device, const std::string& name, bool* is_zero_length) {
+    std::string slot_suffix = GetSuperSlotSuffix(device, name);
+    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    auto path = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number));
     if (!path) {
         return false;
     }
 
-    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
     std::unique_ptr<LpMetadata> metadata = ReadMetadata(path->c_str(), slot_number);
     if (!metadata) {
         return false;
@@ -154,12 +161,29 @@ std::vector<std::string> ListPartitions(FastbootDevice* device) {
         }
     }
 
-    // Next get logical partitions.
-    if (auto path = FindPhysicalPartition(fs_mgr_get_super_partition_name())) {
-        uint32_t slot_number = SlotNumberForSlotSuffix(device->GetCurrentSlot());
-        if (auto metadata = ReadMetadata(path->c_str(), slot_number)) {
-            for (const auto& partition : metadata->partitions) {
-                std::string partition_name = GetPartitionName(partition);
+    // Find metadata in each super partition (on retrofit devices, there will
+    // be two).
+    std::vector<std::unique_ptr<LpMetadata>> metadata_list;
+
+    uint32_t current_slot = SlotNumberForSlotSuffix(device->GetCurrentSlot());
+    std::string super_name = fs_mgr_get_super_partition_name(current_slot);
+    if (auto metadata = ReadMetadata(super_name, current_slot)) {
+        metadata_list.emplace_back(std::move(metadata));
+    }
+
+    uint32_t other_slot = (current_slot == 0) ? 1 : 0;
+    std::string other_super = fs_mgr_get_super_partition_name(other_slot);
+    if (super_name != other_super) {
+        if (auto metadata = ReadMetadata(other_super, other_slot)) {
+            metadata_list.emplace_back(std::move(metadata));
+        }
+    }
+
+    for (const auto& metadata : metadata_list) {
+        for (const auto& partition : metadata->partitions) {
+            std::string partition_name = GetPartitionName(partition);
+            if (std::find(partitions.begin(), partitions.end(), partition_name) ==
+                partitions.end()) {
                 partitions.emplace_back(partition_name);
             }
         }
@@ -174,4 +198,31 @@ bool GetDeviceLockStatus() {
         return true;
     }
     return cmdline.find("androidboot.verifiedbootstate=orange") == std::string::npos;
+}
+
+bool UpdateAllPartitionMetadata(const std::string& super_name,
+                                const android::fs_mgr::LpMetadata& metadata) {
+    bool ok = true;
+    for (size_t i = 0; i < metadata.geometry.metadata_slot_count; i++) {
+        ok &= UpdatePartitionTable(super_name, metadata, i);
+    }
+    return ok;
+}
+
+std::string GetSuperSlotSuffix(FastbootDevice* device, const std::string& partition_name) {
+    // If the super partition does not have a slot suffix, this is not a
+    // retrofit device, and we should take the current slot.
+    std::string current_slot_suffix = device->GetCurrentSlot();
+    uint32_t current_slot_number = SlotNumberForSlotSuffix(current_slot_suffix);
+    std::string super_partition = fs_mgr_get_super_partition_name(current_slot_number);
+    if (GetPartitionSlotSuffix(super_partition).empty()) {
+        return current_slot_suffix;
+    }
+
+    // Otherwise, infer the slot from the partition name.
+    std::string slot_suffix = GetPartitionSlotSuffix(partition_name);
+    if (!slot_suffix.empty()) {
+        return slot_suffix;
+    }
+    return current_slot_suffix;
 }

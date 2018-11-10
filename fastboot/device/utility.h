@@ -20,6 +20,7 @@
 
 #include <android-base/unique_fd.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
+#include <liblp/liblp.h>
 
 // Logical partitions are only mapped to a block device as needed, and
 // immediately unmapped when no longer needed. In order to enforce this we
@@ -52,10 +53,20 @@ class PartitionHandle {
 
 class FastbootDevice;
 
+// On normal devices, the super partition is always named "super". On retrofit
+// devices, the name must be derived from the partition name or current slot.
+// This helper assists in choosing the correct super for a given partition
+// name.
+std::string GetSuperSlotSuffix(FastbootDevice* device, const std::string& partition_name);
+
 std::optional<std::string> FindPhysicalPartition(const std::string& name);
-bool LogicalPartitionExists(const std::string& name, const std::string& slot_suffix,
+bool LogicalPartitionExists(FastbootDevice* device, const std::string& name,
                             bool* is_zero_length = nullptr);
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle);
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
 std::vector<std::string> ListPartitions(FastbootDevice* device);
 bool GetDeviceLockStatus();
+
+// Update all copies of metadata.
+bool UpdateAllPartitionMetadata(const std::string& super_name,
+                                const android::fs_mgr::LpMetadata& metadata);
