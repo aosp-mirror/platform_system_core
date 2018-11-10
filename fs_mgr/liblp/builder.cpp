@@ -113,18 +113,7 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const IPartitionOpener& op
     if (!metadata) {
         return nullptr;
     }
-    std::unique_ptr<MetadataBuilder> builder = New(*metadata.get());
-    if (!builder) {
-        return nullptr;
-    }
-    for (size_t i = 0; i < builder->block_devices_.size(); i++) {
-        std::string partition_name = GetBlockDevicePartitionName(builder->block_devices_[i]);
-        BlockDeviceInfo device_info;
-        if (opener.GetInfo(partition_name, &device_info)) {
-            builder->UpdateBlockDeviceInfo(i, device_info);
-        }
-    }
-    return builder;
+    return New(*metadata.get(), &opener);
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& super_partition,
@@ -142,12 +131,67 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(
     return builder;
 }
 
-std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const LpMetadata& metadata) {
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const LpMetadata& metadata,
+                                                      const IPartitionOpener* opener) {
     std::unique_ptr<MetadataBuilder> builder(new MetadataBuilder());
     if (!builder->Init(metadata)) {
         return nullptr;
     }
+    if (opener) {
+        for (size_t i = 0; i < builder->block_devices_.size(); i++) {
+            std::string partition_name = GetBlockDevicePartitionName(builder->block_devices_[i]);
+            BlockDeviceInfo device_info;
+            if (opener->GetInfo(partition_name, &device_info)) {
+                builder->UpdateBlockDeviceInfo(i, device_info);
+            }
+        }
+    }
     return builder;
+}
+
+std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionOpener& opener,
+                                                               const std::string& source_partition,
+                                                               uint32_t source_slot_number,
+                                                               uint32_t target_slot_number) {
+    auto metadata = ReadMetadata(opener, source_partition, source_slot_number);
+    if (!metadata) {
+        return nullptr;
+    }
+
+    // Get the list of devices we already have.
+    std::set<std::string> block_devices;
+    for (const auto& block_device : metadata->block_devices) {
+        block_devices.emplace(GetBlockDevicePartitionName(block_device));
+    }
+
+    auto new_block_devices = metadata->block_devices;
+
+    // Add missing block devices.
+    std::string source_slot_suffix = SlotSuffixForSlotNumber(source_slot_number);
+    std::string target_slot_suffix = SlotSuffixForSlotNumber(target_slot_number);
+    for (const auto& block_device : metadata->block_devices) {
+        std::string partition_name = GetBlockDevicePartitionName(block_device);
+        std::string slot_suffix = GetPartitionSlotSuffix(partition_name);
+        if (slot_suffix.empty() || slot_suffix != source_slot_suffix) {
+            continue;
+        }
+        std::string new_name =
+                partition_name.substr(0, partition_name.size() - slot_suffix.size()) +
+                target_slot_suffix;
+        if (block_devices.find(new_name) != block_devices.end()) {
+            continue;
+        }
+
+        auto new_device = block_device;
+        if (!UpdateBlockDevicePartitionName(&new_device, new_name)) {
+            LERROR << "Partition name too long: " << new_name;
+            return nullptr;
+        }
+        new_block_devices.emplace_back(new_device);
+    }
+
+    metadata->block_devices = new_block_devices;
+    return New(*metadata.get(), &opener);
 }
 
 MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
