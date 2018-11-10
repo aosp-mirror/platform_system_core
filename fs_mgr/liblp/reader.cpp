@@ -369,12 +369,10 @@ bool AdjustMetadataForSlot(LpMetadata* metadata, uint32_t slot_number) {
             continue;
         }
         std::string partition_name = GetBlockDevicePartitionName(block_device) + slot_suffix;
-        if (partition_name.size() > sizeof(block_device.partition_name)) {
+        if (!UpdateBlockDevicePartitionName(&block_device, partition_name)) {
             LERROR << __PRETTY_FUNCTION__ << " partition name too long: " << partition_name;
             return false;
         }
-        strncpy(block_device.partition_name, partition_name.c_str(),
-                sizeof(block_device.partition_name));
         block_device.flags &= ~LP_BLOCK_DEVICE_SLOT_SUFFIXED;
     }
     return true;
