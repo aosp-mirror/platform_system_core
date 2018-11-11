@@ -132,5 +132,18 @@ std::string GetPartitionSlotSuffix(const std::string& partition_name) {
     return (suffix == "_a" || suffix == "_b") ? suffix : "";
 }
 
+std::string SlotSuffixForSlotNumber(uint32_t slot_number) {
+    CHECK(slot_number == 0 || slot_number == 1);
+    return (slot_number == 0) ? "_a" : "_b";
+}
+
+bool UpdateBlockDevicePartitionName(LpMetadataBlockDevice* device, const std::string& name) {
+    if (name.size() > sizeof(device->partition_name)) {
+        return false;
+    }
+    strncpy(device->partition_name, name.c_str(), sizeof(device->partition_name));
+    return true;
+}
+
 }  // namespace fs_mgr
 }  // namespace android

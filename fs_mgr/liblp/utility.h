@@ -84,6 +84,9 @@ constexpr uint64_t AlignTo(uint64_t base, uint32_t alignment, uint32_t alignment
     return aligned;
 }
 
+// Update names from C++ strings.
+bool UpdateBlockDevicePartitionName(LpMetadataBlockDevice* device, const std::string& name);
+
 }  // namespace fs_mgr
 }  // namespace android
 

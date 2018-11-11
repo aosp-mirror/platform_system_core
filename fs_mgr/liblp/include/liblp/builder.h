@@ -150,10 +150,24 @@ class MetadataBuilder {
     static std::unique_ptr<MetadataBuilder> New(const std::string& super_partition,
                                                 uint32_t slot_number);
 
+    // This is when performing an A/B update. The source partition must be a
+    // super partition. On a normal device, the metadata for the source slot
+    // is imported and the target slot is ignored. On a retrofit device, the
+    // metadata may not have the target slot's devices listed yet, in which
+    // case, it is automatically upgraded to include all available block
+    // devices.
+    static std::unique_ptr<MetadataBuilder> NewForUpdate(const IPartitionOpener& opener,
+                                                         const std::string& source_partition,
+                                                         uint32_t source_slot_number,
+                                                         uint32_t target_slot_number);
+
     // Import an existing table for modification. If the table is not valid, for
     // example it contains duplicate partition names, then nullptr is returned.
-    // This method is for testing or changing off-line tables.
-    static std::unique_ptr<MetadataBuilder> New(const LpMetadata& metadata);
+    //
+    // If an IPartitionOpener is specified, then block device informatiom will
+    // be updated.
+    static std::unique_ptr<MetadataBuilder> New(const LpMetadata& metadata,
+                                                const IPartitionOpener* opener = nullptr);
 
     // Helper function for a single super partition, for tests.
     static std::unique_ptr<MetadataBuilder> New(const BlockDeviceInfo& device_info,
@@ -223,6 +237,9 @@ class MetadataBuilder {
     // Remove all partitions belonging to a group, then remove the group.
     void RemoveGroupAndPartitions(const std::string& group_name);
 
+    // Set the LP_METADATA_AUTO_SLOT_SUFFIXING flag.
+    void SetAutoSlotSuffixing();
+
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
@@ -275,6 +292,7 @@ class MetadataBuilder {
     std::vector<std::unique_ptr<Partition>> partitions_;
     std::vector<std::unique_ptr<PartitionGroup>> groups_;
     std::vector<LpMetadataBlockDevice> block_devices_;
+    bool auto_slot_suffixing_;
 };
 
 // Read BlockDeviceInfo for a given block device. This always returns false

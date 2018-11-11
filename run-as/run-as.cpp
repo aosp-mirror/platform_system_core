@@ -25,6 +25,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <string>
+
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
@@ -43,7 +45,7 @@
 //
 //  - that the ro.boot.disable_runas property is not set
 //  - that it is invoked from the 'shell' or 'root' user (abort otherwise)
-//  - that '<package-name>' is the name of an installed and debuggable package
+//  - that '<package-name>' is the name of an installed and debuggable/profileableFromShell package
 //  - that the package's data directory is well-formed
 //
 //  If so, it will drop to the application's user id / group id, cd to the
@@ -55,6 +57,7 @@
 //    during development.
 //
 //  - Run the 'gdbserver' binary executable to allow native debugging
+//  - Run simpleperf to allow native profiling
 //
 
 static bool packagelist_parse_callback(pkg_info* this_package, void* userdata) {
@@ -194,9 +197,9 @@ int main(int argc, char* argv[]) {
     error(1, 0, "package not an application: %s", pkgname);
   }
 
-  // Reject any non-debuggable package.
-  if (!info.debuggable) {
-    error(1, 0, "package not debuggable: %s", pkgname);
+  // Reject packages that are neither debuggable nor profileable from shell.
+  if (!info.debuggable && !info.profileable_from_shell) {
+    error(1, 0, "package is neither debuggable nor profileable from shell: %s", pkgname);
   }
 
   // Check that the data directory path is valid.
@@ -214,7 +217,8 @@ int main(int argc, char* argv[]) {
   minijail_keep_supplementary_gids(j.get());
   minijail_enter(j.get());
 
-  if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {
+  std::string seinfo = std::string(info.seinfo) + ":fromRunAs";
+  if (selinux_android_setcontext(uid, 0, seinfo.c_str(), pkgname) < 0) {
     error(1, errno, "couldn't set SELinux security context");
   }
 

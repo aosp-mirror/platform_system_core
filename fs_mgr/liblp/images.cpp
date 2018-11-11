@@ -62,7 +62,7 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes) {
 }
 
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
-    android::base::unique_fd fd(open(file, O_RDONLY));
+    android::base::unique_fd fd(open(file, O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
         return nullptr;
@@ -84,7 +84,7 @@ bool WriteToImageFile(int fd, const LpMetadata& input) {
 }
 
 bool WriteToImageFile(const char* file, const LpMetadata& input) {
-    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC, 0644));
+    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
         return false;
@@ -97,7 +97,6 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
     : metadata_(metadata),
       geometry_(metadata.geometry),
       block_size_(block_size),
-      file_(nullptr, sparse_file_destroy),
       images_(images) {
     uint64_t total_size = GetTotalSuperPartitionSize(metadata);
     if (block_size % LP_SECTOR_SIZE != 0) {
@@ -129,20 +128,32 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
         return;
     }
 
-    file_.reset(sparse_file_new(block_size_, total_size));
-    if (!file_) {
-        LERROR << "Could not allocate sparse file of size " << total_size;
+    for (const auto& block_device : metadata.block_devices) {
+        SparsePtr file(sparse_file_new(block_size_, block_device.size), sparse_file_destroy);
+        if (!file) {
+            LERROR << "Could not allocate sparse file of size " << block_device.size;
+            return;
+        }
+        device_images_.emplace_back(std::move(file));
     }
 }
 
+bool SparseBuilder::IsValid() const {
+    return device_images_.size() == metadata_.block_devices.size();
+}
+
 bool SparseBuilder::Export(const char* file) {
-    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC, 0644));
+    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
     if (fd < 0) {
         PERROR << "open failed: " << file;
         return false;
     }
+    if (device_images_.size() > 1) {
+        LERROR << "Cannot export to a single image on retrofit builds.";
+        return false;
+    }
     // No gzip compression; sparseify; no checksum.
-    int ret = sparse_file_write(file_.get(), fd, false, true, false);
+    int ret = sparse_file_write(device_images_[0].get(), fd, false, true, false);
     if (ret != 0) {
         LERROR << "sparse_file_write failed (error code " << ret << ")";
         return false;
@@ -150,13 +161,39 @@ bool SparseBuilder::Export(const char* file) {
     return true;
 }
 
-bool SparseBuilder::AddData(const std::string& blob, uint64_t sector) {
+bool SparseBuilder::ExportFiles(const std::string& output_dir) {
+    android::base::unique_fd dir(open(output_dir.c_str(), O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW));
+    if (dir < 0) {
+        PERROR << "open dir failed: " << output_dir;
+        return false;
+    }
+
+    for (size_t i = 0; i < device_images_.size(); i++) {
+        std::string name = GetBlockDevicePartitionName(metadata_.block_devices[i]);
+        std::string path = output_dir + "/super_" + name + ".img";
+        android::base::unique_fd fd(openat(
+                dir, path.c_str(), O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0644));
+        if (fd < 0) {
+            PERROR << "open failed: " << path;
+            return false;
+        }
+        // No gzip compression; sparseify; no checksum.
+        int ret = sparse_file_write(device_images_[i].get(), fd, false, true, false);
+        if (ret != 0) {
+            LERROR << "sparse_file_write failed (error code " << ret << ")";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SparseBuilder::AddData(sparse_file* file, const std::string& blob, uint64_t sector) {
     uint32_t block;
     if (!SectorToBlock(sector, &block)) {
         return false;
     }
     void* data = const_cast<char*>(blob.data());
-    int ret = sparse_file_add_data(file_.get(), data, blob.size(), block);
+    int ret = sparse_file_add_data(file, data, blob.size(), block);
     if (ret != 0) {
         LERROR << "sparse_file_add_data failed (error code " << ret << ")";
         return false;
@@ -179,8 +216,12 @@ bool SparseBuilder::SectorToBlock(uint64_t sector, uint32_t* block) {
     return true;
 }
 
+uint64_t SparseBuilder::BlockToSector(uint64_t block) const {
+    return (block * block_size_) / LP_SECTOR_SIZE;
+}
+
 bool SparseBuilder::Build() {
-    if (sparse_file_add_fill(file_.get(), 0, LP_PARTITION_RESERVED_BYTES, 0) < 0) {
+    if (sparse_file_add_fill(device_images_[0].get(), 0, LP_PARTITION_RESERVED_BYTES, 0) < 0) {
         LERROR << "Could not add initial sparse block for reserved zeroes";
         return false;
     }
@@ -194,7 +235,13 @@ bool SparseBuilder::Build() {
     for (size_t i = 0; i < geometry_.metadata_slot_count * 2; i++) {
         all_metadata_ += metadata_blob;
     }
-    if (!AddData(all_metadata_, 0)) {
+
+    uint64_t first_sector = LP_PARTITION_RESERVED_BYTES / LP_SECTOR_SIZE;
+    if (!AddData(device_images_[0].get(), all_metadata_, first_sector)) {
+        return false;
+    }
+
+    if (!CheckExtentOrdering()) {
         return false;
     }
 
@@ -228,13 +275,10 @@ static inline bool HasFillValue(uint32_t* buffer, size_t count) {
 
 bool SparseBuilder::AddPartitionImage(const LpMetadataPartition& partition,
                                       const std::string& file) {
-    if (partition.num_extents != 1) {
-        LERROR << "Partition for new tables should not have more than one extent: "
-               << GetPartitionName(partition);
-        return false;
-    }
+    // Track which extent we're processing.
+    uint32_t extent_index = partition.first_extent_index;
 
-    const LpMetadataExtent& extent = metadata_.extents[partition.first_extent_index];
+    const LpMetadataExtent& extent = metadata_.extents[extent_index];
     if (extent.target_type != LP_TARGET_TYPE_LINEAR) {
         LERROR << "Partition should only have linear extents: " << GetPartitionName(partition);
         return false;
@@ -252,9 +296,11 @@ bool SparseBuilder::AddPartitionImage(const LpMetadataPartition& partition,
         LERROR << "Could not compute image size";
         return false;
     }
-    if (file_length > extent.num_sectors * LP_SECTOR_SIZE) {
+    uint64_t partition_size = ComputePartitionSize(partition);
+    if (file_length > partition_size) {
         LERROR << "Image for partition '" << GetPartitionName(partition)
-               << "' is greater than its size";
+               << "' is greater than its size (" << file_length << ", excepted " << partition_size
+               << ")";
         return false;
     }
     if (SeekFile64(fd, 0, SEEK_SET)) {
@@ -262,14 +308,39 @@ bool SparseBuilder::AddPartitionImage(const LpMetadataPartition& partition,
         return false;
     }
 
+    // We track the current logical sector and the position the current extent
+    // ends at.
+    uint64_t output_sector = 0;
+    uint64_t extent_last_sector = extent.num_sectors;
+
+    // We also track the output device and the current output block within that
+    // device.
     uint32_t output_block;
     if (!SectorToBlock(extent.target_data, &output_block)) {
         return false;
     }
+    sparse_file* output_device = device_images_[extent.target_source].get();
 
+    // Proceed to read the file and build sparse images.
     uint64_t pos = 0;
     uint64_t remaining = file_length;
     while (remaining) {
+        // Check if we need to advance to the next extent.
+        if (output_sector == extent_last_sector) {
+            extent_index++;
+            if (extent_index >= partition.first_extent_index + partition.num_extents) {
+                LERROR << "image is larger than extent table";
+                return false;
+            }
+
+            const LpMetadataExtent& extent = metadata_.extents[extent_index];
+            extent_last_sector += extent.num_sectors;
+            output_device = device_images_[extent.target_source].get();
+            if (!SectorToBlock(extent.target_data, &output_block)) {
+                return false;
+            }
+        }
+
         uint32_t buffer[block_size_ / sizeof(uint32_t)];
         size_t read_size = remaining >= sizeof(buffer) ? sizeof(buffer) : size_t(remaining);
         if (!android::base::ReadFully(fd, buffer, sizeof(buffer))) {
@@ -277,13 +348,13 @@ bool SparseBuilder::AddPartitionImage(const LpMetadataPartition& partition,
             return false;
         }
         if (read_size != sizeof(buffer) || !HasFillValue(buffer, read_size / sizeof(uint32_t))) {
-            int rv = sparse_file_add_fd(file_.get(), fd, pos, read_size, output_block);
+            int rv = sparse_file_add_fd(output_device, fd, pos, read_size, output_block);
             if (rv) {
                 LERROR << "sparse_file_add_fd failed with code: " << rv;
                 return false;
             }
         } else {
-            int rv = sparse_file_add_fill(file_.get(), buffer[0], read_size, output_block);
+            int rv = sparse_file_add_fill(output_device, buffer[0], read_size, output_block);
             if (rv) {
                 LERROR << "sparse_file_add_fill failed with code: " << rv;
                 return false;
@@ -291,21 +362,57 @@ bool SparseBuilder::AddPartitionImage(const LpMetadataPartition& partition,
         }
         pos += read_size;
         remaining -= read_size;
+        output_sector += block_size_ / LP_SECTOR_SIZE;
         output_block++;
     }
 
     return true;
 }
 
+uint64_t SparseBuilder::ComputePartitionSize(const LpMetadataPartition& partition) const {
+    uint64_t sectors = 0;
+    for (size_t i = 0; i < partition.num_extents; i++) {
+        sectors += metadata_.extents[partition.first_extent_index + i].num_sectors;
+    }
+    return sectors * LP_SECTOR_SIZE;
+}
+
+// For simplicity, we don't allow serializing any configuration: extents must
+// be ordered, such that any extent at position I in the table occurs *before*
+// any extent after position I, for the same block device. We validate that
+// here.
+//
+// Without this, it would be more difficult to find the appropriate extent for
+// an output block. With this guarantee it is a linear walk.
+bool SparseBuilder::CheckExtentOrdering() {
+    std::vector<uint64_t> last_sectors(metadata_.block_devices.size());
+
+    for (const auto& extent : metadata_.extents) {
+        if (extent.target_type != LP_TARGET_TYPE_LINEAR) {
+            LERROR << "Extents must all be type linear.";
+            return false;
+        }
+        if (extent.target_data <= last_sectors[extent.target_source]) {
+            LERROR << "Extents must appear in increasing order.";
+            return false;
+        }
+        if ((extent.num_sectors * LP_SECTOR_SIZE) % block_size_ != 0) {
+            LERROR << "Extents must be aligned to the block size.";
+            return false;
+        }
+        last_sectors[extent.target_source] = extent.target_data;
+    }
+    return true;
+}
+
 int SparseBuilder::OpenImageFile(const std::string& file) {
-    android::base::unique_fd source_fd(open(file.c_str(), O_RDONLY));
+    android::base::unique_fd source_fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
     if (source_fd < 0) {
         PERROR << "open image file failed: " << file;
         return -1;
     }
 
-    std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)> source(
-            sparse_file_import(source_fd, true, true), sparse_file_destroy);
+    SparsePtr source(sparse_file_import(source_fd, true, true), sparse_file_destroy);
     if (!source) {
         int fd = source_fd.get();
         temp_fds_.push_back(std::move(source_fd));
@@ -338,6 +445,12 @@ bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t bl
                        const std::map<std::string, std::string>& images) {
     SparseBuilder builder(metadata, block_size, images);
     return builder.IsValid() && builder.Build() && builder.Export(file);
+}
+
+bool WriteSplitSparseFiles(const std::string& output_dir, const LpMetadata& metadata,
+                           uint32_t block_size, const std::map<std::string, std::string>& images) {
+    SparseBuilder builder(metadata, block_size, images);
+    return builder.IsValid() && builder.Build() && builder.ExportFiles(output_dir);
 }
 
 }  // namespace fs_mgr

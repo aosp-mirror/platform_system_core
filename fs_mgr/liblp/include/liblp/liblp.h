@@ -78,6 +78,14 @@ bool WriteToImageFile(const char* file, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file);
 std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 
+// Similar to WriteToSparseFile, this will generate an image that can be
+// flashed to a device directly. However unlike WriteToSparseFile, it
+// is intended for retrofit devices, and will generate one sparse file per
+// block device (each named super_<name>.img) and placed in the specified
+// output folder.
+bool WriteSplitSparseFiles(const std::string& output_dir, const LpMetadata& metadata,
+                           uint32_t block_size, const std::map<std::string, std::string>& images);
+
 // Helper to extract safe C++ strings from partition info.
 std::string GetPartitionName(const LpMetadataPartition& partition);
 std::string GetPartitionGroupName(const LpMetadataPartitionGroup& group);
@@ -95,6 +103,7 @@ std::vector<std::string> GetBlockDevicePartitionNames(const LpMetadata& metadata
 
 // Slot suffix helpers.
 uint32_t SlotNumberForSlotSuffix(const std::string& suffix);
+std::string SlotSuffixForSlotNumber(uint32_t slot_number);
 std::string GetPartitionSlotSuffix(const std::string& partition_name);
 
 }  // namespace fs_mgr

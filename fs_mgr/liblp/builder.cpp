@@ -113,18 +113,7 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const IPartitionOpener& op
     if (!metadata) {
         return nullptr;
     }
-    std::unique_ptr<MetadataBuilder> builder = New(*metadata.get());
-    if (!builder) {
-        return nullptr;
-    }
-    for (size_t i = 0; i < builder->block_devices_.size(); i++) {
-        std::string partition_name = GetBlockDevicePartitionName(builder->block_devices_[i]);
-        BlockDeviceInfo device_info;
-        if (opener.GetInfo(partition_name, &device_info)) {
-            builder->UpdateBlockDeviceInfo(i, device_info);
-        }
-    }
-    return builder;
+    return New(*metadata.get(), &opener);
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const std::string& super_partition,
@@ -142,15 +131,70 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(
     return builder;
 }
 
-std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const LpMetadata& metadata) {
+std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const LpMetadata& metadata,
+                                                      const IPartitionOpener* opener) {
     std::unique_ptr<MetadataBuilder> builder(new MetadataBuilder());
     if (!builder->Init(metadata)) {
         return nullptr;
     }
+    if (opener) {
+        for (size_t i = 0; i < builder->block_devices_.size(); i++) {
+            std::string partition_name = GetBlockDevicePartitionName(builder->block_devices_[i]);
+            BlockDeviceInfo device_info;
+            if (opener->GetInfo(partition_name, &device_info)) {
+                builder->UpdateBlockDeviceInfo(i, device_info);
+            }
+        }
+    }
     return builder;
 }
 
-MetadataBuilder::MetadataBuilder() {
+std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionOpener& opener,
+                                                               const std::string& source_partition,
+                                                               uint32_t source_slot_number,
+                                                               uint32_t target_slot_number) {
+    auto metadata = ReadMetadata(opener, source_partition, source_slot_number);
+    if (!metadata) {
+        return nullptr;
+    }
+
+    // Get the list of devices we already have.
+    std::set<std::string> block_devices;
+    for (const auto& block_device : metadata->block_devices) {
+        block_devices.emplace(GetBlockDevicePartitionName(block_device));
+    }
+
+    auto new_block_devices = metadata->block_devices;
+
+    // Add missing block devices.
+    std::string source_slot_suffix = SlotSuffixForSlotNumber(source_slot_number);
+    std::string target_slot_suffix = SlotSuffixForSlotNumber(target_slot_number);
+    for (const auto& block_device : metadata->block_devices) {
+        std::string partition_name = GetBlockDevicePartitionName(block_device);
+        std::string slot_suffix = GetPartitionSlotSuffix(partition_name);
+        if (slot_suffix.empty() || slot_suffix != source_slot_suffix) {
+            continue;
+        }
+        std::string new_name =
+                partition_name.substr(0, partition_name.size() - slot_suffix.size()) +
+                target_slot_suffix;
+        if (block_devices.find(new_name) != block_devices.end()) {
+            continue;
+        }
+
+        auto new_device = block_device;
+        if (!UpdateBlockDevicePartitionName(&new_device, new_name)) {
+            LERROR << "Partition name too long: " << new_name;
+            return nullptr;
+        }
+        new_block_devices.emplace_back(new_device);
+    }
+
+    metadata->block_devices = new_block_devices;
+    return New(*metadata.get(), &opener);
+}
+
+MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
     memset(&geometry_, 0, sizeof(geometry_));
     geometry_.magic = LP_METADATA_GEOMETRY_MAGIC;
     geometry_.struct_size = sizeof(geometry_);
@@ -564,7 +608,12 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
     metadata->geometry = geometry_;
 
     // Assign this early so the extent table can read it.
-    metadata->block_devices = block_devices_;
+    for (const auto& block_device : block_devices_) {
+        metadata->block_devices.emplace_back(block_device);
+        if (auto_slot_suffixing_) {
+            metadata->block_devices.back().flags |= LP_BLOCK_DEVICE_SLOT_SUFFIXED;
+        }
+    }
 
     std::map<std::string, size_t> group_indices;
     for (const auto& group : groups_) {
@@ -600,6 +649,9 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         part.first_extent_index = static_cast<uint32_t>(metadata->extents.size());
         part.num_extents = static_cast<uint32_t>(partition->extents().size());
         part.attributes = partition->attributes();
+        if (auto_slot_suffixing_) {
+            part.attributes |= LP_PARTITION_ATTR_SLOT_SUFFIXED;
+        }
 
         auto iter = group_indices.find(partition->group_name());
         if (iter == group_indices.end()) {
@@ -834,6 +886,10 @@ bool MetadataBuilder::ImportPartition(const LpMetadata& metadata,
         return false;
     }
     return true;
+}
+
+void MetadataBuilder::SetAutoSlotSuffixing() {
+    auto_slot_suffixing_ = true;
 }
 
 }  // namespace fs_mgr

@@ -348,6 +348,38 @@ std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry&
     return ParseMetadata(geometry, fd);
 }
 
+namespace {
+
+bool AdjustMetadataForSlot(LpMetadata* metadata, uint32_t slot_number) {
+    std::string slot_suffix = SlotSuffixForSlotNumber(slot_number);
+    for (auto& partition : metadata->partitions) {
+        if (!(partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED)) {
+            continue;
+        }
+        std::string partition_name = GetPartitionName(partition) + slot_suffix;
+        if (partition_name.size() > sizeof(partition.name)) {
+            LERROR << __PRETTY_FUNCTION__ << " partition name too long: " << partition_name;
+            return false;
+        }
+        strncpy(partition.name, partition_name.c_str(), sizeof(partition.name));
+        partition.attributes &= ~LP_PARTITION_ATTR_SLOT_SUFFIXED;
+    }
+    for (auto& block_device : metadata->block_devices) {
+        if (!(block_device.flags & LP_BLOCK_DEVICE_SLOT_SUFFIXED)) {
+            continue;
+        }
+        std::string partition_name = GetBlockDevicePartitionName(block_device) + slot_suffix;
+        if (!UpdateBlockDevicePartitionName(&block_device, partition_name)) {
+            LERROR << __PRETTY_FUNCTION__ << " partition name too long: " << partition_name;
+            return false;
+        }
+        block_device.flags &= ~LP_BLOCK_DEVICE_SLOT_SUFFIXED;
+    }
+    return true;
+}
+
+}  // namespace
+
 std::unique_ptr<LpMetadata> ReadMetadata(const IPartitionOpener& opener,
                                          const std::string& super_partition, uint32_t slot_number) {
     android::base::unique_fd fd = opener.Open(super_partition, O_RDONLY);
@@ -360,18 +392,30 @@ std::unique_ptr<LpMetadata> ReadMetadata(const IPartitionOpener& opener,
     if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
         return nullptr;
     }
-
     if (slot_number >= geometry.metadata_slot_count) {
         LERROR << __PRETTY_FUNCTION__ << " invalid metadata slot number";
         return nullptr;
     }
 
-    // Read the primary copy, and if that fails, try the backup.
-    std::unique_ptr<LpMetadata> metadata = ReadPrimaryMetadata(fd, geometry, slot_number);
-    if (metadata) {
-        return metadata;
+    std::vector<int64_t> offsets = {
+            GetPrimaryMetadataOffset(geometry, slot_number),
+            GetBackupMetadataOffset(geometry, slot_number),
+    };
+    std::unique_ptr<LpMetadata> metadata;
+
+    for (const auto& offset : offsets) {
+        if (SeekFile64(fd, offset, SEEK_SET) < 0) {
+            PERROR << __PRETTY_FUNCTION__ << " lseek failed, offset " << offset;
+            continue;
+        }
+        if ((metadata = ParseMetadata(geometry, fd)) != nullptr) {
+            break;
+        }
     }
-    return ReadBackupMetadata(fd, geometry, slot_number);
+    if (!metadata || !AdjustMetadataForSlot(metadata.get(), slot_number)) {
+        return nullptr;
+    }
+    return metadata;
 }
 
 std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uint32_t slot_number) {
