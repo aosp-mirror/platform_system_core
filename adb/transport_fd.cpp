@@ -85,18 +85,9 @@ struct NonblockingFdConnection : public Connection {
             if (pfds[0].revents) {
                 if ((pfds[0].revents & POLLOUT)) {
                     std::lock_guard<std::mutex> lock(this->write_mutex_);
-                    WriteResult result = DispatchWrites();
-                    switch (result) {
-                        case WriteResult::Error:
-                            *error = "write failed";
-                            return;
-
-                        case WriteResult::Completed:
-                            writable_ = true;
-                            break;
-
-                        case WriteResult::TryAgain:
-                            break;
+                    if (DispatchWrites() == WriteResult::Error) {
+                        *error = "write failed";
+                        return;
                     }
                 }
 
@@ -179,13 +170,14 @@ struct NonblockingFdConnection : public Connection {
 
     WriteResult DispatchWrites() REQUIRES(write_mutex_) {
         CHECK(!write_buffer_.empty());
-        if (!writable_) {
-            return WriteResult::TryAgain;
-        }
-
         auto iovs = write_buffer_.iovecs();
         ssize_t rc = adb_writev(fd_.get(), iovs.data(), iovs.size());
         if (rc == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                writable_ = false;
+                return WriteResult::TryAgain;
+            }
+
             return WriteResult::Error;
         } else if (rc == 0) {
             errno = 0;
@@ -194,6 +186,7 @@ struct NonblockingFdConnection : public Connection {
 
         // TODO: Implement a more efficient drop_front?
         write_buffer_.take_front(rc);
+        writable_ = write_buffer_.empty();
         if (write_buffer_.empty()) {
             return WriteResult::Completed;
         }
@@ -211,7 +204,12 @@ struct NonblockingFdConnection : public Connection {
         if (!packet->payload.empty()) {
             write_buffer_.append(std::make_unique<IOVector::block_type>(std::move(packet->payload)));
         }
-        return DispatchWrites() != WriteResult::Error;
+
+        WriteResult result = DispatchWrites();
+        if (result == WriteResult::TryAgain) {
+            WakeThread();
+        }
+        return result != WriteResult::Error;
     }
 
     std::thread thread_;
