@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fts.h>
+#include <glob.h>
 #include <linux/loop.h>
 #include <linux/module.h>
 #include <mntent.h>
@@ -1053,6 +1054,38 @@ static Result<Success> do_init_user0(const BuiltinArguments& args) {
         {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
 }
 
+static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
+    glob_t glob_result;
+    // @ is added to filter out the later paths, which are bind mounts of the places
+    // where the APEXes are really mounted at. Otherwise, we will parse the
+    // same file twice.
+    static constexpr char glob_pattern[] = "/apex/*@*/etc/*.rc";
+    if (glob(glob_pattern, GLOB_MARK, nullptr, &glob_result) != 0) {
+        globfree(&glob_result);
+        return Error() << "glob pattern '" << glob_pattern << "' failed";
+    }
+    std::vector<std::string> configs;
+    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance());
+    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
+        configs.emplace_back(glob_result.gl_pathv[i]);
+    }
+    globfree(&glob_result);
+
+    bool success = true;
+    for (const auto& c : configs) {
+        if (c.back() == '/') {
+            // skip if directory
+            continue;
+        }
+        success &= parser.ParseConfigFile(c);
+    }
+    if (success) {
+        return Success();
+    } else {
+        return Error() << "Could not parse apex configs";
+    }
+}
+
 // Builtin-function-map start
 const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
@@ -1090,6 +1123,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
+        {"parse_apex_configs",      {0,     0,    {false,  do_parse_apex_configs}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"restart",                 {1,     1,    {false,  do_restart}}},
