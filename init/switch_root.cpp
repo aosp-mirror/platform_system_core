@@ -16,7 +16,6 @@
 
 #include "switch_root.h"
 
-#include <dirent.h>
 #include <fcntl.h>
 #include <mntent.h>
 #include <sys/mount.h>
@@ -34,45 +33,6 @@ namespace android {
 namespace init {
 
 namespace {
-
-void FreeRamdisk(DIR* dir, dev_t dev) {
-    int dfd = dirfd(dir);
-
-    dirent* de;
-    while ((de = readdir(dir)) != nullptr) {
-        if (de->d_name == "."s || de->d_name == ".."s) {
-            continue;
-        }
-
-        bool is_dir = false;
-
-        if (de->d_type == DT_DIR || de->d_type == DT_UNKNOWN) {
-            struct stat info;
-            if (fstatat(dfd, de->d_name, &info, AT_SYMLINK_NOFOLLOW) != 0) {
-                continue;
-            }
-
-            if (info.st_dev != dev) {
-                continue;
-            }
-
-            if (S_ISDIR(info.st_mode)) {
-                is_dir = true;
-                auto fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY);
-                if (fd >= 0) {
-                    auto subdir =
-                            std::unique_ptr<DIR, decltype(&closedir)>{fdopendir(fd), closedir};
-                    if (subdir) {
-                        FreeRamdisk(subdir.get(), dev);
-                    } else {
-                        close(fd);
-                    }
-                }
-            }
-        }
-        unlinkat(dfd, de->d_name, is_dir ? AT_REMOVEDIR : 0);
-    }
-}
 
 std::vector<std::string> GetMounts(const std::string& new_root) {
     auto fp = std::unique_ptr<std::FILE, decltype(&endmntent)>{setmntent("/proc/mounts", "re"),
@@ -112,22 +72,14 @@ std::vector<std::string> GetMounts(const std::string& new_root) {
 void SwitchRoot(const std::string& new_root) {
     auto mounts = GetMounts(new_root);
 
+    LOG(INFO) << "Switching root to '" << new_root << "'";
+
     for (const auto& mount_path : mounts) {
         auto new_mount_path = new_root + mount_path;
+        mkdir(new_mount_path.c_str(), 0755);
         if (mount(mount_path.c_str(), new_mount_path.c_str(), nullptr, MS_MOVE, nullptr) != 0) {
             PLOG(FATAL) << "Unable to move mount at '" << mount_path << "'";
         }
-    }
-
-    auto old_root_dir = std::unique_ptr<DIR, decltype(&closedir)>{opendir("/"), closedir};
-    if (!old_root_dir) {
-        PLOG(ERROR) << "Could not opendir(\"/\"), not freeing ramdisk";
-    }
-
-    struct stat old_root_info;
-    if (stat("/", &old_root_info) != 0) {
-        PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
-        old_root_dir.reset();
     }
 
     if (chdir(new_root.c_str()) != 0) {
@@ -140,10 +92,6 @@ void SwitchRoot(const std::string& new_root) {
 
     if (chroot(".") != 0) {
         PLOG(FATAL) << "Unable to chroot to new root";
-    }
-
-    if (old_root_dir) {
-        FreeRamdisk(old_root_dir.get(), old_root_info.st_dev);
     }
 }
 
