@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
+#include <fcntl.h>
 #include <paths.h>
 #include <stdlib.h>
 #include <sys/mount.h>
@@ -26,18 +28,71 @@
 #include <vector>
 
 #include <android-base/chrono_utils.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <cutils/android_reboot.h>
 #include <private/android_filesystem_config.h>
 
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
+#include "switch_root.h"
 #include "util.h"
 
 using android::base::boot_clock;
 
+using namespace std::literals;
+
 namespace android {
 namespace init {
+
+namespace {
+
+void FreeRamdisk(DIR* dir, dev_t dev) {
+    int dfd = dirfd(dir);
+
+    dirent* de;
+    while ((de = readdir(dir)) != nullptr) {
+        if (de->d_name == "."s || de->d_name == ".."s) {
+            continue;
+        }
+
+        bool is_dir = false;
+
+        if (de->d_type == DT_DIR || de->d_type == DT_UNKNOWN) {
+            struct stat info;
+            if (fstatat(dfd, de->d_name, &info, AT_SYMLINK_NOFOLLOW) != 0) {
+                continue;
+            }
+
+            if (info.st_dev != dev) {
+                continue;
+            }
+
+            if (S_ISDIR(info.st_mode)) {
+                is_dir = true;
+                auto fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY);
+                if (fd >= 0) {
+                    auto subdir =
+                            std::unique_ptr<DIR, decltype(&closedir)>{fdopendir(fd), closedir};
+                    if (subdir) {
+                        FreeRamdisk(subdir.get(), dev);
+                    } else {
+                        close(fd);
+                    }
+                }
+            }
+        }
+        unlinkat(dfd, de->d_name, is_dir ? AT_REMOVEDIR : 0);
+    }
+}
+
+bool ForceNormalBoot() {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    return cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
+}
+
+}  // namespace
 
 int main(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
@@ -117,8 +172,39 @@ int main(int argc, char** argv) {
 
     LOG(INFO) << "init first stage started!";
 
+    auto old_root_dir = std::unique_ptr<DIR, decltype(&closedir)>{opendir("/"), closedir};
+    if (!old_root_dir) {
+        PLOG(ERROR) << "Could not opendir(\"/\"), not freeing ramdisk";
+    }
+
+    struct stat old_root_info;
+    if (stat("/", &old_root_info) != 0) {
+        PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
+        old_root_dir.reset();
+    }
+
+    if (ForceNormalBoot()) {
+        mkdir("/first_stage_ramdisk", 0755);
+        // SwitchRoot() must be called with a mount point as the target, so we bind mount the
+        // target directory to itself here.
+        if (mount("/first_stage_ramdisk", "/first_stage_ramdisk", nullptr, MS_BIND, nullptr) != 0) {
+            LOG(FATAL) << "Could not bind mount /first_stage_ramdisk to itself";
+        }
+        SwitchRoot("/first_stage_ramdisk");
+    }
+
     if (!DoFirstStageMount()) {
         LOG(FATAL) << "Failed to mount required partitions early ...";
+    }
+
+    struct stat new_root_info;
+    if (stat("/", &new_root_info) != 0) {
+        PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
+        old_root_dir.reset();
+    }
+
+    if (old_root_dir && old_root_info.st_dev != new_root_info.st_dev) {
+        FreeRamdisk(old_root_dir.get(), old_root_info.st_dev);
     }
 
     SetInitAvbVersionInRecovery();
