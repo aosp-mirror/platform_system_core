@@ -45,7 +45,7 @@
 //
 //  - that the ro.boot.disable_runas property is not set
 //  - that it is invoked from the 'shell' or 'root' user (abort otherwise)
-//  - that '<package-name>' is the name of an installed and debuggable/profileableFromShell package
+//  - that '<package-name>' is the name of an installed and debuggable package
 //  - that the package's data directory is well-formed
 //
 //  If so, it will drop to the application's user id / group id, cd to the
@@ -57,7 +57,6 @@
 //    during development.
 //
 //  - Run the 'gdbserver' binary executable to allow native debugging
-//  - Run simpleperf to allow native profiling
 //
 
 static bool packagelist_parse_callback(pkg_info* this_package, void* userdata) {
@@ -197,9 +196,9 @@ int main(int argc, char* argv[]) {
     error(1, 0, "package not an application: %s", pkgname);
   }
 
-  // Reject packages that are neither debuggable nor profileable from shell.
-  if (!info.debuggable && !info.profileable_from_shell) {
-    error(1, 0, "package is neither debuggable nor profileable from shell: %s", pkgname);
+  // Reject any non-debuggable package.
+  if (!info.debuggable) {
+    error(1, 0, "package not debuggable: %s", pkgname);
   }
 
   // Check that the data directory path is valid.
