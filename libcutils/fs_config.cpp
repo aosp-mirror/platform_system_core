@@ -60,7 +60,7 @@ static inline uint64_t get8LE(const uint8_t* src) {
 // way up to the root.
 
 static const struct fs_path_config android_dirs[] = {
-    // clang-format off
+        // clang-format off
     { 00770, AID_SYSTEM,       AID_CACHE,        0, "cache" },
     { 00555, AID_ROOT,         AID_ROOT,         0, "config" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data/app" },
@@ -80,17 +80,18 @@ static const struct fs_path_config android_dirs[] = {
     { 00775, AID_ROOT,         AID_ROOT,         0, "data/preloads" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
-    { 00755, AID_ROOT,         AID_SHELL,        0, "product/bin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "product/bin" },
     { 00750, AID_ROOT,         AID_SHELL,        0, "sbin" },
     { 00777, AID_ROOT,         AID_ROOT,         0, "sdcard" },
     { 00751, AID_ROOT,         AID_SDCARD_R,     0, "storage" },
-    { 00755, AID_ROOT,         AID_SHELL,        0, "system/bin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "system/bin" },
     { 00755, AID_ROOT,         AID_ROOT,         0, "system/etc/ppp" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/vendor" },
-    { 00755, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
     { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
-    // clang-format on
+        // clang-format on
 };
 #ifndef __ANDROID_VNDK__
 auto __for_testing_only__android_dirs = android_dirs;
