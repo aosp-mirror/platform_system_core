@@ -28,7 +28,6 @@
 #include <string>
 
 #include <android-base/file.h>
-#include <android-base/test_utils.h>
 
 // All of these tests fail on Windows because they use the C Runtime open(),
 // but the adb_io APIs expect file descriptors from adb_open(). This could

@@ -20,7 +20,7 @@
 
 #include <unordered_map>
 
-#include <android-base/test_utils.h>
+#include <android-base/file.h>
 
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
