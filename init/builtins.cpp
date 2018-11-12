@@ -1079,6 +1079,7 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
         }
         success &= parser.ParseConfigFile(c);
     }
+    ServiceList::GetInstance().MarkServicesUpdate();
     if (success) {
         return Success();
     } else {
