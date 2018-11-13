@@ -560,7 +560,7 @@ ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
         std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
         if (!links.empty()) {
             auto [it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
-            if (!inserted) {
+            if (!inserted && (links[0] != it->second)) {
                 LOG(ERROR) << "Partition '" << uevent.partition_name
                            << "' already existed in the by-name symlink map with a value of '"
                            << it->second << "', new value '" << links[0] << "' will be ignored.";
