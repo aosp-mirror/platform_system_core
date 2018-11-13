@@ -183,10 +183,8 @@ ADB_CONNECTION_BENCHMARK(BM_Connection_Echo, ThreadPolicy::SameThread);
 ADB_CONNECTION_BENCHMARK(BM_Connection_Echo, ThreadPolicy::MainThread);
 
 int main(int argc, char** argv) {
-#if defined(__BIONIC__)
     // Set M_DECAY_TIME so that our allocations aren't immediately purged on free.
     mallopt(M_DECAY_TIME, 1);
-#endif
 
     android::base::SetMinimumLogSeverity(android::base::WARNING);
     adb_trace_init(argv);
