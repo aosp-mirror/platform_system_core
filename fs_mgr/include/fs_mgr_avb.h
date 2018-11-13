@@ -53,13 +53,6 @@ class FsManagerAvbHandle {
     // A typical usage will be:
     //   - FsManagerAvbUniquePtr handle = FsManagerAvbHandle::Open();
     //
-    // There are two overloaded Open() functions with a single parameter.
-    // The argument can be a ByNameSymlinkMap describing the mapping from partition
-    // name to by-name symlink, or a fstab file to which the ByNameSymlinkMap is
-    // constructed from. e.g.,
-    //   - /dev/block/platform/soc.0/7824900.sdhci/by-name/system_a ->
-    //   - ByNameSymlinkMap["system_a"] = "/dev/block/platform/soc.0/7824900.sdhci/by-name/system_a"
-    //
     // Possible return values:
     //   - nullptr: any error when reading and verifying the metadata,
     //     e.g., I/O error, digest value mismatch, size mismatch, etc.
@@ -82,8 +75,7 @@ class FsManagerAvbHandle {
     //   - a valid unique_ptr with status kAvbHandleSuccess: the metadata
     //     is verified and can be trusted.
     //
-    static FsManagerAvbUniquePtr Open(const fstab& fstab);
-    static FsManagerAvbUniquePtr Open(ByNameSymlinkMap&& by_name_symlink_map);
+    static FsManagerAvbUniquePtr Open();
 
     // Sets up dm-verity on the given fstab entry.
     // The 'wait_for_verity_dev' parameter makes this function wait for the
@@ -121,7 +113,6 @@ class FsManagerAvbHandle {
     };
 
     FsManagerAvbHandle() : avb_slot_data_(nullptr), status_(kAvbHandleUninitialized) {}
-    static FsManagerAvbUniquePtr DoOpen(FsManagerAvbOps* avb_ops);
 
     AvbSlotVerifyData* avb_slot_data_;
     AvbHandleStatus status_;
