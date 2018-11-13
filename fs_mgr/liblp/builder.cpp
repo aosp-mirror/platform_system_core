@@ -536,8 +536,8 @@ bool MetadataBuilder::ValidatePartitionSizeChange(Partition* partition, uint64_t
         if (group_size >= group->maximum_size() ||
             group->maximum_size() - group_size < space_needed) {
             LERROR << "Partition " << partition->name() << " is part of group " << group->name()
-                   << " which does not have enough space free (" << space_needed << "requested, "
-                   << group_size << " used out of " << group->maximum_size();
+                   << " which does not have enough space free (" << space_needed << " requested, "
+                   << group_size << " used out of " << group->maximum_size() << ")";
             return false;
         }
     }
