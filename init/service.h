@@ -123,6 +123,7 @@ class Service {
     std::chrono::seconds restart_period() const { return restart_period_; }
     std::optional<std::chrono::seconds> timeout_period() const { return timeout_period_; }
     const std::vector<std::string>& args() const { return args_; }
+    bool is_updatable() const { return updatable_; }
 
   private:
     using OptionParser = Result<Success> (Service::*)(std::vector<std::string>&& args);
@@ -170,6 +171,7 @@ class Service {
     Result<Success> ParseFile(std::vector<std::string>&& args);
     Result<Success> ParseUser(std::vector<std::string>&& args);
     Result<Success> ParseWritepid(std::vector<std::string>&& args);
+    Result<Success> ParseUpdatable(std::vector<std::string>&& args);
 
     template <typename T>
     Result<Success> AddDescriptor(std::vector<std::string>&& args);
@@ -235,6 +237,8 @@ class Service {
     std::chrono::seconds restart_period_ = 5s;
     std::optional<std::chrono::seconds> timeout_period_;
 
+    bool updatable_ = false;
+
     std::vector<std::string> args_;
 
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
@@ -279,8 +283,15 @@ class ServiceList {
     const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
     const std::vector<Service*> services_in_shutdown_order() const;
 
+    void MarkServicesUpdate();
+    bool IsServicesUpdated() const { return services_update_finished_; }
+    void DelayService(const Service& service);
+
   private:
     std::vector<std::unique_ptr<Service>> services_;
+
+    bool services_update_finished_ = false;
+    std::vector<std::string> delayed_service_names_;
 };
 
 class ServiceParser : public SectionParser {
@@ -291,6 +302,7 @@ class ServiceParser : public SectionParser {
                                  int line) override;
     Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
     Result<Success> EndSection() override;
+    void EndFile() override { filename_ = ""; }
 
   private:
     bool IsValidName(const std::string& name) const;
@@ -298,6 +310,7 @@ class ServiceParser : public SectionParser {
     ServiceList* service_list_;
     std::vector<Subcontext>* subcontexts_;
     std::unique_ptr<Service> service_;
+    std::string filename_;
 };
 
 }  // namespace init
