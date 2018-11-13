@@ -108,7 +108,10 @@ struct Block {
         CHECK_EQ(0ULL, capacity_);
         CHECK_EQ(0ULL, size_);
         if (size != 0) {
-            data_ = std::make_unique<char[]>(size);
+            // This isn't std::make_unique because that's equivalent to `new char[size]()`, which
+            // value-initializes the array instead of leaving it uninitialized. As an optimization,
+            // call new without parentheses to avoid this costly initialization.
+            data_.reset(new char[size]);
             capacity_ = size;
             size_ = size;
         }
