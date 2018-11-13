@@ -213,7 +213,6 @@ cc_test_host {
 cc_benchmark {
     name: "adb_benchmark",
     defaults: ["adb_defaults"],
-    host_supported: true,
 
     srcs: ["transport_benchmark.cpp"],
     target: {
@@ -227,9 +226,6 @@ cc_benchmark {
                 "libadb_host",
             ],
         },
-        darwin: {
-            enabled: false,
-        }
     },
 
     static_libs: [
