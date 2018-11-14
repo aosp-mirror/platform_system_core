@@ -120,7 +120,7 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
         return;
     }
 
-    uint64_t num_blocks = total_size % block_size;
+    uint64_t num_blocks = total_size / block_size;
     if (num_blocks >= UINT_MAX) {
         // libsparse counts blocks in unsigned 32-bit integers, so we check to
         // make sure we're not going to overflow.
