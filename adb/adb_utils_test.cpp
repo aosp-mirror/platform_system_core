@@ -30,8 +30,8 @@
 
 #include "sysdeps.h"
 
+#include <android-base/file.h>
 #include <android-base/macros.h>
-#include <android-base/test_utils.h>
 
 #ifdef _WIN32
 static std::string subdir(const char* parent, const char* child) {

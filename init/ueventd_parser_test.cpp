@@ -16,7 +16,7 @@
 
 #include "ueventd_parser.h"
 
-#include <android-base/test_utils.h>
+#include <android-base/file.h>
 #include <gtest/gtest.h>
 #include <private/android_filesystem_config.h>
 
