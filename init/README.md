@@ -332,6 +332,13 @@ runs the service.
   This is particularly useful for creating a periodic service combined with the restart_period
   option described above.
 
+`updatable`
+> Mark that the service can be overridden (via the 'override' option) later in
+  the boot sequence by APEXes. When a service with updatable option is started
+  before APEXes are all activated, the execution is delayed until the activation
+  is finished. A service that is not marked as updatable cannot be overridden by
+  APEXes.
+
 `user <username>`
 > Change to 'username' before exec'ing this service.
   Currently defaults to root.  (??? probably should default to nobody)

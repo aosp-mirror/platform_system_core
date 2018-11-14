@@ -765,6 +765,11 @@ Result<Success> Service::ParseWritepid(std::vector<std::string>&& args) {
     return Success();
 }
 
+Result<Success> Service::ParseUpdatable(std::vector<std::string>&& args) {
+    updatable_ = true;
+    return Success();
+}
+
 class Service::OptionParserMap : public KeywordMap<OptionParser> {
   public:
     OptionParserMap() {}
@@ -817,6 +822,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
         {"socket",      {3,     6,    &Service::ParseSocket}},
         {"timeout_period",
                         {1,     1,    &Service::ParseTimeoutPeriod}},
+        {"updatable",   {0,     0,    &Service::ParseUpdatable}},
         {"user",        {1,     1,    &Service::ParseUser}},
         {"writepid",    {1,     kMax, &Service::ParseWritepid}},
     };
@@ -834,6 +840,13 @@ Result<Success> Service::ParseLine(std::vector<std::string>&& args) {
 }
 
 Result<Success> Service::ExecStart() {
+    if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
+        // Don't delay the service for ExecStart() as the semantic is that
+        // the caller might depend on the side effect of the execution.
+        return Error() << "Cannot start an updatable service '" << name_
+                       << "' before configs from APEXes are all loaded";
+    }
+
     flags_ |= SVC_ONESHOT;
 
     if (auto result = Start(); !result) {
@@ -851,6 +864,13 @@ Result<Success> Service::ExecStart() {
 }
 
 Result<Success> Service::Start() {
+    if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
+        ServiceList::GetInstance().DelayService(*this);
+        return Error() << "Cannot start an updatable service '" << name_
+                       << "' before configs from APEXes are all loaded. "
+                       << "Queued for execution.";
+    }
+
     bool disabled = (flags_ & (SVC_DISABLED | SVC_RESET));
     // Starting a service removes it from the disabled or reset state and
     // immediately takes it out of the restarting state if it was in there.
@@ -1280,6 +1300,32 @@ void ServiceList::DumpState() const {
     }
 }
 
+void ServiceList::MarkServicesUpdate() {
+    services_update_finished_ = true;
+
+    // start the delayed services
+    for (const auto& name : delayed_service_names_) {
+        Service* service = FindService(name);
+        if (service == nullptr) {
+            LOG(ERROR) << "delayed service '" << name << "' could not be found.";
+            continue;
+        }
+        if (auto result = service->Start(); !result) {
+            LOG(ERROR) << result.error_string();
+        }
+    }
+    delayed_service_names_.clear();
+}
+
+void ServiceList::DelayService(const Service& service) {
+    if (services_update_finished_) {
+        LOG(ERROR) << "Cannot delay the start of service '" << service.name()
+                   << "' because all services are already updated. Ignoring.";
+        return;
+    }
+    delayed_service_names_.emplace_back(service.name());
+}
+
 Result<Success> ServiceParser::ParseSection(std::vector<std::string>&& args,
                                             const std::string& filename, int line) {
     if (args.size() < 3) {
@@ -1290,6 +1336,8 @@ Result<Success> ServiceParser::ParseSection(std::vector<std::string>&& args,
     if (!IsValidName(name)) {
         return Error() << "invalid service name '" << name << "'";
     }
+
+    filename_ = filename;
 
     Subcontext* restart_action_subcontext = nullptr;
     if (subcontexts_) {
@@ -1324,6 +1372,11 @@ Result<Success> ServiceParser::EndSection() {
             if (!service_->is_override()) {
                 return Error() << "ignored duplicate definition of service '" << service_->name()
                                << "'";
+            }
+
+            if (StartsWith(filename_, "/apex/") && !old_service->is_updatable()) {
+                return Error() << "cannot update a non-updatable service '" << service_->name()
+                               << "' with a config in APEX";
             }
 
             service_list_->RemoveService(*old_service);

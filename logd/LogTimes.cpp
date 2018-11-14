@@ -204,6 +204,10 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
         goto skip;
     }
 
+    if (me->mRelease) {
+        goto stop;
+    }
+
     if (!me->mTail) {
         goto ok;
     }

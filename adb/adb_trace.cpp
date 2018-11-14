@@ -41,6 +41,11 @@ void AdbLogger(android::base::LogId id, android::base::LogSeverity severity,
                const char* tag, const char* file, unsigned int line,
                const char* message) {
     android::base::StderrLogger(id, severity, tag, file, line, message);
+#if defined(_WIN32)
+    // stderr can be buffered on Windows (and setvbuf doesn't seem to work), so explicitly flush.
+    fflush(stderr);
+#endif
+
 #if !ADB_HOST
     // Only print logs of INFO or higher to logcat, so that `adb logcat` with adbd tracing on
     // doesn't result in exponential logging.
