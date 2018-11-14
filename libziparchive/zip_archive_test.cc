@@ -28,7 +28,6 @@
 
 #include <android-base/file.h>
 #include <android-base/mapped_file.h>
-#include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <ziparchive/zip_archive.h>

@@ -30,7 +30,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/test_utils.h>
 
 using namespace std;
 using namespace android::meminfo;

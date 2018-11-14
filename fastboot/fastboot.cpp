@@ -56,7 +56,6 @@
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <build/version.h>
 #include <platform_tools_version.h>
