@@ -1404,7 +1404,7 @@ TEST(logcat, regex) {
     int count = 0;
 
     char buffer[BIG_BUFFER];
-#define logcat_regex_prefix ___STRING(logcat) "_test"
+#define logcat_regex_prefix logcat_executable "_test"
 
     snprintf(buffer, sizeof(buffer),
              logcat_executable " --pid %d -d -e " logcat_regex_prefix "_a+b",
@@ -1550,7 +1550,7 @@ TEST(logcat, descriptive) {
 
     {
         static const struct tag sync = { 2720, "sync" };
-        static const char id[] = ___STRING(logcat) ".descriptive-sync";
+        static const char id[] = logcat_executable ".descriptive-sync";
         {
             android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)42 << (int32_t)-1 << (int32_t)0;
@@ -1665,7 +1665,7 @@ TEST(logcat, descriptive) {
         // Invent new entries because existing can not serve
         EventTagMap* map = android_openEventTagMap(nullptr);
         ASSERT_TRUE(nullptr != map);
-        static const char name[] = ___STRING(logcat) ".descriptive-monotonic";
+        static const char name[] = logcat_executable ".descriptive-monotonic";
         int myTag = android_lookupEventTagNum(map, name, "(new|1|s)",
                                               ANDROID_LOG_UNKNOWN);
         android_closeEventTagMap(map);
