@@ -176,11 +176,15 @@ check_eq() {
     die "${@}"
 }
 
-[ "USAGE: skip_administrative_mounts
+[ "USAGE: skip_administrative_mounts < /proc/mounts
 
-Filters out all administrative (eg: sysfs) mounts" ]
+Filters out all administrative (eg: sysfs) mounts uninteresting to the test" ]
 skip_administrative_mounts() {
-  grep -v -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\|/data/media\) " -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\|data\) "
+  grep -v \
+    -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\) " \
+    -e "^\(bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
+    -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
+    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\|data\) "
 }
 
 if [ X"-s" = X"${1}" -a -n "${2}" ]; then
