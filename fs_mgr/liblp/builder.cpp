@@ -713,6 +713,11 @@ bool MetadataBuilder::FindBlockDeviceByName(const std::string& partition_name,
     return false;
 }
 
+bool MetadataBuilder::HasBlockDevice(const std::string& partition_name) const {
+    uint32_t index;
+    return FindBlockDeviceByName(partition_name, &index);
+}
+
 bool MetadataBuilder::GetBlockDeviceInfo(const std::string& partition_name,
                                          BlockDeviceInfo* info) const {
     uint32_t index;

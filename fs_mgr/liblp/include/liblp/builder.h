@@ -248,6 +248,9 @@ class MetadataBuilder {
     // false is returned.
     bool ImportPartitions(const LpMetadata& metadata, const std::set<std::string>& partition_names);
 
+    // Return true if a block device is found, else false.
+    bool HasBlockDevice(const std::string& partition_name) const;
+
   private:
     MetadataBuilder();
     MetadataBuilder(const MetadataBuilder&) = delete;
