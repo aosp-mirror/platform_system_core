@@ -25,7 +25,7 @@
 #include <unistd.h>
 #include <memory>
 
-#include <android/security/IKeystoreService.h>
+#include <android/security/keystore/IKeystoreService.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
@@ -318,8 +318,8 @@ public:
             // TODO: cache service?
             sp<IServiceManager> sm = defaultServiceManager();
             sp<IBinder> binder = sm->getService(String16("android.security.keystore"));
-            sp<security::IKeystoreService> service =
-                interface_cast<security::IKeystoreService>(binder);
+            sp<security::keystore::IKeystoreService> service =
+                    interface_cast<security::keystore::IKeystoreService>(binder);
             if (service != NULL) {
                 std::vector<uint8_t> auth_token_vector(*auth_token,
                                                        (*auth_token) + *auth_token_length);
