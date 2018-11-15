@@ -120,7 +120,7 @@ SparseBuilder::SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
         return;
     }
 
-    uint64_t num_blocks = total_size % block_size;
+    uint64_t num_blocks = total_size / block_size;
     if (num_blocks >= UINT_MAX) {
         // libsparse counts blocks in unsigned 32-bit integers, so we check to
         // make sure we're not going to overflow.
@@ -299,7 +299,7 @@ bool SparseBuilder::AddPartitionImage(const LpMetadataPartition& partition,
     uint64_t partition_size = ComputePartitionSize(partition);
     if (file_length > partition_size) {
         LERROR << "Image for partition '" << GetPartitionName(partition)
-               << "' is greater than its size (" << file_length << ", excepted " << partition_size
+               << "' is greater than its size (" << file_length << ", expected " << partition_size
                << ")";
         return false;
     }
@@ -419,25 +419,19 @@ int SparseBuilder::OpenImageFile(const std::string& file) {
         return fd;
     }
 
-    char temp_file[PATH_MAX];
-    snprintf(temp_file, sizeof(temp_file), "%s/imageXXXXXX", P_tmpdir);
-    android::base::unique_fd temp_fd(mkstemp(temp_file));
-    if (temp_fd < 0) {
-        PERROR << "mkstemp failed";
-        return -1;
-    }
-    if (unlink(temp_file) < 0) {
-        PERROR << "unlink failed";
+    TemporaryFile tf;
+    if (tf.fd < 0) {
+        PERROR << "make temporary file failed";
         return -1;
     }
 
     // We temporarily unsparse the file, rather than try to merge its chunks.
-    int rv = sparse_file_write(source.get(), temp_fd, false, false, false);
+    int rv = sparse_file_write(source.get(), tf.fd, false, false, false);
     if (rv) {
         LERROR << "sparse_file_write failed with code: " << rv;
         return -1;
     }
-    temp_fds_.push_back(std::move(temp_fd));
+    temp_fds_.push_back(android::base::unique_fd(tf.release()));
     return temp_fds_.back().get();
 }
 

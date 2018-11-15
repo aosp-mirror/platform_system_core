@@ -30,7 +30,6 @@
 #include "android-base/file.h"
 #include "android-base/stringprintf.h"
 #include "android-base/strings.h"
-#include "android-base/test_utils.h"
 #include "client/file_sync_client.h"
 #include "commandline.h"
 #include "fastdeploy.h"

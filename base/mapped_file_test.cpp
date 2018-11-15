@@ -25,7 +25,6 @@
 #include <string>
 
 #include "android-base/file.h"
-#include "android-base/test_utils.h"
 #include "android-base/unique_fd.h"
 
 TEST(mapped_file, smoke) {

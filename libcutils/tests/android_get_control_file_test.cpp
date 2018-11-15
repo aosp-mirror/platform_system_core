@@ -23,8 +23,8 @@
 
 #include <string>
 
+#include <android-base/file.h>
 #include <android-base/stringprintf.h>
-#include <android-base/test_utils.h>
 #include <cutils/android_get_control_file.h>
 #include <gtest/gtest.h>
 

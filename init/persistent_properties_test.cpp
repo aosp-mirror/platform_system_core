@@ -20,7 +20,7 @@
 
 #include <vector>
 
-#include <android-base/test_utils.h>
+#include <android-base/file.h>
 #include <gtest/gtest.h>
 
 #include "util.h"
