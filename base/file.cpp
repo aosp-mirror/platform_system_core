@@ -134,6 +134,8 @@ TemporaryDir::TemporaryDir() {
 }
 
 TemporaryDir::~TemporaryDir() {
+  if (!remove_dir_and_contents_) return;
+
   auto callback = [](const char* child, const struct stat*, int file_type, struct FTW*) -> int {
     switch (file_type) {
       case FTW_D:
