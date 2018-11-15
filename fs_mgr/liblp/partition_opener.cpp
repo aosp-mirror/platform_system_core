@@ -53,18 +53,18 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
         return false;
     }
     if (ioctl(fd, BLKIOMIN, &device_info->alignment) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
+        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed on " << block_device;
         return false;
     }
 
     int alignment_offset;
     if (ioctl(fd, BLKALIGNOFF, &alignment_offset) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "BLKIOMIN failed";
+        PERROR << __PRETTY_FUNCTION__ << "BLKALIGNOFF failed on " << block_device;
         return false;
     }
     int logical_block_size;
     if (ioctl(fd, BLKSSZGET, &logical_block_size) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "BLKSSZGET failed";
+        PERROR << __PRETTY_FUNCTION__ << "BLKSSZGET failed on " << block_device;
         return false;
     }
 
