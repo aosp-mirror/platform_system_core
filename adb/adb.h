@@ -149,6 +149,10 @@ asocket* host_service_to_socket(const char* name, const char* serial, TransportI
 #endif
 
 #if !ADB_HOST
+asocket* daemon_service_to_socket(std::string_view name);
+#endif
+
+#if !ADB_HOST
 int init_jdwp(void);
 asocket* create_jdwp_service_socket();
 asocket* create_jdwp_tracker_service_socket();
