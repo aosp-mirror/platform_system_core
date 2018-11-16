@@ -290,27 +290,6 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) 
   ASSERT_TRUE(elf->memory()->ReadFully(0x1000, buffer.data(), 1));
 }
 
-TEST_F(MapInfoGetElfTest, process_memory_not_read_only) {
-  MapInfo info(nullptr, 0x9000, 0xa000, 0x1000, 0, "");
-
-  // Create valid elf data in process memory only.
-  Elf64_Ehdr ehdr;
-  TestInitEhdr<Elf64_Ehdr>(&ehdr, ELFCLASS64, EM_AARCH64);
-  ehdr.e_shoff = 0x2000;
-  ehdr.e_shentsize = sizeof(Elf64_Shdr) + 100;
-  ehdr.e_shnum = 0;
-  memory_->SetMemory(0x9000, &ehdr, sizeof(ehdr));
-
-  Elf* elf = info.GetElf(process_memory_, ARCH_ARM64);
-  ASSERT_TRUE(elf != nullptr);
-  ASSERT_FALSE(elf->valid());
-
-  info.elf.reset();
-  info.flags = PROT_READ;
-  elf = info.GetElf(process_memory_, ARCH_ARM64);
-  ASSERT_TRUE(elf->valid());
-}
-
 TEST_F(MapInfoGetElfTest, check_device_maps) {
   MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ | MAPS_FLAGS_DEVICE_MAP,
                "/dev/something");
