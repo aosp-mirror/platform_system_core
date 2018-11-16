@@ -58,6 +58,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <build/version.h>
+#include <liblp/liblp.h>
 #include <platform_tools_version.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
@@ -407,6 +408,7 @@ static int show_help() {
             " -s SERIAL                  Specify a USB device.\n"
             " -s tcp|udp:HOST[:PORT]     Specify a network device.\n"
             " -S SIZE[K|M|G]             Break into sparse files no larger than SIZE.\n"
+            " --force                    Force a flash operation that may be unsafe.\n"
             " --slot SLOT                Use SLOT; 'all' for both slots, 'other' for\n"
             "                            non-current slot (default: current active slot).\n"
             " --set-active[=SLOT]        Sets the active slot before rebooting.\n"
@@ -1505,6 +1507,31 @@ failed:
     fprintf(stderr, "FAILED (%s)\n", fb->Error().c_str());
 }
 
+static bool should_flash_in_userspace(const std::string& partition_name) {
+    auto path = find_item_given_name("super_empty.img");
+    if (path.empty()) {
+        return false;
+    }
+    auto metadata = android::fs_mgr::ReadFromImageFile(path);
+    if (!metadata) {
+        return false;
+    }
+    for (const auto& partition : metadata->partitions) {
+        auto candidate = android::fs_mgr::GetPartitionName(partition);
+        if (partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED) {
+            // On retrofit devices, we don't know if, or whether, the A or B
+            // slot has been flashed for dynamic partitions. Instead we add
+            // both names to the list as a conservative guess.
+            if (candidate + "_a" == partition_name || candidate + "_b" == partition_name) {
+                return true;
+            }
+        } else if (candidate == partition_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int FastBootTool::Main(int argc, char* argv[]) {
     bool wants_wipe = false;
     bool wants_reboot = false;
@@ -1515,6 +1542,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
     bool wants_set_active = false;
     bool skip_secondary = false;
     bool set_fbe_marker = false;
+    bool force_flash = false;
     int longindex;
     std::string slot_override;
     std::string next_active;
@@ -1530,6 +1558,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
         {"cmdline", required_argument, 0, 0},
         {"disable-verification", no_argument, 0, 0},
         {"disable-verity", no_argument, 0, 0},
+        {"force", no_argument, 0, 0},
         {"header-version", required_argument, 0, 0},
         {"help", no_argument, 0, 'h'},
         {"kernel-offset", required_argument, 0, 0},
@@ -1565,6 +1594,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 g_disable_verification = true;
             } else if (name == "disable-verity") {
                 g_disable_verity = true;
+            } else if (name == "force") {
+                force_flash = true;
             } else if (name == "header-version") {
                 g_boot_img_hdr.header_version = strtoul(optarg, nullptr, 0);
             } else if (name == "kernel-offset") {
@@ -1779,6 +1810,16 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
 
             auto flash = [&](const std::string &partition) {
+                if (should_flash_in_userspace(partition) && !is_userspace_fastboot() &&
+                    !force_flash) {
+                    die("The partition you are trying to flash is dynamic, and "
+                        "should be flashed via fastbootd. Please run:\n"
+                        "\n"
+                        "    fastboot reboot fastboot\n"
+                        "\n"
+                        "And try again. If you are intentionally trying to "
+                        "overwrite a fixed partition, use --force.");
+                }
                 do_flash(partition.c_str(), fname.c_str());
             };
             do_for_partitions(pname.c_str(), slot_override, flash, true);

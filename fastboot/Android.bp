@@ -43,6 +43,7 @@ cc_library_host_static {
         "libgtest_main",
         "libbase",
         "libadb_host",
+        "liblp",
     ],
 
     header_libs: [
@@ -173,6 +174,11 @@ cc_defaults {
 
             host_ldlibs: ["-lws2_32"],
         },
+        not_windows: {
+            static_libs: [
+                "libext4_utils",
+            ],
+        },
     },
 
     stl: "libc++_static",
@@ -193,6 +199,8 @@ cc_defaults {
         "libbase",
         "libcutils",
         "libgtest_host",
+        "liblp",
+        "libcrypto",
     ],
 }
 

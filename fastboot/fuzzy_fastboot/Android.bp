@@ -26,6 +26,9 @@ cc_test_host {
     "libadb_host",
     "libtinyxml2",
     "libsparse",
+    "liblp",
+    "libcrypto",
+    "libext4_utils",
   ],
 
   // Static libs (libfastboot2) shared library dependencies are not transitively included
