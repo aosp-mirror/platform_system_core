@@ -52,11 +52,27 @@ adb_sh() {
   adb shell "${@}"
 }
 
+[ "USAGE: adb_date >/dev/stdout
+
+Returns: report device epoch time (suitable for logcat -t)" ]
+adb_date() {
+  adb_sh date +%s.%N </dev/null
+}
+
+[ "USAGE: adb_logcat [arguments] >/dev/stdout
+
+Returns: the logcat output" ]
+adb_logcat() {
+  adb logcat "${@}" </dev/null |
+    grep -v 'logd    : logdr: UID=' |
+    sed -e '${/------- beginning of kernel/d}' -e 's/^[0-1][0-9]-[0-3][0-9] //'
+}
+
 [ "USAGE: get_property <prop>
 
 Returns the property value" ]
 get_property() {
-  adb_sh getprop ${1} 2>&1 </dev/null
+  adb_sh getprop ${1} </dev/null
 }
 
 [ "USAGE: isDebuggable
@@ -108,13 +124,22 @@ adb_wait() {
 
 Returns: true if device in root state" ]
 adb_root() {
-  adb root >/dev/null </dev/null 2>&1 &&
+  adb root >/dev/null </dev/null 2>/dev/null &&
   sleep 1 &&
   adb_wait &&
   sleep 1
 }
 
+[ "USAGE: die [-t <epoch>] [message] >/dev/stderr
+
+If -t <epoch> argument is supplied, dump logcat.
+
+Returns: exit failure, report status" ]
 die() {
+  if [ X"-t" = X"${1}" -a -n "${2}" ]; then
+    adb_logcat -b all -v nsec -t ${2} >&2
+    shift 2
+  fi
   echo "${RED}[  FAILED  ]${NORMAL} ${@}" >&2
   exit 1
 }
@@ -176,11 +201,15 @@ check_eq() {
     die "${@}"
 }
 
-[ "USAGE: skip_administrative_mounts
+[ "USAGE: skip_administrative_mounts < /proc/mounts
 
-Filters out all administrative (eg: sysfs) mounts" ]
+Filters out all administrative (eg: sysfs) mounts uninteresting to the test" ]
 skip_administrative_mounts() {
-  grep -v -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\|/data/media\) " -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\|data\) "
+  grep -v \
+    -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\) " \
+    -e "^\(bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
+    -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
+    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\|data\) "
 }
 
 if [ X"-s" = X"${1}" -a -n "${2}" ]; then
@@ -210,7 +239,7 @@ adb_root &&
 reboot=false
 OVERLAYFS_BACKING="cache mnt/scratch"
 for d in ${OVERLAYFS_BACKING}; do
-  if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>&1; then
+  if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
     echo "${ORANGE}[  WARNING ]${NORMAL} /${d}/overlay is setup, wiping" >&2
     adb_sh rm -rf /${d}/overlay </dev/null ||
       die "/${d}/overlay wipe"
@@ -232,10 +261,17 @@ D=`adb_sh df -k </dev/null` &&
   echo "${D}" &&
   echo "${ORANGE}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
   echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
+adb_sh df -k `adb_sh cat /proc/mounts |
+                skip_administrative_mounts |
+                cut -s -d' ' -f1`
 
-D=`adb disable-verity 2>&1` ||
-  die "setup for overlay ${D}"
+T=`adb_date`
+D=`adb disable-verity 2>&1`
+err=${?}
 echo "${D}"
+if [ ${err} != 0 -o X"${D}" != X"${D##*setup failed}" ]; then
+  die -t ${T} "setup for overlay"
+fi
 if [ X"${D}" != X"${D##*using overlayfs}" ]; then
   echo "${GREEN}[       OK ]${NORMAL} using overlayfs" >&2
 fi
@@ -250,11 +286,12 @@ adb_reboot &&
 echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
   echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover before remount not complete" >&2
 
+T=`adb_date`
 adb_root &&
   adb_wait &&
   adb remount &&
   D=`adb_sh df -k </dev/null` ||
-  die "can not collect filesystem data"
+  die -t ${T} "can not collect filesystem data"
 if echo "${D}" | grep " /mnt/scratch" >/dev/null; then
   echo "${ORANGE}[     INFO ]${NORMAL} using scratch dynamic partition for overrides" >&2
   H=`adb_sh cat /proc/mounts | sed -n 's@\([^ ]*\) /mnt/scratch \([^ ]*\) .*@\2 on \1@p'`
@@ -262,7 +299,7 @@ if echo "${D}" | grep " /mnt/scratch" >/dev/null; then
     echo "${ORANGE}[     INFO ]${NORMAL} scratch filesystem ${H}"
 fi
 for d in ${OVERLAYFS_BACKING}; do
-  if adb_sh ls -d /${d}/overlay/system/upper </dev/null >/dev/null 2>&1; then
+  if adb_sh ls -d /${d}/overlay/system/upper </dev/null >/dev/null 2>/dev/null; then
     echo "${ORANGE}[     INFO ]${NORMAL} /${d}/overlay is setup" >&2
   fi
 done
@@ -312,8 +349,9 @@ adb reboot-fastboot &&
   fastboot flash vendor &&
   fastboot reboot ||
   die "fastbootd flash vendor"
-adb_wait &&
-  adb_root &&
+adb_wait 2m ||
+  die "did not reboot after flash"
+adb_root &&
   adb_wait &&
   D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
@@ -334,10 +372,11 @@ B="`adb_cat /vendor/hello`" &&
   die "re-read vendor hello after flash vendor"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
 
+T=`adb_date`
 adb remount &&
   ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
   adb_sh rm /system/hello </dev/null ||
-  die "cleanup hello"
+  die -t ${T} "cleanup hello"
 B="`adb_cat /system/hello`" &&
   die "re-read system hello after rm"
 check_eq "cat: /system/hello: No such file or directory" "${B}" after flash rm
