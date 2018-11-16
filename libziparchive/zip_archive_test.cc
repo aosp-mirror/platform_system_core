@@ -297,7 +297,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, kEmptyEntriesZip, sizeof(kEmptyEntriesZip)));
 
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 
   ZipEntry entry;
   ZipString empty_name;
@@ -322,7 +322,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, reinterpret_cast<const uint8_t*>(kAbZip),
                                         sizeof(kAbZip) - 1));
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle, false));
 
   ZipEntry entry;
   ZipString ab_name;
@@ -369,7 +369,7 @@ TEST(ziparchive, TrailerAfterEOCD) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, trailer, sizeof(trailer)));
 
   ZipArchiveHandle handle;
-  ASSERT_GT(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle));
+  ASSERT_GT(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 }
 
 TEST(ziparchive, ExtractToFile) {
@@ -579,7 +579,7 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   ASSERT_NE(-1, tmp_file.fd);
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &zip_data[0], zip_data.size()));
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "ExtractEntryToMemory", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "ExtractEntryToMemory", &handle, false));
 
   // This function expects a variant of kDataDescriptorZipFile, for look for
   // an entry whose name is "name" and whose size is 12 (contents =
@@ -687,7 +687,7 @@ TEST(ziparchive, BrokenLfhSignature) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &kZipFileWithBrokenLfhSignature[0],
                                         kZipFileWithBrokenLfhSignature.size()));
   ZipArchiveHandle handle;
-  ASSERT_EQ(-1, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle));
+  ASSERT_EQ(-1, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle, false));
 }
 
 class VectorReader : public zip_archive::Reader {
