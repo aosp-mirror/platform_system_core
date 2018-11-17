@@ -1,0 +1,12 @@
+cc_test {
+    name: "test-pixelflinger-gglmul",
+
+    srcs: ["gglmul_test.cpp"],
+
+    header_libs: ["libpixelflinger_internal"],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}

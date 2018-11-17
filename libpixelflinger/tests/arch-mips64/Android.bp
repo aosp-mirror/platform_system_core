@@ -1,0 +1,11 @@
+cc_defaults {
+    name: "pixelflinger-tests-mips64",
+    defaults: ["pixelflinger-tests"],
+
+    enabled: false,
+    arch: {
+        mips64: {
+            enabled: true,
+        },
+    },
+}
