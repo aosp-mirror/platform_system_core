@@ -17,6 +17,18 @@
 #ifndef _ADB_MDNS_H_
 #define _ADB_MDNS_H_
 
+#include <android-base/macros.h>
+
 const char* kADBServiceType = "_adb._tcp";
+const char* kADBSecurePairingServiceType = "_adb_secure_pairing._tcp";
+const char* kADBSecureConnectServiceType = "_adb_secure_connect._tcp";
+
+const char* kADBDNSServices[] = {
+        kADBServiceType,
+        kADBSecurePairingServiceType,
+        kADBSecureConnectServiceType,
+};
+
+const int kNumADBDNSServices = arraysize(kADBDNSServices);
 
 #endif

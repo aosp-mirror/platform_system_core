@@ -32,8 +32,8 @@ using namespace std::chrono_literals;
 
 static std::mutex& mdns_lock = *new std::mutex();
 static int port;
-static DNSServiceRef mdns_ref;
-static bool mdns_registered = false;
+static DNSServiceRef mdns_refs[kNumADBDNSServices];
+static bool mdns_registered[kNumADBDNSServices];
 
 static void start_mdns() {
     if (android::base::GetProperty("init.svc.mdnsd", "") == "running") {
@@ -67,24 +67,33 @@ static void setup_mdns_thread() {
     std::string hostname = "adb-";
     hostname += android::base::GetProperty("ro.serialno", "unidentified");
 
-    auto error = DNSServiceRegister(&mdns_ref, 0, 0, hostname.c_str(),
-                                    kADBServiceType, nullptr, nullptr,
-                                    htobe16((uint16_t)port), 0, nullptr,
-                                    mdns_callback, nullptr);
+    for (int i = 0; i < kNumADBDNSServices; i++) {
+        auto error = DNSServiceRegister(&mdns_refs[i], 0, 0, hostname.c_str(), kADBDNSServices[i],
+                                        nullptr, nullptr, htobe16((uint16_t)port), 0, nullptr,
+                                        mdns_callback, nullptr);
 
-    if (error != kDNSServiceErr_NoError) {
-        LOG(ERROR) << "Could not register mDNS service (" << error << ").";
-        return;
+        if (error != kDNSServiceErr_NoError) {
+            LOG(ERROR) << "Could not register mDNS service " << kADBDNSServices[i] << ", error ("
+                       << error << ").";
+            mdns_registered[i] = false;
+        }
+
+        mdns_registered[i] = true;
     }
 
-    mdns_registered = true;
+    for (int i = 0; i < kNumADBDNSServices; i++) {
+        LOG(INFO) << "adbd mDNS service " << kADBDNSServices[i]
+                  << " registered: " << mdns_registered[i];
+    }
 }
 
 static void teardown_mdns() {
     std::lock_guard<std::mutex> lock(mdns_lock);
 
-    if (mdns_registered) {
-        DNSServiceRefDeallocate(mdns_ref);
+    for (int i = 0; i < kNumADBDNSServices; ++i) {
+        if (mdns_registered[i]) {
+            DNSServiceRefDeallocate(mdns_refs[i]);
+        }
     }
 }
 
