@@ -468,7 +468,7 @@ bool HandlePowerctlMessage(const std::string& command) {
             // adb reboot fastboot should boot into bootloader for devices not
             // supporting logical partitions.
             if (reboot_target == "fastboot" &&
-                !android::base::GetBoolProperty("ro.boot.logical_partitions", false)) {
+                !android::base::GetBoolProperty("ro.boot.dynamic_partitions", false)) {
                 reboot_target = "bootloader";
             }
             // When rebooting to the bootloader notify the bootloader writing
