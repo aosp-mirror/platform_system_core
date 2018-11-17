@@ -19,8 +19,9 @@
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
+#if !defined(_WIN32)
 #include <sys/ioctl.h>
-#include <sys/stat.h>
+#endif
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -84,7 +85,7 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
 
 unique_fd PartitionOpener::Open(const std::string& partition_name, int flags) const {
     std::string path = GetPartitionAbsolutePath(partition_name);
-    return unique_fd{open(path.c_str(), flags)};
+    return unique_fd{open(path.c_str(), flags | O_CLOEXEC)};
 }
 
 bool PartitionOpener::GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const {
