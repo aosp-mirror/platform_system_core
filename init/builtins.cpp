@@ -1060,7 +1060,8 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     // where the APEXes are really mounted at. Otherwise, we will parse the
     // same file twice.
     static constexpr char glob_pattern[] = "/apex/*@*/etc/*.rc";
-    if (glob(glob_pattern, GLOB_MARK, nullptr, &glob_result) != 0) {
+    const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
+    if (ret != 0 && ret != GLOB_NOMATCH) {
         globfree(&glob_result);
         return Error() << "glob pattern '" << glob_pattern << "' failed";
     }
