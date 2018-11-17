@@ -1,0 +1,6 @@
+cc_test {
+    name: "test-pixelflinger-mips-t32cb16blend",
+    defaults: ["pixelflinger-tests-mips"],
+
+    srcs: ["t32cb16blend_test.c"],
+}
