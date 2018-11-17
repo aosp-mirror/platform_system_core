@@ -1,0 +1,11 @@
+cc_defaults {
+    name: "pixelflinger-tests-arm64",
+    defaults: ["pixelflinger-tests"],
+
+    enabled: false,
+    arch: {
+        arm64: {
+            enabled: true,
+        },
+    },
+}

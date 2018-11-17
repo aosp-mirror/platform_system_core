@@ -1,0 +1,16 @@
+cc_defaults {
+    name: "pixelflinger-tests",
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    header_libs: ["libpixelflinger_internal"],
+    static_libs: [
+        "libcutils",
+        "liblog",
+        "libpixelflinger",
+        "libutils",
+    ],
+}
