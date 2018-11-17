@@ -30,5 +30,6 @@ const char* kADBDNSServices[] = {
 };
 
 const int kNumADBDNSServices = arraysize(kADBDNSServices);
+const int kADBTransportServiceRefIndex = 0;
 
 #endif

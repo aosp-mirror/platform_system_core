@@ -34,7 +34,7 @@
 #include "fdevent/fdevent.h"
 #include "sysdeps.h"
 
-static DNSServiceRef service_ref;
+static DNSServiceRef service_refs[kNumADBDNSServices];
 static fdevent* service_ref_fde;
 
 // Use adb_DNSServiceRefSockFD() instead of calling DNSServiceRefSockFD()
@@ -239,14 +239,10 @@ static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
     }
 }
 
-static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
-                                              DNSServiceFlags flags,
-                                              uint32_t interfaceIndex,
-                                              DNSServiceErrorType errorCode,
-                                              const char* serviceName,
-                                              const char* regtype,
-                                              const char* domain,
-                                              void*  /*context*/) {
+static void DNSSD_API on_service_browsed(DNSServiceRef sdRef, DNSServiceFlags flags,
+                                         uint32_t interfaceIndex, DNSServiceErrorType errorCode,
+                                         const char* serviceName, const char* regtype,
+                                         const char* domain, void* /*context*/) {
     D("Registering a transport.");
     if (errorCode != kDNSServiceErr_NoError) {
         D("Got error %d during mDNS browse.", errorCode);
@@ -262,19 +258,25 @@ static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
 }
 
 void init_mdns_transport_discovery_thread(void) {
-    DNSServiceErrorType errorCode = DNSServiceBrowse(&service_ref, 0, 0, kADBServiceType, nullptr,
-                                                     register_mdns_transport, nullptr);
+    int errorCodes[kNumADBDNSServices];
 
-    if (errorCode != kDNSServiceErr_NoError) {
-        D("Got %d initiating mDNS browse.", errorCode);
-        return;
+    for (int i = 0; i < kNumADBDNSServices; ++i) {
+        errorCodes[i] = DNSServiceBrowse(&service_refs[i], 0, 0, kADBDNSServices[i], nullptr,
+                                         on_service_browsed, nullptr);
+
+        if (errorCodes[i] != kDNSServiceErr_NoError) {
+            D("Got %d browsing for mDNS service %s.", errorCodes[i], kADBDNSServices[i]);
+        }
     }
 
-    fdevent_run_on_main_thread([]() {
-        service_ref_fde =
-            fdevent_create(adb_DNSServiceRefSockFD(service_ref), pump_service_ref, &service_ref);
-        fdevent_set(service_ref_fde, FDE_READ);
-    });
+    if (errorCodes[kADBTransportServiceRefIndex] == kDNSServiceErr_NoError) {
+        fdevent_run_on_main_thread([]() {
+            service_ref_fde = fdevent_create(
+                    adb_DNSServiceRefSockFD(service_refs[kADBTransportServiceRefIndex]),
+                    pump_service_ref, &service_refs[kADBTransportServiceRefIndex]);
+            fdevent_set(service_ref_fde, FDE_READ);
+        });
+    }
 }
 
 void init_mdns_transport_discovery(void) {
