@@ -1,0 +1,6 @@
+cc_test {
+    name: "test-pixelflinger-mips64-col32cb16blend",
+    defaults: ["pixelflinger-tests-mips64"],
+
+    srcs: ["col32cb16blend_test.c"],
+}
