@@ -96,11 +96,6 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
     }
   }
 
-  // If the map isn't readable, don't bother trying to read from process memory.
-  if (!(flags & PROT_READ)) {
-    return nullptr;
-  }
-
   // Need to verify that this elf is valid. It's possible that
   // only part of the elf file to be mapped into memory is in the executable
   // map. In this case, there will be another read-only map that includes the
@@ -132,18 +127,19 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
     }
   }
 
-  if (ro_map_info != nullptr) {
-    // Make sure that relative pc values are corrected properly.
-    elf_offset = offset - closest_offset;
-
-    MemoryRanges* ranges = new MemoryRanges;
-    ranges->Insert(new MemoryRange(process_memory, ro_map_info->start,
-                                   ro_map_info->end - ro_map_info->start, 0));
-    ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
-
-    return ranges;
+  if (ro_map_info == nullptr) {
+    return nullptr;
   }
-  return nullptr;
+
+  // Make sure that relative pc values are corrected properly.
+  elf_offset = offset - closest_offset;
+
+  MemoryRanges* ranges = new MemoryRanges;
+  ranges->Insert(new MemoryRange(process_memory, ro_map_info->start,
+                                 ro_map_info->end - ro_map_info->start, 0));
+  ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
+
+  return ranges;
 }
 
 Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch) {
