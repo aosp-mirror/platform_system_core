@@ -73,7 +73,7 @@ class FirstStageMount {
     bool GetDmLinearMetadataDevice();
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
 
-    virtual ListenerAction UeventCallback(const Uevent& uevent);
+    ListenerAction UeventCallback(const Uevent& uevent);
 
     // Pure virtual functions.
     virtual bool GetDmVerityDevices() = 0;
@@ -108,14 +108,12 @@ class FirstStageMountVBootV2 : public FirstStageMount {
     ~FirstStageMountVBootV2() override = default;
 
   protected:
-    ListenerAction UeventCallback(const Uevent& uevent) override;
     bool GetDmVerityDevices() override;
     bool SetUpDmVerity(fstab_rec* fstab_rec) override;
     bool InitAvbHandle();
 
     std::string device_tree_vbmeta_parts_;
     FsManagerAvbUniquePtr avb_handle_;
-    ByNameSymlinkMap by_name_symlink_map_;
 };
 
 // Static Functions
@@ -544,33 +542,6 @@ bool FirstStageMountVBootV2::GetDmVerityDevices() {
     return true;
 }
 
-ListenerAction FirstStageMountVBootV2::UeventCallback(const Uevent& uevent) {
-    // Check if this uevent corresponds to one of the required partitions and store its symlinks if
-    // so, in order to create FsManagerAvbHandle later.
-    // Note that the parent callback removes partitions from the list of required partitions
-    // as it finds them, so this must happen first.
-    if (!uevent.partition_name.empty() &&
-        required_devices_partition_names_.find(uevent.partition_name) !=
-                required_devices_partition_names_.end()) {
-        // GetBlockDeviceSymlinks() will return three symlinks at most, depending on
-        // the content of uevent. by-name symlink will be at [0] if uevent->partition_name
-        // is not empty. e.g.,
-        //   - /dev/block/platform/soc.0/f9824900.sdhci/by-name/modem
-        //   - /dev/block/platform/soc.0/f9824900.sdhci/mmcblk0p1
-        std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
-        if (!links.empty()) {
-            auto [it, inserted] = by_name_symlink_map_.emplace(uevent.partition_name, links[0]);
-            if (!inserted && (links[0] != it->second)) {
-                LOG(ERROR) << "Partition '" << uevent.partition_name
-                           << "' already existed in the by-name symlink map with a value of '"
-                           << it->second << "', new value '" << links[0] << "' will be ignored.";
-            }
-        }
-    }
-
-    return FirstStageMount::UeventCallback(uevent);
-}
-
 bool FirstStageMountVBootV2::SetUpDmVerity(fstab_rec* fstab_rec) {
     if (fs_mgr_is_avb(fstab_rec)) {
         if (!InitAvbHandle()) return false;
@@ -594,13 +565,7 @@ bool FirstStageMountVBootV2::SetUpDmVerity(fstab_rec* fstab_rec) {
 bool FirstStageMountVBootV2::InitAvbHandle() {
     if (avb_handle_) return true;  // Returns true if the handle is already initialized.
 
-    if (by_name_symlink_map_.empty()) {
-        LOG(ERROR) << "by_name_symlink_map_ is empty";
-        return false;
-    }
-
-    avb_handle_ = FsManagerAvbHandle::Open(std::move(by_name_symlink_map_));
-    by_name_symlink_map_.clear();  // Removes all elements after the above std::move().
+    avb_handle_ = FsManagerAvbHandle::Open();
 
     if (!avb_handle_) {
         PLOG(ERROR) << "Failed to open FsManagerAvbHandle";
@@ -651,8 +616,7 @@ void SetInitAvbVersionInRecovery() {
         return;
     }
 
-    FsManagerAvbUniquePtr avb_handle =
-            FsManagerAvbHandle::Open(std::move(avb_first_mount.by_name_symlink_map_));
+    FsManagerAvbUniquePtr avb_handle = FsManagerAvbHandle::Open();
     if (!avb_handle) {
         PLOG(ERROR) << "Failed to open FsManagerAvbHandle for INIT_AVB_VERSION";
         return;

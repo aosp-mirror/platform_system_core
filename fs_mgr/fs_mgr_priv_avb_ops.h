@@ -46,8 +46,7 @@
 //
 class FsManagerAvbOps {
   public:
-    FsManagerAvbOps(const fstab& fstab);
-    FsManagerAvbOps(std::map<std::string, std::string>&& by_name_symlink_map);
+    FsManagerAvbOps();
 
     static FsManagerAvbOps* GetInstanceFromAvbOps(AvbOps* ops) {
         return reinterpret_cast<FsManagerAvbOps*>(ops->user_data);
@@ -60,8 +59,6 @@ class FsManagerAvbOps {
                                       AvbSlotVerifyData** out_data);
 
   private:
-    void InitializeAvbOps();
-
     AvbOps avb_ops_;
     std::map<std::string, std::string> by_name_symlink_map_;
 };
