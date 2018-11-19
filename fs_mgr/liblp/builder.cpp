@@ -623,6 +623,9 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
             LERROR << "Partition group name is too long: " << group->name();
             return nullptr;
         }
+        if (auto_slot_suffixing_ && group->name() != "default") {
+            out.flags |= LP_GROUP_SLOT_SUFFIXED;
+        }
         strncpy(out.name, group->name().c_str(), sizeof(out.name));
         out.maximum_size = group->maximum_size();
 
