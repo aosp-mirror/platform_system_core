@@ -53,7 +53,8 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->shared_dirty += from.shared_dirty;
 }
 
-ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss) : pid_(pid), get_wss_(get_wss) {
+ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss, uint64_t pgflags, uint64_t pgflags_mask)
+    : pid_(pid), get_wss_(get_wss), pgflags_(pgflags), pgflags_mask_(pgflags_mask) {
     if (!ReadMaps(get_wss_)) {
         LOG(ERROR) << "Failed to read maps for Process " << pid_;
     }
@@ -169,6 +170,9 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
             LOG(ERROR) << "Failed to get page flags for " << page_frame << " in process " << pid_;
             return false;
         }
+
+        // skip unwanted pages from the count
+        if ((pg_flags[i] & pgflags_mask_) != pgflags_) continue;
 
         if (!pinfo.PageMapCount(page_frame, &pg_counts[i])) {
             LOG(ERROR) << "Failed to get page count for " << page_frame << " in process " << pid_;

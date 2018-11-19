@@ -245,6 +245,55 @@ TEST_F(ValidatePageAcct, TestPageIdle) {
     }
 }
 
+TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
+    // Create proc object using libpagemap
+    pm_kernel_t* ker;
+    ASSERT_EQ(0, pm_kernel_create(&ker));
+    pm_process_t* proc;
+    ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
+
+    // count swapbacked pages using libpagemap
+    pm_memusage_t proc_usage;
+    pm_memusage_zero(&proc_usage);
+    ASSERT_EQ(0, pm_process_usage_flags(proc, &proc_usage, (1 << KPF_SWAPBACKED),
+                                        (1 << KPF_SWAPBACKED)));
+
+    // Create ProcMemInfo that counts swapbacked pages
+    ProcMemInfo proc_mem(pid, false, (1 << KPF_SWAPBACKED), (1 << KPF_SWAPBACKED));
+
+    EXPECT_EQ(proc_usage.vss, proc_mem.Usage().vss);
+    EXPECT_EQ(proc_usage.rss, proc_mem.Usage().rss);
+    EXPECT_EQ(proc_usage.pss, proc_mem.Usage().pss);
+    EXPECT_EQ(proc_usage.uss, proc_mem.Usage().uss);
+
+    pm_process_destroy(proc);
+    pm_kernel_destroy(ker);
+}
+
+TEST(ValidateProcMemInfoFlags, TestPageFlags2) {
+    // Create proc object using libpagemap
+    pm_kernel_t* ker;
+    ASSERT_EQ(0, pm_kernel_create(&ker));
+    pm_process_t* proc;
+    ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
+
+    // count non-swapbacked pages using libpagemap
+    pm_memusage_t proc_usage;
+    pm_memusage_zero(&proc_usage);
+    ASSERT_EQ(0, pm_process_usage_flags(proc, &proc_usage, (1 << KPF_SWAPBACKED), 0));
+
+    // Create ProcMemInfo that counts non-swapbacked pages
+    ProcMemInfo proc_mem(pid, false, 0, (1 << KPF_SWAPBACKED));
+
+    EXPECT_EQ(proc_usage.vss, proc_mem.Usage().vss);
+    EXPECT_EQ(proc_usage.rss, proc_mem.Usage().rss);
+    EXPECT_EQ(proc_usage.pss, proc_mem.Usage().pss);
+    EXPECT_EQ(proc_usage.uss, proc_mem.Usage().uss);
+
+    pm_process_destroy(proc);
+    pm_kernel_destroy(ker);
+}
+
 TEST(SysMemInfoParser, TestSysMemInfoFile) {
     std::string meminfo = R"meminfo(MemTotal:        3019740 kB
 MemFree:         1809728 kB

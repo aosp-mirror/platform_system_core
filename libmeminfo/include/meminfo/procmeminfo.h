@@ -29,7 +29,7 @@ namespace meminfo {
 class ProcMemInfo final {
     // Per-process memory accounting
   public:
-    ProcMemInfo(pid_t pid, bool get_wss = false);
+    ProcMemInfo(pid_t pid, bool get_wss = false, uint64_t pgflags = 0, uint64_t pgflags_mask = 0);
 
     const std::vector<Vma>& Maps();
     const MemUsage& Usage();
@@ -45,6 +45,8 @@ class ProcMemInfo final {
 
     pid_t pid_;
     bool get_wss_;
+    uint64_t pgflags_;
+    uint64_t pgflags_mask_;
 
     std::vector<Vma> maps_;
 
