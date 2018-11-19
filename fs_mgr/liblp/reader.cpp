@@ -375,6 +375,18 @@ bool AdjustMetadataForSlot(LpMetadata* metadata, uint32_t slot_number) {
         }
         block_device.flags &= ~LP_BLOCK_DEVICE_SLOT_SUFFIXED;
     }
+    for (auto& group : metadata->groups) {
+        if (!(group.flags & LP_GROUP_SLOT_SUFFIXED)) {
+            continue;
+        }
+        std::string group_name = GetPartitionGroupName(group) + slot_suffix;
+        if (group_name.size() > sizeof(group.name)) {
+            LERROR << __PRETTY_FUNCTION__ << " group name too long: " << group_name;
+            return false;
+        }
+        strncpy(group.name, group_name.c_str(), sizeof(group.name));
+        group.flags &= ~LP_GROUP_SLOT_SUFFIXED;
+    }
     return true;
 }
 
