@@ -665,6 +665,7 @@ TEST(liblp, UpdateRetrofit) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+    ASSERT_TRUE(builder->AddGroup("example", 0));
     builder->SetAutoSlotSuffixing();
 
     auto fd = CreateFakeDisk();
@@ -682,9 +683,11 @@ TEST(liblp, UpdateRetrofit) {
     ASSERT_NE(builder, nullptr);
     auto updated = builder->Export();
     ASSERT_NE(updated, nullptr);
-    ASSERT_EQ(updated->block_devices.size(), static_cast<size_t>(2));
-    EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super_a");
-    EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[1]), "super_b");
+    ASSERT_EQ(updated->block_devices.size(), static_cast<size_t>(1));
+    EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super_b");
+    ASSERT_TRUE(updated->groups.empty());
+    ASSERT_TRUE(updated->partitions.empty());
+    ASSERT_TRUE(updated->extents.empty());
 }
 
 TEST(liblp, UpdateNonRetrofit) {
