@@ -53,6 +53,16 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->shared_dirty += from.shared_dirty;
 }
 
+bool ProcMemInfo::ResetWorkingSet(pid_t pid) {
+    std::string clear_refs_path = ::android::base::StringPrintf("/proc/%d/clear_refs", pid);
+    if (!::android::base::WriteStringToFile("1\n", clear_refs_path)) {
+        PLOG(ERROR) << "Failed to write to " << clear_refs_path;
+        return false;
+    }
+
+    return true;
+}
+
 ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss, uint64_t pgflags, uint64_t pgflags_mask)
     : pid_(pid), get_wss_(get_wss), pgflags_(pgflags), pgflags_mask_(pgflags_mask) {
     if (!ReadMaps(get_wss_)) {
@@ -66,14 +76,16 @@ const std::vector<Vma>& ProcMemInfo::Maps() {
 
 const MemUsage& ProcMemInfo::Usage() {
     if (get_wss_) {
-        LOG(WARNING) << "Trying to read memory usage from working set object";
+        LOG(WARNING) << "Trying to read process memory usage for " << pid_
+                     << " using invalid object";
     }
     return usage_;
 }
 
 const MemUsage& ProcMemInfo::Wss() {
     if (!get_wss_) {
-        LOG(WARNING) << "Trying to read working set when there is none";
+        LOG(WARNING) << "Trying to read process working set for " << pid_
+                     << " using invalid object";
     }
 
     return wss_;
@@ -81,22 +93,6 @@ const MemUsage& ProcMemInfo::Wss() {
 
 const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() const {
     return swap_offsets_;
-}
-
-bool ProcMemInfo::WssReset() {
-    if (!get_wss_) {
-        LOG(ERROR) << "Trying to reset working set from a memory usage counting object";
-        return false;
-    }
-
-    std::string clear_refs_path = ::android::base::StringPrintf("/proc/%d/clear_refs", pid_);
-    if (!::android::base::WriteStringToFile("1\n", clear_refs_path)) {
-        PLOG(ERROR) << "Failed to write to " << clear_refs_path;
-        return false;
-    }
-
-    wss_.clear();
-    return true;
 }
 
 bool ProcMemInfo::ReadMaps(bool get_wss) {

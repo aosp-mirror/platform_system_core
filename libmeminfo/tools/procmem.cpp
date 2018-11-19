@@ -66,14 +66,12 @@ static void scan_usage(std::stringstream& ss, const MemUsage& usage, const std::
     // clear string stream first.
     ss.str("");
     // TODO: use ::android::base::StringPrintf instead of <iomanip> here.
-    if (!show_wss)
-        ss << std::setw(6) << usage.vss/1024 << padding;
-    ss << std::setw(6) << usage.rss/1024 << padding << std::setw(6)
-       << usage.pss/1024 << padding << std::setw(6) << usage.uss/1024 << padding
-       << std::setw(6) << usage.shared_clean/1024 << padding << std::setw(6)
-       << usage.shared_dirty/1024 << padding << std::setw(6)
-       << usage.private_clean/1024 << padding << std::setw(6)
-       << usage.private_dirty/1024 << padding;
+    if (!show_wss) ss << std::setw(6) << usage.vss / 1024 << padding;
+    ss << std::setw(6) << usage.rss / 1024 << padding << std::setw(6) << usage.pss / 1024 << padding
+       << std::setw(6) << usage.uss / 1024 << padding << std::setw(6) << usage.shared_clean / 1024
+       << padding << std::setw(6) << usage.shared_dirty / 1024 << padding << std::setw(6)
+       << usage.private_clean / 1024 << padding << std::setw(6) << usage.private_dirty / 1024
+       << padding;
 }
 
 static int show(ProcMemInfo& proc, bool hide_zeroes, bool show_wss) {
@@ -158,14 +156,14 @@ int main(int argc, char* argv[]) {
     }
 
     bool need_wss = wss_reset || show_wss;
-    ProcMemInfo proc(pid, need_wss);
     if (wss_reset) {
-        if (!proc.WssReset()) {
+        if (!ProcMemInfo::ResetWorkingSet(pid)) {
             std::cerr << "Failed to reset working set of pid : " << pid << std::endl;
             exit(EXIT_FAILURE);
         }
         return 0;
     }
 
+    ProcMemInfo proc(pid, need_wss);
     return show(proc, hide_zeroes, show_wss);
 }

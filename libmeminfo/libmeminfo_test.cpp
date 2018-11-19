@@ -142,7 +142,7 @@ class ValidateProcMemInfoWss : public ::testing::Test {
 
 TEST_F(ValidateProcMemInfoWss, TestWorkingTestReset) {
     // Expect reset to succeed
-    EXPECT_TRUE(proc_mem->WssReset());
+    EXPECT_TRUE(ProcMemInfo::ResetWorkingSet(pid));
 }
 
 TEST_F(ValidateProcMemInfoWss, TestWssEquality) {
