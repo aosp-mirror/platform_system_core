@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 9
+#define LP_METADATA_MAJOR_VERSION 10
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -267,9 +267,18 @@ typedef struct LpMetadataPartitionGroup {
     /*  0: Name of this group. Any unused characters must be 0. */
     char name[36];
 
-    /* 36: Maximum size in bytes. If 0, the group has no maximum size. */
+    /* 36: Flags (see LP_GROUP_*). */
+    uint32_t flags;
+
+    /* 40: Maximum size in bytes. If 0, the group has no maximum size. */
     uint64_t maximum_size;
 } LpMetadataPartitionGroup;
+
+/* This flag is only intended to be used with super_empty.img and super.img on
+ * retrofit devices. If set, the group needs a slot suffix to be interpreted
+ * correctly. The suffix is automatically applied by ReadMetadata().
+ */
+#define LP_GROUP_SLOT_SUFFIXED (1 << 0)
 
 /* This struct defines an entry in the block_devices table. There must be at
  * least one device, and the first device must represent the partition holding
