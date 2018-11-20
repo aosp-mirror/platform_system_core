@@ -20,9 +20,11 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <mntent.h>
+#include <linux/loop.h>
 #include <sys/cdefs.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
+#include <sys/swap.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -58,6 +60,7 @@
 using android::base::Split;
 using android::base::StringPrintf;
 using android::base::Timer;
+using android::base::unique_fd;
 
 namespace android {
 namespace init {
@@ -281,6 +284,48 @@ static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeo
     return stat;
 }
 
+// zram is able to use backing device on top of a loopback device.
+// In order to unmount /data successfully, we have to kill the loopback device first
+#define ZRAM_DEVICE   "/dev/block/zram0"
+#define ZRAM_RESET    "/sys/block/zram0/reset"
+#define ZRAM_BACK_DEV "/sys/block/zram0/backing_dev"
+static void KillZramBackingDevice() {
+    std::string backing_dev;
+    if (!android::base::ReadFileToString(ZRAM_BACK_DEV, &backing_dev)) return;
+
+    if (!android::base::StartsWith(backing_dev, "/dev/block/loop")) return;
+
+    // cut the last "\n"
+    backing_dev.erase(backing_dev.length() - 1);
+
+    // shutdown zram handle
+    Timer swap_timer;
+    LOG(INFO) << "swapoff() start...";
+    if (swapoff(ZRAM_DEVICE) == -1) {
+        LOG(ERROR) << "zram_backing_dev: swapoff (" << backing_dev << ")" << " failed";
+        return;
+    }
+    LOG(INFO) << "swapoff() took " << swap_timer;;
+
+    if (!android::base::WriteStringToFile("1", ZRAM_RESET)) {
+        LOG(ERROR) << "zram_backing_dev: reset (" << backing_dev << ")" << " failed";
+        return;
+    }
+
+    // clear loopback device
+    unique_fd loop(TEMP_FAILURE_RETRY(open(backing_dev.c_str(), O_RDWR | O_CLOEXEC)));
+    if (loop.get() < 0) {
+        LOG(ERROR) << "zram_backing_dev: open(" << backing_dev << ")" << " failed";
+        return;
+    }
+
+    if (ioctl(loop.get(), LOOP_CLR_FD, 0) < 0) {
+        LOG(ERROR) << "zram_backing_dev: loop_clear (" << backing_dev << ")" << " failed";
+        return;
+    }
+    LOG(INFO) << "zram_backing_dev: `" << backing_dev << "` is cleared successfully.";
+}
+
 //* Reboot / shutdown the system.
 // cmd ANDROID_RB_* as defined in android_reboot.h
 // reason Reason string like "reboot", "shutdown,userrequested"
@@ -423,6 +468,9 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         sync();
         LOG(INFO) << "sync() before umount took" << sync_timer;
     }
+    // 5. drop caches and disable zram backing device, if exist
+    KillZramBackingDevice();
+
     UmountStat stat = TryUmountAndFsck(runFsck, shutdown_timeout - t.duration());
     // Follow what linux shutdown is doing: one more sync with little bit delay
     {

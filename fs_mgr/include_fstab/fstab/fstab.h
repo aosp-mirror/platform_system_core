@@ -59,6 +59,9 @@ struct fstab_rec {
     off64_t erase_blk_size;
     off64_t logical_blk_size;
     char* sysfs_path;
+    char* zram_loopback_path;
+    uint64_t zram_loopback_size;
+    char* zram_backing_dev_path;
 };
 
 struct fstab* fs_mgr_read_fstab_default();
@@ -119,6 +122,9 @@ struct FstabEntry {
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
     std::string vbmeta_partition;
+    std::string zram_loopback_path;
+    uint64_t zram_loopback_size;
+    std::string zram_backing_dev_path;
 
     // TODO: Remove this union once fstab_rec is deprecated. It only serves as a
     // convenient way to convert between fstab_rec::fs_mgr_flags and these bools.
