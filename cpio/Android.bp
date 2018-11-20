@@ -5,4 +5,7 @@ cc_binary_host {
     srcs: ["mkbootfs.c"],
     cflags: ["-Werror"],
     shared_libs: ["libcutils"],
+    dist: {
+        targets: ["dist_files"],
+    },
 }
