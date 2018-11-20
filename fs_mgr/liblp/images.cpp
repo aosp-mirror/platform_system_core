@@ -27,6 +27,12 @@
 namespace android {
 namespace fs_mgr {
 
+using android::base::unique_fd;
+
+#if defined(_WIN32)
+static const int O_NOFOLLOW = 0;
+#endif
+
 std::unique_ptr<LpMetadata> ReadFromImageFile(int fd) {
     std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
     if (SeekFile64(fd, 0, SEEK_SET) < 0) {
@@ -62,7 +68,7 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes) {
 }
 
 std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
-    android::base::unique_fd fd(open(file, O_RDONLY | O_CLOEXEC));
+    unique_fd fd(open(file, O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
         return nullptr;
@@ -84,7 +90,7 @@ bool WriteToImageFile(int fd, const LpMetadata& input) {
 }
 
 bool WriteToImageFile(const char* file, const LpMetadata& input) {
-    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
+    unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
         return false;
@@ -143,7 +149,7 @@ bool SparseBuilder::IsValid() const {
 }
 
 bool SparseBuilder::Export(const char* file) {
-    android::base::unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
+    unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
     if (fd < 0) {
         PERROR << "open failed: " << file;
         return false;
@@ -162,19 +168,15 @@ bool SparseBuilder::Export(const char* file) {
 }
 
 bool SparseBuilder::ExportFiles(const std::string& output_dir) {
-    android::base::unique_fd dir(open(output_dir.c_str(), O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW));
-    if (dir < 0) {
-        PERROR << "open dir failed: " << output_dir;
-        return false;
-    }
-
     for (size_t i = 0; i < device_images_.size(); i++) {
         std::string name = GetBlockDevicePartitionName(metadata_.block_devices[i]);
-        std::string path = output_dir + "/super_" + name + ".img";
-        android::base::unique_fd fd(openat(
-                dir, path.c_str(), O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0644));
+        std::string file_name = "super_" + name + ".img";
+        std::string file_path = output_dir + "/" + file_name;
+
+        static const int kOpenFlags = O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_NOFOLLOW;
+        unique_fd fd(open(file_path.c_str(), kOpenFlags, 0644));
         if (fd < 0) {
-            PERROR << "open failed: " << path;
+            PERROR << "open failed: " << file_path;
             return false;
         }
         // No gzip compression; sparseify; no checksum.
