@@ -63,6 +63,7 @@ adb_date() {
 
 Returns: the logcat output" ]
 adb_logcat() {
+  echo "${RED}[     INFO ]${NORMAL} logcat ${@}" >&2 &&
   adb logcat "${@}" </dev/null |
     grep -v 'logd    : logdr: UID=' |
     sed -e '${/------- beginning of kernel/d}' -e 's/^[0-1][0-9]-[0-3][0-9] //'
@@ -106,12 +107,13 @@ adb_cat() {
 
 Returns: true if the reboot command succeeded" ]
 adb_reboot() {
-  adb reboot remount-test
+  adb reboot remount-test &&
+  sleep 2
 }
 
 [ "USAGE: adb_wait [timeout]
 
-Returns: waits until the device has returned or the optional timeout" ]
+Returns: waits until the device has returned for adb or optional timeout" ]
 adb_wait() {
   if [ -n "${1}" ]; then
     timeout --preserve-status --signal=KILL ${1} adb wait-for-device
@@ -120,14 +122,49 @@ adb_wait() {
   fi
 }
 
+[ "USAGE: fastboot_wait [timeout]
+
+Returns: waits until the device has returned for fastboot or optional timeout" ]
+fastboot_wait() {
+  # fastboot has no wait-for-device, but it does an automatic
+  # wait and requires (even a nonsensical) command to do so.
+  if [ -n "${1}" ]; then
+    timeout --preserve-status --signal=KILL ${1} fastboot wait-for-device
+  else
+    fastboot wait-for-device >/dev/null
+  fi >/dev/null 2>/dev/null ||
+    inFastboot
+}
+
 [ "USAGE: adb_root
 
 Returns: true if device in root state" ]
 adb_root() {
-  adb root >/dev/null </dev/null 2>/dev/null &&
-  sleep 1 &&
-  adb_wait &&
-  sleep 1
+  adb root >/dev/null </dev/null 2>/dev/null
+  sleep 2
+  adb_wait 2m &&
+    [ `adb_sh echo '${USER}'` = root ]
+}
+
+[ "USAGE: fastboot_getvar var expected
+
+Returns: true if var output matches expected" ]
+fastboot_getvar() {
+  O=`fastboot getvar ${1} 2>&1`
+  err=${?}
+  O="${O#< waiting for * >?}"
+  O="${O%%?Finished. Total time: *}"
+  if [ 0 -ne ${err} ]; then
+    echo ${O} >&2
+    false
+    return
+  fi
+  if [ -n "${2}" -a "${1}: ${2}" != "${O}" ]; then
+    echo "${2} != ${O}" >&2
+    false
+    return
+  fi
+  echo ${O} >&2
 }
 
 [ "USAGE: die [-t <epoch>] [message] >/dev/stderr
@@ -233,8 +270,7 @@ adb_sh ls -d /sys/module/overlay </dev/null >/dev/null &&
 adb_su ls /sys/module/overlay/parameters/override_creds </dev/null >/dev/null &&
   echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
   die "overlay module can not be used on ANDROID"
-adb_root &&
-  adb_wait ||
+adb_root ||
   die "initial setup"
 reboot=false
 OVERLAYFS_BACKING="cache mnt/scratch"
@@ -250,8 +286,7 @@ if ${reboot}; then
   echo "${ORANGE}[  WARNING ]${NORMAL} rebooting before test" >&2
   adb_reboot &&
     adb_wait 2m &&
-    adb_root &&
-    adb_wait ||
+    adb_root ||
     die "reboot after wipe"
 fi
 D=`adb_sh df -k </dev/null` &&
@@ -288,7 +323,6 @@ echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
 
 T=`adb_date`
 adb_root &&
-  adb_wait &&
   adb remount &&
   D=`adb_sh df -k </dev/null` ||
   die -t ${T} "can not collect filesystem data"
@@ -340,19 +374,28 @@ B="`adb_cat /vendor/hello`" &&
   die "re-read vendor hello after reboot w/o root"
 check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
 adb_root &&
-  adb_wait &&
   B="`adb_cat /vendor/hello`" ||
   die "re-read vendor hello after reboot"
 check_eq "${A}" "${B}" vendor after reboot
 
 adb reboot-fastboot &&
-  fastboot flash vendor &&
-  fastboot reboot ||
+  fastboot_wait 2m &&
+  fastboot flash vendor ||
   die "fastbootd flash vendor"
+# check scratch via fastboot
+fastboot_getvar partition-type:scratch raw &&
+  fastboot_getvar has-slot:scratch no &&
+  fastboot_getvar is-logical:scratch yes ||
+  die "fastboot can not see scratch parameters"
+echo "${ORANGE}[     INFO ]${NORMAL} expect fastboot erase scratch to fail" >&2
+fastboot erase scratch &&
+  die "fastbootd can erase scratch"
+fastboot reboot ||
+  die "can not reboot out of fastbootd"
+echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot ... waiting 2 minutes"
 adb_wait 2m ||
   die "did not reboot after flash"
 adb_root &&
-  adb_wait &&
   D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
   D=`echo "${D}" | grep "^overlay "` &&
@@ -365,8 +408,7 @@ echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
 B="`adb_cat /system/hello`" ||
   die "re-read system hello after flash vendor"
 check_eq "${A}" "${B}" system after flash vendor
-adb_root &&
-  adb_wait ||
+adb_root ||
   die "adb root"
 B="`adb_cat /vendor/hello`" &&
   die "re-read vendor hello after flash vendor"
@@ -383,5 +425,28 @@ check_eq "cat: /system/hello: No such file or directory" "${B}" after flash rm
 B="`adb_cat /vendor/hello`" &&
   die "re-read vendor hello after rm"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after flash rm
+
+adb reboot-fastboot &&
+  dd if=/dev/zero of=adb-remount-test.img bs=4096 count=16 &&
+  fastboot_wait 2m ||
+  die "reboot into fastbootd"
+fastboot flash scratch adb-remount-test.img
+err=${?}
+rm adb-remount-test.img
+[ 0 -eq ${err} ] ||
+  die "fastbootd flash scratch"
+fastboot reboot ||
+  die "can not reboot out of fastbootd"
+adb_wait 2m &&
+  adb_root ||
+  die "did not reboot after flash"
+T=`adb_date`
+D=`adb disable-verity 2>&1`
+err=${?}
+echo "${D}"
+[ ${err} = 0 ] &&
+  [ X"${D}" = X"${D##*setup failed}" ] &&
+  [ X"${D}" != X"${D##*using overlayfs}" ] ||
+  die -t ${T} "setup for overlayfs"
 
 echo "${GREEN}[  PASSED  ]${NORMAL} adb remount" >&2
