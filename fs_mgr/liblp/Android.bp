@@ -39,6 +39,11 @@ cc_library {
         "libext4_utils",
         "libz",
     ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
     export_include_dirs: ["include"],
 }
 
