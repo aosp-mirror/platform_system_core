@@ -64,13 +64,13 @@ bool ProcMemInfo::ResetWorkingSet(pid_t pid) {
 }
 
 ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss, uint64_t pgflags, uint64_t pgflags_mask)
-    : pid_(pid), get_wss_(get_wss), pgflags_(pgflags), pgflags_mask_(pgflags_mask) {
-    if (!ReadMaps(get_wss_)) {
-        LOG(ERROR) << "Failed to read maps for Process " << pid_;
-    }
-}
+    : pid_(pid), get_wss_(get_wss), pgflags_(pgflags), pgflags_mask_(pgflags_mask) {}
 
 const std::vector<Vma>& ProcMemInfo::Maps() {
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to read maps for Process " << pid_;
+    }
+
     return maps_;
 }
 
@@ -78,7 +78,13 @@ const MemUsage& ProcMemInfo::Usage() {
     if (get_wss_) {
         LOG(WARNING) << "Trying to read process memory usage for " << pid_
                      << " using invalid object";
+        return usage_;
     }
+
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to get memory usage for Process " << pid_;
+    }
+
     return usage_;
 }
 
@@ -86,16 +92,39 @@ const MemUsage& ProcMemInfo::Wss() {
     if (!get_wss_) {
         LOG(WARNING) << "Trying to read process working set for " << pid_
                      << " using invalid object";
+        return wss_;
+    }
+
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to get working set for Process " << pid_;
     }
 
     return wss_;
 }
 
-const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() const {
+const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
+    if (get_wss_) {
+        LOG(WARNING) << "Trying to read process swap offsets for " << pid_
+                     << " using invalid object";
+        return swap_offsets_;
+    }
+
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to get swap offsets for Process " << pid_;
+    }
+
     return swap_offsets_;
 }
 
 bool ProcMemInfo::ReadMaps(bool get_wss) {
+    // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
+    // running for the lifetime of the system can recycle the objects and don't have to
+    // unnecessarily retain and update this object in memory (which can get significantly large).
+    // E.g. A program that only needs to reset the working set will never all ->Maps(), ->Usage().
+    // E.g. A program that is monitoring smaps_rollup, may never call ->maps(), Usage(), so it
+    // doesn't make sense for us to parse and retain unnecessary memory accounting stats by default.
+    if (!maps_.empty()) return true;
+
     // parse and read /proc/<pid>/maps
     std::string maps_file = ::android::base::StringPrintf("/proc/%d/maps", pid_);
     if (!::android::procinfo::ReadMapFile(
@@ -164,6 +193,7 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
         uint64_t page_frame = PAGE_PFN(p);
         if (!pinfo.PageFlags(page_frame, &pg_flags[i])) {
             LOG(ERROR) << "Failed to get page flags for " << page_frame << " in process " << pid_;
+            swap_offsets_.clear();
             return false;
         }
 
@@ -172,6 +202,7 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
 
         if (!pinfo.PageMapCount(page_frame, &pg_counts[i])) {
             LOG(ERROR) << "Failed to get page count for " << page_frame << " in process " << pid_;
+            swap_offsets_.clear();
             return false;
         }
 

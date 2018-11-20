@@ -245,6 +245,44 @@ TEST_F(ValidatePageAcct, TestPageIdle) {
     }
 }
 
+TEST(TestProcMemInfo, TestMapsEmpty) {
+    ProcMemInfo proc_mem(pid);
+    const std::vector<Vma>& maps = proc_mem.Maps();
+    EXPECT_GT(maps.size(), 0);
+}
+
+TEST(TestProcMemInfo, TestUsageEmpty) {
+    // If we created the object for getting working set,
+    // the usage must be empty
+    ProcMemInfo proc_mem(pid, true);
+    const MemUsage& usage = proc_mem.Usage();
+    EXPECT_EQ(usage.rss, 0);
+    EXPECT_EQ(usage.vss, 0);
+    EXPECT_EQ(usage.pss, 0);
+    EXPECT_EQ(usage.uss, 0);
+    EXPECT_EQ(usage.swap, 0);
+}
+
+TEST(TestProcMemInfoWssReset, TestWssEmpty) {
+    // If we created the object for getting usage,
+    // the working set must be empty
+    ProcMemInfo proc_mem(pid, false);
+    const MemUsage& wss = proc_mem.Wss();
+    EXPECT_EQ(wss.rss, 0);
+    EXPECT_EQ(wss.vss, 0);
+    EXPECT_EQ(wss.pss, 0);
+    EXPECT_EQ(wss.uss, 0);
+    EXPECT_EQ(wss.swap, 0);
+}
+
+TEST(TestProcMemInfoWssReset, TestSwapOffsetsEmpty) {
+    // If we created the object for getting working set,
+    // the swap offsets must be empty
+    ProcMemInfo proc_mem(pid, true);
+    const std::vector<uint16_t>& swap_offsets = proc_mem.SwapOffsets();
+    EXPECT_EQ(swap_offsets.size(), 0);
+}
+
 TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
     // Create proc object using libpagemap
     pm_kernel_t* ker;
