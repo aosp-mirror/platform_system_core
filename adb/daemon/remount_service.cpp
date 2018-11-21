@@ -240,59 +240,57 @@ void remount_service(unique_fd fd, const std::string& cmd) {
     std::vector<std::string> partitions{"/",        "/odm",   "/oem", "/product_services",
                                         "/product", "/vendor"};
 
-    bool verity_enabled = (system_verified || vendor_verified);
+    if (system_verified || vendor_verified) {
+        // Disable verity automatically (reboot will be required).
+        set_verity_enabled_state_service(unique_fd(dup(fd.get())), false);
 
-    // If we can use overlayfs, lets get it in place first
-    // before we struggle with determining deduplication operations.
-    if (!verity_enabled && fs_mgr_overlayfs_setup()) {
+        // If overlayfs is not supported, we try and remount or set up
+        // un-deduplication. If it is supported, we can go ahead and wait for
+        // a reboot.
+        if (fs_mgr_overlayfs_valid() != OverlayfsValidResult::kNotSupported) {
+            if (user_requested_reboot) {
+                if (android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot")) {
+                    WriteFdExactly(fd.get(), "rebooting device\n");
+                } else {
+                    WriteFdExactly(fd.get(), "reboot failed\n");
+                }
+            }
+            return;
+        }
+    } else if (fs_mgr_overlayfs_setup()) {
+        // If we can use overlayfs, lets get it in place first before we
+        // struggle with determining deduplication operations.
         Fstab fstab;
         if (ReadDefaultFstab(&fstab) && fs_mgr_overlayfs_mount_all(&fstab)) {
             WriteFdExactly(fd.get(), "overlayfs mounted\n");
         }
     }
 
-    // Find partitions that are deduplicated, and can be un-deduplicated.
+    // If overlayfs is supported, we don't bother trying to un-deduplicate
+    // partitions.
     std::set<std::string> dedup;
-    for (const auto& part : partitions) {
-        auto partition = part;
-        if ((part == "/") && !find_mount("/system", false).empty()) partition = "/system";
-        std::string dev = find_mount(partition.c_str(), partition == "/");
-        if (dev.empty() || !fs_mgr_has_shared_blocks(partition, dev)) {
-            continue;
-        }
-        if (can_unshare_blocks(fd.get(), dev.c_str())) {
-            dedup.emplace(partition);
-        }
-    }
-
-    // Reboot now if the user requested it (and an operation needs a reboot).
-    if (user_requested_reboot) {
-        if (!dedup.empty() || verity_enabled) {
-            if (verity_enabled) {
-                set_verity_enabled_state_service(unique_fd(dup(fd.get())), false);
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
+        // Find partitions that are deduplicated, and can be un-deduplicated.
+        for (const auto& part : partitions) {
+            auto partition = part;
+            if ((part == "/") && !find_mount("/system", false).empty()) partition = "/system";
+            std::string dev = find_mount(partition.c_str(), partition == "/");
+            if (dev.empty() || !fs_mgr_has_shared_blocks(partition, dev)) {
+                continue;
             }
-            reboot_for_remount(fd.get(), !dedup.empty());
-            return;
+            if (can_unshare_blocks(fd.get(), dev.c_str())) {
+                dedup.emplace(partition);
+            }
         }
-        WriteFdExactly(fd.get(), "No reboot needed, skipping -R.\n");
-    }
 
-    // If we need to disable-verity, but we also need to perform a recovery
-    // fsck for deduplicated partitions, hold off on warning about verity. We
-    // can handle both verity and the recovery fsck in the same reboot cycle.
-    if (verity_enabled && dedup.empty()) {
-        // Allow remount but warn of likely bad effects
-        bool both = system_verified && vendor_verified;
-        WriteFdFmt(fd.get(), "dm_verity is enabled on the %s%s%s partition%s.\n",
-                   system_verified ? "system" : "", both ? " and " : "",
-                   vendor_verified ? "vendor" : "", both ? "s" : "");
-        WriteFdExactly(fd.get(),
-                       "Use \"adb disable-verity\" to disable verity.\n"
-                       "If you do not, remount may succeed, however, you will still "
-                       "not be able to write to these volumes.\n");
-        WriteFdExactly(fd.get(),
-                       "Alternately, use \"adb remount -R\" to disable verity "
-                       "and automatically reboot.\n");
+        // Reboot now if the user requested it (and an operation needs a reboot).
+        if (user_requested_reboot) {
+            if (!dedup.empty()) {
+                reboot_for_remount(fd.get(), !dedup.empty());
+                return;
+            }
+            WriteFdExactly(fd.get(), "No reboot needed, skipping -R.\n");
+        }
     }
 
     bool success = true;
