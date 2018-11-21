@@ -322,7 +322,7 @@ bool RebootRecoveryHandler(FastbootDevice* device, const std::vector<std::string
 // partition table to the same place it was read.
 class PartitionBuilder {
   public:
-    explicit PartitionBuilder(FastbootDevice* device);
+    explicit PartitionBuilder(FastbootDevice* device, const std::string& partition_name);
 
     bool Write();
     bool Valid() const { return !!builder_; }
@@ -330,19 +330,19 @@ class PartitionBuilder {
 
   private:
     std::string super_device_;
+    uint32_t slot_number_;
     std::unique_ptr<MetadataBuilder> builder_;
 };
 
-PartitionBuilder::PartitionBuilder(FastbootDevice* device) {
-    auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name());
+PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& partition_name) {
+    std::string slot_suffix = GetSuperSlotSuffix(device, partition_name);
+    slot_number_ = SlotNumberForSlotSuffix(slot_suffix);
+    auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number_));
     if (!super_device) {
         return;
     }
     super_device_ = *super_device;
-
-    std::string slot = device->GetCurrentSlot();
-    uint32_t slot_number = SlotNumberForSlotSuffix(slot);
-    builder_ = MetadataBuilder::New(super_device_, slot_number);
+    builder_ = MetadataBuilder::New(super_device_, slot_number_);
 }
 
 bool PartitionBuilder::Write() {
@@ -350,11 +350,7 @@ bool PartitionBuilder::Write() {
     if (!metadata) {
         return false;
     }
-    bool ok = true;
-    for (uint32_t i = 0; i < metadata->geometry.metadata_slot_count; i++) {
-        ok &= UpdatePartitionTable(super_device_, *metadata.get(), i);
-    }
-    return ok;
+    return UpdateAllPartitionMetadata(super_device_, *metadata.get());
 }
 
 bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::string>& args) {
@@ -372,7 +368,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition size");
     }
 
-    PartitionBuilder builder(device);
+    PartitionBuilder builder(device, partition_name);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
     }
@@ -404,11 +400,13 @@ bool DeletePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
     }
 
-    PartitionBuilder builder(device);
+    std::string partition_name = args[1];
+
+    PartitionBuilder builder(device, partition_name);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
     }
-    builder->RemovePartition(args[1]);
+    builder->RemovePartition(partition_name);
     if (!builder.Write()) {
         return device->WriteFail("Failed to write partition table");
     }
@@ -430,7 +428,7 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition size");
     }
 
-    PartitionBuilder builder(device);
+    PartitionBuilder builder(device, partition_name);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
     }
