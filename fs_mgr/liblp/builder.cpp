@@ -158,39 +158,48 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
         return nullptr;
     }
 
-    // Get the list of devices we already have.
-    std::set<std::string> block_devices;
-    for (const auto& block_device : metadata->block_devices) {
-        block_devices.emplace(GetBlockDevicePartitionName(block_device));
+    // On non-retrofit devices there is only one location for metadata: the
+    // super partition. update_engine will remove and resize partitions as
+    // needed. On the other hand, for retrofit devices, we'll need to
+    // translate block device and group names to update their slot suffixes.
+    auto super_device = GetMetadataSuperBlockDevice(*metadata.get());
+    if (GetBlockDevicePartitionName(*super_device) == "super") {
+        return New(*metadata.get(), &opener);
     }
 
-    auto new_block_devices = metadata->block_devices;
+    // Clear partitions and extents, since they have no meaning on the target
+    // slot. We also clear groups since they are re-added during OTA.
+    metadata->partitions.clear();
+    metadata->extents.clear();
+    metadata->groups.clear();
 
-    // Add missing block devices.
     std::string source_slot_suffix = SlotSuffixForSlotNumber(source_slot_number);
     std::string target_slot_suffix = SlotSuffixForSlotNumber(target_slot_number);
-    for (const auto& block_device : metadata->block_devices) {
-        std::string partition_name = GetBlockDevicePartitionName(block_device);
+
+    // Translate block devices.
+    auto source_block_devices = std::move(metadata->block_devices);
+    for (const auto& source_block_device : source_block_devices) {
+        std::string partition_name = GetBlockDevicePartitionName(source_block_device);
         std::string slot_suffix = GetPartitionSlotSuffix(partition_name);
         if (slot_suffix.empty() || slot_suffix != source_slot_suffix) {
-            continue;
+            // This should never happen. It means that the source metadata
+            // refers to a target or unknown block device.
+            LERROR << "Invalid block device for slot " << source_slot_suffix << ": "
+                   << partition_name;
+            return nullptr;
         }
         std::string new_name =
                 partition_name.substr(0, partition_name.size() - slot_suffix.size()) +
                 target_slot_suffix;
-        if (block_devices.find(new_name) != block_devices.end()) {
-            continue;
-        }
 
-        auto new_device = block_device;
+        auto new_device = source_block_device;
         if (!UpdateBlockDevicePartitionName(&new_device, new_name)) {
             LERROR << "Partition name too long: " << new_name;
             return nullptr;
         }
-        new_block_devices.emplace_back(new_device);
+        metadata->block_devices.emplace_back(new_device);
     }
 
-    metadata->block_devices = new_block_devices;
     return New(*metadata.get(), &opener);
 }
 

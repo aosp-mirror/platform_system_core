@@ -147,5 +147,13 @@ bool UpdateBlockDevicePartitionName(LpMetadataBlockDevice* device, const std::st
     return true;
 }
 
+bool UpdatePartitionGroupName(LpMetadataPartitionGroup* group, const std::string& name) {
+    if (name.size() > sizeof(group->name)) {
+        return false;
+    }
+    strncpy(group->name, name.c_str(), sizeof(group->name));
+    return true;
+}
+
 }  // namespace fs_mgr
 }  // namespace android
