@@ -16,6 +16,7 @@
 
 #define LOG_TAG "lowmemorykiller"
 
+#include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <sched.h>
@@ -26,15 +27,19 @@
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
+#include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
 #include <lmkd.h>
 #include <log/log.h>
+#include <system/thread_defs.h>
 
 #ifdef LMKD_LOG_STATS
 #include "statslog.h"
@@ -1029,6 +1034,40 @@ static struct proc *proc_get_heaviest(int oomadj) {
     return maxprocp;
 }
 
+static void set_process_group_and_prio(int pid, SchedPolicy sp, int prio) {
+    DIR* d;
+    char proc_path[PATH_MAX];
+    struct dirent* de;
+
+    snprintf(proc_path, sizeof(proc_path), "/proc/%d/task", pid);
+    if (!(d = opendir(proc_path))) {
+        ALOGW("Failed to open %s; errno=%d: process pid(%d) might have died", proc_path, errno, pid);
+        return;
+    }
+
+    while ((de = readdir(d))) {
+        int t_pid;
+
+        if (de->d_name[0] == '.') continue;
+        t_pid = atoi(de->d_name);
+
+        if (!t_pid) {
+            ALOGW("Failed to get t_pid for '%s' of pid(%d)", de->d_name, pid);
+            continue;
+        }
+
+        if (setpriority(PRIO_PROCESS, t_pid, prio) && errno != ESRCH) {
+            ALOGW("Unable to raise priority of killing t_pid (%d): errno=%d", t_pid, errno);
+        }
+
+        if (set_cpuset_policy(t_pid, sp)) {
+            ALOGW("Failed to set_cpuset_policy on pid(%d) t_pid(%d) to %d", pid, t_pid, (int)sp);
+            continue;
+        }
+    }
+    closedir(d);
+}
+
 static int last_killed_pid = -1;
 
 /* Kill one process specified by procp.  Returns the size of the process killed */
@@ -1069,6 +1108,9 @@ static int kill_one_process(struct proc* procp) {
 
     /* CAP_KILL required */
     r = kill(pid, SIGKILL);
+
+    set_process_group_and_prio(pid, SP_FOREGROUND, ANDROID_PRIORITY_HIGHEST);
+
     ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB",
         taskname, pid, uid, procp->oomadj, tasksize * page_k);
 
