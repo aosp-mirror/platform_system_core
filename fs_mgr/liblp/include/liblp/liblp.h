@@ -75,7 +75,7 @@ std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uin
 bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
                        const std::map<std::string, std::string>& images);
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
-std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file);
+std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file);
 std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 
 // Similar to WriteToSparseFile, this will generate an image that can be
