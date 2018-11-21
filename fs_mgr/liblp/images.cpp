@@ -67,10 +67,10 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes) {
     return ParseMetadata(geometry, metadata_buffer, metadata_buffer_size);
 }
 
-std::unique_ptr<LpMetadata> ReadFromImageFile(const char* file) {
-    unique_fd fd(open(file, O_RDONLY | O_CLOEXEC));
+std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file) {
+    unique_fd fd(open(image_file.c_str(), O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << image_file;
         return nullptr;
     }
     return ReadFromImageFile(fd);
