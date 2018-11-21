@@ -361,21 +361,7 @@ static bool get_hashtree_descriptor(const std::string& partition_name,
     return true;
 }
 
-FsManagerAvbUniquePtr FsManagerAvbHandle::Open(const fstab& fstab) {
-    FsManagerAvbOps avb_ops(fstab);
-    return DoOpen(&avb_ops);
-}
-
-FsManagerAvbUniquePtr FsManagerAvbHandle::Open(ByNameSymlinkMap&& by_name_symlink_map) {
-    if (by_name_symlink_map.empty()) {
-        LERROR << "Empty by_name_symlink_map when opening FsManagerAvbHandle";
-        return nullptr;
-    }
-    FsManagerAvbOps avb_ops(std::move(by_name_symlink_map));
-    return DoOpen(&avb_ops);
-}
-
-FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
+FsManagerAvbUniquePtr FsManagerAvbHandle::Open() {
     bool is_device_unlocked = fs_mgr_is_device_unlocked();
 
     FsManagerAvbUniquePtr avb_handle(new FsManagerAvbHandle());
@@ -384,10 +370,11 @@ FsManagerAvbUniquePtr FsManagerAvbHandle::DoOpen(FsManagerAvbOps* avb_ops) {
         return nullptr;
     }
 
+    FsManagerAvbOps avb_ops;
     AvbSlotVerifyFlags flags = is_device_unlocked ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
                                                   : AVB_SLOT_VERIFY_FLAGS_NONE;
     AvbSlotVerifyResult verify_result =
-        avb_ops->AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->avb_slot_data_);
+            avb_ops.AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->avb_slot_data_);
 
     // Only allow two verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.

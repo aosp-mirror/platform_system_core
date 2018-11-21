@@ -555,7 +555,9 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& 
 }
 
 void llkAlarmHandler(int) {
-    llkPanicKernel(false, ::getpid(), "alarm");
+    LOG(FATAL) << "alarm";
+    // NOTREACHED
+    llkPanicKernel(true, ::getpid(), "alarm");
 }
 
 milliseconds GetUintProperty(const std::string& key, milliseconds def) {

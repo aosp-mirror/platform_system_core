@@ -1031,7 +1031,7 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open(*fstab);
+                avb_handle = FsManagerAvbHandle::Open();
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
                     return FS_MGR_MNTALL_FAIL;
@@ -1275,7 +1275,7 @@ static int fs_mgr_do_mount_helper(fstab* fstab, const char* n_name, char* n_blk_
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open(*fstab);
+                avb_handle = FsManagerAvbHandle::Open();
                 if (!avb_handle) {
                     LERROR << "Failed to open FsManagerAvbHandle";
                     return FS_MGR_DOMNT_FAILED;

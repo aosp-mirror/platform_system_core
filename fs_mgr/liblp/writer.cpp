@@ -235,6 +235,10 @@ static bool DefaultWriter(int fd, const std::string& blob) {
     return android::base::WriteFully(fd, blob.data(), blob.size());
 }
 
+#if defined(_WIN32)
+static const int O_SYNC = 0;
+#endif
+
 bool FlashPartitionTable(const IPartitionOpener& opener, const std::string& super_partition,
                          const LpMetadata& metadata) {
     android::base::unique_fd fd = opener.Open(super_partition, O_RDWR | O_SYNC);
