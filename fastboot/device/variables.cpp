@@ -271,8 +271,7 @@ bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args,
         return true;
     }
     std::string partition_name = args[0] + slot_suffix;
-    if (FindPhysicalPartition(partition_name) ||
-        LogicalPartitionExists(partition_name, slot_suffix)) {
+    if (FindPhysicalPartition(partition_name) || LogicalPartitionExists(device, partition_name)) {
         *message = "yes";
     } else {
         *message = "no";
@@ -289,8 +288,7 @@ bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& ar
     // Zero-length partitions cannot be created through device-mapper, so we
     // special case them here.
     bool is_zero_length;
-    if (LogicalPartitionExists(args[0], device->GetCurrentSlot(), &is_zero_length) &&
-        is_zero_length) {
+    if (LogicalPartitionExists(device, args[0], &is_zero_length) && is_zero_length) {
         *message = "0x0";
         return true;
     }
@@ -313,8 +311,7 @@ bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& ar
     }
 
     std::string partition_name = args[0];
-    if (!FindPhysicalPartition(partition_name) &&
-        !LogicalPartitionExists(partition_name, device->GetCurrentSlot())) {
+    if (!FindPhysicalPartition(partition_name) && !LogicalPartitionExists(device, partition_name)) {
         *message = "Invalid partition";
         return false;
     }
@@ -363,7 +360,7 @@ bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string
     // return "true", to be consistent with prefering to flash logical partitions
     // over physical ones.
     std::string partition_name = args[0];
-    if (LogicalPartitionExists(partition_name, device->GetCurrentSlot())) {
+    if (LogicalPartitionExists(device, partition_name)) {
         *message = "yes";
         return true;
     }
