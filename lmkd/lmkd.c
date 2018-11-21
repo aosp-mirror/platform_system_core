@@ -1048,18 +1048,20 @@ static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
 
     // field 10 is pgfault
     // field 12 is pgmajfault
+    // field 22 is starttime
     // field 24 is rss_in_pages
-    int64_t pgfault = 0, pgmajfault = 0, rss_in_pages = 0;
+    int64_t pgfault = 0, pgmajfault = 0, starttime = 0, rss_in_pages = 0;
     if (sscanf(buffer,
                "%*u %*s %*s %*d %*d %*d %*d %*d %*d %" SCNd64 " %*d "
                "%" SCNd64 " %*d %*u %*u %*d %*d %*d %*d %*d %*d "
-               "%*d %*d %" SCNd64 "",
-               &pgfault, &pgmajfault, &rss_in_pages) != 3) {
+               "%" SCNd64 " %*d %" SCNd64 "",
+               &pgfault, &pgmajfault, &starttime, &rss_in_pages) != 4) {
         return -1;
     }
     mem_st->pgfault = pgfault;
     mem_st->pgmajfault = pgmajfault;
     mem_st->rss_in_bytes = (rss_in_pages * PAGE_SIZE);
+    mem_st->process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
     return 0;
 }
 #endif
@@ -1383,10 +1385,10 @@ static int kill_one_process(struct proc* procp) {
         if (memory_stat_parse_result == 0) {
             stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
                     procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
-                    mem_st.cache_in_bytes, mem_st.swap_in_bytes);
+                    mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns);
         } else if (enable_stats_log) {
             stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
-                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1);
+                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1);
         }
 #endif
         result = tasksize;
