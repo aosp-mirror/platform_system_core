@@ -183,12 +183,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     }
 
     // Write the new table to every metadata slot.
-    bool ok = true;
-    for (size_t i = 0; i < new_metadata->geometry.metadata_slot_count; i++) {
-        ok &= UpdatePartitionTable(super_name, *new_metadata.get(), i);
-    }
-
-    if (!ok) {
+    if (!UpdateAllPartitionMetadata(super_name, *new_metadata.get())) {
         return device->WriteFail("Unable to write new partition table");
     }
     return device->WriteOkay("Successfully updated partition table");
