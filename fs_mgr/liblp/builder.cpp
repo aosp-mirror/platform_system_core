@@ -20,6 +20,7 @@
 
 #include <algorithm>
 
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 
 #include "liblp/liblp.h"
@@ -28,6 +29,9 @@
 
 namespace android {
 namespace fs_mgr {
+
+bool MetadataBuilder::sABOverrideSet;
+bool MetadataBuilder::sABOverrideValue;
 
 bool LinearExtent::AddTo(LpMetadata* out) const {
     if (device_index_ >= out->block_devices.size()) {
@@ -201,6 +205,11 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
     }
 
     return New(*metadata.get(), &opener);
+}
+
+void MetadataBuilder::OverrideABForTesting(bool ab_device) {
+    sABOverrideSet = true;
+    sABOverrideValue = ab_device;
 }
 
 MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
@@ -425,6 +434,11 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
     }
     if (!FindGroup(group_name)) {
         LERROR << "Could not find partition group: " << group_name;
+        return nullptr;
+    }
+    if (IsABDevice() && !auto_slot_suffixing_ && name != "scratch" &&
+        GetPartitionSlotSuffix(name).empty()) {
+        LERROR << "Unsuffixed partition not allowed on A/B device: " << name;
         return nullptr;
     }
     partitions_.push_back(std::make_unique<Partition>(name, group_name, attributes));
@@ -907,6 +921,13 @@ bool MetadataBuilder::ImportPartition(const LpMetadata& metadata,
 
 void MetadataBuilder::SetAutoSlotSuffixing() {
     auto_slot_suffixing_ = true;
+}
+
+bool MetadataBuilder::IsABDevice() const {
+    if (sABOverrideSet) {
+        return sABOverrideValue;
+    }
+    return android::base::GetBoolProperty("ro.build.ab_update", false);
 }
 
 }  // namespace fs_mgr
