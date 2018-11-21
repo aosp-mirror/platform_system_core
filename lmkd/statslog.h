@@ -64,6 +64,7 @@ struct memory_stat {
     int64_t rss_in_bytes;
     int64_t cache_in_bytes;
     int64_t swap_in_bytes;
+    int64_t process_start_time_ns;
 };
 
 #define MEMCG_PROCESS_MEMORY_STAT_PATH "/dev/memcg/apps/uid_%u/pid_%u/memory.stat"
@@ -87,7 +88,7 @@ int
 stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid,
                               char const* process_name, int32_t oom_score, int64_t pgfault,
                               int64_t pgmajfault, int64_t rss_in_bytes, int64_t cache_in_bytes,
-                              int64_t swap_in_bytes);
+                              int64_t swap_in_bytes, int64_t process_start_time_ns);
 
 __END_DECLS
 
