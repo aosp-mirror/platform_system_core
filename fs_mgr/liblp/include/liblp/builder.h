@@ -22,6 +22,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 #include "liblp.h"
@@ -186,6 +187,9 @@ class MetadataBuilder {
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 
+    // Used by the test harness to override whether the device is "A/B".
+    static void OverrideABForTesting(bool ab_device);
+
     // Define a new partition group. By default there is one group called
     // "default", with an unrestricted size. A non-zero size will restrict the
     // total space used by all partitions in the group.
@@ -270,6 +274,7 @@ class MetadataBuilder {
     void ImportExtents(Partition* dest, const LpMetadata& metadata,
                        const LpMetadataPartition& source);
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
+    bool IsABDevice() const;
 
     struct Interval {
         uint32_t device_index;
@@ -289,6 +294,9 @@ class MetadataBuilder {
     std::vector<Interval> GetFreeRegions() const;
     void ExtentsToFreeList(const std::vector<Interval>& extents,
                            std::vector<Interval>* free_regions) const;
+
+    static bool sABOverrideValue;
+    static bool sABOverrideSet;
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
