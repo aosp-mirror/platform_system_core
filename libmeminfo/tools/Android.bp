@@ -13,11 +13,24 @@
 // limitations under the License.
 
 cc_binary {
+    name: "librank2",
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    srcs: ["librank.cpp"],
+    shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+}
+
+cc_binary {
     name: "procmem2",
     cflags: [
         "-Wall",
         "-Werror",
-        "-Wno-unused-parameter",
     ],
 
     srcs: ["procmem.cpp"],
@@ -32,7 +45,6 @@ cc_binary {
     cflags: [
         "-Wall",
         "-Werror",
-        "-Wno-unused-parameter",
     ],
 
     srcs: ["procrank.cpp"],
