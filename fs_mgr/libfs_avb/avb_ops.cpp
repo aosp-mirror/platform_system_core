@@ -170,16 +170,32 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
 
 AvbSlotVerifyResult FsManagerAvbOps::AvbSlotVerify(const std::string& ab_suffix,
                                                    AvbSlotVerifyFlags flags,
-                                                   AvbSlotVerifyData** out_data) {
+                                                   std::vector<VBMetaData>* out_vbmeta_images) {
     // Invokes avb_slot_verify() to load and verify all vbmeta images.
     // Sets requested_partitions to nullptr as it's to copy the contents
     // of HASH partitions into handle>avb_slot_data_, which is not required as
     // fs_mgr only deals with HASHTREE partitions.
     const char* requested_partitions[] = {nullptr};
+
+    // Local resource to store vbmeta images from avb_slot_verify();
+    AvbSlotVerifyData* avb_slot_data;
+
     // The |hashtree_error_mode| field doesn't matter as it only
     // influences the generated kernel cmdline parameters.
-    return avb_slot_verify(&avb_ops_, requested_partitions, ab_suffix.c_str(), flags,
-                           AVB_HASHTREE_ERROR_MODE_RESTART_AND_INVALIDATE, out_data);
+    auto verify_result =
+            avb_slot_verify(&avb_ops_, requested_partitions, ab_suffix.c_str(), flags,
+                            AVB_HASHTREE_ERROR_MODE_RESTART_AND_INVALIDATE, &avb_slot_data);
+
+    // Copies avb_slot_data->vbmeta_images[].
+    for (size_t i = 0; i < avb_slot_data->num_vbmeta_images; i++) {
+        out_vbmeta_images->emplace_back(VBMetaData(avb_slot_data->vbmeta_images[i].vbmeta_data,
+                                                   avb_slot_data->vbmeta_images[i].vbmeta_size));
+    }
+
+    // Free the local resource.
+    avb_slot_verify_data_free(avb_slot_data);
+
+    return verify_result;
 }
 
 }  // namespace fs_mgr
