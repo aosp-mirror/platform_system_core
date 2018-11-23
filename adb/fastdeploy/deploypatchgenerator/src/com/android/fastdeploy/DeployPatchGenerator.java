@@ -61,22 +61,22 @@ public final class DeployPatchGenerator {
             File hostFile = new File(apkPath);
 
             List<APKEntry> deviceZipEntries = getMetadataFromFile(deviceMetadataPath);
+            System.err.println("Device Entries (" + deviceZipEntries.size() + ")");
             if (verbose) {
                 sb = new StringBuilder();
                 for (APKEntry entry : deviceZipEntries) {
                     APKEntryToString(entry, sb);
                 }
-                System.err.println("Device Entries (" + deviceZipEntries.size() + ")");
                 System.err.println(sb.toString());
             }
 
             List<APKEntry> hostFileEntries = PatchUtils.getAPKMetaData(hostFile).getEntriesList();
+            System.err.println("Host Entries (" + hostFileEntries.size() + ")");
             if (verbose) {
                 sb = new StringBuilder();
                 for (APKEntry entry : hostFileEntries) {
                     APKEntryToString(entry, sb);
                 }
-                System.err.println("Host Entries (" + hostFileEntries.size() + ")");
                 System.err.println(sb.toString());
             }
 
@@ -130,7 +130,8 @@ public final class DeployPatchGenerator {
 
         for (APKEntry deviceZipEntry : deviceZipEntries) {
             for (APKEntry hostZipEntry : hostZipEntries) {
-                if (deviceZipEntry.getCrc32() == hostZipEntry.getCrc32()) {
+                if (deviceZipEntry.getCrc32() == hostZipEntry.getCrc32() &&
+                    deviceZipEntry.getFileName().equals(hostZipEntry.getFileName())) {
                     identicalContents.add(new SimpleEntry(deviceZipEntry, hostZipEntry));
                 }
             }
