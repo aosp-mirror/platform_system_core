@@ -322,8 +322,16 @@ static pid_t wait_for_vm_process(pid_t pseudothread_tid) {
   return vm_pid;
 }
 
+static void InstallSigPipeHandler() {
+  struct sigaction action = {};
+  action.sa_handler = SIG_IGN;
+  action.sa_flags = SA_RESTART;
+  sigaction(SIGPIPE, &action, nullptr);
+}
+
 int main(int argc, char** argv) {
   DefuseSignalHandlers();
+  InstallSigPipeHandler();
 
   atrace_begin(ATRACE_TAG, "before reparent");
   pid_t target_process = getppid();
