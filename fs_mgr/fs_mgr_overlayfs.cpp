@@ -386,8 +386,10 @@ uint32_t fs_mgr_overlayfs_slot_number() {
     return SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
 }
 
+const auto kPhysicalDevice = "/dev/block/by-name/"s;
+
 std::string fs_mgr_overlayfs_super_device(uint32_t slot_number) {
-    return "/dev/block/by-name/" + fs_mgr_get_super_partition_name(slot_number);
+    return kPhysicalDevice + fs_mgr_get_super_partition_name(slot_number);
 }
 
 bool fs_mgr_overlayfs_has_logical(const fstab* fstab) {
@@ -645,10 +647,16 @@ std::string fs_mgr_overlayfs_scratch_mount_type() {
 std::string fs_mgr_overlayfs_scratch_device() {
     if (!scratch_device_cache.empty()) return scratch_device_cache;
 
-    auto& dm = DeviceMapper::Instance();
-    const auto partition_name = android::base::Basename(kScratchMountPoint);
-    std::string path;
-    if (!dm.GetDmDevicePathByName(partition_name, &path)) return "";
+    // Is this a multiple super device (retrofit)?
+    auto slot_number = fs_mgr_overlayfs_slot_number();
+    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
+    auto path = fs_mgr_overlayfs_super_device(slot_number == 0);
+    if (super_device == path) {
+        // Create from within single super device;
+        auto& dm = DeviceMapper::Instance();
+        const auto partition_name = android::base::Basename(kScratchMountPoint);
+        if (!dm.GetDmDevicePathByName(partition_name, &path)) return "";
+    }
     return scratch_device_cache = path;
 }
 
@@ -679,6 +687,10 @@ bool fs_mgr_overlayfs_create_scratch(const fstab* fstab, std::string* scratch_de
     *scratch_device = fs_mgr_overlayfs_scratch_device();
     *partition_exists = fs_mgr_rw_access(*scratch_device);
     auto partition_create = !*partition_exists;
+    // Do we need to create a logical "scratch" partition?
+    if (!partition_create && android::base::StartsWith(*scratch_device, kPhysicalDevice)) {
+        return true;
+    }
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     if (!fs_mgr_rw_access(super_device)) return false;
@@ -784,6 +796,7 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
 bool fs_mgr_overlayfs_scratch_can_be_mounted(const std::string& scratch_device) {
     if (scratch_device.empty()) return false;
     if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return false;
+    if (android::base::StartsWith(scratch_device, kPhysicalDevice)) return true;
     if (fs_mgr_rw_access(scratch_device)) return true;
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
