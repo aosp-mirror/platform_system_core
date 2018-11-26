@@ -759,14 +759,20 @@ bool fs_mgr_overlayfs_scratch_can_be_mounted(const std::string& scratch_device) 
     return builder->FindPartition(android::base::Basename(kScratchMountPoint)) != nullptr;
 }
 
+bool fs_mgr_overlayfs_invalid(const fstab* fstab) {
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return true;
+
+    // in recovery or fastbootd mode, not allowed!
+    if (fs_mgr_access("/system/bin/recovery")) return true;
+
+    return !fstab;
+}
+
 }  // namespace
 
 bool fs_mgr_overlayfs_mount_all(fstab* fstab) {
     auto ret = false;
-
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return ret;
-
-    if (!fstab) return ret;
+    if (fs_mgr_overlayfs_invalid(fstab)) return ret;
 
     auto scratch_can_be_mounted = true;
     for (const auto& mount_point : fs_mgr_candidate_list(fstab)) {
@@ -795,9 +801,9 @@ bool fs_mgr_overlayfs_mount_all(const std::vector<const fstab_rec*>& fsrecs) {
 }
 
 std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab* fstab) {
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return {};
+    if (fs_mgr_overlayfs_invalid(fstab)) return {};
 
-    if (fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), kScratchMountPoint)) {
+    if (fs_mgr_get_entry_for_mount_point(fstab, kScratchMountPoint)) {
         return {};
     }
 
