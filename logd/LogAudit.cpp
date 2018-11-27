@@ -165,9 +165,14 @@ void LogAudit::auditParse(const std::string& string, uid_t uid,
         bug_num->assign("");
     }
 
+    // Ensure the uid name is not null before passing it to the bug string.
     if (uid >= AID_APP_START && uid <= AID_APP_END) {
-        bug_num->append(" app=");
-        bug_num->append(android::uidToName(uid));
+        char* uidname = android::uidToName(uid);
+        if (uidname) {
+            bug_num->append(" app=");
+            bug_num->append(uidname);
+            free(uidname);
+        }
     }
 }
 
