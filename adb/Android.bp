@@ -285,6 +285,15 @@ cc_binary_host {
         "deploypatchgenerator",
     ],
 
+    // Archive adb, adb.exe.
+    dist: {
+        targets: [
+            "dist_files",
+            "sdk",
+            "win_sdk",
+        ],
+    },
+
     target: {
         darwin: {
             cflags: [
