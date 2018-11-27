@@ -185,7 +185,6 @@ static void help() {
         " enable-verity            re-enable dm-verity checking on userdebug builds\n"
         " keygen FILE\n"
         "     generate adb public/private key; private key stored in FILE,\n"
-        "     public key stored in FILE.pub (existing files overwritten)\n"
         "\n"
         "scripting:\n"
         " wait-for[-TRANSPORT]-STATE\n"
@@ -1756,14 +1755,14 @@ int adb_commandline(int argc, const char** argv) {
         // Always print key generation information for keygen command.
         adb_trace_enable(AUTH);
         return adb_auth_keygen(argv[1]);
-    }
-    else if (!strcmp(argv[0], "jdwp")) {
+    } else if (!strcmp(argv[0], "pubkey")) {
+        if (argc != 2) error_exit("pubkey requires an argument");
+        return adb_auth_pubkey(argv[1]);
+    } else if (!strcmp(argv[0], "jdwp")) {
         return adb_connect_command("jdwp");
-    }
-    else if (!strcmp(argv[0], "track-jdwp")) {
+    } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
-    }
-    else if (!strcmp(argv[0], "track-devices")) {
+    } else if (!strcmp(argv[0], "track-devices")) {
         return adb_connect_command("host:track-devices");
     } else if (!strcmp(argv[0], "raw")) {
         if (argc != 2) {
@@ -1772,13 +1771,11 @@ int adb_commandline(int argc, const char** argv) {
         return adb_connect_command(argv[1]);
     }
 
-
     /* "adb /?" is a common idiom under Windows */
     else if (!strcmp(argv[0], "--help") || !strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
         help();
         return 0;
-    }
-    else if (!strcmp(argv[0], "--version") || !strcmp(argv[0], "version")) {
+    } else if (!strcmp(argv[0], "--version") || !strcmp(argv[0], "version")) {
         fprintf(stdout, "%s", adb_version().c_str());
         return 0;
     } else if (!strcmp(argv[0], "features")) {
