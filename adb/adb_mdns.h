@@ -23,6 +23,10 @@ const char* kADBServiceType = "_adb._tcp";
 const char* kADBSecurePairingServiceType = "_adb_secure_pairing._tcp";
 const char* kADBSecureConnectServiceType = "_adb_secure_connect._tcp";
 
+const int kADBTransportServiceRefIndex = 0;
+const int kADBSecurePairingServiceRefIndex = 1;
+const int kADBSecureConnectServiceRefIndex = 2;
+
 const char* kADBDNSServices[] = {
         kADBServiceType,
         kADBSecurePairingServiceType,
@@ -30,6 +34,5 @@ const char* kADBDNSServices[] = {
 };
 
 const int kNumADBDNSServices = arraysize(kADBDNSServices);
-const int kADBTransportServiceRefIndex = 0;
 
 #endif
