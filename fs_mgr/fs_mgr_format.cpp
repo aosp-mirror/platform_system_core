@@ -117,12 +117,7 @@ static int format_f2fs(char *fs_blkdev, uint64_t dev_sz, bool crypt_footer)
     // clang-format off
     const char* const args[] = {
         "/system/bin/make_f2fs",
-        "-d1",
-        "-f",
-        "-O", "encrypt",
-        "-O", "quota",
-        "-O", "verity",
-        "-w", "4096",
+        "-g", "android",
         fs_blkdev,
         size_str.c_str(),
         nullptr
