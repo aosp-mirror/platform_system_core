@@ -162,9 +162,17 @@ static Image images[] = {
         // clang-format on
 };
 
-static std::string find_item_given_name(const std::string& img_name) {
+static char* get_android_product_out() {
     char* dir = getenv("ANDROID_PRODUCT_OUT");
     if (dir == nullptr || dir[0] == '\0') {
+        return nullptr;
+    }
+    return dir;
+}
+
+static std::string find_item_given_name(const std::string& img_name) {
+    char* dir = get_android_product_out();
+    if (!dir) {
         die("ANDROID_PRODUCT_OUT not set");
     }
     return std::string(dir) + "/" + img_name;
@@ -1508,6 +1516,9 @@ failed:
 }
 
 static bool should_flash_in_userspace(const std::string& partition_name) {
+    if (!get_android_product_out()) {
+        return false;
+    }
     auto path = find_item_given_name("super_empty.img");
     if (path.empty()) {
         return false;
