@@ -78,7 +78,7 @@ static void dump_header_info(log_t* log) {
   _LOG(log, logtype::HEADER, "ABI: '%s'\n", ABI_STRING);
 }
 
-static void dump_probable_cause(log_t* log, const siginfo_t* si) {
+static void dump_probable_cause(log_t* log, const siginfo_t* si, BacktraceMap* map) {
   std::string cause;
   if (si->si_signo == SIGSEGV && si->si_code == SEGV_MAPERR) {
     if (si->si_addr < reinterpret_cast<void*>(4096)) {
@@ -93,6 +93,14 @@ static void dump_probable_cause(log_t* log, const siginfo_t* si) {
       cause = "call to kuser_memory_barrier";
     } else if (si->si_addr == reinterpret_cast<void*>(0xffff0f60)) {
       cause = "call to kuser_cmpxchg64";
+    }
+  } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
+    for (auto it = map->begin(); it != map->end(); ++it) {
+      const backtrace_map_t* entry = *it;
+      if (si->si_addr >= reinterpret_cast<void*>(entry->start) &&
+          si->si_addr < reinterpret_cast<void*>(entry->end) && entry->flags == PROT_EXEC) {
+        cause = "execute-only (no-read) memory access error; likely due to data in .text.";
+      }
     }
   } else if (si->si_signo == SIGSYS && si->si_code == SYS_SECCOMP) {
     cause = StringPrintf("seccomp prevented call to disallowed %s system call %d", ABI_STRING,
@@ -125,8 +133,6 @@ static void dump_signal_info(log_t* log, const ThreadInfo& thread_info, Memory* 
   _LOG(log, logtype::HEADER, "signal %d (%s), code %d (%s%s), fault addr %s\n",
        thread_info.siginfo->si_signo, get_signame(thread_info.siginfo),
        thread_info.siginfo->si_code, get_sigcode(thread_info.siginfo), sender_desc, addr_desc);
-
-  dump_probable_cause(log, thread_info.siginfo);
 }
 
 static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
@@ -426,6 +432,7 @@ static bool dump_thread(log_t* log, BacktraceMap* map, Memory* process_memory,
 
   if (thread_info.siginfo) {
     dump_signal_info(log, thread_info, process_memory);
+    dump_probable_cause(log, thread_info.siginfo, map);
   }
 
   if (primary_thread) {

@@ -18,13 +18,9 @@ LOCAL_PATH:= $(call my-dir)
 # Package fastboot-related executables.
 #
 
-my_dist_files := $(HOST_OUT_EXECUTABLES)/fastboot
-my_dist_files += $(HOST_OUT_EXECUTABLES)/mke2fs
+my_dist_files := $(HOST_OUT_EXECUTABLES)/mke2fs
 my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid
 my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs
 my_dist_files += $(HOST_OUT_EXECUTABLES)/sload_f2fs
 $(call dist-for-goals,dist_files sdk win_sdk,$(my_dist_files))
-ifdef HOST_CROSS_OS
-$(call dist-for-goals,dist_files sdk win_sdk,$(ALL_MODULES.host_cross_fastboot.BUILT))
-endif
 my_dist_files :=
