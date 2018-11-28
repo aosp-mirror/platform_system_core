@@ -1603,9 +1603,6 @@ std::string fs_mgr_get_super_partition_name(int slot) {
         } else if (slot == -1) {
             suffix = fs_mgr_get_slot_suffix();
         }
-        if (suffix.empty()) {
-            LFATAL << "Super partition name can only be overridden on A/B devices.";
-        }
         return super_partition + suffix;
     }
     return LP_METADATA_DEFAULT_PARTITION_NAME;
