@@ -39,12 +39,15 @@ init_cflags += \
 
 # --
 
+# Do not build this even with mmma if we're system-as-root, otherwise it will overwrite the symlink.
+ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES := \
     devices.cpp \
+    first_stage_init.cpp \
+    first_stage_main.cpp \
     first_stage_mount.cpp \
-    init_first_stage.cpp \
     reboot_utils.cpp \
     selinux.cpp \
     switch_root.cpp \
@@ -93,19 +96,16 @@ LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
 LOCAL_NOSANITIZE := hwaddress
 include $(BUILD_EXECUTABLE)
+endif
 
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := init_system
+LOCAL_REQUIRED_MODULES := \
+   init_second_stage \
+
 ifeq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
-LOCAL_REQUIRED_MODULES := \
-   init_first_stage \
-   init_second_stage \
-
-else
-LOCAL_REQUIRED_MODULES := \
-   init_second_stage \
-
+LOCAL_POST_INSTALL_CMD := ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
 endif
 include $(BUILD_PHONY_PACKAGE)
 
@@ -118,5 +118,3 @@ LOCAL_REQUIRED_MODULES := \
 
 endif
 include $(BUILD_PHONY_PACKAGE)
-
-
