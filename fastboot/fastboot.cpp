@@ -46,6 +46,7 @@
 #include <chrono>
 #include <functional>
 #include <regex>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -78,6 +79,7 @@ using android::base::ReadFully;
 using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
+using namespace std::string_literals;
 
 static const char* serial = nullptr;
 
@@ -1106,6 +1108,14 @@ static bool is_logical(const std::string& partition) {
     return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
 }
 
+static bool is_retrofit_device() {
+    std::string value;
+    if (fb->GetVar("super-partition-name", &value) != fastboot::SUCCESS) {
+        return false;
+    }
+    return android::base::StartsWith(value, "system_");
+}
+
 static void do_flash(const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
@@ -1319,6 +1329,19 @@ void FlashAllTool::UpdateSuperPartition() {
         command += ":wipe";
     }
     fb->RawCommand(command, "Updating super partition");
+
+    // Retrofit devices have two super partitions, named super_a and super_b.
+    // On these devices, secondary slots must be flashed as physical
+    // partitions (otherwise they would not mount on first boot). To enforce
+    // this, we delete any logical partitions for the "other" slot.
+    if (is_retrofit_device()) {
+        for (const auto& [image, slot] : os_images_) {
+            std::string partition_name = image->part_name + "_"s + slot;
+            if (image->IsSecondary() && is_logical(partition_name)) {
+                fb->DeletePartition(partition_name);
+            }
+        }
+    }
 }
 
 class ZipImageSource final : public ImageSource {
