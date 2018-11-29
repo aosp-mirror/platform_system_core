@@ -59,6 +59,8 @@ class HeapWalker {
         segv_page_count_(0) {
     valid_allocations_range_.end = 0;
     valid_allocations_range_.begin = ~valid_allocations_range_.end;
+    valid_mappings_range_.end = 0;
+    valid_mappings_range_.begin = ~valid_allocations_range_.end;
 
     segv_handler_.install(
         SIGSEGV, [=](ScopedSignalHandler& handler, int signal, siginfo_t* siginfo, void* uctx) {
@@ -68,6 +70,7 @@ class HeapWalker {
 
   ~HeapWalker() {}
   bool Allocation(uintptr_t begin, uintptr_t end);
+  void Mapping(uintptr_t begin, uintptr_t end);
   void Root(uintptr_t begin, uintptr_t end);
   void Root(const allocator::vector<uintptr_t>& vals);
 
@@ -98,6 +101,7 @@ class HeapWalker {
   AllocationMap allocations_;
   size_t allocation_bytes_;
   Range valid_allocations_range_;
+  Range valid_mappings_range_;
 
   allocator::vector<Range> roots_;
   allocator::vector<uintptr_t> root_vals_;
