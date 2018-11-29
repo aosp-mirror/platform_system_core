@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "first_stage_init.h"
+
 #include <dirent.h>
 #include <fcntl.h>
 #include <paths.h>
@@ -94,7 +96,7 @@ bool ForceNormalBoot() {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int FirstStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
@@ -214,7 +216,7 @@ int main(int argc, char** argv) {
     setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
 
     const char* path = "/system/bin/init";
-    const char* args[] = {path, nullptr};
+    const char* args[] = {path, "selinux_setup", nullptr};
     execv(path, const_cast<char**>(args));
 
     // execv() only returns if an error happened, in which case we
@@ -226,7 +228,3 @@ int main(int argc, char** argv) {
 
 }  // namespace init
 }  // namespace android
-
-int main(int argc, char** argv) {
-    return android::init::main(argc, argv);
-}
