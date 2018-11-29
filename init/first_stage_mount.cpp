@@ -449,7 +449,9 @@ bool FirstStageMountVBootV1::GetDmVerityDevices() {
     // Includes the partition names of fstab records and verity_loc_device (if any).
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (auto fstab_rec : mount_fstab_recs_) {
-        required_devices_partition_names_.emplace(basename(fstab_rec->blk_device));
+        if (!fs_mgr_is_logical(fstab_rec)) {
+            required_devices_partition_names_.emplace(basename(fstab_rec->blk_device));
+        }
     }
 
     if (!verity_loc_device.empty()) {

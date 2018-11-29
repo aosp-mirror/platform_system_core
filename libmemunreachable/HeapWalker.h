@@ -53,7 +53,10 @@ class HeapWalker {
         roots_(allocator),
         root_vals_(allocator),
         segv_handler_(),
-        walking_ptr_(0) {
+        walking_ptr_(0),
+        walking_range_{0, 0},
+        segv_logged_(false),
+        segv_page_count_(0) {
     valid_allocations_range_.end = 0;
     valid_allocations_range_.begin = ~valid_allocations_range_.end;
 
@@ -100,7 +103,10 @@ class HeapWalker {
   allocator::vector<uintptr_t> root_vals_;
 
   ScopedSignalHandler segv_handler_;
-  uintptr_t walking_ptr_;
+  volatile uintptr_t walking_ptr_;
+  Range walking_range_;
+  bool segv_logged_;
+  size_t segv_page_count_;
 };
 
 template <class F>

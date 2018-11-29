@@ -76,12 +76,14 @@ void HeapWalker::RecurseRoot(const Range& root) {
     Range range = to_do.back();
     to_do.pop_back();
 
+    walking_range_ = range;
     ForEachPtrInRange(range, [&](Range& ref_range, AllocationInfo* ref_info) {
       if (!ref_info->referenced_from_root) {
         ref_info->referenced_from_root = true;
         to_do.push_back(ref_range);
       }
     });
+    walking_range_ = Range{0, 0};
   }
 }
 
@@ -112,6 +114,10 @@ bool HeapWalker::DetectLeaks() {
   vals.end = vals.begin + root_vals_.size() * sizeof(uintptr_t);
 
   RecurseRoot(vals);
+
+  if (segv_page_count_ > 0) {
+    MEM_ALOGE("%zu pages skipped due to segfaults", segv_page_count_);
+  }
 
   return true;
 }
@@ -168,7 +174,15 @@ void HeapWalker::HandleSegFault(ScopedSignalHandler& handler, int signal, siginf
     handler.reset();
     return;
   }
-  MEM_ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
+  if (!segv_logged_) {
+    MEM_ALOGW("failed to read page at %p, signal %d", si->si_addr, signal);
+    if (walking_range_.begin != 0U) {
+      MEM_ALOGW("while walking range %p-%p", reinterpret_cast<void*>(walking_range_.begin),
+                reinterpret_cast<void*>(walking_range_.end));
+    }
+    segv_logged_ = true;
+  }
+  segv_page_count_++;
   if (!MapOverPage(si->si_addr)) {
     handler.reset();
   }
