@@ -104,9 +104,7 @@ LOCAL_MODULE := init_system
 LOCAL_REQUIRED_MODULES := \
    init_second_stage \
 
-ifeq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
 LOCAL_POST_INSTALL_CMD := ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
-endif
 include $(BUILD_PHONY_PACKAGE)
 
 include $(CLEAR_VARS)
