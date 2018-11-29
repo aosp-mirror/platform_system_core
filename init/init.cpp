@@ -49,6 +49,7 @@
 #endif
 
 #include "action_parser.h"
+#include "boringssl_self_test.h"
 #include "epoll.h"
 #include "first_stage_mount.h"
 #include "import_parser.h"
@@ -696,6 +697,9 @@ int SecondStageMain(int argc, char** argv) {
 
     // Trigger all the boot actions to get us started.
     am.QueueEventTrigger("init");
+
+    // Starting the BoringSSL self test, for NIAP certification compliance.
+    am.QueueBuiltinAction(StartBoringSslSelfTest, "StartBoringSslSelfTest");
 
     // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
     // wasn't ready immediately after wait_for_coldboot_done
