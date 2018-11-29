@@ -14,8 +14,70 @@
  * limitations under the License.
  */
 
+#include "builtins.h"
+#include "first_stage_init.h"
 #include "init.h"
+#include "selinux.h"
+#include "subcontext.h"
+#include "ueventd.h"
+
+#include <android-base/logging.h>
+
+#if __has_feature(address_sanitizer)
+#include <sanitizer/asan_interface.h>
+#endif
+
+#if __has_feature(address_sanitizer)
+// Load asan.options if it exists since these are not yet in the environment.
+// Always ensure detect_container_overflow=0 as there are false positives with this check.
+// Always ensure abort_on_error=1 to ensure we reboot to bootloader for development builds.
+extern "C" const char* __asan_default_options() {
+    return "include_if_exists=/system/asan.options:detect_container_overflow=0:abort_on_error=1";
+}
+
+__attribute__((no_sanitize("address", "memory", "thread", "undefined"))) extern "C" void
+__sanitizer_report_error_summary(const char* summary) {
+    LOG(ERROR) << "Init (error summary): " << summary;
+}
+
+__attribute__((no_sanitize("address", "memory", "thread", "undefined"))) static void
+AsanReportCallback(const char* str) {
+    LOG(ERROR) << "Init: " << str;
+}
+#endif
+
+using namespace android::init;
 
 int main(int argc, char** argv) {
-    android::init::main(argc, argv);
+#if __has_feature(address_sanitizer)
+    __asan_set_error_report_callback(AsanReportCallback);
+#endif
+
+    if (!strcmp(basename(argv[0]), "ueventd")) {
+        return ueventd_main(argc, argv);
+    }
+
+    if (argc < 2) {
+        return FirstStageMain(argc, argv);
+    }
+
+    if (!strcmp(argv[1], "subcontext")) {
+        android::base::InitLogging(argv, &android::base::KernelLogger);
+        const BuiltinFunctionMap function_map;
+
+        return SubcontextMain(argc, argv, &function_map);
+    }
+
+    if (!strcmp(argv[1], "selinux_setup")) {
+        return SetupSelinux(argv);
+    }
+
+    if (!strcmp(argv[1], "second_stage")) {
+        return SecondStageMain(argc, argv);
+    }
+
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    LOG(ERROR) << "Unknown argument passed to init '" << argv[1] << "'";
+    return 1;
 }

@@ -18,8 +18,8 @@
 // for SELinux operation for init.
 
 // When the system boots, there is no SEPolicy present and init is running in the kernel domain.
-// Init loads the SEPolicy from the file system, restores the context of /init based on this
-// SEPolicy, and finally exec()'s itself to run in the proper domain.
+// Init loads the SEPolicy from the file system, restores the context of /system/bin/init based on
+// this SEPolicy, and finally exec()'s itself to run in the proper domain.
 
 // The SEPolicy on Android comes in two variants: monolithic and split.
 
@@ -58,8 +58,10 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
+#include <cutils/android_reboot.h>
 #include <selinux/android.h>
 
+#include "reboot_utils.h"
 #include "util.h"
 
 using android::base::ParseInt;
@@ -379,8 +381,6 @@ bool LoadPolicy() {
     return IsSplitPolicyDevice() ? LoadSplitPolicy() : LoadMonolithicPolicy();
 }
 
-}  // namespace
-
 void SelinuxInitialize() {
     Timer t;
 
@@ -404,6 +404,8 @@ void SelinuxInitialize() {
     // init's first stage can't set properties, so pass the time to the second stage.
     setenv("INIT_SELINUX_TOOK", std::to_string(t.duration().count()).c_str(), 1);
 }
+
+}  // namespace
 
 // The files and directories that were created before initial sepolicy load or
 // files on ramdisk need to have their security context restored to the proper
@@ -494,6 +496,39 @@ int SelinuxGetVendorAndroidVersion() {
     }
 
     return major_version;
+}
+
+// This function initializes SELinux then execs init to run in the init SELinux context.
+int SetupSelinux(char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger, [](const char*) {
+        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+    });
+
+    if (REBOOT_BOOTLOADER_ON_PANIC) {
+        InstallRebootSignalHandlers();
+    }
+
+    // Set up SELinux, loading the SELinux policy.
+    SelinuxSetupKernelLogging();
+    SelinuxInitialize();
+
+    // We're in the kernel domain and want to transition to the init domain.  File systems that
+    // store SELabels in their xattrs, such as ext4 do not need an explicit restorecon here,
+    // but other file systems do.  In particular, this is needed for ramdisks such as the
+    // recovery image for A/B devices.
+    if (selinux_android_restorecon("/system/bin/init", 0) == -1) {
+        PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
+    }
+
+    const char* path = "/system/bin/init";
+    const char* args[] = {path, "second_stage", nullptr};
+    execv(path, const_cast<char**>(args));
+
+    // execv() only returns if an error happened, in which case we
+    // panic and never return from this function.
+    PLOG(FATAL) << "execv(\"" << path << "\") failed";
+
+    return 1;
 }
 
 // selinux_android_file_context_handle() takes on the order of 10+ms to run, so we want to cache
