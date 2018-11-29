@@ -790,6 +790,8 @@ bool fs_mgr_overlayfs_mount_all(const std::vector<const fstab_rec*>& fsrecs) {
 }
 
 std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab* fstab) {
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return {};
+
     if (fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), kScratchMountPoint)) {
         return {};
     }
