@@ -38,21 +38,21 @@ using android::base::StartsWith;
 const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android");
 
 struct fs_mgr_flag_values {
-    char *key_loc;
-    char* key_dir;
-    char *verity_loc;
-    char *sysfs_path;
-    off64_t part_length;
-    char *label;
-    int partnum;
-    int swap_prio;
-    int max_comp_streams;
-    off64_t zram_size;
-    off64_t reserved_size;
-    int file_contents_mode;
-    int file_names_mode;
-    off64_t erase_blk_size;
-    off64_t logical_blk_size;
+    std::string key_loc;
+    std::string key_dir;
+    std::string verity_loc;
+    std::string sysfs_path;
+    off64_t part_length = 0;
+    std::string label;
+    int partnum = -1;
+    int swap_prio = -1;
+    int max_comp_streams = 0;
+    off64_t zram_size = 0;
+    off64_t reserved_size = 0;
+    int file_contents_mode = 0;
+    int file_names_mode = 0;
+    off64_t erase_blk_size = 0;
+    off64_t logical_blk_size = 0;
 };
 
 struct flag_list {
@@ -209,14 +209,6 @@ static int parse_flags(char *flags, struct flag_list *fl,
     char *p;
     char *savep;
 
-    /* initialize flag values.  If we find a relevant flag, we'll
-     * update the value */
-    if (flag_vals) {
-        memset(flag_vals, 0, sizeof(*flag_vals));
-        flag_vals->partnum = -1;
-        flag_vals->swap_prio = -1; /* negative means it wasn't specified. */
-    }
-
     /* initialize fs_options to the null string */
     if (fs_options && (fs_options_len > 0)) {
         fs_options[0] = '\0';
@@ -242,22 +234,22 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     /* The encryptable flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    flag_vals->key_loc = strdup(arg);
+                    flag_vals->key_loc = arg;
                 } else if (flag == MF_VERIFY) {
                     /* If the verify flag is followed by an = and the
                      * location for the verity state,  get it and return it.
                      */
-                    flag_vals->verity_loc = strdup(arg);
+                    flag_vals->verity_loc = arg;
                 } else if (flag == MF_FORCECRYPT) {
                     /* The forceencrypt flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    flag_vals->key_loc = strdup(arg);
+                    flag_vals->key_loc = arg;
                 } else if (flag == MF_FORCEFDEORFBE) {
                     /* The forcefdeorfbe flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    flag_vals->key_loc = strdup(arg);
+                    flag_vals->key_loc = arg;
                     flag_vals->file_contents_mode = EM_AES_256_XTS;
                     flag_vals->file_names_mode = EM_AES_256_CTS;
                 } else if (flag == MF_FILEENCRYPTION) {
@@ -285,7 +277,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     /* The metadata flag is followed by an = and the
                      * directory for the keys.  Get it and return it.
                      */
-                    flag_vals->key_dir = strdup(arg);
+                    flag_vals->key_dir = arg;
                 } else if (flag == MF_LENGTH) {
                     /* The length flag is followed by an = and the
                      * size of the partition.  Get it and return it.
@@ -302,8 +294,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     auto label_end = strchr(label_start, ':');
 
                     if (label_end) {
-                        flag_vals->label = strndup(label_start,
-                                                   (int) (label_end - label_start));
+                        flag_vals->label = std::string(label_start, (int)(label_end - label_start));
                         auto part_start = label_end + 1;
                         if (!strcmp(part_start, "auto")) {
                             flag_vals->partnum = -1;
@@ -347,7 +338,7 @@ static int parse_flags(char *flags, struct flag_list *fl,
                         flag_vals->logical_blk_size = val;
                 } else if (flag == MF_SYSFS) {
                     /* The path to trigger device gc by idle-maint of vold. */
-                    flag_vals->sysfs_path = strdup(arg);
+                    flag_vals->sysfs_path = arg;
                 }
                 break;
             }
@@ -504,49 +495,17 @@ bool is_dt_compatible() {
     return false;
 }
 
-static struct fstab* fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts) {
-    int cnt, entries;
+static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
     ssize_t len;
     size_t alloc_len = 0;
     char *line = NULL;
     const char *delim = " \t";
     char *save_ptr, *p;
-    struct fstab *fstab = NULL;
+    Fstab fstab;
     struct fs_mgr_flag_values flag_vals;
 #define FS_OPTIONS_LEN 1024
     char tmp_fs_options[FS_OPTIONS_LEN];
 
-    entries = 0;
-    while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
-        /* if the last character is a newline, shorten the string by 1 byte */
-        if (line[len - 1] == '\n') {
-            line[len - 1] = '\0';
-        }
-        /* Skip any leading whitespace */
-        p = line;
-        while (isspace(*p)) {
-            p++;
-        }
-        /* ignore comments or empty lines */
-        if (*p == '#' || *p == '\0')
-            continue;
-        entries++;
-    }
-
-    if (!entries) {
-        LERROR << "No entries found in fstab";
-        goto err;
-    }
-
-    /* Allocate and init the fstab structure */
-    fstab = static_cast<struct fstab *>(calloc(1, sizeof(struct fstab)));
-    fstab->num_entries = entries;
-    fstab->recs = static_cast<struct fstab_rec *>(
-        calloc(fstab->num_entries, sizeof(struct fstab_rec)));
-
-    fseek(fstab_file, 0, SEEK_SET);
-
-    cnt = 0;
     while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
         /* if the last character is a newline, shorten the string by 1 byte */
         if (line[len - 1] == '\n') {
@@ -562,46 +521,36 @@ static struct fstab* fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts) 
         if (*p == '#' || *p == '\0')
             continue;
 
-        /* If a non-comment entry is greater than the size we allocated, give an
-         * error and quit.  This can happen in the unlikely case the file changes
-         * between the two reads.
-         */
-        if (cnt >= entries) {
-            LERROR << "Tried to process more entries than counted";
-            break;
-        }
+        FstabEntry entry;
 
         if (!(p = strtok_r(line, delim, &save_ptr))) {
             LERROR << "Error parsing mount source";
             goto err;
         }
-        fstab->recs[cnt].blk_device = strdup(p);
+        entry.blk_device = p;
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             LERROR << "Error parsing mount_point";
             goto err;
         }
-        fstab->recs[cnt].mount_point = strdup(p);
+        entry.mount_point = p;
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             LERROR << "Error parsing fs_type";
             goto err;
         }
-        fstab->recs[cnt].fs_type = strdup(p);
+        entry.fs_type = p;
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             LERROR << "Error parsing mount_flags";
             goto err;
         }
         tmp_fs_options[0] = '\0';
-        fstab->recs[cnt].flags = parse_flags(p, mount_flags, NULL,
-                                       tmp_fs_options, FS_OPTIONS_LEN);
+        entry.flags = parse_flags(p, mount_flags, NULL, tmp_fs_options, FS_OPTIONS_LEN);
 
         /* fs_options are optional */
         if (tmp_fs_options[0]) {
-            fstab->recs[cnt].fs_options = strdup(tmp_fs_options);
-        } else {
-            fstab->recs[cnt].fs_options = NULL;
+            entry.fs_options = tmp_fs_options;
         }
 
         // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
@@ -611,78 +560,47 @@ static struct fstab* fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts) 
             LERROR << "Error parsing fs_mgr_options";
             goto err;
         }
-        fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
-                                                    &flag_vals, NULL, 0);
-        fstab->recs[cnt].key_loc = flag_vals.key_loc;
-        fstab->recs[cnt].key_dir = flag_vals.key_dir;
-        fstab->recs[cnt].verity_loc = flag_vals.verity_loc;
-        fstab->recs[cnt].length = flag_vals.part_length;
-        fstab->recs[cnt].label = flag_vals.label;
-        fstab->recs[cnt].partnum = flag_vals.partnum;
-        fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
-        fstab->recs[cnt].max_comp_streams = flag_vals.max_comp_streams;
-        fstab->recs[cnt].zram_size = flag_vals.zram_size;
-        fstab->recs[cnt].reserved_size = flag_vals.reserved_size;
-        fstab->recs[cnt].file_contents_mode = flag_vals.file_contents_mode;
-        fstab->recs[cnt].file_names_mode = flag_vals.file_names_mode;
-        fstab->recs[cnt].erase_blk_size = flag_vals.erase_blk_size;
-        fstab->recs[cnt].logical_blk_size = flag_vals.logical_blk_size;
-        fstab->recs[cnt].sysfs_path = flag_vals.sysfs_path;
-        if (fstab->recs[cnt].fs_mgr_flags & MF_LOGICAL) {
-            fstab->recs[cnt].logical_partition_name = strdup(fstab->recs[cnt].blk_device);
+        entry.fs_mgr_flags.val = parse_flags(p, fs_mgr_flags, &flag_vals, NULL, 0);
+
+        entry.key_loc = std::move(flag_vals.key_loc);
+        entry.key_dir = std::move(flag_vals.key_dir);
+        entry.verity_loc = std::move(flag_vals.verity_loc);
+        entry.length = flag_vals.part_length;
+        entry.label = std::move(flag_vals.label);
+        entry.partnum = flag_vals.partnum;
+        entry.swap_prio = flag_vals.swap_prio;
+        entry.max_comp_streams = flag_vals.max_comp_streams;
+        entry.zram_size = flag_vals.zram_size;
+        entry.reserved_size = flag_vals.reserved_size;
+        entry.file_contents_mode = flag_vals.file_contents_mode;
+        entry.file_names_mode = flag_vals.file_names_mode;
+        entry.erase_blk_size = flag_vals.erase_blk_size;
+        entry.logical_blk_size = flag_vals.logical_blk_size;
+        entry.sysfs_path = std::move(flag_vals.sysfs_path);
+        if (entry.fs_mgr_flags.logical) {
+            entry.logical_partition_name = entry.blk_device;
         }
 
-        cnt++;
+        fstab.emplace_back(std::move(entry));
     }
+
+    if (fstab.empty()) {
+        LERROR << "No entries found in fstab";
+        goto err;
+    }
+
     /* If an A/B partition, modify block device to be the real block device */
-    if (!fs_mgr_update_for_slotselect(fstab)) {
+    if (!fs_mgr_update_for_slotselect(&fstab)) {
         LERROR << "Error updating for slotselect";
         goto err;
     }
     free(line);
-    return fstab;
+    *fstab_out = std::move(fstab);
+    return true;
 
 err:
     free(line);
-    if (fstab)
-        fs_mgr_free_fstab(fstab);
-    return NULL;
-}
-
-/* merges fstab entries from both a and b, then returns the merged result.
- * note that the caller should only manage the return pointer without
- * doing further memory management for the two inputs, i.e. only need to
- * frees up memory of the return value without touching a and b. */
-static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
-{
-    if (!a && !b) return nullptr;
-    if (!a) return b;
-    if (!b) return a;
-
-    int total_entries = a->num_entries + b->num_entries;
-    a->recs = static_cast<struct fstab_rec *>(realloc(
-        a->recs, total_entries * (sizeof(struct fstab_rec))));
-    if (!a->recs) {
-        LERROR << __FUNCTION__ << "(): failed to allocate fstab recs";
-        // If realloc() fails the original block is left untouched;
-        // it is not freed or moved. So we have to free both a and b here.
-        fs_mgr_free_fstab(a);
-        fs_mgr_free_fstab(b);
-        return nullptr;
-    }
-
-    for (int i = a->num_entries, j = 0; i < total_entries; i++, j++) {
-        // Copy the structs by assignment.
-        a->recs[i] = b->recs[j];
-    }
-
-    // We can't call fs_mgr_free_fstab because a->recs still references the
-    // memory allocated by strdup.
-    free(b->recs);
-    free(b);
-
-    a->num_entries = total_entries;
-    return a;
+    return false;
 }
 
 /* Extracts <device>s from the by-name symlinks specified in a fstab:
@@ -695,11 +613,11 @@ static struct fstab *in_place_merge(struct fstab *a, struct fstab *b)
  *   /dev/block/pci/soc.0/f9824900.sdhci/by-name/vendor
  * it returns a set { "soc/1da4000.ufshc", "soc.0/f9824900.sdhci" }.
  */
-static std::set<std::string> extract_boot_devices(const fstab& fstab) {
+static std::set<std::string> extract_boot_devices(const Fstab& fstab) {
     std::set<std::string> boot_devices;
 
-    for (int i = 0; i < fstab.num_entries; i++) {
-        std::string blk_device(fstab.recs[i].blk_device);
+    for (const auto& entry : fstab) {
+        std::string blk_device = entry.blk_device;
         // Skips blk_device that doesn't conform to the format.
         if (!android::base::StartsWith(blk_device, "/dev/block") ||
             android::base::StartsWith(blk_device, "/dev/block/by-name") ||
@@ -728,33 +646,36 @@ static std::set<std::string> extract_boot_devices(const fstab& fstab) {
     return boot_devices;
 }
 
-struct fstab *fs_mgr_read_fstab(const char *fstab_path)
-{
-    struct fstab *fstab;
-
-    auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(fstab_path, "re"), fclose};
+bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
+    auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (!fstab_file) {
-        PERROR << __FUNCTION__<< "(): cannot open file: '" << fstab_path << "'";
+        PERROR << __FUNCTION__ << "(): cannot open file: '" << path << "'";
+        return false;
+    }
+
+    if (!fs_mgr_read_fstab_file(fstab_file.get(), path == "/proc/mounts", fstab)) {
+        LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
+        return false;
+    }
+
+    return true;
+}
+
+struct fstab* fs_mgr_read_fstab(const char* fstab_path) {
+    Fstab fstab;
+    if (!ReadFstabFromFile(fstab_path, &fstab)) {
         return nullptr;
     }
 
-    fstab = fs_mgr_read_fstab_file(fstab_file.get(), !strcmp("/proc/mounts", fstab_path));
-    if (!fstab) {
-        LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << fstab_path << "'";
-    }
-
-    return fstab;
+    return FstabToLegacyFstab(fstab);
 }
 
-/* Returns fstab entries parsed from the device tree if they
- * exist
- */
-struct fstab *fs_mgr_read_fstab_dt()
-{
+// Returns fstab entries parsed from the device tree if they exist
+bool ReadFstabFromDt(Fstab* fstab) {
     std::string fstab_buf = read_fstab_from_dt();
     if (fstab_buf.empty()) {
         LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
-        return nullptr;
+        return false;
     }
 
     std::unique_ptr<FILE, decltype(&fclose)> fstab_file(
@@ -762,16 +683,25 @@ struct fstab *fs_mgr_read_fstab_dt()
                  fstab_buf.length(), "r"), fclose);
     if (!fstab_file) {
         PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
+        return false;
+    }
+
+    if (!fs_mgr_read_fstab_file(fstab_file.get(), false, fstab)) {
+        LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:"
+               << std::endl << fstab_buf;
+        return false;
+    }
+
+    return true;
+}
+
+struct fstab* fs_mgr_read_fstab_dt() {
+    Fstab fstab;
+    if (!ReadFstabFromDt(&fstab)) {
         return nullptr;
     }
 
-    struct fstab* fstab = fs_mgr_read_fstab_file(fstab_file.get(), false);
-    if (!fstab) {
-        LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:"
-               << std::endl << fstab_buf;
-    }
-
-    return fstab;
+    return FstabToLegacyFstab(fstab);
 }
 
 /*
@@ -797,32 +727,42 @@ static std::string get_fstab_path()
     return std::string();
 }
 
-/*
- * loads the fstab file and combines with fstab entries passed in from device tree.
- */
-struct fstab *fs_mgr_read_fstab_default()
-{
-    std::string default_fstab;
+// Loads the fstab file and combines with fstab entries passed in from device tree.
+bool ReadDefaultFstab(Fstab* fstab) {
+    Fstab dt_fstab;
+    ReadFstabFromDt(&dt_fstab);
 
+    *fstab = std::move(dt_fstab);
+
+    std::string default_fstab_path;
     // Use different fstab paths for normal boot and recovery boot, respectively
     if (access("/system/bin/recovery", F_OK) == 0) {
-        default_fstab = "/etc/recovery.fstab";
+        default_fstab_path = "/etc/recovery.fstab";
     } else {  // normal boot
-        default_fstab = get_fstab_path();
+        default_fstab_path = get_fstab_path();
     }
 
-    struct fstab* fstab = nullptr;
-    if (!default_fstab.empty()) {
-        fstab = fs_mgr_read_fstab(default_fstab.c_str());
+    Fstab default_fstab;
+    if (!default_fstab_path.empty()) {
+        ReadFstabFromFile(default_fstab_path, &default_fstab);
     } else {
         LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
 
-    struct fstab* fstab_dt = fs_mgr_read_fstab_dt();
+    for (auto&& entry : default_fstab) {
+        fstab->emplace_back(std::move(entry));
+    }
 
-    // combines fstab entries passed in from device tree with
-    // the ones found from default_fstab file
-    return in_place_merge(fstab_dt, fstab);
+    return !fstab->empty();
+}
+
+struct fstab* fs_mgr_read_fstab_default() {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        return nullptr;
+    }
+
+    return FstabToLegacyFstab(fstab);
 }
 
 void fs_mgr_free_fstab(struct fstab *fstab)
@@ -908,11 +848,83 @@ std::set<std::string> fs_mgr_get_boot_devices() {
     }
 
     // Fallback to extract boot devices from fstab.
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    if (fstab) return extract_boot_devices(*fstab);
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        return {};
+    }
 
-    return {};
+    return extract_boot_devices(fstab);
+}
+
+FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec) {
+    FstabEntry entry;
+    entry.blk_device = fstab_rec->blk_device;
+    entry.logical_partition_name = fstab_rec->logical_partition_name;
+    entry.mount_point = fstab_rec->mount_point;
+    entry.fs_type = fstab_rec->fs_type;
+    entry.flags = fstab_rec->flags;
+    entry.fs_options = fstab_rec->fs_options;
+    entry.fs_mgr_flags.val = fstab_rec->fs_mgr_flags;
+    entry.key_loc = fstab_rec->key_loc;
+    entry.key_dir = fstab_rec->key_dir;
+    entry.verity_loc = fstab_rec->verity_loc;
+    entry.length = fstab_rec->length;
+    entry.label = fstab_rec->label;
+    entry.partnum = fstab_rec->partnum;
+    entry.swap_prio = fstab_rec->swap_prio;
+    entry.max_comp_streams = fstab_rec->max_comp_streams;
+    entry.zram_size = fstab_rec->zram_size;
+    entry.reserved_size = fstab_rec->reserved_size;
+    entry.file_contents_mode = fstab_rec->file_contents_mode;
+    entry.file_names_mode = fstab_rec->file_names_mode;
+    entry.erase_blk_size = fstab_rec->erase_blk_size;
+    entry.logical_blk_size = fstab_rec->logical_blk_size;
+    entry.sysfs_path = fstab_rec->sysfs_path;
+
+    return entry;
+}
+
+Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab) {
+    Fstab fstab;
+    for (int i = 0; i < legacy_fstab->num_entries; i++) {
+        fstab.emplace_back(FstabRecToFstabEntry(&legacy_fstab->recs[i]));
+    }
+
+    return fstab;
+}
+
+fstab* FstabToLegacyFstab(const Fstab& fstab) {
+    struct fstab* legacy_fstab = static_cast<struct fstab*>(calloc(1, sizeof(struct fstab)));
+    legacy_fstab->num_entries = fstab.size();
+    legacy_fstab->recs =
+            static_cast<fstab_rec*>(calloc(legacy_fstab->num_entries, sizeof(fstab_rec)));
+
+    for (int i = 0; i < legacy_fstab->num_entries; i++) {
+        legacy_fstab->recs[i].blk_device = strdup(fstab[i].blk_device.c_str());
+        legacy_fstab->recs[i].logical_partition_name =
+                strdup(fstab[i].logical_partition_name.c_str());
+        legacy_fstab->recs[i].mount_point = strdup(fstab[i].mount_point.c_str());
+        legacy_fstab->recs[i].fs_type = strdup(fstab[i].fs_type.c_str());
+        legacy_fstab->recs[i].flags = fstab[i].flags;
+        legacy_fstab->recs[i].fs_options = strdup(fstab[i].fs_options.c_str());
+        legacy_fstab->recs[i].fs_mgr_flags = fstab[i].fs_mgr_flags.val;
+        legacy_fstab->recs[i].key_loc = strdup(fstab[i].key_loc.c_str());
+        legacy_fstab->recs[i].key_dir = strdup(fstab[i].key_dir.c_str());
+        legacy_fstab->recs[i].verity_loc = strdup(fstab[i].verity_loc.c_str());
+        legacy_fstab->recs[i].length = fstab[i].length;
+        legacy_fstab->recs[i].label = strdup(fstab[i].label.c_str());
+        legacy_fstab->recs[i].partnum = fstab[i].partnum;
+        legacy_fstab->recs[i].swap_prio = fstab[i].swap_prio;
+        legacy_fstab->recs[i].max_comp_streams = fstab[i].max_comp_streams;
+        legacy_fstab->recs[i].zram_size = fstab[i].zram_size;
+        legacy_fstab->recs[i].reserved_size = fstab[i].reserved_size;
+        legacy_fstab->recs[i].file_contents_mode = fstab[i].file_contents_mode;
+        legacy_fstab->recs[i].file_names_mode = fstab[i].file_names_mode;
+        legacy_fstab->recs[i].erase_blk_size = fstab[i].erase_blk_size;
+        legacy_fstab->recs[i].logical_blk_size = fstab[i].logical_blk_size;
+        legacy_fstab->recs[i].sysfs_path = strdup(fstab[i].sysfs_path.c_str());
+    }
+    return legacy_fstab;
 }
 
 int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab)
