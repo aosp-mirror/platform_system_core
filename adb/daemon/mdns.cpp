@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "mdns.h"
 #include "adb_mdns.h"
 #include "sysdeps.h"
 
@@ -60,42 +61,57 @@ static void mdns_callback(DNSServiceRef /*ref*/,
     }
 }
 
-static void setup_mdns_thread() {
-    start_mdns();
+static void register_mdns_service(int index, int port) {
     std::lock_guard<std::mutex> lock(mdns_lock);
 
     std::string hostname = "adb-";
     hostname += android::base::GetProperty("ro.serialno", "unidentified");
 
-    for (int i = 0; i < kNumADBDNSServices; i++) {
-        auto error = DNSServiceRegister(&mdns_refs[i], 0, 0, hostname.c_str(), kADBDNSServices[i],
-                                        nullptr, nullptr, htobe16((uint16_t)port), 0, nullptr,
-                                        mdns_callback, nullptr);
+    auto error = DNSServiceRegister(&mdns_refs[index], 0, 0, hostname.c_str(),
+                                    kADBDNSServices[index], nullptr, nullptr,
+                                    htobe16((uint16_t)port), 0, nullptr, mdns_callback, nullptr);
 
-        if (error != kDNSServiceErr_NoError) {
-            LOG(ERROR) << "Could not register mDNS service " << kADBDNSServices[i] << ", error ("
-                       << error << ").";
-            mdns_registered[i] = false;
-        }
-
-        mdns_registered[i] = true;
+    if (error != kDNSServiceErr_NoError) {
+        LOG(ERROR) << "Could not register mDNS service " << kADBDNSServices[index] << ", error ("
+                   << error << ").";
+        mdns_registered[index] = false;
     }
 
-    for (int i = 0; i < kNumADBDNSServices; i++) {
-        LOG(INFO) << "adbd mDNS service " << kADBDNSServices[i]
-                  << " registered: " << mdns_registered[i];
-    }
+    mdns_registered[index] = true;
+
+    LOG(INFO) << "adbd mDNS service " << kADBDNSServices[index]
+              << " registered: " << mdns_registered[index];
 }
 
-static void teardown_mdns() {
+static void unregister_mdns_service(int index) {
     std::lock_guard<std::mutex> lock(mdns_lock);
 
-    for (int i = 0; i < kNumADBDNSServices; ++i) {
-        if (mdns_registered[i]) {
-            DNSServiceRefDeallocate(mdns_refs[i]);
-        }
+    if (mdns_registered[index]) {
+        DNSServiceRefDeallocate(mdns_refs[index]);
     }
 }
+
+static void register_base_mdns_transport() {
+    register_mdns_service(kADBTransportServiceRefIndex, port);
+}
+
+static void setup_mdns_thread() {
+    start_mdns();
+
+    // We will now only set up the normal transport mDNS service
+    // instead of registering all the adb secure mDNS services
+    // in the beginning. This is to provide more privacy/security.
+    register_base_mdns_transport();
+}
+
+// This also tears down any adb secure mDNS services, if they exist.
+static void teardown_mdns() {
+    for (int i = 0; i < kNumADBDNSServices; ++i) {
+        unregister_mdns_service(i);
+    }
+}
+
+// Public interface/////////////////////////////////////////////////////////////
 
 void setup_mdns(int port_in) {
     port = port_in;
@@ -103,4 +119,34 @@ void setup_mdns(int port_in) {
 
     // TODO: Make this more robust against a hard kill.
     atexit(teardown_mdns);
+}
+
+void register_adb_secure_pairing_service(int port) {
+    std::thread([port]() {
+        register_mdns_service(kADBSecurePairingServiceRefIndex, port);
+    }).detach();
+}
+
+void unregister_adb_secure_pairing_service() {
+    std::thread([]() { unregister_mdns_service(kADBSecurePairingServiceRefIndex); }).detach();
+}
+
+bool is_adb_secure_pairing_service_registered() {
+    std::lock_guard<std::mutex> lock(mdns_lock);
+    return mdns_registered[kADBSecurePairingServiceRefIndex];
+}
+
+void register_adb_secure_connect_service(int port) {
+    std::thread([port]() {
+        register_mdns_service(kADBSecureConnectServiceRefIndex, port);
+    }).detach();
+}
+
+void unregister_adb_secure_connect_service() {
+    std::thread([]() { unregister_mdns_service(kADBSecureConnectServiceRefIndex); }).detach();
+}
+
+bool is_adb_secure_connect_service_registered() {
+    std::lock_guard<std::mutex> lock(mdns_lock);
+    return mdns_registered[kADBSecureConnectServiceRefIndex];
 }
