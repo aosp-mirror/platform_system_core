@@ -73,6 +73,24 @@ TEST_F(HeapWalkerTest, zero) {
   ASSERT_FALSE(heap_walker.Allocation(2, 3));
 }
 
+TEST_F(HeapWalkerTest, mapping) {
+  HeapWalker heap_walker(heap_);
+  heap_walker.Mapping(2, 3);
+  heap_walker.Mapping(4, 5);
+  ASSERT_TRUE(heap_walker.Allocation(2, 3));
+  ASSERT_TRUE(heap_walker.Allocation(4, 5));
+  // space between mappings is not checked, but could be in the future
+  ASSERT_TRUE(heap_walker.Allocation(3, 4));
+
+  // re-enable malloc, ASSERT_DEATH may allocate
+  disable_malloc_.Enable();
+  ASSERT_DEATH({ heap_walker.Allocation(1, 2); }, "0x1-0x2.*outside.*0x2-0x5");
+  ASSERT_DEATH({ heap_walker.Allocation(1, 3); }, "0x1-0x3.*outside.*0x2-0x5");
+  ASSERT_DEATH({ heap_walker.Allocation(4, 6); }, "0x4-0x6.*outside.*0x2-0x5");
+  ASSERT_DEATH({ heap_walker.Allocation(5, 6); }, "0x5-0x6.*outside.*0x2-0x5");
+  ASSERT_DEATH({ heap_walker.Allocation(1, 6); }, "0x1-0x6.*outside.*0x2-0x5");
+}
+
 #define buffer_begin(buffer) reinterpret_cast<uintptr_t>(buffer)
 #define buffer_end(buffer) (reinterpret_cast<uintptr_t>(buffer) + sizeof(buffer))
 
