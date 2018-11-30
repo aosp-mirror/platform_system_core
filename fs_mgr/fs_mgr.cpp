@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1414,7 +1415,7 @@ int fs_mgr_swapon_all(fstab* fstab) {
                 ret = -1;
                 continue;
             }
-            fprintf(zram_fp.get(), "%u\n", fstab->recs[i].zram_size);
+            fprintf(zram_fp.get(), "%" PRId64 "\n", fstab->recs[i].zram_size);
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_WAIT &&
