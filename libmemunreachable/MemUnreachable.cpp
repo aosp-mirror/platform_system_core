@@ -87,6 +87,11 @@ bool MemUnreachable::CollectAllocations(const allocator::vector<ThreadInfo>& thr
                                         const allocator::vector<Mapping>& mappings,
                                         const allocator::vector<uintptr_t>& refs) {
   MEM_ALOGI("searching process %d for allocations", pid_);
+
+  for (auto it = mappings.begin(); it != mappings.end(); it++) {
+    heap_walker_.Mapping(it->begin, it->end);
+  }
+
   allocator::vector<Mapping> heap_mappings{mappings};
   allocator::vector<Mapping> anon_mappings{mappings};
   allocator::vector<Mapping> globals_mappings{mappings};
