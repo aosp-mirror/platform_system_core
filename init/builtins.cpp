@@ -612,14 +612,15 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_swapon_all(const BuiltinArguments& args) {
-    struct fstab *fstab;
-    int ret;
+    Fstab fstab;
+    if (!ReadFstabFromFile(args[1], &fstab)) {
+        return Error() << "Could not read fstab '" << args[1] << "'";
+    }
 
-    fstab = fs_mgr_read_fstab(args[1].c_str());
-    ret = fs_mgr_swapon_all(fstab);
-    fs_mgr_free_fstab(fstab);
+    if (!fs_mgr_swapon_all(fstab)) {
+        return Error() << "fs_mgr_swapon_all() failed";
+    }
 
-    if (ret != 0) return Error() << "fs_mgr_swapon_all() failed";
     return Success();
 }
 
