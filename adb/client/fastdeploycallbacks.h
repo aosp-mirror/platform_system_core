@@ -21,7 +21,7 @@
 
 class DeployAgentFileCallback : public StandardStreamsCallbackInterface {
   public:
-    DeployAgentFileCallback(FILE* outputFile, std::vector<char>* errBuffer, int* statusCode);
+    DeployAgentFileCallback(FILE* outputFile, std::vector<char>* errBuffer);
 
     virtual void OnStdout(const char* buffer, int length);
     virtual void OnStderr(const char* buffer, int length);
@@ -33,7 +33,6 @@ class DeployAgentFileCallback : public StandardStreamsCallbackInterface {
     FILE* mpOutFile;
     std::vector<char>* mpErrBuffer;
     int mBytesWritten;
-    int* mpStatusCode;
 };
 
 int capture_shell_command(const char* command, std::vector<char>* outBuffer,

@@ -228,11 +228,12 @@ void extract_metadata(const char* apkPath, FILE* outputFp) {
             android::base::StringPrintf(kAgentExtractCommandPattern, packageName.c_str());
 
     std::vector<char> extractErrorBuffer;
-    int statusCode;
-    DeployAgentFileCallback cb(outputFp, &extractErrorBuffer, &statusCode);
+    DeployAgentFileCallback cb(outputFp, &extractErrorBuffer);
     int returnCode = send_shell_command(extractCommand, false, &cb);
     if (returnCode != 0) {
-        error_exit("Executing %s returned %d", extractCommand.c_str(), returnCode);
+        fprintf(stderr, "Executing %s returned %d\n", extractCommand.c_str(), returnCode);
+        fprintf(stderr, "%*s\n", int(extractErrorBuffer.size()), extractErrorBuffer.data());
+        error_exit("Aborting");
     }
 }
 
