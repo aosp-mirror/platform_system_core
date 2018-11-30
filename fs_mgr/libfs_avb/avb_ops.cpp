@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-#include "fs_mgr_priv_avb_ops.h"
+#include "avb_ops.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -37,15 +37,17 @@
 #include <libavb/libavb.h>
 #include <utils/Compat.h>
 
-#include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
 using namespace std::literals;
 
+namespace android {
+namespace fs_mgr {
+
 static AvbIOResult read_from_partition(AvbOps* ops, const char* partition, int64_t offset,
                                        size_t num_bytes, void* buffer, size_t* out_num_read) {
     return FsManagerAvbOps::GetInstanceFromAvbOps(ops)->ReadFromPartition(
-        partition, offset, num_bytes, buffer, out_num_read);
+            partition, offset, num_bytes, buffer, out_num_read);
 }
 
 static AvbIOResult dummy_read_rollback_index(AvbOps* ops ATTRIBUTE_UNUSED,
@@ -58,9 +60,10 @@ static AvbIOResult dummy_read_rollback_index(AvbOps* ops ATTRIBUTE_UNUSED,
 }
 
 static AvbIOResult dummy_validate_vbmeta_public_key(
-    AvbOps* ops ATTRIBUTE_UNUSED, const uint8_t* public_key_data ATTRIBUTE_UNUSED,
-    size_t public_key_length ATTRIBUTE_UNUSED, const uint8_t* public_key_metadata ATTRIBUTE_UNUSED,
-    size_t public_key_metadata_length ATTRIBUTE_UNUSED, bool* out_is_trusted) {
+        AvbOps* ops ATTRIBUTE_UNUSED, const uint8_t* public_key_data ATTRIBUTE_UNUSED,
+        size_t public_key_length ATTRIBUTE_UNUSED,
+        const uint8_t* public_key_metadata ATTRIBUTE_UNUSED,
+        size_t public_key_metadata_length ATTRIBUTE_UNUSED, bool* out_is_trusted) {
     // vbmeta public key has been checked in bootloader phase.
     // In user-space, returns true to pass the check.
     //
@@ -178,3 +181,6 @@ AvbSlotVerifyResult FsManagerAvbOps::AvbSlotVerify(const std::string& ab_suffix,
     return avb_slot_verify(&avb_ops_, requested_partitions, ab_suffix.c_str(), flags,
                            AVB_HASHTREE_ERROR_MODE_RESTART_AND_INVALIDATE, out_data);
 }
+
+}  // namespace fs_mgr
+}  // namespace android
