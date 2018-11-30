@@ -54,8 +54,8 @@ struct fstab_rec {
     int max_comp_streams;
     off64_t zram_size;
     off64_t reserved_size;
-    off64_t file_contents_mode;
-    off64_t file_names_mode;
+    int file_contents_mode;
+    int file_names_mode;
     off64_t erase_blk_size;
     off64_t logical_blk_size;
     char* sysfs_path;
