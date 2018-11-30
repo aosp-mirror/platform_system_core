@@ -35,6 +35,13 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
     end = begin + 1;
   }
   Range range{begin, end};
+  if (valid_mappings_range_.end != 0 &&
+      (begin < valid_mappings_range_.begin || end > valid_mappings_range_.end)) {
+    MEM_LOG_ALWAYS_FATAL("allocation %p-%p is outside mapping range %p-%p",
+                         reinterpret_cast<void*>(begin), reinterpret_cast<void*>(end),
+                         reinterpret_cast<void*>(valid_mappings_range_.begin),
+                         reinterpret_cast<void*>(valid_mappings_range_.end));
+  }
   auto inserted = allocations_.insert(std::pair<Range, AllocationInfo>(range, AllocationInfo{}));
   if (inserted.second) {
     valid_allocations_range_.begin = std::min(valid_allocations_range_.begin, begin);
@@ -85,6 +92,11 @@ void HeapWalker::RecurseRoot(const Range& root) {
     });
     walking_range_ = Range{0, 0};
   }
+}
+
+void HeapWalker::Mapping(uintptr_t begin, uintptr_t end) {
+  valid_mappings_range_.begin = std::min(valid_mappings_range_.begin, begin);
+  valid_mappings_range_.end = std::max(valid_mappings_range_.end, end);
 }
 
 void HeapWalker::Root(uintptr_t begin, uintptr_t end) {
