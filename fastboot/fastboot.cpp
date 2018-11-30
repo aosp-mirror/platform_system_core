@@ -1497,15 +1497,13 @@ static void fb_perform_format(
             fprintf(stderr, "File system type %s not supported.\n", partition_type.c_str());
             return;
         }
-        fprintf(stderr, "Formatting is not supported for file system with type '%s'.\n",
-                partition_type.c_str());
-        return;
+        die("Formatting is not supported for file system with type '%s'.",
+            partition_type.c_str());
     }
 
     int64_t size;
     if (!android::base::ParseInt(partition_size, &size)) {
-        fprintf(stderr, "Couldn't parse partition size '%s'.\n", partition_size.c_str());
-        return;
+        die("Couldn't parse partition size '%s'.", partition_size.c_str());
     }
 
     unsigned eraseBlkSize, logicalBlkSize;
@@ -1515,17 +1513,14 @@ static void fb_perform_format(
     if (fs_generator_generate(gen, output.path, size, initial_dir,
             eraseBlkSize, logicalBlkSize)) {
         die("Cannot generate image for %s", partition.c_str());
-        return;
     }
 
     fd.reset(open(output.path, O_RDONLY));
     if (fd == -1) {
-        fprintf(stderr, "Cannot open generated image: %s\n", strerror(errno));
-        return;
+        die("Cannot open generated image: %s", strerror(errno));
     }
     if (!load_buf_fd(fd.release(), &buf)) {
-        fprintf(stderr, "Cannot read image: %s\n", strerror(errno));
-        return;
+        die("Cannot read image: %s", strerror(errno));
     }
     flash_buf(partition, &buf);
     return;
@@ -1536,6 +1531,9 @@ failed:
         if (errMsg) fprintf(stderr, "%s", errMsg);
     }
     fprintf(stderr, "FAILED (%s)\n", fb->Error().c_str());
+    if (!skip_if_not_supported) {
+        die("Command failed");
+    }
 }
 
 static bool should_flash_in_userspace(const std::string& partition_name) {

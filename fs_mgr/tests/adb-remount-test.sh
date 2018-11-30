@@ -390,6 +390,9 @@ fastboot_getvar partition-type:scratch raw &&
 echo "${ORANGE}[     INFO ]${NORMAL} expect fastboot erase scratch to fail" >&2
 fastboot erase scratch &&
   die "fastbootd can erase scratch"
+echo "${ORANGE}[     INFO ]${NORMAL} expect fastboot format scratch to fail" >&2
+fastboot format scratch &&
+  die "fastbootd can format scratch"
 fastboot reboot ||
   die "can not reboot out of fastbootd"
 echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot ... waiting 2 minutes"
