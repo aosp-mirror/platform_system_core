@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef __CORE_FS_MGR_PRIV_SHA_H
-#define __CORE_FS_MGR_PRIV_SHA_H
+#pragma once
 
 #include <openssl/sha.h>
+
+namespace android {
+namespace fs_mgr {
 
 class SHA256Hasher {
   private:
@@ -59,4 +61,5 @@ class SHA512Hasher {
     }
 };
 
-#endif /* __CORE_FS_MGR_PRIV_SHA_H */
+}  // namespace fs_mgr
+}  // namespace android

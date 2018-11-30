@@ -70,6 +70,7 @@ LOCAL_POST_INSTALL_CMD := \
     $(TARGET_RAMDISK_OUT)/sys \
 
 LOCAL_STATIC_LIBRARIES := \
+    libfs_avb \
     libfs_mgr \
     libfec \
     libfec_rs \

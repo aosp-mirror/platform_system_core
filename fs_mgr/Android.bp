@@ -42,8 +42,6 @@ cc_library {
         "fs_mgr.cpp",
         "fs_mgr_format.cpp",
         "fs_mgr_verity.cpp",
-        "fs_mgr_avb.cpp",
-        "fs_mgr_avb_ops.cpp",
         "fs_mgr_dm_linear.cpp",
         "fs_mgr_overlayfs.cpp",
         "fs_mgr_vendor_overlay.cpp",
@@ -61,10 +59,12 @@ cc_library {
     ],
     static_libs: [
         "libavb",
+        "libfs_avb",
         "libfstab",
         "libdm",
     ],
     export_static_lib_headers: [
+        "libfs_avb",
         "libfstab",
         "libdm",
     ],
@@ -103,4 +103,29 @@ cc_library_static {
     ],
     export_include_dirs: ["include_fstab"],
     header_libs: ["libbase_headers"],
+}
+
+cc_library_static {
+    name: "libfs_avb",
+    defaults: ["fs_mgr_defaults"],
+    recovery_available: true,
+    export_include_dirs: ["libfs_avb/include"],
+    srcs: [
+        "libfs_avb/avb_ops.cpp",
+        "libfs_avb/fs_avb.cpp",
+    ],
+    static_libs: [
+        "libavb",
+        "libfstab",
+        "libdm",
+    ],
+    export_static_lib_headers: [
+        "libfstab",
+    ],
+    shared_libs: [
+        "libcrypto",
+    ],
+    header_libs: [
+        "libbase_headers",
+    ],
 }

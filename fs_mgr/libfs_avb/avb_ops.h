@@ -22,15 +22,14 @@
  * SOFTWARE.
  */
 
-#ifndef __CORE_FS_MGR_PRIV_AVB_OPS_H
-#define __CORE_FS_MGR_PRIV_AVB_OPS_H
+#pragma once
 
-#include <map>
 #include <string>
 
 #include <libavb/libavb.h>
 
-#include "fs_mgr.h"
+namespace android {
+namespace fs_mgr {
 
 // This class provides C++ bindings to interact with libavb, a small
 // self-contained piece of code that's intended to be used in bootloaders.
@@ -42,7 +41,7 @@
 //     read and verify the metadata and store it into the out_data parameter.
 //     The caller MUST check the integrity of metadata against the
 //     androidboot.vbmeta.{hash_alg, size, digest} values from /proc/cmdline.
-//     e.g., see class FsManagerAvbVerifier for more details.
+//     e.g., see class AvbVerifier for more details.
 //
 class FsManagerAvbOps {
   public:
@@ -60,6 +59,7 @@ class FsManagerAvbOps {
 
   private:
     AvbOps avb_ops_;
-    std::map<std::string, std::string> by_name_symlink_map_;
 };
-#endif /* __CORE_FS_MGR_PRIV_AVB_OPS_H */
+
+}  // namespace fs_mgr
+}  // namespace android
