@@ -49,15 +49,15 @@ struct fs_mgr_flag_values {
     int max_comp_streams;
     off64_t zram_size;
     off64_t reserved_size;
-    unsigned int file_contents_mode;
-    unsigned int file_names_mode;
+    int file_contents_mode;
+    int file_names_mode;
     off64_t erase_blk_size;
     off64_t logical_blk_size;
 };
 
 struct flag_list {
     const char *name;
-    unsigned int flag;
+    int flag;
 };
 
 static struct flag_list mount_flags[] = {
@@ -133,9 +133,8 @@ static const struct flag_list file_names_encryption_modes[] = {
     {0, 0},
 };
 
-static unsigned int encryption_mode_to_flag(const struct flag_list *list,
-                                            const char *mode, const char *type)
-{
+static int encryption_mode_to_flag(const struct flag_list* list, const char* mode,
+                                   const char* type) {
     const struct flag_list *j;
 
     for (j = list; j->name; ++j) {
@@ -147,9 +146,7 @@ static unsigned int encryption_mode_to_flag(const struct flag_list *list,
     return 0;
 }
 
-static const char *flag_to_encryption_mode(const struct flag_list *list,
-                                           unsigned int flag)
-{
+static const char* flag_to_encryption_mode(const struct flag_list* list, int flag) {
     const struct flag_list *j;
 
     for (j = list; j->name; ++j) {
