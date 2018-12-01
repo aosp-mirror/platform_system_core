@@ -536,8 +536,7 @@ static int read_partition(const char *path, uint64_t size)
     return 0;
 }
 
-static int compare_last_signature(struct fstab_rec *fstab, int *match)
-{
+static int compare_last_signature(const FstabEntry& entry, int* match) {
     char tag[METADATA_TAG_MAX_LENGTH + 1];
     int fd = -1;
     int rc = -1;
@@ -549,42 +548,40 @@ static int compare_last_signature(struct fstab_rec *fstab, int *match)
 
     *match = 1;
 
-    if (fec_open(&f, fstab->blk_device, O_RDONLY, FEC_VERITY_DISABLE,
-            FEC_DEFAULT_ROOTS) == -1) {
-        PERROR << "Failed to open '" << fstab->blk_device << "'";
+    if (fec_open(&f, entry.blk_device.c_str(), O_RDONLY, FEC_VERITY_DISABLE, FEC_DEFAULT_ROOTS) ==
+        -1) {
+        PERROR << "Failed to open '" << entry.blk_device << "'";
         return rc;
     }
 
     // read verity metadata
     if (fec_verity_get_metadata(f, &verity) == -1) {
-        PERROR << "Failed to get verity metadata '" << fstab->blk_device << "'";
+        PERROR << "Failed to get verity metadata '" << entry.blk_device << "'";
         goto out;
     }
 
     SHA256(verity.signature, sizeof(verity.signature), curr);
 
-    if (snprintf(tag, sizeof(tag), VERITY_LASTSIG_TAG "_%s",
-            basename(fstab->mount_point)) >= (int)sizeof(tag)) {
-        LERROR << "Metadata tag name too long for " << fstab->mount_point;
+    if (snprintf(tag, sizeof(tag), VERITY_LASTSIG_TAG "_%s", basename(entry.mount_point.c_str())) >=
+        (int)sizeof(tag)) {
+        LERROR << "Metadata tag name too long for " << entry.mount_point;
         goto out;
     }
 
-    if (metadata_find(fstab->verity_loc, tag, SHA256_DIGEST_LENGTH,
-            &offset) < 0) {
+    if (metadata_find(entry.verity_loc.c_str(), tag, SHA256_DIGEST_LENGTH, &offset) < 0) {
         goto out;
     }
 
-    fd = TEMP_FAILURE_RETRY(open(fstab->verity_loc, O_RDWR | O_SYNC | O_CLOEXEC));
+    fd = TEMP_FAILURE_RETRY(open(entry.verity_loc.c_str(), O_RDWR | O_SYNC | O_CLOEXEC));
 
     if (fd == -1) {
-        PERROR << "Failed to open " << fstab->verity_loc;
+        PERROR << "Failed to open " << entry.verity_loc;
         goto out;
     }
 
-    if (TEMP_FAILURE_RETRY(pread64(fd, prev, sizeof(prev),
-            offset)) != sizeof(prev)) {
-        PERROR << "Failed to read " << sizeof(prev) << " bytes from "
-               << fstab->verity_loc << " offset " << offset;
+    if (TEMP_FAILURE_RETRY(pread64(fd, prev, sizeof(prev), offset)) != sizeof(prev)) {
+        PERROR << "Failed to read " << sizeof(prev) << " bytes from " << entry.verity_loc
+               << " offset " << offset;
         goto out;
     }
 
@@ -594,8 +591,8 @@ static int compare_last_signature(struct fstab_rec *fstab, int *match)
         /* update current signature hash */
         if (TEMP_FAILURE_RETRY(pwrite64(fd, curr, sizeof(curr),
                 offset)) != sizeof(curr)) {
-            PERROR << "Failed to write " << sizeof(curr) << " bytes to "
-                   << fstab->verity_loc << " offset " << offset;
+            PERROR << "Failed to write " << sizeof(curr) << " bytes to " << entry.verity_loc
+                   << " offset " << offset;
             goto out;
         }
     }
@@ -607,28 +604,23 @@ out:
     return rc;
 }
 
-static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
-{
+static int get_verity_state_offset(const FstabEntry& entry, off64_t* offset) {
     char tag[METADATA_TAG_MAX_LENGTH + 1];
 
-    if (snprintf(tag, sizeof(tag), VERITY_STATE_TAG "_%s",
-            basename(fstab->mount_point)) >= (int)sizeof(tag)) {
-        LERROR << "Metadata tag name too long for " << fstab->mount_point;
+    if (snprintf(tag, sizeof(tag), VERITY_STATE_TAG "_%s", basename(entry.mount_point.c_str())) >=
+        (int)sizeof(tag)) {
+        LERROR << "Metadata tag name too long for " << entry.mount_point;
         return -1;
     }
 
-    return metadata_find(fstab->verity_loc, tag, sizeof(struct verity_state),
-                offset);
+    return metadata_find(entry.verity_loc.c_str(), tag, sizeof(struct verity_state), offset);
 }
 
-int load_verity_state(struct fstab_rec* fstab, int* mode) {
-    int match = 0;
-    off64_t offset = 0;
-
-    /* unless otherwise specified, use EIO mode */
+int load_verity_state(const FstabEntry& entry, int* mode) {
+    // unless otherwise specified, use EIO mode.
     *mode = VERITY_MODE_EIO;
 
-    /* use the kernel parameter if set */
+    // use the kernel parameter if set.
     std::string veritymode;
     if (fs_mgr_get_boot_config("veritymode", &veritymode)) {
         if (veritymode == "enforcing") {
@@ -637,7 +629,8 @@ int load_verity_state(struct fstab_rec* fstab, int* mode) {
         return 0;
     }
 
-    if (get_verity_state_offset(fstab, &offset) < 0) {
+    off64_t offset = 0;
+    if (get_verity_state_offset(entry, &offset) < 0) {
         /* fall back to stateless behavior */
         return 0;
     }
@@ -645,16 +638,17 @@ int load_verity_state(struct fstab_rec* fstab, int* mode) {
     if (was_verity_restart()) {
         /* device was restarted after dm-verity detected a corrupted
          * block, so use EIO mode */
-        return write_verity_state(fstab->verity_loc, offset, *mode);
+        return write_verity_state(entry.verity_loc.c_str(), offset, *mode);
     }
 
-    if (!compare_last_signature(fstab, &match) && !match) {
+    int match = 0;
+    if (!compare_last_signature(entry, &match) && !match) {
         /* partition has been reflashed, reset dm-verity state */
         *mode = VERITY_MODE_DEFAULT;
-        return write_verity_state(fstab->verity_loc, offset, *mode);
+        return write_verity_state(entry.verity_loc.c_str(), offset, *mode);
     }
 
-    return read_verity_state(fstab->verity_loc, offset, mode);
+    return read_verity_state(entry.verity_loc.c_str(), offset, mode);
 }
 
 // Update the verity table using the actual block device path.
@@ -716,8 +710,7 @@ static void update_verity_table_blk_device(const std::string& blk_device, char**
 // prepares the verity enabled (MF_VERIFY / MF_VERIFYATBOOT) fstab record for
 // mount. The 'wait_for_verity_dev' parameter makes this function wait for the
 // verity device to get created before return
-int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
-{
+int fs_mgr_setup_verity(FstabEntry* entry, bool wait_for_verity_dev) {
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     int fd = -1;
     std::string verity_blk_name;
@@ -725,20 +718,20 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
     struct fec_verity_metadata verity;
     struct verity_table_params params = { .table = NULL };
 
-    const std::string mount_point(basename(fstab->mount_point));
+    const std::string mount_point(basename(entry->mount_point.c_str()));
     bool verified_at_boot = false;
 
     android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
 
-    if (fec_open(&f, fstab->blk_device, O_RDONLY, FEC_VERITY_DISABLE,
-            FEC_DEFAULT_ROOTS) < 0) {
-        PERROR << "Failed to open '" << fstab->blk_device << "'";
+    if (fec_open(&f, entry->blk_device.c_str(), O_RDONLY, FEC_VERITY_DISABLE, FEC_DEFAULT_ROOTS) <
+        0) {
+        PERROR << "Failed to open '" << entry->blk_device << "'";
         return retval;
     }
 
     // read verity metadata
     if (fec_verity_get_metadata(f, &verity) < 0) {
-        PERROR << "Failed to get verity metadata '" << fstab->blk_device << "'";
+        PERROR << "Failed to get verity metadata '" << entry->blk_device << "'";
         // Allow verity disabled when the device is unlocked without metadata
         if (fs_mgr_is_device_unlocked()) {
             retval = FS_MGR_SETUP_VERITY_SKIPPED;
@@ -760,9 +753,9 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
         params.ecc.valid = false;
     }
 
-    params.ecc_dev = fstab->blk_device;
+    params.ecc_dev = entry->blk_device.c_str();
 
-    if (load_verity_state(fstab, &params.mode) < 0) {
+    if (load_verity_state(*entry, &params.mode) < 0) {
         /* if accessing or updating the state failed, switch to the default
          * safe mode. This makes sure the device won't end up in an endless
          * restart loop, and no corrupted data will be exposed to userspace
@@ -803,8 +796,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab, bool wait_for_verity_dev)
           << " (mode " << params.mode << ")";
 
     // Update the verity params using the actual block device path
-    update_verity_table_blk_device(fstab->blk_device, &params.table,
-                                   fstab->fs_mgr_flags & MF_SLOTSELECT);
+    update_verity_table_blk_device(entry->blk_device, &params.table,
+                                   entry->fs_mgr_flags.slot_select);
 
     // load the verity mapping table
     if (load_verity_table(dm, mount_point, verity.data_size, &params, format_verity_table) == 0) {
@@ -848,31 +841,29 @@ loaded:
     }
 
     // mark the underlying block device as read-only
-    fs_mgr_set_blk_ro(fstab->blk_device);
+    fs_mgr_set_blk_ro(entry->blk_device);
 
     // Verify the entire partition in one go
     // If there is an error, allow it to mount as a normal verity partition.
-    if (fstab->fs_mgr_flags & MF_VERIFYATBOOT) {
-        LINFO << "Verifying partition " << fstab->blk_device << " at boot";
+    if (entry->fs_mgr_flags.verify_at_boot) {
+        LINFO << "Verifying partition " << entry->blk_device << " at boot";
         int err = read_partition(verity_blk_name.c_str(), verity.data_size);
         if (!err) {
-            LINFO << "Verified verity partition "
-                  << fstab->blk_device << " at boot";
+            LINFO << "Verified verity partition " << entry->blk_device << " at boot";
             verified_at_boot = true;
         }
     }
 
     // assign the new verity block device as the block device
     if (!verified_at_boot) {
-        free(fstab->blk_device);
-        fstab->blk_device = strdup(verity_blk_name.c_str());
+        entry->blk_device = verity_blk_name;
     } else if (!dm.DeleteDevice(mount_point)) {
         LERROR << "Failed to remove verity device " << mount_point.c_str();
         goto out;
     }
 
     // make sure we've set everything up properly
-    if (wait_for_verity_dev && !fs_mgr_wait_for_file(fstab->blk_device, 1s)) {
+    if (wait_for_verity_dev && !fs_mgr_wait_for_file(entry->blk_device, 1s)) {
         goto out;
     }
 

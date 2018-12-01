@@ -473,9 +473,10 @@ static Result<int> mount_fstab(const char* fstabfile, int mount_mode) {
         // Only needed if someone explicitly changes the default log level in their init.rc.
         android::base::ScopedLogSeverity info(android::base::INFO);
 
-        struct fstab* fstab = fs_mgr_read_fstab(fstabfile);
-        int child_ret = fs_mgr_mount_all(fstab, mount_mode);
-        fs_mgr_free_fstab(fstab);
+        Fstab fstab;
+        ReadFstabFromFile(fstabfile, &fstab);
+
+        int child_ret = fs_mgr_mount_all(&fstab, mount_mode);
         if (child_ret == -1) {
             PLOG(ERROR) << "fs_mgr_mount_all returned an error";
         }

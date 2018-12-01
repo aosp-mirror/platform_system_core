@@ -265,7 +265,7 @@ static bool construct_verity_table(const AvbHashtreeDescriptor& hashtree_desc,
     return table->AddTarget(std::make_unique<android::dm::DmTargetVerity>(target));
 }
 
-static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
+static bool hashtree_dm_verity_setup(FstabEntry* fstab_entry,
                                      const AvbHashtreeDescriptor& hashtree_desc,
                                      const std::string& salt, const std::string& root_digest,
                                      bool wait_for_verity_dev) {
@@ -278,7 +278,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
     }
     table.set_readonly(true);
 
-    const std::string mount_point(basename(fstab_entry->mount_point));
+    const std::string mount_point(basename(fstab_entry->mount_point.c_str()));
     android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
     if (!dm.CreateDevice(mount_point, table)) {
         LERROR << "Couldn't create verity device!";
@@ -295,8 +295,7 @@ static bool hashtree_dm_verity_setup(struct fstab_rec* fstab_entry,
     fs_mgr_set_blk_ro(fstab_entry->blk_device);
 
     // Updates fstab_rec->blk_device to verity device name.
-    free(fstab_entry->blk_device);
-    fstab_entry->blk_device = strdup(dev_path.c_str());
+    fstab_entry->blk_device = dev_path;
 
     // Makes sure we've set everything up properly.
     if (wait_for_verity_dev && !fs_mgr_wait_for_file(dev_path, 1s)) {
@@ -449,8 +448,7 @@ AvbUniquePtr AvbHandle::Open() {
     return avb_handle;
 }
 
-AvbHashtreeResult AvbHandle::SetUpAvbHashtree(struct fstab_rec* fstab_entry,
-                                              bool wait_for_verity_dev) {
+AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait_for_verity_dev) {
     if (!fstab_entry || status_ == kAvbHandleUninitialized || !avb_slot_data_ ||
         avb_slot_data_->num_vbmeta_images < 1) {
         return AvbHashtreeResult::kFail;
@@ -464,13 +462,13 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(struct fstab_rec* fstab_entry,
     // Derives partition_name from blk_device to query the corresponding AVB HASHTREE descriptor
     // to setup dm-verity. The partition_names in AVB descriptors are without A/B suffix.
     std::string partition_name;
-    if (fstab_entry->fs_mgr_flags & MF_LOGICAL) {
+    if (fstab_entry->fs_mgr_flags.logical) {
         partition_name = fstab_entry->logical_partition_name;
     } else {
-        partition_name = basename(fstab_entry->blk_device);
+        partition_name = basename(fstab_entry->blk_device.c_str());
     }
 
-    if (fstab_entry->fs_mgr_flags & MF_SLOTSELECT) {
+    if (fstab_entry->fs_mgr_flags.slot_select) {
         auto ab_suffix = partition_name.rfind(fs_mgr_get_slot_suffix());
         if (ab_suffix != std::string::npos) {
             partition_name.erase(ab_suffix);
