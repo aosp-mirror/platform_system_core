@@ -46,6 +46,7 @@
 #include <chrono>
 #include <functional>
 #include <regex>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -78,6 +79,7 @@ using android::base::ReadFully;
 using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
+using namespace std::string_literals;
 
 static const char* serial = nullptr;
 
@@ -1106,6 +1108,14 @@ static bool is_logical(const std::string& partition) {
     return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
 }
 
+static bool is_retrofit_device() {
+    std::string value;
+    if (fb->GetVar("super-partition-name", &value) != fastboot::SUCCESS) {
+        return false;
+    }
+    return android::base::StartsWith(value, "system_");
+}
+
 static void do_flash(const char* pname, const char* fname) {
     struct fastboot_buffer buf;
 
@@ -1319,6 +1329,19 @@ void FlashAllTool::UpdateSuperPartition() {
         command += ":wipe";
     }
     fb->RawCommand(command, "Updating super partition");
+
+    // Retrofit devices have two super partitions, named super_a and super_b.
+    // On these devices, secondary slots must be flashed as physical
+    // partitions (otherwise they would not mount on first boot). To enforce
+    // this, we delete any logical partitions for the "other" slot.
+    if (is_retrofit_device()) {
+        for (const auto& [image, slot] : os_images_) {
+            std::string partition_name = image->part_name + "_"s + slot;
+            if (image->IsSecondary() && is_logical(partition_name)) {
+                fb->DeletePartition(partition_name);
+            }
+        }
+    }
 }
 
 class ZipImageSource final : public ImageSource {
@@ -1474,15 +1497,13 @@ static void fb_perform_format(
             fprintf(stderr, "File system type %s not supported.\n", partition_type.c_str());
             return;
         }
-        fprintf(stderr, "Formatting is not supported for file system with type '%s'.\n",
-                partition_type.c_str());
-        return;
+        die("Formatting is not supported for file system with type '%s'.",
+            partition_type.c_str());
     }
 
     int64_t size;
     if (!android::base::ParseInt(partition_size, &size)) {
-        fprintf(stderr, "Couldn't parse partition size '%s'.\n", partition_size.c_str());
-        return;
+        die("Couldn't parse partition size '%s'.", partition_size.c_str());
     }
 
     unsigned eraseBlkSize, logicalBlkSize;
@@ -1492,17 +1513,14 @@ static void fb_perform_format(
     if (fs_generator_generate(gen, output.path, size, initial_dir,
             eraseBlkSize, logicalBlkSize)) {
         die("Cannot generate image for %s", partition.c_str());
-        return;
     }
 
     fd.reset(open(output.path, O_RDONLY));
     if (fd == -1) {
-        fprintf(stderr, "Cannot open generated image: %s\n", strerror(errno));
-        return;
+        die("Cannot open generated image: %s", strerror(errno));
     }
     if (!load_buf_fd(fd.release(), &buf)) {
-        fprintf(stderr, "Cannot read image: %s\n", strerror(errno));
-        return;
+        die("Cannot read image: %s", strerror(errno));
     }
     flash_buf(partition, &buf);
     return;
@@ -1513,6 +1531,9 @@ failed:
         if (errMsg) fprintf(stderr, "%s", errMsg);
     }
     fprintf(stderr, "FAILED (%s)\n", fb->Error().c_str());
+    if (!skip_if_not_supported) {
+        die("Command failed");
+    }
 }
 
 static bool should_flash_in_userspace(const std::string& partition_name) {

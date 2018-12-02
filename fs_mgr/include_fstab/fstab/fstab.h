@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 #include <set>
 #include <string>
@@ -46,17 +47,17 @@ struct fstab_rec {
     char* key_loc;
     char* key_dir;
     char* verity_loc;
-    long long length;
+    off64_t length;
     char* label;
     int partnum;
     int swap_prio;
     int max_comp_streams;
-    unsigned int zram_size;
-    uint64_t reserved_size;
-    unsigned int file_contents_mode;
-    unsigned int file_names_mode;
-    unsigned int erase_blk_size;
-    unsigned int logical_blk_size;
+    off64_t zram_size;
+    off64_t reserved_size;
+    int file_contents_mode;
+    int file_names_mode;
+    off64_t erase_blk_size;
+    off64_t logical_blk_size;
     char* sysfs_path;
 };
 

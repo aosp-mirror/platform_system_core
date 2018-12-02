@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 #include <unistd.h>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <thread>
@@ -53,6 +55,7 @@
 #include <ext4_utils/ext4_sb.h>
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
+#include <fs_avb/fs_avb.h>
 #include <fs_mgr_overlayfs.h>
 #include <libdm/dm.h>
 #include <liblp/metadata_format.h>
@@ -62,7 +65,6 @@
 #include <log/log_properties.h>
 #include <logwrap/logwrap.h>
 
-#include "fs_mgr_avb.h"
 #include "fs_mgr_priv.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
@@ -82,6 +84,9 @@
 
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
+using android::fs_mgr::AvbHandle;
+using android::fs_mgr::AvbHashtreeResult;
+using android::fs_mgr::AvbUniquePtr;
 
 // record fs stat
 enum FsStatFlags {
@@ -973,7 +978,7 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
     int mount_errno = 0;
     int attempted_idx = -1;
     CheckpointManager checkpoint_manager;
-    FsManagerAvbUniquePtr avb_handle(nullptr);
+    AvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
         return FS_MGR_MNTALL_FAIL;
@@ -1031,14 +1036,14 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open();
+                avb_handle = AvbHandle::Open();
                 if (!avb_handle) {
-                    LERROR << "Failed to open FsManagerAvbHandle";
+                    LERROR << "Failed to open AvbHandle";
                     return FS_MGR_MNTALL_FAIL;
                 }
             }
             if (avb_handle->SetUpAvbHashtree(&fstab->recs[i], true /* wait_for_verity_dev */) ==
-                SetUpAvbHashtreeResult::kFail) {
+                AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -1232,7 +1237,7 @@ static int fs_mgr_do_mount_helper(fstab* fstab, const char* n_name, char* n_blk_
     int first_mount_errno = 0;
     char* mount_point;
     CheckpointManager checkpoint_manager(needs_checkpoint);
-    FsManagerAvbUniquePtr avb_handle(nullptr);
+    AvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
         return FS_MGR_DOMNT_FAILED;
@@ -1275,14 +1280,14 @@ static int fs_mgr_do_mount_helper(fstab* fstab, const char* n_name, char* n_blk_
 
         if (fstab->recs[i].fs_mgr_flags & MF_AVB) {
             if (!avb_handle) {
-                avb_handle = FsManagerAvbHandle::Open();
+                avb_handle = AvbHandle::Open();
                 if (!avb_handle) {
-                    LERROR << "Failed to open FsManagerAvbHandle";
+                    LERROR << "Failed to open AvbHandle";
                     return FS_MGR_DOMNT_FAILED;
                 }
             }
             if (avb_handle->SetUpAvbHashtree(&fstab->recs[i], true /* wait_for_verity_dev */) ==
-                SetUpAvbHashtreeResult::kFail) {
+                AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on partition: "
                        << fstab->recs[i].mount_point << ", skipping!";
                 /* Skips mounting the device. */
@@ -1410,7 +1415,7 @@ int fs_mgr_swapon_all(fstab* fstab) {
                 ret = -1;
                 continue;
             }
-            fprintf(zram_fp.get(), "%u\n", fstab->recs[i].zram_size);
+            fprintf(zram_fp.get(), "%" PRId64 "\n", fstab->recs[i].zram_size);
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_WAIT &&

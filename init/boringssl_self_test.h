@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,28 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SELINUX_H
-#define _INIT_SELINUX_H
+#pragma once
 
-#include <string>
-#include <vector>
+#include "builtin_arguments.h"
+#include "result.h"
 
 namespace android {
 namespace init {
 
-int SetupSelinux(char** argv);
-void SelinuxRestoreContext();
-
-void SelinuxSetupKernelLogging();
-int SelinuxGetVendorAndroidVersion();
-
-void SelabelInitialize();
-bool SelabelLookupFileContext(const std::string& key, int type, std::string* result);
-bool SelabelLookupFileContextBestMatch(const std::string& key,
-                                       const std::vector<std::string>& aliases, int type,
-                                       std::string* result);
+Result<Success> StartBoringSslSelfTest(const BuiltinArguments&);
 
 }  // namespace init
 }  // namespace android
-
-#endif
