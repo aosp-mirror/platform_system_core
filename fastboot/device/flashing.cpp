@@ -153,6 +153,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
         if (!FlashPartitionTable(super_name, *new_metadata.get())) {
             return device->WriteFail("Unable to flash new partition table");
         }
+        fs_mgr_overlayfs_teardown();
         return device->WriteOkay("Successfully flashed partition table");
     }
 
@@ -186,5 +187,6 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     if (!UpdateAllPartitionMetadata(super_name, *new_metadata.get())) {
         return device->WriteFail("Unable to write new partition table");
     }
+    fs_mgr_overlayfs_teardown();
     return device->WriteOkay("Successfully updated partition table");
 }
