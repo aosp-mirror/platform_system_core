@@ -35,7 +35,6 @@ init_cflags += \
     -Wall -Wextra \
     -Wno-unused-parameter \
     -Werror \
-    -std=gnu++1z \
 
 # --
 
