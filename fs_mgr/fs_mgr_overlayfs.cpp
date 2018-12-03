@@ -96,6 +96,10 @@ bool fs_mgr_overlayfs_teardown(const char*, bool* change) {
     return false;
 }
 
+bool fs_mgr_overlayfs_is_setup() {
+    return false;
+}
+
 #else  // ALLOW_ADBD_DISABLE_VERITY == 0
 
 namespace {
@@ -922,6 +926,17 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (mount_scratch) fs_mgr_overlayfs_umount_scratch();
 
     return ret;
+}
+
+bool fs_mgr_overlayfs_is_setup() {
+    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (fs_mgr_overlayfs_invalid(fstab.get())) return false;
+    for (const auto& mount_point : fs_mgr_candidate_list(fstab.get())) {
+        if (fs_mgr_overlayfs_already_mounted(mount_point)) return true;
+    }
+    return false;
 }
 
 #endif  // ALLOW_ADBD_DISABLE_VERITY != 0
