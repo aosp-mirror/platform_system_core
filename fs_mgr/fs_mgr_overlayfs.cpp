@@ -395,6 +395,18 @@ bool fs_mgr_overlayfs_has_logical(const fstab* fstab) {
     return false;
 }
 
+void fs_mgr_overlayfs_umount_scratch() {
+    // Lazy umount will allow us to move on and possibly later
+    // establish a new fresh mount without requiring a reboot should
+    // the developer wish to restart.  Old references should melt
+    // away or have no data.  Main goal is to shut the door on the
+    // current overrides with an expectation of a subsequent reboot,
+    // thus any errors here are ignored.
+    umount2(kScratchMountPoint.c_str(), MNT_DETACH);
+    LINFO << "umount(" << kScratchMountPoint << ")";
+    rmdir(kScratchMountPoint.c_str());
+}
+
 // reduce 'DM_DEV_STATUS failed for scratch: No such device or address' noise
 std::string scratch_device_cache;
 
@@ -408,13 +420,7 @@ bool fs_mgr_overlayfs_teardown_scratch(const std::string& overlay, bool* change)
 
     auto save_errno = errno;
     if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
-        // Lazy umount will allow us to move on and possibly later
-        // establish a new fresh mount without requiring a reboot should
-        // the developer wish to restart.  Old references should melt
-        // away or have no data.  Main goal is to shut the door on the
-        // current overrides with an expectation of a subsequent reboot,
-        // thus any errors here are ignored.
-        umount2(kScratchMountPoint.c_str(), MNT_DETACH);
+        fs_mgr_overlayfs_umount_scratch();
     }
     auto builder = MetadataBuilder::New(super_device, slot_number);
     if (!builder) {
@@ -753,14 +759,20 @@ bool fs_mgr_overlayfs_scratch_can_be_mounted(const std::string& scratch_device) 
     return builder->FindPartition(android::base::Basename(kScratchMountPoint)) != nullptr;
 }
 
+bool fs_mgr_overlayfs_invalid(const fstab* fstab) {
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return true;
+
+    // in recovery or fastbootd mode, not allowed!
+    if (fs_mgr_access("/system/bin/recovery")) return true;
+
+    return !fstab;
+}
+
 }  // namespace
 
 bool fs_mgr_overlayfs_mount_all(fstab* fstab) {
     auto ret = false;
-
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return ret;
-
-    if (!fstab) return ret;
+    if (fs_mgr_overlayfs_invalid(fstab)) return ret;
 
     auto scratch_can_be_mounted = true;
     for (const auto& mount_point : fs_mgr_candidate_list(fstab)) {
@@ -773,8 +785,7 @@ bool fs_mgr_overlayfs_mount_all(fstab* fstab) {
                 fs_mgr_overlayfs_mount_scratch(scratch_device,
                                                fs_mgr_overlayfs_scratch_mount_type()) &&
                 !fs_mgr_access(kScratchMountPoint + kOverlayTopDir)) {
-                umount2(kScratchMountPoint.c_str(), MNT_DETACH);
-                rmdir(kScratchMountPoint.c_str());
+                fs_mgr_overlayfs_umount_scratch();
             }
         }
         if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
@@ -790,9 +801,9 @@ bool fs_mgr_overlayfs_mount_all(const std::vector<const fstab_rec*>& fsrecs) {
 }
 
 std::vector<std::string> fs_mgr_overlayfs_required_devices(fstab* fstab) {
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return {};
+    if (fs_mgr_overlayfs_invalid(fstab)) return {};
 
-    if (fs_mgr_get_entry_for_mount_point(const_cast<struct fstab*>(fstab), kScratchMountPoint)) {
+    if (fs_mgr_get_entry_for_mount_point(fstab, kScratchMountPoint)) {
         return {};
     }
 
@@ -867,6 +878,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     auto ret = true;
     // If scratch exists, but is not mounted, lets gain access to clean
     // specific override entries.
+    auto mount_scratch = false;
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
         auto scratch_device = fs_mgr_overlayfs_scratch_device();
         if (scratch_device.empty()) {
@@ -876,7 +888,8 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
             CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
                                    &scratch_device);
         }
-        fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type());
+        mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
+                                                       fs_mgr_overlayfs_scratch_mount_type());
     }
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         ret &= fs_mgr_overlayfs_teardown_one(overlay_mount_point, mount_point ?: "", change);
@@ -894,6 +907,8 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
         PERROR << "teardown";
         ret = false;
     }
+    if (mount_scratch) fs_mgr_overlayfs_umount_scratch();
+
     return ret;
 }
 
