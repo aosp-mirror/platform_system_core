@@ -764,6 +764,10 @@ static void transport_unref(atransport* t) {
 #if ADB_HOST
         if (t->IsTcpDevice() && !t->kicked()) {
             D("transport: %s unref (attempting reconnection)", t->serial.c_str());
+
+            // We need to clear the transport's keys, so that on the next connection, it tries
+            // again from the beginning.
+            t->ResetKeys();
             reconnect_handler.TrackTransport(t);
         } else {
             D("transport: %s unref (kicking and closing)", t->serial.c_str());
@@ -1328,10 +1332,20 @@ bool check_header(apacket* p, atransport* t) {
 
 #if ADB_HOST
 std::shared_ptr<RSA> atransport::NextKey() {
-    if (keys_.empty()) keys_ = adb_auth_get_private_keys();
+    if (keys_.empty()) {
+        LOG(INFO) << "fetching keys for transport " << this->serial_name();
+        keys_ = adb_auth_get_private_keys();
+
+        // We should have gotten at least one key: the one that's automatically generated.
+        CHECK(!keys_.empty());
+    }
 
     std::shared_ptr<RSA> result = keys_[0];
     keys_.pop_front();
     return result;
+}
+
+void atransport::ResetKeys() {
+    keys_.clear();
 }
 #endif
