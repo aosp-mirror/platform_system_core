@@ -130,7 +130,7 @@ bool fs_mgr_wait_for_file(const std::string& filename,
                           const std::chrono::milliseconds relative_timeout,
                           FileWaitMode wait_mode = FileWaitMode::Exists);
 
-int fs_mgr_set_blk_ro(const char* blockdev);
+bool fs_mgr_set_blk_ro(const std::string& blockdev);
 bool fs_mgr_update_for_slotselect(Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
