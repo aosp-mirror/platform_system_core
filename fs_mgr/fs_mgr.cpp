@@ -1411,89 +1411,74 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
     return 0;
 }
 
-/* This must be called after mount_all, because the mkswap command needs to be
- * available.
- */
-int fs_mgr_swapon_all(fstab* fstab) {
-    int i = 0;
-    int flags = 0;
-    int err = 0;
-    int ret = 0;
-    int status;
-    const char *mkswap_argv[2] = {
-        MKSWAP_BIN,
-        nullptr
-    };
-
-    if (!fstab) {
-        return -1;
-    }
-
-    for (i = 0; i < fstab->num_entries; i++) {
-        /* Skip non-swap entries */
-        if (strcmp(fstab->recs[i].fs_type, "swap")) {
+bool fs_mgr_swapon_all(const Fstab& fstab) {
+    bool ret = true;
+    for (const auto& entry : fstab) {
+        // Skip non-swap entries.
+        if (entry.fs_type != "swap") {
             continue;
         }
 
-        if (fstab->recs[i].zram_size > 0) {
-            /* A zram_size was specified, so we need to configure the
-             * device.  There is no point in having multiple zram devices
-             * on a system (all the memory comes from the same pool) so
-             * we can assume the device number is 0.
-             */
-            if (fstab->recs[i].max_comp_streams >= 0) {
+        if (entry.zram_size > 0) {
+            // A zram_size was specified, so we need to configure the
+            // device.  There is no point in having multiple zram devices
+            // on a system (all the memory comes from the same pool) so
+            // we can assume the device number is 0.
+            if (entry.max_comp_streams >= 0) {
                 auto zram_mcs_fp = std::unique_ptr<FILE, decltype(&fclose)>{
                         fopen(ZRAM_CONF_MCS, "re"), fclose};
-                if (zram_mcs_fp == NULL) {
+                if (zram_mcs_fp == nullptr) {
                     LERROR << "Unable to open zram conf comp device " << ZRAM_CONF_MCS;
-                    ret = -1;
+                    ret = false;
                     continue;
                 }
-                fprintf(zram_mcs_fp.get(), "%d\n", fstab->recs[i].max_comp_streams);
+                fprintf(zram_mcs_fp.get(), "%d\n", entry.max_comp_streams);
             }
 
             auto zram_fp =
                     std::unique_ptr<FILE, decltype(&fclose)>{fopen(ZRAM_CONF_DEV, "re+"), fclose};
-            if (zram_fp == NULL) {
+            if (zram_fp == nullptr) {
                 LERROR << "Unable to open zram conf device " << ZRAM_CONF_DEV;
-                ret = -1;
+                ret = false;
                 continue;
             }
-            fprintf(zram_fp.get(), "%" PRId64 "\n", fstab->recs[i].zram_size);
+            fprintf(zram_fp.get(), "%" PRId64 "\n", entry.zram_size);
         }
 
-        if (fstab->recs[i].fs_mgr_flags & MF_WAIT &&
-            !fs_mgr_wait_for_file(fstab->recs[i].blk_device, 20s)) {
-            LERROR << "Skipping mkswap for '" << fstab->recs[i].blk_device << "'";
-            ret = -1;
+        if (entry.fs_mgr_flags.wait && !fs_mgr_wait_for_file(entry.blk_device, 20s)) {
+            LERROR << "Skipping mkswap for '" << entry.blk_device << "'";
+            ret = false;
             continue;
         }
 
-        /* Initialize the swap area */
-        mkswap_argv[1] = fstab->recs[i].blk_device;
-        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv),
-                                      const_cast<char **>(mkswap_argv),
-                                      &status, true, LOG_KLOG, false, NULL,
-                                      NULL, 0);
+        // Initialize the swap area.
+        const char* mkswap_argv[2] = {
+                MKSWAP_BIN,
+                entry.blk_device.c_str(),
+        };
+        int err = 0;
+        int status;
+        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), const_cast<char**>(mkswap_argv),
+                                      &status, true, LOG_KLOG, false, nullptr, nullptr, 0);
         if (err) {
-            LERROR << "mkswap failed for " << fstab->recs[i].blk_device;
-            ret = -1;
+            LERROR << "mkswap failed for " << entry.blk_device;
+            ret = false;
             continue;
         }
 
         /* If -1, then no priority was specified in fstab, so don't set
          * SWAP_FLAG_PREFER or encode the priority */
-        if (fstab->recs[i].swap_prio >= 0) {
-            flags = (fstab->recs[i].swap_prio << SWAP_FLAG_PRIO_SHIFT) &
-                    SWAP_FLAG_PRIO_MASK;
+        int flags = 0;
+        if (entry.swap_prio >= 0) {
+            flags = (entry.swap_prio << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK;
             flags |= SWAP_FLAG_PREFER;
         } else {
             flags = 0;
         }
-        err = swapon(fstab->recs[i].blk_device, flags);
+        err = swapon(entry.blk_device.c_str(), flags);
         if (err) {
-            LERROR << "swapon failed for " << fstab->recs[i].blk_device;
-            ret = -1;
+            LERROR << "swapon failed for " << entry.blk_device;
+            ret = false;
         }
     }
 
