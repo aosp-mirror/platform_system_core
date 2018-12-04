@@ -9,7 +9,6 @@ cc_defaults {
         "-Wno-nullability-completeness",
         "-Os",
     ],
-    cpp_std: "gnu++17",
 
     local_include_dirs: ["include"],
 }

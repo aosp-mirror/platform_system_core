@@ -144,8 +144,6 @@ cc_binary {
     static_libs: [
         "libhealthhalutils",
     ],
-
-    cpp_std: "c++17",
 }
 
 cc_defaults {
@@ -212,7 +210,6 @@ cc_library_host_static {
     name: "libfastboot",
     defaults: ["fastboot_host_defaults"],
 
-    cpp_std: "c++17",
     srcs: [
         "bootimg_utils.cpp",
         "fastboot.cpp",
