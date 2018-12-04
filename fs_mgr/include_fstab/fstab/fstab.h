@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __CORE_FS_TAB_H
-#define __CORE_FS_TAB_H
+#pragma once
 
 #include <linux/dm-ioctl.h>
 #include <stdbool.h>
@@ -25,6 +24,7 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
 /*
  * The entries must be kept in the same order as they were seen in the fstab.
@@ -95,4 +95,82 @@ int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
 std::string fs_mgr_get_slot_suffix();
 std::set<std::string> fs_mgr_get_boot_devices();
 
-#endif /* __CORE_FS_TAB_H */
+struct FstabEntry {
+    std::string blk_device;
+    std::string logical_partition_name;
+    std::string mount_point;
+    std::string fs_type;
+    unsigned long flags = 0;
+    std::string fs_options;
+    std::string key_loc;
+    std::string key_dir;
+    std::string verity_loc;
+    off64_t length = 0;
+    std::string label;
+    int partnum = -1;
+    int swap_prio = -1;
+    int max_comp_streams = 0;
+    off64_t zram_size = 0;
+    off64_t reserved_size = 0;
+    int file_contents_mode = 0;
+    int file_names_mode = 0;
+    off64_t erase_blk_size = 0;
+    off64_t logical_blk_size = 0;
+    std::string sysfs_path;
+
+    // TODO: Remove this union once fstab_rec is deprecated. It only serves as a
+    // convenient way to convert between fstab_rec::fs_mgr_flags and these bools.
+    union {
+        int val;
+        struct {
+            bool wait : 1;
+            bool check : 1;
+            bool crypt : 1;
+            bool nonremovable : 1;
+            bool vold_managed : 1;
+            bool length : 1;
+            bool recovery_only : 1;
+            bool swap_prio : 1;
+            bool zram_size : 1;
+            bool verify : 1;
+            bool force_crypt : 1;
+            bool no_emulated_sd : 1;  // No emulated sdcard daemon; sd card is the only external
+                                      // storage.
+            bool no_trim : 1;
+            bool file_encryption : 1;
+            bool formattable : 1;
+            bool slot_select : 1;
+            bool force_fde_or_fbe : 1;
+            bool late_mount : 1;
+            bool no_fail : 1;
+            bool verify_at_boot : 1;
+            bool max_comp_streams : 1;
+            bool reserved_size : 1;
+            bool quota : 1;
+            bool erase_blk_size : 1;
+            bool logical_blk_size : 1;
+            bool avb : 1;
+            bool key_directory : 1;
+            bool sysfs : 1;
+            bool logical : 1;
+            bool checkpoint_blk : 1;
+            bool checkpoint_fs : 1;
+        };
+    } fs_mgr_flags;
+
+    bool is_encryptable() const {
+        return fs_mgr_flags.crypt || fs_mgr_flags.force_crypt || fs_mgr_flags.force_fde_or_fbe;
+    }
+};
+
+// An Fstab is a collection of FstabEntry structs.
+using Fstab = std::vector<FstabEntry>;
+
+bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
+bool ReadFstabFromDt(Fstab* fstab);
+bool ReadDefaultFstab(Fstab* fstab);
+
+// Temporary conversion functions.
+FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec);
+Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab);
+fstab* FstabToLegacyFstab(const Fstab& fstab);
