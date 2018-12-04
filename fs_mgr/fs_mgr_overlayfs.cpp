@@ -675,14 +675,26 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
         }
         changed = true;
     }
-    // Take half of free space, minimum 512MB or free space - 256KB margin.
+    // Take half of free space, minimum 512MB or maximum free - margin.
     static constexpr auto kMinimumSize = uint64_t(512 * 1024 * 1024);
-    static constexpr auto kMarginSize = uint64_t(256 * 1024);
     if (partition->size() < kMinimumSize) {
         auto partition_size =
                 builder->AllocatableSpace() - builder->UsedSpace() + partition->size();
         if ((partition_size > kMinimumSize) || !partition->size()) {
-            partition_size = std::max(std::min(kMinimumSize, partition_size - kMarginSize),
+            // Leave some space for free space jitter of a few erase
+            // blocks, in case they are needed for any individual updates
+            // to any other partition that needs to be flashed while
+            // overlayfs is in force.  Of course if margin_size is not
+            // enough could normally get a flash failure, so
+            // ResizePartition() will delete the scratch partition in
+            // order to fulfill.  Deleting scratch will destroy all of
+            // the adb remount overrides :-( .
+            auto margin_size = uint64_t(3 * 256 * 1024);
+            BlockDeviceInfo info;
+            if (builder->GetBlockDeviceInfo(partition_name, &info)) {
+                margin_size = 3 * info.logical_block_size;
+            }
+            partition_size = std::max(std::min(kMinimumSize, partition_size - margin_size),
                                       partition_size / 2);
             if (partition_size > partition->size()) {
                 if (!builder->ResizePartition(partition, partition_size)) {
