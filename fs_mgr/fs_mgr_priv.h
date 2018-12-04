@@ -22,6 +22,7 @@
 
 #include <android-base/logging.h>
 #include <fs_mgr.h>
+#include <fstab/fstab.h>
 
 #include "fs_mgr_priv_boot_config.h"
 
@@ -130,7 +131,7 @@ bool fs_mgr_wait_for_file(const std::string& filename,
                           FileWaitMode wait_mode = FileWaitMode::Exists);
 
 int fs_mgr_set_blk_ro(const char* blockdev);
-bool fs_mgr_update_for_slotselect(fstab* fstab);
+bool fs_mgr_update_for_slotselect(Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
