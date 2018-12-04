@@ -89,4 +89,9 @@ Caveats
   if higher than 4.6.
 - *adb enable-verity* will free up overlayfs and as a bonus the
   device will be reverted pristine to before any content was updated.
+- If dynamic partitions runs out of space, resizing a logical
+  partition larger may fail because of the scratch partition.
+  If this happens, either fastboot flashall or adb enable-verity can
+  be used to clear scratch storage to permit the flash.
+  Then reinstate the overrides and continue.
 - File bugs or submit fixes for review.
