@@ -31,36 +31,23 @@ std::string fs_mgr_get_slot_suffix() {
 }
 
 // Updates |fstab| for slot_suffix. Returns true on success, false on error.
-bool fs_mgr_update_for_slotselect(struct fstab *fstab) {
+bool fs_mgr_update_for_slotselect(Fstab* fstab) {
     int n;
     std::string ab_suffix;
 
-    for (n = 0; n < fstab->num_entries; n++) {
-        fstab_rec& record = fstab->recs[n];
-        if (record.fs_mgr_flags & MF_SLOTSELECT) {
-            if (ab_suffix.empty()) {
-                ab_suffix = fs_mgr_get_slot_suffix();
-                // Return false if failed to get ab_suffix when MF_SLOTSELECT is specified.
-                if (ab_suffix.empty()) return false;
-            }
-
-            char* new_blk_device;
-            if (asprintf(&new_blk_device, "%s%s", record.blk_device, ab_suffix.c_str()) <= 0) {
-                return false;
-            }
-            free(record.blk_device);
-            record.blk_device = new_blk_device;
-
-            char* new_partition_name;
-            if (record.logical_partition_name) {
-                if (asprintf(&new_partition_name, "%s%s", record.logical_partition_name,
-                             ab_suffix.c_str()) <= 0) {
-                    return false;
-                }
-                free(record.logical_partition_name);
-                record.logical_partition_name = new_partition_name;
-            }
+    for (auto& entry : *fstab) {
+        if (!entry.fs_mgr_flags.slot_select) {
+            continue;
         }
+
+        if (ab_suffix.empty()) {
+            ab_suffix = fs_mgr_get_slot_suffix();
+            // Return false if failed to get ab_suffix when MF_SLOTSELECT is specified.
+            if (ab_suffix.empty()) return false;
+        }
+
+        entry.blk_device = entry.blk_device + ab_suffix;
+        entry.logical_partition_name = entry.logical_partition_name + ab_suffix;
     }
     return true;
 }

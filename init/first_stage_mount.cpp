@@ -413,7 +413,14 @@ bool FirstStageMount::MountPartitions() {
     // heads up for instantiating required device(s) for overlayfs logic
     const auto devices = fs_mgr_overlayfs_required_devices(device_tree_fstab_.get());
     for (auto const& device : devices) {
-        InitMappedDevice(device);
+        if (android::base::StartsWith(device, "/dev/block/by-name/")) {
+            required_devices_partition_names_.emplace(basename(device.c_str()));
+            auto uevent_callback = [this](const Uevent& uevent) { return UeventCallback(uevent); };
+            uevent_listener_.RegenerateUevents(uevent_callback);
+            uevent_listener_.Poll(uevent_callback, 10s);
+        } else {
+            InitMappedDevice(device);
+        }
     }
 
     fs_mgr_overlayfs_mount_all(device_tree_fstab_.get());

@@ -82,6 +82,7 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
+using android::base::Realpath;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
 using android::fs_mgr::AvbHandle;
@@ -100,7 +101,7 @@ enum FsStatFlags {
     FS_STAT_FULL_MOUNT_FAILED = 0x0100,
     FS_STAT_E2FSCK_FAILED = 0x0200,
     FS_STAT_E2FSCK_FS_FIXED = 0x0400,
-    FS_STAT_EXT4_INVALID_MAGIC = 0x0800,
+    FS_STAT_INVALID_MAGIC = 0x0800,
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
     FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
@@ -143,6 +144,18 @@ static bool is_extfs(const std::string& fs_type) {
     return fs_type == "ext4" || fs_type == "ext3" || fs_type == "ext2";
 }
 
+static bool is_f2fs(const std::string& fs_type) {
+    return fs_type == "f2fs";
+}
+
+static std::string realpath(const char* blk_device) {
+    std::string real_path;
+    if (!Realpath(blk_device, &real_path)) {
+        real_path = blk_device;
+    }
+    return real_path;
+}
+
 static bool should_force_check(int fs_stat) {
     return fs_stat &
            (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
@@ -160,11 +173,12 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
     const char* e2fsck_argv[] = {E2FSCK_BIN, "-y", blk_device};
     const char* e2fsck_forced_argv[] = {E2FSCK_BIN, "-f", "-y", blk_device};
 
+    if (*fs_stat & FS_STAT_INVALID_MAGIC) {  // will fail, so do not try
+        return;
+    }
+
     /* Check for the types of filesystems we know how to check */
     if (is_extfs(fs_type)) {
-        if (*fs_stat & FS_STAT_EXT4_INVALID_MAGIC) {  // will fail, so do not try
-            return;
-        }
         /*
          * First try to mount and unmount the filesystem.  We do this because
          * the kernel is more efficient than e2fsck in running the journal and
@@ -214,10 +228,10 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
          * (e.g. recent SDK system images). Detect these and skip the check.
          */
         if (access(E2FSCK_BIN, X_OK)) {
-            LINFO << "Not running " << E2FSCK_BIN << " on " << blk_device
+            LINFO << "Not running " << E2FSCK_BIN << " on " << realpath(blk_device)
                   << " (executable not in system image)";
         } else {
-            LINFO << "Running " << E2FSCK_BIN << " on " << blk_device;
+            LINFO << "Running " << E2FSCK_BIN << " on " << realpath(blk_device);
             if (should_force_check(*fs_stat)) {
                 ret = android_fork_execvp_ext(
                     ARRAY_SIZE(e2fsck_forced_argv), const_cast<char**>(e2fsck_forced_argv), &status,
@@ -237,13 +251,9 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
                 *fs_stat |= FS_STAT_E2FSCK_FS_FIXED;
             }
         }
-    } else if (!strcmp(fs_type, "f2fs")) {
-            const char *f2fs_fsck_argv[] = {
-                    F2FS_FSCK_BIN,
-                    "-a",
-                    blk_device
-            };
-        LINFO << "Running " << F2FS_FSCK_BIN << " -a " << blk_device;
+    } else if (is_f2fs(fs_type)) {
+        const char* f2fs_fsck_argv[] = {F2FS_FSCK_BIN, "-a", blk_device};
+        LINFO << "Running " << F2FS_FSCK_BIN << " -a " << realpath(blk_device);
 
         ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv),
                                       const_cast<char **>(f2fs_fsck_argv),
@@ -277,7 +287,7 @@ static bool is_ext4_superblock_valid(const struct ext4_super_block* es) {
 }
 
 // Read the primary superblock from an ext4 filesystem.  On failure return
-// false.  If it's not an ext4 filesystem, also set FS_STAT_EXT4_INVALID_MAGIC.
+// false.  If it's not an ext4 filesystem, also set FS_STAT_INVALID_MAGIC.
 static bool read_ext4_superblock(const char* blk_device, struct ext4_super_block* sb, int* fs_stat) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
 
@@ -294,7 +304,7 @@ static bool read_ext4_superblock(const char* blk_device, struct ext4_super_block
     if (!is_ext4_superblock_valid(sb)) {
         LINFO << "Invalid ext4 superblock on '" << blk_device << "'";
         // not a valid fs, tune2fs, fsck, and mount  will all fail.
-        *fs_stat |= FS_STAT_EXT4_INVALID_MAGIC;
+        *fs_stat |= FS_STAT_INVALID_MAGIC;
         return false;
     }
     *fs_stat |= FS_STAT_IS_EXT4;
@@ -422,6 +432,36 @@ static void tune_encrypt(const char* blk_device, const struct fstab_rec* rec,
     }
 }
 
+// Read the primary superblock from an f2fs filesystem.  On failure return
+// false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
+#define F2FS_BLKSIZE 4096
+#define F2FS_SUPER_OFFSET 1024
+static bool read_f2fs_superblock(const char* blk_device, int* fs_stat) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
+    __le32 sb1, sb2;
+
+    if (fd < 0) {
+        PERROR << "Failed to open '" << blk_device << "'";
+        return false;
+    }
+
+    if (pread(fd, &sb1, sizeof(sb1), F2FS_SUPER_OFFSET) != sizeof(sb1)) {
+        PERROR << "Can't read '" << blk_device << "' superblock1";
+        return false;
+    }
+    if (pread(fd, &sb2, sizeof(sb2), F2FS_BLKSIZE + F2FS_SUPER_OFFSET) != sizeof(sb2)) {
+        PERROR << "Can't read '" << blk_device << "' superblock2";
+        return false;
+    }
+
+    if (sb1 != cpu_to_le32(F2FS_SUPER_MAGIC) && sb2 != cpu_to_le32(F2FS_SUPER_MAGIC)) {
+        LINFO << "Invalid f2fs superblock on '" << blk_device << "'";
+        *fs_stat |= FS_STAT_INVALID_MAGIC;
+        return false;
+    }
+    return true;
+}
+
 //
 // Prepare the filesystem on the given block device to be mounted.
 //
@@ -449,6 +489,10 @@ static int prepare_fs_for_mount(const char* blk_device, const struct fstab_rec* 
             // Note: quotas should be enabled before running fsck.
             tune_quota(blk_device, rec, &sb, &fs_stat);
         } else {
+            return fs_stat;
+        }
+    } else if (is_f2fs(rec->fs_type)) {
+        if (!read_f2fs_superblock(blk_device, &fs_stat)) {
             return fs_stat;
         }
     }
@@ -617,9 +661,10 @@ static int mount_with_alternatives(fstab* fstab, int start_idx, int* end_idx, in
             }
 
             int fs_stat = prepare_fs_for_mount(fstab->recs[i].blk_device, &fstab->recs[i]);
-            if (fs_stat & FS_STAT_EXT4_INVALID_MAGIC) {
-                LERROR << __FUNCTION__ << "(): skipping mount, invalid ext4, mountpoint="
-                       << fstab->recs[i].mount_point << " rec[" << i
+            if (fs_stat & FS_STAT_INVALID_MAGIC) {
+                LERROR << __FUNCTION__ << "(): skipping mount due to invalid magic, mountpoint="
+                       << fstab->recs[i].mount_point
+                       << " blk_dev=" << realpath(fstab->recs[i].blk_device) << " rec[" << i
                        << "].fs_type=" << fstab->recs[i].fs_type;
                 mount_errno = EINVAL;  // continue bootup for FDE
                 continue;
@@ -911,7 +956,7 @@ class CheckpointManager {
   private:
     bool UpdateCheckpointPartition(struct fstab_rec* rec) {
         if (fs_mgr_is_checkpoint_fs(rec)) {
-            if (!strcmp(rec->fs_type, "f2fs")) {
+            if (is_f2fs(rec->fs_type)) {
                 std::string opts(rec->fs_options);
 
                 opts += ",checkpoint=disable";
@@ -1002,7 +1047,7 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
         /* Skip mounting the root partition, as it will already have been mounted */
         if (!strcmp(fstab->recs[i].mount_point, "/") ||
             !strcmp(fstab->recs[i].mount_point, "/system")) {
-            if ((fstab->recs[i].fs_mgr_flags & MS_RDONLY) != 0) {
+            if ((fstab->recs[i].flags & MS_RDONLY) != 0) {
                 fs_mgr_set_blk_ro(fstab->recs[i].blk_device);
             }
             continue;
@@ -1104,10 +1149,9 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
              * at two different lines in the fstab.  Use the top one for formatting
              * as that is the preferred one.
              */
-            LERROR << __FUNCTION__ << "(): " << fstab->recs[top_idx].blk_device
-                   << " is wiped and " << fstab->recs[top_idx].mount_point
-                   << " " << fstab->recs[top_idx].fs_type
-                   << " is formattable. Format it.";
+            LERROR << __FUNCTION__ << "(): " << realpath(fstab->recs[top_idx].blk_device)
+                   << " is wiped and " << fstab->recs[top_idx].mount_point << " "
+                   << fstab->recs[top_idx].fs_type << " is formattable. Format it.";
 
             checkpoint_manager.Revert(&fstab->recs[top_idx]);
 
