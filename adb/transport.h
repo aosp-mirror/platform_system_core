@@ -258,6 +258,7 @@ class atransport {
 
 #if ADB_HOST
     std::shared_ptr<RSA> NextKey();
+    void ResetKeys();
 #endif
 
     char token[TOKEN_SIZE] = {};
