@@ -591,11 +591,25 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         free_regions = PrioritizeSecondHalfOfSuper(free_regions);
     }
 
-    // Find gaps that we can use for new extents. Note we store new extents in a
-    // temporary vector, and only commit them if we are guaranteed enough free
-    // space.
+    // Note we store new extents in a temporary vector, and only commit them
+    // if we are guaranteed enough free space.
     std::vector<std::unique_ptr<LinearExtent>> new_extents;
+
+    // If the last extent in the partition has a size < alignment, then the
+    // difference is unallocatable due to being misaligned. We peek for that
+    // case here to avoid wasting space.
+    if (auto extent = ExtendFinalExtent(partition, free_regions, sectors_needed)) {
+        sectors_needed -= extent->num_sectors();
+        new_extents.emplace_back(std::move(extent));
+    }
+
     for (auto& region : free_regions) {
+        // Note: this comes first, since we may enter the loop not needing any
+        // more sectors.
+        if (!sectors_needed) {
+            break;
+        }
+
         if (region.length() % sectors_per_block != 0) {
             // This should never happen, because it would imply that we
             // once allocated an extent that was not a multiple of the
@@ -618,9 +632,6 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         auto extent = std::make_unique<LinearExtent>(sectors, region.device_index, region.start);
         new_extents.push_back(std::move(extent));
         sectors_needed -= sectors;
-        if (!sectors_needed) {
-            break;
-        }
     }
     if (sectors_needed) {
         LERROR << "Not enough free space to expand partition: " << partition->name();
@@ -666,6 +677,64 @@ std::vector<MetadataBuilder::Interval> MetadataBuilder::PrioritizeSecondHalfOfSu
     }
     second_half.insert(second_half.end(), first_half.begin(), first_half.end());
     return second_half;
+}
+
+std::unique_ptr<LinearExtent> MetadataBuilder::ExtendFinalExtent(
+        Partition* partition, const std::vector<Interval>& free_list,
+        uint64_t sectors_needed) const {
+    if (partition->extents().empty()) {
+        return nullptr;
+    }
+    LinearExtent* extent = partition->extents().back()->AsLinearExtent();
+    if (!extent) {
+        return nullptr;
+    }
+
+    // If the sector ends where the next aligned chunk begins, then there's
+    // no missing gap to try and allocate.
+    const auto& block_device = block_devices_[extent->device_index()];
+    uint64_t next_aligned_sector = AlignSector(block_device, extent->end_sector());
+    if (extent->end_sector() == next_aligned_sector) {
+        return nullptr;
+    }
+
+    uint64_t num_sectors = std::min(next_aligned_sector - extent->end_sector(), sectors_needed);
+    auto new_extent = std::make_unique<LinearExtent>(num_sectors, extent->device_index(),
+                                                     extent->end_sector());
+    if (IsAnyRegionAllocated(*new_extent.get()) ||
+        IsAnyRegionCovered(free_list, *new_extent.get())) {
+        LERROR << "Misaligned region " << new_extent->physical_sector() << ".."
+               << new_extent->end_sector() << " was allocated or marked allocatable.";
+        return nullptr;
+    }
+    return new_extent;
+}
+
+bool MetadataBuilder::IsAnyRegionCovered(const std::vector<Interval>& regions,
+                                         const LinearExtent& candidate) const {
+    for (const auto& region : regions) {
+        if (region.device_index == candidate.device_index() &&
+            (candidate.OwnsSector(region.start) || candidate.OwnsSector(region.end))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MetadataBuilder::IsAnyRegionAllocated(const LinearExtent& candidate) const {
+    for (const auto& partition : partitions_) {
+        for (const auto& extent : partition->extents()) {
+            LinearExtent* linear = extent->AsLinearExtent();
+            if (!linear || linear->device_index() != candidate.device_index()) {
+                continue;
+            }
+            if (linear->OwnsSector(candidate.physical_sector()) ||
+                linear->OwnsSector(candidate.end_sector() - 1)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void MetadataBuilder::ShrinkPartition(Partition* partition, uint64_t aligned_size) {

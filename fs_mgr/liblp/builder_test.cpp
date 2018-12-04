@@ -218,7 +218,7 @@ TEST_F(BuilderTest, InternalPartitionAlignment) {
     // Check that each starting sector is aligned.
     for (const auto& extent : exported->extents) {
         ASSERT_EQ(extent.target_type, LP_TARGET_TYPE_LINEAR);
-        EXPECT_EQ(extent.num_sectors, 8);
+        EXPECT_EQ(extent.num_sectors, 80);
 
         uint64_t lba = extent.target_data * LP_SECTOR_SIZE;
         uint64_t aligned_lba = AlignTo(lba, device_info.alignment, device_info.alignment_offset);
@@ -226,7 +226,7 @@ TEST_F(BuilderTest, InternalPartitionAlignment) {
     }
 
     // Sanity check one extent.
-    EXPECT_EQ(exported->extents.back().target_data, 30656);
+    EXPECT_EQ(exported->extents.back().target_data, 3008);
 }
 
 TEST_F(BuilderTest, UseAllDiskSpace) {
@@ -797,19 +797,43 @@ TEST_F(BuilderTest, ABExtents) {
     EXPECT_EQ(system_a->extents().size(), static_cast<size_t>(1));
     EXPECT_EQ(system_b->extents().size(), static_cast<size_t>(1));
     ASSERT_TRUE(builder->ResizePartition(system_b, 6_GiB));
-    EXPECT_EQ(system_b->extents().size(), static_cast<size_t>(3));
+    EXPECT_EQ(system_b->extents().size(), static_cast<size_t>(2));
 
     unique_ptr<LpMetadata> exported = builder->Export();
     ASSERT_NE(exported, nullptr);
-    ASSERT_EQ(exported->extents.size(), static_cast<size_t>(4));
+    ASSERT_EQ(exported->extents.size(), static_cast<size_t>(3));
     EXPECT_EQ(exported->extents[0].target_data, 10487808);
-    EXPECT_EQ(exported->extents[0].num_sectors, 4194304);
-    EXPECT_EQ(exported->extents[1].target_data, 14682624);
-    EXPECT_EQ(exported->extents[1].num_sectors, 6288896);
-    EXPECT_EQ(exported->extents[2].target_data, 6292992);
-    EXPECT_EQ(exported->extents[2].num_sectors, 2099712);
-    EXPECT_EQ(exported->extents[3].target_data, 1536);
-    EXPECT_EQ(exported->extents[3].num_sectors, 6291456);
+    EXPECT_EQ(exported->extents[0].num_sectors, 10483712);
+    EXPECT_EQ(exported->extents[1].target_data, 6292992);
+    EXPECT_EQ(exported->extents[1].num_sectors, 2099200);
+    EXPECT_EQ(exported->extents[2].target_data, 1536);
+    EXPECT_EQ(exported->extents[2].num_sectors, 6291456);
+}
+
+TEST_F(BuilderTest, PartialExtents) {
+    // super has a minimum extent size of 768KiB.
+    BlockDeviceInfo device_info("super", 1_GiB, 768 * 1024, 0, 4096);
+    auto builder = MetadataBuilder::New(device_info, 65536, 1);
+    ASSERT_NE(builder, nullptr);
+    Partition* system = builder->AddPartition("system", 0);
+    ASSERT_NE(system, nullptr);
+    Partition* vendor = builder->AddPartition("vendor", 0);
+    ASSERT_NE(vendor, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(system, device_info.alignment + 4096));
+    ASSERT_TRUE(builder->ResizePartition(vendor, device_info.alignment));
+    ASSERT_EQ(system->size(), device_info.alignment + 4096);
+    ASSERT_EQ(vendor->size(), device_info.alignment);
+
+    ASSERT_TRUE(builder->ResizePartition(system, device_info.alignment * 2));
+    ASSERT_EQ(system->extents().size(), static_cast<size_t>(1));
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    ASSERT_EQ(exported->extents.size(), static_cast<size_t>(2));
+    EXPECT_EQ(exported->extents[0].target_data, 1536);
+    EXPECT_EQ(exported->extents[0].num_sectors, 3072);
+    EXPECT_EQ(exported->extents[1].target_data, 4608);
+    EXPECT_EQ(exported->extents[1].num_sectors, 1536);
 }
 
 TEST_F(BuilderTest, UpdateSuper) {
