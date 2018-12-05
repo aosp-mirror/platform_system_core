@@ -84,7 +84,7 @@ class FirstStageMount {
 
     bool need_dm_verity_;
 
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> device_tree_fstab_;
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab_;
     std::string lp_metadata_partition_;
     std::vector<fstab_rec*> mount_fstab_recs_;
     std::set<std::string> required_devices_partition_names_;
@@ -132,15 +132,27 @@ static bool IsRecoveryMode() {
 // Class Definitions
 // -----------------
 FirstStageMount::FirstStageMount()
-    : need_dm_verity_(false), device_tree_fstab_(fs_mgr_read_fstab_dt(), fs_mgr_free_fstab) {
-    if (device_tree_fstab_) {
-        // Stores device_tree_fstab_->recs[] into mount_fstab_recs_ (vector<fstab_rec*>)
-        // for easier manipulation later, e.g., range-base for loop.
-        for (int i = 0; i < device_tree_fstab_->num_entries; i++) {
-            mount_fstab_recs_.push_back(&device_tree_fstab_->recs[i]);
+    : need_dm_verity_(false), fstab_(fs_mgr_read_fstab_dt(), fs_mgr_free_fstab) {
+    // Stores fstab_->recs[] into mount_fstab_recs_ (vector<fstab_rec*>)
+    // for easier manipulation later, e.g., range-base for loop.
+    if (fstab_) {
+        // DT Fstab predated having a first_stage_mount fs_mgr flag, so if it exists, we use it.
+        for (int i = 0; i < fstab_->num_entries; i++) {
+            mount_fstab_recs_.push_back(&fstab_->recs[i]);
         }
     } else {
-        LOG(INFO) << "Failed to read fstab from device tree";
+        // Fstab found in first stage ramdisk, which should be a copy of the normal fstab.
+        // Mounts intended for first stage are explicitly flagged as such.
+        fstab_.reset(fs_mgr_read_fstab_default());
+        if (fstab_) {
+            for (int i = 0; i < fstab_->num_entries; i++) {
+                if (fs_mgr_is_first_stage_mount(&fstab_->recs[i])) {
+                    mount_fstab_recs_.push_back(&fstab_->recs[i]);
+                }
+            }
+        } else {
+            LOG(INFO) << "Failed to read fstab from device tree";
+        }
     }
 
     auto boot_devices = fs_mgr_get_boot_devices();
@@ -412,7 +424,7 @@ bool FirstStageMount::MountPartitions() {
     }
 
     // heads up for instantiating required device(s) for overlayfs logic
-    const auto devices = fs_mgr_overlayfs_required_devices(device_tree_fstab_.get());
+    const auto devices = fs_mgr_overlayfs_required_devices(mount_fstab_recs_);
     for (auto const& device : devices) {
         if (android::base::StartsWith(device, "/dev/block/by-name/")) {
             required_devices_partition_names_.emplace(basename(device.c_str()));
@@ -424,7 +436,7 @@ bool FirstStageMount::MountPartitions() {
         }
     }
 
-    fs_mgr_overlayfs_mount_all(device_tree_fstab_.get());
+    fs_mgr_overlayfs_mount_all(mount_fstab_recs_);
 
     return true;
 }
