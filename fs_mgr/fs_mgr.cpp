@@ -83,6 +83,8 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using android::base::Realpath;
+using android::base::StartsWith;
+using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
 using android::fs_mgr::AvbHandle;
@@ -525,26 +527,15 @@ static void remove_trailing_slashes(char *n)
     }
 }
 
-/*
- * Mark the given block device as read-only, using the BLKROSET ioctl.
- * Return 0 on success, and -1 on error.
- */
-int fs_mgr_set_blk_ro(const char *blockdev)
-{
-    int fd;
-    int rc = -1;
-    int ON = 1;
-
-    fd = TEMP_FAILURE_RETRY(open(blockdev, O_RDONLY | O_CLOEXEC));
+// Mark the given block device as read-only, using the BLKROSET ioctl.
+bool fs_mgr_set_blk_ro(const std::string& blockdev) {
+    unique_fd fd(TEMP_FAILURE_RETRY(open(blockdev.c_str(), O_RDONLY | O_CLOEXEC)));
     if (fd < 0) {
-        // should never happen
-        return rc;
+        return false;
     }
 
-    rc = ioctl(fd, BLKROSET, &ON);
-    close(fd);
-
-    return rc;
+    int ON = 1;
+    return ioctl(fd, BLKROSET, &ON) == 0;
 }
 
 // Orange state means the device is unlocked, see the following link for details.
@@ -712,82 +703,65 @@ static int mount_with_alternatives(fstab* fstab, int start_idx, int* end_idx, in
     return 0;
 }
 
-static int translate_ext_labels(struct fstab_rec *rec)
-{
-    DIR *blockdir = NULL;
-    struct dirent *ent;
-    char *label;
-    size_t label_len;
-    int ret = -1;
-
-    if (strncmp(rec->blk_device, "LABEL=", 6))
-        return 0;
-
-    label = rec->blk_device + 6;
-    label_len = strlen(label);
-
-    if (label_len > 16) {
-        LERROR << "FS label is longer than allowed by filesystem";
-        goto out;
+static bool TranslateExtLabels(fstab_rec* rec) {
+    if (!StartsWith(rec->blk_device, "LABEL=")) {
+        return true;
     }
 
+    std::string label = rec->blk_device + 6;
+    if (label.size() > 16) {
+        LERROR << "FS label is longer than allowed by filesystem";
+        return false;
+    }
 
-    blockdir = opendir("/dev/block");
+    auto blockdir = std::unique_ptr<DIR, decltype(&closedir)>{opendir("/dev/block"), closedir};
     if (!blockdir) {
         LERROR << "couldn't open /dev/block";
-        goto out;
+        return false;
     }
 
-    while ((ent = readdir(blockdir))) {
-        int fd;
-        char super_buf[1024];
-        struct ext4_super_block *sb;
-
+    struct dirent* ent;
+    while ((ent = readdir(blockdir.get()))) {
         if (ent->d_type != DT_BLK)
             continue;
 
-        fd = openat(dirfd(blockdir), ent->d_name, O_RDONLY);
+        unique_fd fd(TEMP_FAILURE_RETRY(
+                openat(dirfd(blockdir.get()), ent->d_name, O_RDONLY | O_CLOEXEC)));
         if (fd < 0) {
             LERROR << "Cannot open block device /dev/block/" << ent->d_name;
-            goto out;
+            return false;
         }
 
+        ext4_super_block super_block;
         if (TEMP_FAILURE_RETRY(lseek(fd, 1024, SEEK_SET)) < 0 ||
-            TEMP_FAILURE_RETRY(read(fd, super_buf, 1024)) != 1024) {
-            /* Probably a loopback device or something else without a readable
-             * superblock.
-             */
-            close(fd);
+            TEMP_FAILURE_RETRY(read(fd, &super_block, sizeof(super_block))) !=
+                    sizeof(super_block)) {
+            // Probably a loopback device or something else without a readable superblock.
             continue;
         }
 
-        sb = (struct ext4_super_block *)super_buf;
-        if (sb->s_magic != EXT4_SUPER_MAGIC) {
+        if (super_block.s_magic != EXT4_SUPER_MAGIC) {
             LINFO << "/dev/block/" << ent->d_name << " not ext{234}";
             continue;
         }
 
-        if (!strncmp(label, sb->s_volume_name, label_len)) {
-            char *new_blk_device;
+        if (label == super_block.s_volume_name) {
+            char* new_blk_device;
 
             if (asprintf(&new_blk_device, "/dev/block/%s", ent->d_name) < 0) {
                 LERROR << "Could not allocate block device string";
-                goto out;
+                return false;
             }
 
-            LINFO << "resolved label " << rec->blk_device << " to "
-                  << new_blk_device;
+            LINFO << "resolved label " << rec->blk_device << " to " << new_blk_device;
 
             free(rec->blk_device);
             rec->blk_device = new_blk_device;
-            ret = 0;
-            break;
+            return true;
         }
     }
 
-out:
-    closedir(blockdir);
-    return ret;
+    return false;
 }
 
 static bool needs_block_encryption(const struct fstab_rec* rec)
@@ -966,9 +940,8 @@ class CheckpointManager {
                 LERROR << rec->fs_type << " does not implement checkpoints.";
             }
         } else if (fs_mgr_is_checkpoint_blk(rec)) {
-            android::base::unique_fd fd(
-                    TEMP_FAILURE_RETRY(open(rec->blk_device, O_RDONLY | O_CLOEXEC)));
-            if (!fd) {
+            unique_fd fd(TEMP_FAILURE_RETRY(open(rec->blk_device, O_RDONLY | O_CLOEXEC)));
+            if (fd < 0) {
                 PERROR << "Cannot open device " << rec->blk_device;
                 return false;
             }
@@ -1055,8 +1028,7 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
 
         /* Translate LABEL= file system labels into block devices */
         if (is_extfs(fstab->recs[i].fs_type)) {
-            int tret = translate_ext_labels(&fstab->recs[i]);
-            if (tret < 0) {
+            if (!TranslateExtLabels(&fstab->recs[i])) {
                 LERROR << "Could not translate label to block device";
                 continue;
             }
@@ -1157,12 +1129,12 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
 
             if (fs_mgr_is_encryptable(&fstab->recs[top_idx]) &&
                 strcmp(fstab->recs[top_idx].key_loc, KEY_IN_FOOTER)) {
-                int fd = open(fstab->recs[top_idx].key_loc, O_WRONLY);
+                unique_fd fd(TEMP_FAILURE_RETRY(
+                        open(fstab->recs[top_idx].key_loc, O_WRONLY | O_CLOEXEC)));
                 if (fd >= 0) {
                     LINFO << __FUNCTION__ << "(): also wipe "
                           << fstab->recs[top_idx].key_loc;
                     wipe_block_device(fd, get_file_size(fd));
-                    close(fd);
                 } else {
                     PERROR << __FUNCTION__ << "(): "
                            << fstab->recs[top_idx].key_loc << " wouldn't open";
