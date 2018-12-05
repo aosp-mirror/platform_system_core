@@ -652,10 +652,31 @@ std::string fs_mgr_overlayfs_scratch_device() {
     return scratch_device_cache = path;
 }
 
+bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std::string& mnt_type) {
+    // Force mkfs by design for overlay support of adb remount, simplify and
+    // thus do not rely on fsck to correct problems that could creep in.
+    auto command = ""s;
+    if (mnt_type == "f2fs") {
+        command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
+    } else if (mnt_type == "ext4") {
+        command = kMkExt4 + " -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
+    } else {
+        errno = ESRCH;
+        LERROR << mnt_type << " has no mkfs cookbook";
+        return false;
+    }
+    command += " " + scratch_device;
+    auto ret = system(command.c_str());
+    if (ret) {
+        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
+        return false;
+    }
+    return true;
+}
+
 // Create and mount kScratchMountPoint storage if we have logical partitions
 bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
     if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
-    auto mnt_type = fs_mgr_overlayfs_scratch_mount_type();
     auto scratch_device = fs_mgr_overlayfs_scratch_device();
     auto partition_create = !fs_mgr_rw_access(scratch_device);
     auto slot_number = fs_mgr_overlayfs_slot_number();
@@ -730,33 +751,18 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
         if (change) *change = true;
     }
 
+    // If the partition exists, assume first that it can be mounted.
+    auto mnt_type = fs_mgr_overlayfs_scratch_mount_type();
     if (partition_exists) {
         if (fs_mgr_overlayfs_mount_scratch(scratch_device, mnt_type)) {
             if (change) *change = true;
             return true;
         }
-        // partition existed, but was not initialized;
+        // partition existed, but was not initialized; fall through to make it.
         errno = 0;
     }
 
-    // Force mkfs by design for overlay support of adb remount, simplify and
-    // thus do not rely on fsck to correct problems that could creep in.
-    auto command = ""s;
-    if (mnt_type == "f2fs") {
-        command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
-    } else if (mnt_type == "ext4") {
-        command = kMkExt4 + " -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
-    } else {
-        errno = ESRCH;
-        LERROR << mnt_type << " has no mkfs cookbook";
-        return false;
-    }
-    command += " " + scratch_device;
-    auto ret = system(command.c_str());
-    if (ret) {
-        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
-        return false;
-    }
+    if (!fs_mgr_overlayfs_make_scratch(scratch_device, mnt_type)) return false;
 
     if (change) *change = true;
 
