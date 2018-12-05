@@ -57,7 +57,7 @@ struct fs_mgr_flag_values {
 
 struct flag_list {
     const char *name;
-    int flag;
+    unsigned int flag;
 };
 
 static struct flag_list mount_flags[] = {
@@ -102,6 +102,7 @@ static struct flag_list fs_mgr_flags[] = {
         {"formattable", MF_FORMATTABLE},
         {"slotselect", MF_SLOTSELECT},
         {"nofail", MF_NOFAIL},
+        {"first_stage_mount", MF_FIRST_STAGE_MOUNT},
         {"latemount", MF_LATEMOUNT},
         {"reservedsize=", MF_RESERVEDSIZE},
         {"quota", MF_QUOTA},
@@ -996,6 +997,10 @@ int fs_mgr_is_slotselect(const struct fstab_rec* fstab) {
 
 int fs_mgr_is_nofail(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_NOFAIL;
+}
+
+int fs_mgr_is_first_stage_mount(const struct fstab_rec* fstab) {
+    return fstab->fs_mgr_flags & MF_FIRST_STAGE_MOUNT;
 }
 
 int fs_mgr_is_latemount(const struct fstab_rec* fstab) {
