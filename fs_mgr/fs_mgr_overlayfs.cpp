@@ -674,11 +674,11 @@ bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std:
     return true;
 }
 
-// Create and mount kScratchMountPoint storage if we have logical partitions
-bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
-    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
-    auto scratch_device = fs_mgr_overlayfs_scratch_device();
-    auto partition_create = !fs_mgr_rw_access(scratch_device);
+bool fs_mgr_overlayfs_create_scratch(const fstab* fstab, std::string* scratch_device,
+                                     bool* partition_exists, bool* change) {
+    *scratch_device = fs_mgr_overlayfs_scratch_device();
+    *partition_exists = fs_mgr_rw_access(*scratch_device);
+    auto partition_create = !*partition_exists;
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     if (!fs_mgr_rw_access(super_device)) return false;
@@ -690,9 +690,9 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
     }
     const auto partition_name = android::base::Basename(kScratchMountPoint);
     auto partition = builder->FindPartition(partition_name);
-    auto partition_exists = partition != nullptr;
+    *partition_exists = partition != nullptr;
     auto changed = false;
-    if (!partition_exists) {
+    if (!*partition_exists) {
         partition = builder->AddPartition(partition_name, LP_PARTITION_ATTR_NONE);
         if (!partition) {
             LERROR << "create " << partition_name;
@@ -728,7 +728,7 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
                 }
                 if (!partition_create) DestroyLogicalPartition(partition_name, 10s);
                 changed = true;
-                partition_exists = false;
+                *partition_exists = false;
             }
         }
     }
@@ -745,10 +745,22 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
 
     if (changed || partition_create) {
         if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
-                                    &scratch_device))
+                                    scratch_device))
             return false;
 
         if (change) *change = true;
+    }
+    return true;
+}
+
+// Create and mount kScratchMountPoint storage if we have logical partitions
+bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
+    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
+
+    std::string scratch_device;
+    bool partition_exists;
+    if (!fs_mgr_overlayfs_create_scratch(fstab, &scratch_device, &partition_exists, change)) {
+        return false;
     }
 
     // If the partition exists, assume first that it can be mounted.
