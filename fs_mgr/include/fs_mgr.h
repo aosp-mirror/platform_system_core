@@ -78,7 +78,7 @@ fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab);
 void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
 bool fs_mgr_load_verity_state(int* mode);
 bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback);
-int fs_mgr_swapon_all(struct fstab *fstab);
+bool fs_mgr_swapon_all(const Fstab& fstab);
 bool fs_mgr_update_logical_partition(struct fstab_rec* rec);
 
 int fs_mgr_do_format(fstab_rec* fstab, bool reserve_footer);

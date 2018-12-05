@@ -43,7 +43,7 @@ std::unique_ptr<LpMetadata> ReadCurrentMetadata(const std::string& block_device)
 
 // Create block devices for all logical partitions in the given metadata. The
 // metadata must have been read from the current slot.
-bool CreateLogicalPartitions(const LpMetadata& metadata);
+bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& block_device);
 
 // Create block devices for all logical partitions. This is a convenience
 // method for ReadMetadata and CreateLogicalPartitions.

@@ -275,6 +275,7 @@ class MetadataBuilder {
                        const LpMetadataPartition& source);
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
     bool IsABDevice() const;
+    bool IsRetrofitDevice() const;
 
     struct Interval {
         uint32_t device_index;
@@ -294,6 +295,7 @@ class MetadataBuilder {
     std::vector<Interval> GetFreeRegions() const;
     void ExtentsToFreeList(const std::vector<Interval>& extents,
                            std::vector<Interval>* free_regions) const;
+    std::vector<Interval> PrioritizeSecondHalfOfSuper(const std::vector<Interval>& free_list);
 
     static bool sABOverrideValue;
     static bool sABOverrideSet;
