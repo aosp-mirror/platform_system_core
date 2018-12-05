@@ -104,7 +104,6 @@ LOCAL_MODULE := init_system
 LOCAL_REQUIRED_MODULES := \
    init_second_stage \
 
-LOCAL_POST_INSTALL_CMD := ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
 include $(BUILD_PHONY_PACKAGE)
 
 include $(CLEAR_VARS)
