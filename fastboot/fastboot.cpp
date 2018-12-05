@@ -1541,7 +1541,7 @@ static bool should_flash_in_userspace(const std::string& partition_name) {
         return false;
     }
     auto path = find_item_given_name("super_empty.img");
-    if (path.empty()) {
+    if (path.empty() || access(path.c_str(), R_OK)) {
         return false;
     }
     auto metadata = android::fs_mgr::ReadFromImageFile(path);
