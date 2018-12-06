@@ -140,6 +140,10 @@ bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
   return true;
 }
 
+bool Elf::GetBuildID(std::string* build_id) {
+  return valid_ && interface_->GetBuildID(build_id);
+}
+
 void Elf::GetLastError(ErrorData* data) {
   if (valid_) {
     *data = interface_->last_error();
