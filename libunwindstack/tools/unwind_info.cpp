@@ -123,6 +123,15 @@ int GetElfInfo(const char* file, uint64_t offset) {
     printf("Soname: %s\n", soname.c_str());
   }
 
+  std::string build_id;
+  if (elf.GetBuildID(&build_id)) {
+    printf("Build ID: ");
+    for (size_t i = 0; i < build_id.size(); ++i) {
+      printf("%02hhx", build_id[i]);
+    }
+    printf("\n");
+  }
+
   ElfInterface* interface = elf.interface();
   if (elf.machine_type() == EM_ARM) {
     DumpArm(&elf, reinterpret_cast<ElfInterfaceArm*>(interface));

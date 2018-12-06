@@ -72,6 +72,9 @@ class ElfInterfaceFake : public ElfInterface {
 
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override;
   bool GetGlobalVariable(const std::string&, uint64_t*) override;
+  bool GetBuildID(std::string*) override {
+    return false;
+  }
 
   bool Step(uint64_t, Regs*, Memory*, bool*) override;
 
