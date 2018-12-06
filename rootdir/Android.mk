@@ -9,6 +9,10 @@ LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
+# The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
+# Since init.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
+LOCAL_POST_INSTALL_CMD := ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
+
 include $(BUILD_PREBUILT)
 
 #######################################
