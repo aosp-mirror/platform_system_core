@@ -1,4 +1,4 @@
-cc_library_shared {
+cc_library {
     name: "libsysutils",
     vendor_available: true,
     vndk: {
