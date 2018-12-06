@@ -62,6 +62,8 @@ class ElfInterface {
 
   virtual bool GetGlobalVariable(const std::string& name, uint64_t* memory_address) = 0;
 
+  virtual bool GetBuildID(std::string* build_id) = 0;
+
   virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
 
   virtual bool IsValidPc(uint64_t pc);
@@ -85,6 +87,8 @@ class ElfInterface {
   uint64_t debug_frame_size() { return debug_frame_size_; }
   uint64_t gnu_debugdata_offset() { return gnu_debugdata_offset_; }
   uint64_t gnu_debugdata_size() { return gnu_debugdata_size_; }
+  uint64_t gnu_build_id_offset() { return gnu_build_id_offset_; }
+  uint64_t gnu_build_id_size() { return gnu_build_id_size_; }
 
   DwarfSection* eh_frame() { return eh_frame_.get(); }
   DwarfSection* debug_frame() { return debug_frame_.get(); }
@@ -123,6 +127,9 @@ class ElfInterface {
   template <typename EhdrType>
   static void GetMaxSizeWithTemplate(Memory* memory, uint64_t* size);
 
+  template <typename NhdrType>
+  bool ReadBuildID(std::string* build_id);
+
   Memory* memory_;
   std::unordered_map<uint64_t, LoadInfo> pt_loads_;
 
@@ -142,6 +149,9 @@ class ElfInterface {
 
   uint64_t gnu_debugdata_offset_ = 0;
   uint64_t gnu_debugdata_size_ = 0;
+
+  uint64_t gnu_build_id_offset_ = 0;
+  uint64_t gnu_build_id_size_ = 0;
 
   uint8_t soname_type_ = SONAME_UNKNOWN;
   std::string soname_;
@@ -182,6 +192,10 @@ class ElfInterface32 : public ElfInterface {
     return ElfInterface::GetGlobalVariableWithTemplate<Elf32_Sym>(name, memory_address);
   }
 
+  bool GetBuildID(std::string* build_id) {
+    return ElfInterface::ReadBuildID<Elf32_Nhdr>(build_id);
+  }
+
   static void GetMaxSize(Memory* memory, uint64_t* size) {
     GetMaxSizeWithTemplate<Elf32_Ehdr>(memory, size);
   }
@@ -210,6 +224,10 @@ class ElfInterface64 : public ElfInterface {
 
   bool GetGlobalVariable(const std::string& name, uint64_t* memory_address) override {
     return ElfInterface::GetGlobalVariableWithTemplate<Elf64_Sym>(name, memory_address);
+  }
+
+  bool GetBuildID(std::string* build_id) {
+    return ElfInterface::ReadBuildID<Elf64_Nhdr>(build_id);
   }
 
   static void GetMaxSize(Memory* memory, uint64_t* size) {
