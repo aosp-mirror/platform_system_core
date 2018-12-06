@@ -1005,8 +1005,9 @@ int fs_mgr_mount_all(fstab* fstab, int mount_mode) {
     for (i = 0; i < fstab->num_entries; i++) {
         /* Don't mount entries that are managed by vold or not for the mount mode*/
         if ((fstab->recs[i].fs_mgr_flags & (MF_VOLDMANAGED | MF_RECOVERYONLY)) ||
-             ((mount_mode == MOUNT_MODE_LATE) && !fs_mgr_is_latemount(&fstab->recs[i])) ||
-             ((mount_mode == MOUNT_MODE_EARLY) && fs_mgr_is_latemount(&fstab->recs[i]))) {
+            ((mount_mode == MOUNT_MODE_LATE) && !fs_mgr_is_latemount(&fstab->recs[i])) ||
+            ((mount_mode == MOUNT_MODE_EARLY) && fs_mgr_is_latemount(&fstab->recs[i])) ||
+            fs_mgr_is_first_stage_mount(&fstab->recs[i])) {
             continue;
         }
 
