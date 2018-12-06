@@ -17,6 +17,7 @@
 #include <elf.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <string>
 
 #include <unwindstack/Memory.h>

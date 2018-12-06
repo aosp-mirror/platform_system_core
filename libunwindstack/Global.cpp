@@ -15,6 +15,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
 
 #include <string>
