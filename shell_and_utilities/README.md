@@ -1,5 +1,4 @@
-Android's shell and utilities
-=============================
+# Android's shell and utilities
 
 Since IceCreamSandwich Android has used
 [mksh](https://www.mirbsd.org/mksh.htm) as its shell. Before then it used
@@ -34,8 +33,7 @@ commands than there are symlinks for in `/system/bin`. You can get the
 full list for a release by running `toybox` directly.
 
 
-Android 2.3 (Gingerbread)
--------------------------
+## Android 2.3 (Gingerbread)
 
 BSD: cat dd newfs\_msdos
 
@@ -46,8 +44,7 @@ schedtop sendevent setconsole setprop sleep smd start stop sync top
 umount uptime vmstat watchprops wipe
 
 
-Android 4.0 (IceCreamSandwich)
-------------------------------
+## Android 4.0 (IceCreamSandwich)
 
 BSD: cat dd newfs\_msdos
 
@@ -58,8 +55,7 @@ schedtop sendevent setconsole setprop sleep smd start stop sync top
 touch umount uptime vmstat watchprops wipe
 
 
-Android 4.1-4.3 (JellyBean)
----------------------------
+## Android 4.1-4.3 (JellyBean)
 
 BSD: cat cp dd du grep newfs\_msdos
 
@@ -71,8 +67,7 @@ sendevent setconsole setenforce setprop setsebool sleep smd start stop
 sync top touch umount uptime vmstat watchprops wipe
 
 
-Android 4.4 (KitKat)
---------------------
+## Android 4.4 (KitKat)
 
 BSD: cat cp dd du grep newfs\_msdos
 
@@ -84,8 +79,7 @@ schedtop sendevent setconsole setenforce setprop setsebool sleep smd start
 stop swapoff swapon sync top touch umount uptime vmstat watchprops wipe
 
 
-Android 5.0 (Lollipop)
-----------------------
+## Android 5.0 (Lollipop)
 
 BSD: cat chown cp dd du grep kill ln mv printenv rm rmdir sleep sync
 
@@ -97,8 +91,7 @@ sendevent setenforce setprop setsebool smd start stop swapoff swapon
 top touch umount uptime vmstat watchprops wipe
 
 
-Android 6.0 (Marshmallow)
--------------------------
+## Android 6.0 (Marshmallow)
 
 BSD: dd du grep
 
@@ -118,8 +111,7 @@ time timeout touch tr true truncate umount uname uniq unix2dos usleep
 vmstat wc which whoami xargs yes
 
 
-Android 7.0 (Nougat)
---------------------
+## Android 7.0 (Nougat)
 
 BSD: dd grep
 
@@ -140,8 +132,7 @@ time timeout touch tr true truncate tty ulimit umount uname uniq unix2dos
 uptime usleep vmstat wc which whoami xargs xxd yes
 
 
-Android 8.0 (Oreo)
-------------------
+## Android 8.0 (Oreo)
 
 BSD: dd grep
 
@@ -164,8 +155,8 @@ sysctl tac tail tar taskset tee time timeout top touch tr true truncate
 tty ulimit umount uname uniq unix2dos uptime usleep uudecode uuencode
 vmstat wc which whoami xargs xxd yes zcat
 
-Android P
----------
+
+## Android 9.0 (Pie)
 
 BSD: dd grep
 
@@ -190,8 +181,8 @@ tail tar taskset tee time timeout top touch tr true truncate tty ulimit
 umount uname uniq unix2dos uptime usleep uudecode uuencode vmstat wc
 which whoami xargs xxd yes zcat
 
-Android Q
----------
+
+## Android Q
 
 BSD: grep fsck\_msdos newfs\_msdos
 
@@ -201,17 +192,22 @@ one-true-awk: awk
 
 toolbox: getevent getprop
 
-toybox: acpi base64 basename blockdev cal cat chcon chgrp chmod chown
-chroot chrt cksum clear cmp comm cp cpio cut date dd df diff dirname
-dmesg dos2unix du echo env expand expr fallocate false file find flock
-fmt free getenforce groups gunzip gzip head hostname hwclock id ifconfig
-inotifyd insmod ionice iorenice kill killall ln load\_policy log logname
-losetup ls lsmod lsof lspci lsusb md5sum microcom mkdir mkfifo mknod
-mkswap mktemp modinfo modprobe more mount mountpoint mv nc netcat netstat
-nice nl nohup nsenter od paste patch pgrep pidof pkill pmap printenv
-printf ps pwd readlink realpath renice restorecon rm rmdir rmmod runcon
-sed sendevent seq setenforce setprop setsid sha1sum sha224sum sha256sum
-sha384sum sha512sum sleep sort split start stat stop strings stty swapoff
-swapon sync sysctl tac tail tar taskset tee time timeout top touch tr
-true truncate tty ulimit umount uname uniq unix2dos unshare uptime usleep
-uudecode uuencode vmstat wc which whoami xargs xxd yes zcat
+toybox: acpi base64 basename bc blkid blockdev cal cat chattr chcon chgrp
+chmod chown chroot chrt cksum clear cmp comm cp cpio cut date dd df
+diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
+false fgrep file find flock fmt free freeramdisk fsfreeze getconf
+getenforce getfattr grep groups gunzip gzip head help hostname hwclock
+i2cdetect i2cdump i2cget i2cset iconv id ifconfig inotifyd insmod
+install ionice iorenice iotop kill killall ln load\_policy log logname
+losetup ls lsattr lsmod lsof lspci lsusb makedevs md5sum microcom
+mkdir mkfifo mknod mkswap mktemp modinfo modprobe more mount mountpoint
+mv nbd-client nc netcat netstat nice nl nohup nproc nsenter od partprobe
+paste patch pgrep pidof ping ping6 pivot\_root pkill pmap printenv
+printf prlimit ps pwd pwdx readlink realpath renice restorecon rev
+rfkill rm rmdir rmmod runcon sed sendevent seq setenforce setfattr
+setprop setsid sha1sum sha224sum sha256sum sha384sum sha512sum sleep
+sort split start stat stop strings stty swapoff swapon sync sysctl
+tac tail tar taskset tee time timeout top touch tr traceroute traceroute6
+true truncate tty tunctl ulimit umount uname uniq unix2dos unlink
+unshare uptime usleep uudecode uuencode uuidgen vconfig vmstat watch
+wc which whoami xargs xxd yes zcat
