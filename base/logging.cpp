@@ -417,6 +417,14 @@ LogMessage::~LogMessage() {
   }
   std::string msg(data_->ToString());
 
+  if (data_->GetSeverity() == FATAL) {
+#ifdef __ANDROID__
+    // Set the bionic abort message early to avoid liblog doing it
+    // with the individual lines, so that we get the whole message.
+    android_set_abort_message(msg.c_str());
+#endif
+  }
+
   {
     // Do the actual logging with the lock held.
     std::lock_guard<std::mutex> lock(LoggingLock());
