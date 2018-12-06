@@ -378,6 +378,11 @@ fi
 M=`adb_sh cat /proc/mounts | sed -n 's@\([^ ]*\) /mnt/scratch \([^ ]*\) .*@\2 on \1@p'`
 [ -n "${M}" ] &&
   echo "${BLUE}[     INFO ]${NORMAL} scratch filesystem ${M}"
+uses_dynamic_scratch=true
+if [ "${M}" != "${M##*/dev/block/by-name/}" ]; then
+  uses_dynamic_scratch=false
+  scratch_partition="${M##*/dev/block/by-name/}"
+fi
 scratch_size=`adb_sh df -k /mnt/scratch </dev/null 2>/dev/null |
               while read device kblocks used available use mounted on; do
                 if [ "/mnt/scratch" = "\${mounted}" ]; then
@@ -453,16 +458,30 @@ echo "${GREEN}[ RUN      ]${NORMAL} flash vendor, confirm its content disappears
   fastboot flash vendor ||
   ( fastboot reboot && false) ||
   die "fastboot flash vendor"
-# check ${scratch_partition} via fastboot
-fastboot_getvar partition-type:${scratch_partition} raw &&
-  fastboot_getvar has-slot:${scratch_partition} no &&
-  fastboot_getvar is-logical:${scratch_partition} yes ||
+fastboot_getvar partition-type:${scratch_partition} raw ||
   ( fastboot reboot && false) ||
   die "fastboot can not see ${scratch_partition} parameters"
-echo "${BLUE}[     INFO ]${NORMAL} expect fastboot erase ${scratch_partition} to fail" >&2
-fastboot erase ${scratch_partition} &&
-  ( fastboot reboot || true) &&
-  die "fastboot can erase ${scratch_partition}"
+if ${uses_dynamic_scratch}; then
+  # check ${scratch_partition} via fastboot
+  fastboot_getvar has-slot:${scratch_partition} no &&
+    fastboot_getvar is-logical:${scratch_partition} yes ||
+    ( fastboot reboot && false) ||
+    die "fastboot can not see ${scratch_partition} parameters"
+else
+  fastboot_getvar is-logical:${scratch_partition} no ||
+    ( fastboot reboot && false) ||
+    die "fastboot can not see ${scratch_partition} parameters"
+fi
+if ! ${uses_dynamic_scratch}; then
+  fastboot reboot-bootloader ||
+    die "Reboot into fastboot"
+fi
+if ${uses_dynamic_scratch}; then
+  echo "${BLUE}[     INFO ]${NORMAL} expect fastboot erase ${scratch_partition} to fail" >&2
+  fastboot erase ${scratch_partition} &&
+    ( fastboot reboot || true) &&
+    die "fastboot can erase ${scratch_partition}"
+fi
 echo "${BLUE}[     INFO ]${NORMAL} expect fastboot format ${scratch_partition} to fail" >&2
 fastboot format ${scratch_partition} &&
   ( fastboot reboot || true) &&
@@ -507,12 +526,13 @@ check_eq "cat: /vendor/hello: No such file or directory" "${B}" after flash rm
 
 echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition}" >&2
 
-adb reboot-fastboot &&
-  dd if=/dev/zero of=/tmp/adb-remount-test.img bs=4096 count=16 2>/dev/null &&
+adb reboot-fastboot ||
+  die "Reboot into fastbootd"
+dd if=/dev/zero of=/tmp/adb-remount-test.img bs=4096 count=16 2>/dev/null &&
   fastboot_wait 2m ||
   ( rm /tmp/adb-remount-test.img && false) ||
   die "reboot into fastboot"
-fastboot flash ${scratch_partition} /tmp/adb-remount-test.img
+fastboot flash --force ${scratch_partition} /tmp/adb-remount-test.img
 err=${?}
 rm /tmp/adb-remount-test.img
 fastboot reboot ||
