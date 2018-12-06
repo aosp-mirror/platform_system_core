@@ -89,6 +89,12 @@ Caveats
   if higher than 4.6.
 - *adb enable-verity* will free up overlayfs and as a bonus the
   device will be reverted pristine to before any content was updated.
+  Update engine does not take advantage of this, will perform a full OTA.
+- Update engine will not run if *fs_mgr_overlayfs_is_setup*() reports
+  true as adb remount overrides are incompatable with an OTA for
+  multiple reasons.
+  NB: This is not a problem for fastbootd or recovery as overrides are
+  disabled for those special boot scenarios.
 - If dynamic partitions runs out of space, resizing a logical
   partition larger may fail because of the scratch partition.
   If this happens, either fastboot flashall or adb enable-verity can
