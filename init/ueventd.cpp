@@ -233,29 +233,26 @@ int ueventd_main(int argc, char** argv) {
     SelabelInitialize();
 
     std::vector<std::unique_ptr<UeventHandler>> uevent_handlers;
-    UeventListener uevent_listener;
 
-    {
-        // Keep the current product name base configuration so we remain backwards compatible and
-        // allow it to override everything.
-        // TODO: cleanup platform ueventd.rc to remove vendor specific device node entries (b/34968103)
-        auto hardware = android::base::GetProperty("ro.hardware", "");
+    // Keep the current product name base configuration so we remain backwards compatible and
+    // allow it to override everything.
+    // TODO: cleanup platform ueventd.rc to remove vendor specific device node entries (b/34968103)
+    auto hardware = android::base::GetProperty("ro.hardware", "");
 
-        auto ueventd_configuration =
-                ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc", "/odm/ueventd.rc",
-                             "/ueventd." + hardware + ".rc"});
+    auto ueventd_configuration = ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc",
+                                              "/odm/ueventd.rc", "/ueventd." + hardware + ".rc"});
 
-        uevent_handlers.emplace_back(std::make_unique<DeviceHandler>(
-                std::move(ueventd_configuration.dev_permissions),
-                std::move(ueventd_configuration.sysfs_permissions),
-                std::move(ueventd_configuration.subsystems), fs_mgr_get_boot_devices(), true));
-        uevent_handlers.emplace_back(std::make_unique<FirmwareHandler>(
-                std::move(ueventd_configuration.firmware_directories)));
+    uevent_handlers.emplace_back(std::make_unique<DeviceHandler>(
+            std::move(ueventd_configuration.dev_permissions),
+            std::move(ueventd_configuration.sysfs_permissions),
+            std::move(ueventd_configuration.subsystems), fs_mgr_get_boot_devices(), true));
+    uevent_handlers.emplace_back(std::make_unique<FirmwareHandler>(
+            std::move(ueventd_configuration.firmware_directories)));
 
-        if (ueventd_configuration.enable_modalias_handling) {
-            uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>());
-        }
+    if (ueventd_configuration.enable_modalias_handling) {
+        uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>());
     }
+    UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
 
     if (access(COLDBOOT_DONE, F_OK) != 0) {
         ColdBoot cold_boot(uevent_listener, uevent_handlers);
