@@ -1533,7 +1533,8 @@ bool fs_mgr_load_verity_state(int* mode) {
     return true;
 }
 
-bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback) {
+bool fs_mgr_update_verity_state(
+        std::function<void(const std::string& mount_point, int mode)> callback) {
     if (!callback) {
         return false;
     }
@@ -1543,27 +1544,25 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         return false;
     }
 
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    if (!fstab) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
         LERROR << "Failed to read default fstab";
         return false;
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    for (int i = 0; i < fstab->num_entries; i++) {
-        auto fsrec = &fstab->recs[i];
-        if (!fs_mgr_is_verified(fsrec) && !fs_mgr_is_avb(fsrec)) {
+    for (const auto& entry : fstab) {
+        if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
             continue;
         }
 
         std::string mount_point;
-        if (!strcmp(fsrec->mount_point, "/")) {
+        if (entry.mount_point == "/") {
             // In AVB, the dm device name is vroot instead of system.
-            mount_point = fs_mgr_is_avb(fsrec) ? "vroot" : "system";
+            mount_point = entry.fs_mgr_flags.avb ? "vroot" : "system";
         } else {
-            mount_point = basename(fsrec->mount_point);
+            mount_point = basename(entry.mount_point.c_str());
         }
 
         if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
@@ -1574,7 +1573,7 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         const char* status;
         std::vector<DeviceMapper::TargetInfo> table;
         if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
-            if (!fs_mgr_is_verifyatboot(fsrec)) {
+            if (!entry.fs_mgr_flags.verify_at_boot) {
                 PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point;
                 continue;
             }
@@ -1588,7 +1587,7 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         // instead of [partition.vroot.verified].
         if (mount_point == "vroot") mount_point = "system";
         if (*status == 'C' || *status == 'V') {
-            callback(fsrec, mount_point.c_str(), mode, *status);
+            callback(mount_point, mode);
         }
     }
 
