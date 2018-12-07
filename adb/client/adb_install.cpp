@@ -226,17 +226,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
 
 static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
                               bool use_localagent) {
-    static const char* const DATA_DEST = "/data/local/tmp/%s";
-    static const char* const SD_DEST = "/sdcard/tmp/%s";
-    const char* where = DATA_DEST;
-
     printf("Performing Push Install\n");
-
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-s")) {
-            where = SD_DEST;
-        }
-    }
 
     // Find last APK argument.
     // All other arguments passed through verbatim.
@@ -256,7 +246,7 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
     int result = -1;
     std::vector<const char*> apk_file = {argv[last_apk]};
     std::string apk_dest =
-            android::base::StringPrintf(where, android::base::Basename(argv[last_apk]).c_str());
+            "/data/local/tmp/" + android::base::Basename(argv[last_apk]);
 
     if (use_fastdeploy == true) {
         TemporaryFile metadataTmpFile;
