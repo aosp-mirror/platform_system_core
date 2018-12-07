@@ -138,6 +138,15 @@ firmware_directories /more
     TestUeventdFile(ueventd_file, {{}, {}, {}, firmware_directories});
 }
 
+TEST(ueventd_parser, UeventSocketRcvbufSize) {
+    auto ueventd_file = R"(
+uevent_socket_rcvbuf_size 8k
+uevent_socket_rcvbuf_size 8M
+)";
+
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, false, 8 * 1024 * 1024});
+}
+
 TEST(ueventd_parser, AllTogether) {
     auto ueventd_file = R"(
 
@@ -169,6 +178,8 @@ subsystem test_devpath_dirname
 /sys/devices/virtual/*/input   poll_delay  0660  root   input
 firmware_directories /more
 
+uevent_socket_rcvbuf_size 6M
+
 #ending comment
 )";
 
@@ -197,8 +208,10 @@ firmware_directories /more
             "/more",
     };
 
-    TestUeventdFile(ueventd_file,
-                    {subsystems, sysfs_permissions, permissions, firmware_directories});
+    size_t uevent_socket_rcvbuf_size = 6 * 1024 * 1024;
+
+    TestUeventdFile(ueventd_file, {subsystems, sysfs_permissions, permissions, firmware_directories,
+                                   false, uevent_socket_rcvbuf_size});
 }
 
 // All of these lines are ill-formed, so test that there is 0 output.
@@ -212,6 +225,8 @@ firmware_directories #no directory listed
 /sys/devices/platform/trusty.*      trusty_version        badmode  root   log
 /sys/devices/platform/trusty.*      trusty_version        0440  baduidbad   log
 /sys/devices/platform/trusty.*      trusty_version        0440  root   baduidbad
+
+uevent_socket_rcvbuf_size blah
 
 subsystem #no name
 
