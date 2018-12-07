@@ -41,7 +41,7 @@ using ListenerCallback = std::function<ListenerAction(const Uevent&)>;
 
 class UeventListener {
   public:
-    UeventListener();
+    UeventListener(size_t uevent_socket_rcvbuf_size);
 
     void RegenerateUevents(const ListenerCallback& callback) const;
     ListenerAction RegenerateUeventsForPath(const std::string& path,

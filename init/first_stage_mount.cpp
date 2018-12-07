@@ -132,7 +132,9 @@ static bool IsRecoveryMode() {
 // Class Definitions
 // -----------------
 FirstStageMount::FirstStageMount()
-    : need_dm_verity_(false), fstab_(fs_mgr_read_fstab_dt(), fs_mgr_free_fstab) {
+    : need_dm_verity_(false),
+      fstab_(fs_mgr_read_fstab_dt(), fs_mgr_free_fstab),
+      uevent_listener_(16 * 1024 * 1024) {
     // Stores fstab_->recs[] into mount_fstab_recs_ (vector<fstab_rec*>)
     // for easier manipulation later, e.g., range-base for loop.
     if (fstab_) {
