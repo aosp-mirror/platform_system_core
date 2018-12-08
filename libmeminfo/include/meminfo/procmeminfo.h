@@ -29,13 +29,16 @@ namespace meminfo {
 class ProcMemInfo final {
     // Per-process memory accounting
   public:
-    ProcMemInfo(pid_t pid, bool get_wss = false);
+    // Reset the working set accounting of the process via /proc/<pid>/clear_refs
+    static bool ResetWorkingSet(pid_t pid);
+
+    ProcMemInfo(pid_t pid, bool get_wss = false, uint64_t pgflags = 0, uint64_t pgflags_mask = 0);
 
     const std::vector<Vma>& Maps();
     const MemUsage& Usage();
     const MemUsage& Wss();
+    const std::vector<uint16_t>& SwapOffsets();
 
-    bool WssReset();
     ~ProcMemInfo() = default;
 
   private:
@@ -44,11 +47,14 @@ class ProcMemInfo final {
 
     pid_t pid_;
     bool get_wss_;
+    uint64_t pgflags_;
+    uint64_t pgflags_mask_;
 
     std::vector<Vma> maps_;
 
     MemUsage usage_;
     MemUsage wss_;
+    std::vector<uint16_t> swap_offsets_;
 };
 
 }  // namespace meminfo
