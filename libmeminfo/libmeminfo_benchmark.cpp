@@ -17,6 +17,8 @@
 #include <meminfo/sysmeminfo.h>
 
 #include <fcntl.h>
+#include <inttypes.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -46,7 +48,7 @@ enum {
     MEMINFO_COUNT
 };
 
-void get_mem_info(uint64_t mem[], const char* file) {
+static void get_mem_info(uint64_t mem[], const char* file) {
     char buffer[4096];
     unsigned int numFound = 0;
 
@@ -67,9 +69,10 @@ void get_mem_info(uint64_t mem[], const char* file) {
     buffer[len] = 0;
 
     static const char* const tags[] = {
-            "MemTotal:",     "MemFree:",    "Buffers:",     "Cached:",       "Shmem:", "Slab:",
-            "SReclaimable:", "SUnreclaim:", "SwapTotal:",   "SwapFree:",     "ZRam:",  "Mapped:",
-            "VmallocUsed:",  "PageTables:", "KernelStack:", NULL};
+            "MemTotal:",     "MemFree:",    "Buffers:",     "Cached:",   "Shmem:", "Slab:",
+            "SReclaimable:", "SUnreclaim:", "SwapTotal:",   "SwapFree:", "ZRam:",  "Mapped:",
+            "VmallocUsed:",  "PageTables:", "KernelStack:", NULL
+    };
 
     static const int tagsLen[] = {9, 8, 8, 7, 6, 5, 13, 11, 10, 9, 5, 7, 12, 11, 12, 0};
 
@@ -78,7 +81,8 @@ void get_mem_info(uint64_t mem[], const char* file) {
     while (*p && (numFound < (sizeof(tagsLen) / sizeof(tagsLen[0])))) {
         int i = 0;
         while (tags[i]) {
-            //std::cout << "tag =" << tags[i] << " p = " << std::string(p, tagsLen[i]) << std::endl;
+            // std::cout << "tag =" << tags[i] << " p = " << std::string(p, tagsLen[i]) <<
+            // std::endl;
             if (strncmp(p, tags[i], tagsLen[i]) == 0) {
                 p += tagsLen[i];
                 while (*p == ' ') p++;
@@ -213,5 +217,52 @@ Hugepagesize:       2048 kB)meminfo";
     }
 }
 BENCHMARK(BM_ReadMemInfo);
+
+static uint64_t get_zram_mem_used(const std::string& zram_dir) {
+    FILE* f = fopen((zram_dir + "mm_stat").c_str(), "r");
+    if (f) {
+        uint64_t mem_used_total = 0;
+
+        int matched = fscanf(f, "%*d %*d %" SCNu64 " %*d %*d %*d %*d", &mem_used_total);
+        if (matched != 1)
+            fprintf(stderr, "warning: failed to parse %s\n", (zram_dir + "mm_stat").c_str());
+
+        fclose(f);
+        return mem_used_total;
+    }
+
+    f = fopen((zram_dir + "mem_used_total").c_str(), "r");
+    if (f) {
+        uint64_t mem_used_total = 0;
+
+        int matched = fscanf(f, "%" SCNu64, &mem_used_total);
+        if (matched != 1)
+            fprintf(stderr, "warning: failed to parse %s\n", (zram_dir + "mem_used_total").c_str());
+
+        fclose(f);
+        return mem_used_total;
+    }
+
+    return 0;
+}
+
+static void BM_OldReadZramTotal(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    for (auto _ : state) {
+        uint64_t zram_total __attribute__((unused)) = get_zram_mem_used(zram_mmstat_dir) / 1024;
+    }
+}
+BENCHMARK(BM_OldReadZramTotal);
+
+static void BM_NewReadZramTotal(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    ::android::meminfo::SysMemInfo mi;
+    for (auto _ : state) {
+        uint64_t zram_total __attribute__((unused)) = mi.mem_zram_kb(zram_mmstat_dir);
+    }
+}
+BENCHMARK(BM_NewReadZramTotal);
 
 BENCHMARK_MAIN();
