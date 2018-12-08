@@ -25,3 +25,18 @@ cc_binary {
         "libmeminfo",
     ],
 }
+
+cc_binary {
+    name: "procrank2",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+
+    srcs: ["procrank.cpp"],
+    shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+}

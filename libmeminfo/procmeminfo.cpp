@@ -44,6 +44,8 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->pss += from.pss;
     to->uss += from.uss;
 
+    to->swap += from.swap;
+
     to->private_clean += from.private_clean;
     to->private_dirty += from.private_dirty;
 
@@ -51,48 +53,78 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->shared_dirty += from.shared_dirty;
 }
 
-ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss) : pid_(pid), get_wss_(get_wss) {
-    if (!ReadMaps(get_wss_)) {
-        LOG(ERROR) << "Failed to read maps for Process " << pid_;
-    }
-}
-
-const std::vector<Vma>& ProcMemInfo::Maps() {
-    return maps_;
-}
-
-const MemUsage& ProcMemInfo::Usage() {
-    if (get_wss_) {
-        LOG(WARNING) << "Trying to read memory usage from working set object";
-    }
-    return usage_;
-}
-
-const MemUsage& ProcMemInfo::Wss() {
-    if (!get_wss_) {
-        LOG(WARNING) << "Trying to read working set when there is none";
-    }
-
-    return wss_;
-}
-
-bool ProcMemInfo::WssReset() {
-    if (!get_wss_) {
-        LOG(ERROR) << "Trying to reset working set from a memory usage counting object";
-        return false;
-    }
-
-    std::string clear_refs_path = ::android::base::StringPrintf("/proc/%d/clear_refs", pid_);
+bool ProcMemInfo::ResetWorkingSet(pid_t pid) {
+    std::string clear_refs_path = ::android::base::StringPrintf("/proc/%d/clear_refs", pid);
     if (!::android::base::WriteStringToFile("1\n", clear_refs_path)) {
         PLOG(ERROR) << "Failed to write to " << clear_refs_path;
         return false;
     }
 
-    wss_.clear();
     return true;
 }
 
+ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss, uint64_t pgflags, uint64_t pgflags_mask)
+    : pid_(pid), get_wss_(get_wss), pgflags_(pgflags), pgflags_mask_(pgflags_mask) {}
+
+const std::vector<Vma>& ProcMemInfo::Maps() {
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to read maps for Process " << pid_;
+    }
+
+    return maps_;
+}
+
+const MemUsage& ProcMemInfo::Usage() {
+    if (get_wss_) {
+        LOG(WARNING) << "Trying to read process memory usage for " << pid_
+                     << " using invalid object";
+        return usage_;
+    }
+
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to get memory usage for Process " << pid_;
+    }
+
+    return usage_;
+}
+
+const MemUsage& ProcMemInfo::Wss() {
+    if (!get_wss_) {
+        LOG(WARNING) << "Trying to read process working set for " << pid_
+                     << " using invalid object";
+        return wss_;
+    }
+
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to get working set for Process " << pid_;
+    }
+
+    return wss_;
+}
+
+const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
+    if (get_wss_) {
+        LOG(WARNING) << "Trying to read process swap offsets for " << pid_
+                     << " using invalid object";
+        return swap_offsets_;
+    }
+
+    if (maps_.empty() && !ReadMaps(get_wss_)) {
+        LOG(ERROR) << "Failed to get swap offsets for Process " << pid_;
+    }
+
+    return swap_offsets_;
+}
+
 bool ProcMemInfo::ReadMaps(bool get_wss) {
+    // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
+    // running for the lifetime of the system can recycle the objects and don't have to
+    // unnecessarily retain and update this object in memory (which can get significantly large).
+    // E.g. A program that only needs to reset the working set will never all ->Maps(), ->Usage().
+    // E.g. A program that is monitoring smaps_rollup, may never call ->maps(), Usage(), so it
+    // doesn't make sense for us to parse and retain unnecessary memory accounting stats by default.
+    if (!maps_.empty()) return true;
+
     // parse and read /proc/<pid>/maps
     std::string maps_file = ::android::base::StringPrintf("/proc/%d/maps", pid_);
     if (!::android::procinfo::ReadMapFile(
@@ -115,8 +147,8 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
 
     for (auto& vma : maps_) {
         if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss)) {
-            LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start
-                       << "-" << vma.end << "]";
+            LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
+                       << vma.end << "]";
             maps_.clear();
             return false;
         }
@@ -153,18 +185,24 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
         if (!PAGE_PRESENT(p) && !PAGE_SWAPPED(p)) continue;
 
         if (PAGE_SWAPPED(p)) {
-            // TODO: do what's needed for swapped pages
+            vma.usage.swap += pagesz;
+            swap_offsets_.emplace_back(PAGE_SWAP_OFFSET(p));
             continue;
         }
 
         uint64_t page_frame = PAGE_PFN(p);
         if (!pinfo.PageFlags(page_frame, &pg_flags[i])) {
             LOG(ERROR) << "Failed to get page flags for " << page_frame << " in process " << pid_;
+            swap_offsets_.clear();
             return false;
         }
 
+        // skip unwanted pages from the count
+        if ((pg_flags[i] & pgflags_mask_) != pgflags_) continue;
+
         if (!pinfo.PageMapCount(page_frame, &pg_counts[i])) {
             LOG(ERROR) << "Failed to get page count for " << page_frame << " in process " << pid_;
+            swap_offsets_.clear();
             return false;
         }
 
