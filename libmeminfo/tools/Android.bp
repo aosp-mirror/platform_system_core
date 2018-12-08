@@ -22,6 +22,7 @@ cc_binary {
 
     srcs: ["procmem.cpp"],
     shared_libs: [
+        "libbase",
         "libmeminfo",
     ],
 }
