@@ -17,10 +17,12 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include <cctype>
+#include <cstdio>
 #include <fstream>
 #include <string>
 #include <utility>
@@ -29,7 +31,9 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 
 #include "meminfo_private.h"
 
@@ -37,9 +41,11 @@ namespace android {
 namespace meminfo {
 
 const std::vector<std::string> SysMemInfo::kDefaultSysMemInfoTags = {
-    "MemTotal:", "MemFree:",      "Buffers:",     "Cached:",     "Shmem:",
-    "Slab:",     "SReclaimable:", "SUnreclaim:",  "SwapTotal:",  "SwapFree:",
-    "ZRam:",     "Mapped:",       "VmallocUsed:", "PageTables:", "KernelStack:",
+        SysMemInfo::kMemTotal,      SysMemInfo::kMemFree,        SysMemInfo::kMemBuffers,
+        SysMemInfo::kMemCached,     SysMemInfo::kMemShmem,       SysMemInfo::kMemSlab,
+        SysMemInfo::kMemSReclaim,   SysMemInfo::kMemSUnreclaim,  SysMemInfo::kMemSwapTotal,
+        SysMemInfo::kMemSwapFree,   SysMemInfo::kMemMapped,      SysMemInfo::kMemVmallocUsed,
+        SysMemInfo::kMemPageTables, SysMemInfo::kMemKernelStack,
 };
 
 bool SysMemInfo::ReadMemInfo(const std::string& path) {
@@ -99,6 +105,7 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
     buffer[len] = '\0';
     char* p = buffer;
     uint32_t found = 0;
+    uint32_t lineno = 0;
     while (*p && found < tags.size()) {
         for (auto& tag : tags) {
             if (strncmp(p, tag.c_str(), tag.size()) == 0) {
@@ -107,7 +114,7 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
                 char* endptr = nullptr;
                 mem_in_kb_[tag] = strtoull(p, &endptr, 10);
                 if (p == endptr) {
-                    PLOG(ERROR) << "Failed to parse line in file: " << path;
+                    PLOG(ERROR) << "Failed to parse line:" << lineno + 1 << " in file: " << path;
                     return false;
                 }
                 p = endptr;
@@ -119,11 +126,75 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
             p++;
         }
         if (*p) p++;
+        lineno++;
     }
 
     return true;
 }
 #endif
+
+uint64_t SysMemInfo::mem_zram_kb(const std::string& zram_dev) {
+    uint64_t mem_zram_total = 0;
+    if (!zram_dev.empty()) {
+        if (!MemZramDevice(zram_dev, &mem_zram_total)) {
+            return 0;
+        }
+        return mem_zram_total / 1024;
+    }
+
+    constexpr uint32_t kMaxZramDevices = 256;
+    for (uint32_t i = 0; i < kMaxZramDevices; i++) {
+        std::string zram_dev = ::android::base::StringPrintf("/sys/block/zram%u/", i);
+        if (access(zram_dev.c_str(), F_OK)) {
+            // We assume zram devices appear in range 0-255 and appear always in sequence
+            // under /sys/block. So, stop looking for them once we find one is missing.
+            break;
+        }
+
+        uint64_t mem_zram_dev;
+        if (!MemZramDevice(zram_dev, &mem_zram_dev)) {
+            return 0;
+        }
+
+        mem_zram_total += mem_zram_dev;
+    }
+
+    return mem_zram_total / 1024;
+}
+
+bool SysMemInfo::MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_dev) {
+    std::string content;
+    if (android::base::ReadFileToString(zram_dev + "mm_stat", &content)) {
+        std::vector<std::string> values = ::android::base::Split(content, " ");
+        if (values.size() < 3) {
+            LOG(ERROR) << "Malformed mm_stat file for zram dev: " << zram_dev
+                       << " content: " << content;
+            return false;
+        }
+
+        if (!::android::base::ParseUint(values[2], mem_zram_dev)) {
+            LOG(ERROR) << "Malformed mm_stat file for zram dev: " << zram_dev
+                       << " value: " << values[2];
+            return false;
+        }
+
+        return true;
+    }
+
+    if (::android::base::ReadFileToString(zram_dev + "mem_used_total", &content)) {
+        *mem_zram_dev = strtoull(content.c_str(), NULL, 10);
+        if (*mem_zram_dev == ULLONG_MAX) {
+            PLOG(ERROR) << "Malformed mem_used_total file for zram dev: " << zram_dev
+                        << " content: " << content;
+            return false;
+        }
+
+        return true;
+    }
+
+    LOG(ERROR) << "Can't find memory status under: " << zram_dev;
+    return false;
+}
 
 }  // namespace meminfo
 }  // namespace android

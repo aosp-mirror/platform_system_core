@@ -96,6 +96,10 @@ bool fs_mgr_overlayfs_teardown(const char*, bool* change) {
     return false;
 }
 
+bool fs_mgr_overlayfs_is_setup() {
+    return false;
+}
+
 #else  // ALLOW_ADBD_DISABLE_VERITY == 0
 
 namespace {
@@ -382,8 +386,10 @@ uint32_t fs_mgr_overlayfs_slot_number() {
     return SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
 }
 
+const auto kPhysicalDevice = "/dev/block/by-name/"s;
+
 std::string fs_mgr_overlayfs_super_device(uint32_t slot_number) {
-    return "/dev/block/by-name/" + fs_mgr_get_super_partition_name(slot_number);
+    return kPhysicalDevice + fs_mgr_get_super_partition_name(slot_number);
 }
 
 bool fs_mgr_overlayfs_has_logical(const fstab* fstab) {
@@ -641,19 +647,50 @@ std::string fs_mgr_overlayfs_scratch_mount_type() {
 std::string fs_mgr_overlayfs_scratch_device() {
     if (!scratch_device_cache.empty()) return scratch_device_cache;
 
-    auto& dm = DeviceMapper::Instance();
-    const auto partition_name = android::base::Basename(kScratchMountPoint);
-    std::string path;
-    if (!dm.GetDmDevicePathByName(partition_name, &path)) return "";
+    // Is this a multiple super device (retrofit)?
+    auto slot_number = fs_mgr_overlayfs_slot_number();
+    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
+    auto path = fs_mgr_overlayfs_super_device(slot_number == 0);
+    if (super_device == path) {
+        // Create from within single super device;
+        auto& dm = DeviceMapper::Instance();
+        const auto partition_name = android::base::Basename(kScratchMountPoint);
+        if (!dm.GetDmDevicePathByName(partition_name, &path)) return "";
+    }
     return scratch_device_cache = path;
 }
 
-// Create and mount kScratchMountPoint storage if we have logical partitions
-bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
-    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
-    auto mnt_type = fs_mgr_overlayfs_scratch_mount_type();
-    auto scratch_device = fs_mgr_overlayfs_scratch_device();
-    auto partition_create = !fs_mgr_rw_access(scratch_device);
+bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std::string& mnt_type) {
+    // Force mkfs by design for overlay support of adb remount, simplify and
+    // thus do not rely on fsck to correct problems that could creep in.
+    auto command = ""s;
+    if (mnt_type == "f2fs") {
+        command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
+    } else if (mnt_type == "ext4") {
+        command = kMkExt4 + " -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
+    } else {
+        errno = ESRCH;
+        LERROR << mnt_type << " has no mkfs cookbook";
+        return false;
+    }
+    command += " " + scratch_device;
+    auto ret = system(command.c_str());
+    if (ret) {
+        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
+        return false;
+    }
+    return true;
+}
+
+bool fs_mgr_overlayfs_create_scratch(const fstab* fstab, std::string* scratch_device,
+                                     bool* partition_exists, bool* change) {
+    *scratch_device = fs_mgr_overlayfs_scratch_device();
+    *partition_exists = fs_mgr_rw_access(*scratch_device);
+    auto partition_create = !*partition_exists;
+    // Do we need to create a logical "scratch" partition?
+    if (!partition_create && android::base::StartsWith(*scratch_device, kPhysicalDevice)) {
+        return true;
+    }
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     if (!fs_mgr_rw_access(super_device)) return false;
@@ -665,9 +702,9 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
     }
     const auto partition_name = android::base::Basename(kScratchMountPoint);
     auto partition = builder->FindPartition(partition_name);
-    auto partition_exists = partition != nullptr;
+    *partition_exists = partition != nullptr;
     auto changed = false;
-    if (!partition_exists) {
+    if (!*partition_exists) {
         partition = builder->AddPartition(partition_name, LP_PARTITION_ATTR_NONE);
         if (!partition) {
             LERROR << "create " << partition_name;
@@ -703,7 +740,7 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
                 }
                 if (!partition_create) DestroyLogicalPartition(partition_name, 10s);
                 changed = true;
-                partition_exists = false;
+                *partition_exists = false;
             }
         }
     }
@@ -720,39 +757,36 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
 
     if (changed || partition_create) {
         if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
-                                    &scratch_device))
+                                    scratch_device))
             return false;
 
         if (change) *change = true;
     }
+    return true;
+}
 
+// Create and mount kScratchMountPoint storage if we have logical partitions
+bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
+    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
+
+    std::string scratch_device;
+    bool partition_exists;
+    if (!fs_mgr_overlayfs_create_scratch(fstab, &scratch_device, &partition_exists, change)) {
+        return false;
+    }
+
+    // If the partition exists, assume first that it can be mounted.
+    auto mnt_type = fs_mgr_overlayfs_scratch_mount_type();
     if (partition_exists) {
         if (fs_mgr_overlayfs_mount_scratch(scratch_device, mnt_type)) {
             if (change) *change = true;
             return true;
         }
-        // partition existed, but was not initialized;
+        // partition existed, but was not initialized; fall through to make it.
         errno = 0;
     }
 
-    // Force mkfs by design for overlay support of adb remount, simplify and
-    // thus do not rely on fsck to correct problems that could creep in.
-    auto command = ""s;
-    if (mnt_type == "f2fs") {
-        command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
-    } else if (mnt_type == "ext4") {
-        command = kMkExt4 + " -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
-    } else {
-        errno = ESRCH;
-        LERROR << mnt_type << " has no mkfs cookbook";
-        return false;
-    }
-    command += " " + scratch_device;
-    auto ret = system(command.c_str());
-    if (ret) {
-        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
-        return false;
-    }
+    if (!fs_mgr_overlayfs_make_scratch(scratch_device, mnt_type)) return false;
 
     if (change) *change = true;
 
@@ -762,6 +796,7 @@ bool fs_mgr_overlayfs_setup_scratch(const fstab* fstab, bool* change) {
 bool fs_mgr_overlayfs_scratch_can_be_mounted(const std::string& scratch_device) {
     if (scratch_device.empty()) return false;
     if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return false;
+    if (android::base::StartsWith(scratch_device, kPhysicalDevice)) return true;
     if (fs_mgr_rw_access(scratch_device)) return true;
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
@@ -921,6 +956,17 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (mount_scratch) fs_mgr_overlayfs_umount_scratch();
 
     return ret;
+}
+
+bool fs_mgr_overlayfs_is_setup() {
+    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) return true;
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    if (fs_mgr_overlayfs_invalid(fstab.get())) return false;
+    for (const auto& mount_point : fs_mgr_candidate_list(fstab.get())) {
+        if (fs_mgr_overlayfs_already_mounted(mount_point)) return true;
+    }
+    return false;
 }
 
 #endif  // ALLOW_ADBD_DISABLE_VERITY != 0

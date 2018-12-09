@@ -19,8 +19,12 @@
 #include <grp.h>
 #include <pwd.h>
 
+#include <android-base/parseint.h>
+
 #include "keyword_map.h"
 #include "parser.h"
+
+using android::base::ParseByteCount;
 
 namespace android {
 namespace init {
@@ -97,6 +101,22 @@ Result<Success> ParseModaliasHandlingLine(std::vector<std::string>&& args,
     } else {
         return Error() << "modalias_handling takes either 'enabled' or 'disabled' as a parameter";
     }
+
+    return Success();
+}
+
+Result<Success> ParseUeventSocketRcvbufSizeLine(std::vector<std::string>&& args,
+                                                size_t* uevent_socket_rcvbuf_size) {
+    if (args.size() != 2) {
+        return Error() << "uevent_socket_rcvbuf_size lines take exactly one parameter";
+    }
+
+    size_t parsed_size;
+    if (!ParseByteCount(args[1], &parsed_size)) {
+        return Error() << "could not parse size '" << args[1] << "' for uevent_socket_rcvbuf_line";
+    }
+
+    *uevent_socket_rcvbuf_size = parsed_size;
 
     return Success();
 }
@@ -202,6 +222,9 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
     parser.AddSingleLineParser("modalias_handling",
                                std::bind(ParseModaliasHandlingLine, _1,
                                          &ueventd_configuration.enable_modalias_handling));
+    parser.AddSingleLineParser("uevent_socket_rcvbuf_size",
+                               std::bind(ParseUeventSocketRcvbufSizeLine, _1,
+                                         &ueventd_configuration.uevent_socket_rcvbuf_size));
 
     for (const auto& config : configs) {
         parser.ParseConfig(config);

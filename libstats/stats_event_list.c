@@ -193,3 +193,47 @@ static int __write_to_statsd_init(struct iovec* vec, size_t nr) {
     errno = save_errno;
     return ret;
 }
+
+static inline void copy4LE(uint8_t* buf, uint32_t val) {
+    buf[0] = val & 0xFF;
+    buf[1] = (val >> 8) & 0xFF;
+    buf[2] = (val >> 16) & 0xFF;
+    buf[3] = (val >> 24) & 0xFF;
+}
+
+// Note: this function differs from android_log_write_string8_len in that the length passed in
+// should be treated as actual length and not max length.
+int android_log_write_char_array(android_log_context ctx, const char* value, size_t actual_len) {
+    size_t needed;
+    ssize_t len = actual_len;
+    android_log_context_internal* context;
+
+    context = (android_log_context_internal*)ctx;
+    if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
+        return -EBADF;
+    }
+    if (context->overflow) {
+        return -EIO;
+    }
+    if (!value) {
+        value = "";
+        len = 0;
+    }
+    needed = sizeof(uint8_t) + sizeof(int32_t) + len;
+    if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
+        /* Truncate string for delivery */
+        len = MAX_EVENT_PAYLOAD - context->pos - 1 - sizeof(int32_t);
+        if (len <= 0) {
+            context->overflow = true;
+            return -EIO;
+        }
+    }
+    context->count[context->list_nest_depth]++;
+    context->storage[context->pos + 0] = EVENT_TYPE_STRING;
+    copy4LE(&context->storage[context->pos + 1], len);
+    if (len) {
+        memcpy(&context->storage[context->pos + 5], value, len);
+    }
+    context->pos += needed;
+    return len;
+}

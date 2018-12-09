@@ -28,6 +28,21 @@ namespace meminfo {
 class SysMemInfo final {
     // System or Global memory accounting
   public:
+    static constexpr const char* kMemTotal = "MemTotal:";
+    static constexpr const char* kMemFree = "MemFree:";
+    static constexpr const char* kMemBuffers = "Buffers:";
+    static constexpr const char* kMemCached = "Cached:";
+    static constexpr const char* kMemShmem = "Shmem:";
+    static constexpr const char* kMemSlab = "Slab:";
+    static constexpr const char* kMemSReclaim = "SReclaimable:";
+    static constexpr const char* kMemSUnreclaim = "SUnreclaim:";
+    static constexpr const char* kMemSwapTotal = "SwapTotal:";
+    static constexpr const char* kMemSwapFree = "SwapFree:";
+    static constexpr const char* kMemMapped = "Mapped:";
+    static constexpr const char* kMemVmallocUsed = "VmallocUsed:";
+    static constexpr const char* kMemPageTables = "PageTables:";
+    static constexpr const char* kMemKernelStack = "KernelStack:";
+
     static const std::vector<std::string> kDefaultSysMemInfoTags;
 
     SysMemInfo() = default;
@@ -38,24 +53,25 @@ class SysMemInfo final {
                      const std::string& path = "/proc/meminfo");
 
     // getters
-    uint64_t mem_total_kb() { return mem_in_kb_["MemTotal:"]; }
-    uint64_t mem_free_kb() { return mem_in_kb_["MemFree:"]; }
-    uint64_t mem_buffers_kb() { return mem_in_kb_["Buffers:"]; }
-    uint64_t mem_cached_kb() { return mem_in_kb_["Cached:"]; }
-    uint64_t mem_shmem_kb() { return mem_in_kb_["Shmem:"]; }
-    uint64_t mem_slab_kb() { return mem_in_kb_["Slab:"]; }
-    uint64_t mem_slab_reclailmable_kb() { return mem_in_kb_["SReclaimable:"]; }
-    uint64_t mem_slab_unreclaimable_kb() { return mem_in_kb_["SUnreclaim:"]; }
-    uint64_t mem_swap_kb() { return mem_in_kb_["SwapTotal:"]; }
-    uint64_t mem_free_swap_kb() { return mem_in_kb_["SwapFree:"]; }
-    uint64_t mem_zram_kb() { return mem_in_kb_["Zram:"]; }
-    uint64_t mem_mapped_kb() { return mem_in_kb_["Mapped:"]; }
-    uint64_t mem_vmalloc_used_kb() { return mem_in_kb_["VmallocUsed:"]; }
-    uint64_t mem_page_tables_kb() { return mem_in_kb_["PageTables:"]; }
-    uint64_t mem_kernel_stack_kb() { return mem_in_kb_["KernelStack:"]; }
+    uint64_t mem_total_kb() { return mem_in_kb_[kMemTotal]; }
+    uint64_t mem_free_kb() { return mem_in_kb_[kMemFree]; }
+    uint64_t mem_buffers_kb() { return mem_in_kb_[kMemBuffers]; }
+    uint64_t mem_cached_kb() { return mem_in_kb_[kMemCached]; }
+    uint64_t mem_shmem_kb() { return mem_in_kb_[kMemShmem]; }
+    uint64_t mem_slab_kb() { return mem_in_kb_[kMemSlab]; }
+    uint64_t mem_slab_reclailmable_kb() { return mem_in_kb_[kMemSReclaim]; }
+    uint64_t mem_slab_unreclaimable_kb() { return mem_in_kb_[kMemSUnreclaim]; }
+    uint64_t mem_swap_kb() { return mem_in_kb_[kMemSwapTotal]; }
+    uint64_t mem_swap_free_kb() { return mem_in_kb_[kMemSwapFree]; }
+    uint64_t mem_mapped_kb() { return mem_in_kb_[kMemMapped]; }
+    uint64_t mem_vmalloc_used_kb() { return mem_in_kb_[kMemVmallocUsed]; }
+    uint64_t mem_page_tables_kb() { return mem_in_kb_[kMemPageTables]; }
+    uint64_t mem_kernel_stack_kb() { return mem_in_kb_[kMemPageTables]; }
+    uint64_t mem_zram_kb(const std::string& zram_dev = "");
 
   private:
     std::map<std::string, uint64_t> mem_in_kb_;
+    bool MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_dev);
 };
 
 }  // namespace meminfo

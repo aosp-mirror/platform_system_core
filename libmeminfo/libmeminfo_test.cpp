@@ -73,7 +73,7 @@ TEST_F(ValidateProcMemInfo, TestMapsEquality) {
     }
 }
 
-TEST_F(ValidateProcMemInfo, TestMapsUsage) {
+TEST_F(ValidateProcMemInfo, TestMaps) {
     const std::vector<Vma>& maps = proc_mem->Maps();
     ASSERT_FALSE(maps.empty());
     ASSERT_EQ(proc->num_maps, maps.size());
@@ -94,6 +94,30 @@ TEST_F(ValidateProcMemInfo, TestMapsUsage) {
     EXPECT_EQ(proc_usage.rss, proc_mem->Usage().rss);
     EXPECT_EQ(proc_usage.pss, proc_mem->Usage().pss);
     EXPECT_EQ(proc_usage.uss, proc_mem->Usage().uss);
+}
+
+TEST_F(ValidateProcMemInfo, TestSwapUsage) {
+    const std::vector<Vma>& maps = proc_mem->Maps();
+    ASSERT_FALSE(maps.empty());
+    ASSERT_EQ(proc->num_maps, maps.size());
+
+    pm_memusage_t map_usage, proc_usage;
+    pm_memusage_zero(&map_usage);
+    pm_memusage_zero(&proc_usage);
+    for (size_t i = 0; i < maps.size(); i++) {
+        ASSERT_EQ(0, pm_map_usage(proc->maps[i], &map_usage));
+        EXPECT_EQ(map_usage.swap, maps[i].usage.swap) << "SWAP mismatch for map: " << maps[i].name;
+        pm_memusage_add(&proc_usage, &map_usage);
+    }
+
+    EXPECT_EQ(proc_usage.swap, proc_mem->Usage().swap);
+}
+
+TEST_F(ValidateProcMemInfo, TestSwapOffsets) {
+    const MemUsage& proc_usage = proc_mem->Usage();
+    const std::vector<uint16_t>& swap_offsets = proc_mem->SwapOffsets();
+
+    EXPECT_EQ(proc_usage.swap / getpagesize(), swap_offsets.size());
 }
 
 class ValidateProcMemInfoWss : public ::testing::Test {
@@ -118,7 +142,7 @@ class ValidateProcMemInfoWss : public ::testing::Test {
 
 TEST_F(ValidateProcMemInfoWss, TestWorkingTestReset) {
     // Expect reset to succeed
-    EXPECT_TRUE(proc_mem->WssReset());
+    EXPECT_TRUE(ProcMemInfo::ResetWorkingSet(pid));
 }
 
 TEST_F(ValidateProcMemInfoWss, TestWssEquality) {
@@ -221,6 +245,93 @@ TEST_F(ValidatePageAcct, TestPageIdle) {
     }
 }
 
+TEST(TestProcMemInfo, TestMapsEmpty) {
+    ProcMemInfo proc_mem(pid);
+    const std::vector<Vma>& maps = proc_mem.Maps();
+    EXPECT_GT(maps.size(), 0);
+}
+
+TEST(TestProcMemInfo, TestUsageEmpty) {
+    // If we created the object for getting working set,
+    // the usage must be empty
+    ProcMemInfo proc_mem(pid, true);
+    const MemUsage& usage = proc_mem.Usage();
+    EXPECT_EQ(usage.rss, 0);
+    EXPECT_EQ(usage.vss, 0);
+    EXPECT_EQ(usage.pss, 0);
+    EXPECT_EQ(usage.uss, 0);
+    EXPECT_EQ(usage.swap, 0);
+}
+
+TEST(TestProcMemInfoWssReset, TestWssEmpty) {
+    // If we created the object for getting usage,
+    // the working set must be empty
+    ProcMemInfo proc_mem(pid, false);
+    const MemUsage& wss = proc_mem.Wss();
+    EXPECT_EQ(wss.rss, 0);
+    EXPECT_EQ(wss.vss, 0);
+    EXPECT_EQ(wss.pss, 0);
+    EXPECT_EQ(wss.uss, 0);
+    EXPECT_EQ(wss.swap, 0);
+}
+
+TEST(TestProcMemInfoWssReset, TestSwapOffsetsEmpty) {
+    // If we created the object for getting working set,
+    // the swap offsets must be empty
+    ProcMemInfo proc_mem(pid, true);
+    const std::vector<uint16_t>& swap_offsets = proc_mem.SwapOffsets();
+    EXPECT_EQ(swap_offsets.size(), 0);
+}
+
+TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
+    // Create proc object using libpagemap
+    pm_kernel_t* ker;
+    ASSERT_EQ(0, pm_kernel_create(&ker));
+    pm_process_t* proc;
+    ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
+
+    // count swapbacked pages using libpagemap
+    pm_memusage_t proc_usage;
+    pm_memusage_zero(&proc_usage);
+    ASSERT_EQ(0, pm_process_usage_flags(proc, &proc_usage, (1 << KPF_SWAPBACKED),
+                                        (1 << KPF_SWAPBACKED)));
+
+    // Create ProcMemInfo that counts swapbacked pages
+    ProcMemInfo proc_mem(pid, false, (1 << KPF_SWAPBACKED), (1 << KPF_SWAPBACKED));
+
+    EXPECT_EQ(proc_usage.vss, proc_mem.Usage().vss);
+    EXPECT_EQ(proc_usage.rss, proc_mem.Usage().rss);
+    EXPECT_EQ(proc_usage.pss, proc_mem.Usage().pss);
+    EXPECT_EQ(proc_usage.uss, proc_mem.Usage().uss);
+
+    pm_process_destroy(proc);
+    pm_kernel_destroy(ker);
+}
+
+TEST(ValidateProcMemInfoFlags, TestPageFlags2) {
+    // Create proc object using libpagemap
+    pm_kernel_t* ker;
+    ASSERT_EQ(0, pm_kernel_create(&ker));
+    pm_process_t* proc;
+    ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
+
+    // count non-swapbacked pages using libpagemap
+    pm_memusage_t proc_usage;
+    pm_memusage_zero(&proc_usage);
+    ASSERT_EQ(0, pm_process_usage_flags(proc, &proc_usage, (1 << KPF_SWAPBACKED), 0));
+
+    // Create ProcMemInfo that counts non-swapbacked pages
+    ProcMemInfo proc_mem(pid, false, 0, (1 << KPF_SWAPBACKED));
+
+    EXPECT_EQ(proc_usage.vss, proc_mem.Usage().vss);
+    EXPECT_EQ(proc_usage.rss, proc_mem.Usage().rss);
+    EXPECT_EQ(proc_usage.pss, proc_mem.Usage().pss);
+    EXPECT_EQ(proc_usage.uss, proc_mem.Usage().uss);
+
+    pm_process_destroy(proc);
+    pm_kernel_destroy(ker);
+}
+
 TEST(SysMemInfoParser, TestSysMemInfoFile) {
     std::string meminfo = R"meminfo(MemTotal:        3019740 kB
 MemFree:         1809728 kB
@@ -286,6 +397,17 @@ TEST(SysMemInfoParser, TestEmptyFile) {
     SysMemInfo mi;
     EXPECT_TRUE(mi.ReadMemInfo(tf.path));
     EXPECT_EQ(mi.mem_total_kb(), 0);
+}
+
+TEST(SysMemInfoParse, TestZramTotal) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+
+    SysMemInfo mi;
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    EXPECT_EQ(mi.mem_zram_kb(zram_mmstat_dir), 30504);
+
+    std::string zram_memused_dir = exec_dir + "/testdata2/";
+    EXPECT_EQ(mi.mem_zram_kb(zram_memused_dir), 30504);
 }
 
 int main(int argc, char** argv) {

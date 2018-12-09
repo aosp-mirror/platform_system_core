@@ -15,19 +15,32 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include <android-base/stringprintf.h>
 #include <meminfo/procmeminfo.h>
 
+using Vma = ::android::meminfo::Vma;
 using ProcMemInfo = ::android::meminfo::ProcMemInfo;
 using MemUsage = ::android::meminfo::MemUsage;
+
+// Global flags to control procmem output
+
+// Set to use page idle bits for working set detection
+bool use_pageidle = false;
+// hides map entries with zero rss
+bool hide_zeroes = false;
+// Reset working set and exit
+bool reset_wss = false;
+// Show working set, mutually exclusive with reset_wss;
+bool show_wss = false;
 
 static void usage(const char* cmd) {
     fprintf(stderr,
@@ -42,68 +55,56 @@ static void usage(const char* cmd) {
             cmd);
 }
 
-static void show_footer(uint32_t nelem, const std::string& padding) {
-    std::string elem(7, '-');
-
-    for (uint32_t i = 0; i < nelem; ++i) {
-        std::cout << std::setw(7) << elem << padding;
+static void print_separator(std::stringstream& ss) {
+    if (show_wss) {
+        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "-------",
+                                            "-------", "-------", "-------", "-------", "-------",
+                                            "-------", "");
+        return;
     }
-    std::cout << std::endl;
+    ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "-------",
+                                        "-------", "-------", "-------", "-------", "-------",
+                                        "-------", "-------", "");
 }
 
-static void show_header(const std::vector<std::string>& header, const std::string& padding) {
-    if (header.empty()) return;
-
-    for (size_t i = 0; i < header.size() - 1; ++i) {
-        std::cout << std::setw(7) << header[i] << padding;
+static void print_header(std::stringstream& ss) {
+    if (show_wss) {
+        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "WRss",
+                                            "WPss", "WUss", "WShCl", "WShDi", "WPrCl", "WPrDi",
+                                            "Name");
+    } else {
+        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "Vss",
+                                            "Rss", "Pss", "Uss", "ShCl", "ShDi", "PrCl", "PrDi",
+                                            "Name");
     }
-    std::cout << header.back() << std::endl;
-    show_footer(header.size() - 1, padding);
+    print_separator(ss);
 }
 
-static void scan_usage(std::stringstream& ss, const MemUsage& usage, const std::string& padding,
-                       bool show_wss) {
-    // clear string stream first.
-    ss.str("");
-    // TODO: use ::android::base::StringPrintf instead of <iomanip> here.
-    if (!show_wss)
-        ss << std::setw(6) << usage.vss/1024 << padding;
-    ss << std::setw(6) << usage.rss/1024 << padding << std::setw(6)
-       << usage.pss/1024 << padding << std::setw(6) << usage.uss/1024 << padding
-       << std::setw(6) << usage.shared_clean/1024 << padding << std::setw(6)
-       << usage.shared_dirty/1024 << padding << std::setw(6)
-       << usage.private_clean/1024 << padding << std::setw(6)
-       << usage.private_dirty/1024 << padding;
+static void print_stats(std::stringstream& ss, const MemUsage& stats) {
+    if (!show_wss) {
+        ss << ::android::base::StringPrintf("%6" PRIu64 "K  ", stats.vss / 1024);
+    }
+
+    ss << ::android::base::StringPrintf("%6" PRIu64 "K  %6" PRIu64 "K  %6" PRIu64 "K  %6" PRIu64
+                                        "K  %6" PRIu64 "K  %6" PRIu64 "K  %6" PRIu64 "K  ",
+                                        stats.rss / 1024, stats.pss / 1024, stats.uss / 1024,
+                                        stats.shared_clean / 1024, stats.shared_dirty / 1024,
+                                        stats.private_clean / 1024, stats.private_dirty / 1024);
 }
 
-static int show(ProcMemInfo& proc, bool hide_zeroes, bool show_wss) {
-    const std::vector<std::string> main_header = {"Vss",  "Rss",  "Pss",  "Uss", "ShCl",
-                                                  "ShDi", "PrCl", "PrDi", "Name"};
-    const std::vector<std::string> wss_header = {"WRss",  "WPss",  "WUss",  "WShCl",
-                                                 "WShDi", "WPrCl", "WPrDi", "Name"};
-    const std::vector<std::string>& header = show_wss ? wss_header : main_header;
-
-    // Read process memory stats
-    const MemUsage& stats = show_wss ? proc.Wss() : proc.Usage();
-    const std::vector<::android::meminfo::Vma>& maps = proc.Maps();
-
-    // following retains 'procmem' output so as to not break any scripts
-    // that rely on it.
-    std::string spaces = "  ";
-    show_header(header, spaces);
-    const std::string padding = "K  ";
+static int show(const MemUsage& proc_stats, const std::vector<Vma>& maps) {
     std::stringstream ss;
+    print_header(ss);
     for (auto& vma : maps) {
         const MemUsage& vma_stats = show_wss ? vma.wss : vma.usage;
         if (hide_zeroes && vma_stats.rss == 0) {
             continue;
         }
-        scan_usage(ss, vma_stats, padding, show_wss);
+        print_stats(ss, vma_stats);
         ss << vma.name << std::endl;
-        std::cout << ss.str();
     }
-    show_footer(header.size() - 1, spaces);
-    scan_usage(ss, stats, padding, show_wss);
+    print_separator(ss);
+    print_stats(ss, proc_stats);
     ss << "TOTAL" << std::endl;
     std::cout << ss.str();
 
@@ -111,28 +112,43 @@ static int show(ProcMemInfo& proc, bool hide_zeroes, bool show_wss) {
 }
 
 int main(int argc, char* argv[]) {
-    bool use_pageidle = false;
-    bool hide_zeroes = false;
-    bool wss_reset = false;
-    bool show_wss = false;
     int opt;
+    auto pss_sort = [](const Vma& a, const Vma& b) {
+        uint64_t pss_a = show_wss ? a.wss.pss : a.usage.pss;
+        uint64_t pss_b = show_wss ? b.wss.pss : b.usage.pss;
+        return pss_a > pss_b;
+    };
 
+    auto uss_sort = [](const Vma& a, const Vma& b) {
+        uint64_t uss_a = show_wss ? a.wss.uss : a.usage.uss;
+        uint64_t uss_b = show_wss ? b.wss.uss : b.usage.uss;
+        return uss_a > uss_b;
+    };
+
+    std::function<bool(const Vma& a, const Vma& b)> sort_func = nullptr;
     while ((opt = getopt(argc, argv, "himpuWw")) != -1) {
         switch (opt) {
             case 'h':
                 hide_zeroes = true;
                 break;
             case 'i':
+                // TODO: libmeminfo doesn't support the flag to chose
+                // between idle page tracking vs clear_refs. So for now,
+                // this flag is unused and the library defaults to using
+                // /proc/<pid>/clear_refs for finding the working set.
                 use_pageidle = true;
                 break;
             case 'm':
+                // this is the default
                 break;
             case 'p':
+                sort_func = pss_sort;
                 break;
             case 'u':
+                sort_func = uss_sort;
                 break;
             case 'W':
-                wss_reset = true;
+                reset_wss = true;
                 break;
             case 'w':
                 show_wss = true;
@@ -157,15 +173,20 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    bool need_wss = wss_reset || show_wss;
-    ProcMemInfo proc(pid, need_wss);
-    if (wss_reset) {
-        if (!proc.WssReset()) {
+    if (reset_wss) {
+        if (!ProcMemInfo::ResetWorkingSet(pid)) {
             std::cerr << "Failed to reset working set of pid : " << pid << std::endl;
             exit(EXIT_FAILURE);
         }
         return 0;
     }
 
-    return show(proc, hide_zeroes, show_wss);
+    ProcMemInfo proc(pid, show_wss);
+    const MemUsage& proc_stats = show_wss ? proc.Wss() : proc.Usage();
+    std::vector<Vma> maps(proc.Maps());
+    if (sort_func != nullptr) {
+        std::sort(maps.begin(), maps.end(), sort_func);
+    }
+
+    return show(proc_stats, maps);
 }

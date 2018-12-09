@@ -26,7 +26,7 @@ void reset_log_context(android_log_context ctx);
 int write_to_logger(android_log_context context, log_id_t id);
 void note_log_drop(int error);
 void stats_log_close();
-
+int android_log_write_char_array(android_log_context ctx, const char* value, size_t len);
 #ifdef __cplusplus
 }
 #endif
@@ -238,6 +238,14 @@ class stats_event_list {
 
     bool Append(const char* value, size_t len) {
         int retval = android_log_write_string8_len(ctx, value, len);
+        if (retval < 0) {
+            ret = retval;
+        }
+        return ret >= 0;
+    }
+
+    bool AppendCharArray(const char* value, size_t len) {
+        int retval = android_log_write_char_array(ctx, value, len);
         if (retval < 0) {
             ret = retval;
         }

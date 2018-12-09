@@ -31,6 +31,7 @@ struct UeventdConfiguration {
     std::vector<Permissions> dev_permissions;
     std::vector<std::string> firmware_directories;
     bool enable_modalias_handling = false;
+    size_t uevent_socket_rcvbuf_size = 0;
 };
 
 UeventdConfiguration ParseConfig(const std::vector<std::string>& configs);
