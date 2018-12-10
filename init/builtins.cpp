@@ -734,13 +734,10 @@ static Result<Success> do_verity_load_state(const BuiltinArguments& args) {
     return Success();
 }
 
-static void verity_update_property(fstab_rec *fstab, const char *mount_point,
-                                   int mode, int status) {
-    property_set("partition."s + mount_point + ".verified", std::to_string(mode));
-}
-
 static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
-    if (!fs_mgr_update_verity_state(verity_update_property)) {
+    if (!fs_mgr_update_verity_state([](const std::string& mount_point, int mode) {
+            property_set("partition." + mount_point + ".verified", std::to_string(mode));
+        })) {
         return Error() << "fs_mgr_update_verity_state() failed";
     }
     return Success();
