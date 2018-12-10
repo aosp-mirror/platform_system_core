@@ -59,16 +59,16 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
   }
 
   static void SetUpTestCase() {
-    std::vector<uint8_t> buffer(1024);
-    memset(buffer.data(), 0, buffer.size());
+    std::vector<uint8_t> buffer(12288, 0);
     memcpy(buffer.data(), ELFMAG, SELFMAG);
     buffer[EI_CLASS] = ELFCLASS32;
-    ASSERT_TRUE(android::base::WriteFully(elf_.fd, buffer.data(), buffer.size()));
+    ASSERT_TRUE(android::base::WriteFully(elf_.fd, buffer.data(), 1024));
 
     memset(buffer.data(), 0, buffer.size());
-    memcpy(&buffer[0x100], ELFMAG, SELFMAG);
-    buffer[0x100 + EI_CLASS] = ELFCLASS64;
-    ASSERT_TRUE(android::base::WriteFully(elf_at_100_.fd, buffer.data(), buffer.size()));
+    memcpy(&buffer[0x1000], ELFMAG, SELFMAG);
+    buffer[0x1000 + EI_CLASS] = ELFCLASS64;
+    buffer[0x2000] = 0xff;
+    ASSERT_TRUE(android::base::WriteFully(elf_at_1000_.fd, buffer.data(), buffer.size()));
 
     InitElf<Elf32_Ehdr, Elf32_Shdr>(elf32_at_map_.fd, 0x1000, 0x2000, ELFCLASS32);
     InitElf<Elf64_Ehdr, Elf64_Shdr>(elf64_at_map_.fd, 0x2000, 0x3000, ELFCLASS64);
@@ -84,13 +84,13 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
 
   static TemporaryFile elf_;
 
-  static TemporaryFile elf_at_100_;
+  static TemporaryFile elf_at_1000_;
 
   static TemporaryFile elf32_at_map_;
   static TemporaryFile elf64_at_map_;
 };
 TemporaryFile MapInfoCreateMemoryTest::elf_;
-TemporaryFile MapInfoCreateMemoryTest::elf_at_100_;
+TemporaryFile MapInfoCreateMemoryTest::elf_at_1000_;
 TemporaryFile MapInfoCreateMemoryTest::elf32_at_map_;
 TemporaryFile MapInfoCreateMemoryTest::elf64_at_map_;
 
@@ -134,7 +134,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
 // Verify that if the offset is non-zero and there is an elf at that
 // offset, that only part of the file is used.
 TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
-  MapInfo info(nullptr, 0x100, 0x200, 0x100, 0, elf_at_100_.path);
+  MapInfo info(nullptr, 0x100, 0x200, 0x1000, 0, elf_at_1000_.path);
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
@@ -310,6 +310,45 @@ TEST_F(MapInfoCreateMemoryTest, valid_rosegment_non_zero_offset) {
   for (size_t i = 0; i < bytes; i++) {
     ASSERT_EQ(0x43, buffer[i]) << "Failed at byte " << i;
   }
+}
+
+TEST_F(MapInfoCreateMemoryTest, rosegment_from_file) {
+  Maps maps;
+  maps.Add(0x500, 0x600, 0, PROT_READ, "something_else", 0);
+  maps.Add(0x1000, 0x2000, 0x1000, PROT_READ, elf_at_1000_.path, 0);
+  maps.Add(0x2000, 0x3000, 0x2000, PROT_READ | PROT_EXEC, elf_at_1000_.path, 0);
+
+  MapInfo* map_info = maps.Find(0x2000);
+  ASSERT_TRUE(map_info != nullptr);
+
+  // Set up the size
+  Elf64_Ehdr ehdr;
+  ASSERT_EQ(0x1000, lseek(elf_at_1000_.fd, 0x1000, SEEK_SET));
+  ASSERT_TRUE(android::base::ReadFully(elf_at_1000_.fd, &ehdr, sizeof(ehdr)));
+
+  // Will not give the elf memory, because the read-only entry does not
+  // extend over the executable segment.
+  std::unique_ptr<Memory> memory(map_info->CreateMemory(process_memory_));
+  ASSERT_TRUE(memory.get() != nullptr);
+  std::vector<uint8_t> buffer(0x100);
+  EXPECT_EQ(0x2000U, map_info->offset);
+  EXPECT_EQ(0U, map_info->elf_offset);
+  ASSERT_TRUE(memory->ReadFully(0, buffer.data(), 0x100));
+  EXPECT_EQ(0xffU, buffer[0]);
+
+  // Now init the elf data enough so that the file memory object will be used.
+  ehdr.e_shoff = 0x4000;
+  ehdr.e_shnum = 1;
+  ehdr.e_shentsize = 0x100;
+  ASSERT_EQ(0x1000, lseek(elf_at_1000_.fd, 0x1000, SEEK_SET));
+  ASSERT_TRUE(android::base::WriteFully(elf_at_1000_.fd, &ehdr, sizeof(ehdr)));
+
+  memory.reset(map_info->CreateMemory(process_memory_));
+  EXPECT_EQ(0x2000U, map_info->offset);
+  EXPECT_EQ(0x1000U, map_info->elf_offset);
+  Elf64_Ehdr ehdr_mem;
+  ASSERT_TRUE(memory->ReadFully(0, &ehdr_mem, sizeof(ehdr_mem)));
+  EXPECT_TRUE(memcmp(&ehdr, &ehdr_mem, sizeof(ehdr)) == 0);
 }
 
 }  // namespace unwindstack
