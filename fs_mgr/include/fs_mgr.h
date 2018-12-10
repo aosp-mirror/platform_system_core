@@ -50,10 +50,6 @@ enum mount_mode {
     MOUNT_MODE_LATE = 2
 };
 
-// Callback function for verity status
-typedef void fs_mgr_verity_state_callback(fstab_rec* fstab, const char* mount_point, int mode,
-                                          int status);
-
 #define FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED 7
 #define FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION 6
 #define FS_MGR_MNTALL_DEV_FILE_ENCRYPTED 5
@@ -77,7 +73,8 @@ int fs_mgr_do_tmpfs_mount(const char *n_name);
 fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab);
 void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
 bool fs_mgr_load_verity_state(int* mode);
-bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback);
+bool fs_mgr_update_verity_state(
+        std::function<void(const std::string& mount_point, int mode)> callback);
 bool fs_mgr_swapon_all(const Fstab& fstab);
 bool fs_mgr_update_logical_partition(struct fstab_rec* rec);
 
