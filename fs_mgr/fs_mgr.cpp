@@ -763,7 +763,7 @@ static bool needs_block_encryption(const struct fstab_rec* rec)
     if (rec->fs_mgr_flags & MF_FORCECRYPT) return true;
     if (rec->fs_mgr_flags & MF_CRYPT) {
         // Check for existence of convert_fde breadcrumb file.
-        auto convert_fde_name = rec->mount_point + "%s/misc/vold/convert_fde"s;
+        auto convert_fde_name = rec->mount_point + "/misc/vold/convert_fde"s;
         if (access(convert_fde_name.c_str(), F_OK) == 0) return true;
     }
     if (rec->fs_mgr_flags & MF_FORCEFDEORFBE) {
