@@ -91,6 +91,8 @@ using android::fs_mgr::AvbHandle;
 using android::fs_mgr::AvbHashtreeResult;
 using android::fs_mgr::AvbUniquePtr;
 
+using namespace std::literals;
+
 // record fs stat
 enum FsStatFlags {
     FS_STAT_IS_EXT4 = 0x0001,
@@ -131,10 +133,10 @@ bool fs_mgr_wait_for_file(const std::string& filename,
     }
 }
 
-static void log_fs_stat(const char* blk_device, int fs_stat)
-{
+static void log_fs_stat(const std::string& blk_device, int fs_stat) {
     if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
-    std::string msg = android::base::StringPrintf("\nfs_stat,%s,0x%x\n", blk_device, fs_stat);
+    std::string msg =
+            android::base::StringPrintf("\nfs_stat,%s,0x%x\n", blk_device.c_str(), fs_stat);
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(FSCK_LOG_FILE, O_WRONLY | O_CLOEXEC |
                                                         O_APPEND | O_CREAT, 0664)));
     if (fd == -1 || !android::base::WriteStringToFd(msg, fd)) {
@@ -150,7 +152,7 @@ static bool is_f2fs(const std::string& fs_type) {
     return fs_type == "f2fs";
 }
 
-static std::string realpath(const char* blk_device) {
+static std::string realpath(const std::string& blk_device) {
     std::string real_path;
     if (!Realpath(blk_device, &real_path)) {
         real_path = blk_device;
@@ -166,14 +168,14 @@ static bool should_force_check(int fs_stat) {
             FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
-static void check_fs(const char *blk_device, char *fs_type, char *target, int *fs_stat)
-{
+static void check_fs(const std::string& blk_device, const std::string& fs_type,
+                     const std::string& target, int* fs_stat) {
     int status;
     int ret;
     long tmpmnt_flags = MS_NOATIME | MS_NOEXEC | MS_NOSUID;
-    char tmpmnt_opts[64] = "errors=remount-ro";
-    const char* e2fsck_argv[] = {E2FSCK_BIN, "-y", blk_device};
-    const char* e2fsck_forced_argv[] = {E2FSCK_BIN, "-f", "-y", blk_device};
+    auto tmpmnt_opts = "errors=remount-ro"s;
+    const char* e2fsck_argv[] = {E2FSCK_BIN, "-y", blk_device.c_str()};
+    const char* e2fsck_forced_argv[] = {E2FSCK_BIN, "-f", "-y", blk_device.c_str()};
 
     if (*fs_stat & FS_STAT_INVALID_MAGIC) {  // will fail, so do not try
         return;
@@ -196,18 +198,19 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
          */
         if (!(*fs_stat & FS_STAT_FULL_MOUNT_FAILED)) {  // already tried if full mount failed
             errno = 0;
-            if (!strcmp(fs_type, "ext4")) {
+            if (fs_type == "ext4") {
                 // This option is only valid with ext4
-                strlcat(tmpmnt_opts, ",nomblk_io_submit", sizeof(tmpmnt_opts));
+                tmpmnt_opts += ",nomblk_io_submit";
             }
-            ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
+            ret = mount(blk_device.c_str(), target.c_str(), fs_type.c_str(), tmpmnt_flags,
+                        tmpmnt_opts.c_str());
             PINFO << __FUNCTION__ << "(): mount(" << blk_device << "," << target << "," << fs_type
                   << ")=" << ret;
             if (!ret) {
                 bool umounted = false;
                 int retry_count = 5;
                 while (retry_count-- > 0) {
-                    umounted = umount(target) == 0;
+                    umounted = umount(target.c_str()) == 0;
                     if (umounted) {
                         LINFO << __FUNCTION__ << "(): unmount(" << target << ") succeeded";
                         break;
@@ -254,7 +257,7 @@ static void check_fs(const char *blk_device, char *fs_type, char *target, int *f
             }
         }
     } else if (is_f2fs(fs_type)) {
-        const char* f2fs_fsck_argv[] = {F2FS_FSCK_BIN, "-a", blk_device};
+        const char* f2fs_fsck_argv[] = {F2FS_FSCK_BIN, "-a", blk_device.c_str()};
         LINFO << "Running " << F2FS_FSCK_BIN << " -a " << realpath(blk_device);
 
         ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv),
@@ -290,8 +293,9 @@ static bool is_ext4_superblock_valid(const struct ext4_super_block* es) {
 
 // Read the primary superblock from an ext4 filesystem.  On failure return
 // false.  If it's not an ext4 filesystem, also set FS_STAT_INVALID_MAGIC.
-static bool read_ext4_superblock(const char* blk_device, struct ext4_super_block* sb, int* fs_stat) {
-    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
+static bool read_ext4_superblock(const std::string& blk_device, struct ext4_super_block* sb,
+                                 int* fs_stat) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
 
     if (fd < 0) {
         PERROR << "Failed to open '" << blk_device << "'";
@@ -332,7 +336,7 @@ static bool run_tune2fs(const char* argv[], int argc) {
 }
 
 // Enable/disable quota support on the filesystem if needed.
-static void tune_quota(const char* blk_device, const struct fstab_rec* rec,
+static void tune_quota(const std::string& blk_device, const struct fstab_rec* rec,
                        const struct ext4_super_block* sb, int* fs_stat) {
     bool has_quota = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
     bool want_quota = fs_mgr_is_quota(rec) != 0;
@@ -347,7 +351,7 @@ static void tune_quota(const char* blk_device, const struct fstab_rec* rec,
         return;
     }
 
-    const char* argv[] = {TUNE2FS_BIN, nullptr, nullptr, blk_device};
+    const char* argv[] = {TUNE2FS_BIN, nullptr, nullptr, blk_device.c_str()};
 
     if (want_quota) {
         LINFO << "Enabling quotas on " << blk_device;
@@ -368,7 +372,7 @@ static void tune_quota(const char* blk_device, const struct fstab_rec* rec,
 }
 
 // Set the number of reserved filesystem blocks if needed.
-static void tune_reserved_size(const char* blk_device, const struct fstab_rec* rec,
+static void tune_reserved_size(const std::string& blk_device, const struct fstab_rec* rec,
                                const struct ext4_super_block* sb, int* fs_stat) {
     if (!(rec->fs_mgr_flags & MF_RESERVEDSIZE)) {
         return;
@@ -400,7 +404,8 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
     auto reserved_blocks_str = std::to_string(reserved_blocks);
     auto reserved_gid_str = std::to_string(AID_RESERVED_DISK);
     const char* argv[] = {
-        TUNE2FS_BIN, "-r", reserved_blocks_str.c_str(), "-g", reserved_gid_str.c_str(), blk_device};
+            TUNE2FS_BIN,       "-r", reserved_blocks_str.c_str(), "-g", reserved_gid_str.c_str(),
+            blk_device.c_str()};
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
         LERROR << "Failed to run " TUNE2FS_BIN " to set the number of reserved blocks on "
                << blk_device;
@@ -409,7 +414,7 @@ static void tune_reserved_size(const char* blk_device, const struct fstab_rec* r
 }
 
 // Enable file-based encryption if needed.
-static void tune_encrypt(const char* blk_device, const struct fstab_rec* rec,
+static void tune_encrypt(const std::string& blk_device, const struct fstab_rec* rec,
                          const struct ext4_super_block* sb, int* fs_stat) {
     bool has_encrypt = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_ENCRYPT)) != 0;
     bool want_encrypt = fs_mgr_is_file_encrypted(rec) != 0;
@@ -424,7 +429,7 @@ static void tune_encrypt(const char* blk_device, const struct fstab_rec* rec,
         return;
     }
 
-    const char* argv[] = {TUNE2FS_BIN, "-Oencrypt", blk_device};
+    const char* argv[] = {TUNE2FS_BIN, "-Oencrypt", blk_device.c_str()};
 
     LINFO << "Enabling ext4 encryption on " << blk_device;
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
@@ -438,8 +443,8 @@ static void tune_encrypt(const char* blk_device, const struct fstab_rec* rec,
 // false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
 #define F2FS_BLKSIZE 4096
 #define F2FS_SUPER_OFFSET 1024
-static bool read_f2fs_superblock(const char* blk_device, int* fs_stat) {
-    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC)));
+static bool read_f2fs_superblock(const std::string& blk_device, int* fs_stat) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
     __le32 sb1, sb2;
 
     if (fd < 0) {
@@ -473,7 +478,7 @@ static bool read_f2fs_superblock(const char* blk_device, int* fs_stat) {
 // If needed, we'll also enable (or disable) filesystem features as specified by
 // the fstab record.
 //
-static int prepare_fs_for_mount(const char* blk_device, const struct fstab_rec* rec) {
+static int prepare_fs_for_mount(const std::string& blk_device, const struct fstab_rec* rec) {
     int fs_stat = 0;
 
     if (is_extfs(rec->fs_type)) {
@@ -516,17 +521,6 @@ static int prepare_fs_for_mount(const char* blk_device, const struct fstab_rec* 
     return fs_stat;
 }
 
-static void remove_trailing_slashes(char *n)
-{
-    int len;
-
-    len = strlen(n) - 1;
-    while ((*(n + len) == '/') && len) {
-      *(n + len) = '\0';
-      len--;
-    }
-}
-
 // Mark the given block device as read-only, using the BLKROSET ioctl.
 bool fs_mgr_set_blk_ro(const std::string& blockdev) {
     unique_fd fd(TEMP_FAILURE_RETRY(open(blockdev.c_str(), O_RDONLY | O_CLOEXEC)));
@@ -548,34 +542,28 @@ bool fs_mgr_is_device_unlocked() {
     return false;
 }
 
-/*
- * __mount(): wrapper around the mount() system call which also
- * sets the underlying block device to read-only if the mount is read-only.
- * See "man 2 mount" for return values.
- */
-static int __mount(const char *source, const char *target, const struct fstab_rec *rec)
-{
-    unsigned long mountflags = rec->flags;
-    int ret;
-    int save_errno;
-
-    /* We need this because sometimes we have legacy symlinks
-     * that are lingering around and need cleaning up.
-     */
+// __mount(): wrapper around the mount() system call which also
+// sets the underlying block device to read-only if the mount is read-only.
+// See "man 2 mount" for return values.
+static int __mount(const std::string& source, const std::string& target,
+                   const struct fstab_rec* rec) {
+    // We need this because sometimes we have legacy symlinks that are
+    // lingering around and need cleaning up.
     struct stat info;
-    if (!lstat(target, &info))
-        if ((info.st_mode & S_IFMT) == S_IFLNK)
-            unlink(target);
-    mkdir(target, 0755);
+    if (lstat(target.c_str(), &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK) {
+        unlink(target.c_str());
+    }
+    mkdir(target.c_str(), 0755);
     errno = 0;
-    ret = mount(source, target, rec->fs_type, mountflags, rec->fs_options);
-    save_errno = errno;
+    unsigned long mountflags = rec->flags;
+    int ret = mount(source.c_str(), target.c_str(), rec->fs_type, mountflags, rec->fs_options);
+    int save_errno = errno;
     const char* target_missing = "";
     const char* source_missing = "";
     if (save_errno == ENOENT) {
-        if (access(target, F_OK)) {
+        if (access(target.c_str(), F_OK)) {
             target_missing = "(missing)";
-        } else if (access(source, F_OK)) {
+        } else if (access(source.c_str(), F_OK)) {
             source_missing = "(missing)";
         }
         errno = save_errno;
@@ -589,24 +577,32 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     return ret;
 }
 
-static int fs_match(const char *in1, const char *in2)
-{
-    char *n1;
-    char *n2;
-    int ret;
+static bool fs_match(const std::string& in1, const std::string& in2) {
+    if (in1.empty() || in2.empty()) {
+        return false;
+    }
 
-    n1 = strdup(in1);
-    n2 = strdup(in2);
+    auto in1_end = in1.size() - 1;
+    while (in1_end > 0 && in1[in1_end] == '/') {
+        in1_end--;
+    }
 
-    remove_trailing_slashes(n1);
-    remove_trailing_slashes(n2);
+    auto in2_end = in2.size() - 1;
+    while (in2_end > 0 && in2[in2_end] == '/') {
+        in2_end--;
+    }
 
-    ret = !strcmp(n1, n2);
+    if (in1_end != in2_end) {
+        return false;
+    }
 
-    free(n1);
-    free(n2);
+    for (size_t i = 0; i <= in1_end; ++i) {
+        if (in1[i] != in2[i]) {
+            return false;
+        }
+    }
 
-    return ret;
+    return true;
 }
 
 /*
@@ -746,17 +742,12 @@ static bool TranslateExtLabels(fstab_rec* rec) {
         }
 
         if (label == super_block.s_volume_name) {
-            char* new_blk_device;
-
-            if (asprintf(&new_blk_device, "/dev/block/%s", ent->d_name) < 0) {
-                LERROR << "Could not allocate block device string";
-                return false;
-            }
+            std::string new_blk_device = "/dev/block/"s + ent->d_name;
 
             LINFO << "resolved label " << rec->blk_device << " to " << new_blk_device;
 
             free(rec->blk_device);
-            rec->blk_device = new_blk_device;
+            rec->blk_device = strdup(new_blk_device.c_str());
             return true;
         }
     }
@@ -771,18 +762,14 @@ static bool needs_block_encryption(const struct fstab_rec* rec)
         return true;
     if (rec->fs_mgr_flags & MF_FORCECRYPT) return true;
     if (rec->fs_mgr_flags & MF_CRYPT) {
-        /* Check for existence of convert_fde breadcrumb file */
-        char convert_fde_name[PATH_MAX];
-        snprintf(convert_fde_name, sizeof(convert_fde_name),
-                 "%s/misc/vold/convert_fde", rec->mount_point);
-        if (access(convert_fde_name, F_OK) == 0) return true;
+        // Check for existence of convert_fde breadcrumb file.
+        auto convert_fde_name = rec->mount_point + "/misc/vold/convert_fde"s;
+        if (access(convert_fde_name.c_str(), F_OK) == 0) return true;
     }
     if (rec->fs_mgr_flags & MF_FORCEFDEORFBE) {
-        /* Check for absence of convert_fbe breadcrumb file */
-        char convert_fbe_name[PATH_MAX];
-        snprintf(convert_fbe_name, sizeof(convert_fbe_name),
-                 "%s/convert_fbe", rec->mount_point);
-        if (access(convert_fbe_name, F_OK) != 0) return true;
+        // Check for absence of convert_fbe breadcrumb file.
+        auto convert_fbe_name = rec->mount_point + "/convert_fbe"s;
+        if (access(convert_fbe_name.c_str(), F_OK) != 0) return true;
     }
     return false;
 }
@@ -1533,7 +1520,8 @@ bool fs_mgr_load_verity_state(int* mode) {
     return true;
 }
 
-bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> callback) {
+bool fs_mgr_update_verity_state(
+        std::function<void(const std::string& mount_point, int mode)> callback) {
     if (!callback) {
         return false;
     }
@@ -1543,27 +1531,25 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         return false;
     }
 
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    if (!fstab) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
         LERROR << "Failed to read default fstab";
         return false;
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    for (int i = 0; i < fstab->num_entries; i++) {
-        auto fsrec = &fstab->recs[i];
-        if (!fs_mgr_is_verified(fsrec) && !fs_mgr_is_avb(fsrec)) {
+    for (const auto& entry : fstab) {
+        if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
             continue;
         }
 
         std::string mount_point;
-        if (!strcmp(fsrec->mount_point, "/")) {
+        if (entry.mount_point == "/") {
             // In AVB, the dm device name is vroot instead of system.
-            mount_point = fs_mgr_is_avb(fsrec) ? "vroot" : "system";
+            mount_point = entry.fs_mgr_flags.avb ? "vroot" : "system";
         } else {
-            mount_point = basename(fsrec->mount_point);
+            mount_point = basename(entry.mount_point.c_str());
         }
 
         if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
@@ -1574,7 +1560,7 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         const char* status;
         std::vector<DeviceMapper::TargetInfo> table;
         if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
-            if (!fs_mgr_is_verifyatboot(fsrec)) {
+            if (!entry.fs_mgr_flags.verify_at_boot) {
                 PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point;
                 continue;
             }
@@ -1588,7 +1574,7 @@ bool fs_mgr_update_verity_state(std::function<fs_mgr_verity_state_callback> call
         // instead of [partition.vroot.verified].
         if (mount_point == "vroot") mount_point = "system";
         if (*status == 'C' || *status == 'V') {
-            callback(fsrec, mount_point.c_str(), mode, *status);
+            callback(mount_point, mode);
         }
     }
 

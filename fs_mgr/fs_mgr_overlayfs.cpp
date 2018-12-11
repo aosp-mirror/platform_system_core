@@ -277,9 +277,8 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overl
 
 std::vector<std::string> fs_mgr_overlayfs_verity_enabled_list() {
     std::vector<std::string> ret;
-    fs_mgr_update_verity_state([&ret](fstab_rec*, const char* mount_point, int, int) {
-        ret.emplace_back(mount_point);
-    });
+    fs_mgr_update_verity_state(
+            [&ret](const std::string& mount_point, int) { ret.emplace_back(mount_point); });
     return ret;
 }
 

@@ -38,13 +38,15 @@ additional.namespaces = sphal,vndk,rs
 ###############################################################################
 namespace.default.isolated = false
 
-namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths  = /apex/com.android.runtime/${LIB}
+namespace.default.search.paths += /system/${LIB}
 namespace.default.search.paths += /odm/${LIB}
 namespace.default.search.paths += /vendor/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
+namespace.default.asan.search.paths += /apex/com.android.runtime/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
 namespace.default.asan.search.paths += /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
@@ -211,6 +213,7 @@ namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 # Access to system libraries are allowed
 namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
+namespace.default.search.paths += /apex/com.android.runtime/${LIB}
 namespace.default.search.paths += /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
@@ -232,6 +235,7 @@ namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}
+namespace.default.asan.search.paths += /apex/com.android.runtime/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
 namespace.default.asan.search.paths += /data/asan/product/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
@@ -248,6 +252,7 @@ namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 ###############################################################################
 [postinstall]
 namespace.default.isolated = false
-namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths  = /apex/com.android.runtime/${LIB}
+namespace.default.search.paths += /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}

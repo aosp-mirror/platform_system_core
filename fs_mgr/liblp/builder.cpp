@@ -606,14 +606,23 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
         }
 
         uint64_t sectors = std::min(sectors_needed, region.length());
+        if (sectors < region.length()) {
+            const auto& block_device = block_devices_[region.device_index];
+            if (block_device.alignment) {
+                const uint64_t alignment = block_device.alignment / LP_SECTOR_SIZE;
+                sectors = AlignTo(sectors, alignment);
+                sectors = std::min(sectors, region.length());
+            }
+        }
         CHECK(sectors % sectors_per_block == 0);
 
         auto extent = std::make_unique<LinearExtent>(sectors, region.device_index, region.start);
         new_extents.push_back(std::move(extent));
-        sectors_needed -= sectors;
-        if (!sectors_needed) {
+        if (sectors >= sectors_needed) {
+            sectors_needed = 0;
             break;
         }
+        sectors_needed -= sectors;
     }
     if (sectors_needed) {
         LERROR << "Not enough free space to expand partition: " << partition->name();
