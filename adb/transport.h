@@ -37,6 +37,7 @@
 
 #include "adb.h"
 #include "adb_unique_fd.h"
+#include "usb.h"
 
 typedef std::unordered_set<std::string> FeatureSet;
 
@@ -242,6 +243,9 @@ class atransport {
         return connection_;
     }
 
+    void SetUsbHandle(usb_handle* h) { usb_handle_ = h; }
+    usb_handle* GetUsbHandle() { return usb_handle_; }
+
     const TransportId id;
     size_t ref_count = 0;
     bool online = false;
@@ -332,6 +336,9 @@ class atransport {
 
     // The underlying connection object.
     std::shared_ptr<Connection> connection_ GUARDED_BY(mutex_);
+
+    // USB handle for the connection, if available.
+    usb_handle* usb_handle_ = nullptr;
 
     // A callback that will be invoked when the atransport needs to reconnect.
     ReconnectCallback reconnect_;
