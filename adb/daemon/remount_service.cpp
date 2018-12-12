@@ -245,9 +245,8 @@ void remount_service(unique_fd fd, const std::string& cmd) {
     // If we can use overlayfs, lets get it in place first
     // before we struggle with determining deduplication operations.
     if (!verity_enabled && fs_mgr_overlayfs_setup()) {
-        std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                                   fs_mgr_free_fstab);
-        if (fs_mgr_overlayfs_mount_all(fstab.get())) {
+        Fstab fstab;
+        if (ReadDefaultFstab(&fstab) && fs_mgr_overlayfs_mount_all(&fstab)) {
             WriteFdExactly(fd.get(), "overlayfs mounted\n");
         }
     }
