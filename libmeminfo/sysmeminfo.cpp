@@ -18,12 +18,15 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,7 +52,29 @@ const std::vector<std::string> SysMemInfo::kDefaultSysMemInfoTags = {
 };
 
 bool SysMemInfo::ReadMemInfo(const std::string& path) {
-    return ReadMemInfo(SysMemInfo::kDefaultSysMemInfoTags, path);
+    return ReadMemInfo(SysMemInfo::kDefaultSysMemInfoTags, path,
+                       [&](const std::string& tag, uint64_t val) { mem_in_kb_[tag] = val; });
+}
+
+bool SysMemInfo::ReadMemInfo(std::vector<uint64_t>* out, const std::string& path) {
+    return ReadMemInfo(SysMemInfo::kDefaultSysMemInfoTags, out, path);
+}
+
+bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, std::vector<uint64_t>* out,
+                             const std::string& path) {
+    out->clear();
+    out->resize(tags.size());
+
+    return ReadMemInfo(tags, path, [&]([[maybe_unused]] const std::string& tag, uint64_t val) {
+        auto it = std::find(tags.begin(), tags.end(), tag);
+        if (it == tags.end()) {
+            LOG(ERROR) << "Tried to store invalid tag: " << tag;
+            return;
+        }
+        auto index = std::distance(tags.begin(), it);
+        // store the values in the same order as the tags
+        out->at(index) = val;
+    });
 }
 
 // TODO: Delete this function if it can't match up with the c-like implementation below.
@@ -88,7 +113,8 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
 }
 
 #else
-bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::string& path) {
+bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::string& path,
+                             std::function<void(const std::string&, uint64_t)> store_val) {
     char buffer[4096];
     int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
@@ -106,22 +132,34 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
     char* p = buffer;
     uint32_t found = 0;
     uint32_t lineno = 0;
+    bool zram_tag_found = false;
     while (*p && found < tags.size()) {
         for (auto& tag : tags) {
+            // Special case for "Zram:" tag that android_os_Debug and friends look
+            // up along with the rest of the numbers from /proc/meminfo
+            if (!zram_tag_found && tag == "Zram:") {
+                store_val(tag, mem_zram_kb());
+                zram_tag_found = true;
+                found++;
+                continue;
+            }
+
             if (strncmp(p, tag.c_str(), tag.size()) == 0) {
                 p += tag.size();
                 while (*p == ' ') p++;
                 char* endptr = nullptr;
-                mem_in_kb_[tag] = strtoull(p, &endptr, 10);
+                uint64_t val = strtoull(p, &endptr, 10);
                 if (p == endptr) {
                     PLOG(ERROR) << "Failed to parse line:" << lineno + 1 << " in file: " << path;
                     return false;
                 }
+                store_val(tag, val);
                 p = endptr;
                 found++;
                 break;
             }
         }
+
         while (*p && *p != '\n') {
             p++;
         }
@@ -163,24 +201,19 @@ uint64_t SysMemInfo::mem_zram_kb(const std::string& zram_dev) {
 }
 
 bool SysMemInfo::MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_dev) {
-    std::string content;
-    if (android::base::ReadFileToString(zram_dev + "mm_stat", &content)) {
-        std::vector<std::string> values = ::android::base::Split(content, " ");
-        if (values.size() < 3) {
-            LOG(ERROR) << "Malformed mm_stat file for zram dev: " << zram_dev
-                       << " content: " << content;
+    std::string mmstat = ::android::base::StringPrintf("%s/%s", zram_dev.c_str(), "mm_stat");
+    auto mmstat_fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(mmstat.c_str(), "re"), fclose};
+    if (mmstat_fp != nullptr) {
+        // only if we do have mmstat, use it. Otherwise, fall through to trying out the old
+        // 'mem_used_total'
+        if (fscanf(mmstat_fp.get(), "%*" SCNu64 " %*" SCNu64 " %" SCNu64, mem_zram_dev) != 1) {
+            PLOG(ERROR) << "Malformed mm_stat file in: " << zram_dev;
             return false;
         }
-
-        if (!::android::base::ParseUint(values[2], mem_zram_dev)) {
-            LOG(ERROR) << "Malformed mm_stat file for zram dev: " << zram_dev
-                       << " value: " << values[2];
-            return false;
-        }
-
         return true;
     }
 
+    std::string content;
     if (::android::base::ReadFileToString(zram_dev + "mem_used_total", &content)) {
         *mem_zram_dev = strtoull(content.c_str(), NULL, 10);
         if (*mem_zram_dev == ULLONG_MAX) {
