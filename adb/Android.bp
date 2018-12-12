@@ -355,6 +355,7 @@ cc_library {
     compile_multilib: "both",
 
     srcs: [
+        "daemon/abb_service.cpp",
         "daemon/file_sync_service.cpp",
         "daemon/framebuffer_service.cpp",
         "daemon/mdns.cpp",
@@ -391,6 +392,14 @@ cc_library {
         "libmdnssd",
         "libselinux",
     ],
+
+    target: {
+        recovery: {
+            exclude_srcs: [
+                "daemon/abb_service.cpp",
+            ],
+        },
+    },
 }
 
 cc_library {
@@ -451,6 +460,40 @@ cc_binary {
         "libcutils",
         "liblog",
         "libminijail",
+        "libselinux",
+    ],
+}
+
+cc_binary {
+    name: "abb",
+
+    defaults: ["adb_defaults"],
+    recovery_available: false,
+
+    srcs: [
+        "daemon/abb.cpp",
+    ],
+
+    cflags: [
+        "-D_GNU_SOURCE",
+        "-Wno-deprecated-declarations",
+    ],
+
+    strip: {
+        keep_symbols: true,
+    },
+
+    static_libs: [
+        "libadbd_core",
+        "libadbd_services",
+        "libcmd",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libbinder",
+        "liblog",
+        "libutils",
         "libselinux",
     ],
 }
