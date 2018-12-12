@@ -32,7 +32,6 @@ std::string fs_mgr_get_slot_suffix() {
 
 // Updates |fstab| for slot_suffix. Returns true on success, false on error.
 bool fs_mgr_update_for_slotselect(Fstab* fstab) {
-    int n;
     std::string ab_suffix;
 
     for (auto& entry : *fstab) {

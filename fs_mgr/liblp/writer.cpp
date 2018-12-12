@@ -84,7 +84,6 @@ std::string SerializeMetadata(const LpMetadata& input) {
 // with potentially invalid metadata, or random partition data with metadata.
 static bool ValidateAndSerializeMetadata(const IPartitionOpener& opener, const LpMetadata& metadata,
                                          const std::string& slot_suffix, std::string* blob) {
-    const LpMetadataHeader& header = metadata.header;
     const LpMetadataGeometry& geometry = metadata.geometry;
 
     *blob = SerializeMetadata(metadata);
