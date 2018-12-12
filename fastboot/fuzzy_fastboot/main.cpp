@@ -281,7 +281,7 @@ TEST_F(Conformance, GetVarAll) {
     std::vector<std::string> vars;
     EXPECT_EQ(fb->GetVarAll(&vars), SUCCESS) << "getvar:all failed";
     EXPECT_GT(vars.size(), 0) << "getvar:all did not respond with any INFO responses";
-    for (const auto s : vars) {
+    for (const auto& s : vars) {
         EXPECT_LE(s.size(), FB_RESPONSE_SZ - 4)
                 << "getvar:all included an INFO response: 'INFO" + s << "' which is too long";
     }
@@ -316,7 +316,7 @@ TEST_F(Conformance, PartitionInfo) {
     EXPECT_GT(parts.size(), 0)
             << "getvar:all did not report any partition-size: through INFO responses";
     std::set<std::string> allowed{"ext4", "f2fs", "raw"};
-    for (const auto p : parts) {
+    for (const auto& p : parts) {
         EXPECT_GE(std::get<1>(p), 0);
         std::string part(std::get<0>(p));
         std::set<std::string> allowed{"ext4", "f2fs", "raw"};
@@ -355,7 +355,7 @@ TEST_F(Conformance, Slots) {
     if (num_slots > 0) {
         EXPECT_EQ(fb->GetVar("current-slot", &var), SUCCESS) << "getvar:current-slot failed";
 
-        for (const auto p : parts) {
+        for (const auto& p : parts) {
             std::string part(std::get<0>(p));
             std::regex reg("([[:graph:]]*)_([[:lower:]])");
             std::smatch sm;
@@ -378,7 +378,7 @@ TEST_F(Conformance, Slots) {
             }
         }
         // Ensure each partition has the correct slot suffix
-        for (const auto iter : part_slots) {
+        for (const auto& iter : part_slots) {
             const std::set<char>& char_set = iter.second;
             std::string chars;
             for (char c : char_set) {
@@ -572,7 +572,7 @@ TEST_F(LockPermissions, DownloadFlash) {
     std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed in locked mode";
     std::string resp;
-    for (const auto tup : parts) {
+    for (const auto& tup : parts) {
         EXPECT_EQ(fb->Flash(std::get<0>(tup), &resp), DEVICE_FAIL)
                 << "Device did not respond with FAIL when trying to flash '" << std::get<0>(tup)
                 << "' in locked mode";
@@ -585,7 +585,7 @@ TEST_F(LockPermissions, Erase) {
     std::vector<std::tuple<std::string, uint64_t>> parts;
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
     std::string resp;
-    for (const auto tup : parts) {
+    for (const auto& tup : parts) {
         EXPECT_EQ(fb->Erase(std::get<0>(tup), &resp), DEVICE_FAIL)
                 << "Device did not respond with FAIL when trying to erase '" << std::get<0>(tup)
                 << "' in locked mode";
@@ -601,7 +601,7 @@ TEST_F(LockPermissions, SetActive) {
     EXPECT_EQ(fb->GetVar("slot-count", &resp), SUCCESS) << "getvar:slot-count failed";
     int32_t num_slots = strtol(resp.c_str(), nullptr, 10);
 
-    for (const auto tup : parts) {
+    for (const auto& tup : parts) {
         std::string part(std::get<0>(tup));
         std::regex reg("([[:graph:]]*)_([[:lower:]])");
         std::smatch sm;
@@ -1554,12 +1554,12 @@ INSTANTIATE_TEST_CASE_P(XMLSparseTest, SparseTestPartition,
 
 void GenerateXmlTests(const extension::Configuration& config) {
     // Build the getvar tests
-    for (const auto it : config.getvars) {
+    for (const auto& it : config.getvars) {
         GETVAR_XML_TESTS.push_back(std::make_pair(it.first, it.second));
     }
 
     // Build the partition tests, to interface with gtest we need to do it this way
-    for (const auto it : config.partitions) {
+    for (const auto& it : config.partitions) {
         const auto tup = std::make_tuple(it.first, it.second);
         PARTITION_XML_TESTS.push_back(tup);  // All partitions
 
@@ -1581,7 +1581,7 @@ void GenerateXmlTests(const extension::Configuration& config) {
 
     // Build the packed tests, only useful if we have a hash
     if (!config.checksum.empty()) {
-        for (const auto it : config.packed) {
+        for (const auto& it : config.packed) {
             for (const auto& test : it.second.tests) {
                 const auto tup = std::make_tuple(it.first, test);
                 if (test.expect == extension::OKAY) {  // only testing the success case
@@ -1608,7 +1608,7 @@ void GenerateXmlTests(const extension::Configuration& config) {
     }
 
     // Build oem tests
-    for (const auto it : config.oem) {
+    for (const auto& it : config.oem) {
         auto oem_cmd = it.second;
         for (const auto& t : oem_cmd.tests) {
             OEM_XML_TESTS.push_back(std::make_tuple(it.first, oem_cmd.restricted, t));

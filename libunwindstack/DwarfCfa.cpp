@@ -260,7 +260,7 @@ bool DwarfCfa<AddressType>::LogInstruction(uint32_t indent, uint64_t cfa_offset,
   }
 
   // Log any of the expression data.
-  for (const auto line : expression_lines) {
+  for (const auto& line : expression_lines) {
     log(indent + 1, "%s", line.c_str());
   }
   return true;
