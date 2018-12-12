@@ -137,6 +137,6 @@ bool fs_mgr_update_for_slotselect(Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
-int load_verity_state(fstab_rec* fstab, int* mode);
+int load_verity_state(const FstabEntry& entry, int* mode);
 
 #endif /* __CORE_FS_MGR_PRIV_H */
