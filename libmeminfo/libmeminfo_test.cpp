@@ -347,8 +347,8 @@ Active(file):     367364 kB
 Inactive(file):   456852 kB
 Unevictable:        3096 kB
 Mlocked:            3096 kB
-SwapTotal:             0 kB
-SwapFree:              0 kB
+SwapTotal:         32768 kB
+SwapFree:           4096 kB
 Dirty:                32 kB
 Writeback:             0 kB
 AnonPages:         74988 kB
@@ -365,7 +365,7 @@ WritebackTmp:          0 kB
 CommitLimit:     1509868 kB
 Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
-VmallocUsed:           0 kB
+VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
@@ -385,7 +385,19 @@ Hugepagesize:       2048 kB)meminfo";
     SysMemInfo mi;
     ASSERT_TRUE(mi.ReadMemInfo(tf.path));
     EXPECT_EQ(mi.mem_total_kb(), 3019740);
+    EXPECT_EQ(mi.mem_free_kb(), 1809728);
+    EXPECT_EQ(mi.mem_buffers_kb(), 54736);
+    EXPECT_EQ(mi.mem_cached_kb(), 776052);
+    EXPECT_EQ(mi.mem_shmem_kb(), 4020);
+    EXPECT_EQ(mi.mem_slab_kb(), 86464);
+    EXPECT_EQ(mi.mem_slab_reclaimable_kb(), 44432);
+    EXPECT_EQ(mi.mem_slab_unreclaimable_kb(), 42032);
+    EXPECT_EQ(mi.mem_swap_kb(), 32768);
+    EXPECT_EQ(mi.mem_swap_free_kb(), 4096);
+    EXPECT_EQ(mi.mem_mapped_kb(), 62624);
+    EXPECT_EQ(mi.mem_vmalloc_used_kb(), 65536);
     EXPECT_EQ(mi.mem_page_tables_kb(), 2900);
+    EXPECT_EQ(mi.mem_kernel_stack_kb(), 4880);
 }
 
 TEST(SysMemInfoParser, TestEmptyFile) {
@@ -399,7 +411,7 @@ TEST(SysMemInfoParser, TestEmptyFile) {
     EXPECT_EQ(mi.mem_total_kb(), 0);
 }
 
-TEST(SysMemInfoParse, TestZramTotal) {
+TEST(SysMemInfoParser, TestZramTotal) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
 
     SysMemInfo mi;
@@ -408,6 +420,100 @@ TEST(SysMemInfoParse, TestZramTotal) {
 
     std::string zram_memused_dir = exec_dir + "/testdata2/";
     EXPECT_EQ(mi.mem_zram_kb(zram_memused_dir), 30504);
+}
+
+enum {
+    MEMINFO_TOTAL,
+    MEMINFO_FREE,
+    MEMINFO_BUFFERS,
+    MEMINFO_CACHED,
+    MEMINFO_SHMEM,
+    MEMINFO_SLAB,
+    MEMINFO_SLAB_RECLAIMABLE,
+    MEMINFO_SLAB_UNRECLAIMABLE,
+    MEMINFO_SWAP_TOTAL,
+    MEMINFO_SWAP_FREE,
+    MEMINFO_ZRAM_TOTAL,
+    MEMINFO_MAPPED,
+    MEMINFO_VMALLOC_USED,
+    MEMINFO_PAGE_TABLES,
+    MEMINFO_KERNEL_STACK,
+    MEMINFO_COUNT
+};
+
+TEST(SysMemInfoParser, TestZramWithTags) {
+    std::string meminfo = R"meminfo(MemTotal:        3019740 kB
+MemFree:         1809728 kB
+MemAvailable:    2546560 kB
+Buffers:           54736 kB
+Cached:           776052 kB
+SwapCached:            0 kB
+Active:           445856 kB
+Inactive:         459092 kB
+Active(anon):      78492 kB
+Inactive(anon):     2240 kB
+Active(file):     367364 kB
+Inactive(file):   456852 kB
+Unevictable:        3096 kB
+Mlocked:            3096 kB
+SwapTotal:         32768 kB
+SwapFree:           4096 kB
+Dirty:                32 kB
+Writeback:             0 kB
+AnonPages:         74988 kB
+Mapped:            62624 kB
+Shmem:              4020 kB
+Slab:              86464 kB
+SReclaimable:      44432 kB
+SUnreclaim:        42032 kB
+KernelStack:        4880 kB
+PageTables:         2900 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     1509868 kB
+Committed_AS:      80296 kB
+VmallocTotal:   263061440 kB
+VmallocUsed:       65536 kB
+VmallocChunk:          0 kB
+AnonHugePages:      6144 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+CmaTotal:         131072 kB
+CmaFree:          130380 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB)meminfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(meminfo, tf.fd));
+    std::string file = std::string(tf.path);
+    std::vector<uint64_t> mem(MEMINFO_COUNT);
+    std::vector<std::string> tags(SysMemInfo::kDefaultSysMemInfoTags);
+    auto it = tags.begin();
+    tags.insert(it + MEMINFO_ZRAM_TOTAL, "Zram:");
+    SysMemInfo mi;
+
+    // Read system memory info
+    EXPECT_TRUE(mi.ReadMemInfo(tags, &mem, file));
+
+    EXPECT_EQ(mem[MEMINFO_TOTAL], 3019740);
+    EXPECT_EQ(mem[MEMINFO_FREE], 1809728);
+    EXPECT_EQ(mem[MEMINFO_BUFFERS], 54736);
+    EXPECT_EQ(mem[MEMINFO_CACHED], 776052);
+    EXPECT_EQ(mem[MEMINFO_SHMEM], 4020);
+    EXPECT_EQ(mem[MEMINFO_SLAB], 86464);
+    EXPECT_EQ(mem[MEMINFO_SLAB_RECLAIMABLE], 44432);
+    EXPECT_EQ(mem[MEMINFO_SLAB_UNRECLAIMABLE], 42032);
+    EXPECT_EQ(mem[MEMINFO_SWAP_TOTAL], 32768);
+    EXPECT_EQ(mem[MEMINFO_SWAP_FREE], 4096);
+    EXPECT_EQ(mem[MEMINFO_MAPPED], 62624);
+    EXPECT_EQ(mem[MEMINFO_VMALLOC_USED], 65536);
+    EXPECT_EQ(mem[MEMINFO_PAGE_TABLES], 2900);
+    EXPECT_EQ(mem[MEMINFO_KERNEL_STACK], 4880);
 }
 
 int main(int argc, char** argv) {
