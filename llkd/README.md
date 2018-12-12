@@ -135,8 +135,9 @@ Only active on userdebug or eng builds.
 default 2 minutes samples of threads for D or Z.
 
 #### ro.llk.stack
-default cma_alloc,__get_user_pages,bit_wait_io comma separated list of kernel
-symbols.  The string "*false*" is the equivalent to an *empty* list.
+default cma_alloc,__get_user_pages,bit_wait_io,wait_on_page_bit_killable
+comma separated list of kernel symbols.
+The string "*false*" is the equivalent to an *empty* list.
 Look for kernel stack symbols that if ever persistently present can
 indicate a subsystem is locked up.
 Beware, check does not on purpose do forward scheduling ABA except by polling
