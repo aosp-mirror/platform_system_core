@@ -273,7 +273,7 @@ bool Subprocess::ForkAndExec(std::string* error) {
     }
 
     std::vector<std::string> joined_env;
-    for (auto it : env) {
+    for (const auto& it : env) {
         const char* key = it.first.c_str();
         const char* value = it.second.c_str();
         joined_env.push_back(android::base::StringPrintf("%s=%s", key, value));
