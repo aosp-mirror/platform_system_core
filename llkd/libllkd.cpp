@@ -610,7 +610,7 @@ std::string llkFormat(bool flag) {
 
 std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
     std::string ret;
-    for (auto entry : blacklist) {
+    for (const auto& entry : blacklist) {
         if (ret.size()) {
             ret += ",";
         }

@@ -224,7 +224,7 @@ int SaveData(pid_t pid) {
     sp_map_start = map_info->start;
   }
 
-  for (auto frame : unwinder.frames()) {
+  for (const auto& frame : unwinder.frames()) {
     map_info = maps.Find(frame.sp);
     if (map_info != nullptr && sp_map_start != map_info->start) {
       stacks.emplace_back(std::make_pair(frame.sp, map_info->end));
