@@ -63,6 +63,7 @@ static void heap_error(const char* msg, const char* function, void* p);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wexpansion-to-defined"
+#pragma GCC diagnostic ignored "-Wnull-pointer-arithmetic"
 #include "../../../../external/dlmalloc/malloc.c"
 #pragma GCC diagnostic pop
 
