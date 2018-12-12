@@ -499,7 +499,7 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
     // hijack __mount() report format to help triage
     auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
     const auto opt_list = android::base::Split(options, ",");
-    for (const auto opt : opt_list) {
+    for (const auto& opt : opt_list) {
         if (android::base::StartsWith(opt, kUpperdirOption)) {
             report = report + "," + opt;
             break;
