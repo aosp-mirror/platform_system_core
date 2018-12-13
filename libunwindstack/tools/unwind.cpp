@@ -35,7 +35,12 @@
 #include <unwindstack/Unwinder.h>
 
 static bool Attach(pid_t pid) {
-  if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+  if (ptrace(PTRACE_SEIZE, pid, 0, 0) == -1) {
+    return false;
+  }
+
+  if (ptrace(PTRACE_INTERRUPT, pid, 0, 0) == -1) {
+    ptrace(PTRACE_DETACH, pid, 0, 0);
     return false;
   }
 
