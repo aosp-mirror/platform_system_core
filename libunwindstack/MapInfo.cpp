@@ -29,6 +29,38 @@
 
 namespace unwindstack {
 
+bool MapInfo::InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory) {
+  // One last attempt, see if the previous map is read-only with the
+  // same name and stretches across this map.
+  for (auto iter = maps_->begin(); iter != maps_->end(); ++iter) {
+    if (*iter == this) {
+      if (iter == maps_->begin()) {
+        return false;
+      }
+      --iter;
+      MapInfo* prev_map = *iter;
+      // Make sure this is a read-only map.
+      if (prev_map->flags != PROT_READ) {
+        return false;
+      }
+      uint64_t map_size = end - prev_map->end;
+      if (!memory->Init(name, prev_map->offset, map_size)) {
+        return false;
+      }
+      uint64_t max_size;
+      if (!Elf::GetInfo(memory, &max_size) || max_size < map_size) {
+        return false;
+      }
+      if (!memory->Init(name, prev_map->offset, max_size)) {
+        return false;
+      }
+      elf_offset = offset - prev_map->offset;
+      return true;
+    }
+  }
+  return false;
+}
+
 Memory* MapInfo::GetFileMemory() {
   std::unique_ptr<MemoryFileAtOffset> memory(new MemoryFileAtOffset);
   if (offset == 0) {
@@ -38,8 +70,12 @@ Memory* MapInfo::GetFileMemory() {
     return nullptr;
   }
 
-  // There are two possibilities when the offset is non-zero.
-  // - There is an elf file embedded in a file.
+  // These are the possibilities when the offset is non-zero.
+  // - There is an elf file embedded in a file, and the offset is the
+  //   the start of the elf in the file.
+  // - There is an elf file embedded in a file, and the offset is the
+  //   the start of the executable part of the file. The actual start
+  //   of the elf is in the read-only segment preceeding this map.
   // - The whole file is an elf file, and the offset needs to be saved.
   //
   // Map in just the part of the file for the map. If this is not
@@ -53,27 +89,41 @@ Memory* MapInfo::GetFileMemory() {
     return nullptr;
   }
 
-  uint64_t max_size;
-  if (!Elf::GetInfo(memory.get(), &max_size)) {
-    // Init as if the whole file is an elf.
-    if (memory->Init(name, 0)) {
-      elf_offset = offset;
-      return memory.release();
+  // Check if the start of this map is an embedded elf.
+  uint64_t max_size = 0;
+  uint64_t file_offset = offset;
+  if (Elf::GetInfo(memory.get(), &max_size)) {
+    if (max_size > map_size) {
+      if (memory->Init(name, file_offset, max_size)) {
+        return memory.release();
+      }
+      // Try to reinit using the default map_size.
+      if (memory->Init(name, file_offset, map_size)) {
+        return memory.release();
+      }
+      return nullptr;
     }
-    return nullptr;
+    return memory.release();
   }
 
-  if (max_size > map_size) {
-    if (memory->Init(name, offset, max_size)) {
-      return memory.release();
-    }
-    // Try to reinit using the default map_size.
-    if (memory->Init(name, offset, map_size)) {
-      return memory.release();
-    }
-    return nullptr;
+  // No elf at offset, try to init as if the whole file is an elf.
+  if (memory->Init(name, 0) && Elf::IsValidElf(memory.get())) {
+    elf_offset = offset;
+    return memory.release();
   }
-  return memory.release();
+
+  // See if the map previous to this one contains a read-only map
+  // that represents the real start of the elf data.
+  if (InitFileMemoryFromPreviousReadOnlyMap(memory.get())) {
+    return memory.release();
+  }
+
+  // Failed to find elf at start of file or at read-only map, return
+  // file object from the current map.
+  if (memory->Init(name, offset, map_size)) {
+    return memory.release();
+  }
+  return nullptr;
 }
 
 Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
@@ -110,29 +160,27 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
     return nullptr;
   }
 
-  // Find the read-only map that has the same name and has an offset closest
-  // to the current offset but less than the offset of the current map.
-  // For shared libraries, there should be a r-x map that has a non-zero
-  // offset and then a r-- map that has a zero offset.
-  // For shared libraries loaded from an apk, there should be a r-x map that
-  // has a non-zero offset and then a r-- map that has a non-zero offset less
-  // than the offset from the r-x map.
-  uint64_t closest_offset = 0;
+  // Find the read-only map by looking at the previous map. The linker
+  // doesn't guarantee that this invariant will always be true. However,
+  // if that changes, there is likely something else that will change and
+  // break something.
   MapInfo* ro_map_info = nullptr;
-  for (auto map_info : *maps_) {
-    if (map_info->flags == PROT_READ && map_info->name == name && map_info->offset < offset &&
-        map_info->offset >= closest_offset) {
-      ro_map_info = map_info;
-      closest_offset = ro_map_info->offset;
+  for (auto iter = maps_->begin(); iter != maps_->end(); ++iter) {
+    if (*iter == this) {
+      if (iter != maps_->begin()) {
+        --iter;
+        ro_map_info = *iter;
+      }
+      break;
     }
   }
 
-  if (ro_map_info == nullptr) {
+  if (ro_map_info == nullptr || ro_map_info->name != name || ro_map_info->offset >= offset) {
     return nullptr;
   }
 
   // Make sure that relative pc values are corrected properly.
-  elf_offset = offset - closest_offset;
+  elf_offset = offset - ro_map_info->offset;
 
   MemoryRanges* ranges = new MemoryRanges;
   ranges->Insert(new MemoryRange(process_memory, ro_map_info->start,
