@@ -1305,11 +1305,7 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
 void unregister_usb_transport(usb_handle* usb) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     transport_list.remove_if([usb](atransport* t) {
-        auto connection = t->connection();
-        if (auto usb_connection = dynamic_cast<UsbConnection*>(connection.get())) {
-            return usb_connection->handle_ == usb && t->GetConnectionState() == kCsNoPerm;
-        }
-        return false;
+        return t->GetUsbHandle() == usb && t->GetConnectionState() == kCsNoPerm;
     });
 }
 #endif

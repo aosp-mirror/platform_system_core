@@ -180,6 +180,7 @@ void init_usb_transport(atransport* t, usb_handle* h) {
     auto connection = std::make_unique<UsbConnection>(h);
     t->SetConnection(std::make_unique<BlockingConnectionAdapter>(std::move(connection)));
     t->type = kTransportUsb;
+    t->SetUsbHandle(h);
 }
 
 int is_adb_interface(int usb_class, int usb_subclass, int usb_protocol) {
