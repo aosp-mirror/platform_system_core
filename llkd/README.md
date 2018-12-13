@@ -160,7 +160,7 @@ size of 92.
 NB: false is a very very very unlikely process to want to blacklist.
 
 #### ro.llk.blacklist.parent
-default 0,2 (kernel and [kthreadd]).
+default 0,2,adbd (kernel, [kthreadd] and adbd).
 The string "*false*" is the equivalent to an *empty* list.
 Do not watch processes that have this parent.
 A parent process can be comm, cmdline or pid reference.
