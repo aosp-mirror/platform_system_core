@@ -83,6 +83,7 @@ struct MapInfo {
   void operator=(const MapInfo&) = delete;
 
   Memory* GetFileMemory();
+  bool InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory);
 
   // Protect the creation of the elf object.
   std::mutex mutex_;
