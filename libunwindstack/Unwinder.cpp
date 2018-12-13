@@ -239,8 +239,14 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
 
     if (!stepped) {
       if (return_address_attempt) {
-        // Remove the speculative frame.
-        frames_.pop_back();
+        // Only remove the speculative frame if there are more than two frames
+        // or the pc in the first frame is in a valid map.
+        // This allows for a case where the code jumps into the middle of
+        // nowhere, but there is no other unwind information after that.
+        if (frames_.size() != 2 || maps_->Find(frames_[0].pc) != nullptr) {
+          // Remove the speculative frame.
+          frames_.pop_back();
+        }
         break;
       } else if (in_device_map) {
         // Do not attempt any other unwinding, pc or sp is in a device
