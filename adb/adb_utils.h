@@ -94,3 +94,16 @@ class BlockingQueue {
 };
 
 std::string GetLogFilePath();
+
+inline std::string_view StripTrailingNulls(std::string_view str) {
+    size_t n = 0;
+    for (auto it = str.rbegin(); it != str.rend(); ++it) {
+        if (*it != '\0') {
+            break;
+        }
+        ++n;
+    }
+
+    str.remove_suffix(n);
+    return str;
+}

@@ -141,7 +141,7 @@ atransport* find_emulator_transport_by_console_port(int console_port);
 
 int service_to_fd(const char* name, atransport* transport);
 #if !ADB_HOST
-unique_fd daemon_service_to_fd(const char* name, atransport* transport);
+unique_fd daemon_service_to_fd(std::string_view name, atransport* transport);
 #endif
 
 #if ADB_HOST
