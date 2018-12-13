@@ -118,6 +118,7 @@ struct FstabEntry {
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
+    std::string vbmeta_partition;
 
     // TODO: Remove this union once fstab_rec is deprecated. It only serves as a
     // convenient way to convert between fstab_rec::fs_mgr_flags and these bools.
