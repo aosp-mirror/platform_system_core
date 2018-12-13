@@ -600,7 +600,7 @@ static void ReportServerStartupFailure(pid_t pid) {
     fprintf(stderr, "Full server startup log: %s\n", GetLogFilePath().c_str());
     fprintf(stderr, "Server had pid: %d\n", pid);
 
-    android::base::unique_fd fd(unix_open(GetLogFilePath().c_str(), O_RDONLY));
+    android::base::unique_fd fd(unix_open(GetLogFilePath(), O_RDONLY));
     if (fd == -1) return;
 
     // Let's not show more than 128KiB of log...

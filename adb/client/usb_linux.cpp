@@ -156,7 +156,7 @@ static void find_usb_device(const std::string& base,
                 continue;
             }
 
-            int fd = unix_open(dev_name.c_str(), O_RDONLY | O_CLOEXEC);
+            int fd = unix_open(dev_name, O_RDONLY | O_CLOEXEC);
             if (fd == -1) {
                 continue;
             }
@@ -535,10 +535,10 @@ static void register_device(const char* dev_name, const char* dev_path, unsigned
     // Initialize mark so we don't get garbage collected after the device scan.
     usb->mark = true;
 
-    usb->fd = unix_open(usb->path.c_str(), O_RDWR | O_CLOEXEC);
+    usb->fd = unix_open(usb->path, O_RDWR | O_CLOEXEC);
     if (usb->fd == -1) {
         // Opening RW failed, so see if we have RO access.
-        usb->fd = unix_open(usb->path.c_str(), O_RDONLY | O_CLOEXEC);
+        usb->fd = unix_open(usb->path, O_RDONLY | O_CLOEXEC);
         if (usb->fd == -1) {
             D("[ usb open %s failed: %s]", usb->path.c_str(), strerror(errno));
             return;
