@@ -53,6 +53,7 @@ struct fs_mgr_flag_values {
     int file_names_mode = 0;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
+    std::string vbmeta_partition;
 };
 
 struct flag_list {
@@ -97,6 +98,7 @@ static struct flag_list fs_mgr_flags[] = {
         {"verifyatboot", MF_VERIFYATBOOT},
         {"verify", MF_VERIFY},
         {"avb", MF_AVB},
+        {"avb=", MF_AVB},
         {"noemulatedsd", MF_NOEMULATEDSD},
         {"notrim", MF_NOTRIM},
         {"formattable", MF_FORMATTABLE},
@@ -314,6 +316,8 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     flag_vals->swap_prio = strtoll(arg, NULL, 0);
                 } else if (flag == MF_MAX_COMP_STREAMS) {
                     flag_vals->max_comp_streams = strtoll(arg, NULL, 0);
+                } else if (flag == MF_AVB) {
+                    flag_vals->vbmeta_partition = arg;
                 } else if (flag == MF_ZRAMSIZE) {
                     auto is_percent = !!strrchr(arg, '%');
                     auto val = strtoll(arg, NULL, 0);
@@ -583,6 +587,7 @@ static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fs
         entry.erase_blk_size = flag_vals.erase_blk_size;
         entry.logical_blk_size = flag_vals.logical_blk_size;
         entry.sysfs_path = std::move(flag_vals.sysfs_path);
+        entry.vbmeta_partition = std::move(flag_vals.vbmeta_partition);
         if (entry.fs_mgr_flags.logical) {
             entry.logical_partition_name = entry.blk_device;
         }
