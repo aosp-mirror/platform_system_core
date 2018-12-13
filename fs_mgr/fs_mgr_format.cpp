@@ -120,20 +120,21 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt
                                    LOG_KLOG, true, nullptr, nullptr, 0);
 }
 
-int fs_mgr_do_format(struct fstab_rec *fstab, bool crypt_footer)
-{
-    int rc = -EINVAL;
+int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
+    LERROR << __FUNCTION__ << ": Format " << entry.blk_device << " as '" << entry.fs_type << "'";
 
-    LERROR << __FUNCTION__ << ": Format " << fstab->blk_device
-           << " as '" << fstab->fs_type << "'";
-
-    if (!strncmp(fstab->fs_type, "f2fs", 4)) {
-        rc = format_f2fs(fstab->blk_device, fstab->length, crypt_footer);
-    } else if (!strncmp(fstab->fs_type, "ext4", 4)) {
-        rc = format_ext4(fstab->blk_device, fstab->mount_point, crypt_footer);
+    if (entry.fs_type == "f2fs") {
+        return format_f2fs(entry.blk_device, entry.length, crypt_footer);
+    } else if (entry.fs_type == "ext4") {
+        return format_ext4(entry.blk_device, entry.mount_point, crypt_footer);
     } else {
-        LERROR << "File system type '" << fstab->fs_type << "' is not supported";
+        LERROR << "File system type '" << entry.fs_type << "' is not supported";
+        return -EINVAL;
     }
+}
 
-    return rc;
+int fs_mgr_do_format(struct fstab_rec* rec, bool crypt_footer) {
+    auto entry = FstabRecToFstabEntry(rec);
+
+    return fs_mgr_do_format(entry, crypt_footer);
 }

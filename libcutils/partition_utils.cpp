@@ -39,8 +39,7 @@ static int only_one_char(uint8_t *buf, int len, uint8_t c)
     return ret;
 }
 
-int partition_wiped(char *source)
-{
+int partition_wiped(const char* source) {
     uint8_t buf[4096];
     int fd, ret;
 
@@ -67,4 +66,3 @@ int partition_wiped(char *source)
 
     return 0;
 }
-

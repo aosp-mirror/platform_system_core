@@ -21,7 +21,7 @@
 
 __BEGIN_DECLS
 
-int partition_wiped(char *source);
+int partition_wiped(const char* source);
 
 __END_DECLS
 

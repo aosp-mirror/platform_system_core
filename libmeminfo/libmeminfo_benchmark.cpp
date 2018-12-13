@@ -29,6 +29,8 @@
 
 #include <benchmark/benchmark.h>
 
+using ::android::meminfo::SysMemInfo;
+
 enum {
     MEMINFO_TOTAL,
     MEMINFO_FREE,
@@ -71,8 +73,7 @@ static void get_mem_info(uint64_t mem[], const char* file) {
     static const char* const tags[] = {
             "MemTotal:",     "MemFree:",    "Buffers:",     "Cached:",   "Shmem:", "Slab:",
             "SReclaimable:", "SUnreclaim:", "SwapTotal:",   "SwapFree:", "ZRam:",  "Mapped:",
-            "VmallocUsed:",  "PageTables:", "KernelStack:", NULL
-    };
+            "VmallocUsed:",  "PageTables:", "KernelStack:", NULL};
 
     static const int tagsLen[] = {9, 8, 8, 7, 6, 5, 13, 11, 10, 9, 5, 7, 12, 11, 12, 0};
 
@@ -105,7 +106,7 @@ static void get_mem_info(uint64_t mem[], const char* file) {
     }
 }
 
-static void BM_ParseSysMemInfo(benchmark::State& state) {
+static void BM_ReadMemInfo_old(benchmark::State& state) {
     std::string meminfo = R"meminfo(MemTotal:        3019740 kB
 MemFree:         1809728 kB
 MemAvailable:    2546560 kB
@@ -159,9 +160,9 @@ Hugepagesize:       2048 kB)meminfo";
         get_mem_info(mem, tf.path);
     }
 }
-BENCHMARK(BM_ParseSysMemInfo);
+BENCHMARK(BM_ReadMemInfo_old);
 
-static void BM_ReadMemInfo(benchmark::State& state) {
+static void BM_ReadMemInfo_new(benchmark::State& state) {
     std::string meminfo = R"meminfo(MemTotal:        3019740 kB
 MemFree:         1809728 kB
 MemAvailable:    2546560 kB
@@ -211,12 +212,21 @@ Hugepagesize:       2048 kB)meminfo";
     android::base::WriteStringToFd(meminfo, tf.fd);
 
     std::string file = std::string(tf.path);
-    ::android::meminfo::SysMemInfo mi;
+    std::vector<uint64_t> mem(MEMINFO_COUNT);
+    const std::vector<std::string> tags = {
+            SysMemInfo::kMemTotal,      SysMemInfo::kMemFree,        SysMemInfo::kMemBuffers,
+            SysMemInfo::kMemCached,     SysMemInfo::kMemShmem,       SysMemInfo::kMemSlab,
+            SysMemInfo::kMemSReclaim,   SysMemInfo::kMemSUnreclaim,  SysMemInfo::kMemSwapTotal,
+            SysMemInfo::kMemSwapFree,   SysMemInfo::kMemMapped,      SysMemInfo::kMemVmallocUsed,
+            SysMemInfo::kMemPageTables, SysMemInfo::kMemKernelStack,
+    };
+
+    SysMemInfo smi;
     for (auto _ : state) {
-        mi.ReadMemInfo(file);
+        smi.ReadMemInfo(tags, &mem, file);
     }
 }
-BENCHMARK(BM_ReadMemInfo);
+BENCHMARK(BM_ReadMemInfo_new);
 
 static uint64_t get_zram_mem_used(const std::string& zram_dir) {
     FILE* f = fopen((zram_dir + "mm_stat").c_str(), "r");
@@ -246,23 +256,145 @@ static uint64_t get_zram_mem_used(const std::string& zram_dir) {
     return 0;
 }
 
-static void BM_OldReadZramTotal(benchmark::State& state) {
+static void BM_ZramTotal_old(benchmark::State& state) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string zram_mmstat_dir = exec_dir + "/testdata1/";
     for (auto _ : state) {
         uint64_t zram_total __attribute__((unused)) = get_zram_mem_used(zram_mmstat_dir) / 1024;
     }
 }
-BENCHMARK(BM_OldReadZramTotal);
+BENCHMARK(BM_ZramTotal_old);
 
-static void BM_NewReadZramTotal(benchmark::State& state) {
+static void BM_ZramTotal_new(benchmark::State& state) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string zram_mmstat_dir = exec_dir + "/testdata1/";
-    ::android::meminfo::SysMemInfo mi;
+    SysMemInfo smi;
     for (auto _ : state) {
-        uint64_t zram_total __attribute__((unused)) = mi.mem_zram_kb(zram_mmstat_dir);
+        uint64_t zram_total __attribute__((unused)) = smi.mem_zram_kb(zram_mmstat_dir);
     }
 }
-BENCHMARK(BM_NewReadZramTotal);
+BENCHMARK(BM_ZramTotal_new);
+
+static void BM_MemInfoWithZram_old(benchmark::State& state) {
+    std::string meminfo = R"meminfo(MemTotal:        3019740 kB
+MemFree:         1809728 kB
+MemAvailable:    2546560 kB
+Buffers:           54736 kB
+Cached:           776052 kB
+SwapCached:            0 kB
+Active:           445856 kB
+Inactive:         459092 kB
+Active(anon):      78492 kB
+Inactive(anon):     2240 kB
+Active(file):     367364 kB
+Inactive(file):   456852 kB
+Unevictable:        3096 kB
+Mlocked:            3096 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                32 kB
+Writeback:             0 kB
+AnonPages:         74988 kB
+Mapped:            62624 kB
+Shmem:              4020 kB
+Slab:              86464 kB
+SReclaimable:      44432 kB
+SUnreclaim:        42032 kB
+KernelStack:        4880 kB
+PageTables:         2900 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     1509868 kB
+Committed_AS:      80296 kB
+VmallocTotal:   263061440 kB
+VmallocUsed:           0 kB
+VmallocChunk:          0 kB
+AnonHugePages:      6144 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+CmaTotal:         131072 kB
+CmaFree:          130380 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB)meminfo";
+
+    TemporaryFile tf;
+    ::android::base::WriteStringToFd(meminfo, tf.fd);
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    uint64_t mem[MEMINFO_COUNT];
+    for (auto _ : state) {
+        get_mem_info(mem, tf.path);
+        mem[MEMINFO_ZRAM_TOTAL] = get_zram_mem_used("/sys/block/zram0/") / 1024;
+        CHECK_EQ(mem[MEMINFO_KERNEL_STACK], 4880u);
+    }
+}
+BENCHMARK(BM_MemInfoWithZram_old);
+
+static void BM_MemInfoWithZram_new(benchmark::State& state) {
+    std::string meminfo = R"meminfo(MemTotal:        3019740 kB
+MemFree:         1809728 kB
+MemAvailable:    2546560 kB
+Buffers:           54736 kB
+Cached:           776052 kB
+SwapCached:            0 kB
+Active:           445856 kB
+Inactive:         459092 kB
+Active(anon):      78492 kB
+Inactive(anon):     2240 kB
+Active(file):     367364 kB
+Inactive(file):   456852 kB
+Unevictable:        3096 kB
+Mlocked:            3096 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                32 kB
+Writeback:             0 kB
+AnonPages:         74988 kB
+Mapped:            62624 kB
+Shmem:              4020 kB
+Slab:              86464 kB
+SReclaimable:      44432 kB
+SUnreclaim:        42032 kB
+KernelStack:        4880 kB
+PageTables:         2900 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     1509868 kB
+Committed_AS:      80296 kB
+VmallocTotal:   263061440 kB
+VmallocUsed:           0 kB
+VmallocChunk:          0 kB
+AnonHugePages:      6144 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+CmaTotal:         131072 kB
+CmaFree:          130380 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB)meminfo";
+
+    TemporaryFile tf;
+    android::base::WriteStringToFd(meminfo, tf.fd);
+
+    std::string file = std::string(tf.path);
+    std::vector<uint64_t> mem(MEMINFO_COUNT);
+    std::vector<std::string> tags(SysMemInfo::kDefaultSysMemInfoTags);
+    auto it = tags.begin();
+    tags.insert(it + MEMINFO_ZRAM_TOTAL, "Zram:");
+    SysMemInfo smi;
+
+    for (auto _ : state) {
+        smi.ReadMemInfo(tags, &mem, file);
+        CHECK_EQ(mem[MEMINFO_KERNEL_STACK], 4880u);
+    }
+}
+BENCHMARK(BM_MemInfoWithZram_new);
 
 BENCHMARK_MAIN();

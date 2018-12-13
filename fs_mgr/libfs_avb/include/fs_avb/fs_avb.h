@@ -85,7 +85,7 @@ class AvbHandle {
     //     failed to get the HASHTREE descriptor, runtime error when set up
     //     device-mapper, etc.
     //   - kDisabled: hashtree is disabled.
-    AvbHashtreeResult SetUpAvbHashtree(fstab_rec* fstab_entry, bool wait_for_verity_dev);
+    AvbHashtreeResult SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait_for_verity_dev);
 
     const std::string& avb_version() const { return avb_version_; }
 

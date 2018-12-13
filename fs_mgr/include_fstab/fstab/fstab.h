@@ -156,6 +156,7 @@ struct FstabEntry {
             bool logical : 1;
             bool checkpoint_blk : 1;
             bool checkpoint_fs : 1;
+            bool first_stage_mount : 1;
         };
     } fs_mgr_flags;
 
