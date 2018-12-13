@@ -1275,6 +1275,42 @@ static int adb_connect_command(const std::string& command) {
     return 0;
 }
 
+static int adb_connect_command_bidirectional(const std::string& command) {
+    std::string error;
+    int fd = adb_connect(command, &error);
+    if (fd < 0) {
+        fprintf(stderr, "error: %s\n", error.c_str());
+        return 1;
+    }
+
+    static constexpr auto forward = [](int src, int sink, bool exit_on_end) {
+        char buf[4096];
+        while (true) {
+            int rc = adb_read(src, buf, sizeof(buf));
+            if (rc == 0) {
+                if (exit_on_end) {
+                    exit(0);
+                } else {
+                    adb_shutdown(sink, SHUT_WR);
+                }
+                return;
+            } else if (rc < 0) {
+                perror_exit("read failed");
+            }
+            if (!WriteFdExactly(sink, buf, rc)) {
+                perror_exit("write failed");
+            }
+        }
+    };
+
+    std::thread read(forward, fd, STDOUT_FILENO, true);
+    std::thread write(forward, STDIN_FILENO, fd, false);
+    read.join();
+    write.join();
+    adb_close(fd);
+    return 0;
+}
+
 static int adb_query_command(const std::string& command) {
     std::string result;
     std::string error;
@@ -1766,7 +1802,7 @@ int adb_commandline(int argc, const char** argv) {
         if (argc != 2) {
             error_exit("usage: adb raw SERVICE");
         }
-        return adb_connect_command(argv[1]);
+        return adb_connect_command_bidirectional(argv[1]);
     }
 
     /* "adb /?" is a common idiom under Windows */
