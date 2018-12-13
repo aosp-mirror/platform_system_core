@@ -346,7 +346,7 @@ asocket* create_local_socket(int fd) {
     return s;
 }
 
-asocket* create_local_service_socket(const char* name, atransport* transport) {
+asocket* create_local_service_socket(std::string_view name, atransport* transport) {
 #if !ADB_HOST
     if (asocket* s = daemon_service_to_socket(name); s) {
         return s;
@@ -358,13 +358,12 @@ asocket* create_local_service_socket(const char* name, atransport* transport) {
     }
 
     asocket* s = create_local_socket(fd);
-    D("LS(%d): bound to '%s' via %d", s->id, name, fd);
+    LOG(VERBOSE) << "LS(" << s->id << "): bound to '" << name << "' via " << fd;
 
 #if !ADB_HOST
-    if ((!strncmp(name, "root:", 5) && getuid() != 0 && __android_log_is_debuggable()) ||
-        (!strncmp(name, "unroot:", 7) && getuid() == 0) ||
-        !strncmp(name, "usb:", 4) ||
-        !strncmp(name, "tcpip:", 6)) {
+    if ((name.starts_with("root:") && getuid() != 0 && __android_log_is_debuggable()) ||
+        (name.starts_with("unroot:") && getuid() == 0) || name.starts_with("usb:") ||
+        name.starts_with("tcpip:")) {
         D("LS(%d): enabling exit_on_close", s->id);
         s->exit_on_close = 1;
     }
