@@ -39,6 +39,7 @@
 #include <list>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include <android-base/file.h>
@@ -90,7 +91,7 @@ struct usb_handle : public ::usb_handle {
 static auto& g_usb_handles_mutex = *new std::mutex();
 static auto& g_usb_handles = *new std::list<usb_handle*>();
 
-static int is_known_device(const char* dev_name) {
+static int is_known_device(std::string_view dev_name) {
     std::lock_guard<std::mutex> lock(g_usb_handles_mutex);
     for (usb_handle* usb : g_usb_handles) {
         if (usb->path == dev_name) {
@@ -152,7 +153,7 @@ static void find_usb_device(const std::string& base,
             if (contains_non_digit(de->d_name)) continue;
 
             std::string dev_name = bus_name + "/" + de->d_name;
-            if (is_known_device(dev_name.c_str())) {
+            if (is_known_device(dev_name)) {
                 continue;
             }
 
