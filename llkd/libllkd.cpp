@@ -510,9 +510,7 @@ bool llkWriteStringToFileConfirm(const std::string& string, const std::string& f
     return android::base::Trim(content) == string;
 }
 
-void llkPanicKernel(bool dump, pid_t tid, const char* state,
-                    const std::string& message = "") __noreturn;
-void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& message) {
+void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& message = "") {
     if (!message.empty()) LOG(ERROR) << message;
     auto sysrqTriggerFd = llkFileToWriteFd("/proc/sysrq-trigger");
     if (sysrqTriggerFd < 0) {
@@ -521,6 +519,7 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& 
         // The answer to life, the universe and everything
         ::exit(42);
         // NOTREACHED
+        return;
     }
     ::sync();
     if (dump) {
@@ -544,6 +543,13 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& 
     llkWriteStringToFile(message + (message.empty() ? "" : "\n") +
                                  "SysRq : Trigger a crash : 'livelock,"s + state + "'\n",
                          "/dev/kmsg");
+    // Because panic is such a serious thing to do, let us
+    // make sure that the tid being inspected still exists!
+    auto piddir = procdir + std::to_string(tid) + "/stat";
+    if (access(piddir.c_str(), F_OK) != 0) {
+        PLOG(WARNING) << piddir;
+        return;
+    }
     android::base::WriteStringToFd("c", sysrqTriggerFd);
     // NOTREACHED
     // DYB
@@ -909,6 +915,7 @@ milliseconds llkCheck(bool checkRunning) {
     ms -= llkCycle;
     auto myPid = ::getpid();
     auto myTid = ::gettid();
+    auto dump = true;
     for (auto dp = llkTopDirectory.read(); dp != nullptr; dp = llkTopDirectory.read()) {
         std::string piddir;
 
@@ -1109,9 +1116,10 @@ milliseconds llkCheck(bool checkRunning) {
             const auto message = state + " "s + llkFormat(procp->count) + " " +
                                  std::to_string(ppid) + "->" + std::to_string(pid) + "->" +
                                  std::to_string(tid) + " " + procp->getComm() + " [panic]";
-            llkPanicKernel(true, tid,
+            llkPanicKernel(dump, tid,
                            (state == 'Z') ? "zombie" : (state == 'D') ? "driver" : "sleeping",
                            message);
+            dump = false;
         }
         LOG(VERBOSE) << "+closedir()";
     }
