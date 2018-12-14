@@ -36,14 +36,25 @@ NORMAL="${ESCAPE}[0m"
 
 Returns: true if device is in fastboot mode" ]
 inFastboot() {
-  fastboot devices | grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
+  fastboot devices |
+    if [ -n "${ANDROID_SERIAL}" ]; then
+      grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
+    else
+      wc -l | grep '^1$' >/dev/null
+    fi
 }
 
 [ "USAGE: inAdb
 
 Returns: true if device is in adb mode" ]
 inAdb() {
-  adb devices | grep -v 'List of devices attached' | grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
+  adb devices |
+    grep -v 'List of devices attached' |
+    if [ -n "${ANDROID_SERIAL}" ]; then
+      grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
+    else
+      wc -l | grep '^1$' >/dev/null
+    fi
 }
 
 [ "USAGE: adb_sh <commands> </dev/stdin >/dev/stdout 2>/dev/stderr
@@ -277,7 +288,7 @@ if ! inAdb; then
   echo "${ORANGE}[  WARNING ]${NORMAL} device not in adb mode ... waiting 2 minutes"
   adb_wait 2m
 fi
-inAdb || die "device not in adb mode"
+inAdb || die "specified device not in adb mode"
 isDebuggable || die "device not a debug build"
 
 # Do something
