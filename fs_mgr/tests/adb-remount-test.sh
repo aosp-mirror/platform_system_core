@@ -290,6 +290,11 @@ if ! inAdb; then
 fi
 inAdb || die "specified device not in adb mode"
 isDebuggable || die "device not a debug build"
+enforcing=true
+if ! adb_su getenforce </dev/null | grep 'Enforcing' >/dev/null; then
+  echo "${ORANGE}[  WARNING ]${NORMAL} device does not have sepolicy in enforcing mode"
+  enforcing=false
+fi
 
 # Do something
 
@@ -535,9 +540,11 @@ B="`adb_cat /system/hello`" ||
   die "re-read system hello after reboot"
 check_eq "${A}" "${B}" system after reboot
 # Only root can read vendor if sepolicy permissions are as expected
-B="`adb_cat /vendor/hello`" &&
-  die "re-read vendor hello after reboot w/o root"
-check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
+if ${enforcing}; then
+  B="`adb_cat /vendor/hello`" &&
+    die "re-read vendor hello after reboot w/o root"
+  check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
+fi
 adb_root &&
   B="`adb_cat /vendor/hello`" ||
   die "re-read vendor hello after reboot"
