@@ -59,7 +59,7 @@ struct fs_mgr_flag_values {
 
 struct flag_list {
     const char *name;
-    unsigned int flag;
+    uint64_t flag;
 };
 
 static struct flag_list mount_flags[] = {
@@ -116,6 +116,7 @@ static struct flag_list fs_mgr_flags[] = {
         {"logical", MF_LOGICAL},
         {"checkpoint=block", MF_CHECKPOINT_BLK},
         {"checkpoint=fs", MF_CHECKPOINT_FS},
+        {"slotselect_other", MF_SLOTSELECT_OTHER},
         {0, 0},
 };
 
@@ -207,11 +208,9 @@ static bool read_dt_file(const std::string& file_name, std::string* dt_value)
     return false;
 }
 
-static int parse_flags(char *flags, struct flag_list *fl,
-                       struct fs_mgr_flag_values *flag_vals,
-                       char *fs_options, int fs_options_len)
-{
-    int f = 0;
+static uint64_t parse_flags(char* flags, struct flag_list* fl, struct fs_mgr_flag_values* flag_vals,
+                            char* fs_options, int fs_options_len) {
+    uint64_t f = 0;
     int i;
     char *p;
     char *savep;
