@@ -25,37 +25,30 @@
 #include <string>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/Memory.h>
 
 namespace unwindstack {
 
-// Forward declarations.
-class Maps;
-class Memory;
-
 struct MapInfo {
-  MapInfo(Maps* maps) : maps_(maps) {}
-  MapInfo(Maps* maps, uint64_t start, uint64_t end) : maps_(maps), start(start), end(end) {}
-  MapInfo(Maps* maps, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+  MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
           const char* name)
-      : maps_(maps),
-        start(start),
+      : start(start),
         end(end),
         offset(offset),
         flags(flags),
         name(name),
+        prev_map(map_info),
         load_bias(static_cast<uint64_t>(-1)) {}
-  MapInfo(Maps* maps, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+  MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
           const std::string& name)
-      : maps_(maps),
-        start(start),
+      : start(start),
         end(end),
         offset(offset),
         flags(flags),
         name(name),
+        prev_map(map_info),
         load_bias(static_cast<uint64_t>(-1)) {}
   ~MapInfo() = default;
-
-  Maps* maps_ = nullptr;
 
   uint64_t start = 0;
   uint64_t end = 0;
@@ -64,10 +57,14 @@ struct MapInfo {
   std::string name;
   std::shared_ptr<Elf> elf;
   // This value is only non-zero if the offset is non-zero but there is
-  // no elf signature found at that offset. This indicates that the
-  // entire file is represented by the Memory object returned by CreateMemory,
-  // instead of a portion of the file.
+  // no elf signature found at that offset.
   uint64_t elf_offset = 0;
+  // This value is the offset from the map in memory that is the start
+  // of the elf. This is not equal to offset when the linker splits
+  // shared libraries into a read-only and read-execute map.
+  uint64_t elf_start_offset = 0;
+
+  MapInfo* prev_map = nullptr;
 
   std::atomic_uint64_t load_bias;
 

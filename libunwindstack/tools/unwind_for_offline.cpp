@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -46,6 +47,7 @@ struct map_info_t {
   uint64_t start;
   uint64_t end;
   uint64_t offset;
+  uint64_t flags;
   std::string name;
 };
 
@@ -163,14 +165,19 @@ bool CreateElfFromMemory(std::shared_ptr<unwindstack::Memory>& memory, map_info_
   return true;
 }
 
-bool CopyElfFromFile(map_info_t* info) {
+bool CopyElfFromFile(map_info_t* info, bool* file_copied) {
+  std::string cur_name = basename(info->name.c_str());
+  if (*file_copied) {
+    info->name = cur_name;
+    return true;
+  }
+
   std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(info->name.c_str(), "r"), &fclose);
   if (fp == nullptr) {
     perror((std::string("Cannot open ") + info->name).c_str());
     return false;
   }
 
-  std::string cur_name = basename(info->name.c_str());
   std::unique_ptr<FILE, decltype(&fclose)> output(fopen(cur_name.c_str(), "w+"), &fclose);
   if (output == nullptr) {
     perror((std::string("Cannot create file " + cur_name)).c_str());
@@ -191,6 +198,39 @@ bool CopyElfFromFile(map_info_t* info) {
   info->name = cur_name;
 
   return true;
+}
+
+map_info_t* FillInAndGetMapInfo(std::unordered_map<uint64_t, map_info_t>& maps_by_start,
+                                unwindstack::MapInfo* map_info) {
+  auto info = &maps_by_start[map_info->start];
+  info->start = map_info->start;
+  info->end = map_info->end;
+  info->offset = map_info->offset;
+  info->name = map_info->name;
+  info->flags = map_info->flags;
+
+  return info;
+}
+
+void SaveMapInformation(std::shared_ptr<unwindstack::Memory>& process_memory, map_info_t* info,
+                        bool* file_copied) {
+  if (CopyElfFromFile(info, file_copied)) {
+    return;
+  }
+  *file_copied = false;
+
+  // Try to create the elf from memory, this will handle cases where
+  // the data only exists in memory such as vdso data on x86.
+  if (CreateElfFromMemory(process_memory, info)) {
+    return;
+  }
+
+  printf("Cannot save memory or file for map ");
+  if (!info->name.empty()) {
+    printf("%s\n", info->name.c_str());
+  } else {
+    printf("anonymous:%" PRIx64 "\n", info->start);
+  }
 }
 
 int SaveData(pid_t pid) {
@@ -237,22 +277,21 @@ int SaveData(pid_t pid) {
     }
 
     if (maps_by_start.count(frame.map_start) == 0) {
-      auto info = &maps_by_start[frame.map_start];
-      info->start = frame.map_start;
-      info->end = frame.map_end;
-      info->offset = frame.map_offset;
-      info->name = frame.map_name;
-      if (!CopyElfFromFile(info)) {
-        // Try to create the elf from memory, this will handle cases where
-        // the data only exists in memory such as vdso data on x86.
-        if (!CreateElfFromMemory(process_memory, info)) {
-          printf("Ignoring map ");
-          if (!info->name.empty()) {
-            printf("%s\n", info->name.c_str());
-          } else {
-            printf("anonymous:%" PRIx64 "\n", info->start);
-          }
-        }
+      map_info = maps.Find(frame.map_start);
+
+      auto info = FillInAndGetMapInfo(maps_by_start, map_info);
+      bool file_copied = false;
+      SaveMapInformation(process_memory, info, &file_copied);
+
+      // If you are using a a linker that creates two maps (one read-only, one
+      // read-executable), it's necessary to capture the previous map
+      // information if needed.
+      unwindstack::MapInfo* prev_map = map_info->prev_map;
+      if (prev_map != nullptr && map_info->offset != 0 && prev_map->offset == 0 &&
+          prev_map->flags == PROT_READ && map_info->name == prev_map->name &&
+          maps_by_start.count(prev_map->start) == 0) {
+        info = FillInAndGetMapInfo(maps_by_start, prev_map);
+        SaveMapInformation(process_memory, info, &file_copied);
       }
     }
   }
@@ -277,8 +316,18 @@ int SaveData(pid_t pid) {
   }
 
   for (auto& element : sorted_maps) {
+    char perms[5] = {"---p"};
     map_info_t& map = element.second;
-    fprintf(fp.get(), "%" PRIx64 "-%" PRIx64 " r-xp %" PRIx64 " 00:00 0", map.start, map.end,
+    if (map.flags & PROT_READ) {
+      perms[0] = 'r';
+    }
+    if (map.flags & PROT_WRITE) {
+      perms[1] = 'w';
+    }
+    if (map.flags & PROT_EXEC) {
+      perms[2] = 'x';
+    }
+    fprintf(fp.get(), "%" PRIx64 "-%" PRIx64 " %s %" PRIx64 " 00:00 0", map.start, map.end, perms,
             map.offset);
     if (!map.name.empty()) {
       fprintf(fp.get(), "   %s", map.name.c_str());
