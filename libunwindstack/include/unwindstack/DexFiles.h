@@ -66,7 +66,7 @@ class DexFiles : public Global {
 
   std::mutex lock_;
   bool initialized_ = false;
-  std::unordered_map<uint64_t, DexFile*> files_;
+  std::unordered_map<uint64_t, std::unique_ptr<DexFile>> files_;
 
   uint64_t entry_addr_ = 0;
   uint64_t (DexFiles::*read_entry_ptr_func_)(uint64_t) = nullptr;
