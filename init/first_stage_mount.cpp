@@ -42,6 +42,7 @@
 #include "uevent_listener.h"
 #include "util.h"
 
+using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::Timer;
 using android::fs_mgr::AvbHandle;
@@ -73,6 +74,8 @@ class FirstStageMount {
     bool CreateLogicalPartitions();
     bool MountPartition(FstabEntry* fstab_entry);
     bool MountPartitions();
+    bool TrySwitchSystemAsRoot();
+    bool TrySkipMountingPartitions();
     bool IsDmLinearEnabled();
     bool GetDmLinearMetadataDevice();
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
@@ -398,10 +401,10 @@ bool FirstStageMount::MountPartition(FstabEntry* fstab_entry) {
     return true;
 }
 
-bool FirstStageMount::MountPartitions() {
-    // If system is in the fstab then we're not a system-as-root device, and in
-    // this case, we mount system first then pivot to it.  From that point on,
-    // we are effectively identical to a system-as-root device.
+// If system is in the fstab then we're not a system-as-root device, and in
+// this case, we mount system first then pivot to it.  From that point on,
+// we are effectively identical to a system-as-root device.
+bool FirstStageMount::TrySwitchSystemAsRoot() {
     auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
         return entry.mount_point == "/system";
     });
@@ -415,6 +418,44 @@ bool FirstStageMount::MountPartitions() {
 
         fstab_.erase(system_partition);
     }
+
+    return true;
+}
+
+// For GSI to skip mounting /product and /product_services, until there are
+// well-defined interfaces between them and /system. Otherwise, the GSI flashed
+// on /system might not be able to work with /product and /product_services.
+// When they're skipped here, /system/product and /system/product_services in
+// GSI will be used.
+bool FirstStageMount::TrySkipMountingPartitions() {
+    constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
+
+    std::string skip_config;
+    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
+        return true;
+    }
+
+    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
+        if (skip_mount_point.empty()) {
+            continue;
+        }
+        auto removing_entry =
+                std::find_if(fstab_.begin(), fstab_.end(), [&skip_mount_point](const auto& entry) {
+                    return entry.mount_point == skip_mount_point;
+                });
+        if (removing_entry != fstab_.end()) {
+            fstab_.erase(removing_entry);
+            LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
+        }
+    }
+
+    return true;
+}
+
+bool FirstStageMount::MountPartitions() {
+    if (!TrySwitchSystemAsRoot()) return false;
+
+    if (!TrySkipMountingPartitions()) return false;
 
     for (auto& fstab_entry : fstab_) {
         if (!MountPartition(&fstab_entry) && !fstab_entry.fs_mgr_flags.no_fail) {
