@@ -33,6 +33,7 @@
 
 #include "fs_mgr_priv.h"
 
+using android::base::Split;
 using android::base::StartsWith;
 
 const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android");
@@ -53,11 +54,12 @@ struct fs_mgr_flag_values {
     int file_names_mode = 0;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
+    std::string vbmeta_partition;
 };
 
 struct flag_list {
     const char *name;
-    unsigned int flag;
+    uint64_t flag;
 };
 
 static struct flag_list mount_flags[] = {
@@ -97,6 +99,7 @@ static struct flag_list fs_mgr_flags[] = {
         {"verifyatboot", MF_VERIFYATBOOT},
         {"verify", MF_VERIFY},
         {"avb", MF_AVB},
+        {"avb=", MF_AVB},
         {"noemulatedsd", MF_NOEMULATEDSD},
         {"notrim", MF_NOTRIM},
         {"formattable", MF_FORMATTABLE},
@@ -113,6 +116,7 @@ static struct flag_list fs_mgr_flags[] = {
         {"logical", MF_LOGICAL},
         {"checkpoint=block", MF_CHECKPOINT_BLK},
         {"checkpoint=fs", MF_CHECKPOINT_FS},
+        {"slotselect_other", MF_SLOTSELECT_OTHER},
         {0, 0},
 };
 
@@ -204,11 +208,9 @@ static bool read_dt_file(const std::string& file_name, std::string* dt_value)
     return false;
 }
 
-static int parse_flags(char *flags, struct flag_list *fl,
-                       struct fs_mgr_flag_values *flag_vals,
-                       char *fs_options, int fs_options_len)
-{
-    int f = 0;
+static uint64_t parse_flags(char* flags, struct flag_list* fl, struct fs_mgr_flag_values* flag_vals,
+                            char* fs_options, int fs_options_len) {
+    uint64_t f = 0;
     int i;
     char *p;
     char *savep;
@@ -314,6 +316,8 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     flag_vals->swap_prio = strtoll(arg, NULL, 0);
                 } else if (flag == MF_MAX_COMP_STREAMS) {
                     flag_vals->max_comp_streams = strtoll(arg, NULL, 0);
+                } else if (flag == MF_AVB) {
+                    flag_vals->vbmeta_partition = arg;
                 } else if (flag == MF_ZRAMSIZE) {
                     auto is_percent = !!strrchr(arg, '%');
                     auto val = strtoll(arg, NULL, 0);
@@ -583,6 +587,7 @@ static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fs
         entry.erase_blk_size = flag_vals.erase_blk_size;
         entry.logical_blk_size = flag_vals.logical_blk_size;
         entry.sysfs_path = std::move(flag_vals.sysfs_path);
+        entry.vbmeta_partition = std::move(flag_vals.vbmeta_partition);
         if (entry.fs_mgr_flags.logical) {
             entry.logical_partition_name = entry.blk_device;
         }
@@ -845,11 +850,12 @@ struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const st
 }
 
 std::set<std::string> fs_mgr_get_boot_devices() {
-    // boot_devices can be specified in device tree.
-    std::string dt_value;
-    std::string file_name = get_android_dt_dir() + "/boot_devices";
-    if (read_dt_file(file_name, &dt_value)) {
-        auto boot_devices = android::base::Split(dt_value, ",");
+    // First check the kernel commandline, then try the device tree otherwise
+    std::string dt_file_name = get_android_dt_dir() + "/boot_devices";
+    std::string value;
+    if (fs_mgr_get_boot_config_from_kernel_cmdline("boot_devices", &value) ||
+        read_dt_file(dt_file_name, &value)) {
+        auto boot_devices = Split(value, ",");
         return std::set<std::string>(boot_devices.begin(), boot_devices.end());
     }
 

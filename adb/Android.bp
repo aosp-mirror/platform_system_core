@@ -24,7 +24,7 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wvla",
     ],
-    rtti: true,
+    cpp_std: "experimental",
 
     use_version_lib: true,
 

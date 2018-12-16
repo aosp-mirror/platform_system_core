@@ -21,6 +21,19 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
+// https://source.android.com/devices/tech/ota/ab/ab_implement#partitions
+// All partitions that are A/B-ed should be named as follows (slots are always
+// named a, b, etc.): boot_a, boot_b, system_a, system_b, vendor_a, vendor_b.
+static std::string other_suffix(const std::string& slot_suffix) {
+    if (slot_suffix == "_a") {
+        return "_b";
+    }
+    if (slot_suffix == "_b") {
+        return "_a";
+    }
+    return "";
+}
+
 // Returns "_a" or "_b" based on androidboot.slot_suffix in kernel cmdline, or an empty string
 // if that parameter does not exist.
 std::string fs_mgr_get_slot_suffix() {
@@ -32,11 +45,10 @@ std::string fs_mgr_get_slot_suffix() {
 
 // Updates |fstab| for slot_suffix. Returns true on success, false on error.
 bool fs_mgr_update_for_slotselect(Fstab* fstab) {
-    int n;
     std::string ab_suffix;
 
     for (auto& entry : *fstab) {
-        if (!entry.fs_mgr_flags.slot_select) {
+        if (!entry.fs_mgr_flags.slot_select && !entry.fs_mgr_flags.slot_select_other) {
             continue;
         }
 
@@ -46,8 +58,10 @@ bool fs_mgr_update_for_slotselect(Fstab* fstab) {
             if (ab_suffix.empty()) return false;
         }
 
-        entry.blk_device = entry.blk_device + ab_suffix;
-        entry.logical_partition_name = entry.logical_partition_name + ab_suffix;
+        const auto& update_suffix =
+                entry.fs_mgr_flags.slot_select ? ab_suffix : other_suffix(ab_suffix);
+        entry.blk_device = entry.blk_device + update_suffix;
+        entry.logical_partition_name = entry.logical_partition_name + update_suffix;
     }
     return true;
 }

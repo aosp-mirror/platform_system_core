@@ -144,7 +144,10 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     if (entry->fs_mgr_flags.logical) {
         fs_mgr_update_logical_partition(entry);
     }
-    return fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
+    auto save_errno = errno;
+    auto has_shared_blocks = fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
+    errno = save_errno;
+    return has_shared_blocks;
 }
 
 bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr, int level = 0) {
@@ -263,8 +266,10 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overl
 
 std::vector<std::string> fs_mgr_overlayfs_verity_enabled_list() {
     std::vector<std::string> ret;
+    auto save_errno = errno;
     fs_mgr_update_verity_state(
             [&ret](const std::string& mount_point, int) { ret.emplace_back(mount_point); });
+    if ((errno == ENOENT) || (errno == ENXIO)) errno = save_errno;
     return ret;
 }
 
@@ -837,10 +842,12 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
         return ret;
     }
 
+    auto save_errno = errno;
     Fstab fstab;
     if (!ReadDefaultFstab(&fstab)) {
         return false;
     }
+    errno = save_errno;
     auto mounts = fs_mgr_candidate_list(&fstab, fs_mgr_mount_point(mount_point));
     if (mounts.empty()) return ret;
 
@@ -864,7 +871,8 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
         break;
     }
     if (dir.empty()) {
-        errno = ESRCH;
+        if (change && *change) errno = ESRCH;
+        if (errno == EPERM) errno = save_errno;
         return ret;
     }
 

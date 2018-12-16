@@ -78,6 +78,15 @@ static void dump_header_info(log_t* log) {
   _LOG(log, logtype::HEADER, "ABI: '%s'\n", ABI_STRING);
 }
 
+static void dump_timestamp(log_t* log, time_t time) {
+  struct tm tm;
+  localtime_r(&time, &tm);
+
+  char buf[strlen("1970-01-01 00:00:00+0830") + 1];
+  strftime(buf, sizeof(buf), "%F %T%z", &tm);
+  _LOG(log, logtype::HEADER, "Timestamp: %s\n", buf);
+}
+
 static void dump_probable_cause(log_t* log, const siginfo_t* si, BacktraceMap* map) {
   std::string cause;
   if (si->si_signo == SIGSEGV && si->si_code == SEGV_MAPERR) {
@@ -654,6 +663,7 @@ void engrave_tombstone(unique_fd output_fd, BacktraceMap* map, Memory* process_m
 
   _LOG(&log, logtype::HEADER, "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(&log);
+  dump_timestamp(&log, time(nullptr));
 
   auto it = threads.find(target_thread);
   if (it == threads.end()) {

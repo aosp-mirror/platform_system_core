@@ -660,6 +660,54 @@ TEST_F(UnwinderTest, speculative_frame_removed) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
 
   // Fake as if code called a nullptr function.
+  regs_.set_pc(0x20000);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0x10010, false));
+  regs_.FakeSetReturnAddress(0x12);
+  regs_.FakeSetReturnAddressValid(true);
+
+  Unwinder unwinder(64, &maps_, &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_INVALID_MAP, unwinder.LastErrorCode());
+
+  ASSERT_EQ(2U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x20000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libunwind.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x20000U, frame->map_start);
+  EXPECT_EQ(0x22000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0U, frame->pc);
+  EXPECT_EQ(0x10010U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0U, frame->map_start);
+  EXPECT_EQ(0U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(0, frame->map_flags);
+}
+
+// Verify that a speculative frame is added and left if there are only
+// two frames and the pc is in the middle nowhere.
+TEST_F(UnwinderTest, speculative_frame_not_removed_pc_bad) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame1", 1));
+
+  // Fake as if code called a nullptr function.
   regs_.set_pc(0);
   regs_.set_sp(0x10000);
   regs_.FakeSetReturnAddress(0x1202);
@@ -669,7 +717,7 @@ TEST_F(UnwinderTest, speculative_frame_removed) {
   unwinder.Unwind();
   EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
 
-  ASSERT_EQ(1U, unwinder.NumFrames());
+  ASSERT_EQ(2U, unwinder.NumFrames());
 
   auto* frame = &unwinder.frames()[0];
   EXPECT_EQ(0U, frame->num);
@@ -684,6 +732,20 @@ TEST_F(UnwinderTest, speculative_frame_removed) {
   EXPECT_EQ(0U, frame->map_end);
   EXPECT_EQ(0U, frame->map_load_bias);
   EXPECT_EQ(0, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0x200U, frame->rel_pc);
+  EXPECT_EQ(0x1200U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
 
 // Verify that an unwind stops when a frame is in given suffix.
