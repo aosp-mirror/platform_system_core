@@ -154,7 +154,7 @@ static int encryption_mode_to_flag(const struct flag_list* list, const char* mod
     return 0;
 }
 
-static const char* flag_to_encryption_mode(const struct flag_list* list, int flag) {
+static const char* flag_to_encryption_mode(const struct flag_list* list, uint64_t flag) {
     const struct flag_list *j;
 
     for (j = list; j->name; ++j) {
