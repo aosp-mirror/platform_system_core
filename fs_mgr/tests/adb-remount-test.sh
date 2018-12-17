@@ -92,7 +92,7 @@ get_property() {
 
 Returns: true if device is (likely) a debug build" ]
 isDebuggable() {
-  if inAdb && [ 1 -ne `get_property ro.debuggable` ]; then
+  if inAdb && [ 1 -ne "`get_property ro.debuggable`" ]; then
     false
   fi
 }
@@ -389,16 +389,16 @@ if [ ${err} != 0 ]; then
   die -t "${T}" "disable-verity"
 fi
 rebooted=false
-if [ X"${D}" != X"${H}" -a X"${D}" = X"${D##*using overlayfs}" ]; then
+if [ X"${D}" != X"${H}" ]; then
   echo "${H}"
   if [ X"${D}" != X"${D##*setup failed}" ]; then
     echo "${ORANGE}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
   fi
   D=`adb_sh df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep "^overlay "` &&
-    [ -n "${D}" ] &&
-    ( echo "${H}" && echo "${D}" ) &&
+    D=`echo "${D}" | grep "^overlay " || true` &&
+    [ -z "${D}" ] ||
+    ( echo "${H}" && echo "${D}" && false ) ||
     die -t ${T} "overlay takeover unexpected at this phase"
   echo "${GREEN}[     INFO ]${NORMAL} rebooting as requested" >&2
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
@@ -426,12 +426,12 @@ if ${overlayfs_supported} && ${overlayfs_needed} && [ X"${D}" != X"${D##*setup f
   die -t "${T}" "setup for overlay"
 fi
 if [ X"${D}" != X"${D##*Successfully disabled verity}" ]; then
-  echo "${D}"
+  echo "${H}"
   D=`adb_sh df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep "^overlay " | true` &&
-    [ -n "${D}" ] &&
-    ( echo "${H}" && echo "${D}" ) &&
+    D=`echo "${D}" | grep "^overlay " || true` &&
+    [ -z "${D}" ] ||
+    ( echo "${H}" && echo "${D}" && false ) ||
     ( [ -n "${L}" ] && echo "${L}" && false ) ||
     die -t "${T}" "overlay takeover unexpected"
   [ -n "${L}" ] && echo "${L}"
@@ -504,17 +504,17 @@ fi
 
 # Check something
 
-echo "${GREEN}[ RUN      ]${NORMAL} push content to system and vendor" >&2
+echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
 
 A="Hello World! $(date)"
 echo "${A}" | adb_sh "cat - > /system/hello"
 echo "${A}" | adb_sh "cat - > /vendor/hello"
 B="`adb_cat /system/hello`" ||
   die "sytem hello"
-check_eq "${A}" "${B}" system before reboot
+check_eq "${A}" "${B}" /system before reboot
 B="`adb_cat /vendor/hello`" ||
   die "vendor hello"
-check_eq "${A}" "${B}" vendor before reboot
+check_eq "${A}" "${B}" /vendor before reboot
 
 echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
@@ -537,18 +537,21 @@ if ${overlayfs_needed}; then
 fi
 
 B="`adb_cat /system/hello`" ||
-  die "re-read system hello after reboot"
-check_eq "${A}" "${B}" system after reboot
+  die "re-read /system/hello after reboot"
+check_eq "${A}" "${B}" /system after reboot
+echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected
 if ${enforcing}; then
   B="`adb_cat /vendor/hello`" &&
-    die "re-read vendor hello after reboot w/o root"
+    die "re-read /vendor/hello after reboot w/o root"
   check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
+  echo "${GREEN}[       OK ]${NORMAL} /vendor content correct MAC after reboot" >&2
 fi
 adb_root &&
   B="`adb_cat /vendor/hello`" ||
-  die "re-read vendor hello after reboot"
+  die "re-read /vendor/hello after reboot"
 check_eq "${A}" "${B}" vendor after reboot
+echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
 
 echo "${GREEN}[ RUN      ]${NORMAL} flash vendor, confirm its content disappears" >&2
 
@@ -608,17 +611,17 @@ else
       echo "${H}" &&
       echo "${D}" &&
       echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
-      die  "overlay system takeover after flash vendor"
+      die  "overlay /system takeover after flash vendor"
     echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
-      die  "overlay minus vendor takeover after flash vendor"
+      die  "overlay supposed to be minus /vendor takeover after flash vendor"
   fi
   B="`adb_cat /system/hello`" ||
-    die "re-read system hello after flash vendor"
+    die "re-read /system/hello after flash vendor"
   check_eq "${A}" "${B}" system after flash vendor
   adb_root ||
     die "adb root"
   B="`adb_cat /vendor/hello`" &&
-    die "re-read vendor hello after flash vendor"
+    die "re-read /vendor/hello after flash vendor"
   check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
 fi
 
@@ -630,10 +633,10 @@ adb remount &&
   adb_sh rm /system/hello </dev/null ||
   die -t ${T} "cleanup hello"
 B="`adb_cat /system/hello`" &&
-  die "re-read system hello after rm"
+  die "re-read /system/hello after rm"
 check_eq "cat: /system/hello: No such file or directory" "${B}" after flash rm
 B="`adb_cat /vendor/hello`" &&
-  die "re-read vendor hello after rm"
+  die "re-read /vendor/hello after rm"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after flash rm
 
 if [ -n "${scratch_partition}" ]; then
