@@ -69,7 +69,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode);
 int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point);
 int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
                     bool need_cp);
-int fs_mgr_do_mount_one(const FstabEntry& entry);
+int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point = "");
 int fs_mgr_do_mount_one(fstab_rec* rec);
 int fs_mgr_do_tmpfs_mount(const char *n_name);
 fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab);
