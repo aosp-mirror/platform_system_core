@@ -615,7 +615,7 @@ static bool fs_match(const std::string& in1, const std::string& in2) {
 // Sets errno to match the 1st mount failure on failure.
 static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_idx,
                                     int* attempted_idx) {
-    int i;
+    unsigned long i;
     int mount_errno = 0;
     bool mounted = false;
 
