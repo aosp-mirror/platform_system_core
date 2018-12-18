@@ -311,7 +311,7 @@ class BridgeEpollController : private EpollController {
 };
 
 FuseBridgeLoop::FuseBridgeLoop() : opened_(true) {
-    base::unique_fd epoll_fd(epoll_create1(/* no flag */ 0));
+    base::unique_fd epoll_fd(epoll_create1(EPOLL_CLOEXEC));
     if (epoll_fd.get() == -1) {
         PLOG(ERROR) << "Failed to open FD for epoll";
         opened_ = false;
