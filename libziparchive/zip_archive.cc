@@ -491,7 +491,7 @@ int32_t OpenArchiveFd(int fd, const char* debug_file_name, ZipArchiveHandle* han
 }
 
 int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
-  const int fd = ::android::base::utf8::open(fileName, O_RDONLY | O_BINARY, 0);
+  const int fd = ::android::base::utf8::open(fileName, O_RDONLY | O_BINARY | O_CLOEXEC, 0);
   ZipArchive* archive = new ZipArchive(fd, true);
   *handle = archive;
 
