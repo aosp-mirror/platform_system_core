@@ -329,12 +329,14 @@ class PartitionBuilder {
     MetadataBuilder* operator->() const { return builder_.get(); }
 
   private:
+    FastbootDevice* device_;
     std::string super_device_;
     uint32_t slot_number_;
     std::unique_ptr<MetadataBuilder> builder_;
 };
 
-PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& partition_name) {
+PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& partition_name)
+    : device_(device) {
     std::string slot_suffix = GetSuperSlotSuffix(device, partition_name);
     slot_number_ = SlotNumberForSlotSuffix(slot_suffix);
     auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number_));
@@ -350,7 +352,7 @@ bool PartitionBuilder::Write() {
     if (!metadata) {
         return false;
     }
-    return UpdateAllPartitionMetadata(super_device_, *metadata.get());
+    return UpdateAllPartitionMetadata(device_, super_device_, *metadata.get());
 }
 
 bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::string>& args) {
