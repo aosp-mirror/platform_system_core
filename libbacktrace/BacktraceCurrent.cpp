@@ -76,7 +76,7 @@ bool BacktraceCurrent::Unwind(size_t num_ignore_frames, void* ucontext) {
     return UnwindFromContext(num_ignore_frames, ucontext);
   }
 
-  if (Tid() != android::base::GetThreadId()) {
+  if (Tid() != static_cast<pid_t>(android::base::GetThreadId())) {
     return UnwindThread(num_ignore_frames);
   }
 

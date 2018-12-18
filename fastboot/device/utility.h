@@ -68,5 +68,5 @@ std::vector<std::string> ListPartitions(FastbootDevice* device);
 bool GetDeviceLockStatus();
 
 // Update all copies of metadata.
-bool UpdateAllPartitionMetadata(const std::string& super_name,
+bool UpdateAllPartitionMetadata(FastbootDevice* device, const std::string& super_name,
                                 const android::fs_mgr::LpMetadata& metadata);

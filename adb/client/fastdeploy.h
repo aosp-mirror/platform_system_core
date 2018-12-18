@@ -32,3 +32,4 @@ void create_patch(const char* apkPath, const char* metadataPath, const char* pat
 void apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath);
 void install_patch(const char* apkPath, const char* patchPath, int argc, const char** argv);
 std::string get_patch_path(const char* apkPath);
+bool find_package(const char* apkPath);

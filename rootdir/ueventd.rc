@@ -1,9 +1,6 @@
 firmware_directories /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/
 uevent_socket_rcvbuf_size 16M
 
-subsystem adf
-    devname uevent_devname
-
 subsystem graphics
     devname uevent_devpath
     dirname /dev/graphics
@@ -12,25 +9,9 @@ subsystem drm
     devname uevent_devpath
     dirname /dev/dri
 
-subsystem oncrpc
-    devname uevent_devpath
-    dirname /dev/oncrpc
-
-subsystem adsp
-    devname uevent_devpath
-    dirname /dev/adsp
-
-subsystem msm_camera
-    devname uevent_devpath
-    dirname /dev/msm_camera
-
 subsystem input
     devname uevent_devpath
     dirname /dev/input
-
-subsystem mtd
-    devname uevent_devpath
-    dirname /dev/mtd
 
 subsystem sound
     devname uevent_devpath
@@ -59,73 +40,27 @@ subsystem sound
 
 /dev/pmsg0                0222   root       log
 
-# the msm hw3d client device node is world writable/readable.
-/dev/msm_hw3dc            0666   root       root
-
-# gpu driver for adreno200 is globally accessible
-/dev/kgsl                 0666   root       root
-
 # kms driver for drm based gpu
 /dev/dri/*                0666   root       graphics
 
 # these should not be world writable
 /dev/diag                 0660   radio      radio
-/dev/diag_arm9            0660   radio      radio
 /dev/ttyMSM0              0600   bluetooth  bluetooth
 /dev/uhid                 0660   uhid       uhid
 /dev/uinput               0660   uhid       uhid
-/dev/alarm                0664   system     radio
 /dev/rtc0                 0640   system     system
 /dev/tty0                 0660   root       system
 /dev/graphics/*           0660   root       graphics
-/dev/msm_hw3dm            0660   system     graphics
 /dev/input/*              0660   root       input
 /dev/v4l-touch*           0660   root       input
-/dev/eac                  0660   root       audio
-/dev/cam                  0660   root       camera
-/dev/pmem                 0660   system     graphics
-/dev/pmem_adsp*           0660   system     audio
-/dev/pmem_camera*         0660   system     camera
-/dev/oncrpc/*             0660   root       system
-/dev/adsp/*               0660   system     audio
 /dev/snd/*                0660   system     audio
-/dev/mt9t013              0660   system     system
-/dev/msm_camera/*         0660   system     system
-/dev/akm8976_daemon       0640   compass    system
-/dev/akm8976_aot          0640   compass    system
-/dev/akm8973_daemon       0640   compass    system
-/dev/akm8973_aot          0640   compass    system
-/dev/bma150               0640   compass    system
-/dev/cm3602               0640   compass    system
-/dev/akm8976_pffd         0640   compass    system
-/dev/lightsensor          0640   system     system
-/dev/msm_pcm_out*         0660   system     audio
-/dev/msm_pcm_in*          0660   system     audio
-/dev/msm_pcm_ctl*         0660   system     audio
-/dev/msm_snd*             0660   system     audio
 /dev/msm_mp3*             0660   system     audio
-/dev/audience_a1026*      0660   system     audio
-/dev/tpa2018d1*           0660   system     audio
-/dev/msm_audpre           0660   system     audio
-/dev/msm_audio_ctl        0660   system     audio
-/dev/htc-acoustic         0660   system     audio
-/dev/vdec                 0660   system     audio
-/dev/q6venc               0660   system     audio
-/dev/snd/dsp              0660   system     audio
-/dev/snd/dsp1             0660   system     audio
-/dev/snd/mixer            0660   system     audio
-/dev/smd0                 0640   radio      radio
-/dev/qmi                  0640   radio      radio
-/dev/qmi0                 0640   radio      radio
-/dev/qmi1                 0640   radio      radio
-/dev/qmi2                 0640   radio      radio
 /dev/bus/usb/*            0660   root       usb
 /dev/mtp_usb              0660   root       mtp
 /dev/usb_accessory        0660   root       usb
 /dev/tun                  0660   system     vpn
 
 # CDMA radio interface MUX
-/dev/ts0710mux*           0640   radio      radio
 /dev/ppp                  0660   radio      vpn
 
 # sysfs properties
@@ -135,6 +70,3 @@ subsystem sound
 /sys/devices/virtual/usb_composite/*   enable      0664  root   system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_max_freq   0664  system system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_min_freq   0664  system system
-
-# DVB API device nodes
-/dev/dvb*                 0660   root       system
