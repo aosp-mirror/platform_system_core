@@ -306,6 +306,11 @@ bool LoadSplitPolicy() {
     }
     std::string mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
 
+    std::string product_policy_cil_file("/product/etc/selinux/product_sepolicy.cil");
+    if (access(product_policy_cil_file.c_str(), F_OK) == -1) {
+        product_policy_cil_file.clear();
+    }
+
     // vendor_sepolicy.cil and plat_pub_versioned.cil are the new design to replace
     // nonplat_sepolicy.cil.
     std::string plat_pub_versioned_cil_file("/vendor/etc/selinux/plat_pub_versioned.cil");
@@ -342,6 +347,9 @@ bool LoadSplitPolicy() {
     };
     // clang-format on
 
+    if (!product_policy_cil_file.empty()) {
+        compile_args.push_back(product_policy_cil_file.c_str());
+    }
     if (!plat_pub_versioned_cil_file.empty()) {
         compile_args.push_back(plat_pub_versioned_cil_file.c_str());
     }
