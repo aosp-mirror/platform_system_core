@@ -200,10 +200,16 @@ bool GetDeviceLockStatus() {
     return cmdline.find("androidboot.verifiedbootstate=orange") == std::string::npos;
 }
 
-bool UpdateAllPartitionMetadata(const std::string& super_name,
+bool UpdateAllPartitionMetadata(FastbootDevice* device, const std::string& super_name,
                                 const android::fs_mgr::LpMetadata& metadata) {
+    size_t num_slots = 1;
+    auto boot_control_hal = device->boot_control_hal();
+    if (boot_control_hal) {
+        num_slots = boot_control_hal->getNumberSlots();
+    }
+
     bool ok = true;
-    for (size_t i = 0; i < metadata.geometry.metadata_slot_count; i++) {
+    for (size_t i = 0; i < num_slots; i++) {
         ok &= UpdatePartitionTable(super_name, metadata, i);
     }
     return ok;
