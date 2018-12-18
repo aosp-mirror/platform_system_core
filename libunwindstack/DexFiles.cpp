@@ -48,7 +48,11 @@ DexFiles::DexFiles(std::shared_ptr<Memory>& memory) : Global(memory) {}
 DexFiles::DexFiles(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs)
     : Global(memory, search_libs) {}
 
-DexFiles::~DexFiles() {}
+DexFiles::~DexFiles() {
+  for (auto& entry : files_) {
+    delete entry.second;
+  }
+}
 
 void DexFiles::ProcessArch() {
   switch (arch()) {
@@ -133,11 +137,10 @@ DexFile* DexFiles::GetDexFile(uint64_t dex_file_offset, MapInfo* info) {
   DexFile* dex_file;
   auto entry = files_.find(dex_file_offset);
   if (entry == files_.end()) {
-    std::unique_ptr<DexFile> new_dex_file = DexFile::Create(dex_file_offset, memory_.get(), info);
-    dex_file = new_dex_file.get();
-    files_[dex_file_offset] = std::move(new_dex_file);
+    dex_file = DexFile::Create(dex_file_offset, memory_.get(), info);
+    files_[dex_file_offset] = dex_file;
   } else {
-    dex_file = entry->second.get();
+    dex_file = entry->second;
   }
   return dex_file;
 }
