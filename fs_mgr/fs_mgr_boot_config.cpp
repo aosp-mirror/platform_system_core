@@ -81,6 +81,9 @@ bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::s
 bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val) {
     std::string cmdline;
     if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) return false;
+    if (!cmdline.empty() && cmdline.back() == '\n') {
+        cmdline.pop_back();
+    }
     return fs_mgr_get_boot_config_from_kernel(cmdline, key, out_val);
 }
 
