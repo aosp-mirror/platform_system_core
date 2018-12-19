@@ -32,33 +32,27 @@ namespace unwindstack {
 bool MapInfo::InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory) {
   // One last attempt, see if the previous map is read-only with the
   // same name and stretches across this map.
-  for (auto iter = maps_->begin(); iter != maps_->end(); ++iter) {
-    if (*iter == this) {
-      if (iter == maps_->begin()) {
-        return false;
-      }
-      --iter;
-      MapInfo* prev_map = *iter;
-      // Make sure this is a read-only map.
-      if (prev_map->flags != PROT_READ) {
-        return false;
-      }
-      uint64_t map_size = end - prev_map->end;
-      if (!memory->Init(name, prev_map->offset, map_size)) {
-        return false;
-      }
-      uint64_t max_size;
-      if (!Elf::GetInfo(memory, &max_size) || max_size < map_size) {
-        return false;
-      }
-      if (!memory->Init(name, prev_map->offset, max_size)) {
-        return false;
-      }
-      elf_offset = offset - prev_map->offset;
-      return true;
-    }
+  if (prev_map == nullptr || prev_map->flags != PROT_READ) {
+    return false;
   }
-  return false;
+
+  uint64_t map_size = end - prev_map->end;
+  if (!memory->Init(name, prev_map->offset, map_size)) {
+    return false;
+  }
+
+  uint64_t max_size;
+  if (!Elf::GetInfo(memory, &max_size) || max_size < map_size) {
+    return false;
+  }
+
+  if (!memory->Init(name, prev_map->offset, max_size)) {
+    return false;
+  }
+
+  elf_offset = offset - prev_map->offset;
+  elf_start_offset = prev_map->offset;
+  return true;
 }
 
 Memory* MapInfo::GetFileMemory() {
@@ -91,14 +85,13 @@ Memory* MapInfo::GetFileMemory() {
 
   // Check if the start of this map is an embedded elf.
   uint64_t max_size = 0;
-  uint64_t file_offset = offset;
   if (Elf::GetInfo(memory.get(), &max_size)) {
     if (max_size > map_size) {
-      if (memory->Init(name, file_offset, max_size)) {
+      if (memory->Init(name, offset, max_size)) {
         return memory.release();
       }
       // Try to reinit using the default map_size.
-      if (memory->Init(name, file_offset, map_size)) {
+      if (memory->Init(name, offset, map_size)) {
         return memory.release();
       }
       return nullptr;
@@ -109,6 +102,13 @@ Memory* MapInfo::GetFileMemory() {
   // No elf at offset, try to init as if the whole file is an elf.
   if (memory->Init(name, 0) && Elf::IsValidElf(memory.get())) {
     elf_offset = offset;
+    // Need to check how to set the elf start offset. If this map is not
+    // the r-x map of a r-- map, then use the real offset value. Otherwise,
+    // use 0.
+    if (prev_map == nullptr || prev_map->offset != 0 || prev_map->flags != PROT_READ ||
+        prev_map->name != name) {
+      elf_start_offset = offset;
+    }
     return memory.release();
   }
 
@@ -156,35 +156,24 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
     return memory.release();
   }
 
-  if (name.empty() || maps_ == nullptr) {
-    return nullptr;
-  }
-
   // Find the read-only map by looking at the previous map. The linker
   // doesn't guarantee that this invariant will always be true. However,
   // if that changes, there is likely something else that will change and
   // break something.
-  MapInfo* ro_map_info = nullptr;
-  for (auto iter = maps_->begin(); iter != maps_->end(); ++iter) {
-    if (*iter == this) {
-      if (iter != maps_->begin()) {
-        --iter;
-        ro_map_info = *iter;
-      }
-      break;
-    }
-  }
-
-  if (ro_map_info == nullptr || ro_map_info->name != name || ro_map_info->offset >= offset) {
+  if (offset == 0 || name.empty() || prev_map == nullptr || prev_map->name != name ||
+      prev_map->offset >= offset) {
     return nullptr;
   }
 
   // Make sure that relative pc values are corrected properly.
-  elf_offset = offset - ro_map_info->offset;
+  elf_offset = offset - prev_map->offset;
+  // Use this as the elf start offset, otherwise, you always get offsets into
+  // the r-x section, which is not quite the right information.
+  elf_start_offset = prev_map->offset;
 
   MemoryRanges* ranges = new MemoryRanges;
-  ranges->Insert(new MemoryRange(process_memory, ro_map_info->start,
-                                 ro_map_info->end - ro_map_info->start, 0));
+  ranges->Insert(
+      new MemoryRange(process_memory, prev_map->start, prev_map->end - prev_map->start, 0));
   ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
 
   return ranges;
