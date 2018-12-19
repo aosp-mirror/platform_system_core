@@ -48,6 +48,7 @@
 
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_int dropped = 0;
+static atomic_int log_error = 0;
 
 void statsd_writer_init_lock() {
     /*
@@ -150,8 +151,9 @@ static int statsdAvailable() {
     return 1;
 }
 
-static void statsdNoteDrop() {
+static void statsdNoteDrop(int error) {
     atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
+    atomic_exchange_explicit(&log_error, error, memory_order_relaxed);
 }
 
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
@@ -202,7 +204,8 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
         if (snapshot) {
             android_log_event_int_t buffer;
             header.id = LOG_ID_STATS;
-            buffer.header.tag = htole32(LIBLOG_LOG_TAG);
+            // store the last log error in the tag field. This tag field is not used by statsd.
+            buffer.header.tag = htole32(atomic_load(&log_error));
             buffer.payload.type = EVENT_TYPE_INT;
             buffer.payload.data = htole32(snapshot);
 
