@@ -48,7 +48,13 @@ struct FrameData {
   uint64_t function_offset = 0;
 
   std::string map_name;
-  uint64_t map_offset = 0;
+  // The offset from the first map representing the frame. When there are
+  // two maps (read-only and read-execute) this will be the offset from
+  // the read-only map. When there is only one map, this will be the
+  // same as the actual offset of the map and match map_exact_offset.
+  uint64_t map_elf_start_offset = 0;
+  // The actual offset from the map where the pc lies.
+  uint64_t map_exact_offset = 0;
   uint64_t map_start = 0;
   uint64_t map_end = 0;
   uint64_t map_load_bias = 0;
