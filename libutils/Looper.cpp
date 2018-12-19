@@ -51,9 +51,6 @@ int SimpleLooperCallback::handleEvent(int fd, int events, void* data) {
 
 // --- Looper ---
 
-// Hint for number of file descriptors to be associated with the epoll instance.
-static const int EPOLL_SIZE_HINT = 8;
-
 // Maximum number of file descriptors for which to retrieve poll events each iteration.
 static const int EPOLL_MAX_EVENTS = 16;
 
@@ -139,7 +136,7 @@ void Looper::rebuildEpollLocked() {
     }
 
     // Allocate the new epoll instance and register the wake pipe.
-    mEpollFd.reset(epoll_create(EPOLL_SIZE_HINT));
+    mEpollFd.reset(epoll_create1(EPOLL_CLOEXEC));
     LOG_ALWAYS_FATAL_IF(mEpollFd < 0, "Could not create epoll instance: %s", strerror(errno));
 
     struct epoll_event eventItem;
