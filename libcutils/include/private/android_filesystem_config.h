@@ -133,6 +133,7 @@
 #define AID_LLKD 1070            /* live lock daemon */
 #define AID_IORAPD 1071          /* input/output readahead and pin daemon */
 #define AID_GPU_SERVICE 1072     /* GPU service daemon */
+#define AID_NETWORK_STACK 1073   /* network stack service */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
