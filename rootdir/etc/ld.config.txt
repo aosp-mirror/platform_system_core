@@ -73,6 +73,7 @@ namespace.default.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.permitted.paths += /data
 namespace.default.permitted.paths += /mnt/expand
+namespace.default.permitted.paths += /apex/com.android.resolv/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
