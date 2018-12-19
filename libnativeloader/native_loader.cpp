@@ -639,7 +639,11 @@ void* OpenNativeLibrary(JNIEnv* env,
   UNUSED(target_sdk_version);
   if (class_loader == nullptr) {
     *needs_native_bridge = false;
-    return dlopen(path, RTLD_NOW);
+    void* handle = dlopen(path, RTLD_NOW);
+    if (handle == nullptr) {
+      *error_msg = dlerror();
+    }
+    return handle;
   }
 
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
