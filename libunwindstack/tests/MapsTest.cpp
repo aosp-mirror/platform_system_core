@@ -62,7 +62,7 @@ TEST(MapsTest, map_add) {
 }
 
 TEST(MapsTest, verify_parse_line) {
-  MapInfo info(nullptr);
+  MapInfo info(nullptr, 0, 0, 0, 0, "");
 
   VerifyLine("01-02 rwxp 03 04:05 06\n", &info);
   EXPECT_EQ(1U, info.start);
@@ -135,7 +135,7 @@ TEST(MapsTest, verify_parse_line) {
 }
 
 TEST(MapsTest, verify_large_values) {
-  MapInfo info(nullptr);
+  MapInfo info(nullptr, 0, 0, 0, 0, "");
 #if defined(__LP64__)
   VerifyLine("fabcdef012345678-f12345678abcdef8 rwxp f0b0d0f010305070 00:00 0\n", &info);
   EXPECT_EQ(0xfabcdef012345678UL, info.start);

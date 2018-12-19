@@ -67,13 +67,15 @@ bool Maps::Parse() {
         if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
           flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
         }
-        maps_.push_back(new MapInfo(this, start, end, pgoff, flags, name));
+        maps_.push_back(
+            new MapInfo(maps_.empty() ? nullptr : maps_.back(), start, end, pgoff, flags, name));
       });
 }
 
 void Maps::Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
                const std::string& name, uint64_t load_bias) {
-  MapInfo* map_info = new MapInfo(this, start, end, offset, flags, name);
+  MapInfo* map_info =
+      new MapInfo(maps_.empty() ? nullptr : maps_.back(), start, end, offset, flags, name);
   map_info->load_bias = load_bias;
   maps_.push_back(map_info);
 }
@@ -81,6 +83,13 @@ void Maps::Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
 void Maps::Sort() {
   std::sort(maps_.begin(), maps_.end(),
             [](const MapInfo* a, const MapInfo* b) { return a->start < b->start; });
+
+  // Set the prev_map values on the info objects.
+  MapInfo* prev_map = nullptr;
+  for (MapInfo* map_info : maps_) {
+    map_info->prev_map = prev_map;
+    prev_map = map_info;
+  }
 }
 
 Maps::~Maps() {
@@ -98,7 +107,8 @@ bool BufferMaps::Parse() {
         if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
           flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
         }
-        maps_.push_back(new MapInfo(this, start, end, pgoff, flags, name));
+        maps_.push_back(
+            new MapInfo(maps_.empty() ? nullptr : maps_.back(), start, end, pgoff, flags, name));
       });
 }
 
