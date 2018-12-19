@@ -55,8 +55,19 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
       mMsgLen(elem.mMsgLen),
       mLogId(elem.mLogId),
       mDropped(elem.mDropped) {
-    mMsg = new char[mMsgLen];
-    memcpy(mMsg, elem.mMsg, mMsgLen);
+    if (mDropped) {
+        if (elem.isBinary() && elem.mMsg != nullptr) {
+            // for the following "len" value, refer to : setDropped(uint16_t value), getTag()
+            const int len = sizeof(android_event_header_t);
+            mMsg = new char[len];
+            memcpy(mMsg, elem.mMsg, len);
+        } else {
+            mMsg = nullptr;
+        }
+    } else {
+        mMsg = new char[mMsgLen];
+        memcpy(mMsg, elem.mMsg, mMsgLen);
+    }
 }
 
 LogBufferElement::~LogBufferElement() {
