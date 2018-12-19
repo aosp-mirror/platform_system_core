@@ -113,7 +113,8 @@ void connect_to_smartsocket(asocket *s);
 namespace internal {
 
 #if ADB_HOST
-char* skip_host_serial(char* service);
+bool parse_host_service(std::string_view* out_serial, std::string_view* out_command,
+                        std::string_view service);
 #endif
 
 }  // namespace internal
