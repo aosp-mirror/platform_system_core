@@ -25,41 +25,48 @@
 #include <utility>
 #include <vector>
 
-#include <art_api/ext_dex_file.h>
+#include <dex/dex_file-inl.h>
 
 namespace unwindstack {
 
-class DexFile : protected art_api::dex::DexFile {
+class DexFile {
  public:
+  DexFile() = default;
   virtual ~DexFile() = default;
 
   bool GetMethodInformation(uint64_t dex_offset, std::string* method_name, uint64_t* method_offset);
 
-  static std::unique_ptr<DexFile> Create(uint64_t dex_file_offset_in_memory, Memory* memory,
-                                         MapInfo* info);
+  static DexFile* Create(uint64_t dex_file_offset_in_memory, Memory* memory, MapInfo* info);
 
  protected:
-  DexFile(art_api::dex::DexFile&& art_dex_file) : art_api::dex::DexFile(std::move(art_dex_file)) {}
+  void Init();
+
+  std::unique_ptr<const art::DexFile> dex_file_;
+  std::map<uint32_t, std::pair<uint64_t, uint32_t>> method_cache_;  // dex offset to method index.
+
+  uint32_t class_def_index_ = 0;
 };
 
 class DexFileFromFile : public DexFile {
  public:
-  static std::unique_ptr<DexFileFromFile> Create(uint64_t dex_file_offset_in_file,
-                                                 const std::string& file);
+  DexFileFromFile() = default;
+  virtual ~DexFileFromFile();
+
+  bool Open(uint64_t dex_file_offset_in_file, const std::string& name);
 
  private:
-  DexFileFromFile(art_api::dex::DexFile&& art_dex_file) : DexFile(std::move(art_dex_file)) {}
+  void* mapped_memory_ = nullptr;
+  size_t size_ = 0;
 };
 
 class DexFileFromMemory : public DexFile {
  public:
-  static std::unique_ptr<DexFileFromMemory> Create(uint64_t dex_file_offset_in_memory,
-                                                   Memory* memory, const std::string& name);
+  DexFileFromMemory() = default;
+  virtual ~DexFileFromMemory() = default;
+
+  bool Open(uint64_t dex_file_offset_in_memory, Memory* memory);
 
  private:
-  DexFileFromMemory(art_api::dex::DexFile&& art_dex_file, std::vector<uint8_t>&& memory)
-      : DexFile(std::move(art_dex_file)), memory_(std::move(memory)) {}
-
   std::vector<uint8_t> memory_;
 };
 
