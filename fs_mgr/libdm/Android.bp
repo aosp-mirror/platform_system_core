@@ -20,10 +20,6 @@ cc_library_static {
     recovery_available: true,
 
     export_include_dirs: ["include"],
-    cflags: [
-        // TODO(b/110035986): Allows us to create a skeleton of required classes
-        "-Wno-unused-private-field",
-    ],
 
     srcs: [
         "dm_table.cpp",
