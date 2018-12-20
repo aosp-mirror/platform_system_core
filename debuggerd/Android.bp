@@ -116,14 +116,21 @@ cc_library_static {
         "libdebuggerd",
         "libbacktrace",
         "libunwindstack",
-        "libdexfile",
+        "libdexfile",  // libunwindstack dependency
+        "libdexfile_external",  // libunwindstack dependency
+        "libdexfile_support",  // libunwindstack dependency
         "liblzma",
         "libcutils",
     ],
     target: {
         recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
-            exclude_static_libs: ["libdexfile"],
+            exclude_static_libs: [
+                "libartbase",
+                "libdexfile",
+                "libdexfile_external",
+                "libdexfile_support",
+            ],
         },
     },
 
@@ -170,12 +177,22 @@ cc_library_static {
 
     static_libs: [
         "libbacktrace",
+        "libdexfile_external",  // libunwindstack dependency
+        "libdexfile_support",  // libunwindstack dependency
         "libunwindstack",
         "liblzma",
         "libbase",
         "libcutils",
         "liblog",
     ],
+    target: {
+        recovery: {
+            exclude_static_libs: [
+                "libdexfile_external",
+                "libdexfile_support",
+            ],
+        },
+    },
 }
 
 cc_test {
@@ -216,6 +233,8 @@ cc_test {
 
     static_libs: [
         "libdebuggerd",
+        "libdexfile_external",  // libunwindstack dependency
+        "libdexfile_support",  // libunwindstack dependency
         "libunwindstack",
     ],
 

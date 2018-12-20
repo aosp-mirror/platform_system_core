@@ -94,7 +94,10 @@ cc_library {
                 "DexFile.cpp",
                 "DexFiles.cpp",
             ],
-            exclude_shared_libs: ["libdexfile"],
+            exclude_shared_libs: [
+                "libdexfile_external",
+                "libdexfile_support",
+            ],
         },
         recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
@@ -102,7 +105,10 @@ cc_library {
                 "DexFile.cpp",
                 "DexFiles.cpp",
             ],
-            exclude_shared_libs: ["libdexfile"],
+            exclude_shared_libs: [
+                "libdexfile_external",
+                "libdexfile_support",
+            ],
         },
     },
 
@@ -127,7 +133,8 @@ cc_library {
 
     shared_libs: [
         "libbase",
-        "libdexfile",
+        "libdexfile_external",
+        "libdexfile_support",
         "liblog",
         "liblzma",
     ],
@@ -215,6 +222,7 @@ cc_test {
         "liblzma",
         "libunwindstack",
         "libdexfile",
+        "libdexfile_support",
     ],
 
     static_libs: [
