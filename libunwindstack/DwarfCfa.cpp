@@ -204,7 +204,7 @@ template <typename AddressType>
 bool DwarfCfa<AddressType>::LogInstruction(uint32_t indent, uint64_t cfa_offset, uint8_t op,
                                            uint64_t* cur_pc) {
   const auto* cfa = &DwarfCfaInfo::kTable[op];
-  if (cfa->name == nullptr) {
+  if (cfa->name[0] == '\0') {
     log(indent, "Illegal");
     log(indent, "Raw Data: 0x%02x", op);
     return true;
@@ -677,29 +677,29 @@ const DwarfCfaInfo::Info DwarfCfaInfo::kTable[64] = {
         {DW_EH_PE_uleb128, DW_EH_PE_block},
         {DWARF_DISPLAY_REGISTER, DWARF_DISPLAY_EVAL_BLOCK},
     },
-    {nullptr, 0, 0, {}, {}},  // 0x17 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x18 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x19 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x1a illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x1b illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x1c DW_CFA_lo_user (Treat as illegal)
-    {nullptr, 0, 0, {}, {}},  // 0x1d illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x1e illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x1f illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x20 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x21 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x22 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x23 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x24 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x25 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x26 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x27 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x28 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x29 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x2a illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x2b illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x2c illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x2d DW_CFA_GNU_window_save (Treat as illegal)
+    {"", 0, 0, {}, {}},  // 0x17 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x18 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x19 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x1a illegal cfa
+    {"", 0, 0, {}, {}},  // 0x1b illegal cfa
+    {"", 0, 0, {}, {}},  // 0x1c DW_CFA_lo_user (Treat as illegal)
+    {"", 0, 0, {}, {}},  // 0x1d illegal cfa
+    {"", 0, 0, {}, {}},  // 0x1e illegal cfa
+    {"", 0, 0, {}, {}},  // 0x1f illegal cfa
+    {"", 0, 0, {}, {}},  // 0x20 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x21 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x22 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x23 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x24 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x25 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x26 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x27 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x28 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x29 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x2a illegal cfa
+    {"", 0, 0, {}, {}},  // 0x2b illegal cfa
+    {"", 0, 0, {}, {}},  // 0x2c illegal cfa
+    {"", 0, 0, {}, {}},  // 0x2d DW_CFA_GNU_window_save (Treat as illegal)
     {
         "DW_CFA_GNU_args_size",  // 0x2e DW_CFA_GNU_args_size
         2,
@@ -714,21 +714,21 @@ const DwarfCfaInfo::Info DwarfCfaInfo::kTable[64] = {
         {DW_EH_PE_uleb128, DW_EH_PE_uleb128},
         {DWARF_DISPLAY_REGISTER, DWARF_DISPLAY_NUMBER},
     },
-    {nullptr, 0, 0, {}, {}},  // 0x31 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x32 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x33 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x34 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x35 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x36 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x37 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x38 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x39 illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x3a illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x3b illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x3c illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x3d illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x3e illegal cfa
-    {nullptr, 0, 0, {}, {}},  // 0x3f DW_CFA_hi_user (Treat as illegal)
+    {"", 0, 0, {}, {}},  // 0x31 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x32 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x33 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x34 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x35 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x36 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x37 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x38 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x39 illegal cfa
+    {"", 0, 0, {}, {}},  // 0x3a illegal cfa
+    {"", 0, 0, {}, {}},  // 0x3b illegal cfa
+    {"", 0, 0, {}, {}},  // 0x3c illegal cfa
+    {"", 0, 0, {}, {}},  // 0x3d illegal cfa
+    {"", 0, 0, {}, {}},  // 0x3e illegal cfa
+    {"", 0, 0, {}, {}},  // 0x3f DW_CFA_hi_user (Treat as illegal)
 };
 
 // Explicitly instantiate DwarfCfa.
