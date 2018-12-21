@@ -38,7 +38,8 @@ bool SendProtocolString(int fd, const std::string& s) {
 
     // The cost of sending two strings outweighs the cost of formatting.
     // "adb sync" performance is affected by this.
-    return WriteFdFmt(fd, "%04x%.*s", length, length, s.c_str());
+    auto str = android::base::StringPrintf("%04x", length).append(s);
+    return WriteFdExactly(fd, str);
 }
 
 bool ReadProtocolString(int fd, std::string* s, std::string* error) {
