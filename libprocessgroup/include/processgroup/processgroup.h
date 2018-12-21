@@ -14,13 +14,27 @@
  *  limitations under the License.
  */
 
-#ifndef _PROCESSGROUP_H_
-#define _PROCESSGROUP_H_
+#pragma once
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <string>
+#include <vector>
 
 __BEGIN_DECLS
+
+static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
+static constexpr const char* CGROUPS_RC_DIR = "/dev/cgroup_info";
+
+bool CgroupSetupCgroups();
+bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
+bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
+bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path);
+
+bool UsePerAppMemcg();
+
+bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles);
+bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
 
 // Return 0 and removes the cgroup if there are no longer any processes in it.
 // Returns -1 in the case of an error occurring or if there are processes still running
@@ -42,5 +56,3 @@ bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
 void removeAllProcessGroups(void);
 
 __END_DECLS
-
-#endif
