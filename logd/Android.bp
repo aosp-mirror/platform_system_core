@@ -73,6 +73,7 @@ cc_binary {
         "libcutils",
         "libbase",
         "libpackagelistparser",
+        "libprocessgroup",
         "libcap",
     ],
 
