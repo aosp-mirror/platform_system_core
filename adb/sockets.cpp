@@ -462,16 +462,19 @@ asocket* create_remote_socket(unsigned id, atransport* t) {
     return s;
 }
 
-void connect_to_remote(asocket* s, const char* destination) {
+void connect_to_remote(asocket* s, std::string_view destination) {
     D("Connect_to_remote call RS(%d) fd=%d", s->id, s->fd);
     apacket* p = get_apacket();
 
-    D("LS(%d): connect('%s')", s->id, destination);
+    LOG(VERBOSE) << "LS(" << s->id << ": connect(" << destination << ")";
     p->msg.command = A_OPEN;
     p->msg.arg0 = s->id;
 
-    // adbd expects a null-terminated string.
-    p->payload.assign(destination, destination + strlen(destination) + 1);
+    // adbd used to expect a null-terminated string.
+    // Keep doing so to maintain backward compatibility.
+    p->payload.resize(destination.size() + 1);
+    memcpy(p->payload.data(), destination.data(), destination.size());
+    p->payload[destination.size()] = '\0';
     p->msg.data_length = p->payload.size();
 
     CHECK_LE(p->msg.data_length, s->get_max_payload());
@@ -826,7 +829,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
     /* give him our transport and upref it */
     s->peer->transport = s->transport;
 
-    connect_to_remote(s->peer, s->smart_socket_data.data() + 4);
+    connect_to_remote(s->peer, std::string_view(s->smart_socket_data).substr(4));
     s->peer = nullptr;
     s->close(s);
     return 1;

@@ -105,7 +105,7 @@ static void listener_event_func(int _fd, unsigned ev, void* _l)
         s = create_local_socket(fd);
         if (s) {
             s->transport = listener->transport;
-            connect_to_remote(s, listener->connect_to.c_str());
+            connect_to_remote(s, listener->connect_to);
             return;
         }
 
