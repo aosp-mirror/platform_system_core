@@ -395,6 +395,11 @@ bool FirstStageMount::MountPartition(FstabEntry* fstab_entry) {
         return false;
     }
     if (fs_mgr_do_mount_one(*fstab_entry)) {
+        if (fstab_entry->fs_mgr_flags.formattable) {
+            PLOG(INFO) << "Failed to mount '" << fstab_entry->mount_point << "', "
+                       << "ignoring mount for formattable partition";
+            return true;
+        }
         PLOG(ERROR) << "Failed to mount '" << fstab_entry->mount_point << "'";
         return false;
     }
