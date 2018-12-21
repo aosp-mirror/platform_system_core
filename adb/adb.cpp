@@ -1153,7 +1153,9 @@ int handle_host_request(const char* service, TransportType type, const char* ser
         std::string host;
         int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
         std::string error;
-        if (!android::base::ParseNetAddress(address, &host, &port, &serial, &error)) {
+        if (address.find("vsock:") == 0) {
+            serial = address;
+        } else if (!android::base::ParseNetAddress(address, &host, &port, &serial, &error)) {
             return SendFail(reply_fd, android::base::StringPrintf("couldn't parse '%s': %s",
                                                                   address.c_str(), error.c_str()));
         }
