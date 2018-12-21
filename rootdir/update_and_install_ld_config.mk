@@ -38,9 +38,11 @@ vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.txt
 
 sanitizer_runtime_libraries := $(call normalize-path-list,$(addsuffix .so,\
   $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+  $(HWADDRESS_SANITIZER_RUNTIME_LIBRARY) \
   $(UBSAN_RUNTIME_LIBRARY) \
   $(TSAN_RUNTIME_LIBRARY) \
   $(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+  $(2ND_HWADDRESS_SANITIZER_RUNTIME_LIBRARY) \
   $(2ND_UBSAN_RUNTIME_LIBRARY) \
   $(2ND_TSAN_RUNTIME_LIBRARY)))
 # If BOARD_VNDK_VERSION is not defined, VNDK version suffix will not be used.
