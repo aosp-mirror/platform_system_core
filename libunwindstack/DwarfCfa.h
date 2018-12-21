@@ -49,7 +49,14 @@ class DwarfCfaInfo {
   };
 
   struct Info {
-    const char* name;
+    // It may seem cleaner to just change the type of 'name' to 'const char *'.
+    // However, having a pointer here would require relocation at runtime,
+    // causing 'kTable' to be placed in data.rel.ro section instead of rodata
+    // section, adding memory pressure to the system.  Note that this is only
+    // safe because this is only used in C++ code.  C++ standard, unlike C
+    // standard, mandates the array size to be large enough to hold the NULL
+    // terminator when initialized with a string literal.
+    const char name[36];
     uint8_t supported_version;
     uint8_t num_operands;
     uint8_t operands[2];
