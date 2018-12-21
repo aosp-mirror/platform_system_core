@@ -27,7 +27,10 @@ cc_library {
         enabled: true,
         support_system_process: true,
     },
-    shared_libs: ["libbase"],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
     // for cutils/android_filesystem_config.h
     header_libs: [
         "libcutils_headers",
