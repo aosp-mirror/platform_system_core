@@ -18,6 +18,7 @@
 #define _LOGD_LOG_TIMES_H__
 
 #include <pthread.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -82,6 +83,8 @@ class LogTimeEntry {
     void cleanSkip_Locked(void);
 
     void release_Locked(void) {
+        // gracefully shut down the socket.
+        shutdown(mClient->getSocket(), SHUT_RDWR);
         mRelease = true;
         pthread_cond_signal(&threadTriggeredCondition);
     }
