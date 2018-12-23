@@ -298,7 +298,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(
       "  #00 pc 00068fb8  libarttestd.so (_ZN3artL13CauseSegfaultEv+72)\n"
       "  #01 pc 00067f00  libarttestd.so (Java_Main_unwindInProcess+10032)\n"
-      "  #02 pc 000021a8 (offset 0x2000)  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
+      "  #02 pc 000021a8  137-cfi.odex (offset 0x2000) (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+136)\n"
       "  #03 pc 0000fe80  anonymous:ee74c000 (boolean Main.bar(boolean)+64)\n"
       "  #04 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
@@ -591,7 +591,7 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
   ASSERT_EQ(76U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
       "  #00 pc 00018a5e  libarttestd.so (Java_Main_unwindInProcess+866)\n"
-      "  #01 pc 0000212d (offset 0x2000)  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
+      "  #01 pc 0000212d  137-cfi.odex (offset 0x2000) (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+92)\n"
       "  #02 pc 00011cb1  anonymous:e2796000 (boolean Main.bar(boolean)+72)\n"
       "  #03 pc 00462175  libartd.so (art_quick_invoke_stub_internal+68)\n"
@@ -1135,29 +1135,29 @@ TEST_F(UnwindOfflineTest, offset_arm) {
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(19U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
-      "  #00 pc 0032bfa0 (offset 0x42000)  libunwindstack_test (SignalInnerFunction+40)\n"
-      "  #01 pc 0032bfeb (offset 0x42000)  libunwindstack_test (SignalMiddleFunction+2)\n"
-      "  #02 pc 0032bff3 (offset 0x42000)  libunwindstack_test (SignalOuterFunction+2)\n"
-      "  #03 pc 0032fed3 (offset 0x42000)  libunwindstack_test "
+      "  #00 pc 0032bfa0  libunwindstack_test (SignalInnerFunction+40)\n"
+      "  #01 pc 0032bfeb  libunwindstack_test (SignalMiddleFunction+2)\n"
+      "  #02 pc 0032bff3  libunwindstack_test (SignalOuterFunction+2)\n"
+      "  #03 pc 0032fed3  libunwindstack_test "
       "(_ZN11unwindstackL19SignalCallerHandlerEiP7siginfoPv+26)\n"
-      "  #04 pc 00026528 (offset 0x25000)  libc.so\n"
+      "  #04 pc 00026528  libc.so\n"
       "  #05 pc 00000000  <unknown>\n"
-      "  #06 pc 0032c2d9 (offset 0x42000)  libunwindstack_test (InnerFunction+736)\n"
-      "  #07 pc 0032cc4f (offset 0x42000)  libunwindstack_test (MiddleFunction+42)\n"
-      "  #08 pc 0032cc81 (offset 0x42000)  libunwindstack_test (OuterFunction+42)\n"
-      "  #09 pc 0032e547 (offset 0x42000)  libunwindstack_test "
+      "  #06 pc 0032c2d9  libunwindstack_test (InnerFunction+736)\n"
+      "  #07 pc 0032cc4f  libunwindstack_test (MiddleFunction+42)\n"
+      "  #08 pc 0032cc81  libunwindstack_test (OuterFunction+42)\n"
+      "  #09 pc 0032e547  libunwindstack_test "
       "(_ZN11unwindstackL19RemoteThroughSignalEij+270)\n"
-      "  #10 pc 0032ed99 (offset 0x42000)  libunwindstack_test "
+      "  #10 pc 0032ed99  libunwindstack_test "
       "(_ZN11unwindstack55UnwindTest_remote_through_signal_with_invalid_func_Test8TestBodyEv+16)\n"
-      "  #11 pc 00354453 (offset 0x42000)  libunwindstack_test (_ZN7testing4Test3RunEv+154)\n"
-      "  #12 pc 00354de7 (offset 0x42000)  libunwindstack_test (_ZN7testing8TestInfo3RunEv+194)\n"
-      "  #13 pc 00355105 (offset 0x42000)  libunwindstack_test (_ZN7testing8TestCase3RunEv+180)\n"
-      "  #14 pc 0035a215 (offset 0x42000)  libunwindstack_test "
+      "  #11 pc 00354453  libunwindstack_test (_ZN7testing4Test3RunEv+154)\n"
+      "  #12 pc 00354de7  libunwindstack_test (_ZN7testing8TestInfo3RunEv+194)\n"
+      "  #13 pc 00355105  libunwindstack_test (_ZN7testing8TestCase3RunEv+180)\n"
+      "  #14 pc 0035a215  libunwindstack_test "
       "(_ZN7testing8internal12UnitTestImpl11RunAllTestsEv+664)\n"
-      "  #15 pc 00359f4f (offset 0x42000)  libunwindstack_test (_ZN7testing8UnitTest3RunEv+110)\n"
-      "  #16 pc 0034d3db (offset 0x42000)  libunwindstack_test (main+38)\n"
-      "  #17 pc 00092c0d (offset 0x25000)  libc.so (__libc_init+48)\n"
-      "  #18 pc 0004202f (offset 0x42000)  libunwindstack_test (_start_main+38)\n",
+      "  #15 pc 00359f4f  libunwindstack_test (_ZN7testing8UnitTest3RunEv+110)\n"
+      "  #16 pc 0034d3db  libunwindstack_test (main+38)\n"
+      "  #17 pc 00092c0d  libc.so (__libc_init+48)\n"
+      "  #18 pc 0004202f  libunwindstack_test (_start_main+38)\n",
       frame_info);
 
   EXPECT_EQ(0x2e55fa0U, unwinder.frames()[0].pc);
@@ -1248,14 +1248,14 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_arm64) {
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(7U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
-      "  #00 pc 000000000014ccbc (offset 0x39000)  linker64 (__dl_syscall+28)\n"
-      "  #01 pc 000000000005426c (offset 0x39000)  linker64 "
+      "  #00 pc 000000000014ccbc  linker64 (__dl_syscall+28)\n"
+      "  #01 pc 000000000005426c  linker64 "
       "(__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1128)\n"
       "  #02 pc 00000000000008bc  vdso.so\n"
-      "  #03 pc 00000000000846f4 (offset 0x40000)  libc.so (abort+172)\n"
-      "  #04 pc 0000000000084ad4 (offset 0x40000)  libc.so (__assert2+36)\n"
-      "  #05 pc 000000000003d5b4 (offset 0x40000)  ANGLEPrebuilt.apk (ANGLEGetUtilityAPI+56)\n"
-      "  #06 pc 000000000007fe68 (offset 0x40000)  libc.so (__libc_init)\n",
+      "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
+      "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
+      "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk (offset 0x4000) (ANGLEGetUtilityAPI+56)\n"
+      "  #06 pc 000000000007fe68  libc.so (__libc_init)\n",
       frame_info);
 
   EXPECT_EQ(0x7e82c4fcbcULL, unwinder.frames()[0].pc);
@@ -1287,14 +1287,14 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
   std::string frame_info(DumpFrames(unwinder));
   ASSERT_EQ(7U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
-      "  #00 pc 000000000014ccbc (offset 0x39000)  linker64 (__dl_syscall+28)\n"
-      "  #01 pc 000000000005426c (offset 0x39000)  linker64 "
+      "  #00 pc 000000000014ccbc  linker64 (__dl_syscall+28)\n"
+      "  #01 pc 000000000005426c  linker64 "
       "(__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1128)\n"
       "  #02 pc 00000000000008bc  vdso.so\n"
-      "  #03 pc 00000000000846f4 (offset 0x40000)  libc.so (abort+172)\n"
-      "  #04 pc 0000000000084ad4 (offset 0x40000)  libc.so (__assert2+36)\n"
-      "  #05 pc 000000000003d5b4 (offset 0x2211000)  ANGLEPrebuilt.apk\n"
-      "  #06 pc 000000000007fe68 (offset 0x40000)  libc.so (__libc_init)\n",
+      "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
+      "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
+      "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk (offset 0x21d5000)\n"
+      "  #06 pc 000000000007fe68  libc.so (__libc_init)\n",
       frame_info);
 
   EXPECT_EQ(0x7e82c4fcbcULL, unwinder.frames()[0].pc);

@@ -143,6 +143,11 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
         return device->WriteFail("Data is not a valid logical partition metadata image");
     }
 
+    if (!FindPhysicalPartition(super_name)) {
+        return device->WriteFail("Cannot find " + super_name +
+                                 ", build may be missing broken or missing boot_devices");
+    }
+
     // If we are unable to read the existing metadata, then the super partition
     // is corrupt. In this case we reflash the whole thing using the provided
     // image.
