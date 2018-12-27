@@ -71,7 +71,7 @@ unique_fd create_service_thread(const char* service_name, std::function<void(uni
     return unique_fd(s[0]);
 }
 
-int service_to_fd(const char* name, atransport* transport) {
+int service_to_fd(std::string_view name, atransport* transport) {
     int ret = -1;
 
     if (is_socket_spec(name)) {

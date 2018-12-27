@@ -27,6 +27,7 @@
 #include <errno.h>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Include this before open/close/unlink are defined as macros below.
@@ -139,7 +140,7 @@ static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 }
 
 // See the comments for the !defined(_WIN32) version of unix_open().
-extern int unix_open(const char* path, int options, ...);
+extern int unix_open(std::string_view path, int options, ...);
 #define  open    ___xxx_unix_open
 
 // Checks if |fd| corresponds to a console.
@@ -357,20 +358,17 @@ static __inline__ void  close_on_exec(int  fd)
 // by unix_read(), unix_write(), unix_close()). Also, the C Runtime has
 // configurable CR/LF translation which defaults to text mode, but is settable
 // with _setmode().
-static __inline__ int  unix_open(const char*  path, int options,...)
-{
-    if ((options & O_CREAT) == 0)
-    {
-        return  TEMP_FAILURE_RETRY( open(path, options) );
-    }
-    else
-    {
-        int      mode;
-        va_list  args;
-        va_start( args, options );
-        mode = va_arg( args, int );
-        va_end( args );
-        return TEMP_FAILURE_RETRY( open( path, options, mode ) );
+static __inline__ int unix_open(std::string_view path, int options, ...) {
+    std::string zero_terminated(path.begin(), path.end());
+    if ((options & O_CREAT) == 0) {
+        return TEMP_FAILURE_RETRY(open(zero_terminated.c_str(), options));
+    } else {
+        int mode;
+        va_list args;
+        va_start(args, options);
+        mode = va_arg(args, int);
+        va_end(args);
+        return TEMP_FAILURE_RETRY(open(zero_terminated.c_str(), options, mode));
     }
 }
 

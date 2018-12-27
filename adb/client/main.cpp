@@ -40,7 +40,7 @@
 
 static void setup_daemon_logging() {
     const std::string log_file_path(GetLogFilePath());
-    int fd = unix_open(log_file_path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0640);
+    int fd = unix_open(log_file_path, O_WRONLY | O_CREAT | O_APPEND, 0640);
     if (fd == -1) {
         PLOG(FATAL) << "cannot open " << log_file_path;
     }

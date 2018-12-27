@@ -19,13 +19,12 @@
 #include <string>
 
 // Returns true if the argument starts with a plausible socket prefix.
-bool is_socket_spec(const std::string& spec);
-bool is_local_socket_spec(const std::string& spec);
+bool is_socket_spec(std::string_view spec);
+bool is_local_socket_spec(std::string_view spec);
 
-int socket_spec_connect(const std::string& spec, std::string* error);
-int socket_spec_listen(const std::string& spec, std::string* error,
-                       int* resolved_tcp_port = nullptr);
+int socket_spec_connect(std::string_view spec, std::string* error);
+int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_tcp_port = nullptr);
 
 // Exposed for testing.
-bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* port,
+bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* port,
                            std::string* error);
