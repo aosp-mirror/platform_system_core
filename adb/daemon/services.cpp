@@ -328,13 +328,6 @@ asocket* daemon_service_to_socket(std::string_view name) {
 }
 
 unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
-    // Historically, we received service names as a char*, and stopped at the first NUL byte.
-    // The client unintentionally sent strings with embedded NULs, which post-string_view, start
-    // being interpreted as part of the string, unless we explicitly strip them.
-    // Notably, shell checks that the part after "shell:" is empty to determine whether the session
-    // is interactive, and {'\0'} is non-empty.
-    name = StripTrailingNulls(name);
-
     if (name.starts_with("dev:")) {
         name.remove_prefix(strlen("dev:"));
         return unique_fd{unix_open(name, O_RDWR | O_CLOEXEC)};
