@@ -203,7 +203,8 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets) {
         }
         next += vers->next;
         data_size -= vers->next;
-        vers = reinterpret_cast<struct dm_target_versions*>(static_cast<char*>(buffer.get()) + next);
+        vers = reinterpret_cast<struct dm_target_versions*>(static_cast<char*>(buffer.get()) +
+                                                            next);
     }
 
     return true;
@@ -288,12 +289,23 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
 }
 
 bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, 0, table);
+}
+
+bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, DM_STATUS_TABLE_FLAG, table);
+}
+
+// private methods of DeviceMapper
+bool DeviceMapper::GetTable(const std::string& name, uint32_t flags,
+                            std::vector<TargetInfo>* table) {
     char buffer[4096];
     struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(buffer);
 
     InitIo(io, name);
     io->data_size = sizeof(buffer);
     io->data_start = sizeof(*io);
+    io->flags = flags;
     if (ioctl(fd_, DM_TABLE_STATUS, io) < 0) {
         PLOG(ERROR) << "DM_TABLE_STATUS failed for " << name;
         return false;
@@ -327,7 +339,6 @@ bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInf
     return true;
 }
 
-// private methods of DeviceMapper
 void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
     CHECK(io != nullptr) << "nullptr passed to dm_ioctl initialization";
     memset(io, 0, sizeof(*io));
