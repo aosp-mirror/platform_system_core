@@ -359,6 +359,11 @@ void handle_packet(apacket *p, atransport *t)
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
             std::string_view address(p->payload.begin(), p->payload.size());
 
+            // Historically, we received service names as a char*, and stopped at the first NUL
+            // byte. The client sent strings with null termination, which post-string_view, start
+            // being interpreted as part of the string, unless we explicitly strip them.
+            address = StripTrailingNulls(address);
+
             asocket* s = create_local_service_socket(address, t);
             if (s == nullptr) {
                 send_close(0, p->msg.arg0, t);
