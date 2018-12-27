@@ -34,6 +34,9 @@
 #include "sysdeps.h"
 #include "sysdeps/chrono.h"
 
+using namespace std::string_literals;
+using namespace std::string_view_literals;
+
 struct ThreadArg {
     int first_read_fd;
     int last_write_fd;
@@ -303,56 +306,78 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
 
 #if ADB_HOST
 
-// Checks that skip_host_serial(serial) returns a pointer to the part of |serial| which matches
-// |expected|, otherwise logs the failure to gtest.
-void VerifySkipHostSerial(std::string serial, const char* expected) {
-    char* result = internal::skip_host_serial(&serial[0]);
-    if (expected == nullptr) {
-        EXPECT_EQ(nullptr, result);
-    } else {
-        EXPECT_STREQ(expected, result);
-    }
-}
+#define VerifyParseHostServiceFailed(s)                                         \
+    do {                                                                        \
+        std::string service(s);                                                 \
+        std::string_view serial, command;                                       \
+        bool result = internal::parse_host_service(&serial, &command, service); \
+        EXPECT_FALSE(result);                                                   \
+    } while (0)
+
+#define VerifyParseHostService(s, expected_serial, expected_command)            \
+    do {                                                                        \
+        std::string service(s);                                                 \
+        std::string_view serial, command;                                       \
+        bool result = internal::parse_host_service(&serial, &command, service); \
+        EXPECT_TRUE(result);                                                    \
+        EXPECT_EQ(std::string(expected_serial), std::string(serial));           \
+        EXPECT_EQ(std::string(expected_command), std::string(command));         \
+    } while (0);
 
 // Check [tcp:|udp:]<serial>[:<port>]:<command> format.
-TEST(socket_test, test_skip_host_serial) {
+TEST(socket_test, test_parse_host_service) {
     for (const std::string& protocol : {"", "tcp:", "udp:"}) {
-        VerifySkipHostSerial(protocol, nullptr);
-        VerifySkipHostSerial(protocol + "foo", nullptr);
+        VerifyParseHostServiceFailed(protocol);
+        VerifyParseHostServiceFailed(protocol + "foo");
 
-        VerifySkipHostSerial(protocol + "foo:bar", ":bar");
-        VerifySkipHostSerial(protocol + "foo:bar:baz", ":bar:baz");
+        {
+            std::string serial = protocol + "foo";
+            VerifyParseHostService(serial + ":bar", serial, "bar");
+            VerifyParseHostService(serial + " :bar:baz", serial, "bar:baz");
+        }
 
-        VerifySkipHostSerial(protocol + "foo:123:bar", ":bar");
-        VerifySkipHostSerial(protocol + "foo:123:456", ":456");
-        VerifySkipHostSerial(protocol + "foo:123:bar:baz", ":bar:baz");
+        {
+            // With port.
+            std::string serial = protocol + "foo:123";
+            VerifyParseHostService(serial + ":bar", serial, "bar");
+            VerifyParseHostService(serial + ":456", serial, "456");
+            VerifyParseHostService(serial + ":bar:baz", serial, "bar:baz");
+        }
 
         // Don't register a port unless it's all numbers and ends with ':'.
-        VerifySkipHostSerial(protocol + "foo:123", ":123");
-        VerifySkipHostSerial(protocol + "foo:123bar:baz", ":123bar:baz");
+        VerifyParseHostService(protocol + "foo:123", protocol + "foo", "123");
+        VerifyParseHostService(protocol + "foo:123bar:baz", protocol + "foo", "123bar:baz");
 
-        VerifySkipHostSerial(protocol + "100.100.100.100:5555:foo", ":foo");
-        VerifySkipHostSerial(protocol + "[0123:4567:89ab:CDEF:0:9:a:f]:5555:foo", ":foo");
-        VerifySkipHostSerial(protocol + "[::1]:5555:foo", ":foo");
+        std::string addresses[] = {"100.100.100.100", "[0123:4567:89ab:CDEF:0:9:a:f]", "[::1]"};
+        for (const std::string& address : addresses) {
+            std::string serial = protocol + address;
+            std::string serial_with_port = protocol + address + ":5555";
+            VerifyParseHostService(serial + ":foo", serial, "foo");
+            VerifyParseHostService(serial_with_port + ":foo", serial_with_port, "foo");
+        }
 
         // If we can't find both [] then treat it as a normal serial with [ in it.
-        VerifySkipHostSerial(protocol + "[0123:foo", ":foo");
+        VerifyParseHostService(protocol + "[0123:foo", protocol + "[0123", "foo");
 
         // Don't be fooled by random IPv6 addresses in the command string.
-        VerifySkipHostSerial(protocol + "foo:ping [0123:4567:89ab:CDEF:0:9:a:f]:5555",
-                             ":ping [0123:4567:89ab:CDEF:0:9:a:f]:5555");
+        VerifyParseHostService(protocol + "foo:ping [0123:4567:89ab:CDEF:0:9:a:f]:5555",
+                               protocol + "foo", "ping [0123:4567:89ab:CDEF:0:9:a:f]:5555");
+
+        // Handle embedded NULs properly.
+        VerifyParseHostService(protocol + "foo:echo foo\0bar"s, protocol + "foo",
+                               "echo foo\0bar"sv);
     }
 }
 
 // Check <prefix>:<serial>:<command> format.
-TEST(socket_test, test_skip_host_serial_prefix) {
+TEST(socket_test, test_parse_host_service_prefix) {
     for (const std::string& prefix : {"usb:", "product:", "model:", "device:"}) {
-        VerifySkipHostSerial(prefix, nullptr);
-        VerifySkipHostSerial(prefix + "foo", nullptr);
+        VerifyParseHostServiceFailed(prefix);
+        VerifyParseHostServiceFailed(prefix + "foo");
 
-        VerifySkipHostSerial(prefix + "foo:bar", ":bar");
-        VerifySkipHostSerial(prefix + "foo:bar:baz", ":bar:baz");
-        VerifySkipHostSerial(prefix + "foo:123:bar", ":123:bar");
+        VerifyParseHostService(prefix + "foo:bar", prefix + "foo", "bar");
+        VerifyParseHostService(prefix + "foo:bar:baz", prefix + "foo", "bar:baz");
+        VerifyParseHostService(prefix + "foo:123:bar", prefix + "foo", "123:bar");
     }
 }
 
