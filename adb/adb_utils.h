@@ -19,6 +19,8 @@
 #include <condition_variable>
 #include <mutex>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <android-base/macros.h>
@@ -94,3 +96,47 @@ class BlockingQueue {
 };
 
 std::string GetLogFilePath();
+
+inline std::string_view StripTrailingNulls(std::string_view str) {
+    size_t n = 0;
+    for (auto it = str.rbegin(); it != str.rend(); ++it) {
+        if (*it != '\0') {
+            break;
+        }
+        ++n;
+    }
+
+    str.remove_suffix(n);
+    return str;
+}
+
+// Base-10 stroll on a string_view.
+template <typename T>
+inline bool ParseUint(T* result, std::string_view str, std::string_view* remaining) {
+    if (str.empty() || !isdigit(str[0])) {
+        return false;
+    }
+
+    T value = 0;
+    std::string_view::iterator it;
+    constexpr T max = std::numeric_limits<T>::max();
+    for (it = str.begin(); it != str.end() && isdigit(*it); ++it) {
+        if (value > max / 10) {
+            return false;
+        }
+
+        value *= 10;
+
+        T digit = *it - '0';
+        if (value > max - digit) {
+            return false;
+        }
+
+        value += digit;
+    }
+    *result = value;
+    if (remaining) {
+        *remaining = str.substr(it - str.begin());
+    }
+    return true;
+}

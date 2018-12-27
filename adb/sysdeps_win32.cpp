@@ -29,6 +29,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -2203,15 +2204,15 @@ NarrowArgs::~NarrowArgs() {
     }
 }
 
-int unix_open(const char* path, int options, ...) {
+int unix_open(std::string_view path, int options, ...) {
     std::wstring path_wide;
-    if (!android::base::UTF8ToWide(path, &path_wide)) {
+    if (!android::base::UTF8ToWide(path.data(), path.size(), &path_wide)) {
         return -1;
     }
     if ((options & O_CREAT) == 0) {
         return _wopen(path_wide.c_str(), options);
     } else {
-        int      mode;
+        int mode;
         va_list  args;
         va_start(args, options);
         mode = va_arg(args, int);

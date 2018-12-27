@@ -103,7 +103,7 @@ bool dev_is_overlayfs(const std::string& dev) {
 
 bool make_block_device_writable(const std::string& dev) {
     if (dev_is_overlayfs(dev)) return true;
-    int fd = unix_open(dev.c_str(), O_RDONLY | O_CLOEXEC);
+    int fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         return false;
     }

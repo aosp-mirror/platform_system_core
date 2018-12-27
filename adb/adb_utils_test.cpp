@@ -181,3 +181,48 @@ TEST(adb_utils, test_forward_targets_are_valid) {
     EXPECT_FALSE(forward_targets_are_valid("tcp:8000", "tcp:a", &error));
     EXPECT_FALSE(forward_targets_are_valid("tcp:8000", "tcp:22x", &error));
 }
+
+void TestParseUint(std::string_view string, bool expected_success, uint32_t expected_value = 0) {
+    // Standalone.
+    {
+        uint32_t value;
+        std::string_view remaining;
+        bool success = ParseUint(&value, string, &remaining);
+        EXPECT_EQ(success, expected_success);
+        if (expected_success) {
+            EXPECT_EQ(value, expected_value);
+        }
+        EXPECT_TRUE(remaining.empty());
+    }
+
+    // With trailing text.
+    {
+        std::string text = std::string(string) + "foo";
+        uint32_t value;
+        std::string_view remaining;
+        bool success = ParseUint(&value, text, &remaining);
+        EXPECT_EQ(success, expected_success);
+        if (expected_success) {
+            EXPECT_EQ(value, expected_value);
+            EXPECT_EQ(remaining, "foo");
+        }
+    }
+}
+
+TEST(adb_utils, ParseUint) {
+    TestParseUint("", false);
+    TestParseUint("foo", false);
+    TestParseUint("foo123", false);
+    TestParseUint("-1", false);
+
+    TestParseUint("123", true, 123);
+    TestParseUint("9999999999999999999999999", false);
+    TestParseUint(std::to_string(UINT32_MAX), true, UINT32_MAX);
+    TestParseUint("0" + std::to_string(UINT32_MAX), true, UINT32_MAX);
+    TestParseUint(std::to_string(static_cast<uint64_t>(UINT32_MAX) + 1), false);
+    TestParseUint("0" + std::to_string(static_cast<uint64_t>(UINT32_MAX) + 1), false);
+
+    std::string x = std::to_string(UINT32_MAX) + "123";
+    std::string_view substr = std::string_view(x).substr(0, std::to_string(UINT32_MAX).size());
+    TestParseUint(substr, true, UINT32_MAX);
+}

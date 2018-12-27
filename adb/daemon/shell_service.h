@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "adb_unique_fd.h"
 
 enum class SubprocessType {
@@ -32,5 +34,5 @@ enum class SubprocessProtocol {
 // shell is started, otherwise |name| is executed non-interactively.
 //
 // Returns an open FD connected to the subprocess or -1 on failure.
-unique_fd StartSubprocess(const char* name, const char* terminal_type, SubprocessType type,
+unique_fd StartSubprocess(std::string name, const char* terminal_type, SubprocessType type,
                           SubprocessProtocol protocol);
