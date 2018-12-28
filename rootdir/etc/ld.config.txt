@@ -105,6 +105,7 @@ namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/framework
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.asan.permitted.paths += /mnt/expand
+namespace.default.asan.permitted.paths += /apex/com.android.resolv/${LIB}
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.default.links = runtime
