@@ -26,6 +26,8 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 
 #include <benchmark/benchmark.h>
 
@@ -396,5 +398,63 @@ Hugepagesize:       2048 kB)meminfo";
     }
 }
 BENCHMARK(BM_MemInfoWithZram_new);
+
+// Current implementation is in frameworks/base/core/jni/android_os_Debug.cpp.
+// That implementation is still buggy and it skips over vmalloc allocated memory by kernel modules.
+// This is the *fixed* version of the same implementation intended for benchmarking against the new
+// one.
+static uint64_t get_allocated_vmalloc_memory(const std::string& vm_file) {
+    char line[1024];
+
+    uint64_t vmalloc_allocated_size = 0;
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(vm_file.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return 0;
+    }
+
+    while (true) {
+        if (fgets(line, 1024, fp.get()) == NULL) {
+            break;
+        }
+
+        // check to see if there are pages mapped in vmalloc area
+        if (!strstr(line, "pages=")) {
+            continue;
+        }
+
+        long nr_pages;
+        if (sscanf(line, "%*x-%*x %*ld %*s pages=%ld", &nr_pages) == 1) {
+            vmalloc_allocated_size += (nr_pages * getpagesize());
+        } else if (sscanf(line, "%*x-%*x %*ld %*s %*s pages=%ld", &nr_pages) == 1) {
+            // The second case is for kernel modules. If allocation comes from the module,
+            // kernel puts an extra string containing the module name before "pages=" in
+            // the line.
+            //    See: https://elixir.bootlin.com/linux/latest/source/kernel/kallsyms.c#L373
+            vmalloc_allocated_size += (nr_pages * getpagesize());
+        }
+    }
+    return vmalloc_allocated_size;
+}
+
+static void BM_VmallocInfo_old_fixed(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string vmallocinfo =
+            ::android::base::StringPrintf("%s/testdata1/vmallocinfo", exec_dir.c_str());
+    for (auto _ : state) {
+        CHECK_EQ(get_allocated_vmalloc_memory(vmallocinfo), 29884416);
+    }
+}
+BENCHMARK(BM_VmallocInfo_old_fixed);
+
+static void BM_VmallocInfo_new(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string vmallocinfo =
+            ::android::base::StringPrintf("%s/testdata1/vmallocinfo", exec_dir.c_str());
+    for (auto _ : state) {
+        SysMemInfo smi;
+        CHECK_EQ(smi.ReadVmallocInfo(vmallocinfo), 29884416);
+    }
+}
+BENCHMARK(BM_VmallocInfo_new);
 
 BENCHMARK_MAIN();

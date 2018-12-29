@@ -30,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 
 using namespace std;
 using namespace android::meminfo;
@@ -514,6 +515,66 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_VMALLOC_USED], 65536);
     EXPECT_EQ(mem[MEMINFO_PAGE_TABLES], 2900);
     EXPECT_EQ(mem[MEMINFO_KERNEL_STACK], 4880);
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoNoMemory) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000   69632 of_iomap+0x78/0xb0 phys=17a00000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=b220000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17c90000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17ca0000 ioremap)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), 0);
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoKernel) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000    8192 drm_property_create_blob+0x44/0xec pages=1 vmalloc)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), getpagesize());
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoModule) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000   28672 pktlog_alloc_buf+0xc4/0x15c [wlan] pages=6 vmalloc)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), 6 * getpagesize());
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoAll) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000   69632 of_iomap+0x78/0xb0 phys=17a00000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=b220000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17c90000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17ca0000 ioremap
+0x0000000000000000-0x0000000000000000    8192 drm_property_create_blob+0x44/0xec pages=1 vmalloc
+0x0000000000000000-0x0000000000000000   28672 pktlog_alloc_buf+0xc4/0x15c [wlan] pages=6 vmalloc)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), 7 * getpagesize());
 }
 
 int main(int argc, char** argv) {
