@@ -40,7 +40,7 @@ using ::android::meminfo::MemUsage;
 using ::android::meminfo::ProcMemInfo;
 using ::android::meminfo::Vma;
 
-[[noreturn]] static void usage(const char* myname, int exit_status) {
+[[noreturn]] static void usage(int exit_status) {
     fprintf(stderr,
             "Usage: %s [ -P | -L ] [ -v | -r | -p | -u | -s | -h ]\n"
             "\n"
@@ -59,7 +59,7 @@ using ::android::meminfo::Vma;
             "    -C  Only show non-cached (ram/swap backed) pages\n"
             "    -k  Only show pages collapsed by KSM\n"
             "    -h  Display this help screen.\n",
-            myname);
+            getprogname());
     exit(exit_status);
 }
 
@@ -278,7 +278,7 @@ int main(int argc, char* argv[]) {
                 g_pgflags = g_pgflags_mask = (1 << KPF_SWAPBACKED);
                 break;
             case 'h':
-                usage(argv[0], EXIT_SUCCESS);
+                usage(EXIT_SUCCESS);
             case 'k':
                 g_pgflags = g_pgflags_mask = (1 << KPF_KSM);
                 break;
@@ -307,7 +307,7 @@ int main(int argc, char* argv[]) {
                 g_reverse_sort = true;
                 break;
             default:
-                usage(argv[0], EXIT_FAILURE);
+                usage(EXIT_FAILURE);
         }
     }
 

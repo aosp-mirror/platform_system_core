@@ -142,8 +142,9 @@ uint64_t total_pswap = 0;
 uint64_t total_uswap = 0;
 uint64_t total_zswap = 0;
 
-static void usage(const char* myname) {
-    std::cerr << "Usage: " << myname << " [ -W ] [ -v | -r | -p | -u | -s | -h ]" << std::endl
+[[noreturn]] static void usage(int exit_status) {
+    std::cerr << "Usage: " << getprogname() << " [ -W ] [ -v | -r | -p | -u | -s | -h ]"
+              << std::endl
               << "    -v  Sort by VSS." << std::endl
               << "    -r  Sort by RSS." << std::endl
               << "    -p  Sort by PSS." << std::endl
@@ -159,6 +160,7 @@ static void usage(const char* myname) {
               << "    -o  Show and sort by oom score against lowmemorykiller thresholds."
               << std::endl
               << "    -h  Display this help screen." << std::endl;
+    exit(exit_status);
 }
 
 static bool read_all_pids(std::vector<pid_t>* pids, std::function<bool(pid_t pid)> for_each_pid) {
@@ -386,9 +388,7 @@ int main(int argc, char* argv[]) {
                 pgflags_mask = (1 << KPF_SWAPBACKED);
                 break;
             case 'h':
-                usage(argv[0]);
-                return 0;
-                break;
+                usage(EXIT_SUCCESS);
             case 'k':
                 pgflags = (1 << KPF_KSM);
                 pgflags_mask = (1 << KPF_KSM);
@@ -422,7 +422,7 @@ int main(int argc, char* argv[]) {
                 reset_wss = true;
                 break;
             default:
-                abort();
+                usage(EXIT_FAILURE);
         }
     }
 
