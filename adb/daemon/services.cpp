@@ -151,14 +151,17 @@ void reconnect_service(unique_fd fd, atransport* t) {
     kick_transport(t);
 }
 
-unique_fd reverse_service(const char* command, atransport* transport) {
+unique_fd reverse_service(std::string_view command, atransport* transport) {
+    // TODO: Switch handle_forward_request to std::string_view.
+    std::string str(command);
+
     int s[2];
     if (adb_socketpair(s)) {
         PLOG(ERROR) << "cannot create service socket pair.";
         return unique_fd{};
     }
     VLOG(SERVICES) << "service socketpair: " << s[0] << ", " << s[1];
-    if (!handle_forward_request(command, transport, s[1])) {
+    if (!handle_forward_request(str.c_str(), transport, s[1])) {
         SendFail(s[1], "not a reverse forwarding command");
     }
     adb_close(s[1]);
@@ -167,15 +170,16 @@ unique_fd reverse_service(const char* command, atransport* transport) {
 
 // Shell service string can look like:
 //   shell[,arg1,arg2,...]:[command]
-unique_fd ShellService(const std::string& args, const atransport* transport) {
+unique_fd ShellService(std::string_view args, const atransport* transport) {
     size_t delimiter_index = args.find(':');
     if (delimiter_index == std::string::npos) {
         LOG(ERROR) << "No ':' found in shell service arguments: " << args;
         return unique_fd{};
     }
 
-    const std::string service_args = args.substr(0, delimiter_index);
-    const std::string command = args.substr(delimiter_index + 1);
+    // TODO: android::base::Split(const std::string_view&, ...)
+    std::string service_args(args.substr(0, delimiter_index));
+    std::string command(args.substr(delimiter_index + 1));
 
     // Defaults:
     //   PTY for interactive, raw for non-interactive.
@@ -192,15 +196,15 @@ unique_fd ShellService(const std::string& args, const atransport* transport) {
             type = SubprocessType::kPty;
         } else if (arg == kShellServiceArgShellProtocol) {
             protocol = SubprocessProtocol::kShell;
-        } else if (android::base::StartsWith(arg, "TERM=")) {
-            terminal_type = arg.substr(5);
+        } else if (arg.starts_with("TERM=")) {
+            terminal_type = arg.substr(strlen("TERM="));
         } else if (!arg.empty()) {
             // This is not an error to allow for future expansion.
             LOG(WARNING) << "Ignoring unknown shell service argument: " << arg;
         }
     }
 
-    return StartSubprocess(command.c_str(), terminal_type.c_str(), type, protocol);
+    return StartSubprocess(command, terminal_type.c_str(), type, protocol);
 }
 
 static void spin_service(unique_fd fd) {
@@ -323,59 +327,70 @@ asocket* daemon_service_to_socket(std::string_view name) {
     return nullptr;
 }
 
-unique_fd daemon_service_to_fd(const char* name, atransport* transport) {
-    if (!strncmp("dev:", name, 4)) {
-        return unique_fd{unix_open(name + 4, O_RDWR | O_CLOEXEC)};
-    } else if (!strncmp(name, "framebuffer:", 12)) {
+unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
+    if (name.starts_with("dev:")) {
+        name.remove_prefix(strlen("dev:"));
+        return unique_fd{unix_open(name, O_RDWR | O_CLOEXEC)};
+    } else if (name.starts_with("framebuffer:")) {
         return create_service_thread("fb", framebuffer_service);
-    } else if (!strncmp(name, "jdwp:", 5)) {
-        return create_jdwp_connection_fd(atoi(name + 5));
-    } else if (!strncmp(name, "shell", 5)) {
-        return ShellService(name + 5, transport);
-    } else if (!strncmp(name, "exec:", 5)) {
-        return StartSubprocess(name + 5, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
-    } else if (!strncmp(name, "sync:", 5)) {
+    } else if (name.starts_with("jdwp:")) {
+        name.remove_prefix(strlen("jdwp:"));
+        std::string str(name);
+        return create_jdwp_connection_fd(atoi(str.c_str()));
+    } else if (name.starts_with("shell")) {
+        name.remove_prefix(strlen("shell"));
+        return ShellService(name, transport);
+    } else if (name.starts_with("exec:")) {
+        name.remove_prefix(strlen("exec:"));
+        return StartSubprocess(std::string(name), nullptr, SubprocessType::kRaw,
+                               SubprocessProtocol::kNone);
+    } else if (name.starts_with("sync:")) {
         return create_service_thread("sync", file_sync_service);
-    } else if (!strncmp(name, "remount:", 8)) {
-        std::string options(name + strlen("remount:"));
+    } else if (name.starts_with("remount:")) {
+        std::string arg(name.begin() + strlen("remount:"), name.end());
         return create_service_thread("remount",
-                                     std::bind(remount_service, std::placeholders::_1, options));
-    } else if (!strncmp(name, "reboot:", 7)) {
-        std::string arg(name + strlen("reboot:"));
+                                     std::bind(remount_service, std::placeholders::_1, arg));
+    } else if (name.starts_with("reboot:")) {
+        std::string arg(name.begin() + strlen("reboot:"), name.end());
         return create_service_thread("reboot",
                                      std::bind(reboot_service, std::placeholders::_1, arg));
-    } else if (!strncmp(name, "root:", 5)) {
+    } else if (name.starts_with("root:")) {
         return create_service_thread("root", restart_root_service);
-    } else if (!strncmp(name, "unroot:", 7)) {
+    } else if (name.starts_with("unroot:")) {
         return create_service_thread("unroot", restart_unroot_service);
-    } else if (!strncmp(name, "backup:", 7)) {
-        return StartSubprocess(
-                android::base::StringPrintf("/system/bin/bu backup %s", (name + 7)).c_str(),
-                nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
-    } else if (!strncmp(name, "restore:", 8)) {
+    } else if (name.starts_with("backup:")) {
+        name.remove_prefix(strlen("backup:"));
+        std::string cmd = "/system/bin/bu backup ";
+        cmd += name;
+        return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
+    } else if (name.starts_with("restore:")) {
         return StartSubprocess("/system/bin/bu restore", nullptr, SubprocessType::kRaw,
                                SubprocessProtocol::kNone);
-    } else if (!strncmp(name, "tcpip:", 6)) {
+    } else if (name.starts_with("tcpip:")) {
+        name.remove_prefix(strlen("tcpip:"));
+        std::string str(name);
+
         int port;
-        if (sscanf(name + 6, "%d", &port) != 1) {
+        if (sscanf(str.c_str(), "%d", &port) != 1) {
             return unique_fd{};
         }
         return create_service_thread("tcp",
                                      std::bind(restart_tcp_service, std::placeholders::_1, port));
-    } else if (!strncmp(name, "usb:", 4)) {
+    } else if (name.starts_with("usb:")) {
         return create_service_thread("usb", restart_usb_service);
-    } else if (!strncmp(name, "reverse:", 8)) {
-        return reverse_service(name + 8, transport);
-    } else if (!strncmp(name, "disable-verity:", 15)) {
+    } else if (name.starts_with("reverse:")) {
+        name.remove_prefix(strlen("reverse:"));
+        return reverse_service(name, transport);
+    } else if (name.starts_with("disable-verity:")) {
         return create_service_thread("verity-on", std::bind(set_verity_enabled_state_service,
                                                             std::placeholders::_1, false));
-    } else if (!strncmp(name, "enable-verity:", 15)) {
+    } else if (name.starts_with("enable-verity:")) {
         return create_service_thread("verity-off", std::bind(set_verity_enabled_state_service,
                                                              std::placeholders::_1, true));
-    } else if (!strcmp(name, "reconnect")) {
+    } else if (name == "reconnect") {
         return create_service_thread(
                 "reconnect", std::bind(reconnect_service, std::placeholders::_1, transport));
-    } else if (!strcmp(name, "spin")) {
+    } else if (name == "spin") {
         return create_service_thread("spin", spin_service);
     }
 

@@ -357,9 +357,14 @@ void handle_packet(apacket *p, atransport *t)
 
     case A_OPEN: /* OPEN(local-id, 0, "destination") */
         if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
-            // TODO: Switch to string_view.
-            std::string address(p->payload.begin(), p->payload.end());
-            asocket* s = create_local_service_socket(address.c_str(), t);
+            std::string_view address(p->payload.begin(), p->payload.size());
+
+            // Historically, we received service names as a char*, and stopped at the first NUL
+            // byte. The client sent strings with null termination, which post-string_view, start
+            // being interpreted as part of the string, unless we explicitly strip them.
+            address = StripTrailingNulls(address);
+
+            asocket* s = create_local_service_socket(address, t);
             if (s == nullptr) {
                 send_close(0, p->msg.arg0, t);
             } else {
@@ -600,7 +605,7 @@ static void ReportServerStartupFailure(pid_t pid) {
     fprintf(stderr, "Full server startup log: %s\n", GetLogFilePath().c_str());
     fprintf(stderr, "Server had pid: %d\n", pid);
 
-    android::base::unique_fd fd(unix_open(GetLogFilePath().c_str(), O_RDONLY));
+    android::base::unique_fd fd(unix_open(GetLogFilePath(), O_RDONLY));
     if (fd == -1) return;
 
     // Let's not show more than 128KiB of log...

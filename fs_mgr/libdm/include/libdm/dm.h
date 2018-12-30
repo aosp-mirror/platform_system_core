@@ -128,6 +128,10 @@ class DeviceMapper final {
     };
     bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table);
 
+    // Identical to GetTableStatus, except also retrives the active table for the device
+    // mapper device from the kernel.
+    bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table);
+
   private:
     // Maximum possible device mapper targets registered in the kernel.
     // This is only used to read the list of targets from kernel so we allocate
@@ -139,6 +143,8 @@ class DeviceMapper final {
     // kernels. In Android systems however, we never expect these to grow beyond the artificial
     // limit we are imposing here of 256.
     static constexpr uint32_t kMaxPossibleDmDevices = 256;
+
+    bool GetTable(const std::string& name, uint32_t flags, std::vector<TargetInfo>* table);
 
     void InitIo(struct dm_ioctl* io, const std::string& name = std::string()) const;
 
