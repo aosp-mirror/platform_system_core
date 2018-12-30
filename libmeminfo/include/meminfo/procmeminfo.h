@@ -37,6 +37,22 @@ class ProcMemInfo final {
     const std::vector<Vma>& Maps();
     const MemUsage& Usage();
     const MemUsage& Wss();
+
+    // Used to parse either of /proc/<pid>/{smaps, smaps_rollup} and record the process's
+    // Pss and Private memory usage in 'stats'.  In particular, the method only populates the fields
+    // of the MemUsage structure that are intended to be used by Android's periodic Pss collection.
+    //
+    // The method populates the following statistics in order to be fast an efficient.
+    //   Pss
+    //   Rss
+    //   Uss
+    //   private_clean
+    //   private_dirty
+    //   SwapPss
+    //
+    // All other fields of MemUsage are zeroed.
+    bool SmapsOrRollup(bool use_rollup, MemUsage* stats) const;
+
     const std::vector<uint16_t>& SwapOffsets();
 
     ~ProcMemInfo() = default;
@@ -56,6 +72,11 @@ class ProcMemInfo final {
     MemUsage wss_;
     std::vector<uint16_t> swap_offsets_;
 };
+
+// Same as ProcMemInfo::SmapsOrRollup but reads the statistics directly
+// from a file. The file MUST be in the same format as /proc/<pid>/smaps
+// or /proc/<pid>/smaps_rollup
+bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats);
 
 }  // namespace meminfo
 }  // namespace android

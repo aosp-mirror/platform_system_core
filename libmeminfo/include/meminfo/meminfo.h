@@ -32,6 +32,7 @@ struct MemUsage {
     uint64_t uss;
 
     uint64_t swap;
+    uint64_t swap_pss;
 
     uint64_t private_clean;
     uint64_t private_dirty;
@@ -44,6 +45,7 @@ struct MemUsage {
           pss(0),
           uss(0),
           swap(0),
+          swap_pss(0),
           private_clean(0),
           private_dirty(0),
           shared_clean(0),
@@ -52,7 +54,7 @@ struct MemUsage {
     ~MemUsage() = default;
 
     void clear() {
-        vss = rss = pss = uss = swap = 0;
+        vss = rss = pss = uss = swap = swap_pss = 0;
         private_clean = private_dirty = shared_clean = shared_dirty = 0;
     }
 };

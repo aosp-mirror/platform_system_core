@@ -30,6 +30,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <procinfo/process_map.h>
 
@@ -101,6 +102,12 @@ const MemUsage& ProcMemInfo::Wss() {
 
     return wss_;
 }
+
+bool ProcMemInfo::SmapsOrRollup(bool use_rollup, MemUsage* stats) const {
+    std::string path = ::android::base::StringPrintf("/proc/%d/%s", pid_,
+                                                     use_rollup ? "smaps_rollup" : "smaps");
+    return SmapsOrRollupFromFile(path, stats);
+};
 
 const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
     if (get_wss_) {
@@ -246,6 +253,51 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
                 vma.usage.shared_dirty += is_dirty ? pagesz : 0;
                 vma.usage.shared_clean += is_dirty ? 0 : pagesz;
             }
+        }
+    }
+
+    return true;
+}
+
+// Public APIs
+bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return false;
+    }
+
+    char line[1024];
+    stats->clear();
+    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+        switch (line[0]) {
+            case 'P':
+                if (strncmp(line, "Pss:", 4) == 0) {
+                    char* c = line + 4;
+                    stats->pss += strtoull(c, nullptr, 10);
+                } else if (strncmp(line, "Private_Clean:", 14) == 0) {
+                    char* c = line + 14;
+                    uint64_t prcl = strtoull(c, nullptr, 10);
+                    stats->private_clean += prcl;
+                    stats->uss += prcl;
+                } else if (strncmp(line, "Private_Dirty:", 14) == 0) {
+                    char* c = line + 14;
+                    uint64_t prdi = strtoull(c, nullptr, 10);
+                    stats->private_dirty += prdi;
+                    stats->uss += prdi;
+                }
+                break;
+            case 'R':
+                if (strncmp(line, "Rss:", 4) == 0) {
+                    char* c = line + 4;
+                    stats->rss += strtoull(c, nullptr, 10);
+                }
+                break;
+            case 'S':
+                if (strncmp(line, "SwapPss:", 8) == 0) {
+                    char* c = line + 8;
+                    stats->swap_pss += strtoull(c, nullptr, 10);
+                }
+                break;
         }
     }
 

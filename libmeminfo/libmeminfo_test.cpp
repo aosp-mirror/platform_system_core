@@ -246,13 +246,13 @@ TEST_F(ValidatePageAcct, TestPageIdle) {
     }
 }
 
-TEST(TestProcMemInfo, TestMapsEmpty) {
+TEST(TestProcMemInfo, MapsEmpty) {
     ProcMemInfo proc_mem(pid);
     const std::vector<Vma>& maps = proc_mem.Maps();
     EXPECT_GT(maps.size(), 0);
 }
 
-TEST(TestProcMemInfo, TestUsageEmpty) {
+TEST(TestProcMemInfo, UsageEmpty) {
     // If we created the object for getting working set,
     // the usage must be empty
     ProcMemInfo proc_mem(pid, true);
@@ -264,7 +264,7 @@ TEST(TestProcMemInfo, TestUsageEmpty) {
     EXPECT_EQ(usage.swap, 0);
 }
 
-TEST(TestProcMemInfoWssReset, TestWssEmpty) {
+TEST(TestProcMemInfo, WssEmpty) {
     // If we created the object for getting usage,
     // the working set must be empty
     ProcMemInfo proc_mem(pid, false);
@@ -276,12 +276,93 @@ TEST(TestProcMemInfoWssReset, TestWssEmpty) {
     EXPECT_EQ(wss.swap, 0);
 }
 
-TEST(TestProcMemInfoWssReset, TestSwapOffsetsEmpty) {
+TEST(TestProcMemInfo, SwapOffsetsEmpty) {
     // If we created the object for getting working set,
     // the swap offsets must be empty
     ProcMemInfo proc_mem(pid, true);
     const std::vector<uint16_t>& swap_offsets = proc_mem.SwapOffsets();
     EXPECT_EQ(swap_offsets.size(), 0);
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupReturn) {
+    // if /proc/<pid>/smaps_rollup file exists, .SmapsRollup() must return true;
+    // false otherwise
+    std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
+    ProcMemInfo proc_mem(pid);
+    MemUsage stats;
+    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(true, &stats));
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupTest) {
+    std::string rollup =
+            R"rollup(12c00000-7fe859e000 ---p 00000000 00:00 0                                [rollup]
+Rss:              331908 kB
+Pss:              202052 kB
+Shared_Clean:     158492 kB
+Shared_Dirty:      18928 kB
+Private_Clean:     90472 kB
+Private_Dirty:     64016 kB
+Referenced:       318700 kB
+Anonymous:         81984 kB
+AnonHugePages:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:               5344 kB
+SwapPss:             442 kB
+Locked:          1523537 kB)rollup";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(rollup, tf.fd));
+
+    MemUsage stats;
+    ASSERT_EQ(SmapsOrRollupFromFile(tf.path, &stats), true);
+    EXPECT_EQ(stats.rss, 331908);
+    EXPECT_EQ(stats.pss, 202052);
+    EXPECT_EQ(stats.uss, 154488);
+    EXPECT_EQ(stats.private_clean, 90472);
+    EXPECT_EQ(stats.private_dirty, 64016);
+    EXPECT_EQ(stats.swap_pss, 442);
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupSmapsTest) {
+    // This is a made up smaps for the test
+    std::string smaps =
+            R"smaps(12c00000-13440000 rw-p 00000000 00:00 0                                  [anon:dalvik-main space (region space)]
+Name:           [anon:dalvik-main space (region space)]
+Size:               8448 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2652 kB
+Pss:                2652 kB
+Shared_Clean:        840 kB
+Shared_Dirty:         40 kB
+Private_Clean:        84 kB
+Private_Dirty:      2652 kB
+Referenced:         2652 kB
+Anonymous:          2652 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                102 kB
+SwapPss:              70 kB
+Locked:             2652 kB
+VmFlags: rd wr mr mw me ac 
+)smaps";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(smaps, tf.fd));
+
+    MemUsage stats;
+    ASSERT_EQ(SmapsOrRollupFromFile(tf.path, &stats), true);
+    EXPECT_EQ(stats.rss, 2652);
+    EXPECT_EQ(stats.pss, 2652);
+    EXPECT_EQ(stats.uss, 2736);
+    EXPECT_EQ(stats.private_clean, 84);
+    EXPECT_EQ(stats.private_dirty, 2652);
+    EXPECT_EQ(stats.swap_pss, 70);
 }
 
 TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
