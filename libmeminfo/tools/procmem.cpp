@@ -42,7 +42,7 @@ bool reset_wss = false;
 // Show working set, mutually exclusive with reset_wss;
 bool show_wss = false;
 
-static void usage(const char* cmd) {
+[[noreturn]] static void usage(int exit_status) {
     fprintf(stderr,
             "Usage: %s [-i] [ -w | -W ] [ -p | -m ] [ -h ] pid\n"
             "    -i  Uses idle page tracking for working set statistics.\n"
@@ -52,7 +52,9 @@ static void usage(const char* cmd) {
             "    -u  Sort by USS.\n"
             "    -m  Sort by mapping order (as read from /proc).\n"
             "    -h  Hide maps with no RSS.\n",
-            cmd);
+            getprogname());
+
+    exit(exit_status);
 }
 
 static void print_separator(std::stringstream& ss) {
@@ -154,17 +156,15 @@ int main(int argc, char* argv[]) {
                 show_wss = true;
                 break;
             case '?':
-                usage(argv[0]);
-                return 0;
+                usage(EXIT_SUCCESS);
             default:
-                abort();
+                usage(EXIT_FAILURE);
         }
     }
 
     if (optind != (argc - 1)) {
         fprintf(stderr, "Need exactly one pid at the end\n");
-        usage(argv[0]);
-        exit(EXIT_FAILURE);
+        usage(EXIT_FAILURE);
     }
 
     pid_t pid = atoi(argv[optind]);
