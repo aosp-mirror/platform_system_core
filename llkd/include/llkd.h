@@ -56,11 +56,7 @@ unsigned llkCheckMilliseconds(void);
 #define LLK_BLACKLIST_PROCESS_DEFAULT  \
     "0,1,2,init,[kthreadd],[khungtaskd],lmkd,llkd,watchdogd,[watchdogd],[watchdogd/0]"
 #define LLK_BLACKLIST_PARENT_PROPERTY  "ro.llk.blacklist.parent"
-#ifdef __PTRACE_ENABLED__  // defined if userdebug build
-#define LLK_BLACKLIST_PARENT_DEFAULT   "0,2,[kthreadd],adbd"
-#else
-#define LLK_BLACKLIST_PARENT_DEFAULT   "0,2,[kthreadd]"
-#endif
+#define LLK_BLACKLIST_PARENT_DEFAULT   "0,2,[kthreadd],adbd&[setsid]"
 #define LLK_BLACKLIST_UID_PROPERTY     "ro.llk.blacklist.uid"
 #define LLK_BLACKLIST_UID_DEFAULT      ""
 #define LLK_BLACKLIST_STACK_PROPERTY   "ro.llk.blacklist.process.stack"
