@@ -983,5 +983,18 @@ bool MetadataBuilder::IsRetrofitDevice() const {
     return GetBlockDevicePartitionName(block_devices_[0]) != LP_METADATA_DEFAULT_PARTITION_NAME;
 }
 
+bool MetadataBuilder::AddLinearExtent(Partition* partition, const std::string& block_device,
+                                      uint64_t num_sectors, uint64_t physical_sector) {
+    uint32_t device_index;
+    if (!FindBlockDeviceByName(block_device, &device_index)) {
+        LERROR << "Could not find backing block device for extent: " << block_device;
+        return false;
+    }
+
+    auto extent = std::make_unique<LinearExtent>(num_sectors, device_index, physical_sector);
+    partition->AddExtent(std::move(extent));
+    return true;
+}
+
 }  // namespace fs_mgr
 }  // namespace android
