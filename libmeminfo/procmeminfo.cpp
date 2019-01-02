@@ -54,6 +54,51 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->shared_dirty += from.shared_dirty;
 }
 
+// Returns true if the line was valid smaps stats line false otherwise.
+static bool parse_smaps_field(const char* line, MemUsage* stats) {
+    char field[64];
+    int len;
+    if (sscanf(line, "%63s %n", field, &len) == 1 && *field && field[strlen(field) - 1] == ':') {
+        const char* c = line + len;
+        switch (field[0]) {
+            case 'P':
+                if (strncmp(field, "Pss:", 4) == 0) {
+                    stats->pss = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "Private_Clean:", 14) == 0) {
+                    uint64_t prcl = strtoull(c, nullptr, 10);
+                    stats->private_clean = prcl;
+                    stats->uss += prcl;
+                } else if (strncmp(field, "Private_Dirty:", 14) == 0) {
+                    uint64_t prdi = strtoull(c, nullptr, 10);
+                    stats->private_dirty = prdi;
+                    stats->uss += prdi;
+                }
+                break;
+            case 'S':
+                if (strncmp(field, "Size:", 5) == 0) {
+                    stats->vss = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "Shared_Clean:", 13) == 0) {
+                    stats->shared_clean = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "Shared_Dirty:", 13) == 0) {
+                    stats->shared_dirty = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "Swap:", 5) == 0) {
+                    stats->swap = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "SwapPss:", 8) == 0) {
+                    stats->swap_pss = strtoull(c, nullptr, 10);
+                }
+                break;
+            case 'R':
+                if (strncmp(field, "Rss:", 4) == 0) {
+                    stats->rss = strtoull(c, nullptr, 10);
+                }
+                break;
+        }
+        return true;
+    }
+
+    return false;
+}
+
 bool ProcMemInfo::ResetWorkingSet(pid_t pid) {
     std::string clear_refs_path = ::android::base::StringPrintf("/proc/%d/clear_refs", pid);
     if (!::android::base::WriteStringToFile("1\n", clear_refs_path)) {
@@ -70,6 +115,25 @@ ProcMemInfo::ProcMemInfo(pid_t pid, bool get_wss, uint64_t pgflags, uint64_t pgf
 const std::vector<Vma>& ProcMemInfo::Maps() {
     if (maps_.empty() && !ReadMaps(get_wss_)) {
         LOG(ERROR) << "Failed to read maps for Process " << pid_;
+    }
+
+    return maps_;
+}
+
+const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
+    if (!maps_.empty()) {
+        return maps_;
+    }
+
+    auto collect_vmas = [&](const Vma& vma) { maps_.emplace_back(vma); };
+    if (path.empty() && !ForEachVma(collect_vmas)) {
+        LOG(ERROR) << "Failed to read smaps for Process " << pid_;
+        maps_.clear();
+    }
+
+    if (!path.empty() && !ForEachVmaFromFile(path, collect_vmas)) {
+        LOG(ERROR) << "Failed to read smaps from file " << path;
+        maps_.clear();
     }
 
     return maps_;
@@ -101,6 +165,11 @@ const MemUsage& ProcMemInfo::Wss() {
     }
 
     return wss_;
+}
+
+bool ProcMemInfo::ForEachVma(const VmaCallback& callback) {
+    std::string path = ::android::base::StringPrintf("/proc/%d/smaps", pid_);
+    return ForEachVmaFromFile(path, callback);
 }
 
 bool ProcMemInfo::SmapsOrRollup(bool use_rollup, MemUsage* stats) const {
@@ -260,6 +329,59 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
 }
 
 // Public APIs
+bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return false;
+    }
+
+    char* line = nullptr;
+    bool parsing_vma = false;
+    ssize_t line_len;
+    Vma vma;
+    while ((line_len = getline(&line, 0, fp.get())) > 0) {
+        // Make sure the line buffer terminates like a C string for ReadMapFile
+        line[line_len] = '\0';
+
+        if (parsing_vma) {
+            if (parse_smaps_field(line, &vma.usage)) {
+                // This was a stats field
+                continue;
+            }
+
+            // Done collecting stats, make the call back
+            callback(vma);
+            parsing_vma = false;
+        }
+
+        vma.clear();
+        // If it has, we are looking for the vma stats
+        // 00400000-00409000 r-xp 00000000 fc:00 426998  /usr/lib/gvfs/gvfsd-http
+        if (!::android::procinfo::ReadMapFileContent(
+                    line, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff,
+                              const char* name) {
+                        vma.start = start;
+                        vma.end = end;
+                        vma.flags = flags;
+                        vma.offset = pgoff;
+                        vma.name = name;
+                    })) {
+            LOG(ERROR) << "Failed to parse " << path;
+            return false;
+        }
+        parsing_vma = true;
+    }
+
+    // free getline() managed buffer
+    free(line);
+
+    if (parsing_vma) {
+        callback(vma);
+    }
+
+    return true;
+}
+
 bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
     auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (fp == nullptr) {

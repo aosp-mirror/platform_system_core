@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -66,9 +67,15 @@ struct Vma {
     uint16_t flags;
     std::string name;
 
+    Vma() : start(0), end(0), offset(0), flags(0), name("") {}
     Vma(uint64_t s, uint64_t e, uint64_t off, uint16_t f, const char* n)
         : start(s), end(e), offset(off), flags(f), name(n) {}
     ~Vma() = default;
+
+    void clear() {
+        memset(&usage, 0, sizeof(usage));
+        memset(&wss, 0, sizeof(wss));
+    }
 
     // Memory usage of this mapping.
     MemUsage usage;

@@ -365,6 +365,191 @@ VmFlags: rd wr mr mw me ac
     EXPECT_EQ(stats.swap_pss, 70);
 }
 
+TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
+    ProcMemInfo proc_mem(pid);
+
+    std::vector<Vma> vmas;
+    auto collect_vmas = [&](const Vma& v) { vmas.push_back(v); };
+    ASSERT_TRUE(ForEachVmaFromFile(path, collect_vmas));
+
+    // Expect values to be equal to what we have in testdata1/smaps_short
+    // Check for sizes first
+    ASSERT_EQ(vmas[0].usage.vss, 32768);
+    EXPECT_EQ(vmas[1].usage.vss, 11204);
+    EXPECT_EQ(vmas[2].usage.vss, 16896);
+    EXPECT_EQ(vmas[3].usage.vss, 260);
+    EXPECT_EQ(vmas[4].usage.vss, 6060);
+    EXPECT_EQ(vmas[5].usage.vss, 4);
+
+    // Check for names
+    EXPECT_EQ(vmas[0].name, "[anon:dalvik-zygote-jit-code-cache]");
+    EXPECT_EQ(vmas[1].name, "/system/framework/x86_64/boot-framework.art");
+    EXPECT_EQ(vmas[2].name, "[anon:libc_malloc]");
+    EXPECT_EQ(vmas[3].name, "/system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex");
+    EXPECT_EQ(vmas[4].name, "/system/lib64/libhwui.so");
+    EXPECT_EQ(vmas[5].name, "[vsyscall]");
+
+    EXPECT_EQ(vmas[0].usage.rss, 2048);
+    EXPECT_EQ(vmas[1].usage.rss, 11188);
+    EXPECT_EQ(vmas[2].usage.rss, 15272);
+    EXPECT_EQ(vmas[3].usage.rss, 260);
+    EXPECT_EQ(vmas[4].usage.rss, 4132);
+    EXPECT_EQ(vmas[5].usage.rss, 0);
+
+    EXPECT_EQ(vmas[0].usage.pss, 113);
+    EXPECT_EQ(vmas[1].usage.pss, 2200);
+    EXPECT_EQ(vmas[2].usage.pss, 15272);
+    EXPECT_EQ(vmas[3].usage.pss, 260);
+    EXPECT_EQ(vmas[4].usage.pss, 1274);
+    EXPECT_EQ(vmas[5].usage.pss, 0);
+
+    EXPECT_EQ(vmas[0].usage.uss, 0);
+    EXPECT_EQ(vmas[1].usage.uss, 1660);
+    EXPECT_EQ(vmas[2].usage.uss, 15272);
+    EXPECT_EQ(vmas[3].usage.uss, 260);
+    EXPECT_EQ(vmas[4].usage.uss, 0);
+    EXPECT_EQ(vmas[5].usage.uss, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_clean, 0);
+    EXPECT_EQ(vmas[1].usage.private_clean, 0);
+    EXPECT_EQ(vmas[2].usage.private_clean, 0);
+    EXPECT_EQ(vmas[3].usage.private_clean, 260);
+    EXPECT_EQ(vmas[4].usage.private_clean, 0);
+    EXPECT_EQ(vmas[5].usage.private_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[1].usage.private_dirty, 1660);
+    EXPECT_EQ(vmas[2].usage.private_dirty, 15272);
+    EXPECT_EQ(vmas[3].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.private_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[1].usage.shared_clean, 80);
+    EXPECT_EQ(vmas[2].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[3].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[4].usage.shared_clean, 4132);
+    EXPECT_EQ(vmas[5].usage.shared_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_dirty, 2048);
+    EXPECT_EQ(vmas[1].usage.shared_dirty, 9448);
+    EXPECT_EQ(vmas[2].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[3].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.shared_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap, 0);
+    EXPECT_EQ(vmas[1].usage.swap, 0);
+    EXPECT_EQ(vmas[2].usage.swap, 0);
+    EXPECT_EQ(vmas[3].usage.swap, 0);
+    EXPECT_EQ(vmas[4].usage.swap, 0);
+    EXPECT_EQ(vmas[5].usage.swap, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[1].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[2].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[3].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[4].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[5].usage.swap_pss, 0);
+}
+
+TEST(TestProcMemInfo, SmapsReturnTest) {
+    ProcMemInfo proc_mem(pid);
+    auto vmas = proc_mem.Smaps();
+    EXPECT_FALSE(vmas.empty());
+}
+
+TEST(TestProcMemInfo, SmapsTest) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
+    ProcMemInfo proc_mem(pid);
+    auto vmas = proc_mem.Smaps(path);
+
+    ASSERT_FALSE(vmas.empty());
+
+    // Expect values to be equal to what we have in testdata1/smaps_short
+    // Check for sizes first
+    ASSERT_EQ(vmas[0].usage.vss, 32768);
+    EXPECT_EQ(vmas[1].usage.vss, 11204);
+    EXPECT_EQ(vmas[2].usage.vss, 16896);
+    EXPECT_EQ(vmas[3].usage.vss, 260);
+    EXPECT_EQ(vmas[4].usage.vss, 6060);
+    EXPECT_EQ(vmas[5].usage.vss, 4);
+
+    // Check for names
+    EXPECT_EQ(vmas[0].name, "[anon:dalvik-zygote-jit-code-cache]");
+    EXPECT_EQ(vmas[1].name, "/system/framework/x86_64/boot-framework.art");
+    EXPECT_EQ(vmas[2].name, "[anon:libc_malloc]");
+    EXPECT_EQ(vmas[3].name, "/system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex");
+    EXPECT_EQ(vmas[4].name, "/system/lib64/libhwui.so");
+    EXPECT_EQ(vmas[5].name, "[vsyscall]");
+
+    EXPECT_EQ(vmas[0].usage.rss, 2048);
+    EXPECT_EQ(vmas[1].usage.rss, 11188);
+    EXPECT_EQ(vmas[2].usage.rss, 15272);
+    EXPECT_EQ(vmas[3].usage.rss, 260);
+    EXPECT_EQ(vmas[4].usage.rss, 4132);
+    EXPECT_EQ(vmas[5].usage.rss, 0);
+
+    EXPECT_EQ(vmas[0].usage.pss, 113);
+    EXPECT_EQ(vmas[1].usage.pss, 2200);
+    EXPECT_EQ(vmas[2].usage.pss, 15272);
+    EXPECT_EQ(vmas[3].usage.pss, 260);
+    EXPECT_EQ(vmas[4].usage.pss, 1274);
+    EXPECT_EQ(vmas[5].usage.pss, 0);
+
+    EXPECT_EQ(vmas[0].usage.uss, 0);
+    EXPECT_EQ(vmas[1].usage.uss, 1660);
+    EXPECT_EQ(vmas[2].usage.uss, 15272);
+    EXPECT_EQ(vmas[3].usage.uss, 260);
+    EXPECT_EQ(vmas[4].usage.uss, 0);
+    EXPECT_EQ(vmas[5].usage.uss, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_clean, 0);
+    EXPECT_EQ(vmas[1].usage.private_clean, 0);
+    EXPECT_EQ(vmas[2].usage.private_clean, 0);
+    EXPECT_EQ(vmas[3].usage.private_clean, 260);
+    EXPECT_EQ(vmas[4].usage.private_clean, 0);
+    EXPECT_EQ(vmas[5].usage.private_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[1].usage.private_dirty, 1660);
+    EXPECT_EQ(vmas[2].usage.private_dirty, 15272);
+    EXPECT_EQ(vmas[3].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.private_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[1].usage.shared_clean, 80);
+    EXPECT_EQ(vmas[2].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[3].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[4].usage.shared_clean, 4132);
+    EXPECT_EQ(vmas[5].usage.shared_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_dirty, 2048);
+    EXPECT_EQ(vmas[1].usage.shared_dirty, 9448);
+    EXPECT_EQ(vmas[2].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[3].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.shared_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap, 0);
+    EXPECT_EQ(vmas[1].usage.swap, 0);
+    EXPECT_EQ(vmas[2].usage.swap, 0);
+    EXPECT_EQ(vmas[3].usage.swap, 0);
+    EXPECT_EQ(vmas[4].usage.swap, 0);
+    EXPECT_EQ(vmas[5].usage.swap, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[1].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[2].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[3].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[4].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[5].usage.swap_pss, 0);
+}
+
 TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
     // Create proc object using libpagemap
     pm_kernel_t* ker;
