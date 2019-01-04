@@ -737,19 +737,21 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
 
     auto kernel_stack = ReadFile(piddir + "/stack");
     if (kernel_stack.empty()) {
-        LOG(INFO) << piddir << "/stack empty comm=" << procp->getComm()
-                  << " cmdline=" << procp->getCmdline();
+        LOG(VERBOSE) << piddir << "/stack empty comm=" << procp->getComm()
+                     << " cmdline=" << procp->getCmdline();
         return false;
     }
     // A scheduling incident that should not reset count_stack
     if (kernel_stack.find(" cpu_worker_pools+0x") != std::string::npos) return false;
     char idx = -1;
     char match = -1;
+    std::string matched_stack_symbol = "<unknown>";
     for (const auto& stack : llkCheckStackSymbols) {
         if (++idx < 0) break;
         if ((kernel_stack.find(" "s + stack + "+0x") != std::string::npos) ||
             (kernel_stack.find(" "s + stack + ".cfi+0x") != std::string::npos)) {
             match = idx;
+            matched_stack_symbol = stack;
             break;
         }
     }
@@ -760,7 +762,9 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
     }
     if (match == char(-1)) return false;
     procp->count_stack += llkCycle;
-    return procp->count_stack >= llkStateTimeoutMs[llkStateStack];
+    if (procp->count_stack < llkStateTimeoutMs[llkStateStack]) return false;
+    LOG(WARNING) << "Found " << matched_stack_symbol << " in stack for pid " << procp->pid;
+    return true;
 }
 #endif
 
