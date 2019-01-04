@@ -123,13 +123,14 @@ public:
         if (reinterpret_cast<uintptr_t>(logStackInternal) != 0 && stack != nullptr) {
             logStackInternal(logtag, stack, priority);
         } else {
-            ALOGW("CallStack::logStackInternal not linked");
+            ALOG(LOG_WARN, logtag, "CallStack::logStackInternal not linked");
         }
     }
 
 #else
-    static void ALWAYS_INLINE logStack(const char*, CallStack* = getCurrent().get(),
+    static void ALWAYS_INLINE logStack(const char* logtag, CallStack* = getCurrent().get(),
                                        android_LogPriority = ANDROID_LOG_DEBUG) {
+        ALOG(LOG_WARN, logtag, "CallStack::logStackInternal not linked");
     }
 #endif // !WEAKS_AVAILABLE
 
@@ -139,13 +140,13 @@ public:
         if (reinterpret_cast<uintptr_t>(stackToStringInternal) != 0 && stack != nullptr) {
             return stackToStringInternal(prefix, stack);
         } else {
-            return String8("<CallStack package not linked>");
+            return String8::format("%s<CallStack package not linked>", (prefix ? prefix : ""));
         }
     }
 #else // !WEAKS_AVAILABLE
-    static String8 ALWAYS_INLINE stackToString(const char* = nullptr,
+    static String8 ALWAYS_INLINE stackToString(const char* prefix = nullptr,
                                                const CallStack* = getCurrent().get()) {
-        return String8("<CallStack package not linked>");
+        return String8::format("%s<CallStack package not linked>", (prefix ? prefix : ""));
     }
 #endif // !WEAKS_AVAILABLE
 
