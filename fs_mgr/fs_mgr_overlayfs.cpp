@@ -48,6 +48,7 @@
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
 #include <libdm/dm.h>
+#include <libgsi/libgsi.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 
@@ -802,8 +803,9 @@ bool fs_mgr_overlayfs_scratch_can_be_mounted(const std::string& scratch_device) 
 bool fs_mgr_overlayfs_invalid() {
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return true;
 
-    // in recovery or fastbootd mode, not allowed!
+    // in recovery, fastbootd, or gsi mode, not allowed!
     if (fs_mgr_access("/system/bin/recovery")) return true;
+    if (android::gsi::IsGsiRunning()) return true;
 
     return false;
 }
