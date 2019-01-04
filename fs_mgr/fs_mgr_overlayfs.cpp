@@ -751,8 +751,14 @@ bool fs_mgr_overlayfs_setup_scratch(const Fstab& fstab, bool* change) {
     auto mnt_type = fs_mgr_overlayfs_scratch_mount_type();
     if (partition_exists) {
         if (fs_mgr_overlayfs_mount_scratch(scratch_device, mnt_type)) {
-            if (change) *change = true;
-            return true;
+            if (!fs_mgr_access(kScratchMountPoint + kOverlayTopDir) &&
+                !fs_mgr_filesystem_has_space(kScratchMountPoint)) {
+                // declare it useless, no overrides and no free space
+                fs_mgr_overlayfs_umount_scratch();
+            } else {
+                if (change) *change = true;
+                return true;
+            }
         }
         // partition existed, but was not initialized; fall through to make it.
         errno = 0;
