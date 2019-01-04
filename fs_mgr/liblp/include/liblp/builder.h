@@ -219,6 +219,10 @@ class MetadataBuilder {
     // Find a group by name. If no group is found, nullptr is returned.
     PartitionGroup* FindGroup(const std::string& name);
 
+    // Add a predetermined extent to a partition.
+    bool AddLinearExtent(Partition* partition, const std::string& block_device,
+                         uint64_t num_sectors, uint64_t physical_sector);
+
     // Grow or shrink a partition to the requested size. This size will be
     // rounded UP to the nearest block (512 bytes).
     //
