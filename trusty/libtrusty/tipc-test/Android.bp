@@ -17,12 +17,10 @@ cc_test {
     vendor: true,
 
     srcs: ["tipc_test.c"],
-    static_libs: [
-        "libtrusty",
-    ],
     shared_libs: [
         "libc",
         "liblog",
+        "libtrusty",
     ],
     gtest: false,
     cflags: [
