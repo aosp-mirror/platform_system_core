@@ -212,7 +212,7 @@ void MetadataBuilder::OverrideABForTesting(bool ab_device) {
     sABOverrideValue = ab_device;
 }
 
-MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
+MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false), ignore_slot_suffixing_(false) {
     memset(&geometry_, 0, sizeof(geometry_));
     geometry_.magic = LP_METADATA_GEOMETRY_MAGIC;
     geometry_.struct_size = sizeof(geometry_);
@@ -436,7 +436,7 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
         LERROR << "Could not find partition group: " << group_name;
         return nullptr;
     }
-    if (IsABDevice() && !auto_slot_suffixing_ && name != "scratch" &&
+    if (IsABDevice() && !auto_slot_suffixing_ && name != "scratch" && !ignore_slot_suffixing_ &&
         GetPartitionSlotSuffix(name).empty()) {
         LERROR << "Unsuffixed partition not allowed on A/B device: " << name;
         return nullptr;
@@ -970,6 +970,10 @@ bool MetadataBuilder::ImportPartition(const LpMetadata& metadata,
 
 void MetadataBuilder::SetAutoSlotSuffixing() {
     auto_slot_suffixing_ = true;
+}
+
+void MetadataBuilder::IgnoreSlotSuffixing() {
+    ignore_slot_suffixing_ = true;
 }
 
 bool MetadataBuilder::IsABDevice() const {
