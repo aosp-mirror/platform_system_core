@@ -303,7 +303,7 @@ static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type)
 
     uint32_t pin_status = 1;
     int error = ioctl(file_fd, F2FS_IOC_SET_PIN_FILE, &pin_status);
-    if (error) {
+    if (error < 0) {
         if ((errno == ENOTTY) || (errno == ENOTSUP)) {
             PLOG(ERROR) << "Failed to pin file, not supported by kernel: " << file_path;
         } else {
@@ -316,7 +316,7 @@ static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type)
 }
 
 #if 0
-static bool PinFileStatus(int file_fd, const std::string& file_path, uint32_t fs_type) {
+static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_type) {
     if (fs_type == EXT4_SUPER_MAGIC) {
         // No pinning necessary for ext4. The blocks, once allocated, are expected
         // to be fixed.
@@ -339,9 +339,10 @@ static bool PinFileStatus(int file_fd, const std::string& file_path, uint32_t fs
 #define F2FS_IOC_GET_PIN_FILE _IOR(F2FS_IOCTL_MAGIC, 14, __u32)
 #endif
 
-    uint32_t pin_status;
-    int error = ioctl(file_fd, F2FS_IOC_GET_PIN_FILE, &pin_status);
-    if (error) {
+    // F2FS_IOC_GET_PIN_FILE returns the number of blocks moved.
+    uint32_t moved_blocks_nr;
+    int error = ioctl(file_fd, F2FS_IOC_GET_PIN_FILE, &moved_blocks_nr);
+    if (error < 0) {
         if ((errno == ENOTTY) || (errno == ENOTSUP)) {
             PLOG(ERROR) << "Failed to get file pin status, not supported by kernel: " << file_path;
         } else {
@@ -350,7 +351,10 @@ static bool PinFileStatus(int file_fd, const std::string& file_path, uint32_t fs
         return false;
     }
 
-    return !!pin_status;
+    if (moved_blocks_nr) {
+        LOG(ERROR) << moved_blocks_nr << " blocks moved in file " << file_path;
+    }
+    return moved_blocks_nr == 0;
 }
 #endif
 
@@ -447,7 +451,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     std::string bdev_path;
     if (!FileToBlockDevicePath(abs_path, &bdev_path)) {
         LOG(ERROR) << "Failed to get block dev path for file: " << file_path;
-        cleanup(file_path, create);
+        cleanup(abs_path, create);
         return nullptr;
     }
 
@@ -477,20 +481,20 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     uint32_t fs_type;
     if (!PerformFileChecks(abs_path, file_size, blocksz, &fs_type)) {
         LOG(ERROR) << "Failed to validate file or file system for file:" << abs_path;
-        cleanup(file_path, create);
+        cleanup(abs_path, create);
         return nullptr;
     }
 
     if (create) {
         if (!AllocateFile(file_fd, abs_path, blocksz, file_size)) {
-            unlink(abs_path.c_str());
+            cleanup(abs_path, create);
             return nullptr;
         }
     }
 
     // f2fs may move the file blocks around.
     if (!PinFile(file_fd, file_path, fs_type)) {
-        cleanup(file_path, create);
+        cleanup(abs_path, create);
         LOG(ERROR) << "Failed to pin the file in storage";
         return nullptr;
     }
@@ -499,7 +503,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     FiemapUniquePtr fmap(new FiemapWriter());
     if (!ReadFiemap(file_fd, abs_path, &fmap->extents_)) {
         LOG(ERROR) << "Failed to read fiemap of file: " << abs_path;
-        cleanup(file_path, create);
+        cleanup(abs_path, create);
         return nullptr;
     }
 
@@ -543,9 +547,10 @@ bool FiemapWriter::Write(off64_t off, uint8_t* buffer, uint64_t size) {
                    << " for block size " << block_size_;
         return false;
     }
+
 #if 0
     // TODO(b/122138114): check why this fails.
-    if (!PinFileStatus(file_fd_, file_path_, fs_type_)) {
+    if (!IsFilePinned(file_fd_, file_path_, fs_type_)) {
         LOG(ERROR) << "Failed write: file " << file_path_ << " is not pinned";
         return false;
     }
