@@ -50,7 +50,8 @@ unsigned llkCheckMilliseconds(void);
 /* LLK_CHECK_MS_DEFAULT = actual timeout_ms / LLK_CHECKS_PER_TIMEOUT_DEFAULT */
 #define LLK_CHECKS_PER_TIMEOUT_DEFAULT 5
 #define LLK_CHECK_STACK_PROPERTY       "ro.llk.stack"
-#define LLK_CHECK_STACK_DEFAULT        "cma_alloc,__get_user_pages,bit_wait_io"
+#define LLK_CHECK_STACK_DEFAULT        \
+    "cma_alloc,__get_user_pages,bit_wait_io,wait_on_page_bit_killable"
 #define LLK_BLACKLIST_PROCESS_PROPERTY "ro.llk.blacklist.process"
 #define LLK_BLACKLIST_PROCESS_DEFAULT  \
     "0,1,2,init,[kthreadd],[khungtaskd],lmkd,llkd,watchdogd,[watchdogd],[watchdogd/0]"
