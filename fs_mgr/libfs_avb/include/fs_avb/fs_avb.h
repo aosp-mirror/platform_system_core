@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <fstab/fstab.h>
 #include <libavb/libavb.h>
@@ -29,6 +30,35 @@ enum class AvbHashtreeResult {
     kSuccess = 0,
     kFail,
     kDisabled,
+};
+
+class VBMetaData {
+  public:
+    // Constructors
+    VBMetaData() : vbmeta_ptr_(nullptr), vbmeta_size_(0){};
+
+    VBMetaData(uint8_t* data, size_t size)
+        : vbmeta_ptr_(new (std::nothrow) uint8_t[size]), vbmeta_size_(size) {
+        // The ownership of data is NOT transferred, i.e., the caller still
+        // needs to release the memory as we make a copy here.
+        memcpy(vbmeta_ptr_.get(), data, size * sizeof(uint8_t));
+    }
+
+    explicit VBMetaData(size_t size)
+        : vbmeta_ptr_(new (std::nothrow) uint8_t[size]), vbmeta_size_(size) {}
+
+    // Get methods for each data member.
+    const std::string& device_path() const { return device_path_; }
+    uint8_t* vbmeta_data() const { return vbmeta_ptr_.get(); }
+    const size_t& vbmeta_size() const { return vbmeta_size_; }
+
+    // Maximum size of a vbmeta data - 64 KiB.
+    static const size_t kMaxVBMetaSize = 64 * 1024;
+
+  private:
+    std::string device_path_;
+    std::unique_ptr<uint8_t[]> vbmeta_ptr_;
+    size_t vbmeta_size_;
 };
 
 class FsManagerAvbOps;
@@ -43,7 +73,7 @@ class AvbHandle {
   public:
     // The factory method to return a AvbUniquePtr that holds
     // the verified AVB (external/avb) metadata of all verified partitions
-    // in avb_slot_data_.vbmeta_images[].
+    // in vbmeta_images_.
     //
     // The metadata is checked against the following values from /proc/cmdline.
     //   - androidboot.vbmeta.{hash_alg, size, digest}.
@@ -95,12 +125,6 @@ class AvbHandle {
     AvbHandle(AvbHandle&&) noexcept = delete;             // no move
     AvbHandle& operator=(AvbHandle&&) noexcept = delete;  // no move assignment
 
-    ~AvbHandle() {
-        if (avb_slot_data_) {
-            avb_slot_verify_data_free(avb_slot_data_);
-        }
-    };
-
   private:
     enum AvbHandleStatus {
         kAvbHandleSuccess = 0,
@@ -110,9 +134,9 @@ class AvbHandle {
         kAvbHandleVerificationError,
     };
 
-    AvbHandle() : avb_slot_data_(nullptr), status_(kAvbHandleUninitialized) {}
+    AvbHandle() : status_(kAvbHandleUninitialized) {}
 
-    AvbSlotVerifyData* avb_slot_data_;
+    std::vector<VBMetaData> vbmeta_images_;
     AvbHandleStatus status_;
     std::string avb_version_;
 };
