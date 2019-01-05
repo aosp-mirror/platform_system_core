@@ -320,6 +320,7 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
 
     auto link_path = "/dev/block/" + type + "/" + device;
 
+    bool is_boot_device = boot_devices_.find(device) != boot_devices_.end();
     if (!uevent.partition_name.empty()) {
         std::string partition_name_sanitized(uevent.partition_name);
         SanitizePartitionName(&partition_name_sanitized);
@@ -329,9 +330,13 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         }
         links.emplace_back(link_path + "/by-name/" + partition_name_sanitized);
         // Adds symlink: /dev/block/by-name/<partition_name>.
-        if (boot_devices_.find(device) != boot_devices_.end()) {
+        if (is_boot_device) {
             links.emplace_back("/dev/block/by-name/" + partition_name_sanitized);
         }
+    } else if (is_boot_device) {
+        // If we don't have a partition name but we are a partition on a boot device, create a
+        // symlink of /dev/block/by-name/<device_name> for symmetry.
+        links.emplace_back("/dev/block/by-name/" + uevent.device_name);
     }
 
     auto last_slash = uevent.path.rfind('/');
