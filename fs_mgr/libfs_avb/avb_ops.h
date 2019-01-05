@@ -25,7 +25,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
+#include <fs_avb/fs_avb.h>
 #include <libavb/libavb.h>
 
 namespace android {
@@ -55,7 +57,7 @@ class FsManagerAvbOps {
                                   void* buffer, size_t* out_num_read);
 
     AvbSlotVerifyResult AvbSlotVerify(const std::string& ab_suffix, AvbSlotVerifyFlags flags,
-                                      AvbSlotVerifyData** out_data);
+                                      std::vector<VBMetaData>* out_vbmeta_images);
 
   private:
     AvbOps avb_ops_;
