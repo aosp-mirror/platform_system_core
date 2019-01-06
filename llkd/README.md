@@ -86,7 +86,13 @@ kernel instead of deal with more graceful kill operation.
 Android Properties
 ------------------
 
-Android Properties llkd respond to (*prop*_ms parms are in milliseconds):
+The following are the Android Properties llkd respond to.
+*prop*_ms named properties are in milliseconds.
+Properties that use comma (*,*) separator for lists, use a leading separator to
+preserve default and add or subtract entries with (*optional*) plus (*+*) and
+minus (*-*) prefixes respectively.
+For these lists, the string "*false*" is synonymous with an *empty* list,
+and *blank* or *missing* resorts to the specified *default* value.
 
 #### ro.config.low_ram
 device is configured with limited memory.
@@ -135,8 +141,8 @@ Only active on userdebug or eng builds.
 default 2 minutes samples of threads for D or Z.
 
 #### ro.llk.stack
-default cma_alloc,__get_user_pages,bit_wait_io comma separated list of kernel
-symbols.  The string "*false*" is the equivalent to an *empty* list.
+default cma_alloc,__get_user_pages,bit_wait_io,wait_on_page_bit_killable
+comma separated list of kernel symbols.
 Look for kernel stack symbols that if ever persistently present can
 indicate a subsystem is locked up.
 Beware, check does not on purpose do forward scheduling ABA except by polling
@@ -153,7 +159,6 @@ concerns on user builds prevents this checking.
 default 0,1,2 (kernel, init and [kthreadd]) plus process names
 init,[kthreadd],[khungtaskd],lmkd,llkd,watchdogd,
 [watchdogd],[watchdogd/0],...,[watchdogd/***get_nprocs**-1*].
-The string "*false*" is the equivalent to an *empty* list.
 Do not watch these processes.  A process can be comm, cmdline or pid reference.
 NB: automated default here can be larger than the current maximum property
 size of 92.
@@ -161,18 +166,15 @@ NB: false is a very very very unlikely process to want to blacklist.
 
 #### ro.llk.blacklist.parent
 default 0,2,adbd (kernel, [kthreadd] and adbd).
-The string "*false*" is the equivalent to an *empty* list.
 Do not watch processes that have this parent.
 A parent process can be comm, cmdline or pid reference.
 
 #### ro.llk.blacklist.uid
 default *empty* or false, comma separated list of uid numbers or names.
-The string "*false*" is the equivalent to an *empty* list.
 Do not watch processes that match this uid.
 
 #### ro.llk.blacklist.process.stack
 default process names init,lmkd.llkd,llkd,keystore,ueventd,apexd,logd.
-The string "*false*" is the equivalent to an *empty* list.
 This subset of processes are not monitored for live lock stack signatures.
 Also prevents the sepolicy violation associated with processes that block
 ptrace, as these can not be checked anyways.

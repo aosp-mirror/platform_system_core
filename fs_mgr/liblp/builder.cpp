@@ -212,7 +212,7 @@ void MetadataBuilder::OverrideABForTesting(bool ab_device) {
     sABOverrideValue = ab_device;
 }
 
-MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
+MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false), ignore_slot_suffixing_(false) {
     memset(&geometry_, 0, sizeof(geometry_));
     geometry_.magic = LP_METADATA_GEOMETRY_MAGIC;
     geometry_.struct_size = sizeof(geometry_);
@@ -436,7 +436,7 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
         LERROR << "Could not find partition group: " << group_name;
         return nullptr;
     }
-    if (IsABDevice() && !auto_slot_suffixing_ && name != "scratch" &&
+    if (IsABDevice() && !auto_slot_suffixing_ && name != "scratch" && !ignore_slot_suffixing_ &&
         GetPartitionSlotSuffix(name).empty()) {
         LERROR << "Unsuffixed partition not allowed on A/B device: " << name;
         return nullptr;
@@ -972,6 +972,10 @@ void MetadataBuilder::SetAutoSlotSuffixing() {
     auto_slot_suffixing_ = true;
 }
 
+void MetadataBuilder::IgnoreSlotSuffixing() {
+    ignore_slot_suffixing_ = true;
+}
+
 bool MetadataBuilder::IsABDevice() const {
     if (sABOverrideSet) {
         return sABOverrideValue;
@@ -981,6 +985,19 @@ bool MetadataBuilder::IsABDevice() const {
 
 bool MetadataBuilder::IsRetrofitDevice() const {
     return GetBlockDevicePartitionName(block_devices_[0]) != LP_METADATA_DEFAULT_PARTITION_NAME;
+}
+
+bool MetadataBuilder::AddLinearExtent(Partition* partition, const std::string& block_device,
+                                      uint64_t num_sectors, uint64_t physical_sector) {
+    uint32_t device_index;
+    if (!FindBlockDeviceByName(block_device, &device_index)) {
+        LERROR << "Could not find backing block device for extent: " << block_device;
+        return false;
+    }
+
+    auto extent = std::make_unique<LinearExtent>(num_sectors, device_index, physical_sector);
+    partition->AddExtent(std::move(extent));
+    return true;
 }
 
 }  // namespace fs_mgr

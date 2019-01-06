@@ -24,6 +24,7 @@
 #include <pwd.h>  // getpwuid()
 #include <signal.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/cdefs.h>  // ___STRING, __predict_true() and _predict_false()
 #include <sys/mman.h>   // mlockall()
 #include <sys/prctl.h>
@@ -617,17 +618,24 @@ std::string llkFormat(bool flag) {
 std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
     std::string ret;
     for (const auto& entry : blacklist) {
-        if (ret.size()) {
-            ret += ",";
-        }
+        if (!ret.empty()) ret += ",";
         ret += entry;
     }
     return ret;
 }
 
+// This function parses the properties as a list, incorporating the supplied
+// default.  A leading comma separator means preserve the defaults and add
+// entries (with an optional leading + sign), or removes entries with a leading
+// - sign.
+//
 // We only officially support comma separators, but wetware being what they
 // are will take some liberty and I do not believe they should be punished.
-std::unordered_set<std::string> llkSplit(const std::string& s) {
+std::unordered_set<std::string> llkSplit(const std::string& prop, const std::string& def) {
+    auto s = android::base::GetProperty(prop, def);
+    constexpr char separators[] = ", \t:;";
+    if (!s.empty() && (s != def) && strchr(separators, s[0])) s = def + s;
+
     std::unordered_set<std::string> result;
 
     // Special case, allow boolean false to empty the list, otherwise expected
@@ -637,9 +645,29 @@ std::unordered_set<std::string> llkSplit(const std::string& s) {
 
     size_t base = 0;
     while (s.size() > base) {
-        auto found = s.find_first_of(", \t:", base);
-        // Only emplace content, empty entries are not an option
-        if (found != base) result.emplace(s.substr(base, found - base));
+        auto found = s.find_first_of(separators, base);
+        // Only emplace unique content, empty entries are not an option
+        if (found != base) {
+            switch (s[base]) {
+                case '-':
+                    ++base;
+                    if (base >= s.size()) break;
+                    if (base != found) {
+                        auto have = result.find(s.substr(base, found - base));
+                        if (have != result.end()) result.erase(have);
+                    }
+                    break;
+                case '+':
+                    ++base;
+                    if (base >= s.size()) break;
+                    if (base == found) break;
+                    // FALLTHRU (for gcc, lint, pcc, etc; following for clang)
+                    FALLTHROUGH_INTENDED;
+                default:
+                    result.emplace(s.substr(base, found - base));
+                    break;
+            }
+        }
         if (found == s.npos) break;
         base = found + 1;
     }
@@ -648,11 +676,19 @@ std::unordered_set<std::string> llkSplit(const std::string& s) {
 
 bool llkSkipName(const std::string& name,
                  const std::unordered_set<std::string>& blacklist = llkBlacklistProcess) {
-    if ((name.size() == 0) || (blacklist.size() == 0)) {
-        return false;
-    }
+    if (name.empty() || blacklist.empty()) return false;
 
     return blacklist.find(name) != blacklist.end();
+}
+
+bool llkSkipProc(proc* procp,
+                 const std::unordered_set<std::string>& blacklist = llkBlacklistProcess) {
+    if (!procp) return false;
+    if (llkSkipName(std::to_string(procp->pid), blacklist)) return true;
+    if (llkSkipName(procp->getComm(), blacklist)) return true;
+    if (llkSkipName(procp->getCmdline(), blacklist)) return true;
+    if (llkSkipName(android::base::Basename(procp->getCmdline()), blacklist)) return true;
+    return false;
 }
 
 bool llkSkipPid(pid_t pid) {
@@ -730,26 +766,24 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
     }
 
     // Don't check process that are known to block ptrace, save sepolicy noise.
-    if (llkSkipName(std::to_string(procp->pid), llkBlacklistStack)) return false;
-    if (llkSkipName(procp->getComm(), llkBlacklistStack)) return false;
-    if (llkSkipName(procp->getCmdline(), llkBlacklistStack)) return false;
-    if (llkSkipName(android::base::Basename(procp->getCmdline()), llkBlacklistStack)) return false;
-
+    if (llkSkipProc(procp, llkBlacklistStack)) return false;
     auto kernel_stack = ReadFile(piddir + "/stack");
     if (kernel_stack.empty()) {
-        LOG(INFO) << piddir << "/stack empty comm=" << procp->getComm()
-                  << " cmdline=" << procp->getCmdline();
+        LOG(VERBOSE) << piddir << "/stack empty comm=" << procp->getComm()
+                     << " cmdline=" << procp->getCmdline();
         return false;
     }
     // A scheduling incident that should not reset count_stack
     if (kernel_stack.find(" cpu_worker_pools+0x") != std::string::npos) return false;
     char idx = -1;
     char match = -1;
+    std::string matched_stack_symbol = "<unknown>";
     for (const auto& stack : llkCheckStackSymbols) {
         if (++idx < 0) break;
         if ((kernel_stack.find(" "s + stack + "+0x") != std::string::npos) ||
             (kernel_stack.find(" "s + stack + ".cfi+0x") != std::string::npos)) {
             match = idx;
+            matched_stack_symbol = stack;
             break;
         }
     }
@@ -760,7 +794,9 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
     }
     if (match == char(-1)) return false;
     procp->count_stack += llkCycle;
-    return procp->count_stack >= llkStateTimeoutMs[llkStateStack];
+    if (procp->count_stack < llkStateTimeoutMs[llkStateStack]) return false;
+    LOG(WARNING) << "Found " << matched_stack_symbol << " in stack for pid " << procp->pid;
+    return true;
 }
 #endif
 
@@ -776,12 +812,12 @@ void llkCheckSchedUpdate(proc* procp, const std::string& piddir) {
     // but if there are problems we assume at least a few
     // samples of reads occur before we take any real action.
     std::string schedString = ReadFile(piddir + "/sched");
-    if (schedString.size() == 0) {
+    if (schedString.empty()) {
         // /schedstat is not as standardized, but in 3.1+
         // Android devices, the third field is nr_switches
         // from /sched:
         schedString = ReadFile(piddir + "/schedstat");
-        if (schedString.size() == 0) {
+        if (schedString.empty()) {
             return;
         }
         auto val = static_cast<unsigned long long>(-1);
@@ -939,7 +975,7 @@ milliseconds llkCheck(bool checkRunning) {
 
             // Get the process stat
             std::string stat = ReadFile(piddir + "/stat");
-            if (stat.size() == 0) {
+            if (stat.empty()) {
                 continue;
             }
             unsigned tid = -1;
@@ -1028,11 +1064,10 @@ milliseconds llkCheck(bool checkRunning) {
             if (pprocp == nullptr) {
                 pprocp = llkTidAlloc(ppid, ppid, 0, "", 0, '?');
             }
-            if ((pprocp != nullptr) &&
-                (llkSkipName(pprocp->getComm(), llkBlacklistParent) ||
-                 llkSkipName(pprocp->getCmdline(), llkBlacklistParent) ||
-                 llkSkipName(android::base::Basename(pprocp->getCmdline()), llkBlacklistParent))) {
-                break;
+            if (pprocp) {
+                if (llkSkipProc(pprocp, llkBlacklistParent)) break;
+            } else {
+                if (llkSkipName(std::to_string(ppid), llkBlacklistParent)) break;
             }
 
             if ((llkBlacklistUid.size() != 0) && llkSkipUid(procp->getUid())) {
@@ -1131,21 +1166,15 @@ milliseconds llkCheck(bool checkRunning) {
         if (!p->second.updated) {
             IF_ALOG(LOG_VERBOSE, LOG_TAG) {
                 std::string ppidCmdline = llkProcGetName(p->second.ppid, nullptr, nullptr);
-                if (ppidCmdline.size()) {
-                    ppidCmdline = "(" + ppidCmdline + ")";
-                }
+                if (!ppidCmdline.empty()) ppidCmdline = "(" + ppidCmdline + ")";
                 std::string pidCmdline;
                 if (p->second.pid != p->second.tid) {
                     pidCmdline = llkProcGetName(p->second.pid, nullptr, p->second.getCmdline());
-                    if (pidCmdline.size()) {
-                        pidCmdline = "(" + pidCmdline + ")";
-                    }
+                    if (!pidCmdline.empty()) pidCmdline = "(" + pidCmdline + ")";
                 }
                 std::string tidCmdline =
                     llkProcGetName(p->second.tid, p->second.getComm(), p->second.getCmdline());
-                if (tidCmdline.size()) {
-                    tidCmdline = "(" + tidCmdline + ")";
-                }
+                if (!tidCmdline.empty()) tidCmdline = "(" + tidCmdline + ")";
                 LOG(VERBOSE) << "thread " << p->second.ppid << ppidCmdline << "->" << p->second.pid
                              << pidCmdline << "->" << p->second.tid << tidCmdline << " removed";
             }
@@ -1222,13 +1251,11 @@ bool llkInit(const char* threadname) {
     llkValidate();  // validate all (effectively minus llkTimeoutMs)
 #ifdef __PTRACE_ENABLED__
     if (debuggable) {
-        llkCheckStackSymbols = llkSplit(
-                android::base::GetProperty(LLK_CHECK_STACK_PROPERTY, LLK_CHECK_STACK_DEFAULT));
+        llkCheckStackSymbols = llkSplit(LLK_CHECK_STACK_PROPERTY, LLK_CHECK_STACK_DEFAULT);
     }
     std::string defaultBlacklistStack(LLK_BLACKLIST_STACK_DEFAULT);
     if (!debuggable) defaultBlacklistStack += ",logd,/system/bin/logd";
-    llkBlacklistStack = llkSplit(
-            android::base::GetProperty(LLK_BLACKLIST_STACK_PROPERTY, defaultBlacklistStack));
+    llkBlacklistStack = llkSplit(LLK_BLACKLIST_STACK_PROPERTY, defaultBlacklistStack);
 #endif
     std::string defaultBlacklistProcess(
         std::to_string(kernelPid) + "," + std::to_string(initPid) + "," +
@@ -1240,17 +1267,14 @@ bool llkInit(const char* threadname) {
     for (int cpu = 1; cpu < get_nprocs_conf(); ++cpu) {
         defaultBlacklistProcess += ",[watchdog/" + std::to_string(cpu) + "]";
     }
-    defaultBlacklistProcess =
-        android::base::GetProperty(LLK_BLACKLIST_PROCESS_PROPERTY, defaultBlacklistProcess);
-    llkBlacklistProcess = llkSplit(defaultBlacklistProcess);
+    llkBlacklistProcess = llkSplit(LLK_BLACKLIST_PROCESS_PROPERTY, defaultBlacklistProcess);
     if (!llkSkipName("[khungtaskd]")) {  // ALWAYS ignore as special
         llkBlacklistProcess.emplace("[khungtaskd]");
     }
-    llkBlacklistParent = llkSplit(android::base::GetProperty(
-        LLK_BLACKLIST_PARENT_PROPERTY, std::to_string(kernelPid) + "," + std::to_string(kthreaddPid) +
-                                           "," LLK_BLACKLIST_PARENT_DEFAULT));
-    llkBlacklistUid =
-        llkSplit(android::base::GetProperty(LLK_BLACKLIST_UID_PROPERTY, LLK_BLACKLIST_UID_DEFAULT));
+    llkBlacklistParent = llkSplit(LLK_BLACKLIST_PARENT_PROPERTY,
+                                  std::to_string(kernelPid) + "," + std::to_string(kthreaddPid) +
+                                          "," LLK_BLACKLIST_PARENT_DEFAULT);
+    llkBlacklistUid = llkSplit(LLK_BLACKLIST_UID_PROPERTY, LLK_BLACKLIST_UID_DEFAULT);
 
     // internal watchdog
     ::signal(SIGALRM, llkAlarmHandler);

@@ -219,6 +219,10 @@ class MetadataBuilder {
     // Find a group by name. If no group is found, nullptr is returned.
     PartitionGroup* FindGroup(const std::string& name);
 
+    // Add a predetermined extent to a partition.
+    bool AddLinearExtent(Partition* partition, const std::string& block_device,
+                         uint64_t num_sectors, uint64_t physical_sector);
+
     // Grow or shrink a partition to the requested size. This size will be
     // rounded UP to the nearest block (512 bytes).
     //
@@ -243,6 +247,9 @@ class MetadataBuilder {
 
     // Set the LP_METADATA_AUTO_SLOT_SUFFIXING flag.
     void SetAutoSlotSuffixing();
+
+    // If set, checks for slot suffixes will be ignored internally.
+    void IgnoreSlotSuffixing();
 
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
@@ -306,6 +313,7 @@ class MetadataBuilder {
     std::vector<std::unique_ptr<PartitionGroup>> groups_;
     std::vector<LpMetadataBlockDevice> block_devices_;
     bool auto_slot_suffixing_;
+    bool ignore_slot_suffixing_;
 };
 
 // Read BlockDeviceInfo for a given block device. This always returns false
