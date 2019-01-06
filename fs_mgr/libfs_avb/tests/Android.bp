@@ -32,4 +32,9 @@ cc_test_host {
     srcs: [
         "fs_avb_unittest_util.cpp",
     ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
