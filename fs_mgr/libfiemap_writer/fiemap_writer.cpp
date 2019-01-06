@@ -165,23 +165,13 @@ static bool FileToBlockDevicePath(const std::string& file_path, std::string* bde
     return true;
 }
 
-static bool GetBlockDeviceParams(int bdev_fd, const std::string& bdev_path, uint64_t* blocksz,
-                                 uint64_t* bdev_size) {
-    // TODO: For some reason, the block device ioctl require the argument to be initialized
-    // to zero even if its the out parameter for the given ioctl cmd.
-    uint64_t blksz = 0;
-    if (ioctl(bdev_fd, BLKBSZGET, &blksz)) {
-        PLOG(ERROR) << "Failed to get block size for: " << bdev_path;
-        return false;
-    }
-
+static bool GetBlockDeviceSize(int bdev_fd, const std::string& bdev_path, uint64_t* bdev_size) {
     uint64_t size_in_bytes = 0;
     if (ioctl(bdev_fd, BLKGETSIZE64, &size_in_bytes)) {
         PLOG(ERROR) << "Failed to get total size for: " << bdev_path;
         return false;
     }
 
-    *blocksz = blksz;
     *bdev_size = size_in_bytes;
 
     return true;
@@ -197,19 +187,17 @@ static uint64_t GetFileSize(const std::string& file_path) {
     return sb.st_size;
 }
 
-static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, uint64_t blocksz,
+static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, uint64_t* blocksz,
                               uint32_t* fs_type) {
-    // Check if the size aligned to the block size of the block device.
-    // We need this to be true in order to be able to write the file using FIEMAP.
-    if (file_size % blocksz) {
-        LOG(ERROR) << "File size " << file_size << " is not aligned to block size " << blocksz
-                   << " for file " << file_path;
-        return false;
-    }
-
     struct statfs64 sfs;
     if (statfs64(file_path.c_str(), &sfs)) {
         PLOG(ERROR) << "Failed to read file system status at: " << file_path;
+        return false;
+    }
+
+    if (file_size % sfs.f_bsize) {
+        LOG(ERROR) << "File size " << file_size << " is not aligned to optimal block size "
+                   << sfs.f_bsize << " for file " << file_path;
         return false;
     }
 
@@ -226,6 +214,7 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, 
         return false;
     }
 
+    *blocksz = sfs.f_bsize;
     *fs_type = sfs.f_type;
     return true;
 }
@@ -463,9 +452,9 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
         return nullptr;
     }
 
-    uint64_t blocksz, bdevsz;
-    if (!GetBlockDeviceParams(bdev_fd, bdev_path, &blocksz, &bdevsz)) {
-        LOG(ERROR) << "Failed to get block device params for: " << bdev_path;
+    uint64_t bdevsz;
+    if (!GetBlockDeviceSize(bdev_fd, bdev_path, &bdevsz)) {
+        LOG(ERROR) << "Failed to get block device size for : " << bdev_path;
         cleanup(file_path, create);
         return nullptr;
     }
@@ -478,8 +467,9 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
         }
     }
 
+    uint64_t blocksz;
     uint32_t fs_type;
-    if (!PerformFileChecks(abs_path, file_size, blocksz, &fs_type)) {
+    if (!PerformFileChecks(abs_path, file_size, &blocksz, &fs_type)) {
         LOG(ERROR) << "Failed to validate file or file system for file:" << abs_path;
         cleanup(abs_path, create);
         return nullptr;
