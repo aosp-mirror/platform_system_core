@@ -18,6 +18,7 @@ cc_library_static {
     name: "libdm",
     defaults: ["fs_mgr_defaults"],
     recovery_available: true,
+    host_supported: true,
 
     export_include_dirs: ["include"],
 
