@@ -153,6 +153,10 @@ asocket* daemon_service_to_socket(std::string_view name);
 #endif
 
 #if !ADB_HOST
+unique_fd execute_binder_command(std::string_view command);
+#endif
+
+#if !ADB_HOST
 int init_jdwp(void);
 asocket* create_jdwp_service_socket();
 asocket* create_jdwp_tracker_service_socket();
@@ -201,6 +205,9 @@ ConnectionState connection_state(atransport* t);
 extern const char* adb_device_banner;
 
 #define CHUNK_SIZE (64 * 1024)
+
+// Argument delimeter for adb abb command.
+#define ABB_ARG_DELIMETER ('\0')
 
 #if !ADB_HOST
 #define USB_FFS_ADB_PATH "/dev/usb-ffs/adb/"

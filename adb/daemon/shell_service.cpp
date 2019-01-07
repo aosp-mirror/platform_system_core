@@ -141,7 +141,7 @@ bool CreateSocketpair(unique_fd* fd1, unique_fd* fd2) {
 class Subprocess {
   public:
     Subprocess(std::string command, const char* terminal_type, SubprocessType type,
-               SubprocessProtocol protocol);
+               SubprocessProtocol protocol, bool make_pty_raw);
     ~Subprocess();
 
     const std::string& command() const { return command_; }
@@ -153,6 +153,10 @@ class Subprocess {
     // Sets up FDs, forks a subprocess, starts the subprocess manager thread,
     // and exec's the child. Returns false and sets error on failure.
     bool ForkAndExec(std::string* _Nonnull error);
+
+    // Sets up FDs, starts a thread executing command and the manager thread,
+    // Returns false and sets error on failure.
+    bool ExecInProcess(Command command, std::string* _Nonnull error);
 
     // Start the subprocess manager thread. Consumes the subprocess, regardless of success.
     // Returns false and sets error on failure.
@@ -177,9 +181,9 @@ class Subprocess {
 
     const std::string command_;
     const std::string terminal_type_;
-    bool make_pty_raw_ = false;
     SubprocessType type_;
     SubprocessProtocol protocol_;
+    bool make_pty_raw_;
     pid_t pid_ = -1;
     unique_fd local_socket_sfd_;
 
@@ -192,24 +196,12 @@ class Subprocess {
 };
 
 Subprocess::Subprocess(std::string command, const char* terminal_type, SubprocessType type,
-                       SubprocessProtocol protocol)
+                       SubprocessProtocol protocol, bool make_pty_raw)
     : command_(std::move(command)),
       terminal_type_(terminal_type ? terminal_type : ""),
       type_(type),
-      protocol_(protocol) {
-    // If we aren't using the shell protocol we must allocate a PTY to properly close the
-    // subprocess. PTYs automatically send SIGHUP to the slave-side process when the master side
-    // of the PTY closes, which we rely on. If we use a raw pipe, processes that don't read/write,
-    // e.g. screenrecord, will never notice the broken pipe and terminate.
-    // The shell protocol doesn't require a PTY because it's always monitoring the local socket FD
-    // with select() and will send SIGHUP manually to the child process.
-    if (protocol_ == SubprocessProtocol::kNone && type_ == SubprocessType::kRaw) {
-        // Disable PTY input/output processing since the client is expecting raw data.
-        D("Can't create raw subprocess without shell protocol, using PTY in raw mode instead");
-        type_ = SubprocessType::kPty;
-        make_pty_raw_ = true;
-    }
-}
+      protocol_(protocol),
+      make_pty_raw_(make_pty_raw) {}
 
 Subprocess::~Subprocess() {
     WaitForExit();
@@ -430,6 +422,67 @@ bool Subprocess::ForkAndExec(std::string* error) {
     return true;
 }
 
+bool Subprocess::ExecInProcess(Command command, std::string* _Nonnull error) {
+    unique_fd child_stdinout_sfd, child_stderr_sfd;
+
+    CHECK(type_ == SubprocessType::kRaw);
+    CHECK(protocol_ == SubprocessProtocol::kShell);
+
+    __android_log_security_bswrite(SEC_TAG_ADB_SHELL_CMD, command_.c_str());
+
+    if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {
+        *error = android::base::StringPrintf("failed to create socketpair for stdin/out: %s",
+                                             strerror(errno));
+        return false;
+    }
+    // Raw subprocess + shell protocol allows for splitting stderr.
+    if (!CreateSocketpair(&stderr_sfd_, &child_stderr_sfd)) {
+        *error = android::base::StringPrintf("failed to create socketpair for stderr: %s",
+                                             strerror(errno));
+        return false;
+    }
+
+    D("execinprocess: stdin/stdout FD = %d, stderr FD = %d", stdinout_sfd_.get(),
+      stderr_sfd_.get());
+
+    // Required for shell protocol: create another socketpair to intercept data.
+    if (!CreateSocketpair(&protocol_sfd_, &local_socket_sfd_)) {
+        *error = android::base::StringPrintf("failed to create socketpair to intercept data: %s",
+                                             strerror(errno));
+        return false;
+    }
+    D("protocol FD = %d", protocol_sfd_.get());
+
+    input_ = std::make_unique<ShellProtocol>(protocol_sfd_);
+    output_ = std::make_unique<ShellProtocol>(protocol_sfd_);
+    if (!input_ || !output_) {
+        *error = "failed to allocate shell protocol objects";
+        return false;
+    }
+
+    // Don't let reads/writes to the subprocess block our thread. This isn't
+    // likely but could happen under unusual circumstances, such as if we
+    // write a ton of data to stdin but the subprocess never reads it and
+    // the pipe fills up.
+    for (int fd : {stdinout_sfd_.get(), stderr_sfd_.get()}) {
+        if (fd >= 0) {
+            if (!set_file_block_mode(fd, false)) {
+                *error = android::base::StringPrintf("failed to set non-blocking mode for fd %d",
+                                                     fd);
+                return false;
+            }
+        }
+    }
+
+    std::thread([inout_sfd = std::move(child_stdinout_sfd), err_sfd = std::move(child_stderr_sfd),
+                 command = std::move(command),
+                 args = command_]() { command(args, inout_sfd, inout_sfd, err_sfd); })
+            .detach();
+
+    D("execinprocess: completed");
+    return true;
+}
+
 bool Subprocess::StartThread(std::unique_ptr<Subprocess> subprocess, std::string* error) {
     Subprocess* raw = subprocess.release();
     std::thread(ThreadHandler, raw).detach();
@@ -512,7 +565,9 @@ void Subprocess::PassDataStreams() {
                 // needed (e.g. SIGINT), pass those through the shell protocol
                 // and only fall back on this for unexpected closures.
                 D("protocol FD died, sending SIGHUP to pid %d", pid_);
-                kill(pid_, SIGHUP);
+                if (pid_ != -1) {
+                    kill(pid_, SIGHUP);
+                }
 
                 // We also need to close the pipes connected to the child process
                 // so that if it ignores SIGHUP and continues to write data it
@@ -682,7 +737,7 @@ void Subprocess::WaitForExit() {
     int exit_code = 1;
 
     D("waiting for pid %d", pid_);
-    while (true) {
+    while (pid_ != -1) {
         int status;
         if (pid_ == waitpid(pid_, &status, 0)) {
             D("post waitpid (pid=%d) status=%04x", pid_, status);
@@ -716,7 +771,7 @@ void Subprocess::WaitForExit() {
 }  // namespace
 
 // Create a pipe containing the error.
-static unique_fd ReportError(SubprocessProtocol protocol, const std::string& message) {
+unique_fd ReportError(SubprocessProtocol protocol, const std::string& message) {
     unique_fd read, write;
     if (!Pipe(&read, &write)) {
         PLOG(ERROR) << "failed to create pipe to report error";
@@ -747,20 +802,49 @@ static unique_fd ReportError(SubprocessProtocol protocol, const std::string& mes
 
 unique_fd StartSubprocess(std::string name, const char* terminal_type, SubprocessType type,
                           SubprocessProtocol protocol) {
+    // If we aren't using the shell protocol we must allocate a PTY to properly close the
+    // subprocess. PTYs automatically send SIGHUP to the slave-side process when the master side
+    // of the PTY closes, which we rely on. If we use a raw pipe, processes that don't read/write,
+    // e.g. screenrecord, will never notice the broken pipe and terminate.
+    // The shell protocol doesn't require a PTY because it's always monitoring the local socket FD
+    // with select() and will send SIGHUP manually to the child process.
+    bool make_pty_raw = false;
+    if (protocol == SubprocessProtocol::kNone && type == SubprocessType::kRaw) {
+        // Disable PTY input/output processing since the client is expecting raw data.
+        D("Can't create raw subprocess without shell protocol, using PTY in raw mode instead");
+        type = SubprocessType::kPty;
+        make_pty_raw = true;
+    }
+
+    unique_fd error_fd;
+    unique_fd fd = StartSubprocess(std::move(name), terminal_type, type, protocol, make_pty_raw,
+                                   protocol, &error_fd);
+    if (fd == -1) {
+        return error_fd;
+    }
+    return fd;
+}
+
+unique_fd StartSubprocess(std::string name, const char* terminal_type, SubprocessType type,
+                          SubprocessProtocol protocol, bool make_pty_raw,
+                          SubprocessProtocol error_protocol, unique_fd* error_fd) {
     D("starting %s subprocess (protocol=%s, TERM=%s): '%s'",
       type == SubprocessType::kRaw ? "raw" : "PTY",
       protocol == SubprocessProtocol::kNone ? "none" : "shell", terminal_type, name.c_str());
 
-    auto subprocess = std::make_unique<Subprocess>(std::move(name), terminal_type, type, protocol);
+    auto subprocess = std::make_unique<Subprocess>(std::move(name), terminal_type, type, protocol,
+                                                   make_pty_raw);
     if (!subprocess) {
         LOG(ERROR) << "failed to allocate new subprocess";
-        return ReportError(protocol, "failed to allocate new subprocess");
+        *error_fd = ReportError(error_protocol, "failed to allocate new subprocess");
+        return {};
     }
 
     std::string error;
     if (!subprocess->ForkAndExec(&error)) {
         LOG(ERROR) << "failed to start subprocess: " << error;
-        return ReportError(protocol, error);
+        *error_fd = ReportError(error_protocol, error);
+        return {};
     }
 
     unique_fd local_socket(subprocess->ReleaseLocalSocket());
@@ -769,6 +853,40 @@ unique_fd StartSubprocess(std::string name, const char* terminal_type, Subproces
 
     if (!Subprocess::StartThread(std::move(subprocess), &error)) {
         LOG(ERROR) << "failed to start subprocess management thread: " << error;
+        *error_fd = ReportError(error_protocol, error);
+        return {};
+    }
+
+    return local_socket;
+}
+
+unique_fd StartCommandInProcess(std::string name, Command command) {
+    LOG(INFO) << "StartCommandInProcess(" << dump_hex(name.data(), name.size()) << ")";
+
+    constexpr auto terminal_type = "";
+    constexpr auto type = SubprocessType::kRaw;
+    constexpr auto protocol = SubprocessProtocol::kShell;
+    constexpr auto make_pty_raw = false;
+
+    auto subprocess = std::make_unique<Subprocess>(std::move(name), terminal_type, type, protocol,
+                                                   make_pty_raw);
+    if (!subprocess) {
+        LOG(ERROR) << "failed to allocate new subprocess";
+        return ReportError(protocol, "failed to allocate new subprocess");
+    }
+
+    std::string error;
+    if (!subprocess->ExecInProcess(std::move(command), &error)) {
+        LOG(ERROR) << "failed to start subprocess: " << error;
+        return ReportError(protocol, error);
+    }
+
+    unique_fd local_socket(subprocess->ReleaseLocalSocket());
+    D("inprocess creation successful: local_socket_fd=%d, pid=%d", local_socket.get(),
+      subprocess->pid());
+
+    if (!Subprocess::StartThread(std::move(subprocess), &error)) {
+        LOG(ERROR) << "failed to start inprocess management thread: " << error;
         return ReportError(protocol, error);
     }
 

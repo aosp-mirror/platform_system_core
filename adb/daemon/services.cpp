@@ -328,6 +328,13 @@ asocket* daemon_service_to_socket(std::string_view name) {
 }
 
 unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
+#ifndef __ANDROID_RECOVERY__
+    if (name.starts_with("abb:")) {
+        name.remove_prefix(strlen("abb:"));
+        return execute_binder_command(name);
+    }
+#endif
+
     if (name.starts_with("dev:")) {
         name.remove_prefix(strlen("dev:"));
         return unique_fd{unix_open(name, O_RDWR | O_CLOEXEC)};
