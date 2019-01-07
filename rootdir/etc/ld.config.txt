@@ -334,11 +334,9 @@ namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
 ###############################################################################
 namespace.runtime.isolated = true
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.links = system,default
-namespace.runtime.link.system.shared_libs  = %LLNDK_LIBRARIES%
-namespace.runtime.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+namespace.runtime.links = system
 # TODO(b/119867084): Restrict to Bionic dlopen dependencies.
-namespace.runtime.link.default.allow_all_shared_libs = true
+namespace.runtime.link.system.allow_all_shared_libs = true
 
 ###############################################################################
 # "vndk" namespace
