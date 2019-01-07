@@ -237,30 +237,7 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
         CHECK(!proc->out_fds.empty());
 
         int fd = proc->out_fds.back().get();
-        struct cmsghdr* cmsg;
-        struct msghdr msg;
-        struct iovec iov;
-        char dummy = '!';
-        char buffer[sizeof(struct cmsghdr) + sizeof(int)];
-
-        iov.iov_base = &dummy;
-        iov.iov_len = 1;
-        msg.msg_name = nullptr;
-        msg.msg_namelen = 0;
-        msg.msg_iov = &iov;
-        msg.msg_iovlen = 1;
-        msg.msg_flags = 0;
-        msg.msg_control = buffer;
-        msg.msg_controllen = sizeof(buffer);
-
-        cmsg = CMSG_FIRSTHDR(&msg);
-        cmsg->cmsg_len = msg.msg_controllen;
-        cmsg->cmsg_level = SOL_SOCKET;
-        cmsg->cmsg_type = SCM_RIGHTS;
-        ((int*)CMSG_DATA(cmsg))[0] = fd;
-
-        int ret = TEMP_FAILURE_RETRY(sendmsg(socket, &msg, 0));
-        if (ret < 0) {
+        if (!SendFileDescriptor(socket, fd)) {
             D("sending new file descriptor to JDWP %d failed: %s", proc->pid, strerror(errno));
             goto CloseProcess;
         }
