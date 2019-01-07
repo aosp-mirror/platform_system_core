@@ -108,6 +108,9 @@ std::unordered_set<std::string> llkBlacklistProcess;
 // list of parent pids, comm or cmdline names to skip. default:
 // kernel pid (0), [kthreadd] (2), or ourselves, enforced and implied
 std::unordered_set<std::string> llkBlacklistParent;
+// list of parent and target processes to skip. default:
+// adbd *and* [setsid]
+std::unordered_map<std::string, std::unordered_set<std::string>> llkBlacklistParentAndChild;
 // list of uids, and uid names, to skip, default nothing
 std::unordered_set<std::string> llkBlacklistUid;
 #ifdef __PTRACE_ENABLED__
@@ -624,6 +627,19 @@ std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
     return ret;
 }
 
+std::string llkFormat(
+        const std::unordered_map<std::string, std::unordered_set<std::string>>& blacklist,
+        bool leading_comma = false) {
+    std::string ret;
+    for (const auto& entry : blacklist) {
+        for (const auto& target : entry.second) {
+            if (leading_comma || !ret.empty()) ret += ",";
+            ret += entry.first + "&" + target;
+        }
+    }
+    return ret;
+}
+
 // This function parses the properties as a list, incorporating the supplied
 // default.  A leading comma separator means preserve the defaults and add
 // entries (with an optional leading + sign), or removes entries with a leading
@@ -689,6 +705,27 @@ bool llkSkipProc(proc* procp,
     if (llkSkipName(procp->getCmdline(), blacklist)) return true;
     if (llkSkipName(android::base::Basename(procp->getCmdline()), blacklist)) return true;
     return false;
+}
+
+const std::unordered_set<std::string>& llkSkipName(
+        const std::string& name,
+        const std::unordered_map<std::string, std::unordered_set<std::string>>& blacklist) {
+    static const std::unordered_set<std::string> empty;
+    if (name.empty() || blacklist.empty()) return empty;
+    auto found = blacklist.find(name);
+    if (found == blacklist.end()) return empty;
+    return found->second;
+}
+
+bool llkSkipPproc(proc* pprocp, proc* procp,
+                  const std::unordered_map<std::string, std::unordered_set<std::string>>&
+                          blacklist = llkBlacklistParentAndChild) {
+    if (!pprocp || !procp || blacklist.empty()) return false;
+    if (llkSkipProc(procp, llkSkipName(std::to_string(pprocp->pid), blacklist))) return true;
+    if (llkSkipProc(procp, llkSkipName(pprocp->getComm(), blacklist))) return true;
+    if (llkSkipProc(procp, llkSkipName(pprocp->getCmdline(), blacklist))) return true;
+    return llkSkipProc(procp,
+                       llkSkipName(android::base::Basename(pprocp->getCmdline()), blacklist));
 }
 
 bool llkSkipPid(pid_t pid) {
@@ -875,7 +912,8 @@ void llkLogConfig(void) {
               << LLK_BLACKLIST_STACK_PROPERTY "=" << llkFormat(llkBlacklistStack) << "\n"
 #endif
               << LLK_BLACKLIST_PROCESS_PROPERTY "=" << llkFormat(llkBlacklistProcess) << "\n"
-              << LLK_BLACKLIST_PARENT_PROPERTY "=" << llkFormat(llkBlacklistParent) << "\n"
+              << LLK_BLACKLIST_PARENT_PROPERTY "=" << llkFormat(llkBlacklistParent)
+              << llkFormat(llkBlacklistParentAndChild, true) << "\n"
               << LLK_BLACKLIST_UID_PROPERTY "=" << llkFormat(llkBlacklistUid);
 }
 
@@ -1050,7 +1088,8 @@ milliseconds llkCheck(bool checkRunning) {
                 break;
             }
 
-            if (llkSkipName(procp->getComm())) {
+            auto process_comm = procp->getComm();
+            if (llkSkipName(process_comm)) {
                 continue;
             }
             if (llkSkipName(procp->getCmdline())) {
@@ -1065,6 +1104,7 @@ milliseconds llkCheck(bool checkRunning) {
                 pprocp = llkTidAlloc(ppid, ppid, 0, "", 0, '?');
             }
             if (pprocp) {
+                if (llkSkipPproc(pprocp, procp)) break;
                 if (llkSkipProc(pprocp, llkBlacklistParent)) break;
             } else {
                 if (llkSkipName(std::to_string(ppid), llkBlacklistParent)) break;
@@ -1084,7 +1124,7 @@ milliseconds llkCheck(bool checkRunning) {
                     stuck = true;
                 } else if (procp->count != 0ms) {
                     LOG(VERBOSE) << state << ' ' << llkFormat(procp->count) << ' ' << ppid << "->"
-                                 << pid << "->" << tid << ' ' << procp->getComm();
+                                 << pid << "->" << tid << ' ' << process_comm;
                 }
             }
             if (!stuck) continue;
@@ -1092,7 +1132,7 @@ milliseconds llkCheck(bool checkRunning) {
             if (procp->count >= llkStateTimeoutMs[(state == 'Z') ? llkStateZ : llkStateD]) {
                 if (procp->count != 0ms) {
                     LOG(VERBOSE) << state << ' ' << llkFormat(procp->count) << ' ' << ppid << "->"
-                                 << pid << "->" << tid << ' ' << procp->getComm();
+                                 << pid << "->" << tid << ' ' << process_comm;
                 }
                 continue;
             }
@@ -1120,7 +1160,7 @@ milliseconds llkCheck(bool checkRunning) {
                             break;
                         }
                         LOG(WARNING) << "Z " << llkFormat(procp->count) << ' ' << ppid << "->"
-                                     << pid << "->" << tid << ' ' << procp->getComm() << " [kill]";
+                                     << pid << "->" << tid << ' ' << process_comm << " [kill]";
                         if ((llkKillOneProcess(pprocp, procp) >= 0) ||
                             (llkKillOneProcess(ppid, procp) >= 0)) {
                             continue;
@@ -1137,7 +1177,7 @@ milliseconds llkCheck(bool checkRunning) {
                         // kernel (worse).
                     default:
                         LOG(WARNING) << state << ' ' << llkFormat(procp->count) << ' ' << pid
-                                     << "->" << tid << ' ' << procp->getComm() << " [kill]";
+                                     << "->" << tid << ' ' << process_comm << " [kill]";
                         if ((llkKillOneProcess(llkTidLookup(pid), procp) >= 0) ||
                             (llkKillOneProcess(pid, state, tid) >= 0) ||
                             (llkKillOneProcess(procp, procp) >= 0) ||
@@ -1150,7 +1190,7 @@ milliseconds llkCheck(bool checkRunning) {
             // We are here because we have confirmed kernel live-lock
             const auto message = state + " "s + llkFormat(procp->count) + " " +
                                  std::to_string(ppid) + "->" + std::to_string(pid) + "->" +
-                                 std::to_string(tid) + " " + procp->getComm() + " [panic]";
+                                 std::to_string(tid) + " " + process_comm + " [panic]";
             llkPanicKernel(dump, tid,
                            (state == 'Z') ? "zombie" : (state == 'D') ? "driver" : "sleeping",
                            message);
@@ -1274,6 +1314,26 @@ bool llkInit(const char* threadname) {
     llkBlacklistParent = llkSplit(LLK_BLACKLIST_PARENT_PROPERTY,
                                   std::to_string(kernelPid) + "," + std::to_string(kthreaddPid) +
                                           "," LLK_BLACKLIST_PARENT_DEFAULT);
+    // derive llkBlacklistParentAndChild by moving entries with '&' from above
+    for (auto it = llkBlacklistParent.begin(); it != llkBlacklistParent.end();) {
+        auto pos = it->find('&');
+        if (pos == std::string::npos) {
+            ++it;
+            continue;
+        }
+        auto parent = it->substr(0, pos);
+        auto child = it->substr(pos + 1);
+        it = llkBlacklistParent.erase(it);
+
+        auto found = llkBlacklistParentAndChild.find(parent);
+        if (found == llkBlacklistParentAndChild.end()) {
+            llkBlacklistParentAndChild.emplace(std::make_pair(
+                    std::move(parent), std::unordered_set<std::string>({std::move(child)})));
+        } else {
+            found->second.emplace(std::move(child));
+        }
+    }
+
     llkBlacklistUid = llkSplit(LLK_BLACKLIST_UID_PROPERTY, LLK_BLACKLIST_UID_DEFAULT);
 
     // internal watchdog
