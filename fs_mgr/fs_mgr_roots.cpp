@@ -114,7 +114,7 @@ bool EnsurePathMounted(Fstab* fstab, const std::string& path, const std::string&
 
     const std::string mount_point = mount_pt.empty() ? rec->mount_point : mount_pt;
 
-    static const std::vector<std::string> supported_fs{"ext4", "squashfs", "vfat", "f2fs"};
+    static const std::vector<std::string> supported_fs{"ext4", "squashfs", "vfat", "f2fs", "none"};
     if (std::find(supported_fs.begin(), supported_fs.end(), rec->fs_type) == supported_fs.end()) {
         LERROR << "unknown fs_type \"" << rec->fs_type << "\" for " << mount_point;
         return false;
