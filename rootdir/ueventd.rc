@@ -44,8 +44,6 @@ subsystem sound
 /dev/dri/*                0666   root       graphics
 
 # these should not be world writable
-/dev/diag                 0660   radio      radio
-/dev/ttyMSM0              0600   bluetooth  bluetooth
 /dev/uhid                 0660   uhid       uhid
 /dev/uinput               0660   uhid       uhid
 /dev/rtc0                 0640   system     system
@@ -54,7 +52,6 @@ subsystem sound
 /dev/input/*              0660   root       input
 /dev/v4l-touch*           0660   root       input
 /dev/snd/*                0660   system     audio
-/dev/msm_mp3*             0660   system     audio
 /dev/bus/usb/*            0660   root       usb
 /dev/mtp_usb              0660   root       mtp
 /dev/usb_accessory        0660   root       usb
