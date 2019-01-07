@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -332,4 +333,38 @@ TEST(llkd, sleep) {
     waitForPid(child_pid);
 
     unlink(stack_pipe_file);
+}
+
+// b/120983740
+TEST(llkd, adbd_and_setsid) {
+    if (checkKill("kernel_panic,sysrq,livelock,zombie")) {
+        return;
+    }
+    const auto period = llkdSleepPeriod('S');
+
+    // expect llkd.zombie to trigger, but not for adbd&[setsid]
+    // Create a Persistent Zombie setsid Process
+    pid_t child_pid = fork();
+    ASSERT_LE(0, child_pid);
+    if (!child_pid) {
+        prctl(PR_SET_NAME, "adbd");
+        auto zombie_pid = fork();
+        ASSERT_LE(0, zombie_pid);
+        if (!zombie_pid) {
+            prctl(PR_SET_NAME, "setsid");
+            sleep(1);
+            exit(0);
+        }
+        sleep(period.count());
+        exit(42);
+    }
+
+    // Reverse of waitForPid, do _not_ expect kill
+    int wstatus;
+    ASSERT_LE(0, waitpid(child_pid, &wstatus, 0));
+    EXPECT_TRUE(WIFEXITED(wstatus));
+    if (WIFEXITED(wstatus)) {
+        EXPECT_EQ(42, WEXITSTATUS(wstatus));
+    }
+    ASSERT_FALSE(WIFSIGNALED(wstatus)) << "[   INFO   ] signo=" << WTERMSIG(wstatus);
 }
