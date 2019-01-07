@@ -40,11 +40,22 @@ using namespace android::fiemap_writer;
 using unique_fd = android::base::unique_fd;
 using LoopDevice = android::dm::LoopDevice;
 
-std::string testfile = "";
 std::string testbdev = "";
 uint64_t testfile_size = 536870912;  // default of 512MiB
 
-TEST(FiemapWriter, CreateImpossiblyLargeFile) {
+class FiemapWriterTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
+        std::string exec_dir = ::android::base::GetExecutableDirectory();
+        testfile = ::android::base::StringPrintf("%s/testdata/%s", exec_dir.c_str(), tinfo->name());
+    }
+
+    // name of the file we use for testing
+    std::string testfile;
+};
+
+TEST_F(FiemapWriterTest, CreateImpossiblyLargeFile) {
     // Try creating a file of size ~100TB but aligned to
     // 512 byte to make sure block alignment tests don't
     // fail.
@@ -54,7 +65,7 @@ TEST(FiemapWriter, CreateImpossiblyLargeFile) {
     EXPECT_EQ(errno, ENOENT);
 }
 
-TEST(FiemapWriter, CreateUnalignedFile) {
+TEST_F(FiemapWriterTest, CreateUnalignedFile) {
     // Try creating a file of size 4097 bytes which is guaranteed
     // to be unaligned to all known block sizes. The creation must
     // fail.
@@ -64,7 +75,7 @@ TEST(FiemapWriter, CreateUnalignedFile) {
     EXPECT_EQ(errno, ENOENT);
 }
 
-TEST(FiemapWriter, CheckFilePath) {
+TEST_F(FiemapWriterTest, CheckFilePath) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
     ASSERT_NE(fptr, nullptr);
     EXPECT_EQ(fptr->size(), 4096);
@@ -72,20 +83,20 @@ TEST(FiemapWriter, CheckFilePath) {
     EXPECT_EQ(access(testfile.c_str(), F_OK), 0);
 }
 
-TEST(FiemapWriter, CheckBlockDevicePath) {
+TEST_F(FiemapWriterTest, CheckBlockDevicePath) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
     EXPECT_EQ(fptr->size(), 4096);
     EXPECT_EQ(fptr->bdev_path(), testbdev);
 }
 
-TEST(FiemapWriter, CheckFileCreated) {
+TEST_F(FiemapWriterTest, CheckFileCreated) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 32768);
     ASSERT_NE(fptr, nullptr);
     unique_fd fd(open(testfile.c_str(), O_RDONLY));
     EXPECT_GT(fd, -1);
 }
 
-TEST(FiemapWriter, CheckFileSizeActual) {
+TEST_F(FiemapWriterTest, CheckFileSizeActual) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, testfile_size);
     ASSERT_NE(fptr, nullptr);
 
@@ -94,13 +105,13 @@ TEST(FiemapWriter, CheckFileSizeActual) {
     EXPECT_EQ(sb.st_size, testfile_size);
 }
 
-TEST(FiemapWriter, CheckFileExtents) {
+TEST_F(FiemapWriterTest, CheckFileExtents) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, testfile_size);
     ASSERT_NE(fptr, nullptr);
     EXPECT_GT(fptr->extents().size(), 0);
 }
 
-TEST(FiemapWriter, CheckWriteError) {
+TEST_F(FiemapWriterTest, CheckWriteError) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, testfile_size);
     ASSERT_NE(fptr, nullptr);
 
@@ -339,18 +350,17 @@ TEST_F(VerifyBlockWritesF2fs, CheckWrites) {
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    if (argc <= 2) {
+    if (argc <= 1) {
         cerr << "Filepath with its bdev path must be provided as follows:" << endl;
-        cerr << "  $ fiemap_writer_test <path to file> </dev/block/XXXX" << endl;
+        cerr << "  $ fiemap_writer_test </dev/block/XXXX" << endl;
         cerr << "  where, /dev/block/XXX is the block device where the file resides" << endl;
         exit(EXIT_FAILURE);
     }
     ::android::base::InitLogging(argv, ::android::base::StderrLogger);
 
-    testfile = argv[1];
-    testbdev = argv[2];
-    if (argc > 3) {
-        testfile_size = strtoull(argv[3], NULL, 0);
+    testbdev = argv[1];
+    if (argc > 2) {
+        testfile_size = strtoull(argv[2], NULL, 0);
         if (testfile_size == ULLONG_MAX) {
             testfile_size = 512 * 1024 * 1024;
         }
