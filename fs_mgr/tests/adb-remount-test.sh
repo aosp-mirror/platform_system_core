@@ -49,7 +49,7 @@ inFastboot() {
 Returns: true if device is in adb mode" ]
 inAdb() {
   adb devices |
-    grep -v 'List of devices attached' |
+    grep -v -e 'List of devices attached' -e '^$' |
     if [ -n "${ANDROID_SERIAL}" ]; then
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
     else
@@ -61,7 +61,17 @@ inAdb() {
 
 Returns: true if the command succeeded" ]
 adb_sh() {
-  adb shell "${@}"
+  args=
+  for i in ${@}; do
+    if [ X"${i}" != X"${i#\'}" ]; then
+      args="${args} ${i}"
+    elif [ X"${i}" != X"${i#* }" ]; then
+      args="${args} '${i}'"
+    else
+      args="${args} ${i}"
+    fi
+  done
+  adb shell ${args}
 }
 
 [ "USAGE: adb_date >/dev/stdout
@@ -92,7 +102,7 @@ get_property() {
 
 Returns: true if device is (likely) a debug build" ]
 isDebuggable() {
-  if inAdb && [ 1 -ne "`get_property ro.debuggable`" ]; then
+  if inAdb && [ 1 != "`get_property ro.debuggable`" ]; then
     false
   fi
 }
@@ -363,8 +373,12 @@ D=`adb_sh df -k </dev/null` &&
   echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
 overlayfs_needed=true
 D=`adb_sh cat /proc/mounts </dev/null |
-   skip_administrative_mounts data |
-   cut -s -d' ' -f1`
+   skip_administrative_mounts data`
+if echo "${D}" | grep /dev/root >/dev/null; then
+  D=`echo / /
+     echo "${D}" | grep -v /dev/root`
+fi
+D=`echo "${D}" | cut -s -d' ' -f1`
 D=`adb_sh df -k ${D} </dev/null`
 echo "${D}"
 if [ X"${D}" = X"${D##* 100[%] }" ]; then
