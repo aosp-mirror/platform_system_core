@@ -46,6 +46,7 @@ cc_defaults {
     defaults: ["libbase_cflags_defaults"],
     srcs: [
         "chrono_utils.cpp",
+        "cmsg.cpp",
         "file.cpp",
         "logging.cpp",
         "mapped_file.cpp",
@@ -85,6 +86,9 @@ cc_defaults {
                 "errors_windows.cpp",
                 "utf8.cpp",
             ],
+            exclude_srcs: [
+                "cmsg.cpp",
+            ],
             enabled: true,
         },
     },
@@ -121,6 +125,7 @@ cc_test {
     defaults: ["libbase_cflags_defaults"],
     host_supported: true,
     srcs: [
+        "cmsg_test.cpp",
         "endian_test.cpp",
         "errors_test.cpp",
         "file_test.cpp",
