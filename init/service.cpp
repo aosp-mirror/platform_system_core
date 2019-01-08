@@ -367,12 +367,19 @@ void Service::Reap(const siginfo_t& siginfo) {
         return;
     }
 
-    // If we crash > 4 times in 4 minutes, reboot into bootloader.
+    // If we crash > 4 times in 4 minutes, reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
-    if ((flags_ & SVC_CRITICAL) && !(flags_ & SVC_RESTART)) {
+    if (((flags_ & SVC_CRITICAL) || classnames_.count("updatable")) && !(flags_ & SVC_RESTART)) {
         if (now < time_crashed_ + 4min) {
             if (++crash_count_ > 4) {
-                LOG(FATAL) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
+                if (flags_ & SVC_CRITICAL) {
+                    // Aborts into bootloader
+                    LOG(FATAL) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
+                } else {
+                    LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times in 4 minutes";
+                    // Notifies update_verifier and apexd
+                    property_set("ro.init.updatable_crashing", "1");
+                }
             }
         } else {
             time_crashed_ = now;
