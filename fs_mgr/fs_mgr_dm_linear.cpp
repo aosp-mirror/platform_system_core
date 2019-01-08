@@ -168,6 +168,19 @@ bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& supe
     return true;
 }
 
+bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
+                            const std::string& partition_name, bool force_writable,
+                            const std::chrono::milliseconds& timeout_ms, std::string* path) {
+    for (const auto& partition : metadata.partitions) {
+        if (GetPartitionName(partition) == partition_name) {
+            return CreateLogicalPartition(metadata, partition, force_writable, timeout_ms,
+                                          block_device, path);
+        }
+    }
+    LERROR << "Could not find any partition with name: " << partition_name;
+    return false;
+}
+
 bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
                             const std::string& partition_name, bool force_writable,
                             const std::chrono::milliseconds& timeout_ms, std::string* path) {
@@ -176,14 +189,8 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
         LOG(ERROR) << "Could not read partition table.";
         return true;
     }
-    for (const auto& partition : metadata->partitions) {
-        if (GetPartitionName(partition) == partition_name) {
-            return CreateLogicalPartition(*metadata.get(), partition, force_writable, timeout_ms,
-                                          block_device, path);
-        }
-    }
-    LERROR << "Could not find any partition with name: " << partition_name;
-    return false;
+    return CreateLogicalPartition(block_device, *metadata.get(), partition_name, force_writable,
+                                  timeout_ms, path);
 }
 
 bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
