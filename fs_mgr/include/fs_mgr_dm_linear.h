@@ -60,6 +60,12 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
                             const std::string& partition_name, bool force_writable,
                             const std::chrono::milliseconds& timeout_ms, std::string* path);
 
+// Same as above, but with a given metadata object. Care should be taken that
+// the metadata represents a valid partition layout.
+bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
+                            const std::string& partition_name, bool force_writable,
+                            const std::chrono::milliseconds& timeout_ms, std::string* path);
+
 // Destroy the block device for a logical partition, by name. If |timeout_ms|
 // is non-zero, then this will block until the device path has been unlinked.
 bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms);
