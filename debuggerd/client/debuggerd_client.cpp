@@ -72,7 +72,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
     std::string error;
     if (!android::procinfo::GetProcessInfo(tid, &procinfo, &error)) {
       LOG(ERROR) << "libdebugged_client: failed to get process info: " << error;
-      return -1;
+      return false;
     }
     pid = procinfo.pid;
   }
