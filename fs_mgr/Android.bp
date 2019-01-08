@@ -102,28 +102,3 @@ cc_library_static {
     export_include_dirs: ["include_fstab"],
     header_libs: ["libbase_headers"],
 }
-
-cc_library_static {
-    name: "libfs_avb",
-    defaults: ["fs_mgr_defaults"],
-    recovery_available: true,
-    export_include_dirs: ["libfs_avb/include"],
-    srcs: [
-        "libfs_avb/avb_ops.cpp",
-        "libfs_avb/fs_avb.cpp",
-    ],
-    static_libs: [
-        "libavb",
-        "libfstab",
-        "libdm",
-    ],
-    export_static_lib_headers: [
-        "libfstab",
-    ],
-    shared_libs: [
-        "libcrypto",
-    ],
-    header_libs: [
-        "libbase_headers",
-    ],
-}
