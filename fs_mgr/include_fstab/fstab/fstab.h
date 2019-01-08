@@ -97,6 +97,7 @@ int fs_mgr_is_checkpoint_blk(const struct fstab_rec* fstab);
 int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
 
 std::string fs_mgr_get_slot_suffix();
+std::string fs_mgr_get_other_slot_suffix();
 std::set<std::string> fs_mgr_get_boot_devices();
 
 struct FstabEntry {
