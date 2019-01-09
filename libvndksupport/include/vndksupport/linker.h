@@ -20,6 +20,16 @@
 extern "C" {
 #endif
 
+/*
+ * Returns whether the current process is a vendor process.
+ *
+ * Note that this is only checking what process is running and has nothing to
+ * do with what namespace the caller is loaded at.  For example, a VNDK-SP
+ * library loaded by SP-HAL calling this function may still get a 'false',
+ * because it is running in a system process.
+ */
+int android_is_in_vendor_process();
+
 void* android_load_sphal_library(const char* name, int flag);
 
 int android_unload_sphal_library(void* handle);
