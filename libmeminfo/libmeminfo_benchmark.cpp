@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <meminfo/procmeminfo.h>
 #include <meminfo/sysmeminfo.h>
 
 #include <fcntl.h>
@@ -26,9 +27,14 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 
 #include <benchmark/benchmark.h>
 
+using ::android::meminfo::MemUsage;
+using ::android::meminfo::ProcMemInfo;
+using ::android::meminfo::SmapsOrRollupFromFile;
 using ::android::meminfo::SysMemInfo;
 
 enum {
@@ -396,5 +402,144 @@ Hugepagesize:       2048 kB)meminfo";
     }
 }
 BENCHMARK(BM_MemInfoWithZram_new);
+
+// Current implementation is in frameworks/base/core/jni/android_os_Debug.cpp.
+// That implementation is still buggy and it skips over vmalloc allocated memory by kernel modules.
+// This is the *fixed* version of the same implementation intended for benchmarking against the new
+// one.
+static uint64_t get_allocated_vmalloc_memory(const std::string& vm_file) {
+    char line[1024];
+
+    uint64_t vmalloc_allocated_size = 0;
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(vm_file.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return 0;
+    }
+
+    while (true) {
+        if (fgets(line, 1024, fp.get()) == NULL) {
+            break;
+        }
+
+        // check to see if there are pages mapped in vmalloc area
+        if (!strstr(line, "pages=")) {
+            continue;
+        }
+
+        long nr_pages;
+        if (sscanf(line, "%*x-%*x %*ld %*s pages=%ld", &nr_pages) == 1) {
+            vmalloc_allocated_size += (nr_pages * getpagesize());
+        } else if (sscanf(line, "%*x-%*x %*ld %*s %*s pages=%ld", &nr_pages) == 1) {
+            // The second case is for kernel modules. If allocation comes from the module,
+            // kernel puts an extra string containing the module name before "pages=" in
+            // the line.
+            //    See: https://elixir.bootlin.com/linux/latest/source/kernel/kallsyms.c#L373
+            vmalloc_allocated_size += (nr_pages * getpagesize());
+        }
+    }
+    return vmalloc_allocated_size;
+}
+
+static void BM_VmallocInfo_old_fixed(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string vmallocinfo =
+            ::android::base::StringPrintf("%s/testdata1/vmallocinfo", exec_dir.c_str());
+    for (auto _ : state) {
+        CHECK_EQ(get_allocated_vmalloc_memory(vmallocinfo), 29884416);
+    }
+}
+BENCHMARK(BM_VmallocInfo_old_fixed);
+
+static void BM_VmallocInfo_new(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string vmallocinfo =
+            ::android::base::StringPrintf("%s/testdata1/vmallocinfo", exec_dir.c_str());
+    for (auto _ : state) {
+        SysMemInfo smi;
+        CHECK_EQ(smi.ReadVmallocInfo(vmallocinfo), 29884416);
+    }
+}
+BENCHMARK(BM_VmallocInfo_new);
+
+// This implementation is picked up as-is from frameworks/base/core/jni/android_os_Debug.cpp
+// and only slightly modified to use std:unique_ptr.
+static bool get_smaps_rollup(const std::string path, MemUsage* rollup) {
+    char lineBuffer[1024];
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (fp != nullptr) {
+        char* line;
+        while (true) {
+            if (fgets(lineBuffer, sizeof(lineBuffer), fp.get()) == NULL) {
+                break;
+            }
+            line = lineBuffer;
+
+            switch (line[0]) {
+                case 'P':
+                    if (strncmp(line, "Pss:", 4) == 0) {
+                        char* c = line + 4;
+                        while (*c != 0 && (*c < '0' || *c > '9')) {
+                            c++;
+                        }
+                        rollup->pss += atoi(c);
+                    } else if (strncmp(line, "Private_Clean:", 14) == 0 ||
+                               strncmp(line, "Private_Dirty:", 14) == 0) {
+                        char* c = line + 14;
+                        while (*c != 0 && (*c < '0' || *c > '9')) {
+                            c++;
+                        }
+                        rollup->uss += atoi(c);
+                    }
+                    break;
+                case 'R':
+                    if (strncmp(line, "Rss:", 4) == 0) {
+                        char* c = line + 4;
+                        while (*c != 0 && (*c < '0' || *c > '9')) {
+                            c++;
+                        }
+                        rollup->rss += atoi(c);
+                    }
+                    break;
+                case 'S':
+                    if (strncmp(line, "SwapPss:", 8) == 0) {
+                        char* c = line + 8;
+                        long lSwapPss;
+                        while (*c != 0 && (*c < '0' || *c > '9')) {
+                            c++;
+                        }
+                        lSwapPss = atoi(c);
+                        rollup->swap_pss += lSwapPss;
+                    }
+                    break;
+            }
+        }
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+static void BM_SmapsRollup_old(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps", exec_dir.c_str());
+    for (auto _ : state) {
+        MemUsage stats;
+        CHECK_EQ(get_smaps_rollup(path, &stats), true);
+        CHECK_EQ(stats.pss, 108384);
+    }
+}
+BENCHMARK(BM_SmapsRollup_old);
+
+static void BM_SmapsRollup_new(benchmark::State& state) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps", exec_dir.c_str());
+    for (auto _ : state) {
+        MemUsage stats;
+        CHECK_EQ(SmapsOrRollupFromFile(path, &stats), true);
+        CHECK_EQ(stats.pss, 108384);
+    }
+}
+BENCHMARK(BM_SmapsRollup_new);
 
 BENCHMARK_MAIN();
