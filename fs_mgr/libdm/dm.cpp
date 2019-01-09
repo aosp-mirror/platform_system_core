@@ -349,7 +349,7 @@ void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
     io->data_size = sizeof(*io);
     io->data_start = 0;
     if (!name.empty()) {
-        strlcpy(io->name, name.c_str(), sizeof(io->name));
+        snprintf(io->name, sizeof(io->name), "%s", name.c_str());
     }
 }
 
