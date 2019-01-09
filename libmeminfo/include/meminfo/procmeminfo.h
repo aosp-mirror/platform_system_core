@@ -26,6 +26,8 @@
 namespace android {
 namespace meminfo {
 
+using VmaCallback = std::function<void(const Vma&)>;
+
 class ProcMemInfo final {
     // Per-process memory accounting
   public:
@@ -37,6 +39,33 @@ class ProcMemInfo final {
     const std::vector<Vma>& Maps();
     const MemUsage& Usage();
     const MemUsage& Wss();
+
+    // Collect all 'vma' or 'maps' from /proc/<pid>/smaps and store them in 'maps_'. Returns a
+    // constant reference to the vma vector after the collection is done.
+    //
+    // Each 'struct Vma' is *fully* populated by this method (unlike SmapsOrRollup).
+    const std::vector<Vma>& Smaps(const std::string& path = "");
+
+    // This method reads /proc/<pid>/smaps and calls the callback() for each
+    // vma or map that it finds. The map is converted to 'struct Vma' object which is then
+    // passed to the callback.
+    // Returns 'false' if the file is malformed.
+    bool ForEachVma(const VmaCallback& callback);
+
+    // Used to parse either of /proc/<pid>/{smaps, smaps_rollup} and record the process's
+    // Pss and Private memory usage in 'stats'.  In particular, the method only populates the fields
+    // of the MemUsage structure that are intended to be used by Android's periodic Pss collection.
+    //
+    // The method populates the following statistics in order to be fast an efficient.
+    //   Pss
+    //   Rss
+    //   Uss
+    //   private_clean
+    //   private_dirty
+    //   SwapPss
+    // All other fields of MemUsage are zeroed.
+    bool SmapsOrRollup(bool use_rollup, MemUsage* stats) const;
+
     const std::vector<uint16_t>& SwapOffsets();
 
     ~ProcMemInfo() = default;
@@ -56,6 +85,15 @@ class ProcMemInfo final {
     MemUsage wss_;
     std::vector<uint16_t> swap_offsets_;
 };
+
+// Makes callback for each 'vma' or 'map' found in file provided. The file is expected to be in the
+// same format as /proc/<pid>/smaps. Returns 'false' if the file is malformed.
+bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback);
+
+// Same as ProcMemInfo::SmapsOrRollup but reads the statistics directly
+// from a file. The file MUST be in the same format as /proc/<pid>/smaps
+// or /proc/<pid>/smaps_rollup
+bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats);
 
 }  // namespace meminfo
 }  // namespace android

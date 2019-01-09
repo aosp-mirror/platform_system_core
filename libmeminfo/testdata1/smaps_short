@@ -1,0 +1,122 @@
+54c00000-56c00000 r-xp 00000000 00:00 0                                  [anon:dalvik-zygote-jit-code-cache]
+Name:           [anon:dalvik-zygote-jit-code-cache]
+Size:              32768 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2048 kB
+Pss:                 113 kB
+Shared_Clean:          0 kB
+Shared_Dirty:       2048 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:         2048 kB
+Anonymous:          2048 kB
+AnonHugePages:      2048 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:              113 kB
+VmFlags: rd ex mr mw me ac 
+701ea000-70cdb000 rw-p 00000000 fe:00 3165                               /system/framework/x86_64/boot-framework.art
+Size:              11204 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:               11188 kB
+Pss:                2200 kB
+Shared_Clean:         80 kB
+Shared_Dirty:       9448 kB
+Private_Clean:         0 kB
+Private_Dirty:      1660 kB
+Referenced:         9892 kB
+Anonymous:         11108 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:             2200 kB
+VmFlags: rd wr mr mw me ac 
+70074dd8d000-70074ee0d000 rw-p 00000000 00:00 0                          [anon:libc_malloc]
+Name:           [anon:libc_malloc]
+Size:              16896 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:               15272 kB
+Pss:               15272 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:     15272 kB
+Referenced:        11156 kB
+Anonymous:         15272 kB
+AnonHugePages:      6144 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:            15272 kB
+VmFlags: rd wr mr mw me ac 
+700755a2d000-700755a6e000 r-xp 00016000 fe:00 1947                       /system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex
+Size:                260 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 260 kB
+Pss:                 260 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:       260 kB
+Private_Dirty:         0 kB
+Referenced:          260 kB
+Anonymous:             0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:              260 kB
+VmFlags: rd ex mr mw me 
+7007f85b0000-7007f8b9b000 r-xp 001ee000 fe:00 1537                       /system/lib64/libhwui.so
+Size:               6060 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                4132 kB
+Pss:                1274 kB
+Shared_Clean:       4132 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:         4132 kB
+Anonymous:             0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:             1274 kB
+VmFlags: rd ex mr mw me 
+ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]
+Size:                  4 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                   0 kB
+Pss:                   0 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:            0 kB
+Anonymous:             0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+VmFlags: rd ex 

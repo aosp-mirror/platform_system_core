@@ -53,3 +53,17 @@ cc_binary {
         "libmeminfo",
     ],
 }
+
+cc_binary {
+    name: "showmap2",
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    srcs: ["showmap.cpp"],
+    shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+}
