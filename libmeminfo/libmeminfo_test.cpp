@@ -30,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 
 using namespace std;
 using namespace android::meminfo;
@@ -245,13 +246,13 @@ TEST_F(ValidatePageAcct, TestPageIdle) {
     }
 }
 
-TEST(TestProcMemInfo, TestMapsEmpty) {
+TEST(TestProcMemInfo, MapsEmpty) {
     ProcMemInfo proc_mem(pid);
     const std::vector<Vma>& maps = proc_mem.Maps();
     EXPECT_GT(maps.size(), 0);
 }
 
-TEST(TestProcMemInfo, TestUsageEmpty) {
+TEST(TestProcMemInfo, UsageEmpty) {
     // If we created the object for getting working set,
     // the usage must be empty
     ProcMemInfo proc_mem(pid, true);
@@ -263,7 +264,7 @@ TEST(TestProcMemInfo, TestUsageEmpty) {
     EXPECT_EQ(usage.swap, 0);
 }
 
-TEST(TestProcMemInfoWssReset, TestWssEmpty) {
+TEST(TestProcMemInfo, WssEmpty) {
     // If we created the object for getting usage,
     // the working set must be empty
     ProcMemInfo proc_mem(pid, false);
@@ -275,12 +276,278 @@ TEST(TestProcMemInfoWssReset, TestWssEmpty) {
     EXPECT_EQ(wss.swap, 0);
 }
 
-TEST(TestProcMemInfoWssReset, TestSwapOffsetsEmpty) {
+TEST(TestProcMemInfo, SwapOffsetsEmpty) {
     // If we created the object for getting working set,
     // the swap offsets must be empty
     ProcMemInfo proc_mem(pid, true);
     const std::vector<uint16_t>& swap_offsets = proc_mem.SwapOffsets();
     EXPECT_EQ(swap_offsets.size(), 0);
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupReturn) {
+    // if /proc/<pid>/smaps_rollup file exists, .SmapsRollup() must return true;
+    // false otherwise
+    std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
+    ProcMemInfo proc_mem(pid);
+    MemUsage stats;
+    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(true, &stats));
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupTest) {
+    std::string rollup =
+            R"rollup(12c00000-7fe859e000 ---p 00000000 00:00 0                                [rollup]
+Rss:              331908 kB
+Pss:              202052 kB
+Shared_Clean:     158492 kB
+Shared_Dirty:      18928 kB
+Private_Clean:     90472 kB
+Private_Dirty:     64016 kB
+Referenced:       318700 kB
+Anonymous:         81984 kB
+AnonHugePages:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:               5344 kB
+SwapPss:             442 kB
+Locked:          1523537 kB)rollup";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(rollup, tf.fd));
+
+    MemUsage stats;
+    ASSERT_EQ(SmapsOrRollupFromFile(tf.path, &stats), true);
+    EXPECT_EQ(stats.rss, 331908);
+    EXPECT_EQ(stats.pss, 202052);
+    EXPECT_EQ(stats.uss, 154488);
+    EXPECT_EQ(stats.private_clean, 90472);
+    EXPECT_EQ(stats.private_dirty, 64016);
+    EXPECT_EQ(stats.swap_pss, 442);
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupSmapsTest) {
+    // This is a made up smaps for the test
+    std::string smaps =
+            R"smaps(12c00000-13440000 rw-p 00000000 00:00 0                                  [anon:dalvik-main space (region space)]
+Name:           [anon:dalvik-main space (region space)]
+Size:               8448 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2652 kB
+Pss:                2652 kB
+Shared_Clean:        840 kB
+Shared_Dirty:         40 kB
+Private_Clean:        84 kB
+Private_Dirty:      2652 kB
+Referenced:         2652 kB
+Anonymous:          2652 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                102 kB
+SwapPss:              70 kB
+Locked:             2652 kB
+VmFlags: rd wr mr mw me ac 
+)smaps";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(smaps, tf.fd));
+
+    MemUsage stats;
+    ASSERT_EQ(SmapsOrRollupFromFile(tf.path, &stats), true);
+    EXPECT_EQ(stats.rss, 2652);
+    EXPECT_EQ(stats.pss, 2652);
+    EXPECT_EQ(stats.uss, 2736);
+    EXPECT_EQ(stats.private_clean, 84);
+    EXPECT_EQ(stats.private_dirty, 2652);
+    EXPECT_EQ(stats.swap_pss, 70);
+}
+
+TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
+    ProcMemInfo proc_mem(pid);
+
+    std::vector<Vma> vmas;
+    auto collect_vmas = [&](const Vma& v) { vmas.push_back(v); };
+    ASSERT_TRUE(ForEachVmaFromFile(path, collect_vmas));
+
+    // Expect values to be equal to what we have in testdata1/smaps_short
+    // Check for sizes first
+    ASSERT_EQ(vmas[0].usage.vss, 32768);
+    EXPECT_EQ(vmas[1].usage.vss, 11204);
+    EXPECT_EQ(vmas[2].usage.vss, 16896);
+    EXPECT_EQ(vmas[3].usage.vss, 260);
+    EXPECT_EQ(vmas[4].usage.vss, 6060);
+    EXPECT_EQ(vmas[5].usage.vss, 4);
+
+    // Check for names
+    EXPECT_EQ(vmas[0].name, "[anon:dalvik-zygote-jit-code-cache]");
+    EXPECT_EQ(vmas[1].name, "/system/framework/x86_64/boot-framework.art");
+    EXPECT_EQ(vmas[2].name, "[anon:libc_malloc]");
+    EXPECT_EQ(vmas[3].name, "/system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex");
+    EXPECT_EQ(vmas[4].name, "/system/lib64/libhwui.so");
+    EXPECT_EQ(vmas[5].name, "[vsyscall]");
+
+    EXPECT_EQ(vmas[0].usage.rss, 2048);
+    EXPECT_EQ(vmas[1].usage.rss, 11188);
+    EXPECT_EQ(vmas[2].usage.rss, 15272);
+    EXPECT_EQ(vmas[3].usage.rss, 260);
+    EXPECT_EQ(vmas[4].usage.rss, 4132);
+    EXPECT_EQ(vmas[5].usage.rss, 0);
+
+    EXPECT_EQ(vmas[0].usage.pss, 113);
+    EXPECT_EQ(vmas[1].usage.pss, 2200);
+    EXPECT_EQ(vmas[2].usage.pss, 15272);
+    EXPECT_EQ(vmas[3].usage.pss, 260);
+    EXPECT_EQ(vmas[4].usage.pss, 1274);
+    EXPECT_EQ(vmas[5].usage.pss, 0);
+
+    EXPECT_EQ(vmas[0].usage.uss, 0);
+    EXPECT_EQ(vmas[1].usage.uss, 1660);
+    EXPECT_EQ(vmas[2].usage.uss, 15272);
+    EXPECT_EQ(vmas[3].usage.uss, 260);
+    EXPECT_EQ(vmas[4].usage.uss, 0);
+    EXPECT_EQ(vmas[5].usage.uss, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_clean, 0);
+    EXPECT_EQ(vmas[1].usage.private_clean, 0);
+    EXPECT_EQ(vmas[2].usage.private_clean, 0);
+    EXPECT_EQ(vmas[3].usage.private_clean, 260);
+    EXPECT_EQ(vmas[4].usage.private_clean, 0);
+    EXPECT_EQ(vmas[5].usage.private_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[1].usage.private_dirty, 1660);
+    EXPECT_EQ(vmas[2].usage.private_dirty, 15272);
+    EXPECT_EQ(vmas[3].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.private_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[1].usage.shared_clean, 80);
+    EXPECT_EQ(vmas[2].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[3].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[4].usage.shared_clean, 4132);
+    EXPECT_EQ(vmas[5].usage.shared_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_dirty, 2048);
+    EXPECT_EQ(vmas[1].usage.shared_dirty, 9448);
+    EXPECT_EQ(vmas[2].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[3].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.shared_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap, 0);
+    EXPECT_EQ(vmas[1].usage.swap, 0);
+    EXPECT_EQ(vmas[2].usage.swap, 0);
+    EXPECT_EQ(vmas[3].usage.swap, 0);
+    EXPECT_EQ(vmas[4].usage.swap, 0);
+    EXPECT_EQ(vmas[5].usage.swap, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[1].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[2].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[3].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[4].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[5].usage.swap_pss, 0);
+}
+
+TEST(TestProcMemInfo, SmapsReturnTest) {
+    ProcMemInfo proc_mem(pid);
+    auto vmas = proc_mem.Smaps();
+    EXPECT_FALSE(vmas.empty());
+}
+
+TEST(TestProcMemInfo, SmapsTest) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
+    ProcMemInfo proc_mem(pid);
+    auto vmas = proc_mem.Smaps(path);
+
+    ASSERT_FALSE(vmas.empty());
+
+    // Expect values to be equal to what we have in testdata1/smaps_short
+    // Check for sizes first
+    ASSERT_EQ(vmas[0].usage.vss, 32768);
+    EXPECT_EQ(vmas[1].usage.vss, 11204);
+    EXPECT_EQ(vmas[2].usage.vss, 16896);
+    EXPECT_EQ(vmas[3].usage.vss, 260);
+    EXPECT_EQ(vmas[4].usage.vss, 6060);
+    EXPECT_EQ(vmas[5].usage.vss, 4);
+
+    // Check for names
+    EXPECT_EQ(vmas[0].name, "[anon:dalvik-zygote-jit-code-cache]");
+    EXPECT_EQ(vmas[1].name, "/system/framework/x86_64/boot-framework.art");
+    EXPECT_EQ(vmas[2].name, "[anon:libc_malloc]");
+    EXPECT_EQ(vmas[3].name, "/system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex");
+    EXPECT_EQ(vmas[4].name, "/system/lib64/libhwui.so");
+    EXPECT_EQ(vmas[5].name, "[vsyscall]");
+
+    EXPECT_EQ(vmas[0].usage.rss, 2048);
+    EXPECT_EQ(vmas[1].usage.rss, 11188);
+    EXPECT_EQ(vmas[2].usage.rss, 15272);
+    EXPECT_EQ(vmas[3].usage.rss, 260);
+    EXPECT_EQ(vmas[4].usage.rss, 4132);
+    EXPECT_EQ(vmas[5].usage.rss, 0);
+
+    EXPECT_EQ(vmas[0].usage.pss, 113);
+    EXPECT_EQ(vmas[1].usage.pss, 2200);
+    EXPECT_EQ(vmas[2].usage.pss, 15272);
+    EXPECT_EQ(vmas[3].usage.pss, 260);
+    EXPECT_EQ(vmas[4].usage.pss, 1274);
+    EXPECT_EQ(vmas[5].usage.pss, 0);
+
+    EXPECT_EQ(vmas[0].usage.uss, 0);
+    EXPECT_EQ(vmas[1].usage.uss, 1660);
+    EXPECT_EQ(vmas[2].usage.uss, 15272);
+    EXPECT_EQ(vmas[3].usage.uss, 260);
+    EXPECT_EQ(vmas[4].usage.uss, 0);
+    EXPECT_EQ(vmas[5].usage.uss, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_clean, 0);
+    EXPECT_EQ(vmas[1].usage.private_clean, 0);
+    EXPECT_EQ(vmas[2].usage.private_clean, 0);
+    EXPECT_EQ(vmas[3].usage.private_clean, 260);
+    EXPECT_EQ(vmas[4].usage.private_clean, 0);
+    EXPECT_EQ(vmas[5].usage.private_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[1].usage.private_dirty, 1660);
+    EXPECT_EQ(vmas[2].usage.private_dirty, 15272);
+    EXPECT_EQ(vmas[3].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.private_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.private_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[1].usage.shared_clean, 80);
+    EXPECT_EQ(vmas[2].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[3].usage.shared_clean, 0);
+    EXPECT_EQ(vmas[4].usage.shared_clean, 4132);
+    EXPECT_EQ(vmas[5].usage.shared_clean, 0);
+
+    EXPECT_EQ(vmas[0].usage.shared_dirty, 2048);
+    EXPECT_EQ(vmas[1].usage.shared_dirty, 9448);
+    EXPECT_EQ(vmas[2].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[3].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[4].usage.shared_dirty, 0);
+    EXPECT_EQ(vmas[5].usage.shared_dirty, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap, 0);
+    EXPECT_EQ(vmas[1].usage.swap, 0);
+    EXPECT_EQ(vmas[2].usage.swap, 0);
+    EXPECT_EQ(vmas[3].usage.swap, 0);
+    EXPECT_EQ(vmas[4].usage.swap, 0);
+    EXPECT_EQ(vmas[5].usage.swap, 0);
+
+    EXPECT_EQ(vmas[0].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[1].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[2].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[3].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[4].usage.swap_pss, 0);
+    EXPECT_EQ(vmas[5].usage.swap_pss, 0);
 }
 
 TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
@@ -514,6 +781,66 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_VMALLOC_USED], 65536);
     EXPECT_EQ(mem[MEMINFO_PAGE_TABLES], 2900);
     EXPECT_EQ(mem[MEMINFO_KERNEL_STACK], 4880);
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoNoMemory) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000   69632 of_iomap+0x78/0xb0 phys=17a00000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=b220000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17c90000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17ca0000 ioremap)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), 0);
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoKernel) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000    8192 drm_property_create_blob+0x44/0xec pages=1 vmalloc)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), getpagesize());
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoModule) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000   28672 pktlog_alloc_buf+0xc4/0x15c [wlan] pages=6 vmalloc)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), 6 * getpagesize());
+}
+
+TEST(SysMemInfoParser, TestVmallocInfoAll) {
+    std::string vmallocinfo =
+            R"vmallocinfo(0x0000000000000000-0x0000000000000000   69632 of_iomap+0x78/0xb0 phys=17a00000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=b220000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17c90000 ioremap
+0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=17ca0000 ioremap
+0x0000000000000000-0x0000000000000000    8192 drm_property_create_blob+0x44/0xec pages=1 vmalloc
+0x0000000000000000-0x0000000000000000   28672 pktlog_alloc_buf+0xc4/0x15c [wlan] pages=6 vmalloc)vmallocinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    SysMemInfo smi;
+    EXPECT_EQ(smi.ReadVmallocInfo(file), 7 * getpagesize());
 }
 
 int main(int argc, char** argv) {
