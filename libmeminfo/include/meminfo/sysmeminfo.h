@@ -50,11 +50,15 @@ class SysMemInfo final {
 
     // Parse /proc/meminfo and read values that are needed
     bool ReadMemInfo(const std::string& path = "/proc/meminfo");
-    bool ReadMemInfo(const std::vector<std::string>& tags,
-                     const std::string& path = "/proc/meminfo");
     bool ReadMemInfo(const std::vector<std::string>& tags, std::vector<uint64_t>* out,
                      const std::string& path = "/proc/meminfo");
     bool ReadMemInfo(std::vector<uint64_t>* out, const std::string& path = "/proc/meminfo");
+
+    // Parse /proc/vmallocinfo and return total physical memory mapped
+    // in vmalloc area by the kernel.
+    // Note that this deliberately ignores binder buffers. They are _always_
+    // mapped in a process and are counted for in each process.
+    uint64_t ReadVmallocInfo(const std::string& path = "/proc/vmallocinfo");
 
     // getters
     uint64_t mem_total_kb() { return mem_in_kb_[kMemTotal]; }
