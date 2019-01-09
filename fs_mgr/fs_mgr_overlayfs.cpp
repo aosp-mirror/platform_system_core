@@ -277,6 +277,9 @@ bool fs_mgr_wants_overlayfs(FstabEntry* entry) {
     // Don't check entries that are managed by vold.
     if (entry->fs_mgr_flags.vold_managed || entry->fs_mgr_flags.recovery_only) return false;
 
+    // *_other doesn't want overlayfs.
+    if (entry->fs_mgr_flags.slot_select_other) return false;
+
     // Only concerned with readonly partitions.
     if (!(entry->flags & MS_RDONLY)) return false;
 
