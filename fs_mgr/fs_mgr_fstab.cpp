@@ -209,16 +209,11 @@ static bool read_dt_file(const std::string& file_name, std::string* dt_value)
 }
 
 static uint64_t parse_flags(char* flags, struct flag_list* fl, struct fs_mgr_flag_values* flag_vals,
-                            char* fs_options, int fs_options_len) {
+                            std::string* fs_options) {
     uint64_t f = 0;
     int i;
     char *p;
     char *savep;
-
-    /* initialize fs_options to the null string */
-    if (fs_options && (fs_options_len > 0)) {
-        fs_options[0] = '\0';
-    }
 
     p = strtok_r(flags, ",", &savep);
     while (p) {
@@ -356,24 +351,18 @@ static uint64_t parse_flags(char* flags, struct flag_list* fl, struct fs_mgr_fla
 
         if (!fl[i].name) {
             if (fs_options) {
-                /* It's not a known flag, so it must be a filesystem specific
-                 * option.  Add it to fs_options if it was passed in.
-                 */
-                strlcat(fs_options, p, fs_options_len);
-                strlcat(fs_options, ",", fs_options_len);
+                // It's not a known flag, so it must be a filesystem specific
+                // option.  Add it to fs_options if it was passed in.
+                if (!fs_options->empty()) {
+                    fs_options->append(",");  // appends a comma if not the first
+                }
+                fs_options->append(p);
             } else {
-                /* fs_options was not passed in, so if the flag is unknown
-                 * it's an error.
-                 */
+                // fs_options was not passed in, so if the flag is unknown it's an error.
                 LERROR << "Warning: unknown flag " << p;
             }
         }
         p = strtok_r(NULL, ",", &savep);
-    }
-
-    if (fs_options && fs_options[0]) {
-        /* remove the last trailing comma from the list of options */
-        fs_options[strlen(fs_options) - 1] = '\0';
     }
 
     return f;
@@ -513,8 +502,6 @@ static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fs
     char *save_ptr, *p;
     Fstab fstab;
     struct fs_mgr_flag_values flag_vals;
-#define FS_OPTIONS_LEN 1024
-    char tmp_fs_options[FS_OPTIONS_LEN];
 
     while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
         /* if the last character is a newline, shorten the string by 1 byte */
@@ -555,13 +542,7 @@ static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fs
             LERROR << "Error parsing mount_flags";
             goto err;
         }
-        tmp_fs_options[0] = '\0';
-        entry.flags = parse_flags(p, mount_flags, NULL, tmp_fs_options, FS_OPTIONS_LEN);
-
-        /* fs_options are optional */
-        if (tmp_fs_options[0]) {
-            entry.fs_options = tmp_fs_options;
-        }
+        entry.flags = parse_flags(p, mount_flags, nullptr, &entry.fs_options);
 
         // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
         if (proc_mounts) {
@@ -570,7 +551,7 @@ static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fs
             LERROR << "Error parsing fs_mgr_options";
             goto err;
         }
-        entry.fs_mgr_flags.val = parse_flags(p, fs_mgr_flags, &flag_vals, NULL, 0);
+        entry.fs_mgr_flags.val = parse_flags(p, fs_mgr_flags, &flag_vals, nullptr);
 
         entry.key_loc = std::move(flag_vals.key_loc);
         entry.key_dir = std::move(flag_vals.key_dir);

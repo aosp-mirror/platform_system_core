@@ -150,6 +150,7 @@ cc_library {
     shared_libs: [
         "libbase",
         "libcutils",
+        "libprocinfo",
     ],
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],

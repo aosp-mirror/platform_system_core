@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fstab/fstab.h>
 #include <gtest/gtest.h>
@@ -200,4 +202,34 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
         EXPECT_EQ(mnt_opts, fs_options);
         ++i;
     }
+}
+
+TEST(fs_mgr, ReadFstabFromFile_FsOptions) {
+    Fstab fstab;
+    std::string fstab_file = android::base::GetExecutableDirectory() + "/data/fstab.example";
+    EXPECT_TRUE(ReadFstabFromFile(fstab_file, &fstab));
+
+    EXPECT_EQ("/", fstab[0].mount_point);
+    EXPECT_EQ("barrier=1", fstab[0].fs_options);
+
+    EXPECT_EQ("/metadata", fstab[1].mount_point);
+    EXPECT_EQ("discard", fstab[1].fs_options);
+
+    EXPECT_EQ("/data", fstab[2].mount_point);
+    EXPECT_EQ("discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier", fstab[2].fs_options);
+
+    EXPECT_EQ("/misc", fstab[3].mount_point);
+    EXPECT_EQ("", fstab[3].fs_options);
+
+    EXPECT_EQ("/vendor/firmware_mnt", fstab[4].mount_point);
+    EXPECT_EQ(
+            "shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,"
+            "context=u:object_r:firmware_file:s0",
+            fstab[4].fs_options);
+
+    EXPECT_EQ("auto", fstab[5].mount_point);
+    EXPECT_EQ("", fstab[5].fs_options);
+
+    EXPECT_EQ("none", fstab[6].mount_point);
+    EXPECT_EQ("", fstab[6].fs_options);
 }

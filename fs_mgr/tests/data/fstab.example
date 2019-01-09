@@ -1,0 +1,11 @@
+# Android fstab file.
+
+#<src>                                              <mnt_point>        <type>      <mnt_flags and options>                               <fs_mgr_flags>
+
+/dev/block/bootdevice/by-name/system                /                  ext4        ro,barrier=1                                          wait,slotselect,avb
+/dev/block/bootdevice/by-name/metadata              /metadata          ext4        noatime,nosuid,nodev,discard                          wait,formattable
+/dev/block/bootdevice/by-name/userdata              /data              f2fs        noatime,nosuid,nodev,discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier       latemount,wait,check,fileencryption=ice,keydirectory=/metadata/vold/metadata_encryption,quota,formattable,sysfs_path=/sys/devices/platform/soc/1d84000.ufshc,reservedsize=128M
+/dev/block/bootdevice/by-name/misc                  /misc              emmc        defaults                                              defaults
+/dev/block/bootdevice/by-name/modem                 /vendor/firmware_mnt          vfat        ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0   wait,slotselect
+/devices/platform/soc/a600000.ssusb/a600000.dwc3*   auto               vfat        defaults                                              voldmanaged=usb:auto
+/dev/block/zram0                                    none               swap        defaults                                              zramsize=1073741824,max_comp_streams=8
