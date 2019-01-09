@@ -21,7 +21,6 @@
 #include <unordered_map>
 
 #include <android-base/file.h>
-#include <dex/dex_file.h>
 #include <gtest/gtest.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
@@ -40,17 +39,15 @@ TEST(DexFileTest, from_file_open_too_small) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
 
-  ASSERT_EQ(sizeof(art::DexFile::Header) - 1,
-            static_cast<size_t>(
-                TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(art::DexFile::Header) - 1))));
+  ASSERT_EQ(size_t{10}, static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, 10))));
 
   // Header too small.
   EXPECT_TRUE(DexFileFromFile::Create(0, tf.path) == nullptr);
 
   // Header correct, file too small.
   ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
-  ASSERT_EQ(sizeof(art::DexFile::Header), static_cast<size_t>(TEMP_FAILURE_RETRY(write(
-                                              tf.fd, kDexData, sizeof(art::DexFile::Header)))));
+  ASSERT_EQ(sizeof(kDexData) - 1,
+            static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData) - 1))));
   EXPECT_TRUE(DexFileFromFile::Create(0, tf.path) == nullptr);
 }
 
@@ -78,7 +75,7 @@ TEST(DexFileTest, from_file_open_non_zero_offset) {
 TEST(DexFileTest, from_memory_fail_too_small_for_header) {
   MemoryFake memory;
 
-  memory.SetMemory(0x1000, kDexData, sizeof(art::DexFile::Header) - 1);
+  memory.SetMemory(0x1000, kDexData, 10);
 
   EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") == nullptr);
 }
@@ -187,15 +184,6 @@ TEST(DexFileTest, get_method) {
   ASSERT_TRUE(dex_file->GetMethodInformation(0x118, &method, &method_offset));
   EXPECT_EQ("Main.main", method);
   EXPECT_EQ(0U, method_offset);
-
-  // Make sure that any data that is cached is still retrievable.
-  ASSERT_TRUE(dex_file->GetMethodInformation(0x104, &method, &method_offset));
-  EXPECT_EQ("Main.<init>", method);
-  EXPECT_EQ(4U, method_offset);
-
-  ASSERT_TRUE(dex_file->GetMethodInformation(0x119, &method, &method_offset));
-  EXPECT_EQ("Main.main", method);
-  EXPECT_EQ(1U, method_offset);
 }
 
 TEST(DexFileTest, get_method_empty) {
@@ -210,12 +198,6 @@ TEST(DexFileTest, get_method_empty) {
   EXPECT_FALSE(dex_file->GetMethodInformation(0x100000, &method, &method_offset));
 
   EXPECT_FALSE(dex_file->GetMethodInformation(0x98, &method, &method_offset));
-
-  // Make sure that once the whole dex file has been cached, no problems occur.
-  EXPECT_FALSE(dex_file->GetMethodInformation(0x98, &method, &method_offset));
-
-  // Choose a value that is in the cached map, but not in a valid method.
-  EXPECT_FALSE(dex_file->GetMethodInformation(0x110, &method, &method_offset));
 }
 
 }  // namespace unwindstack
