@@ -19,6 +19,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#if defined(__linux__)
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#endif
+
 #include <android-base/file.h>
 #include <ext4_utils/ext4_utils.h>
 #include <openssl/sha.h>
@@ -153,6 +158,17 @@ bool UpdatePartitionGroupName(LpMetadataPartitionGroup* group, const std::string
     }
     strncpy(group->name, name.c_str(), sizeof(group->name));
     return true;
+}
+
+bool SetBlockReadonly(int fd, bool readonly) {
+#if defined(__linux__)
+    int val = readonly;
+    return ioctl(fd, BLKROSET, &val) == 0;
+#else
+    (void)fd;
+    (void)readonly;
+    return true;
+#endif
 }
 
 }  // namespace fs_mgr
