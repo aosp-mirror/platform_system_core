@@ -366,7 +366,7 @@ if ${reboot}; then
 fi
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
-  D=`echo "${D}" | grep "^overlay "` &&
+  D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
   echo "${H}" &&
   echo "${D}" &&
   echo "${ORANGE}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
@@ -410,7 +410,7 @@ if [ X"${D}" != X"${H}" ]; then
   fi
   D=`adb_sh df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep "^overlay " || true` &&
+    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay " || true` &&
     [ -z "${D}" ] ||
     ( echo "${H}" && echo "${D}" && false ) ||
     die -t ${T} "overlay takeover unexpected at this phase"
@@ -443,7 +443,7 @@ if [ X"${D}" != X"${D##*Successfully disabled verity}" ]; then
   echo "${H}"
   D=`adb_sh df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep "^overlay " || true` &&
+    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay " || true` &&
     [ -z "${D}" ] ||
     ( echo "${H}" && echo "${D}" && false ) ||
     ( [ -n "${L}" ] && echo "${L}" && false ) ||
@@ -463,7 +463,7 @@ adb remount ||
   die -t "${T}" "adb remount failed"
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
-  D=`echo "${D}" | grep "^overlay "` ||
+  D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` ||
   ( [ -n "${L}" ] && echo "${L}" && false )
 ret=${?}
 uses_dynamic_scratch=false
@@ -506,7 +506,7 @@ if ${overlayfs_needed}; then
     echo "${D}" &&
     echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
     die  "overlay takeover after remount"
-  !(adb_sh grep "^overlay " /proc/mounts </dev/null | grep " overlay ro,") &&
+  !(adb_sh grep "^overlay " /proc/mounts </dev/null | grep -v "^overlay /vendor/..* overlay ro," | grep " overlay ro,") &&
     !(adb_sh grep " rw," /proc/mounts </dev/null |
       skip_administrative_mounts data) ||
     die "remount overlayfs missed a spot (ro)"
@@ -539,7 +539,7 @@ adb_reboot &&
 if ${overlayfs_needed}; then
   D=`adb_su df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep "^overlay "` ||
+    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` ||
     ( echo "${L}" && false ) ||
     die -d "overlay takeover failed after reboot"
 
@@ -621,7 +621,7 @@ else
     adb_root &&
       D=`adb_sh df -k </dev/null` &&
       H=`echo "${D}" | head -1` &&
-      D=`echo "${D}" | grep "^overlay "` &&
+      D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
       echo "${H}" &&
       echo "${D}" &&
       echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
