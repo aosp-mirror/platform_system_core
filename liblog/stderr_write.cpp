@@ -45,8 +45,7 @@
 static int stderrOpen();
 static void stderrClose();
 static int stderrAvailable(log_id_t logId);
-static int stderrWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
-                       size_t nr);
+static int stderrWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct stderrContext {
   AndroidLogFormat* logformat;
@@ -56,13 +55,13 @@ struct stderrContext {
 };
 
 LIBLOG_HIDDEN struct android_log_transport_write stderrLoggerWrite = {
-  .node = { &stderrLoggerWrite.node, &stderrLoggerWrite.node },
-  .context.priv = NULL,
-  .name = "stderr",
-  .available = stderrAvailable,
-  .open = stderrOpen,
-  .close = stderrClose,
-  .write = stderrWrite,
+    .node = {&stderrLoggerWrite.node, &stderrLoggerWrite.node},
+    .context.priv = NULL,
+    .name = "stderr",
+    .available = stderrAvailable,
+    .open = stderrOpen,
+    .close = stderrClose,
+    .write = stderrWrite,
 };
 
 static int stderrOpen() {
@@ -78,7 +77,7 @@ static int stderrOpen() {
     return fileno(stderr);
   }
 
-  ctx = calloc(1, sizeof(struct stderrContext));
+  ctx = static_cast<stderrContext*>(calloc(1, sizeof(stderrContext)));
   if (!ctx) {
     return -ENOMEM;
   }
@@ -123,7 +122,7 @@ static int stderrOpen() {
 }
 
 static void stderrClose() {
-  struct stderrContext* ctx = stderrLoggerWrite.context.priv;
+  stderrContext* ctx = static_cast<stderrContext*>(stderrLoggerWrite.context.priv);
 
   if (ctx) {
     stderrLoggerWrite.context.priv = NULL;
@@ -147,14 +146,13 @@ static int stderrAvailable(log_id_t logId) {
   return 1;
 }
 
-static int stderrWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
-                       size_t nr) {
+static int stderrWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   struct log_msg log_msg;
   AndroidLogEntry entry;
   char binaryMsgBuf[1024];
   int err;
   size_t i;
-  struct stderrContext* ctx = stderrLoggerWrite.context.priv;
+  stderrContext* ctx = static_cast<stderrContext*>(stderrLoggerWrite.context.priv);
 
   if (!ctx) return -EBADF;
   if (!vec || !nr) return -EINVAL;

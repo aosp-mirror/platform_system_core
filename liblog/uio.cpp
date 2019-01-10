@@ -26,7 +26,7 @@ LIBLOG_ABI_PUBLIC int readv(int fd, struct iovec* vecs, int count) {
   int total = 0;
 
   for (; count > 0; count--, vecs++) {
-    char* buf = vecs->iov_base;
+    char* buf = static_cast<char*>(vecs->iov_base);
     int len = vecs->iov_len;
 
     while (len > 0) {
@@ -50,7 +50,7 @@ LIBLOG_ABI_PUBLIC int writev(int fd, const struct iovec* vecs, int count) {
   int total = 0;
 
   for (; count > 0; count--, vecs++) {
-    const char* buf = vecs->iov_base;
+    const char* buf = static_cast<const char*>(vecs->iov_base);
     int len = vecs->iov_len;
 
     while (len > 0) {

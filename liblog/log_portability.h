@@ -46,7 +46,7 @@
 #if defined(_WIN32)
 #define LIBLOG_WEAK static /* Accept that it is totally private */
 #else
-#define LIBLOG_WEAK __attribute__((weak, visibility("default")))
+#define LIBLOG_WEAK extern "C" __attribute__((weak, visibility("default")))
 #endif
 
 /* possible missing definitions in sys/cdefs.h */
@@ -60,11 +60,6 @@
 #define __BEGIN_DECLS
 #define __END_DECLS
 #endif
-#endif
-
-/* Unused argument. For C code only, remove symbol name for C++ */
-#ifndef __unused
-#define __unused __attribute__((__unused__))
 #endif
 
 /* possible missing definitions in unistd.h */

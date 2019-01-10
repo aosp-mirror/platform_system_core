@@ -17,6 +17,9 @@
  * Intercepts log messages intended for the Android log device.
  * Messages are printed to stderr.
  */
+
+#include "fake_log_device.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -32,7 +35,6 @@
 #include <android/log.h>
 #include <log/uio.h>
 
-#include "fake_log_device.h"
 #include "log_portability.h"
 
 #define kMaxTagLen 16 /* from the long-dead utils/Log.cpp */
@@ -181,8 +183,7 @@ static void configureInitialState(const char* pathName, LogState* logState) {
   logState->debugName[sizeof(logState->debugName) - 1] = '\0';
 
   /* identify binary logs */
-  if (!strcmp(pathName + kDevLogLen, "events") ||
-      !strcmp(pathName + kDevLogLen, "security")) {
+  if (!strcmp(pathName + kDevLogLen, "events") || !strcmp(pathName + kDevLogLen, "security")) {
     logState->isBinary = 1;
   }
 
@@ -204,8 +205,7 @@ static void configureInitialState(const char* pathName, LogState* logState) {
       while (isspace(*tags)) tags++;
 
       i = 0;
-      while (*tags != '\0' && !isspace(*tags) && *tags != ':' &&
-             i < kMaxTagLen) {
+      while (*tags != '\0' && !isspace(*tags) && *tags != ':' && i < kMaxTagLen) {
         tagName[i++] = *tags++;
       }
       if (i == kMaxTagLen) {
@@ -313,13 +313,11 @@ static void configureInitialState(const char* pathName, LogState* logState) {
  */
 static const char* getPriorityString(int priority) {
   /* the first character of each string should be unique */
-  static const char* priorityStrings[] = { "Verbose", "Debug", "Info",
-                                           "Warn",    "Error", "Assert" };
+  static const char* priorityStrings[] = {"Verbose", "Debug", "Info", "Warn", "Error", "Assert"};
   int idx;
 
   idx = (int)priority - (int)ANDROID_LOG_VERBOSE;
-  if (idx < 0 ||
-      idx >= (int)(sizeof(priorityStrings) / sizeof(priorityStrings[0])))
+  if (idx < 0 || idx >= (int)(sizeof(priorityStrings) / sizeof(priorityStrings[0])))
     return "?unknown?";
   return priorityStrings[idx];
 }
@@ -351,8 +349,7 @@ static ssize_t fake_writev(int fd, const struct iovec* iov, int iovcnt) {
  *
  * Log format parsing taken from the long-dead utils/Log.cpp.
  */
-static void showLog(LogState* state, int logPrio, const char* tag,
-                    const char* msg) {
+static void showLog(LogState* state, int logPrio, const char* tag, const char* msg) {
 #if !defined(_WIN32)
   struct tm tmBuf;
 #endif
@@ -397,19 +394,16 @@ static void showLog(LogState* state, int logPrio, const char* tag,
 
   switch (state->outputFormat) {
     case FORMAT_TAG:
-      prefixLen =
-          snprintf(prefixBuf, sizeof(prefixBuf), "%c/%-8s: ", priChar, tag);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%c/%-8s: ", priChar, tag);
       strcpy(suffixBuf, "\n");
       suffixLen = 1;
       break;
     case FORMAT_PROCESS:
-      prefixLen =
-          snprintf(prefixBuf, sizeof(prefixBuf), "%c(%5d) ", priChar, pid);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%c(%5d) ", priChar, pid);
       suffixLen = snprintf(suffixBuf, sizeof(suffixBuf), "  (%s)\n", tag);
       break;
     case FORMAT_THREAD:
-      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%c(%5d:%5d) ",
-                           priChar, pid, tid);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%c(%5d:%5d) ", priChar, pid, tid);
       strcpy(suffixBuf, "\n");
       suffixLen = 1;
       break;
@@ -420,28 +414,24 @@ static void showLog(LogState* state, int logPrio, const char* tag,
       suffixLen = 1;
       break;
     case FORMAT_TIME:
-      prefixLen =
-          snprintf(prefixBuf, sizeof(prefixBuf), "%s %-8s\n\t", timeBuf, tag);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%s %-8s\n\t", timeBuf, tag);
       strcpy(suffixBuf, "\n");
       suffixLen = 1;
       break;
     case FORMAT_THREADTIME:
-      prefixLen =
-          snprintf(prefixBuf, sizeof(prefixBuf), "%s %5d %5d %c %-8s \n\t",
-                   timeBuf, pid, tid, priChar, tag);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%s %5d %5d %c %-8s \n\t", timeBuf, pid,
+                           tid, priChar, tag);
       strcpy(suffixBuf, "\n");
       suffixLen = 1;
       break;
     case FORMAT_LONG:
-      prefixLen =
-          snprintf(prefixBuf, sizeof(prefixBuf), "[ %s %5d:%5d %c/%-8s ]\n",
-                   timeBuf, pid, tid, priChar, tag);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "[ %s %5d:%5d %c/%-8s ]\n", timeBuf, pid,
+                           tid, priChar, tag);
       strcpy(suffixBuf, "\n\n");
       suffixLen = 2;
       break;
     default:
-      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-                           "%c/%-8s(%5d): ", priChar, tag, pid);
+      prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%c/%-8s(%5d): ", priChar, tag, pid);
       strcpy(suffixBuf, "\n");
       suffixLen = 1;
       break;
@@ -559,8 +549,7 @@ static void showLog(LogState* state, int logPrio, const char* tag,
  *  tag (N bytes -- null-terminated ASCII string)
  *  message (N bytes -- null-terminated ASCII string)
  */
-LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
-                                    int count) {
+LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count) {
   LogState* state;
 
   /* Make sure that no-one frees the LogState while we're using it.
@@ -572,17 +561,24 @@ LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
   state = fdToLogState(fd);
   if (state == NULL) {
     errno = EBADF;
-    goto error;
+    unlock();
+    return -1;
   }
 
   if (state->isBinary) {
     TRACE("%s: ignoring binary log\n", state->debugName);
-    goto bail;
+    unlock();
+    int len = 0;
+    for (int i = 0; i < count; ++i) {
+      len += vector[i].iov_len;
+    }
+    return len;
   }
 
   if (count != 3) {
     TRACE("%s: writevLog with count=%d not expected\n", state->debugName, count);
-    goto error;
+    unlock();
+    return -1;
   }
 
   /* pull out the three fields */
@@ -598,7 +594,6 @@ LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
       break; /* reached end of configured values */
 
     if (strcmp(state->tagSet[i].tag, tag) == 0) {
-      // TRACE("MATCH tag '%s'\n", tag);
       minPrio = state->tagSet[i].minPriority;
       break;
     }
@@ -606,21 +601,14 @@ LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
 
   if (logPrio >= minPrio) {
     showLog(state, logPrio, tag, msg);
-  } else {
-    // TRACE("+++ NOLOG(%d): %s %s", logPrio, tag, msg);
   }
 
-bail:
   unlock();
   int len = 0;
   for (i = 0; i < count; ++i) {
     len += vector[i].iov_len;
   }
   return len;
-
-error:
-  unlock();
-  return -1;
 }
 
 /*
@@ -663,22 +651,16 @@ LIBLOG_HIDDEN int fakeLogOpen(const char* pathName) {
   return fd;
 }
 
-LIBLOG_HIDDEN ssize_t __send_log_msg(char* buf __unused,
-                                     size_t buf_size __unused) {
+LIBLOG_HIDDEN ssize_t __send_log_msg(char*, size_t) {
   return -ENODEV;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio,
-                                                const char* tag __unused,
-                                                int def) {
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char*, int def) {
   int logLevel = def;
   return logLevel >= 0 && prio >= logLevel;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio,
-                                                    const char* tag __unused,
-                                                    size_t len __unused,
-                                                    int def) {
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio, const char*, size_t, int def) {
   int logLevel = def;
   return logLevel >= 0 && prio >= logLevel;
 }
