@@ -145,10 +145,9 @@ that was used when opening the sub-log.  It is recommended to open the log `ANDR
 these cases.
 
 `android_set_log_transport()` selects transport filters.  Argument is either `LOGGER_DEFAULT`,
-`LOGGER_LOGD`, `LOGGER_NULL` or `LOGGER_LOCAL`. Log to logger daemon for default or logd, drop
-contents on floor, or log into local memory respectively.  `Both android_set_log_transport()` and
-`android_get_log_transport()` return the current transport mask, or a negative errno for any
-problems.
+`LOGGER_LOGD`, or `LOGGER_NULL`. Log to logger daemon for default or logd, or drop contents on floor
+respectively.  `Both android_set_log_transport()` and `android_get_log_transport()` return the
+current transport mask, or a negative errno for any problems.
 
 Errors
 ------

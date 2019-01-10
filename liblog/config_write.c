@@ -55,13 +55,6 @@ static void __android_log_add_transport(
 }
 
 LIBLOG_HIDDEN void __android_log_config_write() {
-  if (__android_log_transport & LOGGER_LOCAL) {
-    extern struct android_log_transport_write localLoggerWrite;
-
-    __android_log_add_transport(&__android_log_transport_write,
-                                &localLoggerWrite);
-  }
-
   if ((__android_log_transport == LOGGER_DEFAULT) ||
       (__android_log_transport & LOGGER_LOGD)) {
 #if (FAKE_LOG_DEVICE == 0)
