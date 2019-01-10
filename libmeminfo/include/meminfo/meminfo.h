@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -32,6 +33,7 @@ struct MemUsage {
     uint64_t uss;
 
     uint64_t swap;
+    uint64_t swap_pss;
 
     uint64_t private_clean;
     uint64_t private_dirty;
@@ -44,6 +46,7 @@ struct MemUsage {
           pss(0),
           uss(0),
           swap(0),
+          swap_pss(0),
           private_clean(0),
           private_dirty(0),
           shared_clean(0),
@@ -52,7 +55,7 @@ struct MemUsage {
     ~MemUsage() = default;
 
     void clear() {
-        vss = rss = pss = uss = swap = 0;
+        vss = rss = pss = uss = swap = swap_pss = 0;
         private_clean = private_dirty = shared_clean = shared_dirty = 0;
     }
 };
@@ -64,9 +67,15 @@ struct Vma {
     uint16_t flags;
     std::string name;
 
+    Vma() : start(0), end(0), offset(0), flags(0), name("") {}
     Vma(uint64_t s, uint64_t e, uint64_t off, uint16_t f, const char* n)
         : start(s), end(e), offset(off), flags(f), name(n) {}
     ~Vma() = default;
+
+    void clear() {
+        memset(&usage, 0, sizeof(usage));
+        memset(&wss, 0, sizeof(wss));
+    }
 
     // Memory usage of this mapping.
     MemUsage usage;
