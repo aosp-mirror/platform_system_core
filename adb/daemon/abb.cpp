@@ -22,6 +22,8 @@
 
 #include <sys/wait.h>
 
+#include <android-base/cmsg.h>
+
 namespace {
 
 class AdbFdTextOutput : public android::TextOutput {
@@ -83,8 +85,8 @@ int main(int argc, char* const argv[]) {
             break;
         }
 
-        auto result = StartCommandInProcess(std::move(data), &execCmd);
-        if (!SendFileDescriptor(fd, result)) {
+        unique_fd result = StartCommandInProcess(std::move(data), &execCmd);
+        if (android::base::SendFileDescriptors(fd, "", 1, result.get()) != 1) {
             PLOG(ERROR) << "Failed to send an inprocess fd for command: " << data;
             break;
         }

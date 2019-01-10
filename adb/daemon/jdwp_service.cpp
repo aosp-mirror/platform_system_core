@@ -32,6 +32,8 @@
 #include <memory>
 #include <vector>
 
+#include <android-base/cmsg.h>
+
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_unique_fd.h"
@@ -237,7 +239,7 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
         CHECK(!proc->out_fds.empty());
 
         int fd = proc->out_fds.back().get();
-        if (!SendFileDescriptor(socket, fd)) {
+        if (android::base::SendFileDescriptors(socket, "", 1, fd) != 1) {
             D("sending new file descriptor to JDWP %d failed: %s", proc->pid, strerror(errno));
             goto CloseProcess;
         }

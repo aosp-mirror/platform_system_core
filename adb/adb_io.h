@@ -74,13 +74,4 @@ bool WriteFdExactly(int fd, const std::string& s);
 
 // Same as above, but formats the string to send.
 bool WriteFdFmt(int fd, const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3)));
-
-#if !ADB_HOST
-// Sends an FD via Unix domain socket.
-bool SendFileDescriptor(int socket_fd, int fd);
-
-// Receives an FD via Unix domain socket.
-bool ReceiveFileDescriptor(int socket_fd, unique_fd* fd, std::string* error);
-#endif
-
 #endif /* ADB_IO_H */
