@@ -523,13 +523,13 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
 }
 
 // Mark the given block device as read-only, using the BLKROSET ioctl.
-bool fs_mgr_set_blk_ro(const std::string& blockdev) {
+bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly) {
     unique_fd fd(TEMP_FAILURE_RETRY(open(blockdev.c_str(), O_RDONLY | O_CLOEXEC)));
     if (fd < 0) {
         return false;
     }
 
-    int ON = 1;
+    int ON = readonly;
     return ioctl(fd, BLKROSET, &ON) == 0;
 }
 
