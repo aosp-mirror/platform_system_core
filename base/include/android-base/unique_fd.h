@@ -103,7 +103,7 @@ class unique_fd_impl final {
   void reset(int new_value = -1) { reset(new_value, nullptr); }
 
   int get() const { return fd_; }
-  operator int() const { return get(); }
+  operator int() const { return get(); }  // NOLINT
 
   int release() __attribute__((warn_unused_result)) {
     tag(fd_, this, nullptr);
