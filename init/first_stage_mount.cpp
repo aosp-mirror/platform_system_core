@@ -414,15 +414,31 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
         return entry.mount_point == "/system";
     });
 
-    if (system_partition != fstab_.end()) {
-        if (!MountPartition(&(*system_partition))) {
-            return false;
+    if (system_partition == fstab_.end()) return true;
+
+    bool mounted = false;
+    bool no_fail = false;
+    for (auto it = system_partition; it != fstab_.end();) {
+        if (it->mount_point != "/system") {
+            break;
         }
-
-        SwitchRoot((*system_partition).mount_point);
-
-        fstab_.erase(system_partition);
+        no_fail |= (it->fs_mgr_flags).no_fail;
+        if (MountPartition(&(*it))) {
+            mounted = true;
+            SwitchRoot("/system");
+            break;
+        }
+        it++;
     }
+
+    if (!mounted && !no_fail) {
+        LOG(ERROR) << "Failed to mount /system";
+        return false;
+    }
+
+    auto it = std::remove_if(fstab_.begin(), fstab_.end(),
+                             [](const auto& entry) { return entry.mount_point == "/system"; });
+    fstab_.erase(it, fstab_.end());
 
     return true;
 }
@@ -444,14 +460,12 @@ bool FirstStageMount::TrySkipMountingPartitions() {
         if (skip_mount_point.empty()) {
             continue;
         }
-        auto removing_entry =
-                std::find_if(fstab_.begin(), fstab_.end(), [&skip_mount_point](const auto& entry) {
-                    return entry.mount_point == skip_mount_point;
-                });
-        if (removing_entry != fstab_.end()) {
-            fstab_.erase(removing_entry);
-            LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
-        }
+        auto it = std::remove_if(fstab_.begin(), fstab_.end(),
+                                 [&skip_mount_point](const auto& entry) {
+                                     return entry.mount_point == skip_mount_point;
+                                 });
+        fstab_.erase(it, fstab_.end());
+        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
     }
 
     return true;
@@ -462,8 +476,21 @@ bool FirstStageMount::MountPartitions() {
 
     if (!TrySkipMountingPartitions()) return false;
 
-    for (auto& fstab_entry : fstab_) {
-        if (!MountPartition(&fstab_entry) && !fstab_entry.fs_mgr_flags.no_fail) {
+    for (auto it = fstab_.begin(); it != fstab_.end();) {
+        bool mounted = false;
+        bool no_fail = false;
+        auto start_mount_point = it->mount_point;
+        do {
+            no_fail |= (it->fs_mgr_flags).no_fail;
+            if (!mounted)
+                mounted = MountPartition(&(*it));
+            else
+                LOG(INFO) << "Skip already-mounted partition: " << start_mount_point;
+            it++;
+        } while (it != fstab_.end() && it->mount_point == start_mount_point);
+
+        if (!mounted && !no_fail) {
+            LOG(ERROR) << start_mount_point << " mounted unsuccessfully but it is required!";
             return false;
         }
     }
