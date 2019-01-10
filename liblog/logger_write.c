@@ -684,9 +684,9 @@ LIBLOG_ABI_PUBLIC int android_set_log_transport(int transport_flag) {
     return retval;
   }
 
-  __android_log_transport &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
+  __android_log_transport &= LOGGER_LOGD | LOGGER_STDERR;
 
-  transport_flag &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
+  transport_flag &= LOGGER_LOGD | LOGGER_STDERR;
 
   if (__android_log_transport != transport_flag) {
     __android_log_transport = transport_flag;
@@ -714,7 +714,7 @@ LIBLOG_ABI_PUBLIC int android_get_log_transport() {
   if (write_to_log == __write_to_log_null) {
     ret = LOGGER_NULL;
   } else {
-    __android_log_transport &= LOGGER_LOCAL | LOGGER_LOGD | LOGGER_STDERR;
+    __android_log_transport &= LOGGER_LOGD | LOGGER_STDERR;
     ret = __android_log_transport;
     if ((write_to_log != __write_to_log_init) &&
         (write_to_log != __write_to_log_daemon)) {
