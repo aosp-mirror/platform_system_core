@@ -525,7 +525,7 @@ void llkPanicKernel(bool dump, pid_t tid, const char* state, const std::string& 
         // NOTREACHED
         return;
     }
-    ::sync();
+    // Wish could ::sync() here, if storage is locked up, we will not continue.
     if (dump) {
         // Show all locks that are held
         android::base::WriteStringToFd("d", sysrqTriggerFd);
