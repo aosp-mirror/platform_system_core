@@ -26,6 +26,7 @@
 
 #include <chrono>
 
+#include <android-base/cmsg.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
@@ -41,6 +42,7 @@
 
 using namespace std::chrono_literals;
 
+using android::base::SendFileDescriptors;
 using android::base::unique_fd;
 
 static bool send_signal(pid_t pid, const DebuggerdDumpType dump_type) {
@@ -146,15 +148,16 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
     PLOG(ERROR) << "failed to set pipe buffer size";
   }
 
-  if (send_fd(set_timeout(sockfd), &req, sizeof(req), std::move(pipe_write)) != sizeof(req)) {
+  ssize_t rc = SendFileDescriptors(set_timeout(sockfd), &req, sizeof(req), pipe_write.get());
+  pipe_write.reset();
+  if (rc != sizeof(req)) {
     PLOG(ERROR) << "libdebuggerd_client: failed to send output fd to tombstoned";
     return false;
   }
 
   // Check to make sure we've successfully registered.
   InterceptResponse response;
-  ssize_t rc =
-      TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
+  rc = TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
     LOG(ERROR) << "libdebuggerd_client: failed to read initial response from tombstoned: "
                << "timeout reached?";
