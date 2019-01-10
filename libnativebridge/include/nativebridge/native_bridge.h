@@ -17,12 +17,17 @@
 #ifndef NATIVE_BRIDGE_H_
 #define NATIVE_BRIDGE_H_
 
-#include "jni.h"
 #include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
 
+#include "jni.h"
+
+#ifdef __cplusplus
 namespace android {
+extern "C" {
+#endif  // __cplusplus
 
 struct NativeBridgeRuntimeCallbacks;
 struct NativeBridgeRuntimeValues;
@@ -32,11 +37,10 @@ struct NativeBridgeRuntimeValues;
 // to the chain.
 typedef bool (*NativeBridgeSignalHandlerFn)(int, siginfo_t*, void*);
 
-
 // Open the native bridge, if any. Should be called by Runtime::Init(). A null library filename
 // signals that we do not want to load a native bridge.
 bool LoadNativeBridge(const char* native_bridge_library_filename,
-                      const NativeBridgeRuntimeCallbacks* runtime_callbacks);
+                      const struct NativeBridgeRuntimeCallbacks* runtime_callbacks);
 
 // Quick check whether a native bridge will be needed. This is based off of the instruction set
 // of the process.
@@ -138,19 +142,17 @@ bool NativeBridgeInitAnonymousNamespace(const char* public_ns_sonames,
 //
 // Starting with v3, NativeBridge has two scenarios: with/without namespace.
 // Should not use in non-namespace scenario.
-native_bridge_namespace_t* NativeBridgeCreateNamespace(const char* name,
-                                                       const char* ld_library_path,
-                                                       const char* default_library_path,
-                                                       uint64_t type,
-                                                       const char* permitted_when_isolated_path,
-                                                       native_bridge_namespace_t* parent_ns);
+struct native_bridge_namespace_t* NativeBridgeCreateNamespace(
+    const char* name, const char* ld_library_path, const char* default_library_path, uint64_t type,
+    const char* permitted_when_isolated_path, struct native_bridge_namespace_t* parent_ns);
 
 // Creates a link which shares some libraries from one namespace to another.
 // NativeBridge's peer of android_link_namespaces() of dynamic linker.
 //
 // Starting with v3, NativeBridge has two scenarios: with/without namespace.
 // Should not use in non-namespace scenario.
-bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_namespace_t* to,
+bool NativeBridgeLinkNamespaces(struct native_bridge_namespace_t* from,
+                                struct native_bridge_namespace_t* to,
                                 const char* shared_libs_sonames);
 
 // Load a shared library with namespace key that is supported by the native bridge.
@@ -159,10 +161,11 @@ bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_n
 //
 // Starting with v3, NativeBridge has two scenarios: with/without namespace.
 // Use NativeBridgeLoadLibrary() instead in non-namespace scenario.
-void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_namespace_t* ns);
+void* NativeBridgeLoadLibraryExt(const char* libpath, int flag,
+                                 struct native_bridge_namespace_t* ns);
 
 // Returns vendor namespace if it is enabled for the device and null otherwise
-native_bridge_namespace_t* NativeBridgeGetVendorNamespace();
+struct native_bridge_namespace_t* NativeBridgeGetVendorNamespace();
 
 // Native bridge interfaces to runtime.
 struct NativeBridgeCallbacks {
@@ -177,8 +180,8 @@ struct NativeBridgeCallbacks {
   //   runtime_cbs [IN] the pointer to NativeBridgeRuntimeCallbacks.
   // Returns:
   //   true if initialization was successful.
-  bool (*initialize)(const NativeBridgeRuntimeCallbacks* runtime_cbs, const char* private_dir,
-                     const char* instruction_set);
+  bool (*initialize)(const struct NativeBridgeRuntimeCallbacks* runtime_cbs,
+                     const char* private_dir, const char* instruction_set);
 
   // Load a shared library that is supported by the native bridge.
   //
@@ -314,12 +317,12 @@ struct NativeBridgeCallbacks {
   //
   // Starting with v3, NativeBridge has two scenarios: with/without namespace.
   // Should not use in non-namespace scenario.
-  native_bridge_namespace_t* (*createNamespace)(const char* name,
-                                                const char* ld_library_path,
-                                                const char* default_library_path,
-                                                uint64_t type,
-                                                const char* permitted_when_isolated_path,
-                                                native_bridge_namespace_t* parent_ns);
+  struct native_bridge_namespace_t* (*createNamespace)(const char* name,
+                                                       const char* ld_library_path,
+                                                       const char* default_library_path,
+                                                       uint64_t type,
+                                                       const char* permitted_when_isolated_path,
+                                                       struct native_bridge_namespace_t* parent_ns);
 
   // Creates a link which shares some libraries from one namespace to another.
   // NativeBridge's peer of android_link_namespaces() of dynamic linker.
@@ -334,8 +337,8 @@ struct NativeBridgeCallbacks {
   //
   // Starting with v3, NativeBridge has two scenarios: with/without namespace.
   // Should not use in non-namespace scenario.
-  bool (*linkNamespaces)(native_bridge_namespace_t* from, native_bridge_namespace_t* to,
-                         const char* shared_libs_sonames);
+  bool (*linkNamespaces)(struct native_bridge_namespace_t* from,
+                         struct native_bridge_namespace_t* to, const char* shared_libs_sonames);
 
   // Load a shared library within a namespace.
   // NativeBridge's peer of android_dlopen_ext() of dynamic linker, only supports namespace
@@ -350,7 +353,7 @@ struct NativeBridgeCallbacks {
   //
   // Starting with v3, NativeBridge has two scenarios: with/without namespace.
   // Use loadLibrary instead in non-namespace scenario.
-  void* (*loadLibraryExt)(const char* libpath, int flag, native_bridge_namespace_t* ns);
+  void* (*loadLibraryExt)(const char* libpath, int flag, struct native_bridge_namespace_t* ns);
 
   // Get native bridge version of vendor namespace.
   // The vendor namespace is the namespace used to load vendor public libraries.
@@ -359,7 +362,7 @@ struct NativeBridgeCallbacks {
   //
   // Returns:
   //   vendor namespace or null if it was not set up for the device
-  native_bridge_namespace_t* (*getVendorNamespace)();
+  struct native_bridge_namespace_t* (*getVendorNamespace)();
 };
 
 // Runtime interfaces to native bridge.
@@ -396,6 +399,9 @@ struct NativeBridgeRuntimeCallbacks {
                                uint32_t method_count);
 };
 
-};  // namespace android
+#ifdef __cplusplus
+}  // extern "C"
+}  // namespace android
+#endif  // __cplusplus
 
 #endif  // NATIVE_BRIDGE_H_
