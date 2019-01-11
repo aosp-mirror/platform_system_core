@@ -549,6 +549,58 @@ TEST_F(BuilderTest, GroupSizeLimits) {
     EXPECT_EQ(partition->size(), 16384);
 }
 
+TEST_F(BuilderTest, ListPartitionsInGroup) {
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("groupA", 16384));
+    ASSERT_TRUE(builder->AddGroup("groupB", 16384));
+
+    Partition* system = builder->AddPartition("system", "groupA", 0);
+    Partition* vendor = builder->AddPartition("vendor", "groupA", 0);
+    Partition* product = builder->AddPartition("product", "groupB", 0);
+    ASSERT_NE(system, nullptr);
+    ASSERT_NE(vendor, nullptr);
+    ASSERT_NE(product, nullptr);
+
+    auto groupA = builder->ListPartitionsInGroup("groupA");
+    auto groupB = builder->ListPartitionsInGroup("groupB");
+    auto groupC = builder->ListPartitionsInGroup("groupC");
+    ASSERT_THAT(groupA, ElementsAre(system, vendor));
+    ASSERT_THAT(groupB, ElementsAre(product));
+    ASSERT_TRUE(groupC.empty());
+}
+
+TEST_F(BuilderTest, ChangeGroups) {
+    BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("groupA", 16384));
+    ASSERT_TRUE(builder->AddGroup("groupB", 32768));
+
+    Partition* system = builder->AddPartition("system", "groupA", 0);
+    Partition* vendor = builder->AddPartition("vendor", "groupB", 0);
+    ASSERT_NE(system, nullptr);
+    ASSERT_NE(vendor, nullptr);
+    ASSERT_NE(builder->Export(), nullptr);
+
+    ASSERT_FALSE(builder->ChangePartitionGroup(system, "groupXYZ"));
+    ASSERT_TRUE(builder->ChangePartitionGroup(system, "groupB"));
+    ASSERT_NE(builder->Export(), nullptr);
+
+    // Violate group constraint by reassigning groups.
+    ASSERT_TRUE(builder->ResizePartition(system, 16384 + 4096));
+    ASSERT_TRUE(builder->ChangePartitionGroup(system, "groupA"));
+    ASSERT_EQ(builder->Export(), nullptr);
+
+    ASSERT_FALSE(builder->ChangeGroupSize("default", 2));
+    ASSERT_FALSE(builder->ChangeGroupSize("unknown", 2));
+    ASSERT_TRUE(builder->ChangeGroupSize("groupA", 32768));
+    ASSERT_NE(builder->Export(), nullptr);
+}
+
 constexpr unsigned long long operator"" _GiB(unsigned long long x) {  // NOLINT
     return x << 30;
 }
