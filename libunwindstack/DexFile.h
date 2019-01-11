@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#include <art_api/ext_dex_file.h>
+#include <art_api/dex_file_support.h>
 
 namespace unwindstack {
 
