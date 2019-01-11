@@ -122,29 +122,26 @@ bool GetHashtreeDescriptor(const std::string& partition_name,
     bool found = false;
     const uint8_t* desc_partition_name;
 
-    for (size_t i = 0; i < vbmeta_images.size() && !found; i++) {
-        // Get descriptors from vbmeta_images[i].
+    for (const auto& vbmeta : vbmeta_images) {
         size_t num_descriptors;
         std::unique_ptr<const AvbDescriptor* [], decltype(&avb_free)> descriptors(
-                avb_descriptor_get_all(vbmeta_images[i].data(), vbmeta_images[i].size(),
-                                       &num_descriptors),
-                avb_free);
+                avb_descriptor_get_all(vbmeta.data(), vbmeta.size(), &num_descriptors), avb_free);
 
         if (!descriptors || num_descriptors < 1) {
             continue;
         }
 
-        for (size_t j = 0; j < num_descriptors && !found; j++) {
+        for (size_t n = 0; n < num_descriptors && !found; n++) {
             AvbDescriptor desc;
-            if (!avb_descriptor_validate_and_byteswap(descriptors[j], &desc)) {
-                LWARNING << "Descriptor[" << j << "] is invalid";
+            if (!avb_descriptor_validate_and_byteswap(descriptors[n], &desc)) {
+                LWARNING << "Descriptor[" << n << "] is invalid";
                 continue;
             }
             if (desc.tag == AVB_DESCRIPTOR_TAG_HASHTREE) {
                 desc_partition_name =
-                        (const uint8_t*)descriptors[j] + sizeof(AvbHashtreeDescriptor);
+                        (const uint8_t*)descriptors[n] + sizeof(AvbHashtreeDescriptor);
                 if (!avb_hashtree_descriptor_validate_and_byteswap(
-                            (AvbHashtreeDescriptor*)descriptors[j], out_hashtree_desc)) {
+                            (AvbHashtreeDescriptor*)descriptors[n], out_hashtree_desc)) {
                     continue;
                 }
                 if (out_hashtree_desc->partition_name_len != partition_name.length()) {
@@ -158,6 +155,8 @@ bool GetHashtreeDescriptor(const std::string& partition_name,
                 }
             }
         }
+
+        if (found) break;
     }
 
     if (!found) {
