@@ -37,7 +37,7 @@
 #include <libavb/libavb.h>
 #include <utils/Compat.h>
 
-#include "fs_mgr_priv.h"
+#include "util.h"
 
 using namespace std::literals;
 
@@ -127,7 +127,7 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
     const std::string path = "/dev/block/by-name/"s + partition;
 
     // Ensures the device path (a symlink created by init) is ready to access.
-    if (!fs_mgr_wait_for_file(path, 1s)) {
+    if (!WaitForFile(path, 1s)) {
         return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
     }
 
