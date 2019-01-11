@@ -40,6 +40,11 @@ cc_library_static {
     header_libs: [
         "libbase_headers",
     ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
 
 cc_defaults {
