@@ -37,7 +37,7 @@ class VBMetaData {
     // Constructors
     VBMetaData() : vbmeta_ptr_(nullptr), vbmeta_size_(0){};
 
-    VBMetaData(uint8_t* data, size_t size)
+    VBMetaData(const uint8_t* data, size_t size)
         : vbmeta_ptr_(new (std::nothrow) uint8_t[size]), vbmeta_size_(size) {
         // The ownership of data is NOT transferred, i.e., the caller still
         // needs to release the memory as we make a copy here.
@@ -49,8 +49,8 @@ class VBMetaData {
 
     // Get methods for each data member.
     const std::string& device_path() const { return device_path_; }
-    uint8_t* vbmeta_data() const { return vbmeta_ptr_.get(); }
-    const size_t& vbmeta_size() const { return vbmeta_size_; }
+    uint8_t* data() const { return vbmeta_ptr_.get(); }
+    const size_t& size() const { return vbmeta_size_; }
 
     // Maximum size of a vbmeta data - 64 KiB.
     static const size_t kMaxVBMetaSize = 64 * 1024;

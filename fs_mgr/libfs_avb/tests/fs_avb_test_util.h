@@ -79,7 +79,7 @@ class BaseFsAvbTest : public ::testing::Test {
 
     // Generate a file with name |file_name| of size |image_size| with
     // known content (0x00 0x01 0x02 .. 0xff 0x00 0x01 ..).
-    base::FilePath GenerateImage(const std::string file_name, size_t image_size,
+    base::FilePath GenerateImage(const std::string& file_name, size_t image_size,
                                  uint8_t start_byte = 0);
     // Invokes 'avbtool add_hash_footer' or 'avbtool add_hashtree_footer' to sign
     // the |image_path|. The |footer_type| can be either "hash" or "hashtree".
@@ -107,6 +107,8 @@ class BaseFsAvbTest : public ::testing::Test {
     base::FilePath test_dir_;
     // Maps vbmeta image name (e.g., vbmeta_a.img, system_a.img) to VBMetaImage.
     std::map<std::string, VBMetaImage> vbmeta_images_;
+
+    static base::FilePath data_dir_;
 };
 
 }  // namespace fs_avb_host_test
