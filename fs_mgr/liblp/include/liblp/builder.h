@@ -80,6 +80,8 @@ class ZeroExtent final : public Extent {
 };
 
 class PartitionGroup final {
+    friend class MetadataBuilder;
+
   public:
     explicit PartitionGroup(const std::string& name, uint64_t maximum_size)
         : name_(name), maximum_size_(maximum_size) {}
@@ -88,6 +90,8 @@ class PartitionGroup final {
     uint64_t maximum_size() const { return maximum_size_; }
 
   private:
+    void set_maximum_size(uint64_t maximum_size) { maximum_size_ = maximum_size; }
+
     std::string name_;
     uint64_t maximum_size_;
 };
@@ -116,6 +120,7 @@ class Partition final {
 
   private:
     void ShrinkTo(uint64_t aligned_size);
+    void set_group_name(const std::string& group_name) { group_name_ = group_name; }
 
     std::string name_;
     std::string group_name_;
@@ -235,6 +240,21 @@ class MetadataBuilder {
     // underlying filesystem or contents of the partition on disk.
     bool ResizePartition(Partition* partition, uint64_t requested_size);
 
+    // Return the list of partitions belonging to a group.
+    std::vector<Partition*> ListPartitionsInGroup(const std::string& group_name);
+
+    // Changes a partition's group. Size constraints will not be checked until
+    // the metadata is exported, to avoid errors during potential group and
+    // size shuffling operations. This will return false if the new group does
+    // not exist.
+    bool ChangePartitionGroup(Partition* partition, const std::string& group_name);
+
+    // Changes the size of a partition group. Size constraints will not be
+    // checked until metadata is exported, to avoid errors during group
+    // reshuffling. This will return false if the group does not exist, or if
+    // the group name is "default".
+    bool ChangeGroupSize(const std::string& group_name, uint64_t maximum_size);
+
     // Amount of space that can be allocated to logical partitions.
     uint64_t AllocatableSpace() const;
     uint64_t UsedSpace() const;
@@ -283,6 +303,7 @@ class MetadataBuilder {
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
     bool IsABDevice() const;
     bool IsRetrofitDevice() const;
+    bool ValidatePartitionGroups() const;
 
     struct Interval {
         uint32_t device_index;
