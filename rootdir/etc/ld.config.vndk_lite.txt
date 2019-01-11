@@ -57,8 +57,7 @@ namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.default.links = runtime
-namespace.default.link.runtime.shared_libs  = libc.so:libdl.so:libm.so
-namespace.default.link.runtime.shared_libs += libart.so:libartd.so
+namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
 
@@ -110,12 +109,8 @@ namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 
 # Once in this namespace, access to libraries in /system/lib is restricted. Only
 # libs listed here can be used.
-namespace.sphal.links = runtime,default,vndk,rs
+namespace.sphal.links = default,vndk,rs
 
-namespace.sphal.link.runtime.shared_libs = libc.so:libdl.so:libm.so
-
-# LLNDK_LIBRARIES includes the runtime libs above, but the order here ensures
-# that they are loaded from the runtime namespace.
 namespace.sphal.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.sphal.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
@@ -162,9 +157,7 @@ namespace.rs.asan.permitted.paths += /data/asan/vendor/${LIB}
 namespace.rs.asan.permitted.paths +=           /vendor/${LIB}
 namespace.rs.asan.permitted.paths += /data
 
-namespace.rs.links = runtime,default,vndk
-
-namespace.rs.link.runtime.shared_libs = libc.so:libdl.so:libm.so
+namespace.rs.links = default,vndk
 
 namespace.rs.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.rs.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -215,9 +208,7 @@ namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
-namespace.vndk.links = runtime,default
-
-namespace.vndk.link.runtime.shared_libs = libc.so:libdl.so:libm.so
+namespace.vndk.links = default
 
 namespace.vndk.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -230,7 +221,6 @@ namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = runtime
 namespace.default.isolated = false
 
 namespace.default.search.paths  = /odm/${LIB}
@@ -270,47 +260,16 @@ namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
-namespace.default.links = runtime
-namespace.default.link.runtime.shared_libs = libc.so:libdl.so:libm.so
-
-###############################################################################
-# "runtime" APEX namespace
-#
-# This namespace pulls in externally accessible libs from the Runtime APEX.
-###############################################################################
-namespace.runtime.isolated = true
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.links = default
-# TODO(b/119867084): Restrict to Bionic dlopen dependencies.
-namespace.runtime.link.default.allow_all_shared_libs = true
-
-
 ###############################################################################
 # Namespace config for binaries under /postinstall.
-# Only default and runtime namespaces are defined and default has no directories
+# Only default namespace is defined and default has no directories
 # other than /system/lib in the search paths. This is because linker calls
 # realpath on the search paths and this causes selinux denial if the paths
 # (/vendor, /odm) are not allowed to the postinstall binaries. There is no
 # reason to allow the binaries to access the paths.
 ###############################################################################
 [postinstall]
-additional.namespaces = runtime
-
 namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
-
-namespace.default.links = runtime
-namespace.default.link.runtime.shared_libs = libc.so:libdl.so:libm.so
-
-###############################################################################
-# "runtime" APEX namespace
-#
-# This namespace pulls in externally accessible libs from the Runtime APEX.
-###############################################################################
-namespace.runtime.isolated = true
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.links = default
-# TODO(b/119867084): Restrict to Bionic dlopen dependencies.
-namespace.runtime.link.default.allow_all_shared_libs = true
