@@ -23,7 +23,7 @@
 #include <memory>
 
 #include <android-base/unique_fd.h>
-#include <art_api/ext_dex_file.h>
+#include <art_api/dex_file_support.h>
 
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Memory.h>
@@ -46,7 +46,7 @@ std::unique_ptr<DexFile> DexFile::Create(uint64_t dex_file_offset_in_memory, Mem
 
 bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name,
                                    uint64_t* method_offset) {
-  art_api::dex::MethodInfo method_info = GetMethodInfoForOffset(dex_offset);
+  art_api::dex::MethodInfo method_info = GetMethodInfoForOffset(dex_offset, false);
   if (method_info.offset == 0) {
     return false;
   }
