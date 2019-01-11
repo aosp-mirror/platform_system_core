@@ -223,6 +223,23 @@ extern bool packagelist_parse(pfn_on_package callback, void *userdata)
             }
         }
 
+        cur = strsep(&next, " \t\r\n");
+        if (cur) {
+            tmp = strtoul(cur, &endptr, 10);
+            if (*endptr != '\0') {
+                errmsg = "Could not convert field \"profileable_from_shell\" to integer value";
+                goto err;
+            }
+
+            /* should be a valid boolean of 1 or 0 */
+            if (!(tmp == 0 || tmp == 1)) {
+                errmsg = "Field \"profileable_from_shell\" is not 0 or 1 boolean value";
+                goto err;
+            }
+
+            pkg_info->profileable_from_shell = (bool)tmp;
+        }
+
         rc = callback(pkg_info, userdata);
         if (rc == false) {
             /*
