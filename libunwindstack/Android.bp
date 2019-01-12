@@ -221,7 +221,6 @@ cc_test {
         "liblog",
         "liblzma",
         "libunwindstack",
-        "libdexfile",
         "libdexfile_support",
     ],
 
