@@ -501,6 +501,197 @@ finalize_session:
     return EXIT_FAILURE;
 }
 
+int install_multi_package(int argc, const char** argv) {
+    // Find all APK arguments starting at end.
+    // All other arguments passed through verbatim.
+    int first_apk = -1;
+    for (int i = argc - 1; i >= 0; i--) {
+        const char* file = argv[i];
+        if (android::base::EndsWithIgnoreCase(file, ".apk")) {
+            first_apk = i;
+        } else {
+            break;
+        }
+    }
+
+    if (first_apk == -1) error_exit("need APK file on command line");
+
+    if (use_legacy_install()) {
+        fprintf(stderr, "adb: multi-package install is not supported on this device\n");
+        return EXIT_FAILURE;
+    }
+    std::string install_cmd = "exec:cmd package";
+
+    std::string multi_package_cmd =
+            android::base::StringPrintf("%s install-create --multi-package", install_cmd.c_str());
+
+    // Create multi-package install session
+    std::string error;
+    int fd = adb_connect(multi_package_cmd, &error);
+    if (fd < 0) {
+        fprintf(stderr, "adb: connect error for create multi-package: %s\n", error.c_str());
+        return EXIT_FAILURE;
+    }
+    char buf[BUFSIZ];
+    read_status_line(fd, buf, sizeof(buf));
+    adb_close(fd);
+
+    int parent_session_id = -1;
+    if (!strncmp("Success", buf, 7)) {
+        char* start = strrchr(buf, '[');
+        char* end = strrchr(buf, ']');
+        if (start && end) {
+            *end = '\0';
+            parent_session_id = strtol(start + 1, nullptr, 10);
+        }
+    }
+    if (parent_session_id < 0) {
+        fprintf(stderr, "adb: failed to create multi-package session\n");
+        fputs(buf, stderr);
+        return EXIT_FAILURE;
+    }
+
+    fprintf(stdout, "Created parent session ID %d.\n", parent_session_id);
+
+    std::vector<int> session_ids;
+
+    // Valid session, now create the individual sessions and stream the APKs
+    int success = EXIT_FAILURE;
+    std::string individual_cmd =
+            android::base::StringPrintf("%s install-create", install_cmd.c_str());
+    std::string all_session_ids = "";
+    for (int i = 1; i < first_apk; i++) {
+        individual_cmd += " " + escape_arg(argv[i]);
+    }
+    std::string cmd = "";
+    for (int i = first_apk; i < argc; i++) {
+        // Create individual install session
+        fd = adb_connect(individual_cmd, &error);
+        if (fd < 0) {
+            fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
+            goto finalize_multi_package_session;
+        }
+        char buf[BUFSIZ];
+        read_status_line(fd, buf, sizeof(buf));
+        adb_close(fd);
+
+        int session_id = -1;
+        if (!strncmp("Success", buf, 7)) {
+            char* start = strrchr(buf, '[');
+            char* end = strrchr(buf, ']');
+            if (start && end) {
+                *end = '\0';
+                session_id = strtol(start + 1, nullptr, 10);
+            }
+        }
+        if (session_id < 0) {
+            fprintf(stderr, "adb: failed to create multi-package session\n");
+            fputs(buf, stderr);
+            goto finalize_multi_package_session;
+        }
+
+        fprintf(stdout, "Created child session ID %d.\n", session_id);
+        session_ids.push_back(session_id);
+
+        const char* file = argv[i];
+        struct stat sb;
+        if (stat(file, &sb) == -1) {
+            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
+            goto finalize_multi_package_session;
+        }
+
+        std::string cmd =
+                android::base::StringPrintf("%s install-write -S %" PRIu64 " %d %d_%s -",
+                                            install_cmd.c_str(), static_cast<uint64_t>(sb.st_size),
+                                            session_id, i, android::base::Basename(file).c_str());
+
+        int localFd = adb_open(file, O_RDONLY);
+        if (localFd < 0) {
+            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
+            goto finalize_multi_package_session;
+        }
+
+        std::string error;
+        int remoteFd = adb_connect(cmd, &error);
+        if (remoteFd < 0) {
+            fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
+            adb_close(localFd);
+            goto finalize_multi_package_session;
+        }
+
+        copy_to_file(localFd, remoteFd);
+        read_status_line(remoteFd, buf, sizeof(buf));
+
+        adb_close(localFd);
+        adb_close(remoteFd);
+
+        if (strncmp("Success", buf, 7)) {
+            fprintf(stderr, "adb: failed to write %s\n", file);
+            fputs(buf, stderr);
+            goto finalize_multi_package_session;
+        }
+
+        all_session_ids += android::base::StringPrintf(" %d", session_id);
+    }
+
+    cmd = android::base::StringPrintf("%s install-add-session %d%s", install_cmd.c_str(),
+                                      parent_session_id, all_session_ids.c_str());
+    fd = adb_connect(cmd, &error);
+    if (fd < 0) {
+        fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
+        goto finalize_multi_package_session;
+    }
+    read_status_line(fd, buf, sizeof(buf));
+    adb_close(fd);
+
+    if (strncmp("Success", buf, 7)) {
+        fprintf(stderr, "adb: failed to link sessions (%s)\n", cmd.c_str());
+        fputs(buf, stderr);
+        goto finalize_multi_package_session;
+    }
+
+    // no failures means we can proceed with the assumption of success
+    success = 0;
+
+finalize_multi_package_session:
+    // Commit session if we streamed everything okay; otherwise abandon
+    std::string service =
+            android::base::StringPrintf("%s install-%s %d", install_cmd.c_str(),
+                                        success == 0 ? "commit" : "abandon", parent_session_id);
+    fd = adb_connect(service, &error);
+    if (fd < 0) {
+        fprintf(stderr, "adb: connect error for finalize: %s\n", error.c_str());
+        return EXIT_FAILURE;
+    }
+    read_status_line(fd, buf, sizeof(buf));
+    adb_close(fd);
+
+    if (!strncmp("Success", buf, 7)) {
+        fputs(buf, stdout);
+        if (success == 0) {
+            return 0;
+        }
+    } else {
+        fprintf(stderr, "adb: failed to finalize session\n");
+        fputs(buf, stderr);
+    }
+
+    // try to abandon all remaining sessions
+    for (std::size_t i = 0; i < session_ids.size(); i++) {
+        service = android::base::StringPrintf("%s install-abandon %d", install_cmd.c_str(),
+                                              session_ids[i]);
+        fprintf(stderr, "Attempting to abandon session ID %d\n", session_ids[i]);
+        fd = adb_connect(service, &error);
+        if (fd < 0) {
+            fprintf(stderr, "adb: connect error for finalize: %s\n", error.c_str());
+            continue;
+        }
+        read_status_line(fd, buf, sizeof(buf));
+        adb_close(fd);
+    }
+    return EXIT_FAILURE;
+}
+
 int delete_device_file(const std::string& filename) {
     std::string cmd = "rm -f " + escape_arg(filename);
     return send_shell_command(cmd);
