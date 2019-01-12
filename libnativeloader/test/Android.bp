@@ -69,3 +69,14 @@ cc_library {
         "libbase",
     ],
 }
+
+// Build the test for the C API.
+cc_test {
+    name: "libnativeloader-api-tests",
+    host_supported: true,
+    test_per_src: true,
+    srcs: [
+        "api_test.c",
+    ],
+    header_libs: ["libnativeloader-dummy-headers"],
+}
