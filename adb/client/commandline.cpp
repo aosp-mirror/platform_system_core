@@ -142,7 +142,7 @@ static void help() {
         "     -x: disable remote exit codes and stdout/stderr separation\n"
         " emu COMMAND              run emulator console command\n"
         "\n"
-        "app installation:\n"
+        "app installation (see also `adb shell cmd package help`):\n"
         " install [-lrtsdg] [--instant] PACKAGE\n"
         "     push a single package to the device and install it\n"
         " install-multiple [-lrtsdpg] [--instant] PACKAGE...\n"
