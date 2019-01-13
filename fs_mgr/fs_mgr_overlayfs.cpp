@@ -277,6 +277,9 @@ bool fs_mgr_wants_overlayfs(FstabEntry* entry) {
     // Don't check entries that are managed by vold.
     if (entry->fs_mgr_flags.vold_managed || entry->fs_mgr_flags.recovery_only) return false;
 
+    // *_other doesn't want overlayfs.
+    if (entry->fs_mgr_flags.slot_select_other) return false;
+
     // Only concerned with readonly partitions.
     if (!(entry->flags & MS_RDONLY)) return false;
 
@@ -595,7 +598,11 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     entry.mount_point = kScratchMountPoint;
     entry.fs_type = mnt_type;
     entry.flags = MS_RELATIME;
-    if (readonly) entry.flags |= MS_RDONLY;
+    if (readonly) {
+        entry.flags |= MS_RDONLY;
+    } else {
+        fs_mgr_set_blk_ro(device_path, false);
+    }
     auto save_errno = errno;
     auto mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {
@@ -653,6 +660,7 @@ bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std:
         return false;
     }
     command += " " + scratch_device;
+    fs_mgr_set_blk_ro(scratch_device, false);
     auto ret = system(command.c_str());
     if (ret) {
         LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;

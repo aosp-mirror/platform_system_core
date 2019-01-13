@@ -57,27 +57,22 @@ int main(int argc, char** argv) {
         return ueventd_main(argc, argv);
     }
 
-    if (argc < 2) {
-        return FirstStageMain(argc, argv);
+    if (argc > 1) {
+        if (!strcmp(argv[1], "subcontext")) {
+            android::base::InitLogging(argv, &android::base::KernelLogger);
+            const BuiltinFunctionMap function_map;
+
+            return SubcontextMain(argc, argv, &function_map);
+        }
+
+        if (!strcmp(argv[1], "selinux_setup")) {
+            return SetupSelinux(argv);
+        }
+
+        if (!strcmp(argv[1], "second_stage")) {
+            return SecondStageMain(argc, argv);
+        }
     }
 
-    if (!strcmp(argv[1], "subcontext")) {
-        android::base::InitLogging(argv, &android::base::KernelLogger);
-        const BuiltinFunctionMap function_map;
-
-        return SubcontextMain(argc, argv, &function_map);
-    }
-
-    if (!strcmp(argv[1], "selinux_setup")) {
-        return SetupSelinux(argv);
-    }
-
-    if (!strcmp(argv[1], "second_stage")) {
-        return SecondStageMain(argc, argv);
-    }
-
-    android::base::InitLogging(argv, &android::base::KernelLogger);
-
-    LOG(ERROR) << "Unknown argument passed to init '" << argv[1] << "'";
-    return 1;
+    return FirstStageMain(argc, argv);
 }

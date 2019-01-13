@@ -142,10 +142,13 @@ static void help() {
         "     -x: disable remote exit codes and stdout/stderr separation\n"
         " emu COMMAND              run emulator console command\n"
         "\n"
-        "app installation:\n"
+        "app installation (see also `adb shell cmd package help`):\n"
         " install [-lrtsdg] [--instant] PACKAGE\n"
+        "     push a single package to the device and install it\n"
         " install-multiple [-lrtsdpg] [--instant] PACKAGE...\n"
-        "     push package(s) to the device and install them\n"
+        "     push multiple APKs to the device for a single package and install them\n"
+        " install-multi-package [-lrtsdpg] [--instant] PACKAGE...\n"
+        "     push one or more packages to the device and install them atomically\n"
         "     -r: replace existing application\n"
         "     -t: allow test packages\n"
         "     -d: allow version code downgrade (debuggable packages only)\n"
@@ -1734,6 +1737,9 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) error_exit("install-multiple requires an argument");
         return install_multiple_app(argc, argv);
+    } else if (!strcmp(argv[0], "install-multi-package")) {
+        if (argc < 3) error_exit("install-multi-package requires an argument");
+        return install_multi_package(argc, argv);
     } else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) error_exit("uninstall requires an argument");
         return uninstall_app(argc, argv);

@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <string>
+#include <vector>
 
 #include <libminijail.h>
 #include <scoped_minijail.h>
@@ -131,6 +132,25 @@ static bool check_data_path(const char* data_path, uid_t uid) {
   return check_directory(data_path, uid);
 }
 
+std::vector<gid_t> get_supplementary_gids(uid_t userAppId) {
+  std::vector<gid_t> gids;
+  int size = getgroups(0, &gids[0]);
+  if (size < 0) {
+    error(1, errno, "getgroups failed");
+  }
+  gids.resize(size);
+  size = getgroups(size, &gids[0]);
+  if (size != static_cast<int>(gids.size())) {
+    error(1, errno, "getgroups failed");
+  }
+  // Profile guide compiled oat files (like /data/app/xxx/oat/arm64/base.odex) are not readable
+  // worldwide (DEXOPT_PUBLIC flag isn't set). To support reading them (needed by simpleperf for
+  // profiling), add shared app gid to supplementary groups.
+  gid_t shared_app_gid = userAppId % AID_USER_OFFSET - AID_APP_START + AID_SHARED_GID_START;
+  gids.push_back(shared_app_gid);
+  return gids;
+}
+
 int main(int argc, char* argv[]) {
   // Check arguments.
   if (argc < 2) {
@@ -210,10 +230,11 @@ int main(int argc, char* argv[]) {
   // same time to avoid nasty surprises.
   uid_t uid = userAppId;
   uid_t gid = userAppId;
+  std::vector<gid_t> supplementary_gids = get_supplementary_gids(userAppId);
   ScopedMinijail j(minijail_new());
   minijail_change_uid(j.get(), uid);
   minijail_change_gid(j.get(), gid);
-  minijail_keep_supplementary_gids(j.get());
+  minijail_set_supplementary_gids(j.get(), supplementary_gids.size(), supplementary_gids.data());
   minijail_enter(j.get());
 
   std::string seinfo = std::string(info.seinfo) + ":fromRunAs";

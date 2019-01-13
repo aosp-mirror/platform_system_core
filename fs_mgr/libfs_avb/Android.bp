@@ -1,0 +1,105 @@
+//
+// Copyright (C) 2019 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+cc_library_static {
+    name: "libfs_avb",
+    defaults: ["fs_mgr_defaults"],
+    recovery_available: true,
+    host_supported: true,
+    export_include_dirs: ["include"],
+    srcs: [
+        "avb_ops.cpp",
+        "avb_util.cpp",
+        "fs_avb.cpp",
+        "util.cpp",
+    ],
+    static_libs: [
+        "libavb",
+        "libdm",
+        "libfstab",
+    ],
+    export_static_lib_headers: [
+        "libfstab",
+    ],
+    shared_libs: [
+        "libcrypto",
+    ],
+    header_libs: [
+        "libbase_headers",
+    ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
+cc_defaults {
+    name: "libfs_avb_host_test_defaults",
+    required: [
+        "avbtool",
+    ],
+    data: [
+        "tests/data/*",
+    ],
+    static_libs: [
+        "libgtest_host",
+    ],
+    shared_libs: [
+        "libbase",
+        "libchrome",
+    ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+    cflags: [
+        "-DHOST_TEST",
+    ],
+}
+
+cc_library_host_static {
+    name: "libfs_avb_test_util",
+    defaults: ["libfs_avb_host_test_defaults"],
+    srcs: [
+        "tests/fs_avb_test_util.cpp",
+    ],
+}
+
+cc_test_host {
+    name: "libfs_avb_test",
+    defaults: ["libfs_avb_host_test_defaults"],
+    static_libs: [
+        "libfs_avb_test_util",
+    ],
+    srcs: [
+        "tests/basic_test.cpp",
+    ],
+}
+
+cc_test_host {
+    name: "libfs_avb_internal_test",
+    defaults: ["libfs_avb_host_test_defaults"],
+    static_libs: [
+        "libfs_avb_test_util",
+        "libfstab",
+    ],
+    srcs: [
+        "util.cpp",
+        "tests/util_test.cpp",
+    ],
+}

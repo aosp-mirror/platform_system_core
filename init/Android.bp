@@ -85,6 +85,7 @@ cc_defaults {
         "libselinux",
         "libutils",
     ],
+    bootstrap: true,
 }
 
 cc_library_static {

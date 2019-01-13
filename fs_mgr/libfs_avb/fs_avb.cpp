@@ -28,84 +28,30 @@
 
 #include <android-base/file.h>
 #include <android-base/parseint.h>
-#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
-#include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <libavb/libavb.h>
 #include <libdm/dm.h>
 
 #include "avb_ops.h"
-#include "fs_mgr_priv.h"
+#include "avb_util.h"
 #include "sha.h"
+#include "util.h"
+
+using android::base::Basename;
+using android::base::ParseUint;
+using android::base::StringPrintf;
 
 namespace android {
 namespace fs_mgr {
 
-static inline bool nibble_value(const char& c, uint8_t* value) {
-    FS_MGR_CHECK(value != nullptr);
-
-    switch (c) {
-        case '0' ... '9':
-            *value = c - '0';
-            break;
-        case 'a' ... 'f':
-            *value = c - 'a' + 10;
-            break;
-        case 'A' ... 'F':
-            *value = c - 'A' + 10;
-            break;
-        default:
-            return false;
-    }
-
-    return true;
-}
-
-static bool hex_to_bytes(uint8_t* bytes, size_t bytes_len, const std::string& hex) {
-    FS_MGR_CHECK(bytes != nullptr);
-
-    if (hex.size() % 2 != 0) {
-        return false;
-    }
-    if (hex.size() / 2 > bytes_len) {
-        return false;
-    }
-    for (size_t i = 0, j = 0, n = hex.size(); i < n; i += 2, ++j) {
-        uint8_t high;
-        if (!nibble_value(hex[i], &high)) {
-            return false;
-        }
-        uint8_t low;
-        if (!nibble_value(hex[i + 1], &low)) {
-            return false;
-        }
-        bytes[j] = (high << 4) | low;
-    }
-    return true;
-}
-
-static std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
-    FS_MGR_CHECK(bytes != nullptr);
-
-    static const char* hex_digits = "0123456789abcdef";
-    std::string hex;
-
-    for (size_t i = 0; i < bytes_len; i++) {
-        hex.push_back(hex_digits[(bytes[i] & 0xF0) >> 4]);
-        hex.push_back(hex_digits[bytes[i] & 0x0F]);
-    }
-    return hex;
-}
-
 template <typename Hasher>
-static std::pair<size_t, bool> verify_vbmeta_digest(const std::vector<VBMetaData>& vbmeta_images,
-                                                    const uint8_t* expected_digest) {
+std::pair<size_t, bool> VerifyVbmetaDigest(const std::vector<VBMetaData>& vbmeta_images,
+                                           const uint8_t* expected_digest) {
     size_t total_size = 0;
     Hasher hasher;
-    for (size_t n = 0; n < vbmeta_images.size(); n++) {
-        hasher.update(vbmeta_images[n].vbmeta_data(), vbmeta_images[n].vbmeta_size());
-        total_size += vbmeta_images[n].vbmeta_size();
+    for (const auto& vbmeta : vbmeta_images) {
+        hasher.update(vbmeta.data(), vbmeta.size());
+        total_size += vbmeta.size();
     }
 
     bool matched = (memcmp(hasher.finalize(), expected_digest, Hasher::DIGEST_SIZE) == 0);
@@ -148,7 +94,7 @@ std::unique_ptr<AvbVerifier> AvbVerifier::Create() {
 
     std::string value;
     if (!fs_mgr_get_boot_config("vbmeta.size", &value) ||
-        !android::base::ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
+        !ParseUint(value.c_str(), &avb_verifier->vbmeta_size_)) {
         LERROR << "Invalid hash size: " << value.c_str();
         return nullptr;
     }
@@ -177,7 +123,7 @@ std::unique_ptr<AvbVerifier> AvbVerifier::Create() {
         return nullptr;
     }
 
-    if (!hex_to_bytes(avb_verifier->digest_, sizeof(avb_verifier->digest_), digest)) {
+    if (!HexToBytes(avb_verifier->digest_, sizeof(avb_verifier->digest_), digest)) {
         LERROR << "Hash digest contains non-hexidecimal character: " << digest.c_str();
         return nullptr;
     }
@@ -196,10 +142,10 @@ bool AvbVerifier::VerifyVbmetaImages(const std::vector<VBMetaData>& vbmeta_image
 
     if (hash_alg_ == kSHA256) {
         std::tie(total_size, digest_matched) =
-                verify_vbmeta_digest<SHA256Hasher>(vbmeta_images, digest_);
+                VerifyVbmetaDigest<SHA256Hasher>(vbmeta_images, digest_);
     } else if (hash_alg_ == kSHA512) {
         std::tie(total_size, digest_matched) =
-                verify_vbmeta_digest<SHA512Hasher>(vbmeta_images, digest_);
+                VerifyVbmetaDigest<SHA512Hasher>(vbmeta_images, digest_);
     }
 
     if (total_size != vbmeta_size_) {
@@ -216,155 +162,9 @@ bool AvbVerifier::VerifyVbmetaImages(const std::vector<VBMetaData>& vbmeta_image
     return true;
 }
 
-// Constructs dm-verity arguments for sending DM_TABLE_LOAD ioctl to kernel.
-// See the following link for more details:
-// https://gitlab.com/cryptsetup/cryptsetup/wikis/DMVerity
-static bool construct_verity_table(const AvbHashtreeDescriptor& hashtree_desc,
-                                   const std::string& salt, const std::string& root_digest,
-                                   const std::string& blk_device, android::dm::DmTable* table) {
-    // Loads androidboot.veritymode from kernel cmdline.
-    std::string verity_mode;
-    if (!fs_mgr_get_boot_config("veritymode", &verity_mode)) {
-        verity_mode = "enforcing";  // Defaults to enforcing when it's absent.
-    }
-
-    // Converts veritymode to the format used in kernel.
-    std::string dm_verity_mode;
-    if (verity_mode == "enforcing") {
-        dm_verity_mode = "restart_on_corruption";
-    } else if (verity_mode == "logging") {
-        dm_verity_mode = "ignore_corruption";
-    } else if (verity_mode != "eio") {  // Default dm_verity_mode is eio.
-        LERROR << "Unknown androidboot.veritymode: " << verity_mode;
-        return false;
-    }
-
-    std::ostringstream hash_algorithm;
-    hash_algorithm << hashtree_desc.hash_algorithm;
-
-    android::dm::DmTargetVerity target(0, hashtree_desc.image_size / 512,
-                                       hashtree_desc.dm_verity_version, blk_device, blk_device,
-                                       hashtree_desc.data_block_size, hashtree_desc.hash_block_size,
-                                       hashtree_desc.image_size / hashtree_desc.data_block_size,
-                                       hashtree_desc.tree_offset / hashtree_desc.hash_block_size,
-                                       hash_algorithm.str(), root_digest, salt);
-    if (hashtree_desc.fec_size > 0) {
-        target.UseFec(blk_device, hashtree_desc.fec_num_roots,
-                      hashtree_desc.fec_offset / hashtree_desc.data_block_size,
-                      hashtree_desc.fec_offset / hashtree_desc.data_block_size);
-    }
-    if (!dm_verity_mode.empty()) {
-        target.SetVerityMode(dm_verity_mode);
-    }
-    // Always use ignore_zero_blocks.
-    target.IgnoreZeroBlocks();
-
-    LINFO << "Built verity table: '" << target.GetParameterString() << "'";
-
-    return table->AddTarget(std::make_unique<android::dm::DmTargetVerity>(target));
-}
-
-static bool hashtree_dm_verity_setup(FstabEntry* fstab_entry,
-                                     const AvbHashtreeDescriptor& hashtree_desc,
-                                     const std::string& salt, const std::string& root_digest,
-                                     bool wait_for_verity_dev) {
-    android::dm::DmTable table;
-    if (!construct_verity_table(hashtree_desc, salt, root_digest, fstab_entry->blk_device,
-                                &table) ||
-        !table.valid()) {
-        LERROR << "Failed to construct verity table.";
-        return false;
-    }
-    table.set_readonly(true);
-
-    const std::string mount_point(basename(fstab_entry->mount_point.c_str()));
-    android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
-    if (!dm.CreateDevice(mount_point, table)) {
-        LERROR << "Couldn't create verity device!";
-        return false;
-    }
-
-    std::string dev_path;
-    if (!dm.GetDmDevicePathByName(mount_point, &dev_path)) {
-        LERROR << "Couldn't get verity device path!";
-        return false;
-    }
-
-    // Marks the underlying block device as read-only.
-    fs_mgr_set_blk_ro(fstab_entry->blk_device);
-
-    // Updates fstab_rec->blk_device to verity device name.
-    fstab_entry->blk_device = dev_path;
-
-    // Makes sure we've set everything up properly.
-    if (wait_for_verity_dev && !fs_mgr_wait_for_file(dev_path, 1s)) {
-        return false;
-    }
-
-    return true;
-}
-
-static bool get_hashtree_descriptor(const std::string& partition_name,
-                                    const std::vector<VBMetaData>& vbmeta_images,
-                                    AvbHashtreeDescriptor* out_hashtree_desc, std::string* out_salt,
-                                    std::string* out_digest) {
-    bool found = false;
-    const uint8_t* desc_partition_name;
-
-    for (size_t i = 0; i < vbmeta_images.size() && !found; i++) {
-        // Get descriptors from vbmeta_images[i].
-        size_t num_descriptors;
-        std::unique_ptr<const AvbDescriptor* [], decltype(&avb_free)> descriptors(
-                avb_descriptor_get_all(vbmeta_images[i].vbmeta_data(),
-                                       vbmeta_images[i].vbmeta_size(), &num_descriptors),
-                avb_free);
-
-        if (!descriptors || num_descriptors < 1) {
-            continue;
-        }
-
-        for (size_t j = 0; j < num_descriptors && !found; j++) {
-            AvbDescriptor desc;
-            if (!avb_descriptor_validate_and_byteswap(descriptors[j], &desc)) {
-                LWARNING << "Descriptor[" << j << "] is invalid";
-                continue;
-            }
-            if (desc.tag == AVB_DESCRIPTOR_TAG_HASHTREE) {
-                desc_partition_name =
-                        (const uint8_t*)descriptors[j] + sizeof(AvbHashtreeDescriptor);
-                if (!avb_hashtree_descriptor_validate_and_byteswap(
-                            (AvbHashtreeDescriptor*)descriptors[j], out_hashtree_desc)) {
-                    continue;
-                }
-                if (out_hashtree_desc->partition_name_len != partition_name.length()) {
-                    continue;
-                }
-                // Notes that desc_partition_name is not NUL-terminated.
-                std::string hashtree_partition_name((const char*)desc_partition_name,
-                                                    out_hashtree_desc->partition_name_len);
-                if (hashtree_partition_name == partition_name) {
-                    found = true;
-                }
-            }
-        }
-    }
-
-    if (!found) {
-        LERROR << "Partition descriptor not found: " << partition_name.c_str();
-        return false;
-    }
-
-    const uint8_t* desc_salt = desc_partition_name + out_hashtree_desc->partition_name_len;
-    *out_salt = bytes_to_hex(desc_salt, out_hashtree_desc->salt_len);
-
-    const uint8_t* desc_digest = desc_salt + out_hashtree_desc->salt_len;
-    *out_digest = bytes_to_hex(desc_digest, out_hashtree_desc->root_digest_len);
-
-    return true;
-}
 
 AvbUniquePtr AvbHandle::Open() {
-    bool is_device_unlocked = fs_mgr_is_device_unlocked();
+    bool is_device_unlocked = IsDeviceUnlocked();
 
     AvbUniquePtr avb_handle(new AvbHandle());
     if (!avb_handle) {
@@ -407,8 +207,7 @@ AvbUniquePtr AvbHandle::Open() {
     }
 
     // Sets the MAJOR.MINOR for init to set it into "ro.boot.avb_version".
-    avb_handle->avb_version_ =
-            android::base::StringPrintf("%d.%d", AVB_VERSION_MAJOR, AVB_VERSION_MINOR);
+    avb_handle->avb_version_ = StringPrintf("%d.%d", AVB_VERSION_MAJOR, AVB_VERSION_MINOR);
 
     // Checks whether FLAGS_VERIFICATION_DISABLED is set:
     //   - Only the top-level vbmeta struct is read.
@@ -416,7 +215,7 @@ AvbUniquePtr AvbHandle::Open() {
     //     and AVB HASHTREE descriptor(s).
     AvbVBMetaImageHeader vbmeta_header;
     avb_vbmeta_image_header_to_host_byte_order(
-            (AvbVBMetaImageHeader*)avb_handle->vbmeta_images_[0].vbmeta_data(), &vbmeta_header);
+            (AvbVBMetaImageHeader*)avb_handle->vbmeta_images_[0].data(), &vbmeta_header);
     bool verification_disabled = ((AvbVBMetaImageFlags)vbmeta_header.flags &
                                   AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED);
 
@@ -462,7 +261,7 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
     if (fstab_entry->fs_mgr_flags.logical) {
         partition_name = fstab_entry->logical_partition_name;
     } else {
-        partition_name = basename(fstab_entry->blk_device.c_str());
+        partition_name = Basename(fstab_entry->blk_device);
     }
 
     if (fstab_entry->fs_mgr_flags.slot_select) {
@@ -475,14 +274,14 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
     AvbHashtreeDescriptor hashtree_descriptor;
     std::string salt;
     std::string root_digest;
-    if (!get_hashtree_descriptor(partition_name, vbmeta_images_, &hashtree_descriptor, &salt,
-                                 &root_digest)) {
+    if (!GetHashtreeDescriptor(partition_name, vbmeta_images_, &hashtree_descriptor, &salt,
+                               &root_digest)) {
         return AvbHashtreeResult::kFail;
     }
 
     // Converts HASHTREE descriptor to verity_table_params.
-    if (!hashtree_dm_verity_setup(fstab_entry, hashtree_descriptor, salt, root_digest,
-                                  wait_for_verity_dev)) {
+    if (!HashtreeDmVeritySetup(fstab_entry, hashtree_descriptor, salt, root_digest,
+                               wait_for_verity_dev)) {
         return AvbHashtreeResult::kFail;
     }
 
