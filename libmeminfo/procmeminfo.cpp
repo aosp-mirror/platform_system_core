@@ -157,14 +157,14 @@ const MemUsage& ProcMemInfo::Wss() {
     if (!get_wss_) {
         LOG(WARNING) << "Trying to read process working set for " << pid_
                      << " using invalid object";
-        return wss_;
+        return usage_;
     }
 
     if (maps_.empty() && !ReadMaps(get_wss_)) {
         LOG(ERROR) << "Failed to get working set for Process " << pid_;
     }
 
-    return wss_;
+    return usage_;
 }
 
 bool ProcMemInfo::ForEachVma(const VmaCallback& callback) {
@@ -228,11 +228,7 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
             maps_.clear();
             return false;
         }
-        if (get_wss) {
-            add_mem_usage(&wss_, vma.wss);
-        } else {
-            add_mem_usage(&usage_, vma.usage);
-        }
+        add_mem_usage(&usage_, vma.usage);
     }
 
     return true;
@@ -300,31 +296,20 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
             // This effectively makes vss = rss for the working set is requested.
             // The libpagemap implementation returns vss > rss for
             // working set, which doesn't make sense.
-            vma.wss.vss += pagesz;
-            vma.wss.rss += pagesz;
-            vma.wss.uss += is_private ? pagesz : 0;
-            vma.wss.pss += pagesz / pg_counts[i];
-            if (is_private) {
-                vma.wss.private_dirty += is_dirty ? pagesz : 0;
-                vma.wss.private_clean += is_dirty ? 0 : pagesz;
-            } else {
-                vma.wss.shared_dirty += is_dirty ? pagesz : 0;
-                vma.wss.shared_clean += is_dirty ? 0 : pagesz;
-            }
+            vma.usage.vss += pagesz;
+        }
+
+        vma.usage.rss += pagesz;
+        vma.usage.uss += is_private ? pagesz : 0;
+        vma.usage.pss += pagesz / pg_counts[i];
+        if (is_private) {
+            vma.usage.private_dirty += is_dirty ? pagesz : 0;
+            vma.usage.private_clean += is_dirty ? 0 : pagesz;
         } else {
-            vma.usage.rss += pagesz;
-            vma.usage.uss += is_private ? pagesz : 0;
-            vma.usage.pss += pagesz / pg_counts[i];
-            if (is_private) {
-                vma.usage.private_dirty += is_dirty ? pagesz : 0;
-                vma.usage.private_clean += is_dirty ? 0 : pagesz;
-            } else {
-                vma.usage.shared_dirty += is_dirty ? pagesz : 0;
-                vma.usage.shared_clean += is_dirty ? 0 : pagesz;
-            }
+            vma.usage.shared_dirty += is_dirty ? pagesz : 0;
+            vma.usage.shared_clean += is_dirty ? 0 : pagesz;
         }
     }
-
     return true;
 }
 
