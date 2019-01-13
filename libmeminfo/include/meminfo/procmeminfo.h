@@ -82,7 +82,6 @@ class ProcMemInfo final {
     std::vector<Vma> maps_;
 
     MemUsage usage_;
-    MemUsage wss_;
     std::vector<uint16_t> swap_offsets_;
 };
 

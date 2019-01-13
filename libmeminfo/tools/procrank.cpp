@@ -465,7 +465,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Skip processes with no memory mappings
-        uint64_t vss = show_wss ? proc.Wss().vss : proc.Usage().vss;
+        uint64_t vss = proc.Usage().vss;
         if (vss == 0) return true;
 
         // collect swap_offset counts from all processes in 1st pass
