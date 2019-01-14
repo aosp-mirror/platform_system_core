@@ -88,7 +88,7 @@ cc_test {
 }
 
 // Build the test for the C API.
-art_cc_test {
+cc_test {
     name: "libnativebridge-api-tests",
     host_supported: true,
     test_per_src: true,
