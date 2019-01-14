@@ -64,12 +64,12 @@ class ProcMemInfo final {
     //   private_dirty
     //   SwapPss
     // All other fields of MemUsage are zeroed.
-    bool SmapsOrRollup(bool use_rollup, MemUsage* stats) const;
+    bool SmapsOrRollup(MemUsage* stats) const;
 
     // Used to parse either of /proc/<pid>/{smaps, smaps_rollup} and record the process's
-    // Pss. The 'use_rollup' parameter decides which file is to be tried.
+    // Pss.
     // Returns 'true' on success and the value of Pss in the out parameter.
-    bool SmapsOrRollupPss(bool use_rollup, uint64_t* pss) const;
+    bool SmapsOrRollupPss(uint64_t* pss) const;
 
     const std::vector<uint16_t>& SwapOffsets();
 
@@ -93,6 +93,12 @@ class ProcMemInfo final {
 // Makes callback for each 'vma' or 'map' found in file provided. The file is expected to be in the
 // same format as /proc/<pid>/smaps. Returns 'false' if the file is malformed.
 bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback);
+
+// Returns if the kernel supports /proc/<pid>/smaps_rollup. Assumes that the
+// calling process has access to the /proc/<pid>/smaps_rollup.
+// Returns 'false' if the calling process has no permission to read the file if it exists
+// of if the file doesn't exist.
+bool IsSmapsRollupSupported(pid_t pid);
 
 // Same as ProcMemInfo::SmapsOrRollup but reads the statistics directly
 // from a file. The file MUST be in the same format as /proc/<pid>/smaps

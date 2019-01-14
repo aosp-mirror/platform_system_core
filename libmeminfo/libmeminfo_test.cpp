@@ -284,13 +284,22 @@ TEST(TestProcMemInfo, SwapOffsetsEmpty) {
     EXPECT_EQ(swap_offsets.size(), 0);
 }
 
+TEST(TestProcMemInfo, IsSmapsSupportedTest) {
+    std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
+    bool supported = IsSmapsRollupSupported(pid);
+    EXPECT_EQ(!access(path.c_str(), F_OK | R_OK), supported);
+    // Second call must return what the first one returned regardless of the pid parameter.
+    // So, deliberately pass invalid pid.
+    EXPECT_EQ(supported, IsSmapsRollupSupported(-1));
+}
+
 TEST(TestProcMemInfo, SmapsOrRollupReturn) {
     // if /proc/<pid>/smaps_rollup file exists, .SmapsRollup() must return true;
     // false otherwise
     std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
     ProcMemInfo proc_mem(pid);
     MemUsage stats;
-    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(true, &stats));
+    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(&stats));
 }
 
 TEST(TestProcMemInfo, SmapsOrRollupTest) {
