@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -157,14 +158,14 @@ const MemUsage& ProcMemInfo::Wss() {
     if (!get_wss_) {
         LOG(WARNING) << "Trying to read process working set for " << pid_
                      << " using invalid object";
-        return wss_;
+        return usage_;
     }
 
     if (maps_.empty() && !ReadMaps(get_wss_)) {
         LOG(ERROR) << "Failed to get working set for Process " << pid_;
     }
 
-    return wss_;
+    return usage_;
 }
 
 bool ProcMemInfo::ForEachVma(const VmaCallback& callback) {
@@ -172,11 +173,17 @@ bool ProcMemInfo::ForEachVma(const VmaCallback& callback) {
     return ForEachVmaFromFile(path, callback);
 }
 
-bool ProcMemInfo::SmapsOrRollup(bool use_rollup, MemUsage* stats) const {
-    std::string path = ::android::base::StringPrintf("/proc/%d/%s", pid_,
-                                                     use_rollup ? "smaps_rollup" : "smaps");
+bool ProcMemInfo::SmapsOrRollup(MemUsage* stats) const {
+    std::string path = ::android::base::StringPrintf(
+            "/proc/%d/%s", pid_, IsSmapsRollupSupported(pid_) ? "smaps_rollup" : "smaps");
     return SmapsOrRollupFromFile(path, stats);
-};
+}
+
+bool ProcMemInfo::SmapsOrRollupPss(uint64_t* pss) const {
+    std::string path = ::android::base::StringPrintf(
+            "/proc/%d/%s", pid_, IsSmapsRollupSupported(pid_) ? "smaps_rollup" : "smaps");
+    return SmapsOrRollupPssFromFile(path, pss);
+}
 
 const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
     if (get_wss_) {
@@ -228,11 +235,7 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
             maps_.clear();
             return false;
         }
-        if (get_wss) {
-            add_mem_usage(&wss_, vma.wss);
-        } else {
-            add_mem_usage(&usage_, vma.usage);
-        }
+        add_mem_usage(&usage_, vma.usage);
     }
 
     return true;
@@ -300,31 +303,20 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
             // This effectively makes vss = rss for the working set is requested.
             // The libpagemap implementation returns vss > rss for
             // working set, which doesn't make sense.
-            vma.wss.vss += pagesz;
-            vma.wss.rss += pagesz;
-            vma.wss.uss += is_private ? pagesz : 0;
-            vma.wss.pss += pagesz / pg_counts[i];
-            if (is_private) {
-                vma.wss.private_dirty += is_dirty ? pagesz : 0;
-                vma.wss.private_clean += is_dirty ? 0 : pagesz;
-            } else {
-                vma.wss.shared_dirty += is_dirty ? pagesz : 0;
-                vma.wss.shared_clean += is_dirty ? 0 : pagesz;
-            }
+            vma.usage.vss += pagesz;
+        }
+
+        vma.usage.rss += pagesz;
+        vma.usage.uss += is_private ? pagesz : 0;
+        vma.usage.pss += pagesz / pg_counts[i];
+        if (is_private) {
+            vma.usage.private_dirty += is_dirty ? pagesz : 0;
+            vma.usage.private_clean += is_dirty ? 0 : pagesz;
         } else {
-            vma.usage.rss += pagesz;
-            vma.usage.uss += is_private ? pagesz : 0;
-            vma.usage.pss += pagesz / pg_counts[i];
-            if (is_private) {
-                vma.usage.private_dirty += is_dirty ? pagesz : 0;
-                vma.usage.private_clean += is_dirty ? 0 : pagesz;
-            } else {
-                vma.usage.shared_dirty += is_dirty ? pagesz : 0;
-                vma.usage.shared_clean += is_dirty ? 0 : pagesz;
-            }
+            vma.usage.shared_dirty += is_dirty ? pagesz : 0;
+            vma.usage.shared_clean += is_dirty ? 0 : pagesz;
         }
     }
-
     return true;
 }
 
@@ -338,8 +330,9 @@ bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
     char* line = nullptr;
     bool parsing_vma = false;
     ssize_t line_len;
+    size_t line_alloc = 0;
     Vma vma;
-    while ((line_len = getline(&line, 0, fp.get())) > 0) {
+    while ((line_len = getline(&line, &line_alloc, fp.get())) > 0) {
         // Make sure the line buffer terminates like a C string for ReadMapFile
         line[line_len] = '\0';
 
@@ -382,6 +375,31 @@ bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
     return true;
 }
 
+enum smaps_rollup_support { UNTRIED, SUPPORTED, UNSUPPORTED };
+
+static std::atomic<smaps_rollup_support> g_rollup_support = UNTRIED;
+
+bool IsSmapsRollupSupported(pid_t pid) {
+    // Similar to OpenSmapsOrRollup checks from android_os_Debug.cpp, except
+    // the method only checks if rollup is supported and returns the status
+    // right away.
+    enum smaps_rollup_support rollup_support = g_rollup_support.load(std::memory_order_relaxed);
+    if (rollup_support != UNTRIED) {
+        return rollup_support == SUPPORTED;
+    }
+    std::string rollup_file = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
+    if (access(rollup_file.c_str(), F_OK | R_OK)) {
+        // No check for errno = ENOENT necessary here. The caller MUST fallback to
+        // using /proc/<pid>/smaps instead anyway.
+        g_rollup_support.store(UNSUPPORTED, std::memory_order_relaxed);
+        return false;
+    }
+
+    g_rollup_support.store(SUPPORTED, std::memory_order_relaxed);
+    LOG(INFO) << "Using smaps_rollup for pss collection";
+    return true;
+}
+
 bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
     auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (fp == nullptr) {
@@ -420,6 +438,23 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
                     stats->swap_pss += strtoull(c, nullptr, 10);
                 }
                 break;
+        }
+    }
+
+    return true;
+}
+
+bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss) {
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return false;
+    }
+    *pss = 0;
+    char line[1024];
+    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+        uint64_t v;
+        if (sscanf(line, "Pss: %" SCNu64 " kB", &v) == 1) {
+            *pss += v;
         }
     }
 
