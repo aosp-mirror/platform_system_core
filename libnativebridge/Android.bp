@@ -17,6 +17,11 @@ cc_library {
         "liblog",
     ],
 
+    stubs: {
+        symbol_file: "libnativebridge.map.txt",
+        versions: ["1"],
+    },
+
     export_include_dirs: ["include"],
 
     cflags: [
