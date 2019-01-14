@@ -72,15 +72,10 @@ struct Vma {
         : start(s), end(e), offset(off), flags(f), name(n) {}
     ~Vma() = default;
 
-    void clear() {
-        memset(&usage, 0, sizeof(usage));
-        memset(&wss, 0, sizeof(wss));
-    }
+    void clear() { memset(&usage, 0, sizeof(usage)); }
 
     // Memory usage of this mapping.
     MemUsage usage;
-    // Working set within this mapping.
-    MemUsage wss;
 };
 
 }  // namespace meminfo

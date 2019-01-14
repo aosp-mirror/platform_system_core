@@ -98,7 +98,7 @@ static int show(const MemUsage& proc_stats, const std::vector<Vma>& maps) {
     std::stringstream ss;
     print_header(ss);
     for (auto& vma : maps) {
-        const MemUsage& vma_stats = show_wss ? vma.wss : vma.usage;
+        const MemUsage& vma_stats = vma.usage;
         if (hide_zeroes && vma_stats.rss == 0) {
             continue;
         }
@@ -116,14 +116,14 @@ static int show(const MemUsage& proc_stats, const std::vector<Vma>& maps) {
 int main(int argc, char* argv[]) {
     int opt;
     auto pss_sort = [](const Vma& a, const Vma& b) {
-        uint64_t pss_a = show_wss ? a.wss.pss : a.usage.pss;
-        uint64_t pss_b = show_wss ? b.wss.pss : b.usage.pss;
+        uint64_t pss_a = a.usage.pss;
+        uint64_t pss_b = b.usage.pss;
         return pss_a > pss_b;
     };
 
     auto uss_sort = [](const Vma& a, const Vma& b) {
-        uint64_t uss_a = show_wss ? a.wss.uss : a.usage.uss;
-        uint64_t uss_b = show_wss ? b.wss.uss : b.usage.uss;
+        uint64_t uss_a = a.usage.uss;
+        uint64_t uss_b = b.usage.uss;
         return uss_a > uss_b;
     };
 
@@ -182,7 +182,7 @@ int main(int argc, char* argv[]) {
     }
 
     ProcMemInfo proc(pid, show_wss);
-    const MemUsage& proc_stats = show_wss ? proc.Wss() : proc.Usage();
+    const MemUsage& proc_stats = proc.Usage();
     std::vector<Vma> maps(proc.Maps());
     if (sort_func != nullptr) {
         std::sort(maps.begin(), maps.end(), sort_func);
