@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <algorithm>
 #include <memory>
 
 #include <android-base/file.h>
@@ -476,8 +478,14 @@ void BatteryMonitor::init(struct healthd_config *hc) {
 
         while ((entry = readdir(dir.get()))) {
             const char* name = entry->d_name;
+            std::vector<String8>::iterator itIgnoreName;
 
             if (!strcmp(name, ".") || !strcmp(name, ".."))
+                continue;
+
+            itIgnoreName = find(hc->ignorePowerSupplyNames.begin(),
+                                hc->ignorePowerSupplyNames.end(), String8(name));
+            if (itIgnoreName != hc->ignorePowerSupplyNames.end())
                 continue;
 
             // Look for "type" file in each subdirectory
