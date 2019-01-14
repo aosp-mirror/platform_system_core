@@ -374,6 +374,9 @@ TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
     auto collect_vmas = [&](const Vma& v) { vmas.push_back(v); };
     ASSERT_TRUE(ForEachVmaFromFile(path, collect_vmas));
 
+    // We should get a total of 6 vmas
+    ASSERT_EQ(vmas.size(), 6);
+
     // Expect values to be equal to what we have in testdata1/smaps_short
     // Check for sizes first
     ASSERT_EQ(vmas[0].usage.vss, 32768);
@@ -468,6 +471,8 @@ TEST(TestProcMemInfo, SmapsTest) {
     auto vmas = proc_mem.Smaps(path);
 
     ASSERT_FALSE(vmas.empty());
+    // We should get a total of 6 vmas
+    ASSERT_EQ(vmas.size(), 6);
 
     // Expect values to be equal to what we have in testdata1/smaps_short
     // Check for sizes first

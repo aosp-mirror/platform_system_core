@@ -338,8 +338,9 @@ bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
     char* line = nullptr;
     bool parsing_vma = false;
     ssize_t line_len;
+    size_t line_alloc = 0;
     Vma vma;
-    while ((line_len = getline(&line, 0, fp.get())) > 0) {
+    while ((line_len = getline(&line, &line_alloc, fp.get())) > 0) {
         // Make sure the line buffer terminates like a C string for ReadMapFile
         line[line_len] = '\0';
 
