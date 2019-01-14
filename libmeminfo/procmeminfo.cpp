@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -172,15 +173,15 @@ bool ProcMemInfo::ForEachVma(const VmaCallback& callback) {
     return ForEachVmaFromFile(path, callback);
 }
 
-bool ProcMemInfo::SmapsOrRollup(bool use_rollup, MemUsage* stats) const {
-    std::string path = ::android::base::StringPrintf("/proc/%d/%s", pid_,
-                                                     use_rollup ? "smaps_rollup" : "smaps");
+bool ProcMemInfo::SmapsOrRollup(MemUsage* stats) const {
+    std::string path = ::android::base::StringPrintf(
+            "/proc/%d/%s", pid_, IsSmapsRollupSupported(pid_) ? "smaps_rollup" : "smaps");
     return SmapsOrRollupFromFile(path, stats);
-};
+}
 
-bool ProcMemInfo::SmapsOrRollupPss(bool use_rollup, uint64_t* pss) const {
-    std::string path = ::android::base::StringPrintf("/proc/%d/%s", pid_,
-                                                     use_rollup ? "smaps_rollup" : "smaps");
+bool ProcMemInfo::SmapsOrRollupPss(uint64_t* pss) const {
+    std::string path = ::android::base::StringPrintf(
+            "/proc/%d/%s", pid_, IsSmapsRollupSupported(pid_) ? "smaps_rollup" : "smaps");
     return SmapsOrRollupPssFromFile(path, pss);
 }
 
@@ -371,6 +372,31 @@ bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
         callback(vma);
     }
 
+    return true;
+}
+
+enum smaps_rollup_support { UNTRIED, SUPPORTED, UNSUPPORTED };
+
+static std::atomic<smaps_rollup_support> g_rollup_support = UNTRIED;
+
+bool IsSmapsRollupSupported(pid_t pid) {
+    // Similar to OpenSmapsOrRollup checks from android_os_Debug.cpp, except
+    // the method only checks if rollup is supported and returns the status
+    // right away.
+    enum smaps_rollup_support rollup_support = g_rollup_support.load(std::memory_order_relaxed);
+    if (rollup_support != UNTRIED) {
+        return rollup_support == SUPPORTED;
+    }
+    std::string rollup_file = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
+    if (access(rollup_file.c_str(), F_OK | R_OK)) {
+        // No check for errno = ENOENT necessary here. The caller MUST fallback to
+        // using /proc/<pid>/smaps instead anyway.
+        g_rollup_support.store(UNSUPPORTED, std::memory_order_relaxed);
+        return false;
+    }
+
+    g_rollup_support.store(SUPPORTED, std::memory_order_relaxed);
+    LOG(INFO) << "Using smaps_rollup for pss collection";
     return true;
 }
 
