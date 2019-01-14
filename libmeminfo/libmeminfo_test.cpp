@@ -365,6 +365,50 @@ VmFlags: rd wr mr mw me ac
     EXPECT_EQ(stats.swap_pss, 70);
 }
 
+TEST(TestProcMemInfo, SmapsOrRollupPssRollupTest) {
+    // This is a made up smaps for the test
+    std::string smaps =
+            R"smaps(12c00000-13440000 rw-p 00000000 00:00 0                                  [anon:dalvik-main space (region space)]
+Name:           [anon:dalvik-main space (region space)]
+Size:               8448 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2652 kB
+Pss:                2652 kB
+Shared_Clean:        840 kB
+Shared_Dirty:         40 kB
+Private_Clean:        84 kB
+Private_Dirty:      2652 kB
+Referenced:         2652 kB
+Anonymous:          2652 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                102 kB
+SwapPss:              70 kB
+Locked:             2652 kB
+VmFlags: rd wr mr mw me ac 
+)smaps";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(smaps, tf.fd));
+
+    uint64_t pss;
+    ASSERT_EQ(SmapsOrRollupPssFromFile(tf.path, &pss), true);
+    EXPECT_EQ(pss, 2652);
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupPssSmapsTest) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
+
+    uint64_t pss;
+    ASSERT_EQ(SmapsOrRollupPssFromFile(path, &pss), true);
+    EXPECT_EQ(pss, 19119);
+}
+
 TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());

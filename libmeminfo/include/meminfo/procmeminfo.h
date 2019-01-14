@@ -66,6 +66,11 @@ class ProcMemInfo final {
     // All other fields of MemUsage are zeroed.
     bool SmapsOrRollup(bool use_rollup, MemUsage* stats) const;
 
+    // Used to parse either of /proc/<pid>/{smaps, smaps_rollup} and record the process's
+    // Pss. The 'use_rollup' parameter decides which file is to be tried.
+    // Returns 'true' on success and the value of Pss in the out parameter.
+    bool SmapsOrRollupPss(bool use_rollup, uint64_t* pss) const;
+
     const std::vector<uint16_t>& SwapOffsets();
 
     ~ProcMemInfo() = default;
@@ -93,6 +98,11 @@ bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback);
 // from a file. The file MUST be in the same format as /proc/<pid>/smaps
 // or /proc/<pid>/smaps_rollup
 bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats);
+
+// Same as ProcMemInfo::SmapsOrRollupPss but reads the statistics directly
+// from a file and returns total Pss in kB. The file MUST be in the same format
+// as /proc/<pid>/smaps or /proc/<pid>/smaps_rollup
+bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss);
 
 }  // namespace meminfo
 }  // namespace android

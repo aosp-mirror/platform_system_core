@@ -178,6 +178,12 @@ bool ProcMemInfo::SmapsOrRollup(bool use_rollup, MemUsage* stats) const {
     return SmapsOrRollupFromFile(path, stats);
 };
 
+bool ProcMemInfo::SmapsOrRollupPss(bool use_rollup, uint64_t* pss) const {
+    std::string path = ::android::base::StringPrintf("/proc/%d/%s", pid_,
+                                                     use_rollup ? "smaps_rollup" : "smaps");
+    return SmapsOrRollupPssFromFile(path, pss);
+}
+
 const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
     if (get_wss_) {
         LOG(WARNING) << "Trying to read process swap offsets for " << pid_
@@ -406,6 +412,23 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
                     stats->swap_pss += strtoull(c, nullptr, 10);
                 }
                 break;
+        }
+    }
+
+    return true;
+}
+
+bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss) {
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return false;
+    }
+    *pss = 0;
+    char line[1024];
+    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+        uint64_t v;
+        if (sscanf(line, "Pss: %" SCNu64 " kB", &v) == 1) {
+            *pss += v;
         }
     }
 
