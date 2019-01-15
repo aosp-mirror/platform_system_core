@@ -35,8 +35,8 @@
 #include <string>
 
 #include <android-base/unique_fd.h>
-#include <backtrace/Backtrace.h>
 #include <log/log.h>
+#include <unwindstack/Unwinder.h>
 
 #include "libdebuggerd/types.h"
 #include "libdebuggerd/utility.h"
@@ -59,25 +59,27 @@ static void dump_process_footer(log_t* log, pid_t pid) {
   _LOG(log, logtype::BACKTRACE, "\n----- end %d -----\n", pid);
 }
 
-void dump_backtrace_thread(int output_fd, BacktraceMap* map, const ThreadInfo& thread) {
+void dump_backtrace_thread(int output_fd, unwindstack::Unwinder* unwinder,
+                           const ThreadInfo& thread) {
   log_t log;
   log.tfd = output_fd;
   log.amfd_data = nullptr;
 
   _LOG(&log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", thread.thread_name.c_str(), thread.tid);
 
-  std::vector<backtrace_frame_data_t> frames;
-  if (!Backtrace::Unwind(thread.registers.get(), map, &frames, 0, nullptr)) {
+  unwinder->SetRegs(thread.registers.get());
+  unwinder->Unwind();
+  if (unwinder->NumFrames() == 0) {
     _LOG(&log, logtype::THREAD, "Unwind failed: tid = %d", thread.tid);
     return;
   }
 
-  for (auto& frame : frames) {
-    _LOG(&log, logtype::BACKTRACE, "  %s\n", Backtrace::FormatFrameData(&frame).c_str());
+  for (size_t i = 0; i < unwinder->NumFrames(); i++) {
+    _LOG(&log, logtype::BACKTRACE, "  %s\n", unwinder->FormatFrame(i).c_str());
   }
 }
 
-void dump_backtrace(android::base::unique_fd output_fd, BacktraceMap* map,
+void dump_backtrace(android::base::unique_fd output_fd, unwindstack::Unwinder* unwinder,
                     const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread) {
   log_t log;
   log.tfd = output_fd.get();
@@ -91,10 +93,10 @@ void dump_backtrace(android::base::unique_fd output_fd, BacktraceMap* map,
 
   dump_process_header(&log, target->second.pid, target->second.process_name.c_str());
 
-  dump_backtrace_thread(output_fd.get(), map, target->second);
+  dump_backtrace_thread(output_fd.get(), unwinder, target->second);
   for (const auto& [tid, info] : thread_info) {
     if (tid != target_thread) {
-      dump_backtrace_thread(output_fd.get(), map, info);
+      dump_backtrace_thread(output_fd.get(), unwinder, info);
     }
   }
 
