@@ -95,6 +95,7 @@ int fs_mgr_is_checkpoint(const struct fstab_rec* fstab);
 int fs_mgr_is_checkpoint_fs(const struct fstab_rec* fstab);
 int fs_mgr_is_checkpoint_blk(const struct fstab_rec* fstab);
 int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
+int fs_mgr_is_fs_verity(const struct fstab_rec* fstab);
 
 std::string fs_mgr_get_slot_suffix();
 std::set<std::string> fs_mgr_get_boot_devices();
@@ -177,6 +178,7 @@ struct FstabEntry {
             bool zram_loopback_path : 1;
             bool zram_loopback_size : 1;
             bool zram_backing_dev_path : 1;
+            bool fs_verity : 1;
         };
     } fs_mgr_flags;
 
