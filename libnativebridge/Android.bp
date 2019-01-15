@@ -17,6 +17,7 @@ cc_library {
         "liblog",
     ],
 
+    version_script: "libnativebridge.map.txt",
     stubs: {
         symbol_file: "libnativebridge.map.txt",
         versions: ["1"],
