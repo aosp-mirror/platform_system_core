@@ -954,6 +954,17 @@ class CheckpointManager {
     std::map<std::string, std::string> device_map_;
 };
 
+static bool IsMountPointMounted(const std::string& mount_point) {
+    // Check if this is already mounted.
+    Fstab fstab;
+    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
+        return false;
+    }
+    auto it = std::find_if(fstab.begin(), fstab.end(),
+                           [&](const auto& entry) { return entry.mount_point == mount_point; });
+    return it != fstab.end();
+}
+
 // When multiple fstab records share the same mount_point, it will try to mount each
 // one in turn, and ignore any duplicates after a first successful mount.
 // Returns -1 on error, and  FS_MGR_MNTALL_* otherwise.
@@ -970,9 +981,18 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
     for (size_t i = 0; i < fstab->size(); i++) {
         auto& current_entry = (*fstab)[i];
 
+        // If a filesystem should have been mounted in the first stage, we
+        // ignore it here. With one exception, if the filesystem is
+        // formattable, then it can only be formatted in the second stage,
+        // so we allow it to mount here.
+        if (current_entry.fs_mgr_flags.first_stage_mount &&
+            (!current_entry.fs_mgr_flags.formattable ||
+             IsMountPointMounted(current_entry.mount_point))) {
+            continue;
+        }
+
         // Don't mount entries that are managed by vold or not for the mount mode.
         if (current_entry.fs_mgr_flags.vold_managed || current_entry.fs_mgr_flags.recovery_only ||
-            current_entry.fs_mgr_flags.first_stage_mount ||
             ((mount_mode == MOUNT_MODE_LATE) && !current_entry.fs_mgr_flags.late_mount) ||
             ((mount_mode == MOUNT_MODE_EARLY) && current_entry.fs_mgr_flags.late_mount)) {
             continue;
