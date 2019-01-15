@@ -61,7 +61,11 @@ static void heap_error(const char* msg, const char* function, void* p);
 #define USAGE_ERROR_ACTION(m,p) \
     heap_error("ARGUMENT IS INVALID HEAP ADDRESS", __FUNCTION__, p)
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wexpansion-to-defined"
+#pragma GCC diagnostic ignored "-Wnull-pointer-arithmetic"
 #include "../../../../external/dlmalloc/malloc.c"
+#pragma GCC diagnostic pop
 
 static void heap_error(const char* msg, const char* function, void* p) {
     ALOG(LOG_FATAL, LOG_TAG, "@@@ ABORTING: CODE FLINGER: %s IN %s addr=%p",

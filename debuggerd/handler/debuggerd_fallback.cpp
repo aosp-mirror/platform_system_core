@@ -47,6 +47,7 @@
 #include <unwindstack/Regs.h>
 
 #include "debuggerd/handler.h"
+#include "handler/fallback.h"
 #include "tombstoned/tombstoned.h"
 #include "util.h"
 
@@ -187,7 +188,7 @@ static std::pair<pid_t, int> unpack_thread_fd(uint64_t value) {
 static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
   static std::atomic<uint64_t> trace_output(pack_thread_fd(-1, -1));
 
-  if (info->si_value.sival_int == ~0) {
+  if (info->si_value.sival_ptr == kDebuggerdFallbackSivalPtrRequestDump) {
     // Asked to dump by the original signal recipient.
     uint64_t val = trace_output.load();
     auto [tid, fd] = unpack_thread_fd(val);
@@ -249,17 +250,18 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
         }
 
         uint64_t expected = pack_thread_fd(-1, -1);
-        if (!trace_output.compare_exchange_strong(expected,
-                                                  pack_thread_fd(tid, pipe_write.release()))) {
+        int sent_fd = pipe_write.release();
+        if (!trace_output.compare_exchange_strong(expected, pack_thread_fd(tid, sent_fd))) {
           auto [tid, fd] = unpack_thread_fd(expected);
           async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                                 "thread %d is already outputting to fd %d?", tid, fd);
+          close(sent_fd);
           return false;
         }
 
         siginfo_t siginfo = {};
         siginfo.si_code = SI_QUEUE;
-        siginfo.si_value.sival_int = ~0;
+        siginfo.si_value.sival_ptr = kDebuggerdFallbackSivalPtrRequestDump;
         siginfo.si_pid = getpid();
         siginfo.si_uid = getuid();
 
@@ -331,7 +333,7 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
 
 extern "C" void debuggerd_fallback_handler(siginfo_t* info, ucontext_t* ucontext,
                                            void* abort_message) {
-  if (info->si_signo == DEBUGGER_SIGNAL && info->si_value.sival_int != 0) {
+  if (info->si_signo == DEBUGGER_SIGNAL && info->si_value.sival_ptr != nullptr) {
     return trace_handler(info, ucontext);
   } else {
     return crash_handler(info, ucontext, abort_message);

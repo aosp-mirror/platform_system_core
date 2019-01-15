@@ -30,9 +30,45 @@
 namespace android {
 namespace fs_mgr {
 
-// Parse an LpMetadataGeometry from a buffer. The buffer must be at least
-// LP_METADATA_GEOMETRY_SIZE bytes in size.
-static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
+// Helper class for reading descriptors and memory buffers in the same manner.
+class Reader {
+  public:
+    virtual ~Reader(){};
+    virtual bool ReadFully(void* buffer, size_t length) = 0;
+};
+
+class FileReader final : public Reader {
+  public:
+    explicit FileReader(int fd) : fd_(fd) {}
+    bool ReadFully(void* buffer, size_t length) override {
+        return android::base::ReadFully(fd_, buffer, length);
+    }
+
+  private:
+    int fd_;
+};
+
+class MemoryReader final : public Reader {
+  public:
+    MemoryReader(const void* buffer, size_t size)
+        : buffer_(reinterpret_cast<const uint8_t*>(buffer)), size_(size), pos_(0) {}
+    bool ReadFully(void* out, size_t length) override {
+        if (size_ - pos_ < length) {
+            errno = EINVAL;
+            return false;
+        }
+        memcpy(out, buffer_ + pos_, length);
+        pos_ += length;
+        return true;
+    }
+
+  private:
+    const uint8_t* buffer_;
+    size_t size_;
+    size_t pos_;
+};
+
+bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
     static_assert(sizeof(*geometry) <= LP_METADATA_GEOMETRY_SIZE);
     memcpy(geometry, buffer, sizeof(*geometry));
 
@@ -72,47 +108,44 @@ static bool ParseGeometry(const void* buffer, LpMetadataGeometry* geometry) {
         LERROR << "Metadata max size is not sector-aligned.";
         return false;
     }
+    return true;
+}
 
-    // Check that the metadata area and logical partition areas don't overlap.
-    int64_t end_of_metadata =
-            GetPrimaryMetadataOffset(*geometry, geometry->metadata_slot_count - 1) +
-            geometry->metadata_max_size;
-    if (uint64_t(end_of_metadata) > geometry->first_logical_sector * LP_SECTOR_SIZE) {
-        LERROR << "Logical partition metadata overlaps with logical partition contents.";
+bool ReadPrimaryGeometry(int fd, LpMetadataGeometry* geometry) {
+    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
+    if (SeekFile64(fd, GetPrimaryGeometryOffset(), SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed";
         return false;
     }
-    return true;
+    if (!android::base::ReadFully(fd, buffer.get(), LP_METADATA_GEOMETRY_SIZE)) {
+        PERROR << __PRETTY_FUNCTION__ << " read " << LP_METADATA_GEOMETRY_SIZE << " bytes failed";
+        return false;
+    }
+    return ParseGeometry(buffer.get(), geometry);
+}
+
+bool ReadBackupGeometry(int fd, LpMetadataGeometry* geometry) {
+    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
+    if (SeekFile64(fd, GetBackupGeometryOffset(), SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed";
+        return false;
+    }
+    if (!android::base::ReadFully(fd, buffer.get(), LP_METADATA_GEOMETRY_SIZE)) {
+        PERROR << __PRETTY_FUNCTION__ << " backup read " << LP_METADATA_GEOMETRY_SIZE
+               << " bytes failed";
+        return false;
+    }
+    return ParseGeometry(buffer.get(), geometry);
 }
 
 // Read and validate geometry information from a block device that holds
 // logical partitions. If the information is corrupted, this will attempt
 // to read it from a secondary backup location.
 bool ReadLogicalPartitionGeometry(int fd, LpMetadataGeometry* geometry) {
-    // Read the first 4096 bytes.
-    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);
-    if (SeekFile64(fd, 0, SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed";
-        return false;
-    }
-    if (!android::base::ReadFully(fd, buffer.get(), LP_METADATA_GEOMETRY_SIZE)) {
-        PERROR << __PRETTY_FUNCTION__ << "read " << LP_METADATA_GEOMETRY_SIZE << " bytes failed";
-        return false;
-    }
-    if (ParseGeometry(buffer.get(), geometry)) {
+    if (ReadPrimaryGeometry(fd, geometry)) {
         return true;
     }
-
-    // Try the backup copy in the last 4096 bytes.
-    if (SeekFile64(fd, -LP_METADATA_GEOMETRY_SIZE, SEEK_END) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed, offset " << -LP_METADATA_GEOMETRY_SIZE;
-        return false;
-    }
-    if (!android::base::ReadFully(fd, buffer.get(), LP_METADATA_GEOMETRY_SIZE)) {
-        PERROR << __PRETTY_FUNCTION__ << "backup read " << LP_METADATA_GEOMETRY_SIZE
-               << " bytes failed";
-        return false;
-    }
-    return ParseGeometry(buffer.get(), geometry);
+    return ReadBackupGeometry(fd, geometry);
 }
 
 static bool ValidateTableBounds(const LpMetadataHeader& header,
@@ -152,7 +185,9 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
         return false;
     }
     if (!ValidateTableBounds(header, header.partitions) ||
-        !ValidateTableBounds(header, header.extents)) {
+        !ValidateTableBounds(header, header.extents) ||
+        !ValidateTableBounds(header, header.groups) ||
+        !ValidateTableBounds(header, header.block_devices)) {
         LERROR << "Logical partition metadata has invalid table bounds.";
         return false;
     }
@@ -166,21 +201,27 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
         LERROR << "Logical partition metadata has invalid extent table entry size.";
         return false;
     }
+    if (header.groups.entry_size != sizeof(LpMetadataPartitionGroup)) {
+        LERROR << "Logical partition metadata has invalid group table entry size.";
+        return false;
+    }
     return true;
 }
 
 // Parse and validate all metadata at the current position in the given file
 // descriptor.
-std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
+static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry,
+                                                 Reader* reader) {
     // First read and validate the header.
     std::unique_ptr<LpMetadata> metadata = std::make_unique<LpMetadata>();
-    if (!android::base::ReadFully(fd, &metadata->header, sizeof(metadata->header))) {
-        PERROR << __PRETTY_FUNCTION__ << "read " << sizeof(metadata->header) << "bytes failed";
+    if (!reader->ReadFully(&metadata->header, sizeof(metadata->header))) {
+        PERROR << __PRETTY_FUNCTION__ << " read " << sizeof(metadata->header) << "bytes failed";
         return nullptr;
     }
     if (!ValidateMetadataHeader(metadata->header)) {
         return nullptr;
     }
+    metadata->geometry = geometry;
 
     LpMetadataHeader& header = metadata->header;
 
@@ -191,8 +232,8 @@ std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
         LERROR << "Out of memory reading logical partition tables.";
         return nullptr;
     }
-    if (!android::base::ReadFully(fd, buffer.get(), header.tables_size)) {
-        PERROR << __PRETTY_FUNCTION__ << "read " << header.tables_size << "bytes failed";
+    if (!reader->ReadFully(buffer.get(), header.tables_size)) {
+        PERROR << __PRETTY_FUNCTION__ << " read " << header.tables_size << "bytes failed";
         return nullptr;
     }
 
@@ -219,6 +260,10 @@ std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
             LERROR << "Logical partition has invalid extent list.";
             return nullptr;
         }
+        if (partition.group_index >= header.groups.num_entries) {
+            LERROR << "Logical partition has invalid group index.";
+            return nullptr;
+        }
 
         metadata->partitions.push_back(partition);
     }
@@ -229,61 +274,163 @@ std::unique_ptr<LpMetadata> ParseMetadata(int fd) {
         memcpy(&extent, cursor, sizeof(extent));
         cursor += header.extents.entry_size;
 
+        if (extent.target_type == LP_TARGET_TYPE_LINEAR &&
+            extent.target_source >= header.block_devices.num_entries) {
+            LERROR << "Logical partition extent has invalid block device.";
+            return nullptr;
+        }
+
         metadata->extents.push_back(extent);
     }
 
+    cursor = buffer.get() + header.groups.offset;
+    for (size_t i = 0; i < header.groups.num_entries; i++) {
+        LpMetadataPartitionGroup group = {};
+        memcpy(&group, cursor, sizeof(group));
+        cursor += header.groups.entry_size;
+
+        metadata->groups.push_back(group);
+    }
+
+    cursor = buffer.get() + header.block_devices.offset;
+    for (size_t i = 0; i < header.block_devices.num_entries; i++) {
+        LpMetadataBlockDevice device = {};
+        memcpy(&device, cursor, sizeof(device));
+        cursor += header.block_devices.entry_size;
+
+        metadata->block_devices.push_back(device);
+    }
+
+    const LpMetadataBlockDevice* super_device = GetMetadataSuperBlockDevice(*metadata.get());
+    if (!super_device) {
+        LERROR << "Metadata does not specify a super device.";
+        return nullptr;
+    }
+
+    // Check that the metadata area and logical partition areas don't overlap.
+    uint64_t metadata_region =
+            GetTotalMetadataSize(geometry.metadata_max_size, geometry.metadata_slot_count);
+    if (metadata_region > super_device->first_logical_sector * LP_SECTOR_SIZE) {
+        LERROR << "Logical partition metadata overlaps with logical partition contents.";
+        return nullptr;
+    }
     return metadata;
+}
+
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, const void* buffer,
+                                          size_t size) {
+    MemoryReader reader(buffer, size);
+    return ParseMetadata(geometry, &reader);
+}
+
+std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geometry, int fd) {
+    FileReader reader(fd);
+    return ParseMetadata(geometry, &reader);
 }
 
 std::unique_ptr<LpMetadata> ReadPrimaryMetadata(int fd, const LpMetadataGeometry& geometry,
                                                 uint32_t slot_number) {
     int64_t offset = GetPrimaryMetadataOffset(geometry, slot_number);
     if (SeekFile64(fd, offset, SEEK_SET) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << offset;
         return nullptr;
     }
-    return ParseMetadata(fd);
+    return ParseMetadata(geometry, fd);
 }
 
 std::unique_ptr<LpMetadata> ReadBackupMetadata(int fd, const LpMetadataGeometry& geometry,
                                                uint32_t slot_number) {
     int64_t offset = GetBackupMetadataOffset(geometry, slot_number);
-    if (SeekFile64(fd, offset, SEEK_END) < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "lseek failed: offset " << offset;
+    if (SeekFile64(fd, offset, SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed: offset " << offset;
         return nullptr;
     }
-    return ParseMetadata(fd);
+    return ParseMetadata(geometry, fd);
 }
 
-std::unique_ptr<LpMetadata> ReadMetadata(int fd, uint32_t slot_number) {
+namespace {
+
+bool AdjustMetadataForSlot(LpMetadata* metadata, uint32_t slot_number) {
+    std::string slot_suffix = SlotSuffixForSlotNumber(slot_number);
+    for (auto& partition : metadata->partitions) {
+        if (!(partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED)) {
+            continue;
+        }
+        std::string partition_name = GetPartitionName(partition) + slot_suffix;
+        if (partition_name.size() > sizeof(partition.name)) {
+            LERROR << __PRETTY_FUNCTION__ << " partition name too long: " << partition_name;
+            return false;
+        }
+        strncpy(partition.name, partition_name.c_str(), sizeof(partition.name));
+        partition.attributes &= ~LP_PARTITION_ATTR_SLOT_SUFFIXED;
+    }
+    for (auto& block_device : metadata->block_devices) {
+        if (!(block_device.flags & LP_BLOCK_DEVICE_SLOT_SUFFIXED)) {
+            continue;
+        }
+        std::string partition_name = GetBlockDevicePartitionName(block_device) + slot_suffix;
+        if (!UpdateBlockDevicePartitionName(&block_device, partition_name)) {
+            LERROR << __PRETTY_FUNCTION__ << " partition name too long: " << partition_name;
+            return false;
+        }
+        block_device.flags &= ~LP_BLOCK_DEVICE_SLOT_SUFFIXED;
+    }
+    for (auto& group : metadata->groups) {
+        if (!(group.flags & LP_GROUP_SLOT_SUFFIXED)) {
+            continue;
+        }
+        std::string group_name = GetPartitionGroupName(group) + slot_suffix;
+        if (!UpdatePartitionGroupName(&group, group_name)) {
+            LERROR << __PRETTY_FUNCTION__ << " group name too long: " << group_name;
+            return false;
+        }
+        group.flags &= ~LP_GROUP_SLOT_SUFFIXED;
+    }
+    return true;
+}
+
+}  // namespace
+
+std::unique_ptr<LpMetadata> ReadMetadata(const IPartitionOpener& opener,
+                                         const std::string& super_partition, uint32_t slot_number) {
+    android::base::unique_fd fd = opener.Open(super_partition, O_RDONLY);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed: " << super_partition;
+        return nullptr;
+    }
+
     LpMetadataGeometry geometry;
     if (!ReadLogicalPartitionGeometry(fd, &geometry)) {
         return nullptr;
     }
-
     if (slot_number >= geometry.metadata_slot_count) {
-        LERROR << __PRETTY_FUNCTION__ << "invalid metadata slot number";
+        LERROR << __PRETTY_FUNCTION__ << " invalid metadata slot number";
         return nullptr;
     }
 
-    // Read the priamry copy, and if that fails, try the backup.
-    std::unique_ptr<LpMetadata> metadata = ReadPrimaryMetadata(fd, geometry, slot_number);
-    if (!metadata) {
-        metadata = ReadBackupMetadata(fd, geometry, slot_number);
+    std::vector<int64_t> offsets = {
+            GetPrimaryMetadataOffset(geometry, slot_number),
+            GetBackupMetadataOffset(geometry, slot_number),
+    };
+    std::unique_ptr<LpMetadata> metadata;
+
+    for (const auto& offset : offsets) {
+        if (SeekFile64(fd, offset, SEEK_SET) < 0) {
+            PERROR << __PRETTY_FUNCTION__ << " lseek failed, offset " << offset;
+            continue;
+        }
+        if ((metadata = ParseMetadata(geometry, fd)) != nullptr) {
+            break;
+        }
     }
-    if (metadata) {
-        metadata->geometry = geometry;
+    if (!metadata || !AdjustMetadataForSlot(metadata.get(), slot_number)) {
+        return nullptr;
     }
     return metadata;
 }
 
-std::unique_ptr<LpMetadata> ReadMetadata(const char* block_device, uint32_t slot_number) {
-    android::base::unique_fd fd(open(block_device, O_RDONLY));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << "open failed: " << block_device;
-        return nullptr;
-    }
-    return ReadMetadata(fd, slot_number);
+std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uint32_t slot_number) {
+    return ReadMetadata(PartitionOpener(), super_partition, slot_number);
 }
 
 static std::string NameFromFixedArray(const char* name, size_t buffer_size) {
@@ -298,6 +445,14 @@ static std::string NameFromFixedArray(const char* name, size_t buffer_size) {
 
 std::string GetPartitionName(const LpMetadataPartition& partition) {
     return NameFromFixedArray(partition.name, sizeof(partition.name));
+}
+
+std::string GetPartitionGroupName(const LpMetadataPartitionGroup& group) {
+    return NameFromFixedArray(group.name, sizeof(group.name));
+}
+
+std::string GetBlockDevicePartitionName(const LpMetadataBlockDevice& block_device) {
+    return NameFromFixedArray(block_device.partition_name, sizeof(block_device.partition_name));
 }
 
 }  // namespace fs_mgr

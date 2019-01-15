@@ -22,6 +22,7 @@
 
 #include <limits>
 #include <string>
+#include <type_traits>
 
 namespace android {
 namespace base {
@@ -33,18 +34,36 @@ namespace base {
 template <typename T>
 bool ParseUint(const char* s, T* out, T max = std::numeric_limits<T>::max(),
                bool allow_suffixes = false) {
+  static_assert(std::is_unsigned<T>::value, "ParseUint can only be used with unsigned types");
+  while (isspace(*s)) {
+    s++;
+  }
+
+  if (s[0] == '-') {
+    errno = EINVAL;
+    return false;
+  }
+
   int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
   unsigned long long int result = strtoull(s, &end, base);
-  if (errno != 0 || end == s) return false;
+  if (errno != 0) return false;
+  if (end == s) {
+    errno = EINVAL;
+    return false;
+  }
   if (*end != '\0') {
     const char* suffixes = "bkmgtpe";
     const char* suffix;
-    if (!allow_suffixes || (suffix = strchr(suffixes, tolower(*end))) == nullptr) return false;
-    if (__builtin_mul_overflow(result, 1ULL << (10 * (suffix - suffixes)), &result)) return false;
+    if ((!allow_suffixes || (suffix = strchr(suffixes, tolower(*end))) == nullptr) ||
+        __builtin_mul_overflow(result, 1ULL << (10 * (suffix - suffixes)), &result)) {
+      errno = EINVAL;
+      return false;
+    }
   }
   if (max < result) {
+    errno = ERANGE;
     return false;
   }
   if (out != nullptr) {
@@ -79,14 +98,24 @@ template <typename T>
 bool ParseInt(const char* s, T* out,
               T min = std::numeric_limits<T>::min(),
               T max = std::numeric_limits<T>::max()) {
+  static_assert(std::is_signed<T>::value, "ParseInt can only be used with signed types");
+  while (isspace(*s)) {
+    s++;
+  }
+
   int base = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
   errno = 0;
   char* end;
   long long int result = strtoll(s, &end, base);
-  if (errno != 0 || s == end || *end != '\0') {
+  if (errno != 0) {
+    return false;
+  }
+  if (s == end || *end != '\0') {
+    errno = EINVAL;
     return false;
   }
   if (result < min || max < result) {
+    errno = ERANGE;
     return false;
   }
   if (out != nullptr) {

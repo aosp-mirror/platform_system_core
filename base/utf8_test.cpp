@@ -21,8 +21,8 @@
 #include <fcntl.h>
 #include <stdlib.h>
 
+#include "android-base/file.h"
 #include "android-base/macros.h"
-#include "android-base/test_utils.h"
 #include "android-base/unique_fd.h"
 
 namespace android {

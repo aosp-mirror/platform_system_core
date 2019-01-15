@@ -19,7 +19,11 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 
-#include "stable_properties.h"
+#if defined(__ANDROID__)
+#include "property_service.h"
+#else
+#include "host_init_stubs.h"
+#endif
 
 using android::base::GetBoolProperty;
 using android::base::StartsWith;
@@ -36,15 +40,19 @@ bool IsActionableProperty(Subcontext* subcontext, const std::string& prop_name) 
         return true;
     }
 
-    if (kExportedActionableProperties.count(prop_name) == 1) {
-        return true;
-    }
+    static constexpr const char* kPartnerPrefixes[] = {
+            "init.svc.vendor.", "ro.vendor.",    "persist.vendor.",
+            "vendor.",          "init.svc.odm.", "ro.odm.",
+            "persist.odm.",     "odm.",          "ro.boot.",
+    };
+
     for (const auto& prefix : kPartnerPrefixes) {
         if (android::base::StartsWith(prop_name, prefix)) {
             return true;
         }
     }
-    return false;
+
+    return CanReadProperty(subcontext->context(), prop_name);
 }
 
 Result<Success> ParsePropertyTrigger(const std::string& trigger, Subcontext* subcontext,

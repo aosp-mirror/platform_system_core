@@ -3,21 +3,17 @@ on property:ro.debuggable=*
     setprop llk.enable ${ro.llk.enable:-0}
     setprop khungtask.enable ${ro.khungtask.enable:-0}
 
-on property:ro.debuggable=1
-    setprop llk.enable ${ro.llk.enable:-1}
-    setprop khungtask.enable ${ro.khungtask.enable:-1}
-
-on property:ro.llk.enable=eng
-    setprop llk.enable ${ro.debuggable:-0}
-
-on property:ro.khungtask.enable=eng
-    setprop khungtask.enable ${ro.debuggable:-0}
+on property:ro.llk.enable=true
+    setprop llk.enable true
 
 on property:llk.enable=1
     setprop llk.enable true
 
 on property:llk.enable=0
     setprop llk.enable false
+
+on property:ro.khungtask.enable=true
+    setprop khungtask.enable true
 
 on property:khungtask.enable=1
     setprop khungtask.enable true
@@ -36,9 +32,9 @@ on property:khungtask.enable=false
     write /proc/sys/kernel/hung_task_panic 0
 
 on property:llk.enable=true
-    start llkd
+    start llkd-${ro.debuggable:-0}
 
-service llkd /system/bin/llkd
+service llkd-0 /system/bin/llkd
     class late_start
     disabled
     user llkd

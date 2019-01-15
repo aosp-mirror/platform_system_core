@@ -111,6 +111,22 @@ void property_init() {
         LOG(FATAL) << "Failed to load serialized property info file";
     }
 }
+
+bool CanReadProperty(const std::string& source_context, const std::string& name) {
+    const char* target_context = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), &target_context, nullptr);
+
+    PropertyAuditData audit_data;
+
+    audit_data.name = name.c_str();
+
+    ucred cr = {.pid = 0, .uid = 0, .gid = 0};
+    audit_data.cr = &cr;
+
+    return selinux_check_access(source_context.c_str(), target_context, "file", "read",
+                                &audit_data) == 0;
+}
+
 static bool CheckMacPerms(const std::string& name, const char* target_context,
                           const char* source_context, const ucred& cr) {
     if (!target_context || !source_context) {
@@ -683,22 +699,6 @@ static void update_sys_usb_config() {
     }
 }
 
-void property_load_boot_defaults() {
-    if (!load_properties_from_file("/system/etc/prop.default", NULL)) {
-        // Try recovery path
-        if (!load_properties_from_file("/prop.default", NULL)) {
-            // Try legacy path
-            load_properties_from_file("/default.prop", NULL);
-        }
-    }
-    load_properties_from_file("/product/build.prop", NULL);
-    load_properties_from_file("/product-services/build.prop", NULL);
-    load_properties_from_file("/odm/default.prop", NULL);
-    load_properties_from_file("/vendor/default.prop", NULL);
-
-    update_sys_usb_config();
-}
-
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
         load_properties_from_file("/data/local.prop", NULL);
@@ -746,7 +746,7 @@ void load_recovery_id_prop() {
         return;
     }
 
-    int fd = open(rec->blk_device, O_RDONLY);
+    int fd = open(rec->blk_device, O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         PLOG(ERROR) << "error opening block device " << rec->blk_device;
         return;
@@ -763,12 +763,29 @@ void load_recovery_id_prop() {
     close(fd);
 }
 
-void load_system_props() {
+void property_load_boot_defaults() {
+    // TODO(b/117892318): merge prop.default and build.prop files into one
+    // TODO(b/122864654): read the prop files from all partitions and then
+    // resolve the duplication by their origin so that RO and non-RO properties
+    // have a consistent overriding order.
+    if (!load_properties_from_file("/system/etc/prop.default", NULL)) {
+        // Try recovery path
+        if (!load_properties_from_file("/prop.default", NULL)) {
+            // Try legacy path
+            load_properties_from_file("/default.prop", NULL);
+        }
+    }
+    load_properties_from_file("/product/build.prop", NULL);
+    load_properties_from_file("/product_services/build.prop", NULL);
+    load_properties_from_file("/odm/default.prop", NULL);
+    load_properties_from_file("/vendor/default.prop", NULL);
     load_properties_from_file("/system/build.prop", NULL);
     load_properties_from_file("/odm/build.prop", NULL);
     load_properties_from_file("/vendor/build.prop", NULL);
     load_properties_from_file("/factory/factory.prop", "ro.*");
     load_recovery_id_prop();
+
+    update_sys_usb_config();
 }
 
 static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {

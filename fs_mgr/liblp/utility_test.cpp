@@ -24,10 +24,17 @@ using namespace android::fs_mgr;
 
 TEST(liblp, SlotNumberForSlotSuffix) {
     EXPECT_EQ(SlotNumberForSlotSuffix(""), 0);
+    EXPECT_EQ(SlotNumberForSlotSuffix("a"), 0);
     EXPECT_EQ(SlotNumberForSlotSuffix("_a"), 0);
+    EXPECT_EQ(SlotNumberForSlotSuffix("b"), 1);
     EXPECT_EQ(SlotNumberForSlotSuffix("_b"), 1);
-    EXPECT_EQ(SlotNumberForSlotSuffix("_c"), 2);
-    EXPECT_EQ(SlotNumberForSlotSuffix("_d"), 3);
+    EXPECT_EQ(SlotNumberForSlotSuffix("_c"), 0);
+    EXPECT_EQ(SlotNumberForSlotSuffix("_d"), 0);
+}
+
+TEST(liblp, SlotSuffixForSlotNumber) {
+    EXPECT_EQ(SlotSuffixForSlotNumber(0), "_a");
+    EXPECT_EQ(SlotSuffixForSlotNumber(1), "_b");
 }
 
 TEST(liblp, GetMetadataOffset) {
@@ -36,21 +43,18 @@ TEST(liblp, GetMetadataOffset) {
                                    {0},
                                    16384,
                                    4,
-                                   10000,
-                                   80000,
-                                   0,
-                                   0,
-                                   1024 * 1024,
                                    4096};
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), 4096);
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 1), 4096 + 16384);
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 2), 4096 + 16384 * 2);
-    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 3), 4096 + 16384 * 3);
+    static const uint64_t start = LP_PARTITION_RESERVED_BYTES;
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 0), start + 8192);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 1), start + 8192 + 16384);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 2), start + 8192 + 16384 * 2);
+    EXPECT_EQ(GetPrimaryMetadataOffset(geometry, 3), start + 8192 + 16384 * 3);
 
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 3), -4096 - 16384 * 1);
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 2), -4096 - 16384 * 2);
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 1), -4096 - 16384 * 3);
-    EXPECT_EQ(GetBackupMetadataOffset(geometry, 0), -4096 - 16384 * 4);
+    static const uint64_t backup_start = start + 8192 + 16384 * 4;
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 3), backup_start + 16384 * 3);
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 2), backup_start + 16384 * 2);
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 1), backup_start + 16384 * 1);
+    EXPECT_EQ(GetBackupMetadataOffset(geometry, 0), backup_start + 16384 * 0);
 }
 
 TEST(liblp, AlignTo) {
@@ -62,4 +66,12 @@ TEST(liblp, AlignTo) {
     EXPECT_EQ(AlignTo(54, 32, 30), 62);
     EXPECT_EQ(AlignTo(32, 32, 30), 62);
     EXPECT_EQ(AlignTo(17, 32, 30), 30);
+}
+
+TEST(liblp, GetPartitionSlotSuffix) {
+    EXPECT_EQ(GetPartitionSlotSuffix("system"), "");
+    EXPECT_EQ(GetPartitionSlotSuffix("_"), "");
+    EXPECT_EQ(GetPartitionSlotSuffix("_a"), "");
+    EXPECT_EQ(GetPartitionSlotSuffix("system_a"), "_a");
+    EXPECT_EQ(GetPartitionSlotSuffix("system_b"), "_b");
 }

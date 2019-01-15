@@ -20,10 +20,18 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 
 namespace android {
 namespace dm {
+
+DeviceMapper::DeviceMapper() : fd_(-1) {
+    fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
+    if (fd_ < 0) {
+        PLOG(ERROR) << "Failed to open device-mapper";
+    }
+}
 
 DeviceMapper& DeviceMapper::Instance() {
     static DeviceMapper instance;
@@ -90,9 +98,16 @@ const std::unique_ptr<DmTable> DeviceMapper::table(const std::string& /* name */
     return nullptr;
 }
 
-DmDeviceState DeviceMapper::state(const std::string& /* name */) const {
-    // TODO(b/110035986): Return the state, as read from the kernel instead
-    return DmDeviceState::INVALID;
+DmDeviceState DeviceMapper::GetState(const std::string& name) const {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        return DmDeviceState::INVALID;
+    }
+    if ((io.flags & DM_ACTIVE_PRESENT_FLAG) && !(io.flags & DM_SUSPEND_FLAG)) {
+        return DmDeviceState::ACTIVE;
+    }
+    return DmDeviceState::SUSPENDED;
 }
 
 bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
@@ -188,7 +203,8 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets) {
         }
         next += vers->next;
         data_size -= vers->next;
-        vers = reinterpret_cast<struct dm_target_versions*>(static_cast<char*>(buffer.get()) + next);
+        vers = reinterpret_cast<struct dm_target_versions*>(static_cast<char*>(buffer.get()) +
+                                                            next);
     }
 
     return true;
@@ -263,7 +279,7 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
     struct dm_ioctl io;
     InitIo(&io, name);
     if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
-        PLOG(ERROR) << "DM_DEV_STATUS failed for " << name;
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
         return false;
     }
 
@@ -273,12 +289,23 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
 }
 
 bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, 0, table);
+}
+
+bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, DM_STATUS_TABLE_FLAG, table);
+}
+
+// private methods of DeviceMapper
+bool DeviceMapper::GetTable(const std::string& name, uint32_t flags,
+                            std::vector<TargetInfo>* table) {
     char buffer[4096];
     struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(buffer);
 
     InitIo(io, name);
     io->data_size = sizeof(buffer);
     io->data_start = sizeof(*io);
+    io->flags = flags;
     if (ioctl(fd_, DM_TABLE_STATUS, io) < 0) {
         PLOG(ERROR) << "DM_TABLE_STATUS failed for " << name;
         return false;
@@ -312,7 +339,6 @@ bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInf
     return true;
 }
 
-// private methods of DeviceMapper
 void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
     CHECK(io != nullptr) << "nullptr passed to dm_ioctl initialization";
     memset(io, 0, sizeof(*io));
@@ -323,7 +349,7 @@ void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
     io->data_size = sizeof(*io);
     io->data_start = 0;
     if (!name.empty()) {
-        strlcpy(io->name, name.c_str(), sizeof(io->name));
+        snprintf(io->name, sizeof(io->name), "%s", name.c_str());
     }
 }
 

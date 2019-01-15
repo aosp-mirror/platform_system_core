@@ -70,8 +70,8 @@ TrustyKeymasterDevice::TrustyKeymasterDevice(const hw_module_t* module) {
     device_.export_key = export_key;
     device_.attest_key = attest_key;
     device_.upgrade_key = upgrade_key;
-    device_.delete_key = nullptr;
-    device_.delete_all_keys = nullptr;
+    device_.delete_key = delete_key;
+    device_.delete_all_keys = delete_all_keys;
     device_.begin = begin;
     device_.update = update;
     device_.finish = finish;
@@ -122,10 +122,10 @@ template <typename RequestType>
 void AddClientAndAppData(const keymaster_blob_t* client_id, const keymaster_blob_t* app_data,
                          RequestType* request) {
     request->additional_params.Clear();
-    if (client_id) {
+    if (client_id && client_id->data_length > 0) {
         request->additional_params.push_back(TAG_APPLICATION_ID, *client_id);
     }
-    if (app_data) {
+    if (app_data && app_data->data_length > 0) {
         request->additional_params.push_back(TAG_APPLICATION_DATA, *app_data);
     }
 }
@@ -606,6 +606,34 @@ keymaster_error_t TrustyKeymasterDevice::abort(keymaster_operation_handle_t oper
     return trusty_keymaster_send(KM_ABORT_OPERATION, request, &response);
 }
 
+keymaster_error_t TrustyKeymasterDevice::delete_key(const keymaster_key_blob_t* key) {
+    ALOGD("Device received delete_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+
+    if (!key || !key->key_material)
+        return KM_ERROR_UNEXPECTED_NULL_POINTER;
+
+    DeleteKeyRequest request(message_version_);
+    request.SetKeyMaterial(*key);
+    DeleteKeyResponse response(message_version_);
+    return trusty_keymaster_send(KM_DELETE_KEY, request, &response);
+}
+
+keymaster_error_t TrustyKeymasterDevice::delete_all_keys() {
+    ALOGD("Device received delete_all_key");
+
+    if (error_ != KM_ERROR_OK) {
+        return error_;
+    }
+
+    DeleteAllKeysRequest request(message_version_);
+    DeleteAllKeysResponse response(message_version_);
+    return trusty_keymaster_send(KM_DELETE_ALL_KEYS, request, &response);
+}
+
 hw_device_t* TrustyKeymasterDevice::hw_device() {
     return &device_.common;
 }
@@ -717,6 +745,17 @@ keymaster_error_t TrustyKeymasterDevice::finish(const keymaster2_device_t* dev,
 keymaster_error_t TrustyKeymasterDevice::abort(const keymaster2_device_t* dev,
                                                keymaster_operation_handle_t operation_handle) {
     return convert_device(dev)->abort(operation_handle);
+}
+
+/* static */
+keymaster_error_t TrustyKeymasterDevice::delete_key(const keymaster2_device_t* dev,
+                                               const keymaster_key_blob_t* key) {
+   return convert_device(dev)->delete_key(key);
+}
+
+/* static */
+keymaster_error_t TrustyKeymasterDevice::delete_all_keys(const keymaster2_device_t* dev) {
+   return convert_device(dev)->delete_all_keys();
 }
 
 }  // namespace keymaster

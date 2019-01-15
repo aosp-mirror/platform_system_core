@@ -41,6 +41,7 @@ void LogReader::notifyNewLog(log_mask_t logMask) {
     runOnEachSocket(&command);
 }
 
+// Note returning false will release the SocketClient instance.
 bool LogReader::onDataAvailable(SocketClient* cli) {
     static bool name_set;
     if (!name_set) {
@@ -56,6 +57,18 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         return false;
     }
     buffer[len] = '\0';
+
+    // Clients are only allowed to send one command, disconnect them if they
+    // send another.
+    LogTimeEntry::wrlock();
+    for (const auto& entry : mLogbuf.mTimes) {
+        if (entry->mClient == cli) {
+            entry->release_Locked();
+            LogTimeEntry::unlock();
+            return false;
+        }
+    }
+    LogTimeEntry::unlock();
 
     unsigned long tail = 0;
     static const char _tail[] = " tail=";
@@ -199,14 +212,29 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail,
         logMask, (int)pid, sequence.nsec(), timeout);
 
-    FlushCommand command(*this, nonBlock, tail, logMask, pid, sequence, timeout);
+    if (sequence == log_time::EPOCH) {
+        timeout = 0;
+    }
+
+    LogTimeEntry::wrlock();
+    auto entry = std::make_unique<LogTimeEntry>(
+        *this, cli, nonBlock, tail, logMask, pid, sequence, timeout);
+    if (!entry->startReader_Locked()) {
+        LogTimeEntry::unlock();
+        return false;
+    }
+
+    // release client and entry reference counts once done
+    cli->incRef();
+    mLogbuf.mTimes.emplace_front(std::move(entry));
 
     // Set acceptable upper limit to wait for slow reader processing b/27242723
     struct timeval t = { LOGD_SNDTIMEO, 0 };
     setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char*)&t,
                sizeof(t));
 
-    command.runSocketCommand(cli);
+    LogTimeEntry::unlock();
+
     return true;
 }
 
@@ -215,9 +243,8 @@ void LogReader::doSocketDelete(SocketClient* cli) {
     LogTimeEntry::wrlock();
     LastLogTimes::iterator it = times.begin();
     while (it != times.end()) {
-        LogTimeEntry* entry = (*it);
+        LogTimeEntry* entry = it->get();
         if (entry->mClient == cli) {
-            times.erase(it);
             entry->release_Locked();
             break;
         }

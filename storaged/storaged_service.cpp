@@ -161,7 +161,7 @@ status_t StoragedService::dump(int fd, const Vector<String16>& args) {
         storaged_sp->update_uid_io_interval(time_window);
     }
 
-    return NO_ERROR;
+    return OK;
 }
 
 binder::Status StoragedService::onUserStarted(int32_t userId) {

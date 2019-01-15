@@ -1,0 +1,11 @@
+// Copyright 2005 The Android Open Source Project
+
+cc_binary_host {
+    name: "mkbootfs",
+    srcs: ["mkbootfs.c"],
+    cflags: ["-Werror"],
+    shared_libs: ["libcutils"],
+    dist: {
+        targets: ["dist_files"],
+    },
+}

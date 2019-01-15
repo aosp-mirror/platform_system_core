@@ -12,6 +12,12 @@ import /init.usb.configfs.rc
 import /init.${ro.zygote}.rc
 
 on early-init
+    # Mount shared so changes propagate into child namespaces
+    # Do this before other processes are started from init. Otherwise,
+    # processes launched while the propagation type of / is 'private'
+    # won't get mount events from others.
+    mount rootfs rootfs / shared rec
+
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_score_adj -1000
 
@@ -40,6 +46,8 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    prepare_bootstrap_bionic
+
     start ueventd
 
 on init
@@ -48,6 +56,10 @@ on init
     # Mix device-specific information into the entropy pool
     copy /proc/cmdline /dev/urandom
     copy /default.prop /dev/urandom
+
+    symlink /proc/self/fd/0 /dev/stdin
+    symlink /proc/self/fd/1 /dev/stdout
+    symlink /proc/self/fd/2 /dev/stderr
 
     symlink /system/bin /bin
     symlink /system/etc /etc
@@ -265,6 +277,25 @@ on init
     # that they can be chown'd to system:system later on boot
     write /sys/class/leds/vibrator/trigger "transient"
 
+    # This is used by Bionic to select optimized routines.
+    write /dev/cpu_variant:${ro.bionic.arch} ${ro.bionic.cpu_variant}
+    chmod 0444 /dev/cpu_variant:${ro.bionic.arch}
+    write /dev/cpu_variant:${ro.bionic.2nd_arch} ${ro.bionic.2nd_cpu_variant}
+    chmod 0444 /dev/cpu_variant:${ro.bionic.2nd_arch}
+
+    # Setup APEX mount point and its security context
+    mount tmpfs tmpfs /apex nodev noexec nosuid
+    chmod 0755 /apex
+    chown root root /apex
+    restorecon /apex
+
+    # Start logd before any other services run to ensure we capture all of their logs.
+    start logd
+    # Start essential services.
+    start servicemanager
+    start hwservicemanager
+    start vndservicemanager
+
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
 on property:sys.boot_from_charger_mode=1
@@ -302,11 +333,11 @@ on late-init
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
 
-    # Now we can start zygote for devices with file based encryption
-    trigger zygote-start
-
     # Load persist properties and override properties (if enabled) from /data.
     trigger load_persist_props_action
+
+    # Now we can start zygote for devices with file based encryption
+    trigger zygote-start
 
     # Remove a file to wake up anything waiting for firmware.
     trigger firmware_mounts_complete
@@ -315,23 +346,12 @@ on late-init
     trigger boot
 
 on post-fs
-    # Load properties from
-    #     /system/build.prop,
-    #     /odm/build.prop,
-    #     /vendor/build.prop and
-    #     /factory/factory.prop
-    load_system_props
-    # start essential services
-    start logd
-    start servicemanager
-    start hwservicemanager
-    start vndservicemanager
+    start vold
+    exec - system system -- /system/bin/vdc checkpoint markBootAttempt
 
     # Once everything is setup, no need to modify /.
     # The bind+remount combination allows this to work in containers.
     mount rootfs rootfs / remount bind ro nodev
-    # Mount shared so changes propagate into child namespaces
-    mount rootfs rootfs / shared rec
     # Mount default storage into root namespace
     mount none /mnt/runtime/default /storage bind rec
     mount none none /storage slave rec
@@ -388,6 +408,10 @@ on late-fs
     class_start early_hal
 
 on post-fs-data
+    # Start checkpoint before we touch data
+    start vold
+    exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
+
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
@@ -395,13 +419,15 @@ on post-fs-data
     restorecon /data
 
     # Make sure we have the device encryption key.
-    start vold
     installkey /data
 
     # Start bootcharting as soon as possible after the data partition is
     # mounted to collect more data.
     mkdir /data/bootchart 0755 shell shell
     bootchart start
+
+    # Start apexd as soon as we can
+    start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
@@ -469,6 +495,8 @@ on post-fs-data
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
 
+    mkdir /data/preloads 0775 system system
+
     mkdir /data/vendor 0771 root root
     mkdir /data/vendor_ce 0771 root root
     mkdir /data/vendor_de 0771 root root
@@ -516,6 +544,9 @@ on post-fs-data
 
     mkdir /data/anr 0775 system system
 
+    mkdir /data/apex 0750 root system
+    mkdir /data/staging 0750 system system
+
     # NFC: create data/nfc for nv storage
     mkdir /data/nfc 0770 nfc nfc
     mkdir /data/nfc/param 0770 nfc nfc
@@ -553,8 +584,16 @@ on post-fs-data
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
 
-    # Check any timezone data in /data is newer than the copy in /system, delete if not.
-    exec - system system -- /system/bin/tzdatacheck /system/usr/share/zoneinfo /data/misc/zoneinfo
+    # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
+    exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
+
+    # Wait for apexd to finish activating APEXes before starting more processes.
+    # This certainly reduces the parallelism but is required to make as many processes
+    # as possible to use the bionic libs from the runtime APEX. This takes less than 50ms
+    # so the impact on the booting time is not significant.
+    wait_for_prop apexd.status ready
+    setup_runtime_bionic
+    parse_apex_configs
 
     # If there is no post-fs-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
@@ -712,12 +751,12 @@ on property:vold.decrypt=trigger_restart_min_framework
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
-    stop surfaceflinger
-    start surfaceflinger
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
     class_start main
     class_start late_start
+    setprop service.bootanim.exit 0
+    start bootanim
 
 on property:vold.decrypt=trigger_shutdown_framework
     class_reset late_start

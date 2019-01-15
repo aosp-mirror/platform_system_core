@@ -30,6 +30,8 @@ enum lmk_cmd {
     LMK_TARGET = 0,  /* Associate minfree with oom_adj_score */
     LMK_PROCPRIO,    /* Register a process and set its oom_adj_score */
     LMK_PROCREMOVE,  /* Unregister a process */
+    LMK_PROCPURGE,   /* Purge all registered processes */
+    LMK_GETKILLCNT,  /* Get number of kills */
 };
 
 /*
@@ -139,6 +141,53 @@ inline size_t lmkd_pack_set_procremove(LMKD_CTRL_PACKET packet,
                                    struct lmk_procprio *params) {
     packet[0] = htonl(LMK_PROCREMOVE);
     packet[1] = htonl(params->pid);
+    return 2 * sizeof(int);
+}
+
+/*
+ * Prepare LMK_PROCPURGE packet and return packet size in bytes.
+ * Warning: no checks performed, caller should ensure valid parameters.
+ */
+inline size_t lmkd_pack_set_procpurge(LMKD_CTRL_PACKET packet) {
+    packet[0] = htonl(LMK_PROCPURGE);
+    return sizeof(int);
+}
+
+/* LMK_GETKILLCNT packet payload */
+struct lmk_getkillcnt {
+    int min_oomadj;
+    int max_oomadj;
+};
+
+/*
+ * For LMK_GETKILLCNT packet get its payload.
+ * Warning: no checks performed, caller should ensure valid parameters.
+ */
+inline void lmkd_pack_get_getkillcnt(LMKD_CTRL_PACKET packet,
+                                   struct lmk_getkillcnt *params) {
+    params->min_oomadj = ntohl(packet[1]);
+    params->max_oomadj = ntohl(packet[2]);
+}
+
+/*
+ * Prepare LMK_GETKILLCNT packet and return packet size in bytes.
+ * Warning: no checks performed, caller should ensure valid parameters.
+ */
+inline size_t lmkd_pack_set_getkillcnt(LMKD_CTRL_PACKET packet,
+                                       struct lmk_getkillcnt *params) {
+    packet[0] = htonl(LMK_GETKILLCNT);
+    packet[1] = htonl(params->min_oomadj);
+    packet[2] = htonl(params->max_oomadj);
+    return 3 * sizeof(int);
+}
+
+/*
+ * Prepare LMK_GETKILLCNT reply packet and return packet size in bytes.
+ * Warning: no checks performed, caller should ensure valid parameters.
+ */
+inline size_t lmkd_pack_set_getkillcnt_repl(LMKD_CTRL_PACKET packet, int kill_cnt) {
+    packet[0] = htonl(LMK_GETKILLCNT);
+    packet[1] = htonl(kill_cnt);
     return 2 * sizeof(int);
 }
 

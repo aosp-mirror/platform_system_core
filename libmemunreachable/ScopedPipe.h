@@ -33,12 +33,12 @@ class ScopedPipe {
   }
   ~ScopedPipe() { Close(); }
 
-  ScopedPipe(ScopedPipe&& other) {
+  ScopedPipe(ScopedPipe&& other) noexcept {
     SetReceiver(other.ReleaseReceiver());
     SetSender(other.ReleaseSender());
   }
 
-  ScopedPipe& operator=(ScopedPipe&& other) {
+  ScopedPipe& operator=(ScopedPipe&& other) noexcept {
     SetReceiver(other.ReleaseReceiver());
     SetSender(other.ReleaseSender());
     return *this;

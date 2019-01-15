@@ -18,10 +18,13 @@
 
 # Read inputs
 ld_config_template := $(strip $(ld_config_template))
+check_backward_compatibility := $(strip $(check_backward_compatibility))
 vndk_version := $(strip $(vndk_version))
 lib_list_from_prebuilts := $(strip $(lib_list_from_prebuilts))
 libz_is_llndk := $(strip $(libz_is_llndk))
 
+compatibility_check_script := \
+  $(LOCAL_PATH)/ld_config_backward_compatibility_check.py
 intermediates_dir := $(call intermediates-dir-for,ETC,$(LOCAL_MODULE))
 library_lists_dir := $(intermediates_dir)
 ifeq ($(lib_list_from_prebuilts),true)
@@ -35,9 +38,11 @@ vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.txt
 
 sanitizer_runtime_libraries := $(call normalize-path-list,$(addsuffix .so,\
   $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+  $(HWADDRESS_SANITIZER_RUNTIME_LIBRARY) \
   $(UBSAN_RUNTIME_LIBRARY) \
   $(TSAN_RUNTIME_LIBRARY) \
   $(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
+  $(2ND_HWADDRESS_SANITIZER_RUNTIME_LIBRARY) \
   $(2ND_UBSAN_RUNTIME_LIBRARY) \
   $(2ND_TSAN_RUNTIME_LIBRARY)))
 # If BOARD_VNDK_VERSION is not defined, VNDK version suffix will not be used.
@@ -82,11 +87,19 @@ $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE := $(vndkprivate_libr
 $(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := $(sanitizer_runtime_libraries)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_SUFFIX := $(vndk_version_suffix)
 $(LOCAL_BUILT_MODULE): PRIVATE_INTERMEDIATES_DIR := $(intermediates_dir)
+$(LOCAL_BUILT_MODULE): PRIVATE_COMP_CHECK_SCRIPT := $(compatibility_check_script)
 deps := $(llndk_libraries_file) $(vndksp_libraries_file) $(vndkcore_libraries_file) \
   $(vndkprivate_libraries_file)
+ifeq ($(check_backward_compatibility),true)
+deps += $(compatibility_check_script)
+endif
 
 $(LOCAL_BUILT_MODULE): $(ld_config_template) $(deps)
 	@echo "Generate: $< -> $@"
+ifeq ($(check_backward_compatibility),true)
+	@echo "Checking backward compatibility..."
+	$(hide) $(PRIVATE_COMP_CHECK_SCRIPT) $<
+endif
 	@mkdir -p $(dir $@)
 	$(call private-filter-out-private-libs,$(PRIVATE_LLNDK_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)
 	$(hide) sed -e "s?%LLNDK_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)?g" $< >$@
@@ -108,9 +121,11 @@ $(LOCAL_BUILT_MODULE): $(ld_config_template) $(deps)
 	$(hide) rm -f $@.bak
 
 ld_config_template :=
+check_backward_compatibility :=
 vndk_version :=
 lib_list_from_prebuilts :=
 libz_is_llndk :=
+compatibility_check_script :=
 intermediates_dir :=
 library_lists_dir :=
 llndk_libraries_file :=

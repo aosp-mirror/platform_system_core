@@ -69,9 +69,3 @@ void verbose(const char* fmt, ...) {
     }
     fprintf(stderr, "\n");
 }
-
-char* xstrdup(const char* s) {
-    char* result = strdup(s);
-    if (!result) die("out of memory");
-    return result;
-}

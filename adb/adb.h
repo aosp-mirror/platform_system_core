@@ -124,9 +124,6 @@ inline bool ConnectionStateIsOnline(ConnectionState state) {
 
 void print_packet(const char* label, apacket* p);
 
-void fatal(const char* fmt, ...) __attribute__((noreturn, format(__printf__, 1, 2)));
-void fatal_errno(const char* fmt, ...) __attribute__((noreturn, format(__printf__, 1, 2)));
-
 void handle_packet(apacket* p, atransport* t);
 
 int launch_server(const std::string& socket_spec);
@@ -142,13 +139,21 @@ atransport* find_emulator_transport_by_adb_port(int adb_port);
 atransport* find_emulator_transport_by_console_port(int console_port);
 #endif
 
-int service_to_fd(const char* name, atransport* transport);
+int service_to_fd(std::string_view name, atransport* transport);
 #if !ADB_HOST
-unique_fd daemon_service_to_fd(const char* name, atransport* transport);
+unique_fd daemon_service_to_fd(std::string_view name, atransport* transport);
 #endif
 
 #if ADB_HOST
 asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id);
+#endif
+
+#if !ADB_HOST
+asocket* daemon_service_to_socket(std::string_view name);
+#endif
+
+#if !ADB_HOST
+unique_fd execute_binder_command(std::string_view command);
 #endif
 
 #if !ADB_HOST
@@ -200,6 +205,9 @@ ConnectionState connection_state(atransport* t);
 extern const char* adb_device_banner;
 
 #define CHUNK_SIZE (64 * 1024)
+
+// Argument delimeter for adb abb command.
+#define ABB_ARG_DELIMETER ('\0')
 
 #if !ADB_HOST
 #define USB_FFS_ADB_PATH "/dev/usb-ffs/adb/"

@@ -639,7 +639,11 @@ void* OpenNativeLibrary(JNIEnv* env,
   UNUSED(target_sdk_version);
   if (class_loader == nullptr) {
     *needs_native_bridge = false;
-    return dlopen(path, RTLD_NOW);
+    void* handle = dlopen(path, RTLD_NOW);
+    if (handle == nullptr) {
+      *error_msg = dlerror();
+    }
+    return handle;
   }
 
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
@@ -710,9 +714,21 @@ void* OpenNativeLibrary(JNIEnv* env,
 #endif
 }
 
-bool CloseNativeLibrary(void* handle, const bool needs_native_bridge) {
-    return needs_native_bridge ? NativeBridgeUnloadLibrary(handle) :
-                                 dlclose(handle);
+bool CloseNativeLibrary(void* handle, const bool needs_native_bridge, std::string* error_msg) {
+  bool success;
+  if (needs_native_bridge) {
+    success = (NativeBridgeUnloadLibrary(handle) == 0);
+    if (!success) {
+      *error_msg = NativeBridgeGetError();
+    }
+  } else {
+    success = (dlclose(handle) == 0);
+    if (!success) {
+      *error_msg = dlerror();
+    }
+  }
+
+  return success;
 }
 
 #if defined(__ANDROID__)

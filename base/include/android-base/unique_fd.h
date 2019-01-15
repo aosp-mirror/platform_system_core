@@ -16,12 +16,15 @@
 
 #pragma once
 
+#include <dirent.h>
 #include <fcntl.h>
 
 #if !defined(_WIN32)
+#include <dirent.h>
 #include <sys/socket.h>
 #endif
 
+#include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -89,8 +92,8 @@ class unique_fd_impl final {
   explicit unique_fd_impl(int fd) { reset(fd); }
   ~unique_fd_impl() { reset(); }
 
-  unique_fd_impl(unique_fd_impl&& other) { reset(other.release()); }
-  unique_fd_impl& operator=(unique_fd_impl&& s) {
+  unique_fd_impl(unique_fd_impl&& other) noexcept { reset(other.release()); }
+  unique_fd_impl& operator=(unique_fd_impl&& s) noexcept {
     int fd = s.fd_;
     s.fd_ = -1;
     reset(fd, &s);
@@ -100,7 +103,7 @@ class unique_fd_impl final {
   void reset(int new_value = -1) { reset(new_value, nullptr); }
 
   int get() const { return fd_; }
-  operator int() const { return get(); }
+  operator int() const { return get(); }  // NOLINT
 
   int release() __attribute__((warn_unused_result)) {
     tag(fd_, this, nullptr);
@@ -199,6 +202,28 @@ inline bool Socketpair(int type, unique_fd_impl<Closer>* left, unique_fd_impl<Cl
   return Socketpair(AF_UNIX, type, 0, left, right);
 }
 
+// Using fdopen with unique_fd correctly is more annoying than it should be,
+// because fdopen doesn't close the file descriptor received upon failure.
+inline FILE* Fdopen(unique_fd&& ufd, const char* mode) {
+  int fd = ufd.release();
+  FILE* file = fdopen(fd, mode);
+  if (!file) {
+    close(fd);
+  }
+  return file;
+}
+
+// Using fdopendir with unique_fd correctly is more annoying than it should be,
+// because fdopen doesn't close the file descriptor received upon failure.
+inline DIR* Fdopendir(unique_fd&& ufd) {
+  int fd = ufd.release();
+  DIR* dir = fdopendir(fd);
+  if (dir == nullptr) {
+    close(fd);
+  }
+  return dir;
+}
+
 #endif  // !defined(_WIN32)
 
 }  // namespace base
@@ -207,3 +232,13 @@ inline bool Socketpair(int type, unique_fd_impl<Closer>* left, unique_fd_impl<Cl
 template <typename T>
 int close(const android::base::unique_fd_impl<T>&)
     __attribute__((__unavailable__("close called on unique_fd")));
+
+template <typename T>
+FILE* fdopen(const android::base::unique_fd_impl<T>&, const char* mode)
+    __attribute__((__unavailable__("fdopen takes ownership of the fd passed in; either dup the "
+                                   "unique_fd, or use android::base::Fdopen to pass ownership")));
+
+template <typename T>
+DIR* fdopendir(const android::base::unique_fd_impl<T>&) __attribute__((
+    __unavailable__("fdopendir takes ownership of the fd passed in; either dup the "
+                    "unique_fd, or use android::base::Fdopendir to pass ownership")));

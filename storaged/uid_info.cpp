@@ -32,7 +32,7 @@ status_t UidInfo::writeToParcel(Parcel* parcel) const {
         parcel->writeCString(task_it.second.comm.c_str());
         parcel->write(&task_it.second.io, sizeof(task_it.second.io));
     }
-    return NO_ERROR;
+    return OK;
 }
 
 status_t UidInfo::readFromParcel(const Parcel* parcel) {
@@ -48,5 +48,5 @@ status_t UidInfo::readFromParcel(const Parcel* parcel) {
         parcel->read(&task.io, sizeof(task.io));
         tasks[task.pid] = task;
     }
-    return NO_ERROR;
+    return OK;
 }

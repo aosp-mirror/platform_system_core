@@ -70,7 +70,7 @@ status_t BnGateKeeperService::onTransact(
             } else {
                 reply->writeInt32(GATEKEEPER_RESPONSE_ERROR);
             }
-            return NO_ERROR;
+            return OK;
         }
         case VERIFY: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
@@ -102,7 +102,7 @@ status_t BnGateKeeperService::onTransact(
             } else {
                 reply->writeInt32(GATEKEEPER_RESPONSE_ERROR);
             }
-            return NO_ERROR;
+            return OK;
         }
         case VERIFY_CHALLENGE: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
@@ -141,7 +141,7 @@ status_t BnGateKeeperService::onTransact(
             } else {
                 reply->writeInt32(GATEKEEPER_RESPONSE_ERROR);
             }
-            return NO_ERROR;
+            return OK;
         }
         case GET_SECURE_USER_ID: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
@@ -149,20 +149,20 @@ status_t BnGateKeeperService::onTransact(
             uint64_t sid = getSecureUserId(uid);
             reply->writeNoException();
             reply->writeInt64(sid);
-            return NO_ERROR;
+            return OK;
         }
         case CLEAR_SECURE_USER_ID: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
             uint32_t uid = data.readInt32();
             clearSecureUserId(uid);
             reply->writeNoException();
-            return NO_ERROR;
+            return OK;
         }
         case REPORT_DEVICE_SETUP_COMPLETE: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
             reportDeviceSetupComplete();
             reply->writeNoException();
-            return NO_ERROR;
+            return OK;
         }
         default:
             return BBinder::onTransact(code, data, reply, flags);

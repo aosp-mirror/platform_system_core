@@ -60,7 +60,7 @@ static inline uint64_t get8LE(const uint8_t* src) {
 // way up to the root.
 
 static const struct fs_path_config android_dirs[] = {
-    // clang-format off
+        // clang-format off
     { 00770, AID_SYSTEM,       AID_CACHE,        0, "cache" },
     { 00555, AID_ROOT,         AID_ROOT,         0, "config" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data/app" },
@@ -80,17 +80,18 @@ static const struct fs_path_config android_dirs[] = {
     { 00775, AID_ROOT,         AID_ROOT,         0, "data/preloads" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
-    { 00755, AID_ROOT,         AID_SHELL,        0, "product/bin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "product/bin" },
     { 00750, AID_ROOT,         AID_SHELL,        0, "sbin" },
     { 00777, AID_ROOT,         AID_ROOT,         0, "sdcard" },
     { 00751, AID_ROOT,         AID_SDCARD_R,     0, "storage" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/bin" },
     { 00755, AID_ROOT,         AID_ROOT,         0, "system/etc/ppp" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/vendor" },
-    { 00755, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
     { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
-    // clang-format on
+        // clang-format on
 };
 #ifndef __ANDROID_VNDK__
 auto __for_testing_only__android_dirs = android_dirs;
@@ -107,7 +108,9 @@ static const char sys_conf_file[] = "/system/etc/fs_config_files";
 // although the developer is advised to restrict the scope to the /vendor or
 // oem/ file-system since the intent is to provide support for customized
 // portions of a separate vendor.img or oem.img.  Has to remain open so that
-// customization can also land on /system/vendor, /system/oem or /system/odm.
+// customization can also land on /system/vendor, /system/oem, /system/odm,
+// /system/product or /system/product_services.
+//
 // We expect build-time checking or filtering when constructing the associated
 // fs_config_* files (see build/tools/fs_config/fs_config_generate.c)
 static const char ven_conf_dir[] = "/vendor/etc/fs_config_dirs";
@@ -116,11 +119,17 @@ static const char oem_conf_dir[] = "/oem/etc/fs_config_dirs";
 static const char oem_conf_file[] = "/oem/etc/fs_config_files";
 static const char odm_conf_dir[] = "/odm/etc/fs_config_dirs";
 static const char odm_conf_file[] = "/odm/etc/fs_config_files";
+static const char product_conf_dir[] = "/product/etc/fs_config_dirs";
+static const char product_conf_file[] = "/product/etc/fs_config_files";
+static const char product_services_conf_dir[] = "/product_services/etc/fs_config_dirs";
+static const char product_services_conf_file[] = "/product_services/etc/fs_config_files";
 static const char* conf[][2] = {
-    {sys_conf_file, sys_conf_dir},
-    {ven_conf_file, ven_conf_dir},
-    {oem_conf_file, oem_conf_dir},
-    {odm_conf_file, odm_conf_dir},
+        {sys_conf_file, sys_conf_dir},
+        {ven_conf_file, ven_conf_dir},
+        {oem_conf_file, oem_conf_dir},
+        {odm_conf_file, odm_conf_dir},
+        {product_conf_file, product_conf_dir},
+        {product_services_conf_file, product_services_conf_dir},
 };
 
 // Do not use android_files to grant Linux capabilities.  Use ambient capabilities in their
@@ -149,7 +158,11 @@ static const struct fs_path_config android_files[] = {
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_file + 1 },
     { 00600, AID_ROOT,      AID_ROOT,      0, "product/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "product-services/build.prop" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, product_conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, product_conf_file + 1 },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "product_services/build.prop" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, product_services_conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, product_services_conf_file + 1 },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
@@ -235,10 +248,10 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
     return fd;
 }
 
-// if path is "odm/<stuff>", "oem/<stuff>", "product/<stuff>" or
-// "vendor/<stuff>"
+// if path is "odm/<stuff>", "oem/<stuff>", "product/<stuff>",
+// "product_services/<stuff>" or "vendor/<stuff>"
 static bool is_partition(const char* path, size_t len) {
-    static const char* partitions[] = {"odm/", "oem/", "product/", "vendor/"};
+    static const char* partitions[] = {"odm/", "oem/", "product/", "product_services/", "vendor/"};
     for (size_t i = 0; i < (sizeof(partitions) / sizeof(partitions[0])); ++i) {
         size_t plen = strlen(partitions[i]);
         if (len <= plen) continue;

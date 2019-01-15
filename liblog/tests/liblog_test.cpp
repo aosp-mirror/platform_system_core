@@ -30,6 +30,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #ifdef __ANDROID__  // includes sys/properties.h which does not exist outside
 #include <cutils/properties.h>
@@ -51,22 +52,6 @@
 #endif
 #endif
 
-#if (!defined(USING_LOGGER_DEFAULT) || !defined(USING_LOGGER_LOCAL) || \
-     !defined(USING_LOGGER_STDERR))
-#ifdef liblog  // a binary clue that we are overriding the test names
-// Does not support log reading blocking feature yet
-// Does not support LOG_ID_SECURITY (unless we set LOGGER_LOCAL | LOGGER_LOGD)
-// Assume some common aspects are tested by USING_LOGGER_DEFAULT:
-// Does not need to _retest_ pmsg functionality
-// Does not need to _retest_ property handling as it is a higher function
-// Does not need to _retest_ event mapping functionality
-// Does not need to _retest_ ratelimit
-// Does not need to _retest_ logprint
-#define USING_LOGGER_LOCAL
-#else
-#define USING_LOGGER_DEFAULT
-#endif
-#endif
 #ifdef USING_LOGGER_STDERR
 #define SUPPORTS_END_TO_END 0
 #else
@@ -130,7 +115,7 @@ static bool isPmsgActive() {
 
 static bool isLogdwActive() {
   std::string logdwSignature =
-      popenToString("grep /dev/socket/logdw /proc/net/unix");
+      popenToString("grep -a /dev/socket/logdw /proc/net/unix");
   size_t beginning = logdwSignature.find(' ');
   if (beginning == std::string::npos) return true;
   beginning = logdwSignature.find(' ', beginning + 1);
@@ -144,7 +129,7 @@ static bool isLogdwActive() {
   end = logdwSignature.find(' ', end + 1);
   if (end == std::string::npos) return true;
   std::string allLogdwEndpoints = popenToString(
-      "grep ' 00000002" + logdwSignature.substr(beginning, end - beginning) +
+      "grep -a ' 00000002" + logdwSignature.substr(beginning, end - beginning) +
       " ' /proc/net/unix | " +
       "sed -n 's/.* \\([0-9][0-9]*\\)$/ -> socket:[\\1]/p'");
   if (allLogdwEndpoints.length() == 0) return true;
@@ -174,7 +159,7 @@ static bool tested__android_log_close;
 #endif
 
 TEST(liblog, __android_log_btwrite__android_logger_list_read) {
-#if (defined(__ANDROID__) || defined(USING_LOGGER_LOCAL))
+#ifdef __ANDROID__
 #ifdef TEST_PREFIX
   TEST_PREFIX
 #endif
@@ -268,7 +253,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 #endif
 }
 
-#if (defined(__ANDROID__) || defined(USING_LOGGER_LOCAL))
+#ifdef __ANDROID__
 static void print_transport(const char* prefix, int logger) {
   static const char orstr[] = " | ";
 
@@ -296,16 +281,11 @@ static void print_transport(const char* prefix, int logger) {
     fprintf(stderr, "%sLOGGER_NULL", prefix);
     prefix = orstr;
   }
-  if (logger & LOGGER_LOCAL) {
-    fprintf(stderr, "%sLOGGER_LOCAL", prefix);
-    prefix = orstr;
-  }
   if (logger & LOGGER_STDERR) {
     fprintf(stderr, "%sLOGGER_STDERR", prefix);
     prefix = orstr;
   }
-  logger &= ~(LOGGER_LOGD | LOGGER_KERNEL | LOGGER_NULL | LOGGER_LOCAL |
-              LOGGER_STDERR);
+  logger &= ~(LOGGER_LOGD | LOGGER_KERNEL | LOGGER_NULL | LOGGER_STDERR);
   if (logger) {
     fprintf(stderr, "%s0x%x", prefix, logger);
     prefix = orstr;
@@ -320,7 +300,7 @@ static void print_transport(const char* prefix, int logger) {
 // and behind us, to make us whole.  We could incorporate a prefix and
 // suffix test to make this standalone, but opted to not complicate this.
 TEST(liblog, android_set_log_transport) {
-#if (defined(__ANDROID__) || defined(USING_LOGGER_LOCAL))
+#ifdef __ANDROID__
 #ifdef TEST_PREFIX
   TEST_PREFIX
 #endif
@@ -631,7 +611,7 @@ TEST(liblog, __android_log_buf_write_and_print__newline_space_prefix) {
   buf_write_test("\n Hello World \n");
 }
 
-#ifndef USING_LOGGER_LOCAL  // requires blocking reader functionality
+#ifdef USING_LOGGER_DEFAULT  // requires blocking reader functionality
 #ifdef TEST_PREFIX
 static unsigned signaled;
 static log_time signal_time;
@@ -943,7 +923,7 @@ TEST(liblog, android_logger_list_read__cpu_thread) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
-#endif  // !USING_LOGGER_LOCAL
+#endif  // USING_LOGGER_DEFAULT
 
 #ifdef TEST_PREFIX
 static const char max_payload_tag[] = "TEST_max_payload_and_longish_tag_XXXX";
@@ -2416,7 +2396,7 @@ TEST(liblog, android_errorWriteLog__android_logger_list_read__null_subtag) {
 }
 
 // Do not retest logger list handling
-#if (defined(TEST_PREFIX) || !defined(USING_LOGGER_LOCAL))
+#ifdef TEST_PREFIX
 static int is_real_element(int type) {
   return ((type == EVENT_TYPE_INT) || (type == EVENT_TYPE_LONG) ||
           (type == EVENT_TYPE_STRING) || (type == EVENT_TYPE_FLOAT));
@@ -2516,7 +2496,7 @@ static int android_log_buffer_to_string(const char* msg, size_t len,
 #endif
         elem.data.string = const_cast<char*>("<unknown>");
         elem.len = strlen(elem.data.string);
-      /* FALLTHRU */
+        FALLTHROUGH_INTENDED;
       case EVENT_TYPE_STRING:
         if (elem.len <= strOutLen) {
           memcpy(strOut, elem.data.string, elem.len);
@@ -2571,7 +2551,7 @@ static int android_log_buffer_to_string(const char* msg, size_t len,
 
   return 0;
 }
-#endif  // TEST_PREFIX || !USING_LOGGER_LOCAL
+#endif  // TEST_PREFIX
 
 #ifdef TEST_PREFIX
 static const char* event_test_int32(uint32_t tag, size_t& expected_len) {

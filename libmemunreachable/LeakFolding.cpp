@@ -57,7 +57,7 @@ void LeakFolding::ComputeDAG() {
 }
 
 void LeakFolding::AccumulateLeaks(SCCInfo* dominator) {
-  std::function<void(SCCInfo*)> walk(std::allocator_arg, allocator_, [&](SCCInfo* scc) {
+  std::function<void(SCCInfo*)> walk([&](SCCInfo* scc) {
     if (scc->accumulator != dominator) {
       scc->accumulator = dominator;
       dominator->cuumulative_size += scc->size;

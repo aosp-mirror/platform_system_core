@@ -212,8 +212,13 @@ static void perform_request(Crash* crash) {
   bool intercepted =
       intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
   if (!intercepted) {
-    std::tie(crash->crash_tombstone_path, output_fd) = CrashQueue::for_crash(crash)->get_output();
-    crash->crash_tombstone_fd.reset(dup(output_fd.get()));
+    if (crash->crash_type == kDebuggerdNativeBacktrace) {
+      // Don't generate tombstones for native backtrace requests.
+      output_fd.reset(open("/dev/null", O_WRONLY | O_CLOEXEC));
+    } else {
+      std::tie(crash->crash_tombstone_path, output_fd) = CrashQueue::for_crash(crash)->get_output();
+      crash->crash_tombstone_fd.reset(dup(output_fd.get()));
+    }
   }
 
   TombstonedCrashPacket response = {

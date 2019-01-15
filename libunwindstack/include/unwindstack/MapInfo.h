@@ -25,28 +25,28 @@
 #include <string>
 
 #include <unwindstack/Elf.h>
+#include <unwindstack/Memory.h>
 
 namespace unwindstack {
 
-// Forward declarations.
-class Memory;
-
 struct MapInfo {
-  MapInfo() = default;
-  MapInfo(uint64_t start, uint64_t end) : start(start), end(end) {}
-  MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const char* name)
+  MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+          const char* name)
       : start(start),
         end(end),
         offset(offset),
         flags(flags),
         name(name),
+        prev_map(map_info),
         load_bias(static_cast<uint64_t>(-1)) {}
-  MapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags, const std::string& name)
+  MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+          const std::string& name)
       : start(start),
         end(end),
         offset(offset),
         flags(flags),
         name(name),
+        prev_map(map_info),
         load_bias(static_cast<uint64_t>(-1)) {}
   ~MapInfo() = default;
 
@@ -57,25 +57,30 @@ struct MapInfo {
   std::string name;
   std::shared_ptr<Elf> elf;
   // This value is only non-zero if the offset is non-zero but there is
-  // no elf signature found at that offset. This indicates that the
-  // entire file is represented by the Memory object returned by CreateMemory,
-  // instead of a portion of the file.
+  // no elf signature found at that offset.
   uint64_t elf_offset = 0;
+  // This value is the offset from the map in memory that is the start
+  // of the elf. This is not equal to offset when the linker splits
+  // shared libraries into a read-only and read-execute map.
+  uint64_t elf_start_offset = 0;
+
+  MapInfo* prev_map = nullptr;
 
   std::atomic_uint64_t load_bias;
 
   // This function guarantees it will never return nullptr.
-  Elf* GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata = false);
+  Elf* GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch);
 
   uint64_t GetLoadBias(const std::shared_ptr<Memory>& process_memory);
+
+  Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
 
  private:
   MapInfo(const MapInfo&) = delete;
   void operator=(const MapInfo&) = delete;
 
   Memory* GetFileMemory();
-
-  Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
+  bool InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory);
 
   // Protect the creation of the elf object.
   std::mutex mutex_;

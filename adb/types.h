@@ -25,7 +25,6 @@
 
 #include <android-base/logging.h>
 
-#include "sysdeps/memory.h"
 #include "sysdeps/uio.h"
 
 // Essentially std::vector<char>, except without zero initialization or reallocation.
@@ -42,14 +41,14 @@ struct Block {
     }
 
     Block(const Block& copy) = delete;
-    Block(Block&& move) {
+    Block(Block&& move) noexcept {
         std::swap(data_, move.data_);
         std::swap(capacity_, move.capacity_);
         std::swap(size_, move.size_);
     }
 
     Block& operator=(const Block& copy) = delete;
-    Block& operator=(Block&& move) {
+    Block& operator=(Block&& move) noexcept {
         clear();
 
         std::swap(data_, move.data_);
@@ -109,7 +108,10 @@ struct Block {
         CHECK_EQ(0ULL, capacity_);
         CHECK_EQ(0ULL, size_);
         if (size != 0) {
-            data_ = std::make_unique<char[]>(size);
+            // This isn't std::make_unique because that's equivalent to `new char[size]()`, which
+            // value-initializes the array instead of leaving it uninitialized. As an optimization,
+            // call new without parentheses to avoid this costly initialization.
+            data_.reset(new char[size]);
             capacity_ = size;
             size_ = size;
         }
@@ -147,12 +149,10 @@ struct IOVector {
     }
 
     IOVector(const IOVector& copy) = delete;
-    IOVector(IOVector&& move) : IOVector() {
-        *this = std::move(move);
-    }
+    IOVector(IOVector&& move) noexcept : IOVector() { *this = std::move(move); }
 
     IOVector& operator=(const IOVector& copy) = delete;
-    IOVector& operator=(IOVector&& move) {
+    IOVector& operator=(IOVector&& move) noexcept {
         chain_ = std::move(move.chain_);
         chain_length_ = move.chain_length_;
         begin_offset_ = move.begin_offset_;

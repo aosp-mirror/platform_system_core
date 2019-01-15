@@ -15,6 +15,7 @@
  */
 
 #include <log/log_event_list.h>
+#include <stats_event_list.h>
 #include <cstdint>
 #include <string>
 
@@ -43,6 +44,7 @@ void LogMultiAction(int32_t category, int32_t field, const std::string& value);
 class ComplexEventLogger {
   private:
     android_log_event_list logger;
+    stats_event_list stats_logger;
 
   public:
     // Create a complex event with category|category|.
@@ -114,7 +116,7 @@ enum {
     FIELD_BATTERY_RESISTANCE_UOHMS = 1448,
     FIELD_BATTERY_CURRENT_UA = 1449,
     FIELD_HARDWARE_LOCATION = 1450,
-    ACTION_BATTERY_CAUSED_SHUTDOWN = 1441,
+    ACTION_BATTERY_CAUSED_SHUTDOWN = 1451,
 };
 
 enum {

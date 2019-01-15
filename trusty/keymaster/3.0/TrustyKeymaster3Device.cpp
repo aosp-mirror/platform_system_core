@@ -21,6 +21,7 @@
 #include <cutils/log.h>
 #include <keymaster/android_keymaster_messages.h>
 #include <trusty_keymaster/TrustyKeymaster3Device.h>
+#include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 
 using ::keymaster::AbortOperationRequest;
 using ::keymaster::AbortOperationResponse;
@@ -111,7 +112,8 @@ class KmParamSet : public keymaster_key_param_set_t {
             }
         }
     }
-    KmParamSet(KmParamSet&& other) : keymaster_key_param_set_t{other.params, other.length} {
+    KmParamSet(KmParamSet&& other) noexcept
+        : keymaster_key_param_set_t{other.params, other.length} {
         other.length = 0;
         other.params = nullptr;
     }
@@ -393,20 +395,32 @@ Return<void> TrustyKeymaster3Device::update(uint64_t operationHandle,
                                             const hidl_vec<KeyParameter>& inParams,
                                             const hidl_vec<uint8_t>& input, update_cb _hidl_cb) {
     UpdateOperationRequest request;
-    request.op_handle = operationHandle;
-    request.input.Reinitialize(input.data(), input.size());
-    request.additional_params.Reinitialize(KmParamSet(inParams));
-
     UpdateOperationResponse response;
-    impl_->UpdateOperation(request, &response);
-
-    uint32_t resultConsumed = 0;
     hidl_vec<KeyParameter> resultParams;
     hidl_vec<uint8_t> resultBlob;
-    if (response.error == KM_ERROR_OK) {
-        resultConsumed = response.input_consumed;
-        resultParams = kmParamSet2Hidl(response.output_params);
-        resultBlob = kmBuffer2hidlVec(response.output);
+    uint32_t resultConsumed = 0;
+
+    request.op_handle = operationHandle;
+    request.additional_params.Reinitialize(KmParamSet(inParams));
+
+    size_t inp_size = input.size();
+    size_t ser_size = request.SerializedSize();
+
+    if (ser_size > TRUSTY_KEYMASTER_SEND_BUF_SIZE) {
+        response.error = KM_ERROR_INVALID_INPUT_LENGTH;
+    } else {
+        if (ser_size + inp_size > TRUSTY_KEYMASTER_SEND_BUF_SIZE) {
+            inp_size = TRUSTY_KEYMASTER_SEND_BUF_SIZE - ser_size;
+        }
+        request.input.Reinitialize(input.data(), inp_size);
+
+        impl_->UpdateOperation(request, &response);
+
+        if (response.error == KM_ERROR_OK) {
+            resultConsumed = response.input_consumed;
+            resultParams = kmParamSet2Hidl(response.output_params);
+            resultBlob = kmBuffer2hidlVec(response.output);
+        }
     }
     _hidl_cb(legacy_enum_conversion(response.error), resultConsumed, resultParams, resultBlob);
     return Void();

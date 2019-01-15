@@ -29,6 +29,7 @@
 #include <regex>
 #include <thread>
 
+#include <android/fdsan.h>
 #include <android/set_abort_message.h>
 
 #include <android-base/file.h>
@@ -36,6 +37,7 @@
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
@@ -586,9 +588,28 @@ static const char* const kDebuggerdSeccompPolicy =
     "/system/etc/seccomp_policy/crash_dump." ABI_STRING ".policy";
 
 static pid_t seccomp_fork_impl(void (*prejail)()) {
-  unique_fd policy_fd(open(kDebuggerdSeccompPolicy, O_RDONLY | O_CLOEXEC));
-  if (policy_fd == -1) {
-    LOG(FATAL) << "failed to open policy " << kDebuggerdSeccompPolicy;
+  std::string policy;
+  if (!android::base::ReadFileToString(kDebuggerdSeccompPolicy, &policy)) {
+    PLOG(FATAL) << "failed to read policy file";
+  }
+
+  // Allow a bunch of syscalls used by the tests.
+  policy += "\nclone: 1";
+  policy += "\nsigaltstack: 1";
+  policy += "\nnanosleep: 1";
+
+  FILE* tmp_file = tmpfile();
+  if (!tmp_file) {
+    PLOG(FATAL) << "tmpfile failed";
+  }
+
+  unique_fd tmp_fd(dup(fileno(tmp_file)));
+  if (!android::base::WriteStringToFd(policy, tmp_fd.get())) {
+    PLOG(FATAL) << "failed to write policy to tmpfile";
+  }
+
+  if (lseek(tmp_fd.get(), 0, SEEK_SET) != 0) {
+    PLOG(FATAL) << "failed to seek tmp_fd";
   }
 
   ScopedMinijail jail{minijail_new()};
@@ -599,7 +620,7 @@ static pid_t seccomp_fork_impl(void (*prejail)()) {
   minijail_no_new_privs(jail.get());
   minijail_log_seccomp_filter_failures(jail.get());
   minijail_use_seccomp_filter(jail.get());
-  minijail_parse_seccomp_filters_from_fd(jail.get(), policy_fd.release());
+  minijail_parse_seccomp_filters_from_fd(jail.get(), tmp_fd.release());
 
   pid_t result = fork();
   if (result == -1) {
@@ -734,6 +755,16 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
 }
 
+extern "C" void foo() {
+  LOG(INFO) << "foo";
+  std::this_thread::sleep_for(1s);
+}
+
+extern "C" void bar() {
+  LOG(INFO) << "bar";
+  std::this_thread::sleep_for(1s);
+}
+
 TEST_F(CrasherTest, seccomp_backtrace) {
   int intercept_result;
   unique_fd output_fd;
@@ -741,6 +772,11 @@ TEST_F(CrasherTest, seccomp_backtrace) {
   static const auto dump_type = kDebuggerdNativeBacktrace;
   StartProcess(
       []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
         raise_debugger_signal(dump_type);
         _exit(0);
       },
@@ -755,6 +791,8 @@ TEST_F(CrasherTest, seccomp_backtrace) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
 }
 
 TEST_F(CrasherTest, seccomp_crash_logcat) {
@@ -799,6 +837,31 @@ TEST_F(CrasherTest, competing_tracer) {
 
   ASSERT_EQ(0, ptrace(PTRACE_DETACH, crasher_pid, 0, SIGABRT));
   AssertDeath(SIGABRT);
+}
+
+TEST_F(CrasherTest, fdsan_warning_abort_message) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  StartProcess([]() {
+    android_fdsan_set_error_level(ANDROID_FDSAN_ERROR_LEVEL_WARN_ONCE);
+    unique_fd fd(open("/dev/null", O_RDONLY | O_CLOEXEC));
+    if (fd == -1) {
+      abort();
+    }
+    close(fd.get());
+    _exit(0);
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, "Abort message: 'attempted to close");
 }
 
 TEST(crash_dump, zombie) {
@@ -990,4 +1053,43 @@ TEST(tombstoned, intercept_any) {
   char outbuf[sizeof(any)];
   ASSERT_TRUE(android::base::ReadFully(output_fd.get(), outbuf, sizeof(outbuf)));
   ASSERT_STREQ("any", outbuf);
+}
+
+TEST(tombstoned, interceptless_backtrace) {
+  // Generate 50 backtraces, and then check to see that we haven't created 50 new tombstones.
+  auto get_tombstone_timestamps = []() -> std::map<int, time_t> {
+    std::map<int, time_t> result;
+    for (int i = 0; i < 99; ++i) {
+      std::string path = android::base::StringPrintf("/data/tombstones/tombstone_%02d", i);
+      struct stat st;
+      if (stat(path.c_str(), &st) == 0) {
+        result[i] = st.st_mtim.tv_sec;
+      }
+    }
+    return result;
+  };
+
+  auto before = get_tombstone_timestamps();
+  for (int i = 0; i < 50; ++i) {
+    raise_debugger_signal(kDebuggerdNativeBacktrace);
+  }
+  auto after = get_tombstone_timestamps();
+
+  int diff = 0;
+  for (int i = 0; i < 99; ++i) {
+    if (after.count(i) == 0) {
+      continue;
+    }
+    if (before.count(i) == 0) {
+      ++diff;
+      continue;
+    }
+    if (before[i] != after[i]) {
+      ++diff;
+    }
+  }
+
+  // We can't be sure that nothing's crash looping in the background.
+  // This should be good enough, though...
+  ASSERT_LT(diff, 10) << "too many new tombstones; is something crashing in the background?";
 }

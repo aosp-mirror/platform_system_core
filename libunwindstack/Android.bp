@@ -58,6 +58,7 @@ cc_library {
         "Elf.cpp",
         "ElfInterface.cpp",
         "ElfInterfaceArm.cpp",
+        "Global.cpp",
         "JitDebug.cpp",
         "Log.cpp",
         "MapInfo.cpp",
@@ -93,7 +94,10 @@ cc_library {
                 "DexFile.cpp",
                 "DexFiles.cpp",
             ],
-            exclude_shared_libs: ["libdexfile"],
+            exclude_shared_libs: [
+                "libdexfile_external",
+                "libdexfile_support",
+            ],
         },
         recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
@@ -101,7 +105,10 @@ cc_library {
                 "DexFile.cpp",
                 "DexFiles.cpp",
             ],
-            exclude_shared_libs: ["libdexfile"],
+            exclude_shared_libs: [
+                "libdexfile_external",
+                "libdexfile_support",
+            ],
         },
     },
 
@@ -126,7 +133,8 @@ cc_library {
 
     shared_libs: [
         "libbase",
-        "libdexfile",
+        "libdexfile_external",
+        "libdexfile_support",
         "liblog",
         "liblzma",
     ],
@@ -178,16 +186,19 @@ cc_test {
         "tests/JitDebugTest.cpp",
         "tests/LocalUnwinderTest.cpp",
         "tests/LogFake.cpp",
+        "tests/MapInfoCreateMemoryTest.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapInfoGetLoadBiasTest.cpp",
         "tests/MapsTest.cpp",
         "tests/MemoryBufferTest.cpp",
+        "tests/MemoryCacheTest.cpp",
         "tests/MemoryFake.cpp",
         "tests/MemoryFileTest.cpp",
         "tests/MemoryLocalTest.cpp",
         "tests/MemoryOfflineBufferTest.cpp",
         "tests/MemoryOfflineTest.cpp",
         "tests/MemoryRangeTest.cpp",
+        "tests/MemoryRangesTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/MemoryTest.cpp",
         "tests/RegsInfoTest.cpp",
@@ -210,7 +221,7 @@ cc_test {
         "liblog",
         "liblzma",
         "libunwindstack",
-        "libdexfile",
+        "libdexfile_support",
     ],
 
     static_libs: [
@@ -231,6 +242,8 @@ cc_test {
         "tests/files/offline/jit_map_arm/*",
         "tests/files/offline/gnu_debugdata_arm/*",
         "tests/files/offline/offset_arm/*",
+        "tests/files/offline/shared_lib_in_apk_arm64/*",
+        "tests/files/offline/shared_lib_in_apk_memory_only_arm64/*",
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
@@ -304,6 +317,28 @@ cc_binary {
 
     srcs: [
         "tools/unwind_reg_info.cpp",
+    ],
+}
+
+//-------------------------------------------------------------------------
+// Benchmarks
+//-------------------------------------------------------------------------
+cc_benchmark {
+    name: "unwind_benchmarks",
+    host_supported: true,
+    defaults: ["libunwindstack_flags"],
+
+    // Disable optimizations so that all of the calls are not optimized away.
+    cflags: [
+        "-O0",
+    ],
+
+    srcs: [
+        "benchmarks/unwind_benchmarks.cpp",
+    ],
+
+    shared_libs: [
+        "libunwindstack",
     ],
 }
 

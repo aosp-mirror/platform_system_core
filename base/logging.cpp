@@ -53,6 +53,7 @@
 #include <unistd.h>
 #endif
 
+#include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
@@ -71,14 +72,8 @@ static const char* getprogname() {
   static char progname[MAX_PATH] = {};
 
   if (first) {
-    CHAR longname[MAX_PATH];
-    DWORD nchars = GetModuleFileNameA(nullptr, longname, arraysize(longname));
-    if ((nchars >= arraysize(longname)) || (nchars == 0)) {
-      // String truncation or some other error.
-      strcpy(progname, "<unknown>");
-    } else {
-      strcpy(progname, basename(longname));
-    }
+    snprintf(progname, sizeof(progname), "%s",
+             android::base::Basename(android::base::GetExecutablePath()).c_str());
     first = false;
   }
 
@@ -421,6 +416,14 @@ LogMessage::~LogMessage() {
     data_->GetBuffer() << ": " << strerror(data_->GetError());
   }
   std::string msg(data_->ToString());
+
+  if (data_->GetSeverity() == FATAL) {
+#ifdef __ANDROID__
+    // Set the bionic abort message early to avoid liblog doing it
+    // with the individual lines, so that we get the whole message.
+    android_set_abort_message(msg.c_str());
+#endif
+  }
 
   {
     // Do the actual logging with the lock held.

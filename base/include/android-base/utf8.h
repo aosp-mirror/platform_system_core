@@ -17,6 +17,7 @@
 #pragma once
 
 #ifdef _WIN32
+#include <sys/types.h>
 #include <string>
 #else
 // Bring in prototypes for standard APIs so that we can import them into the utf8 namespace.

@@ -27,6 +27,7 @@
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
+#include <fs_mgr.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <uuid/uuid.h>
@@ -40,42 +41,102 @@ using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::fastboot::V1_0::Result;
+using ::android::hardware::fastboot::V1_0::Status;
+
 using namespace android::fs_mgr;
 
+struct VariableHandlers {
+    // Callback to retrieve the value of a single variable.
+    std::function<bool(FastbootDevice*, const std::vector<std::string>&, std::string*)> get;
+    // Callback to retrieve all possible argument combinations, for getvar all.
+    std::function<std::vector<std::vector<std::string>>(FastbootDevice*)> get_all_args;
+};
+
+static void GetAllVars(FastbootDevice* device, const std::string& name,
+                       const VariableHandlers& handlers) {
+    if (!handlers.get_all_args) {
+        std::string message;
+        if (!handlers.get(device, std::vector<std::string>(), &message)) {
+            return;
+        }
+        device->WriteInfo(android::base::StringPrintf("%s:%s", name.c_str(), message.c_str()));
+        return;
+    }
+
+    auto all_args = handlers.get_all_args(device);
+    for (const auto& args : all_args) {
+        std::string message;
+        if (!handlers.get(device, args, &message)) {
+            continue;
+        }
+        std::string arg_string = android::base::Join(args, ":");
+        device->WriteInfo(android::base::StringPrintf("%s:%s:%s", name.c_str(), arg_string.c_str(),
+                                                      message.c_str()));
+    }
+}
+
 bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    using VariableHandler = std::function<bool(FastbootDevice*, const std::vector<std::string>&)>;
-    const std::unordered_map<std::string, VariableHandler> kVariableMap = {
-            {FB_VAR_VERSION, GetVersion},
-            {FB_VAR_VERSION_BOOTLOADER, GetBootloaderVersion},
-            {FB_VAR_VERSION_BASEBAND, GetBasebandVersion},
-            {FB_VAR_PRODUCT, GetProduct},
-            {FB_VAR_SERIALNO, GetSerial},
-            {FB_VAR_SECURE, GetSecure},
-            {FB_VAR_UNLOCKED, GetUnlocked},
-            {FB_VAR_MAX_DOWNLOAD_SIZE, GetMaxDownloadSize},
-            {FB_VAR_CURRENT_SLOT, ::GetCurrentSlot},
-            {FB_VAR_SLOT_COUNT, GetSlotCount},
-            {FB_VAR_HAS_SLOT, GetHasSlot},
-            {FB_VAR_SLOT_SUCCESSFUL, GetSlotSuccessful},
-            {FB_VAR_SLOT_UNBOOTABLE, GetSlotUnbootable},
-            {FB_VAR_PARTITION_SIZE, GetPartitionSize},
-            {FB_VAR_IS_LOGICAL, GetPartitionIsLogical},
-            {FB_VAR_IS_USERSPACE, GetIsUserspace}};
+    const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
+            {FB_VAR_VERSION, {GetVersion, nullptr}},
+            {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
+            {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
+            {FB_VAR_PRODUCT, {GetProduct, nullptr}},
+            {FB_VAR_SERIALNO, {GetSerial, nullptr}},
+            {FB_VAR_VARIANT, {GetVariant, nullptr}},
+            {FB_VAR_SECURE, {GetSecure, nullptr}},
+            {FB_VAR_UNLOCKED, {GetUnlocked, nullptr}},
+            {FB_VAR_MAX_DOWNLOAD_SIZE, {GetMaxDownloadSize, nullptr}},
+            {FB_VAR_CURRENT_SLOT, {::GetCurrentSlot, nullptr}},
+            {FB_VAR_SLOT_COUNT, {GetSlotCount, nullptr}},
+            {FB_VAR_HAS_SLOT, {GetHasSlot, GetAllPartitionArgsNoSlot}},
+            {FB_VAR_SLOT_SUCCESSFUL, {GetSlotSuccessful, nullptr}},
+            {FB_VAR_SLOT_UNBOOTABLE, {GetSlotUnbootable, nullptr}},
+            {FB_VAR_PARTITION_SIZE, {GetPartitionSize, GetAllPartitionArgsWithSlot}},
+            {FB_VAR_PARTITION_TYPE, {GetPartitionType, GetAllPartitionArgsWithSlot}},
+            {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
+            {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
+            {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
+            {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
+            {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
+            {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
+            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}}};
+
+    if (args.size() < 2) {
+        return device->WriteFail("Missing argument");
+    }
+
+    // Special case: return all variables that we can.
+    if (args[1] == "all") {
+        for (const auto& [name, handlers] : kVariableMap) {
+            GetAllVars(device, name, handlers);
+        }
+        return device->WriteOkay("");
+    }
 
     // args[0] is command name, args[1] is variable.
     auto found_variable = kVariableMap.find(args[1]);
     if (found_variable == kVariableMap.end()) {
-        return device->WriteStatus(FastbootResult::FAIL, "Unknown variable");
+        return device->WriteFail("Unknown variable");
     }
 
+    std::string message;
     std::vector<std::string> getvar_args(args.begin() + 2, args.end());
-    return found_variable->second(device, getvar_args);
+    if (!found_variable->second.get(device, getvar_args, &message)) {
+        return device->WriteFail(message);
+    }
+    return device->WriteOkay(message);
 }
 
 bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Erase is not allowed on locked devices");
+    }
+
     PartitionHandle handle;
     if (!OpenPartition(device, args[1], &handle)) {
         return device->WriteStatus(FastbootResult::FAIL, "Partition doesn't exist");
@@ -86,13 +147,37 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     return device->WriteStatus(FastbootResult::FAIL, "Erasing failed");
 }
 
+bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        return device->WriteStatus(FastbootResult::FAIL, "Unable to open fastboot HAL");
+    }
+
+    Result ret;
+    auto ret_val = fastboot_hal->doOemCommand(args[0], [&](Result result) { ret = result; });
+    if (!ret_val.isOk()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Unable to do OEM command");
+    }
+    if (ret.status != Status::SUCCESS) {
+        return device->WriteStatus(FastbootResult::FAIL, ret.message);
+    }
+
+    return device->WriteStatus(FastbootResult::OKAY, ret.message);
+}
+
 bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "size argument unspecified");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Download is not allowed on locked devices");
+    }
+
     // arg[0] is the command name, arg[1] contains size of data to be downloaded
     unsigned int size;
-    if (!android::base::ParseUint("0x" + args[1], &size, UINT_MAX)) {
+    if (!android::base::ParseUint("0x" + args[1], &size, kMaxDownloadSizeDefault)) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid size");
     }
     device->download_data().resize(size);
@@ -112,6 +197,12 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
     }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Flashing is not allowed on locked devices");
+    }
+
     int ret = Flash(device, args[1]);
     if (ret < 0) {
         return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
@@ -122,6 +213,11 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
 bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Missing slot argument");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "set_active command is not allowed on locked devices");
     }
 
     // Slot suffix needs to be between 'a' and 'z'.
@@ -142,7 +238,13 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
     CommandResult ret;
     auto cb = [&ret](CommandResult result) { ret = result; };
     auto result = boot_control_hal->setActiveBootSlot(slot, cb);
-    if (result.isOk() && ret.success) return device->WriteStatus(FastbootResult::OKAY, "");
+    if (result.isOk() && ret.success) {
+        // Save as slot suffix to match the suffix format as returned from
+        // the boot control HAL.
+        auto current_slot = "_" + args[1];
+        device->set_active_slot(current_slot);
+        return device->WriteStatus(FastbootResult::OKAY, "");
+    }
     return device->WriteStatus(FastbootResult::FAIL, "Unable to set slot");
 }
 
@@ -220,27 +322,28 @@ bool RebootRecoveryHandler(FastbootDevice* device, const std::vector<std::string
 // partition table to the same place it was read.
 class PartitionBuilder {
   public:
-    explicit PartitionBuilder(FastbootDevice* device);
+    explicit PartitionBuilder(FastbootDevice* device, const std::string& partition_name);
 
     bool Write();
     bool Valid() const { return !!builder_; }
     MetadataBuilder* operator->() const { return builder_.get(); }
 
   private:
+    FastbootDevice* device_;
     std::string super_device_;
     uint32_t slot_number_;
     std::unique_ptr<MetadataBuilder> builder_;
 };
 
-PartitionBuilder::PartitionBuilder(FastbootDevice* device) {
-    auto super_device = FindPhysicalPartition(LP_METADATA_PARTITION_NAME);
+PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& partition_name)
+    : device_(device) {
+    std::string slot_suffix = GetSuperSlotSuffix(device, partition_name);
+    slot_number_ = SlotNumberForSlotSuffix(slot_suffix);
+    auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number_));
     if (!super_device) {
         return;
     }
     super_device_ = *super_device;
-
-    std::string slot = device->GetCurrentSlot();
-    slot_number_ = SlotNumberForSlotSuffix(slot);
     builder_ = MetadataBuilder::New(super_device_, slot_number_);
 }
 
@@ -249,12 +352,16 @@ bool PartitionBuilder::Write() {
     if (!metadata) {
         return false;
     }
-    return UpdatePartitionTable(super_device_, *metadata.get(), slot_number_);
+    return UpdateAllPartitionMetadata(device_, super_device_, *metadata.get());
 }
 
 bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 3) {
         return device->WriteFail("Invalid partition name and size");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
     }
 
     uint64_t partition_size;
@@ -263,7 +370,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition size");
     }
 
-    PartitionBuilder builder(device);
+    PartitionBuilder builder(device, partition_name);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
     }
@@ -272,13 +379,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Partition already exists");
     }
 
-    // Make a random UUID, since they're not currently used.
-    uuid_t uuid;
-    char uuid_str[37];
-    uuid_generate_random(uuid);
-    uuid_unparse(uuid, uuid_str);
-
-    Partition* partition = builder->AddPartition(partition_name, uuid_str, 0);
+    Partition* partition = builder->AddPartition(partition_name, 0);
     if (!partition) {
         return device->WriteFail("Failed to add partition");
     }
@@ -297,11 +398,17 @@ bool DeletePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition name and size");
     }
 
-    PartitionBuilder builder(device);
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
+    }
+
+    std::string partition_name = args[1];
+
+    PartitionBuilder builder(device, partition_name);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
     }
-    builder->RemovePartition(args[1]);
+    builder->RemovePartition(partition_name);
     if (!builder.Write()) {
         return device->WriteFail("Failed to write partition table");
     }
@@ -313,13 +420,17 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Invalid partition name and size");
     }
 
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
+    }
+
     uint64_t partition_size;
     std::string partition_name = args[1];
     if (!android::base::ParseUint(args[2].c_str(), &partition_size)) {
         return device->WriteFail("Invalid partition size");
     }
 
-    PartitionBuilder builder(device);
+    PartitionBuilder builder(device, partition_name);
     if (!builder.Valid()) {
         return device->WriteFail("Could not open super partition");
     }
@@ -335,4 +446,17 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Failed to write partition table");
     }
     return device->WriteOkay("Partition resized");
+}
+
+bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteFail("Invalid arguments");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL, "Command not available on locked devices");
+    }
+
+    bool wipe = (args.size() >= 3 && args[2] == "wipe");
+    return UpdateSuper(device, args[1], wipe);
 }

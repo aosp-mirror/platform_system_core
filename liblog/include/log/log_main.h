@@ -56,15 +56,24 @@ __BEGIN_DECLS
 /*
  * Use __VA_ARGS__ if running a static analyzer,
  * to avoid warnings of unused variables in __VA_ARGS__.
- * __FAKE_USE_VA_ARGS is undefined at link time,
- * so don't link with __clang_analyzer__ defined.
+ * Use contexpr function in C++ mode, so these macros can be used
+ * in other constexpr functions without warning.
  */
 #ifdef __clang_analyzer__
-extern void __fake_use_va_args(int, ...);
-#define __FAKE_USE_VA_ARGS(...) __fake_use_va_args(0, ##__VA_ARGS__)
+#ifdef __cplusplus
+extern "C++" {
+template <typename... Ts>
+constexpr int __fake_use_va_args(Ts...) {
+  return 0;
+}
+}
+#else
+extern int __fake_use_va_args(int, ...);
+#endif /* __cplusplus */
+#define __FAKE_USE_VA_ARGS(...) ((void)__fake_use_va_args(0, ##__VA_ARGS__))
 #else
 #define __FAKE_USE_VA_ARGS(...) ((void)(0))
-#endif
+#endif /* __clang_analyzer__ */
 
 #ifndef __predict_false
 #define __predict_false(exp) __builtin_expect((exp) != 0, 0)

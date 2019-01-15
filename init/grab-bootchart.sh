@@ -17,6 +17,6 @@ for f in $FILES; do
     adb "${@}" pull $LOGROOT/$f $TMPDIR/$f 2>&1 > /dev/null
 done
 (cd $TMPDIR && tar -czf $TARBALL $FILES)
-bootchart ${TMPDIR}/${TARBALL}
-gnome-open ${TARBALL%.tgz}.png
+pybootchartgui ${TMPDIR}/${TARBALL}
+xdg-open ${TARBALL%.tgz}.png
 echo "Clean up ${TMPDIR}/ and ./${TARBALL%.tgz}.png when done"

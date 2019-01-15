@@ -47,8 +47,9 @@ void* OpenNativeLibrary(JNIEnv* env,
                         bool* needs_native_bridge,
                         std::string* error_msg);
 
-__attribute__((visibility("default")))
-bool CloseNativeLibrary(void* handle, const bool needs_native_bridge);
+__attribute__((visibility("default"))) bool CloseNativeLibrary(void* handle,
+                                                               const bool needs_native_bridge,
+                                                               std::string* error_msg);
 
 #if defined(__ANDROID__)
 // Look up linker namespace by class_loader. Returns nullptr if

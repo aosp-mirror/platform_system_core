@@ -62,7 +62,9 @@ constexpr size_t kBufferSize = 4096;
 Result<std::string> ReadMessage(int socket) {
     char buffer[kBufferSize] = {};
     auto result = TEMP_FAILURE_RETRY(recv(socket, buffer, sizeof(buffer), 0));
-    if (result <= 0) {
+    if (result == 0) {
+        return Error();
+    } else if (result < 0) {
         return ErrnoError();
     }
     return std::string(buffer, result);
@@ -175,6 +177,12 @@ void SubcontextProcess::MainLoop() {
 
         auto init_message = ReadMessage(init_fd_);
         if (!init_message) {
+            if (init_message.error_errno() == 0) {
+                // If the init file descriptor was closed, let's exit quietly. If
+                // this was accidental, init will restart us. If init died, this
+                // avoids calling abort(3) unnecessarily.
+                return;
+            }
             LOG(FATAL) << "Could not read message from init: " << init_message.error();
         }
 

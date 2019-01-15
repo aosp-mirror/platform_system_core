@@ -43,7 +43,7 @@ LOCAL_SRC_FILES := \
     AnimationParser.cpp
 
 LOCAL_MODULE := libhealthd_charger
-LOCAL_C_INCLUDES := bootable/recovery $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH) \
     $(LOCAL_PATH)/include
@@ -97,6 +97,7 @@ CHARGER_STATIC_LIBRARIES := \
     android.hardware.health@2.0 \
     android.hardware.health@1.0 \
     android.hardware.health@1.0-convert \
+    libbinderthreadstate \
     libhidltransport \
     libhidlbase \
     libhwbinder_noltopgo \

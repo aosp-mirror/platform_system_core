@@ -129,6 +129,10 @@ bool get_disk_stats_from_health_hal(const sp<IHealth>& service, struct disk_stat
 
     bool success = false;
     auto ret = service->getDiskStats([&success, stats](auto result, const auto& halStats) {
+        if (result == Result::NOT_SUPPORTED) {
+            LOG_TO(SYSTEM, DEBUG) << "getDiskStats is not supported on health HAL.";
+            return;
+        }
         if (result != Result::SUCCESS || halStats.size() == 0) {
             LOG_TO(SYSTEM, ERROR) << "getDiskStats failed with result " << toString(result)
                                   << " and size " << halStats.size();

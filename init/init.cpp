@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <seccomp_policy.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,10 +39,17 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/android_reboot.h>
+#include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
+#include <selinux/android.h>
+
+#ifndef RECOVERY
+#include <binder/ProcessState.h>
+#endif
 
 #include "action_parser.h"
+#include "boringssl_self_test.h"
 #include "epoll.h"
 #include "first_stage_mount.h"
 #include "import_parser.h"
@@ -52,7 +60,6 @@
 #include "security.h"
 #include "selinux.h"
 #include "sigchld_handler.h"
-#include "ueventd.h"
 #include "util.h"
 
 using namespace std::chrono_literals;
@@ -102,6 +109,14 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     return parser;
 }
 
+// parser that only accepts new services
+Parser CreateServiceOnlyParser(ServiceList& service_list) {
+    Parser parser;
+
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, subcontexts));
+    return parser;
+}
+
 static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser = CreateParser(action_manager, service_list);
 
@@ -114,8 +129,8 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         if (!parser.ParseConfig("/product/etc/init")) {
             late_import_paths.emplace_back("/product/etc/init");
         }
-        if (!parser.ParseConfig("/product-services/etc/init")) {
-            late_import_paths.emplace_back("/product-services/etc/init");
+        if (!parser.ParseConfig("/product_services/etc/init")) {
+            late_import_paths.emplace_back("/product_services/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
@@ -181,23 +196,34 @@ void property_changed(const std::string& name, const std::string& value) {
     }
 }
 
-static std::optional<boot_clock::time_point> RestartProcesses() {
-    std::optional<boot_clock::time_point> next_process_restart_time;
+static std::optional<boot_clock::time_point> HandleProcessActions() {
+    std::optional<boot_clock::time_point> next_process_action_time;
     for (const auto& s : ServiceList::GetInstance()) {
+        if ((s->flags() & SVC_RUNNING) && s->timeout_period()) {
+            auto timeout_time = s->time_started() + *s->timeout_period();
+            if (boot_clock::now() > timeout_time) {
+                s->Timeout();
+            } else {
+                if (!next_process_action_time || timeout_time < *next_process_action_time) {
+                    next_process_action_time = timeout_time;
+                }
+            }
+        }
+
         if (!(s->flags() & SVC_RESTARTING)) continue;
 
-        auto restart_time = s->time_started() + 5s;
+        auto restart_time = s->time_started() + s->restart_period();
         if (boot_clock::now() > restart_time) {
             if (auto result = s->Start(); !result) {
                 LOG(ERROR) << "Could not restart process '" << s->name() << "': " << result.error();
             }
         } else {
-            if (!next_process_restart_time || restart_time < *next_process_restart_time) {
-                next_process_restart_time = restart_time;
+            if (!next_process_action_time || restart_time < *next_process_action_time) {
+                next_process_action_time = restart_time;
             }
         }
     }
-    return next_process_restart_time;
+    return next_process_action_time;
 }
 
 static Result<Success> DoControlStart(Service* service) {
@@ -340,12 +366,12 @@ static void export_oem_lock_status() {
     if (!android::base::GetBoolProperty("ro.oem_unlock_supported", false)) {
         return;
     }
-
-    std::string value = GetProperty("ro.boot.verifiedbootstate", "");
-
-    if (!value.empty()) {
-        property_set("ro.boot.flash.locked", value == "orange" ? "0" : "1");
-    }
+    import_kernel_cmdline(
+            false, [](const std::string& key, const std::string& value, bool in_qemu) {
+                if (key == "androidboot.verifiedbootstate") {
+                    property_set("ro.boot.flash.locked", value == "orange" ? "0" : "1");
+                }
+            });
 }
 
 static void export_kernel_boot_props() {
@@ -410,6 +436,24 @@ static Result<Success> property_enable_triggers_action(const BuiltinArguments& a
 static Result<Success> queue_property_triggers_action(const BuiltinArguments& args) {
     ActionManager::GetInstance().QueueBuiltinAction(property_enable_triggers_action, "enable_property_trigger");
     ActionManager::GetInstance().QueueAllPropertyActions();
+    return Success();
+}
+
+static Result<Success> InitBinder(const BuiltinArguments& args) {
+    // init's use of binder is very limited. init cannot:
+    //   - have any binder threads
+    //   - receive incoming binder calls
+    //   - pass local binder services to remote processes
+    //   - use death recipients
+    // The main supported usecases are:
+    //   - notifying other daemons (oneway calls only)
+    //   - retrieving data that is necessary to boot
+    // Also, binder can't be used by recovery.
+#ifndef RECOVERY
+    android::ProcessState::self()->setThreadPoolMaxThreadCount(0);
+    android::ProcessState::self()->setCallRestriction(
+            ProcessState::CallRestriction::ERROR_IF_NOT_ONEWAY);
+#endif
     return Success();
 }
 
@@ -548,40 +592,26 @@ static void InitAborter(const char* abort_message) {
     RebootSystem(ANDROID_RB_RESTART2, "bootloader");
 }
 
-static void InitKernelLogging(char* argv[]) {
-    // Make stdin/stdout/stderr all point to /dev/null.
-    int fd = open("/sys/fs/selinux/null", O_RDWR);
-    if (fd == -1) {
-        int saved_errno = errno;
-        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
-        errno = saved_errno;
-        PLOG(FATAL) << "Couldn't open /sys/fs/selinux/null";
-    }
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    if (fd > 2) close(fd);
-
-    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
+static void GlobalSeccomp() {
+    import_kernel_cmdline(false, [](const std::string& key, const std::string& value,
+                                    bool in_qemu) {
+        if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
+            LOG(FATAL) << "Failed to globally enable seccomp!";
+        }
+    });
 }
 
-int main(int argc, char** argv) {
-    if (!strcmp(basename(argv[0]), "ueventd")) {
-        return ueventd_main(argc, argv);
-    }
-
-    if (argc > 1 && !strcmp(argv[1], "subcontext")) {
-        android::base::InitLogging(argv, &android::base::KernelLogger);
-        const BuiltinFunctionMap function_map;
-        return SubcontextMain(argc, argv, &function_map);
-    }
-
+int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
 
-    InitKernelLogging(argv);
+    // We need to set up stdin/stdout/stderr again now that we're running in init's context.
+    InitKernelLogging(argv, InitAborter);
     LOG(INFO) << "init second stage started!";
+
+    // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
+    GlobalSeccomp();
 
     // Set up a session keyring that all processes will have access to. It
     // will hold things like FBE encryption keys. No process should override
@@ -628,6 +658,7 @@ int main(int argc, char** argv) {
     InstallSignalFdHandler(&epoll);
 
     property_load_boot_defaults();
+    fs_mgr_vendor_overlay_mount_all();
     export_oem_lock_status();
     StartPropertyService(&epoll);
     set_usb_controller();
@@ -669,9 +700,15 @@ int main(int argc, char** argv) {
     // Trigger all the boot actions to get us started.
     am.QueueEventTrigger("init");
 
+    // Starting the BoringSSL self test, for NIAP certification compliance.
+    am.QueueBuiltinAction(StartBoringSslSelfTest, "StartBoringSslSelfTest");
+
     // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
     // wasn't ready immediately after wait_for_coldboot_done
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
+
+    // Initialize binder before bringing up other system services
+    am.QueueBuiltinAction(InitBinder, "InitBinder");
 
     // Don't mount filesystems or start core system services in charger mode.
     std::string bootmode = GetProperty("ro.bootmode", "");
@@ -700,12 +737,12 @@ int main(int argc, char** argv) {
         }
         if (!(waiting_for_prop || Service::is_exec_service_running())) {
             if (!shutting_down) {
-                auto next_process_restart_time = RestartProcesses();
+                auto next_process_action_time = HandleProcessActions();
 
                 // If there's a process that needs restarting, wake up in time for that.
-                if (next_process_restart_time) {
+                if (next_process_action_time) {
                     epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
-                        *next_process_restart_time - boot_clock::now());
+                            *next_process_action_time - boot_clock::now());
                     if (*epoll_timeout < 0ms) epoll_timeout = 0ms;
                 }
             }

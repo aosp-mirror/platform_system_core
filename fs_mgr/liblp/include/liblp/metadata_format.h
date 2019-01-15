@@ -38,7 +38,7 @@ extern "C" {
 #define LP_METADATA_HEADER_MAGIC 0x414C5030
 
 /* Current metadata version. */
-#define LP_METADATA_MAJOR_VERSION 1
+#define LP_METADATA_MAJOR_VERSION 10
 #define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
@@ -47,10 +47,19 @@ extern "C" {
  * device mapper, the block device will be created as read-only.
  */
 #define LP_PARTITION_ATTR_NONE 0x0
-#define LP_PARTITION_ATTR_READONLY 0x1
+#define LP_PARTITION_ATTR_READONLY (1 << 0)
+
+/* This flag is only intended to be used with super_empty.img and super.img on
+ * retrofit devices. On these devices there are A and B super partitions, and
+ * we don't know ahead of time which slot the image will be applied to.
+ *
+ * If set, the partition name needs a slot suffix applied. The slot suffix is
+ * determined by the metadata slot number (0 = _a, 1 = _b).
+ */
+#define LP_PARTITION_ATTR_SLOT_SUFFIXED (1 << 1)
 
 /* Mask that defines all valid attributes. */
-#define LP_PARTITION_ATTRIBUTE_MASK (LP_PARTITION_ATTR_READONLY)
+#define LP_PARTITION_ATTRIBUTE_MASK (LP_PARTITION_ATTR_READONLY | LP_PARTITION_ATTR_SLOT_SUFFIXED)
 
 /* Default name of the physical partition that holds logical partition entries.
  * The layout of this partition will look like:
@@ -58,22 +67,27 @@ extern "C" {
  *     +--------------------+
  *     | Disk Geometry      |
  *     +--------------------+
- *     | Metadata           |
+ *     | Geometry Backup    |
  *     +--------------------+
- *     | Logical Partitions |
+ *     | Metadata           |
  *     +--------------------+
  *     | Backup Metadata    |
  *     +--------------------+
- *     | Geometry Backup    |
+ *     | Logical Partitions |
  *     +--------------------+
  */
-#define LP_METADATA_PARTITION_NAME "super"
+#define LP_METADATA_DEFAULT_PARTITION_NAME "super"
 
 /* Size of a sector is always 512 bytes for compatibility with the Linux kernel. */
 #define LP_SECTOR_SIZE 512
 
-/* This structure is stored at sector 0 in the first 4096 bytes of the
- * partition, and again in the very last 4096 bytes. It is never modified and
+/* Amount of space reserved at the start of every super partition to avoid
+ * creating an accidental boot sector.
+ */
+#define LP_PARTITION_RESERVED_BYTES 4096
+
+/* This structure is stored at block 0 in the first 4096 bytes of the
+ * partition, and again in the following block. It is never modified and
  * describes how logical partition information can be located.
  */
 typedef struct LpMetadataGeometry {
@@ -98,48 +112,10 @@ typedef struct LpMetadataGeometry {
      */
     uint32_t metadata_slot_count;
 
-    /* 48: First usable sector for allocating logical partitions. this will be
-     * the first sector after the initial 4096 geometry block, followed by the
-     * space consumed by metadata_max_size*metadata_slot_count.
-     */
-    uint64_t first_logical_sector;
-
-    /* 56: Last usable sector, inclusive, for allocating logical partitions.
-     * At the end of this sector will follow backup metadata slots and the
-     * backup geometry block at the very end.
-     */
-    uint64_t last_logical_sector;
-
-    /* 64: Alignment for defining partitions or partition extents. For example,
-     * an alignment of 1MiB will require that all partitions have a size evenly
-     * divisible by 1MiB, and that the smallest unit the partition can grow by
-     * is 1MiB.
-     *
-     * Alignment is normally determined at runtime when growing or adding
-     * partitions. If for some reason the alignment cannot be determined, then
-     * this predefined alignment in the geometry is used instead. By default
-     * it is set to 1MiB.
-     */
-    uint32_t alignment;
-
-    /* 68: Alignment offset for "stacked" devices. For example, if the "super"
-     * partition itself is not aligned within the parent block device's
-     * partition table, then we adjust for this in deciding where to place
-     * |first_logical_sector|.
-     *
-     * Similar to |alignment|, this will be derived from the operating system.
-     * If it cannot be determined, it is assumed to be 0.
-     */
-    uint32_t alignment_offset;
-
-    /* 72: Block device size, as specified when the metadata was created. This
-     * can be used to verify the geometry against a target device.
-     */
-    uint64_t block_device_size;
-
-    /* 76: Logical block size of the super partition block device. This is the
-     * minimal alignment for partition and extent sizes, and it must be a
-     * multiple of LP_SECTOR_SIZE.
+    /* 48: Logical block size. This is the minimal alignment for partition and
+     * extent sizes, and it must be a multiple of LP_SECTOR_SIZE. Note that
+     * this must be equal across all LUNs that comprise the super partition,
+     * and thus this field is stored in the geometry, not per-device.
      */
     uint32_t logical_block_size;
 } __attribute__((packed)) LpMetadataGeometry;
@@ -216,6 +192,10 @@ typedef struct LpMetadataHeader {
     LpMetadataTableDescriptor partitions;
     /* 92: Extent table descriptor. */
     LpMetadataTableDescriptor extents;
+    /* 104: Updateable group descriptor. */
+    LpMetadataTableDescriptor groups;
+    /* 116: Block device table. */
+    LpMetadataTableDescriptor block_devices;
 } __attribute__((packed)) LpMetadataHeader;
 
 /* This struct defines a logical partition entry, similar to what would be
@@ -230,21 +210,21 @@ typedef struct LpMetadataPartition {
      */
     char name[36];
 
-    /* 36: Globally unique identifier (GUID) of this partition. */
-    uint8_t guid[16];
-
-    /* 52: Attributes for the partition (see LP_PARTITION_ATTR_* flags above). */
+    /* 36: Attributes for the partition (see LP_PARTITION_ATTR_* flags above). */
     uint32_t attributes;
 
-    /* 56: Index of the first extent owned by this partition. The extent will
+    /* 40: Index of the first extent owned by this partition. The extent will
      * start at logical sector 0. Gaps between extents are not allowed.
      */
     uint32_t first_extent_index;
 
-    /* 60: Number of extents in the partition. Every partition must have at
+    /* 44: Number of extents in the partition. Every partition must have at
      * least one extent.
      */
     uint32_t num_extents;
+
+    /* 48: Group this partition belongs to. */
+    uint32_t group_index;
 } __attribute__((packed)) LpMetadataPartition;
 
 /* This extent is a dm-linear target, and the index is an index into the
@@ -269,7 +249,91 @@ typedef struct LpMetadataExtent {
      * ZERO: This field must be 0.
      */
     uint64_t target_data;
+
+    /* 20: Contents depends on target_type.
+     *
+     * LINEAR: Must be an index into the block devices table.
+     * ZERO: This field must be 0.
+     */
+    uint32_t target_source;
 } __attribute__((packed)) LpMetadataExtent;
+
+/* This struct defines an entry in the groups table. Each group has a maximum
+ * size, and partitions in a group must not exceed that size. There is always
+ * a "default" group of unlimited size, which is used when not using update
+ * groups or when using overlayfs or fastbootd.
+ */
+typedef struct LpMetadataPartitionGroup {
+    /*  0: Name of this group. Any unused characters must be 0. */
+    char name[36];
+
+    /* 36: Flags (see LP_GROUP_*). */
+    uint32_t flags;
+
+    /* 40: Maximum size in bytes. If 0, the group has no maximum size. */
+    uint64_t maximum_size;
+} LpMetadataPartitionGroup;
+
+/* This flag is only intended to be used with super_empty.img and super.img on
+ * retrofit devices. If set, the group needs a slot suffix to be interpreted
+ * correctly. The suffix is automatically applied by ReadMetadata().
+ */
+#define LP_GROUP_SLOT_SUFFIXED (1 << 0)
+
+/* This struct defines an entry in the block_devices table. There must be at
+ * least one device, and the first device must represent the partition holding
+ * the super metadata.
+ */
+typedef struct LpMetadataBlockDevice {
+    /* 0: First usable sector for allocating logical partitions. this will be
+     * the first sector after the initial geometry blocks, followed by the
+     * space consumed by metadata_max_size*metadata_slot_count*2.
+     */
+    uint64_t first_logical_sector;
+
+    /* 8: Alignment for defining partitions or partition extents. For example,
+     * an alignment of 1MiB will require that all partitions have a size evenly
+     * divisible by 1MiB, and that the smallest unit the partition can grow by
+     * is 1MiB.
+     *
+     * Alignment is normally determined at runtime when growing or adding
+     * partitions. If for some reason the alignment cannot be determined, then
+     * this predefined alignment in the geometry is used instead. By default
+     * it is set to 1MiB.
+     */
+    uint32_t alignment;
+
+    /* 12: Alignment offset for "stacked" devices. For example, if the "super"
+     * partition itself is not aligned within the parent block device's
+     * partition table, then we adjust for this in deciding where to place
+     * |first_logical_sector|.
+     *
+     * Similar to |alignment|, this will be derived from the operating system.
+     * If it cannot be determined, it is assumed to be 0.
+     */
+    uint32_t alignment_offset;
+
+    /* 16: Block device size, as specified when the metadata was created. This
+     * can be used to verify the geometry against a target device.
+     */
+    uint64_t size;
+
+    /* 24: Partition name in the GPT. Any unused characters must be 0. */
+    char partition_name[36];
+
+    /* 60: Flags (see LP_BLOCK_DEVICE_* flags below). */
+    uint32_t flags;
+} LpMetadataBlockDevice;
+
+/* This flag is only intended to be used with super_empty.img and super.img on
+ * retrofit devices. On these devices there are A and B super partitions, and
+ * we don't know ahead of time which slot the image will be applied to.
+ *
+ * If set, the block device needs a slot suffix applied before being used with
+ * IPartitionOpener. The slot suffix is determined by the metadata slot number
+ * (0 = _a, 1 = _b).
+ */
+#define LP_BLOCK_DEVICE_SLOT_SUFFIXED (1 << 0)
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -31,6 +31,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
 #include <log/event_tag_map.h>
@@ -557,47 +558,48 @@ static int get_groups(const char* cmd) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         int size, consumed, max, payload;
-        char size_mult[3], consumed_mult[3];
+        char size_mult[4], consumed_mult[4];
         long full_size, full_consumed;
 
         size = consumed = max = payload = 0;
         // NB: crash log can be very small, not hit a Kb of consumed space
         //     doubly lucky we are not including it.
-        if (6 != sscanf(buffer,
-                        "%*s ring buffer is %d%2s (%d%2s consumed),"
-                        " max entry is %db, max payload is %db",
-                        &size, size_mult, &consumed, consumed_mult, &max,
-                        &payload)) {
-            fprintf(stderr, "WARNING: Parse error: %s", buffer);
-            continue;
-        }
+        EXPECT_EQ(6, sscanf(buffer,
+                            "%*s ring buffer is %d %3s (%d %3s consumed),"
+                            " max entry is %d B, max payload is %d B",
+                            &size, size_mult, &consumed, consumed_mult, &max, &payload))
+                << "Parse error on: " << buffer;
         full_size = size;
         switch (size_mult[0]) {
             case 'G':
                 full_size *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'M':
                 full_size *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'K':
                 full_size *= 1024;
-            /* FALLTHRU */
-            case 'b':
+                FALLTHROUGH_INTENDED;
+            case 'B':
                 break;
+            default:
+                ADD_FAILURE() << "Parse error on multiplier: " << size_mult;
         }
         full_consumed = consumed;
         switch (consumed_mult[0]) {
             case 'G':
                 full_consumed *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'M':
                 full_consumed *= 1024;
-            /* FALLTHRU */
+                FALLTHROUGH_INTENDED;
             case 'K':
                 full_consumed *= 1024;
-            /* FALLTHRU */
-            case 'b':
+                FALLTHROUGH_INTENDED;
+            case 'B':
                 break;
+            default:
+                ADD_FAILURE() << "Parse error on multiplier: " << consumed_mult;
         }
         EXPECT_GT((full_size * 9) / 4, full_consumed);
         EXPECT_GT(full_size, max);
@@ -1229,39 +1231,38 @@ TEST(logcat, blocking_clear) {
         }
 
         int size, consumed, max, payload;
-        char size_mult[3], consumed_mult[3];
+        char size_mult[4], consumed_mult[4];
         size = consumed = max = payload = 0;
         if (6 == sscanf(buffer,
-                        "events: ring buffer is %d%2s (%d%2s consumed),"
-                        " max entry is %db, max payload is %db",
-                        &size, size_mult, &consumed, consumed_mult, &max,
-                        &payload)) {
+                        "events: ring buffer is %d %3s (%d %3s consumed),"
+                        " max entry is %d B, max payload is %d B",
+                        &size, size_mult, &consumed, consumed_mult, &max, &payload)) {
             long full_size = size, full_consumed = consumed;
 
             switch (size_mult[0]) {
                 case 'G':
                     full_size *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'M':
                     full_size *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'K':
                     full_size *= 1024;
-                /* FALLTHRU */
-                case 'b':
+                    FALLTHROUGH_INTENDED;
+                case 'B':
                     break;
             }
             switch (consumed_mult[0]) {
                 case 'G':
                     full_consumed *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'M':
                     full_consumed *= 1024;
-                /* FALLTHRU */
+                    FALLTHROUGH_INTENDED;
                 case 'K':
                     full_consumed *= 1024;
-                /* FALLTHRU */
-                case 'b':
+                    FALLTHROUGH_INTENDED;
+                case 'B':
                     break;
             }
             EXPECT_GT(full_size, full_consumed);
@@ -1403,7 +1404,7 @@ TEST(logcat, regex) {
     int count = 0;
 
     char buffer[BIG_BUFFER];
-#define logcat_regex_prefix ___STRING(logcat) "_test"
+#define logcat_regex_prefix logcat_executable "_test"
 
     snprintf(buffer, sizeof(buffer),
              logcat_executable " --pid %d -d -e " logcat_regex_prefix "_a+b",
@@ -1549,7 +1550,7 @@ TEST(logcat, descriptive) {
 
     {
         static const struct tag sync = { 2720, "sync" };
-        static const char id[] = ___STRING(logcat) ".descriptive-sync";
+        static const char id[] = logcat_executable ".descriptive-sync";
         {
             android_log_event_list ctx(sync.tagNo);
             ctx << id << (int32_t)42 << (int32_t)-1 << (int32_t)0;
@@ -1664,7 +1665,7 @@ TEST(logcat, descriptive) {
         // Invent new entries because existing can not serve
         EventTagMap* map = android_openEventTagMap(nullptr);
         ASSERT_TRUE(nullptr != map);
-        static const char name[] = ___STRING(logcat) ".descriptive-monotonic";
+        static const char name[] = logcat_executable ".descriptive-monotonic";
         int myTag = android_lookupEventTagNum(map, name, "(new|1|s)",
                                               ANDROID_LOG_UNKNOWN);
         android_closeEventTagMap(map);

@@ -33,6 +33,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
+#include <procinfo/process.h>
 
 #include "debuggerd/handler.h"
 #include "protocol.h"
@@ -62,8 +63,20 @@ static void populate_timeval(struct timeval* tv, const Duration& duration) {
   tv->tv_usec = static_cast<long>(microseconds.count());
 }
 
-bool debuggerd_trigger_dump(pid_t pid, DebuggerdDumpType dump_type, unsigned int timeout_ms,
+bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int timeout_ms,
                             unique_fd output_fd) {
+  pid_t pid = tid;
+  if (dump_type == kDebuggerdJavaBacktrace) {
+    // Java dumps always get sent to the tgid, so we need to resolve our tid to a tgid.
+    android::procinfo::ProcessInfo procinfo;
+    std::string error;
+    if (!android::procinfo::GetProcessInfo(tid, &procinfo, &error)) {
+      LOG(ERROR) << "libdebugged_client: failed to get process info: " << error;
+      return false;
+    }
+    pid = procinfo.pid;
+  }
+
   LOG(INFO) << "libdebuggerd_client: started dumping process " << pid;
   unique_fd sockfd;
   const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
@@ -143,12 +156,16 @@ bool debuggerd_trigger_dump(pid_t pid, DebuggerdDumpType dump_type, unsigned int
   ssize_t rc =
       TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
-    LOG(ERROR) << "libdebuggerd_client: failed to read response from tombstoned: timeout reached?";
+    LOG(ERROR) << "libdebuggerd_client: failed to read initial response from tombstoned: "
+               << "timeout reached?";
+    return false;
+  } else if (rc == -1) {
+    PLOG(ERROR) << "libdebuggerd_client: failed to read initial response from tombstoned";
     return false;
   } else if (rc != sizeof(response)) {
-    LOG(ERROR)
-        << "libdebuggerd_client: received packet of unexpected length from tombstoned: expected "
-        << sizeof(response) << ", received " << rc;
+    LOG(ERROR) << "libdebuggerd_client: received packet of unexpected length from tombstoned while "
+                  "reading initial response: expected "
+               << sizeof(response) << ", received " << rc;
     return false;
   }
 
@@ -158,18 +175,22 @@ bool debuggerd_trigger_dump(pid_t pid, DebuggerdDumpType dump_type, unsigned int
     return false;
   }
 
-  if (!send_signal(pid, dump_type)) {
+  if (!send_signal(tid, dump_type)) {
     return false;
   }
 
   rc = TEMP_FAILURE_RETRY(recv(set_timeout(sockfd.get()), &response, sizeof(response), MSG_TRUNC));
   if (rc == 0) {
-    LOG(ERROR) << "libdebuggerd_client: failed to read response from tombstoned: timeout reached?";
+    LOG(ERROR) << "libdebuggerd_client: failed to read status response from tombstoned: "
+                  "timeout reached?";
+    return false;
+  } else if (rc == -1) {
+    PLOG(ERROR) << "libdebuggerd_client: failed to read status response from tombstoned";
     return false;
   } else if (rc != sizeof(response)) {
-    LOG(ERROR)
-      << "libdebuggerd_client: received packet of unexpected length from tombstoned: expected "
-      << sizeof(response) << ", received " << rc;
+    LOG(ERROR) << "libdebuggerd_client: received packet of unexpected length from tombstoned while "
+                  "reading confirmation response: expected "
+               << sizeof(response) << ", received " << rc;
     return false;
   }
 

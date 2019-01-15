@@ -24,7 +24,7 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wvla",
     ],
-    rtti: true,
+    cpp_std: "experimental",
 
     use_version_lib: true,
 
@@ -41,7 +41,10 @@ cc_defaults {
 
     target: {
         android: {
-            cflags: ["-DADB_HOST=0"],
+            cflags: [
+                "-DADB_HOST=0",
+                "-Wthread-safety",
+            ],
         },
 
         host: {
@@ -68,7 +71,7 @@ cc_defaults {
                 "-DUNICODE=1",
                 "-D_UNICODE=1",
 
-                // -std=gnu++11 doesn't set _GNU_SOURCE on Windows.
+                // Unlike on Linux, -std=gnu++ doesn't set _GNU_SOURCE on Windows.
                 "-D_GNU_SOURCE",
 
                 // MinGW hides some things behind _POSIX_SOURCE.
@@ -138,7 +141,11 @@ cc_library_host_static {
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
         "client/transport_mdns.cpp",
+        "client/fastdeploy.cpp",
+        "client/fastdeploycallbacks.cpp",
     ],
+
+    generated_headers: ["platform_tools_version"],
 
     target: {
         linux: {
@@ -170,6 +177,12 @@ cc_library_host_static {
         "libdiagnose_usb",
         "libmdnssd",
         "libusb",
+        "libandroidfw",
+        "libziparchive",
+        "libz",
+        "libutils",
+        "liblog",
+        "libcutils",
     ],
 }
 
@@ -237,6 +250,7 @@ cc_binary_host {
         "client/file_sync_client.cpp",
         "client/main.cpp",
         "client/console.cpp",
+        "client/adb_install.cpp",
         "client/line_printer.cpp",
         "shell_service_protocol.cpp",
     ],
@@ -251,6 +265,12 @@ cc_binary_host {
         "liblog",
         "libmdnssd",
         "libusb",
+        "libandroidfw",
+        "libziparchive",
+        "libz",
+        "libutils",
+        "liblog",
+        "libcutils",
     ],
 
     stl: "libc++_static",
@@ -259,6 +279,19 @@ cc_binary_host {
     // on the host adb tool, and shared libraries that link against libc++
     // will violate ODR
     shared_libs: [],
+
+    required: [
+        "deploypatchgenerator",
+    ],
+
+    // Archive adb, adb.exe.
+    dist: {
+        targets: [
+            "dist_files",
+            "sdk",
+            "win_sdk",
+        ],
+    },
 
     target: {
         darwin: {
@@ -290,11 +323,15 @@ cc_library_static {
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
         "daemon/usb.cpp",
+        "daemon/usb_ffs.cpp",
+        "daemon/usb_legacy.cpp",
     ],
 
     local_include_dirs: [
         "daemon/include",
     ],
+
+    generated_headers: ["platform_tools_version"],
 
     static_libs: [
         "libdiagnose_usb",
@@ -318,6 +355,7 @@ cc_library {
     compile_multilib: "both",
 
     srcs: [
+        "daemon/abb_service.cpp",
         "daemon/file_sync_service.cpp",
         "daemon/framebuffer_service.cpp",
         "daemon/mdns.cpp",
@@ -338,10 +376,6 @@ cc_library {
         "libavb_user",
         "libdiagnose_usb",
         "libqemu_pipe",
-
-        // `daemon/shell_service.cpp` uses selinux_android_setcon(), which is not exposed by
-        // libselinux.
-        "libselinux",
     ],
 
     shared_libs: [
@@ -356,7 +390,16 @@ cc_library {
         "libfs_mgr",
         "liblog",
         "libmdnssd",
+        "libselinux",
     ],
+
+    target: {
+        recovery: {
+            exclude_srcs: [
+                "daemon/abb_service.cpp",
+            ],
+        },
+    },
 }
 
 cc_library {
@@ -421,6 +464,40 @@ cc_binary {
     ],
 }
 
+cc_binary {
+    name: "abb",
+
+    defaults: ["adb_defaults"],
+    recovery_available: false,
+
+    srcs: [
+        "daemon/abb.cpp",
+    ],
+
+    cflags: [
+        "-D_GNU_SOURCE",
+        "-Wno-deprecated-declarations",
+    ],
+
+    strip: {
+        keep_symbols: true,
+    },
+
+    static_libs: [
+        "libadbd_core",
+        "libadbd_services",
+        "libcmd",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libbinder",
+        "liblog",
+        "libutils",
+        "libselinux",
+    ],
+}
+
 cc_test {
     name: "adbd_test",
     defaults: ["adb_defaults"],
@@ -466,7 +543,7 @@ python_test_host {
     },
 }
 
-python_binary_host {
+python_test_host {
     name: "adb_integration_test_device",
     main: "test_device.py",
     srcs: [
@@ -475,6 +552,8 @@ python_binary_host {
     libs: [
         "adb_py",
     ],
+    test_config: "adb_integration_test_device.xml",
+    test_suites: ["general-tests"],
     version: {
         py2: {
             enabled: true,

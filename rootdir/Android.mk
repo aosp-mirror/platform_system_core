@@ -9,6 +9,10 @@ LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
+# The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
+# Since init.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
+LOCAL_POST_INSTALL_CMD := ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
+
 include $(BUILD_PREBUILT)
 
 #######################################
@@ -67,6 +71,13 @@ ifneq ($(filter address,$(SANITIZE_TARGET)),)
   LOCAL_REQUIRED_MODULES := asan.options $(ASAN_OPTIONS_FILES) $(ASAN_EXTRACT_FILES)
 endif
 
+EXPORT_GLOBAL_HWASAN_OPTIONS :=
+ifneq ($(filter hwaddress,$(SANITIZE_TARGET)),)
+  ifneq ($(HWADDRESS_SANITIZER_GLOBAL_OPTIONS),)
+    EXPORT_GLOBAL_HWASAN_OPTIONS := export HWASAN_OPTIONS $(HWADDRESS_SANITIZER_GLOBAL_OPTIONS)
+  endif
+endif
+
 EXPORT_GLOBAL_GCOV_OPTIONS :=
 ifeq ($(NATIVE_COVERAGE),true)
   EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/gcov
@@ -77,7 +88,7 @@ endif
 #
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    sbin dev proc sys system data odm oem acct config storage mnt $(BOARD_ROOT_EXTRA_FOLDERS)); \
+    sbin dev proc sys system data odm oem acct config storage mnt apex $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/bin $(TARGET_ROOT_OUT)/bin; \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
@@ -94,9 +105,9 @@ else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product $(TARGET_ROOT_OUT)/product
 endif
 ifdef BOARD_USES_PRODUCT_SERVICESIMAGE
-  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/product-services
+  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/product_services
 else
-  LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product-services $(TARGET_ROOT_OUT)/product-services
+  LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product_services $(TARGET_ROOT_OUT)/product_services
 endif
 ifdef BOARD_USES_METADATA_PARTITION
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/metadata
@@ -117,6 +128,7 @@ LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/lib $(TARGET_ROOT_OUT)/odm/lib
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/lib64 $(TARGET_ROOT_OUT)/odm/lib64
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/overlay $(TARGET_ROOT_OUT)/odm/overlay
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/priv-app $(TARGET_ROOT_OUT)/odm/priv-app
+LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/usr $(TARGET_ROOT_OUT)/odm/usr
 
 ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
@@ -138,22 +150,14 @@ endif
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
-# Regenerate init.environ.rc if PRODUCT_BOOTCLASSPATH has changed.
-bcp_md5 := $(word 1, $(shell echo $(PRODUCT_BOOTCLASSPATH) $(PRODUCT_SYSTEM_SERVER_CLASSPATH) | $(MD5SUM)))
-bcp_dep := $(intermediates)/$(bcp_md5).bcp.dep
-$(bcp_dep) :
-	$(hide) mkdir -p $(dir $@) && rm -rf $(dir $@)*.bcp.dep && touch $@
-
-$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in $(bcp_dep)
+$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
 	$(hide) sed -e 's?%BOOTCLASSPATH%?$(PRODUCT_BOOTCLASSPATH)?g' $< >$@
 	$(hide) sed -i -e 's?%SYSTEMSERVERCLASSPATH%?$(PRODUCT_SYSTEM_SERVER_CLASSPATH)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
-
-bcp_md5 :=
-bcp_dep :=
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
 
 # Append PLATFORM_VNDK_VERSION to base name.
 define append_vndk_version
@@ -206,6 +210,7 @@ ifeq ($(_enforce_vndk_at_runtime),true)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
 ld_config_template := $(LOCAL_PATH)/etc/ld.config.txt
+check_backward_compatibility := true
 vndk_version := $(PLATFORM_VNDK_VERSION)
 include $(LOCAL_PATH)/update_and_install_ld_config.mk
 
@@ -243,6 +248,7 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $$(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
 ld_config_template := $(LOCAL_PATH)/etc/ld.config.txt
+check_backward_compatibility := true
 vndk_version := $(1)
 lib_list_from_prebuilts := true
 include $(LOCAL_PATH)/update_and_install_ld_config.mk
@@ -289,7 +295,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := ld.config.recovery.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_SRC_FILES := etc/ld.config.recovery.txt
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/etc
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/etc
 LOCAL_MODULE_STEM := ld.config.txt
 include $(BUILD_PREBUILT)
 

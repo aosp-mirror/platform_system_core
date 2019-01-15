@@ -17,6 +17,7 @@
 #include "socket_spec.h"
 
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -29,7 +30,8 @@
 #include "adb.h"
 #include "sysdeps.h"
 
-using android::base::StartsWith;
+using namespace std::string_literals;
+
 using android::base::StringPrintf;
 
 #if defined(__linux__)
@@ -64,10 +66,11 @@ static auto& kLocalSocketTypes = *new std::unordered_map<std::string, LocalSocke
     { "localfilesystem", { ANDROID_SOCKET_NAMESPACE_FILESYSTEM, !ADB_WINDOWS } },
 });
 
-bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* port,
+bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* port,
                            std::string* error) {
-    if (!StartsWith(spec, "tcp:")) {
-        *error = StringPrintf("specification is not tcp: '%s'", spec.c_str());
+    if (!spec.starts_with("tcp:")) {
+        *error = "specification is not tcp: ";
+        *error += spec;
         return false;
     }
 
@@ -84,7 +87,7 @@ bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* 
             return false;
         }
     } else {
-        std::string addr = spec.substr(4);
+        std::string addr(spec.substr(4));
         port_value = -1;
 
         // FIXME: ParseNetAddress rejects port 0. This currently doesn't hurt, because listening
@@ -94,7 +97,8 @@ bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* 
         }
 
         if (port_value == -1) {
-            *error = StringPrintf("missing port in specification: '%s'", spec.c_str());
+            *error = "missing port in specification: ";
+            *error += spec;
             return false;
         }
     }
@@ -110,25 +114,25 @@ bool parse_tcp_socket_spec(const std::string& spec, std::string* hostname, int* 
     return true;
 }
 
-static bool tcp_host_is_local(const std::string& hostname) {
+static bool tcp_host_is_local(std::string_view hostname) {
     // FIXME
     return hostname.empty() || hostname == "localhost";
 }
 
-bool is_socket_spec(const std::string& spec) {
+bool is_socket_spec(std::string_view spec) {
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix)) {
+        if (spec.starts_with(prefix)) {
             return true;
         }
     }
-    return StartsWith(spec, "tcp:");
+    return spec.starts_with("tcp:");
 }
 
-bool is_local_socket_spec(const std::string& spec) {
+bool is_local_socket_spec(std::string_view spec) {
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix)) {
+        if (spec.starts_with(prefix)) {
             return true;
         }
     }
@@ -141,8 +145,8 @@ bool is_local_socket_spec(const std::string& spec) {
     return tcp_host_is_local(hostname);
 }
 
-int socket_spec_connect(const std::string& spec, std::string* error) {
-    if (StartsWith(spec, "tcp:")) {
+int socket_spec_connect(std::string_view spec, std::string* error) {
+    if (spec.starts_with("tcp:")) {
         std::string hostname;
         int port;
         if (!parse_tcp_socket_spec(spec, &hostname, &port, error)) {
@@ -170,7 +174,7 @@ int socket_spec_connect(const std::string& spec, std::string* error) {
 
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix)) {
+        if (spec.starts_with(prefix)) {
             if (!it.second.available) {
                 *error = StringPrintf("socket type %s is unavailable on this platform",
                                       it.first.c_str());
@@ -182,12 +186,13 @@ int socket_spec_connect(const std::string& spec, std::string* error) {
         }
     }
 
-    *error = StringPrintf("unknown socket specification '%s'", spec.c_str());
+    *error = "unknown socket specification: ";
+    *error += spec;
     return -1;
 }
 
-int socket_spec_listen(const std::string& spec, std::string* error, int* resolved_tcp_port) {
-    if (StartsWith(spec, "tcp:")) {
+int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_tcp_port) {
+    if (spec.starts_with("tcp:")) {
         std::string hostname;
         int port;
         if (!parse_tcp_socket_spec(spec, &hostname, &port, error)) {
@@ -213,10 +218,10 @@ int socket_spec_listen(const std::string& spec, std::string* error, int* resolve
 
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (StartsWith(spec, prefix)) {
+        if (spec.starts_with(prefix)) {
             if (!it.second.available) {
-                *error = StringPrintf("attempted to listen on unavailable socket type: '%s'",
-                                      spec.c_str());
+                *error = "attempted to listen on unavailable socket type: ";
+                *error += spec;
                 return -1;
             }
 
@@ -225,6 +230,7 @@ int socket_spec_listen(const std::string& spec, std::string* error, int* resolve
         }
     }
 
-    *error = StringPrintf("unknown socket specification '%s'", spec.c_str());
+    *error = "unknown socket specification:";
+    *error += spec;
     return -1;
 }

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_
-#define LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_
+#pragma once
+
+#include <ziparchive/zip_archive.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -24,9 +25,8 @@
 #include <memory>
 #include <vector>
 
-#include <utils/FileMap.h>
-#include <ziparchive/zip_archive.h>
 #include "android-base/macros.h"
+#include "android-base/mapped_file.h"
 
 static const char* kErrorMessages[] = {
     "Success",
@@ -136,6 +136,26 @@ class CentralDirectory {
   size_t length_;
 };
 
+/**
+ * More space efficient string representation of strings in an mmaped zipped file than
+ * std::string_view or ZipString. Using ZipString as an entry in the ZipArchive hashtable wastes
+ * space. ZipString stores a pointer to a string (on 64 bit, 8 bytes) and the length to read from
+ * that pointer, 2 bytes. Because of alignment, the structure consumes 16 bytes, wasting 6 bytes.
+ * ZipStringOffset stores a 4 byte offset from a fixed location in the memory mapped file instead
+ * of the entire address, consuming 8 bytes with alignment.
+ */
+struct ZipStringOffset {
+  uint32_t name_offset;
+  uint16_t name_length;
+
+  const ZipString GetZipString(const uint8_t* start) const {
+    ZipString zip_string;
+    zip_string.name = start + name_offset;
+    zip_string.name_length = name_length;
+    return zip_string;
+  }
+};
+
 struct ZipArchive {
   // open Zip archive
   mutable MappedZipFile mapped_zip;
@@ -144,7 +164,7 @@ struct ZipArchive {
   // mapped central directory area
   off64_t directory_offset;
   CentralDirectory central_directory;
-  std::unique_ptr<android::FileMap> directory_map;
+  std::unique_ptr<android::base::MappedFile> directory_map;
 
   // number of entries in the Zip archive
   uint16_t num_entries;
@@ -154,14 +174,11 @@ struct ZipArchive {
   // allocate so the maximum number entries can never be higher than
   // ((4 * UINT16_MAX) / 3 + 1) which can safely fit into a uint32_t.
   uint32_t hash_table_size;
-  ZipString* hash_table;
+  ZipStringOffset* hash_table;
 
   ZipArchive(const int fd, bool assume_ownership);
   ZipArchive(void* address, size_t length);
   ~ZipArchive();
 
-  bool InitializeCentralDirectory(const char* debug_file_name, off64_t cd_start_offset,
-                                  size_t cd_size);
+  bool InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size);
 };
-
-#endif  // LIBZIPARCHIVE_ZIPARCHIVE_PRIVATE_H_

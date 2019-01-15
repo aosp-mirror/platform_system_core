@@ -59,7 +59,8 @@ void Unwinder::FillInDexFrame() {
   if (info != nullptr) {
     frame->map_start = info->start;
     frame->map_end = info->end;
-    frame->map_offset = info->offset;
+    frame->map_elf_start_offset = info->elf_start_offset;
+    frame->map_exact_offset = info->offset;
     frame->map_load_bias = info->load_bias;
     frame->map_flags = info->flags;
     if (resolve_names_) {
@@ -102,7 +103,8 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
   if (resolve_names_) {
     frame->map_name = map_info->name;
   }
-  frame->map_offset = map_info->offset;
+  frame->map_elf_start_offset = map_info->elf_start_offset;
+  frame->map_exact_offset = map_info->offset;
   frame->map_start = map_info->start;
   frame->map_end = map_info->end;
   frame->map_flags = map_info->flags;
@@ -135,6 +137,8 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
 
+  ArchEnum arch = regs_->Arch();
+
   bool return_address_attempt = false;
   bool adjust_pc = false;
   std::unique_ptr<JitDebug> jit_debug;
@@ -155,7 +159,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
       }
-      elf = map_info->GetElf(process_memory_, true);
+      elf = map_info->GetElf(process_memory_, arch);
       step_pc = regs_->pc();
       rel_pc = elf->GetRelPc(step_pc, map_info);
       // Everyone except elf data in gdb jit debug maps uses the relative pc.
@@ -190,6 +194,12 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         FillInDexFrame();
         // Clear the dex pc so that we don't repeat this frame later.
         regs_->set_dex_pc(0);
+
+        // Make sure there is enough room for the real frame.
+        if (frames_.size() == max_frames_) {
+          last_error_.code = ERROR_MAX_FRAMES_EXCEEDED;
+          break;
+        }
       }
 
       FillInFrame(map_info, elf, rel_pc, step_pc, pc_adjustment);
@@ -231,8 +241,14 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
 
     if (!stepped) {
       if (return_address_attempt) {
-        // Remove the speculative frame.
-        frames_.pop_back();
+        // Only remove the speculative frame if there are more than two frames
+        // or the pc in the first frame is in a valid map.
+        // This allows for a case where the code jumps into the middle of
+        // nowhere, but there is no other unwind information after that.
+        if (frames_.size() != 2 || maps_->Find(frames_[0].pc) != nullptr) {
+          // Remove the speculative frame.
+          frames_.pop_back();
+        }
         break;
       } else if (in_device_map) {
         // Do not attempt any other unwinding, pc or sp is in a device
@@ -276,10 +292,6 @@ std::string Unwinder::FormatFrame(const FrameData& frame, bool is32bit) {
     data += android::base::StringPrintf("  #%02zu pc %016" PRIx64, frame.num, frame.rel_pc);
   }
 
-  if (frame.map_offset != 0) {
-    data += android::base::StringPrintf(" (offset 0x%" PRIx64 ")", frame.map_offset);
-  }
-
   if (frame.map_start == frame.map_end) {
     // No valid map associated with this frame.
     data += "  <unknown>";
@@ -288,6 +300,11 @@ std::string Unwinder::FormatFrame(const FrameData& frame, bool is32bit) {
   } else {
     data += android::base::StringPrintf("  <anonymous:%" PRIx64 ">", frame.map_start);
   }
+
+  if (frame.map_elf_start_offset != 0) {
+    data += android::base::StringPrintf(" (offset 0x%" PRIx64 ")", frame.map_elf_start_offset);
+  }
+
   if (!frame.function_name.empty()) {
     data += " (" + frame.function_name;
     if (frame.function_offset != 0) {

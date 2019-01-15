@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fts.h>
+#include <glob.h>
 #include <linux/loop.h>
 #include <linux/module.h>
 #include <mntent.h>
@@ -50,9 +51,9 @@
 #include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
-#include <ext4_utils/ext4_crypt.h>
-#include <ext4_utils/ext4_crypt_init_extensions.h>
 #include <fs_mgr.h>
+#include <fscrypt/fscrypt.h>
+#include <fscrypt/fscrypt_init_extensions.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
@@ -99,6 +100,9 @@ static void ForEachServiceInClass(const std::string& classname, F function) {
 }
 
 static Result<Success> do_class_start(const BuiltinArguments& args) {
+    // Do not start a class if it has a property persist.dont_start_class.CLASS set to 1.
+    if (android::base::GetBoolProperty("persist.init.dont_start_class." + args[1], false))
+        return Success();
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
     for (const auto& service : ServiceList::GetInstance()) {
@@ -123,6 +127,9 @@ static Result<Success> do_class_reset(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_class_restart(const BuiltinArguments& args) {
+    // Do not restart a class if it has a property persist.dont_start_class.CLASS set to 1.
+    if (android::base::GetBoolProperty("persist.init.dont_start_class." + args[1], false))
+        return Success();
     ForEachServiceInClass(args[1], &Service::Restart);
     return Success();
 }
@@ -307,8 +314,8 @@ static Result<Success> do_mkdir(const BuiltinArguments& args) {
         }
     }
 
-    if (e4crypt_is_native()) {
-        if (e4crypt_set_directory_policy(args[1].c_str())) {
+    if (fscrypt_is_native()) {
+        if (fscrypt_set_directory_policy(args[1].c_str())) {
             return reboot_into_recovery(
                 {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
         }
@@ -472,9 +479,10 @@ static Result<int> mount_fstab(const char* fstabfile, int mount_mode) {
         // Only needed if someone explicitly changes the default log level in their init.rc.
         android::base::ScopedLogSeverity info(android::base::INFO);
 
-        struct fstab* fstab = fs_mgr_read_fstab(fstabfile);
-        int child_ret = fs_mgr_mount_all(fstab, mount_mode);
-        fs_mgr_free_fstab(fstab);
+        Fstab fstab;
+        ReadFstabFromFile(fstabfile, &fstab);
+
+        int child_ret = fs_mgr_mount_all(&fstab, mount_mode);
         if (child_ret == -1) {
             PLOG(ERROR) << "fs_mgr_mount_all returned an error";
         }
@@ -517,8 +525,8 @@ static Result<Success> queue_fs_event(int code) {
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (e4crypt_install_keyring()) {
-            return Error() << "e4crypt_install_keyring() failed";
+        if (fscrypt_install_keyring()) {
+            return Error() << "fscrypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -528,8 +536,8 @@ static Result<Success> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (e4crypt_install_keyring()) {
-            return Error() << "e4crypt_install_keyring() failed";
+        if (fscrypt_install_keyring()) {
+            return Error() << "fscrypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -539,8 +547,8 @@ static Result<Success> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (e4crypt_install_keyring()) {
-            return Error() << "e4crypt_install_keyring() failed";
+        if (fscrypt_install_keyring()) {
+            return Error() << "fscrypt_install_keyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -611,14 +619,15 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_swapon_all(const BuiltinArguments& args) {
-    struct fstab *fstab;
-    int ret;
+    Fstab fstab;
+    if (!ReadFstabFromFile(args[1], &fstab)) {
+        return Error() << "Could not read fstab '" << args[1] << "'";
+    }
 
-    fstab = fs_mgr_read_fstab(args[1].c_str());
-    ret = fs_mgr_swapon_all(fstab);
-    fs_mgr_free_fstab(fstab);
+    if (!fs_mgr_swapon_all(fstab)) {
+        return Error() << "fs_mgr_swapon_all() failed";
+    }
 
-    if (ret != 0) return Error() << "fs_mgr_swapon_all() failed";
     return Success();
 }
 
@@ -732,13 +741,10 @@ static Result<Success> do_verity_load_state(const BuiltinArguments& args) {
     return Success();
 }
 
-static void verity_update_property(fstab_rec *fstab, const char *mount_point,
-                                   int mode, int status) {
-    property_set("partition."s + mount_point + ".verified", std::to_string(mode));
-}
-
 static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
-    if (!fs_mgr_update_verity_state(verity_update_property)) {
+    if (!fs_mgr_update_verity_state([](const std::string& mount_point, int mode) {
+            property_set("partition." + mount_point + ".verified", std::to_string(mode));
+        })) {
         return Error() << "fs_mgr_update_verity_state() failed";
     }
     return Success();
@@ -966,7 +972,7 @@ static Result<Success> do_load_persist_props(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_load_system_props(const BuiltinArguments& args) {
-    load_system_props();
+    LOG(INFO) << "deprecated action `load_system_props` called.";
     return Success();
 }
 
@@ -1016,9 +1022,13 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
     }
     service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
-            if (e4crypt_is_native()) {
+            if (fscrypt_is_native()) {
                 LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
-                reboot_into_recovery({"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                if (auto result = reboot_into_recovery(
+                            {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                    !result) {
+                    LOG(FATAL) << "Could not reboot into recovery: " << result.error();
+                }
             } else {
                 LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
             }
@@ -1034,7 +1044,7 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
 static Result<Success> do_installkey(const BuiltinArguments& args) {
     if (!is_file_crypto()) return Success();
 
-    auto unencrypted_dir = args[1] + e4crypt_unencrypted_folder;
+    auto unencrypted_dir = args[1] + fscrypt_unencrypted_folder;
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         return ErrnoError() << "Failed to create " << unencrypted_dir;
     }
@@ -1047,6 +1057,120 @@ static Result<Success> do_init_user0(const BuiltinArguments& args) {
     return ExecWithRebootOnFailure(
         "init_user0_failed",
         {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
+}
+
+static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
+    glob_t glob_result;
+    // @ is added to filter out the later paths, which are bind mounts of the places
+    // where the APEXes are really mounted at. Otherwise, we will parse the
+    // same file twice.
+    static constexpr char glob_pattern[] = "/apex/*@*/etc/*.rc";
+    const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
+    if (ret != 0 && ret != GLOB_NOMATCH) {
+        globfree(&glob_result);
+        return Error() << "glob pattern '" << glob_pattern << "' failed";
+    }
+    std::vector<std::string> configs;
+    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance());
+    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
+        configs.emplace_back(glob_result.gl_pathv[i]);
+    }
+    globfree(&glob_result);
+
+    bool success = true;
+    for (const auto& c : configs) {
+        if (c.back() == '/') {
+            // skip if directory
+            continue;
+        }
+        success &= parser.ParseConfigFile(c);
+    }
+    ServiceList::GetInstance().MarkServicesUpdate();
+    if (success) {
+        return Success();
+    } else {
+        return Error() << "Could not parse apex configs";
+    }
+}
+
+static Result<Success> bind_mount_file(const char* source, const char* mount_point,
+                                       bool remount_private) {
+    if (remount_private && mount(nullptr, mount_point, nullptr, MS_PRIVATE, nullptr) == -1) {
+        return ErrnoError() << "Could not change " << mount_point << " to a private mount point";
+    }
+    if (mount(source, mount_point, nullptr, MS_BIND, nullptr) == -1) {
+        return ErrnoError() << "Could not bind-mount " << source << " to " << mount_point;
+    }
+    return Success();
+}
+
+static Result<Success> bind_mount_bionic(const char* linker_source, const char* lib_dir_source,
+                                         const char* linker_mount_point, const char* lib_mount_dir,
+                                         bool remount_private) {
+    if (access(linker_source, F_OK) != 0) {
+        return Success();
+    }
+    if (auto result = bind_mount_file(linker_source, linker_mount_point, remount_private);
+        !result) {
+        return result;
+    }
+    for (auto libname : kBionicLibFileNames) {
+        std::string mount_point = lib_mount_dir + libname;
+        std::string source = lib_dir_source + libname;
+        if (auto result = bind_mount_file(source.c_str(), mount_point.c_str(), remount_private);
+            !result) {
+            return result;
+        }
+    }
+    return Success();
+}
+
+// The bootstrap bionic libs and the bootstrap linker are bind-mounted to
+// the mount points for pre-apexd processes.
+static Result<Success> do_prepare_bootstrap_bionic(const BuiltinArguments& args) {
+    static bool prepare_bootstrap_bionic_done = false;
+    if (prepare_bootstrap_bionic_done) {
+        return Error() << "prepare_bootstrap_bionic was already executed. Cannot be executed again";
+    }
+    if (auto result = bind_mount_bionic(kBootstrapLinkerPath, kBootstrapBionicLibsDir,
+                                        kLinkerMountPoint, kBionicLibsMountPointDir, false);
+        !result) {
+        return result;
+    }
+    if (auto result = bind_mount_bionic(kBootstrapLinkerPath64, kBootstrapBionicLibsDir64,
+                                        kLinkerMountPoint64, kBionicLibsMountPointDir64, false);
+        !result) {
+        return result;
+    }
+
+    LOG(INFO) << "prepare_bootstrap_bionic done";
+    prepare_bootstrap_bionic_done = true;
+    return Success();
+}
+
+// The bionic libs and the dynamic linker from the runtime APEX are bind-mounted
+// to the mount points. As a result, the previous mounts done by
+// prepare_bootstrap_bionic become hidden.
+static Result<Success> do_setup_runtime_bionic(const BuiltinArguments& args) {
+    static bool setup_runtime_bionic_done = false;
+    if (setup_runtime_bionic_done) {
+        return Error() << "setup_runtime_bionic was already executed. Cannot be executed again";
+    }
+    if (auto result = bind_mount_bionic(kRuntimeLinkerPath, kRuntimeBionicLibsDir,
+                                        kLinkerMountPoint, kBionicLibsMountPointDir, true);
+        !result) {
+        return result;
+    }
+    if (auto result = bind_mount_bionic(kRuntimeLinkerPath64, kRuntimeBionicLibsDir64,
+                                        kLinkerMountPoint64, kBionicLibsMountPointDir64, true);
+        !result) {
+        return result;
+    }
+
+    ServiceList::GetInstance().MarkRuntimeAvailable();
+    LOG(INFO) << "setup_runtime_bionic done";
+    setup_runtime_bionic_done = true;
+    return Success();
 }
 
 // Builtin-function-map start
@@ -1086,6 +1210,8 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
+        {"parse_apex_configs",      {0,     0,    {false,  do_parse_apex_configs}}},
+        {"prepare_bootstrap_bionic",{0,     0,    {false,  do_prepare_bootstrap_bionic}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"restart",                 {1,     1,    {false,  do_restart}}},
@@ -1094,6 +1220,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"rm",                      {1,     1,    {true,   do_rm}}},
         {"rmdir",                   {1,     1,    {true,   do_rmdir}}},
         {"setprop",                 {2,     2,    {true,   do_setprop}}},
+        {"setup_runtime_bionic",    {0,     0,    {false,  do_setup_runtime_bionic}}},
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},

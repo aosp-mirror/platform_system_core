@@ -37,6 +37,7 @@
 
 #include "adb.h"
 #include "adb_unique_fd.h"
+#include "usb.h"
 
 typedef std::unordered_set<std::string> FeatureSet;
 
@@ -57,8 +58,12 @@ extern const char* const kFeatureCmd;
 extern const char* const kFeatureStat2;
 // The server is running with libusb enabled.
 extern const char* const kFeatureLibusb;
-// The server supports `push --sync`.
+// adbd supports `push --sync`.
 extern const char* const kFeaturePushSync;
+// adbd supports installing .apex packages.
+extern const char* const kFeatureApex;
+// adbd has b/110953234 fixed.
+extern const char* const kFeatureFixedPushMkdir;
 
 TransportId NextTransportId();
 
@@ -238,6 +243,9 @@ class atransport {
         return connection_;
     }
 
+    void SetUsbHandle(usb_handle* h) { usb_handle_ = h; }
+    usb_handle* GetUsbHandle() { return usb_handle_; }
+
     const TransportId id;
     size_t ref_count = 0;
     bool online = false;
@@ -254,6 +262,7 @@ class atransport {
 
 #if ADB_HOST
     std::shared_ptr<RSA> NextKey();
+    void ResetKeys();
 #endif
 
     char token[TOKEN_SIZE] = {};
@@ -328,6 +337,9 @@ class atransport {
     // The underlying connection object.
     std::shared_ptr<Connection> connection_ GUARDED_BY(mutex_);
 
+    // USB handle for the connection, if available.
+    usb_handle* usb_handle_ = nullptr;
+
     // A callback that will be invoked when the atransport needs to reconnect.
     ReconnectCallback reconnect_;
 
@@ -362,6 +374,7 @@ atransport* find_transport(const char* serial);
 void kick_all_tcp_devices();
 void kick_all_transports();
 
+void register_transport(atransport* transport);
 void register_usb_transport(usb_handle* h, const char* serial,
                             const char* devpath, unsigned writeable);
 

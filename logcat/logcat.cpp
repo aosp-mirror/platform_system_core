@@ -16,6 +16,7 @@
 
 #include "logcat.h"
 
+#include <android-base/macros.h>
 #include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
@@ -41,6 +42,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/file.h>
@@ -476,10 +478,10 @@ static void show_help(android_logcat_context_internal* context) {
                     "  -G <size>, --buffer-size=<size>\n"
                     "                  Set size of log ring buffer, may suffix with K or M.\n"
                     "  -L, --last      Dump logs from prior to last reboot\n"
-                    // Leave security (Device Owner only installations) and
-                    // kernel (userdebug and eng) buffers undocumented.
                     "  -b <buffer>, --buffer=<buffer>         Request alternate ring buffer, 'main',\n"
                     "                  'system', 'radio', 'events', 'crash', 'default' or 'all'.\n"
+                    "                  Additionally, 'kernel' for userdebug and eng builds, and\n"
+                    "                  'security' for Device Owner installations.\n"
                     "                  Multiple -b parameters or comma separated list of buffers are\n"
                     "                  allowed. Buffers interleaved. Default -b main,system,crash.\n"
                     "  -B, --binary    Output the log in binary.\n"
@@ -565,23 +567,14 @@ static int setLogFormat(android_logcat_context_internal* context,
     return android_log_setPrintFormat(context->logformat, format);
 }
 
-static const char multipliers[][2] = { { "" }, { "K" }, { "M" }, { "G" } };
-
-static unsigned long value_of_size(unsigned long value) {
-    for (unsigned i = 0;
-         (i < sizeof(multipliers) / sizeof(multipliers[0])) && (value >= 1024);
-         value /= 1024, ++i)
-        ;
-    return value;
-}
-
-static const char* multiplier_of_size(unsigned long value) {
-    unsigned i;
+static std::pair<unsigned long, const char*> format_of_size(unsigned long value) {
+    static const char multipliers[][3] = {{""}, {"Ki"}, {"Mi"}, {"Gi"}};
+    size_t i;
     for (i = 0;
          (i < sizeof(multipliers) / sizeof(multipliers[0])) && (value >= 1024);
          value /= 1024, ++i)
         ;
-    return multipliers[i];
+    return std::make_pair(value, multipliers[i]);
 }
 
 // String to unsigned int, returns -1 if it fails
@@ -967,7 +960,7 @@ static int __logcat(android_logcat_context_internal* context) {
             case 't':
                 got_t = true;
                 mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
-            // FALLTHRU
+                FALLTHROUGH_INTENDED;
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
                     char* cp = parseTime(tail_time, optarg);
@@ -1017,7 +1010,7 @@ static int __logcat(android_logcat_context_internal* context) {
                     getLogSize = true;
                     break;
                 }
-            // FALLTHRU
+                FALLTHROUGH_INTENDED;
 
             case 'G': {
                 char* cp;
@@ -1031,15 +1024,15 @@ static int __logcat(android_logcat_context_internal* context) {
                     case 'g':
                     case 'G':
                         setLogSize *= 1024;
-                    // FALLTHRU
+                        FALLTHROUGH_INTENDED;
                     case 'm':
                     case 'M':
                         setLogSize *= 1024;
-                    // FALLTHRU
+                        FALLTHROUGH_INTENDED;
                     case 'k':
                     case 'K':
                         setLogSize *= 1024;
-                    // FALLTHRU
+                        FALLTHROUGH_INTENDED;
                     case '\0':
                         break;
 
@@ -1059,7 +1052,7 @@ static int __logcat(android_logcat_context_internal* context) {
                     getPruneList = true;
                     break;
                 }
-            // FALLTHRU
+                FALLTHROUGH_INTENDED;
 
             case 'P':
                 setPruneList = optarg;
@@ -1472,12 +1465,14 @@ static int __logcat(android_logcat_context_internal* context) {
             if ((size < 0) || (readable < 0)) {
                 reportErrorName(&getSizeFail, dev->device, allSelected);
             } else {
+                auto size_format = format_of_size(size);
+                auto readable_format = format_of_size(readable);
                 std::string str = android::base::StringPrintf(
-                       "%s: ring buffer is %ld%sb (%ld%sb consumed),"
-                         " max entry is %db, max payload is %db\n",
+                       "%s: ring buffer is %lu %sB (%lu %sB consumed),"
+                         " max entry is %d B, max payload is %d B\n",
                        dev->device,
-                       value_of_size(size), multiplier_of_size(size),
-                       value_of_size(readable), multiplier_of_size(readable),
+                       size_format.first, size_format.second,
+                       readable_format.first, readable_format.second,
                        (int)LOGGER_ENTRY_MAX_LEN,
                        (int)LOGGER_ENTRY_MAX_PAYLOAD);
                 TEMP_FAILURE_RETRY(write(context->output_fd,

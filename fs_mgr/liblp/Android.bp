@@ -25,6 +25,7 @@ cc_library {
     srcs: [
         "builder.cpp",
         "images.cpp",
+        "partition_opener.cpp",
         "reader.cpp",
         "utility.cpp",
         "writer.cpp",
@@ -35,10 +36,14 @@ cc_library {
         "libcrypto",
         "libcrypto_utils",
         "libsparse",
-        "libext2_uuid",
         "libext4_utils",
         "libz",
     ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
     export_include_dirs: ["include"],
 }
 
@@ -48,14 +53,19 @@ cc_test {
     cppflags: [
         "-Wno-unused-parameter",
     ],
+    static_libs: [
+        "libgmock",
+    ],
     shared_libs: [
         "liblp",
         "libbase",
         "libfs_mgr",
+        "libsparse",
     ],
     srcs: [
         "builder_test.cpp",
         "io_test.cpp",
+        "test_partition_opener.cpp",
         "utility_test.cpp",
     ],
 }
