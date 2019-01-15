@@ -53,9 +53,13 @@ Note that the sequence above:
     $ adb disable-verity
     $ adb reboot
 
-can be replaced with:
+*or*
 
-    $ adb reboot -R
+    $ adb remount
+
+can be replaced in both places with:
+
+    $ adb remount -R
 
 which will not reboot if everything is already prepared and ready
 to go.
