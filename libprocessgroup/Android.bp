@@ -3,7 +3,10 @@ cc_library {
     name: "libprocessgroup",
     host_supported: true,
     recovery_available: true,
+    vendor_available: true,
     shared_libs: ["libbase"],
+    // for cutils/android_filesystem_config.h
+    header_libs: [ "libcutils_headers" ],
     export_include_dirs: ["include"],
     cflags: [
         "-Wall",

@@ -42,7 +42,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <private/android_filesystem_config.h>
+#include <cutils/android_filesystem_config.h>
 
 #include <processgroup/processgroup.h>
 
