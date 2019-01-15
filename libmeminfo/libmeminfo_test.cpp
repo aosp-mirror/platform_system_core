@@ -293,15 +293,6 @@ TEST(TestProcMemInfo, IsSmapsSupportedTest) {
     EXPECT_EQ(supported, IsSmapsRollupSupported(-1));
 }
 
-TEST(TestProcMemInfo, SmapsOrRollupReturn) {
-    // if /proc/<pid>/smaps_rollup file exists, .SmapsRollup() must return true;
-    // false otherwise
-    std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
-    ProcMemInfo proc_mem(pid);
-    MemUsage stats;
-    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(&stats));
-}
-
 TEST(TestProcMemInfo, SmapsOrRollupTest) {
     std::string rollup =
             R"rollup(12c00000-7fe859e000 ---p 00000000 00:00 0                                [rollup]

@@ -406,9 +406,10 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
         return false;
     }
 
-    char line[1024];
+    char* line = nullptr;
+    size_t line_alloc = 0;
     stats->clear();
-    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+    while (getline(&line, &line_alloc, fp.get()) > 0) {
         switch (line[0]) {
             case 'P':
                 if (strncmp(line, "Pss:", 4) == 0) {
@@ -441,6 +442,8 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
         }
     }
 
+    // free getline() managed buffer
+    free(line);
     return true;
 }
 
@@ -450,14 +453,17 @@ bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss) {
         return false;
     }
     *pss = 0;
-    char line[1024];
-    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+    char* line = nullptr;
+    size_t line_alloc = 0;
+    while (getline(&line, &line_alloc, fp.get()) > 0) {
         uint64_t v;
         if (sscanf(line, "Pss: %" SCNu64 " kB", &v) == 1) {
             *pss += v;
         }
     }
 
+    // free getline() managed buffer
+    free(line);
     return true;
 }
 
