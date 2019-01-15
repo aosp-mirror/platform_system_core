@@ -482,9 +482,8 @@ Commands
   -f: force installation of the module even if the version of the running kernel
   and the version of the kernel for which the module was compiled do not match.
 
-`load_all_props`
-> Loads properties from /system, /vendor, et cetera.
-  This is included in the default init.rc.
+`load_system_props`
+> (This action is deprecated and no-op.)
 
 `load_persist_props`
 > Loads persistent properties when /data has been decrypted.

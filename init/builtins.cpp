@@ -972,7 +972,7 @@ static Result<Success> do_load_persist_props(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_load_system_props(const BuiltinArguments& args) {
-    load_system_props();
+    LOG(INFO) << "deprecated action `load_system_props` called.";
     return Success();
 }
 
