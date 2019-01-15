@@ -284,13 +284,22 @@ TEST(TestProcMemInfo, SwapOffsetsEmpty) {
     EXPECT_EQ(swap_offsets.size(), 0);
 }
 
+TEST(TestProcMemInfo, IsSmapsSupportedTest) {
+    std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
+    bool supported = IsSmapsRollupSupported(pid);
+    EXPECT_EQ(!access(path.c_str(), F_OK | R_OK), supported);
+    // Second call must return what the first one returned regardless of the pid parameter.
+    // So, deliberately pass invalid pid.
+    EXPECT_EQ(supported, IsSmapsRollupSupported(-1));
+}
+
 TEST(TestProcMemInfo, SmapsOrRollupReturn) {
     // if /proc/<pid>/smaps_rollup file exists, .SmapsRollup() must return true;
     // false otherwise
     std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
     ProcMemInfo proc_mem(pid);
     MemUsage stats;
-    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(true, &stats));
+    EXPECT_EQ(!access(path.c_str(), F_OK), proc_mem.SmapsOrRollup(&stats));
 }
 
 TEST(TestProcMemInfo, SmapsOrRollupTest) {
@@ -365,6 +374,50 @@ VmFlags: rd wr mr mw me ac
     EXPECT_EQ(stats.swap_pss, 70);
 }
 
+TEST(TestProcMemInfo, SmapsOrRollupPssRollupTest) {
+    // This is a made up smaps for the test
+    std::string smaps =
+            R"smaps(12c00000-13440000 rw-p 00000000 00:00 0                                  [anon:dalvik-main space (region space)]
+Name:           [anon:dalvik-main space (region space)]
+Size:               8448 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2652 kB
+Pss:                2652 kB
+Shared_Clean:        840 kB
+Shared_Dirty:         40 kB
+Private_Clean:        84 kB
+Private_Dirty:      2652 kB
+Referenced:         2652 kB
+Anonymous:          2652 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                102 kB
+SwapPss:              70 kB
+Locked:             2652 kB
+VmFlags: rd wr mr mw me ac 
+)smaps";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(smaps, tf.fd));
+
+    uint64_t pss;
+    ASSERT_EQ(SmapsOrRollupPssFromFile(tf.path, &pss), true);
+    EXPECT_EQ(pss, 2652);
+}
+
+TEST(TestProcMemInfo, SmapsOrRollupPssSmapsTest) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
+
+    uint64_t pss;
+    ASSERT_EQ(SmapsOrRollupPssFromFile(path, &pss), true);
+    EXPECT_EQ(pss, 19119);
+}
+
 TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
@@ -373,6 +426,9 @@ TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
     std::vector<Vma> vmas;
     auto collect_vmas = [&](const Vma& v) { vmas.push_back(v); };
     ASSERT_TRUE(ForEachVmaFromFile(path, collect_vmas));
+
+    // We should get a total of 6 vmas
+    ASSERT_EQ(vmas.size(), 6);
 
     // Expect values to be equal to what we have in testdata1/smaps_short
     // Check for sizes first
@@ -468,6 +524,8 @@ TEST(TestProcMemInfo, SmapsTest) {
     auto vmas = proc_mem.Smaps(path);
 
     ASSERT_FALSE(vmas.empty());
+    // We should get a total of 6 vmas
+    ASSERT_EQ(vmas.size(), 6);
 
     // Expect values to be equal to what we have in testdata1/smaps_short
     // Check for sizes first

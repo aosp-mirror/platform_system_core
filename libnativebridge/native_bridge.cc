@@ -33,6 +33,13 @@
 
 namespace android {
 
+#ifdef __APPLE__
+template <typename T>
+void UNUSED(const T&) {}
+#endif
+
+extern "C" {
+
 // Environment values required by the apps running with native bridge.
 struct NativeBridgeRuntimeValues {
     const char* os_arch;
@@ -251,10 +258,6 @@ bool NeedsNativeBridge(const char* instruction_set) {
   }
   return strncmp(instruction_set, ABI_STRING, strlen(ABI_STRING) + 1) != 0;
 }
-
-#ifdef __APPLE__
-template<typename T> void UNUSED(const T&) {}
-#endif
 
 bool PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruction_set) {
   if (state != NativeBridgeState::kOpened) {
@@ -626,4 +629,6 @@ void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_na
   return nullptr;
 }
 
-};  // namespace android
+}  // extern "C"
+
+}  // namespace android

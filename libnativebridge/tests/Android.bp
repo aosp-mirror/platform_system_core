@@ -86,3 +86,14 @@ cc_test {
     ],
     header_libs: ["libbase_headers"],
 }
+
+// Build the test for the C API.
+cc_test {
+    name: "libnativebridge-api-tests",
+    host_supported: true,
+    test_per_src: true,
+    srcs: [
+        "NativeBridgeApi.c",
+    ],
+    header_libs: ["libnativebridge-dummy-headers"],
+}
