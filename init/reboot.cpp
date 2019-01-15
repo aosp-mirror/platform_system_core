@@ -142,7 +142,9 @@ static void TurnOffBacklight() {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
         return;
     }
-    service->Start();
+    if (auto result = service->Start(); !result) {
+        LOG(WARNING) << "Could not start blank_screen service: " << result.error();
+    }
 }
 
 static void ShutdownVold() {
@@ -162,7 +164,7 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
  */
 static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
                                    std::vector<MountEntry>* emulatedPartitions, bool dump) {
-    std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
+    std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "re"), endmntent);
     if (fp == nullptr) {
         PLOG(ERROR) << "Failed to open /proc/mounts";
         return false;
@@ -307,15 +309,14 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
     auto shutdown_timeout = 0ms;
     if (!SHUTDOWN_ZERO_TIMEOUT) {
-        if (is_thermal_shutdown) {
-            constexpr unsigned int thermal_shutdown_timeout = 1;
-            shutdown_timeout = std::chrono::seconds(thermal_shutdown_timeout);
-        } else {
-            constexpr unsigned int shutdown_timeout_default = 6;
-            auto shutdown_timeout_property = android::base::GetUintProperty(
-                "ro.build.shutdown_timeout", shutdown_timeout_default);
-            shutdown_timeout = std::chrono::seconds(shutdown_timeout_property);
+        constexpr unsigned int shutdown_timeout_default = 6;
+        constexpr unsigned int max_thermal_shutdown_timeout = 3;
+        auto shutdown_timeout_final = android::base::GetUintProperty("ro.build.shutdown_timeout",
+                                                                     shutdown_timeout_default);
+        if (is_thermal_shutdown && shutdown_timeout_final > max_thermal_shutdown_timeout) {
+            shutdown_timeout_final = max_thermal_shutdown_timeout;
         }
+        shutdown_timeout = std::chrono::seconds(shutdown_timeout_final);
     }
     LOG(INFO) << "Shutdown timeout: " << shutdown_timeout.count() << " ms";
 
@@ -464,6 +465,12 @@ bool HandlePowerctlMessage(const std::string& command) {
         cmd = ANDROID_RB_RESTART2;
         if (cmd_params.size() >= 2) {
             reboot_target = cmd_params[1];
+            // adb reboot fastboot should boot into bootloader for devices not
+            // supporting logical partitions.
+            if (reboot_target == "fastboot" &&
+                !android::base::GetBoolProperty("ro.boot.dynamic_partitions", false)) {
+                reboot_target = "bootloader";
+            }
             // When rebooting to the bootloader notify the bootloader writing
             // also the BCB.
             if (reboot_target == "bootloader") {

@@ -87,12 +87,21 @@ void storage_info_t::load_perf_history_proto(const IOPerfHistory& perf_history)
     day_start_tp += chrono::seconds(perf_history.day_start_sec());
 
     nr_samples = perf_history.nr_samples();
+    if (nr_samples < recent_perf.size()) {
+        recent_perf.erase(recent_perf.begin() + nr_samples, recent_perf.end());
+    }
+    size_t i = 0;
     for (auto bw : perf_history.recent_perf()) {
-        recent_perf.push_back(bw);
+        if (i < recent_perf.size()) {
+            recent_perf[i] = bw;
+        } else {
+            recent_perf.push_back(bw);
+        }
+        ++i;
     }
 
     nr_days = perf_history.nr_days();
-    int i = 0;
+    i = 0;
     for (auto bw : perf_history.daily_perf()) {
         daily_perf[i++] = bw;
     }
@@ -370,8 +379,12 @@ void ufs_info_t::report()
 
 void health_storage_info_t::report() {
     auto ret = mHealth->getStorageInfo([this](auto result, const auto& halInfos) {
+        if (result == Result::NOT_SUPPORTED) {
+            LOG_TO(SYSTEM, DEBUG) << "getStorageInfo is not supported on health HAL.";
+            return;
+        }
         if (result != Result::SUCCESS || halInfos.size() == 0) {
-            LOG_TO(SYSTEM, DEBUG) << "getStorageInfo failed with result " << toString(result)
+            LOG_TO(SYSTEM, ERROR) << "getStorageInfo failed with result " << toString(result)
                                   << " and size " << halInfos.size();
             return;
         }
@@ -380,7 +393,7 @@ void health_storage_info_t::report() {
     });
 
     if (!ret.isOk()) {
-        LOG_TO(SYSTEM, DEBUG) << "getStorageInfo failed with " << ret.description();
+        LOG_TO(SYSTEM, ERROR) << "getStorageInfo failed with " << ret.description();
     }
 }
 

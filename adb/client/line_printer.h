@@ -42,6 +42,9 @@ struct LinePrinter {
   /// Whether the caret is at the beginning of a blank line.
   bool have_blank_line_;
 
+  /// The last printed info line when printing to a dumb terminal.
+  std::string info_line_;
+
 #ifdef _WIN32
   void* console_;
 #endif

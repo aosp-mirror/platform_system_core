@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <list>
+#include <memory>
 
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -29,7 +30,6 @@
 
 #include "socket_spec.h"
 #include "sysdeps.h"
-#include "sysdeps/memory.h"
 #include "transport.h"
 
 // A listener is an entity which binds to a local port and, upon receiving a connection on that
@@ -105,7 +105,7 @@ static void listener_event_func(int _fd, unsigned ev, void* _l)
         s = create_local_socket(fd);
         if (s) {
             s->transport = listener->transport;
-            connect_to_remote(s, listener->connect_to.c_str());
+            connect_to_remote(s, listener->connect_to);
             return;
         }
 

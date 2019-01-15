@@ -21,8 +21,9 @@
 #include <string>
 
 #include <android-base/logging.h>
+#include <fs_mgr.h>
+#include <fstab/fstab.h>
 
-#include "fs_mgr.h"
 #include "fs_mgr_priv_boot_config.h"
 
 /* The CHECK() in logging.h will use program invocation name as the tag.
@@ -39,11 +40,13 @@
 #define LINFO    LOG(INFO) << FS_MGR_TAG
 #define LWARNING LOG(WARNING) << FS_MGR_TAG
 #define LERROR   LOG(ERROR) << FS_MGR_TAG
+#define LFATAL LOG(FATAL) << FS_MGR_TAG
 
 // Logs a message with strerror(errno) at the end
 #define PINFO    PLOG(INFO) << FS_MGR_TAG
 #define PWARNING PLOG(WARNING) << FS_MGR_TAG
 #define PERROR   PLOG(ERROR) << FS_MGR_TAG
+#define PFATAL PLOG(FATAL) << FS_MGR_TAG
 
 #define CRYPTO_TMPFS_OPTIONS "size=512m,mode=0771,uid=1000,gid=1000"
 
@@ -113,19 +116,29 @@
 #define MF_KEYDIRECTORY    0X4000000
 #define MF_SYSFS           0X8000000
 #define MF_LOGICAL        0x10000000
+#define MF_CHECKPOINT_BLK 0x20000000
+#define MF_CHECKPOINT_FS  0x40000000
+#define MF_FIRST_STAGE_MOUNT \
+                          0x80000000
+#define MF_SLOTSELECT_OTHER  \
+                         0x100000000
 // clang-format on
 
 #define DM_BUF_SIZE 4096
 
 using namespace std::chrono_literals;
 
-int fs_mgr_set_blk_ro(const char *blockdev);
+enum class FileWaitMode { Exists, DoesNotExist };
+
 bool fs_mgr_wait_for_file(const std::string& filename,
-                          const std::chrono::milliseconds relative_timeout);
-bool fs_mgr_update_for_slotselect(struct fstab *fstab);
+                          const std::chrono::milliseconds relative_timeout,
+                          FileWaitMode wait_mode = FileWaitMode::Exists);
+
+bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
+bool fs_mgr_update_for_slotselect(Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
-int load_verity_state(struct fstab_rec* fstab, int* mode);
+int load_verity_state(const FstabEntry& entry, int* mode);
 
 #endif /* __CORE_FS_MGR_PRIV_H */

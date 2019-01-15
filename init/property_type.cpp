@@ -29,6 +29,11 @@ namespace android {
 namespace init {
 
 bool CheckType(const std::string& type_string, const std::string& value) {
+    // Always allow clearing a property such that the default value when it is not set takes over.
+    if (value.empty()) {
+        return true;
+    }
+
     auto type_strings = Split(type_string, " ");
     if (type_strings.empty()) {
         return false;

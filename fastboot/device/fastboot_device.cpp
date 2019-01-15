@@ -19,6 +19,8 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
+#include <android/hardware/fastboot/1.0/IFastboot.h>
+#include <healthhalutils/HealthHalUtils.h>
 
 #include <algorithm>
 
@@ -29,6 +31,9 @@
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::IBootControl;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::fastboot::V1_0::IFastboot;
+using ::android::hardware::health::V2_0::get_health_service;
+
 namespace sph = std::placeholders;
 
 FastbootDevice::FastbootDevice()
@@ -46,9 +51,14 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_CREATE_PARTITION, CreatePartitionHandler},
               {FB_CMD_DELETE_PARTITION, DeletePartitionHandler},
               {FB_CMD_RESIZE_PARTITION, ResizePartitionHandler},
+              {FB_CMD_UPDATE_SUPER, UpdateSuperHandler},
+              {FB_CMD_OEM, OemCmdHandler},
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
-      boot_control_hal_(IBootControl::getService()) {}
+      boot_control_hal_(IBootControl::getService()),
+      health_hal_(get_health_service()),
+      fastboot_hal_(IFastboot::getService()),
+      active_slot_("") {}
 
 FastbootDevice::~FastbootDevice() {
     CloseDevice();
@@ -59,6 +69,11 @@ void FastbootDevice::CloseDevice() {
 }
 
 std::string FastbootDevice::GetCurrentSlot() {
+    // Check if a set_active ccommand was issued earlier since the boot control HAL
+    // returns the slot that is currently booted into.
+    if (!active_slot_.empty()) {
+        return active_slot_;
+    }
     // Non-A/B devices must not have boot control HALs.
     if (!boot_control_hal_) {
         return "";
@@ -117,10 +132,20 @@ void FastbootDevice::ExecuteCommands() {
         command[bytes_read] = '\0';
 
         LOG(INFO) << "Fastboot command: " << command;
-        auto args = android::base::Split(command, ":");
-        auto found_command = kCommandMap.find(args[0]);
+
+        std::vector<std::string> args;
+        std::string cmd_name;
+        if (android::base::StartsWith(command, "oem ")) {
+            args = {command};
+            cmd_name = FB_CMD_OEM;
+        } else {
+            args = android::base::Split(command, ":");
+            cmd_name = args[0];
+        }
+
+        auto found_command = kCommandMap.find(cmd_name);
         if (found_command == kCommandMap.end()) {
-            WriteStatus(FastbootResult::FAIL, "Unrecognized command");
+            WriteStatus(FastbootResult::FAIL, "Unrecognized command " + args[0]);
             continue;
         }
         if (!found_command->second(this, args)) {
@@ -135,4 +160,8 @@ bool FastbootDevice::WriteOkay(const std::string& message) {
 
 bool FastbootDevice::WriteFail(const std::string& message) {
     return WriteStatus(FastbootResult::FAIL, message);
+}
+
+bool FastbootDevice::WriteInfo(const std::string& message) {
+    return WriteStatus(FastbootResult::INFO, message);
 }

@@ -34,6 +34,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -282,6 +283,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
   switch (crash_info->header.version) {
     case 2:
       *fdsan_table_address = crash_info->data.v2.fdsan_table_address;
+      FALLTHROUGH_INTENDED;
     case 1:
       *abort_msg_address = crash_info->data.v1.abort_msg_address;
       *siginfo = crash_info->data.v1.siginfo;
@@ -346,8 +348,16 @@ static pid_t wait_for_vm_process(pid_t pseudothread_tid) {
   return vm_pid;
 }
 
+static void InstallSigPipeHandler() {
+  struct sigaction action = {};
+  action.sa_handler = SIG_IGN;
+  action.sa_flags = SA_RESTART;
+  sigaction(SIGPIPE, &action, nullptr);
+}
+
 int main(int argc, char** argv) {
   DefuseSignalHandlers();
+  InstallSigPipeHandler();
 
   atrace_begin(ATRACE_TAG, "before reparent");
   pid_t target_process = getppid();

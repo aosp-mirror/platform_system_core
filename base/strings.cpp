@@ -95,6 +95,10 @@ bool StartsWith(const std::string& s, const std::string& prefix) {
   return strncmp(s.c_str(), prefix.c_str(), prefix.size()) == 0;
 }
 
+bool StartsWith(const std::string& s, char prefix) {
+  return *s.c_str() == prefix;  // Use c_str() to guarantee there is at least a '\0'.
+}
+
 bool StartsWithIgnoreCase(const std::string& s, const char* prefix) {
   return strncasecmp(s.c_str(), prefix, strlen(prefix)) == 0;
 }
@@ -119,6 +123,10 @@ bool EndsWith(const std::string& s, const char* suffix) {
 
 bool EndsWith(const std::string& s, const std::string& suffix) {
   return EndsWith(s, suffix.c_str(), suffix.size(), true);
+}
+
+bool EndsWith(const std::string& s, char suffix) {
+  return EndsWith(s, &suffix, 1, true);
 }
 
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {

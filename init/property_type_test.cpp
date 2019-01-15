@@ -32,7 +32,7 @@ TEST(property_type, CheckType_string) {
 }
 
 TEST(property_type, CheckType_int) {
-    EXPECT_FALSE(CheckType("int", ""));
+    EXPECT_TRUE(CheckType("int", ""));
     EXPECT_FALSE(CheckType("int", "abc"));
     EXPECT_FALSE(CheckType("int", "-abc"));
     EXPECT_TRUE(CheckType("int", "0"));
@@ -43,7 +43,7 @@ TEST(property_type, CheckType_int) {
 }
 
 TEST(property_type, CheckType_uint) {
-    EXPECT_FALSE(CheckType("uint", ""));
+    EXPECT_TRUE(CheckType("uint", ""));
     EXPECT_FALSE(CheckType("uint", "abc"));
     EXPECT_FALSE(CheckType("uint", "-abc"));
     EXPECT_TRUE(CheckType("uint", "0"));
@@ -53,7 +53,7 @@ TEST(property_type, CheckType_uint) {
 }
 
 TEST(property_type, CheckType_double) {
-    EXPECT_FALSE(CheckType("double", ""));
+    EXPECT_TRUE(CheckType("double", ""));
     EXPECT_FALSE(CheckType("double", "abc"));
     EXPECT_FALSE(CheckType("double", "-abc"));
     EXPECT_TRUE(CheckType("double", "0.0"));
@@ -64,7 +64,7 @@ TEST(property_type, CheckType_double) {
 }
 
 TEST(property_type, CheckType_size) {
-    EXPECT_FALSE(CheckType("size", ""));
+    EXPECT_TRUE(CheckType("size", ""));
     EXPECT_FALSE(CheckType("size", "ab"));
     EXPECT_FALSE(CheckType("size", "abcd"));
     EXPECT_FALSE(CheckType("size", "0"));
@@ -80,7 +80,7 @@ TEST(property_type, CheckType_size) {
 }
 
 TEST(property_type, CheckType_enum) {
-    EXPECT_FALSE(CheckType("enum abc", ""));
+    EXPECT_TRUE(CheckType("enum abc", ""));
     EXPECT_FALSE(CheckType("enum abc", "ab"));
     EXPECT_FALSE(CheckType("enum abc", "abcd"));
     EXPECT_FALSE(CheckType("enum 123 456 789", "0"));

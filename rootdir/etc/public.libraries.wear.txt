@@ -1,6 +1,7 @@
 # See https://android.googlesource.com/platform/ndk/+/master/docs/PlatformApis.md
 libandroid.so
 libaaudio.so
+libbinder_ndk.so
 libc.so
 libcamera2ndk.so
 libdl.so

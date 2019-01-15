@@ -23,7 +23,9 @@ cc_test {
         "libfs_mgr",
         "libfstab",
     ],
-
+    data: [
+        "data/*",
+    ],
     srcs: [
         "fs_mgr_test.cpp",
     ],

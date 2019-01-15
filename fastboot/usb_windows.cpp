@@ -69,7 +69,7 @@ struct usb_handle {
 class WindowsUsbTransport : public UsbTransport {
   public:
     WindowsUsbTransport(std::unique_ptr<usb_handle> handle) : handle_(std::move(handle)) {}
-    ~WindowsUsbTransport() override = default;
+    ~WindowsUsbTransport() override;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
@@ -248,6 +248,10 @@ void usb_kick(usb_handle* handle) {
         SetLastError(ERROR_INVALID_HANDLE);
         errno = ERROR_INVALID_HANDLE;
     }
+}
+
+WindowsUsbTransport::~WindowsUsbTransport() {
+    Close();
 }
 
 int WindowsUsbTransport::Close() {

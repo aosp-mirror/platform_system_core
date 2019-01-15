@@ -208,7 +208,7 @@ status_t PropertyMap::Parser::parse() {
 
         mTokenizer->nextLine();
     }
-    return NO_ERROR;
+    return OK;
 }
 
 } // namespace android

@@ -29,8 +29,6 @@
 #include <utility>
 #include <vector>
 
-#include <android-base/logging.h>
-
 #include "dm_table.h"
 
 // The minimum expected device mapper major.minor version
@@ -81,7 +79,7 @@ class DeviceMapper final {
     // Returns the current state of the underlying device mapper device
     // with given name.
     // One of INVALID, SUSPENDED or ACTIVE.
-    DmDeviceState state(const std::string& name) const;
+    DmDeviceState GetState(const std::string& name) const;
 
     // Creates a device, loads the given table, and activates it. If the device
     // is not able to be activated, it is destroyed, and false is returned.
@@ -130,6 +128,10 @@ class DeviceMapper final {
     };
     bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table);
 
+    // Identical to GetTableStatus, except also retrives the active table for the device
+    // mapper device from the kernel.
+    bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table);
+
   private:
     // Maximum possible device mapper targets registered in the kernel.
     // This is only used to read the list of targets from kernel so we allocate
@@ -142,14 +144,11 @@ class DeviceMapper final {
     // limit we are imposing here of 256.
     static constexpr uint32_t kMaxPossibleDmDevices = 256;
 
+    bool GetTable(const std::string& name, uint32_t flags, std::vector<TargetInfo>* table);
+
     void InitIo(struct dm_ioctl* io, const std::string& name = std::string()) const;
 
-    DeviceMapper() : fd_(-1) {
-        fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
-        if (fd_ < 0) {
-            PLOG(ERROR) << "Failed to open device-mapper";
-        }
-    }
+    DeviceMapper();
 
     // Creates a device mapper device with given name.
     // Return 'true' on success and 'false' on failure to

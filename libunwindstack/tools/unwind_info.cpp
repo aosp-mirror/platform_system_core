@@ -113,7 +113,7 @@ int GetElfInfo(const char* file, uint64_t offset) {
   }
 
   Elf elf(memory);
-  if (!elf.Init(true) || !elf.valid()) {
+  if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;
   }
@@ -121,6 +121,15 @@ int GetElfInfo(const char* file, uint64_t offset) {
   std::string soname;
   if (elf.GetSoname(&soname)) {
     printf("Soname: %s\n", soname.c_str());
+  }
+
+  std::string build_id;
+  if (elf.GetBuildID(&build_id)) {
+    printf("Build ID: ");
+    for (size_t i = 0; i < build_id.size(); ++i) {
+      printf("%02hhx", build_id[i]);
+    }
+    printf("\n");
   }
 
   ElfInterface* interface = elf.interface();

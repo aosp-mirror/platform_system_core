@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -45,7 +46,6 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "sysdeps/chrono.h"
-#include "sysdeps/memory.h"
 
 #if ADB_HOST
 
@@ -74,6 +74,7 @@ std::tuple<unique_fd, int, std::string> tcp_connect(const std::string& address,
     std::string host;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
     if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
+        D("failed to parse address: '%s'", address.c_str());
         return std::make_tuple(unique_fd(), port, serial);
     }
 
@@ -103,6 +104,7 @@ void connect_device(const std::string& address, std::string* response) {
         return;
     }
 
+    D("connection requested to '%s'", address.c_str());
     unique_fd fd;
     int port;
     std::string serial;
@@ -185,8 +187,8 @@ static void PollAllLocalPortsForEmulator() {
 }
 
 // Retry the disconnected local port for 60 times, and sleep 1 second between two retries.
-constexpr uint32_t LOCAL_PORT_RETRY_COUNT = 60;
-constexpr auto LOCAL_PORT_RETRY_INTERVAL = 1s;
+static constexpr uint32_t LOCAL_PORT_RETRY_COUNT = 60;
+static constexpr auto LOCAL_PORT_RETRY_INTERVAL = 1s;
 
 struct RetryPort {
     int port;

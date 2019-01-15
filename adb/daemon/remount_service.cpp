@@ -35,10 +35,10 @@
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/properties.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
-#include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
 #include <fs_mgr_overlayfs.h>
 
@@ -48,6 +48,8 @@
 #include "adb_utils.h"
 #include "set_verity_enable_state_service.h"
 
+using android::base::Realpath;
+
 // Returns the last device used to mount a directory in /proc/mounts.
 // This will find overlayfs entry where upperdir=lowerdir, to make sure
 // remount is associated with the correct directory.
@@ -56,9 +58,15 @@ static std::string find_proc_mount(const char* dir) {
     std::string mnt_fsname;
     if (!fp) return mnt_fsname;
 
+    // dir might be a symlink, e.g., /product -> /system/product in GSI.
+    std::string canonical_path;
+    if (!Realpath(dir, &canonical_path)) {
+        PLOG(ERROR) << "Realpath failed: " << dir;
+    }
+
     mntent* e;
     while ((e = getmntent(fp.get())) != nullptr) {
-        if (strcmp(dir, e->mnt_dir) == 0) {
+        if (canonical_path == e->mnt_dir) {
             mnt_fsname = e->mnt_fsname;
         }
     }
@@ -70,7 +78,13 @@ static std::string find_fstab_mount(const char* dir) {
     std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
                                                                fs_mgr_free_fstab);
     struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), dir);
-    return rec ? rec->blk_device : "";
+    if (!rec) {
+        return "";
+    }
+    if (fs_mgr_is_logical(rec)) {
+        fs_mgr_update_logical_partition(rec);
+    }
+    return rec->blk_device;
 }
 
 // The proc entry for / is full of lies, so check fstab instead.
@@ -79,13 +93,17 @@ static std::string find_mount(const char* dir, bool is_root) {
     if (is_root) {
         return find_fstab_mount(dir);
     } else {
-       return find_proc_mount(dir);
+        return find_proc_mount(dir);
     }
 }
 
+bool dev_is_overlayfs(const std::string& dev) {
+    return (dev == "overlay") || (dev == "overlayfs");
+}
+
 bool make_block_device_writable(const std::string& dev) {
-    if ((dev == "overlay") || (dev == "overlayfs")) return true;
-    int fd = unix_open(dev.c_str(), O_RDONLY | O_CLOEXEC);
+    if (dev_is_overlayfs(dev)) return true;
+    int fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
         return false;
     }
@@ -94,27 +112,6 @@ bool make_block_device_writable(const std::string& dev) {
     bool result = (ioctl(fd, BLKROSET, &OFF) != -1);
     unix_close(fd);
     return result;
-}
-
-static bool fs_has_shared_blocks(const std::string& mount_point, const std::string& device) {
-    std::string path = mount_point + "/lost+found";
-    struct statfs fs;
-    if (statfs(path.c_str(), &fs) == -1 || fs.f_type != EXT4_SUPER_MAGIC) {
-        return false;
-    }
-    unique_fd fd(unix_open(device.c_str(), O_RDONLY));
-    if (fd < 0) {
-        return false;
-    }
-    struct ext4_super_block sb;
-    if (lseek64(fd, 1024, SEEK_SET) < 0 || unix_read(fd, &sb, sizeof(sb)) < 0) {
-        return false;
-    }
-    struct fs_info info;
-    if (ext4_parse_sb(&sb, &info) < 0) {
-        return false;
-    }
-    return (info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS) != 0;
 }
 
 static bool can_unshare_blocks(int fd, const char* dev) {
@@ -168,7 +165,16 @@ static bool remount_partition(int fd, const char* dir) {
         return true;
     }
     bool is_root = strcmp(dir, "/") == 0;
+    if (is_root && dev_is_overlayfs(find_mount("/system", false))) {
+        dir = "/system";
+        is_root = false;
+    }
     std::string dev = find_mount(dir, is_root);
+    if (is_root && dev.empty()) {
+        // The fstab entry will be /system if the device switched roots during
+        // first-stage init.
+        dev = find_mount("/system", true);
+    }
     // Even if the device for the root is not found, we still try to remount it
     // as rw. This typically only happens when running Android in a container:
     // the root will almost always be in a loop device, which is dynamic, so
@@ -231,61 +237,60 @@ void remount_service(unique_fd fd, const std::string& cmd) {
     bool system_verified = !(android::base::GetProperty("partition.system.verified", "").empty());
     bool vendor_verified = !(android::base::GetProperty("partition.vendor.verified", "").empty());
 
-    std::vector<std::string> partitions = {"/odm", "/oem", "/product", "/vendor"};
-    if (android::base::GetBoolProperty("ro.build.system_root_image", false)) {
-        partitions.push_back("/");
-    } else {
-        partitions.push_back("/system");
-    }
+    std::vector<std::string> partitions{"/",        "/odm",   "/oem", "/product_services",
+                                        "/product", "/vendor"};
 
-    bool verity_enabled = (system_verified || vendor_verified);
+    if (system_verified || vendor_verified) {
+        // Disable verity automatically (reboot will be required).
+        set_verity_enabled_state_service(unique_fd(dup(fd.get())), false);
 
-    // If we can use overlayfs, lets get it in place first
-    // before we struggle with determining deduplication operations.
-    if (!verity_enabled && fs_mgr_overlayfs_setup() && fs_mgr_overlayfs_mount_all()) {
-        WriteFdExactly(fd.get(), "overlayfs mounted\n");
-    }
-
-    // Find partitions that are deduplicated, and can be un-deduplicated.
-    std::set<std::string> dedup;
-    for (const auto& partition : partitions) {
-        std::string dev = find_mount(partition.c_str(), partition == "/");
-        if (dev.empty() || !fs_has_shared_blocks(partition, dev)) {
-            continue;
-        }
-        if (can_unshare_blocks(fd.get(), dev.c_str())) {
-            dedup.emplace(partition);
-        }
-    }
-
-    // Reboot now if the user requested it (and an operation needs a reboot).
-    if (user_requested_reboot) {
-        if (!dedup.empty() || verity_enabled) {
-            if (verity_enabled) {
-                set_verity_enabled_state_service(unique_fd(dup(fd.get())), false);
+        // If overlayfs is not supported, we try and remount or set up
+        // un-deduplication. If it is supported, we can go ahead and wait for
+        // a reboot.
+        if (fs_mgr_overlayfs_valid() != OverlayfsValidResult::kNotSupported) {
+            if (user_requested_reboot) {
+                if (android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot")) {
+                    WriteFdExactly(fd.get(), "rebooting device\n");
+                } else {
+                    WriteFdExactly(fd.get(), "reboot failed\n");
+                }
             }
-            reboot_for_remount(fd.get(), !dedup.empty());
             return;
         }
-        WriteFdExactly(fd.get(), "No reboot needed, skipping -R.\n");
+    } else if (fs_mgr_overlayfs_setup()) {
+        // If we can use overlayfs, lets get it in place first before we
+        // struggle with determining deduplication operations.
+        Fstab fstab;
+        if (ReadDefaultFstab(&fstab) && fs_mgr_overlayfs_mount_all(&fstab)) {
+            WriteFdExactly(fd.get(), "overlayfs mounted\n");
+        }
     }
 
-    // If we need to disable-verity, but we also need to perform a recovery
-    // fsck for deduplicated partitions, hold off on warning about verity. We
-    // can handle both verity and the recovery fsck in the same reboot cycle.
-    if (verity_enabled && dedup.empty()) {
-        // Allow remount but warn of likely bad effects
-        bool both = system_verified && vendor_verified;
-        WriteFdFmt(fd.get(), "dm_verity is enabled on the %s%s%s partition%s.\n",
-                   system_verified ? "system" : "", both ? " and " : "",
-                   vendor_verified ? "vendor" : "", both ? "s" : "");
-        WriteFdExactly(fd.get(),
-                       "Use \"adb disable-verity\" to disable verity.\n"
-                       "If you do not, remount may succeed, however, you will still "
-                       "not be able to write to these volumes.\n");
-        WriteFdExactly(fd.get(),
-                       "Alternately, use \"adb remount -R\" to disable verity "
-                       "and automatically reboot.\n");
+    // If overlayfs is supported, we don't bother trying to un-deduplicate
+    // partitions.
+    std::set<std::string> dedup;
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
+        // Find partitions that are deduplicated, and can be un-deduplicated.
+        for (const auto& part : partitions) {
+            auto partition = part;
+            if ((part == "/") && !find_mount("/system", false).empty()) partition = "/system";
+            std::string dev = find_mount(partition.c_str(), partition == "/");
+            if (dev.empty() || !fs_mgr_has_shared_blocks(partition, dev)) {
+                continue;
+            }
+            if (can_unshare_blocks(fd.get(), dev.c_str())) {
+                dedup.emplace(partition);
+            }
+        }
+
+        // Reboot now if the user requested it (and an operation needs a reboot).
+        if (user_requested_reboot) {
+            if (!dedup.empty()) {
+                reboot_for_remount(fd.get(), !dedup.empty());
+                return;
+            }
+            WriteFdExactly(fd.get(), "No reboot needed, skipping -R.\n");
+        }
     }
 
     bool success = true;

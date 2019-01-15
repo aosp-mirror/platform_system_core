@@ -508,7 +508,7 @@ static int output_file_init(struct output_file* out, int block_size, int64_t len
 
   out->len = len;
   out->block_size = block_size;
-  out->cur_out_ptr = 0ll;
+  out->cur_out_ptr = 0LL;
   out->chunk_cnt = 0;
   out->crc32 = 0;
   out->use_crc = crc;

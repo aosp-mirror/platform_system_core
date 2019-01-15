@@ -212,8 +212,8 @@ static void _power_notification_thread() {
     const HINSTANCE instance = GetModuleHandleW(nullptr);
     if (!instance) {
         // This is such a common API call that this should never fail.
-        fatal("GetModuleHandleW failed: %s",
-              android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        LOG(FATAL) << "GetModuleHandleW failed: "
+                   << android::base::SystemErrorCodeToString(GetLastError());
     }
 
     WNDCLASSEXW wndclass;
@@ -223,15 +223,15 @@ static void _power_notification_thread() {
     wndclass.hInstance = instance;
     wndclass.lpszClassName = kPowerNotificationWindowClassName;
     if (!RegisterClassExW(&wndclass)) {
-        fatal("RegisterClassExW failed: %s",
-              android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        LOG(FATAL) << "RegisterClassExW failed: "
+                   << android::base::SystemErrorCodeToString(GetLastError());
     }
 
     if (!CreateWindowExW(WS_EX_NOACTIVATE, kPowerNotificationWindowClassName,
                          L"ADB Power Notification Window", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
                          instance, nullptr)) {
-        fatal("CreateWindowExW failed: %s",
-              android::base::SystemErrorCodeToString(GetLastError()).c_str());
+        LOG(FATAL) << "CreateWindowExW failed: "
+                   << android::base::SystemErrorCodeToString(GetLastError());
     }
 
     MSG msg;

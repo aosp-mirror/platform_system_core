@@ -65,7 +65,7 @@ int
 stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid,
                               char const* process_name, int32_t oom_score, int64_t pgfault,
                               int64_t pgmajfault, int64_t rss_in_bytes, int64_t cache_in_bytes,
-                              int64_t swap_in_bytes) {
+                              int64_t swap_in_bytes, int64_t process_start_time_ns) {
     assert(ctx != NULL);
     int ret = -EINVAL;
     if (!ctx) {
@@ -110,6 +110,10 @@ stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid
     }
 
     if ((ret = android_log_write_int64(ctx, swap_in_bytes)) < 0) {
+        return ret;
+    }
+
+    if ((ret = android_log_write_int64(ctx, process_start_time_ns)) < 0) {
         return ret;
     }
 

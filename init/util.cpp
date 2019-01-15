@@ -436,5 +436,21 @@ bool IsLegalPropertyName(const std::string& name) {
     return true;
 }
 
+void InitKernelLogging(char** argv, std::function<void(const char*)> abort_function) {
+    // Make stdin/stdout/stderr all point to /dev/null.
+    int fd = open("/dev/null", O_RDWR);
+    if (fd == -1) {
+        int saved_errno = errno;
+        android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
+        errno = saved_errno;
+        PLOG(FATAL) << "Couldn't open /dev/null";
+    }
+    dup2(fd, 0);
+    dup2(fd, 1);
+    dup2(fd, 2);
+    if (fd > 2) close(fd);
+    android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
+}
+
 }  // namespace init
 }  // namespace android

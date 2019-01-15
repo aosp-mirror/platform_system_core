@@ -15,8 +15,9 @@
  */
 #include "statsd_writer.h"
 
+#include <cutils/fs.h>
 #include <cutils/sockets.h>
-#include <endian.h>
+#include <cutils/threads.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -37,7 +38,17 @@
 /* branchless on many architectures. */
 #define min(x, y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
+#ifndef htole32
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define htole32(x) (x)
+#else
+#define htole32(x) __bswap_32(x)
+#endif
+#endif
+
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
+static atomic_int dropped = 0;
+static atomic_int log_error = 0;
 
 void statsd_writer_init_lock() {
     /*
@@ -59,14 +70,16 @@ static int statsdAvailable();
 static int statsdOpen();
 static void statsdClose();
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr);
+static void statsdNoteDrop();
 
 struct android_log_transport_write statsdLoggerWrite = {
-    .name = "statsd",
-    .sock = -EBADF,
-    .available = statsdAvailable,
-    .open = statsdOpen,
-    .close = statsdClose,
-    .write = statsdWrite,
+        .name = "statsd",
+        .sock = -EBADF,
+        .available = statsdAvailable,
+        .open = statsdOpen,
+        .close = statsdClose,
+        .write = statsdWrite,
+        .noteDrop = statsdNoteDrop,
 };
 
 /* log_init_lock assumed */
@@ -75,7 +88,14 @@ static int statsdOpen() {
 
     i = atomic_load(&statsdLoggerWrite.sock);
     if (i < 0) {
-        int sock = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+        int flags = SOCK_DGRAM;
+#ifdef SOCK_CLOEXEC
+        flags |= SOCK_CLOEXEC;
+#endif
+#ifdef SOCK_NONBLOCK
+        flags |= SOCK_NONBLOCK;
+#endif
+        int sock = TEMP_FAILURE_RETRY(socket(PF_UNIX, flags, 0));
         if (sock < 0) {
             ret = -errno;
         } else {
@@ -131,6 +151,11 @@ static int statsdAvailable() {
     return 1;
 }
 
+static void statsdNoteDrop(int error) {
+    atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
+    atomic_exchange_explicit(&log_error, error, memory_order_relaxed);
+}
+
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
     ssize_t ret;
     int sock;
@@ -138,7 +163,6 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
     struct iovec newVec[nr + headerLength];
     android_log_header_t header;
     size_t i, payloadSize;
-    static atomic_int dropped;
 
     sock = atomic_load(&statsdLoggerWrite.sock);
     if (sock < 0) switch (sock) {
@@ -180,7 +204,8 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
         if (snapshot) {
             android_log_event_int_t buffer;
             header.id = LOG_ID_STATS;
-            buffer.header.tag = htole32(LIBLOG_LOG_TAG);
+            // store the last log error in the tag field. This tag field is not used by statsd.
+            buffer.header.tag = htole32(atomic_load(&log_error));
             buffer.payload.type = EVENT_TYPE_INT;
             buffer.payload.data = htole32(snapshot);
 
@@ -252,8 +277,6 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
 
     if (ret > (ssize_t)sizeof(header)) {
         ret -= sizeof(header);
-    } else if (ret == -EAGAIN) {
-        atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
     }
 
     return ret;

@@ -27,28 +27,48 @@
 
 #include <stdint.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <libdm/dm.h>
-#include <liblp/metadata_format.h>
+#include <liblp/liblp.h>
 
 namespace android {
 namespace fs_mgr {
 
+// Read metadata from the current slot.
+std::unique_ptr<LpMetadata> ReadCurrentMetadata(const std::string& block_device);
+
+// Create block devices for all logical partitions in the given metadata. The
+// metadata must have been read from the current slot.
+bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& block_device);
+
+// Create block devices for all logical partitions. This is a convenience
+// method for ReadMetadata and CreateLogicalPartitions.
 bool CreateLogicalPartitions(const std::string& block_device);
 
 // Create a block device for a single logical partition, given metadata and
 // the partition name. On success, a path to the partition's block device is
 // returned. If |force_writable| is true, the "readonly" flag will be ignored
 // so the partition can be flashed.
+//
+// If |timeout_ms| is non-zero, then CreateLogicalPartition will block for the
+// given amount of time until the path returned in |path| is available.
 bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
                             const std::string& partition_name, bool force_writable,
-                            std::string* path);
+                            const std::chrono::milliseconds& timeout_ms, std::string* path);
 
-// Destroy the block device for a logical partition, by name.
-bool DestroyLogicalPartition(const std::string& name);
+// Same as above, but with a given metadata object. Care should be taken that
+// the metadata represents a valid partition layout.
+bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
+                            const std::string& partition_name, bool force_writable,
+                            const std::chrono::milliseconds& timeout_ms, std::string* path);
+
+// Destroy the block device for a logical partition, by name. If |timeout_ms|
+// is non-zero, then this will block until the device path has been unlinked.
+bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 
 }  // namespace fs_mgr
 }  // namespace android

@@ -40,7 +40,7 @@ bool Elf::cache_enabled_;
 std::unordered_map<std::string, std::pair<std::shared_ptr<Elf>, bool>>* Elf::cache_;
 std::mutex* Elf::cache_lock_;
 
-bool Elf::Init(bool init_gnu_debugdata) {
+bool Elf::Init() {
   load_bias_ = 0;
   if (!memory_) {
     return false;
@@ -54,11 +54,7 @@ bool Elf::Init(bool init_gnu_debugdata) {
   valid_ = interface_->Init(&load_bias_);
   if (valid_) {
     interface_->InitHeaders(load_bias_);
-    if (init_gnu_debugdata) {
-      InitGnuDebugdata();
-    } else {
-      gnu_debugdata_interface_.reset(nullptr);
-    }
+    InitGnuDebugdata();
   } else {
     interface_.reset(nullptr);
   }
@@ -90,6 +86,11 @@ void Elf::InitGnuDebugdata() {
     gnu_debugdata_memory_.reset(nullptr);
     gnu_debugdata_interface_.reset(nullptr);
   }
+}
+
+void Elf::Invalidate() {
+  interface_.reset(nullptr);
+  valid_ = false;
 }
 
 bool Elf::GetSoname(std::string* name) {
@@ -137,6 +138,10 @@ bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
     }
   }
   return true;
+}
+
+bool Elf::GetBuildID(std::string* build_id) {
+  return valid_ && interface_->GetBuildID(build_id);
 }
 
 void Elf::GetLastError(ErrorData* data) {
@@ -194,26 +199,26 @@ bool Elf::IsValidElf(Memory* memory) {
   return true;
 }
 
-void Elf::GetInfo(Memory* memory, bool* valid, uint64_t* size) {
+bool Elf::GetInfo(Memory* memory, uint64_t* size) {
   if (!IsValidElf(memory)) {
-    *valid = false;
-    return;
+    return false;
   }
   *size = 0;
-  *valid = true;
 
-  // Now read the section header information.
   uint8_t class_type;
   if (!memory->ReadFully(EI_CLASS, &class_type, 1)) {
-    return;
+    return false;
   }
+
+  // Get the maximum size of the elf data from the header.
   if (class_type == ELFCLASS32) {
     ElfInterface32::GetMaxSize(memory, size);
   } else if (class_type == ELFCLASS64) {
     ElfInterface64::GetMaxSize(memory, size);
   } else {
-    *valid = false;
+    return false;
   }
+  return true;
 }
 
 bool Elf::IsValidPc(uint64_t pc) {

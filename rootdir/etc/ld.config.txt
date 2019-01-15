@@ -8,7 +8,6 @@
 dir.system = /system/bin/
 dir.system = /system/xbin/
 dir.system = /%PRODUCT%/bin/
-dir.system = /%PRODUCT_SERVICES%/bin/
 
 dir.vendor = /odm/bin/
 dir.vendor = /vendor/bin/
@@ -29,7 +28,7 @@ dir.system = /data/benchmarktest64
 dir.postinstall = /postinstall
 
 [system]
-additional.namespaces = sphal,vndk,rs
+additional.namespaces = runtime,sphal,vndk,rs
 
 ###############################################################################
 # "default" namespace
@@ -74,13 +73,14 @@ namespace.default.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.permitted.paths += /data
 namespace.default.permitted.paths += /mnt/expand
+namespace.default.permitted.paths += /apex/com.android.resolv/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
 namespace.default.asan.search.paths += /data/asan/product/${LIB}
-namespace.default.asan.search.paths +=           /product/${LIB}
-namespace.default.asan.search.paths += /data/asan/product-services/${LIB}
-namespace.default.asan.search.paths +=           /product-services/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.permitted.paths  = /data
 namespace.default.asan.permitted.paths += /system/${LIB}/drm
@@ -105,6 +105,28 @@ namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/framework
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.asan.permitted.paths += /mnt/expand
+namespace.default.asan.permitted.paths += /apex/com.android.resolv/${LIB}
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.default.links = runtime
+namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
+namespace.default.link.runtime.shared_libs += libnativebridge.so
+namespace.default.link.runtime.shared_libs += libnativehelper.so
+namespace.default.link.runtime.shared_libs += libnativeloader.so
+
+###############################################################################
+# "runtime" APEX namespace
+#
+# This namespace exposes externally accessible libraries from the Runtime APEX.
+###############################################################################
+namespace.runtime.isolated = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.links = default
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.runtime.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "sphal" namespace
@@ -190,7 +212,7 @@ namespace.rs.asan.permitted.paths += /data
 
 namespace.rs.links = default,vndk
 
-namespace.rs.link.default.shared_libs  =  %LLNDK_LIBRARIES%
+namespace.rs.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.rs.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # Private LLNDK libs (e.g. libft2.so) are exceptionally allowed to this
 # namespace because RS framework libs are using them.
@@ -249,6 +271,7 @@ namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 # Allow VNDK-SP extensions to use vendor libraries
 namespace.vndk.link.sphal.allow_all_shared_libs = true
+
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
@@ -325,6 +348,7 @@ namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 # to the system namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.links = system,default
+
 namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
@@ -345,15 +369,17 @@ namespace.system.search.paths += /%PRODUCT_SERVICES%/${LIB}
 namespace.system.asan.search.paths  = /data/asan/system/${LIB}
 namespace.system.asan.search.paths +=           /system/${LIB}
 namespace.system.asan.search.paths += /data/asan/product/${LIB}
-namespace.system.asan.search.paths +=           /product/${LIB}
+namespace.system.asan.search.paths +=           /%PRODUCT%/${LIB}
+namespace.system.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
-# Only one default namespace is defined and it has no directories other than
-# /system/lib in the search paths. This is because linker calls realpath on the
-# search paths and this causes selinux denial if the paths (/vendor, /odm) are
-# not allowed to the poinstall binaries. There is no reason to allow the
-# binaries to access the paths.
+# Only default namespace is defined and default has no directories
+# other than /system/lib in the search paths. This is because linker calls
+# realpath on the search paths and this causes selinux denial if the paths
+# (/vendor, /odm) are not allowed to the postinstall binaries. There is no
+# reason to allow the binaries to access the paths.
 ###############################################################################
 [postinstall]
 namespace.default.isolated = false

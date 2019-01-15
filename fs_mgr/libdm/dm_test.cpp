@@ -59,7 +59,8 @@ class TempDevice {
         : dm_(DeviceMapper::Instance()), name_(name), valid_(false) {
         valid_ = dm_.CreateDevice(name, table);
     }
-    TempDevice(TempDevice&& other) : dm_(other.dm_), name_(other.name_), valid_(other.valid_) {
+    TempDevice(TempDevice&& other) noexcept
+        : dm_(other.dm_), name_(other.name_), valid_(other.valid_) {
         other.valid_ = false;
     }
     ~TempDevice() {
@@ -103,7 +104,7 @@ class TempDevice {
     TempDevice(const TempDevice&) = delete;
     TempDevice& operator=(const TempDevice&) = delete;
 
-    TempDevice& operator=(TempDevice&& other) {
+    TempDevice& operator=(TempDevice&& other) noexcept {
         name_ = other.name_;
         valid_ = other.valid_;
         other.valid_ = false;

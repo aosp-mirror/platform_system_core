@@ -136,7 +136,7 @@ struct JdwpProcess {
         this->fde = fdevent_create(socket, jdwp_process_event, this);
 
         if (!this->fde) {
-            fatal("could not create fdevent for new JDWP process");
+            LOG(FATAL) << "could not create fdevent for new JDWP process";
         }
 
         /* start by waiting for the PID */
@@ -200,7 +200,7 @@ static size_t jdwp_process_list_msg(char* buffer, size_t bufferlen) {
     // Message is length-prefixed with 4 hex digits in ASCII.
     static constexpr size_t header_len = 4;
     if (bufferlen < header_len) {
-        fatal("invalid JDWP process list buffer size: %zu", bufferlen);
+        LOG(FATAL) << "invalid JDWP process list buffer size: " << bufferlen;
     }
 
     char head[header_len + 1];
@@ -212,6 +212,7 @@ static size_t jdwp_process_list_msg(char* buffer, size_t bufferlen) {
 
 static void jdwp_process_event(int socket, unsigned events, void* _proc) {
     JdwpProcess* proc = reinterpret_cast<JdwpProcess*>(_proc);
+    CHECK_EQ(socket, proc->socket);
 
     if (events & FDE_READ) {
         if (proc->pid < 0) {
@@ -225,82 +226,27 @@ static void jdwp_process_event(int socket, unsigned events, void* _proc) {
             D("Adding pid %d to jdwp process list", proc->pid);
             jdwp_process_list_updated();
         } else {
-            /* the pid was read, if we get there it's probably because the connection
-             * was closed (e.g. the JDWP process exited or crashed) */
-            char buf[32];
-
-            while (true) {
-                int len = TEMP_FAILURE_RETRY(recv(socket, buf, sizeof(buf), 0));
-
-                if (len == 0) {
-                    D("terminating JDWP %d connection: EOF", proc->pid);
-                    break;
-                } else if (len < 0) {
-                    if (len < 0 && errno == EAGAIN) {
-                        return;
-                    }
-
-                    D("terminating JDWP %d connection: EOF", proc->pid);
-                    break;
-                } else {
-                    D("ignoring unexpected JDWP %d control socket activity (%d bytes)", proc->pid,
-                      len);
-                }
-            }
-
+            // We already have the PID, if we can read from the socket, we've probably hit EOF.
+            D("terminating JDWP connection %d", proc->pid);
             goto CloseProcess;
         }
     }
 
     if (events & FDE_WRITE) {
         D("trying to send fd to JDWP process (count = %zu)", proc->out_fds.size());
-        if (!proc->out_fds.empty()) {
-            int fd = proc->out_fds.back().get();
-            struct cmsghdr* cmsg;
-            struct msghdr msg;
-            struct iovec iov;
-            char dummy = '!';
-            char buffer[sizeof(struct cmsghdr) + sizeof(int)];
+        CHECK(!proc->out_fds.empty());
 
-            iov.iov_base = &dummy;
-            iov.iov_len = 1;
-            msg.msg_name = nullptr;
-            msg.msg_namelen = 0;
-            msg.msg_iov = &iov;
-            msg.msg_iovlen = 1;
-            msg.msg_flags = 0;
-            msg.msg_control = buffer;
-            msg.msg_controllen = sizeof(buffer);
+        int fd = proc->out_fds.back().get();
+        if (!SendFileDescriptor(socket, fd)) {
+            D("sending new file descriptor to JDWP %d failed: %s", proc->pid, strerror(errno));
+            goto CloseProcess;
+        }
 
-            cmsg = CMSG_FIRSTHDR(&msg);
-            cmsg->cmsg_len = msg.msg_controllen;
-            cmsg->cmsg_level = SOL_SOCKET;
-            cmsg->cmsg_type = SCM_RIGHTS;
-            ((int*)CMSG_DATA(cmsg))[0] = fd;
+        D("sent file descriptor %d to JDWP process %d", fd, proc->pid);
 
-            if (!set_file_block_mode(proc->socket, true)) {
-                VLOG(JDWP) << "failed to set blocking mode for fd " << proc->socket;
-                goto CloseProcess;
-            }
-
-            int ret = TEMP_FAILURE_RETRY(sendmsg(proc->socket, &msg, 0));
-            if (ret < 0) {
-                D("sending new file descriptor to JDWP %d failed: %s", proc->pid, strerror(errno));
-                goto CloseProcess;
-            }
-
-            D("sent file descriptor %d to JDWP process %d", fd, proc->pid);
-
-            proc->out_fds.pop_back();
-
-            if (!set_file_block_mode(proc->socket, false)) {
-                VLOG(JDWP) << "failed to set non-blocking mode for fd " << proc->socket;
-                goto CloseProcess;
-            }
-
-            if (proc->out_fds.empty()) {
-                fdevent_del(proc->fde, FDE_WRITE);
-            }
+        proc->out_fds.pop_back();
+        if (proc->out_fds.empty()) {
+            fdevent_del(proc->fde, FDE_WRITE);
         }
     }
 
@@ -406,9 +352,10 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
     return 0;
 }
 
-static void jdwp_control_event(int s, unsigned events, void* _control) {
+static void jdwp_control_event(int fd, unsigned events, void* _control) {
     JdwpControl* control = (JdwpControl*)_control;
 
+    CHECK_EQ(fd, control->listen_socket);
     if (events & FDE_READ) {
         int s = adb_socket_accept(control->listen_socket, nullptr, nullptr);
         if (s < 0) {
@@ -425,7 +372,7 @@ static void jdwp_control_event(int s, unsigned events, void* _control) {
 
         auto proc = std::make_unique<JdwpProcess>(s);
         if (!proc) {
-            fatal("failed to allocate JdwpProcess");
+            LOG(FATAL) << "failed to allocate JdwpProcess";
         }
 
         _jdwp_list.emplace_back(std::move(proc));
@@ -484,7 +431,7 @@ asocket* create_jdwp_service_socket(void) {
     JdwpSocket* s = new JdwpSocket();
 
     if (!s) {
-        fatal("failed to allocate JdwpSocket");
+        LOG(FATAL) << "failed to allocate JdwpSocket";
     }
 
     install_local_socket(s);
@@ -561,7 +508,7 @@ static int jdwp_tracker_enqueue(asocket* s, apacket::payload_type) {
 asocket* create_jdwp_tracker_service_socket(void) {
     auto t = std::make_unique<JdwpTracker>();
     if (!t) {
-        fatal("failed to allocate JdwpTracker");
+        LOG(FATAL) << "failed to allocate JdwpTracker";
     }
 
     memset(t.get(), 0, sizeof(asocket));

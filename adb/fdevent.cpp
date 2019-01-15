@@ -35,6 +35,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <android-base/chrono_utils.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/thread_annotations.h>
@@ -44,6 +46,7 @@
 #include "adb_trace.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "sysdeps/chrono.h"
 
 #define FDE_EVENTMASK  0x00ff
 #define FDE_STATEMASK  0xff00
@@ -147,24 +150,34 @@ fdevent* fdevent_create(int fd, fd_func func, void* arg) {
     return fde;
 }
 
-void fdevent_destroy(fdevent* fde) {
+unique_fd fdevent_release(fdevent* fde) {
     check_main_thread();
-    if (fde == nullptr) return;
+    if (!fde) {
+        return {};
+    }
+
     if (!(fde->state & FDE_CREATED)) {
         LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
     }
 
+    unique_fd result = std::move(fde->fd);
     if (fde->state & FDE_ACTIVE) {
-        g_poll_node_map.erase(fde->fd.get());
+        g_poll_node_map.erase(result.get());
+
         if (fde->state & FDE_PENDING) {
             g_pending_list.remove(fde);
         }
-        fde->fd.reset();
         fde->state = 0;
         fde->events = 0;
     }
 
     delete fde;
+    return result;
+}
+
+void fdevent_destroy(fdevent* fde) {
+    // Release, and then let unique_fd's destructor cleanup.
+    fdevent_release(fde);
 }
 
 static void fdevent_update(fdevent* fde, unsigned events) {
@@ -237,6 +250,7 @@ static void fdevent_process() {
     }
     CHECK_GT(pollfds.size(), 0u);
     D("poll(), pollfds = %s", dump_pollfds(pollfds).c_str());
+
     int ret = adb_poll(&pollfds[0], pollfds.size(), -1);
     if (ret == -1) {
         PLOG(ERROR) << "poll(), ret = " << ret;
@@ -357,10 +371,66 @@ void fdevent_run_on_main_thread(std::function<void()> fn) {
     }
 }
 
+static void fdevent_check_spin(uint64_t cycle) {
+    // Check to see if we're spinning because we forgot about an fdevent
+    // by keeping track of how long fdevents have been continuously pending.
+    struct SpinCheck {
+        fdevent* fde;
+        android::base::boot_clock::time_point timestamp;
+        uint64_t cycle;
+    };
+    static auto& g_continuously_pending = *new std::unordered_map<uint64_t, SpinCheck>();
+    static auto last_cycle = android::base::boot_clock::now();
+
+    auto now = android::base::boot_clock::now();
+    if (now - last_cycle > 10ms) {
+        // We're not spinning.
+        g_continuously_pending.clear();
+        last_cycle = now;
+        return;
+    }
+    last_cycle = now;
+
+    for (auto* fde : g_pending_list) {
+        auto it = g_continuously_pending.find(fde->id);
+        if (it == g_continuously_pending.end()) {
+            g_continuously_pending[fde->id] =
+                    SpinCheck{.fde = fde, .timestamp = now, .cycle = cycle};
+        } else {
+            it->second.cycle = cycle;
+        }
+    }
+
+    for (auto it = g_continuously_pending.begin(); it != g_continuously_pending.end();) {
+        if (it->second.cycle != cycle) {
+            it = g_continuously_pending.erase(it);
+        } else {
+            // Use an absurdly long window, since all we really care about is
+            // getting a bugreport eventually.
+            if (now - it->second.timestamp > 300s) {
+                LOG(FATAL_WITHOUT_ABORT)
+                        << "detected spin in fdevent: " << dump_fde(it->second.fde);
+#if defined(__linux__)
+                int fd = it->second.fde->fd.get();
+                std::string fd_path = android::base::StringPrintf("/proc/self/fd/%d", fd);
+                std::string path;
+                if (!android::base::Readlink(fd_path, &path)) {
+                    PLOG(FATAL_WITHOUT_ABORT) << "readlink of fd " << fd << " failed";
+                }
+                LOG(FATAL_WITHOUT_ABORT) << "fd " << fd << " = " << path;
+#endif
+                abort();
+            }
+            ++it;
+        }
+    }
+}
+
 void fdevent_loop() {
     set_main_thread();
     fdevent_run_setup();
 
+    uint64_t cycle = 0;
     while (true) {
         if (terminate_loop) {
             return;
@@ -369,6 +439,8 @@ void fdevent_loop() {
         D("--- --- waiting for events");
 
         fdevent_process();
+
+        fdevent_check_spin(cycle++);
 
         while (!g_pending_list.empty()) {
             fdevent* fde = g_pending_list.front();

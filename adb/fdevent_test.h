@@ -20,6 +20,7 @@
 #include <mutex>
 #include <thread>
 
+#include "adb_io.h"
 #include "socket.h"
 #include "sysdeps.h"
 #include "sysdeps/chrono.h"

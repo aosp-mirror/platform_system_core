@@ -8,7 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#ifndef WIN32
+#ifndef _WIN32
 #include <sys/wait.h>
 #else
 #include <tchar.h>
@@ -27,7 +27,7 @@ using android::base::GetExecutableDirectory;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
-#ifdef WIN32
+#ifdef _WIN32
 static int exec_cmd(const char* path, const char** argv, const char** envp) {
     std::string cmd;
     int i = 0;
@@ -172,13 +172,8 @@ static int generate_f2fs_image(const char* fileName, long long partSize, const s
     mkf2fs_args.push_back("-S");
     std::string size_str = std::to_string(partSize);
     mkf2fs_args.push_back(size_str.c_str());
-    mkf2fs_args.push_back("-f");
-    mkf2fs_args.push_back("-O");
-    mkf2fs_args.push_back("encrypt");
-    mkf2fs_args.push_back("-O");
-    mkf2fs_args.push_back("quota");
-    mkf2fs_args.push_back("-O");
-    mkf2fs_args.push_back("verity");
+    mkf2fs_args.push_back("-g");
+    mkf2fs_args.push_back("android");
     mkf2fs_args.push_back(fileName);
     mkf2fs_args.push_back(nullptr);
 

@@ -189,7 +189,7 @@ runs the service.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
-  four minutes, the device will reboot into recovery mode.
+  four minutes, the device will reboot into bootloader.
 
 `disabled`
 > This service will not automatically start with its class.
@@ -213,7 +213,8 @@ runs the service.
 `interface <interface name> <instance name>`
 > Associates this service with a list of the HIDL services that it provides. The interface name
   must be a fully-qualified name and not a value name. This is used to allow hwservicemanager to
-  lazily start services.
+  lazily start services. When multiple interfaces are served, this tag should be used multiple
+  times.
   For example: interface vendor.foo.bar@1.0::IBaz default
 
 `ioprio <class> <priority>`
@@ -225,9 +226,25 @@ runs the service.
   keycodes are pressed at once, the service will start. This is typically used to start the
   bugreport service.
 
-`memcg.limit_in_bytes <value>`
-> Sets the child's memory.limit_in_bytes to the specified value (only if memcg is mounted),
-  which must be equal or greater than 0.
+> This option may take a property instead of a list of keycodes. In this case, only one option is
+  provided: the property name in the typical property expansion format. The property must contain
+  a comma separated list of keycode values or the text 'none' to indicate that
+  this service does not respond to keycodes.
+
+> For example, `keycodes ${some.property.name:-none}` where some.property.name expands
+  to "123,124,125". Since keycodes are handled very early in init,
+  only PRODUCT_DEFAULT_PROPERTY_OVERRIDES properties can be used.
+
+`memcg.limit_in_bytes <value>` and `memcg.limit_percent <value>`
+> Sets the child's memory.limit_in_bytes to the minimum of `limit_in_bytes`
+  bytes and `limit_percent` which is interpreted as a percentage of the size
+  of the device's physical memory (only if memcg is mounted).
+  Values must be equal or greater than 0.
+
+`memcg.limit_property <value>`
+> Sets the child's memory.limit_in_bytes to the value of the specified property
+  (only if memcg is mounted). This property will override the values specified
+  via `memcg.limit_in_bytes` and `memcg.limit_percent`.
 
 `memcg.soft_limit_in_bytes <value>`
 > Sets the child's memory.soft_limit_in_bytes to the specified value (only if memcg is mounted),
@@ -258,9 +275,20 @@ runs the service.
   since it has some peculiarities for backwards compatibility reasons. The 'imports' section of
   this file has more details on the order.
 
+`parse_apex_configs`
+  Parses config file(s) from the mounted APEXes. Intented to be used only once
+  when apexd notifies the mount event by setting apexd.status to ready.
+
 `priority <priority>`
 > Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().
+
+`restart_period <seconds>`
+> If a non-oneshot service exits, it will be restarted at its start time plus
+  this period. It defaults to 5s to rate limit crashing services.
+  This can be increased for services that are meant to run periodically. For
+  example, it may be set to 3600 to indicate that the service should run every hour
+  or 86400 to indicate that the service should run every day.
 
 `rlimit <resource> <cur> <max>`
 > This applies the given rlimit to the service. rlimits are inherited by child
@@ -297,6 +325,19 @@ runs the service.
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
+
+`timeout_period <seconds>`
+> Provide a timeout after which point the service will be killed. The oneshot keyword is respected
+  here, so oneshot services do not automatically restart, however all other services will.
+  This is particularly useful for creating a periodic service combined with the restart_period
+  option described above.
+
+`updatable`
+> Mark that the service can be overridden (via the 'override' option) later in
+  the boot sequence by APEXes. When a service with updatable option is started
+  before APEXes are all activated, the execution is delayed until the activation
+  is finished. A service that is not marked as updatable cannot be overridden by
+  APEXes.
 
 `user <username>`
 > Change to 'username' before exec'ing this service.
@@ -441,9 +482,8 @@ Commands
   -f: force installation of the module even if the version of the running kernel
   and the version of the kernel for which the module was compiled do not match.
 
-`load_all_props`
-> Loads properties from /system, /vendor, et cetera.
-  This is included in the default init.rc.
+`load_system_props`
+> (This action is deprecated and no-op.)
 
 `load_persist_props`
 > Loads persistent properties when /data has been decrypted.
@@ -506,6 +546,7 @@ Commands
   _resource_ is best specified using its text representation ('cpu', 'rtio', etc
   or 'RLIM_CPU', 'RLIM_RTIO', etc). It also may be specified as the int value
   that the resource enum corresponds to.
+  _cur_ and _max_ can be 'unlimited' or '-1' to indicate an infinite rlimit.
 
 `start <service>`
 > Start a service running if it is not already running.
@@ -771,3 +812,42 @@ during build time, among them are the below.
 SELinux would permit the operation, or if the UIDs and GIDs resolve.
 2) No checking if a service exists or has a valid SELinux domain defined
 3) No checking if a service has not been previously defined in a different init script.
+
+Early Init Boot Sequence
+------------------------
+The early init boot sequence is broken up into three stages: first stage init, SELinux setup, and
+second stage init.
+
+First stage init is responsible for setting up the bare minimum requirements to load the rest of the
+system. Specifically this includes mounting /dev, /proc, mounting 'early mount' partitions (which
+needs to include all partitions that contain system code, for example system and vendor), and moving
+the system.img mount to / for devices with a ramdisk.
+
+Note that in Android Q, system.img always contains TARGET_ROOT_OUT and always is mounted at / by the
+time first stage init finishes. Android Q will also require dynamic partitions and therefore will
+require using a ramdisk to boot Android. The recovery ramdisk can be used to boot to Android instead
+of a dedicated ramdisk as well.
+
+First stage init has three variations depending on the device configuration:
+1) For system-as-root devices, first stage init is part of /system/bin/init and a symlink at /init
+points to /system/bin/init for backwards compatibility. These devices do not need to do anything to
+mount system.img, since it is by definition already mounted as the rootfs by the kernel.
+
+2) For devices with a ramdisk, first stage init is a static executable located at /init. These
+devices mount system.img as /system then perform a switch root operation to move the mount at
+/system to /. The contents of the ramdisk are freed after mounting has completed.
+
+3) For devices that use recovery as a ramdisk, first stage init it contained within the shared init
+located at /init within the recovery ramdisk. These devices first switch root to
+/first_stage_ramdisk to remove the recovery components from the environment, then proceed the same
+as 2). Note that the decision to boot normally into Android instead of booting
+into recovery mode is made if androidboot.force_normal_boot=1 is present in the
+kernel commandline.
+
+Once first stage init finishes it execs /system/bin/init with the "selinux_setup" argument. This
+phase is where SELinux is optionally compiled and loaded onto the system. selinux.cpp contains more
+information on the specifics of this process.
+
+Lastly once that phase finishes, it execs /system/bin/init again with the "second_stage"
+argument. At this point the main phase of init runs and continues the boot process via the init.rc
+scripts.

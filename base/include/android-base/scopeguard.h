@@ -28,7 +28,7 @@ class ScopeGuard {
  public:
   ScopeGuard(F&& f) : f_(std::forward<F>(f)), active_(true) {}
 
-  ScopeGuard(ScopeGuard&& that) : f_(std::move(that.f_)), active_(that.active_) {
+  ScopeGuard(ScopeGuard&& that) noexcept : f_(std::move(that.f_)), active_(that.active_) {
     that.active_ = false;
   }
 

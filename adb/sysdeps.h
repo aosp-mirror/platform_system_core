@@ -27,6 +27,7 @@
 #include <errno.h>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Include this before open/close/unlink are defined as macros below.
@@ -52,10 +53,11 @@
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <utime.h>
-#include <winsock2.h>
 #include <windows.h>
+#include <winsock2.h>
 #include <ws2tcpip.h>
 
 #include <memory>   // unique_ptr
@@ -72,12 +74,7 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '\\' || c == '/';
 }
 
-static __inline__ int adb_thread_setname(const std::string& name) {
-    // TODO: See https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx for how to set
-    // the thread name in Windows. Unfortunately, it only works during debugging, but
-    // our build process doesn't generate PDB files needed for debugging.
-    return 0;
-}
+extern int adb_thread_setname(const std::string& name);
 
 static __inline__ void  close_on_exec(int  fd)
 {
@@ -97,7 +94,7 @@ extern int adb_open(const char* path, int options);
 extern int adb_creat(const char* path, int mode);
 extern int adb_read(int fd, void* buf, int len);
 extern int adb_write(int fd, const void* buf, int len);
-extern int adb_lseek(int fd, int pos, int where);
+extern int64_t adb_lseek(int fd, int64_t pos, int where);
 extern int adb_shutdown(int fd, int direction = SHUT_RDWR);
 extern int adb_close(int fd);
 extern int adb_register_socket(SOCKET s);
@@ -129,6 +126,13 @@ static __inline__  int  unix_write(int  fd, const void*  buf, size_t  len)
 #undef   write
 #define  write  ___xxx_write
 
+// See the comments for the !defined(_WIN32) version of unix_lseek().
+static __inline__ int unix_lseek(int fd, int pos, int where) {
+    return lseek(fd, pos, where);
+}
+#undef lseek
+#define lseek ___xxx_lseek
+
 // See the comments for the !defined(_WIN32) version of adb_open_mode().
 static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 {
@@ -136,7 +140,7 @@ static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 }
 
 // See the comments for the !defined(_WIN32) version of unix_open().
-extern int unix_open(const char* path, int options, ...);
+extern int unix_open(std::string_view path, int options, ...);
 #define  open    ___xxx_unix_open
 
 // Checks if |fd| corresponds to a console.
@@ -313,24 +317,23 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include <cutils/sockets.h>
 #include <fcntl.h>
-#include <poll.h>
-#include <signal.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-
-#include <pthread.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdarg.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <string>
+
+#include <cutils/sockets.h>
 
 #define OS_PATH_SEPARATORS "/"
 #define OS_PATH_SEPARATOR '/'
@@ -355,20 +358,17 @@ static __inline__ void  close_on_exec(int  fd)
 // by unix_read(), unix_write(), unix_close()). Also, the C Runtime has
 // configurable CR/LF translation which defaults to text mode, but is settable
 // with _setmode().
-static __inline__ int  unix_open(const char*  path, int options,...)
-{
-    if ((options & O_CREAT) == 0)
-    {
-        return  TEMP_FAILURE_RETRY( open(path, options) );
-    }
-    else
-    {
-        int      mode;
-        va_list  args;
-        va_start( args, options );
-        mode = va_arg( args, int );
-        va_end( args );
-        return TEMP_FAILURE_RETRY( open( path, options, mode ) );
+static __inline__ int unix_open(std::string_view path, int options, ...) {
+    std::string zero_terminated(path.begin(), path.end());
+    if ((options & O_CREAT) == 0) {
+        return TEMP_FAILURE_RETRY(open(zero_terminated.c_str(), options));
+    } else {
+        int mode;
+        va_list args;
+        va_start(args, options);
+        mode = va_arg(args, int);
+        va_end(args);
+        return TEMP_FAILURE_RETRY(open(zero_terminated.c_str(), options, mode));
     }
 }
 
@@ -441,12 +441,15 @@ static __inline__  int  adb_write(int  fd, const void*  buf, size_t  len)
 #undef   write
 #define  write  ___xxx_write
 
-static __inline__ int   adb_lseek(int  fd, int  pos, int  where)
-{
+static __inline__ int64_t adb_lseek(int fd, int64_t pos, int where) {
+#if defined(__APPLE__)
     return lseek(fd, pos, where);
+#else
+    return lseek64(fd, pos, where);
+#endif
 }
-#undef   lseek
-#define  lseek   ___xxx_lseek
+#undef lseek
+#define lseek ___xxx_lseek
 
 static __inline__  int    adb_unlink(const char*  path)
 {
@@ -493,21 +496,7 @@ inline int network_local_server(const char* name, int namespace_id, int type, st
     return _fd_set_error_str(socket_local_server(name, namespace_id, type), error);
 }
 
-inline int network_connect(const std::string& host, int port, int type,
-                           int timeout, std::string* error) {
-  int getaddrinfo_error = 0;
-  int fd = socket_network_client_timeout(host.c_str(), port, type, timeout,
-                                         &getaddrinfo_error);
-  if (fd != -1) {
-    return fd;
-  }
-  if (getaddrinfo_error != 0) {
-    *error = gai_strerror(getaddrinfo_error);
-  } else {
-    *error = strerror(errno);
-  }
-  return -1;
-}
+int network_connect(const std::string& host, int port, int type, int timeout, std::string* error);
 
 static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {
@@ -537,6 +526,7 @@ inline int adb_socket_get_local_port(int fd) {
 // via _setmode()).
 #define  unix_read   adb_read
 #define  unix_write  adb_write
+#define unix_lseek adb_lseek
 #define  unix_close  adb_close
 
 static __inline__ int adb_thread_setname(const std::string& name) {

@@ -105,10 +105,8 @@ void LogBuffer::init() {
 
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
-        LogTimeEntry* entry = (*times);
-        if (entry->owned_Locked()) {
-            entry->triggerReader_Locked();
-        }
+        LogTimeEntry* entry = times->get();
+        entry->triggerReader_Locked();
         times++;
     }
 
@@ -409,17 +407,15 @@ void LogBuffer::log(LogBufferElement* elem) {
 
         LastLogTimes::iterator times = mTimes.begin();
         while (times != mTimes.end()) {
-            LogTimeEntry* entry = (*times);
-            if (entry->owned_Locked()) {
-                if (!entry->mNonBlock) {
-                    end_always = true;
-                    break;
-                }
-                // it passing mEnd is blocked by the following checks.
-                if (!end_set || (end <= entry->mEnd)) {
-                    end = entry->mEnd;
-                    end_set = true;
-                }
+            LogTimeEntry* entry = times->get();
+            if (!entry->mNonBlock) {
+                end_always = true;
+                break;
+            }
+            // it passing mEnd is blocked by the following checks.
+            if (!end_set || (end <= entry->mEnd)) {
+                end = entry->mEnd;
+                end_set = true;
             }
             times++;
         }
@@ -710,8 +706,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     // Region locked?
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
-        LogTimeEntry* entry = (*times);
-        if (entry->owned_Locked() && entry->isWatching(id) &&
+        LogTimeEntry* entry = times->get();
+        if (entry->isWatching(id) &&
             (!oldest || (oldest->mStart > entry->mStart) ||
              ((oldest->mStart == entry->mStart) &&
               (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec)))) {
@@ -1052,9 +1048,9 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
                 LogTimeEntry::wrlock();
                 LastLogTimes::iterator times = mTimes.begin();
                 while (times != mTimes.end()) {
-                    LogTimeEntry* entry = (*times);
+                    LogTimeEntry* entry = times->get();
                     // Killer punch
-                    if (entry->owned_Locked() && entry->isWatching(id)) {
+                    if (entry->isWatching(id)) {
                         entry->release_Locked();
                     }
                     times++;

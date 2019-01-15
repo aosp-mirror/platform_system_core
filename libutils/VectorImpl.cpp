@@ -24,8 +24,6 @@
 
 #include <log/log.h>
 
-#include <safe_iop.h>
-
 #include "SharedBuffer.h"
 
 /*****************************************************************************/
@@ -63,7 +61,7 @@ VectorImpl::~VectorImpl()
         "[%p] subclasses of VectorImpl must call finish_vector()"
         " in their destructor. Leaking %d bytes.",
         this, (int)(mCount*mItemSize));
-    // We can't call _do_destroy() here because the vtable is already gone. 
+    // We can't call _do_destroy() here because the vtable is already gone.
 }
 
 VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
@@ -199,7 +197,7 @@ status_t VectorImpl::sort(VectorImpl::compar_r_t cmp, void* state)
                 _do_copy(temp, item, 1);
 
                 ssize_t j = i-1;
-                void* next = reinterpret_cast<char*>(array) + mItemSize*(i);                    
+                void* next = reinterpret_cast<char*>(array) + mItemSize*(i);
                 do {
                     _do_destroy(next, 1);
                     _do_copy(next, curr, 1);
@@ -216,13 +214,13 @@ status_t VectorImpl::sort(VectorImpl::compar_r_t cmp, void* state)
             }
             i++;
         }
-        
+
         if (temp) {
             _do_destroy(temp, 1);
             free(temp);
         }
     }
-    return NO_ERROR;
+    return OK;
 }
 
 void VectorImpl::pop()
@@ -342,7 +340,7 @@ ssize_t VectorImpl::setCapacity(size_t new_capacity)
     }
 
     size_t new_allocation_size = 0;
-    LOG_ALWAYS_FATAL_IF(!safe_mul(&new_allocation_size, new_capacity, mItemSize));
+    LOG_ALWAYS_FATAL_IF(__builtin_mul_overflow(new_capacity, mItemSize, &new_allocation_size));
     SharedBuffer* sb = SharedBuffer::alloc(new_allocation_size);
     if (sb) {
         void* array = sb->data();
@@ -356,7 +354,7 @@ ssize_t VectorImpl::setCapacity(size_t new_capacity)
 }
 
 ssize_t VectorImpl::resize(size_t size) {
-    ssize_t result = NO_ERROR;
+    ssize_t result = OK;
     if (size > mCount) {
         result = insertAt(mCount, size - mCount);
     } else if (size < mCount) {
@@ -372,7 +370,7 @@ void VectorImpl::release_storage()
         if (sb->release(SharedBuffer::eKeepStorage) == 1) {
             _do_destroy(mStorage, mCount);
             SharedBuffer::dealloc(sb);
-        } 
+        }
     }
 }
 
@@ -386,7 +384,7 @@ void* VectorImpl::_grow(size_t where, size_t amount)
             this, (int)where, (int)amount, (int)mCount); // caller already checked
 
     size_t new_size;
-    LOG_ALWAYS_FATAL_IF(!safe_add(&new_size, mCount, amount), "new_size overflow");
+    LOG_ALWAYS_FATAL_IF(__builtin_add_overflow(mCount, amount, &new_size), "new_size overflow");
 
     if (capacity() < new_size) {
         // NOTE: This implementation used to resize vectors as per ((3*x + 1) / 2)
@@ -397,17 +395,18 @@ void* VectorImpl::_grow(size_t where, size_t amount)
         //
         // This approximates the old calculation, using (x + (x/2) + 1) instead.
         size_t new_capacity = 0;
-        LOG_ALWAYS_FATAL_IF(!safe_add(&new_capacity, new_size, (new_size / 2)),
+        LOG_ALWAYS_FATAL_IF(__builtin_add_overflow(new_size, (new_size / 2), &new_capacity),
                             "new_capacity overflow");
-        LOG_ALWAYS_FATAL_IF(!safe_add(&new_capacity, new_capacity, static_cast<size_t>(1u)),
-                            "new_capacity overflow");
+        LOG_ALWAYS_FATAL_IF(
+                __builtin_add_overflow(new_capacity, static_cast<size_t>(1u), &new_capacity),
+                "new_capacity overflow");
         new_capacity = max(kMinVectorCapacity, new_capacity);
 
         size_t new_alloc_size = 0;
-        LOG_ALWAYS_FATAL_IF(!safe_mul(&new_alloc_size, new_capacity, mItemSize),
+        LOG_ALWAYS_FATAL_IF(__builtin_mul_overflow(new_capacity, mItemSize, &new_alloc_size),
                             "new_alloc_size overflow");
 
-//        ALOGV("grow vector %p, new_capacity=%d", this, (int)new_capacity);
+        // ALOGV("grow vector %p, new_capacity=%d", this, (int)new_capacity);
         if ((mStorage) &&
             (mCount==where) &&
             (mFlags & HAS_TRIVIAL_COPY) &&
@@ -464,7 +463,7 @@ void VectorImpl::_shrink(size_t where, size_t amount)
             this, (int)where, (int)amount, (int)mCount); // caller already checked
 
     size_t new_size;
-    LOG_ALWAYS_FATAL_IF(!safe_sub(&new_size, mCount, amount));
+    LOG_ALWAYS_FATAL_IF(__builtin_sub_overflow(mCount, amount, &new_size));
 
     if (new_size < (capacity() / 2)) {
         // NOTE: (new_size * 2) is safe because capacity didn't overflow and
@@ -645,13 +644,13 @@ ssize_t SortedVectorImpl::merge(const VectorImpl& vector)
             }
         }
     }
-    return NO_ERROR;
+    return OK;
 }
 
 ssize_t SortedVectorImpl::merge(const SortedVectorImpl& vector)
 {
     // we've merging a sorted vector... nice!
-    ssize_t err = NO_ERROR;
+    ssize_t err = OK;
     if (!vector.isEmpty()) {
         // first take care of the case where the vectors are sorted together
         if (do_compare(vector.itemLocation(vector.size()-1), arrayImpl()) <= 0) {
@@ -678,4 +677,3 @@ ssize_t SortedVectorImpl::remove(const void* item)
 /*****************************************************************************/
 
 }; // namespace android
-

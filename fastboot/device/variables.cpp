@@ -24,6 +24,9 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr.h>
+#include <healthhalutils/HealthHalUtils.h>
+#include <liblp/liblp.h>
 
 #include "fastboot_device.h"
 #include "flashing.h"
@@ -31,145 +34,393 @@
 
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::fastboot::V1_0::FileSystemType;
+using ::android::hardware::fastboot::V1_0::Result;
+using ::android::hardware::fastboot::V1_0::Status;
+using namespace android::fs_mgr;
 
-constexpr int kMaxDownloadSizeDefault = 0x20000000;
 constexpr char kFastbootProtocolVersion[] = "0.4";
 
-bool GetVersion(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(kFastbootProtocolVersion);
+bool GetVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                std::string* message) {
+    *message = kFastbootProtocolVersion;
+    return true;
 }
 
-bool GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(android::base::GetProperty("ro.bootloader", ""));
+bool GetBootloaderVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                          std::string* message) {
+    *message = android::base::GetProperty("ro.bootloader", "");
+    return true;
 }
 
-bool GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(android::base::GetProperty("ro.build.expect.baseband", ""));
+bool GetBasebandVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                        std::string* message) {
+    *message = android::base::GetProperty("ro.build.expect.baseband", "");
+    return true;
 }
 
-bool GetProduct(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(android::base::GetProperty("ro.product.device", ""));
+bool GetProduct(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                std::string* message) {
+    *message = android::base::GetProperty("ro.product.device", "");
+    return true;
 }
 
-bool GetSerial(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(android::base::GetProperty("ro.serialno", ""));
+bool GetSerial(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+               std::string* message) {
+    *message = android::base::GetProperty("ro.serialno", "");
+    return true;
 }
 
-bool GetSecure(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(android::base::GetBoolProperty("ro.secure", "") ? "yes" : "no");
+bool GetSecure(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+               std::string* message) {
+    *message = android::base::GetBoolProperty("ro.secure", "") ? "yes" : "no";
+    return true;
 }
 
-bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+bool GetVariant(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                std::string* message) {
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = fastboot_hal->getVariant([&](std::string device_variant, Result result) {
+        *message = device_variant;
+        ret = result;
+    });
+    if (!ret_val.isOk() || ret.status != Status::SUCCESS) {
+        *message = "Unable to get device variant";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetBatteryVoltageHelper(FastbootDevice* device, int32_t* battery_voltage) {
+    using android::hardware::health::V2_0::HealthInfo;
+    using android::hardware::health::V2_0::Result;
+
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = health_hal->getHealthInfo([&](Result result, HealthInfo info) {
+        *battery_voltage = info.legacy.batteryVoltage;
+        ret = result;
+    });
+    if (!ret_val.isOk() || (ret != Result::SUCCESS)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                     std::string* message) {
+    int32_t battery_voltage = 0;
+    if (!GetBatteryVoltageHelper(device, &battery_voltage)) {
+        *message = "Unable to read battery voltage";
+        return false;
+    }
+
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val = fastboot_hal->getBatteryVoltageFlashingThreshold(
+            [&](int32_t voltage_threshold, Result result) {
+                *message = battery_voltage >= voltage_threshold ? "yes" : "no";
+                ret = result;
+            });
+
+    if (!ret_val.isOk() || ret.status != Status::SUCCESS) {
+        *message = "Unable to get battery voltage flashing threshold";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                           std::string* message) {
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    Result ret;
+    auto ret_val =
+            fastboot_hal->getOffModeChargeState([&](bool off_mode_charging_state, Result result) {
+                *message = off_mode_charging_state ? "1" : "0";
+                ret = result;
+            });
+    if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
+        *message = "Unable to get off mode charge state";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                       std::string* message) {
+    int32_t battery_voltage = 0;
+    if (GetBatteryVoltageHelper(device, &battery_voltage)) {
+        *message = std::to_string(battery_voltage);
+        return true;
+    }
+    *message = "Unable to get battery voltage";
+    return false;
+}
+
+bool GetCurrentSlot(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                    std::string* message) {
     std::string suffix = device->GetCurrentSlot();
-    std::string slot = suffix.size() == 2 ? suffix.substr(1) : suffix;
-    return device->WriteOkay(slot);
+    *message = suffix.size() == 2 ? suffix.substr(1) : suffix;
+    return true;
 }
 
-bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& /* args */) {
+bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                  std::string* message) {
     auto boot_control_hal = device->boot_control_hal();
     if (!boot_control_hal) {
-        return "0";
+        *message = "0";
+    } else {
+        *message = std::to_string(boot_control_hal->getNumberSlots());
     }
-    return device->WriteOkay(std::to_string(boot_control_hal->getNumberSlots()));
+    return true;
 }
 
-bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& args,
+                       std::string* message) {
     if (args.empty()) {
-        return device->WriteFail("Missing argument");
+        *message = "Missing argument";
+        return false;
     }
     Slot slot;
     if (!GetSlotNumber(args[0], &slot)) {
-        return device->WriteFail("Invalid slot");
+        *message = "Invalid slot";
+        return false;
     }
     auto boot_control_hal = device->boot_control_hal();
     if (!boot_control_hal) {
-        return device->WriteFail("Device has no slots");
+        *message = "Device has no slots";
+        return false;
     }
     if (boot_control_hal->isSlotMarkedSuccessful(slot) != BoolResult::TRUE) {
-        return device->WriteOkay("no");
+        *message = "no";
+    } else {
+        *message = "yes";
     }
-    return device->WriteOkay("yes");
+    return true;
 }
 
-bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& args,
+                       std::string* message) {
     if (args.empty()) {
-        return device->WriteFail("Missing argument");
+        *message = "Missing argument";
+        return false;
     }
     Slot slot;
     if (!GetSlotNumber(args[0], &slot)) {
-        return device->WriteFail("Invalid slot");
+        *message = "Invalid slot";
+        return false;
     }
     auto boot_control_hal = device->boot_control_hal();
     if (!boot_control_hal) {
-        return device->WriteFail("Device has no slots");
+        *message = "Device has no slots";
+        return false;
     }
     if (boot_control_hal->isSlotBootable(slot) != BoolResult::TRUE) {
-        return device->WriteOkay("yes");
+        *message = "yes";
+    } else {
+        *message = "no";
     }
-    return device->WriteOkay("no");
+    return true;
 }
 
-bool GetMaxDownloadSize(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay(std::to_string(kMaxDownloadSizeDefault));
+bool GetMaxDownloadSize(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                        std::string* message) {
+    *message = android::base::StringPrintf("0x%X", kMaxDownloadSizeDefault);
+    return true;
 }
 
-bool GetUnlocked(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay("yes");
+bool GetUnlocked(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                 std::string* message) {
+    *message = GetDeviceLockStatus() ? "no" : "yes";
+    return true;
 }
 
-bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetHasSlot(FastbootDevice* device, const std::vector<std::string>& args,
+                std::string* message) {
     if (args.empty()) {
-        return device->WriteFail("Missing argument");
+        *message = "Missing argument";
+        return false;
     }
     std::string slot_suffix = device->GetCurrentSlot();
     if (slot_suffix.empty()) {
-        return device->WriteOkay("no");
+        *message = "no";
+        return true;
     }
     std::string partition_name = args[0] + slot_suffix;
-    if (FindPhysicalPartition(partition_name) ||
-        LogicalPartitionExists(partition_name, slot_suffix)) {
-        return device->WriteOkay("yes");
+    if (FindPhysicalPartition(partition_name) || LogicalPartitionExists(device, partition_name)) {
+        *message = "yes";
+    } else {
+        *message = "no";
     }
-    return device->WriteOkay("no");
+    return true;
 }
 
-bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetPartitionSize(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message) {
     if (args.size() < 1) {
-        return device->WriteFail("Missing argument");
+        *message = "Missing argument";
+        return false;
     }
     // Zero-length partitions cannot be created through device-mapper, so we
     // special case them here.
     bool is_zero_length;
-    if (LogicalPartitionExists(args[0], device->GetCurrentSlot(), &is_zero_length) &&
-        is_zero_length) {
-        return device->WriteOkay("0");
+    if (LogicalPartitionExists(device, args[0], &is_zero_length) && is_zero_length) {
+        *message = "0x0";
+        return true;
     }
     // Otherwise, open the partition as normal.
     PartitionHandle handle;
     if (!OpenPartition(device, args[0], &handle)) {
-        return device->WriteFail("Could not open partition");
+        *message = "Could not open partition";
+        return false;
     }
     uint64_t size = get_block_device_size(handle.fd());
-    return device->WriteOkay(android::base::StringPrintf("%" PRIX64, size));
+    *message = android::base::StringPrintf("0x%" PRIX64, size);
+    return true;
 }
 
-bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args) {
+bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message) {
     if (args.size() < 1) {
-        return device->WriteFail("Missing argument");
+        *message = "Missing argument";
+        return false;
+    }
+
+    std::string partition_name = args[0];
+    if (!FindPhysicalPartition(partition_name) && !LogicalPartitionExists(device, partition_name)) {
+        *message = "Invalid partition";
+        return false;
+    }
+
+    auto fastboot_hal = device->fastboot_hal();
+    if (!fastboot_hal) {
+        *message = "Fastboot HAL not found";
+        return false;
+    }
+
+    FileSystemType type;
+    Result ret;
+    auto ret_val =
+            fastboot_hal->getPartitionType(args[0], [&](FileSystemType fs_type, Result result) {
+                type = fs_type;
+                ret = result;
+            });
+    if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
+        *message = "Unable to retrieve partition type";
+    } else {
+        switch (type) {
+            case FileSystemType::RAW:
+                *message = "raw";
+                return true;
+            case FileSystemType::EXT4:
+                *message = "ext4";
+                return true;
+            case FileSystemType::F2FS:
+                *message = "f2fs";
+                return true;
+            default:
+                *message = "Unknown file system type";
+        }
+    }
+
+    return false;
+}
+
+bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string>& args,
+                           std::string* message) {
+    if (args.size() < 1) {
+        *message = "Missing argument";
+        return false;
     }
     // Note: if a partition name is in both the GPT and the super partition, we
     // return "true", to be consistent with prefering to flash logical partitions
     // over physical ones.
     std::string partition_name = args[0];
-    if (LogicalPartitionExists(partition_name, device->GetCurrentSlot())) {
-        return device->WriteOkay("yes");
+    if (LogicalPartitionExists(device, partition_name)) {
+        *message = "yes";
+        return true;
     }
     if (FindPhysicalPartition(partition_name)) {
-        return device->WriteOkay("no");
+        *message = "no";
+        return true;
     }
-    return device->WriteFail("Partition not found");
+    *message = "Partition not found";
+    return false;
 }
 
-bool GetIsUserspace(FastbootDevice* device, const std::vector<std::string>& /* args */) {
-    return device->WriteOkay("yes");
+bool GetIsUserspace(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                    std::string* message) {
+    *message = "yes";
+    return true;
+}
+
+std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device) {
+    std::vector<std::vector<std::string>> args;
+    auto partitions = ListPartitions(device);
+    for (const auto& partition : partitions) {
+        args.emplace_back(std::initializer_list<std::string>{partition});
+    }
+    return args;
+}
+
+std::vector<std::vector<std::string>> GetAllPartitionArgsNoSlot(FastbootDevice* device) {
+    auto partitions = ListPartitions(device);
+
+    std::string slot_suffix = device->GetCurrentSlot();
+    if (!slot_suffix.empty()) {
+        auto names = std::move(partitions);
+        for (const auto& name : names) {
+            std::string slotless_name = name;
+            if (android::base::EndsWith(name, "_a") || android::base::EndsWith(name, "_b")) {
+                slotless_name = name.substr(0, name.rfind("_"));
+            }
+            if (std::find(partitions.begin(), partitions.end(), slotless_name) ==
+                partitions.end()) {
+                partitions.emplace_back(slotless_name);
+            }
+        }
+    }
+
+    std::vector<std::vector<std::string>> args;
+    for (const auto& partition : partitions) {
+        args.emplace_back(std::initializer_list<std::string>{partition});
+    }
+    return args;
+}
+
+bool GetHardwareRevision(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                         std::string* message) {
+    *message = android::base::GetProperty("ro.revision", "");
+    return true;
+}
+
+bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                           std::string* message) {
+    uint32_t slot_number = SlotNumberForSlotSuffix(device->GetCurrentSlot());
+    *message = fs_mgr_get_super_partition_name(slot_number);
+    return true;
 }

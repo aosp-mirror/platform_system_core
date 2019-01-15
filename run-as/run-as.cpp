@@ -25,6 +25,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <string>
+#include <vector>
+
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
@@ -129,6 +132,25 @@ static bool check_data_path(const char* data_path, uid_t uid) {
   return check_directory(data_path, uid);
 }
 
+std::vector<gid_t> get_supplementary_gids(uid_t userAppId) {
+  std::vector<gid_t> gids;
+  int size = getgroups(0, &gids[0]);
+  if (size < 0) {
+    error(1, errno, "getgroups failed");
+  }
+  gids.resize(size);
+  size = getgroups(size, &gids[0]);
+  if (size != static_cast<int>(gids.size())) {
+    error(1, errno, "getgroups failed");
+  }
+  // Profile guide compiled oat files (like /data/app/xxx/oat/arm64/base.odex) are not readable
+  // worldwide (DEXOPT_PUBLIC flag isn't set). To support reading them (needed by simpleperf for
+  // profiling), add shared app gid to supplementary groups.
+  gid_t shared_app_gid = userAppId % AID_USER_OFFSET - AID_APP_START + AID_SHARED_GID_START;
+  gids.push_back(shared_app_gid);
+  return gids;
+}
+
 int main(int argc, char* argv[]) {
   // Check arguments.
   if (argc < 2) {
@@ -144,7 +166,7 @@ int main(int argc, char* argv[]) {
   // Some devices can disable running run-as, such as Chrome OS when running in
   // non-developer mode.
   if (android::base::GetBoolProperty("ro.boot.disable_runas", false)) {
-      error(1, 0, "run-as is disabled from the kernel commandline");
+    error(1, 0, "run-as is disabled from the kernel commandline");
   }
 
   char* pkgname = argv[1];
@@ -167,6 +189,15 @@ int main(int argc, char* argv[]) {
   if (!packagelist_parse(packagelist_parse_callback, &info)) {
     error(1, errno, "packagelist_parse failed");
   }
+
+  // Handle a multi-user data path
+  if (userId > 0) {
+    free(info.data_dir);
+    if (asprintf(&info.data_dir, "/data/user/%d/%s", userId, pkgname) == -1) {
+      error(1, errno, "asprintf failed");
+    }
+  }
+
   if (info.uid == 0) {
     error(1, 0, "unknown package: %s", pkgname);
   }
@@ -199,13 +230,15 @@ int main(int argc, char* argv[]) {
   // same time to avoid nasty surprises.
   uid_t uid = userAppId;
   uid_t gid = userAppId;
+  std::vector<gid_t> supplementary_gids = get_supplementary_gids(userAppId);
   ScopedMinijail j(minijail_new());
   minijail_change_uid(j.get(), uid);
   minijail_change_gid(j.get(), gid);
-  minijail_keep_supplementary_gids(j.get());
+  minijail_set_supplementary_gids(j.get(), supplementary_gids.size(), supplementary_gids.data());
   minijail_enter(j.get());
 
-  if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {
+  std::string seinfo = std::string(info.seinfo) + ":fromRunAs";
+  if (selinux_android_setcontext(uid, 0, seinfo.c_str(), pkgname) < 0) {
     error(1, errno, "couldn't set SELinux security context");
   }
 

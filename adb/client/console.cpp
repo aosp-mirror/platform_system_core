@@ -135,6 +135,7 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
     // preventing the emulator from reading the command that adb has sent.
     // https://code.google.com/p/android/issues/detail?id=21021
     int result;
+    std::string emulator_output;
     do {
         char buf[BUFSIZ];
         result = adb_read(fd, buf, sizeof(buf));
@@ -146,8 +147,37 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
         // appended above, and that causes the emulator to close the socket
         // which should cause zero bytes (orderly/graceful shutdown) to be
         // returned.
+        if (result > 0) emulator_output.append(buf, result);
     } while (result > 0);
 
+    // Note: the following messages are expected to be quite stable from emulator.
+    //
+    // Emulator console will send the following message upon connection:
+    //
+    // Android Console: Authentication required
+    // Android Console: type 'auth <auth_token>' to authenticate
+    // Android Console: you can find your <auth_token> in
+    // '/<path-to-home>/.emulator_console_auth_token'
+    // OK\r\n
+    //
+    // and the following after authentication:
+    // Android Console: type 'help' for a list of commands
+    // OK\r\n
+    //
+    // So try search and skip first two "OK\r\n", print the rest.
+    //
+    const std::string delims = "OK\r\n";
+    size_t found = 0;
+    for (int i = 0; i < 2; ++i) {
+        const size_t result = emulator_output.find(delims, found);
+        if (result == std::string::npos) {
+            break;
+        } else {
+            found = result + delims.size();
+        }
+    }
+
+    printf("%s", emulator_output.c_str() + found);
     adb_close(fd);
 
     return 0;

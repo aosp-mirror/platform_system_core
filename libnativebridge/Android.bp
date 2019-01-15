@@ -10,10 +10,26 @@ cc_library {
 
     host_supported: true,
     srcs: ["native_bridge.cc"],
+    header_libs: [
+        "libbase_headers",
+    ],
     shared_libs: [
         "liblog",
-        "libbase",
     ],
+
+    target: {
+        android: {
+            version_script: "libnativebridge.map.txt",
+        },
+        linux: {
+            version_script: "libnativebridge.map.txt",
+        },
+    },
+
+    stubs: {
+        symbol_file: "libnativebridge.map.txt",
+        versions: ["1"],
+    },
 
     export_include_dirs: ["include"],
 

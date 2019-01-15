@@ -61,6 +61,7 @@ bool StartsWith(const std::string& s, const char* prefix);
 bool StartsWithIgnoreCase(const std::string& s, const char* prefix);
 bool StartsWith(const std::string& s, const std::string& prefix);
 bool StartsWithIgnoreCase(const std::string& s, const std::string& prefix);
+bool StartsWith(const std::string& s, char prefix);
 
 // Tests whether 's' ends with 'suffix'.
 // TODO: string_view
@@ -68,6 +69,7 @@ bool EndsWith(const std::string& s, const char* suffix);
 bool EndsWithIgnoreCase(const std::string& s, const char* suffix);
 bool EndsWith(const std::string& s, const std::string& suffix);
 bool EndsWithIgnoreCase(const std::string& s, const std::string& suffix);
+bool EndsWith(const std::string& s, char suffix);
 
 // Tests whether 'lhs' equals 'rhs', ignoring case.
 bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs);

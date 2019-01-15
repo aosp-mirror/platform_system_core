@@ -21,18 +21,49 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
+#include <string>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr_overlayfs.h>
+#include <fstab/fstab.h>
+#include <liblp/builder.h>
+#include <liblp/liblp.h>
 #include <sparse/sparse.h>
 
 #include "fastboot_device.h"
 #include "utility.h"
 
+using namespace android::fs_mgr;
+using namespace std::literals;
+
 namespace {
 
 constexpr uint32_t SPARSE_HEADER_MAGIC = 0xed26ff3a;
+
+void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partition_name) {
+    // May be called, in the case of sparse data, multiple times so cache/skip.
+    static std::set<std::string> wiped;
+    if (wiped.find(partition_name) != wiped.end()) return;
+    wiped.insert(partition_name);
+    // Following appears to have a first time 2% impact on flashing speeds.
+
+    // Convert partition_name to a validated mount point and wipe.
+    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
+                                                               fs_mgr_free_fstab);
+    for (auto i = 0; i < fstab->num_entries; i++) {
+        const auto mount_point = fstab->recs[i].mount_point;
+        if (!mount_point) continue;
+        auto partition = android::base::Basename(mount_point);
+        if ("/"s == mount_point) partition = "system";
+        if ((partition + device->GetCurrentSlot()) == partition_name) {
+            fs_mgr_overlayfs_teardown(mount_point);
+        }
+    }
+}
 
 }  // namespace
 
@@ -97,5 +128,70 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
     } else if (data.size() > get_block_device_size(handle.fd())) {
         return -EOVERFLOW;
     }
+    WipeOverlayfsForPartition(device, partition_name);
     return FlashBlockDevice(handle.fd(), data);
+}
+
+bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wipe) {
+    std::vector<char> data = std::move(device->download_data());
+    if (data.empty()) {
+        return device->WriteFail("No data available");
+    }
+
+    std::unique_ptr<LpMetadata> new_metadata = ReadFromImageBlob(data.data(), data.size());
+    if (!new_metadata) {
+        return device->WriteFail("Data is not a valid logical partition metadata image");
+    }
+
+    if (!FindPhysicalPartition(super_name)) {
+        return device->WriteFail("Cannot find " + super_name +
+                                 ", build may be missing broken or missing boot_devices");
+    }
+
+    // If we are unable to read the existing metadata, then the super partition
+    // is corrupt. In this case we reflash the whole thing using the provided
+    // image.
+    std::string slot_suffix = device->GetCurrentSlot();
+    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    std::unique_ptr<LpMetadata> old_metadata = ReadMetadata(super_name, slot_number);
+    if (wipe || !old_metadata) {
+        if (!FlashPartitionTable(super_name, *new_metadata.get())) {
+            return device->WriteFail("Unable to flash new partition table");
+        }
+        fs_mgr_overlayfs_teardown();
+        return device->WriteOkay("Successfully flashed partition table");
+    }
+
+    std::set<std::string> partitions_to_keep;
+    for (const auto& partition : old_metadata->partitions) {
+        // Preserve partitions in the other slot, but not the current slot.
+        std::string partition_name = GetPartitionName(partition);
+        if (!slot_suffix.empty() && GetPartitionSlotSuffix(partition_name) == slot_suffix) {
+            continue;
+        }
+        partitions_to_keep.emplace(partition_name);
+    }
+
+    // Do not preserve the scratch partition.
+    partitions_to_keep.erase("scratch");
+
+    if (!partitions_to_keep.empty()) {
+        std::unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(*new_metadata.get());
+        if (!builder->ImportPartitions(*old_metadata.get(), partitions_to_keep)) {
+            return device->WriteFail(
+                    "Old partitions are not compatible with the new super layout; wipe needed");
+        }
+
+        new_metadata = builder->Export();
+        if (!new_metadata) {
+            return device->WriteFail("Unable to build new partition table; wipe needed");
+        }
+    }
+
+    // Write the new table to every metadata slot.
+    if (!UpdateAllPartitionMetadata(device, super_name, *new_metadata.get())) {
+        return device->WriteFail("Unable to write new partition table");
+    }
+    fs_mgr_overlayfs_teardown();
+    return device->WriteOkay("Successfully updated partition table");
 }

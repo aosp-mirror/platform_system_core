@@ -80,6 +80,8 @@ class TrustyKeymasterDevice {
                              const keymaster_blob_t* input, const keymaster_blob_t* signature,
                              keymaster_key_param_set_t* out_params, keymaster_blob_t* output);
     keymaster_error_t abort(keymaster_operation_handle_t operation_handle);
+    keymaster_error_t delete_key(const keymaster_key_blob_t* key);
+    keymaster_error_t delete_all_keys();
 
   private:
     keymaster_error_t Send(uint32_t command, const Serializable& request,

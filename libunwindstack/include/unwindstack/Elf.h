@@ -53,15 +53,19 @@ class Elf {
   Elf(Memory* memory) : memory_(memory) {}
   virtual ~Elf() = default;
 
-  bool Init(bool init_gnu_debugdata);
+  bool Init();
 
   void InitGnuDebugdata();
+
+  void Invalidate();
 
   bool GetSoname(std::string* name);
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
 
   bool GetGlobalVariable(const std::string& name, uint64_t* memory_address);
+
+  bool GetBuildID(std::string* build_id);
 
   uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
 
@@ -94,7 +98,7 @@ class Elf {
 
   static bool IsValidElf(Memory* memory);
 
-  static void GetInfo(Memory* memory, bool* valid, uint64_t* size);
+  static bool GetInfo(Memory* memory, uint64_t* size);
 
   static uint64_t GetLoadBias(Memory* memory);
 

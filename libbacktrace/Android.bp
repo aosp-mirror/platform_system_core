@@ -27,15 +27,6 @@ cc_defaults {
             enabled: false,
         },
     },
-
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
 }
 
 libbacktrace_sources = [
@@ -89,17 +80,10 @@ cc_library {
                 "libbase",
                 "liblog",
                 "libunwindstack",
-                "libdexfile",
             ],
 
             static_libs: [
                 "libprocinfo",
-            ],
-
-            // libdexfile will eventually properly export headers, for now
-            // include these directly.
-            include_dirs: [
-                "art/runtime",
             ],
         },
         android: {
@@ -107,17 +91,15 @@ cc_library {
         },
         vendor: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
-            exclude_shared_libs: ["libdexfile"],
         },
         recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
-            exclude_shared_libs: ["libdexfile"],
         },
     },
     whole_static_libs: ["libdemangle"],
 }
 
-cc_library_shared {
+cc_test_library {
     name: "libbacktrace_test",
     defaults: ["libbacktrace_common"],
     host_supported: true,
@@ -130,6 +112,17 @@ cc_library_shared {
     shared_libs: [
         "libunwindstack",
     ],
+    relative_install_path: "backtrace_test_libs",
+
+    target: {
+        linux_glibc: {
+            // This forces the creation of eh_frame with unwind information
+            // for host.
+            cflags: [
+                "-fcxx-exceptions"
+            ],
+        },
+    },
 }
 
 //-------------------------------------------------------------------------
@@ -137,12 +130,12 @@ cc_library_shared {
 //-------------------------------------------------------------------------
 cc_test {
     name: "backtrace_test",
+    isolated: true,
     defaults: ["libbacktrace_common"],
     host_supported: true,
     srcs: [
         "backtrace_offline_test.cpp",
         "backtrace_test.cpp",
-        "GetPss.cpp",
     ],
 
     cflags: [
@@ -152,9 +145,7 @@ cc_test {
     ],
 
     shared_libs: [
-        "libbacktrace_test",
         "libbacktrace",
-        "libdexfile",
         "libbase",
         "liblog",
         "libunwindstack",
@@ -162,22 +153,9 @@ cc_test {
 
     group_static_libs: true,
 
-    target: {
-        android: {
-            cflags: ["-DENABLE_PSS_TESTS"],
-            shared_libs: [
-                "libutils",
-            ],
-        },
-        linux_glibc: {
-            static_libs: ["libutils"],
-        },
-    },
-
-    // libdexfile will eventually properly export headers, for now
-    // include these directly.
-    include_dirs: [
-        "art/runtime",
+    // So that the dlopen can find the libbacktrace_test.so.
+    ldflags: [
+        "-Wl,--rpath,${ORIGIN}/../backtrace_test_libs",
     ],
 
     test_suites: ["device-tests"],

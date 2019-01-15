@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <algorithm>
 #include <memory>
 
 #include <android-base/file.h>
@@ -240,10 +242,9 @@ bool BatteryMonitor::update(void) {
     if (readFromFile(mHealthdConfig->batteryTechnologyPath, &buf) > 0)
         props.batteryTechnology = String8(buf.c_str());
 
-    unsigned int i;
     double MaxPower = 0;
 
-    for (i = 0; i < mChargerNames.size(); i++) {
+    for (size_t i = 0; i < mChargerNames.size(); i++) {
         String8 path;
         path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH,
                           mChargerNames[i].string());
@@ -357,7 +358,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         if (!mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryChargeCounterPath);
-            ret = NO_ERROR;
+            ret = OK;
         } else {
             ret = NAME_NOT_FOUND;
         }
@@ -367,7 +368,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCurrentNowPath);
-            ret = NO_ERROR;
+            ret = OK;
         } else {
             ret = NAME_NOT_FOUND;
         }
@@ -377,7 +378,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCurrentAvgPath);
-            ret = NO_ERROR;
+            ret = OK;
         } else {
             ret = NAME_NOT_FOUND;
         }
@@ -387,7 +388,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         if (!mHealthdConfig->batteryCapacityPath.isEmpty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCapacityPath);
-            ret = NO_ERROR;
+            ret = OK;
         } else {
             ret = NAME_NOT_FOUND;
         }
@@ -403,7 +404,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     case BATTERY_PROP_BATTERY_STATUS:
         val->valueInt64 = getChargeStatus();
-        ret = NO_ERROR;
+        ret = OK;
         break;
 
     default:
@@ -477,8 +478,14 @@ void BatteryMonitor::init(struct healthd_config *hc) {
 
         while ((entry = readdir(dir.get()))) {
             const char* name = entry->d_name;
+            std::vector<String8>::iterator itIgnoreName;
 
             if (!strcmp(name, ".") || !strcmp(name, ".."))
+                continue;
+
+            itIgnoreName = find(hc->ignorePowerSupplyNames.begin(),
+                                hc->ignorePowerSupplyNames.end(), String8(name));
+            if (itIgnoreName != hc->ignorePowerSupplyNames.end())
                 continue;
 
             // Look for "type" file in each subdirectory

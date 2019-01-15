@@ -16,17 +16,30 @@
 
 #include "android-base/parseint.h"
 
+#include <errno.h>
+
 #include <gtest/gtest.h>
 
 TEST(parseint, signed_smoke) {
+  errno = 0;
   int i = 0;
   ASSERT_FALSE(android::base::ParseInt("x", &i));
+  ASSERT_EQ(EINVAL, errno);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseInt("123x", &i));
+  ASSERT_EQ(EINVAL, errno);
 
   ASSERT_TRUE(android::base::ParseInt("123", &i));
   ASSERT_EQ(123, i);
+  ASSERT_EQ(0, errno);
+  i = 0;
+  EXPECT_TRUE(android::base::ParseInt("  123", &i));
+  EXPECT_EQ(123, i);
   ASSERT_TRUE(android::base::ParseInt("-123", &i));
   ASSERT_EQ(-123, i);
+  i = 0;
+  EXPECT_TRUE(android::base::ParseInt("  -123", &i));
+  EXPECT_EQ(-123, i);
 
   short s = 0;
   ASSERT_TRUE(android::base::ParseInt("1234", &s));
@@ -34,22 +47,43 @@ TEST(parseint, signed_smoke) {
 
   ASSERT_TRUE(android::base::ParseInt("12", &i, 0, 15));
   ASSERT_EQ(12, i);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseInt("-12", &i, 0, 15));
+  ASSERT_EQ(ERANGE, errno);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseInt("16", &i, 0, 15));
+  ASSERT_EQ(ERANGE, errno);
 
+  errno = 0;
   ASSERT_FALSE(android::base::ParseInt<int>("x", nullptr));
+  ASSERT_EQ(EINVAL, errno);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseInt<int>("123x", nullptr));
+  ASSERT_EQ(EINVAL, errno);
   ASSERT_TRUE(android::base::ParseInt<int>("1234", nullptr));
 }
 
 TEST(parseint, unsigned_smoke) {
+  errno = 0;
   unsigned int i = 0u;
   ASSERT_FALSE(android::base::ParseUint("x", &i));
+  ASSERT_EQ(EINVAL, errno);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseUint("123x", &i));
+  ASSERT_EQ(EINVAL, errno);
 
   ASSERT_TRUE(android::base::ParseUint("123", &i));
   ASSERT_EQ(123u, i);
+  ASSERT_EQ(0, errno);
+  i = 0u;
+  EXPECT_TRUE(android::base::ParseUint("  123", &i));
+  EXPECT_EQ(123u, i);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseUint("-123", &i));
+  EXPECT_EQ(EINVAL, errno);
+  errno = 0;
+  EXPECT_FALSE(android::base::ParseUint("  -123", &i));
+  EXPECT_EQ(EINVAL, errno);
 
   unsigned short s = 0u;
   ASSERT_TRUE(android::base::ParseUint("1234", &s));
@@ -57,12 +91,28 @@ TEST(parseint, unsigned_smoke) {
 
   ASSERT_TRUE(android::base::ParseUint("12", &i, 15u));
   ASSERT_EQ(12u, i);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseUint("-12", &i, 15u));
+  ASSERT_EQ(EINVAL, errno);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseUint("16", &i, 15u));
+  ASSERT_EQ(ERANGE, errno);
 
+  errno = 0;
   ASSERT_FALSE(android::base::ParseUint<unsigned short>("x", nullptr));
+  ASSERT_EQ(EINVAL, errno);
+  errno = 0;
   ASSERT_FALSE(android::base::ParseUint<unsigned short>("123x", nullptr));
+  ASSERT_EQ(EINVAL, errno);
   ASSERT_TRUE(android::base::ParseUint<unsigned short>("1234", nullptr));
+
+  errno = 0;
+  unsigned long long int lli;
+  EXPECT_FALSE(android::base::ParseUint("-123", &lli));
+  EXPECT_EQ(EINVAL, errno);
+  errno = 0;
+  EXPECT_FALSE(android::base::ParseUint("  -123", &lli));
+  EXPECT_EQ(EINVAL, errno);
 }
 
 TEST(parseint, no_implicit_octal) {
@@ -79,10 +129,16 @@ TEST(parseint, explicit_hex) {
   int i = 0;
   ASSERT_TRUE(android::base::ParseInt("0x123", &i));
   ASSERT_EQ(0x123, i);
+  i = 0;
+  EXPECT_TRUE(android::base::ParseInt("  0x123", &i));
+  EXPECT_EQ(0x123, i);
 
   unsigned int u = 0u;
   ASSERT_TRUE(android::base::ParseUint("0x123", &u));
   ASSERT_EQ(0x123u, u);
+  u = 0u;
+  EXPECT_TRUE(android::base::ParseUint("  0x123", &u));
+  EXPECT_EQ(0x123u, u);
 }
 
 TEST(parseint, string) {
@@ -101,7 +157,7 @@ TEST(parseint, untouched_on_failure) {
   ASSERT_EQ(123, i);
 
   unsigned int u = 123u;
-  ASSERT_FALSE(android::base::ParseInt("456x", &u));
+  ASSERT_FALSE(android::base::ParseUint("456x", &u));
   ASSERT_EQ(123u, u);
 }
 

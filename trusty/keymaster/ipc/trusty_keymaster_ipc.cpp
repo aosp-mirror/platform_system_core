@@ -167,7 +167,7 @@ keymaster_error_t trusty_keymaster_send(uint32_t command, const keymaster::Seria
         // TODO(swillden): Distinguish permanent from transient errors and set error_ appropriately.
         return translate_error(rc);
     } else {
-        ALOGE("Received %d byte response\n", rsp_size);
+        ALOGV("Received %d byte response\n", rsp_size);
     }
 
     const uint8_t* p = recv_buf;

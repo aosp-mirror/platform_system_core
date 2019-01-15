@@ -42,7 +42,7 @@ std::string DmTarget::Serialize() const {
     struct dm_target_spec* spec = reinterpret_cast<struct dm_target_spec*>(&data[0]);
     spec->sector_start = start();
     spec->length = size();
-    strlcpy(spec->target_type, name().c_str(), sizeof(spec->target_type));
+    snprintf(spec->target_type, sizeof(spec->target_type), "%s", name().c_str());
     spec->next = (uint32_t)data.size();
     return data;
 }

@@ -23,7 +23,7 @@
 namespace android {
 namespace init {
 
-void SelinuxInitialize();
+int SetupSelinux(char** argv);
 void SelinuxRestoreContext();
 
 void SelinuxSetupKernelLogging();

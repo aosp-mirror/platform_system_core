@@ -27,10 +27,9 @@
 #include <vector>
 
 #include <android-base/file.h>
-#include <android-base/test_utils.h>
+#include <android-base/mapped_file.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
-#include <utils/FileMap.h>
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_archive_stream_entry.h>
 
@@ -298,7 +297,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, kEmptyEntriesZip, sizeof(kEmptyEntriesZip)));
 
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 
   ZipEntry entry;
   ZipString empty_name;
@@ -323,7 +322,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, reinterpret_cast<const uint8_t*>(kAbZip),
                                         sizeof(kAbZip) - 1));
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle, false));
 
   ZipEntry entry;
   ZipString ab_name;
@@ -348,7 +347,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   // Read the file back to a buffer and make sure the contents are
   // the same as the memory buffer we extracted directly to.
   std::vector<uint8_t> file_contents(kAbUncompressedSize);
-  ASSERT_EQ(0, lseek64(tmp_output_file.fd, 0, SEEK_SET));
+  ASSERT_EQ(0, lseek(tmp_output_file.fd, 0, SEEK_SET));
   ASSERT_TRUE(android::base::ReadFully(tmp_output_file.fd, &file_contents[0], file_contents.size()));
   ASSERT_EQ(file_contents, buffer);
 
@@ -370,7 +369,7 @@ TEST(ziparchive, TrailerAfterEOCD) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, trailer, sizeof(trailer)));
 
   ZipArchiveHandle handle;
-  ASSERT_GT(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle));
+  ASSERT_GT(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 }
 
 TEST(ziparchive, ExtractToFile) {
@@ -392,7 +391,7 @@ TEST(ziparchive, ExtractToFile) {
 
   // Assert that the first 8 bytes of the file haven't been clobbered.
   uint8_t read_buffer[data_size];
-  ASSERT_EQ(0, lseek64(tmp_file.fd, 0, SEEK_SET));
+  ASSERT_EQ(0, lseek(tmp_file.fd, 0, SEEK_SET));
   ASSERT_TRUE(android::base::ReadFully(tmp_file.fd, read_buffer, data_size));
   ASSERT_EQ(0, memcmp(read_buffer, data, data_size));
 
@@ -404,7 +403,7 @@ TEST(ziparchive, ExtractToFile) {
 
   // Assert that the total length of the file is sane
   ASSERT_EQ(static_cast<ssize_t>(data_size + kATxtContents.size()),
-            lseek64(tmp_file.fd, 0, SEEK_END));
+            lseek(tmp_file.fd, 0, SEEK_END));
 }
 
 #if !defined(_WIN32)
@@ -416,11 +415,10 @@ TEST(ziparchive, OpenFromMemory) {
   ASSERT_EQ(0, fstat(fd, &sb));
 
   // Memory map the file first and open the archive from the memory region.
-  android::FileMap file_map;
-  file_map.create(zip_path.c_str(), fd, 0 /*offset*/, sb.st_size, true);
+  auto file_map{android::base::MappedFile::FromFd(fd, 0, sb.st_size, PROT_READ)};
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFromMemory(file_map.getDataPtr(), file_map.getDataLength(),
-                                     zip_path.c_str(), &handle));
+  ASSERT_EQ(0,
+            OpenArchiveFromMemory(file_map->data(), file_map->size(), zip_path.c_str(), &handle));
 
   // Assert one entry can be found and extracted correctly.
   std::string BINARY_PATH("META-INF/com/google/android/update-binary");
@@ -581,7 +579,7 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   ASSERT_NE(-1, tmp_file.fd);
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &zip_data[0], zip_data.size()));
   ZipArchiveHandle handle;
-  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "ExtractEntryToMemory", &handle));
+  ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "ExtractEntryToMemory", &handle, false));
 
   // This function expects a variant of kDataDescriptorZipFile, for look for
   // an entry whose name is "name" and whose size is 12 (contents =
@@ -689,7 +687,7 @@ TEST(ziparchive, BrokenLfhSignature) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &kZipFileWithBrokenLfhSignature[0],
                                         kZipFileWithBrokenLfhSignature.size()));
   ZipArchiveHandle handle;
-  ASSERT_EQ(-1, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle));
+  ASSERT_EQ(-1, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle, false));
 }
 
 class VectorReader : public zip_archive::Reader {

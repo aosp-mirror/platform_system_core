@@ -29,6 +29,32 @@
 
 namespace unwindstack {
 
+bool MapInfo::InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory) {
+  // One last attempt, see if the previous map is read-only with the
+  // same name and stretches across this map.
+  if (prev_map == nullptr || prev_map->flags != PROT_READ) {
+    return false;
+  }
+
+  uint64_t map_size = end - prev_map->end;
+  if (!memory->Init(name, prev_map->offset, map_size)) {
+    return false;
+  }
+
+  uint64_t max_size;
+  if (!Elf::GetInfo(memory, &max_size) || max_size < map_size) {
+    return false;
+  }
+
+  if (!memory->Init(name, prev_map->offset, max_size)) {
+    return false;
+  }
+
+  elf_offset = offset - prev_map->offset;
+  elf_start_offset = prev_map->offset;
+  return true;
+}
+
 Memory* MapInfo::GetFileMemory() {
   std::unique_ptr<MemoryFileAtOffset> memory(new MemoryFileAtOffset);
   if (offset == 0) {
@@ -38,8 +64,12 @@ Memory* MapInfo::GetFileMemory() {
     return nullptr;
   }
 
-  // There are two possibilities when the offset is non-zero.
-  // - There is an elf file embedded in a file.
+  // These are the possibilities when the offset is non-zero.
+  // - There is an elf file embedded in a file, and the offset is the
+  //   the start of the elf in the file.
+  // - There is an elf file embedded in a file, and the offset is the
+  //   the start of the executable part of the file. The actual start
+  //   of the elf is in the read-only segment preceeding this map.
   // - The whole file is an elf file, and the offset needs to be saved.
   //
   // Map in just the part of the file for the map. If this is not
@@ -53,29 +83,47 @@ Memory* MapInfo::GetFileMemory() {
     return nullptr;
   }
 
-  bool valid;
-  uint64_t max_size;
-  Elf::GetInfo(memory.get(), &valid, &max_size);
-  if (!valid) {
-    // Init as if the whole file is an elf.
-    if (memory->Init(name, 0)) {
-      elf_offset = offset;
-      return memory.release();
+  // Check if the start of this map is an embedded elf.
+  uint64_t max_size = 0;
+  if (Elf::GetInfo(memory.get(), &max_size)) {
+    if (max_size > map_size) {
+      if (memory->Init(name, offset, max_size)) {
+        return memory.release();
+      }
+      // Try to reinit using the default map_size.
+      if (memory->Init(name, offset, map_size)) {
+        return memory.release();
+      }
+      return nullptr;
     }
-    return nullptr;
+    return memory.release();
   }
 
-  if (max_size > map_size) {
-    if (memory->Init(name, offset, max_size)) {
-      return memory.release();
+  // No elf at offset, try to init as if the whole file is an elf.
+  if (memory->Init(name, 0) && Elf::IsValidElf(memory.get())) {
+    elf_offset = offset;
+    // Need to check how to set the elf start offset. If this map is not
+    // the r-x map of a r-- map, then use the real offset value. Otherwise,
+    // use 0.
+    if (prev_map == nullptr || prev_map->offset != 0 || prev_map->flags != PROT_READ ||
+        prev_map->name != name) {
+      elf_start_offset = offset;
     }
-    // Try to reinit using the default map_size.
-    if (memory->Init(name, offset, map_size)) {
-      return memory.release();
-    }
-    return nullptr;
+    return memory.release();
   }
-  return memory.release();
+
+  // See if the map previous to this one contains a read-only map
+  // that represents the real start of the elf data.
+  if (InitFileMemoryFromPreviousReadOnlyMap(memory.get())) {
+    return memory.release();
+  }
+
+  // Failed to find elf at start of file or at read-only map, return
+  // file object from the current map.
+  if (memory->Init(name, offset, map_size)) {
+    return memory.release();
+  }
+  return nullptr;
 }
 
 Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
@@ -98,14 +146,40 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
     }
   }
 
-  // If the map isn't readable, don't bother trying to read from process memory.
-  if (!(flags & PROT_READ)) {
+  // Need to verify that this elf is valid. It's possible that
+  // only part of the elf file to be mapped into memory is in the executable
+  // map. In this case, there will be another read-only map that includes the
+  // first part of the elf file. This is done if the linker rosegment
+  // option is used.
+  std::unique_ptr<MemoryRange> memory(new MemoryRange(process_memory, start, end - start, 0));
+  if (Elf::IsValidElf(memory.get())) {
+    return memory.release();
+  }
+
+  // Find the read-only map by looking at the previous map. The linker
+  // doesn't guarantee that this invariant will always be true. However,
+  // if that changes, there is likely something else that will change and
+  // break something.
+  if (offset == 0 || name.empty() || prev_map == nullptr || prev_map->name != name ||
+      prev_map->offset >= offset) {
     return nullptr;
   }
-  return new MemoryRange(process_memory, start, end - start, 0);
+
+  // Make sure that relative pc values are corrected properly.
+  elf_offset = offset - prev_map->offset;
+  // Use this as the elf start offset, otherwise, you always get offsets into
+  // the r-x section, which is not quite the right information.
+  elf_start_offset = prev_map->offset;
+
+  MemoryRanges* ranges = new MemoryRanges;
+  ranges->Insert(
+      new MemoryRange(process_memory, prev_map->start, prev_map->end - prev_map->start, 0));
+  ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
+
+  return ranges;
 }
 
-Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gnu_debugdata) {
+Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch) {
   // Make sure no other thread is trying to add the elf to this map.
   std::lock_guard<std::mutex> guard(mutex_);
 
@@ -134,7 +208,11 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, bool init_gn
   elf.reset(new Elf(memory));
   // If the init fails, keep the elf around as an invalid object so we
   // don't try to reinit the object.
-  elf->Init(init_gnu_debugdata);
+  elf->Init();
+  if (elf->valid() && expected_arch != elf->arch()) {
+    // Make the elf invalid, mismatch between arch and expected arch.
+    elf->Invalidate();
+  }
 
   if (locked) {
     Elf::CacheAdd(this);

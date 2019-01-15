@@ -17,8 +17,10 @@
 #define _FRAMEWORKSOCKETLISTENER_H
 
 #include "SocketListener.h"
-#include "FrameworkCommand.h"
 
+#include <vector>
+
+class FrameworkCommand;
 class SocketClient;
 
 class FrameworkListener : public SocketListener {
@@ -31,20 +33,20 @@ public:
 private:
     int mCommandCount;
     bool mWithSeq;
-    FrameworkCommandCollection *mCommands;
+    std::vector<FrameworkCommand*> mCommands;
     bool mSkipToNextNullByte;
 
 public:
     FrameworkListener(const char *socketName);
     FrameworkListener(const char *socketName, bool withSeq);
     FrameworkListener(int sock);
-    virtual ~FrameworkListener() {}
+    ~FrameworkListener() override {}
 
-protected:
+  protected:
     void registerCmd(FrameworkCommand *cmd);
-    virtual bool onDataAvailable(SocketClient *c);
+    bool onDataAvailable(SocketClient* c) override;
 
-private:
+  private:
     void dispatchCommand(SocketClient *c, char *data);
     void init(const char *socketName, bool withSeq);
 };

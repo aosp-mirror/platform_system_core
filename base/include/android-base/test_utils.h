@@ -19,59 +19,26 @@
 #include <regex>
 #include <string>
 
+#include <android-base/file.h>
 #include <android-base/macros.h>
-
-class TemporaryFile {
- public:
-  TemporaryFile();
-  explicit TemporaryFile(const std::string& tmp_dir);
-  ~TemporaryFile();
-
-  // Release the ownership of fd, caller is reponsible for closing the
-  // fd or stream properly.
-  int release();
-  // Don't remove the temporary file in the destructor.
-  void DoNotRemove() { remove_file_ = false; }
-
-  int fd;
-  char path[1024];
-
- private:
-  void init(const std::string& tmp_dir);
-
-  bool remove_file_ = true;
-
-  DISALLOW_COPY_AND_ASSIGN(TemporaryFile);
-};
-
-class TemporaryDir {
- public:
-  TemporaryDir();
-  ~TemporaryDir();
-
-  char path[1024];
-
- private:
-  bool init(const std::string& tmp_dir);
-
-  DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
-};
 
 class CapturedStdFd {
  public:
   CapturedStdFd(int std_fd);
   ~CapturedStdFd();
 
-  int fd() const;
   std::string str();
 
- private:
-  void Init();
+  void Start();
+  void Stop();
   void Reset();
+
+ private:
+  int fd() const;
 
   TemporaryFile temp_file_;
   int std_fd_;
-  int old_fd_;
+  int old_fd_ = -1;
 
   DISALLOW_COPY_AND_ASSIGN(CapturedStdFd);
 };
