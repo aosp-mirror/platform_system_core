@@ -166,33 +166,6 @@ clockid_t android_log_clockid(void);
  */
 void __android_log_close(void);
 
-/*
- * if last is NULL, caller _must_ provide a consistent value for seconds.
- *
- * Return -1 if we can not acquire a lock, which below will permit the logging,
- * error on allowing a log message through.
- */
-int __android_log_ratelimit(time_t seconds, time_t* last);
-
-/*
- * Usage:
- *
- *   // Global default and state
- *   IF_ALOG_RATELIMIT() {
- *      ALOG*(...);
- *   }
- *
- *   // local state, 10 seconds ratelimit
- *   static time_t local_state;
- *   IF_ALOG_RATELIMIT_LOCAL(10, &local_state) {
- *     ALOG*(...);
- *   }
- */
-
-#define IF_ALOG_RATELIMIT() if (__android_log_ratelimit(0, NULL) > 0)
-#define IF_ALOG_RATELIMIT_LOCAL(seconds, state) \
-  if (__android_log_ratelimit(seconds, state) > 0)
-
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
