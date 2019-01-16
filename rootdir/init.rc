@@ -117,6 +117,8 @@ on init
     mkdir /mnt/runtime/read/self 0755 root root
     mkdir /mnt/runtime/write 0755 root root
     mkdir /mnt/runtime/write/self 0755 root root
+    mkdir /mnt/runtime/full 0755 root root
+    mkdir /mnt/runtime/full/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /sdcard
