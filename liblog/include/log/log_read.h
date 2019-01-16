@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_READ_H
-#define _LIBS_LOG_LOG_READ_H
+#pragma once
 
 #include <sys/types.h>
 
@@ -246,5 +245,3 @@ struct logger_list* android_logger_list_open(log_id_t id, int mode,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_LOG_H */

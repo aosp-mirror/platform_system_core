@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_CUTILS_EVENTTAGMAP_H
-#define _LIBS_CUTILS_EVENTTAGMAP_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,5 +68,3 @@ int android_lookupEventTagNum(EventTagMap* map, const char* tagname,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*_LIBS_CUTILS_EVENTTAGMAP_H*/

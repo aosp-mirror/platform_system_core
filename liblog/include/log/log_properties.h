@@ -7,8 +7,7 @@
 ** General Public License.
 */
 
-#ifndef _LIBS_LOG_PROPERTIES_H
-#define _LIBS_LOG_PROPERTIES_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,5 +18,3 @@ int __android_log_is_debuggable();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_PROPERTIES_H */
