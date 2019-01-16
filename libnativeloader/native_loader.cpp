@@ -632,7 +632,7 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
     *needs_native_bridge = false;
     void* handle = dlopen(path, RTLD_NOW);
     if (handle == nullptr) {
-      *error_msg = dlerror();
+      *error_msg = strdup(dlerror());
     }
     return handle;
   }
