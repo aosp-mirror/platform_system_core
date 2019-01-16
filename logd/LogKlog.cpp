@@ -197,10 +197,9 @@ char* android::log_strntok_r(char* s, ssize_t& len, char*& last,
     // NOTREACHED
 }
 
-log_time LogKlog::correction =
-    (log_time(CLOCK_REALTIME) < log_time(CLOCK_MONOTONIC))
-        ? log_time::EPOCH
-        : (log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC));
+log_time LogKlog::correction = (log_time(CLOCK_REALTIME) < log_time(CLOCK_MONOTONIC))
+                                       ? log_time(log_time::EPOCH)
+                                       : (log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC));
 
 LogKlog::LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
                  bool auditd)
@@ -268,7 +267,7 @@ void LogKlog::calculateCorrection(const log_time& monotonic,
     static const char real_format[] = "%Y-%m-%d %H:%M:%S.%09q UTC";
     if (len < (ssize_t)(strlen(real_format) + 5)) return;
 
-    log_time real;
+    log_time real(log_time::EPOCH);
     const char* ep = real.strptime(real_string, real_format);
     if (!ep || (ep > &real_string[len]) || (real > log_time(CLOCK_REALTIME))) {
         return;
@@ -282,20 +281,20 @@ void LogKlog::calculateCorrection(const log_time& monotonic,
     tm.tm_isdst = -1;
     localtime_r(&now, &tm);
     if ((tm.tm_gmtoff < 0) && ((-tm.tm_gmtoff) > (long)real.tv_sec)) {
-        real = log_time::EPOCH;
+        real = log_time(log_time::EPOCH);
     } else {
         real.tv_sec += tm.tm_gmtoff;
     }
     if (monotonic > real) {
-        correction = log_time::EPOCH;
+        correction = log_time(log_time::EPOCH);
     } else {
         correction = real - monotonic;
     }
 }
 
-void LogKlog::sniffTime(log_time& now, const char*& buf, ssize_t len,
-                        bool reverse) {
-    if (len <= 0) return;
+log_time LogKlog::sniffTime(const char*& buf, ssize_t len, bool reverse) {
+    log_time now(log_time::EPOCH);
+    if (len <= 0) return now;
 
     const char* cp = nullptr;
     if ((len > 10) && (*buf == '[')) {
@@ -310,7 +309,7 @@ void LogKlog::sniffTime(log_time& now, const char*& buf, ssize_t len,
         }
         buf = cp;
 
-        if (isMonotonic()) return;
+        if (isMonotonic()) return now;
 
         const char* b;
         if (((b = android::strnstr(cp, len, suspendStr))) &&
@@ -329,11 +328,11 @@ void LogKlog::sniffTime(log_time& now, const char*& buf, ssize_t len,
             //     trigger a check for ntp-induced or hardware clock drift.
             log_time real(CLOCK_REALTIME);
             log_time mono(CLOCK_MONOTONIC);
-            correction = (real < mono) ? log_time::EPOCH : (real - mono);
+            correction = (real < mono) ? log_time(log_time::EPOCH) : (real - mono);
         } else if (((b = android::strnstr(cp, len, suspendedStr))) &&
                    (((b += strlen(suspendStr)) - cp) < len)) {
             len -= b - cp;
-            log_time real;
+            log_time real(log_time::EPOCH);
             char* endp;
             real.tv_sec = strtol(b, &endp, 10);
             if ((*endp == '.') && ((endp - b) < len)) {
@@ -345,7 +344,7 @@ void LogKlog::sniffTime(log_time& now, const char*& buf, ssize_t len,
                 }
                 if (reverse) {
                     if (real > correction) {
-                        correction = log_time::EPOCH;
+                        correction = log_time(log_time::EPOCH);
                     } else {
                         correction -= real;
                     }
@@ -363,6 +362,7 @@ void LogKlog::sniffTime(log_time& now, const char*& buf, ssize_t len,
             now = log_time(CLOCK_REALTIME);
         }
     }
+    return now;
 }
 
 pid_t LogKlog::sniffPid(const char*& buf, ssize_t len) {
@@ -451,8 +451,7 @@ void LogKlog::synchronize(const char* buf, ssize_t len) {
     }
     parseKernelPrio(cp, len - (cp - buf));
 
-    log_time now;
-    sniffTime(now, cp, len - (cp - buf), true);
+    log_time now = sniffTime(cp, len - (cp - buf), true);
 
     const char* suspended = android::strnstr(buf, len, suspendedStr);
     if (!suspended || (suspended > cp)) {
@@ -468,7 +467,7 @@ void LogKlog::synchronize(const char* buf, ssize_t len) {
     }
     parseKernelPrio(cp, len - (cp - buf));
 
-    sniffTime(now, cp, len - (cp - buf), true);
+    sniffTime(cp, len - (cp - buf), true);
 }
 
 // Convert kernel log priority number into an Android Logger priority number
@@ -548,8 +547,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     const char* p = buf;
     int pri = parseKernelPrio(p, len);
 
-    log_time now;
-    sniffTime(now, p, len - (p - buf), false);
+    log_time now = sniffTime(p, len - (p - buf), false);
 
     // sniff for start marker
     const char* start = android::strnstr(p, len - (p - buf), klogdStr);

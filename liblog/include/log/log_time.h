@@ -42,22 +42,18 @@ extern "C" {
  */
 struct log_time {
  public:
-  uint32_t tv_sec; /* good to Feb 5 2106 */
-  uint32_t tv_nsec;
+  uint32_t tv_sec = 0; /* good to Feb 5 2106 */
+  uint32_t tv_nsec = 0;
 
   static const uint32_t tv_sec_max = 0xFFFFFFFFUL;
   static const uint32_t tv_nsec_max = 999999999UL;
+  static const timespec EPOCH;
 
-  log_time(const timespec& T)
-      : tv_sec(static_cast<uint32_t>(T.tv_sec)),
-        tv_nsec(static_cast<uint32_t>(T.tv_nsec)) {
-  }
+  log_time() {}
+  explicit log_time(const timespec& T)
+      : tv_sec(static_cast<uint32_t>(T.tv_sec)), tv_nsec(static_cast<uint32_t>(T.tv_nsec)) {}
   explicit log_time(uint32_t sec, uint32_t nsec = 0)
       : tv_sec(sec), tv_nsec(nsec) {
-  }
-#define __struct_log_time_private_defined
-  static const timespec EPOCH;
-  log_time() {
   }
 #ifdef __linux__
   explicit log_time(clockid_t id) {
