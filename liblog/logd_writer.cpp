@@ -45,17 +45,16 @@
 static int logdAvailable(log_id_t LogId);
 static int logdOpen();
 static void logdClose();
-static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
-                     size_t nr);
+static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 LIBLOG_HIDDEN struct android_log_transport_write logdLoggerWrite = {
-  .node = { &logdLoggerWrite.node, &logdLoggerWrite.node },
-  .context.sock = -EBADF,
-  .name = "logd",
-  .available = logdAvailable,
-  .open = logdOpen,
-  .close = logdClose,
-  .write = logdWrite,
+    .node = {&logdLoggerWrite.node, &logdLoggerWrite.node},
+    .context.sock = -EBADF,
+    .name = "logd",
+    .available = logdAvailable,
+    .open = logdOpen,
+    .close = logdClose,
+    .write = logdWrite,
 };
 
 /* log_init_lock assumed */
@@ -64,8 +63,7 @@ static int logdOpen() {
 
   i = atomic_load(&logdLoggerWrite.context.sock);
   if (i < 0) {
-    int sock = TEMP_FAILURE_RETRY(
-        socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+    int sock = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
     if (sock < 0) {
       ret = -errno;
     } else {
@@ -74,15 +72,15 @@ static int logdOpen() {
       un.sun_family = AF_UNIX;
       strcpy(un.sun_path, "/dev/socket/logdw");
 
-      if (TEMP_FAILURE_RETRY(connect(sock, (struct sockaddr*)&un,
-                                     sizeof(struct sockaddr_un))) < 0) {
+      if (TEMP_FAILURE_RETRY(connect(sock, (struct sockaddr*)&un, sizeof(struct sockaddr_un))) <
+          0) {
         ret = -errno;
         switch (ret) {
           case -ENOTCONN:
           case -ECONNREFUSED:
           case -ENOENT:
             i = atomic_exchange(&logdLoggerWrite.context.sock, ret);
-          /* FALLTHRU */
+            [[fallthrough]];
           default:
             break;
         }
@@ -124,16 +122,15 @@ static int logdAvailable(log_id_t logId) {
   return 1;
 }
 
-static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
-                     size_t nr) {
+static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   ssize_t ret;
   int sock;
   static const unsigned headerLength = 1;
   struct iovec newVec[nr + headerLength];
   android_log_header_t header;
   size_t i, payloadSize;
-  static atomic_int_fast32_t dropped;
-  static atomic_int_fast32_t droppedSecurity;
+  static atomic_int dropped;
+  static atomic_int droppedSecurity;
 
   sock = atomic_load(&logdLoggerWrite.context.sock);
   if (sock < 0) switch (sock) {
@@ -181,8 +178,7 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
   newVec[0].iov_len = sizeof(header);
 
   if (sock >= 0) {
-    int32_t snapshot =
-        atomic_exchange_explicit(&droppedSecurity, 0, memory_order_relaxed);
+    int32_t snapshot = atomic_exchange_explicit(&droppedSecurity, 0, memory_order_relaxed);
     if (snapshot) {
       android_log_event_int_t buffer;
 
@@ -196,14 +192,12 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
 
       ret = TEMP_FAILURE_RETRY(writev(sock, newVec, 2));
       if (ret != (ssize_t)(sizeof(header) + sizeof(buffer))) {
-        atomic_fetch_add_explicit(&droppedSecurity, snapshot,
-                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&droppedSecurity, snapshot, memory_order_relaxed);
       }
     }
     snapshot = atomic_exchange_explicit(&dropped, 0, memory_order_relaxed);
-    if (snapshot &&
-        __android_log_is_loggable_len(ANDROID_LOG_INFO, "liblog",
-                                      strlen("liblog"), ANDROID_LOG_VERBOSE)) {
+    if (snapshot && __android_log_is_loggable_len(ANDROID_LOG_INFO, "liblog", strlen("liblog"),
+                                                  ANDROID_LOG_VERBOSE)) {
       android_log_event_int_t buffer;
 
       header.id = LOG_ID_EVENTS;
@@ -267,12 +261,11 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
         return ret;
       }
 
-      ret = TEMP_FAILURE_RETRY(
-          writev(atomic_load(&logdLoggerWrite.context.sock), newVec, i));
+      ret = TEMP_FAILURE_RETRY(writev(atomic_load(&logdLoggerWrite.context.sock), newVec, i));
       if (ret < 0) {
         ret = -errno;
       }
-    /* FALLTHRU */
+      [[fallthrough]];
     default:
       break;
   }

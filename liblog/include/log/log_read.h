@@ -17,6 +17,8 @@
 #ifndef _LIBS_LOG_LOG_READ_H
 #define _LIBS_LOG_LOG_READ_H
 
+#include <sys/types.h>
+
 /* deal with possible sys/cdefs.h conflict with fcntl.h */
 #ifdef __unused
 #define __unused_defined __unused
@@ -47,6 +49,8 @@ extern "C" {
  * access to raw information, or parsing is an issue.
  */
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-length-array"
 /*
  * The userspace structure for version 1 of the logger_entry ABI.
  */
@@ -59,9 +63,7 @@ struct logger_entry {
   int32_t tid;    /* generating process's tid */
   int32_t sec;    /* seconds since Epoch */
   int32_t nsec;   /* nanoseconds */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 };
 #endif
 
@@ -78,9 +80,7 @@ struct logger_entry_v2 {
   int32_t sec;       /* seconds since Epoch */
   int32_t nsec;      /* nanoseconds */
   uint32_t euid;     /* effective UID of logger */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 } __attribute__((__packed__));
 #endif
 
@@ -97,9 +97,7 @@ struct logger_entry_v3 {
   int32_t sec;       /* seconds since Epoch */
   int32_t nsec;      /* nanoseconds */
   uint32_t lid;      /* log id of the payload */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 } __attribute__((__packed__));
 #endif
 
@@ -117,11 +115,10 @@ struct logger_entry_v4 {
   uint32_t nsec;     /* nanoseconds */
   uint32_t lid;      /* log id of the payload, bottom 4 bits currently */
   uint32_t uid;      /* generating process's uid */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 };
 #endif
+#pragma clang diagnostic pop
 
 /*
  * The maximum size of the log entry payload that can be
