@@ -37,17 +37,16 @@
 static int pmsgOpen();
 static void pmsgClose();
 static int pmsgAvailable(log_id_t logId);
-static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
-                     size_t nr);
+static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 LIBLOG_HIDDEN struct android_log_transport_write pmsgLoggerWrite = {
-  .node = { &pmsgLoggerWrite.node, &pmsgLoggerWrite.node },
-  .context.fd = -1,
-  .name = "pmsg",
-  .available = pmsgAvailable,
-  .open = pmsgOpen,
-  .close = pmsgClose,
-  .write = pmsgWrite,
+    .node = {&pmsgLoggerWrite.node, &pmsgLoggerWrite.node},
+    .context.fd = -1,
+    .name = "pmsg",
+    .available = pmsgAvailable,
+    .open = pmsgOpen,
+    .close = pmsgClose,
+    .write = pmsgWrite,
 };
 
 static int pmsgOpen() {
@@ -76,8 +75,7 @@ static int pmsgAvailable(log_id_t logId) {
   if (logId > LOG_ID_SECURITY) {
     return -EINVAL;
   }
-  if ((logId != LOG_ID_SECURITY) && (logId != LOG_ID_EVENTS) &&
-      !__android_log_is_debuggable()) {
+  if ((logId != LOG_ID_SECURITY) && (logId != LOG_ID_EVENTS) && !__android_log_is_debuggable()) {
     return -EINVAL;
   }
   if (atomic_load(&pmsgLoggerWrite.context.fd) < 0) {
@@ -96,8 +94,7 @@ static inline uint32_t get4LE(const uint8_t* src) {
   return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
 }
 
-static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
-                     size_t nr) {
+static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   static const unsigned headerLength = 2;
   struct iovec newVec[nr + headerLength];
   android_log_header_t header;
@@ -110,7 +107,7 @@ static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
       return -EINVAL;
     }
 
-    if (SNET_EVENT_LOG_TAG != get4LE(vec[0].iov_base)) {
+    if (SNET_EVENT_LOG_TAG != get4LE(static_cast<uint8_t*>(vec[0].iov_base))) {
       return -EPERM;
     }
   }
@@ -169,8 +166,7 @@ static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec,
   }
   pmsgHeader.len += payloadSize;
 
-  ret = TEMP_FAILURE_RETRY(
-      writev(atomic_load(&pmsgLoggerWrite.context.fd), newVec, i));
+  ret = TEMP_FAILURE_RETRY(writev(atomic_load(&pmsgLoggerWrite.context.fd), newVec, i));
   if (ret < 0) {
     ret = errno ? -errno : -ENOTCONN;
   }
@@ -203,10 +199,8 @@ static inline const char* strnrchr(const char* buf, size_t len, char c) {
 }
 
 /* Write a buffer as filename references (tag = <basedir>:<basename>) */
-LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(log_id_t logId,
-                                                         char prio,
-                                                         const char* filename,
-                                                         const char* buf,
+LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(log_id_t logId, char prio,
+                                                         const char* filename, const char* buf,
                                                          size_t len) {
   bool weOpened;
   size_t length, packet_len;
@@ -249,13 +243,11 @@ LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(log_id_t logId,
   vec[1].iov_len = length;
 
   weOpened = false;
-  for (ts.tv_nsec = 0, length = len; length;
-       ts.tv_nsec += ANDROID_LOG_PMSG_FILE_SEQUENCE) {
+  for (ts.tv_nsec = 0, length = len; length; ts.tv_nsec += ANDROID_LOG_PMSG_FILE_SEQUENCE) {
     ssize_t ret;
     size_t transfer;
 
-    if ((ts.tv_nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
-        ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
+    if ((ts.tv_nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >= ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
       len -= length;
       break;
     }
