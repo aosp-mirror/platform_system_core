@@ -18,6 +18,7 @@
 #define __ANDROID_DLEXT_NAMESPACES_H__
 
 #include <android/dlext.h>
+#include <stdbool.h>
 
 __BEGIN_DECLS
 
@@ -84,12 +85,9 @@ enum {
  * If a library or any of its dependencies are outside of the permitted_when_isolated_path
  * and search_path, and it is not part of the public namespace dlopen will fail.
  */
-extern struct android_namespace_t* android_create_namespace(const char* name,
-                                                            const char* ld_library_path,
-                                                            const char* default_library_path,
-                                                            uint64_t type,
-                                                            const char* permitted_when_isolated_path,
-                                                            android_namespace_t* parent);
+extern struct android_namespace_t* android_create_namespace(
+    const char* name, const char* ld_library_path, const char* default_library_path, uint64_t type,
+    const char* permitted_when_isolated_path, struct android_namespace_t* parent);
 
 /*
  * Creates a link between namespaces. Every link has list of sonames of
@@ -107,8 +105,8 @@ extern struct android_namespace_t* android_create_namespace(const char* name,
  *      step will not go deeper into linked namespaces for this library but
  *      will do so for DT_NEEDED libraries.
  */
-extern bool android_link_namespaces(android_namespace_t* from,
-                                    android_namespace_t* to,
+extern bool android_link_namespaces(struct android_namespace_t* from,
+                                    struct android_namespace_t* to,
                                     const char* shared_libs_sonames);
 
 /*
@@ -124,7 +122,7 @@ extern bool android_link_namespaces(android_namespace_t* from,
  */
 extern void android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size);
 
-extern android_namespace_t* android_get_exported_namespace(const char* name);
+extern struct android_namespace_t* android_get_exported_namespace(const char* name);
 
 __END_DECLS
 

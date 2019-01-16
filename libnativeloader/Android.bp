@@ -23,4 +23,20 @@ cc_library {
         "llndk.libraries.txt",
         "vndksp.libraries.txt",
     ],
+    target: {
+        android: {
+            version_script: "libnativeloader.map.txt",
+        },
+    },
+    stubs: {
+        symbol_file: "libnativeloader.map.txt",
+        versions: ["1"],
+    },
+}
+
+cc_library_headers {
+    name: "libnativeloader-dummy-headers",
+
+    host_supported: true,
+    export_include_dirs: ["include"],
 }
