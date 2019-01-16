@@ -18,6 +18,7 @@ cc_test {
     shared_libs: [
         "libbase",
         "liblog",
+        "libcutils",
     ],
 
     static_libs: [
