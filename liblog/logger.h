@@ -21,9 +21,9 @@
 
 #include <cutils/list.h>
 #include <log/log.h>
-#include <log/uio.h>
 
 #include "log_portability.h"
+#include "uio.h"
 
 __BEGIN_DECLS
 
