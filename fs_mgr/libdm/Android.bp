@@ -33,6 +33,11 @@ cc_library_static {
         "libbase_headers",
         "liblog_headers",
     ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
 
 cc_test {
