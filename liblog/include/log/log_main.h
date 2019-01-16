@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_MAIN_H
-#define _LIBS_LOG_LOG_MAIN_H
+#pragma once
 
 #include <stdbool.h>
 #include <sys/cdefs.h>
@@ -374,5 +373,3 @@ int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int def
 #endif
 
 __END_DECLS
-
-#endif /* _LIBS_LOG_LOG_MAIN_H */
