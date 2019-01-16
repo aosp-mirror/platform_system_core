@@ -19,23 +19,21 @@
 #include "config_write.h"
 #include "logger.h"
 
-LIBLOG_HIDDEN struct listnode __android_log_transport_write = {
-  &__android_log_transport_write, &__android_log_transport_write
-};
-LIBLOG_HIDDEN struct listnode __android_log_persist_write = {
-  &__android_log_persist_write, &__android_log_persist_write
-};
+LIBLOG_HIDDEN struct listnode __android_log_transport_write = {&__android_log_transport_write,
+                                                               &__android_log_transport_write};
+LIBLOG_HIDDEN struct listnode __android_log_persist_write = {&__android_log_persist_write,
+                                                             &__android_log_persist_write};
 
-static void __android_log_add_transport(
-    struct listnode* list, struct android_log_transport_write* transport) {
-  size_t i;
+static void __android_log_add_transport(struct listnode* list,
+                                        struct android_log_transport_write* transport) {
+  uint32_t i;
 
   /* Try to keep one functioning transport for each log buffer id */
   for (i = LOG_ID_MIN; i < LOG_ID_MAX; i++) {
     struct android_log_transport_write* transp;
 
     if (list_empty(list)) {
-      if (!transport->available || ((*transport->available)(i) >= 0)) {
+      if (!transport->available || ((*transport->available)(static_cast<log_id_t>(i)) >= 0)) {
         list_add_tail(list, &transport->node);
         return;
       }
@@ -44,8 +42,8 @@ static void __android_log_add_transport(
         if (!transp->available) {
           return;
         }
-        if (((*transp->available)(i) < 0) &&
-            (!transport->available || ((*transport->available)(i) >= 0))) {
+        if (((*transp->available)(static_cast<log_id_t>(i)) < 0) &&
+            (!transport->available || ((*transport->available)(static_cast<log_id_t>(i)) >= 0))) {
           list_add_tail(list, &transport->node);
           return;
         }
@@ -55,20 +53,17 @@ static void __android_log_add_transport(
 }
 
 LIBLOG_HIDDEN void __android_log_config_write() {
-  if ((__android_log_transport == LOGGER_DEFAULT) ||
-      (__android_log_transport & LOGGER_LOGD)) {
+  if ((__android_log_transport == LOGGER_DEFAULT) || (__android_log_transport & LOGGER_LOGD)) {
 #if (FAKE_LOG_DEVICE == 0)
     extern struct android_log_transport_write logdLoggerWrite;
     extern struct android_log_transport_write pmsgLoggerWrite;
 
-    __android_log_add_transport(&__android_log_transport_write,
-                                &logdLoggerWrite);
+    __android_log_add_transport(&__android_log_transport_write, &logdLoggerWrite);
     __android_log_add_transport(&__android_log_persist_write, &pmsgLoggerWrite);
 #else
     extern struct android_log_transport_write fakeLoggerWrite;
 
-    __android_log_add_transport(&__android_log_transport_write,
-                                &fakeLoggerWrite);
+    __android_log_add_transport(&__android_log_transport_write, &fakeLoggerWrite);
 #endif
   }
 
@@ -81,8 +76,7 @@ LIBLOG_HIDDEN void __android_log_config_write() {
      * Remember we can be called here if we are already initialized.
      */
     if (list_empty(&__android_log_transport_write)) {
-      __android_log_add_transport(&__android_log_transport_write,
-                                  &stderrLoggerWrite);
+      __android_log_add_transport(&__android_log_transport_write, &stderrLoggerWrite);
     } else {
       struct android_log_transport_write* transp;
       write_transport_for_each(transp, &__android_log_transport_write) {
@@ -90,8 +84,7 @@ LIBLOG_HIDDEN void __android_log_config_write() {
           return;
         }
       }
-      __android_log_add_transport(&__android_log_persist_write,
-                                  &stderrLoggerWrite);
+      __android_log_add_transport(&__android_log_persist_write, &stderrLoggerWrite);
     }
   }
 }
