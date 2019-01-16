@@ -150,37 +150,6 @@ bool __android_logger_valid_buffer_size(unsigned long value);
 /* Retrieve the composed event buffer */
 int android_log_write_list_buffer(android_log_context ctx, const char** msg);
 
-#ifdef __cplusplus
-#ifdef __class_android_log_event_list_defined
-#ifndef __class_android_log_event_list_private_defined
-#define __class_android_log_event_list_private_defined
-/* android_log_context C++ helpers */
-extern "C++" {
-class __android_log_event_list : public android_log_event_list {
-  __android_log_event_list(const android_log_event_list&) = delete;
-  void operator=(const __android_log_event_list&) = delete;
-
- public:
-  explicit __android_log_event_list(int tag) : android_log_event_list(tag) {
-  }
-  explicit __android_log_event_list(log_msg& log_msg)
-      : android_log_event_list(log_msg) {
-  }
-
-  operator std::string() {
-    if (ret) return std::string("");
-    const char* cp = nullptr;
-    ssize_t len = android_log_write_list_buffer(ctx, &cp);
-    if (len < 0) ret = len;
-    if (!cp || (len <= 0)) return std::string("");
-    return std::string(cp, len);
-  }
-};
-}
-#endif
-#endif
-#endif
-
 #if defined(__cplusplus)
 }
 #endif

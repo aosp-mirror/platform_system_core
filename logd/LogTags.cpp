@@ -30,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/macros.h>
+#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <log/log_event_list.h>
 #include <log/log_properties.h>
@@ -37,6 +38,8 @@
 
 #include "LogTags.h"
 #include "LogUtils.h"
+
+using android::base::make_scope_guard;
 
 static LogTags* logtags;
 
@@ -316,27 +319,29 @@ void LogTags::ReadPersistEventLogTags() {
         std::string Format;
         android_log_list_element elem;
         {
-            android_log_event_list ctx(log_msg);
-            elem = ctx.read();
+            auto ctx = create_android_log_parser(log_msg.msg() + sizeof(uint32_t),
+                                                 log_msg.entry.len - sizeof(uint32_t));
+            auto guard = make_scope_guard([&ctx]() { android_log_destroy(&ctx); });
+            elem = android_log_read_next(ctx);
             if (elem.type != EVENT_TYPE_LIST) {
                 continue;
             }
-            elem = ctx.read();
+            elem = android_log_read_next(ctx);
             if (elem.type != EVENT_TYPE_INT) {
                 continue;
             }
             Tag = elem.data.int32;
-            elem = ctx.read();
+            elem = android_log_read_next(ctx);
             if (elem.type != EVENT_TYPE_STRING) {
                 continue;
             }
             Name = std::string(elem.data.string, elem.len);
-            elem = ctx.read();
+            elem = android_log_read_next(ctx);
             if (elem.type != EVENT_TYPE_STRING) {
                 continue;
             }
             Format = std::string(elem.data.string, elem.len);
-            elem = ctx.read();
+            elem = android_log_read_next(ctx);
         }
         if ((elem.type != EVENT_TYPE_LIST_STOP) || !elem.complete) continue;
 
@@ -524,10 +529,22 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
     tag2format_const_iterator iform = tag2format.find(tag);
     std::string Format = (iform != tag2format.end()) ? iform->second : "";
 
-    __android_log_event_list ctx(TAG_DEF_LOG_TAG);
-    ctx << tag << Name << Format;
-    std::string buffer(ctx);
-    if (buffer.length() <= 0) return;  // unlikely
+    auto ctx = create_android_logger(TAG_DEF_LOG_TAG);
+    auto guard = make_scope_guard([&ctx]() { android_log_destroy(&ctx); });
+    if (android_log_write_int32(ctx, static_cast<int32_t>(tag) < 0) ||
+        android_log_write_string8_len(ctx, Name.c_str(), Name.size()) < 0 ||
+        android_log_write_string8_len(ctx, Format.c_str(), Format.size()) < 0) {
+        return;
+    }
+
+    const char* cp = nullptr;
+    ssize_t len = android_log_write_list_buffer(ctx, &cp);
+
+    if (len <= 0 || cp == nullptr) {
+        return;
+    }
+
+    std::string buffer(cp, len);
 
     /*
      *  struct {
