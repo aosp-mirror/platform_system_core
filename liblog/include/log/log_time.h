@@ -34,6 +34,8 @@
 
 #ifdef __cplusplus
 
+extern "C" {
+
 /*
  * NB: we did NOT define a copy constructor. This will result in structure
  * no longer being compatible with pass-by-value which is desired
@@ -170,6 +172,7 @@ struct log_time {
   char* strptime(const char* s, const char* format = default_format);
 #endif
 } __attribute__((__packed__));
+}
 
 #else /* __cplusplus */
 

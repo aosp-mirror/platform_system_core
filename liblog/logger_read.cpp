@@ -14,6 +14,8 @@
 ** limitations under the License.
 */
 
+#include "log/log_read.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -34,8 +36,7 @@
 /* android_logger_alloc unimplemented, no use case */
 /* android_logger_free not exported */
 static void android_logger_free(struct logger* logger) {
-  struct android_log_logger* logger_internal =
-      (struct android_log_logger*)logger;
+  struct android_log_logger* logger_internal = (struct android_log_logger*)logger;
 
   if (!logger_internal) {
     return;
@@ -71,15 +72,13 @@ static int init_transport_context(struct android_log_logger_list* logger_list) {
 
   __android_log_lock();
   /* mini __write_to_log_initialize() to populate transports */
-  if (list_empty(&__android_log_transport_read) &&
-      list_empty(&__android_log_persist_read)) {
+  if (list_empty(&__android_log_transport_read) && list_empty(&__android_log_persist_read)) {
     __android_log_config_read();
   }
   __android_log_unlock();
 
-  node = (logger_list->mode & ANDROID_LOG_PSTORE)
-             ? &__android_log_persist_read
-             : &__android_log_transport_read;
+  node = (logger_list->mode & ANDROID_LOG_PSTORE) ? &__android_log_persist_read
+                                                  : &__android_log_transport_read;
 
   read_transport_for_each(transport, node) {
     struct android_log_transport_context* transp;
@@ -92,15 +91,14 @@ static int init_transport_context(struct android_log_logger_list* logger_list) {
       if ((logId == LOG_ID_SECURITY) && (__android_log_uid() != AID_SYSTEM)) {
         continue;
       }
-      if (transport->read &&
-          (!transport->available || (transport->available(logId) >= 0))) {
+      if (transport->read && (!transport->available || (transport->available(logId) >= 0))) {
         logMask |= 1 << logId;
       }
     }
     if (!logMask) {
       continue;
     }
-    transp = calloc(1, sizeof(*transp));
+    transp = static_cast<android_log_transport_context*>(calloc(1, sizeof(*transp)));
     if (!transp) {
       return -ENOMEM;
     }
@@ -116,31 +114,29 @@ static int init_transport_context(struct android_log_logger_list* logger_list) {
   return 0;
 }
 
-#define LOGGER_FUNCTION(logger, def, func, args...)                   \
-  ssize_t ret = -EINVAL;                                              \
-  struct android_log_transport_context* transp;                       \
-  struct android_log_logger* logger_internal =                        \
-      (struct android_log_logger*)(logger);                           \
-                                                                      \
-  if (!logger_internal) {                                             \
-    return ret;                                                       \
-  }                                                                   \
-  ret = init_transport_context(logger_internal->parent);              \
-  if (ret < 0) {                                                      \
-    return ret;                                                       \
-  }                                                                   \
-                                                                      \
-  ret = (def);                                                        \
-  transport_context_for_each(transp, logger_internal->parent) {       \
-    if ((transp->logMask & (1 << logger_internal->logId)) &&          \
-        transp->transport && transp->transport->func) {               \
-      ssize_t retval =                                                \
-          (transp->transport->func)(logger_internal, transp, ##args); \
-      if ((ret >= 0) || (ret == (def))) {                             \
-        ret = retval;                                                 \
-      }                                                               \
-    }                                                                 \
-  }                                                                   \
+#define LOGGER_FUNCTION(logger, def, func, args...)                                  \
+  ssize_t ret = -EINVAL;                                                             \
+  struct android_log_transport_context* transp;                                      \
+  struct android_log_logger* logger_internal = (struct android_log_logger*)(logger); \
+                                                                                     \
+  if (!logger_internal) {                                                            \
+    return ret;                                                                      \
+  }                                                                                  \
+  ret = init_transport_context(logger_internal->parent);                             \
+  if (ret < 0) {                                                                     \
+    return ret;                                                                      \
+  }                                                                                  \
+                                                                                     \
+  ret = (def);                                                                       \
+  transport_context_for_each(transp, logger_internal->parent) {                      \
+    if ((transp->logMask & (1 << logger_internal->logId)) && transp->transport &&    \
+        transp->transport->func) {                                                   \
+      ssize_t retval = (transp->transport->func)(logger_internal, transp, ##args);   \
+      if ((ret >= 0) || (ret == (def))) {                                            \
+        ret = retval;                                                                \
+      }                                                                              \
+    }                                                                                \
+  }                                                                                  \
   return ret
 
 LIBLOG_ABI_PUBLIC int android_logger_clear(struct logger* logger) {
@@ -152,8 +148,7 @@ LIBLOG_ABI_PUBLIC long android_logger_get_log_size(struct logger* logger) {
   LOGGER_FUNCTION(logger, -ENODEV, getSize);
 }
 
-LIBLOG_ABI_PUBLIC int android_logger_set_log_size(struct logger* logger,
-                                                  unsigned long size) {
+LIBLOG_ABI_PUBLIC int android_logger_set_log_size(struct logger* logger, unsigned long size) {
   LOGGER_FUNCTION(logger, -ENODEV, setSize, size);
 }
 
@@ -161,8 +156,7 @@ LIBLOG_ABI_PUBLIC int android_logger_set_log_size(struct logger* logger,
  * returns the readable size of the log's ring buffer (that is, amount of the
  * log consumed)
  */
-LIBLOG_ABI_PUBLIC long android_logger_get_log_readable_size(
-    struct logger* logger) {
+LIBLOG_ABI_PUBLIC long android_logger_get_log_readable_size(struct logger* logger) {
   LOGGER_FUNCTION(logger, -ENODEV, getReadableSize);
 }
 
@@ -173,51 +167,50 @@ LIBLOG_ABI_PUBLIC int android_logger_get_log_version(struct logger* logger) {
   LOGGER_FUNCTION(logger, 4, version);
 }
 
-#define LOGGER_LIST_FUNCTION(logger_list, def, func, args...)              \
-  struct android_log_transport_context* transp;                            \
-  struct android_log_logger_list* logger_list_internal =                   \
-      (struct android_log_logger_list*)(logger_list);                      \
-                                                                           \
-  ssize_t ret = init_transport_context(logger_list_internal);              \
-  if (ret < 0) {                                                           \
-    return ret;                                                            \
-  }                                                                        \
-                                                                           \
-  ret = (def);                                                             \
-  transport_context_for_each(transp, logger_list_internal) {               \
-    if (transp->transport && (transp->transport->func)) {                  \
-      ssize_t retval =                                                     \
-          (transp->transport->func)(logger_list_internal, transp, ##args); \
-      if ((ret >= 0) || (ret == (def))) {                                  \
-        ret = retval;                                                      \
-      }                                                                    \
-    }                                                                      \
-  }                                                                        \
+#define LOGGER_LIST_FUNCTION(logger_list, def, func, args...)                           \
+  struct android_log_transport_context* transp;                                         \
+  struct android_log_logger_list* logger_list_internal =                                \
+      (struct android_log_logger_list*)(logger_list);                                   \
+                                                                                        \
+  ssize_t ret = init_transport_context(logger_list_internal);                           \
+  if (ret < 0) {                                                                        \
+    return ret;                                                                         \
+  }                                                                                     \
+                                                                                        \
+  ret = (def);                                                                          \
+  transport_context_for_each(transp, logger_list_internal) {                            \
+    if (transp->transport && (transp->transport->func)) {                               \
+      ssize_t retval = (transp->transport->func)(logger_list_internal, transp, ##args); \
+      if ((ret >= 0) || (ret == (def))) {                                               \
+        ret = retval;                                                                   \
+      }                                                                                 \
+    }                                                                                   \
+  }                                                                                     \
   return ret
 
 /*
  * returns statistics
  */
-LIBLOG_ABI_PUBLIC ssize_t android_logger_get_statistics(
-    struct logger_list* logger_list, char* buf, size_t len) {
+LIBLOG_ABI_PUBLIC ssize_t android_logger_get_statistics(struct logger_list* logger_list, char* buf,
+                                                        size_t len) {
   LOGGER_LIST_FUNCTION(logger_list, -ENODEV, getStats, buf, len);
 }
 
-LIBLOG_ABI_PUBLIC ssize_t android_logger_get_prune_list(
-    struct logger_list* logger_list, char* buf, size_t len) {
+LIBLOG_ABI_PUBLIC ssize_t android_logger_get_prune_list(struct logger_list* logger_list, char* buf,
+                                                        size_t len) {
   LOGGER_LIST_FUNCTION(logger_list, -ENODEV, getPrune, buf, len);
 }
 
-LIBLOG_ABI_PUBLIC int android_logger_set_prune_list(
-    struct logger_list* logger_list, char* buf, size_t len) {
+LIBLOG_ABI_PUBLIC int android_logger_set_prune_list(struct logger_list* logger_list, char* buf,
+                                                    size_t len) {
   LOGGER_LIST_FUNCTION(logger_list, -ENODEV, setPrune, buf, len);
 }
 
-LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc(
-    int mode, unsigned int tail, pid_t pid) {
+LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc(int mode, unsigned int tail,
+                                                                pid_t pid) {
   struct android_log_logger_list* logger_list;
 
-  logger_list = calloc(1, sizeof(*logger_list));
+  logger_list = static_cast<android_log_logger_list*>(calloc(1, sizeof(*logger_list)));
   if (!logger_list) {
     return NULL;
   }
@@ -231,11 +224,11 @@ LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc(
   return (struct logger_list*)logger_list;
 }
 
-LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc_time(
-    int mode, log_time start, pid_t pid) {
+LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc_time(int mode, log_time start,
+                                                                     pid_t pid) {
   struct android_log_logger_list* logger_list;
 
-  logger_list = calloc(1, sizeof(*logger_list));
+  logger_list = static_cast<android_log_logger_list*>(calloc(1, sizeof(*logger_list)));
   if (!logger_list) {
     return NULL;
   }
@@ -253,8 +246,8 @@ LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc_time(
 /* android_logger_list_unregister unimplemented, no use case */
 
 /* Open the named log and add it to the logger list */
-LIBLOG_ABI_PUBLIC struct logger* android_logger_open(
-    struct logger_list* logger_list, log_id_t logId) {
+LIBLOG_ABI_PUBLIC struct logger* android_logger_open(struct logger_list* logger_list,
+                                                     log_id_t logId) {
   struct android_log_logger_list* logger_list_internal =
       (struct android_log_logger_list*)logger_list;
   struct android_log_logger* logger;
@@ -269,7 +262,7 @@ LIBLOG_ABI_PUBLIC struct logger* android_logger_open(
     }
   }
 
-  logger = calloc(1, sizeof(*logger));
+  logger = static_cast<android_log_logger*>(calloc(1, sizeof(*logger)));
   if (!logger) {
     goto err;
   }
@@ -296,8 +289,8 @@ ok:
 }
 
 /* Open the single named log and make it part of a new logger list */
-LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_open(
-    log_id_t logId, int mode, unsigned int tail, pid_t pid) {
+LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_open(log_id_t logId, int mode,
+                                                               unsigned int tail, pid_t pid) {
   struct logger_list* logger_list = android_logger_list_alloc(mode, tail, pid);
 
   if (!logger_list) {
@@ -364,8 +357,8 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
   }
 
   /* at least one transport */
-  transp = node_to_item(logger_list_internal->transport.next,
-                        struct android_log_transport_context, node);
+  transp = node_to_item(logger_list_internal->transport.next, struct android_log_transport_context,
+                        node);
 
   /* more than one transport? */
   if (transp->node.next != &logger_list_internal->transport) {
@@ -386,11 +379,9 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
             retval = transp->ret = 0;
           } else if ((logger_list_internal->mode & ANDROID_LOG_NONBLOCK) ||
                      !transp->transport->poll) {
-            retval = android_transport_read(logger_list_internal, transp,
-                                            &transp->logMsg);
+            retval = android_transport_read(logger_list_internal, transp, &transp->logMsg);
           } else {
-            int pollval =
-                (*transp->transport->poll)(logger_list_internal, transp);
+            int pollval = (*transp->transport->poll)(logger_list_internal, transp);
             if (pollval <= 0) {
               sched_yield();
               pollval = (*transp->transport->poll)(logger_list_internal, transp);
@@ -402,8 +393,7 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
               }
               retval = transp->ret = pollval;
             } else if (pollval > 0) {
-              retval = android_transport_read(logger_list_internal, transp,
-                                              &transp->logMsg);
+              retval = android_transport_read(logger_list_internal, transp, &transp->logMsg);
             }
           }
         }
@@ -416,11 +406,9 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
               (oldest->logMsg.entry.nsec > transp->logMsg.entry.nsec)))) {
           oldest = transp;
         }
-        transp = node_to_item(transp->node.next,
-                              struct android_log_transport_context, node);
+        transp = node_to_item(transp->node.next, struct android_log_transport_context, node);
       } while (transp != node_to_item(&logger_list_internal->transport,
-                                      struct android_log_transport_context,
-                                      node));
+                                      struct android_log_transport_context, node));
       if (!oldest && (logger_list_internal->mode & ANDROID_LOG_NONBLOCK)) {
         return (ret < 0) ? ret : -EAGAIN;
       }
@@ -434,10 +422,10 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
     ret = oldest->ret;
     if (ret < oldest->logMsg.entry.hdr_size) {
       // zero truncated header fields.
-      memset(log_msg, 0,
-             (oldest->logMsg.entry.hdr_size > sizeof(oldest->logMsg)
-                  ? sizeof(oldest->logMsg)
-                  : oldest->logMsg.entry.hdr_size));
+      memset(
+          log_msg, 0,
+          (oldest->logMsg.entry.hdr_size > sizeof(oldest->logMsg) ? sizeof(oldest->logMsg)
+                                                                  : oldest->logMsg.entry.hdr_size));
     }
     memcpy(log_msg, &oldest->logMsg, ret);
     oldest->logMsg.entry.len = 0; /* Mark it as copied */
@@ -471,8 +459,7 @@ LIBLOG_ABI_PUBLIC void android_logger_list_free(struct logger_list* logger_list)
 
   while (!list_empty(&logger_list_internal->logger)) {
     struct listnode* node = list_head(&logger_list_internal->logger);
-    struct android_log_logger* logger =
-        node_to_item(node, struct android_log_logger, node);
+    struct android_log_logger* logger = node_to_item(node, struct android_log_logger, node);
     android_logger_free((struct logger*)logger);
   }
 

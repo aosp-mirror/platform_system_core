@@ -19,23 +19,21 @@
 #include "config_read.h"
 #include "logger.h"
 
-LIBLOG_HIDDEN struct listnode __android_log_transport_read = {
-  &__android_log_transport_read, &__android_log_transport_read
-};
-LIBLOG_HIDDEN struct listnode __android_log_persist_read = {
-  &__android_log_persist_read, &__android_log_persist_read
-};
+LIBLOG_HIDDEN struct listnode __android_log_transport_read = {&__android_log_transport_read,
+                                                              &__android_log_transport_read};
+LIBLOG_HIDDEN struct listnode __android_log_persist_read = {&__android_log_persist_read,
+                                                            &__android_log_persist_read};
 
-static void __android_log_add_transport(
-    struct listnode* list, struct android_log_transport_read* transport) {
-  size_t i;
+static void __android_log_add_transport(struct listnode* list,
+                                        struct android_log_transport_read* transport) {
+  uint32_t i;
 
   /* Try to keep one functioning transport for each log buffer id */
   for (i = LOG_ID_MIN; i < LOG_ID_MAX; i++) {
     struct android_log_transport_read* transp;
 
     if (list_empty(list)) {
-      if (!transport->available || ((*transport->available)(i) >= 0)) {
+      if (!transport->available || ((*transport->available)(static_cast<log_id_t>(i)) >= 0)) {
         list_add_tail(list, &transport->node);
         return;
       }
@@ -44,8 +42,8 @@ static void __android_log_add_transport(
         if (!transp->available) {
           return;
         }
-        if (((*transp->available)(i) < 0) &&
-            (!transport->available || ((*transport->available)(i) >= 0))) {
+        if (((*transp->available)(static_cast<log_id_t>(i)) < 0) &&
+            (!transport->available || ((*transport->available)(static_cast<log_id_t>(i)) >= 0))) {
           list_add_tail(list, &transport->node);
           return;
         }
@@ -56,8 +54,7 @@ static void __android_log_add_transport(
 
 LIBLOG_HIDDEN void __android_log_config_read() {
 #if (FAKE_LOG_DEVICE == 0)
-  if ((__android_log_transport == LOGGER_DEFAULT) ||
-      (__android_log_transport & LOGGER_LOGD)) {
+  if ((__android_log_transport == LOGGER_DEFAULT) || (__android_log_transport & LOGGER_LOGD)) {
     extern struct android_log_transport_read logdLoggerRead;
     extern struct android_log_transport_read pmsgLoggerRead;
 
