@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_CUTILS_UIO_H
-#define _LIBS_CUTILS_UIO_H
+#pragma once
 
 #if !defined(_WIN32)
 
@@ -46,5 +45,3 @@ extern int writev(int fd, const struct iovec* vecs, int count);
 #endif
 
 #endif
-
-#endif /* _LIBS_UTILS_UIO_H */

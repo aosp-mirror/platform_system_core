@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBLOG_LOGGER_H__
-#define _LIBLOG_LOGGER_H__
+#pragma once
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -164,5 +163,3 @@ LIBLOG_HIDDEN void __android_log_unlock();
 extern LIBLOG_HIDDEN int __android_log_transport;
 
 __END_DECLS
-
-#endif /* _LIBLOG_LOGGER_H__ */
