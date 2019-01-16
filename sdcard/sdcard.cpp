@@ -160,6 +160,7 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
     std::string dest_path_default = "/mnt/runtime/default/" + label;
     std::string dest_path_read = "/mnt/runtime/read/" + label;
     std::string dest_path_write = "/mnt/runtime/write/" + label;
+    std::string dest_path_full = "/mnt/runtime/full/" + label;
 
     umask(0);
     if (multi_user) {
@@ -172,7 +173,10 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
                                       default_normal, use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_write, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, full_write ? 0007 : 0027,
-                                      derive_gid, default_normal, use_esdfs)) {
+                                      derive_gid, default_normal, use_esdfs) ||
+            !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_full, uid, gid,
+                                      multi_user, userid, AID_EVERYBODY, 0007, derive_gid,
+                                      default_normal, use_esdfs)) {
             LOG(FATAL) << "failed to sdcardfs_setup";
         }
     } else {
@@ -186,7 +190,10 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
                                       derive_gid, default_normal, use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_write, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, full_write ? 0007 : 0022,
-                                      derive_gid, default_normal, use_esdfs)) {
+                                      derive_gid, default_normal, use_esdfs) ||
+            !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_full, uid, gid,
+                                      multi_user, userid, AID_EVERYBODY, 0007, derive_gid,
+                                      default_normal, use_esdfs)) {
             LOG(FATAL) << "failed to sdcardfs_setup";
         }
     }
