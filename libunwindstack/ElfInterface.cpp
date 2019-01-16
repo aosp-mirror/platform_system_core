@@ -177,14 +177,14 @@ bool ElfInterface::ReadAllHeaders(uint64_t* load_bias) {
 template <typename EhdrType, typename PhdrType>
 uint64_t ElfInterface::GetLoadBias(Memory* memory) {
   EhdrType ehdr;
-  if (!memory->Read(0, &ehdr, sizeof(ehdr))) {
+  if (!memory->ReadFully(0, &ehdr, sizeof(ehdr))) {
     return false;
   }
 
   uint64_t offset = ehdr.e_phoff;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
     PhdrType phdr;
-    if (!memory->Read(offset, &phdr, sizeof(phdr))) {
+    if (!memory->ReadFully(offset, &phdr, sizeof(phdr))) {
       return 0;
     }
     if (phdr.p_type == PT_LOAD && phdr.p_offset == 0) {
@@ -308,7 +308,7 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
   // Skip the first header, it's always going to be NULL.
   offset += ehdr.e_shentsize;
   for (size_t i = 1; i < ehdr.e_shnum; i++, offset += ehdr.e_shentsize) {
-    if (!memory_->Read(offset, &shdr, sizeof(shdr))) {
+    if (!memory_->ReadFully(offset, &shdr, sizeof(shdr))) {
       return;
     }
 
@@ -320,7 +320,7 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
         continue;
       }
       uint64_t str_offset = ehdr.e_shoff + shdr.sh_link * ehdr.e_shentsize;
-      if (!memory_->Read(str_offset, &str_shdr, sizeof(str_shdr))) {
+      if (!memory_->ReadFully(str_offset, &str_shdr, sizeof(str_shdr))) {
         continue;
       }
       if (str_shdr.sh_type != SHT_STRTAB) {
