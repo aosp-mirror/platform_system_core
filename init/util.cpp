@@ -441,5 +441,9 @@ void InitKernelLogging(char** argv, std::function<void(const char*)> abort_funct
     android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
 }
 
+bool IsRecoveryMode() {
+    return access("/system/bin/recovery", F_OK) == 0;
+}
+
 }  // namespace init
 }  // namespace android
