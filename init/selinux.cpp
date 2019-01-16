@@ -304,11 +304,16 @@ bool LoadSplitPolicy() {
     if (!GetVendorMappingVersion(&vend_plat_vers)) {
         return false;
     }
-    std::string mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
+    std::string plat_mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
 
     std::string product_policy_cil_file("/product/etc/selinux/product_sepolicy.cil");
     if (access(product_policy_cil_file.c_str(), F_OK) == -1) {
         product_policy_cil_file.clear();
+    }
+
+    std::string product_mapping_file("/product/etc/selinux/mapping/" + vend_plat_vers + ".cil");
+    if (access(product_mapping_file.c_str(), F_OK) == -1) {
+        product_mapping_file.clear();
     }
 
     // vendor_sepolicy.cil and plat_pub_versioned.cil are the new design to replace
@@ -340,7 +345,7 @@ bool LoadSplitPolicy() {
         "-m", "-M", "true", "-G", "-N",
         // Target the highest policy language version supported by the kernel
         "-c", version_as_string.c_str(),
-        mapping_file.c_str(),
+        plat_mapping_file.c_str(),
         "-o", compiled_sepolicy,
         // We don't care about file_contexts output by the compiler
         "-f", "/sys/fs/selinux/null",  // /dev/null is not yet available
@@ -349,6 +354,9 @@ bool LoadSplitPolicy() {
 
     if (!product_policy_cil_file.empty()) {
         compile_args.push_back(product_policy_cil_file.c_str());
+    }
+    if (!product_mapping_file.empty()) {
+        compile_args.push_back(product_mapping_file.c_str());
     }
     if (!plat_pub_versioned_cil_file.empty()) {
         compile_args.push_back(plat_pub_versioned_cil_file.c_str());
