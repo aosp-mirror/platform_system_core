@@ -186,6 +186,7 @@ AvbSlotVerifyResult FsManagerAvbOps::AvbSlotVerify(const std::string& ab_suffix,
             avb_slot_verify(&avb_ops_, requested_partitions, ab_suffix.c_str(), flags,
                             AVB_HASHTREE_ERROR_MODE_RESTART_AND_INVALIDATE, &avb_slot_data);
 
+    if (!avb_slot_data) return verify_result;
     // Copies avb_slot_data->vbmeta_images[].
     for (size_t i = 0; i < avb_slot_data->num_vbmeta_images; i++) {
         out_vbmeta_images->emplace_back(VBMetaData(avb_slot_data->vbmeta_images[i].vbmeta_data,
