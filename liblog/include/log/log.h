@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_H
-#define _LIBS_LOG_LOG_H
+#pragma once
 
 /* Too many in the ecosystem assume these are included */
 #if !defined(_WIN32)
@@ -200,5 +199,3 @@ int __android_log_ratelimit(time_t seconds, time_t* last);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_LOG_H */

@@ -16,8 +16,7 @@
 
 /* This file is used to define the internal protocol for the Android Logger */
 
-#ifndef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
-#define _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
+#pragma once
 
 /* Android private interfaces */
 
@@ -185,5 +184,3 @@ class __android_log_event_list : public android_log_event_list {
 #if defined(__cplusplus)
 }
 #endif
-
-#endif /* _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_ */

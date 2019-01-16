@@ -7,8 +7,7 @@
 ** General Public License.
 */
 
-#ifndef _LIBS_LOG_TRANSPORT_H
-#define _LIBS_LOG_TRANSPORT_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,5 +32,3 @@ int android_get_log_transport();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_TRANSPORT_H */

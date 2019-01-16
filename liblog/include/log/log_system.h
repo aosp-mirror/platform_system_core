@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_SYSTEM_H
-#define _LIBS_LOG_LOG_SYSTEM_H
+#pragma once
 
 #include <android/log.h>
 #include <log/log_id.h>
@@ -138,5 +137,3 @@
                                         LOG_TAG, __VA_ARGS__))            \
        : (void)0)
 #endif
-
-#endif /* _LIBS_LOG_LOG_SYSTEM_H */

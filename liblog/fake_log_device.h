@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBLOG_FAKE_LOG_DEVICE_H
-#define _LIBLOG_FAKE_LOG_DEVICE_H
+#pragma once
 
 #include <sys/types.h>
 
@@ -36,5 +35,3 @@ LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio, const char*, size_
 LIBLOG_ABI_PRIVATE int __android_log_is_debuggable();
 
 __END_DECLS
-
-#endif  // _LIBLOG_FAKE_LOG_DEVICE_H
