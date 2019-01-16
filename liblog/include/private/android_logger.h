@@ -25,10 +25,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#if (defined(__cplusplus) && defined(_USING_LIBCXX))
-extern "C++" {
+#ifdef __cplusplus
 #include <string>
-}
 #endif
 
 #include <log/log.h>
@@ -170,7 +168,6 @@ class __android_log_event_list : public android_log_event_list {
       : android_log_event_list(log_msg) {
   }
 
-#if defined(_USING_LIBCXX)
   operator std::string() {
     if (ret) return std::string("");
     const char* cp = nullptr;
@@ -179,7 +176,6 @@ class __android_log_event_list : public android_log_event_list {
     if (!cp || (len <= 0)) return std::string("");
     return std::string(cp, len);
   }
-#endif
 };
 }
 #endif
