@@ -346,12 +346,6 @@ on late-init
     trigger boot
 
 on post-fs
-    # Load properties from
-    #     /system/build.prop,
-    #     /odm/build.prop,
-    #     /vendor/build.prop and
-    #     /factory/factory.prop
-    load_system_props
     start vold
     exec - system system -- /system/bin/vdc checkpoint markBootAttempt
 

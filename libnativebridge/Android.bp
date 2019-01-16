@@ -17,6 +17,15 @@ cc_library {
         "liblog",
     ],
 
+    target: {
+        android: {
+            version_script: "libnativebridge.map.txt",
+        },
+        linux: {
+            version_script: "libnativebridge.map.txt",
+        },
+    },
+
     stubs: {
         symbol_file: "libnativebridge.map.txt",
         versions: ["1"],

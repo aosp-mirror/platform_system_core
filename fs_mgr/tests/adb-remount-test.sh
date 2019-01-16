@@ -378,7 +378,7 @@ if echo "${D}" | grep /dev/root >/dev/null; then
   D=`echo / /
      echo "${D}" | grep -v /dev/root`
 fi
-D=`echo "${D}" | cut -s -d' ' -f1`
+D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
 D=`adb_sh df -k ${D} </dev/null`
 echo "${D}"
 if [ X"${D}" = X"${D##* 100[%] }" ]; then
@@ -506,7 +506,9 @@ if ${overlayfs_needed}; then
     echo "${D}" &&
     echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
     die  "overlay takeover after remount"
-  !(adb_sh grep "^overlay " /proc/mounts </dev/null | grep -v "^overlay /vendor/..* overlay ro," | grep " overlay ro,") &&
+  !(adb_sh grep "^overlay " /proc/mounts </dev/null |
+    grep -v "^overlay /\(vendor\|system\)/..* overlay ro," |
+    grep " overlay ro,") &&
     !(adb_sh grep " rw," /proc/mounts </dev/null |
       skip_administrative_mounts data) ||
     die "remount overlayfs missed a spot (ro)"
