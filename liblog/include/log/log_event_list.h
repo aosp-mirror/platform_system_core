@@ -32,18 +32,6 @@ extern "C++" {
 extern "C" {
 #endif
 
-#ifndef __ANDROID_USE_LIBLOG_EVENT_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 1
-#elif __ANDROID_API__ > 23 /* > Marshmallow */
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_EVENT_INTERFACE
-
 /* For manipulating lists of events. */
 
 #define ANDROID_MAX_LIST_NEST_DEPTH 8
@@ -313,8 +301,6 @@ class android_log_event_list {
 }
 #endif
 #endif
-
-#endif /* __ANDROID_USE_LIBLOG_EVENT_INTERFACE */
 
 #ifdef __cplusplus
 }

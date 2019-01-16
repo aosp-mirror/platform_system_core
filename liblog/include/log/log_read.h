@@ -197,22 +197,6 @@ struct log_msg {
 };
 #endif
 
-#ifndef __ANDROID_USE_LIBLOG_READER_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 3
-#elif __ANDROID_API__ > 23 /* > Marshmallow */
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 3
-#elif __ANDROID_API__ > 22 /* > Lollipop */
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 2
-#elif __ANDROID_API__ > 19 /* > KitKat */
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE
-
 struct logger;
 
 log_id_t android_logger_get_id(struct logger* logger);
@@ -225,14 +209,12 @@ int android_logger_get_log_version(struct logger* logger);
 
 struct logger_list;
 
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE > 1
 ssize_t android_logger_get_statistics(struct logger_list* logger_list,
                                       char* buf, size_t len);
 ssize_t android_logger_get_prune_list(struct logger_list* logger_list,
                                       char* buf, size_t len);
 int android_logger_set_prune_list(struct logger_list* logger_list, char* buf,
                                   size_t len);
-#endif
 
 #define ANDROID_LOG_RDONLY O_RDONLY
 #define ANDROID_LOG_WRONLY O_WRONLY
@@ -243,13 +225,9 @@ int android_logger_set_prune_list(struct logger_list* logger_list, char* buf,
 #else
 #define ANDROID_LOG_NONBLOCK O_NONBLOCK
 #endif
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE > 2
 #define ANDROID_LOG_WRAP 0x40000000 /* Block until buffer about to wrap */
 #define ANDROID_LOG_WRAP_DEFAULT_TIMEOUT 7200 /* 2 hour default */
-#endif
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE > 1
 #define ANDROID_LOG_PSTORE 0x80000000
-#endif
 
 struct logger_list* android_logger_list_alloc(int mode, unsigned int tail,
                                               pid_t pid);
@@ -267,8 +245,6 @@ struct logger* android_logger_open(struct logger_list* logger_list, log_id_t id)
 struct logger_list* android_logger_list_open(log_id_t id, int mode,
                                              unsigned int tail, pid_t pid);
 #define android_logger_list_close android_logger_list_free
-
-#endif /* __ANDROID_USE_LIBLOG_READER_INTERFACE */
 
 #ifdef __cplusplus
 }
