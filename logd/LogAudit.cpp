@@ -300,7 +300,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
         return 0;
     }
 
-    log_time now;
+    log_time now(log_time::EPOCH);
 
     static const char audit_str[] = " audit(";
     char* timeptr = strstr(str, audit_str);
