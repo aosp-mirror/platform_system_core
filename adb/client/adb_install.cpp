@@ -500,17 +500,22 @@ finalize_session:
 int install_multi_package(int argc, const char** argv) {
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
-    int first_apk = -1;
+    bool apex_found = false;
+    int first_package = -1;
     for (int i = argc - 1; i >= 0; i--) {
         const char* file = argv[i];
-        if (android::base::EndsWithIgnoreCase(file, ".apk")) {
-            first_apk = i;
+        if (android::base::EndsWithIgnoreCase(file, ".apk") ||
+            android::base::EndsWithIgnoreCase(file, ".apex")) {
+            first_package = i;
+            if (android::base::EndsWithIgnoreCase(file, ".apex")) {
+                apex_found = true;
+            }
         } else {
             break;
         }
     }
 
-    if (first_apk == -1) error_exit("need APK file on command line");
+    if (first_package == -1) error_exit("need APK or APEX files on command line");
 
     if (use_legacy_install()) {
         fprintf(stderr, "adb: multi-package install is not supported on this device\n");
@@ -520,6 +525,9 @@ int install_multi_package(int argc, const char** argv) {
 
     std::string multi_package_cmd =
             android::base::StringPrintf("%s install-create --multi-package", install_cmd.c_str());
+    if (apex_found) {
+        multi_package_cmd += " --staged";
+    }
 
     // Create multi-package install session
     std::string error;
@@ -557,15 +565,25 @@ int install_multi_package(int argc, const char** argv) {
     std::string individual_cmd =
             android::base::StringPrintf("%s install-create", install_cmd.c_str());
     std::string all_session_ids = "";
-    for (int i = 1; i < first_apk; i++) {
+    for (int i = 1; i < first_package; i++) {
         individual_cmd += " " + escape_arg(argv[i]);
     }
+    if (apex_found) {
+        individual_cmd += " --staged";
+    }
+    std::string individual_apex_cmd = individual_cmd + " --apex";
     std::string cmd = "";
-    for (int i = first_apk; i < argc; i++) {
-        // Create individual install session
+    for (int i = first_package; i < argc; i++) {
+        const char* file = argv[i];
         char buf[BUFSIZ];
         {
-            unique_fd fd(adb_connect(individual_cmd, &error));
+            unique_fd fd;
+            // Create individual install session
+            if (android::base::EndsWithIgnoreCase(file, ".apex")) {
+                fd.reset(adb_connect(individual_apex_cmd, &error));
+            } else {
+                fd.reset(adb_connect(individual_cmd, &error));
+            }
             if (fd < 0) {
                 fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
                 goto finalize_multi_package_session;
@@ -591,7 +609,6 @@ int install_multi_package(int argc, const char** argv) {
         fprintf(stdout, "Created child session ID %d.\n", session_id);
         session_ids.push_back(session_id);
 
-        const char* file = argv[i];
         struct stat sb;
         if (stat(file, &sb) == -1) {
             fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
@@ -633,7 +650,7 @@ int install_multi_package(int argc, const char** argv) {
     {
         unique_fd fd(adb_connect(cmd, &error));
         if (fd < 0) {
-            fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
+            fprintf(stderr, "adb: connect error for install-add-session: %s\n", error.c_str());
             goto finalize_multi_package_session;
         }
         read_status_line(fd.get(), buf, sizeof(buf));
