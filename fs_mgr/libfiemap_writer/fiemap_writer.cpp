@@ -304,7 +304,6 @@ static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type)
     return true;
 }
 
-#if 0
 static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_type) {
     if (fs_type == EXT4_SUPER_MAGIC) {
         // No pinning necessary for ext4. The blocks, once allocated, are expected
@@ -345,7 +344,6 @@ static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_
     }
     return moved_blocks_nr == 0;
 }
-#endif
 
 static void LogExtent(uint32_t num, const struct fiemap_extent& ext) {
     LOG(INFO) << "Extent #" << num;
@@ -477,13 +475,15 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
 
     if (create) {
         if (!AllocateFile(file_fd, abs_path, blocksz, file_size)) {
+            LOG(ERROR) << "Failed to allocate file: " << abs_path << " of size: " << file_size
+                       << " bytes";
             cleanup(abs_path, create);
             return nullptr;
         }
     }
 
     // f2fs may move the file blocks around.
-    if (!PinFile(file_fd, file_path, fs_type)) {
+    if (!PinFile(file_fd, abs_path, fs_type)) {
         cleanup(abs_path, create);
         LOG(ERROR) << "Failed to pin the file in storage";
         return nullptr;
@@ -538,13 +538,11 @@ bool FiemapWriter::Write(off64_t off, uint8_t* buffer, uint64_t size) {
         return false;
     }
 
-#if 0
-    // TODO(b/122138114): check why this fails.
     if (!IsFilePinned(file_fd_, file_path_, fs_type_)) {
         LOG(ERROR) << "Failed write: file " << file_path_ << " is not pinned";
         return false;
     }
-#endif
+
     // find extents that must be written to and then write one at a time.
     uint32_t num_extent = 1;
     uint32_t buffer_offset = 0;
