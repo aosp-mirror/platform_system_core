@@ -25,9 +25,9 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "libcutils",
-        "liblog",
         "libpcrecpp",
     ],
+    static_libs: ["liblog"],
     logtags: ["event.logtags"],
 }
 
