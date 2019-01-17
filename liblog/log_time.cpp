@@ -137,7 +137,7 @@ LIBLOG_ABI_PRIVATE char* log_time::strptime(const char* s, const char* format) {
 LIBLOG_ABI_PRIVATE log_time log_time::operator-=(const timespec& T) {
   // No concept of negative time, clamp to EPOCH
   if (*this <= T) {
-    return *this = EPOCH;
+    return *this = log_time(EPOCH);
   }
 
   if (this->tv_nsec < (unsigned long int)T.tv_nsec) {
@@ -165,7 +165,7 @@ LIBLOG_ABI_PRIVATE log_time log_time::operator+=(const timespec& T) {
 LIBLOG_ABI_PRIVATE log_time log_time::operator-=(const log_time& T) {
   // No concept of negative time, clamp to EPOCH
   if (*this <= T) {
-    return *this = EPOCH;
+    return *this = log_time(EPOCH);
   }
 
   if (this->tv_nsec < T.tv_nsec) {
