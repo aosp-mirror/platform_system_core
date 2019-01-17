@@ -64,6 +64,8 @@ extern const char* const kFeaturePushSync;
 extern const char* const kFeatureApex;
 // adbd has b/110953234 fixed.
 extern const char* const kFeatureFixedPushMkdir;
+// adbd supports android binder bridge (abb).
+extern const char* const kFeatureAbb;
 
 TransportId NextTransportId();
 
