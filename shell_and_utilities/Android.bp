@@ -18,6 +18,7 @@ phony {
         "newfs_msdos",
         "reboot",
         "sh",
+        "simpleperf",
         "tcpdump",
         "toolbox",
         "toybox",
