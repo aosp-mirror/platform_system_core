@@ -63,11 +63,13 @@ cc_binary {
 
     srcs: ["main.cpp"],
 
-    static_libs: ["liblogd"],
+    static_libs: [
+        "liblog",
+        "liblogd",
+    ],
 
     shared_libs: [
         "libsysutils",
-        "liblog",
         "libcutils",
         "libbase",
         "libpackagelistparser",

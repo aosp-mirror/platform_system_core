@@ -38,9 +38,9 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "libcutils",
-        "liblog",
         "libselinux",
     ],
+    static_libs: ["liblog"],
 }
 
 // Build tests for the logger. Run with:
