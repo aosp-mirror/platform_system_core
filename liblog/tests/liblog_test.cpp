@@ -3160,41 +3160,6 @@ TEST(liblog, __android_log_pmsg_file_read) {
 }
 #endif  // USING_LOGGER_DEFAULT
 
-#ifdef USING_LOGGER_DEFAULT  // Do not retest ratelimit
-TEST(liblog, __android_log_ratelimit) {
-  time_t state = 0;
-
-  errno = 42;
-  // Prime
-  __android_log_ratelimit(3, &state);
-  EXPECT_EQ(errno, 42);
-  // Check
-  EXPECT_FALSE(__android_log_ratelimit(3, &state));
-  sleep(1);
-  EXPECT_FALSE(__android_log_ratelimit(3, &state));
-  sleep(4);
-  EXPECT_TRUE(__android_log_ratelimit(3, &state));
-  sleep(5);
-  EXPECT_TRUE(__android_log_ratelimit(3, &state));
-
-  // API checks
-  IF_ALOG_RATELIMIT_LOCAL(3, &state) {
-    EXPECT_FALSE(0 != "IF_ALOG_RATELIMIT_LOCAL(3, &state)");
-  }
-
-  IF_ALOG_RATELIMIT() {
-    ;
-  }
-  else {
-    EXPECT_TRUE(0 == "IF_ALOG_RATELIMIT()");
-  }
-  IF_ALOG_RATELIMIT() {
-    EXPECT_FALSE(0 != "IF_ALOG_RATELIMIT()");
-  }
-  // Do not test default seconds, to allow liblog to tune freely
-}
-#endif  // USING_LOGGER_DEFAULT
-
 #ifdef USING_LOGGER_DEFAULT  // Do not retest event mapping functionality
 TEST(liblog, android_lookupEventTagNum) {
 #ifdef __ANDROID__
