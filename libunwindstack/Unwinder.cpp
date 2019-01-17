@@ -26,10 +26,13 @@
 
 #include <android-base/stringprintf.h>
 
+#include <demangle.h>
+
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
 #include <unwindstack/Unwinder.h>
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
@@ -306,7 +309,7 @@ std::string Unwinder::FormatFrame(const FrameData& frame, bool is32bit) {
   }
 
   if (!frame.function_name.empty()) {
-    data += " (" + frame.function_name;
+    data += " (" + demangle(frame.function_name.c_str());
     if (frame.function_offset != 0) {
       data += android::base::StringPrintf("+%" PRId64, frame.function_offset);
     }
@@ -326,5 +329,30 @@ void Unwinder::SetDexFiles(DexFiles* dex_files, ArchEnum arch) {
   dex_files_ = dex_files;
 }
 #endif
+
+bool UnwinderFromPid::Init(ArchEnum arch) {
+  if (pid_ == getpid()) {
+    maps_ptr_.reset(new LocalMaps());
+  } else {
+    maps_ptr_.reset(new RemoteMaps(pid_));
+  }
+  if (!maps_ptr_->Parse()) {
+    return false;
+  }
+  maps_ = maps_ptr_.get();
+
+  process_memory_ = Memory::CreateProcessMemoryCached(pid_);
+
+  jit_debug_ptr_.reset(new JitDebug(process_memory_));
+  jit_debug_ = jit_debug_ptr_.get();
+  SetJitDebug(jit_debug_, arch);
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+  dex_files_ptr_.reset(new DexFiles(process_memory_));
+  dex_files_ = dex_files_ptr_.get();
+  SetDexFiles(dex_files_, arch);
+#endif
+
+  return true;
+}
 
 }  // namespace unwindstack

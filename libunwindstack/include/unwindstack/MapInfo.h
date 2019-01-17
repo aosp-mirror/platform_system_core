@@ -75,6 +75,8 @@ struct MapInfo {
 
   Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
 
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
+
  private:
   MapInfo(const MapInfo&) = delete;
   void operator=(const MapInfo&) = delete;
