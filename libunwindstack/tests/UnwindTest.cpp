@@ -44,6 +44,13 @@
 
 namespace unwindstack {
 
+enum TestTypeEnum : uint8_t {
+  TEST_TYPE_LOCAL_UNWINDER = 0,
+  TEST_TYPE_LOCAL_UNWINDER_FROM_PID,
+  TEST_TYPE_REMOTE,
+  TEST_TYPE_REMOTE_WITH_INVALID_CALL,
+};
+
 static std::atomic_bool g_ready;
 static volatile bool g_ready_for_remote;
 static volatile bool g_signal_ready_for_remote;
@@ -88,10 +95,10 @@ static void SignalCallerHandler(int, siginfo_t*, void*) {
   SignalOuterFunction();
 }
 
-static std::string ErrorMsg(const std::vector<const char*>& function_names, Unwinder& unwinder) {
+static std::string ErrorMsg(const std::vector<const char*>& function_names, Unwinder* unwinder) {
   std::string unwind;
-  for (size_t i = 0; i < unwinder.NumFrames(); i++) {
-    unwind += unwinder.FormatFrame(i) + '\n';
+  for (size_t i = 0; i < unwinder->NumFrames(); i++) {
+    unwind += unwinder->FormatFrame(i) + '\n';
   }
 
   return std::string(
@@ -100,14 +107,10 @@ static std::string ErrorMsg(const std::vector<const char*>& function_names, Unwi
          function_names.front() + "\n" + "Unwind data:\n" + unwind;
 }
 
-static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
-                         std::vector<const char*> expected_function_names) {
-  auto process_memory(Memory::CreateProcessMemory(pid));
+static void VerifyUnwind(Unwinder* unwinder, std::vector<const char*> expected_function_names) {
+  unwinder->Unwind();
 
-  Unwinder unwinder(512, maps, regs, process_memory);
-  unwinder.Unwind();
-
-  for (auto& frame : unwinder.frames()) {
+  for (auto& frame : unwinder->frames()) {
     if (frame.function_name == expected_function_names.back()) {
       expected_function_names.pop_back();
       if (expected_function_names.empty()) {
@@ -119,35 +122,55 @@ static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
   ASSERT_TRUE(expected_function_names.empty()) << ErrorMsg(expected_function_names, unwinder);
 }
 
+static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
+                         std::vector<const char*> expected_function_names) {
+  auto process_memory(Memory::CreateProcessMemory(pid));
+
+  Unwinder unwinder(512, maps, regs, process_memory);
+  VerifyUnwind(&unwinder, expected_function_names);
+}
+
 // This test assumes that this code is compiled with optimizations turned
 // off. If this doesn't happen, then all of the calls will be optimized
 // away.
-extern "C" void InnerFunction(bool local, bool trigger_invalid_call) {
-  if (local) {
-    LocalMaps maps;
-    ASSERT_TRUE(maps.Parse());
-    std::unique_ptr<Regs> regs(Regs::CreateFromLocal());
-    RegsGetLocal(regs.get());
-
-    VerifyUnwind(getpid(), &maps, regs.get(), kFunctionOrder);
-  } else {
+extern "C" void InnerFunction(TestTypeEnum test_type) {
+  if (test_type == TEST_TYPE_REMOTE || test_type == TEST_TYPE_REMOTE_WITH_INVALID_CALL) {
     g_ready_for_remote = true;
     g_ready = true;
-    if (trigger_invalid_call) {
+    if (test_type == TEST_TYPE_REMOTE_WITH_INVALID_CALL) {
       void (*crash_func)() = nullptr;
       crash_func();
     }
     while (!g_finish.load()) {
     }
+    return;
   }
+
+  std::unique_ptr<Unwinder> unwinder;
+  std::unique_ptr<Regs> regs(Regs::CreateFromLocal());
+  RegsGetLocal(regs.get());
+  std::unique_ptr<Maps> maps;
+
+  if (test_type == TEST_TYPE_LOCAL_UNWINDER) {
+    maps.reset(new LocalMaps());
+    ASSERT_TRUE(maps->Parse());
+    auto process_memory(Memory::CreateProcessMemory(getpid()));
+    unwinder.reset(new Unwinder(512, maps.get(), regs.get(), process_memory));
+  } else {
+    UnwinderFromPid* unwinder_from_pid = new UnwinderFromPid(512, getpid());
+    ASSERT_TRUE(unwinder_from_pid->Init(regs->Arch()));
+    unwinder_from_pid->SetRegs(regs.get());
+    unwinder.reset(unwinder_from_pid);
+  }
+  VerifyUnwind(unwinder.get(), kFunctionOrder);
 }
 
-extern "C" void MiddleFunction(bool local, bool trigger_invalid_call) {
-  InnerFunction(local, trigger_invalid_call);
+extern "C" void MiddleFunction(TestTypeEnum test_type) {
+  InnerFunction(test_type);
 }
 
-extern "C" void OuterFunction(bool local, bool trigger_invalid_call) {
-  MiddleFunction(local, trigger_invalid_call);
+extern "C" void OuterFunction(TestTypeEnum test_type) {
+  MiddleFunction(test_type);
 }
 
 class UnwindTest : public ::testing::Test {
@@ -156,7 +179,11 @@ class UnwindTest : public ::testing::Test {
 };
 
 TEST_F(UnwindTest, local) {
-  OuterFunction(true, false);
+  OuterFunction(TEST_TYPE_LOCAL_UNWINDER);
+}
+
+TEST_F(UnwindTest, local_use_from_pid) {
+  OuterFunction(TEST_TYPE_LOCAL_UNWINDER_FROM_PID);
 }
 
 void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* completed) {
@@ -191,7 +218,7 @@ void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* complete
 TEST_F(UnwindTest, remote) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    OuterFunction(false, false);
+    OuterFunction(TEST_TYPE_REMOTE);
     exit(0);
   }
   ASSERT_NE(-1, pid);
@@ -212,11 +239,39 @@ TEST_F(UnwindTest, remote) {
       << "ptrace detach failed with unexpected error: " << strerror(errno);
 }
 
+TEST_F(UnwindTest, unwind_from_pid_remote) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    OuterFunction(TEST_TYPE_REMOTE);
+    exit(0);
+  }
+  ASSERT_NE(-1, pid);
+  TestScopedPidReaper reap(pid);
+
+  bool completed;
+  WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_ready_for_remote), true, &completed);
+  ASSERT_TRUE(completed) << "Timed out waiting for remote process to be ready.";
+
+  std::unique_ptr<Regs> regs(Regs::RemoteGet(pid));
+  ASSERT_TRUE(regs.get() != nullptr);
+
+  UnwinderFromPid unwinder(512, pid);
+  ASSERT_TRUE(unwinder.Init(regs->Arch()));
+  unwinder.SetRegs(regs.get());
+
+  VerifyUnwind(&unwinder, kFunctionOrder);
+
+  // Verify that calling the same object works again.
+
+  ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0))
+      << "ptrace detach failed with unexpected error: " << strerror(errno);
+}
+
 TEST_F(UnwindTest, from_context) {
   std::atomic_int tid(0);
   std::thread thread([&]() {
     tid = syscall(__NR_gettid);
-    OuterFunction(false, false);
+    OuterFunction(TEST_TYPE_REMOTE);
   });
 
   struct sigaction act, oldact;
@@ -266,7 +321,7 @@ static void RemoteThroughSignal(int signal, unsigned int sa_flags) {
     act.sa_flags = SA_RESTART | SA_ONSTACK | sa_flags;
     ASSERT_EQ(0, sigaction(signal, &act, &oldact));
 
-    OuterFunction(false, signal == SIGSEGV);
+    OuterFunction(signal != SIGSEGV ? TEST_TYPE_REMOTE : TEST_TYPE_REMOTE_WITH_INVALID_CALL);
     exit(0);
   }
   ASSERT_NE(-1, pid);
