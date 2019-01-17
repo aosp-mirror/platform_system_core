@@ -34,7 +34,6 @@
 #include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
-#include <log/uio.h> /* helper to define iovec for portability */
 
 #ifdef __cplusplus
 extern "C" {

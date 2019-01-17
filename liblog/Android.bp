@@ -85,7 +85,6 @@ cc_library {
             ldflags: ["-Wl,--hash-style=both"],
         },
         windows: {
-            srcs: ["uio.cpp"],
             enabled: true,
         },
         not_windows: {
