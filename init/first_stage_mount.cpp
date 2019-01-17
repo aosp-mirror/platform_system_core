@@ -34,6 +34,7 @@
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
 #include <fs_mgr_overlayfs.h>
+#include <libgsi/libgsi.h>
 #include <liblp/liblp.h>
 
 #include "devices.h"
@@ -79,6 +80,7 @@ class FirstStageMount {
     bool IsDmLinearEnabled();
     bool GetDmLinearMetadataDevice();
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
+    void UseGsiIfPresent();
 
     ListenerAction UeventCallback(const Uevent& uevent);
 
@@ -207,6 +209,8 @@ bool FirstStageMount::GetDmLinearMetadataDevice() {
     }
 
     required_devices_partition_names_.emplace(super_partition_name_);
+    // When booting from live GSI images, userdata is the super device.
+    required_devices_partition_names_.emplace("userdata");
     return true;
 }
 
@@ -410,6 +414,16 @@ bool FirstStageMount::MountPartition(FstabEntry* fstab_entry) {
 // this case, we mount system first then pivot to it.  From that point on,
 // we are effectively identical to a system-as-root device.
 bool FirstStageMount::TrySwitchSystemAsRoot() {
+    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
+        return entry.mount_point == "/metadata";
+    });
+    if (metadata_partition != fstab_.end()) {
+        if (MountPartition(&(*metadata_partition))) {
+            fstab_.erase(metadata_partition);
+            UseGsiIfPresent();
+        }
+    }
+
     auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
         return entry.mount_point == "/system";
     });
@@ -511,6 +525,40 @@ bool FirstStageMount::MountPartitions() {
     fs_mgr_overlayfs_mount_all(&fstab_);
 
     return true;
+}
+
+void FirstStageMount::UseGsiIfPresent() {
+    std::string metadata_file, error;
+
+    if (!android::gsi::CanBootIntoGsi(&metadata_file, &error)) {
+        LOG(INFO) << "GSI " << error << ", proceeding with normal boot";
+        return;
+    }
+
+    auto metadata = android::fs_mgr::ReadFromImageFile(metadata_file.c_str());
+    if (!metadata) {
+        LOG(ERROR) << "GSI partition layout could not be read";
+        return;
+    }
+
+    if (!android::fs_mgr::CreateLogicalPartitions(*metadata.get(), "/dev/block/by-name/userdata")) {
+        LOG(ERROR) << "GSI partition layout could not be instantiated";
+        return;
+    }
+
+    if (!android::gsi::MarkSystemAsGsi()) {
+        PLOG(ERROR) << "GSI indicator file could not be written";
+        return;
+    }
+
+    // Replace the existing system fstab entry.
+    auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
+        return entry.mount_point == "/system";
+    });
+    if (system_partition != fstab_.end()) {
+        fstab_.erase(system_partition);
+    }
+    fstab_.emplace_back(BuildGsiSystemFstabEntry());
 }
 
 bool FirstStageMountVBootV1::GetDmVerityDevices() {
