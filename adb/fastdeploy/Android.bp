@@ -22,6 +22,9 @@ java_binary {
     wrapper: "deployagent/deployagent.sh",
     proto: {
         type: "lite",
+    },
+    dex_preopt: {
+        enabled: false,
     }
 }
 
