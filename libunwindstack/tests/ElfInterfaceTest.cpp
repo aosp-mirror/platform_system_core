@@ -1228,9 +1228,7 @@ void ElfInterfaceTest::BuildID() {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  std::string build_id;
-  ASSERT_TRUE(elf->GetBuildID(&build_id));
-  EXPECT_STREQ(build_id.c_str(), "BUILDID");
+  ASSERT_EQ("BUILDID", elf->GetBuildID());
 }
 
 template <typename Ehdr, typename Shdr, typename Nhdr, typename ElfInterfaceType>
@@ -1292,9 +1290,7 @@ void ElfInterfaceTest::BuildIDTwoNotes() {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  std::string build_id;
-  ASSERT_TRUE(elf->GetBuildID(&build_id));
-  EXPECT_STREQ(build_id.c_str(), "BUILDID");
+  ASSERT_EQ("BUILDID", elf->GetBuildID());
 }
 
 template <typename Ehdr, typename Shdr, typename Nhdr, typename ElfInterfaceType>
@@ -1346,8 +1342,7 @@ void ElfInterfaceTest::BuildIDSectionTooSmallForName () {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  std::string build_id;
-  ASSERT_FALSE(elf->GetBuildID(&build_id));
+  ASSERT_EQ("", elf->GetBuildID());
 }
 
 template <typename Ehdr, typename Shdr, typename Nhdr, typename ElfInterfaceType>
@@ -1399,8 +1394,7 @@ void ElfInterfaceTest::BuildIDSectionTooSmallForDesc () {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  std::string build_id;
-  ASSERT_FALSE(elf->GetBuildID(&build_id));
+  ASSERT_EQ("", elf->GetBuildID());
 }
 
 template <typename Ehdr, typename Shdr, typename Nhdr, typename ElfInterfaceType>
@@ -1452,8 +1446,7 @@ void ElfInterfaceTest::BuildIDSectionTooSmallForHeader () {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  std::string build_id;
-  ASSERT_FALSE(elf->GetBuildID(&build_id));
+  ASSERT_EQ("", elf->GetBuildID());
 }
 
 TEST_F(ElfInterfaceTest, build_id32) {

@@ -88,6 +88,12 @@ TEST_F(MapInfoGetElfTest, valid32) {
   ASSERT_TRUE(elf->valid());
   EXPECT_EQ(static_cast<uint32_t>(EM_ARM), elf->machine_type());
   EXPECT_EQ(ELFCLASS32, elf->class_type());
+
+  // Now verify that an empty process memory returns an invalid elf object.
+  info.elf.reset();
+  elf = info.GetElf(std::shared_ptr<Memory>(), ARCH_ARM);
+  ASSERT_TRUE(elf != nullptr);
+  ASSERT_FALSE(elf->valid());
 }
 
 TEST_F(MapInfoGetElfTest, valid64) {
