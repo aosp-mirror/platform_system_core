@@ -127,6 +127,10 @@ cc_library {
         },
     },
 
+    whole_static_libs: [
+        "libdemangle"
+    ],
+
     static_libs: [
         "libprocinfo",
     ],
@@ -189,6 +193,7 @@ cc_test {
         "tests/MapInfoCreateMemoryTest.cpp",
         "tests/MapInfoGetElfTest.cpp",
         "tests/MapInfoGetLoadBiasTest.cpp",
+        "tests/MapInfoTest.cpp",
         "tests/MapsTest.cpp",
         "tests/MemoryBufferTest.cpp",
         "tests/MemoryCacheTest.cpp",
