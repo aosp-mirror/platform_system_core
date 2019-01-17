@@ -103,13 +103,17 @@ class MountEntry {
         int st;
         if (IsF2Fs()) {
             const char* f2fs_argv[] = {
-                "/system/bin/fsck.f2fs", "-f", mnt_fsname_.c_str(),
+                    "/system/bin/fsck.f2fs",
+                    "-a",
+                    mnt_fsname_.c_str(),
             };
             android_fork_execvp_ext(arraysize(f2fs_argv), (char**)f2fs_argv, &st, true, LOG_KLOG,
                                     true, nullptr, nullptr, 0);
         } else if (IsExt4()) {
             const char* ext4_argv[] = {
-                "/system/bin/e2fsck", "-f", "-y", mnt_fsname_.c_str(),
+                    "/system/bin/e2fsck",
+                    "-y",
+                    mnt_fsname_.c_str(),
             };
             android_fork_execvp_ext(arraysize(ext4_argv), (char**)ext4_argv, &st, true, LOG_KLOG,
                                     true, nullptr, nullptr, 0);
