@@ -62,6 +62,7 @@ namespace.default.links = runtime
 # libart.
 namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
+namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
 
@@ -256,6 +257,8 @@ namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
+additional.namespaces = runtime
+
 namespace.default.isolated = false
 
 namespace.default.search.paths  = /odm/${LIB}
@@ -294,6 +297,23 @@ namespace.default.asan.search.paths += /data/asan/product/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
+
+namespace.default.links = runtime
+namespace.default.link.runtime.shared_libs = libdexfile_external.so
+
+###############################################################################
+# "runtime" APEX namespace
+#
+# This namespace exposes externally accessible libraries from the Runtime APEX.
+###############################################################################
+namespace.runtime.isolated = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.links = default
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.runtime.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
