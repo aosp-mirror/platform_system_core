@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBLOG_LOGGER_H__
-#define _LIBLOG_LOGGER_H__
+#pragma once
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -29,7 +28,7 @@
 __BEGIN_DECLS
 
 /* Union, sock or fd of zero is not allowed unless static initialized */
-union android_log_context {
+union android_log_context_union {
   void* priv;
   atomic_int sock;
   atomic_int fd;
@@ -41,7 +40,7 @@ struct android_log_transport_write {
   struct listnode node;
   const char* name;                  /* human name to describe the transport */
   unsigned logMask;                  /* mask cache of available() success */
-  union android_log_context context; /* Initialized by static allocation */
+  union android_log_context_union context; /* Initialized by static allocation */
 
   int (*available)(log_id_t logId); /* Does not cause resources to be taken */
   int (*open)();   /* can be called multiple times, reusing current resources */
@@ -115,7 +114,7 @@ struct android_log_logger {
 
 struct android_log_transport_context {
   struct listnode node;
-  union android_log_context context; /* zero init per-transport context */
+  union android_log_context_union context; /* zero init per-transport context */
   struct android_log_logger_list* parent;
 
   struct android_log_transport_read* transport;
@@ -161,8 +160,6 @@ LIBLOG_HIDDEN void __android_log_lock();
 LIBLOG_HIDDEN int __android_log_trylock();
 LIBLOG_HIDDEN void __android_log_unlock();
 
-LIBLOG_HIDDEN int __android_log_transport;
+extern LIBLOG_HIDDEN int __android_log_transport;
 
 __END_DECLS
-
-#endif /* _LIBLOG_LOGGER_H__ */

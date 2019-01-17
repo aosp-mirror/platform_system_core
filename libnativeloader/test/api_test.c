@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-#pragma once
+/* The main purpose of this test is to ensure this C header compiles in C, so
+ * that no C++ features inadvertently leak into the C ABI. */
+#include "nativeloader/native_loader.h"
 
-#include <unistd.h>
-
-#include "log_portability.h"
-
-__BEGIN_DECLS
-
-LIBLOG_HIDDEN ssize_t __send_log_msg(char* buf, size_t buf_size);
-
-__END_DECLS
+int main(int argc, char** argv) {
+  (void)argc;
+  (void)argv;
+  return 0;
+}

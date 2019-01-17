@@ -15,6 +15,7 @@
 */
 
 #include <string.h>
+#include <type_traits>
 
 #include <log/log.h>
 
@@ -22,7 +23,7 @@
 
 /* In the future, we would like to make this list extensible */
 static const char* LOG_NAME[LOG_ID_MAX] = {
-      /* clang-format off */
+    /* clang-format off */
   [LOG_ID_MAIN] = "main",
   [LOG_ID_RADIO] = "radio",
   [LOG_ID_EVENTS] = "events",
@@ -31,7 +32,7 @@ static const char* LOG_NAME[LOG_ID_MAX] = {
   [LOG_ID_STATS] = "stats",
   [LOG_ID_SECURITY] = "security",
   [LOG_ID_KERNEL] = "kernel",
-  /* clang-format on */
+    /* clang-format on */
 };
 
 LIBLOG_ABI_PUBLIC const char* android_log_id_to_name(log_id_t log_id) {
@@ -41,12 +42,15 @@ LIBLOG_ABI_PUBLIC const char* android_log_id_to_name(log_id_t log_id) {
   return LOG_NAME[log_id];
 }
 
+static_assert(std::is_same<std::underlying_type<log_id_t>::type, uint32_t>::value,
+              "log_id_t must be an unsigned int");
+
 LIBLOG_ABI_PUBLIC log_id_t android_name_to_log_id(const char* logName) {
   const char* b;
-  int ret;
+  unsigned int ret;
 
   if (!logName) {
-    return -1; /* NB: log_id_t is unsigned */
+    return static_cast<log_id_t>(0xFFFFFFFF);
   }
   b = strrchr(logName, '/');
   if (!b) {
@@ -58,8 +62,8 @@ LIBLOG_ABI_PUBLIC log_id_t android_name_to_log_id(const char* logName) {
   for (ret = LOG_ID_MIN; ret < LOG_ID_MAX; ++ret) {
     const char* l = LOG_NAME[ret];
     if (l && !strcmp(b, l)) {
-      return ret;
+      return static_cast<log_id_t>(ret);
     }
   }
-  return -1; /* should never happen */
+  return static_cast<log_id_t>(0xFFFFFFFF); /* should never happen */
 }

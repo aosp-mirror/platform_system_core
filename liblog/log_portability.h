@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBLOG_PORTABILITY_H__
-#define _LIBLOG_PORTABILITY_H__
+#pragma once
 
 #include <sys/cdefs.h>
 #include <unistd.h>
@@ -46,7 +45,7 @@
 #if defined(_WIN32)
 #define LIBLOG_WEAK static /* Accept that it is totally private */
 #else
-#define LIBLOG_WEAK __attribute__((weak, visibility("default")))
+#define LIBLOG_WEAK extern "C" __attribute__((weak, visibility("default")))
 #endif
 
 /* possible missing definitions in sys/cdefs.h */
@@ -62,11 +61,6 @@
 #endif
 #endif
 
-/* Unused argument. For C code only, remove symbol name for C++ */
-#ifndef __unused
-#define __unused __attribute__((__unused__))
-#endif
-
 /* possible missing definitions in unistd.h */
 
 #ifndef TEMP_FAILURE_RETRY
@@ -80,5 +74,3 @@
     _rc;                                   \
   })
 #endif
-
-#endif /* _LIBLOG_PORTABILITY_H__ */

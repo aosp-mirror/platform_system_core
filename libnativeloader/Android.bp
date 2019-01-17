@@ -24,3 +24,10 @@ cc_library {
         "vndksp.libraries.txt",
     ],
 }
+
+cc_library_headers {
+    name: "libnativeloader-dummy-headers",
+
+    host_supported: true,
+    export_include_dirs: ["include"],
+}

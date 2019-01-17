@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_MAIN_H
-#define _LIBS_LOG_LOG_MAIN_H
+#pragma once
 
 #include <stdbool.h>
+#include <sys/cdefs.h>
+#include <sys/types.h>
 
 #include <android/log.h>
-#include <sys/cdefs.h>
 
 __BEGIN_DECLS
 
@@ -349,20 +349,6 @@ extern int __fake_use_va_args(int, ...);
  *        over Android.
  */
 
-#ifndef __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 2
-#elif __ANDROID_API__ > 24 /* > Nougat */
-#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 2
-#elif __ANDROID_API__ > 22 /* > Lollipop */
-#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE
-
 /*
  * Use the per-tag properties "log.tag.<tagname>" to generate a runtime
  * result of non-zero to expose a log. prio is ANDROID_LOG_VERBOSE to
@@ -370,12 +356,7 @@ extern int __fake_use_va_args(int, ...);
  * any other value.
  */
 int __android_log_is_loggable(int prio, const char* tag, int default_prio);
-
-#if __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE > 1
-#include <sys/types.h>
-
-int __android_log_is_loggable_len(int prio, const char* tag, size_t len,
-                                  int default_prio);
+int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int default_prio);
 
 #if LOG_NDEBUG /* Production */
 #define android_testLog(prio, tag)                                           \
@@ -387,28 +368,8 @@ int __android_log_is_loggable_len(int prio, const char* tag, size_t len,
                                  ANDROID_LOG_VERBOSE) != 0)
 #endif
 
-#else
-
-#if LOG_NDEBUG /* Production */
-#define android_testLog(prio, tag) \
-  (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
-#else
-#define android_testLog(prio, tag) \
-  (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
-#endif
-
-#endif
-
-#else /* __ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE */
-
-#define android_testLog(prio, tag) (1)
-
-#endif /* !__ANDROID_USE_LIBLOG_LOGGABLE_INTERFACE */
-
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
 __END_DECLS
-
-#endif /* _LIBS_LOG_LOG_MAIN_H */

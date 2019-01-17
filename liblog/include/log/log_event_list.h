@@ -14,16 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_EVENT_LIST_H
-#define _LIBS_LOG_EVENT_LIST_H
+#pragma once
 
 #include <errno.h>
 #include <stdint.h>
 
-#if (defined(__cplusplus) && defined(_USING_LIBCXX))
-extern "C++" {
+#ifdef __cplusplus
 #include <string>
-}
 #endif
 
 #include <log/log.h>
@@ -31,18 +28,6 @@ extern "C++" {
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __ANDROID_USE_LIBLOG_EVENT_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 1
-#elif __ANDROID_API__ > 23 /* > Marshmallow */
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_EVENT_INTERFACE
 
 /* For manipulating lists of events. */
 
@@ -208,14 +193,12 @@ class android_log_event_list {
     return *this;
   }
 
-#if defined(_USING_LIBCXX)
   android_log_event_list& operator<<(const std::string& value) {
     int retval =
         android_log_write_string8_len(ctx, value.data(), value.length());
     if (retval < 0) ret = retval;
     return *this;
   }
-#endif
 
   android_log_event_list& operator<<(float value) {
     int retval = android_log_write_float32(ctx, value);
@@ -269,7 +252,6 @@ class android_log_event_list {
     return ret >= 0;
   }
 
-#if defined(_USING_LIBCXX)
   bool AppendString(const std::string& value) {
     int retval =
         android_log_write_string8_len(ctx, value.data(), value.length());
@@ -283,7 +265,6 @@ class android_log_event_list {
     if (retval < 0) ret = retval;
     return ret;
   }
-#endif
 
   bool AppendFloat(float value) {
     int retval = android_log_write_float32(ctx, value);
@@ -314,10 +295,6 @@ class android_log_event_list {
 #endif
 #endif
 
-#endif /* __ANDROID_USE_LIBLOG_EVENT_INTERFACE */
-
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_EVENT_LIST_H */
