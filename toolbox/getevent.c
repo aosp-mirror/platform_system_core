@@ -530,6 +530,9 @@ int getevent_main(int argc, char *argv[])
     const char *device = NULL;
     const char *device_path = "/dev/input";
 
+    /* disable buffering on stdout */
+    setbuf(stdout, NULL);
+
     opterr = 0;
     do {
         c = getopt(argc, argv, "tns:Sv::dpilqc:rh");
