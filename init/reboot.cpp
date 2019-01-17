@@ -196,7 +196,7 @@ static bool FindPartitionsToUmount(std::vector<MountEntry>* blockDevPartitions,
     return true;
 }
 
-static void DumpUmountDebuggingInfo(bool dump_all) {
+static void DumpUmountDebuggingInfo() {
     int status;
     if (!security_getenforce()) {
         LOG(INFO) << "Run lsof";
@@ -205,10 +205,9 @@ static void DumpUmountDebuggingInfo(bool dump_all) {
                                 true, nullptr, nullptr, 0);
     }
     FindPartitionsToUmount(nullptr, nullptr, true);
-    if (dump_all) {
-        // dump current tasks, this log can be lengthy, so only dump with dump_all
-        android::base::WriteStringToFile("t", "/proc/sysrq-trigger");
-    }
+    // dump current CPU stack traces and uninterruptible tasks
+    android::base::WriteStringToFile("l", "/proc/sysrq-trigger");
+    android::base::WriteStringToFile("w", "/proc/sysrq-trigger");
 }
 
 static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
@@ -271,11 +270,11 @@ static UmountStat TryUmountAndFsck(bool runFsck, std::chrono::milliseconds timeo
     UmountStat stat = UmountPartitions(timeout - t.duration());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
-        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(true);
+        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
         UmountStat st = UmountPartitions(0ms);
-        if ((st != UMOUNT_STAT_SUCCESS) && DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo(false);
+        if ((st != UMOUNT_STAT_SUCCESS) && DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
     }
 
     if (stat == UMOUNT_STAT_SUCCESS && runFsck) {
