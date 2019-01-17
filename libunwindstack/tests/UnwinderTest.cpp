@@ -1080,6 +1080,12 @@ TEST_F(UnwinderTest, format_frame_static) {
             Unwinder::FormatFrame(frame, false));
   EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function)", Unwinder::FormatFrame(frame, true));
 
+  // Verify the function name is demangled.
+  frame.function_name = "_ZN4funcEv";
+  EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so (func())",
+            Unwinder::FormatFrame(frame, false));
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (func())", Unwinder::FormatFrame(frame, true));
+
   frame.function_name = "";
   EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so", Unwinder::FormatFrame(frame, false));
   EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so", Unwinder::FormatFrame(frame, true));

@@ -221,6 +221,19 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum exp
   return elf.get();
 }
 
+bool MapInfo::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
+  {
+    // Make sure no other thread is trying to update this elf object.
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (elf == nullptr) {
+      return false;
+    }
+  }
+  // No longer need the lock, once the elf object is created, it is not deleted
+  // until this object is deleted.
+  return elf->GetFunctionName(addr, name, func_offset);
+}
+
 uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
   uint64_t cur_load_bias = load_bias.load();
   if (cur_load_bias != static_cast<uint64_t>(-1)) {
