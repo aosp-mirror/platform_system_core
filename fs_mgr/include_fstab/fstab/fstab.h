@@ -187,3 +187,6 @@ bool ReadDefaultFstab(Fstab* fstab);
 FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec);
 Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab);
 fstab* FstabToLegacyFstab(const Fstab& fstab);
+
+// Helper method to build a GSI fstab entry for mounting /system.
+FstabEntry BuildGsiSystemFstabEntry();
