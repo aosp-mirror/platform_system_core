@@ -63,6 +63,7 @@ namespace.default.links = runtime,resolv
 namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
 namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
 
