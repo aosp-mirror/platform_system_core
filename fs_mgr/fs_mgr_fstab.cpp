@@ -28,6 +28,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <libgsi/libgsi.h>
@@ -44,6 +45,9 @@ struct fs_mgr_flag_values {
     std::string key_dir;
     std::string verity_loc;
     std::string sysfs_path;
+    std::string zram_loopback_path;
+    uint64_t zram_loopback_size = 512 * 1024 * 1024; // 512MB by default
+    std::string zram_backing_dev_path;
     off64_t part_length = 0;
     std::string label;
     int partnum = -1;
@@ -118,6 +122,9 @@ static struct flag_list fs_mgr_flags[] = {
         {"checkpoint=block", MF_CHECKPOINT_BLK},
         {"checkpoint=fs", MF_CHECKPOINT_FS},
         {"slotselect_other", MF_SLOTSELECT_OTHER},
+        {"zram_loopback_path=", MF_ZRAM_LOOPBACK_PATH},
+        {"zram_loopback_size=", MF_ZRAM_LOOPBACK_SIZE},
+        {"zram_backing_dev_path=", MF_ZRAM_BACKING_DEV_PATH},
         {0, 0},
 };
 
@@ -345,6 +352,16 @@ static uint64_t parse_flags(char* flags, struct flag_list* fl, struct fs_mgr_fla
                 } else if (flag == MF_SYSFS) {
                     /* The path to trigger device gc by idle-maint of vold. */
                     flag_vals->sysfs_path = arg;
+                } else if (flag == MF_ZRAM_LOOPBACK_PATH) {
+                    /* The path to use loopback for zram. */
+                    flag_vals->zram_loopback_path = arg;
+                } else if (flag == MF_ZRAM_LOOPBACK_SIZE) {
+                    if (!android::base::ParseByteCount(arg, &flag_vals->zram_loopback_size)) {
+                        LERROR << "Warning: zram_loopback_size = flag malformed";
+                    }
+                } else if (flag == MF_ZRAM_BACKING_DEV_PATH) {
+                    /* The path to use loopback for zram. */
+                    flag_vals->zram_backing_dev_path = arg;
                 }
                 break;
             }
@@ -570,6 +587,9 @@ static bool fs_mgr_read_fstab_file(FILE* fstab_file, bool proc_mounts, Fstab* fs
         entry.logical_blk_size = flag_vals.logical_blk_size;
         entry.sysfs_path = std::move(flag_vals.sysfs_path);
         entry.vbmeta_partition = std::move(flag_vals.vbmeta_partition);
+        entry.zram_loopback_path = std::move(flag_vals.zram_loopback_path);
+        entry.zram_loopback_size = std::move(flag_vals.zram_loopback_size);
+        entry.zram_backing_dev_path = std::move(flag_vals.zram_backing_dev_path);
         if (entry.fs_mgr_flags.logical) {
             entry.logical_partition_name = entry.blk_device;
         }
@@ -811,6 +831,8 @@ void fs_mgr_free_fstab(struct fstab *fstab)
         free(fstab->recs[i].key_dir);
         free(fstab->recs[i].label);
         free(fstab->recs[i].sysfs_path);
+        free(fstab->recs[i].zram_loopback_path);
+        free(fstab->recs[i].zram_backing_dev_path);
     }
 
     /* Free the fstab_recs array created by calloc(3) */
@@ -908,6 +930,9 @@ FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec) {
     entry.erase_blk_size = fstab_rec->erase_blk_size;
     entry.logical_blk_size = fstab_rec->logical_blk_size;
     entry.sysfs_path = fstab_rec->sysfs_path;
+    entry.zram_loopback_path = fstab_rec->zram_loopback_path;
+    entry.zram_loopback_size = fstab_rec->zram_loopback_size;
+    entry.zram_backing_dev_path = fstab_rec->zram_backing_dev_path;
 
     return entry;
 }
@@ -951,6 +976,9 @@ fstab* FstabToLegacyFstab(const Fstab& fstab) {
         legacy_fstab->recs[i].erase_blk_size = fstab[i].erase_blk_size;
         legacy_fstab->recs[i].logical_blk_size = fstab[i].logical_blk_size;
         legacy_fstab->recs[i].sysfs_path = strdup(fstab[i].sysfs_path.c_str());
+        legacy_fstab->recs[i].zram_loopback_path = strdup(fstab[i].zram_loopback_path.c_str());
+        legacy_fstab->recs[i].zram_loopback_size = fstab[i].zram_loopback_size;
+        legacy_fstab->recs[i].zram_backing_dev_path = strdup(fstab[i].zram_backing_dev_path.c_str());
     }
     return legacy_fstab;
 }

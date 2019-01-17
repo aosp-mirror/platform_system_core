@@ -122,6 +122,12 @@
                           0x80000000
 #define MF_SLOTSELECT_OTHER  \
                          0x100000000
+#define MF_ZRAM_LOOPBACK_PATH    \
+                         0x200000000
+#define MF_ZRAM_LOOPBACK_SIZE    \
+                         0x400000000
+#define MF_ZRAM_BACKING_DEV_PATH \
+                         0x800000000
 // clang-format on
 
 #define DM_BUF_SIZE 4096
