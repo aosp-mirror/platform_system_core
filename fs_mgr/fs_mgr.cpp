@@ -556,9 +556,17 @@ static int __mount(const std::string& source, const std::string& target, const F
     mkdir(target.c_str(), 0755);
     errno = 0;
     unsigned long mountflags = entry.flags;
-    int ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
+    int ret = 0;
+    int save_errno = 0;
+    do {
+        if (save_errno == EAGAIN) {
+            PINFO << "Retrying mount (source=" << source << ",target=" << target
+                  << ",type=" << entry.fs_type << ")=" << ret << "(" << save_errno << ")";
+        }
+        ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
                     entry.fs_options.c_str());
-    int save_errno = errno;
+        save_errno = errno;
+    } while (ret && save_errno == EAGAIN);
     const char* target_missing = "";
     const char* source_missing = "";
     if (save_errno == ENOENT) {
