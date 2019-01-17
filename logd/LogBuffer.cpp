@@ -399,7 +399,7 @@ void LogBuffer::log(LogBufferElement* elem) {
                         ((*it)->getLogId() != LOG_ID_KERNEL))) {
         mLogElements.push_back(elem);
     } else {
-        log_time end = log_time::EPOCH;
+        log_time end(log_time::EPOCH);
         bool end_set = false;
         bool end_always = false;
 
