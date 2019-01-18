@@ -45,6 +45,7 @@
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "socket_spec.h"
 #include "sysdeps/chrono.h"
 
 #if ADB_HOST
@@ -70,32 +71,17 @@ bool local_connect(int port) {
 
 std::tuple<unique_fd, int, std::string> tcp_connect(const std::string& address,
                                                     std::string* response) {
-    std::string serial;
-    std::string host;
+    unique_fd fd;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
-        D("failed to parse address: '%s'", address.c_str());
-        return std::make_tuple(unique_fd(), port, serial);
-    }
-
-    std::string error;
-    unique_fd fd(network_connect(host.c_str(), port, SOCK_STREAM, 10, &error));
-    if (fd == -1) {
-        *response = android::base::StringPrintf("unable to connect to %s: %s",
-                                                serial.c_str(), error.c_str());
+    std::string serial;
+    if (socket_spec_connect(&fd, "tcp:" + address, &port, &serial, response)) {
+        close_on_exec(fd);
+        if (!set_tcp_keepalive(fd, 1)) {
+            D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
+        }
         return std::make_tuple(std::move(fd), port, serial);
     }
-
-    D("client: connected %s remote on fd %d", serial.c_str(), fd.get());
-    close_on_exec(fd);
-    disable_tcp_nagle(fd);
-
-    // Send a TCP keepalive ping to the device every second so we can detect disconnects.
-    if (!set_tcp_keepalive(fd, 1)) {
-        D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
-    }
-
-    return std::make_tuple(std::move(fd), port, serial);
+    return std::make_tuple(unique_fd(), 0, "");
 }
 
 void connect_device(const std::string& address, std::string* response) {
@@ -251,8 +237,9 @@ static void server_socket_thread(int port) {
     adb_thread_setname("server socket");
     D("transport: server_socket_thread() starting");
     while (serverfd == -1) {
+        std::string spec = android::base::StringPrintf("tcp:%d", port);
         std::string error;
-        serverfd.reset(network_inaddr_any_server(port, SOCK_STREAM, &error));
+        serverfd.reset(socket_spec_listen(spec, &error));
         if (serverfd < 0) {
             D("server: cannot bind socket yet: %s", error.c_str());
             std::this_thread::sleep_for(1s);
