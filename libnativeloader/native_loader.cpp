@@ -43,6 +43,10 @@
 #include <android-base/properties.h>
 #endif
 
+extern "C" {
+struct android_namespace_t* android_get_exported_namespace(const char*);
+}
+
 #define CHECK(predicate) LOG_ALWAYS_FATAL_IF(!(predicate),\
                                              "%s:%d: %s CHECK '" #predicate "' failed.",\
                                              __FILE__, __LINE__, __FUNCTION__)
@@ -118,6 +122,8 @@ static constexpr const char* kVendorClassloaderNamespaceName = "vendor-classload
 // System.load() with an absolute path which is outside of the classloader library search path.
 // This list includes all directories app is allowed to access this way.
 static constexpr const char* kWhitelistedDirectories = "/data:/mnt/expand";
+
+static constexpr const char* kApexPath = "/apex/";
 
 static bool is_debuggable() {
   char debuggable[PROP_VALUE_MAX];
@@ -623,14 +629,51 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
   return nullptr;
 }
 
+#if defined(__ANDROID__)
+static android_namespace_t* FindExportedNamespace(const char* caller_location) {
+  std::string location = caller_location;
+  // Lots of implicit assumptions here: we expect `caller_location` to be of the form:
+  // /apex/com.android...modulename/...
+  //
+  // And we extract from it 'modulename', which is the name of the linker namespace.
+  if (android::base::StartsWith(location, kApexPath)) {
+    size_t slash_index = location.find_first_of('/', strlen(kApexPath));
+    LOG_ALWAYS_FATAL_IF((slash_index == std::string::npos),
+                        "Error finding namespace of apex: no slash in path %s", caller_location);
+    size_t dot_index = location.find_last_of('.', slash_index);
+    LOG_ALWAYS_FATAL_IF((dot_index == std::string::npos),
+                        "Error finding namespace of apex: no dot in apex name %s", caller_location);
+    std::string name = location.substr(dot_index + 1, slash_index - dot_index - 1);
+    android_namespace_t* boot_namespace = android_get_exported_namespace(name.c_str());
+    LOG_ALWAYS_FATAL_IF((boot_namespace == nullptr),
+                        "Error finding namespace of apex: no namespace called %s", name.c_str());
+    return boot_namespace;
+  }
+  return nullptr;
+}
+#endif
+
 void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
                         jobject class_loader, const char* caller_location, jstring library_path,
                         bool* needs_native_bridge, char** error_msg) {
 #if defined(__ANDROID__)
   UNUSED(target_sdk_version);
-  UNUSED(caller_location);
   if (class_loader == nullptr) {
     *needs_native_bridge = false;
+    if (caller_location != nullptr) {
+      android_namespace_t* boot_namespace = FindExportedNamespace(caller_location);
+      if (boot_namespace != nullptr) {
+        const android_dlextinfo dlextinfo = {
+            .flags = ANDROID_DLEXT_USE_NAMESPACE,
+            .library_namespace = boot_namespace,
+        };
+        void* handle = android_dlopen_ext(path, RTLD_NOW, &dlextinfo);
+        if (handle == nullptr) {
+          *error_msg = strdup(dlerror());
+        }
+        return handle;
+      }
+    }
     void* handle = dlopen(path, RTLD_NOW);
     if (handle == nullptr) {
       *error_msg = strdup(dlerror());

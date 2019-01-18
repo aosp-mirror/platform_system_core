@@ -28,7 +28,7 @@ dir.system = /data/benchmarktest64
 dir.postinstall = /postinstall
 
 [system]
-additional.namespaces = runtime,sphal,vndk,rs
+additional.namespaces = runtime,conscrypt,sphal,vndk,rs
 
 ###############################################################################
 # "default" namespace
@@ -127,6 +127,20 @@ namespace.runtime.links = default
 # TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
 # when it exists.
 namespace.runtime.link.default.allow_all_shared_libs = true
+
+###############################################################################
+# "conscrypt" APEX namespace
+#
+# This namespace is for libraries within the conscrypt APEX.
+###############################################################################
+namespace.conscrypt.isolated = true
+namespace.conscrypt.visible = true
+
+namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.links = default
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.conscrypt.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "sphal" namespace
