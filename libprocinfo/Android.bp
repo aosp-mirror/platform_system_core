@@ -31,6 +31,7 @@ cc_library {
     vndk: {
         enabled: true,
     },
+    double_loadable: true,
     host_supported: true,
     srcs: [
         "process.cpp",
