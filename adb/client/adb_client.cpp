@@ -144,53 +144,51 @@ static int _adb_connect(const std::string& service, std::string* error) {
     }
 
     std::string reason;
-    int fd = socket_spec_connect(__adb_server_socket_spec, &reason);
-    if (fd < 0) {
+    unique_fd fd;
+    if (!socket_spec_connect(&fd, __adb_server_socket_spec, nullptr, nullptr, &reason)) {
         *error = android::base::StringPrintf("cannot connect to daemon at %s: %s",
                                              __adb_server_socket_spec, reason.c_str());
         return -2;
     }
 
-    if (memcmp(&service[0], "host", 4) != 0 && switch_socket_transport(fd, error)) {
+    if (memcmp(&service[0], "host", 4) != 0 && switch_socket_transport(fd.get(), error)) {
         return -1;
     }
 
-    if (!SendProtocolString(fd, service)) {
+    if (!SendProtocolString(fd.get(), service)) {
         *error = perror_str("write failure during connection");
-        adb_close(fd);
         return -1;
     }
 
-    if (!adb_status(fd, error)) {
-        adb_close(fd);
+    if (!adb_status(fd.get(), error)) {
         return -1;
     }
 
-    D("_adb_connect: return fd %d", fd);
-    return fd;
+    D("_adb_connect: return fd %d", fd.get());
+    return fd.release();
 }
 
 bool adb_kill_server() {
     D("adb_kill_server");
     std::string reason;
-    int fd = socket_spec_connect(__adb_server_socket_spec, &reason);
-    if (fd < 0) {
+    unique_fd fd;
+    if (!socket_spec_connect(&fd, __adb_server_socket_spec, nullptr, nullptr, &reason)) {
         fprintf(stderr, "cannot connect to daemon at %s: %s\n", __adb_server_socket_spec,
                 reason.c_str());
         return true;
     }
 
-    if (!SendProtocolString(fd, "host:kill")) {
+    if (!SendProtocolString(fd.get(), "host:kill")) {
         fprintf(stderr, "error: write failure during connection: %s\n", strerror(errno));
         return false;
     }
 
     // The server might send OKAY, so consume that.
     char buf[4];
-    ReadFdExactly(fd, buf, 4);
+    ReadFdExactly(fd.get(), buf, 4);
     // Now that no more data is expected, wait for socket orderly shutdown or error, indicating
     // server death.
-    ReadOrderlyShutdown(fd);
+    ReadOrderlyShutdown(fd.get());
     return true;
 }
 
