@@ -990,18 +990,7 @@ Result<Success> Service::Start() {
             LOG(FATAL) << "Service '" << name_ << "' could not enter namespaces: " << result.error();
         }
 
-        // b/122559956: mount namespace is not cloned for the devices that don't support
-        // the update of bionic libraries via APEX. In that case, because the bionic
-        // libraries in the runtime APEX and the bootstrap bionic libraries are
-        // identical, it doesn't matter which libs are used. This is also to avoid the
-        // bug in sdcardfs which is triggered when we have multiple mount namespaces
-        // across vold and the others. BIONIC_UPDATABLE shall be true only for the
-        // devices where kernel has the fix for the sdcardfs bug (see the commit message
-        // for the fix).
-        static bool bionic_updatable =
-                android::base::GetBoolProperty("ro.apex.bionic_updatable", false);
-
-        if (bionic_updatable && pre_apexd_) {
+        if (pre_apexd_) {
             // pre-apexd process gets a private copy of the mount namespace.
             // However, this does not mean that mount/unmount events are not
             // shared across pre-apexd processes and post-apexd processes.
@@ -1028,8 +1017,7 @@ Result<Success> Service::Start() {
             }
         }
 
-        // b/122559956: same as above
-        if (bionic_updatable && pre_apexd_ && ServiceList::GetInstance().IsRuntimeAvailable()) {
+        if (pre_apexd_ && ServiceList::GetInstance().IsRuntimeAvailable()) {
             if (auto result = SetUpPreApexdMounts(); !result) {
                 LOG(FATAL) << "Pre-apexd service '" << name_
                            << "' could not setup the mount points: " << result.error();
