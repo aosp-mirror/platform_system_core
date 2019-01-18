@@ -48,10 +48,8 @@ cc_benchmark {
 cc_test {
     name: "logcat-unit-tests",
     defaults: ["logcat-tests-defaults"],
-    shared_libs: [
-        "liblog",
-        "libbase",
-    ],
+    shared_libs: ["libbase"],
+    static_libs: ["liblog"],
     srcs: [
         "logcat_test.cpp",
         "logcatd_test.cpp",
