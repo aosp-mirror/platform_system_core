@@ -629,6 +629,12 @@ on boot
     chown root system /sys/module/lowmemorykiller/parameters/minfree
     chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
 
+    # System server manages zram writeback
+    chown root system /sys/block/zram0/idle
+    chmod 0664 /sys/block/zram0/idle
+    chown root system /sys/block/zram0/writeback
+    chmod 0664 /sys/block/zram0/writeback
+
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
