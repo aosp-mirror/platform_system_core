@@ -72,24 +72,23 @@ unique_fd create_service_thread(const char* service_name, std::function<void(uni
 }
 
 int service_to_fd(std::string_view name, atransport* transport) {
-    int ret = -1;
+    unique_fd ret;
 
     if (is_socket_spec(name)) {
         std::string error;
-        ret = socket_spec_connect(name, &error);
-        if (ret < 0) {
+        if (!socket_spec_connect(&ret, name, nullptr, nullptr, &error)) {
             LOG(ERROR) << "failed to connect to socket '" << name << "': " << error;
         }
     } else {
 #if !ADB_HOST
-        ret = daemon_service_to_fd(name, transport).release();
+        ret = daemon_service_to_fd(name, transport);
 #endif
     }
 
     if (ret >= 0) {
         close_on_exec(ret);
     }
-    return ret;
+    return ret.release();
 }
 
 #if ADB_HOST

@@ -67,7 +67,7 @@ static auto& kLocalSocketTypes = *new std::unordered_map<std::string, LocalSocke
 });
 
 bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* port,
-                           std::string* error) {
+                           std::string* serial, std::string* error) {
     if (!spec.starts_with("tcp:")) {
         *error = "specification is not tcp: ";
         *error += spec;
@@ -92,7 +92,7 @@ bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* po
 
         // FIXME: ParseNetAddress rejects port 0. This currently doesn't hurt, because listening
         //        on an address that isn't 'localhost' is unsupported.
-        if (!android::base::ParseNetAddress(addr, &hostname_value, &port_value, nullptr, error)) {
+        if (!android::base::ParseNetAddress(addr, &hostname_value, &port_value, serial, error)) {
             return false;
         }
 
@@ -139,63 +139,68 @@ bool is_local_socket_spec(std::string_view spec) {
 
     std::string error;
     std::string hostname;
-    if (!parse_tcp_socket_spec(spec, &hostname, nullptr, &error)) {
+    if (!parse_tcp_socket_spec(spec, &hostname, nullptr, nullptr, &error)) {
         return false;
     }
     return tcp_host_is_local(hostname);
 }
 
-int socket_spec_connect(std::string_view spec, std::string* error) {
-    if (spec.starts_with("tcp:")) {
+bool socket_spec_connect(unique_fd* fd, std::string_view address, int* port, std::string* serial,
+                         std::string* error) {
+    if (address.starts_with("tcp:")) {
         std::string hostname;
-        int port;
-        if (!parse_tcp_socket_spec(spec, &hostname, &port, error)) {
-            return -1;
+        int port_value = port ? *port : 0;
+        if (!parse_tcp_socket_spec(address, &hostname, &port_value, serial, error)) {
+            return false;
         }
 
-        int result;
         if (tcp_host_is_local(hostname)) {
-            result = network_loopback_client(port, SOCK_STREAM, error);
+            fd->reset(network_loopback_client(port_value, SOCK_STREAM, error));
         } else {
 #if ADB_HOST
-            result = network_connect(hostname, port, SOCK_STREAM, 0, error);
+            fd->reset(network_connect(hostname, port_value, SOCK_STREAM, 0, error));
 #else
             // Disallow arbitrary connections in adbd.
             *error = "adbd does not support arbitrary tcp connections";
-            return -1;
+            return false;
 #endif
         }
 
-        if (result >= 0) {
-            disable_tcp_nagle(result);
+        if (fd->get() > 0) {
+            disable_tcp_nagle(fd->get());
+            if (port) {
+                *port = port_value;
+            }
+            return true;
         }
-        return result;
+        return false;
     }
 
     for (const auto& it : kLocalSocketTypes) {
         std::string prefix = it.first + ":";
-        if (spec.starts_with(prefix)) {
+        if (address.starts_with(prefix)) {
             if (!it.second.available) {
                 *error = StringPrintf("socket type %s is unavailable on this platform",
                                       it.first.c_str());
-                return -1;
+                return false;
             }
 
-            return network_local_client(&spec[prefix.length()], it.second.socket_namespace,
-                                        SOCK_STREAM, error);
+            fd->reset(network_local_client(&address[prefix.length()], it.second.socket_namespace,
+                                           SOCK_STREAM, error));
+            return true;
         }
     }
 
     *error = "unknown socket specification: ";
-    *error += spec;
-    return -1;
+    *error += address;
+    return false;
 }
 
 int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_tcp_port) {
     if (spec.starts_with("tcp:")) {
         std::string hostname;
         int port;
-        if (!parse_tcp_socket_spec(spec, &hostname, &port, error)) {
+        if (!parse_tcp_socket_spec(spec, &hostname, &port, nullptr, error)) {
             return -1;
         }
 
