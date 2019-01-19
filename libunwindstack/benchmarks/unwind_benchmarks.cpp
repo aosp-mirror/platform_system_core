@@ -20,6 +20,9 @@
 
 #include <benchmark/benchmark.h>
 
+#include <android-base/strings.h>
+
+#include <unwindstack/Elf.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -79,5 +82,64 @@ static void BM_cached_unwind(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_cached_unwind);
+
+static void Initialize(benchmark::State& state, unwindstack::Maps& maps,
+                       unwindstack::MapInfo** build_id_map_info) {
+  if (!maps.Parse()) {
+    state.SkipWithError("Failed to parse local maps.");
+    return;
+  }
+
+  // Find the libc.so share library and use that for benchmark purposes.
+  *build_id_map_info = nullptr;
+  for (unwindstack::MapInfo* map_info : maps) {
+    if (map_info->offset == 0 && map_info->GetBuildID() != "") {
+      *build_id_map_info = map_info;
+      break;
+    }
+  }
+
+  if (*build_id_map_info == nullptr) {
+    state.SkipWithError("Failed to find a map with a BuildID.");
+  }
+}
+
+static void BM_get_build_id_from_elf(benchmark::State& state) {
+  unwindstack::LocalMaps maps;
+  unwindstack::MapInfo* build_id_map_info;
+  Initialize(state, maps, &build_id_map_info);
+
+  unwindstack::Elf* elf = build_id_map_info->GetElf(std::shared_ptr<unwindstack::Memory>(),
+                                                    unwindstack::Regs::CurrentArch());
+  if (!elf->valid()) {
+    state.SkipWithError("Cannot get valid elf from map.");
+  }
+
+  for (auto _ : state) {
+    uintptr_t id = build_id_map_info->build_id;
+    if (id != 0) {
+      delete reinterpret_cast<std::string*>(id);
+      build_id_map_info->build_id = 0;
+    }
+    benchmark::DoNotOptimize(build_id_map_info->GetBuildID());
+  }
+}
+BENCHMARK(BM_get_build_id_from_elf);
+
+static void BM_get_build_id_from_file(benchmark::State& state) {
+  unwindstack::LocalMaps maps;
+  unwindstack::MapInfo* build_id_map_info;
+  Initialize(state, maps, &build_id_map_info);
+
+  for (auto _ : state) {
+    uintptr_t id = build_id_map_info->build_id;
+    if (id != 0) {
+      delete reinterpret_cast<std::string*>(id);
+      build_id_map_info->build_id = 0;
+    }
+    benchmark::DoNotOptimize(build_id_map_info->GetBuildID());
+  }
+}
+BENCHMARK(BM_get_build_id_from_file);
 
 BENCHMARK_MAIN();

@@ -123,8 +123,8 @@ int GetElfInfo(const char* file, uint64_t offset) {
     printf("Soname: %s\n", soname.c_str());
   }
 
-  std::string build_id;
-  if (elf.GetBuildID(&build_id)) {
+  std::string build_id = elf.GetBuildID();
+  if (!build_id.empty()) {
     printf("Build ID: ");
     for (size_t i = 0; i < build_id.size(); ++i) {
       printf("%02hhx", build_id[i]);
