@@ -109,6 +109,7 @@ CHARGER_STATIC_LIBRARIES := \
     libbase \
     libutils \
     libcutils \
+    libprocessgroup \
     liblog \
     libm \
     libc \
