@@ -68,6 +68,7 @@ const char* const kFeatureLibusb = "libusb";
 const char* const kFeaturePushSync = "push_sync";
 const char* const kFeatureApex = "apex";
 const char* const kFeatureFixedPushMkdir = "fixed_push_mkdir";
+const char* const kFeatureAbb = "abb";
 
 namespace {
 
@@ -1013,7 +1014,8 @@ size_t atransport::get_max_payload() const {
 const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
-            kFeatureShell2, kFeatureCmd, kFeatureStat2, kFeatureFixedPushMkdir, kFeatureApex
+            kFeatureShell2,         kFeatureCmd,  kFeatureStat2,
+            kFeatureFixedPushMkdir, kFeatureApex, kFeatureAbb,
             // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
             // to know about. Otherwise, the client can be stuck running an old
             // version of the server even after upgrading their copy of adb.
