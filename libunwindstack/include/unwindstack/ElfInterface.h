@@ -62,7 +62,7 @@ class ElfInterface {
 
   virtual bool GetGlobalVariable(const std::string& name, uint64_t* memory_address) = 0;
 
-  virtual bool GetBuildID(std::string* build_id) = 0;
+  virtual std::string GetBuildID() = 0;
 
   virtual bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
 
@@ -100,6 +100,9 @@ class ElfInterface {
   template <typename EhdrType, typename PhdrType>
   static uint64_t GetLoadBias(Memory* memory);
 
+  template <typename EhdrType, typename ShdrType, typename NhdrType>
+  static std::string ReadBuildIDFromMemory(Memory* memory);
+
  protected:
   template <typename AddressType>
   void InitHeadersWithTemplate(uint64_t load_bias);
@@ -128,7 +131,7 @@ class ElfInterface {
   static void GetMaxSizeWithTemplate(Memory* memory, uint64_t* size);
 
   template <typename NhdrType>
-  bool ReadBuildID(std::string* build_id);
+  std::string ReadBuildID();
 
   Memory* memory_;
   std::unordered_map<uint64_t, LoadInfo> pt_loads_;
@@ -192,9 +195,7 @@ class ElfInterface32 : public ElfInterface {
     return ElfInterface::GetGlobalVariableWithTemplate<Elf32_Sym>(name, memory_address);
   }
 
-  bool GetBuildID(std::string* build_id) {
-    return ElfInterface::ReadBuildID<Elf32_Nhdr>(build_id);
-  }
+  std::string GetBuildID() override { return ElfInterface::ReadBuildID<Elf32_Nhdr>(); }
 
   static void GetMaxSize(Memory* memory, uint64_t* size) {
     GetMaxSizeWithTemplate<Elf32_Ehdr>(memory, size);
@@ -226,9 +227,7 @@ class ElfInterface64 : public ElfInterface {
     return ElfInterface::GetGlobalVariableWithTemplate<Elf64_Sym>(name, memory_address);
   }
 
-  bool GetBuildID(std::string* build_id) {
-    return ElfInterface::ReadBuildID<Elf64_Nhdr>(build_id);
-  }
+  std::string GetBuildID() override { return ElfInterface::ReadBuildID<Elf64_Nhdr>(); }
 
   static void GetMaxSize(Memory* memory, uint64_t* size) {
     GetMaxSizeWithTemplate<Elf64_Ehdr>(memory, size);

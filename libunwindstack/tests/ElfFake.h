@@ -72,15 +72,16 @@ class ElfInterfaceFake : public ElfInterface {
 
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override;
   bool GetGlobalVariable(const std::string&, uint64_t*) override;
-  bool GetBuildID(std::string*) override {
-    return false;
-  }
+  std::string GetBuildID() override { return fake_build_id_; }
 
   bool Step(uint64_t, Regs*, Memory*, bool*) override;
 
   void FakeSetGlobalVariable(const std::string& global, uint64_t offset) {
     globals_[global] = offset;
   }
+
+  void FakeSetBuildID(std::string& build_id) { fake_build_id_ = build_id; }
+  void FakeSetBuildID(const char* build_id) { fake_build_id_ = build_id; }
 
   static void FakePushFunctionData(const FunctionData data) { functions_.push_back(data); }
   static void FakePushStepData(const StepData data) { steps_.push_back(data); }
@@ -96,6 +97,7 @@ class ElfInterfaceFake : public ElfInterface {
 
  private:
   std::unordered_map<std::string, uint64_t> globals_;
+  std::string fake_build_id_;
 
   static std::deque<FunctionData> functions_;
   static std::deque<StepData> steps_;

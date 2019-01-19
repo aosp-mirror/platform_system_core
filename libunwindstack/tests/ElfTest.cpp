@@ -311,7 +311,7 @@ class ElfInterfaceMock : public ElfInterface {
   void InitHeaders(uint64_t) override {}
   bool GetSoname(std::string*) override { return false; }
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
-  bool GetBuildID(std::string*) override { return false; }
+  std::string GetBuildID() override { return ""; }
 
   MOCK_METHOD4(Step, bool(uint64_t, Regs*, Memory*, bool*));
   MOCK_METHOD2(GetGlobalVariable, bool(const std::string&, uint64_t*));
