@@ -58,7 +58,7 @@ class SysMemInfo final {
     // in vmalloc area by the kernel.
     // Note that this deliberately ignores binder buffers. They are _always_
     // mapped in a process and are counted for in each process.
-    uint64_t ReadVmallocInfo(const std::string& path = "/proc/vmallocinfo");
+    uint64_t ReadVmallocInfo();
 
     // getters
     uint64_t mem_total_kb() { return mem_in_kb_[kMemTotal]; }
@@ -83,6 +83,11 @@ class SysMemInfo final {
     bool ReadMemInfo(const std::vector<std::string>& tags, const std::string& path,
                      std::function<void(const std::string&, uint64_t)> store_val);
 };
+
+// Parse /proc/vmallocinfo and return total physical memory mapped
+// in vmalloc area by the kernel. Note that this deliberately ignores binder buffers. They are
+// _always_ mapped in a process and are counted for in each process.
+uint64_t ReadVmallocInfo(const std::string& path = "/proc/vmallocinfo");
 
 }  // namespace meminfo
 }  // namespace android
