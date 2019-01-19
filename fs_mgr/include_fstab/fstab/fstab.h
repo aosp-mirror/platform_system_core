@@ -174,6 +174,9 @@ struct FstabEntry {
 
             // bit 32
             bool slot_select_other : 1;
+            bool zram_loopback_path : 1;
+            bool zram_loopback_size : 1;
+            bool zram_backing_dev_path : 1;
         };
     } fs_mgr_flags;
 
