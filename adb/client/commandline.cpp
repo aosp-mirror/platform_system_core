@@ -762,6 +762,17 @@ static int adb_shell(int argc, const char** argv) {
 }
 
 static int adb_abb(int argc, const char** argv) {
+    FeatureSet features;
+    std::string error_message;
+    if (!adb_get_feature_set(&features, &error_message)) {
+        fprintf(stderr, "error: %s\n", error_message.c_str());
+        return 1;
+    }
+
+    if (!CanUseFeature(features, kFeatureAbb)) {
+        error_exit("abb is not supported by the device");
+    }
+
     // Defaults.
     constexpr char escape_char = '~';  // -e
     constexpr bool use_shell_protocol = true;
