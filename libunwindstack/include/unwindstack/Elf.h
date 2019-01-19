@@ -65,14 +65,14 @@ class Elf {
 
   bool GetGlobalVariable(const std::string& name, uint64_t* memory_address);
 
-  bool GetBuildID(std::string* build_id);
-
   uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
 
   bool Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, Regs* regs, Memory* process_memory,
             bool* finished);
 
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
+
+  std::string GetBuildID();
 
   uint64_t GetLoadBias() { return load_bias_; }
 
@@ -101,6 +101,8 @@ class Elf {
   static bool GetInfo(Memory* memory, uint64_t* size);
 
   static uint64_t GetLoadBias(Memory* memory);
+
+  static std::string GetBuildID(Memory* memory);
 
   static void SetCachingEnabled(bool enable);
   static bool CachingEnabled() { return cache_enabled_; }
