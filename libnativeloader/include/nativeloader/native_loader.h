@@ -47,7 +47,7 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
 
 __attribute__((visibility("default"))) void* OpenNativeLibrary(
     JNIEnv* env, int32_t target_sdk_version, const char* path, jobject class_loader,
-    jstring library_path, bool* needs_native_bridge, char** error_msg);
+    const char* caller_location, jstring library_path, bool* needs_native_bridge, char** error_msg);
 
 __attribute__((visibility("default"))) bool CloseNativeLibrary(void* handle,
                                                                const bool needs_native_bridge,
