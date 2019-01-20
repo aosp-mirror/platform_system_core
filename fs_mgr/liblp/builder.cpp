@@ -269,6 +269,11 @@ void MetadataBuilder::ImportExtents(Partition* dest, const LpMetadata& metadata,
 }
 
 static bool VerifyDeviceProperties(const BlockDeviceInfo& device_info) {
+    if (device_info.logical_block_size == 0) {
+        LERROR << "Block device " << device_info.partition_name
+               << " logical block size must not be zero.";
+        return false;
+    }
     if (device_info.logical_block_size % LP_SECTOR_SIZE != 0) {
         LERROR << "Block device " << device_info.partition_name
                << " logical block size must be a multiple of 512.";
@@ -335,7 +340,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
         out.alignment = device_info.alignment;
         out.alignment_offset = device_info.alignment_offset;
         out.size = device_info.size;
-        if (device_info.partition_name.size() >= sizeof(out.partition_name)) {
+        if (device_info.partition_name.size() > sizeof(out.partition_name)) {
             LERROR << "Partition name " << device_info.partition_name << " exceeds maximum length.";
             return false;
         }
