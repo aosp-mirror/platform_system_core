@@ -6,6 +6,7 @@ cc_library_shared {
     },
 
     srcs: [
+        "checksum.c",
         "dhcpclient.c",
         "dhcpmsg.c",
         "ifc_utils.c",
