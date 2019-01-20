@@ -109,8 +109,6 @@ int android_log_destroy(android_log_context* ctx);
 /* android_log_list C++ helpers */
 extern "C++" {
 class android_log_event_list {
-  friend class __android_log_event_list;
-
  private:
   android_log_context ctx;
   int ret;
@@ -121,10 +119,6 @@ class android_log_event_list {
  public:
   explicit android_log_event_list(int tag) : ret(0) {
     ctx = create_android_logger(static_cast<uint32_t>(tag));
-  }
-  explicit android_log_event_list(log_msg& log_msg) : ret(0) {
-    ctx = create_android_log_parser(log_msg.msg() + sizeof(uint32_t),
-                                    log_msg.entry.len - sizeof(uint32_t));
   }
   ~android_log_event_list() {
     android_log_destroy(&ctx);
@@ -282,13 +276,6 @@ class android_log_event_list {
     int retval = android_log_write_string8_len(ctx, value, len);
     if (retval < 0) ret = retval;
     return ret >= 0;
-  }
-
-  android_log_list_element read() {
-    return android_log_read_next(ctx);
-  }
-  android_log_list_element peek() {
-    return android_log_peek_next(ctx);
   }
 };
 }

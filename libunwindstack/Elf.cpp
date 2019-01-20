@@ -140,8 +140,11 @@ bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
   return true;
 }
 
-bool Elf::GetBuildID(std::string* build_id) {
-  return valid_ && interface_->GetBuildID(build_id);
+std::string Elf::GetBuildID() {
+  if (!valid_) {
+    return "";
+  }
+  return interface_->GetBuildID();
 }
 
 void Elf::GetLastError(ErrorData* data) {
@@ -382,6 +385,24 @@ bool Elf::CacheGet(MapInfo* info) {
     return true;
   }
   return false;
+}
+
+std::string Elf::GetBuildID(Memory* memory) {
+  if (!IsValidElf(memory)) {
+    return "";
+  }
+
+  uint8_t class_type;
+  if (!memory->Read(EI_CLASS, &class_type, 1)) {
+    return "";
+  }
+
+  if (class_type == ELFCLASS32) {
+    return ElfInterface::ReadBuildIDFromMemory<Elf32_Ehdr, Elf32_Shdr, Elf32_Nhdr>(memory);
+  } else if (class_type == ELFCLASS64) {
+    return ElfInterface::ReadBuildIDFromMemory<Elf64_Ehdr, Elf64_Shdr, Elf64_Nhdr>(memory);
+  }
+  return "";
 }
 
 }  // namespace unwindstack

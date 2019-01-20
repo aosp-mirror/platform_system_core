@@ -19,7 +19,6 @@ cc_defaults {
     cpp_std: "experimental",
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
-        address: false,  // TODO(b/120561310): Fix ASAN to work without /proc mounted and re-enable.
     },
     cflags: [
         "-DLOG_UEVENTS=0",
@@ -77,6 +76,7 @@ cc_defaults {
         "libext4_utils",
         "libfs_mgr",
         "libfscrypt",
+        "libgsi",
         "libhidl-gen-utils",
         "libkeyutils",
         "liblog",

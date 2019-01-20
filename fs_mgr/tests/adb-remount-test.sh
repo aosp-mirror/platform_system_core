@@ -164,10 +164,24 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in root state" ]
 adb_root() {
+  [ `adb_sh echo '${USER}'` != root ] || return 0
   adb root >/dev/null </dev/null 2>/dev/null
   sleep 2
   adb_wait 2m &&
     [ `adb_sh echo '${USER}'` = root ]
+}
+
+[ "USAGE: adb_unroot
+
+NB: This can be flakey on devices due to USB state
+
+Returns: true if device in un root state" ]
+adb_unroot() {
+  [ `adb_sh echo '${USER}'` = root ] || return 0
+  adb unroot >/dev/null </dev/null 2>/dev/null
+  sleep 2
+  adb_wait 2m &&
+    [ `adb_sh echo '${USER}'` != root ]
 }
 
 [ "USAGE: fastboot_getvar var expected
@@ -194,6 +208,15 @@ fastboot_getvar() {
   echo ${O} >&2
 }
 
+[ "USAGE: cleanup
+
+Do nothing: should be redefined when necessary
+
+Returns: cleans up any latent resources, reverses configurations" ]
+cleanup () {
+  :
+}
+
 [ "USAGE: die [-d|-t <epoch>] [message] >/dev/stderr
 
 If -d, or -t <epoch> argument is supplied, dump logcat.
@@ -212,6 +235,7 @@ die() {
     shift 2
   fi
   echo "${RED}[  FAILED  ]${NORMAL} ${@}" >&2
+  cleanup
   exit 1
 }
 
@@ -558,6 +582,7 @@ check_eq "${A}" "${B}" /system after reboot
 echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected
 if ${enforcing}; then
+  adb_unroot
   B="`adb_cat /vendor/hello`" &&
     die "re-read /vendor/hello after reboot w/o root"
   check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root

@@ -51,10 +51,6 @@ class stats_event_list {
     explicit stats_event_list(int tag) : ret(0) {
         ctx = create_android_logger(static_cast<uint32_t>(tag));
     }
-    explicit stats_event_list(log_msg& log_msg) : ret(0) {
-        ctx = create_android_log_parser(log_msg.msg() + sizeof(uint32_t),
-                                        log_msg.entry.len - sizeof(uint32_t));
-    }
     ~stats_event_list() { android_log_destroy(&ctx); }
 
     int close() {
@@ -251,9 +247,6 @@ class stats_event_list {
         }
         return ret >= 0;
     }
-
-    android_log_list_element read() { return android_log_read_next(ctx); }
-    android_log_list_element peek() { return android_log_peek_next(ctx); }
 };
 
 #endif

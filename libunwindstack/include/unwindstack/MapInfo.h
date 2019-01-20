@@ -38,7 +38,8 @@ struct MapInfo {
         flags(flags),
         name(name),
         prev_map(map_info),
-        load_bias(static_cast<uint64_t>(-1)) {}
+        load_bias(static_cast<uint64_t>(-1)),
+        build_id(0) {}
   MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
           const std::string& name)
       : start(start),
@@ -47,8 +48,9 @@ struct MapInfo {
         flags(flags),
         name(name),
         prev_map(map_info),
-        load_bias(static_cast<uint64_t>(-1)) {}
-  ~MapInfo() = default;
+        load_bias(static_cast<uint64_t>(-1)),
+        build_id(0) {}
+  ~MapInfo();
 
   uint64_t start = 0;
   uint64_t end = 0;
@@ -68,12 +70,21 @@ struct MapInfo {
 
   std::atomic_uint64_t load_bias;
 
+  // This is a pointer to a new'd std::string.
+  // Using an atomic value means that we don't need to lock and will
+  // make it easier to move to a fine grained lock in the future.
+  std::atomic_uintptr_t build_id;
+
   // This function guarantees it will never return nullptr.
   Elf* GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch);
 
   uint64_t GetLoadBias(const std::shared_ptr<Memory>& process_memory);
 
   Memory* CreateMemory(const std::shared_ptr<Memory>& process_memory);
+
+  bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
+
+  std::string GetBuildID();
 
  private:
   MapInfo(const MapInfo&) = delete;

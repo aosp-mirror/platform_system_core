@@ -91,6 +91,7 @@ LOCAL_STATIC_LIBRARIES := \
     libz \
     libselinux \
     libcap \
+    libgsi \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.

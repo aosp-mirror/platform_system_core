@@ -37,10 +37,10 @@
 #include <log/event_tag_map.h>
 #include <log/log.h>
 #include <log/logprint.h>
-#include <log/uio.h>
 
 #include "log_portability.h"
 #include "logger.h"
+#include "uio.h"
 
 static int stderrOpen();
 static void stderrClose();

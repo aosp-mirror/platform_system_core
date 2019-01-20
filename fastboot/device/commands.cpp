@@ -28,6 +28,7 @@
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
 #include <fs_mgr.h>
+#include <libgsi/libgsi.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <uuid/uuid.h>
@@ -459,4 +460,23 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
 
     bool wipe = (args.size() >= 3 && args[2] == "wipe");
     return UpdateSuper(device, args[1], wipe);
+}
+
+bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (!android::gsi::IsGsiInstalled()) {
+        return device->WriteStatus(FastbootResult::FAIL, "No GSI is installed");
+    }
+    if (args.size() != 2) {
+        return device->WriteFail("Invalid arguments");
+    }
+    if (args[1] == "wipe") {
+        if (!android::gsi::UninstallGsi()) {
+            return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
+        }
+    } else if (args[1] == "disable") {
+        if (!android::gsi::DisableGsi()) {
+            return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
+        }
+    }
+    return device->WriteStatus(FastbootResult::OKAY, "Success");
 }

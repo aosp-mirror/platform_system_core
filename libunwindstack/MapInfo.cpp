@@ -146,6 +146,10 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
     }
   }
 
+  if (process_memory == nullptr) {
+    return nullptr;
+  }
+
   // Need to verify that this elf is valid. It's possible that
   // only part of the elf file to be mapped into memory is in the executable
   // map. In this case, there will be another read-only map that includes the
@@ -221,6 +225,19 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum exp
   return elf.get();
 }
 
+bool MapInfo::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset) {
+  {
+    // Make sure no other thread is trying to update this elf object.
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (elf == nullptr) {
+      return false;
+    }
+  }
+  // No longer need the lock, once the elf object is created, it is not deleted
+  // until this object is deleted.
+  return elf->GetFunctionName(addr, name, func_offset);
+}
+
 uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
   uint64_t cur_load_bias = load_bias.load();
   if (cur_load_bias != static_cast<uint64_t>(-1)) {
@@ -248,6 +265,50 @@ uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
   cur_load_bias = Elf::GetLoadBias(memory.get());
   load_bias = cur_load_bias;
   return cur_load_bias;
+}
+
+MapInfo::~MapInfo() {
+  uintptr_t id = build_id.load();
+  if (id != 0) {
+    delete reinterpret_cast<std::string*>(id);
+  }
+}
+
+std::string MapInfo::GetBuildID() {
+  uintptr_t id = build_id.load();
+  if (build_id != 0) {
+    return *reinterpret_cast<std::string*>(id);
+  }
+
+  // No need to lock, at worst if multiple threads do this at the same
+  // time it should be detected and only one thread should win and
+  // save the data.
+  std::unique_ptr<std::string> cur_build_id(new std::string);
+
+  // Now need to see if the elf object exists.
+  // Make sure no other thread is trying to add the elf to this map.
+  mutex_.lock();
+  Elf* elf_obj = elf.get();
+  mutex_.unlock();
+  if (elf_obj != nullptr) {
+    *cur_build_id = elf_obj->GetBuildID();
+  } else {
+    // This will only work if we can get the file associated with this memory.
+    // If this is only available in memory, then the section name information
+    // is not present and we will not be able to find the build id info.
+    std::unique_ptr<Memory> memory(GetFileMemory());
+    if (memory != nullptr) {
+      *cur_build_id = Elf::GetBuildID(memory.get());
+    }
+  }
+
+  id = reinterpret_cast<uintptr_t>(cur_build_id.get());
+  uintptr_t expected_id = 0;
+  if (build_id.compare_exchange_weak(expected_id, id)) {
+    // Value saved, so make sure the memory is not freed.
+    cur_build_id.release();
+  }
+  return *reinterpret_cast<std::string*>(id);
 }
 
 }  // namespace unwindstack
