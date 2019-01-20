@@ -624,10 +624,11 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
 }
 
 void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
-                        jobject class_loader, jstring library_path, bool* needs_native_bridge,
-                        char** error_msg) {
+                        jobject class_loader, const char* caller_location, jstring library_path,
+                        bool* needs_native_bridge, char** error_msg) {
 #if defined(__ANDROID__)
   UNUSED(target_sdk_version);
+  UNUSED(caller_location);
   if (class_loader == nullptr) {
     *needs_native_bridge = false;
     void* handle = dlopen(path, RTLD_NOW);
@@ -654,7 +655,7 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
 
   return OpenNativeLibraryInNamespace(ns, path, needs_native_bridge, error_msg);
 #else
-  UNUSED(env, target_sdk_version, class_loader);
+  UNUSED(env, target_sdk_version, class_loader, caller_location);
 
   // Do some best effort to emulate library-path support. It will not
   // work for dependencies.

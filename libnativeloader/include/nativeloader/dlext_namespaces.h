@@ -109,19 +109,6 @@ extern bool android_link_namespaces(struct android_namespace_t* from,
                                     struct android_namespace_t* to,
                                     const char* shared_libs_sonames);
 
-/*
- * Get the default library search path.
- * The path will be copied into buffer, which must have space for at least
- * buffer_size chars. Elements are separated with ':', and the path will always
- * be null-terminated.
- *
- * If buffer_size is too small to hold the entire default search path and the
- * null terminator, this function will abort. There is currently no way to find
- * out what the required buffer size is. At the time of this writing, PATH_MAX
- * is sufficient and used by all callers of this function.
- */
-extern void android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size);
-
 extern struct android_namespace_t* android_get_exported_namespace(const char* name);
 
 __END_DECLS
