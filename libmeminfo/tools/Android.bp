@@ -13,7 +13,7 @@
 // limitations under the License.
 
 cc_binary {
-    name: "librank2",
+    name: "librank",
     cflags: [
         "-Wall",
         "-Werror",
@@ -27,7 +27,7 @@ cc_binary {
 }
 
 cc_binary {
-    name: "procmem2",
+    name: "procmem",
     cflags: [
         "-Wall",
         "-Werror",
@@ -41,7 +41,7 @@ cc_binary {
 }
 
 cc_binary {
-    name: "procrank2",
+    name: "procrank",
     cflags: [
         "-Wall",
         "-Werror",
@@ -55,7 +55,7 @@ cc_binary {
 }
 
 cc_binary {
-    name: "showmap2",
+    name: "showmap",
     cflags: [
         "-Wall",
         "-Werror",
