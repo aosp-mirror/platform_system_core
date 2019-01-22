@@ -230,3 +230,121 @@ TEST(fs_mgr, ReadFstabFromFile_FsOptions) {
     EXPECT_EQ("none", fstab[6].mount_point);
     EXPECT_EQ("", fstab[6].fs_options);
 }
+
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_ForceFdeOrFbe) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      forcefdeorfbe=/dir/key
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFd(fstab_contents, tf.fd));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    ASSERT_EQ(1U, fstab.size());
+
+    auto entry = fstab.begin();
+    EXPECT_EQ("none0", entry->mount_point);
+
+    FstabEntry::FsMgrFlags flags = {0};
+    flags.force_fde_or_fbe = true;
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+
+    EXPECT_EQ("/dir/key", entry->key_loc);
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+}
+
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_FileEncryption) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      fileencryption=blah
+source none1       swap   defaults      fileencryption=software
+source none2       swap   defaults      fileencryption=aes-256-xts
+source none3       swap   defaults      fileencryption=adiantum
+source none4       swap   defaults      fileencryption=adiantum:aes-256-heh
+source none5       swap   defaults      fileencryption=ice
+source none6       swap   defaults      fileencryption=ice:blah
+source none7       swap   defaults      fileencryption=ice:aes-256-cts
+source none8       swap   defaults      fileencryption=ice:aes-256-heh
+source none9       swap   defaults      fileencryption=ice:adiantum
+source none10      swap   defaults      fileencryption=ice:adiantum:
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFd(fstab_contents, tf.fd));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    ASSERT_EQ(11U, fstab.size());
+
+    FstabEntry::FsMgrFlags flags = {0};
+    flags.file_encryption = true;
+
+    auto entry = fstab.begin();
+    EXPECT_EQ("none0", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("", entry->file_contents_mode);
+    EXPECT_EQ("", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none1", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none2", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none3", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("adiantum", entry->file_contents_mode);
+    EXPECT_EQ("adiantum", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none4", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("adiantum", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-heh", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none5", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("ice", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none6", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("ice", entry->file_contents_mode);
+    EXPECT_EQ("", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none7", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("ice", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none8", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("ice", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-heh", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none9", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("ice", entry->file_contents_mode);
+    EXPECT_EQ("adiantum", entry->file_names_mode);
+
+    entry++;
+    EXPECT_EQ("none10", entry->mount_point);
+    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_EQ("", entry->file_contents_mode);
+    EXPECT_EQ("", entry->file_names_mode);
+}

@@ -54,8 +54,8 @@ struct fstab_rec {
     int max_comp_streams;
     off64_t zram_size;
     off64_t reserved_size;
-    int file_contents_mode;
-    int file_names_mode;
+    char* file_contents_mode;
+    char* file_names_mode;
     off64_t erase_blk_size;
     off64_t logical_blk_size;
     char* sysfs_path;
@@ -118,8 +118,8 @@ struct FstabEntry {
     int max_comp_streams = 0;
     off64_t zram_size = 0;
     off64_t reserved_size = 0;
-    int file_contents_mode = 0;
-    int file_names_mode = 0;
+    std::string file_contents_mode;
+    std::string file_names_mode;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
@@ -130,7 +130,7 @@ struct FstabEntry {
 
     // TODO: Remove this union once fstab_rec is deprecated. It only serves as a
     // convenient way to convert between fstab_rec::fs_mgr_flags and these bools.
-    union {
+    union FsMgrFlags {
         uint64_t val;
         struct {
             // bit 0
