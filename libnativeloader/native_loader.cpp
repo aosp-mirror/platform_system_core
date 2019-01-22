@@ -43,10 +43,6 @@
 #include <android-base/properties.h>
 #endif
 
-extern "C" {
-struct android_namespace_t* android_get_exported_namespace(const char*);
-}
-
 #define CHECK(predicate) LOG_ALWAYS_FATAL_IF(!(predicate),\
                                              "%s:%d: %s CHECK '" #predicate "' failed.",\
                                              __FILE__, __LINE__, __FUNCTION__)

@@ -152,11 +152,12 @@ namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = default
-# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
-# when it exists.
-namespace.conscrypt.link.default.allow_all_shared_libs = true
+namespace.conscrypt.link.default.shared_libs  = libc.so
+namespace.conscrypt.link.default.shared_libs += libm.so
+namespace.conscrypt.link.default.shared_libs += libdl.so
 
 ###############################################################################
 # "sphal" namespace
