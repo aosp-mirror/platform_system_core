@@ -28,10 +28,11 @@ cc_library_shared {
 
 cc_binary {
     name: "memtrack_test",
-    srcs: ["memtrack_test.c"],
+    srcs: ["memtrack_test.cpp"],
+    static_libs: ["libc++fs"],
     shared_libs: [
+        "libbase",
         "libmemtrack",
-        "libpagemap",
     ],
     cflags: [
         "-Wall",
