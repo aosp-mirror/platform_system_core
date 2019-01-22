@@ -109,6 +109,9 @@ namespace.default.asan.permitted.paths += /apex/com.android.resolv/${LIB}
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.default.links = runtime
+# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
+# libart.
+namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
