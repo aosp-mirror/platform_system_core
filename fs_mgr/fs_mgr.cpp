@@ -81,6 +81,8 @@
 #define ZRAM_CONF_MCS   "/sys/block/zram0/max_comp_streams"
 #define ZRAM_BACK_DEV   "/sys/block/zram0/backing_dev"
 
+#define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using android::base::Realpath;
@@ -110,6 +112,7 @@ enum FsStatFlags {
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
     FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
+    FS_STAT_ENABLE_VERITY_FAILED = 0x80000,
 };
 
 // TODO: switch to inotify()
@@ -440,6 +443,43 @@ static void tune_encrypt(const std::string& blk_device, const FstabEntry& entry,
     }
 }
 
+// Enable fs-verity if needed.
+static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
+                        const struct ext4_super_block* sb, int* fs_stat) {
+    bool has_verity = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_VERITY)) != 0;
+    bool want_verity = entry.fs_mgr_flags.fs_verity;
+
+    if (has_verity || !want_verity) {
+        return;
+    }
+
+    std::string verity_support;
+    if (!android::base::ReadFileToString(SYSFS_EXT4_VERITY, &verity_support)) {
+        LERROR << "Failed to open " << SYSFS_EXT4_VERITY;
+        return;
+    }
+
+    if (!(android::base::Trim(verity_support) == "supported")) {
+        LERROR << "Current ext4 verity not supported by kernel";
+        return;
+    }
+
+    if (!tune2fs_available()) {
+        LERROR << "Unable to enable ext4 verity on " << blk_device
+               << " because " TUNE2FS_BIN " is missing";
+        return;
+    }
+
+    LINFO << "Enabling ext4 verity on " << blk_device;
+
+    const char* argv[] = {TUNE2FS_BIN, "-O", "verity", blk_device.c_str()};
+    if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
+        LERROR << "Failed to run " TUNE2FS_BIN " to enable "
+               << "ext4 verity on " << blk_device;
+        *fs_stat |= FS_STAT_ENABLE_VERITY_FAILED;
+    }
+}
+
 // Read the primary superblock from an f2fs filesystem.  On failure return
 // false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
 #define F2FS_BLKSIZE 4096
@@ -511,12 +551,14 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
     }
 
     if (is_extfs(entry.fs_type) &&
-        (entry.fs_mgr_flags.reserved_size || entry.fs_mgr_flags.file_encryption)) {
+        (entry.fs_mgr_flags.reserved_size || entry.fs_mgr_flags.file_encryption ||
+         entry.fs_mgr_flags.fs_verity)) {
         struct ext4_super_block sb;
 
         if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
+            tune_verity(blk_device, entry, &sb, &fs_stat);
         }
     }
 
