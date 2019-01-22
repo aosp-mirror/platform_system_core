@@ -199,6 +199,33 @@ const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
     return swap_offsets_;
 }
 
+bool ProcMemInfo::PageMap(const Vma& vma, std::vector<uint64_t>* pagemap) {
+    pagemap->clear();
+    std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
+    ::android::base::unique_fd pagemap_fd(
+            TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (pagemap_fd < 0) {
+        PLOG(ERROR) << "Failed to open " << pagemap_file;
+        return false;
+    }
+
+    uint64_t nr_pages = (vma.end - vma.start) / getpagesize();
+    pagemap->reserve(nr_pages);
+
+    uint64_t idx = vma.start / getpagesize();
+    uint64_t last = idx + nr_pages;
+    uint64_t val;
+    for (; idx < last; idx++) {
+        if (pread64(pagemap_fd, &val, sizeof(uint64_t), idx * sizeof(uint64_t)) < 0) {
+            PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
+            return false;
+        }
+        pagemap->emplace_back(val);
+    }
+
+    return true;
+}
+
 bool ProcMemInfo::ReadMaps(bool get_wss) {
     // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
     // running for the lifetime of the system can recycle the objects and don't have to
