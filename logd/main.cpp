@@ -38,12 +38,12 @@
 #include <android-base/macros.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/properties.h>
-#include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
+#include <processgroup/sched_policy.h>
 #include <utils/threads.h>
 
 #include "CommandListener.h"

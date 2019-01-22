@@ -66,7 +66,6 @@ cc_library {
         "load_file.cpp",
         "native_handle.cpp",
         "record_stream.cpp",
-        "sched_policy.cpp",
         "sockets.cpp",
         "strdup16to8.cpp",
         "strdup8to16.cpp",
@@ -178,8 +177,12 @@ cc_library {
         "libbase_headers",
         "libcutils_headers",
         "libutils_headers",
+        "libprocessgroup_headers",
     ],
-    export_header_lib_headers: ["libcutils_headers"],
+    export_header_lib_headers: [
+        "libcutils_headers",
+        "libprocessgroup_headers",
+    ],
     local_include_dirs: ["include"],
 
     cflags: [
