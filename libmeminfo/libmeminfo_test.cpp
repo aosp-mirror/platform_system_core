@@ -121,6 +121,23 @@ TEST_F(ValidateProcMemInfo, TestSwapOffsets) {
     EXPECT_EQ(proc_usage.swap / getpagesize(), swap_offsets.size());
 }
 
+TEST_F(ValidateProcMemInfo, TestPageMap) {
+    std::vector<uint64_t> pagemap;
+
+    auto vma_callback = [&](const Vma& vma) {
+        uint64_t* pmap_out;
+        size_t len;
+        ASSERT_EQ(0, pm_process_pagemap_range(proc, vma.start, vma.end, &pmap_out, &len));
+        ASSERT_TRUE(proc_mem->PageMap(vma, &pagemap));
+
+        EXPECT_EQ(len, ((vma.end - vma.start) / getpagesize()));
+        for (size_t i = 0; i < len; i++) {
+            EXPECT_EQ(pmap_out[i], pagemap[i]);
+        }
+    };
+    ASSERT_TRUE(proc_mem->ForEachVma(vma_callback));
+}
+
 class ValidateProcMemInfoWss : public ::testing::Test {
   protected:
     void SetUp() override {
