@@ -309,7 +309,7 @@ skip_administrative_mounts() {
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\) " \
     -e "^\(bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
-    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\) "
+    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|persist\|metadata\) "
 }
 
 if [ X"-s" = X"${1}" -a -n "${2}" ]; then
@@ -403,9 +403,15 @@ if echo "${D}" | grep /dev/root >/dev/null; then
      echo "${D}" | grep -v /dev/root`
 fi
 D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
+no_dedupe=true
+for d in ${D}; do
+  adb_sh tune2fs -l $d 2>&1 |
+    grep "Filesystem features:.*shared_blocks" >/dev/null &&
+  no_dedupe=false
+done
 D=`adb_sh df -k ${D} </dev/null`
 echo "${D}"
-if [ X"${D}" = X"${D##* 100[%] }" ]; then
+if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
 elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
