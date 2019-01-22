@@ -125,6 +125,7 @@ static struct flag_list fs_mgr_flags[] = {
         {"zram_loopback_path=", MF_ZRAM_LOOPBACK_PATH},
         {"zram_loopback_size=", MF_ZRAM_LOOPBACK_SIZE},
         {"zram_backing_dev_path=", MF_ZRAM_BACKING_DEV_PATH},
+        {"fsverity", MF_FS_VERITY},
         {0, 0},
 };
 
@@ -1085,6 +1086,10 @@ int fs_mgr_is_checkpoint_fs(const struct fstab_rec* fstab) {
 
 int fs_mgr_is_checkpoint_blk(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_CHECKPOINT_BLK;
+}
+
+int fs_mgr_is_fs_verity(const struct fstab_rec* fstab) {
+    return fstab->fs_mgr_flags & MF_FS_VERITY;
 }
 
 FstabEntry BuildGsiSystemFstabEntry() {
