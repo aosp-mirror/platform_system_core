@@ -220,7 +220,7 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, 
 }
 
 static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
-                         uint64_t file_size) {
+                         uint64_t file_size, std::function<bool(uint64_t, uint64_t)> on_progress) {
     // Reserve space for the file on the file system and write it out to make sure the extents
     // don't come back unwritten. Return from this function with the kernel file offset set to 0.
     // If the filesystem is f2fs, then we also PIN the file on disk to make sure the blocks
@@ -245,11 +245,21 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
         return false;
     }
 
+    int permille = -1;
     for (; offset < file_size; offset += blocksz) {
         if (!::android::base::WriteFully(file_fd, buffer.get(), blocksz)) {
             PLOG(ERROR) << "Failed to write" << blocksz << " bytes at offset" << offset
                         << " in file " << file_path;
             return false;
+        }
+        // Don't invoke the callback every iteration - wait until a significant
+        // chunk (here, 1/1000th) of the data has been processed.
+        int new_permille = (static_cast<uint64_t>(offset) * 1000) / file_size;
+        if (new_permille != permille) {
+            if (on_progress && !on_progress(offset, file_size)) {
+                return false;
+            }
+            permille = new_permille;
         }
     }
 
@@ -264,6 +274,10 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
         return false;
     }
 
+    // Send one last progress notification.
+    if (on_progress && !on_progress(file_size, file_size)) {
+        return false;
+    }
     return true;
 }
 
@@ -412,7 +426,8 @@ static bool ReadFiemap(int file_fd, const std::string& file_path,
     return last_extent_seen;
 }
 
-FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_size, bool create) {
+FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_size, bool create,
+                                   std::function<bool(uint64_t, uint64_t)> progress) {
     // if 'create' is false, open an existing file and do not truncate.
     int open_flags = O_RDWR | O_CLOEXEC;
     if (create) {
@@ -474,7 +489,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     }
 
     if (create) {
-        if (!AllocateFile(file_fd, abs_path, blocksz, file_size)) {
+        if (!AllocateFile(file_fd, abs_path, blocksz, file_size, std::move(progress))) {
             LOG(ERROR) << "Failed to allocate file: " << abs_path << " of size: " << file_size
                        << " bytes";
             cleanup(abs_path, create);
