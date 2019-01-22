@@ -626,8 +626,8 @@ const std::string kMkExt4("/system/bin/mke2fs");
 
 // Only a suggestion for _first_ try during mounting
 std::string fs_mgr_overlayfs_scratch_mount_type() {
-    if (!access(kMkF2fs.c_str(), X_OK)) return "f2fs";
-    if (!access(kMkExt4.c_str(), X_OK)) return "ext4";
+    if (!access(kMkF2fs.c_str(), X_OK) && fs_mgr_access("/sys/fs/f2fs")) return "f2fs";
+    if (!access(kMkExt4.c_str(), X_OK) && fs_mgr_access("/sys/fs/ext4")) return "ext4";
     return "auto";
 }
 
@@ -829,8 +829,9 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
                                                    true /* readonly */)) {
                     auto has_overlayfs_dir = fs_mgr_access(kScratchMountPoint + kOverlayTopDir);
                     fs_mgr_overlayfs_umount_scratch();
-                    if (has_overlayfs_dir)
+                    if (has_overlayfs_dir) {
                         fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
+                    }
                 }
             }
         }
