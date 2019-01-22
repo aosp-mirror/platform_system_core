@@ -73,6 +73,7 @@ cc_library {
             cflags: ["-DFAKE_LOG_DEVICE=1"],
         },
         android: {
+            version_script: "liblog.map.txt",
             srcs: liblog_target_sources,
             // AddressSanitizer runtime library depends on liblog.
             sanitize: {
