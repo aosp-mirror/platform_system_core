@@ -642,7 +642,11 @@ std::string fs_mgr_overlayfs_scratch_device() {
         // Create from within single super device;
         auto& dm = DeviceMapper::Instance();
         const auto partition_name = android::base::Basename(kScratchMountPoint);
-        if (!dm.GetDmDevicePathByName(partition_name, &path)) return "";
+        if (!dm.GetDmDevicePathByName(partition_name, &path)) {
+            // non-DAP A/B device?
+            if (fs_mgr_access(super_device)) return "";
+            path = kPhysicalDevice + "system" + (slot_number ? "_a" : "_b");
+        }
     }
     return scratch_device_cache = path;
 }
@@ -883,10 +887,6 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         if (backing && backing[0] && (overlay_mount_point != backing)) continue;
         if (overlay_mount_point == kScratchMountPoint) {
-            if (!fs_mgr_rw_access(fs_mgr_overlayfs_super_device(fs_mgr_overlayfs_slot_number())) ||
-                !fs_mgr_overlayfs_has_logical(fstab)) {
-                continue;
-            }
             if (!fs_mgr_overlayfs_setup_scratch(fstab, change)) continue;
         } else {
             if (std::find_if(fstab.begin(), fstab.end(), [&overlay_mount_point](const auto& entry) {
