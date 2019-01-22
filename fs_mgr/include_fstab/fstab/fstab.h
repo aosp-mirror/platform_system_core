@@ -125,7 +125,7 @@ struct FstabEntry {
     std::string sysfs_path;
     std::string vbmeta_partition;
     std::string zram_loopback_path;
-    uint64_t zram_loopback_size;
+    uint64_t zram_loopback_size = 512 * 1024 * 1024;  // 512MB by default;
     std::string zram_backing_dev_path;
 
     // TODO: Remove this union once fstab_rec is deprecated. It only serves as a
