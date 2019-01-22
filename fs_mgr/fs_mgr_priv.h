@@ -128,6 +128,8 @@
                          0x400000000
 #define MF_ZRAM_BACKING_DEV_PATH \
                          0x800000000
+#define MF_FS_VERITY  \
+                         0x1000000000
 // clang-format on
 
 #define DM_BUF_SIZE 4096
