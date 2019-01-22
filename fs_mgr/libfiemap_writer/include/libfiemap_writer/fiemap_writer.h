@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -36,9 +37,13 @@ class FiemapWriter final {
   public:
     // Factory method for FiemapWriter.
     // The method returns FiemapUniquePtr that contains all the data necessary to be able to write
-    // to the given file directly using raw block i/o.
+    // to the given file directly using raw block i/o. The optional progress callback will be
+    // invoked, if create is true, while the file is being initialized. It receives the bytes
+    // written and the number of total bytes. If the callback returns false, the operation will
+    // fail.
     static FiemapUniquePtr Open(const std::string& file_path, uint64_t file_size,
-                                bool create = true);
+                                bool create = true,
+                                std::function<bool(uint64_t, uint64_t)> progress = {});
 
     // Syncs block device writes.
     bool Flush() const;
