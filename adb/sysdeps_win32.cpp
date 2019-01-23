@@ -719,7 +719,7 @@ static int _fh_socket_writev(FH f, const adb_iovec* iov, int iovcnt) {
 /**************************************************************************/
 /**************************************************************************/
 
-static int _init_winsock(void) {
+static void _init_winsock() {
     static std::once_flag once;
     std::call_once(once, []() {
         WSADATA wsaData;
@@ -743,10 +743,7 @@ static int _init_winsock(void) {
         //    crypt32.dll which calls atexit() which tries to acquire the C
         //    Runtime lock that the other thread holds.
     });
-    return 0;
 }
-
-static int _winsock_init = _init_winsock();
 
 // Map a socket type to an explicit socket protocol instead of using the socket
 // protocol of 0. Explicit socket protocols are used by most apps and we should
@@ -2621,14 +2618,13 @@ extern "C" int wmain(int argc, wchar_t **argv) {
 }
 
 // Shadow UTF-8 environment variable name/value pairs that are created from
-// _wenviron the first time that adb_getenv() is called. Note that this is not
-// currently updated if putenv, setenv, unsetenv are called. Note that no
-// thread synchronization is done, but we're called early enough in
+// _wenviron by _init_env(). Note that this is not currently updated if putenv, setenv, unsetenv are
+// called. Note that no thread synchronization is done, but we're called early enough in
 // single-threaded startup that things work ok.
 static auto& g_environ_utf8 = *new std::unordered_map<std::string, char*>();
 
-// Make sure that shadow UTF-8 environment variables are setup.
-static void _ensure_env_setup() {
+// Setup shadow UTF-8 environment variables.
+static void _init_env() {
     // If some name/value pairs exist, then we've already done the setup below.
     if (g_environ_utf8.size() != 0) {
         return;
@@ -2681,8 +2677,6 @@ static void _ensure_env_setup() {
 // Version of getenv() that takes a UTF-8 environment variable name and
 // retrieves a UTF-8 value. Case-insensitive to match getenv() on Windows.
 char* adb_getenv(const char* name) {
-    _ensure_env_setup();
-
     // Case-insensitive search by searching for lowercase name in a map of
     // lowercase names.
     const auto it = g_environ_utf8.find(ToLower(std::string(name)));
@@ -2757,3 +2751,65 @@ int adb_thread_setname(const std::string& name) {
 
     return 0;
 }
+
+#if !defined(ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
+
+#if !defined(DISABLE_NEWLINE_AUTO_RETURN)
+#define DISABLE_NEWLINE_AUTO_RETURN 0x0008
+#endif
+
+static void _init_console() {
+    DWORD old_out_console_mode;
+
+    const HANDLE out = _get_console_handle(STDOUT_FILENO, &old_out_console_mode);
+    if (out == nullptr) {
+        return;
+    }
+
+    // Try to use ENABLE_VIRTUAL_TERMINAL_PROCESSING on the output console to process virtual
+    // terminal sequences on newer versions of Windows 10 and later.
+    // https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
+    // On older OSes that don't support the flag, SetConsoleMode() will return an error.
+    // ENABLE_VIRTUAL_TERMINAL_PROCESSING also solves a problem where the last column of the
+    // console cannot be overwritten.
+    //
+    // Note that we don't use DISABLE_NEWLINE_AUTO_RETURN because it doesn't seem to be necessary.
+    // If we use DISABLE_NEWLINE_AUTO_RETURN, _console_write_utf8() would need to be modified to
+    // translate \n to \r\n.
+    if (!SetConsoleMode(out, old_out_console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
+        return;
+    }
+
+    // If SetConsoleMode() succeeded, the console supports virtual terminal processing, so we
+    // should set the TERM env var to match so that it will be propagated to adbd on devices.
+    //
+    // Below's direct manipulation of env vars and not g_environ_utf8 assumes that _init_env() has
+    // not yet been called. If this fails, _init_env() should be called after _init_console().
+    if (g_environ_utf8.size() > 0) {
+        LOG(FATAL) << "environment variables have already been converted to UTF-8";
+    }
+
+#pragma push_macro("getenv")
+#undef getenv
+#pragma push_macro("putenv")
+#undef putenv
+    if (getenv("TERM") == nullptr) {
+        // This is the same TERM value used by Gnome Terminal and the version of ssh included with
+        // Windows.
+        putenv("TERM=xterm-256color");
+    }
+#pragma pop_macro("putenv")
+#pragma pop_macro("getenv")
+}
+
+static bool _init_sysdeps() {
+    // _init_console() depends on _init_env() not being called yet.
+    _init_console();
+    _init_env();
+    _init_winsock();
+    return true;
+}
+
+static bool _sysdeps_init = _init_sysdeps();
