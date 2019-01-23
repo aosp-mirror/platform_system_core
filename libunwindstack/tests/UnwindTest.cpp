@@ -47,6 +47,7 @@ namespace unwindstack {
 enum TestTypeEnum : uint8_t {
   TEST_TYPE_LOCAL_UNWINDER = 0,
   TEST_TYPE_LOCAL_UNWINDER_FROM_PID,
+  TEST_TYPE_LOCAL_WAIT_FOR_FINISH,
   TEST_TYPE_REMOTE,
   TEST_TYPE_REMOTE_WITH_INVALID_CALL,
 };
@@ -79,7 +80,10 @@ static void SignalHandler(int, siginfo_t*, void* sigcontext) {
 
 extern "C" void SignalInnerFunction() {
   g_signal_ready_for_remote = true;
-  while (!g_finish.load()) {
+  // Avoid any function calls because not every instruction will be
+  // unwindable.
+  // This method of looping is only used when testing a remote unwind.
+  while (true) {
   }
 }
 
@@ -134,6 +138,11 @@ static void VerifyUnwind(pid_t pid, Maps* maps, Regs* regs,
 // off. If this doesn't happen, then all of the calls will be optimized
 // away.
 extern "C" void InnerFunction(TestTypeEnum test_type) {
+  if (test_type == TEST_TYPE_LOCAL_WAIT_FOR_FINISH) {
+    while (!g_finish.load()) {
+    }
+    return;
+  }
   if (test_type == TEST_TYPE_REMOTE || test_type == TEST_TYPE_REMOTE_WITH_INVALID_CALL) {
     g_ready_for_remote = true;
     g_ready = true;
@@ -141,7 +150,10 @@ extern "C" void InnerFunction(TestTypeEnum test_type) {
       void (*crash_func)() = nullptr;
       crash_func();
     }
-    while (!g_finish.load()) {
+    // Avoid any function calls because not every instruction will be
+    // unwindable.
+    // This method of looping is only used when testing a remote unwind.
+    while (true) {
     }
     return;
   }
@@ -271,7 +283,7 @@ TEST_F(UnwindTest, from_context) {
   std::atomic_int tid(0);
   std::thread thread([&]() {
     tid = syscall(__NR_gettid);
-    OuterFunction(TEST_TYPE_REMOTE);
+    OuterFunction(TEST_TYPE_LOCAL_WAIT_FOR_FINISH);
   });
 
   struct sigaction act, oldact;
