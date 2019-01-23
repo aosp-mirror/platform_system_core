@@ -861,8 +861,7 @@ TEST(SysMemInfoParser, TestVmallocInfoNoMemory) {
     ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
     std::string file = std::string(tf.path);
 
-    SysMemInfo smi;
-    EXPECT_EQ(smi.ReadVmallocInfo(file), 0);
+    EXPECT_EQ(ReadVmallocInfo(file), 0);
 }
 
 TEST(SysMemInfoParser, TestVmallocInfoKernel) {
@@ -874,8 +873,7 @@ TEST(SysMemInfoParser, TestVmallocInfoKernel) {
     ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
     std::string file = std::string(tf.path);
 
-    SysMemInfo smi;
-    EXPECT_EQ(smi.ReadVmallocInfo(file), getpagesize());
+    EXPECT_EQ(ReadVmallocInfo(file), getpagesize());
 }
 
 TEST(SysMemInfoParser, TestVmallocInfoModule) {
@@ -887,8 +885,7 @@ TEST(SysMemInfoParser, TestVmallocInfoModule) {
     ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
     std::string file = std::string(tf.path);
 
-    SysMemInfo smi;
-    EXPECT_EQ(smi.ReadVmallocInfo(file), 6 * getpagesize());
+    EXPECT_EQ(ReadVmallocInfo(file), 6 * getpagesize());
 }
 
 TEST(SysMemInfoParser, TestVmallocInfoAll) {
@@ -905,8 +902,7 @@ TEST(SysMemInfoParser, TestVmallocInfoAll) {
     ASSERT_TRUE(::android::base::WriteStringToFd(vmallocinfo, tf.fd));
     std::string file = std::string(tf.path);
 
-    SysMemInfo smi;
-    EXPECT_EQ(smi.ReadVmallocInfo(file), 7 * getpagesize());
+    EXPECT_EQ(ReadVmallocInfo(file), 7 * getpagesize());
 }
 
 int main(int argc, char** argv) {
