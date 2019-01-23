@@ -31,6 +31,8 @@
 // Stuff from ninja's util.h that's needed below.
 #include <vector>
 using namespace std;
+// This does not account for multiple UTF-8 bytes corresponding to a single Unicode code point, or
+// multiple code points corresponding to a single grapheme cluster (user-perceived character).
 string ElideMiddle(const string& str, size_t width) {
   const int kMargin = 3;  // Space for "...".
   string result = str;
@@ -85,9 +87,10 @@ void LinePrinter::Print(string to_print, LineType type) {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(console_, &csbi);
 
-    // TODO: std::wstring to_print_wide; if (!android::base::UTF8ToWide(to_print, &to_print_wide)...
-    // TODO: wstring ElideMiddle.
     to_print = ElideMiddle(to_print, static_cast<size_t>(csbi.dwSize.X));
+    std::wstring to_print_wide;
+    // ElideMiddle may create invalid UTF-8, so ignore conversion errors.
+    (void)android::base::UTF8ToWide(to_print, &to_print_wide);
     // We don't want to have the cursor spamming back and forth, so instead of
     // printf use WriteConsoleOutput which updates the contents of the buffer,
     // but doesn't move the cursor position.
@@ -100,12 +103,10 @@ void LinePrinter::Print(string to_print, LineType type) {
     };
     vector<CHAR_INFO> char_data(csbi.dwSize.X);
     for (size_t i = 0; i < static_cast<size_t>(csbi.dwSize.X); ++i) {
-      // TODO: UnicodeChar instead of AsciiChar, to_print_wide[i].
-      char_data[i].Char.AsciiChar = i < to_print.size() ? to_print[i] : ' ';
-      char_data[i].Attributes = csbi.wAttributes;
+        char_data[i].Char.UnicodeChar = i < to_print_wide.size() ? to_print_wide[i] : L' ';
+        char_data[i].Attributes = csbi.wAttributes;
     }
-    // TODO: WriteConsoleOutputW.
-    WriteConsoleOutput(console_, &char_data[0], buf_size, zero_zero, &target);
+    WriteConsoleOutputW(console_, &char_data[0], buf_size, zero_zero, &target);
 #else
     // Limit output to width of the terminal if provided so we don't cause
     // line-wrapping.
