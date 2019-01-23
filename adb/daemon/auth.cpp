@@ -18,6 +18,7 @@
 
 #include "adb.h"
 #include "adb_auth.h"
+#include "adb_io.h"
 #include "fdevent.h"
 #include "sysdeps.h"
 #include "transport.h"
@@ -39,9 +40,9 @@ static fdevent* listener_fde = nullptr;
 static fdevent* framework_fde = nullptr;
 static int framework_fd = -1;
 
-static void usb_disconnected(void* unused, atransport* t);
-static struct adisconnect usb_disconnect = { usb_disconnected, nullptr};
-static atransport* usb_transport;
+static void adb_disconnected(void* unused, atransport* t);
+static struct adisconnect adb_disconnect = {adb_disconnected, nullptr};
+static atransport* adb_transport;
 static bool needs_retry = false;
 
 bool auth_required = true;
@@ -98,10 +99,17 @@ static bool adbd_auth_generate_token(void* token, size_t token_size) {
     return okay;
 }
 
-static void usb_disconnected(void* unused, atransport* t) {
-    LOG(INFO) << "USB disconnect";
-    usb_transport = nullptr;
+static void adb_disconnected(void* unused, atransport* t) {
+    LOG(INFO) << "ADB disconnect";
+    adb_transport = nullptr;
     needs_retry = false;
+    if (framework_fd >= 0) {
+        const char msg[] = "DC";
+        LOG(DEBUG) << "Sending '" << msg << "'";
+        if (!WriteFdExactly(framework_fd, msg, sizeof(msg))) {
+            PLOG(ERROR) << "Failed to send disconnected message";
+        }
+    }
 }
 
 static void framework_disconnected() {
@@ -119,17 +127,17 @@ static void adbd_auth_event(int fd, unsigned events, void*) {
         if (ret <= 0) {
             framework_disconnected();
         } else if (ret == 2 && response[0] == 'O' && response[1] == 'K') {
-            if (usb_transport) {
-                adbd_auth_verified(usb_transport);
+            if (adb_transport) {
+                adbd_auth_verified(adb_transport);
             }
         }
     }
 }
 
 void adbd_auth_confirm_key(const char* key, size_t len, atransport* t) {
-    if (!usb_transport) {
-        usb_transport = t;
-        t->AddDisconnect(&usb_disconnect);
+    if (!adb_transport) {
+        adb_transport = t;
+        t->AddDisconnect(&adb_disconnect);
     }
 
     if (framework_fd < 0) {
@@ -151,7 +159,7 @@ void adbd_auth_confirm_key(const char* key, size_t len, atransport* t) {
     }
     LOG(DEBUG) << "Sending '" << msg << "'";
 
-    if (unix_write(framework_fd, msg, msg_len) == -1) {
+    if (!WriteFdExactly(framework_fd, msg, msg_len)) {
         PLOG(ERROR) << "Failed to write PK";
         return;
     }
@@ -175,7 +183,7 @@ static void adbd_auth_listener(int fd, unsigned events, void* data) {
 
     if (needs_retry) {
         needs_retry = false;
-        send_auth_request(usb_transport);
+        send_auth_request(adb_transport);
     }
 }
 
