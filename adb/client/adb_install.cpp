@@ -35,7 +35,6 @@
 #include "client/file_sync_client.h"
 #include "commandline.h"
 #include "fastdeploy.h"
-#include "sysdeps.h"
 
 static constexpr int kFastDeployMinApi = 24;
 
@@ -161,17 +160,23 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
 
     if (use_fastdeploy == true) {
         TemporaryFile metadataTmpFile;
-        TemporaryFile patchTmpFile;
+        std::string patchTmpFilePath;
+        {
+            TemporaryFile patchTmpFile;
+            patchTmpFile.DoNotRemove();
+            patchTmpFilePath = patchTmpFile.path;
+        }
 
         FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
         extract_metadata(file, metadataFile);
         fclose(metadataFile);
 
-        create_patch(file, metadataTmpFile.path, patchTmpFile.path);
+        create_patch(file, metadataTmpFile.path, patchTmpFilePath.c_str());
         // pass all but 1st (command) and last (apk path) parameters through to pm for
         // session creation
         std::vector<const char*> pm_args{argv + 1, argv + argc - 1};
-        install_patch(file, patchTmpFile.path, pm_args.size(), pm_args.data());
+        install_patch(file, patchTmpFilePath.c_str(), pm_args.size(), pm_args.data());
+        adb_unlink(patchTmpFilePath.c_str());
         delete_device_patch_file(file);
         return 0;
     } else {
