@@ -75,41 +75,36 @@ static ListenerList& listener_list GUARDED_BY(listener_list_mutex) = *new Listen
 
 static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
     if (ev & FDE_READ) {
-        int fd = adb_socket_accept(_fd, nullptr, nullptr);
+        unique_fd fd(adb_socket_accept(_fd, nullptr, nullptr));
         if (fd < 0) return;
 
         int rcv_buf_size = CHUNK_SIZE;
-        adb_setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcv_buf_size, sizeof(rcv_buf_size));
+        adb_setsockopt(fd.get(), SOL_SOCKET, SO_RCVBUF, &rcv_buf_size, sizeof(rcv_buf_size));
 
-        asocket* s = create_local_socket(fd);
+        asocket* s = create_local_socket(std::move(fd));
         if (s) {
             connect_to_smartsocket(s);
             return;
         }
-
-        adb_close(fd);
     }
 }
 
 static void listener_event_func(int _fd, unsigned ev, void* _l)
 {
     alistener* listener = reinterpret_cast<alistener*>(_l);
-    asocket *s;
 
     if (ev & FDE_READ) {
-        int fd = adb_socket_accept(_fd, nullptr, nullptr);
+        unique_fd fd(adb_socket_accept(_fd, nullptr, nullptr));
         if (fd < 0) {
             return;
         }
 
-        s = create_local_socket(fd);
+        asocket* s = create_local_socket(std::move(fd));
         if (s) {
             s->transport = listener->transport;
             connect_to_remote(s, listener->connect_to);
             return;
         }
-
-        adb_close(fd);
     }
 }
 
