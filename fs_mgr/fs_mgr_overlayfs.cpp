@@ -137,9 +137,9 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
 
 bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     // readonly filesystem, can not be mount -o remount,rw
-    // if squashfs or if free space is (near) zero making such a remount
+    // for squashfs, erofs or if free space is (near) zero making such a remount
     // virtually useless, or if there are shared blocks that prevent remount,rw
-    if ("squashfs" == entry->fs_type || !fs_mgr_filesystem_has_space(entry->mount_point)) {
+    if (!fs_mgr_filesystem_has_space(entry->mount_point)) {
         return true;
     }
     if (entry->fs_mgr_flags.logical) {
