@@ -455,8 +455,7 @@ static void BM_VmallocInfo_new(benchmark::State& state) {
     std::string vmallocinfo =
             ::android::base::StringPrintf("%s/testdata1/vmallocinfo", exec_dir.c_str());
     for (auto _ : state) {
-        SysMemInfo smi;
-        CHECK_EQ(smi.ReadVmallocInfo(vmallocinfo), 29884416);
+        CHECK_EQ(::android::meminfo::ReadVmallocInfo(vmallocinfo), 29884416);
     }
 }
 BENCHMARK(BM_VmallocInfo_new);
