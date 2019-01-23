@@ -28,7 +28,7 @@ dir.system = /data/benchmarktest64
 dir.postinstall = /postinstall
 
 [system]
-additional.namespaces = runtime,sphal,vndk,rs
+additional.namespaces = runtime,conscrypt,media,sphal,vndk,rs
 
 ###############################################################################
 # "default" namespace
@@ -127,6 +127,36 @@ namespace.runtime.links = default
 # TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
 # when it exists.
 namespace.runtime.link.default.allow_all_shared_libs = true
+
+###############################################################################
+# "media" APEX namespace
+#
+# This namespace is for libraries within the media APEX.
+###############################################################################
+namespace.media.isolated = true
+namespace.media.visible = true
+
+namespace.media.search.paths = /apex/com.android.media/${LIB}
+
+namespace.media.links = default
+namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
+namespace.media.link.default.shared_libs += libandroid.so
+namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+###############################################################################
+# "conscrypt" APEX namespace
+#
+# This namespace is for libraries within the conscrypt APEX.
+###############################################################################
+namespace.conscrypt.isolated = true
+namespace.conscrypt.visible = true
+
+namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.links = default
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.conscrypt.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "sphal" namespace

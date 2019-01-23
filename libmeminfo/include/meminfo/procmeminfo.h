@@ -73,6 +73,13 @@ class ProcMemInfo final {
 
     const std::vector<uint16_t>& SwapOffsets();
 
+    // Reads /proc/<pid>/pagemap for this process for each page within
+    // the 'vma' and stores that in 'pagemap'. It is assumed that the 'vma'
+    // is obtained by calling Maps() or 'ForEachVma' for the same object. No special checks
+    // are made to see if 'vma' is *valid*.
+    // Returns false if anything goes wrong, 'true' otherwise.
+    bool PageMap(const Vma& vma, std::vector<uint64_t>* pagemap);
+
     ~ProcMemInfo() = default;
 
   private:

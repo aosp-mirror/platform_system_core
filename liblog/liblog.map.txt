@@ -59,3 +59,24 @@ LIBLOG_Q {
     android_log_reset; #vndk
     android_log_parser_reset; #vndk
 };
+
+LIBLOG_PRIVATE {
+  global:
+    __android_log_bswrite;
+    __android_log_btwrite;
+    __android_log_bwrite;
+    __android_log_close;
+    __android_log_pmsg_file_read;
+    __android_log_pmsg_file_write;
+    __android_log_security;
+    __android_log_security_bswrite;
+    __android_logger_get_buffer_size;
+    __android_logger_property_get_bool;
+    android_openEventTagMap;
+    android_log_processBinaryLogBuffer;
+    android_log_processLogBuffer;
+    android_log_read_next;
+    android_log_write_list_buffer;
+    android_lookupEventTagNum;
+    create_android_log_parser;
+};

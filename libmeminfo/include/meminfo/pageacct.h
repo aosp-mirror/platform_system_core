@@ -65,5 +65,17 @@ class PageAcct final {
     ::android::base::unique_fd pageidle_fd_;
 };
 
+// Returns if the page present bit is set in the value
+// passed in.
+bool page_present(uint64_t pagemap_val);
+
+// Returns if the page swapped bit is set in the value
+// passed in.
+bool page_swapped(uint64_t pagemap_val);
+
+// Returns the page frame number (physical page) from
+// pagemap value
+uint64_t page_pfn(uint64_t pagemap_val);
+
 }  // namespace meminfo
 }  // namespace android

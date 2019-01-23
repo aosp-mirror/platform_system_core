@@ -57,6 +57,7 @@
 #include "service.h"
 #include "sigchld_handler.h"
 
+using android::base::GetBoolProperty;
 using android::base::Split;
 using android::base::StringPrintf;
 using android::base::Timer;
@@ -398,9 +399,31 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     Service* bootAnim = ServiceList::GetInstance().FindService("bootanim");
     Service* surfaceFlinger = ServiceList::GetInstance().FindService("surfaceflinger");
     if (bootAnim != nullptr && surfaceFlinger != nullptr && surfaceFlinger->IsRunning()) {
-        // will not check animation class separately
+        bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
+
+        if (do_shutdown_animation) {
+            property_set("service.bootanim.exit", "0");
+            // Could be in the middle of animation. Stop and start so that it can pick
+            // up the right mode.
+            bootAnim->Stop();
+        }
+
         for (const auto& service : ServiceList::GetInstance()) {
-            if (service->classnames().count("animation")) service->SetShutdownCritical();
+            if (service->classnames().count("animation") == 0) {
+                continue;
+            }
+
+            // start all animation classes if stopped.
+            if (do_shutdown_animation) {
+                service->Start().IgnoreError();
+            }
+            service->SetShutdownCritical();  // will not check animation class separately
+        }
+
+        if (do_shutdown_animation) {
+            bootAnim->Start().IgnoreError();
+            surfaceFlinger->SetShutdownCritical();
+            bootAnim->SetShutdownCritical();
         }
     }
 
