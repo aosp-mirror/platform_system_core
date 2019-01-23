@@ -309,7 +309,7 @@ skip_administrative_mounts() {
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\) " \
     -e "^\(bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
-    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\) "
+    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|persist\|metadata\) "
 }
 
 if [ X"-s" = X"${1}" -a -n "${2}" ]; then
@@ -403,9 +403,15 @@ if echo "${D}" | grep /dev/root >/dev/null; then
      echo "${D}" | grep -v /dev/root`
 fi
 D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
+no_dedupe=true
+for d in ${D}; do
+  adb_sh tune2fs -l $d 2>&1 |
+    grep "Filesystem features:.*shared_blocks" >/dev/null &&
+  no_dedupe=false
+done
 D=`adb_sh df -k ${D} </dev/null`
 echo "${D}"
-if [ X"${D}" = X"${D##* 100[%] }" ]; then
+if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
 elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
@@ -597,6 +603,7 @@ echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
 echo "${GREEN}[ RUN      ]${NORMAL} flash vendor, confirm its content disappears" >&2
 
 H=`adb_sh echo '${HOSTNAME}' </dev/null 2>/dev/null`
+is_userspace_fastboot=false
 if [ -z "${ANDROID_PRODUCT_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} build tree not setup, skipping"
 elif [ ! -s "${ANDROID_PRODUCT_OUT}/vendor.img" ]; then
@@ -609,6 +616,8 @@ else
     fastboot flash vendor ||
     ( fastboot reboot && false) ||
     die "fastboot flash vendor"
+  fastboot_getvar is-userspace yes &&
+    is_userspace_fastboot=true
   if [ -n "${scratch_paritition}" ]; then
     fastboot_getvar partition-type:${scratch_partition} raw ||
       ( fastboot reboot && false) ||
@@ -654,7 +663,12 @@ else
       echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
       die  "overlay /system takeover after flash vendor"
     echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
-      die  "overlay supposed to be minus /vendor takeover after flash vendor"
+      if ${is_userspace_fastboot}; then
+        die  "overlay supposed to be minus /vendor takeover after flash vendor"
+      else
+        echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing, ignoring a failure"
+        ( die  "overlay supposed to be minus /vendor takeover after flash vendor" )
+      fi
   fi
   B="`adb_cat /system/hello`" ||
     die "re-read /system/hello after flash vendor"
@@ -662,8 +676,17 @@ else
   adb_root ||
     die "adb root"
   B="`adb_cat /vendor/hello`" &&
-    die "re-read /vendor/hello after flash vendor"
-  check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
+    if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
+      die "re-read /vendor/hello after flash vendor"
+    else
+      echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing, ignoring a failure"
+      ( die "re-read /vendor/hello after flash vendor" )
+    fi
+  if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
+    check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
+  else
+    ( check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor )
+  fi
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remove test content (cleanup)" >&2
