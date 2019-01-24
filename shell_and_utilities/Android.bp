@@ -19,6 +19,7 @@ phony {
         "reboot",
         "sh",
         "simpleperf",
+        "simpleperf_app_runner",
         "tcpdump",
         "toolbox",
         "toybox",
