@@ -121,6 +121,14 @@ const std::vector<Vma>& ProcMemInfo::Maps() {
     return maps_;
 }
 
+const std::vector<Vma>& ProcMemInfo::MapsWithPageIdle() {
+    if (maps_.empty() && !ReadMaps(get_wss_, true)) {
+        LOG(ERROR) << "Failed to read maps with page idle for Process " << pid_;
+    }
+
+    return maps_;
+}
+
 const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
     if (!maps_.empty()) {
         return maps_;
@@ -226,7 +234,7 @@ bool ProcMemInfo::PageMap(const Vma& vma, std::vector<uint64_t>* pagemap) {
     return true;
 }
 
-bool ProcMemInfo::ReadMaps(bool get_wss) {
+bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle) {
     // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
     // running for the lifetime of the system can recycle the objects and don't have to
     // unnecessarily retain and update this object in memory (which can get significantly large).
@@ -256,7 +264,7 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
     }
 
     for (auto& vma : maps_) {
-        if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss)) {
+        if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss, use_pageidle)) {
             LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
                        << vma.end << "]";
             maps_.clear();
@@ -268,7 +276,7 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
     return true;
 }
 
-bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
+bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_pageidle) {
     PageAcct& pinfo = PageAcct::Instance();
     uint64_t pagesz = getpagesize();
     uint64_t num_pages = (vma.end - vma.start) / pagesz;
@@ -279,6 +287,13 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
                 first * sizeof(uint64_t)) < 0) {
         PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
         return false;
+    }
+
+    if (get_wss && use_pageidle) {
+        if (!pinfo.InitPageAcct(true)) {
+            LOG(ERROR) << "Failed to init idle page accounting";
+            return false;
+        }
     }
 
     std::unique_ptr<uint64_t[]> pg_flags(new uint64_t[num_pages]);
@@ -323,7 +338,8 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
         bool is_private = (pg_counts[i] == 1);
         // Working set
         if (get_wss) {
-            bool is_referenced = !!(pg_flags[i] & (1 << KPF_REFERENCED));
+            bool is_referenced = use_pageidle ? (pinfo.IsPageIdle(page_frame) == 1)
+                                              : !!(pg_flags[i] & (1 << KPF_REFERENCED));
             if (!is_referenced) {
                 continue;
             }

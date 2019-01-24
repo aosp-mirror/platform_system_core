@@ -67,3 +67,17 @@ cc_binary {
         "libmeminfo",
     ],
 }
+
+cc_binary {
+    name: "wsstop",
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    srcs: ["wsstop.cpp"],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libmeminfo",
+    ],
+}
