@@ -24,8 +24,8 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
+        "libcutils",
         "libpcrecpp",
-        "libprocessgroup",
     ],
     static_libs: ["liblog"],
     logtags: ["event.logtags"],

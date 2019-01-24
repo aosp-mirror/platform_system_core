@@ -59,7 +59,6 @@ test_libraries = [
     "libcutils",
     "liblog",
     "libbase",
-    "libprocessgroup",
 ]
 
 cc_test {
