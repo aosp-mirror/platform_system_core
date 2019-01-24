@@ -210,6 +210,21 @@ adb_wait() {
   fi
 }
 
+[ "USAGE: usb_status > stdout
+
+If adb_wait failed, check if device is in fastboot mode and report status
+
+Returns: \"(USB stack borken?)\", \"(In fastboot mode)\" or \"(in adb mode)\"" ]
+usb_status() {
+  if inFastboot; then
+    echo "(In fastboot mode)"
+  elif inAdb; then
+    echo "(In adb mode)"
+  else
+    echo "(USB stack borken?)"
+  fi
+}
+
 [ "USAGE: fastboot_wait [timeout]
 
 Returns: waits until the device has returned for fastboot or optional timeout" ]
@@ -383,6 +398,17 @@ skip_administrative_mounts() {
     -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|persist\|metadata\) "
 }
 
+[ "USAGE: skip_unrelated_mounts < /proc/mounts
+
+or output from df
+
+Filters out all apex and vendor override administrative overlay mounts
+uninteresting to the test" ]
+skip_unrelated_mounts() {
+    grep -v "^overlay.* /\(apex\|bionic\|system\|vendor\)/[^ ]" |
+      grep -v "[%] /\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$"
+}
+
 ##
 ##  MAINLINE
 ##
@@ -484,9 +510,9 @@ if ${reboot}; then
   echo "${ORANGE}[  WARNING ]${NORMAL} rebooting before test" >&2
   adb_reboot &&
     adb_wait 2m ||
-    die "lost device after reboot after wipe (USB stack broken?)"
+    die "lost device after reboot after wipe `usb_status`"
   adb_root ||
-    die "lost device after elevation to root after wipe (USB stack broken?)"
+    die "lost device after elevation to root after wipe `usb_status`"
 fi
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
@@ -509,7 +535,8 @@ for d in ${D}; do
     grep "Filesystem features:.*shared_blocks" >/dev/null &&
   no_dedupe=false
 done
-D=`adb_sh df -k ${D} </dev/null`
+D=`adb_sh df -k ${D} </dev/null |
+   sed 's@\([%] /\)\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$@\1@'`
 echo "${D}"
 if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
@@ -548,9 +575,9 @@ if [ X"${D}" != X"${H}" ]; then
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
     adb_wait 2m ||
-    die "lost device after reboot requested (USB stack broken?)"
+    die "lost device after reboot requested `usb_status`"
   adb_root ||
-    die "lost device after elevation to root (USB stack broken?)"
+    die "lost device after elevation to root `usb_status`"
   rebooted=true
   # re-disable verity to see the setup remarks expected
   T=`adb_date`
@@ -593,7 +620,7 @@ adb remount ||
   die -t "${T}" "adb remount failed"
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
-  D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` ||
+  D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "` ||
   ( [ -n "${L}" ] && echo "${L}" && false )
 ret=${?}
 uses_dynamic_scratch=false
@@ -637,7 +664,7 @@ if ${overlayfs_needed}; then
     echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
     die  "overlay takeover after remount"
   !(adb_sh grep "^overlay " /proc/mounts </dev/null |
-    grep -v "^overlay /\(vendor\|system\|bionic\)/..* overlay ro," |
+    skip_unrelated_mounts |
     grep " overlay ro,") &&
     !(adb_sh grep " rw," /proc/mounts </dev/null |
       skip_administrative_mounts data) ||
@@ -694,7 +721,7 @@ if ${overlayfs_needed}; then
 
   adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
     skip_administrative_mounts |
-    grep -v ' \(squashfs\|ext4\|f2fs\) ' &&
+    grep -v ' \(squashfs\|ext4\|f2fs\|vfat\) ' &&
     echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover after first stage init" >&2 ||
     echo "${GREEN}[       OK ]${NORMAL} overlay takeover in first stage init" >&2
 fi
@@ -782,7 +809,7 @@ else
     adb_root &&
       D=`adb_sh df -k </dev/null` &&
       H=`echo "${D}" | head -1` &&
-      D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
+      D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "` &&
       echo "${H}" &&
       echo "${D}" &&
       echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
@@ -888,7 +915,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} test raw remount commands" >&2
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
-  die "lost device after reboot to ro state (USB stack broken?)"
+  die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null &&
   die "/vendor is not read-only"
 adb_su mount -o rw,remount /vendor ||
