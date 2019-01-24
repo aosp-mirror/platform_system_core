@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-#include <processgroup/sched_policy.h>
+#include <cutils/sched_policy.h>
 
 #define LOG_TAG "SchedPolicy"
 
