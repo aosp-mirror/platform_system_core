@@ -72,7 +72,7 @@ class Unwinder {
     frames_.reserve(max_frames);
   }
 
-  ~Unwinder() = default;
+  virtual ~Unwinder() = default;
 
   void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
               const std::vector<std::string>* map_suffixes_to_ignore = nullptr);
@@ -124,7 +124,7 @@ class Unwinder {
 class UnwinderFromPid : public Unwinder {
  public:
   UnwinderFromPid(size_t max_frames, pid_t pid) : Unwinder(max_frames), pid_(pid) {}
-  ~UnwinderFromPid() = default;
+  virtual ~UnwinderFromPid() = default;
 
   bool Init(ArchEnum arch);
 
