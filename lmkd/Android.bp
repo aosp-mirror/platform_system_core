@@ -5,7 +5,6 @@ cc_binary {
     shared_libs: [
         "libcutils",
         "liblog",
-        "libprocessgroup",
     ],
     static_libs: [
         "libstatslogc",
