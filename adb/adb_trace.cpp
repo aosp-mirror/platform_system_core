@@ -32,7 +32,9 @@
 
 #if !ADB_HOST
 const char* adb_device_banner = "device";
+#if defined(__ANDROID__)
 static android::base::LogdLogger gLogdLogger;
+#endif
 #else
 const char* adb_device_banner = "host";
 #endif
@@ -46,7 +48,7 @@ void AdbLogger(android::base::LogId id, android::base::LogSeverity severity,
     fflush(stderr);
 #endif
 
-#if !ADB_HOST
+#if !ADB_HOST && defined(__ANDROID__)
     // Only print logs of INFO or higher to logcat, so that `adb logcat` with adbd tracing on
     // doesn't result in exponential logging.
     if (severity >= android::base::INFO) {

@@ -98,7 +98,10 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <private/android_logger.h>
+
+#if defined(__ANDROID__)
 #include <selinux/android.h>
+#endif
 
 #include "adb.h"
 #include "adb_io.h"
