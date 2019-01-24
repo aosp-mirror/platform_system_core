@@ -62,16 +62,17 @@ inAdb() {
 Returns: true if the command succeeded" ]
 adb_sh() {
   args=
-  for i in ${@}; do
+  for i in "${@}"; do
+    [ -z "${args}" ] || args="${args} "
     if [ X"${i}" != X"${i#\'}" ]; then
-      args="${args} ${i}"
+      args="${args}${i}"
     elif [ X"${i}" != X"${i#* }" ]; then
-      args="${args} '${i}'"
+      args="${args}'${i}'"
     else
-      args="${args} ${i}"
+      args="${args}${i}"
     fi
   done
-  adb shell ${args}
+  adb shell "${args}"
 }
 
 [ "USAGE: adb_date >/dev/stdout
@@ -332,6 +333,12 @@ fi
 
 # Do something
 
+D=`get_property ro.serialno`
+[ -n "${D}" ] || D=`get_property ro.boot.serialno`
+[ -z "${D}" ] || ANDROID_SERIAL=${D}
+BUILD_DESCRIPTION=`get_property ro.build.description`
+echo "${BLUE}[     INFO ]${NORMAL} ${ANDROID_SERIAL} ${BUILD_DESCRIPTION}" >&2
+
 echo "${GREEN}[ RUN      ]${NORMAL} Testing kernel support for overlayfs" >&2
 
 overlayfs_supported=true;
@@ -553,8 +560,8 @@ fi
 echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
 
 A="Hello World! $(date)"
-echo "${A}" | adb_sh "cat - > /system/hello"
-echo "${A}" | adb_sh "cat - > /vendor/hello"
+echo "${A}" | adb_sh cat - ">/system/hello"
+echo "${A}" | adb_sh cat - ">/vendor/hello"
 B="`adb_cat /system/hello`" ||
   die "sytem hello"
 check_eq "${A}" "${B}" /system before reboot
@@ -575,7 +582,7 @@ if ${overlayfs_needed}; then
     ( echo "${L}" && false ) ||
     die -d "overlay takeover failed after reboot"
 
-  adb_su "sed -n '1,/overlay \\/system/p' /proc/mounts" </dev/null |
+  adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
     skip_administrative_mounts |
     grep -v ' \(squashfs\|ext4\|f2fs\) ' &&
     echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover after first stage init" >&2 ||
@@ -705,17 +712,22 @@ check_eq "cat: /vendor/hello: No such file or directory" "${B}" after flash rm
 
 if [ -n "${scratch_partition}" ]; then
 
-  echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition}" >&2
+  echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
   adb reboot-fastboot ||
     die "Reboot into fastbootd"
+  cleanup() {
+    rm /tmp/adb-remount-test.img
+  }
   dd if=/dev/zero of=/tmp/adb-remount-test.img bs=4096 count=16 2>/dev/null &&
     fastboot_wait 2m ||
-    ( rm /tmp/adb-remount-test.img && false) ||
     die "reboot into fastboot"
   fastboot flash --force ${scratch_partition} /tmp/adb-remount-test.img
   err=${?}
-  rm /tmp/adb-remount-test.img
+  cleanup
+  cleanup() {
+    :
+  }
   fastboot reboot ||
     die "can not reboot out of fastboot"
   [ 0 -eq ${err} ] ||
@@ -726,6 +738,8 @@ if [ -n "${scratch_partition}" ]; then
   T=`adb_date`
   D=`adb disable-verity 2>&1`
   err=${?}
+  adb remount ||
+    die "remount failed"
   echo "${D}"
   [ ${err} = 0 ] &&
     [ X"${D}" = X"${D##*setup failed}" ] &&
@@ -733,5 +747,19 @@ if [ -n "${scratch_partition}" ]; then
     echo "${GREEN}[       OK ]${NORMAL} ${scratch_partition} recreated" >&2 ||
     die -t ${T} "setup for overlayfs"
 fi
+
+echo "${GREEN}[ RUN      ]${NORMAL} test raw remount command" >&2
+
+# prerequisite is a prepped device from above
+adb_reboot &&
+  adb_wait 2m ||
+  die "lost device after reboot to ro state"
+adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null &&
+  die "/vendor is not read-only"
+adb_su mount -o rw,remount /vendor ||
+  die "remount command"
+adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null ||
+  die "/vendor is not read-write"
+echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 
 echo "${GREEN}[  PASSED  ]${NORMAL} adb remount" >&2
