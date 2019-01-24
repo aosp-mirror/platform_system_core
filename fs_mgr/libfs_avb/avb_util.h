@@ -16,9 +16,11 @@
 
 #pragma once
 
+#include <ostream>
 #include <string>
 #include <vector>
 
+#include <fstab/fstab.h>
 #include <libavb/libavb.h>
 #include <libdm/dm.h>
 
@@ -26,6 +28,22 @@
 
 namespace android {
 namespace fs_mgr {
+
+enum class VBMetaVerifyResult {
+    kSuccess = 0,
+    kError = 1,
+    kErrorVerification = 2,
+};
+
+std::ostream& operator<<(std::ostream& os, VBMetaVerifyResult);
+
+struct ChainInfo {
+    std::string partition_name;
+    std::string public_key_blob;
+
+    ChainInfo(const std::string& chain_partition_name, const std::string& chain_public_key_blob)
+        : partition_name(chain_partition_name), public_key_blob(chain_public_key_blob) {}
+};
 
 // AvbHashtreeDescriptor to dm-verity table setup.
 bool GetHashtreeDescriptor(const std::string& partition_name,
@@ -40,6 +58,38 @@ bool ConstructVerityTable(const AvbHashtreeDescriptor& hashtree_desc, const std:
 bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const AvbHashtreeDescriptor& hashtree_desc,
                            const std::string& salt, const std::string& root_digest,
                            bool wait_for_verity_dev);
+
+// Maps AVB partition name to a device partition name.
+std::string AvbPartitionToDevicePatition(const std::string& avb_partition_name,
+                                         const std::string& ab_suffix,
+                                         const std::string& ab_other_suffix);
+
+// AvbFooter and AvbMetaImage maninpulations.
+off64_t GetTotalSize(int fd);
+
+std::unique_ptr<AvbFooter> GetAvbFooter(int fd);
+
+std::unique_ptr<VBMetaData> VerifyVBMetaData(int fd, const std::string& partition_name,
+                                             const std::string& expected_public_key_blob,
+                                             VBMetaVerifyResult* out_verify_result);
+
+VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
+                                         const std::string& expected_public_key_blob);
+
+bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& expected_key_blob);
+
+// Detects if whether a partition contains a rollback image.
+bool RollbackDetected(const std::string& partition_name, uint64_t rollback_index);
+
+// Extracts chain partition info.
+std::vector<ChainInfo> GetChainPartitionInfo(const VBMetaData& vbmeta, bool* fatal_error);
+
+VBMetaVerifyResult LoadAndVerifyVbmetaImpl(
+        const std::string& partition_name, const std::string& ab_suffix,
+        const std::string& ab_other_suffix, const std::string& expected_public_key_blob,
+        bool allow_verification_error, bool load_chained_vbmeta, bool rollback_protection,
+        std::function<std::string(const std::string&)> device_path_constructor,
+        bool is_chained_vbmeta, std::vector<VBMetaData>* out_vbmeta_images);
 
 }  // namespace fs_mgr
 }  // namespace android
