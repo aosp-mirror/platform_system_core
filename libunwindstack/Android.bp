@@ -212,6 +212,7 @@ cc_test {
         "tests/RegsStepIfSignalHandlerTest.cpp",
         "tests/RegsTest.cpp",
         "tests/SymbolsTest.cpp",
+        "tests/TestUtils.cpp",
         "tests/UnwindOfflineTest.cpp",
         "tests/UnwindTest.cpp",
         "tests/UnwinderTest.cpp",

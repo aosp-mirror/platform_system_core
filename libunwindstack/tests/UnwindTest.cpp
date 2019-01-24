@@ -198,6 +198,21 @@ TEST_F(UnwindTest, local_use_from_pid) {
   OuterFunction(TEST_TYPE_LOCAL_UNWINDER_FROM_PID);
 }
 
+static void LocalUnwind(void* data) {
+  TestTypeEnum* test_type = reinterpret_cast<TestTypeEnum*>(data);
+  OuterFunction(*test_type);
+}
+
+TEST_F(UnwindTest, local_check_for_leak) {
+  TestTypeEnum test_type = TEST_TYPE_LOCAL_UNWINDER;
+  TestCheckForLeaks(LocalUnwind, &test_type);
+}
+
+TEST_F(UnwindTest, local_use_from_pid_check_for_leak) {
+  TestTypeEnum test_type = TEST_TYPE_LOCAL_UNWINDER_FROM_PID;
+  TestCheckForLeaks(LocalUnwind, &test_type);
+}
+
 void WaitForRemote(pid_t pid, uint64_t addr, bool leave_attached, bool* completed) {
   *completed = false;
   // Need to sleep before attempting first ptrace. Without this, on the
@@ -277,6 +292,57 @@ TEST_F(UnwindTest, unwind_from_pid_remote) {
 
   ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0))
       << "ptrace detach failed with unexpected error: " << strerror(errno);
+}
+
+static void RemoteCheckForLeaks(void (*unwind_func)(void*)) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    OuterFunction(TEST_TYPE_REMOTE);
+    exit(0);
+  }
+  ASSERT_NE(-1, pid);
+  TestScopedPidReaper reap(pid);
+
+  bool completed;
+  WaitForRemote(pid, reinterpret_cast<uint64_t>(&g_ready_for_remote), true, &completed);
+  ASSERT_TRUE(completed) << "Timed out waiting for remote process to be ready.";
+
+  TestCheckForLeaks(unwind_func, &pid);
+
+  ASSERT_EQ(0, ptrace(PTRACE_DETACH, pid, 0, 0))
+      << "ptrace detach failed with unexpected error: " << strerror(errno);
+}
+
+static void RemoteUnwind(void* data) {
+  pid_t* pid = reinterpret_cast<pid_t*>(data);
+
+  RemoteMaps maps(*pid);
+  ASSERT_TRUE(maps.Parse());
+  std::unique_ptr<Regs> regs(Regs::RemoteGet(*pid));
+  ASSERT_TRUE(regs.get() != nullptr);
+
+  VerifyUnwind(*pid, &maps, regs.get(), kFunctionOrder);
+}
+
+TEST_F(UnwindTest, remote_check_for_leaks) {
+  RemoteCheckForLeaks(RemoteUnwind);
+}
+
+static void RemoteUnwindFromPid(void* data) {
+  pid_t* pid = reinterpret_cast<pid_t*>(data);
+
+  std::unique_ptr<Regs> regs(Regs::RemoteGet(*pid));
+  ASSERT_TRUE(regs.get() != nullptr);
+
+  UnwinderFromPid unwinder(512, *pid);
+  ASSERT_TRUE(unwinder.Init(regs->Arch()));
+  unwinder.SetRegs(regs.get());
+
+  VerifyUnwind(&unwinder, kFunctionOrder);
+}
+
+TEST_F(UnwindTest, remote_unwind_for_pid_check_for_leaks) {
+  RemoteCheckForLeaks(RemoteUnwindFromPid);
 }
 
 TEST_F(UnwindTest, from_context) {
