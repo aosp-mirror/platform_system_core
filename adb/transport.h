@@ -399,4 +399,14 @@ void send_packet(apacket* p, atransport* t);
 
 asocket* create_device_tracker(bool long_output);
 
+#if !ADB_HOST
+void server_socket_thread(int port);
+
+#if defined(__ANDROID__)
+void qemu_socket_thread(int port);
+bool use_qemu_goldfish();
+#endif
+
+#endif
+
 #endif   /* __TRANSPORT_H */
