@@ -137,9 +137,9 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
 
 bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     // readonly filesystem, can not be mount -o remount,rw
-    // if squashfs or if free space is (near) zero making such a remount
+    // for squashfs, erofs or if free space is (near) zero making such a remount
     // virtually useless, or if there are shared blocks that prevent remount,rw
-    if ("squashfs" == entry->fs_type || !fs_mgr_filesystem_has_space(entry->mount_point)) {
+    if (!fs_mgr_filesystem_has_space(entry->mount_point)) {
         return true;
     }
     if (entry->fs_mgr_flags.logical) {
@@ -626,8 +626,8 @@ const std::string kMkExt4("/system/bin/mke2fs");
 
 // Only a suggestion for _first_ try during mounting
 std::string fs_mgr_overlayfs_scratch_mount_type() {
-    if (!access(kMkF2fs.c_str(), X_OK)) return "f2fs";
-    if (!access(kMkExt4.c_str(), X_OK)) return "ext4";
+    if (!access(kMkF2fs.c_str(), X_OK) && fs_mgr_access("/sys/fs/f2fs")) return "f2fs";
+    if (!access(kMkExt4.c_str(), X_OK) && fs_mgr_access("/sys/fs/ext4")) return "ext4";
     return "auto";
 }
 
@@ -642,7 +642,11 @@ std::string fs_mgr_overlayfs_scratch_device() {
         // Create from within single super device;
         auto& dm = DeviceMapper::Instance();
         const auto partition_name = android::base::Basename(kScratchMountPoint);
-        if (!dm.GetDmDevicePathByName(partition_name, &path)) return "";
+        if (!dm.GetDmDevicePathByName(partition_name, &path)) {
+            // non-DAP A/B device?
+            if (fs_mgr_access(super_device)) return "";
+            path = kPhysicalDevice + "system" + (slot_number ? "_a" : "_b");
+        }
     }
     return scratch_device_cache = path;
 }
@@ -829,8 +833,9 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
                                                    true /* readonly */)) {
                     auto has_overlayfs_dir = fs_mgr_access(kScratchMountPoint + kOverlayTopDir);
                     fs_mgr_overlayfs_umount_scratch();
-                    if (has_overlayfs_dir)
+                    if (has_overlayfs_dir) {
                         fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
+                    }
                 }
             }
         }
@@ -882,10 +887,6 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         if (backing && backing[0] && (overlay_mount_point != backing)) continue;
         if (overlay_mount_point == kScratchMountPoint) {
-            if (!fs_mgr_rw_access(fs_mgr_overlayfs_super_device(fs_mgr_overlayfs_slot_number())) ||
-                !fs_mgr_overlayfs_has_logical(fstab)) {
-                continue;
-            }
             if (!fs_mgr_overlayfs_setup_scratch(fstab, change)) continue;
         } else {
             if (std::find_if(fstab.begin(), fstab.end(), [&overlay_mount_point](const auto& entry) {

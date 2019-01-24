@@ -109,7 +109,11 @@ namespace.default.asan.permitted.paths += /apex/com.android.resolv/${LIB}
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.default.links = runtime
+# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
+# libart.
+namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
+namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -152,11 +156,12 @@ namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = default
-# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
-# when it exists.
-namespace.conscrypt.link.default.allow_all_shared_libs = true
+namespace.conscrypt.link.default.shared_libs  = libc.so
+namespace.conscrypt.link.default.shared_libs += libm.so
+namespace.conscrypt.link.default.shared_libs += libdl.so
 
 ###############################################################################
 # "sphal" namespace
@@ -310,7 +315,7 @@ namespace.vndk.link.sphal.allow_all_shared_libs = true
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = system,vndk
+additional.namespaces = runtime,system,vndk
 
 ###############################################################################
 # "default" namespace
@@ -345,6 +350,20 @@ namespace.default.links = system,vndk
 namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
 namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
 namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
+
+###############################################################################
+# "runtime" APEX namespace
+#
+# This namespace exposes externally accessible libraries from the Runtime APEX.
+###############################################################################
+namespace.runtime.isolated = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.links = system
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.runtime.link.system.allow_all_shared_libs = true
 
 ###############################################################################
 # "vndk" namespace
@@ -402,6 +421,9 @@ namespace.system.asan.search.paths += /data/asan/product/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.system.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
+
+namespace.system.links = runtime
+namespace.system.link.runtime.shared_libs = libdexfile_external.so
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
