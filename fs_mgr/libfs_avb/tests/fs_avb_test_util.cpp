@@ -69,7 +69,7 @@ std::string BaseFsAvbTest::CalcVBMetaDigest(const std::string& file_name,
     return trimmed_digest_data;
 }
 
-void BaseFsAvbTest::GenerateVBMetaImage(
+base::FilePath BaseFsAvbTest::GenerateVBMetaImage(
         const std::string& file_name, const std::string& avb_algorithm, uint64_t rollback_index,
         const base::FilePath& key_path,
         const std::vector<base::FilePath>& include_descriptor_image_paths,
@@ -107,17 +107,19 @@ void BaseFsAvbTest::GenerateVBMetaImage(
                    chain_partition_options.c_str(), additional_options.c_str(),
                    vbmeta_image.path.value().c_str());
     int64_t file_size;
-    ASSERT_TRUE(base::GetFileSize(vbmeta_image.path, &file_size));
+    EXPECT_TRUE(base::GetFileSize(vbmeta_image.path, &file_size));
     vbmeta_image.content.resize(file_size);
-    ASSERT_TRUE(base::ReadFile(vbmeta_image.path,
+    EXPECT_TRUE(base::ReadFile(vbmeta_image.path,
                                reinterpret_cast<char*>(vbmeta_image.content.data()), file_size));
     // Stores the generated vbmeta image into vbmeta_images_ member object.
     vbmeta_images_.emplace(file_name, std::move(vbmeta_image));
+
+    return vbmeta_images_[file_name].path;  // returns the path.
 }
 
-void BaseFsAvbTest::ExtractVBMetaImage(const base::FilePath& image_path,
-                                       const std::string& output_file_name,
-                                       const size_t padding_size) {
+base::FilePath BaseFsAvbTest::ExtractVBMetaImage(const base::FilePath& image_path,
+                                                 const std::string& output_file_name,
+                                                 const size_t padding_size) {
     VBMetaImage vbmeta_image;
     vbmeta_image.path = test_dir_.Append(output_file_name);
     EXPECT_COMMAND(0,
@@ -127,12 +129,15 @@ void BaseFsAvbTest::ExtractVBMetaImage(const base::FilePath& image_path,
                    " --padding_size %zu",
                    image_path.value().c_str(), vbmeta_image.path.value().c_str(), padding_size);
     int64_t file_size;
-    ASSERT_TRUE(base::GetFileSize(vbmeta_image.path, &file_size));
+    EXPECT_TRUE(base::GetFileSize(vbmeta_image.path, &file_size));
     vbmeta_image.content.resize(file_size);
-    ASSERT_TRUE(base::ReadFile(vbmeta_image.path,
+    EXPECT_TRUE(base::ReadFile(vbmeta_image.path,
                                reinterpret_cast<char*>(vbmeta_image.content.data()), file_size));
     // Stores the extracted vbmeta image into vbmeta_images_ member object.
     vbmeta_images_.emplace(output_file_name, std::move(vbmeta_image));
+
+    // Returns the output file path.
+    return vbmeta_images_[output_file_name].path;
 }
 
 // Generates a file with name |file_name| of size |image_size| with
@@ -177,6 +182,49 @@ void BaseFsAvbTest::AddAvbFooter(const base::FilePath& image_path, const std::st
                    add_footer_option.c_str(), image_path.value().c_str(), partition_name.c_str(),
                    partition_size, rollback_index, salt.c_str(), signing_options.c_str(),
                    additional_options.c_str());
+}
+
+VBMetaData BaseFsAvbTest::GenerateImageAndExtractVBMetaData(
+        const std::string& partition_name, const size_t image_size, const size_t partition_size,
+        const std::string& footer_type, const base::FilePath& avb_signing_key,
+        const std::string& avb_algorithm, const uint64_t rollback_index) {
+    // Generates a raw image first
+    base::FilePath image_path = GenerateImage(partition_name + ".img", image_size);
+
+    // Appends AVB Hashtree Footer.
+    AddAvbFooter(image_path, footer_type, partition_name, partition_size, avb_algorithm,
+                 rollback_index, avb_signing_key, "d00df00d",
+                 "--internal_release_string \"unit test\"");
+
+    // Extracts vbmeta from the ram image into another *-vbmeta.img.
+    auto vbmeta_image = ExtractVBMetaImage(image_path, partition_name + "-vbmeta.img");
+
+    // Loads *-vbmeta.img into a VBMetaData.
+    std::string vbmeta_buffer;
+    EXPECT_TRUE(base::ReadFileToString(vbmeta_image, &vbmeta_buffer));
+
+    return {(const uint8_t*)vbmeta_buffer.data(), vbmeta_buffer.size(), partition_name};
+}
+
+VBMetaData BaseFsAvbTest::LoadVBMetaData(const std::string& file_name) {
+    auto iter = vbmeta_images_.find(file_name);
+    EXPECT_NE(iter, vbmeta_images_.end());  // ensures file_name is generated before.
+
+    // Gets the image path from iterator->second.path: VBMetaImage.path.
+    base::FilePath image_path = iter->second.path;
+
+    // Loads the vbmeta_image into a VBMetaData.
+    std::string vbmeta_buffer;
+    EXPECT_TRUE(base::ReadFileToString(image_path, &vbmeta_buffer));
+
+    std::string partition_name = image_path.RemoveExtension().BaseName().value();
+    return {(const uint8_t*)vbmeta_buffer.data(), vbmeta_buffer.size(), partition_name};
+}
+
+VBMetaData BaseFsAvbTest::ExtractAndLoadVBMetaData(const base::FilePath& image_path,
+                                                   const std::string& output_file_name) {
+    ExtractVBMetaImage(image_path, output_file_name);
+    return LoadVBMetaData(output_file_name);
 }
 
 std::string BaseFsAvbTest::InfoImage(const base::FilePath& image_path) {
