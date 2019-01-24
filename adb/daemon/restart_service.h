@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,5 +19,8 @@
 #include "adb_unique_fd.h"
 
 #if defined(__ANDROID__)
-void framebuffer_service(unique_fd fd);
+void restart_root_service(unique_fd fd);
+void restart_unroot_service(unique_fd fd);
+void restart_tcp_service(unique_fd fd, int port);
+void restart_usb_service(unique_fd fd);
 #endif
