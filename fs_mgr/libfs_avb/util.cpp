@@ -17,6 +17,7 @@
 #include "util.h"
 
 #include <sys/ioctl.h>
+
 #include <thread>
 
 #include <android-base/unique_fd.h>
