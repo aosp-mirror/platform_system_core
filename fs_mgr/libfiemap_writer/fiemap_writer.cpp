@@ -359,6 +359,21 @@ static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_
     return moved_blocks_nr == 0;
 }
 
+bool FiemapWriter::HasPinnedExtents(const std::string& file_path) {
+    android::base::unique_fd fd(open(file_path.c_str(), O_NOFOLLOW | O_CLOEXEC | O_RDONLY));
+    if (fd < 0) {
+        PLOG(ERROR) << "open: " << file_path;
+        return false;
+    }
+
+    struct statfs64 sfs;
+    if (fstatfs64(fd, &sfs)) {
+        PLOG(ERROR) << "fstatfs64: " << file_path;
+        return false;
+    }
+    return IsFilePinned(fd, file_path, sfs.f_type);
+}
+
 static void LogExtent(uint32_t num, const struct fiemap_extent& ext) {
     LOG(INFO) << "Extent #" << num;
     LOG(INFO) << "  fe_logical:  " << ext.fe_logical;

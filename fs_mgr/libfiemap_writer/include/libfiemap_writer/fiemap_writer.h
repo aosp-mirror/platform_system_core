@@ -45,6 +45,18 @@ class FiemapWriter final {
                                 bool create = true,
                                 std::function<bool(uint64_t, uint64_t)> progress = {});
 
+    // Check that a file still has the same extents since it was last opened with FiemapWriter,
+    // assuming the file was not resized outside of FiemapWriter. Returns false either on error
+    // or if the file was not pinned.
+    //
+    // This will always return true on Ext4. On F2FS, it will return true if either of the
+    // following cases are true:
+    //   - The file was never pinned.
+    //   - The file is pinned and has not been moved by the GC.
+    // Thus, this method should only be called for pinned files (such as those returned by
+    // FiemapWriter::Open).
+    static bool HasPinnedExtents(const std::string& file_path);
+
     // Syncs block device writes.
     bool Flush() const;
 
