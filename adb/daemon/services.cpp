@@ -39,8 +39,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <bootloader_message/bootloader_message.h>
-#include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <log/log_properties.h>
 
@@ -55,96 +53,12 @@
 
 #include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
+#include "daemon/reboot_service.h"
 #include "daemon/remount_service.h"
+#include "daemon/restart_service.h"
 #include "daemon/set_verity_enable_state_service.h"
 #include "daemon/shell_service.h"
 
-void restart_root_service(unique_fd fd) {
-    if (getuid() == 0) {
-        WriteFdExactly(fd.get(), "adbd is already running as root\n");
-        return;
-    }
-    if (!__android_log_is_debuggable()) {
-        WriteFdExactly(fd.get(), "adbd cannot run as root in production builds\n");
-        return;
-    }
-
-    android::base::SetProperty("service.adb.root", "1");
-    WriteFdExactly(fd.get(), "restarting adbd as root\n");
-}
-
-void restart_unroot_service(unique_fd fd) {
-    if (getuid() != 0) {
-        WriteFdExactly(fd.get(), "adbd not running as root\n");
-        return;
-    }
-    android::base::SetProperty("service.adb.root", "0");
-    WriteFdExactly(fd.get(), "restarting adbd as non root\n");
-}
-
-void restart_tcp_service(unique_fd fd, int port) {
-    if (port <= 0) {
-        WriteFdFmt(fd.get(), "invalid port %d\n", port);
-        return;
-    }
-
-    android::base::SetProperty("service.adb.tcp.port", android::base::StringPrintf("%d", port));
-    WriteFdFmt(fd.get(), "restarting in TCP mode port: %d\n", port);
-}
-
-void restart_usb_service(unique_fd fd) {
-    android::base::SetProperty("service.adb.tcp.port", "0");
-    WriteFdExactly(fd.get(), "restarting in USB mode\n");
-}
-
-void reboot_service(unique_fd fd, const std::string& arg) {
-    std::string reboot_arg = arg;
-    sync();
-
-    if (reboot_arg.empty()) reboot_arg = "adb";
-    std::string reboot_string = android::base::StringPrintf("reboot,%s", reboot_arg.c_str());
-
-    if (reboot_arg == "fastboot" &&
-        android::base::GetBoolProperty("ro.boot.dynamic_partitions", false) &&
-        access("/dev/socket/recovery", F_OK) == 0) {
-        LOG(INFO) << "Recovery specific reboot fastboot";
-        /*
-         * The socket is created to allow switching between recovery and
-         * fastboot.
-         */
-        android::base::unique_fd sock(socket(AF_UNIX, SOCK_STREAM, 0));
-        if (sock < 0) {
-            WriteFdFmt(fd, "reboot (%s) create\n", strerror(errno));
-            PLOG(ERROR) << "Creating recovery socket failed";
-            return;
-        }
-
-        sockaddr_un addr = {.sun_family = AF_UNIX};
-        strncpy(addr.sun_path, "/dev/socket/recovery", sizeof(addr.sun_path) - 1);
-        if (connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
-            WriteFdFmt(fd, "reboot (%s) connect\n", strerror(errno));
-            PLOG(ERROR) << "Couldn't connect to recovery socket";
-            return;
-        }
-        const char msg_switch_to_fastboot = 'f';
-        auto ret = adb_write(sock, &msg_switch_to_fastboot, sizeof(msg_switch_to_fastboot));
-        if (ret != sizeof(msg_switch_to_fastboot)) {
-            WriteFdFmt(fd, "reboot (%s) write\n", strerror(errno));
-            PLOG(ERROR) << "Couldn't write message to recovery socket to switch to fastboot";
-            return;
-        }
-    } else {
-        if (!android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_string)) {
-            WriteFdFmt(fd.get(), "reboot (%s) failed\n", reboot_string.c_str());
-            return;
-        }
-    }
-    // Don't return early. Give the reboot command time to take effect
-    // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
-    while (true) {
-        pause();
-    }
-}
 
 void reconnect_service(unique_fd fd, atransport* t) {
     WriteFdExactly(fd.get(), "done");
@@ -221,7 +135,8 @@ static void spin_service(unique_fd fd) {
     }
 
     fdevent_run_on_main_thread([fd = pipe_read.release()]() {
-        fdevent* fde = fdevent_create(fd, [](int, unsigned, void*) {}, nullptr);
+        fdevent* fde = fdevent_create(
+                fd, [](int, unsigned, void*) {}, nullptr);
         fdevent_add(fde, FDE_READ);
     });
 
@@ -328,31 +243,16 @@ asocket* daemon_service_to_socket(std::string_view name) {
 }
 
 unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
-#ifndef __ANDROID_RECOVERY__
+#if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
     if (name.starts_with("abb:")) {
         name.remove_prefix(strlen("abb:"));
         return execute_binder_command(name);
     }
 #endif
 
-    if (name.starts_with("dev:")) {
-        name.remove_prefix(strlen("dev:"));
-        return unique_fd{unix_open(name, O_RDWR | O_CLOEXEC)};
-    } else if (name.starts_with("framebuffer:")) {
+#if defined(__ANDROID__)
+    if (name.starts_with("framebuffer:")) {
         return create_service_thread("fb", framebuffer_service);
-    } else if (name.starts_with("jdwp:")) {
-        name.remove_prefix(strlen("jdwp:"));
-        std::string str(name);
-        return create_jdwp_connection_fd(atoi(str.c_str()));
-    } else if (name.starts_with("shell")) {
-        name.remove_prefix(strlen("shell"));
-        return ShellService(name, transport);
-    } else if (name.starts_with("exec:")) {
-        name.remove_prefix(strlen("exec:"));
-        return StartSubprocess(std::string(name), nullptr, SubprocessType::kRaw,
-                               SubprocessProtocol::kNone);
-    } else if (name.starts_with("sync:")) {
-        return create_service_thread("sync", file_sync_service);
     } else if (name.starts_with("remount:")) {
         std::string arg(name.begin() + strlen("remount:"), name.end());
         return create_service_thread("remount",
@@ -373,6 +273,12 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
     } else if (name.starts_with("restore:")) {
         return StartSubprocess("/system/bin/bu restore", nullptr, SubprocessType::kRaw,
                                SubprocessProtocol::kNone);
+    } else if (name.starts_with("disable-verity:")) {
+        return create_service_thread("verity-on", std::bind(set_verity_enabled_state_service,
+                                                            std::placeholders::_1, false));
+    } else if (name.starts_with("enable-verity:")) {
+        return create_service_thread("verity-off", std::bind(set_verity_enabled_state_service,
+                                                             std::placeholders::_1, true));
     } else if (name.starts_with("tcpip:")) {
         name.remove_prefix(strlen("tcpip:"));
         std::string str(name);
@@ -385,15 +291,28 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
                                      std::bind(restart_tcp_service, std::placeholders::_1, port));
     } else if (name.starts_with("usb:")) {
         return create_service_thread("usb", restart_usb_service);
+    }
+#endif
+
+    if (name.starts_with("dev:")) {
+        name.remove_prefix(strlen("dev:"));
+        return unique_fd{unix_open(name, O_RDWR | O_CLOEXEC)};
+    } else if (name.starts_with("jdwp:")) {
+        name.remove_prefix(strlen("jdwp:"));
+        std::string str(name);
+        return create_jdwp_connection_fd(atoi(str.c_str()));
+    } else if (name.starts_with("shell")) {
+        name.remove_prefix(strlen("shell"));
+        return ShellService(name, transport);
+    } else if (name.starts_with("exec:")) {
+        name.remove_prefix(strlen("exec:"));
+        return StartSubprocess(std::string(name), nullptr, SubprocessType::kRaw,
+                               SubprocessProtocol::kNone);
+    } else if (name.starts_with("sync:")) {
+        return create_service_thread("sync", file_sync_service);
     } else if (name.starts_with("reverse:")) {
         name.remove_prefix(strlen("reverse:"));
         return reverse_service(name, transport);
-    } else if (name.starts_with("disable-verity:")) {
-        return create_service_thread("verity-on", std::bind(set_verity_enabled_state_service,
-                                                            std::placeholders::_1, false));
-    } else if (name.starts_with("enable-verity:")) {
-        return create_service_thread("verity-off", std::bind(set_verity_enabled_state_service,
-                                                             std::placeholders::_1, true));
     } else if (name == "reconnect") {
         return create_service_thread(
                 "reconnect", std::bind(reconnect_service, std::placeholders::_1, transport));

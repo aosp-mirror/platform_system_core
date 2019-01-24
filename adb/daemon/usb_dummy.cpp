@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,25 @@
  * limitations under the License.
  */
 
-#pragma once
+#include <adbd/usb.h>
 
-#include "adb_unique_fd.h"
+#include <android-base/logging.h>
 
-#if defined(__ANDROID__)
-void framebuffer_service(unique_fd fd);
-#endif
+int usb_write(usb_handle*, const void*, int) {
+    LOG(FATAL) << "unimplemented";
+    return -1;
+}
+
+int usb_read(usb_handle*, void*, int) {
+    LOG(FATAL) << "unimplemented";
+    return -1;
+}
+
+int usb_close(usb_handle*) {
+    LOG(FATAL) << "unimplemented";
+    return -1;
+}
+
+void usb_kick(usb_handle*) {
+    LOG(FATAL) << "unimplemented";
+}
