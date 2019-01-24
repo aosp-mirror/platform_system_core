@@ -38,8 +38,9 @@ namespace {
 
 [[noreturn]] void usage(int exit_status) {
     LOG(INFO) << getprogname()
-              << " [-h]\n"
+              << " [-h] [-T fstab_file]\n"
                  "\t-h --help\tthis help\n"
+                 "\t-T --fstab\tcustom fstab file location\n"
                  "\n"
                  "Remount all partitions read-write.\n"
                  "Verity must be disabled.";
@@ -134,12 +135,22 @@ int main(int argc, char* argv[]) {
         return NOT_USERDEBUG;
     }
 
+    const char* fstab_file = nullptr;
+
     struct option longopts[] = {
+            {"fstab", required_argument, nullptr, 'T'},
             {"help", no_argument, nullptr, 'h'},
             {0, 0, nullptr, 0},
     };
-    for (int opt; (opt = ::getopt_long(argc, argv, "h", longopts, nullptr)) != -1;) {
+    for (int opt; (opt = ::getopt_long(argc, argv, "hT:", longopts, nullptr)) != -1;) {
         switch (opt) {
+            case 'T':
+                if (fstab_file) {
+                    LOG(ERROR) << "Cannot supply two fstabs: -T " << fstab_file << " -T" << optarg;
+                    usage(BADARG);
+                }
+                fstab_file = optarg;
+                break;
             default:
                 LOG(ERROR) << "Bad Argument -" << char(opt);
                 usage(BADARG);
@@ -161,10 +172,16 @@ int main(int argc, char* argv[]) {
         return NOT_ROOT;
     }
 
+    // Read the selected fstab.
     android::fs_mgr::Fstab fstab;
-    auto fstab_read = android::fs_mgr::ReadDefaultFstab(&fstab);
+    auto fstab_read = false;
+    if (fstab_file) {
+        fstab_read = android::fs_mgr::ReadFstabFromFile(fstab_file, &fstab);
+    } else {
+        fstab_read = android::fs_mgr::ReadDefaultFstab(&fstab);
+    }
     if (!fstab_read || fstab.empty()) {
-        PLOG(ERROR) << "Failed to read default fstab";
+        PLOG(ERROR) << "Failed to read fstab";
         return NO_FSTAB;
     }
 
