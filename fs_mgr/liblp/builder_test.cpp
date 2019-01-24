@@ -495,6 +495,11 @@ TEST_F(BuilderTest, UpdateBlockDeviceInfo) {
     EXPECT_EQ(new_info.size, 1024 * 1024);
 
     new_info.logical_block_size = 512;
+    ASSERT_TRUE(builder->UpdateBlockDeviceInfo("super", new_info));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
+    EXPECT_EQ(new_info.logical_block_size, 4096);
+
+    new_info.logical_block_size = 7;
     ASSERT_FALSE(builder->UpdateBlockDeviceInfo("super", new_info));
     ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &new_info));
     EXPECT_EQ(new_info.logical_block_size, 4096);
