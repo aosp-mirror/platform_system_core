@@ -275,25 +275,6 @@ size_t strlen16(const char16_t *s)
   return ss-s;
 }
 
-
-char16_t *strncpy16(char16_t *dst, const char16_t *src, size_t n)
-{
-  char16_t *q = dst;
-  const char16_t *p = src;
-  char ch;
-
-  while (n) {
-    n--;
-    *q++ = ch = *p++;
-    if ( !ch )
-      break;
-  }
-
-  *q = 0;
-
-  return dst;
-}
-
 size_t strnlen16(const char16_t *s, size_t maxlen)
 {
   const char16_t *ss = s;
