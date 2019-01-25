@@ -30,10 +30,16 @@
 
 class FdHandler {
   public:
-    FdHandler(int read_fd, int write_fd) : read_fd_(read_fd), write_fd_(write_fd) {
-        read_fde_ = fdevent_create(read_fd_, FdEventCallback, this);
+    FdHandler(int read_fd, int write_fd, bool use_new_callback)
+        : read_fd_(read_fd), write_fd_(write_fd) {
+        if (use_new_callback) {
+            read_fde_ = fdevent_create(read_fd_, FdEventNewCallback, this);
+            write_fde_ = fdevent_create(write_fd_, FdEventNewCallback, this);
+        } else {
+            read_fde_ = fdevent_create(read_fd_, FdEventCallback, this);
+            write_fde_ = fdevent_create(write_fd_, FdEventCallback, this);
+        }
         fdevent_add(read_fde_, FDE_READ);
-        write_fde_ = fdevent_create(write_fd_, FdEventCallback, this);
     }
 
     ~FdHandler() {
@@ -43,6 +49,29 @@ class FdHandler {
 
   private:
     static void FdEventCallback(int fd, unsigned events, void* userdata) {
+        FdHandler* handler = reinterpret_cast<FdHandler*>(userdata);
+        ASSERT_EQ(0u, (events & ~(FDE_READ | FDE_WRITE))) << "unexpected events: " << events;
+        if (events & FDE_READ) {
+            ASSERT_EQ(fd, handler->read_fd_);
+            char c;
+            ASSERT_EQ(1, adb_read(fd, &c, 1));
+            handler->queue_.push(c);
+            fdevent_add(handler->write_fde_, FDE_WRITE);
+        }
+        if (events & FDE_WRITE) {
+            ASSERT_EQ(fd, handler->write_fd_);
+            ASSERT_FALSE(handler->queue_.empty());
+            char c = handler->queue_.front();
+            handler->queue_.pop();
+            ASSERT_EQ(1, adb_write(fd, &c, 1));
+            if (handler->queue_.empty()) {
+                fdevent_del(handler->write_fde_, FDE_WRITE);
+            }
+        }
+    }
+
+    static void FdEventNewCallback(fdevent* fde, unsigned events, void* userdata) {
+        int fd = fde->fd.get();
         FdHandler* handler = reinterpret_cast<FdHandler*>(userdata);
         ASSERT_EQ(0u, (events & ~(FDE_READ | FDE_WRITE))) << "unexpected events: " << events;
         if (events & FDE_READ) {
@@ -84,56 +113,60 @@ TEST_F(FdeventTest, fdevent_terminate) {
 }
 
 TEST_F(FdeventTest, smoke) {
-    const size_t PIPE_COUNT = 10;
-    const size_t MESSAGE_LOOP_COUNT = 100;
-    const std::string MESSAGE = "fdevent_test";
-    int fd_pair1[2];
-    int fd_pair2[2];
-    ASSERT_EQ(0, adb_socketpair(fd_pair1));
-    ASSERT_EQ(0, adb_socketpair(fd_pair2));
-    ThreadArg thread_arg;
-    thread_arg.first_read_fd = fd_pair1[0];
-    thread_arg.last_write_fd = fd_pair2[1];
-    thread_arg.middle_pipe_count = PIPE_COUNT;
-    int writer = fd_pair1[1];
-    int reader = fd_pair2[0];
+    for (bool use_new_callback : {true, false}) {
+        fdevent_reset();
+        const size_t PIPE_COUNT = 10;
+        const size_t MESSAGE_LOOP_COUNT = 100;
+        const std::string MESSAGE = "fdevent_test";
+        int fd_pair1[2];
+        int fd_pair2[2];
+        ASSERT_EQ(0, adb_socketpair(fd_pair1));
+        ASSERT_EQ(0, adb_socketpair(fd_pair2));
+        ThreadArg thread_arg;
+        thread_arg.first_read_fd = fd_pair1[0];
+        thread_arg.last_write_fd = fd_pair2[1];
+        thread_arg.middle_pipe_count = PIPE_COUNT;
+        int writer = fd_pair1[1];
+        int reader = fd_pair2[0];
 
-    PrepareThread();
+        PrepareThread();
 
-    std::vector<std::unique_ptr<FdHandler>> fd_handlers;
-    fdevent_run_on_main_thread([&thread_arg, &fd_handlers]() {
-        std::vector<int> read_fds;
-        std::vector<int> write_fds;
+        std::vector<std::unique_ptr<FdHandler>> fd_handlers;
+        fdevent_run_on_main_thread([&thread_arg, &fd_handlers, use_new_callback]() {
+            std::vector<int> read_fds;
+            std::vector<int> write_fds;
 
-        read_fds.push_back(thread_arg.first_read_fd);
-        for (size_t i = 0; i < thread_arg.middle_pipe_count; ++i) {
-            int fds[2];
-            ASSERT_EQ(0, adb_socketpair(fds));
-            read_fds.push_back(fds[0]);
-            write_fds.push_back(fds[1]);
+            read_fds.push_back(thread_arg.first_read_fd);
+            for (size_t i = 0; i < thread_arg.middle_pipe_count; ++i) {
+                int fds[2];
+                ASSERT_EQ(0, adb_socketpair(fds));
+                read_fds.push_back(fds[0]);
+                write_fds.push_back(fds[1]);
+            }
+            write_fds.push_back(thread_arg.last_write_fd);
+
+            for (size_t i = 0; i < read_fds.size(); ++i) {
+                fd_handlers.push_back(
+                        std::make_unique<FdHandler>(read_fds[i], write_fds[i], use_new_callback));
+            }
+        });
+        WaitForFdeventLoop();
+
+        for (size_t i = 0; i < MESSAGE_LOOP_COUNT; ++i) {
+            std::string read_buffer = MESSAGE;
+            std::string write_buffer(MESSAGE.size(), 'a');
+            ASSERT_TRUE(WriteFdExactly(writer, read_buffer.c_str(), read_buffer.size()));
+            ASSERT_TRUE(ReadFdExactly(reader, &write_buffer[0], write_buffer.size()));
+            ASSERT_EQ(read_buffer, write_buffer);
         }
-        write_fds.push_back(thread_arg.last_write_fd);
 
-        for (size_t i = 0; i < read_fds.size(); ++i) {
-            fd_handlers.push_back(std::make_unique<FdHandler>(read_fds[i], write_fds[i]));
-        }
-    });
-    WaitForFdeventLoop();
+        fdevent_run_on_main_thread([&fd_handlers]() { fd_handlers.clear(); });
+        WaitForFdeventLoop();
 
-    for (size_t i = 0; i < MESSAGE_LOOP_COUNT; ++i) {
-        std::string read_buffer = MESSAGE;
-        std::string write_buffer(MESSAGE.size(), 'a');
-        ASSERT_TRUE(WriteFdExactly(writer, read_buffer.c_str(), read_buffer.size()));
-        ASSERT_TRUE(ReadFdExactly(reader, &write_buffer[0], write_buffer.size()));
-        ASSERT_EQ(read_buffer, write_buffer);
+        TerminateThread();
+        ASSERT_EQ(0, adb_close(writer));
+        ASSERT_EQ(0, adb_close(reader));
     }
-
-    fdevent_run_on_main_thread([&fd_handlers]() { fd_handlers.clear(); });
-    WaitForFdeventLoop();
-
-    TerminateThread();
-    ASSERT_EQ(0, adb_close(writer));
-    ASSERT_EQ(0, adb_close(reader));
 }
 
 struct InvalidFdArg {
