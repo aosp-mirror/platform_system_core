@@ -88,6 +88,7 @@ $(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := $(sanitizer_runtim
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_SUFFIX := $(vndk_version_suffix)
 $(LOCAL_BUILT_MODULE): PRIVATE_INTERMEDIATES_DIR := $(intermediates_dir)
 $(LOCAL_BUILT_MODULE): PRIVATE_COMP_CHECK_SCRIPT := $(compatibility_check_script)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_TAG := \#VNDK$(vndk_version)\#
 deps := $(llndk_libraries_file) $(vndksp_libraries_file) $(vndkcore_libraries_file) \
   $(vndkprivate_libraries_file)
 ifeq ($(check_backward_compatibility),true)
@@ -114,10 +115,12 @@ endif
 	paste -sd ":" $(PRIVATE_INTERMEDIATES_DIR)/private_llndk | \
 	sed -i.bak -e "s?%PRIVATE_LLNDK_LIBRARIES%?$$(cat -)?g" $@
 
-	$(hide) sed -i.bak -e 's?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g' $@
-	$(hide) sed -i.bak -e 's?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g' $@
-	$(hide) sed -i.bak -e 's?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g' $@
-	$(hide) sed -i.bak -e 's?%PRODUCT_SERVICES%?$(TARGET_COPY_OUT_PRODUCT_SERVICES)?g' $@
+	$(hide) sed -i.bak -e "s?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g" $@
+	$(hide) sed -i.bak -e "s?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g" $@
+	$(hide) sed -i.bak -e "s?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g" $@
+	$(hide) sed -i.bak -e "s?%PRODUCT_SERVICES%?$(TARGET_COPY_OUT_PRODUCT_SERVICES)?g" $@
+	$(hide) sed -i.bak -e "s?^$(PRIVATE_VNDK_VERSION_TAG)??g" $@
+	$(hide) sed -i.bak "/^\#VNDK[0-9]\{2\}\#.*$$/d" $@
 	$(hide) rm -f $@.bak
 
 ld_config_template :=
