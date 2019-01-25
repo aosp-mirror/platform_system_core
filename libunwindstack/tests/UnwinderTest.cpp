@@ -749,6 +749,23 @@ TEST_F(UnwinderTest, speculative_frame_not_removed_pc_bad) {
   EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
 }
 
+// Verify that a speculative frame does not cause a crash when it wasn't
+// really added due to a filter.
+TEST_F(UnwinderTest, speculative_frame_check_with_no_frames) {
+  regs_.set_pc(0x23000);
+  regs_.set_sp(0x10000);
+  regs_.FakeSetReturnAddress(0x23100);
+  regs_.FakeSetReturnAddressValid(true);
+
+  Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
+
+  std::vector<std::string> skip_names{"libanother.so"};
+  unwinder.Unwind(&skip_names);
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(0U, unwinder.NumFrames());
+}
+
 // Verify that an unwind stops when a frame is in given suffix.
 TEST_F(UnwinderTest, map_ignore_suffixes) {
   ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
