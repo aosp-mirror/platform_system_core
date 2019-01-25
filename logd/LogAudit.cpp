@@ -111,7 +111,7 @@ static inline bool hasMetadata(char* str, int str_len) {
 }
 
 std::map<std::string, std::string> LogAudit::populateDenialMap() {
-    std::ifstream bug_file("/system/etc/selinux/selinux_denial_metadata");
+    std::ifstream bug_file("/vendor/etc/selinux/selinux_denial_metadata");
     std::string line;
     // allocate a map for the static map pointer in auditParse to keep track of,
     // this function only runs once
