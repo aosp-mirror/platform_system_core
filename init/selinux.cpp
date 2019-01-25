@@ -34,16 +34,18 @@
 // identical to the system image shipped on a vendor's device.
 
 // The split SEPolicy is loaded as described below:
-// 1) There is a precompiled SEPolicy located at /vendor/etc/selinux/precompiled_sepolicy.
-//    Stored along with this file is the sha256 hash of the parts of the SEPolicy on /system that
-//    were used to compile this precompiled policy.  The system partition contains a similar sha256
-//    of the parts of the SEPolicy that it currently contains.  If these two hashes match, then the
-//    system loads this precompiled_sepolicy directly.
-// 2) If these hashes do not match, then /system has been updated out of sync with /vendor and the
-//    init needs to compile the SEPolicy.  /system contains the SEPolicy compiler, secilc, and it
-//    is used by the LoadSplitPolicy() function below to compile the SEPolicy to a temp directory
-//    and load it.  That function contains even more documentation with the specific implementation
-//    details of how the SEPolicy is compiled if needed.
+// 1) There is a precompiled SEPolicy located at either /vendor/etc/selinux/precompiled_sepolicy or
+//    /odm/etc/selinux/precompiled_sepolicy if odm parition is present.  Stored along with this file
+//    are the sha256 hashes of the parts of the SEPolicy on /system and /product that were used to
+//    compile this precompiled policy.  The system partition contains a similar sha256 of the parts
+//    of the SEPolicy that it currently contains.  Symmetrically, product paritition contains a
+//    sha256 of its SEPolicy.  System loads this precompiled_sepolicy directly if and only if hashes
+//    for system policy match and hashes for product policy match.
+// 2) If these hashes do not match, then either /system or /product (or both) have been updated out
+//    of sync with /vendor and the init needs to compile the SEPolicy.  /system contains the
+//    SEPolicy compiler, secilc, and it is used by the LoadSplitPolicy() function below to compile
+//    the SEPolicy to a temp directory and load it.  That function contains even more documentation
+//    with the specific implementation details of how the SEPolicy is compiled if needed.
 
 #include "selinux.h"
 
@@ -217,20 +219,35 @@ bool FindPrecompiledSplitPolicy(std::string* file) {
         return false;
     }
     std::string actual_plat_id;
-    if (!ReadFirstLine("/system/etc/selinux/plat_and_mapping_sepolicy.cil.sha256", &actual_plat_id)) {
+    if (!ReadFirstLine("/system/etc/selinux/plat_sepolicy_and_mapping.sha256", &actual_plat_id)) {
         PLOG(INFO) << "Failed to read "
-                      "/system/etc/selinux/plat_and_mapping_sepolicy.cil.sha256";
+                      "/system/etc/selinux/plat_sepolicy_and_mapping.sha256";
+        return false;
+    }
+    std::string actual_product_id;
+    if (!ReadFirstLine("/product/etc/selinux/product_sepolicy_and_mapping.sha256",
+                       &actual_product_id)) {
+        PLOG(INFO) << "Failed to read "
+                      "/product/etc/selinux/product_sepolicy_and_mapping.sha256";
         return false;
     }
 
     std::string precompiled_plat_id;
-    std::string precompiled_sha256 = *file + ".plat_and_mapping.sha256";
-    if (!ReadFirstLine(precompiled_sha256.c_str(), &precompiled_plat_id)) {
-        PLOG(INFO) << "Failed to read " << precompiled_sha256;
+    std::string precompiled_plat_sha256 = *file + ".plat_sepolicy_and_mapping.sha256";
+    if (!ReadFirstLine(precompiled_plat_sha256.c_str(), &precompiled_plat_id)) {
+        PLOG(INFO) << "Failed to read " << precompiled_plat_sha256;
         file->clear();
         return false;
     }
-    if ((actual_plat_id.empty()) || (actual_plat_id != precompiled_plat_id)) {
+    std::string precompiled_product_id;
+    std::string precompiled_product_sha256 = *file + ".product_sepolicy_and_mapping.sha256";
+    if (!ReadFirstLine(precompiled_product_sha256.c_str(), &precompiled_product_id)) {
+        PLOG(INFO) << "Failed to read " << precompiled_product_sha256;
+        file->clear();
+        return false;
+    }
+    if (actual_plat_id.empty() || actual_plat_id != precompiled_plat_id ||
+        actual_product_id.empty() || actual_product_id != precompiled_product_id) {
         file->clear();
         return false;
     }
