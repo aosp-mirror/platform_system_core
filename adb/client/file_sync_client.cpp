@@ -207,11 +207,10 @@ class SyncConnection {
 
         std::string error;
         if (!adb_get_feature_set(&features_, &error)) {
-            fd = -1;
             Error("failed to get feature set: %s", error.c_str());
         } else {
             have_stat_v2_ = CanUseFeature(features_, kFeatureStat2);
-            fd = adb_connect("sync:", &error);
+            fd.reset(adb_connect("sync:", &error));
             if (fd < 0) {
                 Error("connect failed: %s", error.c_str());
             }
@@ -230,7 +229,6 @@ class SyncConnection {
             // case, this will wait for the server to do orderly shutdown.
             ReadOrderlyShutdown(fd);
         }
-        adb_close(fd);
 
         line_printer_.KeepInfoLine();
     }
@@ -240,7 +238,7 @@ class SyncConnection {
     bool IsValid() { return fd >= 0; }
 
     bool ReceivedError(const char* from, const char* to) {
-        adb_pollfd pfd = {.fd = fd, .events = POLLIN};
+        adb_pollfd pfd = {.fd = fd.get(), .events = POLLIN};
         int rc = adb_poll(&pfd, 1, 0);
         if (rc < 0) {
             Error("failed to poll: %s", strerror(errno));
@@ -324,7 +322,7 @@ class SyncConnection {
 
         memset(st, 0, sizeof(*st));
         if (have_stat_v2_) {
-            if (!ReadFdExactly(fd, &msg.stat_v2, sizeof(msg.stat_v2))) {
+            if (!ReadFdExactly(fd.get(), &msg.stat_v2, sizeof(msg.stat_v2))) {
                 PLOG(FATAL) << "protocol fault: failed to read stat response";
             }
 
@@ -350,7 +348,7 @@ class SyncConnection {
             st->st_ctime = msg.stat_v2.ctime;
             return true;
         } else {
-            if (!ReadFdExactly(fd, &msg.stat_v1, sizeof(msg.stat_v1))) {
+            if (!ReadFdExactly(fd.get(), &msg.stat_v1, sizeof(msg.stat_v1))) {
                 PLOG(FATAL) << "protocol fault: failed to read stat response";
             }
 
@@ -437,7 +435,7 @@ class SyncConnection {
         uint64_t total_size = st.st_size;
         uint64_t bytes_copied = 0;
 
-        int lfd = adb_open(lpath, O_RDONLY);
+        unique_fd lfd(adb_open(lpath, O_RDONLY));
         if (lfd < 0) {
             Error("opening '%s' locally failed: %s", lpath, strerror(errno));
             return false;
@@ -449,7 +447,6 @@ class SyncConnection {
             int bytes_read = adb_read(lfd, sbuf.data, max - sizeof(SyncRequest));
             if (bytes_read == -1) {
                 Error("reading '%s' locally failed: %s", lpath, strerror(errno));
-                adb_close(lfd);
                 return false;
             } else if (bytes_read == 0) {
                 break;
@@ -468,8 +465,6 @@ class SyncConnection {
 
             ReportProgress(rpath, bytes_copied, total_size);
         }
-
-        adb_close(lfd);
 
         syncmsg msg;
         msg.data.id = ID_DONE;
@@ -576,7 +571,7 @@ class SyncConnection {
     }
 
     // TODO: add a char[max] buffer here, to replace syncsendbuf...
-    int fd;
+    unique_fd fd;
     size_t max;
 
   private:
@@ -740,7 +735,7 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
     if (!sc.SendRequest(ID_RECV, rpath)) return false;
 
     adb_unlink(lpath);
-    int lfd = adb_creat(lpath, 0644);
+    unique_fd lfd(adb_creat(lpath, 0644));
     if (lfd < 0) {
         sc.Error("cannot create '%s': %s", lpath, strerror(errno));
         return false;
@@ -750,7 +745,6 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
     while (true) {
         syncmsg msg;
         if (!ReadFdExactly(sc.fd, &msg.data, sizeof(msg.data))) {
-            adb_close(lfd);
             adb_unlink(lpath);
             return false;
         }
@@ -758,7 +752,6 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
         if (msg.data.id == ID_DONE) break;
 
         if (msg.data.id != ID_DATA) {
-            adb_close(lfd);
             adb_unlink(lpath);
             sc.ReportCopyFailure(rpath, lpath, msg);
             return false;
@@ -766,21 +759,18 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
 
         if (msg.data.size > sc.max) {
             sc.Error("msg.data.size too large: %u (max %zu)", msg.data.size, sc.max);
-            adb_close(lfd);
             adb_unlink(lpath);
             return false;
         }
 
         char buffer[SYNC_DATA_MAX];
         if (!ReadFdExactly(sc.fd, buffer, msg.data.size)) {
-            adb_close(lfd);
             adb_unlink(lpath);
             return false;
         }
 
         if (!WriteFdExactly(lfd, buffer, msg.data.size)) {
             sc.Error("cannot write '%s': %s", lpath, strerror(errno));
-            adb_close(lfd);
             adb_unlink(lpath);
             return false;
         }
@@ -792,7 +782,6 @@ static bool sync_recv(SyncConnection& sc, const char* rpath, const char* lpath,
     }
 
     sc.RecordFilesTransferred(1);
-    adb_close(lfd);
     return true;
 }
 
