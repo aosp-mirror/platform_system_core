@@ -330,6 +330,9 @@ additional.namespaces = runtime,system,vndk
 # partition (VNDK and LLNDK libraries) are not loaded here but from the
 # separate namespace 'system'. The delegation to the system namespace is done
 # via the 'namespace.default.link.system.shared_libs' property below.
+#
+# '#VNDK27#' TAG is only for building ld.config.27.txt for backward
+# compatibility. (TODO:b/123390078) Move them to a separate file.
 ###############################################################################
 namespace.default.isolated = true
 namespace.default.visible = true
@@ -339,11 +342,17 @@ namespace.default.search.paths += /vendor/${LIB}
 
 namespace.default.permitted.paths  = /odm
 namespace.default.permitted.paths += /vendor
+#VNDK27#namespace.default.search.paths += /vendor/${LIB}/hw
+#VNDK27#namespace.default.search.paths += /vendor/${LIB}/egl
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
+#VNDK27#namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/hw
+#VNDK27#namespace.default.asan.search.paths +=           /vendor/${LIB}/hw
+#VNDK27#namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/egl
+#VNDK27#namespace.default.asan.search.paths +=           /vendor/${LIB}/egl
 
 namespace.default.asan.permitted.paths  = /data/asan/odm
 namespace.default.asan.permitted.paths +=           /odm
