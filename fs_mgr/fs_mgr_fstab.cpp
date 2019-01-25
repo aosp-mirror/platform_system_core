@@ -719,10 +719,10 @@ struct fstab* fs_mgr_read_fstab(const char* fstab_path) {
 }
 
 // Returns fstab entries parsed from the device tree if they exist
-bool ReadFstabFromDt(Fstab* fstab) {
+bool ReadFstabFromDt(Fstab* fstab, bool log) {
     std::string fstab_buf = read_fstab_from_dt();
     if (fstab_buf.empty()) {
-        LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
+        if (log) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
         return false;
     }
 
@@ -730,13 +730,15 @@ bool ReadFstabFromDt(Fstab* fstab) {
         fmemopen(static_cast<void*>(const_cast<char*>(fstab_buf.c_str())),
                  fstab_buf.length(), "r"), fclose);
     if (!fstab_file) {
-        PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
+        if (log) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
         return false;
     }
 
     if (!fs_mgr_read_fstab_file(fstab_file.get(), false, fstab)) {
-        LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:"
-               << std::endl << fstab_buf;
+        if (log) {
+            LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
+                   << fstab_buf;
+        }
         return false;
     }
 
@@ -778,7 +780,7 @@ static std::string get_fstab_path()
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
     Fstab dt_fstab;
-    ReadFstabFromDt(&dt_fstab);
+    ReadFstabFromDt(&dt_fstab, false);
 
     *fstab = std::move(dt_fstab);
 
