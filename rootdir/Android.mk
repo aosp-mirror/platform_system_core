@@ -24,6 +24,26 @@ LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
 
+# Start of runtime APEX compatibility.
+#
+# Meta-comment:
+# The placing of this section is somewhat arbitrary. The LOCAL_POST_INSTALL_CMD
+# entries need to be associated with something that goes into /system.
+# init-debug.rc qualifies but it could be anything else in /system until soong
+# supports creation of symlinks. http://b/123333111
+#
+# Keeping the appearance of files/dirs having old locations for apps that have
+# come to rely on them.
+
+# http://b/121248172 - create a link from /system/usr/icu to
+# /apex/com.android.runtime/etc/icu so that apps can find the ICU .dat file.
+# A symlink can't overwrite a directory and the /system/usr/icu directory once
+# existed so the required structure must be created whatever we find.
+LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
+LOCAL_POST_INSTALL_CMD += ; ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OUT)/usr/icu
+
+# End of runtime APEX compatibilty.
+
 include $(BUILD_PREBUILT)
 
 #######################################
@@ -128,19 +148,6 @@ LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/lib64 $(TARGET_ROOT_OUT)/odm/lib6
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/overlay $(TARGET_ROOT_OUT)/odm/overlay
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/priv-app $(TARGET_ROOT_OUT)/odm/priv-app
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/usr $(TARGET_ROOT_OUT)/odm/usr
-
-# Start of runtime APEX compatibility.
-# Keeping the appearance of files/dirs having old locations for apps that have
-# come to rely on them.
-
-# http://b/121248172 - create a link from /system/usr/icu to
-# /apex/com.android.runtime/etc/icu so that apps can find the ICU .dat file.
-# A symlink can't overwrite a directory and the /system/usr/icu directory once
-# existed so the required structure must be created whatever we find.
-LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
-LOCAL_POST_INSTALL_CMD += ; ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OUT)/usr/icu
-
-# End of runtime APEX compatibilty.
 
 ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
