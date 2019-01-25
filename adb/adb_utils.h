@@ -53,8 +53,6 @@ std::string perror_str(const char* msg);
 
 bool set_file_block_mode(int fd, bool block);
 
-int adb_close(int fd);
-
 // Given forward/reverse targets, returns true if they look sane. If an error is found, fills
 // |error| and returns false.
 // Currently this only checks "tcp:" targets. Additional checking could be added for other targets

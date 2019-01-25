@@ -108,7 +108,7 @@ static int connect_to_console(const char* serial) {
 }
 
 int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
-    int fd = connect_to_console(serial);
+    unique_fd fd(connect_to_console(serial));
     if (fd == -1) {
         return 1;
     }
@@ -125,7 +125,6 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
     if (!WriteFdExactly(fd, commands)) {
         fprintf(stderr, "error: cannot write to emulator: %s\n",
                 strerror(errno));
-        adb_close(fd);
         return 1;
     }
 
@@ -178,7 +177,5 @@ int adb_send_emulator_command(int argc, const char** argv, const char* serial) {
     }
 
     printf("%s", emulator_output.c_str() + found);
-    adb_close(fd);
-
     return 0;
 }

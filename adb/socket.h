@@ -23,6 +23,7 @@
 #include <memory>
 #include <string>
 
+#include "adb_unique_fd.h"
 #include "fdevent.h"
 #include "types.h"
 
@@ -102,7 +103,7 @@ void install_local_socket(asocket *s);
 void remove_socket(asocket *s);
 void close_all_sockets(atransport *t);
 
-asocket *create_local_socket(int fd);
+asocket* create_local_socket(unique_fd fd);
 asocket* create_local_service_socket(std::string_view destination, atransport* transport);
 
 asocket *create_remote_socket(unsigned id, atransport *t);
