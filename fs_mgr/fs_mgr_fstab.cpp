@@ -686,6 +686,7 @@ static void TransformFstabForGsi(Fstab* fstab) {
     userdata.fs_mgr_flags.logical = true;
     userdata.fs_mgr_flags.quota = true;
     userdata.fs_mgr_flags.late_mount = true;
+    userdata.fs_mgr_flags.formattable = true;
     fstab->emplace_back(userdata);
 }
 
