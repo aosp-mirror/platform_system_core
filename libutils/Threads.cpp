@@ -36,7 +36,7 @@
 
 #include <utils/Log.h>
 
-#include <cutils/sched_policy.h>
+#include <processgroup/sched_policy.h>
 
 #if defined(__ANDROID__)
 # define __android_unused
