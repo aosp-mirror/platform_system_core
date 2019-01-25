@@ -58,7 +58,7 @@ TEST_F(LocalSocketTest, smoke) {
     intermediates.resize(INTERMEDIATE_COUNT);
     ASSERT_EQ(0, adb_socketpair(first)) << strerror(errno);
     ASSERT_EQ(0, adb_socketpair(last)) << strerror(errno);
-    asocket* prev_tail = create_local_socket(first[1]);
+    asocket* prev_tail = create_local_socket(unique_fd(first[1]));
     ASSERT_NE(nullptr, prev_tail);
 
     auto connect = [](asocket* tail, asocket* head) {
@@ -70,17 +70,17 @@ TEST_F(LocalSocketTest, smoke) {
     for (auto& intermediate : intermediates) {
         ASSERT_EQ(0, adb_socketpair(intermediate.data())) << strerror(errno);
 
-        asocket* head = create_local_socket(intermediate[0]);
+        asocket* head = create_local_socket(unique_fd(intermediate[0]));
         ASSERT_NE(nullptr, head);
 
-        asocket* tail = create_local_socket(intermediate[1]);
+        asocket* tail = create_local_socket(unique_fd(intermediate[1]));
         ASSERT_NE(nullptr, tail);
 
         connect(prev_tail, head);
         prev_tail = tail;
     }
 
-    asocket* end = create_local_socket(last[0]);
+    asocket* end = create_local_socket(unique_fd(last[0]));
     ASSERT_NE(nullptr, end);
     connect(prev_tail, end);
 
@@ -104,14 +104,14 @@ TEST_F(LocalSocketTest, smoke) {
 }
 
 struct CloseWithPacketArg {
-    int socket_fd;
+    unique_fd socket_fd;
     size_t bytes_written;
-    int cause_close_fd;
+    unique_fd cause_close_fd;
 };
 
 static void CreateCloser(CloseWithPacketArg* arg) {
     fdevent_run_on_main_thread([arg]() {
-        asocket* s = create_local_socket(arg->socket_fd);
+        asocket* s = create_local_socket(std::move(arg->socket_fd));
         ASSERT_TRUE(s != nullptr);
         arg->bytes_written = 0;
 
@@ -135,7 +135,7 @@ static void CreateCloser(CloseWithPacketArg* arg) {
         }
         ASSERT_TRUE(socket_filled);
 
-        asocket* cause_close_s = create_local_socket(arg->cause_close_fd);
+        asocket* cause_close_s = create_local_socket(std::move(arg->cause_close_fd));
         ASSERT_TRUE(cause_close_s != nullptr);
         cause_close_s->peer = s;
         s->peer = cause_close_s;
@@ -154,8 +154,8 @@ TEST_F(LocalSocketTest, close_socket_with_packet) {
     int cause_close_fd[2];
     ASSERT_EQ(0, adb_socketpair(cause_close_fd));
     CloseWithPacketArg arg;
-    arg.socket_fd = socket_fd[1];
-    arg.cause_close_fd = cause_close_fd[1];
+    arg.socket_fd.reset(socket_fd[1]);
+    arg.cause_close_fd.reset(cause_close_fd[1]);
 
     PrepareThread();
     CreateCloser(&arg);
@@ -178,8 +178,8 @@ TEST_F(LocalSocketTest, read_from_closing_socket) {
     int cause_close_fd[2];
     ASSERT_EQ(0, adb_socketpair(cause_close_fd));
     CloseWithPacketArg arg;
-    arg.socket_fd = socket_fd[1];
-    arg.cause_close_fd = cause_close_fd[1];
+    arg.socket_fd.reset(socket_fd[1]);
+    arg.cause_close_fd.reset(cause_close_fd[1]);
 
     PrepareThread();
     CreateCloser(&arg);
@@ -211,8 +211,8 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     int cause_close_fd[2];
     ASSERT_EQ(0, adb_socketpair(cause_close_fd));
     CloseWithPacketArg arg;
-    arg.socket_fd = socket_fd[1];
-    arg.cause_close_fd = cause_close_fd[1];
+    arg.socket_fd.reset(socket_fd[1]);
+    arg.cause_close_fd.reset(cause_close_fd[1]);
 
     PrepareThread();
     CreateCloser(&arg);
@@ -233,8 +233,8 @@ TEST_F(LocalSocketTest, flush_after_shutdown) {
     ASSERT_EQ(0, adb_socketpair(head_fd));
     ASSERT_EQ(0, adb_socketpair(tail_fd));
 
-    asocket* head = create_local_socket(head_fd[1]);
-    asocket* tail = create_local_socket(tail_fd[1]);
+    asocket* head = create_local_socket(unique_fd(head_fd[1]));
+    asocket* tail = create_local_socket(unique_fd(tail_fd[1]));
 
     head->peer = tail;
     head->ready(head);
@@ -287,7 +287,7 @@ TEST_F(LocalSocketTest, close_socket_in_CLOSE_WAIT_state) {
     PrepareThread();
 
     fdevent_run_on_main_thread([accept_fd]() {
-        asocket* s = create_local_socket(accept_fd);
+        asocket* s = create_local_socket(unique_fd(accept_fd));
         ASSERT_TRUE(s != nullptr);
     });
 

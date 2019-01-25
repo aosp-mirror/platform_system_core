@@ -232,7 +232,7 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
 
     __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
 
-    int fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+    unique_fd fd(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
 
     if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED) <
         0) {
@@ -244,16 +244,16 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
             SendSyncFailErrno(s, "secure_mkdirs failed");
             goto fail;
         }
-        fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+        fd.reset(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
     }
     if (fd < 0 && errno == EEXIST) {
-        fd = adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode);
+        fd.reset(adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode));
     }
     if (fd < 0) {
         SendSyncFailErrno(s, "couldn't create file");
         goto fail;
     } else {
-        if (fchown(fd, uid, gid) == -1) {
+        if (fchown(fd.get(), uid, gid) == -1) {
             SendSyncFailErrno(s, "fchown failed");
             goto fail;
         }
@@ -266,7 +266,7 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
         // fchown clears the setuid bit - restore it if present.
         // Ignore the result of calling fchmod. It's not supported
         // by all filesystems, so we don't check for success. b/12441485
-        fchmod(fd, mode);
+        fchmod(fd.get(), mode);
     }
 
     while (true) {
@@ -288,13 +288,11 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
 
         if (!ReadFdExactly(s, &buffer[0], msg.data.size)) goto abort;
 
-        if (!WriteFdExactly(fd, &buffer[0], msg.data.size)) {
+        if (!WriteFdExactly(fd.get(), &buffer[0], msg.data.size)) {
             SendSyncFailErrno(s, "write failed");
             goto fail;
         }
     }
-
-    adb_close(fd);
 
     if (!update_capabilities(path, capabilities)) {
         SendSyncFailErrno(s, "update_capabilities failed");
@@ -340,7 +338,6 @@ fail:
     }
 
 abort:
-    if (fd >= 0) adb_close(fd);
     if (do_unlink) adb_unlink(path);
     return false;
 }
@@ -445,34 +442,30 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
 static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
     __android_log_security_bswrite(SEC_TAG_ADB_RECV_FILE, path);
 
-    int fd = adb_open(path, O_RDONLY | O_CLOEXEC);
+    unique_fd fd(adb_open(path, O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
         SendSyncFailErrno(s, "open failed");
         return false;
     }
 
-    if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE) < 0) {
+    if (posix_fadvise(fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE) < 0) {
         D("[ Failed to fadvise: %d ]", errno);
     }
 
     syncmsg msg;
     msg.data.id = ID_DATA;
     while (true) {
-        int r = adb_read(fd, &buffer[0], buffer.size() - sizeof(msg.data));
+        int r = adb_read(fd.get(), &buffer[0], buffer.size() - sizeof(msg.data));
         if (r <= 0) {
             if (r == 0) break;
             SendSyncFailErrno(s, "read failed");
-            adb_close(fd);
             return false;
         }
         msg.data.size = r;
         if (!WriteFdExactly(s, &msg.data, sizeof(msg.data)) || !WriteFdExactly(s, &buffer[0], r)) {
-            adb_close(fd);
             return false;
         }
     }
-
-    adb_close(fd);
 
     msg.data.id = ID_DONE;
     msg.data.size = 0;

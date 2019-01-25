@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "adb_io.h"
+#include "adb_unique_fd.h"
 #include "socket.h"
 #include "sysdeps.h"
 #include "sysdeps/chrono.h"
@@ -45,7 +46,7 @@ static void WaitForFdeventLoop() {
 
 class FdeventTest : public ::testing::Test {
   protected:
-    int dummy = -1;
+    unique_fd dummy;
 
     static void SetUpTestCase() {
 #if !defined(_WIN32)
@@ -65,12 +66,12 @@ class FdeventTest : public ::testing::Test {
             FAIL() << "failed to create socketpair: " << strerror(errno);
         }
 
-        asocket* dummy_socket = create_local_socket(dummy_fds[1]);
+        asocket* dummy_socket = create_local_socket(unique_fd(dummy_fds[1]));
         if (!dummy_socket) {
             FAIL() << "failed to create local socket: " << strerror(errno);
         }
         dummy_socket->ready(dummy_socket);
-        dummy = dummy_fds[0];
+        dummy.reset(dummy_fds[0]);
 
         thread_ = std::thread([]() { fdevent_loop(); });
         WaitForFdeventLoop();
@@ -85,7 +86,7 @@ class FdeventTest : public ::testing::Test {
         fdevent_terminate_loop();
         ASSERT_TRUE(WriteFdExactly(dummy, "", 1));
         thread_.join();
-        ASSERT_EQ(0, adb_close(dummy));
+        dummy.reset();
     }
 
     std::thread thread_;
