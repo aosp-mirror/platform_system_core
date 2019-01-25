@@ -303,7 +303,6 @@ static void jdwp_control_event(int s, unsigned events, void* user);
 static int jdwp_control_init(JdwpControl* control, const char* sockname, int socknamelen) {
     sockaddr_un addr;
     socklen_t addrlen;
-    int s;
     int maxpath = sizeof(addr.sun_path);
     int pathlen = socknamelen;
 
@@ -316,7 +315,7 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
     addr.sun_family = AF_UNIX;
     memcpy(addr.sun_path, sockname, socknamelen);
 
-    s = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    unique_fd s(socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0));
     if (s < 0) {
         D("could not create vm debug control socket. %d: %s", errno, strerror(errno));
         return -1;
@@ -326,22 +325,18 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
 
     if (bind(s, reinterpret_cast<sockaddr*>(&addr), addrlen) < 0) {
         D("could not bind vm debug control socket: %d: %s", errno, strerror(errno));
-        adb_close(s);
         return -1;
     }
 
     if (listen(s, 4) < 0) {
         D("listen failed in jdwp control socket: %d: %s", errno, strerror(errno));
-        adb_close(s);
         return -1;
     }
 
-    control->listen_socket = s;
-
-    control->fde = fdevent_create(s, jdwp_control_event, control);
+    control->listen_socket = s.release();
+    control->fde = fdevent_create(control->listen_socket, jdwp_control_event, control);
     if (control->fde == nullptr) {
         D("could not create fdevent for jdwp control socket");
-        adb_close(s);
         return -1;
     }
 

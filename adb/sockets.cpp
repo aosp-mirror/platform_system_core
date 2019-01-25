@@ -333,7 +333,8 @@ static void local_socket_event_func(int fd, unsigned ev, void* _s) {
     }
 }
 
-asocket* create_local_socket(int fd) {
+asocket* create_local_socket(unique_fd ufd) {
+    int fd = ufd.release();
     asocket* s = new asocket();
     s->fd = fd;
     s->enqueue = local_socket_enqueue;
@@ -353,13 +354,13 @@ asocket* create_local_service_socket(std::string_view name, atransport* transpor
         return s;
     }
 #endif
-    int fd = service_to_fd(name, transport);
+    unique_fd fd = service_to_fd(name, transport);
     if (fd < 0) {
         return nullptr;
     }
 
-    asocket* s = create_local_socket(fd);
-    LOG(VERBOSE) << "LS(" << s->id << "): bound to '" << name << "' via " << fd;
+    asocket* s = create_local_socket(std::move(fd));
+    LOG(VERBOSE) << "LS(" << s->id << "): bound to '" << name << "' via " << fd.get();
 
 #if !ADB_HOST
     if ((name.starts_with("root:") && getuid() != 0 && __android_log_is_debuggable()) ||
