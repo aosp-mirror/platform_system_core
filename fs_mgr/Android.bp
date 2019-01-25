@@ -115,9 +115,16 @@ cc_library_static {
 cc_binary {
     name: "remount",
     defaults: ["fs_mgr_defaults"],
+    static_libs: [
+        "libavb_user",
+    ],
     shared_libs: [
+        "libbootloader_message",
         "libbase",
         "libfs_mgr",
+    ],
+    header_libs: [
+        "libcutils_headers",
     ],
     srcs: [
         "fs_mgr_remount.cpp",

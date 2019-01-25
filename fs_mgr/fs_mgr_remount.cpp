@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <getopt.h>
+#include <libavb_user/libavb_user.h>
 #include <stdio.h>
 #include <sys/mount.h>
 #include <sys/types.h>
@@ -30,6 +31,8 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <bootloader_message/bootloader_message.h>
+#include <cutils/android_reboot.h>
 #include <fs_mgr_overlayfs.h>
 #include <fs_mgr_priv.h>
 #include <fstab/fstab.h>
@@ -38,12 +41,13 @@ namespace {
 
 [[noreturn]] void usage(int exit_status) {
     LOG(INFO) << getprogname()
-              << " [-h] [-T fstab_file]\n"
+              << " [-h] [-R] [-T fstab_file]\n"
                  "\t-h --help\tthis help\n"
+                 "\t-R --reboot\tdisable verity & reboot to facilitate remount\n"
                  "\t-T --fstab\tcustom fstab file location\n"
                  "\n"
                  "Remount all partitions read-write.\n"
-                 "Verity must be disabled.";
+                 "-R notwithstanding, verity must be disabled.";
 
     ::exit(exit_status);
 }
@@ -110,6 +114,18 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     logd(id, severity, tag, file, line, message);
 }
 
+[[noreturn]] void reboot(bool dedupe) {
+    if (dedupe) {
+        LOG(INFO) << "The device will now reboot to recovery and attempt un-deduplication.";
+    } else {
+        LOG(INFO) << "Successfully disabled verity\nrebooting device";
+    }
+    ::sync();
+    android::base::SetProperty(ANDROID_RB_PROPERTY, dedupe ? "reboot,recovery" : "reboot,remount");
+    ::sleep(60);
+    ::exit(0);  // SUCCESS
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -136,14 +152,19 @@ int main(int argc, char* argv[]) {
     }
 
     const char* fstab_file = nullptr;
+    auto can_reboot = false;
 
     struct option longopts[] = {
             {"fstab", required_argument, nullptr, 'T'},
             {"help", no_argument, nullptr, 'h'},
+            {"reboot", no_argument, nullptr, 'R'},
             {0, 0, nullptr, 0},
     };
-    for (int opt; (opt = ::getopt_long(argc, argv, "hT:", longopts, nullptr)) != -1;) {
+    for (int opt; (opt = ::getopt_long(argc, argv, "hRT:", longopts, nullptr)) != -1;) {
         switch (opt) {
+            case 'R':
+                can_reboot = true;
+                break;
             case 'T':
                 if (fstab_file) {
                     LOG(ERROR) << "Cannot supply two fstabs: -T " << fstab_file << " -T" << optarg;
@@ -200,11 +221,32 @@ int main(int argc, char* argv[]) {
     }
 
     // Check verity and optionally setup overlayfs backing.
+    auto reboot_later = false;
     for (auto it = partitions.begin(); it != partitions.end();) {
         auto& entry = *it;
         auto& mount_point = entry.mount_point;
         if (fs_mgr_is_verity_enabled(entry)) {
-            LOG(ERROR) << "Verity enabled on " << mount_point << ", skipping";
+            LOG(WARNING) << "Verity enabled on " << mount_point;
+            if (can_reboot &&
+                (android::base::GetProperty("ro.boot.vbmeta.devices_state", "") != "locked")) {
+                if (AvbOps* ops = avb_ops_user_new()) {
+                    auto ret = avb_user_verity_set(
+                            ops, android::base::GetProperty("ro.boot.slot_suffix", "").c_str(),
+                            false);
+                    avb_ops_user_free(ops);
+                    if (ret) {
+                        if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
+                            retval = VERITY_PARTITION;
+                            // w/o overlayfs available, also check for dedupe
+                            reboot_later = true;
+                            ++it;
+                            continue;
+                        }
+                        reboot(false);
+                    }
+                }
+            }
+            LOG(ERROR) << "Skipping " << mount_point;
             retval = VERITY_PARTITION;
             it = partitions.erase(it);
             continue;
@@ -278,22 +320,22 @@ int main(int argc, char* argv[]) {
                 continue;
             }
         }
+        PLOG(WARNING) << "failed to remount partition dev:" << blk_device << " mnt:" << mount_point;
         // If errno = EROFS at this point, we are dealing with r/o
         // filesystem types like squashfs, erofs or ext4 dedupe. We will
         // consider such a device that does not have CONFIG_OVERLAY_FS
-        // in the kernel as a misconfigured and take no action.
-        //
-        // ext4 dedupe _can_ be worked around by performing a reboot into
-        // recovery and fsck'ing.  However the current decision is to not
-        // reboot to reserve only one shell command to do so (reboot).  In
-        // the future, if this is a problem, a -R flag could be introduced
-        // to give permission to do so and as a convenience also implement
-        // verity disable operations.  We will require this functionality
-        // in order for adb remount to call this executable instead of its
-        // current internal code that recognizes the -R flag and logistics.
-        PLOG(ERROR) << "failed to remount partition dev:" << blk_device << " mnt:" << mount_point;
+        // in the kernel as a misconfigured; except for ext4 dedupe.
+        if ((errno == EROFS) && can_reboot) {
+            const std::vector<std::string> msg = {"--fsck_unshare_blocks"};
+            std::string err;
+            if (write_bootloader_message(msg, &err)) reboot(true);
+            LOG(ERROR) << "Failed to set bootloader message: " << err;
+            errno = EROFS;
+        }
         retval = REMOUNT_FAILED;
     }
+
+    if (reboot_later) reboot(false);
 
     try_unmount_bionic(&mounts);
 

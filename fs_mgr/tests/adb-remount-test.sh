@@ -617,6 +617,19 @@ if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
       adb_reboot &&
       adb_wait 2m
   }
+
+  echo "${GREEN}[ RUN      ]${NORMAL} Testing adb shell su root remount -R command" >&2
+
+  adb_su remount -R </dev/null || true
+  sleep 2
+  adb_wait 2m ||
+    die "waiting for device after remount -R `usb_status`"
+  if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
+       "2" = "`get_property partition.system.verified`" ]; then
+    die "remount -R command failed"
+  fi
+
+  echo "${GREEN}[       OK ]${NORMAL} adb shell su root remount -R command" >&2
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} Testing kernel support for overlayfs" >&2
@@ -1172,6 +1185,23 @@ echo "${GREEN}[       OK ]${NORMAL} remount command works from scratch" >&2
 
 restore
 err=${?}
+
+if [ ${err} = 0 ] && ${overlayfs_supported}; then
+  echo "${GREEN}[ RUN      ]${NORMAL} test 'adb remount -R'" >&2
+  adb_root &&
+    adb remount -R &&
+    adb_wait 2m ||
+    die "adb remount -R"
+  if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
+       "2" = "`get_property partition.system.verified`" ]; then
+    die "remount -R command failed to disable verity"
+  fi
+
+  echo "${GREEN}[       OK ]${NORMAL} 'adb remount -R' command" >&2
+
+  restore
+  err=${?}
+fi
 
 restore() {
   true
