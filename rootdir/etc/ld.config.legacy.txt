@@ -80,6 +80,7 @@ namespace.media.links = default
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.media.link.default.shared_libs += libandroid.so
 namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += libmediametrics.so
 namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
