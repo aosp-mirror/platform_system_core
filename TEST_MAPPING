@@ -7,6 +7,9 @@
       "name": "debuggerd_test"
     },
     {
+      "name": "fs_mgr_unit_test"
+    },
+    {
       "name": "init_tests"
     },
     {
