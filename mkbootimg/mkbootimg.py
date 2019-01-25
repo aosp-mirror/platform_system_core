@@ -62,7 +62,13 @@ def get_recovery_dtbo_offset(args):
 
 
 def write_header(args):
+    BOOT_IMAGE_HEADER_V1_SIZE = 1648
+    BOOT_IMAGE_HEADER_V2_SIZE = 1660
     BOOT_MAGIC = 'ANDROID!'.encode()
+
+    if (args.header_version > 2):
+        raise ValueError('Boot header version %d not supported' % args.header_version)
+
     args.output.write(pack('8s', BOOT_MAGIC))
     args.output.write(pack('10I',
         filesize(args.kernel),                          # size in bytes
@@ -99,8 +105,12 @@ def write_header(args):
             args.output.write(pack('Q', get_recovery_dtbo_offset(args))) # recovery dtbo offset
         else:
             args.output.write(pack('Q', 0)) # Will be set to 0 for devices without a recovery dtbo
-        args.output.write(pack('I', args.output.tell() + 4))         # size of boot header
 
+    # Populate boot image header size for header versions 1 and 2.
+    if args.header_version == 1:
+        args.output.write(pack('I', BOOT_IMAGE_HEADER_V1_SIZE))
+    elif args.header_version == 2:
+        args.output.write(pack('I', BOOT_IMAGE_HEADER_V2_SIZE))
 
     if args.header_version > 1:
         args.output.write(pack('I', filesize(args.dtb)))   # size in bytes
