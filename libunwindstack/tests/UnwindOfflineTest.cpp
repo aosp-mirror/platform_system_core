@@ -43,6 +43,7 @@
 #include <unwindstack/Unwinder.h>
 
 #include "ElfTestUtils.h"
+#include "TestUtils.h"
 
 namespace unwindstack {
 
@@ -899,6 +900,43 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
   EXPECT_EQ(0xff85f050U, unwinder.frames()[74].sp);
   EXPECT_EQ(0xedb0d0c9U, unwinder.frames()[75].pc);
   EXPECT_EQ(0xff85f0c0U, unwinder.frames()[75].sp);
+}
+
+struct LeakType {
+  LeakType(Maps* maps, Regs* regs, std::shared_ptr<Memory>& process_memory)
+      : maps(maps), regs(regs), process_memory(process_memory) {}
+
+  Maps* maps;
+  Regs* regs;
+  std::shared_ptr<Memory>& process_memory;
+};
+
+static void OfflineUnwind(void* data) {
+  LeakType* leak_data = reinterpret_cast<LeakType*>(data);
+
+  std::unique_ptr<Regs> regs_copy(leak_data->regs->Clone());
+  JitDebug jit_debug(leak_data->process_memory);
+  Unwinder unwinder(128, leak_data->maps, regs_copy.get(), leak_data->process_memory);
+  unwinder.SetJitDebug(&jit_debug, regs_copy->Arch());
+  unwinder.Unwind();
+  ASSERT_EQ(76U, unwinder.NumFrames());
+}
+
+TEST_F(UnwindOfflineTest, unwind_offline_check_for_leaks) {
+  ASSERT_NO_FATAL_FAILURE(Init("jit_debug_arm/", ARCH_ARM));
+
+  MemoryOfflineParts* memory = new MemoryOfflineParts;
+  AddMemory(dir_ + "descriptor.data", memory);
+  AddMemory(dir_ + "descriptor1.data", memory);
+  AddMemory(dir_ + "stack.data", memory);
+  for (size_t i = 0; i < 7; i++) {
+    AddMemory(dir_ + "entry" + std::to_string(i) + ".data", memory);
+    AddMemory(dir_ + "jit" + std::to_string(i) + ".data", memory);
+  }
+  process_memory_.reset(memory);
+
+  LeakType data(maps_.get(), regs_.get(), process_memory_);
+  TestCheckForLeaks(OfflineUnwind, &data);
 }
 
 // The eh_frame_hdr data is present but set to zero fdes. This should
