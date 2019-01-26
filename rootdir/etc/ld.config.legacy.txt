@@ -36,7 +36,6 @@ namespace.default.asan.search.paths +=           /odm/${LIB}
 ###############################################################################
 
 additional.namespaces = runtime,conscrypt,media
-namespace.default.asan.permitted.paths += /apex/com.android.resolv/${LIB}
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.default.links = runtime
