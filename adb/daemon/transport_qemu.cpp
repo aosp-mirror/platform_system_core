@@ -78,7 +78,7 @@ void qemu_socket_thread(int port) {
         /* This could be an older version of the emulator, that doesn't
          * implement adb QEMUD service. Fall back to the old TCP way. */
         D("adb service is not available. Falling back to TCP socket.");
-        std::thread(server_socket_thread, port).detach();
+        std::thread(server_socket_thread, android::base::StringPrintf("tcp:%d", port)).detach();
         return;
     }
 
