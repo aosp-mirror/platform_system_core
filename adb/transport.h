@@ -28,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 
@@ -400,7 +401,7 @@ void send_packet(apacket* p, atransport* t);
 asocket* create_device_tracker(bool long_output);
 
 #if !ADB_HOST
-void server_socket_thread(int port);
+void server_socket_thread(std::string_view spec);
 
 #if defined(__ANDROID__)
 void qemu_socket_thread(int port);
