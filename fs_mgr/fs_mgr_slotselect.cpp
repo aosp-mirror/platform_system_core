@@ -34,6 +34,12 @@ static std::string other_suffix(const std::string& slot_suffix) {
     return "";
 }
 
+// Returns "_b" or "_a", which is *the other* slot of androidboot.slot_suffix
+// in kernel cmdline, or an empty string if that parameter does not exist.
+std::string fs_mgr_get_other_slot_suffix() {
+    return other_suffix(fs_mgr_get_slot_suffix());
+}
+
 // Returns "_a" or "_b" based on androidboot.slot_suffix in kernel cmdline, or an empty string
 // if that parameter does not exist.
 std::string fs_mgr_get_slot_suffix() {

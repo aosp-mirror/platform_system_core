@@ -79,3 +79,10 @@ cc_binary {
 
     cflags: ["-Werror"],
 }
+
+
+prebuilt_etc {
+    name: "logtagd.rc",
+    src: "logtagd.rc",
+    sub_dir: "init",
+}

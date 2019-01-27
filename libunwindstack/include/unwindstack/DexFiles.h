@@ -40,7 +40,7 @@ class DexFiles : public Global {
  public:
   explicit DexFiles(std::shared_ptr<Memory>& memory);
   DexFiles(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs);
-  ~DexFiles();
+  virtual ~DexFiles();
 
   DexFile* GetDexFile(uint64_t dex_file_offset, MapInfo* info);
 

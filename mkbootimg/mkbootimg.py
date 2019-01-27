@@ -62,7 +62,13 @@ def get_recovery_dtbo_offset(args):
 
 
 def write_header(args):
+    BOOT_IMAGE_HEADER_V1_SIZE = 1648
+    BOOT_IMAGE_HEADER_V2_SIZE = 1660
     BOOT_MAGIC = 'ANDROID!'.encode()
+
+    if (args.header_version > 2):
+        raise ValueError('Boot header version %d not supported' % args.header_version)
+
     args.output.write(pack('8s', BOOT_MAGIC))
     args.output.write(pack('10I',
         filesize(args.kernel),                          # size in bytes
@@ -85,6 +91,8 @@ def write_header(args):
 
     if args.header_version > 0:
         update_sha(sha, args.recovery_dtbo)
+    if args.header_version > 1:
+        update_sha(sha, args.dtb)
 
     img_id = pack('32s', sha.digest())
 
@@ -97,8 +105,16 @@ def write_header(args):
             args.output.write(pack('Q', get_recovery_dtbo_offset(args))) # recovery dtbo offset
         else:
             args.output.write(pack('Q', 0)) # Will be set to 0 for devices without a recovery dtbo
-        args.output.write(pack('I', args.output.tell() + 4))         # size of boot header
 
+    # Populate boot image header size for header versions 1 and 2.
+    if args.header_version == 1:
+        args.output.write(pack('I', BOOT_IMAGE_HEADER_V1_SIZE))
+    elif args.header_version == 2:
+        args.output.write(pack('I', BOOT_IMAGE_HEADER_V2_SIZE))
+
+    if args.header_version > 1:
+        args.output.write(pack('I', filesize(args.dtb)))   # size in bytes
+        args.output.write(pack('Q', args.base + args.dtb_offset)) # dtb physical load address
     pad_file(args.output, args.pagesize)
     return img_id
 
@@ -161,6 +177,7 @@ def parse_cmdline():
                         required=True)
     parser.add_argument('--ramdisk', help='path to the ramdisk', type=FileType('rb'))
     parser.add_argument('--second', help='path to the 2nd bootloader', type=FileType('rb'))
+    parser.add_argument('--dtb', help='path to dtb', type=FileType('rb'))
     recovery_dtbo_group = parser.add_mutually_exclusive_group()
     recovery_dtbo_group.add_argument('--recovery_dtbo', help='path to the recovery DTBO', type=FileType('rb'))
     recovery_dtbo_group.add_argument('--recovery_acpio', help='path to the recovery ACPIO',
@@ -172,6 +189,8 @@ def parse_cmdline():
     parser.add_argument('--ramdisk_offset', help='ramdisk offset', type=parse_int, default=0x01000000)
     parser.add_argument('--second_offset', help='2nd bootloader offset', type=parse_int,
                         default=0x00f00000)
+    parser.add_argument('--dtb_offset', help='dtb offset', type=parse_int, default=0x01f00000)
+
     parser.add_argument('--os_version', help='operating system version', type=parse_os_version,
                         default=0)
     parser.add_argument('--os_patch_level', help='operating system patch level',
@@ -196,6 +215,8 @@ def write_data(args):
 
     if args.header_version > 0:
         write_padded_file(args.output, args.recovery_dtbo, args.pagesize)
+    if args.header_version > 1:
+        write_padded_file(args.output, args.dtb, args.pagesize)
 
 def main():
     args = parse_cmdline()

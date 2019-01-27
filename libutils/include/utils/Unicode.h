@@ -28,7 +28,6 @@ int strncmp16(const char16_t *s1, const char16_t *s2, size_t n);
 size_t strlen16(const char16_t *);
 size_t strnlen16(const char16_t *, size_t);
 char16_t *strcpy16(char16_t *, const char16_t *);
-char16_t *strncpy16(char16_t *, const char16_t *, size_t);
 char16_t *strstr16(const char16_t*, const char16_t*);
 
 // Version of comparison that supports embedded NULs.

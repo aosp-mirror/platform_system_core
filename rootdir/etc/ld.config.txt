@@ -127,6 +127,7 @@ namespace.runtime.isolated = true
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
 # TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
 # when it exists.
@@ -141,11 +142,13 @@ namespace.media.isolated = true
 namespace.media.visible = true
 
 namespace.media.search.paths = /apex/com.android.media/${LIB}
+namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
 namespace.media.links = default
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.media.link.default.shared_libs += libandroid.so
 namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += libmediametrics.so
 namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
@@ -158,6 +161,7 @@ namespace.conscrypt.visible = true
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = default
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
@@ -326,6 +330,9 @@ additional.namespaces = runtime,system,vndk
 # partition (VNDK and LLNDK libraries) are not loaded here but from the
 # separate namespace 'system'. The delegation to the system namespace is done
 # via the 'namespace.default.link.system.shared_libs' property below.
+#
+# '#VNDK27#' TAG is only for building ld.config.27.txt for backward
+# compatibility. (TODO:b/123390078) Move them to a separate file.
 ###############################################################################
 namespace.default.isolated = true
 namespace.default.visible = true
@@ -335,11 +342,17 @@ namespace.default.search.paths += /vendor/${LIB}
 
 namespace.default.permitted.paths  = /odm
 namespace.default.permitted.paths += /vendor
+#VNDK27#namespace.default.search.paths += /vendor/${LIB}/hw
+#VNDK27#namespace.default.search.paths += /vendor/${LIB}/egl
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
+#VNDK27#namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/hw
+#VNDK27#namespace.default.asan.search.paths +=           /vendor/${LIB}/hw
+#VNDK27#namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/egl
+#VNDK27#namespace.default.asan.search.paths +=           /vendor/${LIB}/egl
 
 namespace.default.asan.permitted.paths  = /data/asan/odm
 namespace.default.asan.permitted.paths +=           /odm

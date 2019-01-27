@@ -68,7 +68,7 @@ bool adbd_auth_verify(const char* token, size_t token_size, const std::string& s
                 // b64_pton requires one additional byte in the target buffer for
                 // decoding to succeed. See http://b/28035006 for details.
                 uint8_t keybuf[ANDROID_PUBKEY_ENCODED_SIZE + 1];
-                if (__b64_pton(line.c_str(), keybuf, sizeof(keybuf)) != ANDROID_PUBKEY_ENCODED_SIZE) {
+                if (b64_pton(line.c_str(), keybuf, sizeof(keybuf)) != ANDROID_PUBKEY_ENCODED_SIZE) {
                     LOG(ERROR) << "Invalid base64 key " << line.c_str() << " in " << path;
                     continue;
                 }

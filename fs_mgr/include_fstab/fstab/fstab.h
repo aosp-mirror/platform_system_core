@@ -98,6 +98,7 @@ int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
 int fs_mgr_is_fs_verity(const struct fstab_rec* fstab);
 
 std::string fs_mgr_get_slot_suffix();
+std::string fs_mgr_get_other_slot_suffix();
 std::set<std::string> fs_mgr_get_boot_devices();
 
 struct FstabEntry {
@@ -191,7 +192,7 @@ struct FstabEntry {
 using Fstab = std::vector<FstabEntry>;
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
-bool ReadFstabFromDt(Fstab* fstab);
+bool ReadFstabFromDt(Fstab* fstab, bool log = true);
 bool ReadDefaultFstab(Fstab* fstab);
 
 // Temporary conversion functions.

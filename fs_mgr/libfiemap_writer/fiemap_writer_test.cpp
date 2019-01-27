@@ -51,6 +51,8 @@ class FiemapWriterTest : public ::testing::Test {
         testfile = ::android::base::StringPrintf("%s/testdata/%s", exec_dir.c_str(), tinfo->name());
     }
 
+    void TearDown() override { unlink(testfile.c_str()); }
+
     // name of the file we use for testing
     std::string testfile;
 };
@@ -100,6 +102,12 @@ TEST_F(FiemapWriterTest, CheckProgress) {
     auto ptr = FiemapWriter::Open(testfile, 4096, true, std::move(callback));
     EXPECT_NE(ptr, nullptr);
     EXPECT_EQ(invocations, 2);
+}
+
+TEST_F(FiemapWriterTest, CheckPinning) {
+    auto ptr = FiemapWriter::Open(testfile, 4096);
+    ASSERT_NE(ptr, nullptr);
+    EXPECT_TRUE(FiemapWriter::HasPinnedExtents(testfile));
 }
 
 TEST_F(FiemapWriterTest, CheckBlockDevicePath) {

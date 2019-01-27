@@ -794,7 +794,7 @@ static int adb_abb(int argc, const char** argv) {
 
 static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
     std::string error;
-    int out_fd = adb_connect(android::base::StringPrintf("sideload:%d", size), &error);
+    unique_fd out_fd(adb_connect(android::base::StringPrintf("sideload:%d", size), &error));
     if (out_fd < 0) {
         fprintf(stderr, "adb: pre-KitKat sideload connection failed: %s\n", error.c_str());
         return -1;
@@ -809,14 +809,12 @@ static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
         unsigned xfer = (size > CHUNK_SIZE) ? CHUNK_SIZE : size;
         if (!ReadFdExactly(in_fd, buf, xfer)) {
             fprintf(stderr, "adb: failed to read data from %s: %s\n", filename, strerror(errno));
-            adb_close(out_fd);
             return -1;
         }
         if (!WriteFdExactly(out_fd, buf, xfer)) {
             std::string error;
             adb_status(out_fd, &error);
             fprintf(stderr, "adb: failed to write data: %s\n", error.c_str());
-            adb_close(out_fd);
             return -1;
         }
         size -= xfer;
@@ -827,11 +825,9 @@ static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
 
     if (!adb_status(out_fd, &error)) {
         fprintf(stderr, "adb: error response: %s\n", error.c_str());
-        adb_close(out_fd);
         return -1;
     }
 
-    adb_close(out_fd);
     return 0;
 }
 
@@ -1091,7 +1087,7 @@ static bool adb_root(const char* command) {
 
 int send_shell_command(const std::string& command, bool disable_shell_protocol,
                        StandardStreamsCallbackInterface* callback) {
-    int fd;
+    unique_fd fd;
     bool use_shell_protocol = false;
 
     while (true) {
@@ -1114,7 +1110,7 @@ int send_shell_command(const std::string& command, bool disable_shell_protocol,
             std::string error;
             std::string service_string = ShellServiceString(use_shell_protocol, "", command);
 
-            fd = adb_connect(service_string, &error);
+            fd.reset(adb_connect(service_string, &error));
             if (fd >= 0) {
                 break;
             }
@@ -1126,13 +1122,7 @@ int send_shell_command(const std::string& command, bool disable_shell_protocol,
         }
     }
 
-    int exit_code = read_and_dump(fd, use_shell_protocol, callback);
-
-    if (adb_close(fd) < 0) {
-        PLOG(ERROR) << "failure closing FD " << fd;
-    }
-
-    return exit_code;
+    return read_and_dump(fd.get(), use_shell_protocol, callback);
 }
 
 static int logcat(int argc, const char** argv) {
@@ -1196,7 +1186,7 @@ static int backup(int argc, const char** argv) {
     if (argc < 2) error_exit("backup either needs a list of packages or -all/-shared");
 
     adb_unlink(filename);
-    int outFd = adb_creat(filename, 0640);
+    unique_fd outFd(adb_creat(filename, 0640));
     if (outFd < 0) {
         fprintf(stderr, "adb: backup unable to create file '%s': %s\n", filename, strerror(errno));
         return EXIT_FAILURE;
@@ -1211,20 +1201,16 @@ static int backup(int argc, const char** argv) {
 
     D("backup. filename=%s cmd=%s", filename, cmd.c_str());
     std::string error;
-    int fd = adb_connect(cmd, &error);
+    unique_fd fd(adb_connect(cmd, &error));
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for backup: %s\n", error.c_str());
-        adb_close(outFd);
         return EXIT_FAILURE;
     }
 
     fprintf(stdout, "Now unlock your device and confirm the backup operation...\n");
     fflush(stdout);
 
-    copy_to_file(fd, outFd);
-
-    adb_close(fd);
-    adb_close(outFd);
+    copy_to_file(fd.get(), outFd.get());
     return EXIT_SUCCESS;
 }
 
@@ -1232,33 +1218,29 @@ static int restore(int argc, const char** argv) {
     if (argc != 2) error_exit("restore requires an argument");
 
     const char* filename = argv[1];
-    int tarFd = adb_open(filename, O_RDONLY);
+    unique_fd tarFd(adb_open(filename, O_RDONLY));
     if (tarFd < 0) {
         fprintf(stderr, "adb: unable to open file %s: %s\n", filename, strerror(errno));
         return -1;
     }
 
     std::string error;
-    int fd = adb_connect("restore:", &error);
+    unique_fd fd(adb_connect("restore:", &error));
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for restore: %s\n", error.c_str());
-        adb_close(tarFd);
         return -1;
     }
 
     fprintf(stdout, "Now unlock your device and confirm the restore operation.\n");
     fflush(stdout);
 
-    copy_to_file(tarFd, fd);
+    copy_to_file(tarFd.get(), fd.get());
 
     // Provide an in-band EOD marker in case the archive file is malformed
-    write_zeros(512*2, fd);
+    write_zeros(512 * 2, fd);
 
     // Wait until the other side finishes, or it'll get sent SIGHUP.
-    copy_to_file(fd, STDOUT_FILENO);
-
-    adb_close(fd);
-    adb_close(tarFd);
+    copy_to_file(fd.get(), STDOUT_FILENO);
     return 0;
 }
 
@@ -1298,19 +1280,18 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
 
 static int adb_connect_command(const std::string& command) {
     std::string error;
-    int fd = adb_connect(command, &error);
+    unique_fd fd(adb_connect(command, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
     read_and_dump(fd);
-    adb_close(fd);
     return 0;
 }
 
 static int adb_connect_command_bidirectional(const std::string& command) {
     std::string error;
-    int fd = adb_connect(command, &error);
+    unique_fd fd(adb_connect(command, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
@@ -1336,11 +1317,10 @@ static int adb_connect_command_bidirectional(const std::string& command) {
         }
     };
 
-    std::thread read(forward, fd, STDOUT_FILENO, true);
-    std::thread write(forward, STDIN_FILENO, fd, false);
+    std::thread read(forward, fd.get(), STDOUT_FILENO, true);
+    std::thread write(forward, STDIN_FILENO, fd.get(), false);
     read.join();
     write.join();
-    adb_close(fd);
     return 0;
 }
 
@@ -1599,19 +1579,17 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         std::string error;
-        int fd = adb_connect(cmd, &error);
+        unique_fd fd(adb_connect(cmd, &error));
         if (fd < 0) {
             fprintf(stderr, "error: %s\n", error.c_str());
             return -1;
         }
 
         if (exec_in) {
-            copy_to_file(STDIN_FILENO, fd);
+            copy_to_file(STDIN_FILENO, fd.get());
         } else {
-            copy_to_file(fd, STDOUT_FILENO);
+            copy_to_file(fd.get(), STDOUT_FILENO);
         }
-
-        adb_close(fd);
         return 0;
     } else if (!strcmp(argv[0], "kill-server")) {
         return adb_kill_server() ? 0 : 1;
@@ -1706,9 +1684,8 @@ int adb_commandline(int argc, const char** argv) {
             error_exit("error: %s", error_message.c_str());
         }
 
-        int fd = adb_connect(cmd, &error_message);
-        if (fd < 0 || !adb_status(fd, &error_message)) {
-            adb_close(fd);
+        unique_fd fd(adb_connect(cmd, &error_message));
+        if (fd < 0 || !adb_status(fd.get(), &error_message)) {
             error_exit("error: %s", error_message.c_str());
         }
 

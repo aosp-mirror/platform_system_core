@@ -838,9 +838,10 @@ bool MetadataBuilder::UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo&
                << block_device.size << ")";
         return false;
     }
-    if (device_info.logical_block_size != geometry_.logical_block_size) {
-        LERROR << "Device logical block size does not match (got " << device_info.logical_block_size
-               << ", expected " << geometry_.logical_block_size << ")";
+    if (geometry_.logical_block_size % device_info.logical_block_size) {
+        LERROR << "Device logical block size is misaligned (block size="
+               << device_info.logical_block_size << ", alignment=" << geometry_.logical_block_size
+               << ")";
         return false;
     }
 

@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -74,14 +75,15 @@ std::tuple<unique_fd, int, std::string> tcp_connect(const std::string& address,
     unique_fd fd;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
     std::string serial;
-    if (socket_spec_connect(&fd, "tcp:" + address, &port, &serial, response)) {
+    std::string prefix_addr = address.starts_with("vsock:") ? address : "tcp:" + address;
+    if (socket_spec_connect(&fd, prefix_addr, &port, &serial, response)) {
         close_on_exec(fd);
         if (!set_tcp_keepalive(fd, 1)) {
             D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
         }
         return std::make_tuple(std::move(fd), port, serial);
     }
-    return std::make_tuple(unique_fd(), 0, "");
+    return std::make_tuple(unique_fd(), 0, serial);
 }
 
 void connect_device(const std::string& address, std::string* response) {
@@ -95,6 +97,9 @@ void connect_device(const std::string& address, std::string* response) {
     int port;
     std::string serial;
     std::tie(fd, port, serial) = tcp_connect(address, response);
+    if (fd.get() == -1) {
+        return;
+    }
     auto reconnect = [address](atransport* t) {
         std::string response;
         unique_fd fd;
@@ -229,18 +234,22 @@ static void client_socket_thread(int) {
     }
 }
 
-#else // ADB_HOST
+#else  // !ADB_HOST
 
-static void server_socket_thread(int port) {
+void server_socket_thread(std::string_view spec) {
     unique_fd serverfd;
 
     adb_thread_setname("server socket");
     D("transport: server_socket_thread() starting");
+    int port;
     while (serverfd == -1) {
-        std::string spec = android::base::StringPrintf("tcp:%d", port);
         std::string error;
-        serverfd.reset(socket_spec_listen(spec, &error));
-        if (serverfd < 0) {
+        errno = 0;
+        serverfd.reset(socket_spec_listen(spec, &error, &port));
+        if (errno == EAFNOSUPPORT || errno == EINVAL || errno == EPROTONOSUPPORT) {
+            D("unrecoverable error: '%s'", error.c_str());
+            return;
+        } else if (serverfd < 0) {
             D("server: cannot bind socket yet: %s", error.c_str());
             std::this_thread::sleep_for(1s);
             continue;
@@ -249,7 +258,8 @@ static void server_socket_thread(int port) {
     }
 
     while (true) {
-        D("server: trying to get new connection from %d", port);
+        std::string spec_str{spec};
+        D("server: trying to get new connection from %s", spec_str.c_str());
         unique_fd fd(adb_socket_accept(serverfd, nullptr, nullptr));
         if (fd >= 0) {
             D("server: new connection on fd %d", fd.get());
@@ -263,152 +273,28 @@ static void server_socket_thread(int port) {
     D("transport: server_socket_thread() exiting");
 }
 
-/* This is relevant only for ADB daemon running inside the emulator. */
-/*
- * Redefine open and write for qemu_pipe.h that contains inlined references
- * to those routines. We will redefine them back after qemu_pipe.h inclusion.
- */
-#undef open
-#undef read
-#undef write
-#define open    adb_open
-#define read    adb_read
-#define write   adb_write
-#include <qemu_pipe.h>
-#undef open
-#undef read
-#undef write
-#define open    ___xxx_open
-#define read    ___xxx_read
-#define write   ___xxx_write
+#endif
 
-/* A worker thread that monitors host connections, and registers a transport for
- * every new host connection. This thread replaces server_socket_thread on
- * condition that adbd daemon runs inside the emulator, and emulator uses QEMUD
- * pipe to communicate with adbd daemon inside the guest. This is done in order
- * to provide more robust communication channel between ADB host and guest. The
- * main issue with server_socket_thread approach is that it runs on top of TCP,
- * and thus is sensitive to network disruptions. For instance, the
- * ConnectionManager may decide to reset all network connections, in which case
- * the connection between ADB host and guest will be lost. To make ADB traffic
- * independent from the network, we use here 'adb' QEMUD service to transfer data
- * between the host, and the guest. See external/qemu/android/adb-*.* that
- * implements the emulator's side of the protocol. Another advantage of using
- * QEMUD approach is that ADB will be up much sooner, since it doesn't depend
- * anymore on network being set up.
- * The guest side of the protocol contains the following phases:
- * - Connect with adb QEMUD service. In this phase a handle to 'adb' QEMUD service
- *   is opened, and it becomes clear whether or not emulator supports that
- *   protocol.
- * - Wait for the ADB host to create connection with the guest. This is done by
- *   sending an 'accept' request to the adb QEMUD service, and waiting on
- *   response.
- * - When new ADB host connection is accepted, the connection with adb QEMUD
- *   service is registered as the transport, and a 'start' request is sent to the
- *   adb QEMUD service, indicating that the guest is ready to receive messages.
- *   Note that the guest will ignore messages sent down from the emulator before
- *   the transport registration is completed. That's why we need to send the
- *   'start' request after the transport is registered.
- */
-static void qemu_socket_thread(int port) {
-    /* 'accept' request to the adb QEMUD service. */
-    static const char _accept_req[] = "accept";
-    /* 'start' request to the adb QEMUD service. */
-    static const char _start_req[] = "start";
-    /* 'ok' reply from the adb QEMUD service. */
-    static const char _ok_resp[] = "ok";
-
-    char tmp[256];
-    char con_name[32];
-
-    adb_thread_setname("qemu socket");
-    D("transport: qemu_socket_thread() starting");
-
-    /* adb QEMUD service connection request. */
-    snprintf(con_name, sizeof(con_name), "pipe:qemud:adb:%d", port);
-
-    /* Connect to the adb QEMUD service. */
-    unique_fd fd(qemu_pipe_open(con_name));
-    if (fd < 0) {
-        /* This could be an older version of the emulator, that doesn't
-         * implement adb QEMUD service. Fall back to the old TCP way. */
-        D("adb service is not available. Falling back to TCP socket.");
-        std::thread(server_socket_thread, port).detach();
-        return;
-    }
-
-    while (true) {
-        /*
-         * Wait till the host creates a new connection.
-         */
-
-        /* Send the 'accept' request. */
-        if (WriteFdExactly(fd.get(), _accept_req, strlen(_accept_req))) {
-            /* Wait for the response. In the response we expect 'ok' on success,
-             * or 'ko' on failure. */
-            if (!ReadFdExactly(fd.get(), tmp, 2) || memcmp(tmp, _ok_resp, 2)) {
-                D("Accepting ADB host connection has failed.");
-            } else {
-                /* Host is connected. Register the transport, and start the
-                 * exchange. */
-                std::string serial = android::base::StringPrintf("host-%d", fd.get());
-                WriteFdExactly(fd.get(), _start_req, strlen(_start_req));
-                register_socket_transport(std::move(fd), std::move(serial), port, 1,
-                                          [](atransport*) { return ReconnectResult::Abort; });
-            }
-
-            /* Prepare for accepting of the next ADB host connection. */
-            fd.reset(qemu_pipe_open(con_name));
-            if (fd < 0) {
-                D("adb service become unavailable.");
-                return;
-            }
-        } else {
-            D("Unable to send the '%s' request to ADB service.", _accept_req);
-            return;
-        }
-    }
-    D("transport: qemu_socket_thread() exiting");
-    return;
-}
-
-// If adbd is running inside the emulator, it will normally use QEMUD pipe (aka
-// goldfish) as the transport. This can either be explicitly set by the
-// service.adb.transport property, or be inferred from ro.kernel.qemu that is
-// set to "1" for ranchu/goldfish.
-static bool use_qemu_goldfish() {
-    // Legacy way to detect if adbd should use the goldfish pipe is to check for
-    // ro.kernel.qemu, keep that behaviour for backward compatibility.
-    if (android::base::GetBoolProperty("ro.kernel.qemu", false)) {
-        return true;
-    }
-    // If service.adb.transport is present and is set to "goldfish", use the
-    // QEMUD pipe.
-    if (android::base::GetProperty("service.adb.transport", "") == "goldfish") {
-        return true;
-    }
-    return false;
-}
-
-#endif  // !ADB_HOST
-
-void local_init(int port)
-{
-    void (*func)(int);
-    const char* debug_name = "";
-
+void local_init(int port) {
 #if ADB_HOST
-    func = client_socket_thread;
-    debug_name = "client";
+    D("transport: local client init");
+    std::thread(client_socket_thread, port).detach();
+#elif !defined(__ANDROID__)
+    // Host adbd.
+    D("transport: local server init");
+    std::thread(server_socket_thread, android::base::StringPrintf("tcp:%d", port)).detach();
+    std::thread(server_socket_thread, android::base::StringPrintf("vsock:%d", port)).detach();
 #else
+    D("transport: local server init");
     // For the adbd daemon in the system image we need to distinguish
     // between the device, and the emulator.
-    func = use_qemu_goldfish() ? qemu_socket_thread : server_socket_thread;
-    debug_name = "server";
+    if (use_qemu_goldfish()) {
+        std::thread(qemu_socket_thread, port).detach();
+    } else {
+        std::thread(server_socket_thread, android::base::StringPrintf("tcp:%d", port)).detach();
+    }
+    std::thread(server_socket_thread, android::base::StringPrintf("vsock:%d", port)).detach();
 #endif // !ADB_HOST
-
-    D("transport: local %s init", debug_name);
-    std::thread(func, port).detach();
 }
 
 #if ADB_HOST
