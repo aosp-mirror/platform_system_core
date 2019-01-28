@@ -34,7 +34,6 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
@@ -266,16 +265,6 @@ bool make_dir(const std::string& path, mode_t mode) {
     }
 
     return rc == 0;
-}
-
-/*
- * Writes hex_len hex characters (1/2 byte) to hex from bytes.
- */
-std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
-    std::string hex("0x");
-    for (size_t i = 0; i < bytes_len; i++)
-        android::base::StringAppendF(&hex, "%02x", bytes[i]);
-    return hex;
 }
 
 /*
