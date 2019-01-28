@@ -15,6 +15,7 @@ typedef enum {
 
 typedef enum {
     HAL_DATASPACE_DISPLAY_BT2020 = 142999552 /* ((STANDARD_BT2020 | TRANSFER_SRGB) | RANGE_FULL) */,
+    HAL_DATASPACE_DYNAMIC_DEPTH = 4098 /* 0x1002 */,
 } android_dataspace_v1_2_t;
 
 typedef enum {
