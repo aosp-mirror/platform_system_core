@@ -92,8 +92,9 @@ static uint64_t sparse_limit = 0;
 static int64_t target_sparse_limit = -1;
 
 static unsigned g_base_addr = 0x10000000;
-static boot_img_hdr_v1 g_boot_img_hdr = {};
+static boot_img_hdr_v2 g_boot_img_hdr = {};
 static std::string g_cmdline;
+static std::string g_dtb_path;
 
 static bool g_disable_verity = false;
 static bool g_disable_verification = false;
@@ -394,11 +395,13 @@ static int show_help() {
             "                            Download and boot kernel from RAM.\n"
             " flash:raw PARTITION KERNEL [RAMDISK [SECOND]]\n"
             "                            Create boot image and flash it.\n"
+            " --dtb DTB                  Specify path to DTB for boot image header version 2.\n"
             " --cmdline CMDLINE          Override kernel command line.\n"
             " --base ADDRESS             Set kernel base address (default: 0x10000000).\n"
             " --kernel-offset            Set kernel offset (default: 0x00008000).\n"
             " --ramdisk-offset           Set ramdisk offset (default: 0x01000000).\n"
             " --tags-offset              Set tags offset (default: 0x00000100).\n"
+            " --dtb-offset               Set dtb offset (default: 0x01100000).\n"
             " --page-size BYTES          Set flash page size (default: 2048).\n"
             " --header-version VERSION   Set boot image header version.\n"
             " --os-version MAJOR[.MINOR[.PATCH]]\n"
@@ -448,12 +451,12 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
     }
 
     // Is this actually a boot image?
-    if (kernel_data.size() < sizeof(boot_img_hdr_v1)) {
+    if (kernel_data.size() < sizeof(boot_img_hdr_v2)) {
         die("cannot load '%s': too short", kernel.c_str());
     }
     if (!memcmp(kernel_data.data(), BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
         if (!g_cmdline.empty()) {
-            bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v1*>(kernel_data.data()), g_cmdline);
+            bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v2*>(kernel_data.data()), g_cmdline);
         }
 
         if (!ramdisk.empty()) die("cannot boot a boot.img *and* ramdisk");
@@ -474,15 +477,26 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
             die("cannot load '%s': %s", second_stage.c_str(), strerror(errno));
         }
     }
+
+    std::vector<char> dtb_data;
+    if (!g_dtb_path.empty()) {
+        if (g_boot_img_hdr.header_version < 2) {
+                    die("Argument dtb not supported for boot image header version %d\n",
+                        g_boot_img_hdr.header_version);
+        }
+        if (!ReadFileToVector(g_dtb_path, &dtb_data)) {
+            die("cannot load '%s': %s", g_dtb_path.c_str(), strerror(errno));
+        }
+    }
+
     fprintf(stderr,"creating boot image...\n");
 
     std::vector<char> out;
-    boot_img_hdr_v1* boot_image_data = mkbootimg(kernel_data, ramdisk_data, second_stage_data,
-                                                 g_base_addr, g_boot_img_hdr, &out);
+    boot_img_hdr_v2* boot_image_data = mkbootimg(kernel_data, ramdisk_data, second_stage_data,
+                                                 dtb_data, g_base_addr, g_boot_img_hdr, &out);
 
     if (!g_cmdline.empty()) bootimg_set_cmdline(boot_image_data, g_cmdline);
     fprintf(stderr, "creating boot image - %zu bytes\n", out.size());
-
     return out;
 }
 
@@ -1586,6 +1600,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
     g_boot_img_hdr.second_addr = 0x00f00000;
     g_boot_img_hdr.tags_addr = 0x00000100;
     g_boot_img_hdr.page_size = 2048;
+    g_boot_img_hdr.dtb_addr = 0x01100000;
 
     const struct option longopts[] = {
         {"base", required_argument, 0, 0},
@@ -1605,6 +1620,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
         {"skip-secondary", no_argument, 0, 0},
         {"slot", required_argument, 0, 0},
         {"tags-offset", required_argument, 0, 0},
+        {"dtb", required_argument, 0, 0},
+        {"dtb-offset", required_argument, 0, 0},
         {"unbuffered", no_argument, 0, 0},
         {"verbose", no_argument, 0, 'v'},
         {"version", no_argument, 0, 0},
@@ -1632,6 +1649,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 force_flash = true;
             } else if (name == "header-version") {
                 g_boot_img_hdr.header_version = strtoul(optarg, nullptr, 0);
+            } else if (name == "dtb") {
+                g_dtb_path = optarg;
             } else if (name == "kernel-offset") {
                 g_boot_img_hdr.kernel_addr = strtoul(optarg, 0, 16);
             } else if (name == "os-patch-level") {
@@ -1649,6 +1668,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 skip_secondary = true;
             } else if (name == "slot") {
                 slot_override = optarg;
+            } else if (name == "dtb-offset") {
+                g_boot_img_hdr.dtb_addr = strtoul(optarg, 0, 16);
             } else if (name == "tags-offset") {
                 g_boot_img_hdr.tags_addr = strtoul(optarg, 0, 16);
             } else if (name == "unbuffered") {
@@ -1828,7 +1849,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!args.empty()) ramdisk = next_arg(&args);
             std::string second_stage;
             if (!args.empty()) second_stage = next_arg(&args);
-
             auto data = LoadBootableImage(kernel, ramdisk, second_stage);
             fb->Download("boot.img", data);
             fb->Boot();
