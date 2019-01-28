@@ -55,6 +55,7 @@ namespace.default.link.runtime.shared_libs += libnativeloader.so
 # This namespace exposes externally accessible libraries from the Runtime APEX.
 ###############################################################################
 namespace.runtime.isolated = true
+namespace.runtime.visible = true
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
