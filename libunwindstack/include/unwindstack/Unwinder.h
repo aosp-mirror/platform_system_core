@@ -81,6 +81,12 @@ class Unwinder {
 
   const std::vector<FrameData>& frames() { return frames_; }
 
+  std::vector<FrameData> ConsumeFrames() {
+    std::vector<FrameData> frames = std::move(frames_);
+    frames_.clear();
+    return frames;
+  }
+
   std::string FormatFrame(size_t frame_num);
   static std::string FormatFrame(const FrameData& frame, bool is32bit);
 
