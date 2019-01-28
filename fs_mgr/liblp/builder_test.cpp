@@ -442,10 +442,6 @@ TEST_F(BuilderTest, MetadataTooLarge) {
 }
 
 TEST_F(BuilderTest, block_device_info) {
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    ASSERT_NE(fstab, nullptr);
-
     PartitionOpener opener;
 
     BlockDeviceInfo device_info;
