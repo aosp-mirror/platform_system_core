@@ -169,7 +169,8 @@ class AvbHandle {
     AvbHashtreeResult SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait_for_verity_dev);
 
     // Similar to above, but loads the offline vbmeta from the end of fstab_entry->blk_device.
-    static AvbHashtreeResult SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry);
+    static AvbHashtreeResult SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
+                                                        bool wait_for_verity_dev = true);
 
     const std::string& avb_version() const { return avb_version_; }
     const VBMetaInfo& vbmeta_info() const { return vbmeta_info_; }
