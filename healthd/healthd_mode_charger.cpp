@@ -80,8 +80,13 @@ char* locale;
 #define LOGW(x...) KLOG_WARNING("charger", x);
 #define LOGV(x...) KLOG_DEBUG("charger", x);
 
-static constexpr const char* animation_desc_path =
-    "/res/values/charger/animation.txt";
+// Resources in /product/etc/res overrides resources in /res.
+// If the device is using the Generic System Image (GSI), resources may exist in
+// both paths.
+static constexpr const char* product_animation_desc_path =
+        "/product/etc/res/values/charger/animation.txt";
+static constexpr const char* product_animation_root = "/product/etc/res/images/";
+static constexpr const char* animation_desc_path = "/res/values/charger/animation.txt";
 
 struct key_state {
     bool pending;
@@ -600,7 +605,10 @@ animation* init_animation() {
     bool parse_success;
 
     std::string content;
-    if (base::ReadFileToString(animation_desc_path, &content)) {
+    if (base::ReadFileToString(product_animation_desc_path, &content)) {
+        parse_success = parse_animation_desc(content, &battery_animation);
+        battery_animation.set_resource_root(product_animation_root);
+    } else if (base::ReadFileToString(animation_desc_path, &content)) {
         parse_success = parse_animation_desc(content, &battery_animation);
     } else {
         LOGW("Could not open animation description at %s\n", animation_desc_path);

@@ -48,6 +48,25 @@ struct animation {
         GRFont* font;
     };
 
+    // When libminui loads PNG images:
+    // - When treating paths as relative paths, it adds ".png" suffix.
+    // - When treating paths as absolute paths, it doesn't add the suffix. Hence, the suffix
+    //   is added here.
+    void set_resource_root(const std::string& root) {
+        if (!animation_file.empty()) {
+            animation_file = root + animation_file + ".png";
+        }
+        if (!fail_file.empty()) {
+            fail_file = root + fail_file + ".png";
+        }
+        if (!text_clock.font_file.empty()) {
+            text_clock.font_file = root + text_clock.font_file + ".png";
+        }
+        if (!text_percent.font_file.empty()) {
+            text_percent.font_file = root + text_percent.font_file + ".png";
+        }
+    }
+
     std::string animation_file;
     std::string fail_file;
 
