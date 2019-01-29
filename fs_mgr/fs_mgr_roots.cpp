@@ -37,9 +37,8 @@ FstabEntry* GetEntryForPath(Fstab* fstab, const std::string& path) {
     if (path.empty()) return nullptr;
     std::string str(path);
     while (true) {
-        auto it = std::find_if(fstab->begin(), fstab->end(),
-                               [&str](const auto& entry) { return entry.mount_point == str; });
-        if (it != fstab->end()) return &*it;
+        auto entry = GetEntryForMountPoint(fstab, str);
+        if (entry != nullptr) return entry;
         if (str == "/") break;
         auto slash = str.find_last_of('/');
         if (slash == std::string::npos) break;
@@ -65,10 +64,8 @@ static MountState GetMountState(const std::string& mount_point) {
         return MountState::ERROR;
     }
 
-    auto mv = std::find_if(
-            mounted_fstab.begin(), mounted_fstab.end(),
-            [&mount_point](const auto& entry) { return entry.mount_point == mount_point; });
-    if (mv != mounted_fstab.end()) {
+    auto mv = GetEntryForMountPoint(&mounted_fstab, mount_point);
+    if (mv != nullptr) {
         return MountState::MOUNTED;
     }
     return MountState::NOT_MOUNTED;
@@ -178,9 +175,8 @@ std::string GetSystemRoot() {
         return "";
     }
 
-    auto it = std::find_if(fstab.begin(), fstab.end(),
-                           [](const auto& entry) { return entry.mount_point == kSystemRoot; });
-    if (it == fstab.end()) {
+    auto entry = GetEntryForMountPoint(&fstab, kSystemRoot);
+    if (entry == nullptr) {
         return "/";
     }
 

@@ -787,10 +787,8 @@ void fs_mgr_free_fstab(struct fstab *fstab)
     free(fstab);
 }
 
-/*
- * Returns the fstab_rec* whose mount_point is path.
- * Returns nullptr if not found.
- */
+// Returns the fstab_rec* whose mount_point is path.
+// Returns nullptr if not found.
 struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const std::string& path) {
     if (!fstab) {
         return nullptr;
@@ -800,6 +798,20 @@ struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const st
             return &fstab->recs[i];
         }
     }
+    return nullptr;
+}
+
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
+    if (fstab == nullptr) {
+        return nullptr;
+    }
+
+    for (auto& entry : *fstab) {
+        if (entry.mount_point == path) {
+            return &entry;
+        }
+    }
+
     return nullptr;
 }
 
