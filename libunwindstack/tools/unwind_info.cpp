@@ -44,10 +44,10 @@ void DumpArm(Elf* elf, ElfInterfaceArm* interface) {
   }
 
   printf("ARM Unwind Information:\n");
+  uint64_t load_bias = elf->GetLoadBias();
   for (const auto& entry : interface->pt_loads()) {
-    uint64_t load_bias = entry.second.table_offset;
     printf(" PC Range 0x%" PRIx64 " - 0x%" PRIx64 "\n", entry.second.offset + load_bias,
-           entry.second.table_size + load_bias);
+           entry.second.offset + entry.second.table_size + load_bias);
     for (auto pc : *interface) {
       std::string name;
       printf("  PC 0x%" PRIx64, pc + load_bias);
