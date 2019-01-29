@@ -88,6 +88,7 @@ cc_library_host_static {
 cc_test_host {
     name: "libfs_avb_test",
     defaults: ["libfs_avb_host_test_defaults"],
+    test_suites: ["general-tests"],
     static_libs: [
         "libfs_avb_test_util",
     ],
@@ -103,6 +104,7 @@ cc_test_host {
 cc_test_host {
     name: "libfs_avb_internal_test",
     defaults: ["libfs_avb_host_test_defaults"],
+    test_suites: ["general-tests"],
     static_libs: [
         "libfs_avb_test_util",
     ],
