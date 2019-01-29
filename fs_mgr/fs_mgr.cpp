@@ -889,19 +889,6 @@ bool fs_mgr_update_logical_partition(FstabEntry* entry) {
     return true;
 }
 
-bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
-    auto entry = FstabRecToFstabEntry(rec);
-
-    if (!fs_mgr_update_logical_partition(&entry)) {
-        return false;
-    }
-
-    free(rec->blk_device);
-    rec->blk_device = strdup(entry.blk_device.c_str());
-
-    return true;
-}
-
 class CheckpointManager {
   public:
     CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}

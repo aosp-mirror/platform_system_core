@@ -75,16 +75,20 @@ static std::string find_proc_mount(const char* dir) {
 
 // Returns the device used to mount a directory in the fstab.
 static std::string find_fstab_mount(const char* dir) {
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), dir);
-    if (!rec) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
         return "";
     }
-    if (fs_mgr_is_logical(rec)) {
-        fs_mgr_update_logical_partition(rec);
+
+    auto entry = std::find_if(fstab.begin(), fstab.end(),
+                              [&dir](const auto& entry) { return entry.mount_point == dir; });
+    if (entry == fstab.end()) {
+        return "";
     }
-    return rec->blk_device;
+    if (entry->fs_mgr_flags.logical) {
+        fs_mgr_update_logical_partition(&(*entry));
+    }
+    return entry->blk_device;
 }
 
 // The proc entry for / is full of lies, so check fstab instead.
