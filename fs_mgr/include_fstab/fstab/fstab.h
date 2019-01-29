@@ -69,33 +69,22 @@ struct fstab* fs_mgr_read_fstab_dt();
 struct fstab* fs_mgr_read_fstab(const char* fstab_path);
 void fs_mgr_free_fstab(struct fstab* fstab);
 
-int fs_mgr_add_entry(struct fstab* fstab, const char* mount_point, const char* fs_type,
-                     const char* blk_device);
 struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const std::string& path);
 int fs_mgr_is_voldmanaged(const struct fstab_rec* fstab);
 int fs_mgr_is_nonremovable(const struct fstab_rec* fstab);
 int fs_mgr_is_verified(const struct fstab_rec* fstab);
-int fs_mgr_is_verifyatboot(const struct fstab_rec* fstab);
-int fs_mgr_is_avb(const struct fstab_rec* fstab);
 int fs_mgr_is_encryptable(const struct fstab_rec* fstab);
-int fs_mgr_is_file_encrypted(const struct fstab_rec* fstab);
 void fs_mgr_get_file_encryption_modes(const struct fstab_rec* fstab, const char** contents_mode_ret,
                                       const char** filenames_mode_ret);
 int fs_mgr_is_convertible_to_fbe(const struct fstab_rec* fstab);
 int fs_mgr_is_noemulatedsd(const struct fstab_rec* fstab);
 int fs_mgr_is_notrim(const struct fstab_rec* fstab);
-int fs_mgr_is_formattable(const struct fstab_rec* fstab);
-int fs_mgr_is_slotselect(const struct fstab_rec* fstab);
-int fs_mgr_is_nofail(const struct fstab_rec* fstab);
-int fs_mgr_is_first_stage_mount(const struct fstab_rec* fstab);
-int fs_mgr_is_latemount(const struct fstab_rec* fstab);
 int fs_mgr_is_quota(const struct fstab_rec* fstab);
 int fs_mgr_is_logical(const struct fstab_rec* fstab);
 int fs_mgr_is_checkpoint(const struct fstab_rec* fstab);
 int fs_mgr_is_checkpoint_fs(const struct fstab_rec* fstab);
 int fs_mgr_is_checkpoint_blk(const struct fstab_rec* fstab);
 int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
-int fs_mgr_is_fs_verity(const struct fstab_rec* fstab);
 
 std::string fs_mgr_get_slot_suffix();
 std::string fs_mgr_get_other_slot_suffix();
