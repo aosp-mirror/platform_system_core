@@ -23,6 +23,9 @@
  */
 #define LOG_TAG "ashmem"
 
+#ifndef __ANDROID_VNDK__
+#include <dlfcn.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/ashmem.h>
@@ -45,13 +48,46 @@ static dev_t __ashmem_rdev;
  */
 static pthread_mutex_t __ashmem_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+ * We use ashmemd to enforce that apps don't open /dev/ashmem directly. Vendor
+ * code can't access system aidl services per Treble requirements. So we limit
+ * ashmemd access to the system variant of libcutils.
+ */
+#ifndef __ANDROID_VNDK__
+using openFdType = int (*)();
+
+openFdType initOpenAshmemFd() {
+    openFdType openFd = nullptr;
+    void* handle = dlopen("libashmemd_client.so", RTLD_NOW);
+    if (!handle) {
+        ALOGE("Failed to dlopen() libashmemd_client.so: %s", dlerror());
+        return openFd;
+    }
+
+    openFd = reinterpret_cast<openFdType>(dlsym(handle, "openAshmemdFd"));
+    if (!openFd) {
+        ALOGE("Failed to dlsym() openAshmemdFd() function: %s", dlerror());
+    }
+    return openFd;
+}
+#endif
+
 /* logistics of getting file descriptor for ashmem */
 static int __ashmem_open_locked()
 {
     int ret;
     struct stat st;
 
-    int fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR | O_CLOEXEC));
+    int fd = -1;
+#ifndef __ANDROID_VNDK__
+    static auto openFd = initOpenAshmemFd();
+    if (openFd) {
+        fd = openFd();
+    }
+#endif
+    if (fd < 0) {
+        fd = TEMP_FAILURE_RETRY(open(ASHMEM_DEVICE, O_RDWR | O_CLOEXEC));
+    }
     if (fd < 0) {
         return fd;
     }
