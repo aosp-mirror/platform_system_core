@@ -57,6 +57,12 @@ namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 # Keep in sync with the platform namespace in the com.android.runtime APEX
 # ld.config.txt.
+# If a shared library or an executable requests a shared library that
+# cannot be loaded into the default namespace, the dynamic linker tries
+# to load the shared library from the runtime namespace.And then, if the
+# shared library cannot be loaded from the runtime namespace either, the
+# dynamic linker tries to load the shared library from the resolv namespace.
+# Finally, if all attempts fail, the dynamic linker returns an error.
 namespace.default.links = runtime,resolv
 # Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
 # libart.
@@ -66,6 +72,9 @@ namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
 
+# When libnetd_resolv.so can't be found in the default namespace, search for it
+# in the resolv namespace. Don't allow any other libraries from the resolv namespace
+# to be loaded in the default namespace.
 namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 
 ###############################################################################
