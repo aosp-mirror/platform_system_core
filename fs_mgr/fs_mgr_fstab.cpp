@@ -787,35 +787,6 @@ void fs_mgr_free_fstab(struct fstab *fstab)
     free(fstab);
 }
 
-/* Add an entry to the fstab, and return 0 on success or -1 on error */
-int fs_mgr_add_entry(struct fstab *fstab,
-                     const char *mount_point, const char *fs_type,
-                     const char *blk_device)
-{
-    struct fstab_rec *new_fstab_recs;
-    int n = fstab->num_entries;
-
-    new_fstab_recs = (struct fstab_rec *)
-                     realloc(fstab->recs, sizeof(struct fstab_rec) * (n + 1));
-
-    if (!new_fstab_recs) {
-        return -1;
-    }
-
-    /* A new entry was added, so initialize it */
-     memset(&new_fstab_recs[n], 0, sizeof(struct fstab_rec));
-     new_fstab_recs[n].mount_point = strdup(mount_point);
-     new_fstab_recs[n].fs_type = strdup(fs_type);
-     new_fstab_recs[n].blk_device = strdup(blk_device);
-     new_fstab_recs[n].length = 0;
-
-     /* Update the fstab struct */
-     fstab->recs = new_fstab_recs;
-     fstab->num_entries++;
-
-     return 0;
-}
-
 /*
  * Returns the fstab_rec* whose mount_point is path.
  * Returns nullptr if not found.
@@ -943,24 +914,9 @@ int fs_mgr_is_verified(const struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & MF_VERIFY;
 }
 
-int fs_mgr_is_avb(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_AVB;
-}
-
-int fs_mgr_is_verifyatboot(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_VERIFYATBOOT;
-}
-
 int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE);
-}
-
-int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
 }
 
 void fs_mgr_get_file_encryption_modes(const struct fstab_rec* fstab, const char** contents_mode_ret,
@@ -981,26 +937,6 @@ int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
 
 int fs_mgr_is_notrim(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_NOTRIM;
-}
-
-int fs_mgr_is_formattable(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & (MF_FORMATTABLE);
-}
-
-int fs_mgr_is_slotselect(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_SLOTSELECT;
-}
-
-int fs_mgr_is_nofail(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_NOFAIL;
-}
-
-int fs_mgr_is_first_stage_mount(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_FIRST_STAGE_MOUNT;
-}
-
-int fs_mgr_is_latemount(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_LATEMOUNT;
 }
 
 int fs_mgr_is_quota(const struct fstab_rec* fstab) {
@@ -1026,10 +962,6 @@ int fs_mgr_is_checkpoint_fs(const struct fstab_rec* fstab) {
 
 int fs_mgr_is_checkpoint_blk(const struct fstab_rec* fstab) {
     return fstab->fs_mgr_flags & MF_CHECKPOINT_BLK;
-}
-
-int fs_mgr_is_fs_verity(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_FS_VERITY;
 }
 
 FstabEntry BuildGsiSystemFstabEntry() {
