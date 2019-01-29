@@ -1948,11 +1948,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string size = next_arg(&args);
             fb->ResizePartition(partition, size);
         } else if (command == "gsi") {
-            if (args.empty()) {
-                syntax_error("missing 'wipe' or 'disable' argument");
-            } else if (args.size() == 1 && args[0] == "wipe") {
+            std::string arg = next_arg(&args);
+            if (arg == "wipe") {
                 fb->RawCommand("gsi:wipe", "wiping GSI");
-            } else if (args.size() == 1 && args[0] == "disable") {
+            } else if (arg == "disable") {
                 fb->RawCommand("gsi:disable", "disabling GSI");
             } else {
                 syntax_error("expected 'wipe' or 'disable'");
