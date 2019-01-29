@@ -52,15 +52,17 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
     // Following appears to have a first time 2% impact on flashing speeds.
 
     // Convert partition_name to a validated mount point and wipe.
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    for (auto i = 0; i < fstab->num_entries; i++) {
-        const auto mount_point = fstab->recs[i].mount_point;
-        if (!mount_point) continue;
-        auto partition = android::base::Basename(mount_point);
-        if ("/"s == mount_point) partition = "system";
+    Fstab fstab;
+    ReadDefaultFstab(&fstab);
+
+    for (const auto& entry : fstab) {
+        auto partition = android::base::Basename(entry.mount_point);
+        if ("/" == entry.mount_point) {
+            partition = "system";
+        }
+
         if ((partition + device->GetCurrentSlot()) == partition_name) {
-            fs_mgr_overlayfs_teardown(mount_point);
+            fs_mgr_overlayfs_teardown(entry.mount_point.c_str());
         }
     }
 }
