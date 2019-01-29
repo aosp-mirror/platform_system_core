@@ -79,7 +79,6 @@ bool fs_mgr_update_verity_state(
         std::function<void(const std::string& mount_point, int mode)> callback);
 bool fs_mgr_swapon_all(const Fstab& fstab);
 bool fs_mgr_update_logical_partition(FstabEntry* entry);
-bool fs_mgr_update_logical_partition(struct fstab_rec* rec);
 
 int fs_mgr_do_format(const FstabEntry& entry, bool reserve_footer);
 int fs_mgr_do_format(fstab_rec* rec, bool reserve_footer);

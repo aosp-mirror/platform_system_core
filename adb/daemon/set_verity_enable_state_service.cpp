@@ -41,8 +41,6 @@
 
 #include "fec/io.h"
 
-struct fstab *fstab;
-
 #ifdef ALLOW_ADBD_DISABLE_VERITY
 static const bool kAllowDisableVerity = true;
 #else
@@ -213,18 +211,18 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         // Not using AVB - assume VB1.0.
 
         // read all fstab entries at once from all sources
-        if (!fstab) fstab = fs_mgr_read_fstab_default();
-        if (!fstab) {
+        Fstab fstab;
+        if (!ReadDefaultFstab(&fstab)) {
             WriteFdExactly(fd.get(), "Failed to read fstab\n");
             suggest_run_adb_root(fd.get());
             return;
         }
 
         // Loop through entries looking for ones that verity manages.
-        for (int i = 0; i < fstab->num_entries; i++) {
-            if (fs_mgr_is_verified(&fstab->recs[i])) {
-                if (set_verity_enabled_state(fd.get(), fstab->recs[i].blk_device,
-                                             fstab->recs[i].mount_point, enable)) {
+        for (const auto& entry : fstab) {
+            if (entry.fs_mgr_flags.verify) {
+                if (set_verity_enabled_state(fd.get(), entry.blk_device.c_str(),
+                                             entry.mount_point.c_str(), enable)) {
                     any_changed = true;
                 }
             }
