@@ -1,11 +1,1 @@
-BasedOnStyle: Google
-AccessModifierOffset: -2
-AllowShortFunctionsOnASingleLine: Inline
-ColumnLimit: 100
-CommentPragmas: NOLINT:.*
-DerivePointerAlignment: false
-IndentWidth: 4
-ContinuationIndentWidth: 8
-PointerAlignment: Left
-TabWidth: 4
-UseTab: Never
+../../build/soong/scripts/system-clang-format
