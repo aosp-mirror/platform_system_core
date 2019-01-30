@@ -338,6 +338,8 @@ static void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "zram_backing_dev_path=")) {
             entry->fs_mgr_flags.zram_backing_dev_path = true;
             entry->zram_backing_dev_path = arg;
+        } else if (StartsWith(flag, "avb_key=")) {
+            entry->avb_key = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
