@@ -81,8 +81,15 @@ class VBMetaData {
     // true to update vbmeta_size_ to the actual size with valid content.
     std::unique_ptr<AvbVBMetaImageHeader> GetVBMetaHeader(bool update_vbmeta_size = false);
 
+    // Sets the vbmeta_path where we load the vbmeta data. Could be a partition or a file.
+    // e.g.,
+    // - /dev/block/by-name/system_a
+    // - /path/to/system_other.img.
+    void set_vbmeta_path(std::string vbmeta_path) { vbmeta_path_ = std::move(vbmeta_path); }
+
     // Get methods for each data member.
     const std::string& partition() const { return partition_name_; }
+    const std::string& vbmeta_path() const { return vbmeta_path_; }
     uint8_t* data() const { return vbmeta_ptr_.get(); }
     const size_t& size() const { return vbmeta_size_; }
 
@@ -93,6 +100,7 @@ class VBMetaData {
     std::unique_ptr<uint8_t[]> vbmeta_ptr_;
     size_t vbmeta_size_;
     std::string partition_name_;
+    std::string vbmeta_path_;
 };
 
 class FsManagerAvbOps;
@@ -159,6 +167,9 @@ class AvbHandle {
     //     device-mapper, etc.
     //   - kDisabled: hashtree is disabled.
     AvbHashtreeResult SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait_for_verity_dev);
+
+    // Similar to above, but loads the offline vbmeta from the end of fstab_entry->blk_device.
+    static AvbHashtreeResult SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry);
 
     const std::string& avb_version() const { return avb_version_; }
     const VBMetaInfo& vbmeta_info() const { return vbmeta_info_; }
