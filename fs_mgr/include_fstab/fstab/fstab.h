@@ -185,6 +185,8 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool log = true);
 bool ReadDefaultFstab(Fstab* fstab);
 
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
+
 // Temporary conversion functions.
 FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec);
 Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab);
