@@ -401,7 +401,8 @@ void send_packet(apacket* p, atransport* t);
 asocket* create_device_tracker(bool long_output);
 
 #if !ADB_HOST
-void server_socket_thread(std::string_view spec);
+unique_fd tcp_listen_inaddr_any(int port, std::string* error);
+void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_func, int port);
 
 #if defined(__ANDROID__)
 void qemu_socket_thread(int port);
