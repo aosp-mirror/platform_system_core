@@ -116,6 +116,7 @@ struct FstabEntry {
     std::string zram_loopback_path;
     uint64_t zram_loopback_size = 512 * 1024 * 1024;  // 512MB by default;
     std::string zram_backing_dev_path;
+    std::string avb_key;
 
     // TODO: Remove this union once fstab_rec is deprecated. It only serves as a
     // convenient way to convert between fstab_rec::fs_mgr_flags and these bools.
