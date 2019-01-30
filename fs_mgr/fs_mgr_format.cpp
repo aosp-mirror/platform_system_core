@@ -37,6 +37,9 @@
 
 using android::base::unique_fd;
 
+// Realistically, this file should be part of the android::fs_mgr namespace;
+using namespace android::fs_mgr;
+
 static int get_dev_sz(const std::string& fs_blkdev, uint64_t* dev_sz) {
     unique_fd fd(TEMP_FAILURE_RETRY(open(fs_blkdev.c_str(), O_RDONLY | O_CLOEXEC)));
 
@@ -131,10 +134,4 @@ int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
         LERROR << "File system type '" << entry.fs_type << "' is not supported";
         return -EINVAL;
     }
-}
-
-int fs_mgr_do_format(struct fstab_rec* rec, bool crypt_footer) {
-    auto entry = FstabRecToFstabEntry(rec);
-
-    return fs_mgr_do_format(entry, crypt_footer);
 }
