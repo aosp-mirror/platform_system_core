@@ -299,24 +299,25 @@ bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>
 // private methods of DeviceMapper
 bool DeviceMapper::GetTable(const std::string& name, uint32_t flags,
                             std::vector<TargetInfo>* table) {
-    char buffer[4096];
-    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(buffer);
+    std::vector<char> buffer;
+    struct dm_ioctl* io = nullptr;
 
-    InitIo(io, name);
-    io->data_size = sizeof(buffer);
-    io->data_start = sizeof(*io);
-    io->flags = flags;
-    if (ioctl(fd_, DM_TABLE_STATUS, io) < 0) {
-        PLOG(ERROR) << "DM_TABLE_STATUS failed for " << name;
-        return false;
-    }
-    if (io->flags & DM_BUFFER_FULL_FLAG) {
-        PLOG(ERROR) << "DM_TABLE_STATUS result for " << name << " was too large";
-        return false;
+    for (buffer.resize(4096);; buffer.resize(buffer.size() * 2)) {
+        io = reinterpret_cast<struct dm_ioctl*>(&buffer[0]);
+
+        InitIo(io, name);
+        io->data_size = buffer.size();
+        io->data_start = sizeof(*io);
+        io->flags = flags;
+        if (ioctl(fd_, DM_TABLE_STATUS, io) < 0) {
+            PLOG(ERROR) << "DM_TABLE_STATUS failed for " << name;
+            return false;
+        }
+        if (!(io->flags & DM_BUFFER_FULL_FLAG)) break;
     }
 
     uint32_t cursor = io->data_start;
-    uint32_t data_end = std::min(io->data_size, uint32_t(sizeof(buffer)));
+    uint32_t data_end = std::min(io->data_size, uint32_t(buffer.size()));
     for (uint32_t i = 0; i < io->target_count; i++) {
         if (cursor + sizeof(struct dm_target_spec) > data_end) {
             break;
@@ -324,14 +325,14 @@ bool DeviceMapper::GetTable(const std::string& name, uint32_t flags,
         // After each dm_target_spec is a status string. spec->next is an
         // offset from |io->data_start|, and we clamp it to the size of our
         // buffer.
-        struct dm_target_spec* spec = reinterpret_cast<struct dm_target_spec*>(buffer + cursor);
+        struct dm_target_spec* spec = reinterpret_cast<struct dm_target_spec*>(&buffer[cursor]);
         uint32_t data_offset = cursor + sizeof(dm_target_spec);
         uint32_t next_cursor = std::min(io->data_start + spec->next, data_end);
 
         std::string data;
         if (next_cursor > data_offset) {
             // Note: we use c_str() to eliminate any extra trailing 0s.
-            data = std::string(buffer + data_offset, next_cursor - data_offset).c_str();
+            data = std::string(&buffer[data_offset], next_cursor - data_offset).c_str();
         }
         table->emplace_back(*spec, data);
         cursor = next_cursor;
