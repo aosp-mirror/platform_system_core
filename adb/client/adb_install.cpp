@@ -550,6 +550,10 @@ int install_multi_package(int argc, const char** argv) {
 
     std::string multi_package_cmd =
             android::base::StringPrintf("%s install-create --multi-package", install_cmd.c_str());
+    for (int i = 1; i < first_package; i++) {
+        multi_package_cmd += " " + escape_arg(argv[i]);
+    }
+
     if (apex_found) {
         multi_package_cmd += " --staged";
     }
