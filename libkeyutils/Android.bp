@@ -16,3 +16,16 @@ cc_test {
     srcs: ["keyutils_test.cpp"],
     test_suites: ["device-tests"],
 }
+
+cc_binary {
+    name: "mini-keyctl",
+    srcs: ["mini_keyctl.cpp"],
+
+    shared_libs: [
+        "libbase",
+        "libkeyutils",
+        "liblog",
+    ],
+
+    cflags: ["-Werror", "-Wall", "-Wextra"],
+}
