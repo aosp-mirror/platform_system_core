@@ -57,15 +57,6 @@ class FiemapWriter final {
     // FiemapWriter::Open).
     static bool HasPinnedExtents(const std::string& file_path);
 
-    // Syncs block device writes.
-    bool Flush() const;
-
-    // Writes the file by using its FIEMAP and performing i/o on the raw block device.
-    // The return value is success / failure. This will happen in particular if the
-    // kernel write returns errors, extents are not writeable or more importantly, if the 'size' is
-    // not aligned to the block device's block size.
-    bool Write(off64_t off, uint8_t* buffer, uint64_t size);
-
     // The counter part of Write(). It is an error for the offset to be unaligned with
     // the block device's block size.
     // In case of error, the contents of buffer MUST be discarded.
@@ -93,7 +84,6 @@ class FiemapWriter final {
 
     // File descriptors for the file and block device
     ::android::base::unique_fd file_fd_;
-    ::android::base::unique_fd bdev_fd_;
 
     // Size in bytes of the file this class is writing
     uint64_t file_size_;
@@ -112,9 +102,6 @@ class FiemapWriter final {
     std::vector<struct fiemap_extent> extents_;
 
     FiemapWriter() = default;
-
-    uint64_t WriteExtent(const struct fiemap_extent& ext, uint8_t* buffer, off64_t logical_off,
-                         uint64_t length);
 };
 
 }  // namespace fiemap_writer
