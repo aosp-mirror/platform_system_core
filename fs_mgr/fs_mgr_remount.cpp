@@ -33,6 +33,7 @@
 #include <android-base/strings.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
+#include <fec/io.h>
 #include <fs_mgr_overlayfs.h>
 #include <fs_mgr_priv.h>
 #include <fstab/fstab.h>
@@ -243,6 +244,9 @@ int main(int argc, char* argv[]) {
                             continue;
                         }
                         reboot(false);
+                    } else if (fs_mgr_set_blk_ro(entry.blk_device, false)) {
+                        fec::io fh(entry.blk_device.c_str(), O_RDWR);
+                        if (fh && fh.set_verity_status(false)) reboot_later = true;
                     }
                 }
             }
@@ -268,6 +272,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (partitions.empty()) {
+        if (reboot_later) reboot(false);
         LOG(WARNING) << "No partitions to remount";
         return retval;
     }

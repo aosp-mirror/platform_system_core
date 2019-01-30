@@ -121,6 +121,8 @@ cc_binary {
     shared_libs: [
         "libbootloader_message",
         "libbase",
+        "libcrypto",
+        "libfec",
         "libfs_mgr",
     ],
     header_libs: [
