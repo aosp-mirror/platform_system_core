@@ -26,7 +26,6 @@
 #include <meminfo/pageacct.h>
 #include <meminfo/procmeminfo.h>
 #include <meminfo/sysmeminfo.h>
-#include <pagemap/pagemap.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -37,239 +36,12 @@ using namespace android::meminfo;
 
 pid_t pid = -1;
 
-class ValidateProcMemInfo : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        ASSERT_EQ(0, pm_kernel_create(&ker));
-        ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
-        proc_mem = new ProcMemInfo(pid);
-        ASSERT_NE(proc_mem, nullptr);
-    }
-
-    void TearDown() override {
-        delete proc_mem;
-        pm_process_destroy(proc);
-        pm_kernel_destroy(ker);
-    }
-
-    pm_kernel_t* ker;
-    pm_process_t* proc;
-    ProcMemInfo* proc_mem;
-};
-
-TEST_F(ValidateProcMemInfo, TestMapsSize) {
-    const std::vector<Vma>& maps = proc_mem->Maps();
-    ASSERT_FALSE(maps.empty()) << "Process " << getpid() << " maps are empty";
-}
-
-TEST_F(ValidateProcMemInfo, TestMapsEquality) {
-    const std::vector<Vma>& maps = proc_mem->Maps();
-    ASSERT_EQ(proc->num_maps, maps.size());
-
-    for (size_t i = 0; i < maps.size(); ++i) {
-        EXPECT_EQ(proc->maps[i]->start, maps[i].start);
-        EXPECT_EQ(proc->maps[i]->end, maps[i].end);
-        EXPECT_EQ(proc->maps[i]->offset, maps[i].offset);
-        EXPECT_EQ(std::string(proc->maps[i]->name), maps[i].name);
-    }
-}
-
-TEST_F(ValidateProcMemInfo, TestMaps) {
-    const std::vector<Vma>& maps = proc_mem->Maps();
-    ASSERT_FALSE(maps.empty());
-    ASSERT_EQ(proc->num_maps, maps.size());
-
-    pm_memusage_t map_usage, proc_usage;
-    pm_memusage_zero(&map_usage);
-    pm_memusage_zero(&proc_usage);
-    for (size_t i = 0; i < maps.size(); i++) {
-        ASSERT_EQ(0, pm_map_usage(proc->maps[i], &map_usage));
-        EXPECT_EQ(map_usage.vss, maps[i].usage.vss) << "VSS mismatch for map: " << maps[i].name;
-        EXPECT_EQ(map_usage.rss, maps[i].usage.rss) << "RSS mismatch for map: " << maps[i].name;
-        EXPECT_EQ(map_usage.pss, maps[i].usage.pss) << "PSS mismatch for map: " << maps[i].name;
-        EXPECT_EQ(map_usage.uss, maps[i].usage.uss) << "USS mismatch for map: " << maps[i].name;
-        pm_memusage_add(&proc_usage, &map_usage);
-    }
-
-    EXPECT_EQ(proc_usage.vss, proc_mem->Usage().vss);
-    EXPECT_EQ(proc_usage.rss, proc_mem->Usage().rss);
-    EXPECT_EQ(proc_usage.pss, proc_mem->Usage().pss);
-    EXPECT_EQ(proc_usage.uss, proc_mem->Usage().uss);
-}
-
-TEST_F(ValidateProcMemInfo, TestSwapUsage) {
-    const std::vector<Vma>& maps = proc_mem->Maps();
-    ASSERT_FALSE(maps.empty());
-    ASSERT_EQ(proc->num_maps, maps.size());
-
-    pm_memusage_t map_usage, proc_usage;
-    pm_memusage_zero(&map_usage);
-    pm_memusage_zero(&proc_usage);
-    for (size_t i = 0; i < maps.size(); i++) {
-        ASSERT_EQ(0, pm_map_usage(proc->maps[i], &map_usage));
-        EXPECT_EQ(map_usage.swap, maps[i].usage.swap) << "SWAP mismatch for map: " << maps[i].name;
-        pm_memusage_add(&proc_usage, &map_usage);
-    }
-
-    EXPECT_EQ(proc_usage.swap, proc_mem->Usage().swap);
-}
-
-TEST_F(ValidateProcMemInfo, TestSwapOffsets) {
-    const MemUsage& proc_usage = proc_mem->Usage();
-    const std::vector<uint16_t>& swap_offsets = proc_mem->SwapOffsets();
-
-    EXPECT_EQ(proc_usage.swap / getpagesize(), swap_offsets.size());
-}
-
-TEST_F(ValidateProcMemInfo, TestPageMap) {
-    std::vector<uint64_t> pagemap;
-
-    auto vma_callback = [&](const Vma& vma) {
-        uint64_t* pmap_out;
-        size_t len;
-        ASSERT_EQ(0, pm_process_pagemap_range(proc, vma.start, vma.end, &pmap_out, &len));
-        ASSERT_TRUE(proc_mem->PageMap(vma, &pagemap));
-
-        EXPECT_EQ(len, ((vma.end - vma.start) / getpagesize()));
-        for (size_t i = 0; i < len; i++) {
-            EXPECT_EQ(pmap_out[i], pagemap[i]);
-        }
-    };
-    ASSERT_TRUE(proc_mem->ForEachVma(vma_callback));
-}
-
-class ValidateProcMemInfoWss : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        ASSERT_EQ(0, pm_kernel_create(&ker));
-        ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
-        proc_mem = new ProcMemInfo(pid, true);
-        ASSERT_NE(proc_mem, nullptr);
-    }
-
-    void TearDown() override {
-        delete proc_mem;
-        pm_process_destroy(proc);
-        pm_kernel_destroy(ker);
-    }
-
-    pm_kernel_t* ker;
-    pm_process_t* proc;
-    ProcMemInfo* proc_mem;
-};
-
-TEST_F(ValidateProcMemInfoWss, TestWorkingTestReset) {
+TEST(ProcMemInfo, TestWorkingTestReset) {
     // Expect reset to succeed
     EXPECT_TRUE(ProcMemInfo::ResetWorkingSet(pid));
 }
 
-TEST_F(ValidateProcMemInfoWss, TestWssEquality) {
-    // Read wss using libpagemap
-    pm_memusage_t wss_pagemap;
-    EXPECT_EQ(0, pm_process_workingset(proc, &wss_pagemap, 0));
-
-    // Read wss using libmeminfo
-    MemUsage wss = proc_mem->Wss();
-
-    // compare
-    EXPECT_EQ(wss_pagemap.rss, wss.rss);
-    EXPECT_EQ(wss_pagemap.pss, wss.pss);
-    EXPECT_EQ(wss_pagemap.uss, wss.uss);
-}
-
-class ValidatePageAcct : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        ASSERT_EQ(0, pm_kernel_create(&ker));
-        ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
-    }
-
-    void TearDown() override {
-        pm_process_destroy(proc);
-        pm_kernel_destroy(ker);
-    }
-
-    pm_kernel_t* ker;
-    pm_process_t* proc;
-};
-
-TEST_F(ValidatePageAcct, TestPageFlags) {
-    PageAcct& pi = PageAcct::Instance();
-    pi.InitPageAcct(false);
-
-    uint64_t* pagemap;
-    size_t num_pages;
-    for (size_t i = 0; i < proc->num_maps; i++) {
-        ASSERT_EQ(0, pm_map_pagemap(proc->maps[i], &pagemap, &num_pages));
-        for (size_t j = 0; j < num_pages; j++) {
-            if (!PM_PAGEMAP_PRESENT(pagemap[j])) continue;
-
-            uint64_t pfn = PM_PAGEMAP_PFN(pagemap[j]);
-            uint64_t page_flags_pagemap, page_flags_meminfo;
-
-            ASSERT_EQ(0, pm_kernel_flags(ker, pfn, &page_flags_pagemap));
-            ASSERT_TRUE(pi.PageFlags(pfn, &page_flags_meminfo));
-            // check if page flags equal
-            EXPECT_EQ(page_flags_pagemap, page_flags_meminfo);
-        }
-        free(pagemap);
-    }
-}
-
-TEST_F(ValidatePageAcct, TestPageCounts) {
-    PageAcct& pi = PageAcct::Instance();
-    pi.InitPageAcct(false);
-
-    uint64_t* pagemap;
-    size_t num_pages;
-    for (size_t i = 0; i < proc->num_maps; i++) {
-        ASSERT_EQ(0, pm_map_pagemap(proc->maps[i], &pagemap, &num_pages));
-        for (size_t j = 0; j < num_pages; j++) {
-            uint64_t pfn = PM_PAGEMAP_PFN(pagemap[j]);
-            uint64_t map_count_pagemap, map_count_meminfo;
-
-            ASSERT_EQ(0, pm_kernel_count(ker, pfn, &map_count_pagemap));
-            ASSERT_TRUE(pi.PageMapCount(pfn, &map_count_meminfo));
-            // check if map counts are equal
-            EXPECT_EQ(map_count_pagemap, map_count_meminfo);
-        }
-        free(pagemap);
-    }
-}
-
-TEST_F(ValidatePageAcct, TestPageIdle) {
-    // skip the test if idle page tracking isn't enabled
-    if (pm_kernel_init_page_idle(ker) != 0) {
-        return;
-    }
-
-    PageAcct& pi = PageAcct::Instance();
-    ASSERT_TRUE(pi.InitPageAcct(true));
-
-    uint64_t* pagemap;
-    size_t num_pages;
-    for (size_t i = 0; i < proc->num_maps; i++) {
-        ASSERT_EQ(0, pm_map_pagemap(proc->maps[i], &pagemap, &num_pages));
-        for (size_t j = 0; j < num_pages; j++) {
-            if (!PM_PAGEMAP_PRESENT(pagemap[j])) continue;
-            uint64_t pfn = PM_PAGEMAP_PFN(pagemap[j]);
-
-            ASSERT_EQ(0, pm_kernel_mark_page_idle(ker, &pfn, 1));
-            int idle_status_pagemap = pm_kernel_get_page_idle(ker, pfn);
-            int idle_status_meminfo = pi.IsPageIdle(pfn);
-            EXPECT_EQ(idle_status_pagemap, idle_status_meminfo);
-        }
-        free(pagemap);
-    }
-}
-
-TEST(TestProcMemInfo, MapsEmpty) {
-    ProcMemInfo proc_mem(pid);
-    const std::vector<Vma>& maps = proc_mem.Maps();
-    EXPECT_GT(maps.size(), 0);
-}
-
-TEST(TestProcMemInfo, UsageEmpty) {
+TEST(ProcMemInfo, UsageEmpty) {
     // If we created the object for getting working set,
     // the usage must be empty
     ProcMemInfo proc_mem(pid, true);
@@ -281,7 +53,14 @@ TEST(TestProcMemInfo, UsageEmpty) {
     EXPECT_EQ(usage.swap, 0);
 }
 
-TEST(TestProcMemInfo, WssEmpty) {
+TEST(ProcMemInfo, MapsNotEmpty) {
+    // Make sure the process maps are never empty
+    ProcMemInfo proc_mem(pid);
+    const std::vector<Vma>& maps = proc_mem.Maps();
+    EXPECT_FALSE(maps.empty());
+}
+
+TEST(ProcMemInfo, WssEmpty) {
     // If we created the object for getting usage,
     // the working set must be empty
     ProcMemInfo proc_mem(pid, false);
@@ -293,7 +72,7 @@ TEST(TestProcMemInfo, WssEmpty) {
     EXPECT_EQ(wss.swap, 0);
 }
 
-TEST(TestProcMemInfo, SwapOffsetsEmpty) {
+TEST(ProcMemInfo, SwapOffsetsEmpty) {
     // If we created the object for getting working set,
     // the swap offsets must be empty
     ProcMemInfo proc_mem(pid, true);
@@ -301,7 +80,10 @@ TEST(TestProcMemInfo, SwapOffsetsEmpty) {
     EXPECT_EQ(swap_offsets.size(), 0);
 }
 
-TEST(TestProcMemInfo, IsSmapsSupportedTest) {
+TEST(ProcMemInfo, IsSmapsSupportedTest) {
+    // Get any pid and check if /proc/<pid>/smaps_rollup exists using the API.
+    // The API must return the appropriate value regardless of the after it succeeds
+    // once.
     std::string path = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
     bool supported = IsSmapsRollupSupported(pid);
     EXPECT_EQ(!access(path.c_str(), F_OK | R_OK), supported);
@@ -310,7 +92,8 @@ TEST(TestProcMemInfo, IsSmapsSupportedTest) {
     EXPECT_EQ(supported, IsSmapsRollupSupported(-1));
 }
 
-TEST(TestProcMemInfo, SmapsOrRollupTest) {
+TEST(ProcMemInfo, SmapsOrRollupTest) {
+    // Make sure we can parse 'smaps_rollup' correctly
     std::string rollup =
             R"rollup(12c00000-7fe859e000 ---p 00000000 00:00 0                                [rollup]
 Rss:              331908 kB
@@ -342,8 +125,8 @@ Locked:          1523537 kB)rollup";
     EXPECT_EQ(stats.swap_pss, 442);
 }
 
-TEST(TestProcMemInfo, SmapsOrRollupSmapsTest) {
-    // This is a made up smaps for the test
+TEST(ProcMemInfo, SmapsOrRollupSmapsTest) {
+    // Make sure /proc/<pid>/smaps is parsed correctly
     std::string smaps =
             R"smaps(12c00000-13440000 rw-p 00000000 00:00 0                                  [anon:dalvik-main space (region space)]
 Name:           [anon:dalvik-main space (region space)]
@@ -382,8 +165,9 @@ VmFlags: rd wr mr mw me ac
     EXPECT_EQ(stats.swap_pss, 70);
 }
 
-TEST(TestProcMemInfo, SmapsOrRollupPssRollupTest) {
-    // This is a made up smaps for the test
+TEST(ProcMemInfo, SmapsOrRollupPssRollupTest) {
+    // Make sure /proc/<pid>/smaps is parsed correctly
+    // to get the PSS
     std::string smaps =
             R"smaps(12c00000-13440000 rw-p 00000000 00:00 0                                  [anon:dalvik-main space (region space)]
 Name:           [anon:dalvik-main space (region space)]
@@ -417,7 +201,8 @@ VmFlags: rd wr mr mw me ac
     EXPECT_EQ(pss, 2652);
 }
 
-TEST(TestProcMemInfo, SmapsOrRollupPssSmapsTest) {
+TEST(ProcMemInfo, SmapsOrRollupPssSmapsTest) {
+    // Correctly parse smaps file to gather pss
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
 
@@ -426,7 +211,8 @@ TEST(TestProcMemInfo, SmapsOrRollupPssSmapsTest) {
     EXPECT_EQ(pss, 19119);
 }
 
-TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
+TEST(ProcMemInfo, ForEachVmaFromFileTest) {
+    // Parse smaps file correctly to make callbacks for each virtual memory area (vma)
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
     ProcMemInfo proc_mem(pid);
@@ -519,13 +305,14 @@ TEST(TestProcMemInfo, ForEachVmaFromFileTest) {
     EXPECT_EQ(vmas[5].usage.swap_pss, 0);
 }
 
-TEST(TestProcMemInfo, SmapsReturnTest) {
+TEST(ProcMemInfo, SmapsReturnTest) {
+    // Make sure Smaps() is never empty for any process
     ProcMemInfo proc_mem(pid);
     auto vmas = proc_mem.Smaps();
     EXPECT_FALSE(vmas.empty());
 }
 
-TEST(TestProcMemInfo, SmapsTest) {
+TEST(ProcMemInfo, SmapsTest) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
     std::string path = ::android::base::StringPrintf("%s/testdata1/smaps_short", exec_dir.c_str());
     ProcMemInfo proc_mem(pid);
@@ -616,56 +403,7 @@ TEST(TestProcMemInfo, SmapsTest) {
     EXPECT_EQ(vmas[5].usage.swap_pss, 0);
 }
 
-TEST(ValidateProcMemInfoFlags, TestPageFlags1) {
-    // Create proc object using libpagemap
-    pm_kernel_t* ker;
-    ASSERT_EQ(0, pm_kernel_create(&ker));
-    pm_process_t* proc;
-    ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
-
-    // count swapbacked pages using libpagemap
-    pm_memusage_t proc_usage;
-    pm_memusage_zero(&proc_usage);
-    ASSERT_EQ(0, pm_process_usage_flags(proc, &proc_usage, (1 << KPF_SWAPBACKED),
-                                        (1 << KPF_SWAPBACKED)));
-
-    // Create ProcMemInfo that counts swapbacked pages
-    ProcMemInfo proc_mem(pid, false, (1 << KPF_SWAPBACKED), (1 << KPF_SWAPBACKED));
-
-    EXPECT_EQ(proc_usage.vss, proc_mem.Usage().vss);
-    EXPECT_EQ(proc_usage.rss, proc_mem.Usage().rss);
-    EXPECT_EQ(proc_usage.pss, proc_mem.Usage().pss);
-    EXPECT_EQ(proc_usage.uss, proc_mem.Usage().uss);
-
-    pm_process_destroy(proc);
-    pm_kernel_destroy(ker);
-}
-
-TEST(ValidateProcMemInfoFlags, TestPageFlags2) {
-    // Create proc object using libpagemap
-    pm_kernel_t* ker;
-    ASSERT_EQ(0, pm_kernel_create(&ker));
-    pm_process_t* proc;
-    ASSERT_EQ(0, pm_process_create(ker, pid, &proc));
-
-    // count non-swapbacked pages using libpagemap
-    pm_memusage_t proc_usage;
-    pm_memusage_zero(&proc_usage);
-    ASSERT_EQ(0, pm_process_usage_flags(proc, &proc_usage, (1 << KPF_SWAPBACKED), 0));
-
-    // Create ProcMemInfo that counts non-swapbacked pages
-    ProcMemInfo proc_mem(pid, false, 0, (1 << KPF_SWAPBACKED));
-
-    EXPECT_EQ(proc_usage.vss, proc_mem.Usage().vss);
-    EXPECT_EQ(proc_usage.rss, proc_mem.Usage().rss);
-    EXPECT_EQ(proc_usage.pss, proc_mem.Usage().pss);
-    EXPECT_EQ(proc_usage.uss, proc_mem.Usage().uss);
-
-    pm_process_destroy(proc);
-    pm_kernel_destroy(ker);
-}
-
-TEST(SysMemInfoParser, TestSysMemInfoFile) {
+TEST(SysMemInfo, TestSysMemInfoFile) {
     std::string meminfo = R"meminfo(MemTotal:        3019740 kB
 MemFree:         1809728 kB
 MemAvailable:    2546560 kB
@@ -733,7 +471,7 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mi.mem_kernel_stack_kb(), 4880);
 }
 
-TEST(SysMemInfoParser, TestEmptyFile) {
+TEST(SysMemInfo, TestEmptyFile) {
     TemporaryFile tf;
     std::string empty_string = "";
     ASSERT_TRUE(tf.fd != -1);
@@ -744,7 +482,7 @@ TEST(SysMemInfoParser, TestEmptyFile) {
     EXPECT_EQ(mi.mem_total_kb(), 0);
 }
 
-TEST(SysMemInfoParser, TestZramTotal) {
+TEST(SysMemInfo, TestZramTotal) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
 
     SysMemInfo mi;
@@ -774,7 +512,7 @@ enum {
     MEMINFO_COUNT
 };
 
-TEST(SysMemInfoParser, TestZramWithTags) {
+TEST(SysMemInfo, TestZramWithTags) {
     std::string meminfo = R"meminfo(MemTotal:        3019740 kB
 MemFree:         1809728 kB
 MemAvailable:    2546560 kB
@@ -849,7 +587,7 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_KERNEL_STACK], 4880);
 }
 
-TEST(SysMemInfoParser, TestVmallocInfoNoMemory) {
+TEST(SysMemInfo, TestVmallocInfoNoMemory) {
     std::string vmallocinfo =
             R"vmallocinfo(0x0000000000000000-0x0000000000000000   69632 of_iomap+0x78/0xb0 phys=17a00000 ioremap
 0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=b220000 ioremap
@@ -864,7 +602,7 @@ TEST(SysMemInfoParser, TestVmallocInfoNoMemory) {
     EXPECT_EQ(ReadVmallocInfo(file), 0);
 }
 
-TEST(SysMemInfoParser, TestVmallocInfoKernel) {
+TEST(SysMemInfo, TestVmallocInfoKernel) {
     std::string vmallocinfo =
             R"vmallocinfo(0x0000000000000000-0x0000000000000000    8192 drm_property_create_blob+0x44/0xec pages=1 vmalloc)vmallocinfo";
 
@@ -876,7 +614,7 @@ TEST(SysMemInfoParser, TestVmallocInfoKernel) {
     EXPECT_EQ(ReadVmallocInfo(file), getpagesize());
 }
 
-TEST(SysMemInfoParser, TestVmallocInfoModule) {
+TEST(SysMemInfo, TestVmallocInfoModule) {
     std::string vmallocinfo =
             R"vmallocinfo(0x0000000000000000-0x0000000000000000   28672 pktlog_alloc_buf+0xc4/0x15c [wlan] pages=6 vmalloc)vmallocinfo";
 
@@ -888,7 +626,7 @@ TEST(SysMemInfoParser, TestVmallocInfoModule) {
     EXPECT_EQ(ReadVmallocInfo(file), 6 * getpagesize());
 }
 
-TEST(SysMemInfoParser, TestVmallocInfoAll) {
+TEST(SysMemInfo, TestVmallocInfoAll) {
     std::string vmallocinfo =
             R"vmallocinfo(0x0000000000000000-0x0000000000000000   69632 of_iomap+0x78/0xb0 phys=17a00000 ioremap
 0x0000000000000000-0x0000000000000000    8192 of_iomap+0x78/0xb0 phys=b220000 ioremap
@@ -907,11 +645,7 @@ TEST(SysMemInfoParser, TestVmallocInfoAll) {
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    if (argc <= 1) {
-        cerr << "Pid of a permanently sleeping process must be provided." << endl;
-        exit(EXIT_FAILURE);
-    }
     ::android::base::InitLogging(argv, android::base::StderrLogger);
-    pid = std::stoi(std::string(argv[1]));
+    pid = getpid();
     return RUN_ALL_TESTS();
 }
