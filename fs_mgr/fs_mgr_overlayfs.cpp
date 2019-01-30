@@ -564,9 +564,8 @@ std::vector<std::string> fs_mgr_candidate_list(Fstab* fstab, const char* mount_p
     if (std::find(verity.begin(), verity.end(), "system") != verity.end()) return mounts;
 
     // confirm that fstab is missing system
-    if (std::find_if(fstab->begin(), fstab->end(), [](const auto& entry) {
-            return entry.mount_point == "/" || entry.mount_point == "/system ";
-        }) != fstab->end()) {
+    if (GetEntryForMountPoint(fstab, "/") != nullptr ||
+        GetEntryForMountPoint(fstab, "/system") != nullptr) {
         return mounts;
     }
 
@@ -847,9 +846,7 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
 std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab* fstab) {
     if (fs_mgr_overlayfs_invalid()) return {};
 
-    if (std::find_if(fstab->begin(), fstab->end(), [](const auto& entry) {
-            return entry.mount_point == kScratchMountPoint;
-        }) != fstab->end()) {
+    if (GetEntryForMountPoint(fstab, kScratchMountPoint) != nullptr) {
         return {};
     }
 
@@ -889,9 +886,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
         if (overlay_mount_point == kScratchMountPoint) {
             if (!fs_mgr_overlayfs_setup_scratch(fstab, change)) continue;
         } else {
-            if (std::find_if(fstab.begin(), fstab.end(), [&overlay_mount_point](const auto& entry) {
-                    return entry.mount_point == overlay_mount_point;
-                }) == fstab.end()) {
+            if (GetEntryForMountPoint(&fstab, overlay_mount_point) == nullptr) {
                 continue;
             }
         }
