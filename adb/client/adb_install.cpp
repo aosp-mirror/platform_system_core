@@ -36,7 +36,9 @@
 #include "commandline.h"
 #include "fastdeploy.h"
 
+#if defined(ENABLE_FASTDEPLOY)
 static constexpr int kFastDeployMinApi = 24;
+#endif
 
 static bool can_use_feature(const char* feature) {
     FeatureSet features;
@@ -130,10 +132,12 @@ static void read_status_line(int fd, char* buf, size_t count) {
     *buf = '\0';
 }
 
+#if defined(ENABLE_FASTDEPLOY)
 static int delete_device_patch_file(const char* apkPath) {
     std::string patchDevicePath = get_patch_path(apkPath);
     return delete_device_file(patchDevicePath);
 }
+#endif
 
 static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy,
                                 bool use_localagent) {
@@ -159,6 +163,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     }
 
     if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
         TemporaryFile metadataTmpFile;
         std::string patchTmpFilePath;
         {
@@ -179,6 +184,9 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         adb_unlink(patchTmpFilePath.c_str());
         delete_device_patch_file(file);
         return 0;
+#else
+        error_exit("fastdeploy is disabled");
+#endif
     } else {
         struct stat sb;
         if (stat(file, &sb) == -1) {
@@ -252,6 +260,7 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
             "/data/local/tmp/" + android::base::Basename(argv[last_apk]);
 
     if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
         TemporaryFile metadataTmpFile;
         TemporaryFile patchTmpFile;
 
@@ -261,6 +270,9 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
 
         create_patch(apk_file[0], metadataTmpFile.path, patchTmpFile.path);
         apply_patch_on_device(apk_file[0], patchTmpFile.path, apk_dest.c_str());
+#else
+        error_exit("fastdeploy is disabled");
+#endif
     } else {
         if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
     }
@@ -270,7 +282,9 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
 
 cleanup_apk:
     if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
         delete_device_patch_file(apk_file[0]);
+#endif
     }
     delete_device_file(apk_dest);
     return result;
@@ -334,12 +348,14 @@ int install_app(int argc, const char** argv) {
         error_exit("Attempting to use streaming install on unsupported device");
     }
 
+#if defined(ENABLE_FASTDEPLOY)
     if (use_fastdeploy == true && get_device_api_level() < kFastDeployMinApi) {
         printf("Fast Deploy is only compatible with devices of API version %d or higher, "
                "ignoring.\n",
                kFastDeployMinApi);
         use_fastdeploy = false;
     }
+#endif
 
     std::vector<const char*> passthrough_argv;
     for (int i = 0; i < argc; i++) {
@@ -353,12 +369,16 @@ int install_app(int argc, const char** argv) {
     }
 
     if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
         fastdeploy_set_local_agent(use_localagent);
         update_agent(agent_update_strategy);
 
         // The last argument must be the APK file
         const char* file = passthrough_argv.back();
         use_fastdeploy = find_package(file);
+#else
+        error_exit("fastdeploy is disabled");
+#endif
     }
 
     switch (installMode) {
