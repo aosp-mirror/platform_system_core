@@ -46,7 +46,6 @@ cc_test {
 
     static_libs: [
         "libmeminfo",
-        "libpagemap",
         "libbase",
         "liblog",
     ],
