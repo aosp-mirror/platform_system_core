@@ -374,14 +374,6 @@ bool FiemapWriter::HasPinnedExtents(const std::string& file_path) {
     return IsFilePinned(fd, file_path, sfs.f_type);
 }
 
-static void LogExtent(uint32_t num, const struct fiemap_extent& ext) {
-    LOG(INFO) << "Extent #" << num;
-    LOG(INFO) << "  fe_logical:  " << ext.fe_logical;
-    LOG(INFO) << "  fe_physical: " << ext.fe_physical;
-    LOG(INFO) << "  fe_length:   " << ext.fe_length;
-    LOG(INFO) << "  fe_flags:    0x" << std::hex << ext.fe_flags;
-}
-
 static bool ReadFiemap(int file_fd, const std::string& file_path,
                        std::vector<struct fiemap_extent>* extents) {
     uint64_t fiemap_size =
@@ -473,7 +465,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     }
 
     ::android::base::unique_fd bdev_fd(
-            TEMP_FAILURE_RETRY(open(bdev_path.c_str(), O_RDWR | O_CLOEXEC)));
+            TEMP_FAILURE_RETRY(open(bdev_path.c_str(), O_RDONLY | O_CLOEXEC)));
     if (bdev_fd < 0) {
         PLOG(ERROR) << "Failed to open block device: " << bdev_path;
         cleanup(file_path, create);
@@ -530,7 +522,6 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     fmap->file_path_ = abs_path;
     fmap->bdev_path_ = bdev_path;
     fmap->file_fd_ = std::move(file_fd);
-    fmap->bdev_fd_ = std::move(bdev_fd);
     fmap->file_size_ = file_size;
     fmap->bdev_size_ = bdevsz;
     fmap->fs_type_ = fs_type;
@@ -541,119 +532,8 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     return fmap;
 }
 
-bool FiemapWriter::Flush() const {
-    if (fsync(bdev_fd_)) {
-        PLOG(ERROR) << "Failed to flush " << bdev_path_ << " with fsync";
-        return false;
-    }
-    return true;
-}
-
-// TODO: Test with fs block_size > bdev block_size
-bool FiemapWriter::Write(off64_t off, uint8_t* buffer, uint64_t size) {
-    if (!size || size > file_size_) {
-        LOG(ERROR) << "Failed write: size " << size << " is invalid for file's size " << file_size_;
-        return false;
-    }
-
-    if (off + size > file_size_) {
-        LOG(ERROR) << "Failed write: Invalid offset " << off << " or size " << size
-                   << " for file size " << file_size_;
-        return false;
-    }
-
-    if ((off & (block_size_ - 1)) || (size & (block_size_ - 1))) {
-        LOG(ERROR) << "Failed write: Unaligned offset " << off << " or size " << size
-                   << " for block size " << block_size_;
-        return false;
-    }
-
-    if (!IsFilePinned(file_fd_, file_path_, fs_type_)) {
-        LOG(ERROR) << "Failed write: file " << file_path_ << " is not pinned";
-        return false;
-    }
-
-    // find extents that must be written to and then write one at a time.
-    uint32_t num_extent = 1;
-    uint32_t buffer_offset = 0;
-    for (auto& extent : extents_) {
-        uint64_t e_start = extent.fe_logical;
-        uint64_t e_end = extent.fe_logical + extent.fe_length;
-        // Do we write in this extent ?
-        if (off >= e_start && off < e_end) {
-            uint64_t written = WriteExtent(extent, buffer + buffer_offset, off, size);
-            if (written == 0) {
-                return false;
-            }
-
-            buffer_offset += written;
-            off += written;
-            size -= written;
-
-            // Paranoid check to make sure we are done with this extent now
-            if (size && (off >= e_start && off < e_end)) {
-                LOG(ERROR) << "Failed to write extent fully";
-                LogExtent(num_extent, extent);
-                return false;
-            }
-
-            if (size == 0) {
-                // done
-                break;
-            }
-        }
-        num_extent++;
-    }
-
-    return true;
-}
-
 bool FiemapWriter::Read(off64_t off, uint8_t* buffer, uint64_t size) {
     return false;
-}
-
-// private helpers
-
-// WriteExtent() Returns the total number of bytes written. It will always be multiple of
-// block_size_. 0 is returned in one of the two cases.
-//  1. Any write failed between logical_off & logical_off + length.
-//  2. The logical_offset + length doesn't overlap with the extent passed.
-// The function can either partially for fully write the extent depending on the
-// logical_off + length. It is expected that alignment checks for size and offset are
-// performed before calling into this function.
-uint64_t FiemapWriter::WriteExtent(const struct fiemap_extent& ext, uint8_t* buffer,
-                                   off64_t logical_off, uint64_t length) {
-    uint64_t e_start = ext.fe_logical;
-    uint64_t e_end = ext.fe_logical + ext.fe_length;
-    if (logical_off < e_start || logical_off >= e_end) {
-        LOG(ERROR) << "Failed write extent, invalid offset " << logical_off << " and size "
-                   << length;
-        LogExtent(0, ext);
-        return 0;
-    }
-
-    off64_t bdev_offset = ext.fe_physical + (logical_off - e_start);
-    if (bdev_offset >= bdev_size_) {
-        LOG(ERROR) << "Failed write extent, invalid block # " << bdev_offset << " for block device "
-                   << bdev_path_ << " of size " << bdev_size_ << " bytes";
-        return 0;
-    }
-    if (TEMP_FAILURE_RETRY(lseek64(bdev_fd_, bdev_offset, SEEK_SET)) == -1) {
-        PLOG(ERROR) << "Failed write extent, seek offset for " << bdev_path_ << " offset "
-                    << bdev_offset;
-        return 0;
-    }
-
-    // Determine how much we want to write at once.
-    uint64_t logical_end = logical_off + length;
-    uint64_t write_size = (e_end <= logical_end) ? (e_end - logical_off) : length;
-    if (!android::base::WriteFully(bdev_fd_, buffer, write_size)) {
-        PLOG(ERROR) << "Failed write extent, write " << bdev_path_ << " at " << bdev_offset
-                    << " size " << write_size;
-        return 0;
-    }
-
-    return write_size;
 }
 
 }  // namespace fiemap_writer

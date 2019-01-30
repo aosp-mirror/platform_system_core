@@ -138,36 +138,31 @@ TEST_F(FiemapWriterTest, CheckFileExtents) {
     EXPECT_GT(fptr->extents().size(), 0);
 }
 
-TEST_F(FiemapWriterTest, CheckWriteError) {
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, testfile_size);
-    ASSERT_NE(fptr, nullptr);
-
-    // prepare buffer for writing the pattern - 0xa0
-    uint64_t blocksize = fptr->block_size();
-    auto buffer = std::unique_ptr<void, decltype(&free)>(calloc(1, blocksize), free);
-    ASSERT_NE(buffer, nullptr);
-    memset(buffer.get(), 0xa0, blocksize);
-
-    uint8_t* p = static_cast<uint8_t*>(buffer.get());
-    for (off64_t off = 0; off < testfile_size; off += blocksize) {
-        ASSERT_TRUE(fptr->Write(off, p, blocksize));
-    }
-
-    EXPECT_TRUE(fptr->Flush());
-}
-
 class TestExistingFile : public ::testing::Test {
   protected:
     void SetUp() override {
         std::string exec_dir = ::android::base::GetExecutableDirectory();
-        std::string unaligned_file = exec_dir + "/testdata/unaligned_file";
-        std::string file_4k = exec_dir + "/testdata/file_4k";
-        std::string file_32k = exec_dir + "/testdata/file_32k";
-        fptr_unaligned = FiemapWriter::Open(unaligned_file, 4097, false);
-        fptr_4k = FiemapWriter::Open(file_4k, 4096, false);
-        fptr_32k = FiemapWriter::Open(file_32k, 32768, false);
+        unaligned_file_ = exec_dir + "/testdata/unaligned_file";
+        file_4k_ = exec_dir + "/testdata/file_4k";
+        file_32k_ = exec_dir + "/testdata/file_32k";
+
+        CleanupFiles();
+        fptr_unaligned = FiemapWriter::Open(unaligned_file_, 4097);
+        fptr_4k = FiemapWriter::Open(file_4k_, 4096);
+        fptr_32k = FiemapWriter::Open(file_32k_, 32768);
     }
 
+    void TearDown() { CleanupFiles(); }
+
+    void CleanupFiles() {
+        unlink(unaligned_file_.c_str());
+        unlink(file_4k_.c_str());
+        unlink(file_32k_.c_str());
+    }
+
+    std::string unaligned_file_;
+    std::string file_4k_;
+    std::string file_32k_;
     FiemapUniquePtr fptr_unaligned;
     FiemapUniquePtr fptr_4k;
     FiemapUniquePtr fptr_32k;
@@ -182,33 +177,6 @@ TEST_F(TestExistingFile, ErrorChecks) {
     EXPECT_EQ(fptr_32k->size(), 32768);
     EXPECT_GT(fptr_4k->extents().size(), 0);
     EXPECT_GT(fptr_32k->extents().size(), 0);
-}
-
-TEST_F(TestExistingFile, CheckWriteError) {
-    ASSERT_NE(fptr_4k, nullptr);
-    // prepare buffer for writing the pattern - 0xa0
-    uint64_t blocksize = fptr_4k->block_size();
-    auto buff_4k = std::unique_ptr<void, decltype(&free)>(calloc(1, blocksize), free);
-    ASSERT_NE(buff_4k, nullptr);
-    memset(buff_4k.get(), 0xa0, blocksize);
-
-    uint8_t* p = static_cast<uint8_t*>(buff_4k.get());
-    for (off64_t off = 0; off < 4096; off += blocksize) {
-        ASSERT_TRUE(fptr_4k->Write(off, p, blocksize));
-    }
-    EXPECT_TRUE(fptr_4k->Flush());
-
-    ASSERT_NE(fptr_32k, nullptr);
-    // prepare buffer for writing the pattern - 0xa0
-    blocksize = fptr_32k->block_size();
-    auto buff_32k = std::unique_ptr<void, decltype(&free)>(calloc(1, blocksize), free);
-    ASSERT_NE(buff_32k, nullptr);
-    memset(buff_32k.get(), 0xa0, blocksize);
-    p = static_cast<uint8_t*>(buff_32k.get());
-    for (off64_t off = 0; off < 4096; off += blocksize) {
-        ASSERT_TRUE(fptr_32k->Write(off, p, blocksize));
-    }
-    EXPECT_TRUE(fptr_32k->Flush());
 }
 
 class VerifyBlockWritesExt4 : public ::testing::Test {
@@ -253,46 +221,6 @@ class VerifyBlockWritesExt4 : public ::testing::Test {
     std::string fs_path;
 };
 
-TEST_F(VerifyBlockWritesExt4, CheckWrites) {
-    EXPECT_EQ(access(fs_path.c_str(), F_OK), 0);
-
-    std::string file_path = mntpoint + "/testfile";
-    uint64_t file_size = 100 * 1024 * 1024;
-    auto buffer = std::unique_ptr<void, decltype(&free)>(calloc(1, getpagesize()), free);
-    ASSERT_NE(buffer, nullptr);
-    memset(buffer.get(), 0xa0, getpagesize());
-    {
-        // scoped fiemap writer
-        FiemapUniquePtr fptr = FiemapWriter::Open(file_path, file_size);
-        ASSERT_NE(fptr, nullptr);
-        uint8_t* p = static_cast<uint8_t*>(buffer.get());
-        for (off64_t off = 0; off < file_size / getpagesize(); off += getpagesize()) {
-            ASSERT_TRUE(fptr->Write(off, p, getpagesize()));
-        }
-        EXPECT_TRUE(fptr->Flush());
-    }
-    // unmount file system here to make sure we invalidated all page cache and
-    // remount the filesystem again for verification
-    ASSERT_EQ(umount(mntpoint.c_str()), 0);
-
-    LoopDevice loop_dev(fs_path);
-    ASSERT_TRUE(loop_dev.valid());
-    ASSERT_EQ(mount(loop_dev.device().c_str(), mntpoint.c_str(), "ext4", 0, nullptr), 0)
-            << "failed to mount: " << loop_dev.device() << " on " << mntpoint << ": "
-            << strerror(errno);
-
-    ::android::base::unique_fd fd(open(file_path.c_str(), O_RDONLY | O_SYNC));
-    ASSERT_NE(fd, -1);
-    auto filebuf = std::unique_ptr<void, decltype(&free)>(calloc(1, getpagesize()), free);
-    ASSERT_NE(filebuf, nullptr);
-    for (off64_t off = 0; off < file_size / getpagesize(); off += getpagesize()) {
-        memset(filebuf.get(), 0x00, getpagesize());
-        ASSERT_EQ(pread64(fd, filebuf.get(), getpagesize(), off), getpagesize());
-        ASSERT_EQ(memcmp(filebuf.get(), buffer.get(), getpagesize()), 0)
-                << "Invalid pattern at offset: " << off << " size " << getpagesize();
-    }
-}
-
 class VerifyBlockWritesF2fs : public ::testing::Test {
     // 2GB Filesystem and 4k block size by default
     static constexpr uint64_t block_size = 4096;
@@ -334,46 +262,6 @@ class VerifyBlockWritesF2fs : public ::testing::Test {
     std::string mntpoint;
     std::string fs_path;
 };
-
-TEST_F(VerifyBlockWritesF2fs, CheckWrites) {
-    EXPECT_EQ(access(fs_path.c_str(), F_OK), 0);
-
-    std::string file_path = mntpoint + "/testfile";
-    uint64_t file_size = 100 * 1024 * 1024;
-    auto buffer = std::unique_ptr<void, decltype(&free)>(calloc(1, getpagesize()), free);
-    ASSERT_NE(buffer, nullptr);
-    memset(buffer.get(), 0xa0, getpagesize());
-    {
-        // scoped fiemap writer
-        FiemapUniquePtr fptr = FiemapWriter::Open(file_path, file_size);
-        ASSERT_NE(fptr, nullptr);
-        uint8_t* p = static_cast<uint8_t*>(buffer.get());
-        for (off64_t off = 0; off < file_size / getpagesize(); off += getpagesize()) {
-            ASSERT_TRUE(fptr->Write(off, p, getpagesize()));
-        }
-        EXPECT_TRUE(fptr->Flush());
-    }
-    // unmount file system here to make sure we invalidated all page cache and
-    // remount the filesystem again for verification
-    ASSERT_EQ(umount(mntpoint.c_str()), 0);
-
-    LoopDevice loop_dev(fs_path);
-    ASSERT_TRUE(loop_dev.valid());
-    ASSERT_EQ(mount(loop_dev.device().c_str(), mntpoint.c_str(), "f2fs", 0, nullptr), 0)
-            << "failed to mount: " << loop_dev.device() << " on " << mntpoint << ": "
-            << strerror(errno);
-
-    ::android::base::unique_fd fd(open(file_path.c_str(), O_RDONLY | O_SYNC));
-    ASSERT_NE(fd, -1);
-    auto filebuf = std::unique_ptr<void, decltype(&free)>(calloc(1, getpagesize()), free);
-    ASSERT_NE(filebuf, nullptr);
-    for (off64_t off = 0; off < file_size / getpagesize(); off += getpagesize()) {
-        memset(filebuf.get(), 0x00, getpagesize());
-        ASSERT_EQ(pread64(fd, filebuf.get(), getpagesize(), off), getpagesize());
-        ASSERT_EQ(memcmp(filebuf.get(), buffer.get(), getpagesize()), 0)
-                << "Invalid pattern at offset: " << off << " size " << getpagesize();
-    }
-}
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
