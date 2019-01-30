@@ -233,10 +233,10 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
 
     auto device_path = custom_device_path ? custom_device_path : android_by_name_symlink;
 
-    auto verify_result = LoadAndVerifyVbmetaImpl(
-            partition_name, ab_suffix, ab_other_suffix, expected_key_blob, allow_verification_error,
-            load_chained_vbmeta, rollback_protection, device_path, false,
-            /* is_chained_vbmeta */ &avb_handle->vbmeta_images_);
+    auto verify_result = LoadAndVerifyVbmetaByPartition(
+        partition_name, ab_suffix, ab_other_suffix, expected_key_blob, allow_verification_error,
+        load_chained_vbmeta, rollback_protection, device_path, false,
+        /* is_chained_vbmeta */ &avb_handle->vbmeta_images_);
     switch (verify_result) {
         case VBMetaVerifyResult::kSuccess:
             avb_handle->status_ = AvbHandleStatus::kSuccess;
@@ -245,8 +245,14 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
             avb_handle->status_ = AvbHandleStatus::kVerificationError;
             break;
         default:
-            LERROR << "LoadAndVerifyVbmetaImpl failed, result: " << verify_result;
+            LERROR << "LoadAndVerifyVbmetaByPartition failed, result: " << verify_result;
             return nullptr;
+    }
+
+    // Sanity check here because we have to use vbmeta_images_[0] below.
+    if (avb_handle->vbmeta_images_.size() < 1) {
+        LERROR << "LoadAndVerifyVbmetaByPartition failed, no vbmeta loaded";
+        return nullptr;
     }
 
     // Sets the MAJOR.MINOR for init to set it into "ro.boot.avb_version".
@@ -377,6 +383,54 @@ AvbUniquePtr AvbHandle::Open() {
     return avb_handle;
 }
 
+AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry) {
+    if (fstab_entry->avb_key.empty()) {
+        LERROR << "avb_key=/path/to/key is missing for " << fstab_entry->mount_point;
+        return AvbHashtreeResult::kFail;
+    }
+
+    // Binds allow_verification_error and rollback_protection to device unlock state.
+    bool allow_verification_error = IsDeviceUnlocked();
+    bool rollback_protection = !allow_verification_error;
+
+    std::string expected_key_blob;
+    if (!ReadFileToString(fstab_entry->avb_key, &expected_key_blob)) {
+        if (!allow_verification_error) {
+            LERROR << "Failed to load avb_key: " << fstab_entry->avb_key
+                   << " for mount point: " << fstab_entry->mount_point;
+            return AvbHashtreeResult::kFail;
+        }
+        // Use empty key blob, which means no expectation, if allow verification error.
+        expected_key_blob.clear();
+    }
+
+    bool verification_disabled = false;
+    std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
+        fstab_entry->blk_device, "" /* partition_name, no need for a standalone path */,
+        expected_key_blob, allow_verification_error, rollback_protection,
+        false /* not is_chained_vbmeta */, &verification_disabled, nullptr /* out_verify_result */);
+
+    if (!vbmeta) {
+        LERROR << "Failed to load vbmeta: " << fstab_entry->blk_device;
+        return AvbHashtreeResult::kFail;
+    }
+
+    if (verification_disabled) {
+        LINFO << "AVB verification disabled on: " << fstab_entry->mount_point;
+        return AvbHashtreeResult::kDisabled;
+    }
+
+    // Puts the vbmeta into a vector, for LoadAvbHashtreeToEnableVerity() to use.
+    std::vector<VBMetaData> vbmeta_images;
+    vbmeta_images.emplace_back(std::move(*vbmeta));
+    if (!LoadAvbHashtreeToEnableVerity(fstab_entry, true /* wait_for_verity_dev */, vbmeta_images,
+                                       fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix())) {
+        return AvbHashtreeResult::kFail;
+    }
+
+    return AvbHashtreeResult::kSuccess;
+}
+
 AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait_for_verity_dev) {
     if (!fstab_entry || status_ == AvbHandleStatus::kUninitialized || vbmeta_images_.size() < 1) {
         return AvbHashtreeResult::kFail;
@@ -388,33 +442,8 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
         return AvbHashtreeResult::kDisabled;
     }
 
-    // Derives partition_name from blk_device to query the corresponding AVB HASHTREE descriptor
-    // to setup dm-verity. The partition_names in AVB descriptors are without A/B suffix.
-    std::string partition_name;
-    if (fstab_entry->fs_mgr_flags.logical) {
-        partition_name = fstab_entry->logical_partition_name;
-    } else {
-        partition_name = Basename(fstab_entry->blk_device);
-    }
-
-    if (fstab_entry->fs_mgr_flags.slot_select) {
-        auto ab_suffix = partition_name.rfind(fs_mgr_get_slot_suffix());
-        if (ab_suffix != std::string::npos) {
-            partition_name.erase(ab_suffix);
-        }
-    }
-
-    AvbHashtreeDescriptor hashtree_descriptor;
-    std::string salt;
-    std::string root_digest;
-    if (!GetHashtreeDescriptor(partition_name, vbmeta_images_, &hashtree_descriptor, &salt,
-                               &root_digest)) {
-        return AvbHashtreeResult::kFail;
-    }
-
-    // Converts HASHTREE descriptor to verity_table_params.
-    if (!HashtreeDmVeritySetup(fstab_entry, hashtree_descriptor, salt, root_digest,
-                               wait_for_verity_dev)) {
+    if (!LoadAvbHashtreeToEnableVerity(fstab_entry, wait_for_verity_dev, vbmeta_images_,
+                                       fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix())) {
         return AvbHashtreeResult::kFail;
     }
 
