@@ -21,6 +21,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -61,18 +62,16 @@ struct ion_heap_data {
 
 #define EXPECT_PID_IN_FDREFS(_bufptr, _pid, _expect)                         \
     do {                                                                     \
-        const std::vector<pid_t>& _fdrefs = _bufptr->fdrefs();               \
-        auto _ref = std::find_if(_fdrefs.begin(), _fdrefs.end(),             \
-                                 [&](const pid_t& p) { return p == _pid; }); \
-        EXPECT_EQ((_ref == _fdrefs.end()), _expect);                         \
+        const std::unordered_map<pid_t, int>& _fdrefs = _bufptr->fdrefs();   \
+        auto _ref = _fdrefs.find(_pid);                                      \
+        EXPECT_EQ((_ref != _fdrefs.end()), _expect);                         \
     } while (0)
 
 #define EXPECT_PID_IN_MAPREFS(_bufptr, _pid, _expect)                        \
     do {                                                                     \
-        const std::vector<pid_t>& _maprefs = _bufptr->maprefs();             \
-        auto _ref = std::find_if(_maprefs.begin(), _maprefs.end(),           \
-                                 [&](const pid_t& p) { return p == _pid; }); \
-        EXPECT_EQ((_ref == _maprefs.end()), _expect);                        \
+        const std::unordered_map<pid_t, int>& _maprefs = _bufptr->maprefs(); \
+        auto _ref = _maprefs.find(_pid);                                     \
+        EXPECT_EQ((_ref != _maprefs.end()), _expect);                        \
     } while (0)
 
 TEST(DmaBufInfoParser, TestReadDmaBufInfo) {
