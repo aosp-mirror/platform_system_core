@@ -333,7 +333,10 @@ namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.links = runtime
-namespace.default.link.runtime.shared_libs = libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
+namespace.default.link.runtime.shared_libs += libnativebridge.so
+namespace.default.link.runtime.shared_libs += libnativehelper.so
+namespace.default.link.runtime.shared_libs += libnativeloader.so
 
 ###############################################################################
 # "runtime" APEX namespace
