@@ -407,9 +407,10 @@ AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
 
     bool verification_disabled = false;
     std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
-        fstab_entry->blk_device, "" /* partition_name, no need for a standalone path */,
-        expected_key_blob, allow_verification_error, rollback_protection,
-        false /* not is_chained_vbmeta */, &verification_disabled, nullptr /* out_verify_result */);
+            fstab_entry->blk_device, "" /* partition_name, no need for a standalone path */,
+            expected_key_blob, allow_verification_error, rollback_protection,
+            false /* not is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            &verification_disabled, nullptr /* out_verify_result */);
 
     if (!vbmeta) {
         LERROR << "Failed to load vbmeta: " << fstab_entry->blk_device;

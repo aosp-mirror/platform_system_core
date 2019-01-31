@@ -390,13 +390,36 @@ TEST_F(AvbUtilTest, VerifyVBMetaSignature) {
                                                     "hashtree", signing_key, "SHA256_RSA4096",
                                                     10 /* rollback_index */);
 
-    auto expected_public_key = ExtractPublicKeyAvbBlob(signing_key);
-    EXPECT_EQ(VBMetaVerifyResult::kSuccess, VerifyVBMetaSignature(vbmeta, expected_public_key));
+    auto expected_public_key_blob = ExtractPublicKeyAvbBlob(signing_key);
+    EXPECT_EQ(VBMetaVerifyResult::kSuccess,
+              VerifyVBMetaSignature(vbmeta, expected_public_key_blob,
+                                    nullptr /* out_public_key_data */));
 
     // Converts the expected key into an 'unexpected' key.
-    expected_public_key[10] ^= 0x80;
+    expected_public_key_blob[10] ^= 0x80;
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification,
-              VerifyVBMetaSignature(vbmeta, expected_public_key));
+              VerifyVBMetaSignature(vbmeta, expected_public_key_blob,
+                                    nullptr /* out_public_key_data */));
+}
+
+TEST_F(AvbUtilTest, VerifyVBMetaSignatureOutputPublicKeyData) {
+    const size_t image_size = 10 * 1024 * 1024;
+    const size_t partition_size = 15 * 1024 * 1024;
+    auto signing_key = data_dir_.Append("testkey_rsa4096.pem");
+    auto vbmeta = GenerateImageAndExtractVBMetaData("system", image_size, partition_size,
+                                                    "hashtree", signing_key, "SHA256_RSA4096",
+                                                    10 /* rollback_index */);
+    std::string out_public_key_data;
+    auto expected_public_key_blob = ExtractPublicKeyAvbBlob(signing_key);
+    EXPECT_EQ(VBMetaVerifyResult::kSuccess,
+              VerifyVBMetaSignature(vbmeta, expected_public_key_blob, &out_public_key_data));
+    EXPECT_EQ(out_public_key_data, expected_public_key_blob);
+
+    // Converts the expected key into an 'unexpected' key.
+    expected_public_key_blob[10] ^= 0x80;
+    EXPECT_EQ(VBMetaVerifyResult::kErrorVerification,
+              VerifyVBMetaSignature(vbmeta, expected_public_key_blob, &out_public_key_data));
+    EXPECT_NE(out_public_key_data, expected_public_key_blob);
 }
 
 bool AvbUtilTest::TestVBMetaModification(VBMetaVerifyResult expected_result,
@@ -409,7 +432,8 @@ bool AvbUtilTest::TestVBMetaModification(VBMetaVerifyResult expected_result,
     for (int n = 0; n <= kNumCheckIntervals; n++) {
         size_t o = std::min(length * n / kNumCheckIntervals, length - 1) + offset;
         d[o] ^= 0x80;
-        VBMetaVerifyResult result = VerifyVBMetaSignature(vbmeta, "" /* expected_public_key */);
+        VBMetaVerifyResult result = VerifyVBMetaSignature(vbmeta, "" /* expected_public_key_blob */,
+                                                          nullptr /* out_public_key_data */);
         d[o] ^= 0x80;
         if (result != expected_result) {
             return false;
@@ -455,7 +479,9 @@ TEST_F(AvbUtilTest, VerifyVBMetaSignatureNotSigned) {
             "system", image_size, partition_size, "hashtree", {} /* avb_signing_key */,
             "" /* avb_algorithm */, 10 /* rollback_index */);
 
-    EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, VerifyVBMetaSignature(vbmeta, ""));
+    EXPECT_EQ(VBMetaVerifyResult::kErrorVerification,
+              VerifyVBMetaSignature(vbmeta, "" /* expected_public_key_blob */,
+                                    nullptr /* out_public_key_data */));
 }
 
 TEST_F(AvbUtilTest, VerifyVBMetaSignatureInvalidVBMeta) {
@@ -467,7 +493,9 @@ TEST_F(AvbUtilTest, VerifyVBMetaSignatureInvalidVBMeta) {
 
     VBMetaData invalid_vbmeta((const uint8_t*)vbmeta_buffer.data(), vbmeta_buffer.size(),
                               "invalid_vbmeta");
-    EXPECT_EQ(VBMetaVerifyResult::kError, VerifyVBMetaSignature(invalid_vbmeta, ""));
+    EXPECT_EQ(VBMetaVerifyResult::kError,
+              VerifyVBMetaSignature(invalid_vbmeta, "" /* expected_public_key_blob */,
+                                    nullptr /* out_public_Key_data */));
 }
 
 bool AvbUtilTest::CompareVBMeta(const base::FilePath& avb_image_path,
@@ -537,10 +565,14 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataWithoutFooter) {
     ASSERT_TRUE(fd > 0);
 
     VBMetaVerifyResult verify_result;
-    std::unique_ptr<VBMetaData> vbmeta =
-            VerifyVBMetaData(fd, "vbmeta", "" /*expected_public_key_blob */, &verify_result);
+    std::string out_public_key_data;
+    std::unique_ptr<VBMetaData> vbmeta = VerifyVBMetaData(
+            fd, "vbmeta", "" /*expected_public_key_blob */, &out_public_key_data, &verify_result);
     EXPECT_TRUE(vbmeta != nullptr);
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
+
+    auto rsa8192_public_key_blob = ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa8192.pem"));
+    EXPECT_EQ(rsa8192_public_key_blob, out_public_key_data);
 
     // Checkes the returned vbmeta content is the same as that extracted via avbtool.
     vbmeta->GetVBMetaHeader(true /* update_vbmeta_size */);
@@ -561,10 +593,14 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataWithFooter) {
     ASSERT_TRUE(fd > 0);
 
     VBMetaVerifyResult verify_result;
-    std::unique_ptr<VBMetaData> vbmeta =
-            VerifyVBMetaData(fd, "system", "" /*expected_public_key_blob */, &verify_result);
+    std::string out_public_key_data;
+    std::unique_ptr<VBMetaData> vbmeta = VerifyVBMetaData(
+            fd, "system", "" /*expected_public_key_blob */, &out_public_key_data, &verify_result);
     EXPECT_TRUE(vbmeta != nullptr);
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
+
+    auto rsa8192_public_key_blob = ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa8192.pem"));
+    EXPECT_EQ(rsa8192_public_key_blob, out_public_key_data);
 
     // Checkes the returned vbmeta content is the same as that extracted via avbtool.
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
@@ -617,10 +653,14 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     EXPECT_TRUE(footer != nullptr);
 
     VBMetaVerifyResult verify_result;
-    std::unique_ptr<VBMetaData> vbmeta =
-            VerifyVBMetaData(fd, "system", "" /*expected_public_key_blob */, &verify_result);
+    std::string out_public_key_data;
+    std::unique_ptr<VBMetaData> vbmeta = VerifyVBMetaData(
+            fd, "system", "" /*expected_public_key_blob */, &out_public_key_data, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
+
+    auto rsa8192_public_key_blob = ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa8192.pem"));
+    EXPECT_EQ(rsa8192_public_key_blob, out_public_key_data);
 
     // Modifies hash and signature, checks there is verification error.
     auto header = vbmeta->GetVBMetaHeader(true /* update_vbmeta_size */);
@@ -636,7 +676,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     ASSERT_TRUE(hash_modified_fd > 0);
     // Should return ErrorVerification.
     vbmeta = VerifyVBMetaData(hash_modified_fd, "system", "" /*expected_public_key_blob */,
-                              &verify_result);
+                              nullptr /* out_public_key_data */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
@@ -651,7 +691,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     ASSERT_TRUE(aux_modified_fd > 0);
     // Should return ErrorVerification.
     vbmeta = VerifyVBMetaData(aux_modified_fd, "system", "" /*expected_public_key_blob */,
-                              &verify_result);
+                              nullptr /* out_public_key_data */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
@@ -661,7 +701,8 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     android::base::unique_fd ok_fd(open(system_path.value().c_str(), O_RDONLY | O_CLOEXEC));
     ASSERT_TRUE(ok_fd > 0);
     // Should return ResultOK..
-    vbmeta = VerifyVBMetaData(ok_fd, "system", "" /*expected_public_key_blob */, &verify_result);
+    vbmeta = VerifyVBMetaData(ok_fd, "system", "" /*expected_public_key_blob */,
+                              nullptr /* out_public_key_data */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
@@ -850,22 +891,22 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPath) {
                  20, data_dir_.Append("testkey_rsa4096.pem"), "d00df00d",
                  "--internal_release_string \"unit test\"");
 
-    base::FilePath rsa4096_public_key =
-        ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
-
-    std::string expected_key_blob_4096;
-    EXPECT_TRUE(base::ReadFileToString(rsa4096_public_key, &expected_key_blob_4096));
+    std::string expected_key_blob_4096 =
+            ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa4096.pem"));
 
     bool verification_disabled;
     VBMetaVerifyResult verify_result;
+    std::string out_public_key_data;
     std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        false /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, &verification_disabled, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            false /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, &out_public_key_data, &verification_disabled,
+            &verify_result);
 
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
     EXPECT_EQ(false, verification_disabled);
+    EXPECT_EQ(expected_key_blob_4096, out_public_key_data);
 
     EXPECT_EQ(2112UL, vbmeta->size());
     EXPECT_EQ(system_path.value(), vbmeta->vbmeta_path());
@@ -884,11 +925,8 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathErrorVerification) {
                  20, data_dir_.Append("testkey_rsa4096.pem"), "d00df00d",
                  "--internal_release_string \"unit test\"");
 
-    base::FilePath rsa4096_public_key =
-        ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
-
-    std::string expected_key_blob_4096;
-    EXPECT_TRUE(base::ReadFileToString(rsa4096_public_key, &expected_key_blob_4096));
+    std::string expected_key_blob_4096 =
+            ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa4096.pem"));
 
     // Modifies the auxiliary data of system_other.img
     auto fd = OpenUniqueReadFd(system_path);
@@ -909,16 +947,18 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathErrorVerification) {
     VBMetaVerifyResult verify_result;
     // Not allow verification error.
     std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        false /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            false /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_EQ(nullptr, vbmeta);
 
     // Allow verification error.
     vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        true /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            true /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
 
@@ -933,16 +973,18 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathErrorVerification) {
 
     // Not allow verification error.
     vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        false /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            false /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_EQ(nullptr, vbmeta);
 
     // Allow verification error.
     vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        true /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            true /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
 }
@@ -958,24 +1000,22 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathUnexpectedPublicKey) {
                  20, data_dir_.Append("testkey_rsa4096.pem"), "d00df00d",
                  "--internal_release_string \"unit test\"");
 
-    base::FilePath rsa2048_public_key =
-        ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa2048.pem"));
-    base::FilePath rsa4096_public_key =
-        ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
-
-    std::string expected_key_blob_4096;
-    EXPECT_TRUE(base::ReadFileToString(rsa4096_public_key, &expected_key_blob_4096));
-    std::string unexpected_key_blob_2048;
-    EXPECT_TRUE(base::ReadFileToString(rsa2048_public_key, &unexpected_key_blob_2048));
+    std::string unexpected_key_blob_2048 =
+            ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa2048.pem"));
+    std::string expected_key_blob_4096 =
+            ExtractPublicKeyAvbBlob(data_dir_.Append("testkey_rsa4096.pem"));
 
     // Uses the correct expected public key.
     VBMetaVerifyResult verify_result;
+    std::string out_public_key_data;
     std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        false /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            false /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, &out_public_key_data,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(verify_result, VBMetaVerifyResult::kSuccess);
+    EXPECT_EQ(expected_key_blob_4096, out_public_key_data);
     EXPECT_EQ(2112UL, vbmeta->size());
     EXPECT_EQ(system_path.value(), vbmeta->vbmeta_path());
     EXPECT_EQ("system_other", vbmeta->partition());
@@ -983,17 +1023,23 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathUnexpectedPublicKey) {
 
     // Uses the wrong expected public key with allow_verification_error set to false.
     vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", unexpected_key_blob_2048,
-        false /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", unexpected_key_blob_2048,
+            false /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, &out_public_key_data,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_EQ(nullptr, vbmeta);
+    // Checks out_public_key_data is still loaded properly, if the error is due
+    // to an unexpected public key instead of vbmeta image verification error.
+    EXPECT_EQ(expected_key_blob_4096, out_public_key_data);
 
     // Uses the wrong expected public key with allow_verification_error set to true.
     vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", unexpected_key_blob_2048,
-        true /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, nullptr /* verification_disabled */, &verify_result);
+            system_path.value(), "system_other", unexpected_key_blob_2048,
+            true /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, &out_public_key_data,
+            nullptr /* verification_disabled */, &verify_result);
     EXPECT_NE(nullptr, vbmeta);
+    EXPECT_EQ(expected_key_blob_4096, out_public_key_data);
     EXPECT_EQ(verify_result, VBMetaVerifyResult::kErrorVerification);
     EXPECT_EQ(2112UL, vbmeta->size());
     EXPECT_EQ(system_path.value(), vbmeta->vbmeta_path());
@@ -1022,10 +1068,12 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathVerificationDisabled) {
     SetVBMetaFlags(system_path, AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED);
     bool verification_disabled;
     VBMetaVerifyResult verify_result;
+    std::string out_public_key_data;
     std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        true /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, &verification_disabled, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            true /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            &verification_disabled, &verify_result);
 
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
@@ -1039,9 +1087,10 @@ TEST_F(AvbUtilTest, LoadAndVerifyVbmetaByPathVerificationDisabled) {
     // Since the vbmeta flags is modified, vbmeta will be nullptr
     // if verification error isn't allowed.
     vbmeta = LoadAndVerifyVbmetaByPath(
-        system_path.value(), "system_other", expected_key_blob_4096,
-        false /* allow_verification_error */, false /* rollback_protection */,
-        false /* is_chained_vbmeta */, &verification_disabled, &verify_result);
+            system_path.value(), "system_other", expected_key_blob_4096,
+            false /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            &verification_disabled, &verify_result);
     EXPECT_EQ(nullptr, vbmeta);
 }
 
