@@ -361,12 +361,20 @@ bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& e
 }
 
 VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
-                                         const std::string& expected_public_key_blob) {
+                                         const std::string& expected_public_key_blob,
+                                         std::string* out_public_key_data) {
     const uint8_t* pk_data;
     size_t pk_len;
     ::AvbVBMetaVerifyResult vbmeta_ret;
 
     vbmeta_ret = avb_vbmeta_image_verify(vbmeta.data(), vbmeta.size(), &pk_data, &pk_len);
+
+    if (out_public_key_data != nullptr) {
+        out_public_key_data->clear();
+        if (pk_len > 0) {
+            out_public_key_data->append(reinterpret_cast<const char*>(pk_data), pk_len);
+        }
+    }
 
     switch (vbmeta_ret) {
         case AVB_VBMETA_VERIFY_RESULT_OK:
@@ -406,6 +414,7 @@ VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
 
 std::unique_ptr<VBMetaData> VerifyVBMetaData(int fd, const std::string& partition_name,
                                              const std::string& expected_public_key_blob,
+                                             std::string* out_public_key_data,
                                              VBMetaVerifyResult* out_verify_result) {
     uint64_t vbmeta_offset = 0;
     uint64_t vbmeta_size = VBMetaData::kMaxVBMetaSize;
@@ -434,7 +443,8 @@ std::unique_ptr<VBMetaData> VerifyVBMetaData(int fd, const std::string& partitio
         return nullptr;
     }
 
-    auto verify_result = VerifyVBMetaSignature(*vbmeta, expected_public_key_blob);
+    auto verify_result =
+            VerifyVBMetaSignature(*vbmeta, expected_public_key_blob, out_public_key_data);
     if (out_verify_result != nullptr) *out_verify_result = verify_result;
 
     if (verify_result == VBMetaVerifyResult::kSuccess ||
@@ -494,10 +504,10 @@ std::vector<ChainInfo> GetChainPartitionInfo(const VBMetaData& vbmeta, bool* fat
 
 // Loads the vbmeta from a given path.
 std::unique_ptr<VBMetaData> LoadAndVerifyVbmetaByPath(
-    const std::string& image_path, const std::string& partition_name,
-    const std::string& expected_public_key_blob, bool allow_verification_error,
-    bool rollback_protection, bool is_chained_vbmeta, bool* out_verification_disabled,
-    VBMetaVerifyResult* out_verify_result) {
+        const std::string& image_path, const std::string& partition_name,
+        const std::string& expected_public_key_blob, bool allow_verification_error,
+        bool rollback_protection, bool is_chained_vbmeta, std::string* out_public_key_data,
+        bool* out_verification_disabled, VBMetaVerifyResult* out_verify_result) {
     // Ensures the device path (might be a symlink created by init) is ready to access.
     if (!WaitForFile(image_path, 1s)) {
         PERROR << "No such path: " << image_path;
@@ -511,8 +521,8 @@ std::unique_ptr<VBMetaData> LoadAndVerifyVbmetaByPath(
     }
 
     VBMetaVerifyResult verify_result;
-    std::unique_ptr<VBMetaData> vbmeta =
-            VerifyVBMetaData(fd, partition_name, expected_public_key_blob, &verify_result);
+    std::unique_ptr<VBMetaData> vbmeta = VerifyVBMetaData(
+            fd, partition_name, expected_public_key_blob, out_public_key_data, &verify_result);
     if (!vbmeta) {
         LERROR << partition_name << ": Failed to load vbmeta, result: " << verify_result;
         return nullptr;
@@ -569,9 +579,10 @@ VBMetaVerifyResult LoadAndVerifyVbmetaByPartition(
 
     bool verification_disabled = false;
     VBMetaVerifyResult verify_result;
-    auto vbmeta = LoadAndVerifyVbmetaByPath(
-        image_path, partition_name, expected_public_key_blob, allow_verification_error,
-        rollback_protection, is_chained_vbmeta, &verification_disabled, &verify_result);
+    auto vbmeta = LoadAndVerifyVbmetaByPath(image_path, partition_name, expected_public_key_blob,
+                                            allow_verification_error, rollback_protection,
+                                            is_chained_vbmeta, nullptr /* out_public_key_data */,
+                                            &verification_disabled, &verify_result);
 
     if (!vbmeta) {
         return VBMetaVerifyResult::kError;

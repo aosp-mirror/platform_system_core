@@ -79,10 +79,12 @@ std::unique_ptr<AvbFooter> GetAvbFooter(int fd);
 
 std::unique_ptr<VBMetaData> VerifyVBMetaData(int fd, const std::string& partition_name,
                                              const std::string& expected_public_key_blob,
+                                             std::string* out_public_key_data,
                                              VBMetaVerifyResult* out_verify_result);
 
 VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
-                                         const std::string& expected_public_key_blob);
+                                         const std::string& expected_public_key_blob,
+                                         std::string* out_public_key_data);
 
 bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& expected_key_blob);
 
@@ -94,10 +96,10 @@ std::vector<ChainInfo> GetChainPartitionInfo(const VBMetaData& vbmeta, bool* fat
 
 // Loads the single vbmeta from a given path.
 std::unique_ptr<VBMetaData> LoadAndVerifyVbmetaByPath(
-    const std::string& image_path, const std::string& partition_name,
-    const std::string& expected_public_key_blob, bool allow_verification_error,
-    bool rollback_protection, bool is_chained_vbmeta, bool* out_verification_disabled,
-    VBMetaVerifyResult* out_verify_result);
+        const std::string& image_path, const std::string& partition_name,
+        const std::string& expected_public_key_blob, bool allow_verification_error,
+        bool rollback_protection, bool is_chained_vbmeta, std::string* out_public_key_data,
+        bool* out_verification_disabled, VBMetaVerifyResult* out_verify_result);
 
 // Loads the top-level vbmeta and all its chained vbmeta images.
 // The actual device path is constructed at runtime by:
