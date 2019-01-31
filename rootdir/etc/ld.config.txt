@@ -467,7 +467,10 @@ namespace.system.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.system.links = runtime
-namespace.system.link.runtime.shared_libs = libdexfile_external.so
+namespace.system.link.runtime.shared_libs  = libdexfile_external.so
+namespace.system.link.runtime.shared_libs += libnativebridge.so
+namespace.system.link.runtime.shared_libs += libnativehelper.so
+namespace.system.link.runtime.shared_libs += libnativeloader.so
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
