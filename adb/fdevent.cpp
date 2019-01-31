@@ -33,6 +33,8 @@
 #include <list>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
@@ -121,13 +123,8 @@ static std::string dump_fde(const fdevent* fde) {
                                        state.c_str());
 }
 
-void fdevent_install(fdevent* fde, int fd, fd_func func, void* arg) {
-    check_main_thread();
-    CHECK_GE(fd, 0);
-    memset(fde, 0, sizeof(fdevent));
-}
-
-fdevent* fdevent_create(int fd, fd_func func, void* arg) {
+template <typename F>
+static fdevent* fdevent_create_impl(int fd, F func, void* arg) {
     check_main_thread();
     CHECK_GE(fd, 0);
 
@@ -148,6 +145,14 @@ fdevent* fdevent_create(int fd, fd_func func, void* arg) {
 
     fde->state |= FDE_CREATED;
     return fde;
+}
+
+fdevent* fdevent_create(int fd, fd_func func, void* arg) {
+    return fdevent_create_impl(fd, func, arg);
+}
+
+fdevent* fdevent_create(int fd, fd_func2 func, void* arg) {
+    return fdevent_create_impl(fd, func, arg);
 }
 
 unique_fd fdevent_release(fdevent* fde) {
@@ -290,13 +295,27 @@ static void fdevent_process() {
     }
 }
 
+template <class T>
+struct always_false : std::false_type {};
+
 static void fdevent_call_fdfunc(fdevent* fde) {
     unsigned events = fde->events;
     fde->events = 0;
     CHECK(fde->state & FDE_PENDING);
     fde->state &= (~FDE_PENDING);
     D("fdevent_call_fdfunc %s", dump_fde(fde).c_str());
-    fde->func(fde->fd.get(), events, fde->arg);
+    std::visit(
+            [&](auto&& f) {
+                using F = std::decay_t<decltype(f)>;
+                if constexpr (std::is_same_v<fd_func, F>) {
+                    f(fde->fd.get(), events, fde->arg);
+                } else if constexpr (std::is_same_v<fd_func2, F>) {
+                    f(fde, events, fde->arg);
+                } else {
+                    static_assert(always_false<F>::value, "non-exhaustive visitor");
+                }
+            },
+            fde->func);
 }
 
 static void fdevent_run_flush() EXCLUDES(run_queue_mutex) {
