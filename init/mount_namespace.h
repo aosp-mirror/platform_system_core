@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef _DEBUGGERD_ELF_UTILS_H
-#define _DEBUGGERD_ELF_UTILS_H
+#pragma once
 
-#include <stdint.h>
-#include <string>
+namespace android {
+namespace init {
 
-namespace unwindstack {
-class Memory;
-}
+bool SetupMountNamespaces();
+bool SwitchToDefaultMountNamespace();
+bool SwitchToBootstrapMountNamespaceIfNeeded();
 
-bool elf_get_build_id(unwindstack::Memory*, uintptr_t, std::string*);
-
-#endif // _DEBUGGERD_ELF_UTILS_H
+}  // namespace init
+}  // namespace android

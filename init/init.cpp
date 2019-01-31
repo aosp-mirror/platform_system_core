@@ -54,6 +54,7 @@
 #include "first_stage_mount.h"
 #include "import_parser.h"
 #include "keychords.h"
+#include "mount_namespace.h"
 #include "property_service.h"
 #include "reboot.h"
 #include "reboot_utils.h"
@@ -665,6 +666,10 @@ int SecondStageMain(int argc, char** argv) {
 
     const BuiltinFunctionMap function_map;
     Action::set_function_map(&function_map);
+
+    if (!SetupMountNamespaces()) {
+        PLOG(FATAL) << "SetupMountNamespaces failed";
+    }
 
     subcontexts = InitializeSubcontexts();
 

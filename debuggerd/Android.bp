@@ -114,7 +114,6 @@ cc_library_static {
         "libasync_safe",
         "libbase",
         "libdebuggerd",
-        "libbacktrace",
         "libunwindstack",
         "libdexfile",  // libunwindstack dependency
         "libdexfile_external",  // libunwindstack dependency
@@ -124,7 +123,6 @@ cc_library_static {
     ],
     target: {
         recovery: {
-            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_static_libs: [
                 "libartbase",
                 "libdexfile",
@@ -164,7 +162,6 @@ cc_library_static {
 
     srcs: [
         "libdebuggerd/backtrace.cpp",
-        "libdebuggerd/elf_utils.cpp",
         "libdebuggerd/open_files_list.cpp",
         "libdebuggerd/tombstone.cpp",
         "libdebuggerd/utility.cpp",
@@ -177,7 +174,6 @@ cc_library_static {
     include_dirs: ["bionic/libc"],
 
     static_libs: [
-        "libbacktrace",
         "libdexfile_external",  // libunwindstack dependency
         "libdexfile_support",  // libunwindstack dependency
         "libunwindstack",
@@ -223,7 +219,6 @@ cc_test {
     },
 
     shared_libs: [
-        "libbacktrace",
         "libbase",
         "libcutils",
         "libdebuggerd_client",
@@ -291,7 +286,6 @@ cc_binary {
     ],
 
     shared_libs: [
-        "libbacktrace",
         "libbase",
         "liblog",
         "libprocinfo",

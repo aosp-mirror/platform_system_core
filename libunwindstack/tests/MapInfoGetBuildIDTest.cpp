@@ -78,6 +78,17 @@ TEST_F(MapInfoGetBuildIDTest, from_elf) {
   EXPECT_EQ("46414b455f4255494c445f4944", map_info_->GetPrintableBuildID());
 }
 
+TEST_F(MapInfoGetBuildIDTest, from_elf_no_sign_extension) {
+  map_info_->elf.reset(elf_container_.release());
+
+  std::string build_id = {static_cast<char>(0xfa), static_cast<char>(0xab), static_cast<char>(0x12),
+                          static_cast<char>(0x02)};
+  elf_interface_->FakeSetBuildID(build_id);
+
+  EXPECT_EQ("\xFA\xAB\x12\x2", map_info_->GetBuildID());
+  EXPECT_EQ("faab1202", map_info_->GetPrintableBuildID());
+}
+
 void MapInfoGetBuildIDTest::MultipleThreadTest(std::string expected_build_id) {
   static constexpr size_t kNumConcurrentThreads = 100;
 
