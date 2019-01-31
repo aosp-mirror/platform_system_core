@@ -46,6 +46,9 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
+// Realistically, this file should be part of the android::fs_mgr namespace;
+using namespace android::fs_mgr;
+
 #define VERITY_TABLE_RSA_KEY "/verity_key"
 #define VERITY_TABLE_HASH_IDX 8
 #define VERITY_TABLE_SALT_IDX 9

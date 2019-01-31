@@ -143,10 +143,10 @@ bool fs_mgr_wait_for_file(const std::string& filename,
                           FileWaitMode wait_mode = FileWaitMode::Exists);
 
 bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
-bool fs_mgr_update_for_slotselect(Fstab* fstab);
+bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
-int load_verity_state(const FstabEntry& entry, int* mode);
+int load_verity_state(const android::fs_mgr::FstabEntry& entry, int* mode);
 
 #endif /* __CORE_FS_MGR_PRIV_H */
