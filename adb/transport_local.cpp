@@ -236,16 +236,15 @@ static void client_socket_thread(int) {
 
 #else  // !ADB_HOST
 
-void server_socket_thread(std::string_view spec) {
-    unique_fd serverfd;
-
+void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_func, int port) {
     adb_thread_setname("server socket");
-    D("transport: server_socket_thread() starting");
-    int port;
+
+    unique_fd serverfd;
+    std::string error;
+
     while (serverfd == -1) {
-        std::string error;
         errno = 0;
-        serverfd.reset(socket_spec_listen(spec, &error, &port));
+        serverfd = listen_func(port, &error);
         if (errno == EAFNOSUPPORT || errno == EINVAL || errno == EPROTONOSUPPORT) {
             D("unrecoverable error: '%s'", error.c_str());
             return;
@@ -258,8 +257,7 @@ void server_socket_thread(std::string_view spec) {
     }
 
     while (true) {
-        std::string spec_str{spec};
-        D("server: trying to get new connection from %s", spec_str.c_str());
+        D("server: trying to get new connection from fd %d", serverfd.get());
         unique_fd fd(adb_socket_accept(serverfd, nullptr, nullptr));
         if (fd >= 0) {
             D("server: new connection on fd %d", fd.get());
@@ -275,6 +273,18 @@ void server_socket_thread(std::string_view spec) {
 
 #endif
 
+unique_fd tcp_listen_inaddr_any(int port, std::string* error) {
+    return unique_fd{network_inaddr_any_server(port, SOCK_STREAM, error)};
+}
+
+#if !ADB_HOST
+static unique_fd vsock_listen(int port, std::string* error) {
+    return unique_fd{
+        socket_spec_listen(android::base::StringPrintf("vsock:%d", port), error, nullptr)
+    };
+}
+#endif
+
 void local_init(int port) {
 #if ADB_HOST
     D("transport: local client init");
@@ -282,8 +292,8 @@ void local_init(int port) {
 #elif !defined(__ANDROID__)
     // Host adbd.
     D("transport: local server init");
-    std::thread(server_socket_thread, android::base::StringPrintf("tcp:%d", port)).detach();
-    std::thread(server_socket_thread, android::base::StringPrintf("vsock:%d", port)).detach();
+    std::thread(server_socket_thread, tcp_listen_inaddr_any, port).detach();
+    std::thread(server_socket_thread, vsock_listen, port).detach();
 #else
     D("transport: local server init");
     // For the adbd daemon in the system image we need to distinguish
@@ -291,9 +301,9 @@ void local_init(int port) {
     if (use_qemu_goldfish()) {
         std::thread(qemu_socket_thread, port).detach();
     } else {
-        std::thread(server_socket_thread, android::base::StringPrintf("tcp:%d", port)).detach();
+        std::thread(server_socket_thread, tcp_listen_inaddr_any, port).detach();
     }
-    std::thread(server_socket_thread, android::base::StringPrintf("vsock:%d", port)).detach();
+    std::thread(server_socket_thread, vsock_listen, port).detach();
 #endif // !ADB_HOST
 }
 
