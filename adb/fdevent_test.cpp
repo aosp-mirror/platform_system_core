@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <limits>
 #include <memory>
 #include <queue>
@@ -27,6 +28,8 @@
 
 #include "adb_io.h"
 #include "fdevent_test.h"
+
+using namespace std::chrono_literals;
 
 class FdHandler {
   public:
@@ -256,4 +259,101 @@ TEST_F(FdeventTest, run_on_main_thread_reentrant) {
     for (int i = 0; i < 100; ++i) {
         ASSERT_EQ(i, vec[i]);
     }
+}
+
+TEST_F(FdeventTest, timeout) {
+    fdevent_reset();
+    PrepareThread();
+
+    enum class TimeoutEvent {
+        read,
+        timeout,
+        done,
+    };
+
+    struct TimeoutTest {
+        std::vector<std::pair<TimeoutEvent, std::chrono::steady_clock::time_point>> events;
+        fdevent* fde;
+    };
+    TimeoutTest test;
+
+    int fds[2];
+    ASSERT_EQ(0, adb_socketpair(fds));
+    static constexpr auto delta = 100ms;
+    fdevent_run_on_main_thread([&]() {
+        test.fde = fdevent_create(fds[0], [](fdevent* fde, unsigned events, void* arg) {
+            auto test = static_cast<TimeoutTest*>(arg);
+            auto now = std::chrono::steady_clock::now();
+            CHECK((events & FDE_READ) ^ (events & FDE_TIMEOUT));
+            TimeoutEvent event;
+            if ((events & FDE_READ)) {
+                char buf[2];
+                ssize_t rc = adb_read(fde->fd.get(), buf, sizeof(buf));
+                if (rc == 0) {
+                    event = TimeoutEvent::done;
+                } else if (rc == 1) {
+                    event = TimeoutEvent::read;
+                } else {
+                    abort();
+                }
+            } else if ((events & FDE_TIMEOUT)) {
+                event = TimeoutEvent::timeout;
+            } else {
+                abort();
+            }
+
+            CHECK_EQ(fde, test->fde);
+            test->events.emplace_back(event, now);
+
+            if (event == TimeoutEvent::done) {
+                fdevent_destroy(fde);
+            }
+        }, &test);
+        fdevent_add(test.fde, FDE_READ);
+        fdevent_set_timeout(test.fde, delta);
+    });
+
+    ASSERT_EQ(1, adb_write(fds[1], "", 1));
+
+    // Timeout should happen here
+    std::this_thread::sleep_for(delta);
+
+    // and another.
+    std::this_thread::sleep_for(delta);
+
+    // No timeout should happen here.
+    std::this_thread::sleep_for(delta / 2);
+    adb_close(fds[1]);
+
+    TerminateThread();
+
+    ASSERT_EQ(4ULL, test.events.size());
+    ASSERT_EQ(TimeoutEvent::read, test.events[0].first);
+    ASSERT_EQ(TimeoutEvent::timeout, test.events[1].first);
+    ASSERT_EQ(TimeoutEvent::timeout, test.events[2].first);
+    ASSERT_EQ(TimeoutEvent::done, test.events[3].first);
+
+    std::vector<int> time_deltas;
+    for (size_t i = 0; i < test.events.size() - 1; ++i) {
+        auto before = test.events[i].second;
+        auto after = test.events[i + 1].second;
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(after - before);
+        time_deltas.push_back(diff.count());
+    }
+
+    std::vector<int> expected = {
+        delta.count(),
+        delta.count(),
+        delta.count() / 2,
+    };
+
+    std::vector<int> diff;
+    ASSERT_EQ(time_deltas.size(), expected.size());
+    for (size_t i = 0; i < time_deltas.size(); ++i) {
+        diff.push_back(std::abs(time_deltas[i] - expected[i]));
+    }
+
+    ASSERT_LT(diff[0], delta.count() * 0.5);
+    ASSERT_LT(diff[1], delta.count() * 0.5);
+    ASSERT_LT(diff[2], delta.count() * 0.5);
 }
