@@ -17,10 +17,10 @@
 #pragma once
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 
 #if !defined(_WIN32)
-#include <dirent.h>
 #include <sys/socket.h>
 #endif
 
@@ -114,6 +114,8 @@ class unique_fd_impl final {
 
  private:
   void reset(int new_value, void* previous_tag) {
+    int previous_errno = errno;
+
     if (fd_ != -1) {
       close(fd_, this);
     }
@@ -122,6 +124,8 @@ class unique_fd_impl final {
     if (new_value != -1) {
       tag(new_value, previous_tag, this);
     }
+
+    errno = previous_errno;
   }
 
   int fd_ = -1;
