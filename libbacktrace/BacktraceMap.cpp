@@ -46,8 +46,7 @@ BacktraceMap::BacktraceMap(pid_t pid) : pid_(pid) {
   }
 }
 
-BacktraceMap::~BacktraceMap() {
-}
+BacktraceMap::~BacktraceMap() {}
 
 void BacktraceMap::FillIn(uint64_t addr, backtrace_map_t* map) {
   ScopedBacktraceMapIteratorLock lock(this);
@@ -68,12 +67,13 @@ static bool ParseLine(const char* line, backtrace_map_t* map) {
   char permissions[5];
   int name_pos;
 
-// Mac OS vmmap(1) output:
-// __TEXT                 0009f000-000a1000 [    8K     8K] r-x/rwx SM=COW  /Volumes/android/dalvik-dev/out/host/darwin-x86/bin/libcorkscrew_test\n
-// 012345678901234567890123456789012345678901234567890123456789
-// 0         1         2         3         4         5
-  if (sscanf(line, "%*21c %" SCNx64 "-%" SCNx64 " [%*13c] %3c/%*3c SM=%*3c  %n",
-             &start, &end, permissions, &name_pos) != 3) {
+  // Mac OS vmmap(1) output:
+  // __TEXT                 0009f000-000a1000 [    8K     8K] r-x/rwx SM=COW
+  // /Volumes/android/dalvik-dev/out/host/darwin-x86/bin/libcorkscrew_test\n
+  // 012345678901234567890123456789012345678901234567890123456789
+  // 0         1         2         3         4         5
+  if (sscanf(line, "%*21c %" SCNx64 "-%" SCNx64 " [%*13c] %3c/%*3c SM=%*3c  %n", &start, &end,
+             permissions, &name_pos) != 3) {
     return false;
   }
 
@@ -90,21 +90,21 @@ static bool ParseLine(const char* line, backtrace_map_t* map) {
     map->flags |= PROT_EXEC;
   }
 
-  map->name = line+name_pos;
-  if (!map->name.empty() && map->name[map->name.length()-1] == '\n') {
-    map->name.erase(map->name.length()-1);
+  map->name = line + name_pos;
+  if (!map->name.empty() && map->name[map->name.length() - 1] == '\n') {
+    map->name.erase(map->name.length() - 1);
   }
 
-  ALOGV("Parsed map: start=%p, end=%p, flags=%x, name=%s",
-        reinterpret_cast<void*>(map->start), reinterpret_cast<void*>(map->end),
-        map->flags, map->name.c_str());
+  ALOGV("Parsed map: start=%p, end=%p, flags=%x, name=%s", reinterpret_cast<void*>(map->start),
+        reinterpret_cast<void*>(map->end), map->flags, map->name.c_str());
   return true;
 }
 #endif  // defined(__APPLE__)
 
 bool BacktraceMap::Build() {
 #if defined(__APPLE__)
-  char cmd[sizeof(pid_t)*3 + sizeof("vmmap -w -resident -submap -allSplitLibs -interleaved ") + 1];
+  char
+      cmd[sizeof(pid_t) * 3 + sizeof("vmmap -w -resident -submap -allSplitLibs -interleaved ") + 1];
   char line[1024];
   // cmd is guaranteed to always be big enough to hold this string.
   snprintf(cmd, sizeof(cmd), "vmmap -w -resident -submap -allSplitLibs -interleaved %d", pid_);
@@ -113,7 +113,7 @@ bool BacktraceMap::Build() {
     return false;
   }
 
-  while(fgets(line, sizeof(line), fp)) {
+  while (fgets(line, sizeof(line), fp)) {
     backtrace_map_t map;
     if (ParseLine(line, &map)) {
       maps_.push_back(map);
@@ -123,7 +123,7 @@ bool BacktraceMap::Build() {
   return true;
 #else
   return android::procinfo::ReadProcessMaps(
-      pid_, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t, const char* name) {
+      pid_, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t, ino_t, const char* name) {
         maps_.resize(maps_.size() + 1);
         backtrace_map_t& map = maps_.back();
         map.start = start;

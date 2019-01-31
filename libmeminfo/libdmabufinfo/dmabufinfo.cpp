@@ -123,18 +123,14 @@ static bool ReadDmaBufFdRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
         auto buf = std::find_if(dmabufs->begin(), dmabufs->end(),
                                 [&inode](const DmaBuffer& dbuf) { return dbuf.inode() == inode; });
         if (buf != dmabufs->end()) {
-            if (buf->name() == "" || buf->name() == "<unknown>")
-                buf->SetName(name);
-            if (buf->exporter() == "" || buf->exporter() == "<unknown>")
-                buf->SetExporter(exporter);
-            if (buf->count() == 0)
-                buf->SetCount(count);
+            if (buf->name() == "" || buf->name() == "<unknown>") buf->SetName(name);
+            if (buf->exporter() == "" || buf->exporter() == "<unknown>") buf->SetExporter(exporter);
+            if (buf->count() == 0) buf->SetCount(count);
             buf->AddFdRef(pid);
             return true;
         }
 
-        DmaBuffer& db =
-                dmabufs->emplace_back(sb.st_ino, sb.st_blocks * 512, count, exporter, name);
+        DmaBuffer& db = dmabufs->emplace_back(sb.st_ino, sb.st_blocks * 512, count, exporter, name);
         db.AddFdRef(pid);
     }
 
@@ -155,29 +151,12 @@ static bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
     // Process the map if it is dmabuf. Add map reference to existing object in 'dmabufs'
     // if it was already found. If it wasn't create a new one and append it to 'dmabufs'
     auto account_dmabuf = [&](uint64_t start, uint64_t end, uint16_t /* flags */,
-                              uint64_t /* pgoff */, const char* name) {
+                              uint64_t /* pgoff */, ino_t inode, const char* name) {
         // no need to look into this mapping if it is not dmabuf
         if (!FileIsDmaBuf(std::string(name))) {
             return;
         }
 
-        // TODO (b/123532375) : Add inode number to the callback of ReadMapFileContent.
-        //
-        // Workaround: we know 'name' points to the name at the end of 'line'.
-        // We use that to backtrack and pick up the inode number from the line as well.
-        // start    end      flag pgoff    mj:mn inode   name
-        // 00400000-00409000 r-xp 00000000 00:00 426998  /dmabuf (deleted)
-        const char* p = name;
-        p--;
-        // skip spaces
-        while (p != line && *p == ' ') {
-            p--;
-        }
-        // walk backwards to the beginning of inode number
-        while (p != line && isdigit(*p)) {
-            p--;
-        }
-        uint64_t inode = strtoull(p, nullptr, 10);
         auto buf = std::find_if(dmabufs->begin(), dmabufs->end(),
                                 [&inode](const DmaBuffer& dbuf) { return dbuf.inode() == inode; });
         if (buf != dmabufs->end()) {

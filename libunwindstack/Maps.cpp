@@ -62,7 +62,7 @@ MapInfo* Maps::Find(uint64_t pc) {
 bool Maps::Parse() {
   return android::procinfo::ReadMapFile(
       GetMapsFile(),
-      [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name) {
+      [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, ino_t, const char* name) {
         // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
         if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
           flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
@@ -102,7 +102,7 @@ bool BufferMaps::Parse() {
   std::string content(buffer_);
   return android::procinfo::ReadMapFileContent(
       &content[0],
-      [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name) {
+      [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, ino_t, const char* name) {
         // Mark a device map in /dev/ and not in /dev/ashmem/ specially.
         if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
           flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;

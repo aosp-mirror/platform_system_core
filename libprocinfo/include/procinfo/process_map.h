@@ -36,6 +36,7 @@ bool ReadMapFileContent(char* content, const CallbackType& callback) {
   uint64_t end_addr;
   uint16_t flags;
   uint64_t pgoff;
+  ino_t inode;
   char* next_line = content;
   char* p;
 
@@ -124,18 +125,25 @@ bool ReadMapFileContent(char* content, const CallbackType& callback) {
       return false;
     }
     // inode
-    if (!pass_xdigit() || (*p != '\0' && !pass_space())) {
+    inode = strtoull(p, &end, 10);
+    if (end == p) {
       return false;
     }
+    p = end;
+
+    if (*p != '\0' && !pass_space()) {
+      return false;
+    }
+
     // filename
-    callback(start_addr, end_addr, flags, pgoff, p);
+    callback(start_addr, end_addr, flags, pgoff, inode, p);
   }
   return true;
 }
 
-inline bool ReadMapFile(
-    const std::string& map_file,
-    const std::function<void(uint64_t, uint64_t, uint16_t, uint64_t, const char*)>& callback) {
+inline bool ReadMapFile(const std::string& map_file,
+                        const std::function<void(uint64_t, uint64_t, uint16_t, uint64_t, ino_t,
+                                                 const char*)>& callback) {
   std::string content;
   if (!android::base::ReadFileToString(map_file, &content)) {
     return false;
@@ -143,9 +151,9 @@ inline bool ReadMapFile(
   return ReadMapFileContent(&content[0], callback);
 }
 
-inline bool ReadProcessMaps(
-    pid_t pid,
-    const std::function<void(uint64_t, uint64_t, uint16_t, uint64_t, const char*)>& callback) {
+inline bool ReadProcessMaps(pid_t pid,
+                            const std::function<void(uint64_t, uint64_t, uint16_t, uint64_t, ino_t,
+                                                     const char*)>& callback) {
   return ReadMapFile("/proc/" + std::to_string(pid) + "/maps", callback);
 }
 
@@ -154,17 +162,18 @@ struct MapInfo {
   uint64_t end;
   uint16_t flags;
   uint64_t pgoff;
+  ino_t inode;
   std::string name;
 
-  MapInfo(uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name)
-      : start(start), end(end), flags(flags), pgoff(pgoff), name(name) {}
+  MapInfo(uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, ino_t inode,
+          const char* name)
+      : start(start), end(end), flags(flags), pgoff(pgoff), inode(inode), name(name) {}
 };
 
 inline bool ReadProcessMaps(pid_t pid, std::vector<MapInfo>* maps) {
   return ReadProcessMaps(
-      pid, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, const char* name) {
-        maps->emplace_back(start, end, flags, pgoff, name);
-      });
+      pid, [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, ino_t inode,
+               const char* name) { maps->emplace_back(start, end, flags, pgoff, inode, name); });
 }
 
 } /* namespace procinfo */
