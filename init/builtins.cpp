@@ -76,6 +76,8 @@
 using namespace std::literals::string_literals;
 
 using android::base::unique_fd;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::ReadFstabFromFile;
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 

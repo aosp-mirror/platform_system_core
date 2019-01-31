@@ -21,6 +21,9 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
+// Realistically, this file should be part of the android::fs_mgr namespace;
+using namespace android::fs_mgr;
+
 // https://source.android.com/devices/tech/ota/ab/ab_implement#partitions
 // All partitions that are A/B-ed should be named as follows (slots are always
 // named a, b, etc.): boot_a, boot_b, system_a, system_b, vendor_a, vendor_b.

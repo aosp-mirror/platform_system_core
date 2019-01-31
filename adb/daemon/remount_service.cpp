@@ -49,6 +49,8 @@
 #include "set_verity_enable_state_service.h"
 
 using android::base::Realpath;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::ReadDefaultFstab;
 
 // Returns the last device used to mount a directory in /proc/mounts.
 // This will find overlayfs entry where upperdir=lowerdir, to make sure

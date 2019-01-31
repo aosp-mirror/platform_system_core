@@ -28,6 +28,7 @@
 // Target classes or functions to test:
 using android::fs_mgr::AvbPartitionToDevicePatition;
 using android::fs_mgr::DeriveAvbPartitionName;
+using android::fs_mgr::FstabEntry;
 using android::fs_mgr::GetAvbFooter;
 using android::fs_mgr::GetChainPartitionInfo;
 using android::fs_mgr::GetTotalSize;

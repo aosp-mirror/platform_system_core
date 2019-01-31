@@ -49,6 +49,11 @@ using android::base::Timer;
 using android::fs_mgr::AvbHandle;
 using android::fs_mgr::AvbHashtreeResult;
 using android::fs_mgr::AvbUniquePtr;
+using android::fs_mgr::BuildGsiSystemFstabEntry;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::FstabEntry;
+using android::fs_mgr::ReadDefaultFstab;
+using android::fs_mgr::ReadFstabFromDt;
 
 using namespace std::literals;
 
@@ -156,7 +161,7 @@ static Fstab ReadFirstStageFstab() {
 // -----------------
 FirstStageMount::FirstStageMount(Fstab fstab)
     : need_dm_verity_(false), fstab_(std::move(fstab)), uevent_listener_(16 * 1024 * 1024) {
-    auto boot_devices = fs_mgr_get_boot_devices();
+    auto boot_devices = android::fs_mgr::GetBootDevices();
     device_handler_ = std::make_unique<DeviceHandler>(
             std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
             std::move(boot_devices), false);

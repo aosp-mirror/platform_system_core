@@ -32,6 +32,8 @@
 
 #include "../fs_mgr_priv_boot_config.h"
 
+using namespace android::fs_mgr;
+
 namespace {
 
 const std::string cmdline =
