@@ -110,6 +110,7 @@ cc_library_static {
         "init.cpp",
         "keychords.cpp",
         "modalias_handler.cpp",
+        "mount_namespace.cpp",
         "parser.cpp",
         "persistent_properties.cpp",
         "persistent_properties.proto",
@@ -166,6 +167,7 @@ cc_binary {
             exclude_shared_libs: ["libbinder", "libutils"],
         },
     },
+    ldflags: ["-Wl,--rpath,/system/${LIB}/bootstrap"],
 }
 
 // Tests

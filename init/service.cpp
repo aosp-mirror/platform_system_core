@@ -50,6 +50,7 @@
 #include <sys/system_properties.h>
 
 #include "init.h"
+#include "mount_namespace.h"
 #include "property_service.h"
 #include "selinux.h"
 #else
@@ -205,6 +206,11 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     }
 
     return execv(c_strings[0], c_strings.data()) == 0;
+}
+
+static bool IsRuntimeApexReady() {
+    struct stat buf;
+    return stat("/apex/com.android.runtime/", &buf) == 0;
 }
 
 unsigned long Service::next_start_order_ = 1;
@@ -929,6 +935,14 @@ Result<Success> Service::Start() {
         scon = *result;
     }
 
+    if (!IsRuntimeApexReady() && !pre_apexd_) {
+        // If this service is started before the runtime APEX gets available,
+        // mark it as pre-apexd one. Note that this marking is permanent. So
+        // for example, if the service is re-launched (e.g., due to crash),
+        // it is still recognized as pre-apexd... for consistency.
+        pre_apexd_ = true;
+    }
+
     LOG(INFO) << "starting service '" << name_ << "'...";
 
     pid_t pid = -1;
@@ -944,6 +958,15 @@ Result<Success> Service::Start() {
         if (auto result = EnterNamespaces(); !result) {
             LOG(FATAL) << "Service '" << name_ << "' could not enter namespaces: " << result.error();
         }
+
+#if defined(__ANDROID__)
+        if (pre_apexd_) {
+            if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
+                LOG(FATAL) << "Service '" << name_ << "' could not enter "
+                           << "into the bootstrap mount namespace";
+            }
+        }
+#endif
 
         if (namespace_flags_ & CLONE_NEWNS) {
             if (auto result = SetUpMountNamespace(); !result) {
