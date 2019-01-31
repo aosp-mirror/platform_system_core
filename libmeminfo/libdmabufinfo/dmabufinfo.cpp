@@ -119,9 +119,23 @@ static bool ReadDmaBufFdRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
             return false;
         }
 
-        DmaBuffer& buf =
+        uint64_t inode = sb.st_ino;
+        auto buf = std::find_if(dmabufs->begin(), dmabufs->end(),
+                                [&inode](const DmaBuffer& dbuf) { return dbuf.inode() == inode; });
+        if (buf != dmabufs->end()) {
+            if (buf->name() == "" || buf->name() == "<unknown>")
+                buf->SetName(name);
+            if (buf->exporter() == "" || buf->exporter() == "<unknown>")
+                buf->SetExporter(exporter);
+            if (buf->count() == 0)
+                buf->SetCount(count);
+            buf->AddFdRef(pid);
+            return true;
+        }
+
+        DmaBuffer& db =
                 dmabufs->emplace_back(sb.st_ino, sb.st_blocks * 512, count, exporter, name);
-        buf.AddFdRef(pid);
+        db.AddFdRef(pid);
     }
 
     return true;
@@ -225,6 +239,10 @@ bool ReadDmaBufInfo(std::vector<DmaBuffer>* dmabufs, const std::string& path) {
 
 bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
     dmabufs->clear();
+    return AppendDmaBufInfo(pid, dmabufs);
+}
+
+bool AppendDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
     if (!ReadDmaBufFdRefs(pid, dmabufs)) {
         LOG(ERROR) << "Failed to read dmabuf fd references";
         return false;

@@ -49,8 +49,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <bootimg.h>
-#include <fs_mgr.h>
 #include <property_info_parser/property_info_parser.h>
 #include <property_info_serializer/property_info_serializer.h>
 #include <selinux/android.h>
@@ -78,8 +76,6 @@ using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
 using android::properties::PropertyInfoAreaFile;
 using android::properties::PropertyInfoEntry;
-
-#define RECOVERY_MOUNT_POINT "/recovery"
 
 namespace android {
 namespace init {
@@ -732,37 +728,6 @@ void load_persist_props(void) {
     property_set("ro.persistent_properties.ready", "true");
 }
 
-void load_recovery_id_prop() {
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    if (!fstab) {
-        PLOG(ERROR) << "unable to read default fstab";
-        return;
-    }
-
-    fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), RECOVERY_MOUNT_POINT);
-    if (rec == NULL) {
-        LOG(ERROR) << "/recovery not specified in fstab";
-        return;
-    }
-
-    int fd = open(rec->blk_device, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        PLOG(ERROR) << "error opening block device " << rec->blk_device;
-        return;
-    }
-
-    boot_img_hdr hdr;
-    if (android::base::ReadFully(fd, &hdr, sizeof(hdr))) {
-        std::string hex = bytes_to_hex(reinterpret_cast<uint8_t*>(hdr.id), sizeof(hdr.id));
-        property_set("ro.recovery_id", hex);
-    } else {
-        PLOG(ERROR) << "error reading /recovery";
-    }
-
-    close(fd);
-}
-
 void property_load_boot_defaults() {
     // TODO(b/117892318): merge prop.default and build.prop files into one
     // TODO(b/122864654): read the prop files from all partitions and then
@@ -783,7 +748,6 @@ void property_load_boot_defaults() {
     load_properties_from_file("/odm/build.prop", NULL);
     load_properties_from_file("/vendor/build.prop", NULL);
     load_properties_from_file("/factory/factory.prop", "ro.*");
-    load_recovery_id_prop();
 
     update_sys_usb_config();
 }

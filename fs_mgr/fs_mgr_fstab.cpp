@@ -338,6 +338,8 @@ static void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "zram_backing_dev_path=")) {
             entry->fs_mgr_flags.zram_backing_dev_path = true;
             entry->zram_backing_dev_path = arg;
+        } else if (StartsWith(flag, "avb_key=")) {
+            entry->avb_key = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
@@ -787,10 +789,8 @@ void fs_mgr_free_fstab(struct fstab *fstab)
     free(fstab);
 }
 
-/*
- * Returns the fstab_rec* whose mount_point is path.
- * Returns nullptr if not found.
- */
+// Returns the fstab_rec* whose mount_point is path.
+// Returns nullptr if not found.
 struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const std::string& path) {
     if (!fstab) {
         return nullptr;
@@ -800,6 +800,20 @@ struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const st
             return &fstab->recs[i];
         }
     }
+    return nullptr;
+}
+
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
+    if (fstab == nullptr) {
+        return nullptr;
+    }
+
+    for (auto& entry : *fstab) {
+        if (entry.mount_point == path) {
+            return &entry;
+        }
+    }
+
     return nullptr;
 }
 

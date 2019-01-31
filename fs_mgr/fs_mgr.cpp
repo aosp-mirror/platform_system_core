@@ -998,9 +998,7 @@ static bool IsMountPointMounted(const std::string& mount_point) {
     if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
         return false;
     }
-    auto it = std::find_if(fstab.begin(), fstab.end(),
-                           [&](const auto& entry) { return entry.mount_point == mount_point; });
-    return it != fstab.end();
+    return GetEntryForMountPoint(&fstab, mount_point) != nullptr;
 }
 
 // When multiple fstab records share the same mount_point, it will try to mount each
@@ -1087,6 +1085,13 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on partition: " << current_entry.mount_point
                        << ", skipping!";
+                // Skips mounting the device.
+                continue;
+            }
+        } else if (!current_entry.avb_key.empty()) {
+            if (AvbHandle::SetUpStandaloneAvbHashtree(&current_entry) == AvbHashtreeResult::kFail) {
+                LERROR << "Failed to set up AVB on standalone partition: "
+                       << current_entry.mount_point << ", skipping!";
                 // Skips mounting the device.
                 continue;
             }
@@ -1326,6 +1331,13 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                 // Skips mounting the device.
                 continue;
             }
+        } else if (!fstab_entry.avb_key.empty()) {
+            if (AvbHandle::SetUpStandaloneAvbHashtree(&fstab_entry) == AvbHashtreeResult::kFail) {
+                LERROR << "Failed to set up AVB on standalone partition: "
+                       << fstab_entry.mount_point << ", skipping!";
+                // Skips mounting the device.
+                continue;
+            }
         } else if (fstab_entry.fs_mgr_flags.verify) {
             int rc = fs_mgr_setup_verity(&fstab_entry, true);
             if (__android_log_is_debuggable() &&
@@ -1382,6 +1394,15 @@ int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* 
     auto new_fstab = LegacyFstabToFstab(fstab);
     return fs_mgr_do_mount_helper(&new_fstab, n_name, n_blk_device, tmp_mount_point,
                                   needs_checkpoint);
+}
+
+int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
+}
+
+int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
+                    bool needs_checkpoint) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint);
 }
 
 /*
