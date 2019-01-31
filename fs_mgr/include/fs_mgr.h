@@ -60,7 +60,7 @@ enum mount_mode {
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
 // fs_mgr_mount_all() updates fstab entries that reference device-mapper.
-int fs_mgr_mount_all(Fstab* fstab, int mount_mode);
+int fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
@@ -68,28 +68,28 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode);
 int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point);
 int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
                     bool needs_checkpoint);
-int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point);
-int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool need_cp);
-int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point = "");
-int fs_mgr_do_mount_one(fstab_rec* rec);
+int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_blk_device,
+                    char* tmp_mount_point);
+int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_blk_device,
+                    char* tmp_mount_point, bool need_cp);
+int fs_mgr_do_mount_one(const android::fs_mgr::FstabEntry& entry,
+                        const std::string& mount_point = "");
 int fs_mgr_do_tmpfs_mount(const char *n_name);
 fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab);
 void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
 bool fs_mgr_load_verity_state(int* mode);
 bool fs_mgr_update_verity_state(
         std::function<void(const std::string& mount_point, int mode)> callback);
-bool fs_mgr_swapon_all(const Fstab& fstab);
-bool fs_mgr_update_logical_partition(FstabEntry* entry);
+bool fs_mgr_swapon_all(const android::fs_mgr::Fstab& fstab);
+bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
 
-int fs_mgr_do_format(const FstabEntry& entry, bool reserve_footer);
-int fs_mgr_do_format(fstab_rec* rec, bool reserve_footer);
+int fs_mgr_do_format(const android::fs_mgr::FstabEntry& entry, bool reserve_footer);
 
 #define FS_MGR_SETUP_VERITY_SKIPPED  (-3)
 #define FS_MGR_SETUP_VERITY_DISABLED (-2)
 #define FS_MGR_SETUP_VERITY_FAIL (-1)
 #define FS_MGR_SETUP_VERITY_SUCCESS 0
-int fs_mgr_setup_verity(FstabEntry* fstab, bool wait_for_verity_dev);
+int fs_mgr_setup_verity(android::fs_mgr::FstabEntry* fstab, bool wait_for_verity_dev);
 
 // Return the name of the super partition if it exists. If a slot number is
 // specified, the super partition for the corresponding metadata slot will be

@@ -211,8 +211,8 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         // Not using AVB - assume VB1.0.
 
         // read all fstab entries at once from all sources
-        Fstab fstab;
-        if (!ReadDefaultFstab(&fstab)) {
+        android::fs_mgr::Fstab fstab;
+        if (!android::fs_mgr::ReadDefaultFstab(&fstab)) {
             WriteFdExactly(fd.get(), "Failed to read fstab\n");
             suggest_run_adb_root(fd.get());
             return;

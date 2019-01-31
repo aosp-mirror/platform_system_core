@@ -65,7 +65,6 @@ struct fstab_rec {
 };
 
 struct fstab* fs_mgr_read_fstab_default();
-struct fstab* fs_mgr_read_fstab_dt();
 struct fstab* fs_mgr_read_fstab(const char* fstab_path);
 void fs_mgr_free_fstab(struct fstab* fstab);
 
@@ -88,7 +87,9 @@ int fs_mgr_has_sysfs_path(const struct fstab_rec* fstab);
 
 std::string fs_mgr_get_slot_suffix();
 std::string fs_mgr_get_other_slot_suffix();
-std::set<std::string> fs_mgr_get_boot_devices();
+
+namespace android {
+namespace fs_mgr {
 
 struct FstabEntry {
     std::string blk_device;
@@ -187,10 +188,15 @@ bool ReadDefaultFstab(Fstab* fstab);
 
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 
-// Temporary conversion functions.
-FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec);
-Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab);
-fstab* FstabToLegacyFstab(const Fstab& fstab);
-
 // Helper method to build a GSI fstab entry for mounting /system.
 FstabEntry BuildGsiSystemFstabEntry();
+
+std::set<std::string> GetBootDevices();
+
+}  // namespace fs_mgr
+}  // namespace android
+
+// Temporary conversion functions.
+android::fs_mgr::FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec);
+android::fs_mgr::Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab);
+fstab* FstabToLegacyFstab(const android::fs_mgr::Fstab& fstab);
