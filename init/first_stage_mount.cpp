@@ -136,10 +136,6 @@ static inline bool IsDtVbmetaCompatible(const Fstab& fstab) {
     return is_android_dt_value_expected("vbmeta/compatible", "android,vbmeta");
 }
 
-static bool IsRecoveryMode() {
-    return access("/system/bin/recovery", F_OK) == 0;
-}
-
 static Fstab ReadFirstStageFstab() {
     Fstab fstab;
     if (!ReadFstabFromDt(&fstab)) {

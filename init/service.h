@@ -242,6 +242,8 @@ class Service {
     std::vector<std::string> args_;
 
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
+
+    bool pre_apexd_ = false;
 };
 
 class ServiceList {
