@@ -383,7 +383,8 @@ AvbUniquePtr AvbHandle::Open() {
     return avb_handle;
 }
 
-AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry) {
+AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
+                                                        bool wait_for_verity_dev) {
     if (fstab_entry->avb_key.empty()) {
         LERROR << "avb_key=/path/to/key is missing for " << fstab_entry->mount_point;
         return AvbHashtreeResult::kFail;
@@ -400,7 +401,7 @@ AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry)
                    << " for mount point: " << fstab_entry->mount_point;
             return AvbHashtreeResult::kFail;
         }
-        // Use empty key blob, which means no expectation, if allow verification error.
+        LWARNING << "Allowing no expected key blob when verification error is permitted";
         expected_key_blob.clear();
     }
 
@@ -423,7 +424,7 @@ AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry)
     // Puts the vbmeta into a vector, for LoadAvbHashtreeToEnableVerity() to use.
     std::vector<VBMetaData> vbmeta_images;
     vbmeta_images.emplace_back(std::move(*vbmeta));
-    if (!LoadAvbHashtreeToEnableVerity(fstab_entry, true /* wait_for_verity_dev */, vbmeta_images,
+    if (!LoadAvbHashtreeToEnableVerity(fstab_entry, wait_for_verity_dev, vbmeta_images,
                                        fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix())) {
         return AvbHashtreeResult::kFail;
     }
