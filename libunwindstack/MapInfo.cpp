@@ -320,7 +320,8 @@ std::string MapInfo::GetPrintableBuildID() {
   }
   std::string printable_build_id;
   for (const char& c : raw_build_id) {
-    printable_build_id += android::base::StringPrintf("%02x", c);
+    // Use %hhx to avoid sign extension on abis that have signed chars.
+    printable_build_id += android::base::StringPrintf("%02hhx", c);
   }
   return printable_build_id;
 }
