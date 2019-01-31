@@ -48,7 +48,12 @@
 #define ATRACE_TAG ATRACE_TAG_BIONIC
 #include <utils/Trace.h>
 
+#include <unwindstack/DexFiles.h>
+#include <unwindstack/JitDebug.h>
+#include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
+#include <unwindstack/Unwinder.h>
 
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/tombstone.h"
@@ -62,8 +67,6 @@
 
 using android::base::unique_fd;
 using android::base::StringPrintf;
-
-using unwindstack::Regs;
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -287,7 +290,8 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
     case 1:
       *abort_msg_address = crash_info->data.v1.abort_msg_address;
       *siginfo = crash_info->data.v1.siginfo;
-      regs->reset(Regs::CreateFromUcontext(Regs::CurrentArch(), &crash_info->data.v1.ucontext));
+      regs->reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(),
+                                                        &crash_info->data.v1.ucontext));
       break;
 
     default:
@@ -469,7 +473,7 @@ int main(int argc, char** argv) {
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
       } else {
-        info.registers.reset(Regs::RemoteGet(thread));
+        info.registers.reset(unwindstack::Regs::RemoteGet(thread));
         if (!info.registers) {
           PLOG(WARNING) << "failed to fetch registers for thread " << thread;
           ptrace(PTRACE_DETACH, thread, 0, 0);
@@ -562,30 +566,25 @@ int main(int argc, char** argv) {
   }
 
   // TODO: Use seccomp to lock ourselves down.
-  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(vm_pid, false));
-  if (!map) {
-    LOG(FATAL) << "failed to create backtrace map";
-  }
-
-  std::shared_ptr<unwindstack::Memory> process_memory = map->GetProcessMemory();
-  if (!process_memory) {
-    LOG(FATAL) << "failed to get unwindstack::Memory handle";
+  unwindstack::UnwinderFromPid unwinder(256, vm_pid);
+  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
+    LOG(FATAL) << "Failed to init unwinder object.";
   }
 
   std::string amfd_data;
   if (backtrace) {
     ATRACE_NAME("dump_backtrace");
-    dump_backtrace(std::move(g_output_fd), map.get(), thread_info, g_target_thread);
+    dump_backtrace(std::move(g_output_fd), &unwinder, thread_info, g_target_thread);
   } else {
     {
       ATRACE_NAME("fdsan table dump");
-      populate_fdsan_table(&open_files, process_memory, fdsan_table_address);
+      populate_fdsan_table(&open_files, unwinder.GetProcessMemory(), fdsan_table_address);
     }
 
     {
       ATRACE_NAME("engrave_tombstone");
-      engrave_tombstone(std::move(g_output_fd), map.get(), process_memory.get(), thread_info,
-                        g_target_thread, abort_msg_address, &open_files, &amfd_data);
+      engrave_tombstone(std::move(g_output_fd), &unwinder, thread_info, g_target_thread,
+                        abort_msg_address, &open_files, &amfd_data);
     }
   }
 
