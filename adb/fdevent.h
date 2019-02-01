@@ -18,17 +18,20 @@
 #define __FDEVENT_H
 
 #include <stddef.h>
-#include <stdint.h>  /* for int64_t */
+#include <stdint.h>
 
+#include <chrono>
 #include <functional>
+#include <optional>
 #include <variant>
 
 #include "adb_unique_fd.h"
 
-/* events that may be observed */
-#define FDE_READ              0x0001
-#define FDE_WRITE             0x0002
-#define FDE_ERROR             0x0004
+// Events that may be observed
+#define FDE_READ 0x0001
+#define FDE_WRITE 0x0002
+#define FDE_ERROR 0x0004
+#define FDE_TIMEOUT 0x0008
 
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 typedef void (*fd_func2)(struct fdevent* fde, unsigned events, void* userdata);
@@ -41,6 +44,8 @@ struct fdevent {
 
     uint16_t state = 0;
     uint16_t events = 0;
+    std::optional<std::chrono::milliseconds> timeout;
+    std::chrono::steady_clock::time_point last_active;
 
     std::variant<fd_func, fd_func2> func;
     void* arg = nullptr;
@@ -62,7 +67,11 @@ void fdevent_set(fdevent *fde, unsigned events);
 void fdevent_add(fdevent *fde, unsigned events);
 void fdevent_del(fdevent *fde, unsigned events);
 
-void fdevent_set_timeout(fdevent *fde, int64_t  timeout_ms);
+// Set a timeout on an fdevent.
+// If no events are triggered by the timeout, an FDE_TIMEOUT will be generated.
+// Note timeouts are not defused automatically; if a timeout is set on an fdevent, it will
+// trigger repeatedly every |timeout| ms.
+void fdevent_set_timeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout);
 
 // Loop forever, handling events.
 void fdevent_loop();

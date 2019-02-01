@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -40,6 +41,8 @@
 #include "adb_utils.h"
 #include "transport.h"
 #include "types.h"
+
+using namespace std::chrono_literals;
 
 static std::recursive_mutex& local_socket_list_lock = *new std::recursive_mutex();
 static unsigned local_socket_next_id = 1;
@@ -238,16 +241,64 @@ static void local_socket_ready(asocket* s) {
     fdevent_add(s->fde, FDE_READ);
 }
 
+struct ClosingSocket {
+    std::chrono::steady_clock::time_point begin;
+};
+
+// The standard (RFC 1122 - 4.2.2.13) says that if we call close on a
+// socket while we have pending data, a TCP RST should be sent to the
+// other end to notify it that we didn't read all of its data. However,
+// this can result in data that we've successfully written out to be dropped
+// on the other end. To avoid this, instead of immediately closing a
+// socket, call shutdown on it instead, and then read from the file
+// descriptor until we hit EOF or an error before closing.
+static void deferred_close(unique_fd fd) {
+    // Shutdown the socket in the outgoing direction only, so that
+    // we don't have the same problem on the opposite end.
+    adb_shutdown(fd.get(), SHUT_WR);
+    auto callback = [](fdevent* fde, unsigned event, void* arg) {
+        auto socket_info = static_cast<ClosingSocket*>(arg);
+        if (event & FDE_READ) {
+            ssize_t rc;
+            char buf[BUFSIZ];
+            while ((rc = adb_read(fde->fd.get(), buf, sizeof(buf))) > 0) {
+                continue;
+            }
+
+            if (rc == -1 && errno == EAGAIN) {
+                // There's potentially more data to read.
+                auto duration = std::chrono::steady_clock::now() - socket_info->begin;
+                if (duration > 1s) {
+                    LOG(WARNING) << "timeout expired while flushing socket, closing";
+                } else {
+                    return;
+                }
+            }
+        } else if (event & FDE_TIMEOUT) {
+            LOG(WARNING) << "timeout expired while flushing socket, closing";
+        }
+
+        // Either there was an error, we hit the end of the socket, or our timeout expired.
+        fdevent_destroy(fde);
+        delete socket_info;
+    };
+
+    ClosingSocket* socket_info = new ClosingSocket{
+            .begin = std::chrono::steady_clock::now(),
+    };
+
+    fdevent* fde = fdevent_create(fd.release(), callback, socket_info);
+    fdevent_add(fde, FDE_READ);
+    fdevent_set_timeout(fde, 1s);
+}
+
 // be sure to hold the socket list lock when calling this
 static void local_socket_destroy(asocket* s) {
     int exit_on_close = s->exit_on_close;
 
     D("LS(%d): destroying fde.fd=%d", s->id, s->fd);
 
-    /* IMPORTANT: the remove closes the fd
-    ** that belongs to this socket
-    */
-    fdevent_destroy(s->fde);
+    deferred_close(fdevent_release(s->fde));
 
     remove_socket(s);
     delete s;

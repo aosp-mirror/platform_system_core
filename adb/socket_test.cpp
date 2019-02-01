@@ -221,6 +221,8 @@ TEST_F(LocalSocketTest, write_error_when_having_packets) {
     EXPECT_EQ(2u + GetAdditionalLocalSocketCount(), fdevent_installed_count());
     ASSERT_EQ(0, adb_close(socket_fd[0]));
 
+    std::this_thread::sleep_for(2s);
+
     WaitForFdeventLoop();
     ASSERT_EQ(GetAdditionalLocalSocketCount(), fdevent_installed_count());
     TerminateThread();
