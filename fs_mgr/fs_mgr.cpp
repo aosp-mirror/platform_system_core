@@ -1446,7 +1446,7 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
     }
 
     // Prepare target path
-    unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0664)));
+    unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600)));
     if (target_fd.get() == -1) {
         PERROR << "Cannot open target path: " << loop;
         return false;
