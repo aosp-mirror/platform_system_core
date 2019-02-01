@@ -18,29 +18,4 @@
 
 #include <chrono>
 
-#if defined(_WIN32)
-// We don't have C++14 on Windows yet.
-// Reimplement std::chrono_literals ourselves until we do.
-
-// Silence the following warning (which gets promoted to an error):
-// error: literal operator suffixes not preceded by ‘_’ are reserved for future standardization
-#pragma GCC system_header
-
-constexpr std::chrono::seconds operator"" s(unsigned long long s) {
-    return std::chrono::seconds(s);
-}
-
-constexpr std::chrono::duration<long double> operator"" s(long double s) {
-    return std::chrono::duration<long double>(s);
-}
-
-constexpr std::chrono::milliseconds operator"" ms(unsigned long long ms) {
-    return std::chrono::milliseconds(ms);
-}
-
-constexpr std::chrono::duration<long double, std::milli> operator"" ms(long double ms) {
-    return std::chrono::duration<long double, std::milli>(ms);
-}
-#else
 using namespace std::chrono_literals;
-#endif
