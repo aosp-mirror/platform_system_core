@@ -587,6 +587,9 @@ on post-fs-data
     # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
 
+    # load fsverity keys
+    exec -- /system/bin/mini-keyctl -c /product/etc/security/cacerts_fsverity,/vendor/etc/security/cacerts_fsverity -k .fs-verity
+
     # Wait for apexd to finish activating APEXes before starting more processes.
     # This certainly reduces the parallelism but is required to make as many processes
     # as possible to use the bionic libs from the runtime APEX. This takes less than 50ms
