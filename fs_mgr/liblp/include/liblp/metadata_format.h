@@ -127,7 +127,7 @@ typedef struct LpMetadataGeometry {
  * num_entries, and the result must not overflow a 32-bit signed integer.
  */
 typedef struct LpMetadataTableDescriptor {
-    /*  0: Location of the table, relative to the metadata header. */
+    /*  0: Location of the table, relative to end of the metadata header. */
     uint32_t offset;
     /*  4: Number of entries in the table. */
     uint32_t num_entries;
@@ -272,7 +272,7 @@ typedef struct LpMetadataPartitionGroup {
 
     /* 40: Maximum size in bytes. If 0, the group has no maximum size. */
     uint64_t maximum_size;
-} LpMetadataPartitionGroup;
+} __attribute__((packed)) LpMetadataPartitionGroup;
 
 /* This flag is only intended to be used with super_empty.img and super.img on
  * retrofit devices. If set, the group needs a slot suffix to be interpreted
@@ -323,7 +323,7 @@ typedef struct LpMetadataBlockDevice {
 
     /* 60: Flags (see LP_BLOCK_DEVICE_* flags below). */
     uint32_t flags;
-} LpMetadataBlockDevice;
+} __attribute__((packed)) LpMetadataBlockDevice;
 
 /* This flag is only intended to be used with super_empty.img and super.img on
  * retrofit devices. On these devices there are A and B super partitions, and

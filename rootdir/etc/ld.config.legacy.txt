@@ -32,6 +32,102 @@ namespace.default.asan.search.paths += /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 
 ###############################################################################
+# APEX related namespaces.
+###############################################################################
+
+additional.namespaces = runtime,conscrypt,media,resolv
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+# If a shared library or an executable requests a shared library that
+# cannot be loaded into the default namespace, the dynamic linker tries
+# to load the shared library from the runtime namespace.And then, if the
+# shared library cannot be loaded from the runtime namespace either, the
+# dynamic linker tries to load the shared library from the resolv namespace.
+# Finally, if all attempts fail, the dynamic linker returns an error.
+namespace.default.links = runtime,resolv
+namespace.default.asan.links = runtime,resolv
+# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
+# libart.
+namespace.default.visible = true
+namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
+namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs += libnativebridge.so
+namespace.default.link.runtime.shared_libs += libnativehelper.so
+namespace.default.link.runtime.shared_libs += libnativeloader.so
+
+# When libnetd_resolv.so can't be found in the default namespace, search for it
+# in the resolv namespace. Don't allow any other libraries from the resolv namespace
+# to be loaded in the default namespace.
+namespace.default.link.resolv.shared_libs = libnetd_resolv.so
+
+###############################################################################
+# "runtime" APEX namespace
+#
+# This namespace exposes externally accessible libraries from the Runtime APEX.
+###############################################################################
+namespace.runtime.isolated = true
+namespace.runtime.visible = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.links = default
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.runtime.link.default.allow_all_shared_libs = true
+
+###############################################################################
+# "media" APEX namespace
+#
+# This namespace is for libraries within the media APEX.
+###############################################################################
+namespace.media.isolated = true
+namespace.media.visible = true
+
+namespace.media.search.paths = /apex/com.android.media/${LIB}
+namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
+
+namespace.media.links = default
+namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
+namespace.media.link.default.shared_libs += libandroid.so
+namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += libmediametrics.so
+namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+###############################################################################
+# "conscrypt" APEX namespace
+#
+# This namespace is for libraries within the conscrypt APEX.
+###############################################################################
+namespace.conscrypt.isolated = true
+namespace.conscrypt.visible = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.links = runtime,default
+namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.default.shared_libs  = libc.so
+namespace.conscrypt.link.default.shared_libs += libm.so
+namespace.conscrypt.link.default.shared_libs += libdl.so
+
+###############################################################################
+# "resolv" APEX namespace
+#
+# This namespace is for libraries within the resolv APEX.
+###############################################################################
+namespace.resolv.isolated = true
+namespace.resolv.visible = true
+
+namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
+namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
+namespace.resolv.links = default
+namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libm.so
+namespace.resolv.link.default.shared_libs += libdl.so
+namespace.resolv.link.default.shared_libs += libbinder_ndk.so
+
+###############################################################################
 # Namespace config for binaries under /postinstall.
 # Only one default namespace is defined and it has no directories other than
 # /system/lib and /product/lib in the search paths. This is because linker

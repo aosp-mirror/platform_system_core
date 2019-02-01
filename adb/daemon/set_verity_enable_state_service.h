@@ -18,4 +18,6 @@
 
 #include "adb_unique_fd.h"
 
+#if defined(__ANDROID__)
 void set_verity_enabled_state_service(unique_fd fd, bool enable);
+#endif

@@ -121,6 +121,14 @@ const std::vector<Vma>& ProcMemInfo::Maps() {
     return maps_;
 }
 
+const std::vector<Vma>& ProcMemInfo::MapsWithPageIdle() {
+    if (maps_.empty() && !ReadMaps(get_wss_, true)) {
+        LOG(ERROR) << "Failed to read maps with page idle for Process " << pid_;
+    }
+
+    return maps_;
+}
+
 const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
     if (!maps_.empty()) {
         return maps_;
@@ -199,7 +207,34 @@ const std::vector<uint16_t>& ProcMemInfo::SwapOffsets() {
     return swap_offsets_;
 }
 
-bool ProcMemInfo::ReadMaps(bool get_wss) {
+bool ProcMemInfo::PageMap(const Vma& vma, std::vector<uint64_t>* pagemap) {
+    pagemap->clear();
+    std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
+    ::android::base::unique_fd pagemap_fd(
+            TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (pagemap_fd < 0) {
+        PLOG(ERROR) << "Failed to open " << pagemap_file;
+        return false;
+    }
+
+    uint64_t nr_pages = (vma.end - vma.start) / getpagesize();
+    pagemap->reserve(nr_pages);
+
+    uint64_t idx = vma.start / getpagesize();
+    uint64_t last = idx + nr_pages;
+    uint64_t val;
+    for (; idx < last; idx++) {
+        if (pread64(pagemap_fd, &val, sizeof(uint64_t), idx * sizeof(uint64_t)) < 0) {
+            PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
+            return false;
+        }
+        pagemap->emplace_back(val);
+    }
+
+    return true;
+}
+
+bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle) {
     // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
     // running for the lifetime of the system can recycle the objects and don't have to
     // unnecessarily retain and update this object in memory (which can get significantly large).
@@ -229,7 +264,7 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
     }
 
     for (auto& vma : maps_) {
-        if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss)) {
+        if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss, use_pageidle)) {
             LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
                        << vma.end << "]";
             maps_.clear();
@@ -241,7 +276,7 @@ bool ProcMemInfo::ReadMaps(bool get_wss) {
     return true;
 }
 
-bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
+bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_pageidle) {
     PageAcct& pinfo = PageAcct::Instance();
     uint64_t pagesz = getpagesize();
     uint64_t num_pages = (vma.end - vma.start) / pagesz;
@@ -252,6 +287,13 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
                 first * sizeof(uint64_t)) < 0) {
         PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
         return false;
+    }
+
+    if (get_wss && use_pageidle) {
+        if (!pinfo.InitPageAcct(true)) {
+            LOG(ERROR) << "Failed to init idle page accounting";
+            return false;
+        }
     }
 
     std::unique_ptr<uint64_t[]> pg_flags(new uint64_t[num_pages]);
@@ -296,7 +338,8 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss) {
         bool is_private = (pg_counts[i] == 1);
         // Working set
         if (get_wss) {
-            bool is_referenced = !!(pg_flags[i] & (1 << KPF_REFERENCED));
+            bool is_referenced = use_pageidle ? (pinfo.IsPageIdle(page_frame) == 1)
+                                              : !!(pg_flags[i] & (1 << KPF_REFERENCED));
             if (!is_referenced) {
                 continue;
             }
@@ -406,9 +449,10 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
         return false;
     }
 
-    char line[1024];
+    char* line = nullptr;
+    size_t line_alloc = 0;
     stats->clear();
-    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+    while (getline(&line, &line_alloc, fp.get()) > 0) {
         switch (line[0]) {
             case 'P':
                 if (strncmp(line, "Pss:", 4) == 0) {
@@ -441,6 +485,8 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats) {
         }
     }
 
+    // free getline() managed buffer
+    free(line);
     return true;
 }
 
@@ -450,14 +496,17 @@ bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss) {
         return false;
     }
     *pss = 0;
-    char line[1024];
-    while (fgets(line, sizeof(line), fp.get()) != nullptr) {
+    char* line = nullptr;
+    size_t line_alloc = 0;
+    while (getline(&line, &line_alloc, fp.get()) > 0) {
         uint64_t v;
         if (sscanf(line, "Pss: %" SCNu64 " kB", &v) == 1) {
             *pss += v;
         }
     }
 
+    // free getline() managed buffer
+    free(line);
     return true;
 }
 

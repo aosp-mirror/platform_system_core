@@ -46,8 +46,6 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
-    prepare_bootstrap_bionic
-
     start ueventd
 
 on init
@@ -55,7 +53,7 @@ on init
 
     # Mix device-specific information into the entropy pool
     copy /proc/cmdline /dev/urandom
-    copy /default.prop /dev/urandom
+    copy /system/etc/prop.default /dev/urandom
 
     symlink /proc/self/fd/0 /dev/stdin
     symlink /proc/self/fd/1 /dev/stdout
@@ -117,6 +115,8 @@ on init
     mkdir /mnt/runtime/read/self 0755 root root
     mkdir /mnt/runtime/write 0755 root root
     mkdir /mnt/runtime/write/self 0755 root root
+    mkdir /mnt/runtime/full 0755 root root
+    mkdir /mnt/runtime/full/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /sdcard
@@ -586,6 +586,9 @@ on post-fs-data
 
     # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
+
+    # load fsverity keys
+    exec -- /system/bin/mini-keyctl -c /product/etc/security/cacerts_fsverity,/vendor/etc/security/cacerts_fsverity -k .fs-verity
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     # This certainly reduces the parallelism but is required to make as many processes

@@ -18,4 +18,6 @@
 
 #include "adb_unique_fd.h"
 
+#if defined(__ANDROID__)
 void framebuffer_service(unique_fd fd);
+#endif

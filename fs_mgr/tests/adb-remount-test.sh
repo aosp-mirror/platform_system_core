@@ -62,16 +62,17 @@ inAdb() {
 Returns: true if the command succeeded" ]
 adb_sh() {
   args=
-  for i in ${@}; do
+  for i in "${@}"; do
+    [ -z "${args}" ] || args="${args} "
     if [ X"${i}" != X"${i#\'}" ]; then
-      args="${args} ${i}"
+      args="${args}${i}"
     elif [ X"${i}" != X"${i#* }" ]; then
-      args="${args} '${i}'"
+      args="${args}'${i}'"
     else
-      args="${args} ${i}"
+      args="${args}${i}"
     fi
   done
-  adb shell ${args}
+  adb shell "${args}"
 }
 
 [ "USAGE: adb_date >/dev/stdout
@@ -164,10 +165,24 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in root state" ]
 adb_root() {
+  [ `adb_sh echo '${USER}'` != root ] || return 0
   adb root >/dev/null </dev/null 2>/dev/null
   sleep 2
   adb_wait 2m &&
     [ `adb_sh echo '${USER}'` = root ]
+}
+
+[ "USAGE: adb_unroot
+
+NB: This can be flakey on devices due to USB state
+
+Returns: true if device in un root state" ]
+adb_unroot() {
+  [ `adb_sh echo '${USER}'` = root ] || return 0
+  adb unroot >/dev/null </dev/null 2>/dev/null
+  sleep 2
+  adb_wait 2m &&
+    [ `adb_sh echo '${USER}'` != root ]
 }
 
 [ "USAGE: fastboot_getvar var expected
@@ -194,6 +209,15 @@ fastboot_getvar() {
   echo ${O} >&2
 }
 
+[ "USAGE: cleanup
+
+Do nothing: should be redefined when necessary
+
+Returns: cleans up any latent resources, reverses configurations" ]
+cleanup () {
+  :
+}
+
 [ "USAGE: die [-d|-t <epoch>] [message] >/dev/stderr
 
 If -d, or -t <epoch> argument is supplied, dump logcat.
@@ -212,6 +236,7 @@ die() {
     shift 2
   fi
   echo "${RED}[  FAILED  ]${NORMAL} ${@}" >&2
+  cleanup
   exit 1
 }
 
@@ -285,7 +310,7 @@ skip_administrative_mounts() {
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\) " \
     -e "^\(bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
-    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|metadata\) "
+    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|persist\|metadata\) "
 }
 
 if [ X"-s" = X"${1}" -a -n "${2}" ]; then
@@ -307,6 +332,12 @@ if ! adb_su getenforce </dev/null | grep 'Enforcing' >/dev/null; then
 fi
 
 # Do something
+
+D=`get_property ro.serialno`
+[ -n "${D}" ] || D=`get_property ro.boot.serialno`
+[ -z "${D}" ] || ANDROID_SERIAL=${D}
+BUILD_DESCRIPTION=`get_property ro.build.description`
+echo "${BLUE}[     INFO ]${NORMAL} ${ANDROID_SERIAL} ${BUILD_DESCRIPTION}" >&2
 
 echo "${GREEN}[ RUN      ]${NORMAL} Testing kernel support for overlayfs" >&2
 
@@ -379,9 +410,15 @@ if echo "${D}" | grep /dev/root >/dev/null; then
      echo "${D}" | grep -v /dev/root`
 fi
 D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
+no_dedupe=true
+for d in ${D}; do
+  adb_sh tune2fs -l $d 2>&1 |
+    grep "Filesystem features:.*shared_blocks" >/dev/null &&
+  no_dedupe=false
+done
 D=`adb_sh df -k ${D} </dev/null`
 echo "${D}"
-if [ X"${D}" = X"${D##* 100[%] }" ]; then
+if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
 elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
@@ -523,14 +560,26 @@ fi
 echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
 
 A="Hello World! $(date)"
-echo "${A}" | adb_sh "cat - > /system/hello"
-echo "${A}" | adb_sh "cat - > /vendor/hello"
+echo "${A}" | adb_sh cat - ">/system/hello"
+echo "${A}" | adb_sh cat - ">/vendor/hello"
 B="`adb_cat /system/hello`" ||
   die "sytem hello"
 check_eq "${A}" "${B}" /system before reboot
 B="`adb_cat /vendor/hello`" ||
   die "vendor hello"
 check_eq "${A}" "${B}" /vendor before reboot
+
+# download libc.so, append some gargage, push back, and check if the file is updated.
+tempdir="`mktemp -d`"
+cleanup() {
+  rm -rf ${tempdir}
+}
+adb pull /system/lib/bootstrap/libc.so ${tempdir} || die "pull libc.so from device"
+garbage="`hexdump -n 16 -e '4/4 "%08X" 1 "\n"' /dev/random`"
+echo ${garbage} >> ${tempdir}/libc.so
+adb push ${tempdir}/libc.so /system/lib/bootstrap/libc.so || die "push libc.so to device"
+adb pull /system/lib/bootstrap/libc.so ${tempdir}/libc.so.fromdevice || die "pull libc.so from device"
+diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null || die "libc.so differ"
 
 echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
@@ -545,7 +594,7 @@ if ${overlayfs_needed}; then
     ( echo "${L}" && false ) ||
     die -d "overlay takeover failed after reboot"
 
-  adb_su "sed -n '1,/overlay \\/system/p' /proc/mounts" </dev/null |
+  adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
     skip_administrative_mounts |
     grep -v ' \(squashfs\|ext4\|f2fs\) ' &&
     echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover after first stage init" >&2 ||
@@ -558,6 +607,7 @@ check_eq "${A}" "${B}" /system after reboot
 echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected
 if ${enforcing}; then
+  adb_unroot
   B="`adb_cat /vendor/hello`" &&
     die "re-read /vendor/hello after reboot w/o root"
   check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
@@ -569,9 +619,18 @@ adb_root &&
 check_eq "${A}" "${B}" vendor after reboot
 echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
 
+# check if the updated libc.so is persistent after reboot
+adb_root &&
+  adb pull /system/lib/bootstrap/libc.so ${tempdir}/libc.so.fromdevice ||
+  die "pull libc.so from device"
+diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null || die "libc.so differ"
+rm -r ${tempdir}
+echo "${GREEN}[       OK ]${NORMAL} /system/lib/bootstrap/libc.so content remains after reboot" >&2
+
 echo "${GREEN}[ RUN      ]${NORMAL} flash vendor, confirm its content disappears" >&2
 
 H=`adb_sh echo '${HOSTNAME}' </dev/null 2>/dev/null`
+is_userspace_fastboot=false
 if [ -z "${ANDROID_PRODUCT_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} build tree not setup, skipping"
 elif [ ! -s "${ANDROID_PRODUCT_OUT}/vendor.img" ]; then
@@ -584,6 +643,8 @@ else
     fastboot flash vendor ||
     ( fastboot reboot && false) ||
     die "fastboot flash vendor"
+  fastboot_getvar is-userspace yes &&
+    is_userspace_fastboot=true
   if [ -n "${scratch_paritition}" ]; then
     fastboot_getvar partition-type:${scratch_partition} raw ||
       ( fastboot reboot && false) ||
@@ -629,7 +690,12 @@ else
       echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
       die  "overlay /system takeover after flash vendor"
     echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
-      die  "overlay supposed to be minus /vendor takeover after flash vendor"
+      if ${is_userspace_fastboot}; then
+        die  "overlay supposed to be minus /vendor takeover after flash vendor"
+      else
+        echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing, ignoring a failure"
+        ( die  "overlay supposed to be minus /vendor takeover after flash vendor" )
+      fi
   fi
   B="`adb_cat /system/hello`" ||
     die "re-read /system/hello after flash vendor"
@@ -637,8 +703,17 @@ else
   adb_root ||
     die "adb root"
   B="`adb_cat /vendor/hello`" &&
-    die "re-read /vendor/hello after flash vendor"
-  check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
+    if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
+      die "re-read /vendor/hello after flash vendor"
+    else
+      echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing, ignoring a failure"
+      ( die "re-read /vendor/hello after flash vendor" )
+    fi
+  if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
+    check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor
+  else
+    ( check_eq "cat: /vendor/hello: No such file or directory" "${B}" vendor after flash vendor )
+  fi
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remove test content (cleanup)" >&2
@@ -657,17 +732,22 @@ check_eq "cat: /vendor/hello: No such file or directory" "${B}" after flash rm
 
 if [ -n "${scratch_partition}" ]; then
 
-  echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition}" >&2
+  echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
   adb reboot-fastboot ||
     die "Reboot into fastbootd"
+  cleanup() {
+    rm /tmp/adb-remount-test.img
+  }
   dd if=/dev/zero of=/tmp/adb-remount-test.img bs=4096 count=16 2>/dev/null &&
     fastboot_wait 2m ||
-    ( rm /tmp/adb-remount-test.img && false) ||
     die "reboot into fastboot"
   fastboot flash --force ${scratch_partition} /tmp/adb-remount-test.img
   err=${?}
-  rm /tmp/adb-remount-test.img
+  cleanup
+  cleanup() {
+    :
+  }
   fastboot reboot ||
     die "can not reboot out of fastboot"
   [ 0 -eq ${err} ] ||
@@ -678,6 +758,8 @@ if [ -n "${scratch_partition}" ]; then
   T=`adb_date`
   D=`adb disable-verity 2>&1`
   err=${?}
+  adb remount ||
+    die "remount failed"
   echo "${D}"
   [ ${err} = 0 ] &&
     [ X"${D}" = X"${D##*setup failed}" ] &&
@@ -685,5 +767,19 @@ if [ -n "${scratch_partition}" ]; then
     echo "${GREEN}[       OK ]${NORMAL} ${scratch_partition} recreated" >&2 ||
     die -t ${T} "setup for overlayfs"
 fi
+
+echo "${GREEN}[ RUN      ]${NORMAL} test raw remount command" >&2
+
+# prerequisite is a prepped device from above
+adb_reboot &&
+  adb_wait 2m ||
+  die "lost device after reboot to ro state"
+adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null &&
+  die "/vendor is not read-only"
+adb_su mount -o rw,remount /vendor ||
+  die "remount command"
+adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null ||
+  die "/vendor is not read-write"
+echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 
 echo "${GREEN}[  PASSED  ]${NORMAL} adb remount" >&2

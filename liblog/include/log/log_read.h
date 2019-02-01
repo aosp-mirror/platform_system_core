@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_READ_H
-#define _LIBS_LOG_LOG_READ_H
+#pragma once
+
+#include <sys/types.h>
 
 /* deal with possible sys/cdefs.h conflict with fcntl.h */
 #ifdef __unused
@@ -47,6 +48,8 @@ extern "C" {
  * access to raw information, or parsing is an issue.
  */
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-length-array"
 /*
  * The userspace structure for version 1 of the logger_entry ABI.
  */
@@ -59,9 +62,7 @@ struct logger_entry {
   int32_t tid;    /* generating process's tid */
   int32_t sec;    /* seconds since Epoch */
   int32_t nsec;   /* nanoseconds */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 };
 #endif
 
@@ -78,9 +79,7 @@ struct logger_entry_v2 {
   int32_t sec;       /* seconds since Epoch */
   int32_t nsec;      /* nanoseconds */
   uint32_t euid;     /* effective UID of logger */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 } __attribute__((__packed__));
 #endif
 
@@ -97,9 +96,7 @@ struct logger_entry_v3 {
   int32_t sec;       /* seconds since Epoch */
   int32_t nsec;      /* nanoseconds */
   uint32_t lid;      /* log id of the payload */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 } __attribute__((__packed__));
 #endif
 
@@ -117,11 +114,10 @@ struct logger_entry_v4 {
   uint32_t nsec;     /* nanoseconds */
   uint32_t lid;      /* log id of the payload, bottom 4 bits currently */
   uint32_t uid;      /* generating process's uid */
-#ifndef __cplusplus
   char msg[0]; /* the entry's payload */
-#endif
 };
 #endif
+#pragma clang diagnostic pop
 
 /*
  * The maximum size of the log entry payload that can be
@@ -197,22 +193,6 @@ struct log_msg {
 };
 #endif
 
-#ifndef __ANDROID_USE_LIBLOG_READER_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 3
-#elif __ANDROID_API__ > 23 /* > Marshmallow */
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 3
-#elif __ANDROID_API__ > 22 /* > Lollipop */
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 2
-#elif __ANDROID_API__ > 19 /* > KitKat */
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_READER_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE
-
 struct logger;
 
 log_id_t android_logger_get_id(struct logger* logger);
@@ -225,14 +205,12 @@ int android_logger_get_log_version(struct logger* logger);
 
 struct logger_list;
 
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE > 1
 ssize_t android_logger_get_statistics(struct logger_list* logger_list,
                                       char* buf, size_t len);
 ssize_t android_logger_get_prune_list(struct logger_list* logger_list,
                                       char* buf, size_t len);
 int android_logger_set_prune_list(struct logger_list* logger_list, char* buf,
                                   size_t len);
-#endif
 
 #define ANDROID_LOG_RDONLY O_RDONLY
 #define ANDROID_LOG_WRONLY O_WRONLY
@@ -243,13 +221,9 @@ int android_logger_set_prune_list(struct logger_list* logger_list, char* buf,
 #else
 #define ANDROID_LOG_NONBLOCK O_NONBLOCK
 #endif
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE > 2
 #define ANDROID_LOG_WRAP 0x40000000 /* Block until buffer about to wrap */
 #define ANDROID_LOG_WRAP_DEFAULT_TIMEOUT 7200 /* 2 hour default */
-#endif
-#if __ANDROID_USE_LIBLOG_READER_INTERFACE > 1
 #define ANDROID_LOG_PSTORE 0x80000000
-#endif
 
 struct logger_list* android_logger_list_alloc(int mode, unsigned int tail,
                                               pid_t pid);
@@ -268,10 +242,6 @@ struct logger_list* android_logger_list_open(log_id_t id, int mode,
                                              unsigned int tail, pid_t pid);
 #define android_logger_list_close android_logger_list_free
 
-#endif /* __ANDROID_USE_LIBLOG_READER_INTERFACE */
-
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_LOG_H */

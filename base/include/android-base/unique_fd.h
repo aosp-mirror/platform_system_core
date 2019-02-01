@@ -17,10 +17,10 @@
 #pragma once
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 
 #if !defined(_WIN32)
-#include <dirent.h>
 #include <sys/socket.h>
 #endif
 
@@ -114,6 +114,8 @@ class unique_fd_impl final {
 
  private:
   void reset(int new_value, void* previous_tag) {
+    int previous_errno = errno;
+
     if (fd_ != -1) {
       close(fd_, this);
     }
@@ -122,6 +124,8 @@ class unique_fd_impl final {
     if (new_value != -1) {
       tag(new_value, previous_tag, this);
     }
+
+    errno = previous_errno;
   }
 
   int fd_ = -1;
@@ -161,22 +165,35 @@ using unique_fd = unique_fd_impl<DefaultCloser>;
 
 // Inline functions, so that they can be used header-only.
 template <typename Closer>
-inline bool Pipe(unique_fd_impl<Closer>* read, unique_fd_impl<Closer>* write) {
+inline bool Pipe(unique_fd_impl<Closer>* read, unique_fd_impl<Closer>* write,
+                 int flags = O_CLOEXEC) {
   int pipefd[2];
 
 #if defined(__linux__)
-  if (pipe2(pipefd, O_CLOEXEC) != 0) {
+  if (pipe2(pipefd, flags) != 0) {
     return false;
   }
 #else  // defined(__APPLE__)
+  if (flags & ~(O_CLOEXEC | O_NONBLOCK)) {
+    return false;
+  }
   if (pipe(pipefd) != 0) {
     return false;
   }
 
-  if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 || fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
-    close(pipefd[0]);
-    close(pipefd[1]);
-    return false;
+  if (flags & O_CLOEXEC) {
+    if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 || fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
+      close(pipefd[0]);
+      close(pipefd[1]);
+      return false;
+    }
+  }
+  if (flags & O_NONBLOCK) {
+    if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) != 0 || fcntl(pipefd[1], F_SETFL, O_NONBLOCK) != 0) {
+      close(pipefd[0]);
+      close(pipefd[1]);
+      return false;
+    }
   }
 #endif
 

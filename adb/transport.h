@@ -28,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 
@@ -64,6 +65,8 @@ extern const char* const kFeaturePushSync;
 extern const char* const kFeatureApex;
 // adbd has b/110953234 fixed.
 extern const char* const kFeatureFixedPushMkdir;
+// adbd supports android binder bridge (abb).
+extern const char* const kFeatureAbb;
 
 TransportId NextTransportId();
 
@@ -396,5 +399,16 @@ void close_usb_devices(std::function<bool(const atransport*)> predicate);
 void send_packet(apacket* p, atransport* t);
 
 asocket* create_device_tracker(bool long_output);
+
+#if !ADB_HOST
+unique_fd tcp_listen_inaddr_any(int port, std::string* error);
+void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_func, int port);
+
+#if defined(__ANDROID__)
+void qemu_socket_thread(int port);
+bool use_qemu_goldfish();
+#endif
+
+#endif
 
 #endif   /* __TRANSPORT_H */

@@ -132,6 +132,7 @@ cc_binary {
         "libext2_uuid",
         "libext4_utils",
         "libfs_mgr",
+        "libgsi",
         "libhidlbase",
         "libhidltransport",
         "libhwbinder",

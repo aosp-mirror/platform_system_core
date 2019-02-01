@@ -49,6 +49,8 @@
 #include "set_verity_enable_state_service.h"
 
 using android::base::Realpath;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::ReadDefaultFstab;
 
 // Returns the last device used to mount a directory in /proc/mounts.
 // This will find overlayfs entry where upperdir=lowerdir, to make sure
@@ -75,16 +77,20 @@ static std::string find_proc_mount(const char* dir) {
 
 // Returns the device used to mount a directory in the fstab.
 static std::string find_fstab_mount(const char* dir) {
-    std::unique_ptr<fstab, decltype(&fs_mgr_free_fstab)> fstab(fs_mgr_read_fstab_default(),
-                                                               fs_mgr_free_fstab);
-    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab.get(), dir);
-    if (!rec) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
         return "";
     }
-    if (fs_mgr_is_logical(rec)) {
-        fs_mgr_update_logical_partition(rec);
+
+    auto entry = std::find_if(fstab.begin(), fstab.end(),
+                              [&dir](const auto& entry) { return entry.mount_point == dir; });
+    if (entry == fstab.end()) {
+        return "";
     }
-    return rec->blk_device;
+    if (entry->fs_mgr_flags.logical) {
+        fs_mgr_update_logical_partition(&(*entry));
+    }
+    return entry->blk_device;
 }
 
 // The proc entry for / is full of lies, so check fstab instead.
@@ -226,6 +232,23 @@ static void reboot_for_remount(int fd, bool need_fsck) {
     android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_cmd.c_str());
 }
 
+static void try_unmount_bionic(int fd) {
+    static constexpr const char* kBionic = "/bionic";
+    struct statfs buf;
+    if (statfs(kBionic, &buf) == -1) {
+        WriteFdFmt(fd, "statfs of the %s mount failed: %s.\n", kBionic, strerror(errno));
+        return;
+    }
+    if (buf.f_flags & ST_RDONLY) {
+        // /bionic is on a read-only partition; can happen for
+        // non-system-as-root-devices. Don' try to unmount.
+        return;
+    }
+    // Success/Fail of the actual remount will be reported by the function.
+    remount_partition(fd, kBionic);
+    return;
+}
+
 void remount_service(unique_fd fd, const std::string& cmd) {
     bool user_requested_reboot = cmd == "-R";
 
@@ -318,6 +341,8 @@ void remount_service(unique_fd fd, const std::string& cmd) {
         }
         return;
     }
+
+    try_unmount_bionic(fd.get());
 
     if (!success) {
         WriteFdExactly(fd.get(), "remount failed\n");

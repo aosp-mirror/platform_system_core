@@ -27,6 +27,7 @@
 #include <android-base/unique_fd.h>
 #include <libdm/dm.h>
 
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <ios>
@@ -50,6 +51,7 @@ using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
     std::cerr << "usage: dmctl <command> [command options]" << std::endl;
+    std::cerr << "       dmctl -f file" << std::endl;
     std::cerr << "commands:" << std::endl;
     std::cerr << "  create <dm-name> [-ro] <targets...>" << std::endl;
     std::cerr << "  delete <dm-name>" << std::endl;
@@ -57,6 +59,8 @@ static int Usage(void) {
     std::cerr << "  getpath <dm-name>" << std::endl;
     std::cerr << "  table <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "-f file reads command and all parameters from named file" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Target syntax:" << std::endl;
     std::cerr << "  <target_type> <start_sector> <num_sectors> [target_data]" << std::endl;
@@ -340,10 +344,38 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         // clang-format on
 };
 
+static bool ReadFile(const char* filename, std::vector<std::string>* args,
+                     std::vector<char*>* arg_ptrs) {
+    std::ifstream file(filename);
+    if (!file) return false;
+
+    std::string arg;
+    while (file >> arg) args->push_back(arg);
+
+    for (auto const& i : *args) arg_ptrs->push_back(const_cast<char*>(i.c_str()));
+    return true;
+}
+
 int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::StderrLogger);
     if (argc < 2) {
         return Usage();
+    }
+
+    std::vector<std::string> args;
+    std::vector<char*> arg_ptrs;
+    if (std::string("-f") == argv[1]) {
+        if (argc != 3) {
+            return Usage();
+        }
+
+        args.push_back(argv[0]);
+        if (!ReadFile(argv[2], &args, &arg_ptrs)) {
+            return Usage();
+        }
+
+        argc = arg_ptrs.size();
+        argv = &arg_ptrs[0];
     }
 
     for (const auto& cmd : cmdmap) {

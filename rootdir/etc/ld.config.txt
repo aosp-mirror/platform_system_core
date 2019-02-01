@@ -28,7 +28,7 @@ dir.system = /data/benchmarktest64
 dir.postinstall = /postinstall
 
 [system]
-additional.namespaces = runtime,sphal,vndk,rs
+additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
 
 ###############################################################################
 # "default" namespace
@@ -73,7 +73,8 @@ namespace.default.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.permitted.paths += /data
 namespace.default.permitted.paths += /mnt/expand
-namespace.default.permitted.paths += /apex/com.android.resolv/${LIB}
+namespace.default.permitted.paths += /bionic/${LIB}
+namespace.default.permitted.paths += /system/${LIB}/bootstrap
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
@@ -105,14 +106,30 @@ namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/framework
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.asan.permitted.paths += /mnt/expand
-namespace.default.asan.permitted.paths += /apex/com.android.resolv/${LIB}
+namespace.default.asan.permitted.paths += /bionic/${LIB}
+namespace.default.asan.permitted.paths += /system/${LIB}/bootstrap
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
-namespace.default.links = runtime
+# If a shared library or an executable requests a shared library that
+# cannot be loaded into the default namespace, the dynamic linker tries
+# to load the shared library from the runtime namespace.And then, if the
+# shared library cannot be loaded from the runtime namespace either, the
+# dynamic linker tries to load the shared library from the resolv namespace.
+# Finally, if all attempts fail, the dynamic linker returns an error.
+namespace.default.links = runtime,resolv
+# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
+# libart.
+namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
+namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
+
+# When libnetd_resolv.so can't be found in the default namespace, search for it
+# in the resolv namespace. Don't allow any other libraries from the resolv namespace
+# to be loaded in the default namespace.
+namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 
 ###############################################################################
 # "runtime" APEX namespace
@@ -120,13 +137,66 @@ namespace.default.link.runtime.shared_libs += libnativeloader.so
 # This namespace exposes externally accessible libraries from the Runtime APEX.
 ###############################################################################
 namespace.runtime.isolated = true
+namespace.runtime.visible = true
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
 # TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
 # when it exists.
 namespace.runtime.link.default.allow_all_shared_libs = true
+
+###############################################################################
+# "media" APEX namespace
+#
+# This namespace is for libraries within the media APEX.
+###############################################################################
+namespace.media.isolated = true
+namespace.media.visible = true
+
+namespace.media.search.paths = /apex/com.android.media/${LIB}
+namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
+
+namespace.media.links = default
+namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
+namespace.media.link.default.shared_libs += libandroid.so
+namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += libmediametrics.so
+namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+###############################################################################
+# "conscrypt" APEX namespace
+#
+# This namespace is for libraries within the conscrypt APEX.
+###############################################################################
+namespace.conscrypt.isolated = true
+namespace.conscrypt.visible = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
+namespace.conscrypt.links = runtime,default
+namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.default.shared_libs  = libc.so
+namespace.conscrypt.link.default.shared_libs += libm.so
+namespace.conscrypt.link.default.shared_libs += libdl.so
+
+###############################################################################
+# "resolv" APEX namespace
+#
+# This namespace is for libraries within the resolv APEX.
+###############################################################################
+namespace.resolv.isolated = true
+namespace.resolv.visible = true
+
+namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
+namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
+namespace.resolv.links = default
+namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libm.so
+namespace.resolv.link.default.shared_libs += libdl.so
+namespace.resolv.link.default.shared_libs += libbinder_ndk.so
 
 ###############################################################################
 # "sphal" namespace
@@ -146,6 +216,7 @@ namespace.sphal.visible = true
 
 namespace.sphal.search.paths  = /odm/${LIB}
 namespace.sphal.search.paths += /vendor/${LIB}
+namespace.sphal.search.paths += /vendor/${LIB}/hw
 
 namespace.sphal.permitted.paths  = /odm/${LIB}
 namespace.sphal.permitted.paths += /vendor/${LIB}
@@ -280,7 +351,7 @@ namespace.vndk.link.sphal.allow_all_shared_libs = true
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = system,vndk
+additional.namespaces = runtime,system,vndk
 
 ###############################################################################
 # "default" namespace
@@ -291,6 +362,9 @@ additional.namespaces = system,vndk
 # partition (VNDK and LLNDK libraries) are not loaded here but from the
 # separate namespace 'system'. The delegation to the system namespace is done
 # via the 'namespace.default.link.system.shared_libs' property below.
+#
+# '#VNDK27#' TAG is only for building ld.config.27.txt for backward
+# compatibility. (TODO:b/123390078) Move them to a separate file.
 ###############################################################################
 namespace.default.isolated = true
 namespace.default.visible = true
@@ -300,11 +374,17 @@ namespace.default.search.paths += /vendor/${LIB}
 
 namespace.default.permitted.paths  = /odm
 namespace.default.permitted.paths += /vendor
+#VNDK27#namespace.default.search.paths += /vendor/${LIB}/hw
+#VNDK27#namespace.default.search.paths += /vendor/${LIB}/egl
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
+#VNDK27#namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/hw
+#VNDK27#namespace.default.asan.search.paths +=           /vendor/${LIB}/hw
+#VNDK27#namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/egl
+#VNDK27#namespace.default.asan.search.paths +=           /vendor/${LIB}/egl
 
 namespace.default.asan.permitted.paths  = /data/asan/odm
 namespace.default.asan.permitted.paths +=           /odm
@@ -315,6 +395,20 @@ namespace.default.links = system,vndk
 namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
 namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
 namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
+
+###############################################################################
+# "runtime" APEX namespace
+#
+# This namespace exposes externally accessible libraries from the Runtime APEX.
+###############################################################################
+namespace.runtime.isolated = true
+
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.links = system
+# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
+# when it exists.
+namespace.runtime.link.system.allow_all_shared_libs = true
 
 ###############################################################################
 # "vndk" namespace
@@ -372,6 +466,12 @@ namespace.system.asan.search.paths += /data/asan/product/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.system.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
+
+namespace.system.links = runtime
+namespace.system.link.runtime.shared_libs  = libdexfile_external.so
+namespace.system.link.runtime.shared_libs += libnativebridge.so
+namespace.system.link.runtime.shared_libs += libnativehelper.so
+namespace.system.link.runtime.shared_libs += libnativeloader.so
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.

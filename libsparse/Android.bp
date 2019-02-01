@@ -67,3 +67,18 @@ cc_binary_host {
 
     cflags: ["-Werror"],
 }
+
+python_binary_host {
+    name: "simg_dump.py",
+    main: "simg_dump.py",
+    srcs: ["simg_dump.py"],
+    version: {
+        py2: {
+            embedded_launcher: true,
+            enabled: true,
+        },
+        py3: {
+            enabled: false,
+        },
+    },
+}

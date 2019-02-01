@@ -52,7 +52,7 @@ using namespace std::string_literals;
 namespace android {
 
 #if defined(__ANDROID__)
-class NativeLoaderNamespace {
+struct NativeLoaderNamespace {
  public:
   NativeLoaderNamespace()
       : android_ns_(nullptr), native_bridge_ns_(nullptr) { }
@@ -119,6 +119,8 @@ static constexpr const char* kVendorClassloaderNamespaceName = "vendor-classload
 // This list includes all directories app is allowed to access this way.
 static constexpr const char* kWhitelistedDirectories = "/data:/mnt/expand";
 
+static constexpr const char* kApexPath = "/apex/";
+
 static bool is_debuggable() {
   char debuggable[PROP_VALUE_MAX];
   property_get("ro.debuggable", debuggable, "0");
@@ -151,14 +153,9 @@ class LibraryNamespaces {
  public:
   LibraryNamespaces() : initialized_(false) { }
 
-  NativeLoaderNamespace* Create(JNIEnv* env,
-                                uint32_t target_sdk_version,
-                                jobject class_loader,
-                                bool is_shared,
-                                bool is_for_vendor,
-                                jstring java_library_path,
-                                jstring java_permitted_path,
-                                std::string* error_msg) {
+  NativeLoaderNamespace* Create(JNIEnv* env, uint32_t target_sdk_version, jobject class_loader,
+                                bool is_shared, bool is_for_vendor, jstring java_library_path,
+                                jstring java_permitted_path, std::string* error_msg) {
     std::string library_path; // empty string by default.
 
     if (java_library_path != nullptr) {
@@ -628,20 +625,54 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
   return nullptr;
 }
 
-void* OpenNativeLibrary(JNIEnv* env,
-                        int32_t target_sdk_version,
-                        const char* path,
-                        jobject class_loader,
-                        jstring library_path,
-                        bool* needs_native_bridge,
-                        std::string* error_msg) {
+#if defined(__ANDROID__)
+static android_namespace_t* FindExportedNamespace(const char* caller_location) {
+  std::string location = caller_location;
+  // Lots of implicit assumptions here: we expect `caller_location` to be of the form:
+  // /apex/com.android...modulename/...
+  //
+  // And we extract from it 'modulename', which is the name of the linker namespace.
+  if (android::base::StartsWith(location, kApexPath)) {
+    size_t slash_index = location.find_first_of('/', strlen(kApexPath));
+    LOG_ALWAYS_FATAL_IF((slash_index == std::string::npos),
+                        "Error finding namespace of apex: no slash in path %s", caller_location);
+    size_t dot_index = location.find_last_of('.', slash_index);
+    LOG_ALWAYS_FATAL_IF((dot_index == std::string::npos),
+                        "Error finding namespace of apex: no dot in apex name %s", caller_location);
+    std::string name = location.substr(dot_index + 1, slash_index - dot_index - 1);
+    android_namespace_t* boot_namespace = android_get_exported_namespace(name.c_str());
+    LOG_ALWAYS_FATAL_IF((boot_namespace == nullptr),
+                        "Error finding namespace of apex: no namespace called %s", name.c_str());
+    return boot_namespace;
+  }
+  return nullptr;
+}
+#endif
+
+void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* path,
+                        jobject class_loader, const char* caller_location, jstring library_path,
+                        bool* needs_native_bridge, char** error_msg) {
 #if defined(__ANDROID__)
   UNUSED(target_sdk_version);
   if (class_loader == nullptr) {
     *needs_native_bridge = false;
+    if (caller_location != nullptr) {
+      android_namespace_t* boot_namespace = FindExportedNamespace(caller_location);
+      if (boot_namespace != nullptr) {
+        const android_dlextinfo dlextinfo = {
+            .flags = ANDROID_DLEXT_USE_NAMESPACE,
+            .library_namespace = boot_namespace,
+        };
+        void* handle = android_dlopen_ext(path, RTLD_NOW, &dlextinfo);
+        if (handle == nullptr) {
+          *error_msg = strdup(dlerror());
+        }
+        return handle;
+      }
+    }
     void* handle = dlopen(path, RTLD_NOW);
     if (handle == nullptr) {
-      *error_msg = dlerror();
+      *error_msg = strdup(dlerror());
     }
     return handle;
   }
@@ -652,21 +683,18 @@ void* OpenNativeLibrary(JNIEnv* env,
   if ((ns = g_namespaces->FindNamespaceByClassLoader(env, class_loader)) == nullptr) {
     // This is the case where the classloader was not created by ApplicationLoaders
     // In this case we create an isolated not-shared namespace for it.
-    if ((ns = g_namespaces->Create(env,
-                                   target_sdk_version,
-                                   class_loader,
-                                   false /* is_shared */,
-                                   false /* is_for_vendor */,
-                                   library_path,
-                                   nullptr,
-                                   error_msg)) == nullptr) {
+    std::string create_error_msg;
+    if ((ns = g_namespaces->Create(env, target_sdk_version, class_loader, false /* is_shared */,
+                                   false /* is_for_vendor */, library_path, nullptr,
+                                   &create_error_msg)) == nullptr) {
+      *error_msg = strdup(create_error_msg.c_str());
       return nullptr;
     }
   }
 
-  return OpenNativeLibrary(ns, path, needs_native_bridge, error_msg);
+  return OpenNativeLibraryInNamespace(ns, path, needs_native_bridge, error_msg);
 #else
-  UNUSED(env, target_sdk_version, class_loader);
+  UNUSED(env, target_sdk_version, class_loader, caller_location);
 
   // Do some best effort to emulate library-path support. It will not
   // work for dependencies.
@@ -705,35 +733,40 @@ void* OpenNativeLibrary(JNIEnv* env,
       if (handle != nullptr) {
         return handle;
       }
-      *error_msg = NativeBridgeGetError();
+      *error_msg = strdup(NativeBridgeGetError());
     } else {
-      *error_msg = dlerror();
+      *error_msg = strdup(dlerror());
     }
   }
   return nullptr;
 #endif
 }
 
-bool CloseNativeLibrary(void* handle, const bool needs_native_bridge, std::string* error_msg) {
+bool CloseNativeLibrary(void* handle, const bool needs_native_bridge, char** error_msg) {
   bool success;
   if (needs_native_bridge) {
     success = (NativeBridgeUnloadLibrary(handle) == 0);
     if (!success) {
-      *error_msg = NativeBridgeGetError();
+      *error_msg = strdup(NativeBridgeGetError());
     }
   } else {
     success = (dlclose(handle) == 0);
     if (!success) {
-      *error_msg = dlerror();
+      *error_msg = strdup(dlerror());
     }
   }
 
   return success;
 }
 
+void NativeLoaderFreeErrorMessage(char* msg) {
+  // The error messages get allocated through strdup, so we must call free on them.
+  free(msg);
+}
+
 #if defined(__ANDROID__)
-void* OpenNativeLibrary(NativeLoaderNamespace* ns, const char* path, bool* needs_native_bridge,
-                        std::string* error_msg) {
+void* OpenNativeLibraryInNamespace(NativeLoaderNamespace* ns, const char* path,
+                                   bool* needs_native_bridge, char** error_msg) {
   if (ns->is_android_namespace()) {
     android_dlextinfo extinfo;
     extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
@@ -741,14 +774,14 @@ void* OpenNativeLibrary(NativeLoaderNamespace* ns, const char* path, bool* needs
 
     void* handle = android_dlopen_ext(path, RTLD_NOW, &extinfo);
     if (handle == nullptr) {
-      *error_msg = dlerror();
+      *error_msg = strdup(dlerror());
     }
     *needs_native_bridge = false;
     return handle;
   } else {
     void* handle = NativeBridgeLoadLibraryExt(path, RTLD_NOW, ns->get_native_bridge_ns());
     if (handle == nullptr) {
-      *error_msg = NativeBridgeGetError();
+      *error_msg = strdup(NativeBridgeGetError());
     }
     *needs_native_bridge = true;
     return handle;

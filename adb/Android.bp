@@ -22,35 +22,16 @@ cc_defaults {
         "-Wexit-time-destructors",
         "-Wno-unused-parameter",
         "-Wno-missing-field-initializers",
+        "-Wthread-safety",
         "-Wvla",
+        "-DADB_HOST=1", // overridden by adbd_defaults
     ],
     cpp_std: "experimental",
 
     use_version_lib: true,
-
     compile_multilib: "first",
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-DALLOW_ADBD_ROOT",
-                "-DALLOW_ADBD_DISABLE_VERITY",
-                "-DALLOW_ADBD_NO_AUTH",
-            ],
-        },
-    },
 
     target: {
-        android: {
-            cflags: [
-                "-DADB_HOST=0",
-                "-Wthread-safety",
-            ],
-        },
-
-        host: {
-            cflags: ["-DADB_HOST=1"],
-        },
-
         darwin: {
             host_ldlibs: [
                 "-lpthread",
@@ -76,6 +57,9 @@ cc_defaults {
 
                 // MinGW hides some things behind _POSIX_SOURCE.
                 "-D_POSIX_SOURCE",
+
+                // Not supported yet.
+                "-Wno-thread-safety",
             ],
 
             host_ldlibs: [
@@ -84,11 +68,42 @@ cc_defaults {
                 "-luserenv",
             ],
         },
+    },
+}
 
-        not_windows: {
+cc_defaults {
+    name: "adbd_defaults",
+    defaults: ["adb_defaults"],
+
+    cflags: ["-UADB_HOST", "-DADB_HOST=0"],
+    product_variables: {
+        debuggable: {
             cflags: [
-                "-Wthread-safety",
+                "-DALLOW_ADBD_ROOT",
+                "-DALLOW_ADBD_DISABLE_VERITY",
+                "-DALLOW_ADBD_NO_AUTH",
             ],
+        },
+    },
+}
+
+cc_defaults {
+    name: "host_adbd_supported",
+
+    host_supported: true,
+    target: {
+        linux: {
+            enabled: true,
+            host_ldlibs: [
+                "-lresolv", // b64_pton
+                "-lutil", // forkpty
+            ],
+        },
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
         },
     },
 }
@@ -141,8 +156,6 @@ cc_library_host_static {
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
         "client/transport_mdns.cpp",
-        "client/fastdeploy.cpp",
-        "client/fastdeploycallbacks.cpp",
     ],
 
     generated_headers: ["platform_tools_version"],
@@ -177,9 +190,6 @@ cc_library_host_static {
         "libdiagnose_usb",
         "libmdnssd",
         "libusb",
-        "libandroidfw",
-        "libziparchive",
-        "libz",
         "libutils",
         "liblog",
         "libcutils",
@@ -265,9 +275,6 @@ cc_binary_host {
         "liblog",
         "libmdnssd",
         "libusb",
-        "libandroidfw",
-        "libziparchive",
-        "libz",
         "libutils",
         "liblog",
         "libcutils",
@@ -313,7 +320,7 @@ cc_binary_host {
 // libadbd_core contains the common sources to build libadbd and libadbd_services.
 cc_library_static {
     name: "libadbd_core",
-    defaults: ["adb_defaults"],
+    defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
 
     // libminadbd wants both, as it's used to build native tests.
@@ -322,9 +329,6 @@ cc_library_static {
     srcs: libadb_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
-        "daemon/usb.cpp",
-        "daemon/usb_ffs.cpp",
-        "daemon/usb_legacy.cpp",
     ],
 
     local_include_dirs: [
@@ -335,7 +339,6 @@ cc_library_static {
 
     static_libs: [
         "libdiagnose_usb",
-        "libqemu_pipe",
     ],
 
     shared_libs: [
@@ -346,22 +349,36 @@ cc_library_static {
         "libcutils",
         "liblog",
     ],
+
+    target: {
+        android: {
+            whole_static_libs: [
+                "libqemu_pipe",
+            ],
+            srcs: [
+                "daemon/transport_qemu.cpp",
+                "daemon/usb.cpp",
+                "daemon/usb_ffs.cpp",
+                "daemon/usb_legacy.cpp",
+            ]
+        },
+        linux_glibc: {
+            srcs: [
+                "daemon/usb_dummy.cpp",
+            ]
+        }
+    },
 }
 
 cc_library {
     name: "libadbd_services",
-    defaults: ["adb_defaults"],
+    defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
     compile_multilib: "both",
 
     srcs: [
-        "daemon/abb_service.cpp",
         "daemon/file_sync_service.cpp",
-        "daemon/framebuffer_service.cpp",
-        "daemon/mdns.cpp",
-        "daemon/remount_service.cpp",
         "daemon/services.cpp",
-        "daemon/set_verity_enable_state_service.cpp",
         "daemon/shell_service.cpp",
         "shell_service_protocol.cpp",
     ],
@@ -373,27 +390,41 @@ cc_library {
 
     static_libs: [
         "libadbd_core",
-        "libavb_user",
         "libdiagnose_usb",
-        "libqemu_pipe",
     ],
 
     shared_libs: [
         "libasyncio",
         "libbase",
-        "libbootloader_message",
         "libcrypto",
         "libcrypto_utils",
         "libcutils",
-        "libext4_utils",
-        "libfec",
-        "libfs_mgr",
         "liblog",
-        "libmdnssd",
-        "libselinux",
     ],
 
     target: {
+        android: {
+            srcs: [
+                "daemon/abb_service.cpp",
+                "daemon/framebuffer_service.cpp",
+                "daemon/mdns.cpp",
+                "daemon/reboot_service.cpp",
+                "daemon/remount_service.cpp",
+                "daemon/restart_service.cpp",
+                "daemon/set_verity_enable_state_service.cpp",
+            ],
+            static_libs: [
+                "libavb_user",
+            ],
+            shared_libs: [
+                "libbootloader_message",
+                "libmdnssd",
+                "libext4_utils",
+                "libfec",
+                "libfs_mgr",
+                "libselinux",
+            ],
+        },
         recovery: {
             exclude_srcs: [
                 "daemon/abb_service.cpp",
@@ -404,7 +435,7 @@ cc_library {
 
 cc_library {
     name: "libadbd",
-    defaults: ["adb_defaults"],
+    defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
 
     // Avoid getting duplicate symbol of android::build::GetBuildNumber().
@@ -435,7 +466,7 @@ cc_library {
 
 cc_binary {
     name: "adbd",
-    defaults: ["adb_defaults"],
+    defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
 
     srcs: [
@@ -467,7 +498,7 @@ cc_binary {
 cc_binary {
     name: "abb",
 
-    defaults: ["adb_defaults"],
+    defaults: ["adbd_defaults"],
     recovery_available: false,
 
     srcs: [
@@ -500,7 +531,7 @@ cc_binary {
 
 cc_test {
     name: "adbd_test",
-    defaults: ["adb_defaults"],
+    defaults: ["adbd_defaults"],
     srcs: libadb_test_srcs + [
         "daemon/services.cpp",
         "daemon/shell_service.cpp",

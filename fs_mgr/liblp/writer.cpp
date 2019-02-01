@@ -373,11 +373,11 @@ bool UpdatePartitionTable(const IPartitionOpener& opener, const std::string& sup
         // safety.
         std::string old_blob;
         if (!ValidateAndSerializeMetadata(opener, *backup.get(), slot_suffix, &old_blob)) {
-            LERROR << "Error serializing primary metadata to repair corrupted backup";
+            LERROR << "Error serializing backup metadata to repair corrupted primary";
             return false;
         }
         if (!WritePrimaryMetadata(fd, metadata, slot_number, old_blob, writer)) {
-            LERROR << "Error writing primary metadata to repair corrupted backup";
+            LERROR << "Error writing backup metadata to repair corrupted primary";
             return false;
         }
     }

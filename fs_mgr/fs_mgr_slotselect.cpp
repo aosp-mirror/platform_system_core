@@ -21,6 +21,9 @@
 #include "fs_mgr.h"
 #include "fs_mgr_priv.h"
 
+// Realistically, this file should be part of the android::fs_mgr namespace;
+using namespace android::fs_mgr;
+
 // https://source.android.com/devices/tech/ota/ab/ab_implement#partitions
 // All partitions that are A/B-ed should be named as follows (slots are always
 // named a, b, etc.): boot_a, boot_b, system_a, system_b, vendor_a, vendor_b.
@@ -32,6 +35,12 @@ static std::string other_suffix(const std::string& slot_suffix) {
         return "_a";
     }
     return "";
+}
+
+// Returns "_b" or "_a", which is *the other* slot of androidboot.slot_suffix
+// in kernel cmdline, or an empty string if that parameter does not exist.
+std::string fs_mgr_get_other_slot_suffix() {
+    return other_suffix(fs_mgr_get_slot_suffix());
 }
 
 // Returns "_a" or "_b" based on androidboot.slot_suffix in kernel cmdline, or an empty string

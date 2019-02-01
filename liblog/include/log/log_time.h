@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_TIME_H
-#define _LIBS_LOG_LOG_TIME_H
+#pragma once
 
 #include <stdint.h>
 #include <time.h>
@@ -34,6 +33,8 @@
 
 #ifdef __cplusplus
 
+extern "C" {
+
 /*
  * NB: we did NOT define a copy constructor. This will result in structure
  * no longer being compatible with pass-by-value which is desired
@@ -41,24 +42,18 @@
  */
 struct log_time {
  public:
-  uint32_t tv_sec; /* good to Feb 5 2106 */
-  uint32_t tv_nsec;
+  uint32_t tv_sec = 0; /* good to Feb 5 2106 */
+  uint32_t tv_nsec = 0;
 
   static const uint32_t tv_sec_max = 0xFFFFFFFFUL;
   static const uint32_t tv_nsec_max = 999999999UL;
+  static const timespec EPOCH;
 
-  log_time(const timespec& T)
-      : tv_sec(static_cast<uint32_t>(T.tv_sec)),
-        tv_nsec(static_cast<uint32_t>(T.tv_nsec)) {
-  }
+  log_time() {}
+  explicit log_time(const timespec& T)
+      : tv_sec(static_cast<uint32_t>(T.tv_sec)), tv_nsec(static_cast<uint32_t>(T.tv_nsec)) {}
   explicit log_time(uint32_t sec, uint32_t nsec = 0)
       : tv_sec(sec), tv_nsec(nsec) {
-  }
-#ifdef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
-#define __struct_log_time_private_defined
-  static const timespec EPOCH;
-#endif
-  log_time() {
   }
 #ifdef __linux__
   explicit log_time(clockid_t id) {
@@ -103,7 +98,6 @@ struct log_time {
     return !(*this > T);
   }
 
-#ifdef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
   log_time operator-=(const timespec& T);
   log_time operator-(const timespec& T) const {
     log_time local(*this);
@@ -114,7 +108,6 @@ struct log_time {
     log_time local(*this);
     return local += T;
   }
-#endif
 
   /* log_time */
   bool operator==(const log_time& T) const {
@@ -138,7 +131,6 @@ struct log_time {
     return !(*this > T);
   }
 
-#ifdef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
   log_time operator-=(const log_time& T);
   log_time operator-(const log_time& T) const {
     log_time local(*this);
@@ -149,7 +141,6 @@ struct log_time {
     log_time local(*this);
     return local += T;
   }
-#endif
 
   uint64_t nsec() const {
     return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
@@ -163,13 +154,12 @@ struct log_time {
            tv_nsec / (NS_PER_SEC / MS_PER_SEC);
   }
 
-#ifdef _SYSTEM_CORE_INCLUDE_PRIVATE_ANDROID_LOGGER_H_
   static const char default_format[];
 
   /* Add %#q for the fraction of a second to the standard library functions */
   char* strptime(const char* s, const char* format = default_format);
-#endif
 } __attribute__((__packed__));
+}
 
 #else /* __cplusplus */
 
@@ -181,5 +171,3 @@ typedef struct log_time {
 #endif /* __cplusplus */
 
 #endif /* __struct_log_time_defined */
-
-#endif /* _LIBS_LOG_LOG_TIME_H */

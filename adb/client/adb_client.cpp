@@ -100,13 +100,11 @@ static int switch_socket_transport(int fd, std::string* error) {
 
     if (!SendProtocolString(fd, service)) {
         *error = perror_str("write failure during connection");
-        adb_close(fd);
         return -1;
     }
     D("Switch transport in progress");
 
     if (!adb_status(fd, error)) {
-        adb_close(fd);
         D("Switch transport failed: %s", error->c_str());
         return -1;
     }
@@ -144,59 +142,57 @@ static int _adb_connect(const std::string& service, std::string* error) {
     }
 
     std::string reason;
-    int fd = socket_spec_connect(__adb_server_socket_spec, &reason);
-    if (fd < 0) {
+    unique_fd fd;
+    if (!socket_spec_connect(&fd, __adb_server_socket_spec, nullptr, nullptr, &reason)) {
         *error = android::base::StringPrintf("cannot connect to daemon at %s: %s",
                                              __adb_server_socket_spec, reason.c_str());
         return -2;
     }
 
-    if (memcmp(&service[0], "host", 4) != 0 && switch_socket_transport(fd, error)) {
+    if (memcmp(&service[0], "host", 4) != 0 && switch_socket_transport(fd.get(), error)) {
         return -1;
     }
 
-    if (!SendProtocolString(fd, service)) {
+    if (!SendProtocolString(fd.get(), service)) {
         *error = perror_str("write failure during connection");
-        adb_close(fd);
         return -1;
     }
 
-    if (!adb_status(fd, error)) {
-        adb_close(fd);
+    if (!adb_status(fd.get(), error)) {
         return -1;
     }
 
-    D("_adb_connect: return fd %d", fd);
-    return fd;
+    D("_adb_connect: return fd %d", fd.get());
+    return fd.release();
 }
 
 bool adb_kill_server() {
     D("adb_kill_server");
     std::string reason;
-    int fd = socket_spec_connect(__adb_server_socket_spec, &reason);
-    if (fd < 0) {
+    unique_fd fd;
+    if (!socket_spec_connect(&fd, __adb_server_socket_spec, nullptr, nullptr, &reason)) {
         fprintf(stderr, "cannot connect to daemon at %s: %s\n", __adb_server_socket_spec,
                 reason.c_str());
         return true;
     }
 
-    if (!SendProtocolString(fd, "host:kill")) {
+    if (!SendProtocolString(fd.get(), "host:kill")) {
         fprintf(stderr, "error: write failure during connection: %s\n", strerror(errno));
         return false;
     }
 
     // The server might send OKAY, so consume that.
     char buf[4];
-    ReadFdExactly(fd, buf, 4);
+    ReadFdExactly(fd.get(), buf, 4);
     // Now that no more data is expected, wait for socket orderly shutdown or error, indicating
     // server death.
-    ReadOrderlyShutdown(fd);
+    ReadOrderlyShutdown(fd.get());
     return true;
 }
 
 int adb_connect(const std::string& service, std::string* error) {
     // first query the adb server's version
-    int fd = _adb_connect("host:version", error);
+    unique_fd fd(_adb_connect("host:version", error));
 
     D("adb_connect: service %s", service.c_str());
     if (fd == -2 && !is_local_socket_spec(__adb_server_socket_spec)) {
@@ -226,12 +222,10 @@ int adb_connect(const std::string& service, std::string* error) {
         if (fd >= 0) {
             std::string version_string;
             if (!ReadProtocolString(fd, &version_string, error)) {
-                adb_close(fd);
                 return -1;
             }
 
             ReadOrderlyShutdown(fd);
-            adb_close(fd);
 
             if (sscanf(&version_string[0], "%04x", &version) != 1) {
                 *error = android::base::StringPrintf("cannot parse version string: %s",
@@ -260,52 +254,48 @@ int adb_connect(const std::string& service, std::string* error) {
         return 0;
     }
 
-    fd = _adb_connect(service, error);
+    fd.reset(_adb_connect(service, error));
     if (fd == -1) {
         D("_adb_connect error: %s", error->c_str());
     } else if(fd == -2) {
         fprintf(stderr, "* daemon still not running\n");
     }
-    D("adb_connect: return fd %d", fd);
+    D("adb_connect: return fd %d", fd.get());
 
-    return fd;
+    return fd.release();
 }
 
 
 bool adb_command(const std::string& service) {
     std::string error;
-    int fd = adb_connect(service, &error);
+    unique_fd fd(adb_connect(service, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return false;
     }
 
-    if (!adb_status(fd, &error)) {
+    if (!adb_status(fd.get(), &error)) {
         fprintf(stderr, "error: %s\n", error.c_str());
-        adb_close(fd);
         return false;
     }
 
-    ReadOrderlyShutdown(fd);
-    adb_close(fd);
+    ReadOrderlyShutdown(fd.get());
     return true;
 }
 
 bool adb_query(const std::string& service, std::string* result, std::string* error) {
     D("adb_query: %s", service.c_str());
-    int fd = adb_connect(service, error);
+    unique_fd fd(adb_connect(service, error));
     if (fd < 0) {
         return false;
     }
 
     result->clear();
-    if (!ReadProtocolString(fd, result, error)) {
-        adb_close(fd);
+    if (!ReadProtocolString(fd.get(), result, error)) {
         return false;
     }
 
-    ReadOrderlyShutdown(fd);
-    adb_close(fd);
+    ReadOrderlyShutdown(fd.get());
     return true;
 }
 

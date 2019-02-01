@@ -47,6 +47,7 @@ LOCAL_SRC_FILES := \
     first_stage_init.cpp \
     first_stage_main.cpp \
     first_stage_mount.cpp \
+    mount_namespace.cpp \
     reboot_utils.cpp \
     selinux.cpp \
     switch_root.cpp \
@@ -91,6 +92,7 @@ LOCAL_STATIC_LIBRARIES := \
     libz \
     libselinux \
     libcap \
+    libgsi \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
