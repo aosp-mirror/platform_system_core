@@ -16,14 +16,20 @@
 
 #pragma once
 
+#include <fcntl.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+
 #include <string>
 #include <vector>
 
+#include <android-base/unique_fd.h>
 #include <base/files/file_path.h>
 #include <base/strings/stringprintf.h>
+#include <fs_avb/fs_avb.h>
 #include <gtest/gtest.h>
 
 // Utility macro to run the command expressed by the printf()-style string
@@ -35,6 +41,8 @@
         EXPECT_TRUE(WIFEXITED(rc));                                                 \
         EXPECT_EQ(WEXITSTATUS(rc), expected_exit_status);                           \
     } while (0);
+
+using android::fs_mgr::VBMetaData;
 
 namespace fs_avb_host_test {
 
@@ -51,6 +59,10 @@ struct ChainPartitionConfig {
     base::FilePath key_blob_path;
 };
 
+inline android::base::unique_fd OpenUniqueReadFd(const base::FilePath& file_path) {
+    return android::base::unique_fd(open(file_path.value().c_str(), O_RDONLY | O_CLOEXEC));
+}
+
 /* Base-class used for unit test. */
 class BaseFsAvbTest : public ::testing::Test {
   public:
@@ -66,16 +78,18 @@ class BaseFsAvbTest : public ::testing::Test {
     // Generates a vbmeta image with |file_name| by avbtool.
     // The generated vbmeta image will be written to disk, see the
     // |vbmeta_images_| variable for its path and the content.
-    void GenerateVBMetaImage(const std::string& file_name, const std::string& avb_algorithm,
-                             uint64_t rollback_index, const base::FilePath& key_path,
-                             const std::vector<base::FilePath>& include_descriptor_image_paths,
-                             const std::vector<ChainPartitionConfig>& chain_partitions,
-                             const std::string& additional_options = "");
+    base::FilePath GenerateVBMetaImage(
+            const std::string& file_name, const std::string& avb_algorithm, uint64_t rollback_index,
+            const base::FilePath& key_path,
+            const std::vector<base::FilePath>& include_descriptor_image_paths,
+            const std::vector<ChainPartitionConfig>& chain_partitions,
+            const std::string& additional_options = "");
     // Similar to above, but extracts a vbmeta image from the given image_path.
     // The extracted vbmeta image will be written to disk, with |output_file_name|.
     // See the |vbmeta_images_| variable for its path and the content.
-    void ExtractVBMetaImage(const base::FilePath& image_path, const std::string& output_file_name,
-                            const size_t padding_size = 0);
+    base::FilePath ExtractVBMetaImage(const base::FilePath& image_path,
+                                      const std::string& output_file_name,
+                                      const size_t padding_size = 0);
 
     // Generate a file with name |file_name| of size |image_size| with
     // known content (0x00 0x01 0x02 .. 0xff 0x00 0x01 ..).
@@ -86,8 +100,18 @@ class BaseFsAvbTest : public ::testing::Test {
     void AddAvbFooter(const base::FilePath& image_path, const std::string& footer_type,
                       const std::string& partition_name, const uint64_t partition_size,
                       const std::string& avb_algorithm, uint64_t rollback_index,
-                      const base::FilePath& key_path, const std::string& salt = "d00df00d",
+                      const base::FilePath& avb_signing_key, const std::string& salt = "d00df00d",
                       const std::string& additional_options = "");
+
+    VBMetaData GenerateImageAndExtractVBMetaData(
+            const std::string& partition_name, const size_t image_size, const size_t partition_size,
+            const std::string& footer_type, const base::FilePath& avb_signing_key,
+            const std::string& avb_algorithm, const uint64_t rollback_index);
+
+    VBMetaData ExtractAndLoadVBMetaData(const base::FilePath& image_path,
+                                        const std::string& output_file_name);
+
+    VBMetaData LoadVBMetaData(const std::string& file_name);
 
     // Returns the output of 'avbtool info_image' for the |image_path|.
     std::string InfoImage(const base::FilePath& image_path);

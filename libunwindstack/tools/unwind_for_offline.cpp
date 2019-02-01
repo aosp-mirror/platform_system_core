@@ -240,12 +240,6 @@ int SaveData(pid_t pid) {
     return 1;
   }
 
-  unwindstack::RemoteMaps maps(pid);
-  if (!maps.Parse()) {
-    printf("Unable to parse maps.\n");
-    return 1;
-  }
-
   // Save the current state of the registers.
   if (!SaveRegs(regs)) {
     return 1;
@@ -253,35 +247,38 @@ int SaveData(pid_t pid) {
 
   // Do an unwind so we know how much of the stack to save, and what
   // elf files are involved.
+  unwindstack::UnwinderFromPid unwinder(1024, pid);
+  if (!unwinder.Init(regs->Arch())) {
+    printf("Unable to init unwinder object.\n");
+    return 1;
+  }
+  unwinder.SetRegs(regs);
   uint64_t sp = regs->sp();
-  auto process_memory = unwindstack::Memory::CreateProcessMemory(pid);
-  unwindstack::JitDebug jit_debug(process_memory);
-  unwindstack::Unwinder unwinder(1024, &maps, regs, process_memory);
-  unwinder.SetJitDebug(&jit_debug, regs->Arch());
   unwinder.Unwind();
 
   std::unordered_map<uint64_t, map_info_t> maps_by_start;
   std::vector<std::pair<uint64_t, uint64_t>> stacks;
+  unwindstack::Maps* maps = unwinder.GetMaps();
   uint64_t sp_map_start = 0;
-  unwindstack::MapInfo* map_info = maps.Find(sp);
+  unwindstack::MapInfo* map_info = maps->Find(sp);
   if (map_info != nullptr) {
     stacks.emplace_back(std::make_pair(sp, map_info->end));
     sp_map_start = map_info->start;
   }
 
   for (const auto& frame : unwinder.frames()) {
-    map_info = maps.Find(frame.sp);
+    map_info = maps->Find(frame.sp);
     if (map_info != nullptr && sp_map_start != map_info->start) {
       stacks.emplace_back(std::make_pair(frame.sp, map_info->end));
       sp_map_start = map_info->start;
     }
 
     if (maps_by_start.count(frame.map_start) == 0) {
-      map_info = maps.Find(frame.map_start);
+      map_info = maps->Find(frame.map_start);
 
       auto info = FillInAndGetMapInfo(maps_by_start, map_info);
       bool file_copied = false;
-      SaveMapInformation(process_memory, info, &file_copied);
+      SaveMapInformation(unwinder.GetProcessMemory(), info, &file_copied);
 
       // If you are using a a linker that creates two maps (one read-only, one
       // read-executable), it's necessary to capture the previous map
@@ -291,7 +288,7 @@ int SaveData(pid_t pid) {
           prev_map->flags == PROT_READ && map_info->name == prev_map->name &&
           maps_by_start.count(prev_map->start) == 0) {
         info = FillInAndGetMapInfo(maps_by_start, prev_map);
-        SaveMapInformation(process_memory, info, &file_copied);
+        SaveMapInformation(unwinder.GetProcessMemory(), info, &file_copied);
       }
     }
   }

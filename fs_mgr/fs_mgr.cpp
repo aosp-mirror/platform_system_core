@@ -79,6 +79,9 @@
 
 #define ZRAM_CONF_DEV   "/sys/block/zram0/disksize"
 #define ZRAM_CONF_MCS   "/sys/block/zram0/max_comp_streams"
+#define ZRAM_BACK_DEV   "/sys/block/zram0/backing_dev"
+
+#define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
@@ -87,9 +90,9 @@ using android::base::StartsWith;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
-using android::fs_mgr::AvbHandle;
-using android::fs_mgr::AvbHashtreeResult;
-using android::fs_mgr::AvbUniquePtr;
+
+// Realistically, this file should be part of the android::fs_mgr namespace;
+using namespace android::fs_mgr;
 
 using namespace std::literals;
 
@@ -109,6 +112,7 @@ enum FsStatFlags {
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
     FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
+    FS_STAT_ENABLE_VERITY_FAILED = 0x80000,
 };
 
 // TODO: switch to inotify()
@@ -439,6 +443,43 @@ static void tune_encrypt(const std::string& blk_device, const FstabEntry& entry,
     }
 }
 
+// Enable fs-verity if needed.
+static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
+                        const struct ext4_super_block* sb, int* fs_stat) {
+    bool has_verity = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_VERITY)) != 0;
+    bool want_verity = entry.fs_mgr_flags.fs_verity;
+
+    if (has_verity || !want_verity) {
+        return;
+    }
+
+    std::string verity_support;
+    if (!android::base::ReadFileToString(SYSFS_EXT4_VERITY, &verity_support)) {
+        LERROR << "Failed to open " << SYSFS_EXT4_VERITY;
+        return;
+    }
+
+    if (!(android::base::Trim(verity_support) == "supported")) {
+        LERROR << "Current ext4 verity not supported by kernel";
+        return;
+    }
+
+    if (!tune2fs_available()) {
+        LERROR << "Unable to enable ext4 verity on " << blk_device
+               << " because " TUNE2FS_BIN " is missing";
+        return;
+    }
+
+    LINFO << "Enabling ext4 verity on " << blk_device;
+
+    const char* argv[] = {TUNE2FS_BIN, "-O", "verity", blk_device.c_str()};
+    if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
+        LERROR << "Failed to run " TUNE2FS_BIN " to enable "
+               << "ext4 verity on " << blk_device;
+        *fs_stat |= FS_STAT_ENABLE_VERITY_FAILED;
+    }
+}
+
 // Read the primary superblock from an f2fs filesystem.  On failure return
 // false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
 #define F2FS_BLKSIZE 4096
@@ -510,12 +551,14 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
     }
 
     if (is_extfs(entry.fs_type) &&
-        (entry.fs_mgr_flags.reserved_size || entry.fs_mgr_flags.file_encryption)) {
+        (entry.fs_mgr_flags.reserved_size || entry.fs_mgr_flags.file_encryption ||
+         entry.fs_mgr_flags.fs_verity)) {
         struct ext4_super_block sb;
 
         if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
+            tune_verity(blk_device, entry, &sb, &fs_stat);
         }
     }
 
@@ -556,9 +599,17 @@ static int __mount(const std::string& source, const std::string& target, const F
     mkdir(target.c_str(), 0755);
     errno = 0;
     unsigned long mountflags = entry.flags;
-    int ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
+    int ret = 0;
+    int save_errno = 0;
+    do {
+        if (save_errno == EAGAIN) {
+            PINFO << "Retrying mount (source=" << source << ",target=" << target
+                  << ",type=" << entry.fs_type << ")=" << ret << "(" << save_errno << ")";
+        }
+        ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
                     entry.fs_options.c_str());
-    int save_errno = errno;
+        save_errno = errno;
+    } while (ret && save_errno == EAGAIN);
     const char* target_missing = "";
     const char* source_missing = "";
     if (save_errno == ENOENT) {
@@ -838,19 +889,6 @@ bool fs_mgr_update_logical_partition(FstabEntry* entry) {
     return true;
 }
 
-bool fs_mgr_update_logical_partition(struct fstab_rec* rec) {
-    auto entry = FstabRecToFstabEntry(rec);
-
-    if (!fs_mgr_update_logical_partition(&entry)) {
-        return false;
-    }
-
-    free(rec->blk_device);
-    rec->blk_device = strdup(entry.blk_device.c_str());
-
-    return true;
-}
-
 class CheckpointManager {
   public:
     CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
@@ -954,6 +992,15 @@ class CheckpointManager {
     std::map<std::string, std::string> device_map_;
 };
 
+static bool IsMountPointMounted(const std::string& mount_point) {
+    // Check if this is already mounted.
+    Fstab fstab;
+    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
+        return false;
+    }
+    return GetEntryForMountPoint(&fstab, mount_point) != nullptr;
+}
+
 // When multiple fstab records share the same mount_point, it will try to mount each
 // one in turn, and ignore any duplicates after a first successful mount.
 // Returns -1 on error, and  FS_MGR_MNTALL_* otherwise.
@@ -970,9 +1017,18 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
     for (size_t i = 0; i < fstab->size(); i++) {
         auto& current_entry = (*fstab)[i];
 
+        // If a filesystem should have been mounted in the first stage, we
+        // ignore it here. With one exception, if the filesystem is
+        // formattable, then it can only be formatted in the second stage,
+        // so we allow it to mount here.
+        if (current_entry.fs_mgr_flags.first_stage_mount &&
+            (!current_entry.fs_mgr_flags.formattable ||
+             IsMountPointMounted(current_entry.mount_point))) {
+            continue;
+        }
+
         // Don't mount entries that are managed by vold or not for the mount mode.
         if (current_entry.fs_mgr_flags.vold_managed || current_entry.fs_mgr_flags.recovery_only ||
-            current_entry.fs_mgr_flags.first_stage_mount ||
             ((mount_mode == MOUNT_MODE_LATE) && !current_entry.fs_mgr_flags.late_mount) ||
             ((mount_mode == MOUNT_MODE_EARLY) && current_entry.fs_mgr_flags.late_mount)) {
             continue;
@@ -1029,6 +1085,13 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on partition: " << current_entry.mount_point
                        << ", skipping!";
+                // Skips mounting the device.
+                continue;
+            }
+        } else if (!current_entry.avb_key.empty()) {
+            if (AvbHandle::SetUpStandaloneAvbHashtree(&current_entry) == AvbHashtreeResult::kFail) {
+                LERROR << "Failed to set up AVB on standalone partition: "
+                       << current_entry.mount_point << ", skipping!";
                 // Skips mounting the device.
                 continue;
             }
@@ -1192,16 +1255,6 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point)
     return ret;
 }
 
-int fs_mgr_do_mount_one(struct fstab_rec* rec) {
-    if (!rec) {
-        return FS_MGR_DOMNT_FAILED;
-    }
-
-    auto entry = FstabRecToFstabEntry(rec);
-
-    return fs_mgr_do_mount_one(entry);
-}
-
 // If tmp_mount_point is non-null, mount the filesystem there.  This is for the
 // tmp mount we do to check the user password
 // If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
@@ -1268,6 +1321,13 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                 // Skips mounting the device.
                 continue;
             }
+        } else if (!fstab_entry.avb_key.empty()) {
+            if (AvbHandle::SetUpStandaloneAvbHashtree(&fstab_entry) == AvbHashtreeResult::kFail) {
+                LERROR << "Failed to set up AVB on standalone partition: "
+                       << fstab_entry.mount_point << ", skipping!";
+                // Skips mounting the device.
+                continue;
+            }
         } else if (fstab_entry.fs_mgr_flags.verify) {
             int rc = fs_mgr_setup_verity(&fstab_entry, true);
             if (__android_log_is_debuggable() &&
@@ -1326,6 +1386,15 @@ int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* 
                                   needs_checkpoint);
 }
 
+int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
+}
+
+int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
+                    bool needs_checkpoint) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint);
+}
+
 /*
  * mount a tmpfs filesystem at the given point.
  * return 0 on success, non-zero on failure.
@@ -1345,12 +1414,80 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
     return 0;
 }
 
+static bool InstallZramDevice(const std::string& device) {
+    if (!android::base::WriteStringToFile(device, ZRAM_BACK_DEV)) {
+        PERROR << "Cannot write " << device << " in: " << ZRAM_BACK_DEV;
+        return false;
+    }
+    LINFO << "Success to set " << device << " to " << ZRAM_BACK_DEV;
+    return true;
+}
+
+static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::string& bdev) {
+    if (loop.empty() && bdev.empty()) return true;
+
+    if (bdev.length()) {
+        return InstallZramDevice(bdev);
+    }
+
+    // Get free loopback
+    unique_fd loop_fd(TEMP_FAILURE_RETRY(open("/dev/loop-control", O_RDWR | O_CLOEXEC)));
+    if (loop_fd.get() == -1) {
+        PERROR << "Cannot open loop-control";
+        return false;
+    }
+
+    int num = ioctl(loop_fd.get(), LOOP_CTL_GET_FREE);
+    if (num == -1) {
+        PERROR << "Cannot get free loop slot";
+        return false;
+    }
+
+    // Prepare target path
+    unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0664)));
+    if (target_fd.get() == -1) {
+        PERROR << "Cannot open target path: " << loop;
+        return false;
+    }
+    if (fallocate(target_fd.get(), 0, 0, size) < 0) {
+        PERROR << "Cannot truncate target path: " << loop;
+        return false;
+    }
+
+    // Connect loopback (device_fd) to target path (target_fd)
+    std::string device = android::base::StringPrintf("/dev/block/loop%d", num);
+    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
+    if (device_fd.get() == -1) {
+        PERROR << "Cannot open /dev/block/loop" << num;
+        return false;
+    }
+
+    if (ioctl(device_fd.get(), LOOP_SET_FD, target_fd.get())) {
+        PERROR << "Cannot set loopback to target path";
+        return false;
+    }
+
+    // set block size & direct IO
+    if (ioctl(device_fd.get(), LOOP_SET_BLOCK_SIZE, 4096)) {
+        PWARNING << "Cannot set 4KB blocksize to /dev/block/loop" << num;
+    }
+    if (ioctl(device_fd.get(), LOOP_SET_DIRECT_IO, 1)) {
+        PWARNING << "Cannot set direct_io to /dev/block/loop" << num;
+    }
+
+    return InstallZramDevice(device);
+}
+
 bool fs_mgr_swapon_all(const Fstab& fstab) {
     bool ret = true;
     for (const auto& entry : fstab) {
         // Skip non-swap entries.
         if (entry.fs_type != "swap") {
             continue;
+        }
+
+        if (!PrepareZramDevice(entry.zram_loopback_path, entry.zram_loopback_size, entry.zram_backing_dev_path)) {
+            LERROR << "Skipping losetup for '" << entry.blk_device << "'";
         }
 
         if (entry.zram_size > 0) {

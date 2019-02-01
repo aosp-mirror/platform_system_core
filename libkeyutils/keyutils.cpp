@@ -69,3 +69,11 @@ long keyctl_setperm(key_serial_t id, int permissions) {
 long keyctl_unlink(key_serial_t key, key_serial_t keyring) {
   return keyctl(KEYCTL_UNLINK, key, keyring);
 }
+
+long keyctl_restrict_keyring(key_serial_t keyring, const char* type, const char* restriction) {
+  return keyctl(KEYCTL_RESTRICT_KEYRING, keyring, type, restriction);
+}
+
+long keyctl_get_security(key_serial_t id, char* buffer, size_t buflen) {
+  return keyctl(KEYCTL_GET_SECURITY, id, buffer, buflen);
+}

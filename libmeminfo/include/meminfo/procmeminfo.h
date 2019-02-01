@@ -40,6 +40,11 @@ class ProcMemInfo final {
     const MemUsage& Usage();
     const MemUsage& Wss();
 
+    // Same as Maps() except, only valid for reading working set using CONFIG_IDLE_PAGE_TRACKING
+    // support in kernel. If the kernel support doesn't exist, the function will return an empty
+    // vector.
+    const std::vector<Vma>& MapsWithPageIdle();
+
     // Collect all 'vma' or 'maps' from /proc/<pid>/smaps and store them in 'maps_'. Returns a
     // constant reference to the vma vector after the collection is done.
     //
@@ -73,11 +78,18 @@ class ProcMemInfo final {
 
     const std::vector<uint16_t>& SwapOffsets();
 
+    // Reads /proc/<pid>/pagemap for this process for each page within
+    // the 'vma' and stores that in 'pagemap'. It is assumed that the 'vma'
+    // is obtained by calling Maps() or 'ForEachVma' for the same object. No special checks
+    // are made to see if 'vma' is *valid*.
+    // Returns false if anything goes wrong, 'true' otherwise.
+    bool PageMap(const Vma& vma, std::vector<uint64_t>* pagemap);
+
     ~ProcMemInfo() = default;
 
   private:
-    bool ReadMaps(bool get_wss);
-    bool ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss);
+    bool ReadMaps(bool get_wss, bool use_pageidle = false);
+    bool ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_pageidle);
 
     pid_t pid_;
     bool get_wss_;

@@ -29,10 +29,10 @@ cc_benchmark {
         "-fno-builtin",
     ],
     shared_libs: [
-        "liblog",
         "libm",
         "libbase",
     ],
+    static_libs: ["liblog"],
     srcs: ["liblog_benchmark.cpp"],
 }
 
@@ -63,10 +63,10 @@ cc_defaults {
         "log_wrap_test.cpp",
     ],
     shared_libs: [
-        "liblog",
         "libcutils",
         "libbase",
     ],
+    static_libs: ["liblog"],
 }
 
 // Build tests for the device (with .so). Run with:

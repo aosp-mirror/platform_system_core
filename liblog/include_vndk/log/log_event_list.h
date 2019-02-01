@@ -27,8 +27,6 @@
 extern "C" {
 #endif
 
-#define __ANDROID_USE_LIBLOG_EVENT_INTERFACE 1
-
 /*
  * The opaque context used to manipulate lists of events.
  */

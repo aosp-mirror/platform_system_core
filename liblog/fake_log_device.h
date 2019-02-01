@@ -14,18 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef _LIBLOG_FAKE_LOG_DEVICE_H
-#define _LIBLOG_FAKE_LOG_DEVICE_H
+#pragma once
 
 #include <sys/types.h>
 
 #include "log_portability.h"
+#include "uio.h"
 
 struct iovec;
+
+__BEGIN_DECLS
 
 LIBLOG_HIDDEN int fakeLogOpen(const char* pathName);
 LIBLOG_HIDDEN int fakeLogClose(int fd);
 LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector,
                                     int count);
 
-#endif  // _LIBLOG_FAKE_LOG_DEVICE_H
+LIBLOG_HIDDEN ssize_t __send_log_msg(char*, size_t);
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char*, int def);
+LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio, const char*, size_t, int def);
+LIBLOG_ABI_PRIVATE int __android_log_is_debuggable();
+
+__END_DECLS

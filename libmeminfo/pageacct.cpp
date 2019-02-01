@@ -138,5 +138,18 @@ int PageAcct::GetPageIdle(uint64_t pfn) const {
     return !!(idle_bits & (1ULL << (pfn % 64)));
 }
 
+// Public methods
+bool page_present(uint64_t pagemap_val) {
+    return PAGE_PRESENT(pagemap_val);
+}
+
+bool page_swapped(uint64_t pagemap_val) {
+    return PAGE_SWAPPED(pagemap_val);
+}
+
+uint64_t page_pfn(uint64_t pagemap_val) {
+    return PAGE_PFN(pagemap_val);
+}
+
 }  // namespace meminfo
 }  // namespace android

@@ -54,6 +54,7 @@
 #include <fs_mgr.h>
 #include <fscrypt/fscrypt.h>
 #include <fscrypt/fscrypt_init_extensions.h>
+#include <libgsi/libgsi.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
@@ -62,6 +63,7 @@
 #include "action_manager.h"
 #include "bootchart.h"
 #include "init.h"
+#include "mount_namespace.h"
 #include "parser.h"
 #include "property_service.h"
 #include "reboot.h"
@@ -74,6 +76,8 @@
 using namespace std::literals::string_literals;
 
 using android::base::unique_fd;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::ReadFstabFromFile;
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 
@@ -520,6 +524,9 @@ static Result<Success> queue_fs_event(int code) {
         return Success();
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
+        if (android::gsi::IsGsiRunning()) {
+            return Error() << "cannot wipe within GSI";
+        }
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
         return reboot_into_recovery(options);
@@ -1022,7 +1029,8 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
     }
     service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
-            if (fscrypt_is_native()) {
+            // TODO (b/122850122): support this in gsi
+            if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
                 LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
                 if (auto result = reboot_into_recovery(
                             {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
@@ -1093,84 +1101,12 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     }
 }
 
-static Result<Success> bind_mount_file(const char* source, const char* mount_point,
-                                       bool remount_private) {
-    if (remount_private && mount(nullptr, mount_point, nullptr, MS_PRIVATE, nullptr) == -1) {
-        return ErrnoError() << "Could not change " << mount_point << " to a private mount point";
-    }
-    if (mount(source, mount_point, nullptr, MS_BIND, nullptr) == -1) {
-        return ErrnoError() << "Could not bind-mount " << source << " to " << mount_point;
-    }
-    return Success();
-}
-
-static Result<Success> bind_mount_bionic(const char* linker_source, const char* lib_dir_source,
-                                         const char* linker_mount_point, const char* lib_mount_dir,
-                                         bool remount_private) {
-    if (access(linker_source, F_OK) != 0) {
-        return Success();
-    }
-    if (auto result = bind_mount_file(linker_source, linker_mount_point, remount_private);
-        !result) {
-        return result;
-    }
-    for (auto libname : kBionicLibFileNames) {
-        std::string mount_point = lib_mount_dir + libname;
-        std::string source = lib_dir_source + libname;
-        if (auto result = bind_mount_file(source.c_str(), mount_point.c_str(), remount_private);
-            !result) {
-            return result;
-        }
-    }
-    return Success();
-}
-
-// The bootstrap bionic libs and the bootstrap linker are bind-mounted to
-// the mount points for pre-apexd processes.
-static Result<Success> do_prepare_bootstrap_bionic(const BuiltinArguments& args) {
-    static bool prepare_bootstrap_bionic_done = false;
-    if (prepare_bootstrap_bionic_done) {
-        return Error() << "prepare_bootstrap_bionic was already executed. Cannot be executed again";
-    }
-    if (auto result = bind_mount_bionic(kBootstrapLinkerPath, kBootstrapBionicLibsDir,
-                                        kLinkerMountPoint, kBionicLibsMountPointDir, false);
-        !result) {
-        return result;
-    }
-    if (auto result = bind_mount_bionic(kBootstrapLinkerPath64, kBootstrapBionicLibsDir64,
-                                        kLinkerMountPoint64, kBionicLibsMountPointDir64, false);
-        !result) {
-        return result;
-    }
-
-    LOG(INFO) << "prepare_bootstrap_bionic done";
-    prepare_bootstrap_bionic_done = true;
-    return Success();
-}
-
-// The bionic libs and the dynamic linker from the runtime APEX are bind-mounted
-// to the mount points. As a result, the previous mounts done by
-// prepare_bootstrap_bionic become hidden.
 static Result<Success> do_setup_runtime_bionic(const BuiltinArguments& args) {
-    static bool setup_runtime_bionic_done = false;
-    if (setup_runtime_bionic_done) {
-        return Error() << "setup_runtime_bionic was already executed. Cannot be executed again";
+    if (SwitchToDefaultMountNamespace()) {
+        return Success();
+    } else {
+        return Error() << "Failed to setup runtime bionic";
     }
-    if (auto result = bind_mount_bionic(kRuntimeLinkerPath, kRuntimeBionicLibsDir,
-                                        kLinkerMountPoint, kBionicLibsMountPointDir, true);
-        !result) {
-        return result;
-    }
-    if (auto result = bind_mount_bionic(kRuntimeLinkerPath64, kRuntimeBionicLibsDir64,
-                                        kLinkerMountPoint64, kBionicLibsMountPointDir64, true);
-        !result) {
-        return result;
-    }
-
-    ServiceList::GetInstance().MarkRuntimeAvailable();
-    LOG(INFO) << "setup_runtime_bionic done";
-    setup_runtime_bionic_done = true;
-    return Success();
 }
 
 // Builtin-function-map start
@@ -1211,7 +1147,6 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
         {"parse_apex_configs",      {0,     0,    {false,  do_parse_apex_configs}}},
-        {"prepare_bootstrap_bionic",{0,     0,    {false,  do_prepare_bootstrap_bionic}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"restart",                 {1,     1,    {false,  do_restart}}},
@@ -1220,8 +1155,8 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"rm",                      {1,     1,    {true,   do_rm}}},
         {"rmdir",                   {1,     1,    {true,   do_rmdir}}},
         {"setprop",                 {2,     2,    {true,   do_setprop}}},
-        {"setup_runtime_bionic",    {0,     0,    {false,  do_setup_runtime_bionic}}},
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
+        {"setup_runtime_bionic",    {0,     0,    {false,  do_setup_runtime_bionic}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
         {"swapon_all",              {1,     1,    {false,  do_swapon_all}}},

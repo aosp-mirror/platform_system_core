@@ -29,7 +29,13 @@
 #include "open_files_list.h"
 #include "types.h"
 
-class BacktraceMap;
+// Forward declarations
+namespace unwindstack {
+class Unwinder;
+}
+
+// The maximum number of frames to save when unwinding.
+constexpr size_t kMaxFrames = 256;
 
 /* Create and open a tombstone file for writing.
  * Returns a writable file descriptor, or -1 with errno set appropriately.
@@ -38,16 +44,15 @@ class BacktraceMap;
 int open_tombstone(std::string* path);
 
 /* Creates a tombstone file and writes the crash dump to it. */
-void engrave_tombstone(int tombstone_fd, BacktraceMap* map, const OpenFilesList* open_files,
-                       pid_t pid, pid_t tid, const std::string& process_name,
-                       const std::map<pid_t, std::string>& threads, uint64_t abort_msg_address,
-                       std::string* amfd_data);
+void engrave_tombstone(int tombstone_fd, unwindstack::Unwinder* unwinder,
+                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
+                       const std::string& process_name, const std::map<pid_t, std::string>& threads,
+                       uint64_t abort_msg_address, std::string* amfd_data);
 
 void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, siginfo_t* siginfo,
                                 ucontext_t* ucontext);
 
-void engrave_tombstone(android::base::unique_fd output_fd, BacktraceMap* map,
-                       unwindstack::Memory* process_memory,
+void engrave_tombstone(android::base::unique_fd output_fd, unwindstack::Unwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread,
                        uint64_t abort_msg_address, OpenFilesList* open_files,
                        std::string* amfd_data);

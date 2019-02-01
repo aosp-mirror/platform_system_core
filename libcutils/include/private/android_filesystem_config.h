@@ -134,6 +134,7 @@
 #define AID_IORAPD 1071          /* input/output readahead and pin daemon */
 #define AID_GPU_SERVICE 1072     /* GPU service daemon */
 #define AID_NETWORK_STACK 1073   /* network stack service */
+#define AID_GSID 1074            /* GSI service daemon */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
@@ -190,7 +191,8 @@
  */
 #define AID_OVERFLOWUID 65534 /* unmapped user in the user namespace */
 
-#define AID_ISOLATED_START 99000 /* start of uids for fully isolated sandboxed processes */
+/* use the ranges below to determine whether a process is isolated */
+#define AID_ISOLATED_START 90000 /* start of uids for fully isolated sandboxed processes */
 #define AID_ISOLATED_END 99999   /* end of uids for fully isolated sandboxed processes */
 
 #define AID_USER 100000        /* TODO: switch users over to AID_USER_OFFSET */

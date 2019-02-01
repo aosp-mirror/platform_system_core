@@ -122,6 +122,14 @@
                           0x80000000
 #define MF_SLOTSELECT_OTHER  \
                          0x100000000
+#define MF_ZRAM_LOOPBACK_PATH    \
+                         0x200000000
+#define MF_ZRAM_LOOPBACK_SIZE    \
+                         0x400000000
+#define MF_ZRAM_BACKING_DEV_PATH \
+                         0x800000000
+#define MF_FS_VERITY  \
+                         0x1000000000
 // clang-format on
 
 #define DM_BUF_SIZE 4096
@@ -135,10 +143,10 @@ bool fs_mgr_wait_for_file(const std::string& filename,
                           FileWaitMode wait_mode = FileWaitMode::Exists);
 
 bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
-bool fs_mgr_update_for_slotselect(Fstab* fstab);
+bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
-int load_verity_state(const FstabEntry& entry, int* mode);
+int load_verity_state(const android::fs_mgr::FstabEntry& entry, int* mode);
 
 #endif /* __CORE_FS_MGR_PRIV_H */

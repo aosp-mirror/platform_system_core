@@ -79,36 +79,8 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, std::vector<u
     });
 }
 
-uint64_t SysMemInfo::ReadVmallocInfo(const std::string& path) {
-    uint64_t vmalloc_total = 0;
-    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
-    if (fp == nullptr) {
-        return vmalloc_total;
-    }
-
-    char line[1024];
-    while (fgets(line, 1024, fp.get()) != nullptr) {
-        // We are looking for lines like
-        // 0x0000000000000000-0x0000000000000000   12288 drm_property_create_blob+0x44/0xec pages=2
-        // vmalloc 0x0000000000000000-0x0000000000000000    8192
-        // wlan_logging_sock_init_svc+0xf8/0x4f0 [wlan] pages=1 vmalloc Notice that if the caller is
-        // coming from a module, the kernel prints and extra "[module_name]" after the address and
-        // the symbol of the call site. This means we can't use the old sscanf() method of getting
-        // the # of pages.
-        char* p_start = strstr(line, "pages=");
-        if (p_start == nullptr) {
-            // we didn't find anything
-            continue;
-        }
-
-        p_start = strtok(p_start, " ");
-        long nr_pages;
-        if (sscanf(p_start, "pages=%ld", &nr_pages) == 1) {
-            vmalloc_total += (nr_pages * getpagesize());
-        }
-    }
-
-    return vmalloc_total;
+uint64_t SysMemInfo::ReadVmallocInfo() {
+    return ::android::meminfo::ReadVmallocInfo();
 }
 
 // TODO: Delete this function if it can't match up with the c-like implementation below.
@@ -261,6 +233,42 @@ bool SysMemInfo::MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_d
 
     LOG(ERROR) << "Can't find memory status under: " << zram_dev;
     return false;
+}
+
+// Public methods
+uint64_t ReadVmallocInfo(const std::string& path) {
+    uint64_t vmalloc_total = 0;
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (fp == nullptr) {
+        return vmalloc_total;
+    }
+
+    char* line = nullptr;
+    size_t line_alloc = 0;
+    while (getline(&line, &line_alloc, fp.get()) > 0) {
+        // We are looking for lines like
+        //
+        // 0x0000000000000000-0x0000000000000000   12288 drm_property_create_blob+0x44/0xec pages=2 vmalloc
+        // 0x0000000000000000-0x0000000000000000    8192 wlan_logging_sock_init_svc+0xf8/0x4f0 [wlan] pages=1 vmalloc
+        //
+        // Notice that if the caller is coming from a module, the kernel prints and extra
+        // "[module_name]" after the address and the symbol of the call site. This means we can't
+        // use the old sscanf() method of getting the # of pages.
+        char* p_start = strstr(line, "pages=");
+        if (p_start == nullptr) {
+            // we didn't find anything
+            continue;
+        }
+
+        uint64_t nr_pages;
+        if (sscanf(p_start, "pages=%" SCNu64 "", &nr_pages) == 1) {
+            vmalloc_total += (nr_pages * getpagesize());
+        }
+    }
+
+    free(line);
+
+    return vmalloc_total;
 }
 
 }  // namespace meminfo

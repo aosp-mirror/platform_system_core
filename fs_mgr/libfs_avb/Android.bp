@@ -56,6 +56,11 @@ cc_defaults {
         "tests/data/*",
     ],
     static_libs: [
+        "libavb",
+        "libavb_host_sysdeps",
+        "libdm",
+        "libfs_avb",
+        "libfstab",
         "libgtest_host",
     ],
     shared_libs: [
@@ -83,23 +88,30 @@ cc_library_host_static {
 cc_test_host {
     name: "libfs_avb_test",
     defaults: ["libfs_avb_host_test_defaults"],
+    test_suites: ["general-tests"],
     static_libs: [
         "libfs_avb_test_util",
     ],
+    shared_libs: [
+        "libcrypto",
+    ],
     srcs: [
         "tests/basic_test.cpp",
+        "tests/fs_avb_test.cpp",
     ],
 }
 
 cc_test_host {
     name: "libfs_avb_internal_test",
     defaults: ["libfs_avb_host_test_defaults"],
+    test_suites: ["general-tests"],
     static_libs: [
         "libfs_avb_test_util",
-        "libfstab",
     ],
     srcs: [
+        "avb_util.cpp",
         "util.cpp",
+        "tests/avb_util_test.cpp",
         "tests/util_test.cpp",
     ],
 }

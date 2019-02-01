@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LIBS_LOG_LOG_H
-#define _LIBS_LOG_LOG_H
+#pragma once
 
 /* Too many in the ecosystem assume these are included */
 #if !defined(_WIN32)
@@ -35,7 +34,6 @@
 #include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
-#include <log/uio.h> /* helper to define iovec for portability */
 
 #ifdef __cplusplus
 extern "C" {
@@ -152,35 +150,12 @@ typedef enum {
 
 #ifdef __linux__
 
-#ifndef __ANDROID_USE_LIBLOG_CLOCK_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_CLOCK_INTERFACE 1
-#elif __ANDROID_API__ > 22 /* > Lollipop */
-#define __ANDROID_USE_LIBLOG_CLOCK_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_CLOCK_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_CLOCK_INTERFACE
 clockid_t android_log_clockid(void);
-#endif
 
 #endif /* __linux__ */
 
 /* --------------------------------------------------------------------- */
 
-#ifndef __ANDROID_USE_LIBLOG_CLOSE_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_CLOSE_INTERFACE 1
-#elif __ANDROID_API__ > 18 /* > JellyBean */
-#define __ANDROID_USE_LIBLOG_CLOSE_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_CLOSE_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_CLOSE_INTERFACE
 /*
  * Release any logger resources (a new log write will immediately re-acquire)
  *
@@ -188,54 +163,6 @@ clockid_t android_log_clockid(void);
  * all O_CLOEXEC so wil self clean on exec().
  */
 void __android_log_close(void);
-#endif
-
-#ifndef __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE
-#ifndef __ANDROID_API__
-#define __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE 1
-#elif __ANDROID_API__ > 25 /* > OC */
-#define __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE 1
-#else
-#define __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE 0
-#endif
-#endif
-
-#if __ANDROID_USE_LIBLOG_RATELIMIT_INTERFACE
-
-/*
- * if last is NULL, caller _must_ provide a consistent value for seconds.
- *
- * Return -1 if we can not acquire a lock, which below will permit the logging,
- * error on allowing a log message through.
- */
-int __android_log_ratelimit(time_t seconds, time_t* last);
-
-/*
- * Usage:
- *
- *   // Global default and state
- *   IF_ALOG_RATELIMIT() {
- *      ALOG*(...);
- *   }
- *
- *   // local state, 10 seconds ratelimit
- *   static time_t local_state;
- *   IF_ALOG_RATELIMIT_LOCAL(10, &local_state) {
- *     ALOG*(...);
- *   }
- */
-
-#define IF_ALOG_RATELIMIT() if (__android_log_ratelimit(0, NULL) > 0)
-#define IF_ALOG_RATELIMIT_LOCAL(seconds, state) \
-  if (__android_log_ratelimit(seconds, state) > 0)
-
-#else
-
-/* No ratelimiting as API unsupported */
-#define IF_ALOG_RATELIMIT() if (1)
-#define IF_ALOG_RATELIMIT_LOCAL(...) if (1)
-
-#endif
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -244,5 +171,3 @@ int __android_log_ratelimit(time_t seconds, time_t* last);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _LIBS_LOG_LOG_H */

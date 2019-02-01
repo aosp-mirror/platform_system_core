@@ -15,7 +15,7 @@
 
 """unpacks the bootimage.
 
-Extracts the kernel, ramdisk, second bootloader and recovery dtbo images.
+Extracts the kernel, ramdisk, second bootloader, dtb and recovery dtbo images.
 """
 
 from __future__ import print_function
@@ -82,6 +82,14 @@ def unpack_bootimage(args):
         print('boot header size: %s' % boot_header_size)
     else:
         recovery_dtbo_size = 0
+    if version > 1:
+        dtb_size = unpack('I', args.boot_img.read(4))[0]
+        print('dtb size: %s' % dtb_size)
+        dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
+        print('dtb address: %s' % dtb_load_address)
+    else:
+        dtb_size = 0
+
 
     # The first page contains the boot header
     num_header_pages = 1
@@ -103,6 +111,15 @@ def unpack_bootimage(args):
     if recovery_dtbo_size > 0:
         image_info_list.append((recovery_dtbo_offset, recovery_dtbo_size,
                                 'recovery_dtbo'))
+    if dtb_size > 0:
+        num_second_pages = get_number_of_pages(second_size, page_size)
+        num_recovery_dtbo_pages = get_number_of_pages(recovery_dtbo_size, page_size)
+        dtb_offset = page_size * (
+            num_header_pages + num_kernel_pages + num_ramdisk_pages + num_second_pages +
+            num_recovery_dtbo_pages
+        )
+
+        image_info_list.append((dtb_offset, dtb_size, 'dtb'))
 
     for image_info in image_info_list:
         extract_image(image_info[0], image_info[1], args.boot_img,
@@ -113,7 +130,7 @@ def parse_cmdline():
     """parse command line arguments"""
     parser = ArgumentParser(
         description='Unpacks boot.img/recovery.img, extracts the kernel,'
-        'ramdisk, second bootloader and recovery dtbo')
+        'ramdisk, second bootloader, recovery dtbo and dtb')
     parser.add_argument(
         '--boot_img',
         help='path to boot image',

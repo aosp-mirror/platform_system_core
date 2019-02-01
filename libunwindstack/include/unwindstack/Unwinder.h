@@ -24,7 +24,9 @@
 #include <string>
 #include <vector>
 
+#include <unwindstack/DexFiles.h>
 #include <unwindstack/Error.h>
+#include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -32,9 +34,7 @@
 namespace unwindstack {
 
 // Forward declarations.
-class DexFiles;
 class Elf;
-class JitDebug;
 enum ArchEnum : uint8_t;
 
 struct FrameData {
@@ -67,7 +67,12 @@ class Unwinder {
       : max_frames_(max_frames), maps_(maps), regs_(regs), process_memory_(process_memory) {
     frames_.reserve(max_frames);
   }
-  ~Unwinder() = default;
+  Unwinder(size_t max_frames, Maps* maps, std::shared_ptr<Memory> process_memory)
+      : max_frames_(max_frames), maps_(maps), process_memory_(process_memory) {
+    frames_.reserve(max_frames);
+  }
+
+  virtual ~Unwinder() = default;
 
   void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
               const std::vector<std::string>* map_suffixes_to_ignore = nullptr);
@@ -76,10 +81,20 @@ class Unwinder {
 
   const std::vector<FrameData>& frames() { return frames_; }
 
+  std::vector<FrameData> ConsumeFrames() {
+    std::vector<FrameData> frames = std::move(frames_);
+    frames_.clear();
+    return frames;
+  }
+
   std::string FormatFrame(size_t frame_num);
   static std::string FormatFrame(const FrameData& frame, bool is32bit);
 
   void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
+
+  void SetRegs(Regs* regs) { regs_ = regs; }
+  Maps* GetMaps() { return maps_; }
+  std::shared_ptr<Memory>& GetProcessMemory() { return process_memory_; }
 
   // Disabling the resolving of names results in the function name being
   // set to an empty string and the function offset being set to zero.
@@ -92,7 +107,9 @@ class Unwinder {
   ErrorCode LastErrorCode() { return last_error_.code; }
   uint64_t LastErrorAddress() { return last_error_.address; }
 
- private:
+ protected:
+  Unwinder(size_t max_frames) : max_frames_(max_frames) { frames_.reserve(max_frames); }
+
   void FillInDexFrame();
   void FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t func_pc,
                    uint64_t pc_adjustment);
@@ -108,6 +125,22 @@ class Unwinder {
 #endif
   bool resolve_names_ = true;
   ErrorData last_error_;
+};
+
+class UnwinderFromPid : public Unwinder {
+ public:
+  UnwinderFromPid(size_t max_frames, pid_t pid) : Unwinder(max_frames), pid_(pid) {}
+  virtual ~UnwinderFromPid() = default;
+
+  bool Init(ArchEnum arch);
+
+ private:
+  pid_t pid_;
+  std::unique_ptr<Maps> maps_ptr_;
+  std::unique_ptr<JitDebug> jit_debug_ptr_;
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+  std::unique_ptr<DexFiles> dex_files_ptr_;
+#endif
 };
 
 }  // namespace unwindstack

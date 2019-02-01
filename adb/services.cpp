@@ -71,23 +71,22 @@ unique_fd create_service_thread(const char* service_name, std::function<void(uni
     return unique_fd(s[0]);
 }
 
-int service_to_fd(std::string_view name, atransport* transport) {
-    int ret = -1;
+unique_fd service_to_fd(std::string_view name, atransport* transport) {
+    unique_fd ret;
 
     if (is_socket_spec(name)) {
         std::string error;
-        ret = socket_spec_connect(name, &error);
-        if (ret < 0) {
+        if (!socket_spec_connect(&ret, name, nullptr, nullptr, &error)) {
             LOG(ERROR) << "failed to connect to socket '" << name << "': " << error;
         }
     } else {
 #if !ADB_HOST
-        ret = daemon_service_to_fd(name, transport).release();
+        ret = daemon_service_to_fd(name, transport);
 #endif
     }
 
     if (ret >= 0) {
-        close_on_exec(ret);
+        close_on_exec(ret.get());
     }
     return ret;
 }
@@ -100,9 +99,7 @@ struct state_info {
     ConnectionState state;
 };
 
-static void wait_for_state(int fd, void* data) {
-    std::unique_ptr<state_info> sinfo(reinterpret_cast<state_info*>(data));
-
+static void wait_for_state(int fd, state_info* sinfo) {
     D("wait_for_state %d", sinfo->state);
 
     while (true) {
@@ -198,7 +195,7 @@ asocket* host_service_to_socket(const char* name, const char* serial, TransportI
     } else if (android::base::StartsWith(name, "wait-for-")) {
         name += strlen("wait-for-");
 
-        std::unique_ptr<state_info> sinfo = std::make_unique<state_info>();
+        std::shared_ptr<state_info> sinfo = std::make_shared<state_info>();
         if (sinfo == nullptr) {
             fprintf(stderr, "couldn't allocate state_info: %s", strerror(errno));
             return nullptr;
@@ -234,19 +231,15 @@ asocket* host_service_to_socket(const char* name, const char* serial, TransportI
             return nullptr;
         }
 
-        int fd = create_service_thread(
-                         "wait", std::bind(wait_for_state, std::placeholders::_1, sinfo.get()))
-                         .release();
-        if (fd != -1) {
-            sinfo.release();
-        }
-        return create_local_socket(fd);
+        unique_fd fd = create_service_thread("wait", [sinfo](int fd) {
+            wait_for_state(fd, sinfo.get());
+        });
+        return create_local_socket(std::move(fd));
     } else if (!strncmp(name, "connect:", 8)) {
         std::string host(name + strlen("connect:"));
-        int fd = create_service_thread("connect",
-                                       std::bind(connect_service, std::placeholders::_1, host))
-                         .release();
-        return create_local_socket(fd);
+        unique_fd fd = create_service_thread(
+                "connect", std::bind(connect_service, std::placeholders::_1, host));
+        return create_local_socket(std::move(fd));
     }
     return nullptr;
 }

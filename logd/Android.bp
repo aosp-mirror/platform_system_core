@@ -63,16 +63,26 @@ cc_binary {
 
     srcs: ["main.cpp"],
 
-    static_libs: ["liblogd"],
+    static_libs: [
+        "liblog",
+        "liblogd",
+    ],
 
     shared_libs: [
         "libsysutils",
-        "liblog",
         "libcutils",
         "libbase",
         "libpackagelistparser",
+        "libprocessgroup",
         "libcap",
     ],
 
     cflags: ["-Werror"],
+}
+
+
+prebuilt_etc {
+    name: "logtagd.rc",
+    src: "logtagd.rc",
+    sub_dir: "init",
 }
