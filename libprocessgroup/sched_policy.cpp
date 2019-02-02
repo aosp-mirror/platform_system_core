@@ -36,6 +36,8 @@ static inline SchedPolicy _policy(SchedPolicy p) {
     return p == SP_DEFAULT ? SP_SYSTEM_DEFAULT : p;
 }
 
+#if defined(__ANDROID__)
+
 int set_cpuset_policy(int tid, SchedPolicy policy) {
     if (tid == 0) {
         tid = GetThreadId();
@@ -194,6 +196,21 @@ int get_sched_policy(int tid, SchedPolicy* policy) {
     }
     return 0;
 }
+
+#else
+
+/* Stubs for non-Android targets. */
+
+int set_sched_policy(int, SchedPolicy) {
+    return 0;
+}
+
+int get_sched_policy(int, SchedPolicy* policy) {
+    *policy = SP_SYSTEM_DEFAULT;
+    return 0;
+}
+
+#endif
 
 const char* get_sched_policy_name(SchedPolicy policy) {
     policy = _policy(policy);

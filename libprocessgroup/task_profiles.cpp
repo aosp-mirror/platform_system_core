@@ -18,7 +18,6 @@
 #define LOG_TAG "libprocessgroup"
 
 #include <fcntl.h>
-#include <sys/prctl.h>
 #include <task_profiles.h>
 #include <string>
 
@@ -31,6 +30,11 @@
 
 #include <json/reader.h>
 #include <json/value.h>
+
+// To avoid issues in sdk_mac build
+#if defined(__ANDROID__)
+#include <sys/prctl.h>
+#endif
 
 using android::base::GetThreadId;
 using android::base::StringPrintf;
@@ -69,6 +73,9 @@ bool SetClampsAction::ExecuteForTask(int) const {
     return false;
 }
 
+// To avoid issues in sdk_mac build
+#if defined(__ANDROID__)
+
 bool SetTimerSlackAction::IsTimerSlackSupported(int tid) {
     auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
 
@@ -96,6 +103,8 @@ bool SetTimerSlackAction::ExecuteForTask(int tid) const {
 
     return true;
 }
+
+#endif
 
 bool SetAttributeAction::ExecuteForProcess(uid_t, pid_t pid) const {
     return ExecuteForTask(pid);
