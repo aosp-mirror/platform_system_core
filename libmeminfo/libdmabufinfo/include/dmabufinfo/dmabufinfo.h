@@ -44,7 +44,7 @@ struct DmaBuffer {
     }
 
     // Getters for each property
-    uint64_t size() { return size_; }
+    uint64_t size() const { return size_; }
     const std::unordered_map<pid_t, int>& fdrefs() const { return fdrefs_; }
     const std::unordered_map<pid_t, int>& maprefs() const { return maprefs_; }
     ino_t inode() const { return inode_; }
@@ -55,6 +55,11 @@ struct DmaBuffer {
     void SetName(const std::string& name) { name_ = name; }
     void SetExporter(const std::string& exporter) { exporter_ = exporter; }
     void SetCount(uint64_t count) { count_ = count; }
+
+    bool operator==(const DmaBuffer& rhs) {
+        return (inode_ == rhs.inode()) && (size_ == rhs.size()) && (name_ == rhs.name()) &&
+               (exporter_ == rhs.exporter());
+    }
 
   private:
     ino_t inode_;
