@@ -90,9 +90,9 @@ using android::base::StartsWith;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
-using android::fs_mgr::AvbHandle;
-using android::fs_mgr::AvbHashtreeResult;
-using android::fs_mgr::AvbUniquePtr;
+
+// Realistically, this file should be part of the android::fs_mgr namespace;
+using namespace android::fs_mgr;
 
 using namespace std::literals;
 
@@ -1255,16 +1255,6 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point)
     return ret;
 }
 
-int fs_mgr_do_mount_one(struct fstab_rec* rec) {
-    if (!rec) {
-        return FS_MGR_DOMNT_FAILED;
-    }
-
-    auto entry = FstabRecToFstabEntry(rec);
-
-    return fs_mgr_do_mount_one(entry);
-}
-
 // If tmp_mount_point is non-null, mount the filesystem there.  This is for the
 // tmp mount we do to check the user password
 // If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
@@ -1454,7 +1444,7 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
     }
 
     // Prepare target path
-    unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0664)));
+    unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600)));
     if (target_fd.get() == -1) {
         PERROR << "Cannot open target path: " << loop;
         return false;

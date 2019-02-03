@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,13 +67,13 @@ extern int set_sched_policy(int tid, SchedPolicy policy);
  * On platforms which support gettid(), zero tid means current thread.
  * Return value: 0 for success, or -1 for error and set errno.
  */
-extern int get_sched_policy(int tid, SchedPolicy *policy);
+extern int get_sched_policy(int tid, SchedPolicy* policy);
 
 /* Return a displayable string corresponding to policy.
  * Return value: non-NULL NUL-terminated name of unspecified length;
  * the caller is responsible for displaying the useful part of the string.
  */
-extern const char *get_sched_policy_name(SchedPolicy policy);
+extern const char* get_sched_policy_name(SchedPolicy policy);
 
 #ifdef __cplusplus
 }

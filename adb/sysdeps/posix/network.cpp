@@ -24,6 +24,7 @@
 #include <string>
 
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 
 #include "adb_unique_fd.h"
@@ -136,11 +137,13 @@ int network_connect(const std::string& host, int port, int type, int timeout, st
         return fd;
     }
     if (getaddrinfo_error != 0) {
-        *error = gai_strerror(getaddrinfo_error);
-        LOG(WARNING) << "failed to resolve host '" << host << "': " << *error;
+        *error = android::base::StringPrintf("failed to resolve host: '%s': %s", host.c_str(),
+                                             gai_strerror(getaddrinfo_error));
+        LOG(WARNING) << *error;
     } else {
-        *error = strerror(errno);
-        LOG(WARNING) << "failed to connect to '" << host << "': " << *error;
+        *error = android::base::StringPrintf("failed to connect to '%s:%d': %s", host.c_str(), port,
+                                             strerror(errno));
+        LOG(WARNING) << *error;
     }
     return -1;
 }

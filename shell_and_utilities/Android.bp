@@ -14,6 +14,7 @@ phony {
         "bzip2",
         "grep",
         "logwrapper",
+        "mini-keyctl",
         "mkshrc",
         "newfs_msdos",
         "reboot",

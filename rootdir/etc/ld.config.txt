@@ -176,7 +176,8 @@ namespace.conscrypt.visible = true
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
-namespace.conscrypt.links = default
+namespace.conscrypt.links = runtime,default
+namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
@@ -215,6 +216,7 @@ namespace.sphal.visible = true
 
 namespace.sphal.search.paths  = /odm/${LIB}
 namespace.sphal.search.paths += /vendor/${LIB}
+namespace.sphal.search.paths += /vendor/${LIB}/hw
 
 namespace.sphal.permitted.paths  = /odm/${LIB}
 namespace.sphal.permitted.paths += /vendor/${LIB}
@@ -466,7 +468,10 @@ namespace.system.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.system.links = runtime
-namespace.system.link.runtime.shared_libs = libdexfile_external.so
+namespace.system.link.runtime.shared_libs  = libdexfile_external.so
+namespace.system.link.runtime.shared_libs += libnativebridge.so
+namespace.system.link.runtime.shared_libs += libnativehelper.so
+namespace.system.link.runtime.shared_libs += libnativeloader.so
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
