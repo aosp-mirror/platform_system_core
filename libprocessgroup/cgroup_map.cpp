@@ -142,6 +142,9 @@ static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors
     return true;
 }
 
+// To avoid issues in sdk_mac build
+#if defined(__ANDROID__)
+
 static bool SetupCgroup(const CgroupDescriptor& descriptor) {
     const CgroupController* controller = descriptor.controller();
 
@@ -179,6 +182,15 @@ static bool SetupCgroup(const CgroupDescriptor& descriptor) {
 
     return true;
 }
+
+#else
+
+// Stubs for non-Android targets.
+static bool SetupCgroup(const CgroupDescriptor&) {
+    return false;
+}
+
+#endif
 
 static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descriptors) {
     std::string cgroup_rc_path = StringPrintf("%s/%s", CGROUPS_RC_DIR, CgroupMap::CGROUPS_RC_FILE);
