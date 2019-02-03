@@ -991,27 +991,33 @@ Result<Success> Service::Start() {
         std::for_each(descriptors_.begin(), descriptors_.end(),
                       std::bind(&DescriptorInfo::CreateAndPublish, std::placeholders::_1, scon));
 
-        // See if there were "writepid" instructions to write to files under /dev/cpuset/.
-        auto cpuset_predicate = [](const std::string& path) {
-            return StartsWith(path, "/dev/cpuset/");
-        };
-        auto iter = std::find_if(writepid_files_.begin(), writepid_files_.end(), cpuset_predicate);
-        if (iter == writepid_files_.end()) {
-            // There were no "writepid" instructions for cpusets, check if the system default
-            // cpuset is specified to be used for the process.
-            std::string default_cpuset = GetProperty("ro.cpuset.default", "");
-            if (!default_cpuset.empty()) {
-                // Make sure the cpuset name starts and ends with '/'.
-                // A single '/' means the 'root' cpuset.
-                if (default_cpuset.front() != '/') {
-                    default_cpuset.insert(0, 1, '/');
+        // See if there were "writepid" instructions to write to files under cpuset path.
+        std::string cpuset_path;
+        if (CgroupGetControllerPath("cpuset", &cpuset_path)) {
+            auto cpuset_predicate = [&cpuset_path](const std::string& path) {
+                return StartsWith(path, cpuset_path + "/");
+            };
+            auto iter =
+                    std::find_if(writepid_files_.begin(), writepid_files_.end(), cpuset_predicate);
+            if (iter == writepid_files_.end()) {
+                // There were no "writepid" instructions for cpusets, check if the system default
+                // cpuset is specified to be used for the process.
+                std::string default_cpuset = GetProperty("ro.cpuset.default", "");
+                if (!default_cpuset.empty()) {
+                    // Make sure the cpuset name starts and ends with '/'.
+                    // A single '/' means the 'root' cpuset.
+                    if (default_cpuset.front() != '/') {
+                        default_cpuset.insert(0, 1, '/');
+                    }
+                    if (default_cpuset.back() != '/') {
+                        default_cpuset.push_back('/');
+                    }
+                    writepid_files_.push_back(
+                            StringPrintf("%s%stasks", cpuset_path.c_str(), default_cpuset.c_str()));
                 }
-                if (default_cpuset.back() != '/') {
-                    default_cpuset.push_back('/');
-                }
-                writepid_files_.push_back(
-                    StringPrintf("/dev/cpuset%stasks", default_cpuset.c_str()));
             }
+        } else {
+            LOG(ERROR) << "cpuset cgroup controller is not mounted!";
         }
         std::string pid_str = std::to_string(getpid());
         for (const auto& file : writepid_files_) {
