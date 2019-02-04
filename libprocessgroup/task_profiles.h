@@ -46,8 +46,8 @@ class ProfileAction {
     virtual ~ProfileAction() {}
 
     // Default implementations will fail
-    virtual bool ExecuteForProcess(uid_t, pid_t) const { return -1; };
-    virtual bool ExecuteForTask(int) const { return -1; };
+    virtual bool ExecuteForProcess(uid_t, pid_t) const { return false; };
+    virtual bool ExecuteForTask(int) const { return false; };
 };
 
 // Profile actions
