@@ -60,7 +60,6 @@ cc_defaults {
     },
     static_libs: [
         "libseccomp_policy",
-        "libprocessgroup",
         "libavb",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
@@ -82,6 +81,7 @@ cc_defaults {
         "liblog",
         "liblogwrap",
         "liblp",
+        "libprocessgroup",
         "libselinux",
         "libutils",
     ],
