@@ -300,7 +300,7 @@ class LibraryNamespaces {
         return nullptr;
       }
 
-      native_bridge_namespace_t* vendor_ns = NativeBridgeGetVendorNamespace();
+      native_bridge_namespace_t* vendor_ns = NativeBridgeGetExportedNamespace(kVendorNamespaceName);
 
       if (!NativeBridgeLinkNamespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = NativeBridgeGetError();
