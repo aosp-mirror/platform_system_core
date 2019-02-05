@@ -24,7 +24,7 @@ LIBNATIVEBRIDGE_1 {
     NativeBridgeGetError;
     NativeBridgeIsPathSupported;
     NativeBridgeCreateNamespace;
-    NativeBridgeGetVendorNamespace;
+    NativeBridgeGetExportedNamespace;
     NativeBridgeLinkNamespaces;
     NativeBridgeLoadLibraryExt;
     NativeBridgeInitAnonymousNamespace;

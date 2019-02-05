@@ -101,6 +101,8 @@ enum NativeBridgeImplementationVersion {
   NAMESPACE_VERSION = 3,
   // The version with vendor namespaces
   VENDOR_NAMESPACE_VERSION = 4,
+  // The version with runtime namespaces
+  RUNTIME_NAMESPACE_VERSION = 5,
 };
 
 // Whether we had an error at some point.
@@ -610,12 +612,22 @@ bool NativeBridgeLinkNamespaces(native_bridge_namespace_t* from, native_bridge_n
   return false;
 }
 
-native_bridge_namespace_t* NativeBridgeGetVendorNamespace() {
-  if (!NativeBridgeInitialized() || !isCompatibleWith(VENDOR_NAMESPACE_VERSION)) {
+native_bridge_namespace_t* NativeBridgeGetExportedNamespace(const char* name) {
+  if (!NativeBridgeInitialized()) {
     return nullptr;
   }
 
-  return callbacks->getVendorNamespace();
+  if (isCompatibleWith(RUNTIME_NAMESPACE_VERSION)) {
+    return callbacks->getExportedNamespace(name);
+  }
+
+  // sphal is vendor namespace name -> use v4 callback in the case NB callbacks
+  // are not compatible with v5
+  if (isCompatibleWith(VENDOR_NAMESPACE_VERSION) && name != nullptr && strcmp("sphal", name) == 0) {
+    return callbacks->getVendorNamespace();
+  }
+
+  return nullptr;
 }
 
 void* NativeBridgeLoadLibraryExt(const char* libpath, int flag, native_bridge_namespace_t* ns) {
