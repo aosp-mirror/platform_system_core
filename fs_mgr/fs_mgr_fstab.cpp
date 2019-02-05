@@ -587,18 +587,7 @@ std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
     return boot_devices;
 }
 
-void EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
-    auto iter = std::remove_if(fstab->begin(), fstab->end(),
-                               [&](const auto& entry) { return entry.mount_point == mount_point; });
-    fstab->erase(iter, fstab->end());
-}
-
-void TransformFstabForGsi(Fstab* fstab) {
-    EraseFstabEntry(fstab, "/system");
-    EraseFstabEntry(fstab, "/data");
-
-    fstab->emplace_back(BuildGsiSystemFstabEntry());
-
+FstabEntry BuildGsiUserdataFstabEntry() {
     constexpr uint32_t kFlags = MS_NOATIME | MS_NOSUID | MS_NODEV;
 
     FstabEntry userdata = {
@@ -614,6 +603,34 @@ void TransformFstabForGsi(Fstab* fstab) {
     userdata.fs_mgr_flags.quota = true;
     userdata.fs_mgr_flags.late_mount = true;
     userdata.fs_mgr_flags.formattable = true;
+    return userdata;
+}
+
+void EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
+    auto iter = std::remove_if(fstab->begin(), fstab->end(),
+                               [&](const auto& entry) { return entry.mount_point == mount_point; });
+    fstab->erase(iter, fstab->end());
+}
+
+void TransformFstabForGsi(Fstab* fstab) {
+    // Inherit fstab properties for userdata.
+    FstabEntry userdata;
+    if (FstabEntry* entry = GetEntryForMountPoint(fstab, "/data")) {
+        userdata = *entry;
+        userdata.blk_device = "userdata_gsi";
+        userdata.fs_mgr_flags.logical = true;
+        userdata.fs_mgr_flags.formattable = true;
+        if (!userdata.key_dir.empty()) {
+            userdata.key_dir += "/gsi";
+        }
+    } else {
+        userdata = BuildGsiUserdataFstabEntry();
+    }
+
+    EraseFstabEntry(fstab, "/system");
+    EraseFstabEntry(fstab, "/data");
+
+    fstab->emplace_back(BuildGsiSystemFstabEntry());
     fstab->emplace_back(userdata);
 }
 
