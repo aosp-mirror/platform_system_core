@@ -176,6 +176,7 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
 
 void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     for (const auto& flag : Split(flags, ",")) {
+        if (flag.empty() || flag == "defaults") continue;
         std::string arg;
         if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
             arg = flag.substr(equal_sign + 1);
