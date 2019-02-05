@@ -1969,11 +1969,9 @@ static void mainloop(void) {
 
             clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
             if (get_time_diff_ms(&last_report_tm, &curr_tm) >= PSI_POLL_PERIOD_MS) {
-                if (polling) {
-                    polling--;
-                    poll_handler->handler(poll_handler->data, 0);
-                    last_report_tm = curr_tm;
-                }
+                polling--;
+                poll_handler->handler(poll_handler->data, 0);
+                last_report_tm = curr_tm;
             }
         } else {
             /* Wait for events with no timeout */
