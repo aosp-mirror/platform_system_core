@@ -164,8 +164,9 @@ bool NativeBridgeLinkNamespaces(struct native_bridge_namespace_t* from,
 void* NativeBridgeLoadLibraryExt(const char* libpath, int flag,
                                  struct native_bridge_namespace_t* ns);
 
-// Returns vendor namespace if it is enabled for the device and null otherwise
-struct native_bridge_namespace_t* NativeBridgeGetVendorNamespace();
+// Returns exported namespace by the name. This is a reflection of
+// android_get_exported_namespace function. Introduced in v5.
+struct native_bridge_namespace_t* NativeBridgeGetExportedNamespace(const char* name);
 
 // Native bridge interfaces to runtime.
 struct NativeBridgeCallbacks {
@@ -362,7 +363,17 @@ struct NativeBridgeCallbacks {
   //
   // Returns:
   //   vendor namespace or null if it was not set up for the device
+  //
+  // Starting with v5 (Android Q) this function is no longer used.
+  // Use getExportedNamespace() below.
   struct native_bridge_namespace_t* (*getVendorNamespace)();
+
+  // Get native bridge version of exported namespace. Peer of
+  // android_get_exported_namespace(const char*) function.
+  //
+  // Returns:
+  //   exported namespace or null if it was not set up for the device
+  struct native_bridge_namespace_t* (*getExportedNamespace)(const char* name);
 };
 
 // Runtime interfaces to native bridge.
