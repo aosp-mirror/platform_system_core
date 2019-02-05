@@ -11,6 +11,7 @@ import /vendor/etc/init/hw/init.${ro.hardware}.rc
 import /init.usb.configfs.rc
 import /init.${ro.zygote}.rc
 
+# Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
     # Mount shared so changes propagate into child namespaces
     # Do this before other processes are started from init. Otherwise,
@@ -30,14 +31,8 @@ on early-init
     # Set the security context of /postinstall if present.
     restorecon /postinstall
 
-    # Mount cgroup mount point for cpu accounting
-    mount cgroup none /acct nodev noexec nosuid cpuacct
-    chmod 0555 /acct
     mkdir /acct/uid
 
-    # root memory control cgroup, used by lmkd
-    mkdir /dev/memcg 0700 root system
-    mount cgroup none /dev/memcg nodev noexec nosuid memory
     # memory.pressure_level used by lmkd
     chown root system /dev/memcg/memory.pressure_level
     chmod 0040 /dev/memcg/memory.pressure_level
@@ -69,8 +64,6 @@ on init
     symlink /system/vendor /vendor
 
     # Create energy-aware scheduler tuning nodes
-    mkdir /dev/stune
-    mount cgroup none /dev/stune nodev noexec nosuid schedtune
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
     mkdir /dev/stune/top-app
@@ -164,8 +157,6 @@ on init
     chmod 0400 /proc/net/fib_trie
 
     # Create cgroup mount points for process groups
-    mkdir /dev/cpuctl
-    mount cgroup none /dev/cpuctl nodev noexec nosuid cpu
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/tasks
     chmod 0666 /dev/cpuctl/tasks
@@ -173,9 +164,6 @@ on init
     write /dev/cpuctl/cpu.rt_runtime_us 950000
 
     # sets up initial cpusets for ActivityManager
-    mkdir /dev/cpuset
-    mount cpuset none /dev/cpuset nodev noexec nosuid
-
     # this ensures that the cpusets are present and usable, but the device's
     # init.rc must actually set the correct cpus
     mkdir /dev/cpuset/foreground
@@ -237,8 +225,6 @@ on init
     # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
 
-    mkdir /dev/cg2_bpf
-    mount cgroup2 cg2_bpf /dev/cg2_bpf nodev noexec nosuid
     chown root root /dev/cg2_bpf
     chmod 0600 /dev/cg2_bpf
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
