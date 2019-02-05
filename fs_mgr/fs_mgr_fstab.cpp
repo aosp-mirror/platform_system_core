@@ -175,7 +175,6 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
 }
 
 void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
-    entry->fs_mgr_flags.val = 0U;
     for (const auto& flag : Split(flags, ",")) {
         std::string arg;
         if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
@@ -239,18 +238,14 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             }
         } else if (StartsWith(flag, "length=")) {
             // The length flag is followed by an = and the size of the partition.
-            entry->fs_mgr_flags.length = true;
             if (!ParseInt(arg, &entry->length)) {
                 LWARNING << "Warning: length= flag malformed: " << arg;
             }
         } else if (StartsWith(flag, "swapprio=")) {
-            entry->fs_mgr_flags.swap_prio = true;
             if (!ParseInt(arg, &entry->swap_prio)) {
                 LWARNING << "Warning: length= flag malformed: " << arg;
             }
         } else if (StartsWith(flag, "zramsize=")) {
-            entry->fs_mgr_flags.zram_size = true;
-
             if (!arg.empty() && arg.back() == '%') {
                 arg.pop_back();
                 int val;
@@ -282,13 +277,11 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             entry->file_contents_mode = "aes-256-xts";
             entry->file_names_mode = "aes-256-cts";
         } else if (StartsWith(flag, "max_comp_streams=")) {
-            entry->fs_mgr_flags.max_comp_streams = true;
             if (!ParseInt(arg, &entry->max_comp_streams)) {
                 LWARNING << "Warning: max_comp_streams= flag malformed: " << arg;
             }
         } else if (StartsWith(flag, "reservedsize=")) {
             // The reserved flag is followed by an = and the reserved size of the partition.
-            entry->fs_mgr_flags.reserved_size = true;
             uint64_t size;
             if (!ParseByteCount(arg, &size)) {
                 LWARNING << "Warning: reservedsize= flag malformed: " << arg;
@@ -298,7 +291,6 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "eraseblk=")) {
             // The erase block size flag is followed by an = and the flash erase block size. Get it,
             // check that it is a power of 2 and at least 4096, and return it.
-            entry->fs_mgr_flags.erase_blk_size = true;
             off64_t val;
             if (!ParseInt(arg, &val) || val < 4096 || (val & (val - 1)) != 0) {
                 LWARNING << "Warning: eraseblk= flag malformed: " << arg;
@@ -308,7 +300,6 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "logicalblk=")) {
             // The logical block size flag is followed by an = and the flash logical block size. Get
             // it, check that it is a power of 2 and at least 4096, and return it.
-            entry->fs_mgr_flags.logical_blk_size = true;
             off64_t val;
             if (!ParseInt(arg, &val) || val < 4096 || (val & (val - 1)) != 0) {
                 LWARNING << "Warning: logicalblk= flag malformed: " << arg;
@@ -320,23 +311,18 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             entry->vbmeta_partition = arg;
         } else if (StartsWith(flag, "keydirectory=")) {
             // The metadata flag is followed by an = and the directory for the keys.
-            entry->fs_mgr_flags.key_directory = true;
             entry->key_dir = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
-            entry->fs_mgr_flags.sysfs = true;
             entry->sysfs_path = arg;
         } else if (StartsWith(flag, "zram_loopback_path=")) {
             // The path to use loopback for zram.
-            entry->fs_mgr_flags.zram_loopback_path = true;
             entry->zram_loopback_path = arg;
         } else if (StartsWith(flag, "zram_loopback_size=")) {
-            entry->fs_mgr_flags.zram_loopback_size = true;
             if (!ParseByteCount(arg, &entry->zram_loopback_size)) {
                 LWARNING << "Warning: zram_loopback_size= flag malformed: " << arg;
             }
         } else if (StartsWith(flag, "zram_backing_dev_path=")) {
-            entry->fs_mgr_flags.zram_backing_dev_path = true;
             entry->zram_backing_dev_path = arg;
         } else if (StartsWith(flag, "avb_key=")) {
             entry->avb_key = arg;
@@ -777,215 +763,4 @@ bool is_dt_compatible() {
     }
 
     return false;
-}
-
-// Everything from here down is deprecated and will be removed shortly.
-
-using android::fs_mgr::Fstab;
-using android::fs_mgr::FstabEntry;
-using android::fs_mgr::ReadDefaultFstab;
-using android::fs_mgr::ReadFstabFromFile;
-
-struct fstab* fs_mgr_read_fstab(const char* fstab_path) {
-    Fstab fstab;
-    if (!ReadFstabFromFile(fstab_path, &fstab)) {
-        return nullptr;
-    }
-
-    return FstabToLegacyFstab(fstab);
-}
-
-struct fstab* fs_mgr_read_fstab_default() {
-    Fstab fstab;
-    if (!ReadDefaultFstab(&fstab)) {
-        return nullptr;
-    }
-
-    return FstabToLegacyFstab(fstab);
-}
-
-void fs_mgr_free_fstab(struct fstab *fstab)
-{
-    int i;
-
-    if (!fstab) {
-        return;
-    }
-
-    for (i = 0; i < fstab->num_entries; i++) {
-        /* Free the pointers return by strdup(3) */
-        free(fstab->recs[i].blk_device);
-        free(fstab->recs[i].logical_partition_name);
-        free(fstab->recs[i].mount_point);
-        free(fstab->recs[i].fs_type);
-        free(fstab->recs[i].fs_options);
-        free(fstab->recs[i].key_loc);
-        free(fstab->recs[i].key_dir);
-        free(fstab->recs[i].label);
-        free(fstab->recs[i].file_contents_mode);
-        free(fstab->recs[i].file_names_mode);
-        free(fstab->recs[i].sysfs_path);
-        free(fstab->recs[i].zram_loopback_path);
-        free(fstab->recs[i].zram_backing_dev_path);
-    }
-
-    /* Free the fstab_recs array created by calloc(3) */
-    free(fstab->recs);
-
-    /* Free fstab */
-    free(fstab);
-}
-
-struct fstab_rec* fs_mgr_get_entry_for_mount_point(struct fstab* fstab, const std::string& path) {
-    if (!fstab) {
-        return nullptr;
-    }
-    for (int i = 0; i < fstab->num_entries; i++) {
-        if (fstab->recs[i].mount_point && path == fstab->recs[i].mount_point) {
-            return &fstab->recs[i];
-        }
-    }
-    return nullptr;
-}
-
-FstabEntry FstabRecToFstabEntry(const fstab_rec* fstab_rec) {
-    FstabEntry entry;
-    entry.blk_device = fstab_rec->blk_device;
-    entry.logical_partition_name = fstab_rec->logical_partition_name;
-    entry.mount_point = fstab_rec->mount_point;
-    entry.fs_type = fstab_rec->fs_type;
-    entry.flags = fstab_rec->flags;
-    entry.fs_options = fstab_rec->fs_options;
-    entry.fs_mgr_flags.val = fstab_rec->fs_mgr_flags;
-    entry.key_loc = fstab_rec->key_loc;
-    entry.key_dir = fstab_rec->key_dir;
-    entry.verity_loc = fstab_rec->verity_loc;
-    entry.length = fstab_rec->length;
-    entry.label = fstab_rec->label;
-    entry.partnum = fstab_rec->partnum;
-    entry.swap_prio = fstab_rec->swap_prio;
-    entry.max_comp_streams = fstab_rec->max_comp_streams;
-    entry.zram_size = fstab_rec->zram_size;
-    entry.reserved_size = fstab_rec->reserved_size;
-    entry.file_contents_mode = fstab_rec->file_contents_mode;
-    entry.file_names_mode = fstab_rec->file_names_mode;
-    entry.erase_blk_size = fstab_rec->erase_blk_size;
-    entry.logical_blk_size = fstab_rec->logical_blk_size;
-    entry.sysfs_path = fstab_rec->sysfs_path;
-    entry.zram_loopback_path = fstab_rec->zram_loopback_path;
-    entry.zram_loopback_size = fstab_rec->zram_loopback_size;
-    entry.zram_backing_dev_path = fstab_rec->zram_backing_dev_path;
-
-    return entry;
-}
-
-Fstab LegacyFstabToFstab(const struct fstab* legacy_fstab) {
-    Fstab fstab;
-    for (int i = 0; i < legacy_fstab->num_entries; i++) {
-        fstab.emplace_back(FstabRecToFstabEntry(&legacy_fstab->recs[i]));
-    }
-
-    return fstab;
-}
-
-fstab* FstabToLegacyFstab(const Fstab& fstab) {
-    struct fstab* legacy_fstab = static_cast<struct fstab*>(calloc(1, sizeof(struct fstab)));
-    legacy_fstab->num_entries = fstab.size();
-    legacy_fstab->recs =
-            static_cast<fstab_rec*>(calloc(legacy_fstab->num_entries, sizeof(fstab_rec)));
-
-    for (int i = 0; i < legacy_fstab->num_entries; i++) {
-        legacy_fstab->recs[i].blk_device = strdup(fstab[i].blk_device.c_str());
-        legacy_fstab->recs[i].logical_partition_name =
-                strdup(fstab[i].logical_partition_name.c_str());
-        legacy_fstab->recs[i].mount_point = strdup(fstab[i].mount_point.c_str());
-        legacy_fstab->recs[i].fs_type = strdup(fstab[i].fs_type.c_str());
-        legacy_fstab->recs[i].flags = fstab[i].flags;
-        legacy_fstab->recs[i].fs_options = strdup(fstab[i].fs_options.c_str());
-        legacy_fstab->recs[i].fs_mgr_flags = fstab[i].fs_mgr_flags.val;
-        legacy_fstab->recs[i].key_loc = strdup(fstab[i].key_loc.c_str());
-        legacy_fstab->recs[i].key_dir = strdup(fstab[i].key_dir.c_str());
-        legacy_fstab->recs[i].verity_loc = strdup(fstab[i].verity_loc.c_str());
-        legacy_fstab->recs[i].length = fstab[i].length;
-        legacy_fstab->recs[i].label = strdup(fstab[i].label.c_str());
-        legacy_fstab->recs[i].partnum = fstab[i].partnum;
-        legacy_fstab->recs[i].swap_prio = fstab[i].swap_prio;
-        legacy_fstab->recs[i].max_comp_streams = fstab[i].max_comp_streams;
-        legacy_fstab->recs[i].zram_size = fstab[i].zram_size;
-        legacy_fstab->recs[i].reserved_size = fstab[i].reserved_size;
-        legacy_fstab->recs[i].file_contents_mode = strdup(fstab[i].file_contents_mode.c_str());
-        legacy_fstab->recs[i].file_names_mode = strdup(fstab[i].file_names_mode.c_str());
-        legacy_fstab->recs[i].erase_blk_size = fstab[i].erase_blk_size;
-        legacy_fstab->recs[i].logical_blk_size = fstab[i].logical_blk_size;
-        legacy_fstab->recs[i].sysfs_path = strdup(fstab[i].sysfs_path.c_str());
-        legacy_fstab->recs[i].zram_loopback_path = strdup(fstab[i].zram_loopback_path.c_str());
-        legacy_fstab->recs[i].zram_loopback_size = fstab[i].zram_loopback_size;
-        legacy_fstab->recs[i].zram_backing_dev_path = strdup(fstab[i].zram_backing_dev_path.c_str());
-    }
-    return legacy_fstab;
-}
-
-int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_VOLDMANAGED;
-}
-
-int fs_mgr_is_nonremovable(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_NONREMOVABLE;
-}
-
-int fs_mgr_is_verified(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_VERIFY;
-}
-
-int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE);
-}
-
-void fs_mgr_get_file_encryption_modes(const struct fstab_rec* fstab, const char** contents_mode_ret,
-                                      const char** filenames_mode_ret) {
-    *contents_mode_ret = fstab->file_contents_mode;
-    *filenames_mode_ret = fstab->file_names_mode;
-}
-
-int fs_mgr_is_convertible_to_fbe(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_FORCEFDEORFBE;
-}
-
-int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_NOEMULATEDSD;
-}
-
-int fs_mgr_is_notrim(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_NOTRIM;
-}
-
-int fs_mgr_is_quota(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_QUOTA;
-}
-
-int fs_mgr_has_sysfs_path(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_SYSFS;
-}
-
-int fs_mgr_is_logical(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_LOGICAL;
-}
-
-int fs_mgr_is_checkpoint(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & (MF_CHECKPOINT_FS | MF_CHECKPOINT_BLK);
-}
-
-int fs_mgr_is_checkpoint_fs(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_CHECKPOINT_FS;
-}
-
-int fs_mgr_is_checkpoint_blk(const struct fstab_rec* fstab) {
-    return fstab->fs_mgr_flags & MF_CHECKPOINT_BLK;
 }
