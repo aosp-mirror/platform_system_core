@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __CORE_FS_MGR_PRIV_H
-#define __CORE_FS_MGR_PRIV_H
+#pragma once
 
 #include <chrono>
 #include <string>
@@ -85,53 +84,6 @@
  *
  */
 
-// clang-format off
-#define MF_WAIT                  0x1
-#define MF_CHECK                 0x2
-#define MF_CRYPT                 0x4
-#define MF_NONREMOVABLE          0x8
-#define MF_VOLDMANAGED          0x10
-#define MF_LENGTH               0x20
-#define MF_RECOVERYONLY         0x40
-#define MF_SWAPPRIO             0x80
-#define MF_ZRAMSIZE            0x100
-#define MF_VERIFY              0x200
-#define MF_FORCECRYPT          0x400
-#define MF_NOEMULATEDSD        0x800 /* no emulated sdcard daemon, sd card is the only
-                                        external storage */
-#define MF_NOTRIM             0x1000
-#define MF_FILEENCRYPTION     0x2000
-#define MF_FORMATTABLE        0x4000
-#define MF_SLOTSELECT         0x8000
-#define MF_FORCEFDEORFBE     0x10000
-#define MF_LATEMOUNT         0x20000
-#define MF_NOFAIL            0x40000
-#define MF_VERIFYATBOOT      0x80000
-#define MF_MAX_COMP_STREAMS 0x100000
-#define MF_RESERVEDSIZE     0x200000
-#define MF_QUOTA            0x400000
-#define MF_ERASEBLKSIZE     0x800000
-#define MF_LOGICALBLKSIZE  0X1000000
-#define MF_AVB             0X2000000
-#define MF_KEYDIRECTORY    0X4000000
-#define MF_SYSFS           0X8000000
-#define MF_LOGICAL        0x10000000
-#define MF_CHECKPOINT_BLK 0x20000000
-#define MF_CHECKPOINT_FS  0x40000000
-#define MF_FIRST_STAGE_MOUNT \
-                          0x80000000
-#define MF_SLOTSELECT_OTHER  \
-                         0x100000000
-#define MF_ZRAM_LOOPBACK_PATH    \
-                         0x200000000
-#define MF_ZRAM_LOOPBACK_SIZE    \
-                         0x400000000
-#define MF_ZRAM_BACKING_DEV_PATH \
-                         0x800000000
-#define MF_FS_VERITY  \
-                         0x1000000000
-// clang-format on
-
 #define DM_BUF_SIZE 4096
 
 using namespace std::chrono_literals;
@@ -148,5 +100,3 @@ bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
 int load_verity_state(const android::fs_mgr::FstabEntry& entry, int* mode);
-
-#endif /* __CORE_FS_MGR_PRIV_H */
