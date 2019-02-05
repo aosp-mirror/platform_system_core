@@ -256,6 +256,36 @@ TEST(fs_mgr, ReadFstabFromFile_MountOptions) {
     EXPECT_EQ("", fstab[10].fs_options);
 }
 
+static bool CompareFlags(FstabEntry::FsMgrFlags& lhs, FstabEntry::FsMgrFlags& rhs) {
+    // clang-format off
+    return lhs.wait == rhs.wait &&
+           lhs.check == rhs.check &&
+           lhs.crypt == rhs.crypt &&
+           lhs.nonremovable == rhs.nonremovable &&
+           lhs.vold_managed == rhs.vold_managed &&
+           lhs.recovery_only == rhs.recovery_only &&
+           lhs.verify == rhs.verify &&
+           lhs.force_crypt == rhs.force_crypt &&
+           lhs.no_emulated_sd == rhs.no_emulated_sd &&
+           lhs.no_trim == rhs.no_trim &&
+           lhs.file_encryption == rhs.file_encryption &&
+           lhs.formattable == rhs.formattable &&
+           lhs.slot_select == rhs.slot_select &&
+           lhs.force_fde_or_fbe == rhs.force_fde_or_fbe &&
+           lhs.late_mount == rhs.late_mount &&
+           lhs.no_fail == rhs.no_fail &&
+           lhs.verify_at_boot == rhs.verify_at_boot &&
+           lhs.quota == rhs.quota &&
+           lhs.avb == rhs.avb &&
+           lhs.logical == rhs.logical &&
+           lhs.checkpoint_blk == rhs.checkpoint_blk &&
+           lhs.checkpoint_fs == rhs.checkpoint_fs &&
+           lhs.first_stage_mount == rhs.first_stage_mount &&
+           lhs.slot_select_other == rhs.slot_select_other &&
+           lhs.fs_verity == rhs.fs_verity;
+    // clang-format on
+}
+
 TEST(fs_mgr, ReadFstabFromFile_FsMgrFlags) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
@@ -276,62 +306,62 @@ source none5       swap   defaults      defaults
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.wait = true;
         flags.check = true;
         flags.nonremovable = true;
         flags.recovery_only = true;
         flags.verify_at_boot = true;
         flags.verify = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.avb = true;
         flags.no_emulated_sd = true;
         flags.no_trim = true;
         flags.formattable = true;
         flags.slot_select = true;
         flags.no_fail = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.first_stage_mount = true;
         flags.late_mount = true;
         flags.quota = true;
         flags.logical = true;
         flags.slot_select_other = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.checkpoint_blk = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     entry++;
 
     EXPECT_EQ("none4", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.checkpoint_fs = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     entry++;
 
     EXPECT_EQ("none5", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        FstabEntry::FsMgrFlags flags = {};
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
 }
 
@@ -355,8 +385,8 @@ source none2       swap   defaults      forcefdeorfbe=
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        FstabEntry::FsMgrFlags flags = {};
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     EXPECT_EQ("", entry->key_loc);
     EXPECT_EQ("", entry->key_dir);
@@ -380,25 +410,13 @@ source none2       swap   defaults      forcefdeorfbe=
 
     EXPECT_EQ("none1", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.crypt = true;
         flags.force_crypt = true;
         flags.file_encryption = true;
-        flags.key_directory = true;
-        flags.length = true;
-        flags.swap_prio = true;
-        flags.zram_size = true;
-        flags.max_comp_streams = true;
         flags.verify = true;
         flags.avb = true;
-        flags.reserved_size = true;
-        flags.erase_blk_size = true;
-        flags.logical_blk_size = true;
-        flags.sysfs = true;
-        flags.zram_loopback_path = true;
-        flags.zram_loopback_size = true;
-        flags.zram_backing_dev_path = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     EXPECT_EQ("", entry->key_loc);
     EXPECT_EQ("", entry->key_dir);
@@ -423,9 +441,9 @@ source none2       swap   defaults      forcefdeorfbe=
     // forcefdeorfbe sets file_contents_mode and file_names_mode by default, so test it separately.
     EXPECT_EQ("none2", entry->mount_point);
     {
-        FstabEntry::FsMgrFlags flags = {0};
+        FstabEntry::FsMgrFlags flags = {};
         flags.force_fde_or_fbe = true;
-        EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
@@ -444,12 +462,12 @@ source none0       swap   defaults      encryptable=/dir/key
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(1U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.crypt = true;
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("/dir/key", entry->key_loc);
 }
 
@@ -468,30 +486,30 @@ source none3       swap   defaults      voldmanaged=sdcard:auto
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(4U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.vold_managed = true;
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_TRUE(entry->label.empty());
     EXPECT_EQ(-1, entry->partnum);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_TRUE(entry->label.empty());
     EXPECT_EQ(-1, entry->partnum);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("sdcard", entry->label);
     EXPECT_EQ(3, entry->partnum);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("sdcard", entry->label);
     EXPECT_EQ(-1, entry->partnum);
 }
@@ -509,17 +527,16 @@ source none1       swap   defaults      length=123456
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(2U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.length = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->length);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(123456, entry->length);
 }
 
@@ -536,17 +553,16 @@ source none1       swap   defaults      swapprio=123456
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(2U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.swap_prio = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(-1, entry->swap_prio);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(123456, entry->swap_prio);
 }
 
@@ -567,37 +583,36 @@ source none5       swap   defaults      zramsize=%
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(6U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.zram_size = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->zram_size);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(123456, entry->zram_size);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->zram_size);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_NE(0, entry->zram_size);
     entry++;
 
     EXPECT_EQ("none4", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->zram_size);
     entry++;
 
     EXPECT_EQ("none5", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->zram_size);
 }
 
@@ -617,9 +632,9 @@ source none0       swap   defaults      verify=/dir/key
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.verify = true;
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("/dir/key", entry->verity_loc);
 }
@@ -640,9 +655,9 @@ source none0       swap   defaults      forceencrypt=/dir/key
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.force_crypt = true;
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("/dir/key", entry->key_loc);
 }
@@ -663,9 +678,9 @@ source none0       swap   defaults      forcefdeorfbe=/dir/key
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.force_fde_or_fbe = true;
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("/dir/key", entry->key_loc);
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
@@ -695,72 +710,72 @@ source none10      swap   defaults      fileencryption=ice:adiantum:
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(11U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.file_encryption = true;
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("", entry->file_contents_mode);
     EXPECT_EQ("", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("adiantum", entry->file_contents_mode);
     EXPECT_EQ("adiantum", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none4", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("adiantum", entry->file_contents_mode);
     EXPECT_EQ("aes-256-heh", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none5", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none6", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none7", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none8", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("aes-256-heh", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none9", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("adiantum", entry->file_names_mode);
 
     entry++;
     EXPECT_EQ("none10", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("", entry->file_contents_mode);
     EXPECT_EQ("", entry->file_names_mode);
 }
@@ -778,17 +793,16 @@ source none1       swap   defaults      max_comp_streams=123456
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(2U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.max_comp_streams = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->max_comp_streams);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(123456, entry->max_comp_streams);
 }
 
@@ -807,27 +821,26 @@ source none3       swap   defaults      reservedsize=2m
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(4U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.reserved_size = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->reserved_size);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(2, entry->reserved_size);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(1024, entry->reserved_size);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(2 * 1024 * 1024, entry->reserved_size);
 }
 
@@ -846,27 +859,26 @@ source none3       swap   defaults      eraseblk=8192
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(4U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.erase_blk_size = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->erase_blk_size);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->erase_blk_size);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->erase_blk_size);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(8192, entry->erase_blk_size);
 }
 
@@ -885,27 +897,26 @@ source none3       swap   defaults      logicalblk=8192
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     ASSERT_EQ(4U, fstab.size());
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.logical_blk_size = true;
+    FstabEntry::FsMgrFlags flags = {};
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->logical_blk_size);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->logical_blk_size);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->logical_blk_size);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(8192, entry->logical_blk_size);
 }
 
@@ -925,9 +936,9 @@ source none0       swap   defaults      avb=vbmeta_partition
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
 
-    FstabEntry::FsMgrFlags flags = {0};
+    FstabEntry::FsMgrFlags flags = {};
     flags.avb = true;
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("vbmeta_partition", entry->vbmeta_partition);
 }
@@ -948,9 +959,8 @@ source none0       swap   defaults      keydirectory=/dir/key
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.key_directory = true;
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    FstabEntry::FsMgrFlags flags = {};
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("/dir/key", entry->key_dir);
 }
@@ -971,9 +981,8 @@ source none0       swap   defaults      sysfs_path=/sys/device
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
 
-    FstabEntry::FsMgrFlags flags = {0};
-    flags.sysfs = true;
-    EXPECT_EQ(flags.val, entry->fs_mgr_flags.val);
+    FstabEntry::FsMgrFlags flags = {};
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("/sys/device", entry->sysfs_path);
 }

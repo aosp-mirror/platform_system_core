@@ -378,7 +378,7 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
 // Set the number of reserved filesystem blocks if needed.
 static void tune_reserved_size(const std::string& blk_device, const FstabEntry& entry,
                                const struct ext4_super_block* sb, int* fs_stat) {
-    if (!entry.fs_mgr_flags.reserved_size) {
+    if (entry.reserved_size != 0) {
         return;
     }
 
@@ -551,7 +551,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
     }
 
     if (is_extfs(entry.fs_type) &&
-        (entry.fs_mgr_flags.reserved_size || entry.fs_mgr_flags.file_encryption ||
+        (entry.reserved_size != 0 || entry.fs_mgr_flags.file_encryption ||
          entry.fs_mgr_flags.fs_verity)) {
         struct ext4_super_block sb;
 
@@ -806,7 +806,7 @@ static bool needs_block_encryption(const FstabEntry& entry) {
 }
 
 static bool should_use_metadata_encryption(const FstabEntry& entry) {
-    return entry.fs_mgr_flags.key_directory &&
+    return !entry.key_dir.empty() &&
            (entry.fs_mgr_flags.file_encryption || entry.fs_mgr_flags.force_fde_or_fbe);
 }
 
@@ -1374,18 +1374,6 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
     return FS_MGR_DOMNT_FAILED;
 }
 
-int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
-    auto new_fstab = LegacyFstabToFstab(fstab);
-    return fs_mgr_do_mount_helper(&new_fstab, n_name, n_blk_device, tmp_mount_point, -1);
-}
-
-int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool needs_checkpoint) {
-    auto new_fstab = LegacyFstabToFstab(fstab);
-    return fs_mgr_do_mount_helper(&new_fstab, n_name, n_blk_device, tmp_mount_point,
-                                  needs_checkpoint);
-}
-
 int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
     return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
 }
@@ -1554,48 +1542,6 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
     }
 
     return ret;
-}
-
-struct fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab) {
-    int i;
-
-    if (!fstab) {
-        return NULL;
-    }
-
-    /* Look for the encryptable partition to find the data */
-    for (i = 0; i < fstab->num_entries; i++) {
-        /* Don't deal with vold managed enryptable partitions here */
-        if (!(fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) &&
-            (fstab->recs[i].fs_mgr_flags &
-             (MF_CRYPT | MF_FORCECRYPT | MF_FORCEFDEORFBE | MF_FILEENCRYPTION))) {
-            return &fstab->recs[i];
-        }
-    }
-    return NULL;
-}
-
-/*
- * key_loc must be at least PROPERTY_VALUE_MAX bytes long
- *
- * real_blk_device must be at least PROPERTY_VALUE_MAX bytes long
- */
-void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size) {
-    struct fstab_rec const* rec = fs_mgr_get_crypt_entry(fstab);
-    if (key_loc) {
-        if (rec) {
-            strlcpy(key_loc, rec->key_loc, size);
-        } else {
-            *key_loc = '\0';
-        }
-    }
-    if (real_blk_device) {
-        if (rec) {
-            strlcpy(real_blk_device, rec->blk_device, size);
-        } else {
-            *real_blk_device = '\0';
-        }
-    }
 }
 
 bool fs_mgr_load_verity_state(int* mode) {

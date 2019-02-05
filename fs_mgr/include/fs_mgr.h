@@ -65,9 +65,6 @@ int fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
 #define FS_MGR_DOMNT_SUCCESS 0
-int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point);
-int fs_mgr_do_mount(fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool needs_checkpoint);
 int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_blk_device,
                     char* tmp_mount_point);
 int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_blk_device,
@@ -75,8 +72,6 @@ int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_b
 int fs_mgr_do_mount_one(const android::fs_mgr::FstabEntry& entry,
                         const std::string& mount_point = "");
 int fs_mgr_do_tmpfs_mount(const char *n_name);
-fstab_rec const* fs_mgr_get_crypt_entry(fstab const* fstab);
-void fs_mgr_get_crypt_info(fstab* fstab, char* key_loc, char* real_blk_device, size_t size);
 bool fs_mgr_load_verity_state(int* mode);
 bool fs_mgr_update_verity_state(
         std::function<void(const std::string& mount_point, int mode)> callback);
