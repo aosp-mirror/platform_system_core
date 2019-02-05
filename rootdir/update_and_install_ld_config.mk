@@ -118,7 +118,12 @@ endif
 	$(hide) sed -i.bak -e "s?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g" $@
 	$(hide) sed -i.bak -e "s?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g" $@
 	$(hide) sed -i.bak -e "s?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g" $@
+ifeq ($(TARGET_COPY_OUT_PRODUCT),$(TARGET_COPY_OUT_PRODUCT_SERVICES))
+	# Remove lines containing %PRODUCT_SERVICES% (identical to the %PRODUCT% ones)
+	$(hide) sed -i.bak -e "\?%PRODUCT_SERVICES%?d" $@
+else
 	$(hide) sed -i.bak -e "s?%PRODUCT_SERVICES%?$(TARGET_COPY_OUT_PRODUCT_SERVICES)?g" $@
+endif
 	$(hide) sed -i.bak -e "s?^$(PRIVATE_VNDK_VERSION_TAG)??g" $@
 	$(hide) sed -i.bak "/^\#VNDK[0-9]\{2\}\#.*$$/d" $@
 	$(hide) rm -f $@.bak
