@@ -50,9 +50,9 @@ namespace.default.asan.search.paths += /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
-namespace.default.asan.search.paths += /data/asan/product/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
-namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT_SERVICES%/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 # Keep in sync with the platform namespace in the com.android.runtime APEX
