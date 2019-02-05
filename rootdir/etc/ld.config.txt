@@ -24,6 +24,9 @@ dir.system = /data/nativetest
 dir.system = /data/nativetest64
 dir.system = /data/benchmarktest
 dir.system = /data/benchmarktest64
+# TODO(b/123864775): Ensure tests are run from one of the directories above and
+# remove this.
+dir.system = /data/local/tmp
 
 dir.postinstall = /postinstall
 
