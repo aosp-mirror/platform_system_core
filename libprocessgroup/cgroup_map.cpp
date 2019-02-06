@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <pwd.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
@@ -72,26 +73,28 @@ static bool Mkdir(const std::string& path, mode_t mode, const std::string& uid,
         }
     }
 
-    passwd* uid_pwd = nullptr;
-    passwd* gid_pwd = nullptr;
-
-    if (!uid.empty()) {
-        uid_pwd = getpwnam(uid.c_str());
-        if (!uid_pwd) {
-            PLOG(ERROR) << "Unable to decode UID for '" << uid << "'";
-            return false;
-        }
-
-        if (!gid.empty()) {
-            gid_pwd = getpwnam(gid.c_str());
-            if (!gid_pwd) {
-                PLOG(ERROR) << "Unable to decode GID for '" << gid << "'";
-                return false;
-            }
-        }
+    if (uid.empty()) {
+        return true;
     }
 
-    if (uid_pwd && lchown(path.c_str(), uid_pwd->pw_uid, gid_pwd ? gid_pwd->pw_uid : -1) < 0) {
+    passwd* uid_pwd = getpwnam(uid.c_str());
+    if (!uid_pwd) {
+        PLOG(ERROR) << "Unable to decode UID for '" << uid << "'";
+        return false;
+    }
+
+    uid_t pw_uid = uid_pwd->pw_uid;
+    gid_t gr_gid = -1;
+    if (!gid.empty()) {
+        group* gid_pwd = getgrnam(gid.c_str());
+        if (!gid_pwd) {
+            PLOG(ERROR) << "Unable to decode GID for '" << gid << "'";
+            return false;
+        }
+        gr_gid = gid_pwd->gr_gid;
+    }
+
+    if (lchown(path.c_str(), pw_uid, gr_gid) < 0) {
         PLOG(ERROR) << "lchown() failed for " << path;
         return false;
     }
