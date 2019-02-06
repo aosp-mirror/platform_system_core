@@ -24,6 +24,9 @@ dir.system = /data/nativetest
 dir.system = /data/nativetest64
 dir.system = /data/benchmarktest
 dir.system = /data/benchmarktest64
+# TODO(b/123864775): Ensure tests are run from one of the directories above and
+# remove this.
+dir.system = /data/local/tmp
 
 dir.postinstall = /postinstall
 
@@ -78,9 +81,9 @@ namespace.default.permitted.paths += /system/${LIB}/bootstrap
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
-namespace.default.asan.search.paths += /data/asan/product/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
-namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT_SERVICES%/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.permitted.paths  = /data
