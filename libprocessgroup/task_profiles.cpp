@@ -132,6 +132,7 @@ bool SetCgroupAction::IsAppDependentPath(const std::string& path) {
 
 SetCgroupAction::SetCgroupAction(const CgroupController* c, const std::string& p)
     : controller_(c), path_(p) {
+#ifdef CACHE_FILE_DESCRIPTORS
     // cache file descriptor only if path is app independent
     if (IsAppDependentPath(path_)) {
         // file descriptor is not cached
@@ -155,6 +156,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController* c, const std::string& p
     }
 
     fd_ = std::move(fd);
+#endif
 }
 
 bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
@@ -176,6 +178,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
 }
 
 bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+#ifdef CACHE_FILE_DESCRIPTORS
     if (fd_ >= 0) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(pid, fd_)) {
@@ -203,9 +206,24 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     }
 
     return true;
+#else
+    std::string procs_path = controller_->GetProcsFilePath(path_.c_str(), uid, pid);
+    unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
+    if (tmp_fd < 0) {
+        // no permissions to access the file, ignore
+        return true;
+    }
+    if (!AddTidToCgroup(pid, tmp_fd)) {
+        PLOG(ERROR) << "Failed to add task into cgroup";
+        return false;
+    }
+
+    return true;
+#endif
 }
 
 bool SetCgroupAction::ExecuteForTask(int tid) const {
+#ifdef CACHE_FILE_DESCRIPTORS
     if (fd_ >= 0) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(tid, fd_)) {
@@ -223,6 +241,20 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     // application-dependent path can't be used with tid
     PLOG(ERROR) << "Application profile can't be applied to a thread";
     return false;
+#else
+    std::string tasks_path = controller_->GetTasksFilePath(path_.c_str());
+    unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
+    if (tmp_fd < 0) {
+        // no permissions to access the file, ignore
+        return true;
+    }
+    if (!AddTidToCgroup(tid, tmp_fd)) {
+        PLOG(ERROR) << "Failed to add task into cgroup";
+        return false;
+    }
+
+    return true;
+#endif
 }
 
 bool TaskProfile::ExecuteForProcess(uid_t uid, pid_t pid) const {
