@@ -531,6 +531,9 @@ on post-fs-data
     mkdir /data/anr 0775 system system
 
     mkdir /data/apex 0750 root system
+    mkdir /data/apex/active 0750 root system
+    mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/sessions 0700 root system
     mkdir /data/staging 0750 system system
 
     # NFC: create data/nfc for nv storage
