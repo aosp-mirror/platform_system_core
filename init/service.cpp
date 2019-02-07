@@ -218,12 +218,12 @@ bool Service::is_exec_service_running_ = false;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::vector<std::string>& args)
-    : Service(name, 0, 0, 0, {}, 0, 0, "", subcontext_for_restart_commands, args) {}
+    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
-                 const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
-                 unsigned namespace_flags, const std::string& seclabel,
-                 Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args)
+                 const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
+                 const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
+                 const std::vector<std::string>& args)
     : name_(name),
       classnames_({"default"}),
       flags_(flags),
@@ -232,7 +232,6 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       uid_(uid),
       gid_(gid),
       supp_gids_(supp_gids),
-      capabilities_(capabilities),
       namespace_flags_(namespace_flags),
       seclabel_(seclabel),
       onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
@@ -289,7 +288,7 @@ void Service::SetProcessAttributes() {
         }
     }
     // Keep capabilites on uid change.
-    if (capabilities_.any() && uid_) {
+    if (capabilities_ && uid_) {
         // If Android is running in a container, some securebits might already
         // be locked, so don't change those.
         unsigned long securebits = prctl(PR_GET_SECUREBITS);
@@ -328,8 +327,8 @@ void Service::SetProcessAttributes() {
             PLOG(FATAL) << "setpriority failed for " << name_;
         }
     }
-    if (capabilities_.any()) {
-        if (!SetCapsForExec(capabilities_)) {
+    if (capabilities_) {
+        if (!SetCapsForExec(*capabilities_)) {
             LOG(FATAL) << "cannot set capabilities for " << name_;
         }
     } else if (uid_) {
@@ -420,7 +419,7 @@ Result<Success> Service::ParseCapabilities(std::vector<std::string>&& args) {
     }
 
     unsigned int last_valid_cap = GetLastValidCap();
-    if (last_valid_cap >= capabilities_.size()) {
+    if (last_valid_cap >= capabilities_->size()) {
         LOG(WARNING) << "last valid run-time capability is larger than CAP_LAST_CAP";
     }
 
@@ -435,7 +434,7 @@ Result<Success> Service::ParseCapabilities(std::vector<std::string>&& args) {
             return Error() << StringPrintf("capability '%s' not supported by the kernel",
                                            arg.c_str());
         }
-        capabilities_[cap] = true;
+        (*capabilities_)[cap] = true;
     }
     return Success();
 }
@@ -796,7 +795,7 @@ const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
     // clang-format off
     static const Map option_parsers = {
         {"capabilities",
-                        {1,     kMax, &Service::ParseCapabilities}},
+                        {0,     kMax, &Service::ParseCapabilities}},
         {"class",       {1,     kMax, &Service::ParseClass}},
         {"console",     {0,     1,    &Service::ParseConsole}},
         {"critical",    {0,     0,    &Service::ParseCritical}},
@@ -1268,7 +1267,6 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
     std::string name = "exec " + std::to_string(exec_count) + " (" + Join(str_args, " ") + ")";
 
     unsigned flags = SVC_ONESHOT | SVC_TEMPORARY;
-    CapSet no_capabilities;
     unsigned namespace_flags = 0;
 
     std::string seclabel = "";
@@ -1303,8 +1301,8 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
         }
     }
 
-    return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, no_capabilities,
-                                     namespace_flags, seclabel, nullptr, str_args);
+    return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
+                                     nullptr, str_args);
 }
 
 // Shutdown services in the opposite order that they were started.
