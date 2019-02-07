@@ -68,9 +68,9 @@ class Service {
             const std::vector<std::string>& args);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
-            const std::vector<gid_t>& supp_gids, const CapSet& capabilities,
-            unsigned namespace_flags, const std::string& seclabel,
-            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args);
+            const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
+            const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
+            const std::vector<std::string>& args);
 
     static std::unique_ptr<Service> MakeTemporaryOneshotService(const std::vector<std::string>& args);
 
@@ -192,7 +192,7 @@ class Service {
     uid_t uid_;
     gid_t gid_;
     std::vector<gid_t> supp_gids_;
-    CapSet capabilities_;
+    std::optional<CapSet> capabilities_;
     unsigned namespace_flags_;
     // Pair of namespace type, path to namespace.
     std::vector<std::pair<int, std::string>> namespaces_to_enter_;
