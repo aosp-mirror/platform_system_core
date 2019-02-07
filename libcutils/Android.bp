@@ -196,4 +196,71 @@ cc_library {
     ],
 }
 
-subdirs = ["tests"]
+cc_defaults {
+    name: "libcutils_test_default",
+    srcs: ["sockets_test.cpp"],
+
+    target: {
+        android: {
+            srcs: [
+                "android_get_control_file_test.cpp",
+                "android_get_control_socket_test.cpp",
+                "ashmem_test.cpp",
+                "fs_config_test.cpp",
+                "memset_test.cpp",
+                "multiuser_test.cpp",
+                "properties_test.cpp",
+                "sched_policy_test.cpp",
+                "str_parms_test.cpp",
+                "trace-dev_test.cpp",
+            ],
+        },
+
+        not_windows: {
+            srcs: [
+                "str_parms_test.cpp",
+            ],
+        },
+    },
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+}
+
+test_libraries = [
+    "libcutils",
+    "liblog",
+    "libbase",
+    "libjsoncpp",
+    "libprocessgroup",
+]
+
+cc_test {
+    name: "libcutils_test",
+    test_suites: ["device-tests"],
+    defaults: ["libcutils_test_default"],
+    host_supported: true,
+    shared_libs: test_libraries,
+}
+
+cc_test {
+    name: "libcutils_test_static",
+    test_suites: ["device-tests"],
+    defaults: ["libcutils_test_default"],
+    static_libs: ["libc"] + test_libraries,
+    stl: "libc++_static",
+
+    target: {
+        android: {
+            static_executable: true,
+        },
+        windows: {
+            host_ldlibs: ["-lws2_32"],
+
+            enabled: true,
+        },
+    },
+}

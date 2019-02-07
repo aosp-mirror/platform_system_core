@@ -19,6 +19,9 @@
       "name": "libprocinfo_test"
     },
     {
+      "name": "libutils_test"
+    },
+    {
       "name": "memunreachable_test"
     },
     {
