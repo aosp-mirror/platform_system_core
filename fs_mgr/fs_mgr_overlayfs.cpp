@@ -328,6 +328,7 @@ bool fs_mgr_overlayfs_setup_dir(const std::string& dir, std::string* overlay, bo
 bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& mount_point,
                                 bool* change) {
     auto ret = true;
+    if (fs_mgr_overlayfs_already_mounted(mount_point)) return ret;
     auto fsrec_mount_point = overlay + "/" + android::base::Basename(mount_point) + "/";
 
     if (setfscreatecon(kOverlayfsFileContext)) {
@@ -538,7 +539,10 @@ std::vector<std::string> fs_mgr_candidate_list(Fstab* fstab, const char* mount_p
     std::vector<std::string> mounts;
     auto verity = fs_mgr_overlayfs_verity_enabled_list();
     for (auto& entry : *fstab) {
-        if (!fs_mgr_wants_overlayfs(&entry)) continue;
+        if (!fs_mgr_overlayfs_already_mounted(entry.mount_point) &&
+            !fs_mgr_wants_overlayfs(&entry)) {
+            continue;
+        }
         std::string new_mount_point(fs_mgr_mount_point(entry.mount_point.c_str()));
         if (mount_point && (new_mount_point != mount_point)) continue;
         if (std::find(verity.begin(), verity.end(), android::base::Basename(new_mount_point)) !=
@@ -832,7 +836,10 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
 
     auto scratch_can_be_mounted = true;
     for (const auto& mount_point : fs_mgr_candidate_list(fstab)) {
-        if (fs_mgr_overlayfs_already_mounted(mount_point)) continue;
+        if (fs_mgr_overlayfs_already_mounted(mount_point)) {
+            ret = true;
+            continue;
+        }
         if (scratch_can_be_mounted) {
             scratch_can_be_mounted = false;
             auto scratch_device = fs_mgr_overlayfs_scratch_device();
