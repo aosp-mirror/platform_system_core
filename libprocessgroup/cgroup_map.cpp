@@ -131,7 +131,8 @@ static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors
         std::string name = cgroups[i]["Controller"].asString();
         descriptors->emplace(std::make_pair(
                 name,
-                CgroupDescriptor(1, name, cgroups[i]["Path"].asString(), cgroups[i]["Mode"].asInt(),
+                CgroupDescriptor(1, name, cgroups[i]["Path"].asString(),
+                                 std::strtoul(cgroups[i]["Mode"].asString().c_str(), 0, 8),
                                  cgroups[i]["UID"].asString(), cgroups[i]["GID"].asString())));
     }
 
@@ -139,8 +140,8 @@ static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors
     descriptors->emplace(std::make_pair(
             CGROUPV2_CONTROLLER_NAME,
             CgroupDescriptor(2, CGROUPV2_CONTROLLER_NAME, cgroups2["Path"].asString(),
-                             cgroups2["Mode"].asInt(), cgroups2["UID"].asString(),
-                             cgroups2["GID"].asString())));
+                             std::strtoul(cgroups2["Mode"].asString().c_str(), 0, 8),
+                             cgroups2["UID"].asString(), cgroups2["GID"].asString())));
 
     return true;
 }
