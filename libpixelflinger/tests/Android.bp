@@ -8,6 +8,7 @@ cc_defaults {
 
     header_libs: ["libpixelflinger_internal"],
     static_libs: [
+        "libbase",
         "libcutils",
         "liblog",
         "libpixelflinger",
