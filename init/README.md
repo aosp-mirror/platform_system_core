@@ -161,11 +161,13 @@ Options
 Options are modifiers to services.  They affect how and when init
 runs the service.
 
-`capabilities <capability> [ <capability>\* ]`
+`capabilities [ <capability>\* ]`
 > Set capabilities when exec'ing this service. 'capability' should be a Linux
   capability without the "CAP\_" prefix, like "NET\_ADMIN" or "SETPCAP". See
   http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
   capabilities.
+  If no capabilities are provided, then all capabilities are removed from this service, even if it
+  runs as root.
 
 `class <name> [ <name>\* ]`
 > Specify class names for the service.  All services in a
