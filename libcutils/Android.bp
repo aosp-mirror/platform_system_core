@@ -172,7 +172,10 @@ cc_library {
         }
     },
 
-    shared_libs: ["liblog"],
+    shared_libs: [
+        "liblog",
+        "libbase",
+    ],
     header_libs: [
         "libbase_headers",
         "libcutils_headers",
