@@ -118,7 +118,16 @@ static constexpr const char* kVndkNamespaceName = "vndk";
 
 static constexpr const char* kRuntimeNamespaceName = "runtime";
 
+// classloader-namespace is a linker namespace that is created for the loaded
+// app. To be specific, it is created for the app classloader. When
+// System.load() is called from a Java class that is loaded from the
+// classloader, the classloader-namespace namespace associated with that
+// classloader is selected for dlopen. The namespace is configured so that its
+// search path is set to the app-local JNI directory and it is linked to the
+// default namespace with the names of libs listed in the public.libraries.txt.
+// This way an app can only load its own JNI libraries along with the public libs.
 static constexpr const char* kClassloaderNamespaceName = "classloader-namespace";
+// Same thing for vendor APKs.
 static constexpr const char* kVendorClassloaderNamespaceName = "vendor-classloader-namespace";
 
 // (http://b/27588281) This is a workaround for apps using custom classloaders and calling
