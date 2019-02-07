@@ -22,6 +22,7 @@ cc_test {
 
     srcs: [
         "BitSet_test.cpp",
+        "FileMap_test.cpp",
         "LruCache_test.cpp",
         "Mutex_test.cpp",
         "Singleton_test.cpp",
