@@ -50,7 +50,7 @@ static void android_logger_free(struct logger* logger) {
 /* android_logger_alloc unimplemented, no use case */
 
 /* method for getting the associated sublog id */
-LIBLOG_ABI_PUBLIC log_id_t android_logger_get_id(struct logger* logger) {
+log_id_t android_logger_get_id(struct logger* logger) {
   return ((struct android_log_logger*)logger)->logId;
 }
 
@@ -139,16 +139,16 @@ static int init_transport_context(struct android_log_logger_list* logger_list) {
   }                                                                                  \
   return ret
 
-LIBLOG_ABI_PUBLIC int android_logger_clear(struct logger* logger) {
+int android_logger_clear(struct logger* logger) {
   LOGGER_FUNCTION(logger, -ENODEV, clear);
 }
 
 /* returns the total size of the log's ring buffer */
-LIBLOG_ABI_PUBLIC long android_logger_get_log_size(struct logger* logger) {
+long android_logger_get_log_size(struct logger* logger) {
   LOGGER_FUNCTION(logger, -ENODEV, getSize);
 }
 
-LIBLOG_ABI_PUBLIC int android_logger_set_log_size(struct logger* logger, unsigned long size) {
+int android_logger_set_log_size(struct logger* logger, unsigned long size) {
   LOGGER_FUNCTION(logger, -ENODEV, setSize, size);
 }
 
@@ -156,14 +156,14 @@ LIBLOG_ABI_PUBLIC int android_logger_set_log_size(struct logger* logger, unsigne
  * returns the readable size of the log's ring buffer (that is, amount of the
  * log consumed)
  */
-LIBLOG_ABI_PUBLIC long android_logger_get_log_readable_size(struct logger* logger) {
+long android_logger_get_log_readable_size(struct logger* logger) {
   LOGGER_FUNCTION(logger, -ENODEV, getReadableSize);
 }
 
 /*
  * returns the logger version
  */
-LIBLOG_ABI_PUBLIC int android_logger_get_log_version(struct logger* logger) {
+int android_logger_get_log_version(struct logger* logger) {
   LOGGER_FUNCTION(logger, 4, version);
 }
 
@@ -191,23 +191,19 @@ LIBLOG_ABI_PUBLIC int android_logger_get_log_version(struct logger* logger) {
 /*
  * returns statistics
  */
-LIBLOG_ABI_PUBLIC ssize_t android_logger_get_statistics(struct logger_list* logger_list, char* buf,
-                                                        size_t len) {
+ssize_t android_logger_get_statistics(struct logger_list* logger_list, char* buf, size_t len) {
   LOGGER_LIST_FUNCTION(logger_list, -ENODEV, getStats, buf, len);
 }
 
-LIBLOG_ABI_PUBLIC ssize_t android_logger_get_prune_list(struct logger_list* logger_list, char* buf,
-                                                        size_t len) {
+ssize_t android_logger_get_prune_list(struct logger_list* logger_list, char* buf, size_t len) {
   LOGGER_LIST_FUNCTION(logger_list, -ENODEV, getPrune, buf, len);
 }
 
-LIBLOG_ABI_PUBLIC int android_logger_set_prune_list(struct logger_list* logger_list, char* buf,
-                                                    size_t len) {
+int android_logger_set_prune_list(struct logger_list* logger_list, char* buf, size_t len) {
   LOGGER_LIST_FUNCTION(logger_list, -ENODEV, setPrune, buf, len);
 }
 
-LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc(int mode, unsigned int tail,
-                                                                pid_t pid) {
+struct logger_list* android_logger_list_alloc(int mode, unsigned int tail, pid_t pid) {
   struct android_log_logger_list* logger_list;
 
   logger_list = static_cast<android_log_logger_list*>(calloc(1, sizeof(*logger_list)));
@@ -224,8 +220,7 @@ LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc(int mode, unsign
   return (struct logger_list*)logger_list;
 }
 
-LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc_time(int mode, log_time start,
-                                                                     pid_t pid) {
+struct logger_list* android_logger_list_alloc_time(int mode, log_time start, pid_t pid) {
   struct android_log_logger_list* logger_list;
 
   logger_list = static_cast<android_log_logger_list*>(calloc(1, sizeof(*logger_list)));
@@ -246,8 +241,7 @@ LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_alloc_time(int mode, l
 /* android_logger_list_unregister unimplemented, no use case */
 
 /* Open the named log and add it to the logger list */
-LIBLOG_ABI_PUBLIC struct logger* android_logger_open(struct logger_list* logger_list,
-                                                     log_id_t logId) {
+struct logger* android_logger_open(struct logger_list* logger_list, log_id_t logId) {
   struct android_log_logger_list* logger_list_internal =
       (struct android_log_logger_list*)logger_list;
   struct android_log_logger* logger;
@@ -289,8 +283,8 @@ ok:
 }
 
 /* Open the single named log and make it part of a new logger list */
-LIBLOG_ABI_PUBLIC struct logger_list* android_logger_list_open(log_id_t logId, int mode,
-                                                               unsigned int tail, pid_t pid) {
+struct logger_list* android_logger_list_open(log_id_t logId, int mode, unsigned int tail,
+                                             pid_t pid) {
   struct logger_list* logger_list = android_logger_list_alloc(mode, tail, pid);
 
   if (!logger_list) {
@@ -345,8 +339,7 @@ static int android_transport_read(struct android_log_logger_list* logger_list,
 }
 
 /* Read from the selected logs */
-LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
-                                               struct log_msg* log_msg) {
+int android_logger_list_read(struct logger_list* logger_list, struct log_msg* log_msg) {
   struct android_log_transport_context* transp;
   struct android_log_logger_list* logger_list_internal =
       (struct android_log_logger_list*)logger_list;
@@ -437,7 +430,7 @@ LIBLOG_ABI_PUBLIC int android_logger_list_read(struct logger_list* logger_list,
 }
 
 /* Close all the logs */
-LIBLOG_ABI_PUBLIC void android_logger_list_free(struct logger_list* logger_list) {
+void android_logger_list_free(struct logger_list* logger_list) {
   struct android_log_logger_list* logger_list_internal =
       (struct android_log_logger_list*)logger_list;
 

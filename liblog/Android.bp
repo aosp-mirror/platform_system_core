@@ -101,7 +101,6 @@ cc_library {
 
     cflags: [
         "-Werror",
-        "-fvisibility=hidden",
         // This is what we want to do:
         //  liblog_cflags := $(shell \
         //   sed -n \

@@ -22,6 +22,6 @@
 
 __BEGIN_DECLS
 
-LIBLOG_HIDDEN ssize_t __send_log_msg(char* buf, size_t buf_size);
+ssize_t __send_log_msg(char* buf, size_t buf_size);
 
 __END_DECLS

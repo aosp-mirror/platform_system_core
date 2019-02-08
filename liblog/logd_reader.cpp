@@ -67,7 +67,7 @@ static ssize_t logdSetPrune(struct android_log_logger_list* logger,
 static ssize_t logdGetStats(struct android_log_logger_list* logger,
                             struct android_log_transport_context* transp, char* buf, size_t len);
 
-LIBLOG_HIDDEN struct android_log_transport_read logdLoggerRead = {
+struct android_log_transport_read logdLoggerRead = {
     .node = {&logdLoggerRead.node, &logdLoggerRead.node},
     .name = "logd",
     .available = logdAvailable,
@@ -309,7 +309,7 @@ done:
   return ret;
 }
 
-LIBLOG_HIDDEN ssize_t __send_log_msg(char* buf, size_t buf_size) {
+ssize_t __send_log_msg(char* buf, size_t buf_size) {
   return send_log_msg(NULL, NULL, buf, buf_size);
 }
 
