@@ -64,38 +64,6 @@ $(foreach b,$(ART_BINARIES), \
 include $(BUILD_PREBUILT)
 
 #######################################
-# cgroups.json
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := cgroups.json
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-
-include $(BUILD_PREBUILT)
-
-#######################################
-# cgroups.json for recovery
-include $(CLEAR_VARS)
-LOCAL_MODULE := cgroups.recovery.json
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/etc
-LOCAL_MODULE_STEM := cgroups.json
-include $(BUILD_PREBUILT)
-
-#######################################
-# task_profiles.json
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := task_profiles.json
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-
-include $(BUILD_PREBUILT)
-
-#######################################
 # asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 
