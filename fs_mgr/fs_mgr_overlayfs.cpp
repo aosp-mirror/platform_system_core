@@ -565,26 +565,6 @@ std::vector<std::string> fs_mgr_candidate_list(Fstab* fstab, const char* mount_p
         if (!duplicate_or_more_specific) mounts.emplace_back(new_mount_point);
     }
 
-    // if not itemized /system or /, system as root, fake one up?
-
-    // do we want or need to?
-    if (mount_point && ("/system"s != mount_point)) return mounts;
-    if (std::find(mounts.begin(), mounts.end(), "/system") != mounts.end()) return mounts;
-
-    // fs_mgr_overlayfs_verity_enabled_list says not to?
-    if (std::find(verity.begin(), verity.end(), "system") != verity.end()) return mounts;
-
-    // confirm that fstab is missing system
-    if (GetEntryForMountPoint(fstab, "/") != nullptr ||
-        GetEntryForMountPoint(fstab, "/system") != nullptr) {
-        return mounts;
-    }
-
-    // We have a stunted fstab (w/o system or / ) passed in by the caller,
-    // verity claims are assumed accurate because they are collected internally
-    // from fs_mgr_fstab_default() from within fs_mgr_update_verity_state(),
-    // Can (re)evaluate /system with impunity since we know it is ever-present.
-    mounts.emplace_back("/system");
     return mounts;
 }
 
