@@ -105,7 +105,7 @@ static void PrintDmaBufInfo(const std::vector<DmaBuffer>& bufs) {
 
     for (auto buf = bufs.begin(); buf != bufs.end(); ++buf) {
 
-        std::cout << ::android::base::StringPrintf("%16lu\t%10" PRIu64 "\t%lu\t",
+        std::cout << ::android::base::StringPrintf("%16lu\t%10" PRIu64 "\t%" PRIu64 "\t",
             buf->inode(),buf->size(), buf->count());
 
         memset(fds.get(), 0, sizeof(int) * pid_count);
