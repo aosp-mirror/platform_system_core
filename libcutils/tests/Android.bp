@@ -20,6 +20,7 @@ cc_defaults {
         android: {
             srcs: [
                 "AshmemTest.cpp",
+                "fs_config.cpp",
                 "MemsetTest.cpp",
                 "PropertiesTest.cpp",
                 "sched_policy_test.cpp",
@@ -28,13 +29,13 @@ cc_defaults {
                 "android_get_control_socket_test.cpp",
                 "android_get_control_file_test.cpp",
                 "multiuser_test.cpp",
-                "fs_config.cpp",
             ],
         },
 
         not_windows: {
             srcs: [
                 "test_str_parms.cpp",
+                "fs_config.cpp",
             ],
         },
     },
