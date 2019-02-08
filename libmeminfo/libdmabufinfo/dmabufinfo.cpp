@@ -130,7 +130,7 @@ static bool ReadDmaBufFdRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
             if (buf->count() == 0)
                 buf->SetCount(count);
             buf->AddFdRef(pid);
-            return true;
+            continue;
         }
 
         DmaBuffer& db =
