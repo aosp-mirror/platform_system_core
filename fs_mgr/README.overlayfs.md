@@ -74,7 +74,7 @@ a probe of the filesystem types and space remaining.
 When *overlayfs* logic is feasible, it will use either the
 **/cache/overlay/** directory for non-A/B devices, or the
 **/mnt/scratch/overlay** directory for A/B devices that have
-access to *Logical Resizeable Android Partitions*.
+access to *Logical Resizable Android Partitions*.
 The backing store is used as soon as possible in the boot
 process and can occur at first stage init, or at the
 mount_all init rc commands.
@@ -94,12 +94,17 @@ Caveats
   and thus free dynamic partition space.
 - Kernel must have CONFIG_OVERLAY_FS=y and will need to be patched
   with "*overlayfs: override_creds=off option bypass creator_cred*"
-  if higher than 4.6.
+  if kernel is higher than 4.6.
+  The patch is available on the upstream mailing list and the latest as of
+  Feb 8 2019 is https://lore.kernel.org/patchwork/patch/1009299/.
+  This patch adds an override_creds _mount_ option to overlayfs that
+  permits legacy behavior for systems that do not have overlapping
+  sepolicy rules, principals of least privilege, which is how Android behaves.
 - *adb enable-verity* will free up overlayfs and as a bonus the
   device will be reverted pristine to before any content was updated.
   Update engine does not take advantage of this, will perform a full OTA.
 - Update engine may not run if *fs_mgr_overlayfs_is_setup*() reports
-  true as adb remount overrides are incompatable with an OTA resources.
+  true as adb remount overrides are incompatible with an OTA resources.
 - For implementation simplicity on retrofit dynamic partition devices,
   take the whole alternate super (eg: if "*a*" slot, then the whole of
   "*system_b*").
