@@ -23,6 +23,10 @@ cc_library {
         "llndk.libraries.txt",
         "vndksp.libraries.txt",
     ],
+    stubs: {
+        symbol_file: "libnativeloader.map.txt",
+        versions: ["1"],
+    },
 }
 
 cc_library_headers {
