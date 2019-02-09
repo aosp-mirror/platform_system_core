@@ -31,8 +31,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/thread_annotations.h>
 #include <cutils/sockets.h>
 
@@ -45,6 +47,10 @@
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
 #include "sysdeps/chrono.h"
+
+#if defined(__linux__)
+#include "vm_sockets.h"
+#endif
 
 #if ADB_HOST
 
@@ -76,12 +82,55 @@ void connect_device(const std::string& address, std::string* response) {
     std::string serial;
     std::string host;
     int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
+    int fd = -1;
+
+#if defined(__linux__)
+    if (android::base::StartsWith(address, "vsock:")) {
+        std::vector<std::string> fragments = android::base::Split(address, ":");
+        unsigned int cid = 0;
+        if (fragments.size() != 2 && fragments.size() != 3) {
+            *response = android::base::StringPrintf("expected vsock:cid or vsock:port:cid in '%s'",
+                                                    address.c_str());
+            return;
+        }
+        if (!android::base::ParseUint(fragments[1], &cid)) {
+            *response =
+                android::base::StringPrintf("could not parse vsock cid in '%s'", address.c_str());
+            return;
+        }
+        if (fragments.size() == 3 && !android::base::ParseInt(fragments[2], &port)) {
+            *response =
+                android::base::StringPrintf("could not parse vsock port in '%s'", address.c_str());
+            return;
+        }
+        fd = socket(AF_VSOCK, SOCK_STREAM, 0);
+        if (fd < 0) {
+            *response = "could not open vsock socket";
+            return;
+        }
+        sockaddr_vm addr;
+        memset(&addr, '\0', sizeof(addr));
+        addr.svm_family = AF_VSOCK;
+        addr.svm_port = port;
+        addr.svm_cid = cid;
+        if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
+            *response = android::base::StringPrintf("could not connect to vsock address '%s'",
+                                                    address.c_str());
+            unix_close(fd);
+            return;
+        }
+        serial = android::base::StringPrintf("vsock:%u:%d", cid, port);
+        host = android::base::StringPrintf("vsock:%d", cid);
+    } else
+#endif  // defined(__linux__)
+        if (!android::base::ParseNetAddress(address, &host, &port, &serial, response)) {
         return;
     }
 
     std::string error;
-    int fd = network_connect(host.c_str(), port, SOCK_STREAM, 10, &error);
+    if (fd == -1) {
+        fd = network_connect(host.c_str(), port, SOCK_STREAM, 10, &error);
+    }
     if (fd == -1) {
         *response = android::base::StringPrintf("unable to connect to %s: %s",
                                                 serial.c_str(), error.c_str());
@@ -242,6 +291,55 @@ static void server_socket_thread(int port) {
     D("transport: server_socket_thread() exiting");
 }
 
+static void server_vsock_thread(int port) {
+    adb_thread_setname("server vsock");
+    D("transport: server_vsock_thread() starting");
+    int serverfd = -1;
+    for (;;) {
+        if (serverfd == -1) {
+            serverfd = socket(AF_VSOCK, SOCK_STREAM, 0);
+            if (serverfd == -1) {
+                if (errno == EAFNOSUPPORT || errno == EINVAL || errno == EPROTONOSUPPORT) {
+                    D("vsock: not supported (%s)", strerror(errno));
+                    return;
+                }
+                D("vsock: cannot bind socket yet: %s", strerror(errno));
+                std::this_thread::sleep_for(1s);
+                continue;
+            }
+            struct sockaddr_vm addr;
+            addr.svm_family = AF_VSOCK;
+            addr.svm_reserved1 = 0;
+            addr.svm_port = port;
+            addr.svm_cid = VMADDR_CID_ANY;
+            if (bind(serverfd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr))) {
+                adb_close(serverfd);
+                D("vsock: cannot bind socket yet: %s", strerror(errno));
+                std::this_thread::sleep_for(1s);
+                continue;
+            }
+            if (listen(serverfd, 4)) {
+                adb_close(serverfd);
+                D("vsock: cannot bind socket yet: %s", strerror(errno));
+                std::this_thread::sleep_for(1s);
+                continue;
+            }
+        }
+
+        D("vsock: trying to get new connection from %d", port);
+        int fd = adb_socket_accept(serverfd, nullptr, nullptr);
+        if (fd >= 0) {
+            D("server: new connection on fd %d", fd);
+            close_on_exec(fd);
+            disable_tcp_nagle(fd);
+            std::string serial = android::base::StringPrintf("host-%d", fd);
+            if (register_socket_transport(fd, serial.c_str(), port, 1) != 0) {
+                adb_close(fd);
+            }
+        }
+    }
+}
+
 /* This is relevant only for ADB daemon running inside the emulator. */
 /*
  * Redefine open and write for qemu_pipe.h that contains inlined references
@@ -386,6 +484,7 @@ void local_init(int port)
     // For the adbd daemon in the system image we need to distinguish
     // between the device, and the emulator.
     func = use_qemu_goldfish() ? qemu_socket_thread : server_socket_thread;
+    std::thread(server_vsock_thread, port).detach();
     debug_name = "server";
 #endif // !ADB_HOST
 
