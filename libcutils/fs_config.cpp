@@ -95,9 +95,7 @@ static const struct fs_path_config android_dirs[] = {
     { 00755, AID_ROOT,         AID_ROOT,         0, "system/etc/ppp" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/vendor" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
-    // TODO(b/123743953): eliminate the APEX name with better pattern matching
-    { 00755, AID_ROOT,         AID_SHELL,        0, "system/apex/com.android.runtime.debug/bin" },
-    { 00755, AID_ROOT,         AID_SHELL,        0, "system/apex/com.android.runtime.release/bin" },
+    { 00755, AID_ROOT,         AID_SHELL,        0, "system/apex/*/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
     { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
@@ -224,9 +222,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib64/valgrind/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
-    // TODO(b/123743953): eliminate the APEX name with better pattern matching
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/apex/com.android.runtime.debug/bin/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "system/apex/com.android.runtime.release/bin/*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/apex/*/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
