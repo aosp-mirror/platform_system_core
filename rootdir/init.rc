@@ -593,6 +593,11 @@ on post-fs-data
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
 
+    # sys.memfd_use set to false by default, which keeps it disabled
+    # until it is confirmed that apps and vendor processes don't make
+    # IOCTLs on ashmem fds any more.
+    setprop sys.use_memfd false
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted

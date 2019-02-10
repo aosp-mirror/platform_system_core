@@ -16,6 +16,8 @@
 
 #include "android-base/mapped_file.h"
 
+#include <errno.h>
+
 namespace android {
 namespace base {
 
@@ -50,7 +52,14 @@ std::unique_ptr<MappedFile> MappedFile::FromFd(int fd, off64_t offset, size_t le
       new MappedFile{static_cast<char*>(base), length, slop, handle});
 #else
   void* base = mmap(nullptr, file_length, prot, MAP_SHARED, fd, file_offset);
-  if (base == MAP_FAILED) return nullptr;
+  if (base == MAP_FAILED) {
+    // http://b/119818070 "app crashes when reading asset of zero length".
+    // mmap fails with EINVAL for a zero length region.
+    if (errno == EINVAL && length == 0) {
+      return std::unique_ptr<MappedFile>(new MappedFile{nullptr, 0, 0});
+    }
+    return nullptr;
+  }
   return std::unique_ptr<MappedFile>(new MappedFile{static_cast<char*>(base), length, slop});
 #endif
 }

@@ -24,6 +24,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <fnmatch.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +32,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <string>
+
+#include <android-base/strings.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
 #include <utils/Compat.h>
@@ -38,6 +42,9 @@
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
+
+using android::base::EndsWith;
+using android::base::StartsWith;
 
 // My kingdom for <endian.h>
 static inline uint16_t get2LE(const uint8_t* src) {
@@ -88,6 +95,7 @@ static const struct fs_path_config android_dirs[] = {
     { 00755, AID_ROOT,         AID_ROOT,         0, "system/etc/ppp" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/vendor" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
+    { 00755, AID_ROOT,         AID_SHELL,        0, "system/apex/*/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
     { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
@@ -214,6 +222,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib64/valgrind/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/apex/*/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
@@ -253,46 +262,55 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
 
 // if path is "odm/<stuff>", "oem/<stuff>", "product/<stuff>",
 // "product_services/<stuff>" or "vendor/<stuff>"
-static bool is_partition(const char* path, size_t len) {
+static bool is_partition(const std::string& path) {
     static const char* partitions[] = {"odm/", "oem/", "product/", "product_services/", "vendor/"};
     for (size_t i = 0; i < (sizeof(partitions) / sizeof(partitions[0])); ++i) {
-        size_t plen = strlen(partitions[i]);
-        if (len <= plen) continue;
-        if (!strncmp(path, partitions[i], plen)) return true;
+        if (StartsWith(path, partitions[i])) return true;
     }
     return false;
 }
 
-static inline bool prefix_cmp(bool partial, const char* prefix, size_t len, const char* path,
-                              size_t plen) {
-    return ((partial && plen >= len) || (plen == len)) && !strncmp(prefix, path, len);
-}
-
 // alias prefixes of "<partition>/<stuff>" to "system/<partition>/<stuff>" or
 // "system/<partition>/<stuff>" to "<partition>/<stuff>"
-static bool fs_config_cmp(bool partial, const char* prefix, size_t len, const char* path,
-                          size_t plen) {
-    // If name ends in * then allow partial matches.
-    if (!partial && prefix[len - 1] == '*') {
-        len--;
-        partial = true;
+static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* path, size_t plen) {
+    std::string pattern(prefix, len);
+    std::string input(path, plen);
+
+    // Massage pattern and input so that they can be used by fnmatch where
+    // directories have to end with /.
+    if (dir) {
+        if (!EndsWith(input, "/")) {
+            input.append("/");
+        }
+
+        if (!EndsWith(pattern, "/*")) {
+            if (EndsWith(pattern, "/")) {
+                pattern.append("*");
+            } else {
+                pattern.append("/*");
+            }
+        }
     }
 
-    if (prefix_cmp(partial, prefix, len, path, plen)) return true;
+    // no FNM_PATHNAME is set in order to match a/b/c/d with a/*
+    // FNM_ESCAPE is set in order to prevent using \\? and \\* and maintenance issues.
+    const int fnm_flags = FNM_NOESCAPE;
+    if (fnmatch(pattern.c_str(), input.c_str(), fnm_flags) == 0) return true;
 
-    static const char system[] = "system/";
-    if (!strncmp(path, system, strlen(system))) {
-        path += strlen(system);
-        plen -= strlen(system);
-    } else if (len <= strlen(system)) {
+    static constexpr const char* kSystem = "system/";
+    if (StartsWith(input, kSystem)) {
+        input.erase(0, strlen(kSystem));
+    } else if (input.size() <= strlen(kSystem)) {
         return false;
-    } else if (strncmp(prefix, system, strlen(system))) {
-        return false;
+    } else if (StartsWith(pattern, kSystem)) {
+        pattern.erase(0, strlen(kSystem));
     } else {
-        prefix += strlen(system);
-        len -= strlen(system);
+        return false;
     }
-    return is_partition(prefix, len) && prefix_cmp(partial, prefix, len, path, plen);
+
+    if (!is_partition(pattern)) return false;
+    if (!is_partition(input)) return false;
+    return fnmatch(pattern.c_str(), input.c_str(), fnm_flags) == 0;
 }
 #ifndef __ANDROID_VNDK__
 auto __for_testing_only__fs_config_cmp = fs_config_cmp;

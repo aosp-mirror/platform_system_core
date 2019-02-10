@@ -1019,6 +1019,7 @@ const BootloaderTimingMap GetBootLoaderTimings() {
     auto stageTimingValues = android::base::Split(stageTiming, ":");
     DCHECK_EQ(2U, stageTimingValues.size());
 
+    if (stageTimingValues.size() < 2) continue;
     std::string stageName = stageTimingValues[0];
     int32_t time_ms;
     if (android::base::ParseInt(stageTimingValues[1], &time_ms)) {
