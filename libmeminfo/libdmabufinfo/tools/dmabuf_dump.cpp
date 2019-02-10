@@ -150,8 +150,8 @@ int main(int argc, char* argv[]) {
 
     if (show_all) {
         if (!ReadDmaBufInfo(&bufs)) {
-            std::cerr << "Unable to read DEBUGFS dmabuf info" << std::endl;
-            exit(EXIT_FAILURE);
+            std::cerr << "debugfs entry for dmabuf not available, skipping" << std::endl;
+            bufs.clear();
         }
         std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir("/proc"), closedir);
         if (!dir) {
