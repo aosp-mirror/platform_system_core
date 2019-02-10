@@ -17,8 +17,10 @@ cc_defaults {
     name: "dmabufinfo_defaults",
     static_libs: [
         "libbase",
-        "liblog",
         "libprocinfo",
+    ],
+    shared_libs: [
+        "liblog",
     ],
 
     cflags: [
@@ -30,10 +32,9 @@ cc_defaults {
 
 cc_library_static {
     name: "libdmabufinfo",
+    vendor_available: true,
     defaults: ["dmabufinfo_defaults"],
     export_include_dirs: ["include"],
-    static_libs: ["libc++fs"],
-
     srcs: [
          "dmabufinfo.cpp",
     ],

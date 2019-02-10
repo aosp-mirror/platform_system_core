@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#include <dmabufinfo/dmabufinfo.h>
-
+#include <dirent.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +33,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <procinfo/process_map.h>
+
+#include <dmabufinfo/dmabufinfo.h>
 
 namespace android {
 namespace dmabufinfo {
@@ -80,16 +81,42 @@ static bool ReadDmaBufFdInfo(pid_t pid, int fd, std::string* name, std::string* 
     return true;
 }
 
+// TODO: std::filesystem::is_symlink fails to link on vendor code,
+// forcing this workaround.
+// Move back to libc++fs once it is vendor-available. See b/124012728
+static bool is_symlink(const char *filename)
+{
+    struct stat p_statbuf;
+    if (lstat(filename, &p_statbuf) < 0) {
+        return false;
+    }
+    if (S_ISLNK(p_statbuf.st_mode) == 1) {
+        return true;
+    }
+    return false;
+}
+
 static bool ReadDmaBufFdRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
     std::string fdpath = ::android::base::StringPrintf("/proc/%d/fd", pid);
-    for (auto& de : std::filesystem::directory_iterator(fdpath)) {
-        if (!std::filesystem::is_symlink(de.path())) {
+
+    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(fdpath.c_str()), closedir);
+    if (!dir) {
+        LOG(ERROR) << "Failed to open " << fdpath << " directory" << std::endl;
+        return false;
+    }
+    struct dirent* dent;
+    while ((dent = readdir(dir.get()))) {
+        std::string path =
+            ::android::base::StringPrintf("%s/%s", fdpath.c_str(), dent->d_name);
+
+        if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, "..") ||
+            !is_symlink(path.c_str())) {
             continue;
         }
 
         std::string target;
-        if (!::android::base::Readlink(de.path().string(), &target)) {
-            LOG(ERROR) << "Failed to find target for symlink: " << de.path().string();
+        if (!::android::base::Readlink(path, &target)) {
+            LOG(ERROR) << "Failed to find target for symlink: " << path;
             return false;
         }
 
@@ -98,8 +125,8 @@ static bool ReadDmaBufFdRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
         }
 
         int fd;
-        if (!::android::base::ParseInt(de.path().filename().string(), &fd)) {
-            LOG(ERROR) << "Dmabuf fd: " << de.path().string() << " is invalid";
+        if (!::android::base::ParseInt(dent->d_name, &fd)) {
+            LOG(ERROR) << "Dmabuf fd: " << path << " is invalid";
             return false;
         }
 
@@ -109,13 +136,13 @@ static bool ReadDmaBufFdRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs) {
         std::string exporter = "<unknown>";
         uint64_t count = 0;
         if (!ReadDmaBufFdInfo(pid, fd, &name, &exporter, &count)) {
-            LOG(ERROR) << "Failed to read fdinfo for: " << de.path().string();
+            LOG(ERROR) << "Failed to read fdinfo for: " << path;
             return false;
         }
 
         struct stat sb;
-        if (stat(de.path().c_str(), &sb) < 0) {
-            PLOG(ERROR) << "Failed to stat: " << de.path().string();
+        if (stat(path.c_str(), &sb) < 0) {
+            PLOG(ERROR) << "Failed to stat: " << path;
             return false;
         }
 
