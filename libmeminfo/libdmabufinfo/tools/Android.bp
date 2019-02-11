@@ -22,10 +22,9 @@ cc_binary {
     srcs: ["dmabuf_dump.cpp"],
     shared_libs: [
         "libbase",
-        "libmeminfo",
     ],
     static_libs: [
         "libdmabufinfo",
-        "libc++fs",
     ],
+    soc_specific: true,
 }
