@@ -28,7 +28,7 @@
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
-LIBLOG_HIDDEN void __android_log_lock() {
+void __android_log_lock() {
 #if !defined(_WIN32)
   /*
    * If we trigger a signal handler in the middle of locked activity and the
@@ -38,7 +38,7 @@ LIBLOG_HIDDEN void __android_log_lock() {
 #endif
 }
 
-LIBLOG_HIDDEN int __android_log_trylock() {
+int __android_log_trylock() {
 #if !defined(_WIN32)
   return pthread_mutex_trylock(&log_init_lock);
 #else
@@ -46,7 +46,7 @@ LIBLOG_HIDDEN int __android_log_trylock() {
 #endif
 }
 
-LIBLOG_HIDDEN void __android_log_unlock() {
+void __android_log_unlock() {
 #if !defined(_WIN32)
   pthread_mutex_unlock(&log_init_lock);
 #endif

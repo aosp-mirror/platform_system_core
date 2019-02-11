@@ -19,25 +19,6 @@
 #include <sys/cdefs.h>
 #include <unistd.h>
 
-/* Helpful private sys/cdefs.h like definitions */
-
-/* Declare this library function hidden and internal */
-#if defined(_WIN32)
-#define LIBLOG_HIDDEN
-#else
-#define LIBLOG_HIDDEN __attribute__((visibility("hidden")))
-#endif
-
-/* Declare this library function visible and external */
-#if defined(_WIN32)
-#define LIBLOG_ABI_PUBLIC
-#else
-#define LIBLOG_ABI_PUBLIC __attribute__((visibility("default")))
-#endif
-
-/* Declare this library function visible but private */
-#define LIBLOG_ABI_PRIVATE LIBLOG_ABI_PUBLIC
-
 /*
  * Declare this library function as reimplementation.
  * Prevent circular dependencies, but allow _real_ library to hijack
