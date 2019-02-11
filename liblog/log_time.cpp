@@ -23,12 +23,12 @@
 
 #include "log_portability.h"
 
-LIBLOG_ABI_PRIVATE const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
-LIBLOG_ABI_PRIVATE const timespec log_time::EPOCH = { 0, 0 };
+const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
+const timespec log_time::EPOCH = {0, 0};
 
 // Add %#q for fractional seconds to standard strptime function
 
-LIBLOG_ABI_PRIVATE char* log_time::strptime(const char* s, const char* format) {
+char* log_time::strptime(const char* s, const char* format) {
   time_t now;
 #ifdef __linux__
   *this = log_time(CLOCK_REALTIME);
@@ -134,7 +134,7 @@ LIBLOG_ABI_PRIVATE char* log_time::strptime(const char* s, const char* format) {
   return ret;
 }
 
-LIBLOG_ABI_PRIVATE log_time log_time::operator-=(const timespec& T) {
+log_time log_time::operator-=(const timespec& T) {
   // No concept of negative time, clamp to EPOCH
   if (*this <= T) {
     return *this = log_time(EPOCH);
@@ -151,7 +151,7 @@ LIBLOG_ABI_PRIVATE log_time log_time::operator-=(const timespec& T) {
   return *this;
 }
 
-LIBLOG_ABI_PRIVATE log_time log_time::operator+=(const timespec& T) {
+log_time log_time::operator+=(const timespec& T) {
   this->tv_nsec += (unsigned long int)T.tv_nsec;
   if (this->tv_nsec >= NS_PER_SEC) {
     this->tv_nsec -= NS_PER_SEC;
@@ -162,7 +162,7 @@ LIBLOG_ABI_PRIVATE log_time log_time::operator+=(const timespec& T) {
   return *this;
 }
 
-LIBLOG_ABI_PRIVATE log_time log_time::operator-=(const log_time& T) {
+log_time log_time::operator-=(const log_time& T) {
   // No concept of negative time, clamp to EPOCH
   if (*this <= T) {
     return *this = log_time(EPOCH);
@@ -179,7 +179,7 @@ LIBLOG_ABI_PRIVATE log_time log_time::operator-=(const log_time& T) {
   return *this;
 }
 
-LIBLOG_ABI_PRIVATE log_time log_time::operator+=(const log_time& T) {
+log_time log_time::operator+=(const log_time& T) {
   this->tv_nsec += T.tv_nsec;
   if (this->tv_nsec >= NS_PER_SEC) {
     this->tv_nsec -= NS_PER_SEC;

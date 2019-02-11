@@ -54,7 +54,7 @@ struct stderrContext {
 #endif
 };
 
-LIBLOG_HIDDEN struct android_log_transport_write stderrLoggerWrite = {
+struct android_log_transport_write stderrLoggerWrite = {
     .node = {&stderrLoggerWrite.node, &stderrLoggerWrite.node},
     .context.priv = NULL,
     .name = "stderr",
