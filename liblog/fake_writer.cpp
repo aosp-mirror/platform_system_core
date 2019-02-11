@@ -31,7 +31,7 @@ static int fakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, si
 
 static int logFds[(int)LOG_ID_MAX] = {-1, -1, -1, -1, -1, -1};
 
-LIBLOG_HIDDEN struct android_log_transport_write fakeLoggerWrite = {
+struct android_log_transport_write fakeLoggerWrite = {
     .node = {&fakeLoggerWrite.node, &fakeLoggerWrite.node},
     .context.priv = &logFds,
     .name = "fake",

@@ -22,8 +22,8 @@
 
 __BEGIN_DECLS
 
-extern LIBLOG_HIDDEN struct listnode __android_log_transport_read;
-extern LIBLOG_HIDDEN struct listnode __android_log_persist_read;
+extern struct listnode __android_log_transport_read;
+extern struct listnode __android_log_persist_read;
 
 #define read_transport_for_each(transp, transports)                           \
   for ((transp) = node_to_item((transports)->next,                            \
@@ -46,7 +46,7 @@ extern LIBLOG_HIDDEN struct listnode __android_log_persist_read;
        (transp) = node_to_item((n), struct android_log_transport_read, node), \
       (n) = (transp)->node.next)
 
-LIBLOG_HIDDEN void __android_log_config_read();
-LIBLOG_HIDDEN void __android_log_config_read_close();
+void __android_log_config_read();
+void __android_log_config_read_close();
 
 __END_DECLS
