@@ -114,11 +114,9 @@ static struct flag_list fs_mgr_flags[] = {
 #define EM_ICE          2
 #define EM_AES_256_CTS  3
 #define EM_AES_256_HEH  4
-#define EM_ADIANTUM     5
 
 static const struct flag_list file_contents_encryption_modes[] = {
     {"aes-256-xts", EM_AES_256_XTS},
-    {"adiantum", EM_ADIANTUM},
     {"software", EM_AES_256_XTS}, /* alias for backwards compatibility */
     {"ice", EM_ICE}, /* hardware-specific inline cryptographic engine */
     {0, 0},
@@ -127,7 +125,6 @@ static const struct flag_list file_contents_encryption_modes[] = {
 static const struct flag_list file_names_encryption_modes[] = {
     {"aes-256-cts", EM_AES_256_CTS},
     {"aes-256-heh", EM_AES_256_HEH},
-    {"adiantum", EM_ADIANTUM},
     {0, 0},
 };
 
@@ -276,8 +273,6 @@ static int parse_flags(char *flags, struct flag_list *fl,
                         flag_vals->file_names_mode =
                             encryption_mode_to_flag(file_names_encryption_modes,
                                                     colon + 1, "file names");
-                    } else if (flag_vals->file_contents_mode == EM_ADIANTUM) {
-                        flag_vals->file_names_mode = EM_ADIANTUM;
                     } else {
                         flag_vals->file_names_mode = EM_AES_256_CTS;
                     }
