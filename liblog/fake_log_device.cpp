@@ -548,7 +548,7 @@ static void showLog(LogState* state, int logPrio, const char* tag, const char* m
  *  tag (N bytes -- null-terminated ASCII string)
  *  message (N bytes -- null-terminated ASCII string)
  */
-LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count) {
+ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count) {
   LogState* state;
 
   /* Make sure that no-one frees the LogState while we're using it.
@@ -623,7 +623,7 @@ LIBLOG_HIDDEN ssize_t fakeLogWritev(int fd, const struct iovec* vector, int coun
  * call is in the exit handler. Logging can continue in the exit handler to
  * help debug HOST tools ...
  */
-LIBLOG_HIDDEN int fakeLogClose(int fd) {
+int fakeLogClose(int fd) {
   deleteFakeFd(fd);
   return 0;
 }
@@ -631,7 +631,7 @@ LIBLOG_HIDDEN int fakeLogClose(int fd) {
 /*
  * Open a log output device and return a fake fd.
  */
-LIBLOG_HIDDEN int fakeLogOpen(const char* pathName) {
+int fakeLogOpen(const char* pathName) {
   LogState* logState;
   int fd = -1;
 
@@ -650,20 +650,20 @@ LIBLOG_HIDDEN int fakeLogOpen(const char* pathName) {
   return fd;
 }
 
-LIBLOG_HIDDEN ssize_t __send_log_msg(char*, size_t) {
+ssize_t __send_log_msg(char*, size_t) {
   return -ENODEV;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char*, int def) {
+int __android_log_is_loggable(int prio, const char*, int def) {
   int logLevel = def;
   return logLevel >= 0 && prio >= logLevel;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio, const char*, size_t, int def) {
+int __android_log_is_loggable_len(int prio, const char*, size_t, int def) {
   int logLevel = def;
   return logLevel >= 0 && prio >= logLevel;
 }
 
-LIBLOG_ABI_PRIVATE int __android_log_is_debuggable() {
+int __android_log_is_debuggable() {
   return 1;
 }

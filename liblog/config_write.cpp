@@ -19,10 +19,10 @@
 #include "config_write.h"
 #include "logger.h"
 
-LIBLOG_HIDDEN struct listnode __android_log_transport_write = {&__android_log_transport_write,
-                                                               &__android_log_transport_write};
-LIBLOG_HIDDEN struct listnode __android_log_persist_write = {&__android_log_persist_write,
-                                                             &__android_log_persist_write};
+struct listnode __android_log_transport_write = {&__android_log_transport_write,
+                                                 &__android_log_transport_write};
+struct listnode __android_log_persist_write = {&__android_log_persist_write,
+                                               &__android_log_persist_write};
 
 static void __android_log_add_transport(struct listnode* list,
                                         struct android_log_transport_write* transport) {
@@ -52,7 +52,7 @@ static void __android_log_add_transport(struct listnode* list,
   }
 }
 
-LIBLOG_HIDDEN void __android_log_config_write() {
+void __android_log_config_write() {
   if ((__android_log_transport == LOGGER_DEFAULT) || (__android_log_transport & LOGGER_LOGD)) {
 #if (FAKE_LOG_DEVICE == 0)
     extern struct android_log_transport_write logdLoggerWrite;
@@ -89,7 +89,7 @@ LIBLOG_HIDDEN void __android_log_config_write() {
   }
 }
 
-LIBLOG_HIDDEN void __android_log_config_write_close() {
+void __android_log_config_write_close() {
   struct android_log_transport_write* transport;
   struct listnode* n;
 

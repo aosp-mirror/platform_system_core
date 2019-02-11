@@ -40,7 +40,7 @@ static void pmsgClose();
 static int pmsgAvailable(log_id_t logId);
 static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
-LIBLOG_HIDDEN struct android_log_transport_write pmsgLoggerWrite = {
+struct android_log_transport_write pmsgLoggerWrite = {
     .node = {&pmsgLoggerWrite.node, &pmsgLoggerWrite.node},
     .context.fd = -1,
     .name = "pmsg",
@@ -200,9 +200,8 @@ static inline const char* strnrchr(const char* buf, size_t len, char c) {
 }
 
 /* Write a buffer as filename references (tag = <basedir>:<basename>) */
-LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_write(log_id_t logId, char prio,
-                                                         const char* filename, const char* buf,
-                                                         size_t len) {
+ssize_t __android_log_pmsg_file_write(log_id_t logId, char prio, const char* filename,
+                                      const char* buf, size_t len) {
   bool weOpened;
   size_t length, packet_len;
   const char* tag;

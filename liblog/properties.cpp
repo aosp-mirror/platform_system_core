@@ -264,18 +264,17 @@ static int __android_log_level(const char* tag, size_t len, int default_prio) {
   return default_prio;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable_len(int prio, const char* tag, size_t len,
-                                                    int default_prio) {
+int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int default_prio) {
   int logLevel = __android_log_level(tag, len, default_prio);
   return logLevel >= 0 && prio >= logLevel;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_loggable(int prio, const char* tag, int default_prio) {
+int __android_log_is_loggable(int prio, const char* tag, int default_prio) {
   int logLevel = __android_log_level(tag, (tag && *tag) ? strlen(tag) : 0, default_prio);
   return logLevel >= 0 && prio >= logLevel;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_is_debuggable() {
+int __android_log_is_debuggable() {
   static uint32_t serial;
   static struct cache_char tag_cache;
   static const char key[] = "ro.debuggable";
@@ -361,7 +360,7 @@ static unsigned char evaluate_persist_ro(const struct cache2_char* self) {
  * Timestamp state generally remains constant, but can change at any time
  * to handle developer requirements.
  */
-LIBLOG_ABI_PUBLIC clockid_t android_log_clockid() {
+clockid_t android_log_clockid() {
   static struct cache2_char clockid = {PTHREAD_MUTEX_INITIALIZER, 0,
                                        "persist.logd.timestamp",  {{NULL, 0xFFFFFFFF}, '\0'},
                                        "ro.logd.timestamp",       {{NULL, 0xFFFFFFFF}, '\0'},
@@ -380,7 +379,7 @@ static unsigned char evaluate_security(const struct cache2_char* self) {
   return (c != BOOLEAN_FALSE) && c && (self->cache_persist.c == BOOLEAN_TRUE);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_security() {
+int __android_log_security() {
   static struct cache2_char security = {
       PTHREAD_MUTEX_INITIALIZER, 0,
       "persist.logd.security",   {{NULL, 0xFFFFFFFF}, BOOLEAN_FALSE},
@@ -428,7 +427,7 @@ static void refresh_cache_property(struct cache_property* cache, const char* key
 }
 
 /* get boolean with the logger twist that supports eng adjustments */
-LIBLOG_ABI_PRIVATE bool __android_logger_property_get_bool(const char* key, int flag) {
+bool __android_logger_property_get_bool(const char* key, int flag) {
   struct cache_property property = {{NULL, 0xFFFFFFFF}, {0}};
   if (flag & BOOL_DEFAULT_FLAG_PERSIST) {
     char newkey[strlen("persist.") + strlen(key) + 1];
@@ -478,7 +477,7 @@ LIBLOG_ABI_PRIVATE bool __android_logger_property_get_bool(const char* key, int 
   return (flag & BOOL_DEFAULT_FLAG_TRUE_FALSE) != BOOL_DEFAULT_FALSE;
 }
 
-LIBLOG_ABI_PRIVATE bool __android_logger_valid_buffer_size(unsigned long value) {
+bool __android_logger_valid_buffer_size(unsigned long value) {
   static long pages, pagesize;
   unsigned long maximum;
 
@@ -583,7 +582,7 @@ static unsigned long evaluate_property_get_size(const struct cache2_property_siz
   return property_get_size_from_cache(&self->cache_ro);
 }
 
-LIBLOG_ABI_PRIVATE unsigned long __android_logger_get_buffer_size(log_id_t logId) {
+unsigned long __android_logger_get_buffer_size(log_id_t logId) {
   static const char global_tunable[] = "persist.logd.size"; /* Settings App */
   static const char global_default[] = "ro.logd.size";      /* BoardConfig.mk */
   static struct cache2_property_size global = {
