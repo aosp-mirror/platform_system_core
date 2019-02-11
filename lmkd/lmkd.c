@@ -114,6 +114,7 @@ static bool low_ram_device;
 static bool kill_heaviest_task;
 static unsigned long kill_timeout_ms;
 static bool use_minfree_levels;
+static bool per_app_memcg;
 
 /* data required to handle events */
 struct event_handler_info {
@@ -523,7 +524,36 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
         return;
 
     lmkd_pack_get_procremove(packet, &params);
+    /*
+     * WARNING: After pid_remove() procp is freed and can't be used!
+     * Therefore placed at the end of the function.
+     */
     pid_remove(params.pid);
+}
+
+static void cmd_procpurge() {
+    int i;
+    struct proc *procp;
+    struct proc *next;
+
+    if (use_inkernel_interface) {
+        return;
+    }
+
+    for (i = 0; i <= ADJTOSLOT(OOM_SCORE_ADJ_MAX); i++) {
+        procadjslot_list[i].next = &procadjslot_list[i];
+        procadjslot_list[i].prev = &procadjslot_list[i];
+    }
+
+    for (i = 0; i < PIDHASH_SZ; i++) {
+        procp = pidhash[i];
+        while (procp) {
+            next = procp->pidhash_next;
+            free(procp);
+            procp = next;
+        }
+    }
+    memset(&pidhash[0], 0, sizeof(pidhash));
 }
 
 static void cmd_target(int ntargets, LMKD_CTRL_PACKET packet) {
@@ -634,6 +664,11 @@ static void ctrl_command_handler(int dsock_idx) {
             goto wronglen;
         cmd_procremove(packet);
         break;
+    case LMK_PROCPURGE:
+        if (nargs != 0)
+            goto wronglen;
+        cmd_procpurge();
+        break;
     default:
         ALOGE("Received unknown command code %d", cmd);
         return;
@@ -699,7 +734,7 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
 }
 
 #ifdef LMKD_LOG_STATS
-static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
+static void memory_stat_parse_line(char* line, struct memory_stat* mem_st) {
     char key[LINE_MAX + 1];
     int64_t value;
 
@@ -721,25 +756,62 @@ static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
         mem_st->swap_in_bytes = value;
 }
 
-static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
-   FILE *fp;
-   char buf[PATH_MAX];
+static int memory_stat_from_cgroup(struct memory_stat* mem_st, int pid, uid_t uid) {
+    FILE* fp;
+    char buf[PATH_MAX];
 
-   snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
+    snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
 
-   fp = fopen(buf, "r");
+    fp = fopen(buf, "r");
 
-   if (fp == NULL) {
-       ALOGE("%s open failed: %s", buf, strerror(errno));
-       return -1;
-   }
+    if (fp == NULL) {
+        ALOGE("%s open failed: %s", buf, strerror(errno));
+        return -1;
+    }
 
-   while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
-       memory_stat_parse_line(buf, mem_st);
-   }
-   fclose(fp);
+    while (fgets(buf, PAGE_SIZE, fp) != NULL) {
+        memory_stat_parse_line(buf, mem_st);
+    }
+    fclose(fp);
 
-   return 0;
+    return 0;
+}
+
+static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
+    char path[PATH_MAX];
+    char buffer[PROC_STAT_BUFFER_SIZE];
+    int fd, ret;
+
+    snprintf(path, sizeof(path), PROC_STAT_FILE_PATH, pid);
+    if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
+        ALOGE("%s open failed: %s", path, strerror(errno));
+        return -1;
+    }
+
+    ret = read(fd, buffer, sizeof(buffer));
+    if (ret < 0) {
+        ALOGE("%s read failed: %s", path, strerror(errno));
+        close(fd);
+        return -1;
+    }
+    close(fd);
+
+    // field 10 is pgfault
+    // field 12 is pgmajfault
+    // field 24 is rss_in_pages
+    int64_t pgfault = 0, pgmajfault = 0, rss_in_pages = 0;
+    if (sscanf(buffer,
+               "%*u %*s %*s %*d %*d %*d %*d %*d %*d %" SCNd64 " %*d "
+               "%" SCNd64 " %*d %*u %*u %*d %*d %*d %*d %*d %*d "
+               "%*d %*d %" SCNd64 "",
+               &pgfault, &pgmajfault, &rss_in_pages) != 3) {
+        return -1;
+    }
+    mem_st->pgfault = pgfault;
+    mem_st->pgmajfault = pgmajfault;
+    mem_st->rss_in_bytes = (rss_in_pages * PAGE_SIZE);
+
+    return 0;
 }
 #endif
 
@@ -966,6 +1038,7 @@ static int kill_one_process(struct proc* procp) {
     char *taskname;
     int tasksize;
     int r;
+    int result = -1;
 
 #ifdef LMKD_LOG_STATS
     struct memory_stat mem_st = {};
@@ -974,28 +1047,30 @@ static int kill_one_process(struct proc* procp) {
 
     taskname = proc_get_name(pid);
     if (!taskname) {
-        pid_remove(pid);
-        return -1;
+        goto out;
     }
 
     tasksize = proc_get_size(pid);
     if (tasksize <= 0) {
-        pid_remove(pid);
-        return -1;
+        goto out;
     }
 
 #ifdef LMKD_LOG_STATS
     if (enable_stats_log) {
-        memory_stat_parse_result = memory_stat_parse(&mem_st, pid, uid);
+        if (per_app_memcg) {
+            memory_stat_parse_result = memory_stat_from_cgroup(&mem_st, pid, uid);
+        } else {
+            memory_stat_parse_result = memory_stat_from_procfs(&mem_st, pid);
+        }
     }
 #endif
 
     TRACE_KILL_START(pid);
 
+    /* CAP_KILL required */
     r = kill(pid, SIGKILL);
     ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB",
         taskname, pid, uid, procp->oomadj, tasksize * page_k);
-    pid_remove(pid);
 
     TRACE_KILL_END();
 
@@ -1003,19 +1078,28 @@ static int kill_one_process(struct proc* procp) {
 
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
-        return -1;
+        goto out;
     } else {
 #ifdef LMKD_LOG_STATS
         if (memory_stat_parse_result == 0) {
             stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
                     procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
                     mem_st.cache_in_bytes, mem_st.swap_in_bytes);
+        } else if (enable_stats_log) {
+            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
+                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1);
         }
 #endif
-        return tasksize;
+        result = tasksize;
     }
 
-    return tasksize;
+out:
+    /*
+     * WARNING: After pid_remove() procp is freed and can't be used!
+     * Therefore placed at the end of the function.
+     */
+    pid_remove(pid);
+    return result;
 }
 
 /*
@@ -1578,7 +1662,7 @@ int main(int argc __unused, char **argv __unused) {
         (unsigned long)property_get_int32("ro.lmk.kill_timeout_ms", 0);
     use_minfree_levels =
         property_get_bool("ro.lmk.use_minfree_levels", false);
-
+    per_app_memcg = property_get_bool("ro.config.per_app_memcg", low_ram_device);
 #ifdef LMKD_LOG_STATS
     statslog_init(&log_ctx, &enable_stats_log);
 #endif
