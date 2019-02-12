@@ -349,6 +349,7 @@ namespace.runtime.isolated = true
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
 # TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
 # when it exists.
