@@ -96,14 +96,17 @@ void try_unmount_bionic(android::fs_mgr::Fstab* mounts) {
     }
 }
 
-void MyLogger(android::base::LogId, android::base::LogSeverity severity, const char*, const char*,
-              unsigned int, const char* message) {
+void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+              const char* file, unsigned int line, const char* message) {
     static const char log_characters[] = "VD\0WEFF";
     if (severity < sizeof(log_characters)) {
         auto severity_char = log_characters[severity];
         if (severity_char) fprintf(stderr, "%c ", severity_char);
     }
     fprintf(stderr, "%s\n", message);
+
+    static auto logd = android::base::LogdLogger();
+    logd(id, severity, tag, file, line, message);
 }
 
 }  // namespace
