@@ -272,15 +272,6 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overl
     return false;
 }
 
-std::vector<std::string> fs_mgr_overlayfs_verity_enabled_list() {
-    std::vector<std::string> ret;
-    auto save_errno = errno;
-    fs_mgr_update_verity_state(
-            [&ret](const std::string& mount_point, int) { ret.emplace_back(mount_point); });
-    if ((errno == ENOENT) || (errno == ENXIO)) errno = save_errno;
-    return ret;
-}
-
 bool fs_mgr_wants_overlayfs(FstabEntry* entry) {
     // Don't check entries that are managed by vold.
     if (entry->fs_mgr_flags.vold_managed || entry->fs_mgr_flags.recovery_only) return false;
@@ -537,7 +528,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
 
 std::vector<std::string> fs_mgr_candidate_list(Fstab* fstab, const char* mount_point = nullptr) {
     std::vector<std::string> mounts;
-    auto verity = fs_mgr_overlayfs_verity_enabled_list();
     for (auto& entry : *fstab) {
         if (!fs_mgr_overlayfs_already_mounted(entry.mount_point) &&
             !fs_mgr_wants_overlayfs(&entry)) {
@@ -545,10 +535,12 @@ std::vector<std::string> fs_mgr_candidate_list(Fstab* fstab, const char* mount_p
         }
         std::string new_mount_point(fs_mgr_mount_point(entry.mount_point.c_str()));
         if (mount_point && (new_mount_point != mount_point)) continue;
-        if (std::find(verity.begin(), verity.end(), android::base::Basename(new_mount_point)) !=
-            verity.end()) {
-            continue;
-        }
+
+        auto saved_errno = errno;
+        auto verity_enabled = fs_mgr_is_verity_enabled(entry);
+        if (errno == ENOENT || errno == ENXIO) errno = saved_errno;
+        if (verity_enabled) continue;
+
         auto duplicate_or_more_specific = false;
         for (auto it = mounts.begin(); it != mounts.end();) {
             if ((*it == new_mount_point) ||

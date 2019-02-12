@@ -85,6 +85,7 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
+using android::base::Basename;
 using android::base::Realpath;
 using android::base::StartsWith;
 using android::base::unique_fd;
@@ -1576,65 +1577,41 @@ bool fs_mgr_load_verity_state(int* mode) {
     return true;
 }
 
-bool fs_mgr_update_verity_state(
-        std::function<void(const std::string& mount_point, int mode)> callback) {
-    if (!callback) {
-        return false;
-    }
-
-    int mode;
-    if (!fs_mgr_load_verity_state(&mode)) {
-        return false;
-    }
-
-    Fstab fstab;
-    if (!ReadDefaultFstab(&fstab)) {
-        LERROR << "Failed to read default fstab";
+bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
+    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
         return false;
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    for (const auto& entry : fstab) {
-        if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
-            continue;
-        }
-
-        std::string mount_point;
-        if (entry.mount_point == "/") {
-            // In AVB, the dm device name is vroot instead of system.
-            mount_point = entry.fs_mgr_flags.avb ? "vroot" : "system";
-        } else {
-            mount_point = basename(entry.mount_point.c_str());
-        }
-
-        if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
-            PERROR << "Could not find verity device for mount point: " << mount_point;
-            continue;
-        }
-
-        const char* status;
-        std::vector<DeviceMapper::TargetInfo> table;
-        if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
-            if (!entry.fs_mgr_flags.verify_at_boot) {
-                PERROR << "Failed to query DM_TABLE_STATUS for " << mount_point;
-                continue;
-            }
-            status = "V";
-        } else {
-            status = table[0].data.c_str();
-        }
-
-        // To be consistent in vboot 1.0 and vboot 2.0 (AVB), change the mount_point
-        // back to 'system' for the callback. So it has property [partition.system.verified]
-        // instead of [partition.vroot.verified].
-        if (mount_point == "vroot") mount_point = "system";
-        if (*status == 'C' || *status == 'V') {
-            callback(mount_point, mode);
-        }
+    std::string mount_point;
+    if (entry.mount_point == "/") {
+        // In AVB, the dm device name is vroot instead of system.
+        mount_point = entry.fs_mgr_flags.avb ? "vroot" : "system";
+    } else {
+        mount_point = Basename(entry.mount_point);
     }
 
-    return true;
+    if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
+        return false;
+    }
+
+    const char* status;
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
+        if (!entry.fs_mgr_flags.verify_at_boot) {
+            return false;
+        }
+        status = "V";
+    } else {
+        status = table[0].data.c_str();
+    }
+
+    if (*status == 'C' || *status == 'V') {
+        return true;
+    }
+
+    return false;
 }
 
 std::string fs_mgr_get_super_partition_name(int slot) {
