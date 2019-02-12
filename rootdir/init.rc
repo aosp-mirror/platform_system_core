@@ -277,6 +277,10 @@ on init
 
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
+
+    # Start apexd as soon as we can
+    start apexd
+
     # Start essential services.
     start servicemanager
     start hwservicemanager
@@ -412,8 +416,8 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
-    # Start apexd as soon as we can
-    start apexd
+    # /data/apex is now available. Let apexd to scan and activate APEXes.
+    setprop apexd.data.status ready
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
@@ -531,6 +535,9 @@ on post-fs-data
     mkdir /data/anr 0775 system system
 
     mkdir /data/apex 0750 root system
+    mkdir /data/apex/active 0750 root system
+    mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/sessions 0700 root system
     mkdir /data/staging 0750 system system
 
     # NFC: create data/nfc for nv storage
@@ -589,6 +596,11 @@ on post-fs-data
     # won't work.
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
+
+    # sys.memfd_use set to false by default, which keeps it disabled
+    # until it is confirmed that apps and vendor processes don't make
+    # IOCTLs on ashmem fds any more.
+    setprop sys.use_memfd false
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.

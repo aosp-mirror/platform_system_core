@@ -25,7 +25,6 @@
 #include <string>
 
 #include "android-base/file.h"
-#include "android-base/unique_fd.h"
 
 TEST(mapped_file, smoke) {
   TemporaryFile tf;
@@ -36,4 +35,14 @@ TEST(mapped_file, smoke) {
   ASSERT_EQ(2u, m->size());
   ASSERT_EQ('l', m->data()[0]);
   ASSERT_EQ('o', m->data()[1]);
+}
+
+TEST(mapped_file, zero_length_mapping) {
+  // http://b/119818070 "app crashes when reading asset of zero length".
+  // mmap fails with EINVAL for a zero length region.
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  auto m = android::base::MappedFile::FromFd(tf.fd, 4096, 0, PROT_READ);
+  ASSERT_EQ(0u, m->size());
 }

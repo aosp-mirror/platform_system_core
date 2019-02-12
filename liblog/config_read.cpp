@@ -19,10 +19,10 @@
 #include "config_read.h"
 #include "logger.h"
 
-LIBLOG_HIDDEN struct listnode __android_log_transport_read = {&__android_log_transport_read,
-                                                              &__android_log_transport_read};
-LIBLOG_HIDDEN struct listnode __android_log_persist_read = {&__android_log_persist_read,
-                                                            &__android_log_persist_read};
+struct listnode __android_log_transport_read = {&__android_log_transport_read,
+                                                &__android_log_transport_read};
+struct listnode __android_log_persist_read = {&__android_log_persist_read,
+                                              &__android_log_persist_read};
 
 static void __android_log_add_transport(struct listnode* list,
                                         struct android_log_transport_read* transport) {
@@ -52,7 +52,7 @@ static void __android_log_add_transport(struct listnode* list,
   }
 }
 
-LIBLOG_HIDDEN void __android_log_config_read() {
+void __android_log_config_read() {
 #if (FAKE_LOG_DEVICE == 0)
   if ((__android_log_transport == LOGGER_DEFAULT) || (__android_log_transport & LOGGER_LOGD)) {
     extern struct android_log_transport_read logdLoggerRead;
@@ -64,7 +64,7 @@ LIBLOG_HIDDEN void __android_log_config_read() {
 #endif
 }
 
-LIBLOG_HIDDEN void __android_log_config_read_close() {
+void __android_log_config_read_close() {
   struct android_log_transport_read* transport;
   struct listnode* n;
 

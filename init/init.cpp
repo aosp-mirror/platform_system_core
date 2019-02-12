@@ -192,7 +192,8 @@ void property_changed(const std::string& name, const std::string& value) {
 
     if (waiting_for_prop) {
         if (wait_prop_name == name && wait_prop_value == value) {
-            LOG(INFO) << "Wait for property took " << *waiting_for_prop;
+            LOG(INFO) << "Wait for property '" << wait_prop_name << "=" << wait_prop_value
+                      << "' took " << *waiting_for_prop;
             ResetWaitForProp();
         }
     }

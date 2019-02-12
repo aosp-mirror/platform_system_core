@@ -1,7 +1,9 @@
 # This file is the LOCAL_INIT_RC file for the bootstat command.
 
-# mirror bootloader boot reason to system boot reason
-on property:ro.boot.bootreason=*
+# Mirror bootloader boot reason to system boot reason
+# ro.boot.bootreason should be set by init already
+# before post-fs trigger
+on post-fs && property:ro.boot.bootreason=*
     setprop sys.boot.reason ${ro.boot.bootreason}
 
 on post-fs-data
@@ -66,11 +68,16 @@ on boot
 on property:init.svc.zygote=stopping
     setprop sys.logbootcomplete 0
 
+# Set boot reason
+on zygote-start
+    # Converts bootloader boot reason and persist.sys.boot.reason to system boot reason
+    # Need go after persist peroperties are loaded which is right before zygote-start trigger
+    exec_background - system log -- /system/bin/bootstat --set_system_boot_reason
+
 # Record boot complete metrics.
 on property:sys.boot_completed=1 && property:sys.logbootcomplete=1
-    # Converts bootloader boot reason to system boot reason
     # Record boot_complete and related stats (decryption, etc).
     # Record the boot reason.
     # Record time since factory reset.
     # Log all boot events.
-    exec_background - system log -- /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l
+    exec_background - system log -- /system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l

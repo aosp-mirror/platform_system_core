@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
-#pragma once
+#include <gtest/gtest.h>
 
-#include <unistd.h>
+#include <meminfo/procmeminfo.h>
 
-#include "log_portability.h"
+namespace android {
+namespace meminfo {
 
-__BEGIN_DECLS
+// /proc/<pid>/smaps_rollup support is required.
+TEST(SmapsRollup, IsSupported) {
+    // Use init's pid for this test since it's the only known pid.
+    ASSERT_TRUE(IsSmapsRollupSupported(1));
+}
 
-ssize_t __send_log_msg(char* buf, size_t buf_size);
-
-__END_DECLS
+}  // namespace meminfo
+}  // namespace android
