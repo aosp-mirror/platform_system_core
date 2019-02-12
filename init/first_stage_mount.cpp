@@ -157,6 +157,37 @@ static Fstab ReadFirstStageFstab() {
     return fstab;
 }
 
+static bool GetRootEntry(FstabEntry* root_entry) {
+    Fstab proc_mounts;
+    if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
+        LOG(ERROR) << "Could not read /proc/mounts and /system not in fstab, /system will not be "
+                      "available for overlayfs";
+        return false;
+    }
+
+    auto entry = std::find_if(proc_mounts.begin(), proc_mounts.end(), [](const auto& entry) {
+        return entry.mount_point == "/" && entry.fs_type != "rootfs";
+    });
+
+    if (entry == proc_mounts.end()) {
+        LOG(ERROR) << "Could not get mount point for '/' in /proc/mounts, /system will not be "
+                      "available for overlayfs";
+        return false;
+    }
+
+    *root_entry = std::move(*entry);
+
+    // We don't know if we're avb or not, so we query device mapper as if we are avb.  If we get a
+    // success, then mark as avb, otherwise default to verify.
+    auto& dm = android::dm::DeviceMapper::Instance();
+    if (dm.GetState("vroot") != android::dm::DmDeviceState::INVALID) {
+        root_entry->fs_mgr_flags.avb = true;
+    } else {
+        root_entry->fs_mgr_flags.verify = true;
+    }
+    return true;
+}
+
 // Class Definitions
 // -----------------
 FirstStageMount::FirstStageMount(Fstab fstab)
@@ -443,7 +474,7 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 
     if (system_partition == fstab_.end()) return true;
 
-    if (MountPartition(system_partition, true /* erase_used_fstab_entry */)) {
+    if (MountPartition(system_partition, false)) {
         SwitchRoot("/system");
     } else {
         PLOG(ERROR) << "Failed to mount /system";
@@ -487,6 +518,12 @@ bool FirstStageMount::MountPartitions() {
     if (!TrySkipMountingPartitions()) return false;
 
     for (auto current = fstab_.begin(); current != fstab_.end();) {
+        // We've already mounted /system above.
+        if (current->mount_point == "/system") {
+            ++current;
+            continue;
+        }
+
         Fstab::iterator end;
         if (!MountPartition(current, false, &end)) {
             if (current->fs_mgr_flags.no_fail) {
@@ -501,6 +538,15 @@ bool FirstStageMount::MountPartitions() {
             }
         }
         current = end;
+    }
+
+    // If we don't see /system or / in the fstab, then we need to create an root entry for
+    // overlayfs.
+    if (!GetEntryForMountPoint(&fstab_, "/system") && !GetEntryForMountPoint(&fstab_, "/")) {
+        FstabEntry root_entry;
+        if (GetRootEntry(&root_entry)) {
+            fstab_.emplace_back(std::move(root_entry));
+        }
     }
 
     // heads up for instantiating required device(s) for overlayfs logic
