@@ -100,148 +100,29 @@ static int logdAvailable(log_id_t logId) {
   return -EBADF;
 }
 
-/* Private copy of ../libcutils/socket_local_client.c prevent library loops */
+// Connects to /dev/socket/<name> and returns the associated fd or returns -1 on error.
+// O_CLOEXEC is always set.
+static int socket_local_client(const std::string& name, int type) {
+  sockaddr_un addr = {.sun_family = AF_LOCAL};
 
-#if defined(_WIN32)
-
-LIBLOG_WEAK int socket_local_client(const char* name, int namespaceId, int type) {
-  errno = ENOSYS;
-  return -ENOSYS;
-}
-
-#else /* !_WIN32 */
-
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
-
-/* Private copy of ../libcutils/socket_local.h prevent library loops */
-#define FILESYSTEM_SOCKET_PREFIX "/tmp/"
-#define ANDROID_RESERVED_SOCKET_PREFIX "/dev/socket/"
-/* End of ../libcutils/socket_local.h */
-
-#define LISTEN_BACKLOG 4
-
-/* Documented in header file. */
-LIBLOG_WEAK int socket_make_sockaddr_un(const char* name, int namespaceId,
-                                        struct sockaddr_un* p_addr, socklen_t* alen) {
-  memset(p_addr, 0, sizeof(*p_addr));
-  size_t namelen;
-
-  switch (namespaceId) {
-    case ANDROID_SOCKET_NAMESPACE_ABSTRACT:
-#if defined(__linux__)
-      namelen = strlen(name);
-
-      /* Test with length +1 for the *initial* '\0'. */
-      if ((namelen + 1) > sizeof(p_addr->sun_path)) {
-        goto error;
-      }
-
-      /*
-       * Note: The path in this case is *not* supposed to be
-       * '\0'-terminated. ("man 7 unix" for the gory details.)
-       */
-
-      p_addr->sun_path[0] = 0;
-      memcpy(p_addr->sun_path + 1, name, namelen);
-#else
-      /* this OS doesn't have the Linux abstract namespace */
-
-      namelen = strlen(name) + strlen(FILESYSTEM_SOCKET_PREFIX);
-      /* unix_path_max appears to be missing on linux */
-      if (namelen > sizeof(*p_addr) - offsetof(struct sockaddr_un, sun_path) - 1) {
-        goto error;
-      }
-
-      strcpy(p_addr->sun_path, FILESYSTEM_SOCKET_PREFIX);
-      strcat(p_addr->sun_path, name);
-#endif
-      break;
-
-    case ANDROID_SOCKET_NAMESPACE_RESERVED:
-      namelen = strlen(name) + strlen(ANDROID_RESERVED_SOCKET_PREFIX);
-      /* unix_path_max appears to be missing on linux */
-      if (namelen > sizeof(*p_addr) - offsetof(struct sockaddr_un, sun_path) - 1) {
-        goto error;
-      }
-
-      strcpy(p_addr->sun_path, ANDROID_RESERVED_SOCKET_PREFIX);
-      strcat(p_addr->sun_path, name);
-      break;
-
-    case ANDROID_SOCKET_NAMESPACE_FILESYSTEM:
-      namelen = strlen(name);
-      /* unix_path_max appears to be missing on linux */
-      if (namelen > sizeof(*p_addr) - offsetof(struct sockaddr_un, sun_path) - 1) {
-        goto error;
-      }
-
-      strcpy(p_addr->sun_path, name);
-      break;
-
-    default:
-      /* invalid namespace id */
-      return -1;
+  std::string path = "/dev/socket/" + name;
+  if (path.size() + 1 > sizeof(addr.sun_path)) {
+    return -1;
   }
+  strlcpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path));
 
-  p_addr->sun_family = AF_LOCAL;
-  *alen = namelen + offsetof(struct sockaddr_un, sun_path) + 1;
-  return 0;
-error:
-  return -1;
-}
-
-/**
- * connect to peer named "name" on fd
- * returns same fd or -1 on error.
- * fd is not closed on error. that's your job.
- *
- * Used by AndroidSocketImpl
- */
-LIBLOG_WEAK int socket_local_client_connect(int fd, const char* name, int namespaceId,
-                                            int type __unused) {
-  struct sockaddr_un addr;
-  socklen_t alen;
-  int err;
-
-  err = socket_make_sockaddr_un(name, namespaceId, &addr, &alen);
-
-  if (err < 0) {
-    goto error;
-  }
-
-  if (connect(fd, (struct sockaddr*)&addr, alen) < 0) {
-    goto error;
-  }
-
-  return fd;
-
-error:
-  return -1;
-}
-
-/**
- * connect to peer named "name"
- * returns fd or -1 on error
- */
-LIBLOG_WEAK int socket_local_client(const char* name, int namespaceId, int type) {
-  int s;
-
-  s = socket(AF_LOCAL, type, 0);
-  if (s < 0) return -1;
-
-  if (0 > socket_local_client_connect(s, name, namespaceId, type)) {
-    close(s);
+  int fd = socket(AF_LOCAL, type | SOCK_CLOEXEC, 0);
+  if (fd == 0) {
     return -1;
   }
 
-  return s;
-}
+  if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
+    close(fd);
+    return -1;
+  }
 
-#endif /* !_WIN32 */
-/* End of ../libcutils/socket_local_client.c */
+  return fd;
+}
 
 /* worker for sending the command to the logger */
 static ssize_t send_log_msg(struct android_log_logger* logger, const char* msg, char* buf,
@@ -250,7 +131,7 @@ static ssize_t send_log_msg(struct android_log_logger* logger, const char* msg, 
   size_t len;
   char* cp;
   int errno_save = 0;
-  int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);
+  int sock = socket_local_client("logd", SOCK_STREAM);
   if (sock < 0) {
     return sock;
   }
@@ -460,10 +341,10 @@ static int logdOpen(struct android_log_logger_list* logger_list,
     return sock;
   }
 
-  sock = socket_local_client("logdr", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET);
+  sock = socket_local_client("logdr", SOCK_SEQPACKET);
   if (sock == 0) {
     /* Guarantee not file descriptor zero */
-    int newsock = socket_local_client("logdr", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET);
+    int newsock = socket_local_client("logdr", SOCK_SEQPACKET);
     close(sock);
     sock = newsock;
   }
