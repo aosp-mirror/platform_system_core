@@ -195,17 +195,83 @@ cc_library {
     },
 }
 
-// Include subdirectory makefiles
-// ============================================================
-
 cc_test {
-    name: "SharedBufferTest",
+    name: "libutils_test",
     host_supported: true,
-    static_libs: ["libutils"],
-    shared_libs: ["liblog"],
-    srcs: ["SharedBufferTest.cpp"],
+
+    srcs: [
+        "BitSet_test.cpp",
+        "FileMap_test.cpp",
+        "LruCache_test.cpp",
+        "Mutex_test.cpp",
+        "SharedBuffer_test.cpp",
+        "Singleton_test.cpp",
+        "String8_test.cpp",
+        "StrongPointer_test.cpp",
+        "Unicode_test.cpp",
+        "Vector_test.cpp",
+    ],
+
+    target: {
+        android: {
+            srcs: [
+                "SystemClock_test.cpp",
+            ],
+            shared_libs: [
+                "libz",
+                "liblog",
+                "libcutils",
+                "libutils",
+                "libbase",
+            ],
+        },
+        linux: {
+            srcs: [
+                "Looper_test.cpp",
+                "RefBase_test.cpp",
+            ],
+        },
+        host: {
+            static_libs: [
+                "libutils",
+                "liblog",
+                "libbase",
+            ],
+        },
+    },
+
+    required: [
+        "libutils_test_singleton1",
+        "libutils_test_singleton2",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wthread-safety",
+    ],
+}
+
+cc_test_library {
+    name: "libutils_test_singleton1",
+    host_supported: true,
+    relative_install_path: "libutils_test",
+    srcs: ["Singleton_test1.cpp"],
     cflags: [
         "-Wall",
         "-Werror",
     ],
+}
+
+cc_test_library {
+    name: "libutils_test_singleton2",
+    host_supported: true,
+    relative_install_path: "libutils_test",
+    srcs: ["Singleton_test2.cpp"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: ["libutils_test_singleton1"],
 }
