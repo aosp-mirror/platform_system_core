@@ -114,25 +114,6 @@ std::string GetCommandLine(int argc, char** argv) {
   return cmd;
 }
 
-// Convenience wrapper over the property API that returns an
-// std::string.
-std::string GetProperty(const char* key) {
-  std::vector<char> temp(PROPERTY_VALUE_MAX);
-  const int len = property_get(key, &temp[0], nullptr);
-  if (len < 0) {
-    return "";
-  }
-  return std::string(&temp[0], len);
-}
-
-bool SetProperty(const char* key, const std::string& val) {
-  return property_set(key, val.c_str()) == 0;
-}
-
-bool SetProperty(const char* key, const char* val) {
-  return property_set(key, val) == 0;
-}
-
 constexpr int32_t kEmptyBootReason = 0;
 constexpr int32_t kUnknownBootReason = 1;
 
@@ -746,11 +727,13 @@ const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
 void BootReasonAddToHistory(const std::string& system_boot_reason) {
   if (system_boot_reason.empty()) return;
   LOG(INFO) << "Canonical boot reason: " << system_boot_reason;
-  auto old_system_boot_reason = GetProperty(system_reboot_reason_property);
-  if (!SetProperty(system_reboot_reason_property, system_boot_reason)) {
-    SetProperty(system_reboot_reason_property, system_boot_reason.substr(0, PROPERTY_VALUE_MAX - 1));
+  auto old_system_boot_reason = android::base::GetProperty(system_reboot_reason_property, "");
+  if (!android::base::SetProperty(system_reboot_reason_property, system_boot_reason)) {
+    android::base::SetProperty(system_reboot_reason_property,
+                               system_boot_reason.substr(0, PROPERTY_VALUE_MAX - 1));
   }
-  auto reason_history = android::base::Split(GetProperty(history_reboot_reason_property), "\n");
+  auto reason_history =
+      android::base::Split(android::base::GetProperty(history_reboot_reason_property, ""), "\n");
   static auto mark = time(nullptr);
   auto mark_str = std::string(",") + std::to_string(mark);
   auto marked_system_boot_reason = system_boot_reason + mark_str;
@@ -773,7 +756,8 @@ void BootReasonAddToHistory(const std::string& system_boot_reason) {
   reason_history.insert(reason_history.begin(), marked_system_boot_reason);
   // If the property string is too long ( > PROPERTY_VALUE_MAX)
   // we get an error, so trim out last entry and try again.
-  while (!(SetProperty(history_reboot_reason_property, android::base::Join(reason_history, '\n')))) {
+  while (!android::base::SetProperty(history_reboot_reason_property,
+                                     android::base::Join(reason_history, '\n'))) {
     auto it = std::prev(reason_history.end());
     if (it == reason_history.end()) break;
     reason_history.erase(it);
@@ -782,7 +766,7 @@ void BootReasonAddToHistory(const std::string& system_boot_reason) {
 
 // Scrub, Sanitize, Standardize and Enhance the boot reason string supplied.
 std::string BootReasonStrToReason(const std::string& boot_reason) {
-  std::string ret(GetProperty(system_reboot_reason_property));
+  auto ret = android::base::GetProperty(system_reboot_reason_property, "");
   std::string reason(boot_reason);
   // If sys.boot.reason == ro.boot.bootreason, let's re-evaluate
   if (reason == ret) ret = "";
@@ -922,7 +906,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     if (isBluntRebootReason(ret)) {
       // Content buffer no longer will have console data. Beware if more
       // checks added below, that depend on parsing console content.
-      content = GetProperty(last_reboot_reason_property);
+      content = android::base::GetProperty(last_reboot_reason_property, "");
       transformReason(content);
 
       // Anything in last is better than 'super-blunt' reboot or shutdown.
@@ -966,7 +950,7 @@ std::string CalculateBootCompletePrefix() {
   static const std::string kBuildDateKey = "build_date";
   std::string boot_complete_prefix = "boot_complete";
 
-  std::string build_date_str = GetProperty("ro.build.date.utc");
+  auto build_date_str = android::base::GetProperty("ro.build.date.utc", "");
   int32_t build_date;
   if (!android::base::ParseInt(build_date_str, &build_date)) {
     return std::string();
@@ -989,7 +973,7 @@ std::string CalculateBootCompletePrefix() {
 
 // Records the value of a given ro.boottime.init property in milliseconds.
 void RecordInitBootTimeProp(BootEventRecordStore* boot_event_store, const char* property) {
-  std::string value = GetProperty(property);
+  auto value = android::base::GetProperty(property, "");
 
   int32_t time_in_ms;
   if (android::base::ParseInt(value, &time_in_ms)) {
@@ -1007,7 +991,7 @@ const BootloaderTimingMap GetBootLoaderTimings() {
 
   // |ro.boot.boottime| is of the form 'stage1:time1,...,stageN:timeN',
   // where timeN is in milliseconds.
-  std::string value = GetProperty("ro.boot.boottime");
+  auto value = android::base::GetProperty("ro.boot.boottime", "");
   if (value.empty()) {
     // ro.boot.boottime is not reported on all devices.
     return BootloaderTimingMap();
@@ -1081,7 +1065,7 @@ void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
 void LogBootInfoToStatsd(std::chrono::milliseconds end_time,
                          std::chrono::milliseconds total_duration, int32_t bootloader_duration_ms,
                          double time_since_last_boot_sec) {
-  const std::string reason(GetProperty(bootloader_reboot_reason_property));
+  const auto reason = android::base::GetProperty(bootloader_reboot_reason_property, "");
 
   if (reason.empty()) {
     android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, "<EMPTY>", "<EMPTY>",
@@ -1091,7 +1075,7 @@ void LogBootInfoToStatsd(std::chrono::milliseconds end_time,
     return;
   }
 
-  const std::string system_reason(GetProperty(system_reboot_reason_property));
+  const auto system_reason = android::base::GetProperty(system_reboot_reason_property, "");
   android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, reason.c_str(),
                              system_reason.c_str(), end_time.count(), total_duration.count(),
                              (int64_t)bootloader_duration_ms,
@@ -1099,19 +1083,20 @@ void LogBootInfoToStatsd(std::chrono::milliseconds end_time,
 }
 
 void SetSystemBootReason() {
-  const std::string bootloader_boot_reason(GetProperty(bootloader_reboot_reason_property));
+  const auto bootloader_boot_reason =
+      android::base::GetProperty(bootloader_reboot_reason_property, "");
   const std::string system_boot_reason(BootReasonStrToReason(bootloader_boot_reason));
   // Record the scrubbed system_boot_reason to the property
   BootReasonAddToHistory(system_boot_reason);
   // Shift last_reboot_reason_property to last_last_reboot_reason_property
-  std::string last_boot_reason(GetProperty(last_reboot_reason_property));
+  auto last_boot_reason = android::base::GetProperty(last_reboot_reason_property, "");
   if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
     last_boot_reason = system_boot_reason;
   } else {
     transformReason(last_boot_reason);
   }
-  SetProperty(last_last_reboot_reason_property, last_boot_reason);
-  SetProperty(last_reboot_reason_property, "");
+  android::base::SetProperty(last_last_reboot_reason_property, last_boot_reason);
+  android::base::SetProperty(last_reboot_reason_property, "");
 }
 
 // Gets the boot time offset. This is useful when Android is running in a
@@ -1198,7 +1183,7 @@ void RecordBootComplete() {
 // Records the boot_reason metric by querying the ro.boot.bootreason system
 // property.
 void RecordBootReason() {
-  const std::string reason(GetProperty(bootloader_reboot_reason_property));
+  const auto reason = android::base::GetProperty(bootloader_reboot_reason_property, "");
 
   if (reason.empty()) {
     // Log an empty boot reason value as '<EMPTY>' to ensure the value is intentional
@@ -1216,12 +1201,12 @@ void RecordBootReason() {
   boot_event_store.AddBootEventWithValue("boot_reason", boot_reason);
 
   // Log the scrubbed system_boot_reason.
-  const std::string system_reason(GetProperty(system_reboot_reason_property));
+  const auto system_reason = android::base::GetProperty(system_reboot_reason_property, "");
   int32_t system_boot_reason = BootReasonStrToEnum(system_reason);
   boot_event_store.AddBootEventWithValue("system_boot_reason", system_boot_reason);
 
   if (reason == "") {
-    SetProperty(bootloader_reboot_reason_property, system_reason);
+    android::base::SetProperty(bootloader_reboot_reason_property, system_reason);
   }
 }
 
