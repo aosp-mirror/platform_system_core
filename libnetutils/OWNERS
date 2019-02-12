@@ -1,3 +1,2 @@
-# TODO: should this be in system/netd?
-ek@google.com
-lorenzo@google.com
+include platform/system/netd:/OWNERS
+
