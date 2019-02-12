@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __CORE_FS_MGR_H
-#define __CORE_FS_MGR_H
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -73,8 +72,8 @@ int fs_mgr_do_mount_one(const android::fs_mgr::FstabEntry& entry,
                         const std::string& mount_point = "");
 int fs_mgr_do_tmpfs_mount(const char *n_name);
 bool fs_mgr_load_verity_state(int* mode);
-bool fs_mgr_update_verity_state(
-        std::function<void(const std::string& mount_point, int mode)> callback);
+// Returns true if verity is enabled on this particular FstabEntry.
+bool fs_mgr_is_verity_enabled(const android::fs_mgr::FstabEntry& entry);
 bool fs_mgr_swapon_all(const android::fs_mgr::Fstab& fstab);
 bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
 
@@ -90,5 +89,3 @@ int fs_mgr_setup_verity(android::fs_mgr::FstabEntry* fstab, bool wait_for_verity
 // specified, the super partition for the corresponding metadata slot will be
 // returned. Otherwise, it will use the current slot.
 std::string fs_mgr_get_super_partition_name(int slot = -1);
-
-#endif /* __CORE_FS_MGR_H */
