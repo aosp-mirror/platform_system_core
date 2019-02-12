@@ -407,7 +407,7 @@ static int parseMapLines(EventTagMap* map, size_t which) {
 //
 // We create a private mapping because we want to terminate the log tag
 // strings with '\0'.
-LIBLOG_ABI_PUBLIC EventTagMap* android_openEventTagMap(const char* fileName) {
+EventTagMap* android_openEventTagMap(const char* fileName) {
   EventTagMap* newTagMap;
   off_t end[NUM_MAPS];
   int save_errno, fd[NUM_MAPS];
@@ -488,7 +488,7 @@ fail_errno:
 }
 
 // Close the map.
-LIBLOG_ABI_PUBLIC void android_closeEventTagMap(EventTagMap* map) {
+void android_closeEventTagMap(EventTagMap* map) {
   if (map) delete map;
 }
 
@@ -535,9 +535,7 @@ static const TagFmt* __getEventTag(EventTagMap* map, unsigned int tag) {
 }
 
 // Look up an entry in the map.
-LIBLOG_ABI_PUBLIC const char* android_lookupEventTag_len(const EventTagMap* map,
-                                                         size_t* len,
-                                                         unsigned int tag) {
+const char* android_lookupEventTag_len(const EventTagMap* map, size_t* len, unsigned int tag) {
   if (len) *len = 0;
   const TagFmt* str = map->find(tag);
   if (!str) {
@@ -549,8 +547,7 @@ LIBLOG_ABI_PUBLIC const char* android_lookupEventTag_len(const EventTagMap* map,
 }
 
 // Look up an entry in the map.
-LIBLOG_ABI_PUBLIC const char* android_lookupEventFormat_len(
-    const EventTagMap* map, size_t* len, unsigned int tag) {
+const char* android_lookupEventFormat_len(const EventTagMap* map, size_t* len, unsigned int tag) {
   if (len) *len = 0;
   const TagFmt* str = map->find(tag);
   if (!str) {
@@ -565,8 +562,7 @@ LIBLOG_ABI_PUBLIC const char* android_lookupEventFormat_len(
 // since it will cause the map to change from Shared and backed by a file,
 // to Private Dirty and backed up by swap, albeit highly compressible. By
 // deprecating this function everywhere, we save 100s of MB of memory space.
-LIBLOG_ABI_PUBLIC const char* android_lookupEventTag(const EventTagMap* map,
-                                                     unsigned int tag) {
+const char* android_lookupEventTag(const EventTagMap* map, unsigned int tag) {
   size_t len;
   const char* tagStr = android_lookupEventTag_len(map, &len, tag);
 
@@ -578,9 +574,7 @@ LIBLOG_ABI_PUBLIC const char* android_lookupEventTag(const EventTagMap* map,
 }
 
 // Look up tagname, generate one if necessary, and return a tag
-LIBLOG_ABI_PUBLIC int android_lookupEventTagNum(EventTagMap* map,
-                                                const char* tagname,
-                                                const char* format, int prio) {
+int android_lookupEventTagNum(EventTagMap* map, const char* tagname, const char* format, int prio) {
   const char* ep = endOfTag(tagname);
   size_t len = ep - tagname;
   if (!len || *ep) {

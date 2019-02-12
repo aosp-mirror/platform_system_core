@@ -105,7 +105,7 @@ static void __android_log_cache_available(struct android_log_transport_write* no
   }
 }
 
-LIBLOG_ABI_PUBLIC extern "C" int __android_log_dev_available() {
+extern "C" int __android_log_dev_available() {
   struct android_log_transport_write* node;
 
   if (list_empty(&__android_log_transport_write)) {
@@ -128,7 +128,7 @@ static atomic_uintptr_t tagMap;
 /*
  * Release any logger resources. A new log write will immediately re-acquire.
  */
-LIBLOG_ABI_PUBLIC void __android_log_close() {
+void __android_log_close() {
   struct android_log_transport_write* transport;
 #if defined(__ANDROID__)
   EventTagMap* m;
@@ -402,12 +402,11 @@ static int __write_to_log_init(log_id_t log_id, struct iovec* vec, size_t nr) {
   return ret;
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_write(int prio, const char* tag, const char* msg) {
+int __android_log_write(int prio, const char* tag, const char* msg) {
   return __android_log_buf_write(LOG_ID_MAIN, prio, tag, msg);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_buf_write(int bufID, int prio, const char* tag,
-                                              const char* msg) {
+int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
   struct iovec vec[3];
   char tmp_tag[32];
 
@@ -472,7 +471,7 @@ LIBLOG_ABI_PUBLIC int __android_log_buf_write(int bufID, int prio, const char* t
   return write_to_log(static_cast<log_id_t>(bufID), vec, 3);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap) {
+int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap) {
   char buf[LOG_BUF_SIZE];
 
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
@@ -480,7 +479,7 @@ LIBLOG_ABI_PUBLIC int __android_log_vprint(int prio, const char* tag, const char
   return __android_log_write(prio, tag, buf);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
+int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
   va_list ap;
   char buf[LOG_BUF_SIZE];
 
@@ -491,8 +490,7 @@ LIBLOG_ABI_PUBLIC int __android_log_print(int prio, const char* tag, const char*
   return __android_log_write(prio, tag, buf);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt,
-                                              ...) {
+int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...) {
   va_list ap;
   char buf[LOG_BUF_SIZE];
 
@@ -503,8 +501,7 @@ LIBLOG_ABI_PUBLIC int __android_log_buf_print(int bufID, int prio, const char* t
   return __android_log_buf_write(bufID, prio, tag, buf);
 }
 
-LIBLOG_ABI_PUBLIC void __android_log_assert(const char* cond, const char* tag, const char* fmt,
-                                            ...) {
+void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...) {
   char buf[LOG_BUF_SIZE];
 
   if (fmt) {
@@ -533,7 +530,7 @@ LIBLOG_ABI_PUBLIC void __android_log_assert(const char* cond, const char* tag, c
            /* NOTREACHED */
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_bwrite(int32_t tag, const void* payload, size_t len) {
+int __android_log_bwrite(int32_t tag, const void* payload, size_t len) {
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -544,7 +541,7 @@ LIBLOG_ABI_PUBLIC int __android_log_bwrite(int32_t tag, const void* payload, siz
   return write_to_log(LOG_ID_EVENTS, vec, 2);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len) {
+int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len) {
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -555,7 +552,7 @@ LIBLOG_ABI_PUBLIC int __android_log_stats_bwrite(int32_t tag, const void* payloa
   return write_to_log(LOG_ID_STATS, vec, 2);
 }
 
-LIBLOG_ABI_PUBLIC int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len) {
+int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len) {
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -571,8 +568,7 @@ LIBLOG_ABI_PUBLIC int __android_log_security_bwrite(int32_t tag, const void* pay
  * for the general case where we're generating lists of stuff, but very
  * handy if we just want to dump an integer into the log.
  */
-LIBLOG_ABI_PUBLIC int __android_log_btwrite(int32_t tag, char type, const void* payload,
-                                            size_t len) {
+int __android_log_btwrite(int32_t tag, char type, const void* payload, size_t len) {
   struct iovec vec[3];
 
   vec[0].iov_base = &tag;
@@ -589,7 +585,7 @@ LIBLOG_ABI_PUBLIC int __android_log_btwrite(int32_t tag, char type, const void* 
  * Like __android_log_bwrite, but used for writing strings to the
  * event log.
  */
-LIBLOG_ABI_PUBLIC int __android_log_bswrite(int32_t tag, const char* payload) {
+int __android_log_bswrite(int32_t tag, const char* payload) {
   struct iovec vec[4];
   char type = EVENT_TYPE_STRING;
   uint32_t len = strlen(payload);
@@ -610,7 +606,7 @@ LIBLOG_ABI_PUBLIC int __android_log_bswrite(int32_t tag, const char* payload) {
  * Like __android_log_security_bwrite, but used for writing strings to the
  * security log.
  */
-LIBLOG_ABI_PUBLIC int __android_log_security_bswrite(int32_t tag, const char* payload) {
+int __android_log_security_bswrite(int32_t tag, const char* payload) {
   struct iovec vec[4];
   char type = EVENT_TYPE_STRING;
   uint32_t len = strlen(payload);
@@ -645,9 +641,9 @@ static int __write_to_log_null(log_id_t log_id, struct iovec* vec, size_t nr) {
 
 /* Following functions need access to our internal write_to_log status */
 
-LIBLOG_HIDDEN int __android_log_transport;
+int __android_log_transport;
 
-LIBLOG_ABI_PUBLIC int android_set_log_transport(int transport_flag) {
+int android_set_log_transport(int transport_flag) {
   int retval;
 
   if (transport_flag < 0) {
@@ -688,7 +684,7 @@ LIBLOG_ABI_PUBLIC int android_set_log_transport(int transport_flag) {
   return retval;
 }
 
-LIBLOG_ABI_PUBLIC int android_get_log_transport() {
+int android_get_log_transport() {
   int ret = LOGGER_DEFAULT;
 
   __android_log_lock();

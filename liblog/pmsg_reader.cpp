@@ -38,7 +38,7 @@ static void pmsgClose(struct android_log_logger_list* logger_list,
 static int pmsgClear(struct android_log_logger* logger,
                      struct android_log_transport_context* transp);
 
-LIBLOG_HIDDEN struct android_log_transport_read pmsgLoggerRead = {
+struct android_log_transport_read pmsgLoggerRead = {
     .node = {&pmsgLoggerRead.node, &pmsgLoggerRead.node},
     .name = "pmsg",
     .available = pmsgAvailable,
@@ -270,10 +270,8 @@ static void* realloc_or_free(void* ptr, size_t new_size) {
   return result;
 }
 
-LIBLOG_ABI_PRIVATE ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio,
-                                                        const char* prefix,
-                                                        __android_log_pmsg_file_read_fn fn,
-                                                        void* arg) {
+ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* prefix,
+                                     __android_log_pmsg_file_read_fn fn, void* arg) {
   ssize_t ret;
   struct android_log_logger_list logger_list;
   struct android_log_transport_context transp;

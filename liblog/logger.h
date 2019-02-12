@@ -156,10 +156,10 @@ static inline uid_t __android_log_uid() {
 }
 #endif
 
-LIBLOG_HIDDEN void __android_log_lock();
-LIBLOG_HIDDEN int __android_log_trylock();
-LIBLOG_HIDDEN void __android_log_unlock();
+void __android_log_lock();
+int __android_log_trylock();
+void __android_log_unlock();
 
-extern LIBLOG_HIDDEN int __android_log_transport;
+extern int __android_log_transport;
 
 __END_DECLS
