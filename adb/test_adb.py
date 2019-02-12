@@ -422,6 +422,9 @@ class ConnectionTest(unittest.TestCase):
         with fake_adbd() as (port, _):
             serial = "localhost:{}".format(port)
             with adb_connect(self, serial):
+                # Wait a bit to give adb some time to connect.
+                time.sleep(0.25)
+
                 output = subprocess.check_output(["adb", "-s", serial,
                                                   "get-state"])
                 self.assertEqual(output.strip(), b"device")

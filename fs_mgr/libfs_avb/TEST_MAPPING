@@ -1,5 +1,5 @@
 {
-  "presubmit": [
+  "postsubmit": [
     {
       "name": "libfs_avb_test",
       "host": true

@@ -103,6 +103,11 @@ static constexpr const char kLlndkNativeLibrariesSystemConfigPathFromRoot[] =
 static constexpr const char kVndkspNativeLibrariesSystemConfigPathFromRoot[] =
     "/etc/vndksp.libraries.txt";
 
+static const std::vector<const std::string> kRuntimePublicLibraries = {
+    "libicuuc.so",
+    "libicui18n.so",
+};
+
 // The device may be configured to have the vendor libraries loaded to a separate namespace.
 // For historical reasons this namespace was named sphal but effectively it is intended
 // to use to load vendor libraries to separate namespace with controlled interface between
@@ -111,7 +116,18 @@ static constexpr const char* kVendorNamespaceName = "sphal";
 
 static constexpr const char* kVndkNamespaceName = "vndk";
 
+static constexpr const char* kRuntimeNamespaceName = "runtime";
+
+// classloader-namespace is a linker namespace that is created for the loaded
+// app. To be specific, it is created for the app classloader. When
+// System.load() is called from a Java class that is loaded from the
+// classloader, the classloader-namespace namespace associated with that
+// classloader is selected for dlopen. The namespace is configured so that its
+// search path is set to the app-local JNI directory and it is linked to the
+// default namespace with the names of libs listed in the public.libraries.txt.
+// This way an app can only load its own JNI libraries along with the public libs.
 static constexpr const char* kClassloaderNamespaceName = "classloader-namespace";
+// Same thing for vendor APKs.
 static constexpr const char* kVendorClassloaderNamespaceName = "vendor-classloader-namespace";
 
 // (http://b/27588281) This is a workaround for apps using custom classloaders and calling
@@ -245,6 +261,8 @@ class LibraryNamespaces {
       }
     }
 
+    std::string runtime_exposed_libraries = base::Join(kRuntimePublicLibraries, ":");
+
     NativeLoaderNamespace native_loader_ns;
     if (!is_native_bridge) {
       android_namespace_t* android_parent_ns =
@@ -265,9 +283,19 @@ class LibraryNamespaces {
       // which is expected behavior in this case.
       android_namespace_t* vendor_ns = android_get_exported_namespace(kVendorNamespaceName);
 
+      android_namespace_t* runtime_ns = android_get_exported_namespace(kRuntimeNamespaceName);
+
       if (!android_link_namespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = dlerror();
         return nullptr;
+      }
+
+      // Runtime apex does not exist in host, and under certain build conditions.
+      if (runtime_ns != nullptr) {
+        if (!android_link_namespaces(ns, runtime_ns, runtime_exposed_libraries.c_str())) {
+          *error_msg = dlerror();
+          return nullptr;
+        }
       }
 
       if (vndk_ns != nullptr && !system_vndksp_libraries_.empty()) {
@@ -301,12 +329,21 @@ class LibraryNamespaces {
       }
 
       native_bridge_namespace_t* vendor_ns = NativeBridgeGetExportedNamespace(kVendorNamespaceName);
+      native_bridge_namespace_t* runtime_ns =
+          NativeBridgeGetExportedNamespace(kRuntimeNamespaceName);
 
       if (!NativeBridgeLinkNamespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = NativeBridgeGetError();
         return nullptr;
       }
 
+      // Runtime apex does not exist in host, and under certain build conditions.
+      if (runtime_ns != nullptr) {
+        if (!NativeBridgeLinkNamespaces(ns, runtime_ns, runtime_exposed_libraries.c_str())) {
+          *error_msg = NativeBridgeGetError();
+          return nullptr;
+        }
+      }
       if (!vendor_public_libraries_.empty()) {
         if (!NativeBridgeLinkNamespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
           *error_msg = NativeBridgeGetError();

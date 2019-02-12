@@ -356,6 +356,9 @@ int adb_open(const char* path, int options) {
     DWORD desiredAccess = 0;
     DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
 
+    // CreateFileW is inherently O_CLOEXEC by default.
+    options &= ~O_CLOEXEC;
+
     switch (options) {
         case O_RDONLY:
             desiredAccess = GENERIC_READ;
