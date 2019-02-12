@@ -75,6 +75,7 @@
 
 using namespace std::literals::string_literals;
 
+using android::base::Basename;
 using android::base::unique_fd;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::ReadFstabFromFile;
@@ -749,11 +750,27 @@ static Result<Success> do_verity_load_state(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
-    if (!fs_mgr_update_verity_state([](const std::string& mount_point, int mode) {
-            property_set("partition." + mount_point + ".verified", std::to_string(mode));
-        })) {
-        return Error() << "fs_mgr_update_verity_state() failed";
+    int mode;
+    if (!fs_mgr_load_verity_state(&mode)) {
+        return Error() << "fs_mgr_load_verity_state() failed";
     }
+
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        return Error() << "Failed to read default fstab";
+    }
+
+    for (const auto& entry : fstab) {
+        if (!fs_mgr_is_verity_enabled(entry)) {
+            continue;
+        }
+
+        // To be consistent in vboot 1.0 and vboot 2.0 (AVB), use "system" for the partition even
+        // for system as root, so it has property [partition.system.verified].
+        std::string partition = entry.mount_point == "/" ? "system" : Basename(entry.mount_point);
+        property_set("partition." + partition + ".verified", std::to_string(mode));
+    }
+
     return Success();
 }
 
