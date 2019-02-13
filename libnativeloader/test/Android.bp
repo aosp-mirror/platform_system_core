@@ -78,5 +78,5 @@ cc_test {
     srcs: [
         "api_test.c",
     ],
-    header_libs: ["libnativeloader-dummy-headers"],
+    header_libs: ["libnativeloader-headers"],
 }
