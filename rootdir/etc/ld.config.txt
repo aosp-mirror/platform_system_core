@@ -200,6 +200,7 @@ namespace.resolv.link.default.shared_libs  = libc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
+namespace.resolv.link.default.shared_libs += libvndksupport.so
 
 ###############################################################################
 # "sphal" namespace
