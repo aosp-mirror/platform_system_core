@@ -47,6 +47,7 @@ using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::Timer;
 using android::fs_mgr::AvbHandle;
+using android::fs_mgr::AvbHandleStatus;
 using android::fs_mgr::AvbHashtreeResult;
 using android::fs_mgr::AvbUniquePtr;
 using android::fs_mgr::BuildGsiSystemFstabEntry;
@@ -737,8 +738,17 @@ bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
         hashtree_result =
                 avb_handle_->SetUpAvbHashtree(fstab_entry, false /* wait_for_verity_dev */);
     } else if (!fstab_entry->avb_key.empty()) {
-        hashtree_result =
-                AvbHandle::SetUpStandaloneAvbHashtree(fstab_entry, false /* wait_for_verity_dev */);
+        if (!InitAvbHandle()) return false;
+        // Checks if hashtree should be disabled from the top-level /vbmeta.
+        if (avb_handle_->status() == AvbHandleStatus::kHashtreeDisabled ||
+            avb_handle_->status() == AvbHandleStatus::kVerificationDisabled) {
+            LOG(ERROR) << "Top-level vbmeta is disabled, skip Hashtree setup for "
+                       << fstab_entry->mount_point;
+            return true;  // Returns true to mount the partition directly.
+        } else {
+            hashtree_result = AvbHandle::SetUpStandaloneAvbHashtree(
+                    fstab_entry, false /* wait_for_verity_dev */);
+        }
     } else {
         return true;  // No need AVB, returns true to mount the partition directly.
     }
@@ -754,8 +764,6 @@ bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
         default:
             return false;
     }
-
-    return true;  // Returns true to mount the partition.
 }
 
 bool FirstStageMountVBootV2::InitAvbHandle() {
