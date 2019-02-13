@@ -24,18 +24,10 @@
 #include <libavb/libavb.h>
 #include <libdm/dm.h>
 
-#include "fs_avb/fs_avb.h"
+#include "fs_avb/types.h"
 
 namespace android {
 namespace fs_mgr {
-
-enum class VBMetaVerifyResult {
-    kSuccess = 0,
-    kError = 1,
-    kErrorVerification = 2,
-};
-
-std::ostream& operator<<(std::ostream& os, VBMetaVerifyResult);
 
 struct ChainInfo {
     std::string partition_name;
@@ -46,16 +38,13 @@ struct ChainInfo {
 };
 
 // AvbHashtreeDescriptor to dm-verity table setup.
-std::unique_ptr<AvbHashtreeDescriptor> GetHashtreeDescriptor(
-    const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images,
-    std::string* out_salt, std::string* out_digest);
+std::unique_ptr<FsAvbHashtreeDescriptor> GetHashtreeDescriptor(
+        const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images);
 
-bool ConstructVerityTable(const AvbHashtreeDescriptor& hashtree_desc, const std::string& salt,
-                          const std::string& root_digest, const std::string& blk_device,
-                          android::dm::DmTable* table);
+bool ConstructVerityTable(const FsAvbHashtreeDescriptor& hashtree_desc,
+                          const std::string& blk_device, android::dm::DmTable* table);
 
-bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const AvbHashtreeDescriptor& hashtree_desc,
-                           const std::string& salt, const std::string& root_digest,
+bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const FsAvbHashtreeDescriptor& hashtree_desc,
                            bool wait_for_verity_dev);
 
 // Searches a Avb hashtree descriptor in vbmeta_images for fstab_entry, to enable dm-verity.
