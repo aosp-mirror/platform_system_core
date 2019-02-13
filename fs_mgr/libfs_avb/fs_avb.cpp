@@ -76,33 +76,6 @@ std::pair<std::string, size_t> CalculateVbmetaDigest(const std::vector<VBMetaDat
     return std::make_pair(digest, total_size);
 }
 
-// Helper functions to dump enum class AvbHandleStatus.
-const char* AvbHandleStatusToString(AvbHandleStatus status) {
-    // clang-format off
-    static const char* const name[] = {
-        "Success",
-        "Uninitialized",
-        "HashtreeDisabled",
-        "VerificationDisabled",
-        "VerificationError",
-        "Unknown",
-    };
-    // clang-format on
-
-    uint32_t index = static_cast<uint32_t>(status);
-    uint32_t unknown_index = sizeof(name) / sizeof(char*) - 1;
-    if (index >= unknown_index) {
-        index = unknown_index;
-    }
-
-    return name[index];
-}
-
-std::ostream& operator<<(std::ostream& os, AvbHandleStatus status) {
-    os << AvbHandleStatusToString(status);
-    return os;
-}
-
 // class AvbVerifier
 // -----------------
 // Reads the following values from kernel cmdline and provides the

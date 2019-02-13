@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-#include <fs_avb/fs_avb.h>
+#include <fs_avb/types.h>
 #include <libavb/libavb.h>
 
 namespace android {
