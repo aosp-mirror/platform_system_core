@@ -53,6 +53,9 @@
 
 using android::base::StringPrintf;
 
+// We can't find out whether we have support for AIO on ffs endpoints until we submit a read.
+static std::optional<bool> gFfsAioSupported;
+
 static constexpr size_t kUsbReadQueueDepth = 16;
 static constexpr size_t kUsbReadSize = 16384;
 
@@ -169,8 +172,13 @@ struct UsbFfsConnection : public Connection {
           read_fd_(std::move(read)),
           write_fd_(std::move(write)) {
         LOG(INFO) << "UsbFfsConnection constructed";
-        event_fd_.reset(eventfd(0, EFD_CLOEXEC));
-        if (event_fd_ == -1) {
+        worker_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
+        if (worker_event_fd_ == -1) {
+            PLOG(FATAL) << "failed to create eventfd";
+        }
+
+        monitor_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
+        if (monitor_event_fd_ == -1) {
             PLOG(FATAL) << "failed to create eventfd";
         }
 
@@ -181,6 +189,13 @@ struct UsbFfsConnection : public Connection {
         LOG(INFO) << "UsbFfsConnection being destroyed";
         Stop();
         monitor_thread_.join();
+
+        // We need to explicitly close our file descriptors before we notify our destruction,
+        // because the thread listening on the future will immediately try to reopen the endpoint.
+        control_fd_.reset();
+        read_fd_.reset();
+        write_fd_.reset();
+
         destruction_notifier_.set_value();
     }
 
@@ -207,10 +222,17 @@ struct UsbFfsConnection : public Connection {
         }
         stopped_ = true;
         uint64_t notify = 1;
-        ssize_t rc = adb_write(event_fd_.get(), &notify, sizeof(notify));
+        ssize_t rc = adb_write(worker_event_fd_.get(), &notify, sizeof(notify));
         if (rc < 0) {
-            PLOG(FATAL) << "failed to notify eventfd to stop UsbFfsConnection";
+            PLOG(FATAL) << "failed to notify worker eventfd to stop UsbFfsConnection";
         }
+        CHECK_EQ(static_cast<size_t>(rc), sizeof(notify));
+
+        rc = adb_write(monitor_event_fd_.get(), &notify, sizeof(notify));
+        if (rc < 0) {
+            PLOG(FATAL) << "failed to notify monitor eventfd to stop UsbFfsConnection";
+        }
+
         CHECK_EQ(static_cast<size_t>(rc), sizeof(notify));
     }
 
@@ -235,22 +257,33 @@ struct UsbFfsConnection : public Connection {
             bool started = false;
             bool running = true;
             while (running) {
+                int timeout = -1;
                 if (!bound || !started) {
-                    adb_pollfd pfd = {.fd = control_fd_.get(), .events = POLLIN, .revents = 0};
-                    int rc = TEMP_FAILURE_RETRY(adb_poll(&pfd, 1, 5000 /*ms*/));
-                    if (rc == -1) {
-                        PLOG(FATAL) << "poll on USB control fd failed";
-                    } else if (rc == 0) {
-                        // Something in the kernel presumably went wrong.
-                        // Close our endpoints, wait for a bit, and then try again.
-                        aio_context_.reset();
-                        read_fd_.reset();
-                        write_fd_.reset();
-                        control_fd_.reset();
-                        std::this_thread::sleep_for(5s);
-                        HandleError("didn't receive FUNCTIONFS_ENABLE, retrying");
-                        return;
-                    }
+                    timeout = 5000 /*ms*/;
+                }
+
+                adb_pollfd pfd[2] = {
+                  { .fd = control_fd_.get(), .events = POLLIN, .revents = 0 },
+                  { .fd = monitor_event_fd_.get(), .events = POLLIN, .revents = 0 },
+                };
+                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, timeout));
+                if (rc == -1) {
+                    PLOG(FATAL) << "poll on USB control fd failed";
+                } else if (rc == 0) {
+                    // Something in the kernel presumably went wrong.
+                    // Close our endpoints, wait for a bit, and then try again.
+                    aio_context_.reset();
+                    read_fd_.reset();
+                    write_fd_.reset();
+                    control_fd_.reset();
+                    std::this_thread::sleep_for(5s);
+                    HandleError("didn't receive FUNCTIONFS_ENABLE, retrying");
+                    return;
+                }
+
+                if (pfd[1].revents) {
+                    // We were told to die.
+                    break;
                 }
 
                 struct usb_functionfs_event event;
@@ -313,12 +346,14 @@ struct UsbFfsConnection : public Connection {
             adb_thread_setname("UsbFfs-worker");
             for (size_t i = 0; i < kUsbReadQueueDepth; ++i) {
                 read_requests_[i] = CreateReadBlock(next_read_id_++);
-                SubmitRead(&read_requests_[i]);
+                if (!SubmitRead(&read_requests_[i])) {
+                    return;
+                }
             }
 
             while (!stopped_) {
                 uint64_t dummy;
-                ssize_t rc = adb_read(event_fd_.get(), &dummy, sizeof(dummy));
+                ssize_t rc = adb_read(worker_event_fd_.get(), &dummy, sizeof(dummy));
                 if (rc == -1) {
                     PLOG(FATAL) << "failed to read from eventfd";
                 } else if (rc == 0) {
@@ -347,7 +382,7 @@ struct UsbFfsConnection : public Connection {
         block.control.aio_fildes = read_fd_.get();
         block.control.aio_offset = 0;
         block.control.aio_flags = IOCB_FLAG_RESFD;
-        block.control.aio_resfd = event_fd_.get();
+        block.control.aio_resfd = worker_event_fd_.get();
         return block;
     }
 
@@ -438,13 +473,22 @@ struct UsbFfsConnection : public Connection {
         SubmitRead(block);
     }
 
-    void SubmitRead(IoBlock* block) {
+    bool SubmitRead(IoBlock* block) {
         block->pending = true;
         struct iocb* iocb = &block->control;
         if (io_submit(aio_context_.get(), 1, &iocb) != 1) {
+            if (errno == EINVAL && !gFfsAioSupported.has_value()) {
+                HandleError("failed to submit first read, AIO on FFS not supported");
+                gFfsAioSupported = false;
+                return false;
+            }
+
             HandleError(StringPrintf("failed to submit read: %s", strerror(errno)));
-            return;
+            return false;
         }
+
+        gFfsAioSupported = true;
+        return true;
     }
 
     void HandleWrite(TransferId id) {
@@ -474,7 +518,7 @@ struct UsbFfsConnection : public Connection {
         block->control.aio_nbytes = block->payload.size();
         block->control.aio_offset = 0;
         block->control.aio_flags = IOCB_FLAG_RESFD;
-        block->control.aio_resfd = event_fd_.get();
+        block->control.aio_resfd = worker_event_fd_.get();
         return block;
     }
 
@@ -526,7 +570,8 @@ struct UsbFfsConnection : public Connection {
     std::promise<void> destruction_notifier_;
     std::once_flag error_flag_;
 
-    unique_fd event_fd_;
+    unique_fd worker_event_fd_;
+    unique_fd monitor_event_fd_;
 
     ScopedAioContext aio_context_;
     unique_fd control_fd_;
@@ -551,10 +596,17 @@ struct UsbFfsConnection : public Connection {
     size_t writes_submitted_ GUARDED_BY(write_mutex_) = 0;
 };
 
+void usb_init_legacy();
+
 static void usb_ffs_open_thread() {
     adb_thread_setname("usb ffs open");
 
     while (true) {
+        if (gFfsAioSupported.has_value() && !gFfsAioSupported.value()) {
+            LOG(INFO) << "failed to use nonblocking ffs, falling back to legacy";
+            return usb_init_legacy();
+        }
+
         unique_fd control;
         unique_fd bulk_out;
         unique_fd bulk_in;
@@ -575,7 +627,6 @@ static void usb_ffs_open_thread() {
     }
 }
 
-void usb_init_legacy();
 void usb_init() {
     if (!android::base::GetBoolProperty("persist.adb.nonblocking_ffs", false)) {
         usb_init_legacy();
