@@ -91,7 +91,7 @@ TEST(liblog, SLOG) {
       "logcat -b system --pid=%u -d -s"
       " TEST__SLOGV TEST__SLOGD TEST__SLOGI TEST__SLOGW TEST__SLOGE",
       (unsigned)getpid());
-  FILE* fp = popen(buf.c_str(), "r");
+  FILE* fp = popen(buf.c_str(), "re");
   int count = 0;
   int count_false = 0;
   if (fp) {
