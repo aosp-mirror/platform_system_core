@@ -277,6 +277,10 @@ on init
 
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
+
+    # Start apexd as soon as we can
+    start apexd
+
     # Start essential services.
     start servicemanager
     start hwservicemanager
@@ -412,8 +416,8 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
-    # Start apexd as soon as we can
-    start apexd
+    # /data/apex is now available. Let apexd to scan and activate APEXes.
+    setprop apexd.data.status ready
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom

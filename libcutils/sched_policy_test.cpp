@@ -90,17 +90,18 @@ TEST(SchedPolicy, set_sched_policy_timerslack) {
     // A measureable effect of scheduling policy is that the kernel has 800x
     // greater slack time in waking up a sleeping background thread.
     //
-    // Look for 100x difference in how long FB and BG threads actually sleep
+    // Look for 10x difference in how long FB and BG threads actually sleep
     // when trying to sleep for 1 ns.  This difference is large enough not
     // to happen by chance, but small enough (compared to 800x) to keep inherent
     // fuzziness in scheduler behavior from causing false negatives.
-    const unsigned int BG_FG_SLACK_FACTOR = 100;
+    const unsigned int BG_FG_SLACK_FACTOR = 10;
 
     ASSERT_EQ(0, set_sched_policy(0, SP_BACKGROUND));
     auto bgSleepTime = medianSleepTime();
 
     ASSERT_EQ(0, set_sched_policy(0, SP_FOREGROUND));
     auto fgSleepTime = medianSleepTime();
+
     ASSERT_GT(bgSleepTime, fgSleepTime * BG_FG_SLACK_FACTOR);
 }
 

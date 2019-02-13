@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "TestHelpers.h"
+#include <utils/threads.h>
 
 // # of milliseconds to fudge stopwatch measurements
 #define TIMING_TOLERANCE_MS 25
@@ -21,6 +21,59 @@ enum {
     MSG_TEST2 = 2,
     MSG_TEST3 = 3,
     MSG_TEST4 = 4,
+};
+
+class Pipe {
+public:
+    int sendFd;
+    int receiveFd;
+
+    Pipe() {
+        int fds[2];
+        ::pipe(fds);
+
+        receiveFd = fds[0];
+        sendFd = fds[1];
+    }
+
+    ~Pipe() {
+        if (sendFd != -1) {
+            ::close(sendFd);
+        }
+
+        if (receiveFd != -1) {
+            ::close(receiveFd);
+        }
+    }
+
+    status_t writeSignal() {
+        ssize_t nWritten = ::write(sendFd, "*", 1);
+        return nWritten == 1 ? 0 : -errno;
+    }
+
+    status_t readSignal() {
+        char buf[1];
+        ssize_t nRead = ::read(receiveFd, buf, 1);
+        return nRead == 1 ? 0 : nRead == 0 ? -EPIPE : -errno;
+    }
+};
+
+class DelayedTask : public Thread {
+    int mDelayMillis;
+
+public:
+    explicit DelayedTask(int delayMillis) : mDelayMillis(delayMillis) { }
+
+protected:
+    virtual ~DelayedTask() { }
+
+    virtual void doTask() = 0;
+
+    virtual bool threadLoop() {
+        usleep(mDelayMillis * 1000);
+        doTask();
+        return false;
+    }
 };
 
 class DelayedWake : public DelayedTask {
