@@ -306,11 +306,11 @@ namespace.default.search.paths += /vendor/${LIB}/vndk
 namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 
 # Access to system libraries is allowed
-namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
+namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
@@ -324,8 +324,6 @@ namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk
 namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}/vndk-sp
 namespace.default.asan.search.paths +=           /vendor/${LIB}/vndk-sp
-namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
-namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}
@@ -334,6 +332,8 @@ namespace.default.asan.search.paths += /data/asan/product/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
+namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
+namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 
 namespace.default.links = runtime
 namespace.default.link.runtime.shared_libs  = libdexfile_external.so
