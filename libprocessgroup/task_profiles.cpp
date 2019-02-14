@@ -90,6 +90,10 @@ bool SetTimerSlackAction::ExecuteForTask(int tid) const {
     if (sys_supports_timerslack) {
         auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
         if (!WriteStringToFile(std::to_string(slack_), file)) {
+            if (errno == ENOENT) {
+                // This happens when process is already dead
+                return true;
+            }
             PLOG(ERROR) << "set_timerslack_ns write failed";
         }
     }
