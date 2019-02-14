@@ -45,6 +45,17 @@ static struct android_namespace_t* get_vendor_namespace() {
     return vendor_namespace;
 }
 
+int android_is_in_vendor_process() {
+    if (android_get_exported_namespace == NULL) {
+        ALOGD("android_get_exported_namespace() not available. Assuming system process.");
+        return 0;
+    }
+
+    // In vendor process, 'vndk' namespace is not visible, whereas in system
+    // process, it is.
+    return android_get_exported_namespace("vndk") == NULL;
+}
+
 void* android_load_sphal_library(const char* name, int flag) {
     struct android_namespace_t* vendor_namespace = get_vendor_namespace();
     if (vendor_namespace != NULL) {
