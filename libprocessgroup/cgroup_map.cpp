@@ -126,22 +126,26 @@ static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors
         return false;
     }
 
-    Json::Value cgroups = root["Cgroups"];
-    for (Json::Value::ArrayIndex i = 0; i < cgroups.size(); ++i) {
-        std::string name = cgroups[i]["Controller"].asString();
-        descriptors->emplace(std::make_pair(
-                name,
-                CgroupDescriptor(1, name, cgroups[i]["Path"].asString(),
-                                 std::strtoul(cgroups[i]["Mode"].asString().c_str(), 0, 8),
-                                 cgroups[i]["UID"].asString(), cgroups[i]["GID"].asString())));
+    if (root.isMember("Cgroups")) {
+        const Json::Value& cgroups = root["Cgroups"];
+        for (Json::Value::ArrayIndex i = 0; i < cgroups.size(); ++i) {
+            std::string name = cgroups[i]["Controller"].asString();
+            descriptors->emplace(std::make_pair(
+                    name,
+                    CgroupDescriptor(1, name, cgroups[i]["Path"].asString(),
+                                     std::strtoul(cgroups[i]["Mode"].asString().c_str(), 0, 8),
+                                     cgroups[i]["UID"].asString(), cgroups[i]["GID"].asString())));
+        }
     }
 
-    Json::Value cgroups2 = root["Cgroups2"];
-    descriptors->emplace(std::make_pair(
-            CGROUPV2_CONTROLLER_NAME,
-            CgroupDescriptor(2, CGROUPV2_CONTROLLER_NAME, cgroups2["Path"].asString(),
-                             std::strtoul(cgroups2["Mode"].asString().c_str(), 0, 8),
-                             cgroups2["UID"].asString(), cgroups2["GID"].asString())));
+    if (root.isMember("Cgroups2")) {
+        const Json::Value& cgroups2 = root["Cgroups2"];
+        descriptors->emplace(std::make_pair(
+                CGROUPV2_CONTROLLER_NAME,
+                CgroupDescriptor(2, CGROUPV2_CONTROLLER_NAME, cgroups2["Path"].asString(),
+                                 std::strtoul(cgroups2["Mode"].asString().c_str(), 0, 8),
+                                 cgroups2["UID"].asString(), cgroups2["GID"].asString())));
+    }
 
     return true;
 }
