@@ -32,8 +32,9 @@ bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::s
 
 bool UsePerAppMemcg();
 
-bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles);
-bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
+bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache = false);
+bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
+                        bool use_fd_cache = false);
 
 // Return 0 and removes the cgroup if there are no longer any processes in it.
 // Returns -1 in the case of an error occurring or if there are processes still running
