@@ -36,3 +36,20 @@ cc_test {
         "-Werror",
     ],
 }
+
+cc_prebuilt_binary {
+    name: "adb-remount-test.sh",
+    srcs: ["adb-remount-test.sh"],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
+        },
+        android: {
+            enabled: false,
+        },
+    },
+    host_supported: true,
+}
