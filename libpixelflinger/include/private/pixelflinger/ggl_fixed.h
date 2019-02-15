@@ -107,7 +107,7 @@ int32_t gglRecip28(GGLfixed x) {
 
 // inline ARM implementations
 inline GGLfixed gglMulx(GGLfixed x, GGLfixed y, int shift) CONST;
-inline GGLfixed gglMulx(GGLfixed x, GGLfixed y, int shift) {
+__attribute__((always_inline)) inline GGLfixed gglMulx(GGLfixed x, GGLfixed y, int shift) {
     GGLfixed result, t;
     if (__builtin_constant_p(shift)) {
     asm("smull  %[lo], %[hi], %[x], %[y]            \n"
@@ -130,7 +130,8 @@ inline GGLfixed gglMulx(GGLfixed x, GGLfixed y, int shift) {
 }
 
 inline GGLfixed gglMulAddx(GGLfixed x, GGLfixed y, GGLfixed a, int shift) CONST;
-inline GGLfixed gglMulAddx(GGLfixed x, GGLfixed y, GGLfixed a, int shift) {
+__attribute__((always_inline)) inline GGLfixed gglMulAddx(GGLfixed x, GGLfixed y, GGLfixed a,
+                                                          int shift) {
     GGLfixed result, t;
     if (__builtin_constant_p(shift)) {
     asm("smull  %[lo], %[hi], %[x], %[y]            \n"
