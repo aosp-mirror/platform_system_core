@@ -299,14 +299,6 @@ bool LoadSplitPolicy() {
 
     LOG(INFO) << "Compiling SELinux policy";
 
-    // Determine the highest policy language version supported by the kernel
-    set_selinuxmnt("/sys/fs/selinux");
-    int max_policy_version = security_policyvers();
-    if (max_policy_version == -1) {
-        PLOG(ERROR) << "Failed to determine highest policy version supported by kernel";
-        return false;
-    }
-
     // We store the output of the compilation on /dev because this is the most convenient tmpfs
     // storage mount available this early in the boot sequence.
     char compiled_sepolicy[] = "/dev/sepolicy.XXXXXX";
@@ -353,14 +345,13 @@ bool LoadSplitPolicy() {
     if (access(odm_policy_cil_file.c_str(), F_OK) == -1) {
         odm_policy_cil_file.clear();
     }
-    const std::string version_as_string = std::to_string(max_policy_version);
+    const std::string version_as_string = std::to_string(SEPOLICY_VERSION);
 
     // clang-format off
     std::vector<const char*> compile_args {
         "/system/bin/secilc",
         plat_policy_cil_file,
         "-m", "-M", "true", "-G", "-N",
-        // Target the highest policy language version supported by the kernel
         "-c", version_as_string.c_str(),
         plat_mapping_file.c_str(),
         "-o", compiled_sepolicy,
