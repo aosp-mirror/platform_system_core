@@ -52,6 +52,8 @@
 #include "fdevent.h"
 #include "sysdeps/chrono.h"
 
+using android::base::ScopedLockAssertion;
+
 static void remove_transport(atransport* transport);
 static void transport_unref(atransport* transport);
 
@@ -71,17 +73,6 @@ const char* const kFeatureFixedPushMkdir = "fixed_push_mkdir";
 const char* const kFeatureAbb = "abb";
 
 namespace {
-
-// A class that helps the Clang Thread Safety Analysis deal with
-// std::unique_lock. Given that std::unique_lock is movable, and the analysis
-// can not currently perform alias analysis, it is not annotated. In order to
-// assert that the mutex is held, a ScopedAssumeLocked can be created just after
-// the std::unique_lock.
-class SCOPED_CAPABILITY ScopedAssumeLocked {
-  public:
-    ScopedAssumeLocked(std::mutex& mutex) ACQUIRE(mutex) {}
-    ~ScopedAssumeLocked() RELEASE() {}
-};
 
 #if ADB_HOST
 // Tracks and handles atransport*s that are attempting reconnection.
@@ -180,7 +171,7 @@ void ReconnectHandler::Run() {
         ReconnectAttempt attempt;
         {
             std::unique_lock<std::mutex> lock(reconnect_mutex_);
-            ScopedAssumeLocked assume_lock(reconnect_mutex_);
+            ScopedLockAssertion assume_lock(reconnect_mutex_);
 
             if (!reconnect_queue_.empty()) {
                 // FIXME: libstdc++ (used on Windows) implements condition_variable with
@@ -296,7 +287,7 @@ void BlockingConnectionAdapter::Start() {
         LOG(INFO) << this->transport_name_ << ": write thread spawning";
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_);
-            ScopedAssumeLocked assume_locked(mutex_);
+            ScopedLockAssertion assume_locked(mutex_);
             cv_.wait(lock, [this]() REQUIRES(mutex_) {
                 return this->stopped_ || !this->write_queue_.empty();
             });
@@ -923,7 +914,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
 
 bool ConnectionWaitable::WaitForConnection(std::chrono::milliseconds timeout) {
     std::unique_lock<std::mutex> lock(mutex_);
-    ScopedAssumeLocked assume_locked(mutex_);
+    ScopedLockAssertion assume_locked(mutex_);
     return cv_.wait_for(lock, timeout, [&]() REQUIRES(mutex_) {
         return connection_established_ready_;
     }) && connection_established_;
