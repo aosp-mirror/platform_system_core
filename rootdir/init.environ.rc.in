@@ -1,5 +1,5 @@
 # set up the global environment
-on init
+on early-init
     export ANDROID_BOOTLOGO 1
     export ANDROID_ROOT /system
     export ANDROID_ASSETS /system/app
