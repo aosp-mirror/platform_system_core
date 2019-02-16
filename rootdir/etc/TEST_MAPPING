@@ -1,7 +1,7 @@
 {
   "presubmit": [
     {
-      "name": "bionic-unit-tests"
+      "name": "CtsBionicTestCases"
     }
   ]
 }
