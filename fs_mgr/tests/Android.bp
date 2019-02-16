@@ -53,3 +53,15 @@ cc_prebuilt_binary {
     },
     host_supported: true,
 }
+
+java_test_host {
+    name: "fs_mgr_vendor_overlay_test",
+
+    srcs:  ["src/**/VendorOverlayHostTest.java"],
+
+    libs: ["tradefed"],
+
+    test_config: "vendor-overlay-test.xml",
+
+    test_suites: ["general-tests"],
+}
