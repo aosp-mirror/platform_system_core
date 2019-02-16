@@ -46,6 +46,8 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     export_include_dirs: ["include"],
+    system_shared_libs: [],
+    stl: "none",
     target: {
         windows: {
             enabled: true,
