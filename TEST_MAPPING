@@ -10,6 +10,9 @@
       "name": "fs_mgr_unit_test"
     },
     {
+      "name": "fs_mgr_vendor_overlay_test"
+    },
+    {
       "name": "init_tests"
     },
     {
