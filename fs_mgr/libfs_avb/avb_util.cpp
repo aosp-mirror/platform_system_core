@@ -34,6 +34,19 @@ using android::base::unique_fd;
 namespace android {
 namespace fs_mgr {
 
+std::string GetAvbPropertyDescriptor(const std::string& key,
+                                     const std::vector<VBMetaData>& vbmeta_images) {
+    size_t value_size;
+    for (const auto& vbmeta : vbmeta_images) {
+        const char* value = avb_property_lookup(vbmeta.data(), vbmeta.size(), key.data(),
+                                                key.size(), &value_size);
+        if (value != nullptr) {
+            return {value, value_size};
+        }
+    }
+    return "";
+}
+
 // Constructs dm-verity arguments for sending DM_TABLE_LOAD ioctl to kernel.
 // See the following link for more details:
 // https://gitlab.com/cryptsetup/cryptsetup/wikis/DMVerity
