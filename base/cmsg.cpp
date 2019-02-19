@@ -18,7 +18,6 @@
 
 #include <alloca.h>
 #include <errno.h>
-#include <malloc.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/user.h>
