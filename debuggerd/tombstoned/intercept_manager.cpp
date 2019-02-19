@@ -24,6 +24,7 @@
 #include <event2/event.h>
 #include <event2/listener.h>
 
+#include <android-base/cmsg.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
@@ -31,6 +32,7 @@
 #include "protocol.h"
 #include "util.h"
 
+using android::base::ReceiveFileDescriptors;
 using android::base::unique_fd;
 
 static void intercept_close_cb(evutil_socket_t sockfd, short event, void* arg) {
@@ -96,7 +98,8 @@ static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
   {
     unique_fd rcv_fd;
     InterceptRequest intercept_request;
-    ssize_t result = recv_fd(sockfd, &intercept_request, sizeof(intercept_request), &rcv_fd);
+    ssize_t result =
+        ReceiveFileDescriptors(sockfd, &intercept_request, sizeof(intercept_request), &rcv_fd);
 
     if (result == -1) {
       PLOG(WARNING) << "failed to read from intercept socket";
