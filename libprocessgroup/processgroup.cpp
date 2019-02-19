@@ -200,7 +200,7 @@ void removeAllProcessGroups() {
         cgroups.push_back(path);
     }
     if (CgroupGetControllerPath("memory", &path)) {
-        cgroups.push_back(path);
+        cgroups.push_back(path + "/apps");
     }
 
     for (std::string cgroup_root_path : cgroups) {
@@ -317,6 +317,7 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
 
     CgroupGetControllerPath("cpuacct", &cpuacct_path);
     CgroupGetControllerPath("memory", &memory_path);
+    memory_path += "/apps";
 
     const char* cgroup =
             (!access(ConvertUidPidToPath(cpuacct_path.c_str(), uid, initialPid).c_str(), F_OK))
@@ -380,6 +381,7 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     std::string cgroup;
     if (isMemoryCgroupSupported() && (memControl || UsePerAppMemcg())) {
         CgroupGetControllerPath("memory", &cgroup);
+        cgroup += "/apps";
     } else {
         CgroupGetControllerPath("cpuacct", &cgroup);
     }
