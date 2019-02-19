@@ -16,8 +16,8 @@
 
 #include <android-base/cmsg.h>
 
-#include <alloca.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/user.h>
@@ -46,7 +46,8 @@ ssize_t SendFileDescriptorVector(int sockfd, const void* data, size_t len,
       .msg_iov = &iov,
       .msg_iovlen = 1,
       .msg_control = cmsg_buf,
-      .msg_controllen = cmsg_space,
+      // We can't cast to the actual type of the field, because it's different across platforms.
+      .msg_controllen = static_cast<unsigned int>(cmsg_space),
       .msg_flags = 0,
   };
 
@@ -60,7 +61,13 @@ ssize_t SendFileDescriptorVector(int sockfd, const void* data, size_t len,
     cmsg_fds[i] = fds[i];
   }
 
-  return TEMP_FAILURE_RETRY(sendmsg(sockfd, &msg, MSG_NOSIGNAL));
+#if defined(__linux__)
+  int flags = MSG_NOSIGNAL;
+#else
+  int flags = 0;
+#endif
+
+  return TEMP_FAILURE_RETRY(sendmsg(sockfd, &msg, flags));
 }
 
 ssize_t ReceiveFileDescriptorVector(int sockfd, void* data, size_t len, size_t max_fds,
@@ -81,12 +88,18 @@ ssize_t ReceiveFileDescriptorVector(int sockfd, void* data, size_t len, size_t m
       .msg_iov = &iov,
       .msg_iovlen = 1,
       .msg_control = cmsg_buf,
-      .msg_controllen = cmsg_space,
+      // We can't cast to the actual type of the field, because it's different across platforms.
+      .msg_controllen = static_cast<unsigned int>(cmsg_space),
       .msg_flags = 0,
   };
 
-  ssize_t rc = TEMP_FAILURE_RETRY(
-      recvmsg(sockfd, &msg, MSG_TRUNC | MSG_CTRUNC | MSG_CMSG_CLOEXEC | MSG_NOSIGNAL));
+  int flags = MSG_TRUNC | MSG_CTRUNC;
+#if defined(__linux__)
+  flags |= MSG_CMSG_CLOEXEC | MSG_NOSIGNAL;
+#endif
+
+  ssize_t rc = TEMP_FAILURE_RETRY(recvmsg(sockfd, &msg, flags));
+
   if (rc == -1) {
     return -1;
   }
@@ -111,11 +124,17 @@ ssize_t ReceiveFileDescriptorVector(int sockfd, void* data, size_t len, size_t m
     }
 
     // There isn't a macro that does the inverse of CMSG_LEN, so hack around it ourselves, with
-    // some static asserts to ensure that CMSG_LEN behaves as we expect.
-    static_assert(CMSG_LEN(0) + 1 * sizeof(int) == CMSG_LEN(1 * sizeof(int)));
-    static_assert(CMSG_LEN(0) + 2 * sizeof(int) == CMSG_LEN(2 * sizeof(int)));
-    static_assert(CMSG_LEN(0) + 3 * sizeof(int) == CMSG_LEN(3 * sizeof(int)));
-    static_assert(CMSG_LEN(0) + 4 * sizeof(int) == CMSG_LEN(4 * sizeof(int)));
+    // some asserts to ensure that CMSG_LEN behaves as we expect.
+#if defined(__linux__)
+#define CMSG_ASSERT static_assert
+#else
+// CMSG_LEN is somehow not constexpr on darwin.
+#define CMSG_ASSERT CHECK
+#endif
+    CMSG_ASSERT(CMSG_LEN(0) + 1 * sizeof(int) == CMSG_LEN(1 * sizeof(int)));
+    CMSG_ASSERT(CMSG_LEN(0) + 2 * sizeof(int) == CMSG_LEN(2 * sizeof(int)));
+    CMSG_ASSERT(CMSG_LEN(0) + 3 * sizeof(int) == CMSG_LEN(3 * sizeof(int)));
+    CMSG_ASSERT(CMSG_LEN(0) + 4 * sizeof(int) == CMSG_LEN(4 * sizeof(int)));
 
     if (cmsg->cmsg_len % sizeof(int) != 0) {
       LOG(FATAL) << "cmsg_len(" << cmsg->cmsg_len << ") not aligned to sizeof(int)";
@@ -126,6 +145,10 @@ ssize_t ReceiveFileDescriptorVector(int sockfd, void* data, size_t len, size_t m
     int* cmsg_fds = reinterpret_cast<int*>(CMSG_DATA(cmsg));
     size_t cmsg_fdcount = static_cast<size_t>(cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
     for (size_t i = 0; i < cmsg_fdcount; ++i) {
+#if !defined(__linux__)
+      // Linux uses MSG_CMSG_CLOEXEC instead of doing this manually.
+      fcntl(cmsg_fds[i], F_SETFD, FD_CLOEXEC);
+#endif
       received_fds.emplace_back(cmsg_fds[i]);
     }
   }
