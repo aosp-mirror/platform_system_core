@@ -28,3 +28,53 @@ prebuilt_etc {
     name: "task_profiles.json",
     src: "task_profiles.json",
 }
+
+cc_library_static {
+    name: "libprocessgroup_proto",
+    host_supported: true,
+    srcs: [
+        "cgroups.proto",
+        "task_profiles.proto",
+    ],
+    proto: {
+        type: "full",
+        export_proto_headers: true,
+    },
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+}
+
+cc_test_host {
+    name: "libprocessgroup_proto_test",
+    srcs: [
+        "test.cpp",
+    ],
+    static_libs: [
+        "libbase",
+        "libgmock",
+        "liblog",
+        "libjsoncpp",
+        "libjsonpbverify",
+        "libjsonpbparse",
+        "libprocessgroup_proto",
+    ],
+    shared_libs: [
+        "libprotobuf-cpp-full",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+    data: [
+        "cgroups.json",
+        "cgroups.recovery.json",
+        "task_profiles.json",
+    ],
+    test_suites: [
+        "general-tests",
+    ],
+}
