@@ -111,3 +111,26 @@ cc_library_static {
         "libgsi_headers",
     ],
 }
+
+cc_binary {
+    name: "remount",
+    defaults: ["fs_mgr_defaults"],
+    shared_libs: [
+        "libbase",
+        "libfs_mgr",
+    ],
+    srcs: [
+        "fs_mgr_remount.cpp",
+    ],
+    cppflags: [
+        "-DALLOW_ADBD_DISABLE_VERITY=0",
+    ],
+    product_variables: {
+        debuggable: {
+            cppflags: [
+                "-UALLOW_ADBD_DISABLE_VERITY",
+                "-DALLOW_ADBD_DISABLE_VERITY=1",
+            ],
+        },
+    },
+}
