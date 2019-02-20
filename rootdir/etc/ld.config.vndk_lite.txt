@@ -344,6 +344,8 @@ namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
+# Workaround for b/124772622
+namespace.default.link.runtime.shared_libs += libandroidicu.so
 
 ###############################################################################
 # "runtime" APEX namespace
