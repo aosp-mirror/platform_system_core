@@ -607,10 +607,14 @@ FstabEntry BuildGsiUserdataFstabEntry() {
     return userdata;
 }
 
-void EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
+bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
     auto iter = std::remove_if(fstab->begin(), fstab->end(),
                                [&](const auto& entry) { return entry.mount_point == mount_point; });
-    fstab->erase(iter, fstab->end());
+    if (iter != fstab->end()) {
+        fstab->erase(iter, fstab->end());
+        return true;
+    }
+    return false;
 }
 
 void TransformFstabForGsi(Fstab* fstab) {
@@ -628,11 +632,13 @@ void TransformFstabForGsi(Fstab* fstab) {
         userdata = BuildGsiUserdataFstabEntry();
     }
 
-    EraseFstabEntry(fstab, "/system");
-    EraseFstabEntry(fstab, "/data");
+    if (EraseFstabEntry(fstab, "/system")) {
+        fstab->emplace_back(BuildGsiSystemFstabEntry());
+    }
 
-    fstab->emplace_back(BuildGsiSystemFstabEntry());
-    fstab->emplace_back(userdata);
+    if (EraseFstabEntry(fstab, "/data")) {
+        fstab->emplace_back(userdata);
+    }
 }
 
 }  // namespace
