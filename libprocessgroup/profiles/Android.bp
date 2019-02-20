@@ -1,0 +1,80 @@
+// Copyright (C) 2019 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+prebuilt_etc {
+    name: "cgroups.json",
+    src: "cgroups.json",
+}
+
+prebuilt_etc {
+    name: "cgroups.recovery.json",
+    filename: "cgroups.json",
+    recovery: true,
+    src: "cgroups.recovery.json",
+}
+
+prebuilt_etc {
+    name: "task_profiles.json",
+    src: "task_profiles.json",
+}
+
+cc_library_static {
+    name: "libprocessgroup_proto",
+    host_supported: true,
+    srcs: [
+        "cgroups.proto",
+        "task_profiles.proto",
+    ],
+    proto: {
+        type: "full",
+        export_proto_headers: true,
+    },
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+}
+
+cc_test_host {
+    name: "libprocessgroup_proto_test",
+    srcs: [
+        "test.cpp",
+    ],
+    static_libs: [
+        "libbase",
+        "libgmock",
+        "liblog",
+        "libjsoncpp",
+        "libjsonpbverify",
+        "libjsonpbparse",
+        "libprocessgroup_proto",
+    ],
+    shared_libs: [
+        "libprotobuf-cpp-full",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+    data: [
+        "cgroups.json",
+        "cgroups.recovery.json",
+        "task_profiles.json",
+    ],
+    test_suites: [
+        "general-tests",
+    ],
+}
