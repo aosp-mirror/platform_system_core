@@ -20,6 +20,7 @@
 
 #include <unistd.h>
 
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <log/log_properties.h>
@@ -37,6 +38,7 @@ void restart_root_service(unique_fd fd) {
         return;
     }
 
+    LOG(INFO) << "adbd restarting as root";
     android::base::SetProperty("service.adb.root", "1");
     WriteFdExactly(fd.get(), "restarting adbd as root\n");
 }
@@ -46,6 +48,8 @@ void restart_unroot_service(unique_fd fd) {
         WriteFdExactly(fd.get(), "adbd not running as root\n");
         return;
     }
+
+    LOG(INFO) << "adbd restarting as nonroot";
     android::base::SetProperty("service.adb.root", "0");
     WriteFdExactly(fd.get(), "restarting adbd as non root\n");
 }
@@ -56,11 +60,13 @@ void restart_tcp_service(unique_fd fd, int port) {
         return;
     }
 
+    LOG(INFO) << "adbd restarting in TCP mode (port = " << port << ")";
     android::base::SetProperty("service.adb.tcp.port", android::base::StringPrintf("%d", port));
     WriteFdFmt(fd.get(), "restarting in TCP mode port: %d\n", port);
 }
 
 void restart_usb_service(unique_fd fd) {
+    LOG(INFO) << "adbd restarting in USB mode";
     android::base::SetProperty("service.adb.tcp.port", "0");
     WriteFdExactly(fd.get(), "restarting in USB mode\n");
 }
