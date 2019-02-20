@@ -485,7 +485,8 @@ namespace.system.link.runtime.shared_libs  = libdexfile_external.so
 namespace.system.link.runtime.shared_libs += libnativebridge.so
 namespace.system.link.runtime.shared_libs += libnativehelper.so
 namespace.system.link.runtime.shared_libs += libnativeloader.so
-
+# Workaround for b/124772622
+namespace.system.link.runtime.shared_libs += libandroidicu.so
 
 ###############################################################################
 # Namespace config for native tests that need access to both system and vendor
