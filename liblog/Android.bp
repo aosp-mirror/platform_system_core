@@ -101,6 +101,11 @@ cc_library {
     header_libs: ["liblog_headers"],
     export_header_lib_headers: ["liblog_headers"],
 
+    stubs: {
+        symbol_file: "liblog.map.txt",
+        versions: ["10000"],
+    },
+
     cflags: [
         "-Werror",
         // This is what we want to do:
