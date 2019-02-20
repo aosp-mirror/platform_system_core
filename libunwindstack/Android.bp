@@ -95,7 +95,6 @@ cc_library {
                 "DexFiles.cpp",
             ],
             exclude_shared_libs: [
-                "libdexfile_external",
                 "libdexfile_support",
             ],
         },
@@ -106,7 +105,6 @@ cc_library {
                 "DexFiles.cpp",
             ],
             exclude_shared_libs: [
-                "libdexfile_external",
                 "libdexfile_support",
             ],
         },
@@ -137,7 +135,6 @@ cc_library {
 
     shared_libs: [
         "libbase",
-        "libdexfile_external",
         "libdexfile_support",
         "liblog",
         "liblzma",
