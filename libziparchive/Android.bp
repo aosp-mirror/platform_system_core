@@ -126,7 +126,6 @@ cc_test {
         },
     },
     test_suites: ["device-tests"],
-    test_config: "ziparchive-tests.xml",  // TODO: Remove after b/117891984.
 }
 
 // Performance benchmarks.
