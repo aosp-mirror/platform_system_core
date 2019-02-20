@@ -32,6 +32,7 @@
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
 
+#include <android-base/cmsg.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
@@ -53,6 +54,8 @@
 #include "util.h"
 
 using namespace std::chrono_literals;
+
+using android::base::SendFileDescriptors;
 using android::base::unique_fd;
 
 #if defined(__LP64__)
@@ -123,12 +126,14 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
 
   ASSERT_GE(pipe_buffer_size, 1024 * 1024);
 
-  if (send_fd(intercept_fd->get(), &req, sizeof(req), std::move(output_pipe_write)) != sizeof(req)) {
+  ssize_t rc = SendFileDescriptors(intercept_fd->get(), &req, sizeof(req), output_pipe_write.get());
+  output_pipe_write.reset();
+  if (rc != sizeof(req)) {
     FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
   }
 
   InterceptResponse response;
-  ssize_t rc = TEMP_FAILURE_RETRY(read(intercept_fd->get(), &response, sizeof(response)));
+  rc = TEMP_FAILURE_RETRY(read(intercept_fd->get(), &response, sizeof(response)));
   if (rc == -1) {
     FAIL() << "failed to read response from tombstoned: " << strerror(errno);
   } else if (rc == 0) {

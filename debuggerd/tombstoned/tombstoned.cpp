@@ -31,6 +31,7 @@
 #include <event2/listener.h>
 #include <event2/thread.h>
 
+#include <android-base/cmsg.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -45,6 +46,7 @@
 #include "intercept_manager.h"
 
 using android::base::GetIntProperty;
+using android::base::SendFileDescriptors;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
@@ -224,7 +226,10 @@ static void perform_request(Crash* crash) {
   TombstonedCrashPacket response = {
     .packet_type = CrashPacketType::kPerformDump
   };
-  ssize_t rc = send_fd(crash->crash_socket_fd, &response, sizeof(response), std::move(output_fd));
+  ssize_t rc =
+      SendFileDescriptors(crash->crash_socket_fd, &response, sizeof(response), output_fd.get());
+  output_fd.reset();
+
   if (rc == -1) {
     PLOG(WARNING) << "failed to send response to CrashRequest";
     goto fail;
