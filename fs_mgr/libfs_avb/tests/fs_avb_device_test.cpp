@@ -114,8 +114,8 @@ TEST(AvbHandleTest, LoadAndVerifyVbmeta_SystemOther) {
     // Use the 2nd fstab entry, which is for physical system_other partition.
     FstabEntry* system_other_entry = &fstab[1];
     // Assign the default key if it's not specified in the fstab.
-    if (system_other_entry->avb_key.empty()) {
-        system_other_entry->avb_key = "/system/etc/security/avb/system_other.avbpubkey";
+    if (system_other_entry->avb_keys.empty()) {
+        system_other_entry->avb_keys = "/system/etc/security/avb/system_other.avbpubkey";
     }
     auto avb_handle = AvbHandle::LoadAndVerifyVbmeta(*system_other_entry);
     EXPECT_NE(nullptr, avb_handle) << "Failed to load system_other vbmeta. Try 'adb root'?";

@@ -325,8 +325,8 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             }
         } else if (StartsWith(flag, "zram_backing_dev_path=")) {
             entry->zram_backing_dev_path = arg;
-        } else if (StartsWith(flag, "avb_key=")) {
-            entry->avb_key = arg;
+        } else if (StartsWith(flag, "avb_keys=")) {
+            entry->avb_keys = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
@@ -759,7 +759,8 @@ FstabEntry BuildGsiSystemFstabEntry() {
                          .fs_type = "ext4",
                          .flags = MS_RDONLY,
                          .fs_options = "barrier=1",
-                         .avb_key = "/gsi.avbpubkey",
+                         // could add more keys separated by ':'.
+                         .avb_keys = "/avb/gsi.avbpubkey:",
                          .logical_partition_name = "system"};
     system.fs_mgr_flags.wait = true;
     system.fs_mgr_flags.logical = true;

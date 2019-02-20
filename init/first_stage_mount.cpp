@@ -760,7 +760,7 @@ bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
         if (!InitAvbHandle()) return false;
         hashtree_result =
                 avb_handle_->SetUpAvbHashtree(fstab_entry, false /* wait_for_verity_dev */);
-    } else if (!fstab_entry->avb_key.empty()) {
+    } else if (!fstab_entry->avb_keys.empty()) {
         if (!InitAvbHandle()) return false;
         // Checks if hashtree should be disabled from the top-level /vbmeta.
         if (avb_handle_->status() == AvbHandleStatus::kHashtreeDisabled ||
