@@ -80,7 +80,7 @@ static bool atrace_is_cmdline_match(const char* cmdline)
 // Determine whether application-level tracing is enabled for this process.
 static bool atrace_is_app_tracing_enabled()
 {
-    bool sys_debuggable = __android_log_is_debuggable();
+    bool sys_debuggable = property_get_bool("ro.debuggable", 0);
     bool result = false;
 
     if (sys_debuggable || atrace_is_debuggable) {
