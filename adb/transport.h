@@ -67,6 +67,8 @@ extern const char* const kFeatureApex;
 extern const char* const kFeatureFixedPushMkdir;
 // adbd supports android binder bridge (abb).
 extern const char* const kFeatureAbb;
+// adbd properly updates symlink timestamps on push.
+extern const char* const kFeatureFixedPushSymlinkTimestamp;
 
 TransportId NextTransportId();
 

@@ -681,9 +681,7 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath, 
     if (sync) {
         struct stat st;
         if (sync_lstat(sc, rpath, &st)) {
-            // For links, we cannot update the atime/mtime.
-            if ((S_ISREG(mode & st.st_mode) && st.st_mtime == static_cast<time_t>(mtime)) ||
-                (S_ISLNK(mode & st.st_mode) && st.st_mtime >= static_cast<time_t>(mtime))) {
+            if (st.st_mtime == static_cast<time_t>(mtime)) {
                 sc.RecordFilesSkipped(1);
                 return true;
             }
@@ -921,12 +919,8 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
         for (copyinfo& ci : file_list) {
             struct stat st;
             if (sc.FinishStat(&st)) {
-                if (st.st_size == static_cast<off_t>(ci.size)) {
-                    // For links, we cannot update the atime/mtime.
-                    if ((S_ISREG(ci.mode & st.st_mode) && st.st_mtime == ci.time) ||
-                        (S_ISLNK(ci.mode & st.st_mode) && st.st_mtime >= ci.time)) {
-                        ci.skip = true;
-                    }
+                if (st.st_size == static_cast<off_t>(ci.size) && st.st_mtime == ci.time) {
+                    ci.skip = true;
                 }
             }
         }
