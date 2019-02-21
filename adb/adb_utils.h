@@ -141,3 +141,11 @@ inline bool ParseUint(T* result, std::string_view str, std::string_view* remaini
 
     return true;
 }
+
+inline bool ConsumePrefix(std::string_view* str, std::string_view prefix) {
+  if (str->starts_with(prefix)) {
+    str->remove_prefix(prefix.size());
+    return true;
+  }
+  return false;
+}
