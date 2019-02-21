@@ -792,16 +792,22 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 
         // Some requests are handled immediately -- in that case the handle_host_request() routine
         // has sent the OKAY or FAIL message and all we have to do is clean up.
-        if (handle_host_request(service, type,
-                                serial.empty() ? nullptr : std::string(serial).c_str(),
-                                transport_id, s->peer->fd, s)) {
-            LOG(VERBOSE) << "SS(" << s->id << "): handled host service '" << service << "'";
-            goto fail;
-        }
-        if (service.starts_with("transport")) {
-            D("SS(%d): okay transport", s->id);
-            s->smart_socket_data.clear();
-            return 0;
+        auto host_request_result = handle_host_request(
+                service, type, serial.empty() ? nullptr : std::string(serial).c_str(), transport_id,
+                s->peer->fd, s);
+
+        switch (host_request_result) {
+            case HostRequestResult::Handled:
+                LOG(VERBOSE) << "SS(" << s->id << "): handled host service '" << service << "'";
+                goto fail;
+
+            case HostRequestResult::SwitchedTransport:
+                D("SS(%d): okay transport", s->id);
+                s->smart_socket_data.clear();
+                return 0;
+
+            case HostRequestResult::Unhandled:
+                break;
         }
 
         /* try to find a local service with this name.
