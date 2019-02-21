@@ -218,7 +218,7 @@ extern const char* adb_device_banner;
 #define USB_FFS_ADB_IN USB_FFS_ADB_EP(ep2)
 #endif
 
-bool handle_host_request(const char* service, TransportType type, const char* serial,
+bool handle_host_request(std::string_view service, TransportType type, const char* serial,
                          TransportId transport_id, int reply_fd, asocket* s);
 
 void handle_online(atransport* t);

@@ -808,8 +808,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 
         // Some requests are handled immediately -- in that case the handle_host_request() routine
         // has sent the OKAY or FAIL message and all we have to do is clean up.
-        // TODO: Convert to string_view.
-        if (handle_host_request(std::string(service).c_str(), type,
+        if (handle_host_request(service, type,
                                 serial.empty() ? nullptr : std::string(serial).c_str(),
                                 transport_id, s->peer->fd, s)) {
             LOG(VERBOSE) << "SS(" << s->id << "): handled host service '" << service << "'";
