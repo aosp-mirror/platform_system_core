@@ -110,7 +110,7 @@ inline std::string_view StripTrailingNulls(std::string_view str) {
 
 // Base-10 stroll on a string_view.
 template <typename T>
-inline bool ParseUint(T* result, std::string_view str, std::string_view* remaining) {
+inline bool ParseUint(T* result, std::string_view str, std::string_view* remaining = nullptr) {
     if (str.empty() || !isdigit(str[0])) {
         return false;
     }
@@ -135,6 +135,9 @@ inline bool ParseUint(T* result, std::string_view str, std::string_view* remaini
     *result = value;
     if (remaining) {
         *remaining = str.substr(it - str.begin());
+    } else {
+      return it == str.end();
     }
+
     return true;
 }
