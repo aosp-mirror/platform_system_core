@@ -170,8 +170,9 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid) {
     return ret;
 }
 
-static void RemoveUidProcessGroups(const std::string& uid_path) {
+static bool RemoveUidProcessGroups(const std::string& uid_path) {
     std::unique_ptr<DIR, decltype(&closedir)> uid(opendir(uid_path.c_str()), closedir);
+    bool empty = true;
     if (uid != NULL) {
         dirent* dir;
         while ((dir = readdir(uid.get())) != nullptr) {
@@ -185,9 +186,15 @@ static void RemoveUidProcessGroups(const std::string& uid_path) {
 
             auto path = StringPrintf("%s/%s", uid_path.c_str(), dir->d_name);
             LOG(VERBOSE) << "Removing " << path;
-            if (rmdir(path.c_str()) == -1) PLOG(WARNING) << "Failed to remove " << path;
+            if (rmdir(path.c_str()) == -1) {
+                if (errno != EBUSY) {
+                    PLOG(WARNING) << "Failed to remove " << path;
+                }
+                empty = false;
+            }
         }
     }
+    return empty;
 }
 
 void removeAllProcessGroups() {
@@ -219,9 +226,14 @@ void removeAllProcessGroups() {
                 }
 
                 auto path = StringPrintf("%s/%s", cgroup_root_path.c_str(), dir->d_name);
-                RemoveUidProcessGroups(path);
+                if (!RemoveUidProcessGroups(path)) {
+                    LOG(VERBOSE) << "Skip removing " << path;
+                    continue;
+                }
                 LOG(VERBOSE) << "Removing " << path;
-                if (rmdir(path.c_str()) == -1) PLOG(WARNING) << "Failed to remove " << path;
+                if (rmdir(path.c_str()) == -1 && errno != EBUSY) {
+                    PLOG(WARNING) << "Failed to remove " << path;
+                }
             }
         }
     }
@@ -249,6 +261,10 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
     auto path = ConvertUidPidToPath(cgroup, uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
     std::unique_ptr<FILE, decltype(&fclose)> fd(fopen(path.c_str(), "re"), fclose);
     if (!fd) {
+        if (errno == ENOENT) {
+            // This happens when process is already dead
+            return 0;
+        }
         PLOG(WARNING) << "Failed to open process cgroup uid " << uid << " pid " << initialPid;
         return -1;
     }
@@ -293,7 +309,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
                      << " as part of process cgroup " << initialPid;
 
-        if (kill(-pgid, signal) == -1) {
+        if (kill(-pgid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
         }
     }
@@ -303,7 +319,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
                      << initialPid;
 
-        if (kill(pid, signal) == -1) {
+        if (kill(pid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
     }
