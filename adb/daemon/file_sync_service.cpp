@@ -27,6 +27,7 @@
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <utime.h>
@@ -242,10 +243,10 @@ static bool SendSyncFailErrno(int fd, const std::string& reason) {
     return SendSyncFail(fd, StringPrintf("%s: %s", reason.c_str(), strerror(errno)));
 }
 
-static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint64_t capabilities,
-                             mode_t mode, std::vector<char>& buffer, bool do_unlink) {
+static bool handle_send_file(int s, const char* path, uint32_t* timestamp, uid_t uid, gid_t gid,
+                             uint64_t capabilities, mode_t mode, std::vector<char>& buffer,
+                             bool do_unlink) {
     syncmsg msg;
-    unsigned int timestamp = 0;
 
     __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
 
@@ -291,7 +292,7 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
 
         if (msg.data.id != ID_DATA) {
             if (msg.data.id == ID_DONE) {
-                timestamp = msg.data.size;
+                *timestamp = msg.data.size;
                 break;
             }
             SendSyncFail(s, "invalid data message");
@@ -315,11 +316,6 @@ static bool handle_send_file(int s, const char* path, uid_t uid, gid_t gid, uint
         SendSyncFailErrno(s, "update_capabilities failed");
         goto fail;
     }
-
-    utimbuf u;
-    u.actime = timestamp;
-    u.modtime = timestamp;
-    utime(path, &u);
 
     msg.status.id = ID_OKAY;
     msg.status.msglen = 0;
@@ -360,9 +356,12 @@ abort:
 }
 
 #if defined(_WIN32)
-extern bool handle_send_link(int s, const std::string& path, std::vector<char>& buffer) __attribute__((error("no symlinks on Windows")));
+extern bool handle_send_link(int s, const std::string& path,
+                             uint32_t* timestamp, std::vector<char>& buffer)
+        __attribute__((error("no symlinks on Windows")));
 #else
-static bool handle_send_link(int s, const std::string& path, std::vector<char>& buffer) {
+static bool handle_send_link(int s, const std::string& path, uint32_t* timestamp,
+                             std::vector<char>& buffer) {
     syncmsg msg;
 
     if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
@@ -399,6 +398,7 @@ static bool handle_send_link(int s, const std::string& path, std::vector<char>& 
     if (!ReadFdExactly(s, &msg.data, sizeof(msg.data))) return false;
 
     if (msg.data.id == ID_DONE) {
+        *timestamp = msg.data.size;
         msg.status.id = ID_OKAY;
         msg.status.msglen = 0;
         if (!WriteFdExactly(s, &msg.status, sizeof(msg.status))) return false;
@@ -448,24 +448,40 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
         adb_unlink(path.c_str());
     }
 
+    bool result;
+    uint32_t timestamp;
     if (S_ISLNK(mode)) {
-        return handle_send_link(s, path.c_str(), buffer);
+        result = handle_send_link(s, path.c_str(), &timestamp, buffer);
+    } else {
+        // Copy user permission bits to "group" and "other" permissions.
+        mode &= 0777;
+        mode |= ((mode >> 3) & 0070);
+        mode |= ((mode >> 3) & 0007);
+
+        uid_t uid = -1;
+        gid_t gid = -1;
+        uint64_t capabilities = 0;
+        if (should_use_fs_config(path)) {
+            unsigned int broken_api_hack = mode;
+            fs_config(path.c_str(), 0, nullptr, &uid, &gid, &broken_api_hack, &capabilities);
+            mode = broken_api_hack;
+        }
+
+        result = handle_send_file(s, path.c_str(), &timestamp, uid, gid, capabilities, mode, buffer,
+                                  do_unlink);
     }
 
-    // Copy user permission bits to "group" and "other" permissions.
-    mode &= 0777;
-    mode |= ((mode >> 3) & 0070);
-    mode |= ((mode >> 3) & 0007);
-
-    uid_t uid = -1;
-    gid_t gid = -1;
-    uint64_t capabilities = 0;
-    if (should_use_fs_config(path)) {
-        unsigned int broken_api_hack = mode;
-        fs_config(path.c_str(), 0, nullptr, &uid, &gid, &broken_api_hack, &capabilities);
-        mode = broken_api_hack;
+    if (!result) {
+      return false;
     }
-    return handle_send_file(s, path.c_str(), uid, gid, capabilities, mode, buffer, do_unlink);
+
+    struct timeval tv[2];
+    tv[0].tv_sec = timestamp;
+    tv[0].tv_usec = 0;
+    tv[1].tv_sec = timestamp;
+    tv[1].tv_usec = 0;
+    lutimes(path.c_str(), tv);
+    return true;
 }
 
 static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
