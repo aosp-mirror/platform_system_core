@@ -984,7 +984,7 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
 }
 
 #ifdef LMKD_LOG_STATS
-static void memory_stat_parse_line(char* line, struct memory_stat* mem_st) {
+static void memory_stat_parse_line(char *line, struct memory_stat *mem_st) {
     char key[LINE_MAX + 1];
     int64_t value;
 
@@ -1006,63 +1006,25 @@ static void memory_stat_parse_line(char* line, struct memory_stat* mem_st) {
         mem_st->swap_in_bytes = value;
 }
 
-static int memory_stat_from_cgroup(struct memory_stat* mem_st, int pid, uid_t uid) {
-    FILE *fp;
-    char buf[PATH_MAX];
+static int memory_stat_parse(struct memory_stat *mem_st,  int pid, uid_t uid) {
+   FILE *fp;
+   char buf[PATH_MAX];
 
-    snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
+   snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
 
-    fp = fopen(buf, "r");
+   fp = fopen(buf, "r");
 
-    if (fp == NULL) {
-        ALOGE("%s open failed: %s", buf, strerror(errno));
-        return -1;
-    }
+   if (fp == NULL) {
+       ALOGE("%s open failed: %s", buf, strerror(errno));
+       return -1;
+   }
 
-    while (fgets(buf, PAGE_SIZE, fp) != NULL) {
-        memory_stat_parse_line(buf, mem_st);
-    }
-    fclose(fp);
+   while (fgets(buf, PAGE_SIZE, fp) != NULL ) {
+       memory_stat_parse_line(buf, mem_st);
+   }
+   fclose(fp);
 
-    return 0;
-}
-
-static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
-    char path[PATH_MAX];
-    char buffer[PROC_STAT_BUFFER_SIZE];
-    int fd, ret;
-
-    snprintf(path, sizeof(path), PROC_STAT_FILE_PATH, pid);
-    if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
-        ALOGE("%s open failed: %s", path, strerror(errno));
-        return -1;
-    }
-
-    ret = read(fd, buffer, sizeof(buffer));
-    if (ret < 0) {
-        ALOGE("%s read failed: %s", path, strerror(errno));
-        close(fd);
-        return -1;
-    }
-    close(fd);
-
-    // field 10 is pgfault
-    // field 12 is pgmajfault
-    // field 22 is starttime
-    // field 24 is rss_in_pages
-    int64_t pgfault = 0, pgmajfault = 0, starttime = 0, rss_in_pages = 0;
-    if (sscanf(buffer,
-               "%*u %*s %*s %*d %*d %*d %*d %*d %*d %" SCNd64 " %*d "
-               "%" SCNd64 " %*d %*u %*u %*d %*d %*d %*d %*d %*d "
-               "%" SCNd64 " %*d %" SCNd64 "",
-               &pgfault, &pgmajfault, &starttime, &rss_in_pages) != 4) {
-        return -1;
-    }
-    mem_st->pgfault = pgfault;
-    mem_st->pgmajfault = pgmajfault;
-    mem_st->rss_in_bytes = (rss_in_pages * PAGE_SIZE);
-    mem_st->process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
-    return 0;
+   return 0;
 }
 #endif
 
@@ -1354,11 +1316,7 @@ static int kill_one_process(struct proc* procp) {
 
 #ifdef LMKD_LOG_STATS
     if (enable_stats_log) {
-        if (per_app_memcg) {
-            memory_stat_parse_result = memory_stat_from_cgroup(&mem_st, pid, uid);
-        } else {
-            memory_stat_parse_result = memory_stat_from_procfs(&mem_st, pid);
-        }
+        memory_stat_parse_result = memory_stat_parse(&mem_st, pid, uid);
     }
 #endif
 
@@ -1385,10 +1343,7 @@ static int kill_one_process(struct proc* procp) {
         if (memory_stat_parse_result == 0) {
             stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
                     procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
-                    mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns);
-        } else if (enable_stats_log) {
-            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
-                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1);
+                    mem_st.cache_in_bytes, mem_st.swap_in_bytes);
         }
 #endif
         result = tasksize;
