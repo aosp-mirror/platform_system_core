@@ -577,9 +577,6 @@ on post-fs-data
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
 
-    # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
-    exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
-
     # load fsverity keys
     exec -- /system/bin/mini-keyctl -c /product/etc/security/cacerts_fsverity,/vendor/etc/security/cacerts_fsverity -k .fs-verity
 
@@ -590,6 +587,9 @@ on post-fs-data
     wait_for_prop apexd.status ready
     setup_runtime_bionic
     parse_apex_configs
+
+    # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
+    exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
 
     # If there is no post-fs-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
