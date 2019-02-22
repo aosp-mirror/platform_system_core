@@ -1047,7 +1047,8 @@ static bool wait_for_device(const char* service) {
 static bool adb_root(const char* command) {
     std::string error;
 
-    unique_fd fd(adb_connect(android::base::StringPrintf("%s:", command), &error));
+    TransportId transport_id;
+    unique_fd fd(adb_connect(&transport_id, android::base::StringPrintf("%s:", command), &error));
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for %s: %s\n", command, error.c_str());
         return false;
@@ -1080,9 +1081,9 @@ static bool adb_root(const char* command) {
         return true;
     }
 
-    // Give adbd some time to kill itself and come back up.
-    // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
-    std::this_thread::sleep_for(3s);
+    // Wait for the device to go away.
+    adb_set_transport(kTransportAny, nullptr, transport_id);
+    wait_for_device("wait-for-disconnect");
     return true;
 }
 
