@@ -109,12 +109,21 @@ static void wait_for_state(int fd, state_info* sinfo) {
         const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : nullptr;
         atransport* t = acquire_one_transport(sinfo->transport_type, serial, sinfo->transport_id,
                                               &is_ambiguous, &error);
-        if (t != nullptr && (sinfo->state == kCsAny || sinfo->state == t->GetConnectionState())) {
+        if (sinfo->state == kCsOffline) {
+            // wait-for-disconnect uses kCsOffline, we don't actually want to wait for 'offline'.
+            if (t == nullptr) {
+                SendOkay(fd);
+                break;
+            }
+        } else if (t != nullptr &&
+                   (sinfo->state == kCsAny || sinfo->state == t->GetConnectionState())) {
             SendOkay(fd);
             break;
-        } else if (!is_ambiguous) {
+        }
+
+        if (!is_ambiguous) {
             adb_pollfd pfd = {.fd = fd, .events = POLLIN};
-            int rc = adb_poll(&pfd, 1, 1000);
+            int rc = adb_poll(&pfd, 1, 100);
             if (rc < 0) {
                 SendFail(fd, error);
                 break;
@@ -224,6 +233,8 @@ asocket* host_service_to_socket(std::string_view name, std::string_view serial,
             sinfo->state = kCsBootloader;
         } else if (name == "-any") {
             sinfo->state = kCsAny;
+        } else if (name == "-disconnect") {
+            sinfo->state = kCsOffline;
         } else {
             return nullptr;
         }
