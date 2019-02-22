@@ -145,7 +145,8 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport);
 #endif
 
 #if ADB_HOST
-asocket* host_service_to_socket(const char* name, const char* serial, TransportId transport_id);
+asocket* host_service_to_socket(std::string_view name, std::string_view serial,
+                                TransportId transport_id);
 #endif
 
 #if !ADB_HOST

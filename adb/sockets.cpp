@@ -426,22 +426,6 @@ asocket* create_local_service_socket(std::string_view name, atransport* transpor
     return s;
 }
 
-#if ADB_HOST
-static asocket* create_host_service_socket(const char* name, const char* serial,
-                                           TransportId transport_id) {
-    asocket* s;
-
-    s = host_service_to_socket(name, serial, transport_id);
-
-    if (s != nullptr) {
-        D("LS(%d) bound to '%s'", s->id, name);
-        return s;
-    }
-
-    return s;
-}
-#endif /* ADB_HOST */
-
 static int remote_socket_enqueue(asocket* s, apacket::payload_type data) {
     D("entered remote_socket_enqueue RS(%d) WRITE fd=%d peer.fd=%d", s->id, s->fd, s->peer->fd);
     apacket* p = get_apacket();
@@ -825,8 +809,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
         ** and tear down here.
         */
         // TODO: Convert to string_view.
-        s2 = create_host_service_socket(std::string(service).c_str(), std::string(serial).c_str(),
-                                        transport_id);
+        s2 = host_service_to_socket(service, serial, transport_id);
         if (s2 == nullptr) {
             LOG(VERBOSE) << "SS(" << s->id << "): couldn't create host service '" << service << "'";
             SendFail(s->peer->fd, "unknown host service");
