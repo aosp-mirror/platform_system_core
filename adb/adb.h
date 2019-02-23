@@ -153,7 +153,7 @@ asocket* daemon_service_to_socket(std::string_view name);
 #endif
 
 #if !ADB_HOST
-unique_fd execute_binder_command(std::string_view command);
+unique_fd execute_abb_command(std::string_view command);
 #endif
 
 #if !ADB_HOST

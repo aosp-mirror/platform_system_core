@@ -49,7 +49,7 @@ unique_fd StartSubprocess(std::string name, const char* terminal_type, Subproces
 //
 // Returns an open FD connected to the thread or -1 on failure.
 using Command = int(std::string_view args, int in, int out, int err);
-unique_fd StartCommandInProcess(std::string name, Command command);
+unique_fd StartCommandInProcess(std::string name, Command command, SubprocessProtocol protocol);
 
 // Create a pipe containing the error.
 unique_fd ReportError(SubprocessProtocol protocol, const std::string& message);
