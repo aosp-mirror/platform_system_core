@@ -115,6 +115,8 @@ static constexpr const char* kVendorNamespaceName = "sphal";
 
 static constexpr const char* kVndkNamespaceName = "vndk";
 
+static constexpr const char* kDefaultNamespaceName = "default";
+static constexpr const char* kPlatformNamespaceName = "platform";
 static constexpr const char* kRuntimeNamespaceName = "runtime";
 
 // classloader-namespace is a linker namespace that is created for the loaded
@@ -272,8 +274,19 @@ class LibraryNamespaces {
 
     NativeLoaderNamespace native_loader_ns;
     if (!is_native_bridge) {
-      android_namespace_t* android_parent_ns =
-          parent_ns == nullptr ? nullptr : parent_ns->get_android_ns();
+      android_namespace_t* android_parent_ns;
+      if (parent_ns != nullptr) {
+        android_parent_ns = parent_ns->get_android_ns();
+      } else {
+        // Fall back to the platform namespace if no parent is found. It is
+        // called "default" for binaries in /system and "platform" for those in
+        // the Runtime APEX. Try "platform" first since "default" always exists.
+        android_parent_ns = android_get_exported_namespace(kPlatformNamespaceName);
+        if (android_parent_ns == nullptr) {
+          android_parent_ns = android_get_exported_namespace(kDefaultNamespaceName);
+        }
+      }
+
       android_namespace_t* ns = android_create_namespace(namespace_name,
                                                          nullptr,
                                                          library_path.c_str(),
@@ -322,8 +335,16 @@ class LibraryNamespaces {
 
       native_loader_ns = NativeLoaderNamespace(ns);
     } else {
-      native_bridge_namespace_t* native_bridge_parent_namespace =
-          parent_ns == nullptr ? nullptr : parent_ns->get_native_bridge_ns();
+      native_bridge_namespace_t* native_bridge_parent_namespace;
+      if (parent_ns != nullptr) {
+        native_bridge_parent_namespace = parent_ns->get_native_bridge_ns();
+      } else {
+        native_bridge_parent_namespace = NativeBridgeGetExportedNamespace(kPlatformNamespaceName);
+        if (native_bridge_parent_namespace == nullptr) {
+          native_bridge_parent_namespace = NativeBridgeGetExportedNamespace(kDefaultNamespaceName);
+        }
+      }
+
       native_bridge_namespace_t* ns = NativeBridgeCreateNamespace(namespace_name,
                                                                   nullptr,
                                                                   library_path.c_str(),
