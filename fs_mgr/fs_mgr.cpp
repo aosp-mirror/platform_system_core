@@ -1098,9 +1098,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             }
         } else if ((current_entry.fs_mgr_flags.verify)) {
             int rc = fs_mgr_setup_verity(&current_entry, true);
-            if (__android_log_is_debuggable() &&
-                    (rc == FS_MGR_SETUP_VERITY_DISABLED ||
-                     rc == FS_MGR_SETUP_VERITY_SKIPPED)) {
+            if (rc == FS_MGR_SETUP_VERITY_DISABLED || rc == FS_MGR_SETUP_VERITY_SKIPPED) {
                 LINFO << "Verity disabled";
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 LERROR << "Could not set up verified partition, skipping!";
@@ -1331,9 +1329,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
             }
         } else if (fstab_entry.fs_mgr_flags.verify) {
             int rc = fs_mgr_setup_verity(&fstab_entry, true);
-            if (__android_log_is_debuggable() &&
-                    (rc == FS_MGR_SETUP_VERITY_DISABLED ||
-                     rc == FS_MGR_SETUP_VERITY_SKIPPED)) {
+            if (rc == FS_MGR_SETUP_VERITY_DISABLED || rc == FS_MGR_SETUP_VERITY_SKIPPED) {
                 LINFO << "Verity disabled";
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 LERROR << "Could not set up verified partition, skipping!";
