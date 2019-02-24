@@ -427,6 +427,11 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
             std::string tmp = input.substr(strlen("INFO"));
             info_(tmp);
             add_info(std::move(tmp));
+            // We may receive one or more INFO packets during long operations,
+            // e.g. flash/erase if they are back by slow media like NAND/NOR
+            // flash. In that case, reset the timer since it's not a real
+            // timeout.
+            start = std::chrono::steady_clock::now();
         } else if (android::base::StartsWith(input, "OKAY")) {
             set_response(input.substr(strlen("OKAY")));
             return SUCCESS;
