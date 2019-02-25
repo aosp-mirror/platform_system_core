@@ -263,6 +263,69 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
     return avb_handle;
 }
 
+AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry) {
+    if (fstab_entry.avb_key.empty()) {
+        LERROR << "avb_key=/path/to/key is missing for " << fstab_entry.mount_point;
+        return nullptr;
+    }
+
+    // Binds allow_verification_error and rollback_protection to device unlock state.
+    bool allow_verification_error = IsDeviceUnlocked();
+    bool rollback_protection = !allow_verification_error;
+
+    std::string expected_key_blob;
+    if (!ReadFileToString(fstab_entry.avb_key, &expected_key_blob)) {
+        if (!allow_verification_error) {
+            LERROR << "Failed to load avb_key: " << fstab_entry.avb_key
+                   << " for mount point: " << fstab_entry.mount_point;
+            return nullptr;
+        }
+        LWARNING << "Allowing no expected key blob when verification error is permitted";
+        expected_key_blob.clear();
+    }
+
+    bool verification_disabled = false;
+    VBMetaVerifyResult verify_result = VBMetaVerifyResult::kError;
+    std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
+            fstab_entry.blk_device, "" /* partition_name, no need for a standalone path */,
+            expected_key_blob, allow_verification_error, rollback_protection,
+            false /* not is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            &verification_disabled, &verify_result);
+
+    if (!vbmeta) {
+        LERROR << "Failed to load vbmeta: " << fstab_entry.blk_device;
+        return nullptr;
+    }
+
+    AvbUniquePtr avb_handle(new AvbHandle());
+    if (!avb_handle) {
+        LERROR << "Failed to allocate AvbHandle";
+        return nullptr;
+    }
+    avb_handle->vbmeta_images_.emplace_back(std::move(*vbmeta));
+
+    switch (verify_result) {
+        case VBMetaVerifyResult::kSuccess:
+            avb_handle->status_ = AvbHandleStatus::kSuccess;
+            break;
+        case VBMetaVerifyResult::kErrorVerification:
+            avb_handle->status_ = AvbHandleStatus::kVerificationError;
+            break;
+        default:
+            LERROR << "LoadAndVerifyVbmetaByPath failed, result: " << verify_result;
+            return nullptr;
+    }
+
+    if (verification_disabled) {
+        LINFO << "AVB verification disabled on: " << fstab_entry.mount_point;
+        avb_handle->status_ = AvbHandleStatus::kVerificationDisabled;
+    }
+
+    LINFO << "Returning avb_handle for '" << fstab_entry.mount_point
+          << "' with status: " << avb_handle->status_;
+    return avb_handle;
+}
+
 AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta() {
     // Loads inline vbmeta images, starting from /vbmeta.
     return LoadAndVerifyVbmeta("vbmeta", fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix(),
@@ -358,52 +421,12 @@ AvbUniquePtr AvbHandle::Open() {
 
 AvbHashtreeResult AvbHandle::SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
                                                         bool wait_for_verity_dev) {
-    if (fstab_entry->avb_key.empty()) {
-        LERROR << "avb_key=/path/to/key is missing for " << fstab_entry->mount_point;
+    auto avb_handle = LoadAndVerifyVbmeta(*fstab_entry);
+    if (!avb_handle) {
         return AvbHashtreeResult::kFail;
     }
 
-    // Binds allow_verification_error and rollback_protection to device unlock state.
-    bool allow_verification_error = IsDeviceUnlocked();
-    bool rollback_protection = !allow_verification_error;
-
-    std::string expected_key_blob;
-    if (!ReadFileToString(fstab_entry->avb_key, &expected_key_blob)) {
-        if (!allow_verification_error) {
-            LERROR << "Failed to load avb_key: " << fstab_entry->avb_key
-                   << " for mount point: " << fstab_entry->mount_point;
-            return AvbHashtreeResult::kFail;
-        }
-        LWARNING << "Allowing no expected key blob when verification error is permitted";
-        expected_key_blob.clear();
-    }
-
-    bool verification_disabled = false;
-    std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
-            fstab_entry->blk_device, "" /* partition_name, no need for a standalone path */,
-            expected_key_blob, allow_verification_error, rollback_protection,
-            false /* not is_chained_vbmeta */, nullptr /* out_public_key_data */,
-            &verification_disabled, nullptr /* out_verify_result */);
-
-    if (!vbmeta) {
-        LERROR << "Failed to load vbmeta: " << fstab_entry->blk_device;
-        return AvbHashtreeResult::kFail;
-    }
-
-    if (verification_disabled) {
-        LINFO << "AVB verification disabled on: " << fstab_entry->mount_point;
-        return AvbHashtreeResult::kDisabled;
-    }
-
-    // Puts the vbmeta into a vector, for LoadAvbHashtreeToEnableVerity() to use.
-    std::vector<VBMetaData> vbmeta_images;
-    vbmeta_images.emplace_back(std::move(*vbmeta));
-    if (!LoadAvbHashtreeToEnableVerity(fstab_entry, wait_for_verity_dev, vbmeta_images,
-                                       fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix())) {
-        return AvbHashtreeResult::kFail;
-    }
-
-    return AvbHashtreeResult::kSuccess;
+    return avb_handle->SetUpAvbHashtree(fstab_entry, wait_for_verity_dev);
 }
 
 AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait_for_verity_dev) {
@@ -423,6 +446,20 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
     }
 
     return AvbHashtreeResult::kSuccess;
+}
+
+std::string AvbHandle::GetSecurityPatchLevel(const FstabEntry& fstab_entry) const {
+    if (vbmeta_images_.size() < 1) {
+        return "";
+    }
+    std::string avb_partition_name = DeriveAvbPartitionName(fstab_entry, fs_mgr_get_slot_suffix(),
+                                                            fs_mgr_get_other_slot_suffix());
+    auto avb_prop_name = "com.android.build." + avb_partition_name + ".security_patch";
+    return GetAvbPropertyDescriptor(avb_prop_name, vbmeta_images_);
+}
+
+bool AvbHandle::IsDeviceUnlocked() {
+    return android::fs_mgr::IsDeviceUnlocked();
 }
 
 }  // namespace fs_mgr

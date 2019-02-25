@@ -85,6 +85,8 @@ class AvbHandle {
     // TODO(bowgotsai): remove Open() and switch to LoadAndVerifyVbmeta().
     static AvbUniquePtr Open();                 // loads inline vbmeta, via libavb.
     static AvbUniquePtr LoadAndVerifyVbmeta();  // loads inline vbmeta.
+    static AvbUniquePtr LoadAndVerifyVbmeta(
+            const FstabEntry& fstab_entry);     // loads offline vbmeta.
     static AvbUniquePtr LoadAndVerifyVbmeta(    // loads offline vbmeta.
             const std::string& partition_name, const std::string& ab_suffix,
             const std::string& ab_other_suffix, const std::string& expected_public_key,
@@ -107,6 +109,10 @@ class AvbHandle {
     // Similar to above, but loads the offline vbmeta from the end of fstab_entry->blk_device.
     static AvbHashtreeResult SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
                                                         bool wait_for_verity_dev = true);
+
+    static bool IsDeviceUnlocked();
+
+    std::string GetSecurityPatchLevel(const FstabEntry& fstab_entry) const;
 
     const std::string& avb_version() const { return avb_version_; }
     const VBMetaInfo& vbmeta_info() const { return vbmeta_info_; }

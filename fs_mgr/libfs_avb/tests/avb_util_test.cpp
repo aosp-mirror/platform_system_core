@@ -30,6 +30,7 @@ using android::fs_mgr::AvbPartitionToDevicePatition;
 using android::fs_mgr::DeriveAvbPartitionName;
 using android::fs_mgr::FstabEntry;
 using android::fs_mgr::GetAvbFooter;
+using android::fs_mgr::GetAvbPropertyDescriptor;
 using android::fs_mgr::GetChainPartitionInfo;
 using android::fs_mgr::GetTotalSize;
 using android::fs_mgr::LoadAndVerifyVbmetaByPartition;
@@ -266,6 +267,67 @@ TEST_F(AvbUtilTest, GetAvbFooterInsufficientSize) {
     auto fd = OpenUniqueReadFd(system_path);
     auto footer = GetAvbFooter(fd);
     EXPECT_EQ(nullptr, footer);
+}
+
+TEST_F(AvbUtilTest, GetAvbPropertyDescriptor_Basic) {
+    // Makes a vbmeta.img with some properties.
+    GenerateVBMetaImage("vbmeta.img", "SHA256_RSA4096", 0, data_dir_.Append("testkey_rsa4096.pem"),
+                        {}, /* include_descriptor_image_paths */
+                        {}, /* chain_partitions */
+                        "--prop foo:android "
+                        "--prop bar:treble "
+                        "--internal_release_string \"unit test\" ");
+    auto vbmeta = LoadVBMetaData("vbmeta.img");
+
+    // Puts the vbmeta into a vector, for GetAvbPropertyDescriptor to use.
+    std::vector<VBMetaData> vbmeta_images;
+    vbmeta_images.emplace_back(std::move(vbmeta));
+
+    EXPECT_EQ("android", GetAvbPropertyDescriptor("foo", vbmeta_images));
+    EXPECT_EQ("treble", GetAvbPropertyDescriptor("bar", vbmeta_images));
+    EXPECT_EQ("", GetAvbPropertyDescriptor("non-existent", vbmeta_images));
+}
+
+TEST_F(AvbUtilTest, GetAvbPropertyDescriptor_SecurityPatchLevel) {
+    // Generates a raw boot.img
+    const size_t boot_image_size = 5 * 1024 * 1024;
+    const size_t boot_partition_size = 10 * 1024 * 1024;
+    base::FilePath boot_path = GenerateImage("boot.img", boot_image_size);
+    // Adds AVB Hash Footer.
+    AddAvbFooter(boot_path, "hash", "boot", boot_partition_size, "SHA256_RSA2048", 10,
+                 data_dir_.Append("testkey_rsa2048.pem"), "d00df00d",
+                 "--internal_release_string \"unit test\"");
+
+    // Generates a raw system.img, use a smaller size to speed-up unit test.
+    const size_t system_image_size = 10 * 1024 * 1024;
+    const size_t system_partition_size = 15 * 1024 * 1024;
+    base::FilePath system_path = GenerateImage("system.img", system_image_size);
+    // Adds AVB Hashtree Footer.
+    AddAvbFooter(system_path, "hashtree", "system", system_partition_size, "SHA512_RSA4096", 20,
+                 data_dir_.Append("testkey_rsa4096.pem"), "d00df00d",
+                 "--prop com.android.build.system.security_patch:2019-04-05 "
+                 "--internal_release_string \"unit test\"");
+
+    // Generates chain partition descriptors.
+    base::FilePath rsa4096_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
+
+    // Makes a vbmeta.img including the 'system' chained descriptor.
+    GenerateVBMetaImage("vbmeta.img", "SHA256_RSA4096", 0, data_dir_.Append("testkey_rsa4096.pem"),
+                        {boot_path},                         /* include_descriptor_image_paths */
+                        {{"system", 3, rsa4096_public_key}}, /* chain_partitions */
+                        "--internal_release_string \"unit test\"");
+
+    auto vbmeta = LoadVBMetaData("vbmeta.img");
+    auto system_vbmeta = ExtractAndLoadVBMetaData(system_path, "system-vbmeta.img");
+
+    // Puts the vbmeta into a vector, for GetAvbPropertyDescriptor to use.
+    std::vector<VBMetaData> vbmeta_images;
+    vbmeta_images.emplace_back(std::move(vbmeta));
+    vbmeta_images.emplace_back(std::move(system_vbmeta));
+
+    EXPECT_EQ("2019-04-05",
+              GetAvbPropertyDescriptor("com.android.build.system.security_patch", vbmeta_images));
 }
 
 TEST_F(AvbUtilTest, GetVBMetaHeader) {
