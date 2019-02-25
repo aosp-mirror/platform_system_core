@@ -755,34 +755,27 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 
 #if ADB_HOST
     service = std::string_view(s->smart_socket_data).substr(4);
-    if (service.starts_with("host-serial:")) {
-        service.remove_prefix(strlen("host-serial:"));
-
+    if (ConsumePrefix(&service, "host-serial:")) {
         // serial number should follow "host:" and could be a host:port string.
         if (!internal::parse_host_service(&serial, &service, service)) {
             LOG(ERROR) << "SS(" << s->id << "): failed to parse host service: " << service;
             goto fail;
         }
-    } else if (service.starts_with("host-transport-id:")) {
-        service.remove_prefix(strlen("host-transport-id:"));
+    } else if (ConsumePrefix(&service, "host-transport-id:")) {
         if (!ParseUint(&transport_id, service, &service)) {
             LOG(ERROR) << "SS(" << s->id << "): failed to parse host transport id: " << service;
             return -1;
         }
-        if (!service.starts_with(":")) {
+        if (!ConsumePrefix(&service, ":")) {
             LOG(ERROR) << "SS(" << s->id << "): host-transport-id without command";
             return -1;
         }
-        service.remove_prefix(1);
-    } else if (service.starts_with("host-usb:")) {
+    } else if (ConsumePrefix(&service, "host-usb:")) {
         type = kTransportUsb;
-        service.remove_prefix(strlen("host-usb:"));
-    } else if (service.starts_with("host-local:")) {
+    } else if (ConsumePrefix(&service, "host-local:")) {
         type = kTransportLocal;
-        service.remove_prefix(strlen("host-local:"));
-    } else if (service.starts_with("host:")) {
+    } else if (ConsumePrefix(&service, "host:")) {
         type = kTransportAny;
-        service.remove_prefix(strlen("host:"));
     } else {
         service = std::string_view{};
     }
