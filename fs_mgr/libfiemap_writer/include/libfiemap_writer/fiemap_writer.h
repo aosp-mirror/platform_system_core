@@ -67,11 +67,6 @@ class FiemapWriter final {
     static bool GetBlockDeviceForFile(const std::string& file_path, std::string* bdev_path,
                                       bool* uses_dm = nullptr);
 
-    // The counter part of Write(). It is an error for the offset to be unaligned with
-    // the block device's block size.
-    // In case of error, the contents of buffer MUST be discarded.
-    bool Read(off64_t off, uint8_t* buffer, uint64_t size);
-
     ~FiemapWriter() = default;
 
     const std::string& file_path() const { return file_path_; };
@@ -79,6 +74,7 @@ class FiemapWriter final {
     const std::string& bdev_path() const { return bdev_path_; };
     uint64_t block_size() const { return block_size_; };
     const std::vector<struct fiemap_extent>& extents() { return extents_; };
+    uint32_t fs_type() const { return fs_type_; }
 
     // Non-copyable & Non-movable
     FiemapWriter(const FiemapWriter&) = delete;
