@@ -44,6 +44,7 @@ LOCAL_POST_INSTALL_CMD += ; ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OU
 
 # TODO(b/124106384): Clean up compat symlinks for ART binaries.
 ART_BINARIES= \
+  dalvikvm \
   dalvikvm32 \
   dalvikvm64 \
   dex2oat \
