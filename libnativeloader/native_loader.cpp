@@ -21,7 +21,6 @@
 #ifdef __ANDROID__
 #define LOG_TAG "libnativeloader"
 #include "nativeloader/dlext_namespaces.h"
-#include "cutils/properties.h"
 #include "log/log.h"
 #endif
 #include <dirent.h>
@@ -144,9 +143,11 @@ static constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/li
 #endif
 
 static bool is_debuggable() {
-  char debuggable[PROP_VALUE_MAX];
-  property_get("ro.debuggable", debuggable, "0");
-  return std::string(debuggable) == "1";
+  bool debuggable = false;
+#ifdef __BIONIC__
+  debuggable = android::base::GetBoolProperty("ro.debuggable", false);
+#endif
+  return debuggable;
 }
 
 static std::string vndk_version_str() {
