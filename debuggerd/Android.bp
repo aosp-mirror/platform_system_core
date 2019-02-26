@@ -218,13 +218,11 @@ cc_test {
         "liblog",
         "libminijail",
         "libnativehelper",
+        "libunwindstack",
     ],
 
     static_libs: [
         "libdebuggerd",
-        "libdexfile_external",  // libunwindstack dependency
-        "libdexfile_support",  // libunwindstack dependency
-        "libunwindstack",
     ],
 
     local_include_dirs: [
