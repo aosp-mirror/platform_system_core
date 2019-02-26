@@ -42,6 +42,7 @@
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
+#include <libgsi/libgsi.h>
 #include <processgroup/processgroup.h>
 #include <selinux/android.h>
 
@@ -694,6 +695,13 @@ int SecondStageMain(int argc, char** argv) {
     // Turning this on and letting the INFO logging be discarded adds 0.2s to
     // Nexus 9 boot time, so it's disabled by default.
     if (false) DumpState();
+
+    // Make the GSI status available before scripts start running.
+    if (android::gsi::IsGsiRunning()) {
+        property_set("ro.gsid.image_running", "1");
+    } else {
+        property_set("ro.gsid.image_running", "0");
+    }
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
 
