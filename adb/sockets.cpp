@@ -426,22 +426,6 @@ asocket* create_local_service_socket(std::string_view name, atransport* transpor
     return s;
 }
 
-#if ADB_HOST
-static asocket* create_host_service_socket(const char* name, const char* serial,
-                                           TransportId transport_id) {
-    asocket* s;
-
-    s = host_service_to_socket(name, serial, transport_id);
-
-    if (s != nullptr) {
-        D("LS(%d) bound to '%s'", s->id, name);
-        return s;
-    }
-
-    return s;
-}
-#endif /* ADB_HOST */
-
 static int remote_socket_enqueue(asocket* s, apacket::payload_type data) {
     D("entered remote_socket_enqueue RS(%d) WRITE fd=%d peer.fd=%d", s->id, s->fd, s->peer->fd);
     apacket* p = get_apacket();
@@ -771,34 +755,27 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 
 #if ADB_HOST
     service = std::string_view(s->smart_socket_data).substr(4);
-    if (service.starts_with("host-serial:")) {
-        service.remove_prefix(strlen("host-serial:"));
-
+    if (ConsumePrefix(&service, "host-serial:")) {
         // serial number should follow "host:" and could be a host:port string.
         if (!internal::parse_host_service(&serial, &service, service)) {
             LOG(ERROR) << "SS(" << s->id << "): failed to parse host service: " << service;
             goto fail;
         }
-    } else if (service.starts_with("host-transport-id:")) {
-        service.remove_prefix(strlen("host-transport-id:"));
+    } else if (ConsumePrefix(&service, "host-transport-id:")) {
         if (!ParseUint(&transport_id, service, &service)) {
             LOG(ERROR) << "SS(" << s->id << "): failed to parse host transport id: " << service;
             return -1;
         }
-        if (!service.starts_with(":")) {
+        if (!ConsumePrefix(&service, ":")) {
             LOG(ERROR) << "SS(" << s->id << "): host-transport-id without command";
             return -1;
         }
-        service.remove_prefix(1);
-    } else if (service.starts_with("host-usb:")) {
+    } else if (ConsumePrefix(&service, "host-usb:")) {
         type = kTransportUsb;
-        service.remove_prefix(strlen("host-usb:"));
-    } else if (service.starts_with("host-local:")) {
+    } else if (ConsumePrefix(&service, "host-local:")) {
         type = kTransportLocal;
-        service.remove_prefix(strlen("host-local:"));
-    } else if (service.starts_with("host:")) {
+    } else if (ConsumePrefix(&service, "host:")) {
         type = kTransportAny;
-        service.remove_prefix(strlen("host:"));
     } else {
         service = std::string_view{};
     }
@@ -808,17 +785,22 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 
         // Some requests are handled immediately -- in that case the handle_host_request() routine
         // has sent the OKAY or FAIL message and all we have to do is clean up.
-        // TODO: Convert to string_view.
-        if (handle_host_request(std::string(service).c_str(), type,
-                                serial.empty() ? nullptr : std::string(serial).c_str(),
-                                transport_id, s->peer->fd, s)) {
-            LOG(VERBOSE) << "SS(" << s->id << "): handled host service '" << service << "'";
-            goto fail;
-        }
-        if (service.starts_with("transport")) {
-            D("SS(%d): okay transport", s->id);
-            s->smart_socket_data.clear();
-            return 0;
+        auto host_request_result = handle_host_request(
+                service, type, serial.empty() ? nullptr : std::string(serial).c_str(), transport_id,
+                s->peer->fd, s);
+
+        switch (host_request_result) {
+            case HostRequestResult::Handled:
+                LOG(VERBOSE) << "SS(" << s->id << "): handled host service '" << service << "'";
+                goto fail;
+
+            case HostRequestResult::SwitchedTransport:
+                D("SS(%d): okay transport", s->id);
+                s->smart_socket_data.clear();
+                return 0;
+
+            case HostRequestResult::Unhandled:
+                break;
         }
 
         /* try to find a local service with this name.
@@ -826,8 +808,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
         ** and tear down here.
         */
         // TODO: Convert to string_view.
-        s2 = create_host_service_socket(std::string(service).c_str(), std::string(serial).c_str(),
-                                        transport_id);
+        s2 = host_service_to_socket(service, serial, transport_id);
         if (s2 == nullptr) {
             LOG(VERBOSE) << "SS(" << s->id << "): couldn't create host service '" << service << "'";
             SendFail(s->peer->fd, "unknown host service");

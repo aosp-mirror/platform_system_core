@@ -206,6 +206,14 @@ void TestParseUint(std::string_view string, bool expected_success, uint32_t expe
             EXPECT_EQ(remaining, "foo");
         }
     }
+
+    // With trailing text, without remaining.
+    {
+        std::string text = std::string(string) + "foo";
+        uint32_t value;
+        bool success = ParseUint(&value, text, nullptr);
+        EXPECT_EQ(success, false);
+    }
 }
 
 TEST(adb_utils, ParseUint) {
