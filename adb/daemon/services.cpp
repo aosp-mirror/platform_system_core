@@ -244,9 +244,8 @@ asocket* daemon_service_to_socket(std::string_view name) {
 
 unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
 #if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
-    if (name.starts_with("abb:")) {
-        name.remove_prefix(strlen("abb:"));
-        return execute_binder_command(name);
+    if (name.starts_with("abb:") || name.starts_with("abb_exec:")) {
+        return execute_abb_command(name);
     }
 #endif
 
