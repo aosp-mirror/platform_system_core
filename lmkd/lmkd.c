@@ -1694,16 +1694,6 @@ do_kill:
         static unsigned long report_skip_count = 0;
 
         if (!use_minfree_levels) {
-            /* If pressure level is less than critical and enough free swap then ignore */
-            if (level < VMPRESS_LEVEL_CRITICAL &&
-                mi.field.free_swap > low_pressure_mem.max_nr_free_pages) {
-                if (debug_process_killing) {
-                    ALOGI("Ignoring pressure since %" PRId64
-                          " swap pages are available ",
-                          mi.field.free_swap);
-                }
-                return;
-            }
             /* Free up enough memory to downgrate the memory pressure to low level */
             if (mi.field.nr_free_pages >= low_pressure_mem.max_nr_free_pages) {
                 if (debug_process_killing) {
