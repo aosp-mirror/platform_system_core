@@ -225,7 +225,7 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
     // don't come back unwritten. Return from this function with the kernel file offset set to 0.
     // If the filesystem is f2fs, then we also PIN the file on disk to make sure the blocks
     // aren't moved around.
-    if (fallocate(file_fd, FALLOC_FL_ZERO_RANGE, 0, file_size)) {
+    if (fallocate64(file_fd, FALLOC_FL_ZERO_RANGE, 0, file_size)) {
         PLOG(ERROR) << "Failed to allocate space for file: " << file_path << " size: " << file_size;
         return false;
     }
