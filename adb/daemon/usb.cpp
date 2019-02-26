@@ -628,9 +628,10 @@ static void usb_ffs_open_thread() {
 }
 
 void usb_init() {
-    if (!android::base::GetBoolProperty("persist.adb.nonblocking_ffs", false)) {
-        usb_init_legacy();
-    } else {
+    bool use_nonblocking = android::base::GetBoolProperty("persist.adb.nonblocking_ffs", true);
+    if (use_nonblocking) {
         std::thread(usb_ffs_open_thread).detach();
+    } else {
+        usb_init_legacy();
     }
 }
