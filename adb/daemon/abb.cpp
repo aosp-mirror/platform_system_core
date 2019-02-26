@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include "adb.h"
-#include "adb_io.h"
-#include "shell_service.h"
-
-#include "cmd.h"
-
 #include <sys/wait.h>
 
 #include <android-base/cmsg.h>
+#include <cmd.h>
+
+#include "adb.h"
+#include "adb_io.h"
+#include "adb_utils.h"
+#include "shell_service.h"
 
 namespace {
 
@@ -87,11 +87,9 @@ int main(int argc, char* const argv[]) {
 
         std::string_view name = data;
         auto protocol = SubprocessProtocol::kShell;
-        if (name.starts_with("abb:")) {
-            name.remove_prefix(strlen("abb:"));
+        if (ConsumePrefix(&name, "abb:")) {
             protocol = SubprocessProtocol::kShell;
-        } else if (name.starts_with("abb_exec:")) {
-            name.remove_prefix(strlen("abb_exec:"));
+        } else if (ConsumePrefix(&name, "abb_exec:")) {
             protocol = SubprocessProtocol::kNone;
         } else {
             LOG(FATAL) << "Unknown command prefix for abb: " << data;
