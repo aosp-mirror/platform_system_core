@@ -85,7 +85,19 @@ int main(int argc, char* const argv[]) {
             break;
         }
 
-        unique_fd result = StartCommandInProcess(std::move(data), &execCmd);
+        std::string_view name = data;
+        auto protocol = SubprocessProtocol::kShell;
+        if (name.starts_with("abb:")) {
+            name.remove_prefix(strlen("abb:"));
+            protocol = SubprocessProtocol::kShell;
+        } else if (name.starts_with("abb_exec:")) {
+            name.remove_prefix(strlen("abb_exec:"));
+            protocol = SubprocessProtocol::kNone;
+        } else {
+            LOG(FATAL) << "Unknown command prefix for abb: " << data;
+        }
+
+        unique_fd result = StartCommandInProcess(std::string(name), &execCmd, protocol);
         if (android::base::SendFileDescriptors(fd, "", 1, result.get()) != 1) {
             PLOG(ERROR) << "Failed to send an inprocess fd for command: " << data;
             break;
