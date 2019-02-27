@@ -948,13 +948,14 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_Avb) {
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
 source none0       swap   defaults      avb=vbmeta_partition
+source none1       swap   defaults      avb_keys=/path/to/test.avbpubkey
 )fs";
 
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_EQ(2U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -964,6 +965,12 @@ source none0       swap   defaults      avb=vbmeta_partition
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("vbmeta_partition", entry->vbmeta_partition);
+    entry++;
+
+    EXPECT_EQ("none1", entry->mount_point);
+    FstabEntry::FsMgrFlags empty_flags = {};  // no flags should be set for avb_keys.
+    EXPECT_TRUE(CompareFlags(empty_flags, entry->fs_mgr_flags));
+    EXPECT_EQ("/path/to/test.avbpubkey", entry->avb_keys);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_KeyDirectory) {
