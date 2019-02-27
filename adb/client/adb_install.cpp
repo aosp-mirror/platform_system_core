@@ -638,39 +638,43 @@ int install_multi_package(int argc, const char** argv) {
         fprintf(stdout, "Created child session ID %d.\n", session_id);
         session_ids.push_back(session_id);
 
-        struct stat sb;
-        if (stat(file, &sb) == -1) {
-            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
-            goto finalize_multi_package_session;
+        // Support splitAPKs by allowing the notation split1.apk:split2.apk:split3.apk as argument.
+        std::vector<std::string> splits = android::base::Split(file, ":");
+
+        for (const std::string& split : splits) {
+            struct stat sb;
+            if (stat(split.c_str(), &sb) == -1) {
+                fprintf(stderr, "adb: failed to stat %s: %s\n", split.c_str(), strerror(errno));
+                goto finalize_multi_package_session;
+            }
+
+            std::string cmd = android::base::StringPrintf(
+                    "%s install-write -S %" PRIu64 " %d %d_%s -", install_cmd.c_str(),
+                    static_cast<uint64_t>(sb.st_size), session_id, i,
+                    android::base::Basename(split).c_str());
+
+            unique_fd local_fd(adb_open(split.c_str(), O_RDONLY | O_CLOEXEC));
+            if (local_fd < 0) {
+                fprintf(stderr, "adb: failed to open %s: %s\n", split.c_str(), strerror(errno));
+                goto finalize_multi_package_session;
+            }
+
+            std::string error;
+            unique_fd remote_fd(adb_connect(cmd, &error));
+            if (remote_fd < 0) {
+                fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
+                goto finalize_multi_package_session;
+            }
+
+            copy_to_file(local_fd.get(), remote_fd.get());
+            read_status_line(remote_fd.get(), buf, sizeof(buf));
+
+            if (strncmp("Success", buf, 7)) {
+                fprintf(stderr, "adb: failed to write %s\n", split.c_str());
+                fputs(buf, stderr);
+                goto finalize_multi_package_session;
+            }
         }
-
-        std::string cmd =
-                android::base::StringPrintf("%s install-write -S %" PRIu64 " %d %d_%s -",
-                                            install_cmd.c_str(), static_cast<uint64_t>(sb.st_size),
-                                            session_id, i, android::base::Basename(file).c_str());
-
-        unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
-        if (local_fd < 0) {
-            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
-            goto finalize_multi_package_session;
-        }
-
-        std::string error;
-        unique_fd remote_fd(adb_connect(cmd, &error));
-        if (remote_fd < 0) {
-            fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-            goto finalize_multi_package_session;
-        }
-
-        copy_to_file(local_fd.get(), remote_fd.get());
-        read_status_line(remote_fd.get(), buf, sizeof(buf));
-
-        if (strncmp("Success", buf, 7)) {
-            fprintf(stderr, "adb: failed to write %s\n", file);
-            fputs(buf, stderr);
-            goto finalize_multi_package_session;
-        }
-
         all_session_ids += android::base::StringPrintf(" %d", session_id);
     }
 
@@ -718,6 +722,7 @@ finalize_multi_package_session:
         fputs(buf, stderr);
     }
 
+    session_ids.push_back(parent_session_id);
     // try to abandon all remaining sessions
     for (std::size_t i = 0; i < session_ids.size(); i++) {
         service = android::base::StringPrintf("%s install-abandon %d", install_cmd.c_str(),
