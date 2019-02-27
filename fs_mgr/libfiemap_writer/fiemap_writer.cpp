@@ -126,7 +126,8 @@ static bool DeviceMapperStackPop(const std::string& bdev, std::string* bdev_raw)
     return DeviceMapperStackPop(bdev_next, bdev_raw);
 }
 
-static bool FileToBlockDevicePath(const std::string& file_path, std::string* bdev_path) {
+bool FiemapWriter::GetBlockDeviceForFile(const std::string& file_path, std::string* bdev_path,
+                                         bool* uses_dm) {
     struct stat sb;
     if (stat(file_path.c_str(), &sb)) {
         PLOG(ERROR) << "Failed to get stat for: " << file_path;
@@ -144,6 +145,10 @@ static bool FileToBlockDevicePath(const std::string& file_path, std::string* bde
     if (!DeviceMapperStackPop(bdev, &bdev_raw)) {
         LOG(ERROR) << "Failed to get the bottom of the device mapper stack for device: " << bdev;
         return false;
+    }
+
+    if (uses_dm) {
+        *uses_dm = (bdev_raw != bdev);
     }
 
     LOG(DEBUG) << "Popped device (" << bdev_raw << ") from device mapper stack starting with ("
@@ -458,7 +463,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     }
 
     std::string bdev_path;
-    if (!FileToBlockDevicePath(abs_path, &bdev_path)) {
+    if (!GetBlockDeviceForFile(abs_path, &bdev_path)) {
         LOG(ERROR) << "Failed to get block dev path for file: " << file_path;
         cleanup(abs_path, create);
         return nullptr;
