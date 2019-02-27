@@ -423,7 +423,7 @@ on post-fs-data
     mkdir /data/apex/active 0750 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/pkg_staging 0750 system system
+    mkdir /data/app-staging 0750 system system
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
