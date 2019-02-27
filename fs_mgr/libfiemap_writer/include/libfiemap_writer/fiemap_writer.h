@@ -57,6 +57,13 @@ class FiemapWriter final {
     // FiemapWriter::Open).
     static bool HasPinnedExtents(const std::string& file_path);
 
+    // Returns the underlying block device of a file. This will look past device-mapper layers.
+    // If an intermediate device-mapper layer would not maintain a 1:1 mapping (i.e. is a non-
+    // trivial dm-linear), then this will fail. If device-mapper nodes are encountered, then
+    // |uses_dm| will be set to true.
+    static bool GetBlockDeviceForFile(const std::string& file_path, std::string* bdev_path,
+                                      bool* uses_dm = nullptr);
+
     // The counter part of Write(). It is an error for the offset to be unaligned with
     // the block device's block size.
     // In case of error, the contents of buffer MUST be discarded.
