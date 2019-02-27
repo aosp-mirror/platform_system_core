@@ -11,13 +11,14 @@
 ##  USAGE
 ##
 
-USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [--color]
+USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [options]
 
 adb remount tests
 
---help      This help
---serial    Specify device (must if multiple are present)
---color     Dress output with highlighting colors
+--help        This help
+--serial      Specify device (must if multiple are present)
+--color       Dress output with highlighting colors
+--print-time  Report the test duration
 
 Conditions:
  - Must be a userdebug build.
@@ -45,6 +46,8 @@ ORANGE="${ESCAPE}[38;5;255:165:0m"
 BLUE="${ESCAPE}[35m"
 NORMAL="${ESCAPE}[0m"
 TMPDIR=${TMPDIR:-/tmp}
+print_time=false
+start_time=`date +%s`
 
 ##
 ##  Helper Functions
@@ -250,11 +253,11 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in root state" ]
 adb_root() {
-  [ `adb_sh echo '${USER}'` != root ] || return 0
+  [ root != "`adb_sh echo '${USER}' </dev/null`" ] || return 0
   adb root >/dev/null </dev/null 2>/dev/null
   sleep 2
   adb_wait 2m &&
-    [ `adb_sh echo '${USER}'` = root ]
+    [ root = "`adb_sh echo '${USER}' </dev/null`" ]
 }
 
 [ "USAGE: adb_unroot
@@ -263,11 +266,11 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in un root state" ]
 adb_unroot() {
-  [ `adb_sh echo '${USER}'` = root ] || return 0
+  [ root = "`adb_sh echo '${USER}' </dev/null`" ] || return 0
   adb unroot >/dev/null </dev/null 2>/dev/null
   sleep 2
   adb_wait 2m &&
-    [ `adb_sh echo '${USER}'` != root ]
+    [ root != "`adb_sh echo '${USER}' </dev/null`" ]
 }
 
 [ "USAGE: fastboot_getvar var expected
@@ -312,6 +315,21 @@ cleanup() {
   true
 }
 
+[ "USAGE: test_duration >/dev/stderr
+
+Prints the duration of the test
+
+Returns: reports duration" ]
+test_duration() {
+  if ${print_time}; then
+    echo "${BLUE}[     INFO ]${NORMAL} end `date`"
+    [ -n "${start_time}" ] || return
+    end_time=`date +%s`
+    diff_time=`expr ${end_time} - ${start_time}`
+    echo "${BLUE}[     INFO ]${NORMAL} duration `format_duration ${diff_time}`"
+  fi >&2
+}
+
 [ "USAGE: die [-d|-t <epoch>] [message] >/dev/stderr
 
 If -d, or -t <epoch> argument is supplied, dump logcat.
@@ -332,6 +350,7 @@ die() {
   echo "${RED}[  FAILED  ]${NORMAL} ${@}" >&2
   cleanup
   restore
+  test_duration
   exit 1
 }
 
@@ -424,7 +443,10 @@ skip_unrelated_mounts() {
 ##  MAINLINE
 ##
 
-OPTIONS=`getopt --alternative --unquoted --longoptions help,serial:,colour,color,no-colour,no-color -- "?hs:" ${*}` ||
+OPTIONS=`getopt --alternative --unquoted \
+                --longoptions help,serial:,colour,color,no-colour,no-color \
+                --longoptions gtest_print_time,print-time \
+                -- "?hs:" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
   die "getopt failure"
 set -- ${OPTIONS}
@@ -446,6 +468,9 @@ while [ ${#} -gt 0 ]; do
     --no-color | --no-colour)
       color=false
       ;;
+    --print-time | --gtest_print_time)
+      print_time=true
+      ;;
     --)
       shift
       break
@@ -466,6 +491,10 @@ if ! ${color}; then
   ORANGE=""
   BLUE=""
   NORMAL=""
+fi
+
+if ${print_time}; then
+  echo "${BLUE}[     INFO ]${NORMAL}" start `date` >&2
 fi
 
 inFastboot && die "device in fastboot mode"
@@ -525,12 +554,12 @@ if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
      "2" = "`get_property partition.system.verified`" ]; then
   restore() {
     ${overlayfs_supported} || return 0
-    echo "${GREEN}[     INFO ]${NORMAL} restoring verity" >&2
     inFastboot &&
       fastboot reboot &&
       adb_wait 2m
-    adb_root &&
-      adb enable-verity &&
+    inAdb &&
+      adb_root &&
+      adb enable-verity >/dev/null 2>/dev/null &&
       adb_reboot &&
       adb_wait 2m
   }
@@ -609,7 +638,7 @@ fi
 D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
 no_dedupe=true
 for d in ${D}; do
-  adb_sh tune2fs -l $d 2>&1 |
+  adb_sh tune2fs -l $d </dev/null 2>&1 |
     grep "Filesystem features:.*shared_blocks" >/dev/null &&
   no_dedupe=false
 done
@@ -758,7 +787,7 @@ if ${overlayfs_needed}; then
   D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
   bad_rw=false
   for d in ${D}; do
-    if adb_sh tune2fs -l $d 2>&1 |
+    if adb_sh tune2fs -l $d </dev/null 2>&1 |
        grep "Filesystem features:.*shared_blocks" >/dev/null; then
       bad_rw=true
     else
@@ -1047,20 +1076,24 @@ echo "${GREEN}[ RUN      ]${NORMAL} test raw remount commands" >&2
 adb_reboot &&
   adb_wait 2m ||
   die "lost device after reboot to ro state `usb_status`"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null &&
+adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
-adb_su mount -o rw,remount /vendor ||
+adb_su mount -o rw,remount /vendor </dev/null ||
   die "remount command"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null ||
+adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
   die "/vendor is not read-write"
 echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 
 restore
 err=${?}
+
 restore() {
   true
 }
+
 [ ${err} = 0 ] ||
   die "failed to restore verity" >&2
 
 echo "${GREEN}[  PASSED  ]${NORMAL} adb remount" >&2
+
+test_duration

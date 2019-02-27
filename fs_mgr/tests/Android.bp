@@ -14,6 +14,7 @@
 
 cc_test {
     name: "fs_mgr_unit_test",
+    test_suites: ["device-tests"],
 
     shared_libs: [
         "libbase",
@@ -22,9 +23,6 @@ cc_test {
     static_libs: [
         "libfs_mgr",
         "libfstab",
-    ],
-    data: [
-        "data/*",
     ],
     srcs: [
         "fs_mgr_test.cpp",

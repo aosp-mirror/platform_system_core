@@ -34,7 +34,7 @@
 #include "adb_utils.h"
 #include "sysdeps.h"
 
-bool SendProtocolString(int fd, const std::string& s) {
+bool SendProtocolString(int fd, std::string_view s) {
     unsigned int length = s.size();
     if (length > MAX_PAYLOAD - 4) {
         errno = EMSGSIZE;
@@ -69,7 +69,7 @@ bool SendOkay(int fd) {
     return WriteFdExactly(fd, "OKAY", 4);
 }
 
-bool SendFail(int fd, const std::string& reason) {
+bool SendFail(int fd, std::string_view reason) {
     return WriteFdExactly(fd, "FAIL", 4) && SendProtocolString(fd, reason);
 }
 

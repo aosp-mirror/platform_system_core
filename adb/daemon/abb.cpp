@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include "adb.h"
-#include "adb_io.h"
-#include "shell_service.h"
-
-#include "cmd.h"
-
 #include <sys/wait.h>
 
 #include <android-base/cmsg.h>
+#include <cmd.h>
+
+#include "adb.h"
+#include "adb_io.h"
+#include "adb_utils.h"
+#include "shell_service.h"
 
 namespace {
 
@@ -85,7 +85,17 @@ int main(int argc, char* const argv[]) {
             break;
         }
 
-        unique_fd result = StartCommandInProcess(std::move(data), &execCmd);
+        std::string_view name = data;
+        auto protocol = SubprocessProtocol::kShell;
+        if (ConsumePrefix(&name, "abb:")) {
+            protocol = SubprocessProtocol::kShell;
+        } else if (ConsumePrefix(&name, "abb_exec:")) {
+            protocol = SubprocessProtocol::kNone;
+        } else {
+            LOG(FATAL) << "Unknown command prefix for abb: " << data;
+        }
+
+        unique_fd result = StartCommandInProcess(std::string(name), &execCmd, protocol);
         if (android::base::SendFileDescriptors(fd, "", 1, result.get()) != 1) {
             PLOG(ERROR) << "Failed to send an inprocess fd for command: " << data;
             break;

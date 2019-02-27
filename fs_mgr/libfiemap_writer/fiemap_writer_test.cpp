@@ -36,19 +36,19 @@
 #include <libfiemap_writer/fiemap_writer.h>
 
 using namespace std;
+using namespace std::string_literals;
 using namespace android::fiemap_writer;
 using unique_fd = android::base::unique_fd;
 using LoopDevice = android::dm::LoopDevice;
 
-std::string testbdev = "";
+std::string gTestDir;
 uint64_t testfile_size = 536870912;  // default of 512MiB
 
 class FiemapWriterTest : public ::testing::Test {
   protected:
     void SetUp() override {
         const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
-        std::string exec_dir = ::android::base::GetExecutableDirectory();
-        testfile = ::android::base::StringPrintf("%s/testdata/%s", exec_dir.c_str(), tinfo->name());
+        testfile = gTestDir + "/"s + tinfo->name();
     }
 
     void TearDown() override { unlink(testfile.c_str()); }
@@ -113,7 +113,8 @@ TEST_F(FiemapWriterTest, CheckPinning) {
 TEST_F(FiemapWriterTest, CheckBlockDevicePath) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
     EXPECT_EQ(fptr->size(), 4096);
-    EXPECT_EQ(fptr->bdev_path(), testbdev);
+    EXPECT_EQ(fptr->bdev_path().find("/dev/block/"), size_t(0));
+    EXPECT_EQ(fptr->bdev_path().find("/dev/block/dm-"), string::npos);
 }
 
 TEST_F(FiemapWriterTest, CheckFileCreated) {
@@ -141,10 +142,9 @@ TEST_F(FiemapWriterTest, CheckFileExtents) {
 class TestExistingFile : public ::testing::Test {
   protected:
     void SetUp() override {
-        std::string exec_dir = ::android::base::GetExecutableDirectory();
-        unaligned_file_ = exec_dir + "/testdata/unaligned_file";
-        file_4k_ = exec_dir + "/testdata/file_4k";
-        file_32k_ = exec_dir + "/testdata/file_32k";
+        unaligned_file_ = gTestDir + "/unaligned_file";
+        file_4k_ = gTestDir + "/file_4k";
+        file_32k_ = gTestDir + "/file_32k";
 
         CleanupFiles();
         fptr_unaligned = FiemapWriter::Open(unaligned_file_, 4097);
@@ -266,14 +266,20 @@ class VerifyBlockWritesF2fs : public ::testing::Test {
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     if (argc <= 1) {
-        cerr << "Filepath with its bdev path must be provided as follows:" << endl;
-        cerr << "  $ fiemap_writer_test </dev/block/XXXX" << endl;
-        cerr << "  where, /dev/block/XXX is the block device where the file resides" << endl;
+        cerr << "Usage: <test_dir> [file_size]\n";
+        cerr << "\n";
+        cerr << "Note: test_dir must be a writable directory.\n";
         exit(EXIT_FAILURE);
     }
     ::android::base::InitLogging(argv, ::android::base::StderrLogger);
 
-    testbdev = argv[1];
+    std::string tempdir = argv[1] + "/XXXXXX"s;
+    if (!mkdtemp(tempdir.data())) {
+        cerr << "unable to create tempdir on " << argv[1];
+        exit(EXIT_FAILURE);
+    }
+    gTestDir = tempdir;
+
     if (argc > 2) {
         testfile_size = strtoull(argv[2], NULL, 0);
         if (testfile_size == ULLONG_MAX) {
@@ -281,5 +287,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    return RUN_ALL_TESTS();
+    auto result = RUN_ALL_TESTS();
+
+    std::string cmd = "rm -rf " + gTestDir;
+    system(cmd.c_str());
+
+    return result;
 }

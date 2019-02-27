@@ -86,6 +86,6 @@ unique_fd AbbProcess::startAbbProcess(unique_fd* error_fd) {
 
 }  // namespace
 
-unique_fd execute_binder_command(std::string_view command) {
+unique_fd execute_abb_command(std::string_view command) {
     return abbp->sendCommand(command);
 }

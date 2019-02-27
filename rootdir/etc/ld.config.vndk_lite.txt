@@ -117,6 +117,8 @@ namespace.media.visible = true
 namespace.media.search.paths = /apex/com.android.media/${LIB}
 namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
+namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
+
 namespace.media.links = default
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.media.link.default.shared_libs += libandroid.so
@@ -433,6 +435,8 @@ namespace.media.visible = true
 
 namespace.media.search.paths = /apex/com.android.media/${LIB}
 namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
+
+namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
