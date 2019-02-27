@@ -84,6 +84,15 @@ on init
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
 
+    # Create blkio tuning nodes
+    mkdir /dev/blkio/background
+    chown system system /dev/blkio
+    chown system system /dev/blkio/background
+    chown system system /dev/blkio/tasks
+    chown system system /dev/blkio/background/tasks
+    chmod 0664 /dev/blkio/tasks
+    chmod 0664 /dev/blkio/background/tasks
+
     restorecon_recursive /mnt
 
     mount configfs none /config nodev noexec nosuid
