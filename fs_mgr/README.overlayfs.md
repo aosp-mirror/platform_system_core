@@ -94,7 +94,7 @@ Caveats
   and thus free dynamic partition space.
 - Kernel must have CONFIG_OVERLAY_FS=y and will need to be patched
   with "*overlayfs: override_creds=off option bypass creator_cred*"
-  if kernel is higher than 4.6.
+  if kernel is 4.4 or higher.
   The patch is available on the upstream mailing list and the latest as of
   Feb 8 2019 is https://lore.kernel.org/patchwork/patch/1009299/.
   This patch adds an override_creds _mount_ option to overlayfs that
