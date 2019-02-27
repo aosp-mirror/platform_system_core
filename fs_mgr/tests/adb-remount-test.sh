@@ -577,20 +577,17 @@ adb_sh ls -d /sys/module/overlay </dev/null >/dev/null 2>/dev/null ||
   ) ||
   overlayfs_supported=false
 if ${overlayfs_supported}; then
-  case `adb_sh uname -r </dev/null` in
-    4.[6789].* | 4.[1-9][0-9]* | [56789].*)
-      adb_su ls /sys/module/overlay/parameters/override_creds </dev/null >/dev/null &&
-        echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
-        (
-          echo "${ORANGE}[  WARNING ]${NORMAL} overlay module does not support override_creds" >&2 &&
-          false
-        ) ||
+  adb_su ls /sys/module/overlay/parameters/override_creds </dev/null >/dev/null &&
+    echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
+    case `adb_sh uname -r </dev/null` in
+      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
+        echo "${ORANGE}[  WARNING ]${NORMAL} overlay module does not support override_creds" >&2 &&
         overlayfs_supported=false
-      ;;
-    *)
-      echo "${GREEN}[       OK ]${NORMAL} overlay module uses callers creds" >&2
-      ;;
-  esac
+        ;;
+      *)
+        echo "${GREEN}[       OK ]${NORMAL} overlay module uses caller's creds" >&2
+        ;;
+    esac
 fi
 
 adb_root ||
