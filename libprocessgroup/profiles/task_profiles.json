@@ -56,10 +56,10 @@
   "Profiles": [
     {
       "Name": "HighEnergySaving",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "schedtune",
             "Path": "background"
@@ -69,10 +69,10 @@
     },
     {
       "Name": "NormalPerformance",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "schedtune",
             "Path": ""
@@ -82,10 +82,10 @@
     },
     {
       "Name": "HighPerformance",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "schedtune",
             "Path": "foreground"
@@ -95,10 +95,10 @@
     },
     {
       "Name": "MaxPerformance",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "schedtune",
             "Path": "top-app"
@@ -108,10 +108,10 @@
     },
     {
       "Name": "RealtimePerformance",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "schedtune",
             "Path": "rt"
@@ -122,26 +122,26 @@
 
     {
       "Name": "CpuPolicySpread",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetAttribute",
-          "Params" :
+          "Name": "SetAttribute",
+          "Params":
           {
-            "Name" : "STunePreferIdle",
-            "Value" : "1"
+            "Name": "STunePreferIdle",
+            "Value": "1"
           }
         }
       ]
     },
     {
       "Name": "CpuPolicyPack",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetAttribute",
-          "Params" :
+          "Name": "SetAttribute",
+          "Params":
           {
-            "Name" : "STunePreferIdle",
-            "Value" : "0"
+            "Name": "STunePreferIdle",
+            "Value": "0"
           }
         }
       ]
@@ -149,10 +149,10 @@
 
     {
       "Name": "VrKernelCapacity",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": ""
@@ -162,10 +162,10 @@
     },
     {
       "Name": "VrServiceCapacityLow",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "system/background"
@@ -175,10 +175,10 @@
     },
     {
       "Name": "VrServiceCapacityNormal",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "system"
@@ -188,10 +188,10 @@
     },
     {
       "Name": "VrServiceCapacityHigh",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "system/performance"
@@ -201,10 +201,10 @@
     },
     {
       "Name": "VrProcessCapacityLow",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "application/background"
@@ -214,10 +214,10 @@
     },
     {
       "Name": "VrProcessCapacityNormal",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "application"
@@ -227,10 +227,10 @@
     },
     {
       "Name": "VrProcessCapacityHigh",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "application/performance"
@@ -241,10 +241,10 @@
 
     {
       "Name": "ProcessCapacityLow",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "background"
@@ -254,10 +254,10 @@
     },
     {
       "Name": "ProcessCapacityNormal",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": ""
@@ -267,10 +267,10 @@
     },
     {
       "Name": "ProcessCapacityHigh",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "foreground"
@@ -280,10 +280,10 @@
     },
     {
       "Name": "ProcessCapacityMax",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "top-app"
@@ -294,10 +294,10 @@
 
     {
       "Name": "ServiceCapacityLow",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "system-background"
@@ -307,10 +307,10 @@
     },
     {
       "Name": "ServiceCapacityRestricted",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "restricted"
@@ -321,10 +321,10 @@
 
     {
       "Name": "CameraServiceCapacity",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "cpuset",
             "Path": "camera-daemon"
@@ -335,10 +335,10 @@
 
     {
       "Name": "LowIoPriority",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "blkio",
             "Path": "background"
@@ -348,10 +348,10 @@
     },
     {
       "Name": "NormalIoPriority",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "blkio",
             "Path": ""
@@ -361,10 +361,10 @@
     },
     {
       "Name": "HighIoPriority",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "blkio",
             "Path": ""
@@ -374,10 +374,10 @@
     },
     {
       "Name": "MaxIoPriority",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "blkio",
             "Path": ""
@@ -388,10 +388,10 @@
 
     {
       "Name": "TimerSlackHigh",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetTimerSlack",
-          "Params" :
+          "Name": "SetTimerSlack",
+          "Params":
           {
             "Slack": "40000000"
           }
@@ -400,10 +400,10 @@
     },
     {
       "Name": "TimerSlackNormal",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetTimerSlack",
-          "Params" :
+          "Name": "SetTimerSlack",
+          "Params":
           {
             "Slack": "50000"
           }
@@ -413,26 +413,26 @@
 
     {
       "Name": "PerfBoost",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetClamps",
-          "Params" :
+          "Name": "SetClamps",
+          "Params":
           {
-            "Boost" : "50%",
-            "Clamp" : "0"
+            "Boost": "50%",
+            "Clamp": "0"
           }
         }
       ]
     },
     {
       "Name": "PerfClamp",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetClamps",
-          "Params" :
+          "Name": "SetClamps",
+          "Params":
           {
-            "Boost" : "0",
-            "Clamp" : "30%"
+            "Boost": "0",
+            "Clamp": "30%"
           }
         }
       ]
@@ -440,21 +440,21 @@
 
     {
       "Name": "LowMemoryUsage",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetAttribute",
-          "Params" :
+          "Name": "SetAttribute",
+          "Params":
           {
-            "Name" : "MemSoftLimit",
-            "Value" : "16MB"
+            "Name": "MemSoftLimit",
+            "Value": "16MB"
           }
         },
         {
-          "Name" : "SetAttribute",
-          "Params" :
+          "Name": "SetAttribute",
+          "Params":
           {
-            "Name" : "MemSwappiness",
-            "Value" : "150"
+            "Name": "MemSwappiness",
+            "Value": "150"
 
           }
         }
@@ -462,31 +462,31 @@
     },
     {
       "Name": "HighMemoryUsage",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "SetAttribute",
-          "Params" :
+          "Name": "SetAttribute",
+          "Params":
           {
-            "Name" : "MemSoftLimit",
-            "Value" : "512MB"
+            "Name": "MemSoftLimit",
+            "Value": "512MB"
           }
         },
         {
-          "Name" : "SetAttribute",
-          "Params" :
+          "Name": "SetAttribute",
+          "Params":
           {
-            "Name" : "MemSwappiness",
-            "Value" : "100"
+            "Name": "MemSwappiness",
+            "Value": "100"
           }
         }
       ]
     },
     {
       "Name": "SystemMemoryProcess",
-      "Actions" : [
+      "Actions": [
         {
-          "Name" : "JoinCgroup",
-          "Params" :
+          "Name": "JoinCgroup",
+          "Params":
           {
             "Controller": "memory",
             "Path": "system"
