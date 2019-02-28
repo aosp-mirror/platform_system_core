@@ -55,7 +55,7 @@ struct FstabEntry {
     std::string zram_loopback_path;
     uint64_t zram_loopback_size = 512 * 1024 * 1024;  // 512MB by default;
     std::string zram_backing_dev_path;
-    std::string avb_key;
+    std::string avb_keys;
 
     struct FsMgrFlags {
         bool wait : 1;
