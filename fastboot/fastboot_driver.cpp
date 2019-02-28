@@ -403,7 +403,7 @@ RetCode FastBootDriver::DownloadCommand(uint32_t size, std::string* response,
 RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::string>* info,
                                        int* dsize) {
     char status[FB_RESPONSE_SZ + 1];
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     auto set_response = [response](std::string s) {
         if (response) *response = std::move(s);
@@ -414,7 +414,7 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
 
     // erase response
     set_response("");
-    while ((std::chrono::system_clock::now() - start) < std::chrono::seconds(RESP_TIMEOUT)) {
+    while ((std::chrono::steady_clock::now() - start) < std::chrono::seconds(RESP_TIMEOUT)) {
         int r = transport_->Read(status, FB_RESPONSE_SZ);
         if (r < 0) {
             error_ = ErrnoStr("Status read failed");
