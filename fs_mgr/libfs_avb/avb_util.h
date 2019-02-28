@@ -80,7 +80,7 @@ VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
 
 bool ValidatePublicKeyBlob(const uint8_t* key, size_t length, const std::string& expected_key_blob);
 
-bool ValidatePublicKeyBlob(const std::string key_blob_to_validate,
+bool ValidatePublicKeyBlob(const std::string& key_blob_to_validate,
                            const std::vector<std::string>& expected_key_paths);
 
 // Detects if whether a partition contains a rollback image.
