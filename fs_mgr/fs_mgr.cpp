@@ -1089,7 +1089,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 // Skips mounting the device.
                 continue;
             }
-        } else if (!current_entry.avb_key.empty()) {
+        } else if (!current_entry.avb_keys.empty()) {
             if (AvbHandle::SetUpStandaloneAvbHashtree(&current_entry) == AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on standalone partition: "
                        << current_entry.mount_point << ", skipping!";
@@ -1320,7 +1320,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                 // Skips mounting the device.
                 continue;
             }
-        } else if (!fstab_entry.avb_key.empty()) {
+        } else if (!fstab_entry.avb_keys.empty()) {
             if (AvbHandle::SetUpStandaloneAvbHashtree(&fstab_entry) == AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on standalone partition: "
                        << fstab_entry.mount_point << ", skipping!";

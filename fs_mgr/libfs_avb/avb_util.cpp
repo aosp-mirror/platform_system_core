@@ -28,6 +28,7 @@
 #include "util.h"
 
 using android::base::Basename;
+using android::base::ReadFileToString;
 using android::base::StartsWith;
 using android::base::unique_fd;
 
@@ -311,7 +312,8 @@ std::unique_ptr<AvbFooter> GetAvbFooter(int fd) {
     return footer;
 }
 
-bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& expected_key_blob) {
+bool ValidatePublicKeyBlob(const uint8_t* key, size_t length,
+                           const std::string& expected_key_blob) {
     if (expected_key_blob.empty()) {  // no expectation of the key, return true.
         return true;
     }
@@ -320,6 +322,21 @@ bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& e
     }
     if (0 == memcmp(key, expected_key_blob.data(), length)) {
         return true;
+    }
+    return false;
+}
+
+bool ValidatePublicKeyBlob(const std::string key_blob_to_validate,
+                           const std::vector<std::string>& allowed_key_paths) {
+    std::string allowed_key_blob;
+    if (key_blob_to_validate.empty()) {
+        LWARNING << "Failed to validate an empty key";
+        return false;
+    }
+    for (const auto& path : allowed_key_paths) {
+        if (ReadFileToString(path, &allowed_key_blob)) {
+            if (key_blob_to_validate == allowed_key_blob) return true;
+        }
     }
     return false;
 }
@@ -347,7 +364,7 @@ VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
                        << ": Error verifying vbmeta image: failed to get public key";
                 return VBMetaVerifyResult::kError;
             }
-            if (!VerifyPublicKeyBlob(pk_data, pk_len, expected_public_key_blob)) {
+            if (!ValidatePublicKeyBlob(pk_data, pk_len, expected_public_key_blob)) {
                 LERROR << vbmeta.partition() << ": Error verifying vbmeta image: public key used to"
                        << " sign data does not match key in chain descriptor";
                 return VBMetaVerifyResult::kErrorVerification;

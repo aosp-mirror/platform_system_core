@@ -35,9 +35,9 @@ using android::fs_mgr::GetChainPartitionInfo;
 using android::fs_mgr::GetTotalSize;
 using android::fs_mgr::LoadAndVerifyVbmetaByPartition;
 using android::fs_mgr::LoadAndVerifyVbmetaByPath;
+using android::fs_mgr::ValidatePublicKeyBlob;
 using android::fs_mgr::VBMetaData;
 using android::fs_mgr::VBMetaVerifyResult;
-using android::fs_mgr::VerifyPublicKeyBlob;
 using android::fs_mgr::VerifyVBMetaData;
 using android::fs_mgr::VerifyVBMetaSignature;
 
@@ -415,7 +415,7 @@ TEST_F(AvbUtilTest, GetVBMetaHeader) {
     EXPECT_EQ(content_padding.size() - padding.size(), vbmeta_padding.size());
 }
 
-TEST_F(AvbUtilTest, VerifyPublicKeyBlob) {
+TEST_F(AvbUtilTest, ValidatePublicKeyBlob) {
     // Generates a raw key.bin
     const size_t key_size = 2048;
     base::FilePath key_path = GenerateImage("key.bin", key_size);
@@ -425,12 +425,12 @@ TEST_F(AvbUtilTest, VerifyPublicKeyBlob) {
 
     std::string expected_key_blob;
     EXPECT_TRUE(base::ReadFileToString(key_path, &expected_key_blob));
-    EXPECT_TRUE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_TRUE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
 
     key_data[10] ^= 0x80;  // toggles a bit and expects a failure
-    EXPECT_FALSE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_FALSE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
     key_data[10] ^= 0x80;  // toggles the bit again, should pass
-    EXPECT_TRUE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_TRUE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
 }
 
 TEST_F(AvbUtilTest, VerifyEmptyPublicKeyBlob) {
@@ -442,7 +442,37 @@ TEST_F(AvbUtilTest, VerifyEmptyPublicKeyBlob) {
     EXPECT_EQ(key_size, base::ReadFile(key_path, (char*)key_data, key_size));
 
     std::string expected_key_blob = "";  // empty means no expectation, thus return true.
-    EXPECT_TRUE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_TRUE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
+}
+
+TEST_F(AvbUtilTest, ValidatePublicKeyBlob_MultipleAllowedKeys) {
+    base::FilePath rsa2048_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa2048.pem"));
+    base::FilePath rsa4096_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
+    base::FilePath rsa8192_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa8192.pem"));
+
+    std::vector<std::string> allowed_key_paths;
+    allowed_key_paths.push_back(rsa2048_public_key.value());
+    allowed_key_paths.push_back(rsa4096_public_key.value());
+
+    std::string expected_key_blob_2048;
+    EXPECT_TRUE(base::ReadFileToString(rsa2048_public_key, &expected_key_blob_2048));
+    std::string expected_key_blob_4096;
+    EXPECT_TRUE(base::ReadFileToString(rsa4096_public_key, &expected_key_blob_4096));
+    std::string expected_key_blob_8192;
+    EXPECT_TRUE(base::ReadFileToString(rsa8192_public_key, &expected_key_blob_8192));
+
+    EXPECT_TRUE(ValidatePublicKeyBlob(expected_key_blob_2048, allowed_key_paths));
+    EXPECT_TRUE(ValidatePublicKeyBlob(expected_key_blob_4096, allowed_key_paths));
+
+    EXPECT_FALSE(ValidatePublicKeyBlob(expected_key_blob_8192, allowed_key_paths));
+    EXPECT_FALSE(ValidatePublicKeyBlob("invalid_content", allowed_key_paths));
+    EXPECT_FALSE(ValidatePublicKeyBlob("", allowed_key_paths));
+
+    allowed_key_paths.push_back(rsa8192_public_key.value());
+    EXPECT_TRUE(ValidatePublicKeyBlob(expected_key_blob_8192, allowed_key_paths));
 }
 
 TEST_F(AvbUtilTest, VerifyVBMetaSignature) {

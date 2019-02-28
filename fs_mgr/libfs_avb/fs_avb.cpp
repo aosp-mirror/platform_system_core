@@ -29,6 +29,7 @@
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <libavb/libavb.h>
 #include <libdm/dm.h>
 
@@ -40,6 +41,7 @@
 using android::base::Basename;
 using android::base::ParseUint;
 using android::base::ReadFileToString;
+using android::base::Split;
 using android::base::StringPrintf;
 
 namespace android {
@@ -264,8 +266,8 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
 }
 
 AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry) {
-    if (fstab_entry.avb_key.empty()) {
-        LERROR << "avb_key=/path/to/key is missing for " << fstab_entry.mount_point;
+    if (fstab_entry.avb_keys.empty()) {
+        LERROR << "avb_keys=/path/to/key(s) is missing for " << fstab_entry.mount_point;
         return nullptr;
     }
 
@@ -273,24 +275,14 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry) {
     bool allow_verification_error = IsDeviceUnlocked();
     bool rollback_protection = !allow_verification_error;
 
-    std::string expected_key_blob;
-    if (!ReadFileToString(fstab_entry.avb_key, &expected_key_blob)) {
-        if (!allow_verification_error) {
-            LERROR << "Failed to load avb_key: " << fstab_entry.avb_key
-                   << " for mount point: " << fstab_entry.mount_point;
-            return nullptr;
-        }
-        LWARNING << "Allowing no expected key blob when verification error is permitted";
-        expected_key_blob.clear();
-    }
-
+    std::string public_key_data;
     bool verification_disabled = false;
     VBMetaVerifyResult verify_result = VBMetaVerifyResult::kError;
     std::unique_ptr<VBMetaData> vbmeta = LoadAndVerifyVbmetaByPath(
             fstab_entry.blk_device, "" /* partition_name, no need for a standalone path */,
-            expected_key_blob, allow_verification_error, rollback_protection,
-            false /* not is_chained_vbmeta */, nullptr /* out_public_key_data */,
-            &verification_disabled, &verify_result);
+            "" /* expected_public_key_blob, */, allow_verification_error, rollback_protection,
+            false /* not is_chained_vbmeta */, &public_key_data, &verification_disabled,
+            &verify_result);
 
     if (!vbmeta) {
         LERROR << "Failed to load vbmeta: " << fstab_entry.blk_device;
@@ -314,6 +306,15 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry) {
         default:
             LERROR << "LoadAndVerifyVbmetaByPath failed, result: " << verify_result;
             return nullptr;
+    }
+
+    if (!ValidatePublicKeyBlob(public_key_data, Split(fstab_entry.avb_keys, ":"))) {
+        avb_handle->status_ = AvbHandleStatus::kVerificationError;
+        LWARNING << "Found unknown public key used to sign " << fstab_entry.mount_point;
+        if (!allow_verification_error) {
+            LERROR << "Unknown public key is not allowed";
+            return nullptr;
+        }
     }
 
     if (verification_disabled) {
