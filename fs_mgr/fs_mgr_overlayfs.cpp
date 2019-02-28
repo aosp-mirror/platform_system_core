@@ -1031,7 +1031,7 @@ OverlayfsValidResult fs_mgr_overlayfs_valid() {
     if (major > 4) {
         return OverlayfsValidResult::kNotSupported;
     }
-    if (minor > 6) {
+    if (minor > 3) {
         return OverlayfsValidResult::kNotSupported;
     }
     return OverlayfsValidResult::kOk;
