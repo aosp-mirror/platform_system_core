@@ -260,7 +260,6 @@ struct UsbFfsConnection : public Connection {
         // until it dies, and then report failure to the transport via HandleError, which will
         // eventually result in the transport being destroyed, which will result in UsbFfsConnection
         // being destroyed, which unblocks the open thread and restarts this entire process.
-        static constexpr int kInterruptionSignal = SIGUSR1;
         static std::once_flag handler_once;
         std::call_once(handler_once, []() { signal(kInterruptionSignal, [](int) {}); });
 
@@ -286,6 +285,7 @@ struct UsbFfsConnection : public Connection {
                 } else if (rc == 0) {
                     // Something in the kernel presumably went wrong.
                     // Close our endpoints, wait for a bit, and then try again.
+                    StopWorker();
                     aio_context_.reset();
                     read_fd_.reset();
                     write_fd_.reset();
@@ -311,7 +311,7 @@ struct UsbFfsConnection : public Connection {
 
                 switch (event.type) {
                     case FUNCTIONFS_BIND:
-                        CHECK(!started) << "received FUNCTIONFS_ENABLE while already bound?";
+                        CHECK(!bound) << "received FUNCTIONFS_BIND while already bound?";
                         bound = true;
                         break;
 
@@ -327,28 +327,7 @@ struct UsbFfsConnection : public Connection {
                 }
             }
 
-            pthread_t worker_thread_handle = worker_thread_.native_handle();
-            while (true) {
-                int rc = pthread_kill(worker_thread_handle, kInterruptionSignal);
-                if (rc != 0) {
-                    LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
-                    break;
-                }
-
-                std::this_thread::sleep_for(100ms);
-
-                rc = pthread_kill(worker_thread_handle, 0);
-                if (rc == 0) {
-                    continue;
-                } else if (rc == ESRCH) {
-                    break;
-                } else {
-                    LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
-                }
-            }
-
-            worker_thread_.join();
-
+            StopWorker();
             aio_context_.reset();
             read_fd_.reset();
             write_fd_.reset();
@@ -377,6 +356,30 @@ struct UsbFfsConnection : public Connection {
                 WaitForEvents();
             }
         });
+    }
+
+    void StopWorker() {
+        pthread_t worker_thread_handle = worker_thread_.native_handle();
+        while (true) {
+            int rc = pthread_kill(worker_thread_handle, kInterruptionSignal);
+            if (rc != 0) {
+                LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
+                break;
+            }
+
+            std::this_thread::sleep_for(100ms);
+
+            rc = pthread_kill(worker_thread_handle, 0);
+            if (rc == 0) {
+                continue;
+            } else if (rc == ESRCH) {
+                break;
+            } else {
+                LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
+            }
+        }
+
+        worker_thread_.join();
     }
 
     void PrepareReadBlock(IoBlock* block, uint64_t id) {
@@ -615,6 +618,8 @@ struct UsbFfsConnection : public Connection {
     std::deque<std::unique_ptr<IoBlock>> write_requests_ GUARDED_BY(write_mutex_);
     size_t next_write_id_ GUARDED_BY(write_mutex_) = 0;
     size_t writes_submitted_ GUARDED_BY(write_mutex_) = 0;
+
+    static constexpr int kInterruptionSignal = SIGUSR1;
 };
 
 void usb_init_legacy();
