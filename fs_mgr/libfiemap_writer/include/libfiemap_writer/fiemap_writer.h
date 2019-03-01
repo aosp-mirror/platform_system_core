@@ -41,6 +41,9 @@ class FiemapWriter final {
     // invoked, if create is true, while the file is being initialized. It receives the bytes
     // written and the number of total bytes. If the callback returns false, the operation will
     // fail.
+    //
+    // Note: when create is true, the file size will be aligned up to the nearest file system
+    // block.
     static FiemapUniquePtr Open(const std::string& file_path, uint64_t file_size,
                                 bool create = true,
                                 std::function<bool(uint64_t, uint64_t)> progress = {});
