@@ -57,11 +57,11 @@ using android::base::StringPrintf;
 // We can't find out whether we have support for AIO on ffs endpoints until we submit a read.
 static std::optional<bool> gFfsAioSupported;
 
-static constexpr size_t kUsbReadQueueDepth = 16;
-static constexpr size_t kUsbReadSize = 16384;
+static constexpr size_t kUsbReadQueueDepth = 32;
+static constexpr size_t kUsbReadSize = 8 * PAGE_SIZE;
 
-static constexpr size_t kUsbWriteQueueDepth = 16;
-static constexpr size_t kUsbWriteSize = 16 * PAGE_SIZE;
+static constexpr size_t kUsbWriteQueueDepth = 32;
+static constexpr size_t kUsbWriteSize = 8 * PAGE_SIZE;
 
 static const char* to_string(enum usb_functionfs_event_type type) {
     switch (type) {
