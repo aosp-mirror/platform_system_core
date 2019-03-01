@@ -307,6 +307,8 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             } else {
                 entry->logical_blk_size = val;
             }
+        } else if (StartsWith(flag, "avb_keys=")) {  // must before the following "avb"
+            entry->avb_keys = arg;
         } else if (StartsWith(flag, "avb")) {
             entry->fs_mgr_flags.avb = true;
             entry->vbmeta_partition = arg;
@@ -325,8 +327,6 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             }
         } else if (StartsWith(flag, "zram_backing_dev_path=")) {
             entry->zram_backing_dev_path = arg;
-        } else if (StartsWith(flag, "avb_keys=")) {
-            entry->avb_keys = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
