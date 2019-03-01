@@ -42,6 +42,7 @@ using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 #define TASK_PROFILE_DB_FILE "/etc/task_profiles.json"
+#define TASK_PROFILE_DB_VENDOR_FILE "/vendor/etc/task_profiles.json"
 
 bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     std::string subgroup;
@@ -288,16 +289,24 @@ TaskProfiles& TaskProfiles::GetInstance() {
 }
 
 TaskProfiles::TaskProfiles() {
-    if (!Load(CgroupMap::GetInstance())) {
-        LOG(ERROR) << "TaskProfiles::Load for [" << getpid() << "] failed";
+    // load system task profiles
+    if (!Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_FILE)) {
+        LOG(ERROR) << "Loading " << TASK_PROFILE_DB_FILE << " for [" << getpid() << "] failed";
+    }
+
+    // load vendor task profiles if the file exists
+    if (!access(TASK_PROFILE_DB_VENDOR_FILE, F_OK) &&
+        !Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_VENDOR_FILE)) {
+        LOG(ERROR) << "Loading " << TASK_PROFILE_DB_VENDOR_FILE << " for [" << getpid()
+                   << "] failed";
     }
 }
 
-bool TaskProfiles::Load(const CgroupMap& cg_map) {
+bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
     std::string json_doc;
 
-    if (!android::base::ReadFileToString(TASK_PROFILE_DB_FILE, &json_doc)) {
-        LOG(ERROR) << "Failed to read task profiles from " << TASK_PROFILE_DB_FILE;
+    if (!android::base::ReadFileToString(file_name, &json_doc)) {
+        LOG(ERROR) << "Failed to read task profiles from " << file_name;
         return false;
     }
 
@@ -311,15 +320,15 @@ bool TaskProfiles::Load(const CgroupMap& cg_map) {
     Json::Value attr = root["Attributes"];
     for (Json::Value::ArrayIndex i = 0; i < attr.size(); ++i) {
         std::string name = attr[i]["Name"].asString();
-        std::string ctrlName = attr[i]["Controller"].asString();
-        std::string file_name = attr[i]["File"].asString();
+        std::string controller_name = attr[i]["Controller"].asString();
+        std::string file_attr = attr[i]["File"].asString();
 
         if (attributes_.find(name) == attributes_.end()) {
-            const CgroupController* controller = cg_map.FindController(ctrlName);
+            const CgroupController* controller = cg_map.FindController(controller_name);
             if (controller) {
-                attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_name);
+                attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_attr);
             } else {
-                LOG(WARNING) << "Controller " << ctrlName << " is not found";
+                LOG(WARNING) << "Controller " << controller_name << " is not found";
             }
         } else {
             LOG(WARNING) << "Attribute " << name << " is already defined";
@@ -341,14 +350,14 @@ bool TaskProfiles::Load(const CgroupMap& cg_map) {
             std::string actionName = actionVal["Name"].asString();
             Json::Value paramsVal = actionVal["Params"];
             if (actionName == "JoinCgroup") {
-                std::string ctrlName = paramsVal["Controller"].asString();
+                std::string controller_name = paramsVal["Controller"].asString();
                 std::string path = paramsVal["Path"].asString();
 
-                const CgroupController* controller = cg_map.FindController(ctrlName);
+                const CgroupController* controller = cg_map.FindController(controller_name);
                 if (controller) {
                     profile->Add(std::make_unique<SetCgroupAction>(controller, path));
                 } else {
-                    LOG(WARNING) << "JoinCgroup: controller " << ctrlName << " is not found";
+                    LOG(WARNING) << "JoinCgroup: controller " << controller_name << " is not found";
                 }
             } else if (actionName == "SetTimerSlack") {
                 std::string slackValue = paramsVal["Slack"].asString();
