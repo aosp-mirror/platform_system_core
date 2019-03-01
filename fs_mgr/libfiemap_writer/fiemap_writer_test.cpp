@@ -22,6 +22,7 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <string>
@@ -43,6 +44,7 @@ using LoopDevice = android::dm::LoopDevice;
 
 std::string gTestDir;
 uint64_t testfile_size = 536870912;  // default of 512MiB
+size_t gBlockSize = 0;
 
 class FiemapWriterTest : public ::testing::Test {
   protected:
@@ -71,16 +73,15 @@ TEST_F(FiemapWriterTest, CreateUnalignedFile) {
     // Try creating a file of size 4097 bytes which is guaranteed
     // to be unaligned to all known block sizes. The creation must
     // fail.
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4097);
-    EXPECT_EQ(fptr, nullptr);
-    EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
-    EXPECT_EQ(errno, ENOENT);
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize + 1);
+    ASSERT_NE(fptr, nullptr);
+    ASSERT_EQ(fptr->size(), gBlockSize * 2);
 }
 
 TEST_F(FiemapWriterTest, CheckFilePath) {
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
     ASSERT_NE(fptr, nullptr);
-    EXPECT_EQ(fptr->size(), 4096);
+    EXPECT_EQ(fptr->size(), gBlockSize);
     EXPECT_EQ(fptr->file_path(), testfile);
     EXPECT_EQ(access(testfile.c_str(), F_OK), 0);
 }
@@ -88,18 +89,18 @@ TEST_F(FiemapWriterTest, CheckFilePath) {
 TEST_F(FiemapWriterTest, CheckProgress) {
     std::vector<uint64_t> expected{
             0,
-            4096,
+            gBlockSize,
     };
     size_t invocations = 0;
     auto callback = [&](uint64_t done, uint64_t total) -> bool {
         EXPECT_LT(invocations, expected.size());
         EXPECT_EQ(done, expected[invocations]);
-        EXPECT_EQ(total, 4096);
+        EXPECT_EQ(total, gBlockSize);
         invocations++;
         return true;
     };
 
-    auto ptr = FiemapWriter::Open(testfile, 4096, true, std::move(callback));
+    auto ptr = FiemapWriter::Open(testfile, gBlockSize, true, std::move(callback));
     EXPECT_NE(ptr, nullptr);
     EXPECT_EQ(invocations, 2);
 }
@@ -111,8 +112,8 @@ TEST_F(FiemapWriterTest, CheckPinning) {
 }
 
 TEST_F(FiemapWriterTest, CheckBlockDevicePath) {
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
-    EXPECT_EQ(fptr->size(), 4096);
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
+    EXPECT_EQ(fptr->size(), gBlockSize);
     EXPECT_EQ(fptr->bdev_path().find("/dev/block/"), size_t(0));
     EXPECT_EQ(fptr->bdev_path().find("/dev/block/dm-"), string::npos);
 }
@@ -139,44 +140,23 @@ TEST_F(FiemapWriterTest, CheckFileExtents) {
     EXPECT_GT(fptr->extents().size(), 0);
 }
 
-class TestExistingFile : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        unaligned_file_ = gTestDir + "/unaligned_file";
-        file_4k_ = gTestDir + "/file_4k";
-        file_32k_ = gTestDir + "/file_32k";
-
-        CleanupFiles();
-        fptr_unaligned = FiemapWriter::Open(unaligned_file_, 4097);
-        fptr_4k = FiemapWriter::Open(file_4k_, 4096);
-        fptr_32k = FiemapWriter::Open(file_32k_, 32768);
+TEST_F(FiemapWriterTest, ExistingFile) {
+    // Create the file.
+    { ASSERT_NE(FiemapWriter::Open(testfile, gBlockSize), nullptr); }
+    // Test that we can still open it.
+    {
+        auto ptr = FiemapWriter::Open(testfile, 0, false);
+        ASSERT_NE(ptr, nullptr);
+        EXPECT_GT(ptr->extents().size(), 0);
     }
+}
 
-    void TearDown() { CleanupFiles(); }
-
-    void CleanupFiles() {
-        unlink(unaligned_file_.c_str());
-        unlink(file_4k_.c_str());
-        unlink(file_32k_.c_str());
-    }
-
-    std::string unaligned_file_;
-    std::string file_4k_;
-    std::string file_32k_;
-    FiemapUniquePtr fptr_unaligned;
-    FiemapUniquePtr fptr_4k;
-    FiemapUniquePtr fptr_32k;
-};
-
-TEST_F(TestExistingFile, ErrorChecks) {
-    EXPECT_EQ(fptr_unaligned, nullptr);
-    EXPECT_NE(fptr_4k, nullptr);
-    EXPECT_NE(fptr_32k, nullptr);
-
-    EXPECT_EQ(fptr_4k->size(), 4096);
-    EXPECT_EQ(fptr_32k->size(), 32768);
-    EXPECT_GT(fptr_4k->extents().size(), 0);
-    EXPECT_GT(fptr_32k->extents().size(), 0);
+TEST_F(FiemapWriterTest, FileDeletedOnError) {
+    auto callback = [](uint64_t, uint64_t) -> bool { return false; };
+    auto ptr = FiemapWriter::Open(testfile, gBlockSize, true, std::move(callback));
+    EXPECT_EQ(ptr, nullptr);
+    EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
+    EXPECT_EQ(errno, ENOENT);
 }
 
 class VerifyBlockWritesExt4 : public ::testing::Test {
@@ -263,6 +243,21 @@ class VerifyBlockWritesF2fs : public ::testing::Test {
     std::string fs_path;
 };
 
+bool DetermineBlockSize() {
+    struct statfs s;
+    if (statfs(gTestDir.c_str(), &s)) {
+        std::cerr << "Could not call statfs: " << strerror(errno) << "\n";
+        return false;
+    }
+    if (!s.f_bsize) {
+        std::cerr << "Invalid block size: " << s.f_bsize << "\n";
+        return false;
+    }
+
+    gBlockSize = s.f_bsize;
+    return true;
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     if (argc <= 1) {
@@ -275,7 +270,7 @@ int main(int argc, char** argv) {
 
     std::string tempdir = argv[1] + "/XXXXXX"s;
     if (!mkdtemp(tempdir.data())) {
-        cerr << "unable to create tempdir on " << argv[1];
+        cerr << "unable to create tempdir on " << argv[1] << "\n";
         exit(EXIT_FAILURE);
     }
     gTestDir = tempdir;
@@ -285,6 +280,10 @@ int main(int argc, char** argv) {
         if (testfile_size == ULLONG_MAX) {
             testfile_size = 512 * 1024 * 1024;
         }
+    }
+
+    if (!DetermineBlockSize()) {
+        exit(EXIT_FAILURE);
     }
 
     auto result = RUN_ALL_TESTS();
