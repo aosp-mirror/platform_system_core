@@ -17,6 +17,8 @@
 
 import os
 import statistics
+import subprocess
+import tempfile
 import time
 
 import adb
@@ -55,6 +57,41 @@ def analyze(name, speeds):
     stddev = statistics.stdev(speeds)
     msg = "%s: %d runs: median %.2f MiB/s, mean %.2f MiB/s, stddev: %.2f MiB/s"
     print(msg % (name, len(speeds), median, mean, stddev))
+
+def benchmark_sink(device=None, size_mb=100):
+    if device == None:
+        device = adb.get_device()
+
+    speeds = list()
+    cmd = device.adb_cmd + ["raw", "sink:%d" % (size_mb * 1024 * 1024)]
+
+    with tempfile.TemporaryFile() as tmpfile:
+        tmpfile.truncate(size_mb * 1024 * 1024)
+
+        for _ in range(0, 10):
+            tmpfile.seek(0)
+            begin = time.time()
+            subprocess.check_call(cmd, stdin=tmpfile)
+            end = time.time()
+            speeds.append(size_mb / float(end - begin))
+
+    analyze("sink %dMiB" % size_mb, speeds)
+
+def benchmark_source(device=None, size_mb=100):
+    if device == None:
+        device = adb.get_device()
+
+    speeds = list()
+    cmd = device.adb_cmd + ["raw", "source:%d" % (size_mb * 1024 * 1024)]
+
+    with open(os.devnull, 'w') as devnull:
+        for _ in range(0, 10):
+            begin = time.time()
+            subprocess.check_call(cmd, stdout=devnull)
+            end = time.time()
+            speeds.append(size_mb / float(end - begin))
+
+    analyze("source %dMiB" % size_mb, speeds)
 
 def benchmark_push(device=None, file_size_mb=100):
     if device == None:
@@ -110,6 +147,8 @@ def benchmark_shell(device=None, file_size_mb=100):
 def main():
     device = adb.get_device()
     unlock(device)
+    benchmark_sink(device)
+    benchmark_source(device)
     benchmark_push(device)
     benchmark_pull(device)
 
