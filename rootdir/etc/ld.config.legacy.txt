@@ -54,8 +54,7 @@ namespace.default.asan.links = runtime,resolv
 # Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
 # libart.
 namespace.default.visible = true
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
