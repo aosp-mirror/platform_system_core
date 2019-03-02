@@ -297,7 +297,8 @@ class MetadataBuilder {
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
     bool UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& info);
     bool FindBlockDeviceByName(const std::string& partition_name, uint32_t* index) const;
-    bool ValidatePartitionSizeChange(Partition* partition, uint64_t old_size, uint64_t new_size);
+    bool ValidatePartitionSizeChange(Partition* partition, uint64_t old_size, uint64_t new_size,
+                                     bool force_check);
     void ImportExtents(Partition* dest, const LpMetadata& metadata,
                        const LpMetadataPartition& source);
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
