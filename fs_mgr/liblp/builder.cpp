@@ -550,11 +550,11 @@ auto MetadataBuilder::GetFreeRegions() const -> std::vector<Interval> {
 }
 
 bool MetadataBuilder::ValidatePartitionSizeChange(Partition* partition, uint64_t old_size,
-                                                  uint64_t new_size) {
+                                                  uint64_t new_size, bool force_check) {
     PartitionGroup* group = FindGroup(partition->group_name());
     CHECK(group);
 
-    if (new_size <= old_size) {
+    if (!force_check && new_size <= old_size) {
         return true;
     }
 
@@ -861,7 +861,7 @@ bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_s
     uint64_t aligned_size = AlignTo(requested_size, geometry_.logical_block_size);
     uint64_t old_size = partition->size();
 
-    if (!ValidatePartitionSizeChange(partition, old_size, aligned_size)) {
+    if (!ValidatePartitionSizeChange(partition, old_size, aligned_size, false)) {
         return false;
     }
 
@@ -973,7 +973,12 @@ bool MetadataBuilder::ImportPartition(const LpMetadata& metadata,
 
     ImportExtents(partition, metadata, source);
 
-    if (!ValidatePartitionSizeChange(partition, 0, partition->size())) {
+    // Note: we've already increased the partition size by calling
+    // ImportExtents(). In order to figure out the size before that,
+    // we would have to iterate the extents and add up the linear
+    // segments. Instead, we just force ValidatePartitionSizeChange
+    // to check if the current configuration is acceptable.
+    if (!ValidatePartitionSizeChange(partition, partition->size(), partition->size(), true)) {
         partition->RemoveExtents();
         return false;
     }
