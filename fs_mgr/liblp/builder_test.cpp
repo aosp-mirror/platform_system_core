@@ -835,3 +835,73 @@ TEST_F(BuilderTest, PartialExtents) {
     EXPECT_EQ(exported->extents[1].target_data, 4608);
     EXPECT_EQ(exported->extents[1].num_sectors, 1536);
 }
+
+TEST_F(BuilderTest, UpdateSuper) {
+    // Build the on-disk metadata that we saw before flashing.
+    auto builder = MetadataBuilder::New(8145338368ULL, 65536, 3);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("google_dynamic_partitions_a", 4068474880ULL));
+    ASSERT_TRUE(builder->AddGroup("google_dynamic_partitions_b", 4068474880ULL));
+
+    Partition* partition = builder->AddPartition("system_a", "google_dynamic_partitions_a",
+                                                 LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(partition, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(partition, "super", 1901568, 3608576));
+
+    partition = builder->AddPartition("vendor_a", "google_dynamic_partitions_a",
+                                      LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(partition, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(partition, "super", 1521664, 5510144));
+
+    partition = builder->AddPartition("product_a", "google_dynamic_partitions_a",
+                                      LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(partition, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(partition, "super", 3606528, 2048));
+
+    partition = builder->AddPartition("system_b", "google_dynamic_partitions_b",
+                                      LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(partition, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(partition, "super", 1901568, 7955456));
+
+    partition = builder->AddPartition("vendor_b", "google_dynamic_partitions_b",
+                                      LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(partition, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(partition, "super", 1521664, 9857024));
+
+    partition = builder->AddPartition("product_b", "google_dynamic_partitions_b",
+                                      LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(partition, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(partition, "super", 3606528, 11378688));
+
+    auto on_disk = builder->Export();
+    ASSERT_NE(on_disk, nullptr);
+
+    // Build the super_empty from the new build.
+    builder = MetadataBuilder::New(8145338368ULL, 65536, 3);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("google_dynamic_partitions_a", 4068474880ULL));
+    ASSERT_TRUE(builder->AddGroup("google_dynamic_partitions_b", 4068474880ULL));
+    ASSERT_NE(builder->AddPartition("system_a", "google_dynamic_partitions_a",
+                                    LP_PARTITION_ATTR_READONLY),
+              nullptr);
+    ASSERT_NE(builder->AddPartition("system_b", "google_dynamic_partitions_b",
+                                    LP_PARTITION_ATTR_READONLY),
+              nullptr);
+    ASSERT_NE(builder->AddPartition("vendor_a", "google_dynamic_partitions_a",
+                                    LP_PARTITION_ATTR_READONLY),
+              nullptr);
+    ASSERT_NE(builder->AddPartition("vendor_b", "google_dynamic_partitions_b",
+                                    LP_PARTITION_ATTR_READONLY),
+              nullptr);
+    ASSERT_NE(builder->AddPartition("product_a", "google_dynamic_partitions_a",
+                                    LP_PARTITION_ATTR_READONLY),
+              nullptr);
+    ASSERT_NE(builder->AddPartition("product_b", "google_dynamic_partitions_b",
+                                    LP_PARTITION_ATTR_READONLY),
+              nullptr);
+
+    std::set<std::string> partitions_to_keep{"system_a", "vendor_a", "product_a"};
+    ASSERT_TRUE(builder->ImportPartitions(*on_disk.get(), partitions_to_keep));
+}
