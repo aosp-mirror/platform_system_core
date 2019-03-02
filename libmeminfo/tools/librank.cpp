@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -122,30 +123,22 @@ struct LibRecord {
 
     const std::string& name() const { return name_; }
     const MemUsage& usage() const { return usage_; }
-    const std::vector<ProcessRecord>& processes() const { return procs_; }
+    const std::map<pid_t, ProcessRecord>& processes() const { return procs_; }
     uint64_t pss() const { return usage_.pss; }
     void AddUsage(const ProcessRecord& proc, const MemUsage& mem_usage) {
-        auto process = std::find_if(procs_.begin(), procs_.end(),
-                                    [&](auto p) -> bool { return p.pid() == proc.pid(); });
-        if (process == procs_.end()) {
-            process = procs_.emplace(procs_.end(), proc.pid());
-        }
-        process->AddUsage(mem_usage);
+        auto [it, inserted] = procs_.insert(std::pair<pid_t, ProcessRecord>(proc.pid(), proc));
+        it->second.AddUsage(mem_usage);
         add_mem_usage(&usage_, mem_usage);
-    }
-
-    void Sort(std::function<bool(const ProcessRecord&, const ProcessRecord&)>& sorter) {
-        std::sort(procs_.begin(), procs_.end(), sorter);
     }
 
   private:
     std::string name_;
     MemUsage usage_;
-    std::vector<ProcessRecord> procs_;
+    std::map<pid_t, ProcessRecord> procs_;
 };
 
 // List of every library / map
-static std::vector<LibRecord> g_libs;
+static std::map<std::string, LibRecord> g_libs;
 
 // List of library/map names that we don't want to show by default
 static const std::vector<std::string> g_blacklisted_libs = {"[heap]", "[stack]"};
@@ -204,13 +197,10 @@ static bool scan_libs_per_process(pid_t pid) {
             continue;
         }
 
-        auto lib = std::find_if(g_libs.begin(), g_libs.end(),
-                                [&](auto l) -> bool { return map.name == l.name(); });
-        if (lib == g_libs.end()) {
-            lib = g_libs.emplace(g_libs.end(), map.name);
-        }
+        auto [it, inserted] =
+            g_libs.insert(std::pair<std::string, LibRecord>(map.name, LibRecord(map.name)));
+        it->second.AddUsage(proc, map.usage);
 
-        lib->AddUsage(proc, map.usage);
         if (!g_has_swap && map.usage.swap) {
             g_has_swap = true;
         }
@@ -321,11 +311,16 @@ int main(int argc, char* argv[]) {
     }
     printf("Name/PID\n");
 
+    std::vector<LibRecord> v_libs;
+    v_libs.reserve(g_libs.size());
+    std::transform(g_libs.begin(), g_libs.end(), std::back_inserter(v_libs),
+        [] (std::pair<std::string, LibRecord> const& pair) { return pair.second; });
+
     // sort the libraries by their pss
-    std::sort(g_libs.begin(), g_libs.end(),
+    std::sort(v_libs.begin(), v_libs.end(),
               [](const LibRecord& l1, const LibRecord& l2) { return l1.pss() > l2.pss(); });
 
-    for (auto& lib : g_libs) {
+    for (auto& lib : v_libs) {
         printf("%6" PRIu64 "K   %7s   %6s   %6s   %6s  ", lib.pss() / 1024, "", "", "", "");
         if (g_has_swap) {
             printf(" %6s  ", "");
@@ -333,9 +328,15 @@ int main(int argc, char* argv[]) {
         printf("%s\n", lib.name().c_str());
 
         // sort all mappings first
-        lib.Sort(sort_func);
 
-        for (auto& p : lib.processes()) {
+        std::vector<ProcessRecord> procs;
+        procs.reserve(lib.processes().size());
+        std::transform(lib.processes().begin(), lib.processes().end(), std::back_inserter(procs),
+            [] (std::pair<pid_t, ProcessRecord> const& pair) { return pair.second; });
+
+        std::sort(procs.begin(), procs.end(), sort_func);
+
+        for (auto& p : procs) {
             const MemUsage& usage = p.usage();
             printf(" %6s  %7" PRIu64 "K  %6" PRIu64 "K  %6" PRIu64 "K  %6" PRIu64 "K  ", "",
                    usage.vss / 1024, usage.rss / 1024, usage.pss / 1024, usage.uss / 1024);
