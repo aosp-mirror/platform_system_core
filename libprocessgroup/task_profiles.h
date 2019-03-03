@@ -152,5 +152,5 @@ class TaskProfiles {
 
     TaskProfiles();
 
-    bool Load(const CgroupMap& cg_map);
+    bool Load(const CgroupMap& cg_map, const std::string& file_name);
 };

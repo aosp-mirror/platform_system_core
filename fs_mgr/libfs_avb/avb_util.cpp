@@ -326,7 +326,7 @@ bool ValidatePublicKeyBlob(const uint8_t* key, size_t length,
     return false;
 }
 
-bool ValidatePublicKeyBlob(const std::string key_blob_to_validate,
+bool ValidatePublicKeyBlob(const std::string& key_blob_to_validate,
                            const std::vector<std::string>& allowed_key_paths) {
     std::string allowed_key_blob;
     if (key_blob_to_validate.empty()) {

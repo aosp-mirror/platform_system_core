@@ -29,6 +29,7 @@
 #include <linux/usb/functionfs.h>
 #include <sys/eventfd.h>
 
+#include <algorithm>
 #include <array>
 #include <future>
 #include <memory>
@@ -56,10 +57,11 @@ using android::base::StringPrintf;
 // We can't find out whether we have support for AIO on ffs endpoints until we submit a read.
 static std::optional<bool> gFfsAioSupported;
 
-static constexpr size_t kUsbReadQueueDepth = 16;
-static constexpr size_t kUsbReadSize = 16384;
+static constexpr size_t kUsbReadQueueDepth = 32;
+static constexpr size_t kUsbReadSize = 8 * PAGE_SIZE;
 
-static constexpr size_t kUsbWriteQueueDepth = 16;
+static constexpr size_t kUsbWriteQueueDepth = 32;
+static constexpr size_t kUsbWriteSize = 8 * PAGE_SIZE;
 
 static const char* to_string(enum usb_functionfs_event_type type) {
     switch (type) {
@@ -115,7 +117,7 @@ struct TransferId {
 struct IoBlock {
     bool pending;
     struct iocb control;
-    Block payload;
+    std::shared_ptr<Block> payload;
 
     TransferId id() const { return TransferId::from_value(control.aio_data); }
 };
@@ -207,8 +209,20 @@ struct UsbFfsConnection : public Connection {
         std::lock_guard<std::mutex> lock(write_mutex_);
         write_requests_.push_back(CreateWriteBlock(std::move(header), next_write_id_++));
         if (!packet->payload.empty()) {
-            write_requests_.push_back(
-                    CreateWriteBlock(std::move(packet->payload), next_write_id_++));
+            // The kernel attempts to allocate a contiguous block of memory for each write,
+            // which can fail if the write is large and the kernel heap is fragmented.
+            // Split large writes into smaller chunks to avoid this.
+            std::shared_ptr<Block> payload = std::make_shared<Block>(std::move(packet->payload));
+            size_t offset = 0;
+            size_t len = payload->size();
+
+            while (len > 0) {
+                size_t write_size = std::min(kUsbWriteSize, len);
+                write_requests_.push_back(
+                        CreateWriteBlock(payload, offset, write_size, next_write_id_++));
+                len -= write_size;
+                offset += write_size;
+            }
         }
         SubmitWrites();
         return true;
@@ -246,7 +260,6 @@ struct UsbFfsConnection : public Connection {
         // until it dies, and then report failure to the transport via HandleError, which will
         // eventually result in the transport being destroyed, which will result in UsbFfsConnection
         // being destroyed, which unblocks the open thread and restarts this entire process.
-        static constexpr int kInterruptionSignal = SIGUSR1;
         static std::once_flag handler_once;
         std::call_once(handler_once, []() { signal(kInterruptionSignal, [](int) {}); });
 
@@ -272,6 +285,7 @@ struct UsbFfsConnection : public Connection {
                 } else if (rc == 0) {
                     // Something in the kernel presumably went wrong.
                     // Close our endpoints, wait for a bit, and then try again.
+                    StopWorker();
                     aio_context_.reset();
                     read_fd_.reset();
                     write_fd_.reset();
@@ -297,7 +311,7 @@ struct UsbFfsConnection : public Connection {
 
                 switch (event.type) {
                     case FUNCTIONFS_BIND:
-                        CHECK(!started) << "received FUNCTIONFS_ENABLE while already bound?";
+                        CHECK(!bound) << "received FUNCTIONFS_BIND while already bound?";
                         bound = true;
                         break;
 
@@ -313,28 +327,7 @@ struct UsbFfsConnection : public Connection {
                 }
             }
 
-            pthread_t worker_thread_handle = worker_thread_.native_handle();
-            while (true) {
-                int rc = pthread_kill(worker_thread_handle, kInterruptionSignal);
-                if (rc != 0) {
-                    LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
-                    break;
-                }
-
-                std::this_thread::sleep_for(100ms);
-
-                rc = pthread_kill(worker_thread_handle, 0);
-                if (rc == 0) {
-                    continue;
-                } else if (rc == ESRCH) {
-                    break;
-                } else {
-                    LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
-                }
-            }
-
-            worker_thread_.join();
-
+            StopWorker();
             aio_context_.reset();
             read_fd_.reset();
             write_fd_.reset();
@@ -365,12 +358,36 @@ struct UsbFfsConnection : public Connection {
         });
     }
 
+    void StopWorker() {
+        pthread_t worker_thread_handle = worker_thread_.native_handle();
+        while (true) {
+            int rc = pthread_kill(worker_thread_handle, kInterruptionSignal);
+            if (rc != 0) {
+                LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
+                break;
+            }
+
+            std::this_thread::sleep_for(100ms);
+
+            rc = pthread_kill(worker_thread_handle, 0);
+            if (rc == 0) {
+                continue;
+            } else if (rc == ESRCH) {
+                break;
+            } else {
+                LOG(ERROR) << "failed to send interruption signal to worker: " << strerror(rc);
+            }
+        }
+
+        worker_thread_.join();
+    }
+
     void PrepareReadBlock(IoBlock* block, uint64_t id) {
         block->pending = false;
-        block->payload.resize(kUsbReadSize);
+        block->payload = std::make_shared<Block>(kUsbReadSize);
         block->control.aio_data = static_cast<uint64_t>(TransferId::read(id));
-        block->control.aio_buf = reinterpret_cast<uintptr_t>(block->payload.data());
-        block->control.aio_nbytes = block->payload.size();
+        block->control.aio_buf = reinterpret_cast<uintptr_t>(block->payload->data());
+        block->control.aio_nbytes = block->payload->size();
     }
 
     IoBlock CreateReadBlock(uint64_t id) {
@@ -421,7 +438,7 @@ struct UsbFfsConnection : public Connection {
         uint64_t read_idx = id.id % kUsbReadQueueDepth;
         IoBlock* block = &read_requests_[read_idx];
         block->pending = false;
-        block->payload.resize(size);
+        block->payload->resize(size);
 
         // Notification for completed reads can be received out of order.
         if (block->id().id != needed_read_id_) {
@@ -442,16 +459,16 @@ struct UsbFfsConnection : public Connection {
     }
 
     void ProcessRead(IoBlock* block) {
-        if (!block->payload.empty()) {
+        if (!block->payload->empty()) {
             if (!incoming_header_.has_value()) {
-                CHECK_EQ(sizeof(amessage), block->payload.size());
+                CHECK_EQ(sizeof(amessage), block->payload->size());
                 amessage msg;
-                memcpy(&msg, block->payload.data(), sizeof(amessage));
+                memcpy(&msg, block->payload->data(), sizeof(amessage));
                 LOG(DEBUG) << "USB read:" << dump_header(&msg);
                 incoming_header_ = msg;
             } else {
                 size_t bytes_left = incoming_header_->data_length - incoming_payload_.size();
-                Block payload = std::move(block->payload);
+                Block payload = std::move(*block->payload);
                 CHECK_LE(payload.size(), bytes_left);
                 incoming_payload_.append(std::make_unique<Block>(std::move(payload)));
             }
@@ -506,7 +523,8 @@ struct UsbFfsConnection : public Connection {
         SubmitWrites();
     }
 
-    std::unique_ptr<IoBlock> CreateWriteBlock(Block payload, uint64_t id) {
+    std::unique_ptr<IoBlock> CreateWriteBlock(std::shared_ptr<Block> payload, size_t offset,
+                                              size_t len, uint64_t id) {
         auto block = std::make_unique<IoBlock>();
         block->payload = std::move(payload);
         block->control.aio_data = static_cast<uint64_t>(TransferId::write(id));
@@ -514,12 +532,18 @@ struct UsbFfsConnection : public Connection {
         block->control.aio_lio_opcode = IOCB_CMD_PWRITE;
         block->control.aio_reqprio = 0;
         block->control.aio_fildes = write_fd_.get();
-        block->control.aio_buf = reinterpret_cast<uintptr_t>(block->payload.data());
-        block->control.aio_nbytes = block->payload.size();
+        block->control.aio_buf = reinterpret_cast<uintptr_t>(block->payload->data() + offset);
+        block->control.aio_nbytes = len;
         block->control.aio_offset = 0;
         block->control.aio_flags = IOCB_FLAG_RESFD;
         block->control.aio_resfd = worker_event_fd_.get();
         return block;
+    }
+
+    std::unique_ptr<IoBlock> CreateWriteBlock(Block payload, uint64_t id) {
+        std::shared_ptr<Block> block = std::make_shared<Block>(std::move(payload));
+        size_t len = block->size();
+        return CreateWriteBlock(std::move(block), 0, len, id);
     }
 
     void SubmitWrites() REQUIRES(write_mutex_) {
@@ -594,6 +618,8 @@ struct UsbFfsConnection : public Connection {
     std::deque<std::unique_ptr<IoBlock>> write_requests_ GUARDED_BY(write_mutex_);
     size_t next_write_id_ GUARDED_BY(write_mutex_) = 0;
     size_t writes_submitted_ GUARDED_BY(write_mutex_) = 0;
+
+    static constexpr int kInterruptionSignal = SIGUSR1;
 };
 
 void usb_init_legacy();

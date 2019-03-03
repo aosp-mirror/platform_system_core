@@ -403,7 +403,7 @@ RetCode FastBootDriver::DownloadCommand(uint32_t size, std::string* response,
 RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::string>* info,
                                        int* dsize) {
     char status[FB_RESPONSE_SZ + 1];
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     auto set_response = [response](std::string s) {
         if (response) *response = std::move(s);
@@ -414,7 +414,7 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
 
     // erase response
     set_response("");
-    while ((std::chrono::system_clock::now() - start) < std::chrono::seconds(RESP_TIMEOUT)) {
+    while ((std::chrono::steady_clock::now() - start) < std::chrono::seconds(RESP_TIMEOUT)) {
         int r = transport_->Read(status, FB_RESPONSE_SZ);
         if (r < 0) {
             error_ = ErrnoStr("Status read failed");
@@ -427,6 +427,11 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
             std::string tmp = input.substr(strlen("INFO"));
             info_(tmp);
             add_info(std::move(tmp));
+            // We may receive one or more INFO packets during long operations,
+            // e.g. flash/erase if they are back by slow media like NAND/NOR
+            // flash. In that case, reset the timer since it's not a real
+            // timeout.
+            start = std::chrono::steady_clock::now();
         } else if (android::base::StartsWith(input, "OKAY")) {
             set_response(input.substr(strlen("OKAY")));
             return SUCCESS;
