@@ -59,6 +59,7 @@ cc_binary {
     name: "r",
     defaults: ["toolbox_defaults"],
     srcs: ["r.c"],
+    vendor_available: true,
 }
 
 // We build BSD grep separately (but see http://b/111849261).
