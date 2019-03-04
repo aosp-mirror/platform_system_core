@@ -25,6 +25,7 @@
 #include <libavb_user/libavb_user.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 
 #include <android-base/properties.h>
@@ -37,7 +38,6 @@
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_unique_fd.h"
-#include "remount_service.h"
 
 #include "fec/io.h"
 
@@ -49,6 +49,18 @@ static const bool kAllowDisableVerity = false;
 
 void suggest_run_adb_root(int fd) {
     if (getuid() != 0) WriteFdExactly(fd, "Maybe run adb root?\n");
+}
+
+static bool make_block_device_writable(const std::string& dev) {
+    int fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
+    if (fd == -1) {
+        return false;
+    }
+
+    int OFF = 0;
+    bool result = (ioctl(fd, BLKROSET, &OFF) != -1);
+    unix_close(fd);
+    return result;
 }
 
 /* Turn verity on/off */
