@@ -68,6 +68,9 @@ namespace.default.permitted.paths += /system/priv-app
 namespace.default.permitted.paths += /vendor/framework
 namespace.default.permitted.paths += /vendor/app
 namespace.default.permitted.paths += /vendor/priv-app
+namespace.default.permitted.paths += /system/vendor/framework
+namespace.default.permitted.paths += /system/vendor/app
+namespace.default.permitted.paths += /system/vendor/priv-app
 namespace.default.permitted.paths += /odm/framework
 namespace.default.permitted.paths += /odm/app
 namespace.default.permitted.paths += /odm/priv-app
@@ -100,6 +103,9 @@ namespace.default.asan.permitted.paths += /system/priv-app
 namespace.default.asan.permitted.paths += /vendor/framework
 namespace.default.asan.permitted.paths += /vendor/app
 namespace.default.asan.permitted.paths += /vendor/priv-app
+namespace.default.asan.permitted.paths += /system/vendor/framework
+namespace.default.asan.permitted.paths += /system/vendor/app
+namespace.default.asan.permitted.paths += /system/vendor/priv-app
 namespace.default.asan.permitted.paths += /odm/framework
 namespace.default.asan.permitted.paths += /odm/app
 namespace.default.asan.permitted.paths += /odm/priv-app
@@ -236,6 +242,7 @@ namespace.sphal.search.paths += /vendor/${LIB}/hw
 
 namespace.sphal.permitted.paths  = /odm/${LIB}
 namespace.sphal.permitted.paths += /vendor/${LIB}
+namespace.sphal.permitted.paths += /system/vendor/${LIB}
 
 namespace.sphal.asan.search.paths  = /data/asan/odm/${LIB}
 namespace.sphal.asan.search.paths +=           /odm/${LIB}
@@ -278,6 +285,7 @@ namespace.rs.search.paths += /vendor/${LIB}
 
 namespace.rs.permitted.paths  = /odm/${LIB}
 namespace.rs.permitted.paths += /vendor/${LIB}
+namespace.rs.permitted.paths += /system/vendor/${LIB}
 namespace.rs.permitted.paths += /data
 
 namespace.rs.asan.search.paths  = /data/asan/odm/${LIB}/vndk-sp
@@ -323,6 +331,8 @@ namespace.vndk.permitted.paths  = /odm/${LIB}/hw
 namespace.vndk.permitted.paths += /odm/${LIB}/egl
 namespace.vndk.permitted.paths += /vendor/${LIB}/hw
 namespace.vndk.permitted.paths += /vendor/${LIB}/egl
+namespace.vndk.permitted.paths += /system/vendor/${LIB}/hw
+namespace.vndk.permitted.paths += /system/vendor/${LIB}/egl
 # This is exceptionally required since android.hidl.memory@1.0-impl.so is here
 namespace.vndk.permitted.paths += /system/${LIB}/vndk-sp%VNDK_VER%/hw
 
@@ -390,6 +400,7 @@ namespace.default.search.paths += /vendor/${LIB}
 
 namespace.default.permitted.paths  = /odm
 namespace.default.permitted.paths += /vendor
+namespace.default.permitted.paths += /system/vendor
 #VNDK27#namespace.default.search.paths += /vendor/${LIB}/hw
 #VNDK27#namespace.default.search.paths += /vendor/${LIB}/egl
 
