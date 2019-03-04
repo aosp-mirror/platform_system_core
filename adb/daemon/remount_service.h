@@ -21,6 +21,5 @@
 #include "adb_unique_fd.h"
 
 #if defined(__ANDROID__)
-bool make_block_device_writable(const std::string&);
 void remount_service(unique_fd, const std::string&);
 #endif
