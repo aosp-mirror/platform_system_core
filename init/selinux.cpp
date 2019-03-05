@@ -459,6 +459,8 @@ void SelinuxRestoreContext() {
 
     selinux_android_restorecon("/dev/block", SELINUX_ANDROID_RESTORECON_RECURSE);
     selinux_android_restorecon("/dev/device-mapper", 0);
+
+    selinux_android_restorecon("/apex", 0);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
