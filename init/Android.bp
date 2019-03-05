@@ -82,6 +82,7 @@ cc_defaults {
         "liblogwrap",
         "liblp",
         "libprocessgroup",
+        "libprocessgroup_setup",
         "libselinux",
         "libutils",
     ],
