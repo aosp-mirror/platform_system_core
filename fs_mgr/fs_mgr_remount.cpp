@@ -42,13 +42,14 @@ namespace {
 
 [[noreturn]] void usage(int exit_status) {
     LOG(INFO) << getprogname()
-              << " [-h] [-R] [-T fstab_file]\n"
+              << " [-h] [-R] [-T fstab_file] [partition]...\n"
                  "\t-h --help\tthis help\n"
                  "\t-R --reboot\tdisable verity & reboot to facilitate remount\n"
                  "\t-T --fstab\tcustom fstab file location\n"
+                 "\tpartition\tspecific partition(s) (empty does all)\n"
                  "\n"
-                 "Remount all partitions read-write.\n"
-                 "-R notwithstanding, verity must be disabled.";
+                 "Remount specified partition(s) read-write, by name or mount point.\n"
+                 "-R notwithstanding, verity must be disabled on partition(s).";
 
     ::exit(exit_status);
 }
@@ -138,6 +139,8 @@ int main(int argc, char* argv[]) {
         BADARG,
         NOT_ROOT,
         NO_FSTAB,
+        UNKNOWN_PARTITION,
+        INVALID_PARTITION,
         VERITY_PARTITION,
         BAD_OVERLAY,
         NO_MOUNTS,
@@ -183,11 +186,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (argc > optind) {
-        LOG(ERROR) << "Bad Argument " << argv[optind];
-        usage(BADARG);
-    }
-
     // Make sure we are root.
     if (::getuid() != 0) {
         LOG(ERROR) << "must be run as root";
@@ -211,14 +209,56 @@ int main(int argc, char* argv[]) {
     auto overlayfs_candidates = fs_mgr_overlayfs_candidate_list(fstab);
 
     // Generate the all remountable partitions sub-list
-    android::fs_mgr::Fstab partitions;
+    android::fs_mgr::Fstab all;
     for (auto const& entry : fstab) {
         if (!remountable_partition(entry)) continue;
         if (overlayfs_candidates.empty() ||
             GetEntryForMountPoint(&overlayfs_candidates, entry.mount_point) ||
             (is_wrapped(overlayfs_candidates, entry) == nullptr)) {
-            partitions.emplace_back(entry);
+            all.emplace_back(entry);
         }
+    }
+
+    // Parse the unique list of valid partition arguments.
+    android::fs_mgr::Fstab partitions;
+    for (; argc > optind; ++optind) {
+        auto partition = std::string(argv[optind]);
+        if (partition.empty()) continue;
+        if (partition == "/") partition = "/system";
+        auto find_part = [&partition](const auto& entry) {
+            const auto mount_point = system_mount_point(entry);
+            if (partition == mount_point) return true;
+            if (partition == android::base::Basename(mount_point)) return true;
+            return false;
+        };
+        // Do we know about the partition?
+        auto it = std::find_if(fstab.begin(), fstab.end(), find_part);
+        if (it == fstab.end()) {
+            LOG(ERROR) << "Unknown partition " << partition << ", skipping";
+            retval = UNKNOWN_PARTITION;
+            continue;
+        }
+        // Is that one covered by an existing overlayfs?
+        auto wrap = is_wrapped(overlayfs_candidates, *it);
+        if (wrap) {
+            LOG(INFO) << "partition " << partition << " covered by overlayfs for "
+                      << wrap->mount_point << ", switching";
+            partition = system_mount_point(*wrap);
+        }
+        // Is it a remountable partition?
+        it = std::find_if(all.begin(), all.end(), find_part);
+        if (it == all.end()) {
+            LOG(ERROR) << "Invalid partition " << partition << ", skipping";
+            retval = INVALID_PARTITION;
+            continue;
+        }
+        if (GetEntryForMountPoint(&partitions, it->mount_point) == nullptr) {
+            partitions.emplace_back(*it);
+        }
+    }
+
+    if (partitions.empty() && !retval) {
+        partitions = all;
     }
 
     // Check verity and optionally setup overlayfs backing.
