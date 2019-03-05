@@ -33,8 +33,10 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <libdm/loop_control.h>
-
 #include <libfiemap_writer/fiemap_writer.h>
+#include <libfiemap_writer/split_fiemap_writer.h>
+
+#include "utility.h"
 
 using namespace std;
 using namespace std::string_literals;
@@ -54,6 +56,24 @@ class FiemapWriterTest : public ::testing::Test {
     }
 
     void TearDown() override { unlink(testfile.c_str()); }
+
+    // name of the file we use for testing
+    std::string testfile;
+};
+
+class SplitFiemapTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
+        testfile = gTestDir + "/"s + tinfo->name();
+    }
+
+    void TearDown() override {
+        std::string message;
+        if (!SplitFiemap::RemoveSplitFiles(testfile, &message)) {
+            cerr << "Could not remove all split files: " << message;
+        }
+    }
 
     // name of the file we use for testing
     std::string testfile;
@@ -166,6 +186,52 @@ TEST_F(FiemapWriterTest, FileDeletedOnError) {
     EXPECT_EQ(ptr, nullptr);
     EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
     EXPECT_EQ(errno, ENOENT);
+}
+
+TEST_F(FiemapWriterTest, MaxBlockSize) {
+    ASSERT_GT(DetermineMaximumFileSize(testfile), 0);
+}
+
+TEST_F(SplitFiemapTest, Create) {
+    auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
+    ASSERT_NE(ptr, nullptr);
+
+    auto extents = ptr->extents();
+
+    // Destroy the fiemap, closing file handles. This should not delete them.
+    ptr = nullptr;
+
+    std::vector<std::string> files;
+    ASSERT_TRUE(SplitFiemap::GetSplitFileList(testfile, &files));
+    for (const auto& path : files) {
+        EXPECT_EQ(access(path.c_str(), F_OK), 0);
+    }
+
+    ASSERT_GE(extents.size(), files.size());
+}
+
+TEST_F(SplitFiemapTest, Open) {
+    {
+        auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
+        ASSERT_NE(ptr, nullptr);
+    }
+
+    auto ptr = SplitFiemap::Open(testfile);
+    ASSERT_NE(ptr, nullptr);
+
+    auto extents = ptr->extents();
+    ASSERT_GE(extents.size(), 24);
+}
+
+TEST_F(SplitFiemapTest, DeleteOnFail) {
+    auto ptr = SplitFiemap::Create(testfile, 1024 * 1024 * 10, 1);
+    ASSERT_EQ(ptr, nullptr);
+
+    std::string first_file = testfile + ".0001";
+    ASSERT_NE(access(first_file.c_str(), F_OK), 0);
+    ASSERT_EQ(errno, ENOENT);
+    ASSERT_NE(access(testfile.c_str(), F_OK), 0);
+    ASSERT_EQ(errno, ENOENT);
 }
 
 class VerifyBlockWritesExt4 : public ::testing::Test {
