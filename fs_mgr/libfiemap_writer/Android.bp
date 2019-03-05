@@ -20,9 +20,7 @@ cc_library_static {
     recovery_available: true,
     export_include_dirs: ["include"],
     cflags: [
-        // TODO(b/121211685): Allows us to create a skeleton of required classes
-        "-Wno-unused-private-field",
-        "-Wno-unused-parameter",
+        "-D_FILE_OFFSET_BITS=64",
     ],
 
     srcs: [
