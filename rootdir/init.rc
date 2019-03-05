@@ -278,12 +278,6 @@ on init
     write /dev/cpu_variant:${ro.bionic.2nd_arch} ${ro.bionic.2nd_cpu_variant}
     chmod 0444 /dev/cpu_variant:${ro.bionic.2nd_arch}
 
-    # Setup APEX mount point and its security context
-    mount tmpfs tmpfs /apex nodev noexec nosuid
-    chmod 0755 /apex
-    chown root root /apex
-    restorecon /apex
-
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
 
