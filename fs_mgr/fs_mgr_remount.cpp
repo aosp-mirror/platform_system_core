@@ -346,10 +346,14 @@ int main(int argc, char* argv[]) {
                 break;
             }
             if ((mount_point == "/") && (rentry.mount_point == "/system")) {
-                if (blk_device != "/dev/root") blk_device = rentry.blk_device;
+                blk_device = rentry.blk_device;
                 mount_point = "/system";
                 break;
             }
+        }
+        if (blk_device == "/dev/root") {
+            auto from_fstab = GetEntryForMountPoint(&fstab, mount_point);
+            if (from_fstab) blk_device = from_fstab->blk_device;
         }
         fs_mgr_set_blk_ro(blk_device, false);
 
