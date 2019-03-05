@@ -172,6 +172,11 @@ bool SetupMountNamespaces() {
                          kBionicLibsMountPointDir64))
         return false;
 
+    // /apex is also a private mountpoint to give different sets of APEXes for
+    // the bootstrap and default mount namespaces. The processes running with
+    // the bootstrap namespace get APEXes from the read-only partition.
+    if (!(MakePrivate("/apex"))) return false;
+
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
 
@@ -227,6 +232,17 @@ bool SwitchToDefaultMountNamespace() {
         }
     }
 
+    LOG(INFO) << "Switched to default mount namespace";
+    return true;
+}
+
+// TODO(jiyong): remove this when /system/lib/libc.so becomes
+// a symlink to /apex/com.android.runtime/lib/bionic/libc.so
+bool SetupRuntimeBionic() {
+    if (IsRecoveryMode()) {
+        // We don't have multiple namespaces in recovery mode
+        return true;
+    }
     // Bind-mount bionic from the runtime APEX since it is now available. Note
     // that in case of IsBionicUpdatable() == false, these mounts are over the
     // existing existing bind mounts for the bootstrap bionic, which effectively
@@ -238,7 +254,7 @@ bool SwitchToDefaultMountNamespace() {
                          kBionicLibsMountPointDir64))
         return false;
 
-    LOG(INFO) << "Switched to default mount namespace";
+    LOG(INFO) << "Runtime bionic is set up";
     return true;
 }
 
