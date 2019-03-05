@@ -263,35 +263,43 @@ int main(int argc, char* argv[]) {
 
     // Check verity and optionally setup overlayfs backing.
     auto reboot_later = false;
+    auto uses_overlayfs = fs_mgr_overlayfs_valid() != OverlayfsValidResult::kNotSupported;
     for (auto it = partitions.begin(); it != partitions.end();) {
         auto& entry = *it;
         auto& mount_point = entry.mount_point;
         if (fs_mgr_is_verity_enabled(entry)) {
-            LOG(WARNING) << "Verity enabled on " << mount_point;
-            if (can_reboot &&
-                (android::base::GetProperty("ro.boot.vbmeta.devices_state", "") != "locked")) {
+            retval = VERITY_PARTITION;
+            if (android::base::GetProperty("ro.boot.vbmeta.devices_state", "") != "locked") {
                 if (AvbOps* ops = avb_ops_user_new()) {
                     auto ret = avb_user_verity_set(
                             ops, android::base::GetProperty("ro.boot.slot_suffix", "").c_str(),
                             false);
                     avb_ops_user_free(ops);
                     if (ret) {
-                        if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
-                            retval = VERITY_PARTITION;
+                        LOG(WARNING) << "Disable verity for " << mount_point;
+                        reboot_later = can_reboot;
+                        if (reboot_later) {
                             // w/o overlayfs available, also check for dedupe
-                            reboot_later = true;
-                            ++it;
-                            continue;
+                            if (!uses_overlayfs) {
+                                ++it;
+                                continue;
+                            }
+                            reboot(false);
                         }
-                        reboot(false);
                     } else if (fs_mgr_set_blk_ro(entry.blk_device, false)) {
                         fec::io fh(entry.blk_device.c_str(), O_RDWR);
-                        if (fh && fh.set_verity_status(false)) reboot_later = true;
+                        if (fh && fh.set_verity_status(false)) {
+                            LOG(WARNING) << "Disable verity for " << mount_point;
+                            reboot_later = can_reboot;
+                            if (reboot_later && !uses_overlayfs) {
+                                ++it;
+                                continue;
+                            }
+                        }
                     }
                 }
             }
             LOG(ERROR) << "Skipping " << mount_point;
-            retval = VERITY_PARTITION;
             it = partitions.erase(it);
             continue;
         }
@@ -318,7 +326,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Mount overlayfs.
-    if (!fs_mgr_overlayfs_mount_all(&partitions)) {
+    errno = 0;
+    if (!fs_mgr_overlayfs_mount_all(&partitions) && errno) {
         retval = BAD_OVERLAY;
         PLOG(ERROR) << "Can not mount overlayfs for partitions";
     }
