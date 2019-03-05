@@ -402,6 +402,14 @@ cc_library {
         "liblog",
     ],
 
+    product_variables: {
+        debuggable: {
+            required: [
+                "remount",
+            ],
+        },
+    },
+
     target: {
         android: {
             srcs: [
