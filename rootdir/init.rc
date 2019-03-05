@@ -13,12 +13,6 @@ import /init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
-    # Mount shared so changes propagate into child namespaces
-    # Do this before other processes are started from init. Otherwise,
-    # processes launched while the propagation type of / is 'private'
-    # won't get mount events from others.
-    mount rootfs rootfs / shared rec
-
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_score_adj -1000
 
@@ -42,6 +36,11 @@ on early-init
     mkdir /dev/memcg/system 0550 system system
 
     start ueventd
+
+    # Run apexd-bootstrap so that APEXes that provide critical libraries
+    # become available. Note that this is executed as exec_start to ensure that
+    # the libraries are available to the processes started after this statement.
+    exec_start apexd-bootstrap
 
 on init
     sysclktz 0
@@ -281,9 +280,6 @@ on init
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
 
-    # Start apexd as soon as we can
-    start apexd
-
     # Start essential services.
     start servicemanager
     start hwservicemanager
@@ -419,8 +415,16 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
-    # /data/apex is now available. Let apexd to scan and activate APEXes.
-    setprop apexd.data.status ready
+    # Make sure that apexd is started in the default namespace
+    enter_default_mount_ns
+
+    # /data/apex is now available. Start apexd to scan and activate APEXes.
+    mkdir /data/apex 0750 root system
+    mkdir /data/apex/active 0750 root system
+    mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/sessions 0700 root system
+    mkdir /data/pkg_staging 0750 system system
+    start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
@@ -537,12 +541,6 @@ on post-fs-data
 
     mkdir /data/anr 0775 system system
 
-    mkdir /data/apex 0750 root system
-    mkdir /data/apex/active 0750 root system
-    mkdir /data/apex/backup 0700 root system
-    mkdir /data/apex/sessions 0700 root system
-    mkdir /data/pkg_staging 0750 system system
-
     # NFC: create data/nfc for nv storage
     mkdir /data/nfc 0770 nfc nfc
     mkdir /data/nfc/param 0770 nfc nfc
@@ -575,6 +573,12 @@ on post-fs-data
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
 
+    # Wait for apexd to finish activating APEXes before starting more processes.
+    wait_for_prop apexd.status ready
+    # TODO(jiyong): remove setup_runtime_bionic
+    setup_runtime_bionic
+    parse_apex_configs
+
     init_user0
 
     # Set SELinux security contexts on upgrade or policy update.
@@ -582,14 +586,6 @@ on post-fs-data
 
     # load fsverity keys
     exec -- /system/bin/mini-keyctl -c /product/etc/security/cacerts_fsverity,/vendor/etc/security/cacerts_fsverity -k .fs-verity
-
-    # Wait for apexd to finish activating APEXes before starting more processes.
-    # This certainly reduces the parallelism but is required to make as many processes
-    # as possible to use the bionic libs from the runtime APEX. This takes less than 50ms
-    # so the impact on the booting time is not significant.
-    wait_for_prop apexd.status ready
-    setup_runtime_bionic
-    parse_apex_configs
 
     # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo

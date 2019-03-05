@@ -1119,10 +1119,18 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_setup_runtime_bionic(const BuiltinArguments& args) {
-    if (SwitchToDefaultMountNamespace()) {
+    if (SetupRuntimeBionic()) {
         return Success();
     } else {
         return Error() << "Failed to setup runtime bionic";
+    }
+}
+
+static Result<Success> do_enter_default_mount_ns(const BuiltinArguments& args) {
+    if (SwitchToDefaultMountNamespace()) {
+        return Success();
+    } else {
+        return Error() << "Failed to enter into default mount namespace";
     }
 }
 
@@ -1177,6 +1185,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
         {"swapon_all",              {1,     1,    {false,  do_swapon_all}}},
+        {"enter_default_mount_ns",  {0,     0,    {false,  do_enter_default_mount_ns}}},
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},
         {"trigger",                 {1,     1,    {false,  do_trigger}}},
