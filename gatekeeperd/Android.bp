@@ -31,6 +31,7 @@ cc_binary {
     shared_libs: [
         "libbinder",
         "libgatekeeper",
+        "libgsi",
         "liblog",
         "libhardware",
         "libbase",
