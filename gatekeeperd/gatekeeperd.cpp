@@ -26,6 +26,8 @@
 #include <memory>
 
 #include <android/security/keystore/IKeystoreService.h>
+#include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
@@ -34,6 +36,7 @@
 #include <hardware/hw_auth_token.h>
 #include <keystore/keystore.h> // For error code
 #include <keystore/keystore_return_types.h>
+#include <libgsi/libgsi.h>
 #include <log/log.h>
 #include <utils/Log.h>
 #include <utils/String16.h>
@@ -59,6 +62,7 @@ public:
     GateKeeperProxy() {
         clear_state_if_needed_done = false;
         hw_device = IGatekeeper::getService();
+        is_running_gsi = android::base::GetBoolProperty(android::gsi::kGsiBootedProp, false);
 
         if (hw_device == nullptr) {
             ALOGW("falling back to software GateKeeper");
@@ -86,7 +90,7 @@ public:
             return;
         }
 
-        if (mark_cold_boot()) {
+        if (mark_cold_boot() && !is_running_gsi) {
             ALOGI("cold boot: clearing state");
             if (hw_device != nullptr) {
                 hw_device->deleteAllUsers([](const GatekeeperResponse &){});
@@ -138,6 +142,18 @@ public:
         }
     }
 
+    // This should only be called on uids being passed to the GateKeeper HAL. It ensures that
+    // secure storage shared across a GSI image and a host image will not overlap.
+    uint32_t adjust_uid(uint32_t uid) {
+        static constexpr uint32_t kGsiOffset = 1000000;
+        CHECK(uid < kGsiOffset);
+        CHECK(hw_device != nullptr);
+        if (is_running_gsi) {
+            return uid + kGsiOffset;
+        }
+        return uid;
+    }
+
     virtual int enroll(uint32_t uid,
             const uint8_t *current_password_handle, uint32_t current_password_handle_length,
             const uint8_t *current_password, uint32_t current_password_length,
@@ -181,7 +197,8 @@ public:
             newPwd.setToExternal(const_cast<uint8_t*>(desired_password),
                                  desired_password_length);
 
-            Return<void> hwRes = hw_device->enroll(uid, curPwdHandle, curPwd, newPwd,
+            uint32_t hw_uid = adjust_uid(uid);
+            Return<void> hwRes = hw_device->enroll(hw_uid, curPwdHandle, curPwd, newPwd,
                               [&ret, enrolled_password_handle, enrolled_password_handle_length]
                                    (const GatekeeperResponse &rsp) {
                 ret = static_cast<int>(rsp.code); // propagate errors
@@ -266,13 +283,14 @@ public:
             // handle version 0 does not have hardware backed flag, and thus cannot be upgraded to
             // a HAL if there was none before
             if (handle->version == 0 || handle->hardware_backed) {
+                uint32_t hw_uid = adjust_uid(uid);
                 android::hardware::hidl_vec<uint8_t> curPwdHandle;
                 curPwdHandle.setToExternal(const_cast<uint8_t*>(enrolled_password_handle),
                                            enrolled_password_handle_length);
                 android::hardware::hidl_vec<uint8_t> enteredPwd;
                 enteredPwd.setToExternal(const_cast<uint8_t*>(provided_password),
                                          provided_password_length);
-                Return<void> hwRes = hw_device->verify(uid, challenge, curPwdHandle, enteredPwd,
+                Return<void> hwRes = hw_device->verify(hw_uid, challenge, curPwdHandle, enteredPwd,
                                         [&ret, request_reenroll, auth_token, auth_token_length]
                                              (const GatekeeperResponse &rsp) {
                     ret = static_cast<int>(rsp.code); // propagate errors
@@ -354,7 +372,8 @@ public:
         clear_sid(uid);
 
         if (hw_device != nullptr) {
-            hw_device->deleteUser(uid, [] (const GatekeeperResponse &){});
+            uint32_t hw_uid = adjust_uid(uid);
+            hw_device->deleteUser(hw_uid, [] (const GatekeeperResponse &){});
         }
     }
 
@@ -394,6 +413,7 @@ private:
     std::unique_ptr<SoftGateKeeperDevice> soft_device;
 
     bool clear_state_if_needed_done;
+    bool is_running_gsi;
 };
 }// namespace android
 
