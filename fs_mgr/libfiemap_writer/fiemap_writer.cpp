@@ -624,8 +624,8 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     fmap->fs_type_ = fs_type;
     fmap->block_size_ = blocksz;
 
-    LOG(INFO) << "Successfully created FiemapWriter for file " << abs_path << " on block device "
-              << bdev_path;
+    LOG(VERBOSE) << "Successfully created FiemapWriter for file " << abs_path << " on block device "
+                 << bdev_path;
     return fmap;
 }
 

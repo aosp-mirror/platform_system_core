@@ -25,6 +25,12 @@ cc_library_static {
 
     srcs: [
         "fiemap_writer.cpp",
+        "split_fiemap_writer.cpp",
+        "utility.cpp",
+    ],
+
+    static_libs: [
+        "libext4_utils",
     ],
 
     header_libs: [
