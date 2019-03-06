@@ -55,7 +55,7 @@ bool UnwindStackMap::Build() {
   }
 
   // Iterate through the maps and fill in the backtrace_map_t structure.
-  for (auto* map_info : *stack_maps_) {
+  for (const auto& map_info : *stack_maps_) {
     backtrace_map_t map;
     map.start = map_info->start;
     map.end = map_info->end;

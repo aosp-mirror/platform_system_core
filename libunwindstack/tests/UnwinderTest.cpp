@@ -49,7 +49,7 @@ class UnwinderTest : public ::testing::Test {
     std::string str_name(name);
     maps_->Add(start, end, offset, flags, name, static_cast<uint64_t>(-1));
     if (elf != nullptr) {
-      MapInfo* map_info = *--maps_->end();
+      const auto& map_info = *--maps_->end();
       map_info->elf.reset(elf);
     }
   }
@@ -85,7 +85,7 @@ class UnwinderTest : public ::testing::Test {
     AddMapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
 
     AddMapInfo(0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.vdex");
-    MapInfo* info = *--maps_->end();
+    const auto& info = *--maps_->end();
     info->load_bias = 0;
 
     elf = new ElfFake(new MemoryFake);
@@ -98,8 +98,8 @@ class UnwinderTest : public ::testing::Test {
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     AddMapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake_offset.oat",
                elf);
-    info = *--maps_->end();
-    info->elf_offset = 0x8000;
+    const auto& info2 = *--maps_->end();
+    info2->elf_offset = 0x8000;
 
     process_memory_.reset(new MemoryFake);
   }

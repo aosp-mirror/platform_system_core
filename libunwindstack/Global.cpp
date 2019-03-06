@@ -77,7 +77,7 @@ void Global::FindAndReadVariable(Maps* maps, const char* var_str) {
   //   f0000-f2000 0 r-- /system/lib/libc.so
   //   f2000-f3000 2000 rw- /system/lib/libc.so
   MapInfo* map_start = nullptr;
-  for (MapInfo* info : *maps) {
+  for (const auto& info : *maps) {
     if (map_start != nullptr) {
       if (map_start->name == info->name) {
         if (info->offset != 0 &&
@@ -96,7 +96,7 @@ void Global::FindAndReadVariable(Maps* maps, const char* var_str) {
     }
     if (map_start == nullptr && (info->flags & PROT_READ) && info->offset == 0 &&
         !info->name.empty()) {
-      map_start = info;
+      map_start = info.get();
     }
   }
 }
