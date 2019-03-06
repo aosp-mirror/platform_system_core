@@ -54,14 +54,12 @@ static uint8_t read_buf[4096];
 
 #ifdef RPMB_DEBUG
 
-static void print_buf(const char *prefix, const uint8_t *buf, size_t size)
-{
+static void print_buf(const char* prefix, const uint8_t* buf, size_t size) {
     size_t i;
 
     printf("%s @%p [%zu]", prefix, buf, size);
     for (i = 0; i < size; i++) {
-        if (i && i % 32 == 0)
-            printf("\n%*s", (int) strlen(prefix), "");
+        if (i && i % 32 == 0) printf("\n%*s", (int)strlen(prefix), "");
         printf(" %02x", buf[i]);
     }
     printf("\n");
@@ -70,34 +68,29 @@ static void print_buf(const char *prefix, const uint8_t *buf, size_t size)
 
 #endif
 
-
-int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
-{
+int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
     int rc;
     struct {
         struct mmc_ioc_multi_cmd multi;
         struct mmc_ioc_cmd cmd_buf[3];
     } mmc = {};
-    struct mmc_ioc_cmd *cmd = mmc.multi.cmds;
-    const struct storage_rpmb_send_req *req = r;
+    struct mmc_ioc_cmd* cmd = mmc.multi.cmds;
+    const struct storage_rpmb_send_req* req = r;
 
     if (req_len < sizeof(*req)) {
-        ALOGW("malformed rpmb request: invalid length (%zu < %zu)\n",
-              req_len, sizeof(*req));
+        ALOGW("malformed rpmb request: invalid length (%zu < %zu)\n", req_len, sizeof(*req));
         msg->result = STORAGE_ERR_NOT_VALID;
         goto err_response;
     }
 
-    size_t expected_len =
-            sizeof(*req) + req->reliable_write_size + req->write_size;
+    size_t expected_len = sizeof(*req) + req->reliable_write_size + req->write_size;
     if (req_len != expected_len) {
-        ALOGW("malformed rpmb request: invalid length (%zu != %zu)\n",
-              req_len, expected_len);
+        ALOGW("malformed rpmb request: invalid length (%zu != %zu)\n", req_len, expected_len);
         msg->result = STORAGE_ERR_NOT_VALID;
         goto err_response;
     }
 
-    const uint8_t *write_buf = req->payload;
+    const uint8_t* write_buf = req->payload;
     if (req->reliable_write_size) {
         if ((req->reliable_write_size % MMC_BLOCK_SIZE) != 0) {
             ALOGW("invalid reliable write size %u\n", req->reliable_write_size);
@@ -143,8 +136,7 @@ int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
     }
 
     if (req->read_size) {
-        if (req->read_size % MMC_BLOCK_SIZE != 0 ||
-            req->read_size > sizeof(read_buf)) {
+        if (req->read_size % MMC_BLOCK_SIZE != 0 || req->read_size > sizeof(read_buf)) {
             ALOGE("%s: invalid read size %u\n", __func__, req->read_size);
             msg->result = STORAGE_ERR_NOT_VALID;
             goto err_response;
@@ -152,8 +144,7 @@ int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
 
         cmd->write_flag = MMC_WRITE_FLAG_R;
         cmd->opcode = MMC_READ_MULTIPLE_BLOCK;
-        cmd->flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC,
-        cmd->blksz = MMC_BLOCK_SIZE;
+        cmd->flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC, cmd->blksz = MMC_BLOCK_SIZE;
         cmd->blocks = req->read_size / MMC_BLOCK_SIZE;
         mmc_ioc_cmd_set_data((*cmd), read_buf);
 #ifdef RPMB_DEBUG
@@ -170,8 +161,7 @@ int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
         goto err_response;
     }
 #ifdef RPMB_DEBUG
-    if (req->read_size)
-        print_buf("response: ", read_buf, req->read_size);
+    if (req->read_size) print_buf("response: ", read_buf, req->read_size);
 #endif
 
     if (msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) {
@@ -188,24 +178,19 @@ err_response:
     return ipc_respond(msg, NULL, 0);
 }
 
-
-int rpmb_open(const char *rpmb_devname)
-{
+int rpmb_open(const char* rpmb_devname) {
     int rc;
 
     rc = open(rpmb_devname, O_RDWR, 0);
     if (rc < 0) {
-        ALOGE("unable (%d) to open rpmb device '%s': %s\n",
-              errno, rpmb_devname, strerror(errno));
+        ALOGE("unable (%d) to open rpmb device '%s': %s\n", errno, rpmb_devname, strerror(errno));
         return rc;
     }
     rpmb_fd = rc;
     return 0;
 }
 
-void rpmb_close(void)
-{
+void rpmb_close(void) {
     close(rpmb_fd);
     rpmb_fd = -1;
 }
-
