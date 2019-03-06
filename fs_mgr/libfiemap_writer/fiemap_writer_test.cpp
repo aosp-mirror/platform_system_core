@@ -71,8 +71,7 @@ TEST_F(FiemapWriterTest, CreateImpossiblyLargeFile) {
 
 TEST_F(FiemapWriterTest, CreateUnalignedFile) {
     // Try creating a file of size 4097 bytes which is guaranteed
-    // to be unaligned to all known block sizes. The creation must
-    // fail.
+    // to be unaligned to all known block sizes.
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize + 1);
     ASSERT_NE(fptr, nullptr);
     ASSERT_EQ(fptr->size(), gBlockSize * 2);
@@ -87,10 +86,7 @@ TEST_F(FiemapWriterTest, CheckFilePath) {
 }
 
 TEST_F(FiemapWriterTest, CheckProgress) {
-    std::vector<uint64_t> expected{
-            0,
-            gBlockSize,
-    };
+    std::vector<uint64_t> expected;
     size_t invocations = 0;
     auto callback = [&](uint64_t done, uint64_t total) -> bool {
         EXPECT_LT(invocations, expected.size());
@@ -100,9 +96,22 @@ TEST_F(FiemapWriterTest, CheckProgress) {
         return true;
     };
 
+    uint32_t fs_type;
+    {
+        auto ptr = FiemapWriter::Open(testfile, gBlockSize, true);
+        ASSERT_NE(ptr, nullptr);
+        fs_type = ptr->fs_type();
+    }
+    ASSERT_EQ(unlink(testfile.c_str()), 0);
+
+    if (fs_type != MSDOS_SUPER_MAGIC) {
+        expected.push_back(0);
+    }
+    expected.push_back(gBlockSize);
+
     auto ptr = FiemapWriter::Open(testfile, gBlockSize, true, std::move(callback));
     EXPECT_NE(ptr, nullptr);
-    EXPECT_EQ(invocations, 2);
+    EXPECT_EQ(invocations, expected.size());
 }
 
 TEST_F(FiemapWriterTest, CheckPinning) {
@@ -273,7 +282,10 @@ int main(int argc, char** argv) {
         cerr << "unable to create tempdir on " << argv[1] << "\n";
         exit(EXIT_FAILURE);
     }
-    gTestDir = tempdir;
+    if (!android::base::Realpath(tempdir, &gTestDir)) {
+        cerr << "unable to find realpath for " << tempdir;
+        exit(EXIT_FAILURE);
+    }
 
     if (argc > 2) {
         testfile_size = strtoull(argv[2], NULL, 0);
