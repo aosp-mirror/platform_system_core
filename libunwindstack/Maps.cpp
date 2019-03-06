@@ -47,9 +47,9 @@ MapInfo* Maps::Find(uint64_t pc) {
   size_t last = maps_.size();
   while (first < last) {
     size_t index = (first + last) / 2;
-    MapInfo* cur = maps_[index];
+    const auto& cur = maps_[index];
     if (pc >= cur->start && pc < cur->end) {
-      return cur;
+      return cur.get();
     } else if (pc < cur->start) {
       last = index;
     } else {
@@ -67,34 +67,31 @@ bool Maps::Parse() {
         if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
           flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
         }
-        maps_.push_back(
-            new MapInfo(maps_.empty() ? nullptr : maps_.back(), start, end, pgoff, flags, name));
+        maps_.emplace_back(
+            new MapInfo(maps_.empty() ? nullptr : maps_.back().get(), start, end, pgoff,
+                        flags, name));
       });
 }
 
 void Maps::Add(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
                const std::string& name, uint64_t load_bias) {
-  MapInfo* map_info =
-      new MapInfo(maps_.empty() ? nullptr : maps_.back(), start, end, offset, flags, name);
+  auto map_info =
+      std::make_unique<MapInfo>(maps_.empty() ? nullptr : maps_.back().get(), start, end, offset,
+                                flags, name);
   map_info->load_bias = load_bias;
-  maps_.push_back(map_info);
+  maps_.emplace_back(std::move(map_info));
 }
 
 void Maps::Sort() {
   std::sort(maps_.begin(), maps_.end(),
-            [](const MapInfo* a, const MapInfo* b) { return a->start < b->start; });
+            [](const std::unique_ptr<MapInfo>& a, const std::unique_ptr<MapInfo>& b) {
+              return a->start < b->start; });
 
   // Set the prev_map values on the info objects.
   MapInfo* prev_map = nullptr;
-  for (MapInfo* map_info : maps_) {
+  for (const auto& map_info : maps_) {
     map_info->prev_map = prev_map;
-    prev_map = map_info;
-  }
-}
-
-Maps::~Maps() {
-  for (auto& map : maps_) {
-    delete map;
+    prev_map = map_info.get();
   }
 }
 
@@ -107,8 +104,9 @@ bool BufferMaps::Parse() {
         if (strncmp(name, "/dev/", 5) == 0 && strncmp(name + 5, "ashmem/", 7) != 0) {
           flags |= unwindstack::MAPS_FLAGS_DEVICE_MAP;
         }
-        maps_.push_back(
-            new MapInfo(maps_.empty() ? nullptr : maps_.back(), start, end, pgoff, flags, name));
+        maps_.emplace_back(
+            new MapInfo(maps_.empty() ? nullptr : maps_.back().get(), start, end, pgoff,
+                        flags, name));
       });
 }
 
@@ -124,10 +122,6 @@ bool LocalUpdatableMaps::Reparse() {
   // New maps will be added at the end without deleting the old ones.
   size_t last_map_idx = maps_.size();
   if (!Parse()) {
-    // Delete any maps added by the Parse call.
-    for (size_t i = last_map_idx; i < maps_.size(); i++) {
-      delete maps_[i];
-    }
     maps_.resize(last_map_idx);
     return false;
   }
@@ -135,17 +129,16 @@ bool LocalUpdatableMaps::Reparse() {
   size_t total_entries = maps_.size();
   size_t search_map_idx = 0;
   for (size_t new_map_idx = last_map_idx; new_map_idx < maps_.size(); new_map_idx++) {
-    MapInfo* new_map_info = maps_[new_map_idx];
+    auto& new_map_info = maps_[new_map_idx];
     uint64_t start = new_map_info->start;
     uint64_t end = new_map_info->end;
     uint64_t flags = new_map_info->flags;
     std::string* name = &new_map_info->name;
     for (size_t old_map_idx = search_map_idx; old_map_idx < last_map_idx; old_map_idx++) {
-      MapInfo* info = maps_[old_map_idx];
+      auto& info = maps_[old_map_idx];
       if (start == info->start && end == info->end && flags == info->flags && *name == info->name) {
         // No need to check
         search_map_idx = old_map_idx + 1;
-        delete new_map_info;
         maps_[new_map_idx] = nullptr;
         total_entries--;
         break;
@@ -158,7 +151,7 @@ bool LocalUpdatableMaps::Reparse() {
       // Never delete these maps, they may be in use. The assumption is
       // that there will only every be a handfull of these so waiting
       // to destroy them is not too expensive.
-      saved_maps_.push_back(info);
+      saved_maps_.emplace_back(std::move(info));
       maps_[old_map_idx] = nullptr;
       total_entries--;
     }
@@ -169,14 +162,14 @@ bool LocalUpdatableMaps::Reparse() {
 
   // Now move out any of the maps that never were found.
   for (size_t i = search_map_idx; i < last_map_idx; i++) {
-    saved_maps_.push_back(maps_[i]);
+    saved_maps_.emplace_back(std::move(maps_[i]));
     maps_[i] = nullptr;
     total_entries--;
   }
 
   // Sort all of the values such that the nullptrs wind up at the end, then
   // resize them away.
-  std::sort(maps_.begin(), maps_.end(), [](const auto* a, const auto* b) {
+  std::sort(maps_.begin(), maps_.end(), [](const auto& a, const auto& b) {
     if (a == nullptr) {
       return false;
     } else if (b == nullptr) {
@@ -187,12 +180,6 @@ bool LocalUpdatableMaps::Reparse() {
   maps_.resize(total_entries);
 
   return true;
-}
-
-LocalUpdatableMaps::~LocalUpdatableMaps() {
-  for (auto map_info : saved_maps_) {
-    delete map_info;
-  }
 }
 
 }  // namespace unwindstack
