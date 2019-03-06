@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include <ApexProperties.sysprop.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -132,9 +133,9 @@ static bool BindMountBionic(const std::string& linker_source, const std::string&
     return true;
 }
 
-static bool IsBionicUpdatable() {
-    static bool result = android::base::GetBoolProperty("ro.apex.IsBionicUpdatable", false);
-    return result;
+static bool IsApexUpdatable() {
+    static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+    return updatable;
 }
 
 static android::base::unique_fd bootstrap_ns_fd;
@@ -187,7 +188,7 @@ bool SetupMountNamespaces() {
     // bind-mounted. In the namespace for post-apexd processes, the bionic from
     // the runtime APEX is bind-mounted.
     bool success = true;
-    if (IsBionicUpdatable() && !IsRecoveryMode()) {
+    if (IsApexUpdatable() && !IsRecoveryMode()) {
         // Creating a new namespace by cloning, saving, and switching back to
         // the original namespace.
         if (unshare(CLONE_NEWNS) == -1) {
@@ -244,7 +245,7 @@ bool SetupRuntimeBionic() {
         return true;
     }
     // Bind-mount bionic from the runtime APEX since it is now available. Note
-    // that in case of IsBionicUpdatable() == false, these mounts are over the
+    // that in case of IsApexUpdatable() == false, these mounts are over the
     // existing existing bind mounts for the bootstrap bionic, which effectively
     // becomes hidden.
     if (!BindMountBionic(kRuntimeLinkerPath, kRuntimeBionicLibsDir, kLinkerMountPoint,
@@ -264,7 +265,7 @@ bool SwitchToBootstrapMountNamespaceIfNeeded() {
         return true;
     }
     if (bootstrap_ns_id != GetMountNamespaceId() && bootstrap_ns_fd.get() != -1 &&
-        IsBionicUpdatable()) {
+        IsApexUpdatable()) {
         if (setns(bootstrap_ns_fd.get(), CLONE_NEWNS) == -1) {
             PLOG(ERROR) << "Failed to switch to bootstrap mount namespace.";
             return false;
