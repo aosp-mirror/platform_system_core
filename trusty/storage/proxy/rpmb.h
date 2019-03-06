@@ -18,6 +18,6 @@
 #include <stdint.h>
 #include <trusty/interface/storage.h>
 
-int rpmb_open(const char *rpmb_devname);
-int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len);
+int rpmb_open(const char* rpmb_devname);
+int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len);
 void rpmb_close(void);
