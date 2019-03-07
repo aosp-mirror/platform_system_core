@@ -387,6 +387,7 @@ on post-fs
     restorecon_recursive /metadata
     mkdir /metadata/vold
     chmod 0700 /metadata/vold
+    mkdir /metadata/password_slots 0771 root system
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
