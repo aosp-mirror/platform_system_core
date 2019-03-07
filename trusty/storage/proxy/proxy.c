@@ -39,15 +39,29 @@ static const char* trusty_devname;
 static const char* rpmb_devname;
 static const char* ss_srv_name = STORAGE_DISK_PROXY_PORT;
 
-static const char* _sopts = "hp:d:r:";
+static enum dev_type dev_type = MMC_RPMB;
+
+static enum dev_type parse_dev_type(const char* dev_type_name) {
+    if (!strcmp(dev_type_name, "mmc")) {
+        return MMC_RPMB;
+    } else if (!strcmp(dev_type_name, "virt")) {
+        return VIRT_RPMB;
+    } else {
+        return UNKNOWN_RPMB;
+    }
+}
+
+static const char* _sopts = "hp:d:r:t:";
 static const struct option _lopts[] = {{"help", no_argument, NULL, 'h'},
                                        {"trusty_dev", required_argument, NULL, 'd'},
                                        {"data_path", required_argument, NULL, 'p'},
                                        {"rpmb_dev", required_argument, NULL, 'r'},
+                                       {"dev_type", required_argument, NULL, 't'},
                                        {0, 0, 0, 0}};
 
 static void show_usage_and_exit(int code) {
-    ALOGE("usage: storageproxyd -d <trusty_dev> -p <data_path> -r <rpmb_dev>\n");
+    ALOGE("usage: storageproxyd -d <trusty_dev> -p <data_path> -r <rpmb_dev> -t <dev_type>\n");
+    ALOGE("Available dev types: mmc, virt\n");
     exit(code);
 }
 
@@ -195,6 +209,14 @@ static void parse_args(int argc, char* argv[]) {
                 rpmb_devname = strdup(optarg);
                 break;
 
+            case 't':
+                dev_type = parse_dev_type(optarg);
+                if (dev_type == UNKNOWN_RPMB) {
+                    ALOGE("Unrecognized dev type: %s\n", optarg);
+                    show_usage_and_exit(EXIT_FAILURE);
+                }
+                break;
+
             default:
                 ALOGE("unrecognized option (%c):\n", opt);
                 show_usage_and_exit(EXIT_FAILURE);
@@ -226,7 +248,7 @@ int main(int argc, char* argv[]) {
     if (rc < 0) return EXIT_FAILURE;
 
     /* open rpmb device */
-    rc = rpmb_open(rpmb_devname);
+    rc = rpmb_open(rpmb_devname, dev_type);
     if (rc < 0) return EXIT_FAILURE;
 
     /* connect to Trusty secure storage server */
