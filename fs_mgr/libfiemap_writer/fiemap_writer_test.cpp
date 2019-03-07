@@ -38,6 +38,9 @@
 
 #include "utility.h"
 
+namespace android {
+namespace fiemap_writer {
+
 using namespace std;
 using namespace std::string_literals;
 using namespace android::fiemap_writer;
@@ -234,6 +237,105 @@ TEST_F(SplitFiemapTest, DeleteOnFail) {
     ASSERT_EQ(errno, ENOENT);
 }
 
+static string ReadSplitFiles(const std::string& base_path, size_t num_files) {
+    std::string result;
+    for (int i = 0; i < num_files; i++) {
+        std::string path = base_path + android::base::StringPrintf(".%04d", i);
+        std::string data;
+        if (!android::base::ReadFileToString(path, &data)) {
+            return {};
+        }
+        result += data;
+    }
+    return result;
+}
+
+TEST_F(SplitFiemapTest, WriteWholeFile) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+    ASSERT_TRUE(ptr->Write(buffer.get(), kSize));
+
+    std::string expected(reinterpret_cast<char*>(buffer.get()), kSize);
+    auto actual = ReadSplitFiles(testfile, 3);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_EQ(memcmp(expected.data(), actual.data(), actual.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, WriteFileInChunks1) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+
+    // Write in chunks of 1000 (so some writes straddle the boundary of two
+    // files).
+    size_t bytes_written = 0;
+    while (bytes_written < kSize) {
+        size_t to_write = std::min(kSize - bytes_written, (size_t)1000);
+        char* data = reinterpret_cast<char*>(buffer.get()) + bytes_written;
+        ASSERT_TRUE(ptr->Write(data, to_write));
+        bytes_written += to_write;
+    }
+
+    std::string expected(reinterpret_cast<char*>(buffer.get()), kSize);
+    auto actual = ReadSplitFiles(testfile, 3);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_EQ(memcmp(expected.data(), actual.data(), actual.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, WriteFileInChunks2) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+
+    // Write in chunks of 32KiB so every write is exactly at the end of the
+    // current file.
+    size_t bytes_written = 0;
+    while (bytes_written < kSize) {
+        size_t to_write = std::min(kSize - bytes_written, kChunkSize);
+        char* data = reinterpret_cast<char*>(buffer.get()) + bytes_written;
+        ASSERT_TRUE(ptr->Write(data, to_write));
+        bytes_written += to_write;
+    }
+
+    std::string expected(reinterpret_cast<char*>(buffer.get()), kSize);
+    auto actual = ReadSplitFiles(testfile, 3);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_EQ(memcmp(expected.data(), actual.data(), actual.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, WritePastEnd) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+    ASSERT_TRUE(ptr->Write(buffer.get(), kSize));
+    ASSERT_FALSE(ptr->Write(buffer.get(), kSize));
+}
+
 class VerifyBlockWritesExt4 : public ::testing::Test {
     // 2GB Filesystem and 4k block size by default
     static constexpr uint64_t block_size = 4096;
@@ -332,6 +434,11 @@ bool DetermineBlockSize() {
     gBlockSize = s.f_bsize;
     return true;
 }
+
+}  // namespace fiemap_writer
+}  // namespace android
+
+using namespace android::fiemap_writer;
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
