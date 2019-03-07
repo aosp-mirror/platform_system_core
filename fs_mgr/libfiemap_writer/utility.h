@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,11 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
-#include <stdint.h>
-#include <trusty/interface/storage.h>
+#include <string>
 
-int rpmb_open(const char* rpmb_devname);
-int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len);
-void rpmb_close(void);
+namespace android {
+namespace fiemap_writer {
+
+// Given a file that will be created, determine the maximum size its containing
+// filesystem allows. Note this is a theoretical maximum size; free space is
+// ignored entirely.
+uint64_t DetermineMaximumFileSize(const std::string& file_path);
+
+}  // namespace fiemap_writer
+}  // namespace android

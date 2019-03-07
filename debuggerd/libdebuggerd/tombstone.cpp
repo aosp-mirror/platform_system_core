@@ -316,7 +316,7 @@ static void dump_all_maps(log_t* log, unwindstack::Unwinder* unwinder, uint64_t 
   std::shared_ptr<unwindstack::Memory>& process_memory = unwinder->GetProcessMemory();
 
   std::string line;
-  for (unwindstack::MapInfo* map_info : *maps) {
+  for (auto const& map_info : *maps) {
     line = "    ";
     if (print_fault_address_marker) {
       if (addr < map_info->start) {

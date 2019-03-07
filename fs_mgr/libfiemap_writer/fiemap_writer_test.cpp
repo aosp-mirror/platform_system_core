@@ -33,8 +33,10 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <libdm/loop_control.h>
-
 #include <libfiemap_writer/fiemap_writer.h>
+#include <libfiemap_writer/split_fiemap_writer.h>
+
+#include "utility.h"
 
 using namespace std;
 using namespace std::string_literals;
@@ -59,6 +61,24 @@ class FiemapWriterTest : public ::testing::Test {
     std::string testfile;
 };
 
+class SplitFiemapTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
+        testfile = gTestDir + "/"s + tinfo->name();
+    }
+
+    void TearDown() override {
+        std::string message;
+        if (!SplitFiemap::RemoveSplitFiles(testfile, &message)) {
+            cerr << "Could not remove all split files: " << message;
+        }
+    }
+
+    // name of the file we use for testing
+    std::string testfile;
+};
+
 TEST_F(FiemapWriterTest, CreateImpossiblyLargeFile) {
     // Try creating a file of size ~100TB but aligned to
     // 512 byte to make sure block alignment tests don't
@@ -71,8 +91,7 @@ TEST_F(FiemapWriterTest, CreateImpossiblyLargeFile) {
 
 TEST_F(FiemapWriterTest, CreateUnalignedFile) {
     // Try creating a file of size 4097 bytes which is guaranteed
-    // to be unaligned to all known block sizes. The creation must
-    // fail.
+    // to be unaligned to all known block sizes.
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize + 1);
     ASSERT_NE(fptr, nullptr);
     ASSERT_EQ(fptr->size(), gBlockSize * 2);
@@ -87,10 +106,7 @@ TEST_F(FiemapWriterTest, CheckFilePath) {
 }
 
 TEST_F(FiemapWriterTest, CheckProgress) {
-    std::vector<uint64_t> expected{
-            0,
-            gBlockSize,
-    };
+    std::vector<uint64_t> expected;
     size_t invocations = 0;
     auto callback = [&](uint64_t done, uint64_t total) -> bool {
         EXPECT_LT(invocations, expected.size());
@@ -100,9 +116,22 @@ TEST_F(FiemapWriterTest, CheckProgress) {
         return true;
     };
 
+    uint32_t fs_type;
+    {
+        auto ptr = FiemapWriter::Open(testfile, gBlockSize, true);
+        ASSERT_NE(ptr, nullptr);
+        fs_type = ptr->fs_type();
+    }
+    ASSERT_EQ(unlink(testfile.c_str()), 0);
+
+    if (fs_type != MSDOS_SUPER_MAGIC) {
+        expected.push_back(0);
+    }
+    expected.push_back(gBlockSize);
+
     auto ptr = FiemapWriter::Open(testfile, gBlockSize, true, std::move(callback));
     EXPECT_NE(ptr, nullptr);
-    EXPECT_EQ(invocations, 2);
+    EXPECT_EQ(invocations, expected.size());
 }
 
 TEST_F(FiemapWriterTest, CheckPinning) {
@@ -157,6 +186,52 @@ TEST_F(FiemapWriterTest, FileDeletedOnError) {
     EXPECT_EQ(ptr, nullptr);
     EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
     EXPECT_EQ(errno, ENOENT);
+}
+
+TEST_F(FiemapWriterTest, MaxBlockSize) {
+    ASSERT_GT(DetermineMaximumFileSize(testfile), 0);
+}
+
+TEST_F(SplitFiemapTest, Create) {
+    auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
+    ASSERT_NE(ptr, nullptr);
+
+    auto extents = ptr->extents();
+
+    // Destroy the fiemap, closing file handles. This should not delete them.
+    ptr = nullptr;
+
+    std::vector<std::string> files;
+    ASSERT_TRUE(SplitFiemap::GetSplitFileList(testfile, &files));
+    for (const auto& path : files) {
+        EXPECT_EQ(access(path.c_str(), F_OK), 0);
+    }
+
+    ASSERT_GE(extents.size(), files.size());
+}
+
+TEST_F(SplitFiemapTest, Open) {
+    {
+        auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
+        ASSERT_NE(ptr, nullptr);
+    }
+
+    auto ptr = SplitFiemap::Open(testfile);
+    ASSERT_NE(ptr, nullptr);
+
+    auto extents = ptr->extents();
+    ASSERT_GE(extents.size(), 24);
+}
+
+TEST_F(SplitFiemapTest, DeleteOnFail) {
+    auto ptr = SplitFiemap::Create(testfile, 1024 * 1024 * 10, 1);
+    ASSERT_EQ(ptr, nullptr);
+
+    std::string first_file = testfile + ".0001";
+    ASSERT_NE(access(first_file.c_str(), F_OK), 0);
+    ASSERT_EQ(errno, ENOENT);
+    ASSERT_NE(access(testfile.c_str(), F_OK), 0);
+    ASSERT_EQ(errno, ENOENT);
 }
 
 class VerifyBlockWritesExt4 : public ::testing::Test {
@@ -273,7 +348,10 @@ int main(int argc, char** argv) {
         cerr << "unable to create tempdir on " << argv[1] << "\n";
         exit(EXIT_FAILURE);
     }
-    gTestDir = tempdir;
+    if (!android::base::Realpath(tempdir, &gTestDir)) {
+        cerr << "unable to find realpath for " << tempdir;
+        exit(EXIT_FAILURE);
+    }
 
     if (argc > 2) {
         testfile_size = strtoull(argv[2], NULL, 0);

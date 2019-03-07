@@ -92,9 +92,9 @@ static void Initialize(benchmark::State& state, unwindstack::Maps& maps,
 
   // Find the libc.so share library and use that for benchmark purposes.
   *build_id_map_info = nullptr;
-  for (unwindstack::MapInfo* map_info : maps) {
+  for (auto& map_info : maps) {
     if (map_info->offset == 0 && map_info->GetBuildID() != "") {
-      *build_id_map_info = map_info;
+      *build_id_map_info = map_info.get();
       break;
     }
   }
