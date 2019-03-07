@@ -27,68 +27,62 @@
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 
-void remount_service(unique_fd fd, const std::string& cmd) {
-    static constexpr char remount_cmd[] = "/system/bin/remount";
-    static constexpr char remount_failed[] = "remount failed\n";
+static constexpr char kRemountCmd[] = "/system/bin/remount";
 
+static bool do_remount(int fd, const std::string& cmd) {
     if (getuid() != 0) {
-        WriteFdExactly(fd.get(), "Not running as root. Try \"adb root\" first.\n");
-        WriteFdExactly(fd.get(), remount_failed);
-        return;
+        WriteFdExactly(fd, "Not running as root. Try \"adb root\" first.\n");
+        return false;
     }
 
-    auto pid = vfork();
+    auto pid = fork();
     if (pid < 0) {
-        WriteFdFmt(fd.get(), "Failed to fork to %s: %s\n", remount_cmd, strerror(errno));
-        WriteFdExactly(fd.get(), remount_failed);
-        return;
+        WriteFdFmt(fd, "Failed to fork to %s: %s\n", kRemountCmd, strerror(errno));
+        return false;
     }
 
     if (pid == 0) {
         // child side of the fork
-        fcntl(fd.get(), F_SETFD, 0);
-        dup2(fd.get(), STDIN_FILENO);
-        dup2(fd.get(), STDOUT_FILENO);
-        dup2(fd.get(), STDERR_FILENO);
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
 
-        execl(remount_cmd, remount_cmd, cmd.empty() ? nullptr : cmd.c_str(), nullptr);
-        _exit(-errno ?: 42);
+        execl(kRemountCmd, kRemountCmd, cmd.empty() ? nullptr : cmd.c_str(), nullptr);
+        _exit(errno);
     }
 
     int wstatus = 0;
     auto ret = waitpid(pid, &wstatus, 0);
 
     if (ret == -1) {
-        WriteFdFmt(fd.get(), "Failed to wait for %s: %s\n", remount_cmd, strerror(errno));
-        goto err;
-    }
-
-    if (ret != pid) {
-        WriteFdFmt(fd.get(), "pid %d and waitpid return %d do not match for %s\n",
-                   static_cast<int>(pid), static_cast<int>(ret), remount_cmd);
-        goto err;
+        WriteFdFmt(fd, "Failed to wait for %s: %s\n", kRemountCmd, strerror(errno));
+        return false;
+    } else if (ret != pid) {
+        WriteFdFmt(fd, "pid %d and waitpid return %d do not match for %s\n",
+                   static_cast<int>(pid), static_cast<int>(ret), kRemountCmd);
+        return false;
     }
 
     if (WIFSIGNALED(wstatus)) {
-        WriteFdFmt(fd.get(), "%s terminated with signal %s\n", remount_cmd,
+        WriteFdFmt(fd, "%s terminated with signal %s\n", kRemountCmd,
                    strsignal(WTERMSIG(wstatus)));
-        goto err;
+        return false;
     }
 
     if (!WIFEXITED(wstatus)) {
-        WriteFdFmt(fd.get(), "%s stopped with status 0x%x\n", remount_cmd, wstatus);
-        goto err;
+        WriteFdFmt(fd, "%s stopped with status 0x%x\n", kRemountCmd, wstatus);
+        return false;
     }
 
     if (WEXITSTATUS(wstatus)) {
-        WriteFdFmt(fd.get(), "%s exited with status %d\n", remount_cmd,
-                   static_cast<signed char>(WEXITSTATUS(wstatus)));
-        goto err;
+        WriteFdFmt(fd, "%s exited with status %d\n", kRemountCmd, WEXITSTATUS(wstatus));
+        return false;
     }
 
-    WriteFdExactly(fd.get(), "remount succeeded\n");
-    return;
+    return true;
+}
 
-err:
-    WriteFdExactly(fd.get(), remount_failed);
+void remount_service(unique_fd fd, const std::string& cmd) {
+    const char* success = do_remount(fd.get(), cmd) ? "succeeded" : "failed";
+    WriteFdFmt(fd.get(), "remount %s\n", success);
 }
