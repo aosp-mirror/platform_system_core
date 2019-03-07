@@ -63,8 +63,9 @@ LOCAL_MODULE_PATH := $(TARGET_RAMDISK_OUT)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_RAMDISK_OUT_UNSTRIPPED)
 
 # Set up the same mount points on the ramdisk that system-as-root contains.
-LOCAL_POST_INSTALL_CMD := \
-    mkdir -p $(TARGET_RAMDISK_OUT)/dev \
+LOCAL_POST_INSTALL_CMD := mkdir -p \
+    $(TARGET_RAMDISK_OUT)/apex \
+    $(TARGET_RAMDISK_OUT)/dev \
     $(TARGET_RAMDISK_OUT)/mnt \
     $(TARGET_RAMDISK_OUT)/proc \
     $(TARGET_RAMDISK_OUT)/sys \
