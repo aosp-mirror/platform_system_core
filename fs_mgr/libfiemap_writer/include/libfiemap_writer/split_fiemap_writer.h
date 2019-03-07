@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include <android-base/unique_fd.h>
+
 #include "fiemap_writer.h"
 
 namespace android {
@@ -54,6 +56,16 @@ class SplitFiemap final {
     // this returns true and does not report an error.
     static bool RemoveSplitFiles(const std::string& file_path, std::string* message = nullptr);
 
+    // Return whether all components of a split file still have pinned extents.
+    bool HasPinnedExtents() const;
+
+    // Helper method for writing data that spans files. Note there is no seek
+    // method (yet); this starts at 0 and increments the position by |bytes|.
+    bool Write(const void* data, uint64_t bytes);
+
+    // Flush all writes to all split files.
+    bool Flush();
+
     const std::vector<struct fiemap_extent>& extents();
     uint32_t block_size() const;
     uint64_t size() const { return total_size_; }
@@ -73,6 +85,11 @@ class SplitFiemap final {
     std::vector<FiemapUniquePtr> files_;
     std::vector<struct fiemap_extent> extents_;
     uint64_t total_size_ = 0;
+
+    // Most recently open file and position for Write().
+    size_t cursor_index_ = 0;
+    uint64_t cursor_file_pos_ = 0;
+    android::base::unique_fd cursor_fd_;
 };
 
 }  // namespace fiemap_writer
