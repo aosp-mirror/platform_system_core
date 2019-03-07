@@ -618,7 +618,6 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
 
     fmap->file_path_ = abs_path;
     fmap->bdev_path_ = bdev_path;
-    fmap->file_fd_ = std::move(file_fd);
     fmap->file_size_ = file_size;
     fmap->bdev_size_ = bdevsz;
     fmap->fs_type_ = fs_type;

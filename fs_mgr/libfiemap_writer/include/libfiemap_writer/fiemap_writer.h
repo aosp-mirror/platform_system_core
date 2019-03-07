@@ -88,9 +88,6 @@ class FiemapWriter final {
     // Block device on which we have created the file.
     std::string bdev_path_;
 
-    // File descriptors for the file and block device
-    ::android::base::unique_fd file_fd_;
-
     // Size in bytes of the file this class is writing
     uint64_t file_size_;
 
