@@ -5,7 +5,6 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     group root readproc reserved_disk
     socket zygote stream 660 root system
     socket blastula_pool stream 660 root system
-    updatable
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
     onrestart restart audioserver
