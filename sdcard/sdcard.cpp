@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -99,14 +100,21 @@ static void drop_privs(uid_t uid, gid_t gid) {
 
 static bool sdcardfs_setup(const std::string& source_path, const std::string& dest_path,
                            uid_t fsuid, gid_t fsgid, bool multi_user, userid_t userid, gid_t gid,
-                           mode_t mask, bool derive_gid, bool default_normal, bool use_esdfs) {
+                           mode_t mask, bool derive_gid, bool default_normal, bool unshared_obb,
+                           bool use_esdfs) {
+    // Add new options at the end of the vector.
+    std::vector<std::string> new_opts_list;
+    if (multi_user) new_opts_list.push_back("multiuser,");
+    if (derive_gid) new_opts_list.push_back("derive_gid,");
+    if (default_normal) new_opts_list.push_back("default_normal,");
+    if (unshared_obb) new_opts_list.push_back("unshared_obb,");
     // Try several attempts, each time with one less option, to gracefully
     // handle older kernels that aren't updated yet.
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i <= new_opts_list.size(); ++i) {
         std::string new_opts;
-        if (multi_user && i < 3) new_opts += "multiuser,";
-        if (derive_gid && i < 2) new_opts += "derive_gid,";
-        if (default_normal && i < 1) new_opts += "default_normal,";
+        for (int j = 0; j < new_opts_list.size() - i; ++j) {
+            new_opts += new_opts_list[j];
+        }
 
         auto opts = android::base::StringPrintf("fsuid=%d,fsgid=%d,%smask=%d,userid=%d,gid=%d",
                                                 fsuid, fsgid, new_opts.c_str(), mask, userid, gid);
@@ -142,13 +150,14 @@ static bool sdcardfs_setup_bind_remount(const std::string& source_path, const st
     return true;
 }
 
-static bool sdcardfs_setup_secondary(const std::string& default_path, const std::string& source_path,
-                                     const std::string& dest_path, uid_t fsuid, gid_t fsgid,
-                                     bool multi_user, userid_t userid, gid_t gid, mode_t mask,
-                                     bool derive_gid, bool default_normal, bool use_esdfs) {
+static bool sdcardfs_setup_secondary(const std::string& default_path,
+                                     const std::string& source_path, const std::string& dest_path,
+                                     uid_t fsuid, gid_t fsgid, bool multi_user, userid_t userid,
+                                     gid_t gid, mode_t mask, bool derive_gid, bool default_normal,
+                                     bool unshared_obb, bool use_esdfs) {
     if (use_esdfs) {
         return sdcardfs_setup(source_path, dest_path, fsuid, fsgid, multi_user, userid, gid, mask,
-                              derive_gid, default_normal, use_esdfs);
+                              derive_gid, default_normal, unshared_obb, use_esdfs);
     } else {
         return sdcardfs_setup_bind_remount(default_path, dest_path, gid, mask);
     }
@@ -156,7 +165,7 @@ static bool sdcardfs_setup_secondary(const std::string& default_path, const std:
 
 static void run_sdcardfs(const std::string& source_path, const std::string& label, uid_t uid,
                          gid_t gid, userid_t userid, bool multi_user, bool full_write,
-                         bool derive_gid, bool default_normal, bool use_esdfs) {
+                         bool derive_gid, bool default_normal, bool unshared_obb, bool use_esdfs) {
     std::string dest_path_default = "/mnt/runtime/default/" + label;
     std::string dest_path_read = "/mnt/runtime/read/" + label;
     std::string dest_path_write = "/mnt/runtime/write/" + label;
@@ -167,16 +176,17 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
         // Multi-user storage is fully isolated per user, so "other"
         // permissions are completely masked off.
         if (!sdcardfs_setup(source_path, dest_path_default, uid, gid, multi_user, userid,
-                            AID_SDCARD_RW, 0006, derive_gid, default_normal, use_esdfs) ||
+                            AID_SDCARD_RW, 0006, derive_gid, default_normal, unshared_obb,
+                            use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_read, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, 0027, derive_gid,
-                                      default_normal, use_esdfs) ||
+                                      default_normal, unshared_obb, use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_write, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, full_write ? 0007 : 0027,
-                                      derive_gid, default_normal, use_esdfs) ||
+                                      derive_gid, default_normal, unshared_obb, use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_full, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, 0007, derive_gid,
-                                      default_normal, use_esdfs)) {
+                                      default_normal, unshared_obb, use_esdfs)) {
             LOG(FATAL) << "failed to sdcardfs_setup";
         }
     } else {
@@ -184,16 +194,17 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
         // the Android directories are masked off to a single user
         // deep inside attr_from_stat().
         if (!sdcardfs_setup(source_path, dest_path_default, uid, gid, multi_user, userid,
-                            AID_SDCARD_RW, 0006, derive_gid, default_normal, use_esdfs) ||
+                            AID_SDCARD_RW, 0006, derive_gid, default_normal, unshared_obb,
+                            use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_read, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, full_write ? 0027 : 0022,
-                                      derive_gid, default_normal, use_esdfs) ||
+                                      derive_gid, default_normal, unshared_obb, use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_write, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, full_write ? 0007 : 0022,
-                                      derive_gid, default_normal, use_esdfs) ||
+                                      derive_gid, default_normal, unshared_obb, use_esdfs) ||
             !sdcardfs_setup_secondary(dest_path_default, source_path, dest_path_full, uid, gid,
                                       multi_user, userid, AID_EVERYBODY, 0007, derive_gid,
-                                      default_normal, use_esdfs)) {
+                                      default_normal, unshared_obb, use_esdfs)) {
             LOG(FATAL) << "failed to sdcardfs_setup";
         }
     }
@@ -216,7 +227,8 @@ static int usage() {
                << "    -U: specify user ID that owns device"
                << "    -m: source_path is multi-user"
                << "    -w: runtime write mount has full write access"
-               << "    -P  preserve owners on the lower file system";
+               << "    -P: preserve owners on the lower file system"
+               << "    -o: obb dir doesn't need to be shared between users";
     return 1;
 }
 
@@ -230,6 +242,7 @@ int main(int argc, char **argv) {
     bool full_write = false;
     bool derive_gid = false;
     bool default_normal = false;
+    bool unshared_obb = false;
     int i;
     struct rlimit rlim;
     int fs_version;
@@ -238,7 +251,7 @@ int main(int argc, char **argv) {
     android::base::InitLogging(argv, android::base::LogdLogger(android::base::SYSTEM));
 
     int opt;
-    while ((opt = getopt(argc, argv, "u:g:U:mwGi")) != -1) {
+    while ((opt = getopt(argc, argv, "u:g:U:mwGio")) != -1) {
         switch (opt) {
             case 'u':
                 uid = strtoul(optarg, NULL, 10);
@@ -261,8 +274,12 @@ int main(int argc, char **argv) {
             case 'i':
                 default_normal = true;
                 break;
+            case 'o':
+                unshared_obb = true;
+                break;
             case '?':
             default:
+                LOG(ERROR) << "Unknown option: '" << opt << "'";
                 return usage();
         }
     }
@@ -304,6 +321,6 @@ int main(int argc, char **argv) {
     }
 
     run_sdcardfs(source_path, label, uid, gid, userid, multi_user, full_write, derive_gid,
-                 default_normal, !should_use_sdcardfs());
+                 default_normal, unshared_obb, !should_use_sdcardfs());
     return 1;
 }
