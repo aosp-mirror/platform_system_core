@@ -40,7 +40,7 @@ additional.namespaces = runtime,conscrypt,media,resolv
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
-# to load the shared library from the runtime namespace.And then, if the
+# to load the shared library from the runtime namespace. And then, if the
 # shared library cannot be loaded from the runtime namespace either, the
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
