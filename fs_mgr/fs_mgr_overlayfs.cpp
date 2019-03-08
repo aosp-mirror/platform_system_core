@@ -769,9 +769,10 @@ bool fs_mgr_overlayfs_invalid() {
 
     // in recovery, fastbootd, or gsi mode, not allowed!
     if (fs_mgr_access("/system/bin/recovery")) return true;
-    if (android::gsi::IsGsiRunning()) return true;
-
-    return false;
+    auto save_errno = errno;
+    auto ret = android::gsi::IsGsiRunning();
+    errno = save_errno;
+    return ret;
 }
 
 }  // namespace
