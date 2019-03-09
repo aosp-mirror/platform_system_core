@@ -167,7 +167,7 @@ static int getCGroupSubsys(int tid, const char* subsys, std::string& subgroup) {
     if (!controller) return -1;
 
     if (!controller->GetTaskGroup(tid, &subgroup)) {
-        PLOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return -1;
     }
     return 0;

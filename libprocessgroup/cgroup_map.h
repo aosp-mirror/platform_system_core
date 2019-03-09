@@ -92,5 +92,5 @@ class CgroupMap {
     ~CgroupMap();
 
     bool LoadRcFile();
-    void Print();
+    void Print() const;
 };
