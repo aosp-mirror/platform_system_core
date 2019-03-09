@@ -1059,7 +1059,7 @@ Result<Success> Service::Start() {
         std::string oom_str = std::to_string(oom_score_adjust_);
         std::string oom_file = StringPrintf("/proc/%d/oom_score_adj", pid);
         if (!WriteStringToFile(oom_str, oom_file)) {
-            PLOG(ERROR) << "couldn't write oom_score_adj: " << strerror(errno);
+            PLOG(ERROR) << "couldn't write oom_score_adj";
         }
     }
 
