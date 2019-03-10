@@ -53,11 +53,26 @@
 
 // Android Wear has been using port 5601 in all of its documentation/tooling,
 // but we search for emulators on ports [5554, 5555 + ADB_LOCAL_TRANSPORT_MAX].
-// Avoid stomping on their port by limiting the number of emulators that can be
-// connected.
-#define ADB_LOCAL_TRANSPORT_MAX 16
+// Avoid stomping on their port by restricting the active scanning range.
+// Once emulators self-(re-)register, they'll have to avoid 5601 in their own way.
+static int adb_local_transport_max_port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT + 16 * 2 - 1;
 
 static std::mutex& local_transports_lock = *new std::mutex();
+
+static void adb_local_transport_max_port_env_override() {
+    const char* env_max_s = getenv("ADB_LOCAL_TRANSPORT_MAX_PORT");
+    if (env_max_s != nullptr) {
+        size_t env_max;
+        if (ParseUint(&env_max, env_max_s, nullptr) && env_max < 65536) {
+            // < DEFAULT_ADB_LOCAL_TRANSPORT_PORT harmlessly mimics ADB_EMU=0
+            adb_local_transport_max_port = env_max;
+            D("transport: ADB_LOCAL_TRANSPORT_MAX_PORT read as %d", adb_local_transport_max_port);
+        } else {
+            D("transport: ADB_LOCAL_TRANSPORT_MAX_PORT '%s' invalid or >= 65536, so ignored",
+              env_max_s);
+        }
+    }
+}
 
 // We keep a map from emulator port to transport.
 // TODO: weak_ptr?
@@ -110,7 +125,6 @@ void connect_device(const std::string& address, std::string* response) {
             D("reconnect failed: %s", response.c_str());
             return ReconnectResult::Retry;
         }
-
         // This invokes the part of register_socket_transport() that needs to be
         // invoked if the atransport* has already been setup. This eventually
         // calls atransport->SetConnection() with a newly created Connection*
@@ -168,12 +182,10 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
 #if ADB_HOST
 
 static void PollAllLocalPortsForEmulator() {
-    int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    int count = ADB_LOCAL_TRANSPORT_MAX;
-
     // Try to connect to any number of running emulator instances.
-    for ( ; count > 0; count--, port += 2 ) {
-        local_connect(port);
+    for (int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT; port <= adb_local_transport_max_port;
+         port += 2) {
+        local_connect(port);  // Note, uses port and port-1, so '=max_port' is OK.
     }
 }
 
@@ -289,6 +301,7 @@ void local_init(int port) {
 #if ADB_HOST
     D("transport: local client init");
     std::thread(client_socket_thread, port).detach();
+    adb_local_transport_max_port_env_override();
 #elif !defined(__ANDROID__)
     // Host adbd.
     D("transport: local server init");
@@ -370,10 +383,6 @@ int init_socket_transport(atransport* t, unique_fd fd, int adb_port, int local) 
         atransport* existing_transport = find_emulator_transport_by_adb_port_locked(adb_port);
         if (existing_transport != nullptr) {
             D("local transport for port %d already registered (%p)?", adb_port, existing_transport);
-            fail = -1;
-        } else if (local_transports.size() >= ADB_LOCAL_TRANSPORT_MAX) {
-            // Too many emulators.
-            D("cannot register more emulators. Maximum is %d", ADB_LOCAL_TRANSPORT_MAX);
             fail = -1;
         } else {
             local_transports[adb_port] = t;

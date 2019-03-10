@@ -5,7 +5,6 @@ service zygote /system/bin/app_process32 -Xzygote /system/bin --zygote --start-s
     group root readproc reserved_disk
     socket zygote stream 660 root system
     socket usap_pool_primary stream 660 root system
-    updatable
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
     onrestart restart audioserver
@@ -22,6 +21,5 @@ service zygote_secondary /system/bin/app_process64 -Xzygote /system/bin --zygote
     group root readproc reserved_disk
     socket zygote_secondary stream 660 root system
     socket usap_pool_secondary stream 660 root system
-    updatable
     onrestart restart zygote
     writepid /dev/cpuset/foreground/tasks

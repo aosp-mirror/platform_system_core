@@ -222,7 +222,9 @@ static void help() {
         "     all,adb,sockets,packets,rwx,usb,sync,sysdeps,transport,jdwp\n"
         " $ADB_VENDOR_KEYS         colon-separated list of keys (files or directories)\n"
         " $ANDROID_SERIAL          serial number to connect to (see -s)\n"
-        " $ANDROID_LOG_TAGS        tags to be used by logcat (see logcat --help)\n");
+        " $ANDROID_LOG_TAGS        tags to be used by logcat (see logcat --help)\n"
+        " $ADB_LOCAL_TRANSPORT_MAX_PORT max emulator scan port (default 5585, 16 emus)\n"
+    );
     // clang-format on
 }
 

@@ -40,7 +40,7 @@ additional.namespaces = runtime,conscrypt,media,resolv
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
-# to load the shared library from the runtime namespace.And then, if the
+# to load the shared library from the runtime namespace. And then, if the
 # shared library cannot be loaded from the runtime namespace either, the
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
@@ -94,11 +94,7 @@ namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default
-namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
-namespace.media.link.default.shared_libs += libandroid.so
-namespace.media.link.default.shared_libs += libbinder_ndk.so
-namespace.media.link.default.shared_libs += libmediametrics.so
-namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+namespace.media.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "conscrypt" APEX namespace

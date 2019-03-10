@@ -176,6 +176,15 @@ bool SplitFiemap::RemoveSplitFiles(const std::string& file_path, std::string* me
     return ok;
 }
 
+bool SplitFiemap::HasPinnedExtents() const {
+    for (const auto& file : files_) {
+        if (!FiemapWriter::HasPinnedExtents(file->file_path())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 const std::vector<struct fiemap_extent>& SplitFiemap::extents() {
     if (extents_.empty()) {
         for (const auto& file : files_) {
@@ -184,6 +193,76 @@ const std::vector<struct fiemap_extent>& SplitFiemap::extents() {
         }
     }
     return extents_;
+}
+
+bool SplitFiemap::Write(const void* data, uint64_t bytes) {
+    // Open the current file.
+    FiemapWriter* file = files_[cursor_index_].get();
+
+    const uint8_t* data_ptr = reinterpret_cast<const uint8_t*>(data);
+    uint64_t bytes_remaining = bytes;
+    while (bytes_remaining) {
+        // How many bytes can we write into the current file?
+        uint64_t file_bytes_left = file->size() - cursor_file_pos_;
+        if (!file_bytes_left) {
+            if (cursor_index_ == files_.size() - 1) {
+                LOG(ERROR) << "write past end of file requested";
+                return false;
+            }
+
+            // No space left in the current file, but we have more files to
+            // use, so prep the next one.
+            cursor_fd_ = {};
+            cursor_file_pos_ = 0;
+            file = files_[++cursor_index_].get();
+            file_bytes_left = file->size();
+        }
+
+        // Open the current file if it's not open.
+        if (cursor_fd_ < 0) {
+            cursor_fd_.reset(open(file->file_path().c_str(), O_CLOEXEC | O_WRONLY));
+            if (cursor_fd_ < 0) {
+                PLOG(ERROR) << "open failed: " << file->file_path();
+                return false;
+            }
+            CHECK(cursor_file_pos_ == 0);
+        }
+
+        if (!FiemapWriter::HasPinnedExtents(file->file_path())) {
+            LOG(ERROR) << "file is no longer pinned: " << file->file_path();
+            return false;
+        }
+
+        uint64_t bytes_to_write = std::min(file_bytes_left, bytes_remaining);
+        if (!android::base::WriteFully(cursor_fd_, data_ptr, bytes_to_write)) {
+            PLOG(ERROR) << "write failed: " << file->file_path();
+            return false;
+        }
+        data_ptr += bytes_to_write;
+        bytes_remaining -= bytes_to_write;
+        cursor_file_pos_ += bytes_to_write;
+    }
+
+    // If we've reached the end of the current file, close it for sanity.
+    if (cursor_file_pos_ == file->size()) {
+        cursor_fd_ = {};
+    }
+    return true;
+}
+
+bool SplitFiemap::Flush() {
+    for (const auto& file : files_) {
+        unique_fd fd(open(file->file_path().c_str(), O_RDONLY | O_CLOEXEC));
+        if (fd < 0) {
+            PLOG(ERROR) << "open failed: " << file->file_path();
+            return false;
+        }
+        if (fsync(fd)) {
+            PLOG(ERROR) << "fsync failed: " << file->file_path();
+            return false;
+        }
+    }
+    return true;
 }
 
 SplitFiemap::~SplitFiemap() {

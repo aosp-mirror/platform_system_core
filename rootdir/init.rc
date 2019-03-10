@@ -387,6 +387,7 @@ on post-fs
     restorecon_recursive /metadata
     mkdir /metadata/vold
     chmod 0700 /metadata/vold
+    mkdir /metadata/password_slots 0771 root system
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
@@ -423,7 +424,7 @@ on post-fs-data
     mkdir /data/apex/active 0750 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/pkg_staging 0750 system system
+    mkdir /data/app-staging 0750 system system
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
@@ -585,7 +586,10 @@ on post-fs-data
     restorecon --recursive --skip-ce /data
 
     # load fsverity keys
-    exec -- /system/bin/mini-keyctl -c /product/etc/security/cacerts_fsverity,/vendor/etc/security/cacerts_fsverity -k .fs-verity
+    exec -- /system/bin/mini-keyctl dadd asymmetric product_cert /product/etc/security/cacerts_fsverity .fs-verity
+    exec -- /system/bin/mini-keyctl dadd asymmetric vendor_cert /vendor/etc/security/cacerts_fsverity .fs-verity
+    # Prevent future key links to fsverity keyring
+    exec -- /system/bin/mini-keyctl restrict_keyring .fs-verity
 
     # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo

@@ -119,7 +119,7 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
     std::string path;
 
     if (!attribute_->GetPathForTask(tid, &path)) {
-        PLOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return false;
     }
 
@@ -174,7 +174,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
     if (TEMP_FAILURE_RETRY(write(fd, value.c_str(), value.length())) < 0) {
         // If the thread is in the process of exiting, don't flag an error
         if (errno != ESRCH) {
-            PLOG(ERROR) << "JoinGroup failed to write '" << value << "'; fd=" << fd;
+            PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; fd=" << fd;
             return false;
         }
     }
@@ -187,7 +187,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     if (fd_ >= 0) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(pid, fd_)) {
-            PLOG(ERROR) << "Failed to add task into cgroup";
+            LOG(ERROR) << "Failed to add task into cgroup";
             return false;
         }
         return true;
@@ -206,7 +206,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
         return false;
     }
     if (!AddTidToCgroup(pid, tmp_fd)) {
-        PLOG(ERROR) << "Failed to add task into cgroup";
+        LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
 
@@ -219,7 +219,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
         return true;
     }
     if (!AddTidToCgroup(pid, tmp_fd)) {
-        PLOG(ERROR) << "Failed to add task into cgroup";
+        LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
 
@@ -232,7 +232,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     if (fd_ >= 0) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(tid, fd_)) {
-            PLOG(ERROR) << "Failed to add task into cgroup";
+            LOG(ERROR) << "Failed to add task into cgroup";
             return false;
         }
         return true;
@@ -244,7 +244,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     }
 
     // application-dependent path can't be used with tid
-    PLOG(ERROR) << "Application profile can't be applied to a thread";
+    LOG(ERROR) << "Application profile can't be applied to a thread";
     return false;
 #else
     std::string tasks_path = controller_->GetTasksFilePath(path_);
@@ -254,7 +254,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
         return true;
     }
     if (!AddTidToCgroup(tid, tmp_fd)) {
-        PLOG(ERROR) << "Failed to add task into cgroup";
+        LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
 
