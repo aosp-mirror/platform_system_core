@@ -6,7 +6,6 @@ cc_library_shared {
     vndk: {
         enabled: true,
     },
-    double_loadable: true,
     srcs: ["memtrack.cpp"],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],

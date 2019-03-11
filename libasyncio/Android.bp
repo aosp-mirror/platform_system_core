@@ -27,7 +27,6 @@ cc_library {
     name: "libasyncio",
     defaults: ["libasyncio_defaults"],
     vendor_available: true,
-    double_loadable: true,
     recovery_available: true,
     host_supported: true,
     srcs: [
