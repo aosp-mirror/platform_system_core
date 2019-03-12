@@ -101,7 +101,7 @@ class MemoryFileAtOffset : public Memory {
 
   size_t Size() { return size_; }
 
-  void Clear();
+  void Clear() override;
 
  protected:
   size_t size_ = 0;
