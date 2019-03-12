@@ -293,6 +293,8 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"kernel_panic,dsps", 166},
     {"kernel_panic,wcnss", 167},
     {"kernel_panic,_sde_encoder_phys_cmd_handle_ppdone_timeout", 168},
+    {"recovery,quiescent", 169},
+    {"reboot,quiescent", 170},
 };
 
 // Converts a string value representing the reason the system booted to an
