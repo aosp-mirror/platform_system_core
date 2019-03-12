@@ -36,14 +36,9 @@ extern "C" {
 __attribute__((visibility("default")))
 void InitializeNativeLoader();
 
-__attribute__((visibility("default")))
-jstring CreateClassLoaderNamespace(JNIEnv* env,
-                                   int32_t target_sdk_version,
-                                   jobject class_loader,
-                                   bool is_shared,
-                                   bool is_for_vendor,
-                                   jstring library_path,
-                                   jstring permitted_path);
+__attribute__((visibility("default"))) jstring CreateClassLoaderNamespace(
+    JNIEnv* env, int32_t target_sdk_version, jobject class_loader, bool is_shared, jstring dex_path,
+    jstring library_path, jstring permitted_path);
 
 __attribute__((visibility("default"))) void* OpenNativeLibrary(
     JNIEnv* env, int32_t target_sdk_version, const char* path, jobject class_loader,
