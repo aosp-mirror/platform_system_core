@@ -501,12 +501,13 @@ static bool ReadFibmap(int file_fd, const std::string& file_path,
         }
 
         if (!extents->empty() && block == last_block + 1) {
-            extents->back().fe_length++;
+            extents->back().fe_length += s.st_blksize;
         } else {
-            extents->push_back(fiemap_extent{.fe_logical = block_number,
-                                             .fe_physical = block,
-                                             .fe_length = 1,
-                                             .fe_flags = 0});
+            extents->push_back(
+                    fiemap_extent{.fe_logical = block_number,
+                                  .fe_physical = static_cast<uint64_t>(block) * s.st_blksize,
+                                  .fe_length = static_cast<uint64_t>(s.st_blksize),
+                                  .fe_flags = 0});
         }
         last_block = block;
     }
