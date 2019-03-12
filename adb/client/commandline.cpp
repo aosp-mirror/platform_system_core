@@ -1005,7 +1005,8 @@ static int ppp(int argc, const char** argv) {
 #endif /* !defined(_WIN32) */
 }
 
-static bool wait_for_device(const char* service) {
+static bool wait_for_device(const char* service,
+                            std::optional<std::chrono::milliseconds> timeout = std::nullopt) {
     std::vector<std::string> components = android::base::Split(service, "-");
     if (components.size() < 3 || components.size() > 4) {
         fprintf(stderr, "adb: couldn't parse 'wait-for' command: %s\n", service);
@@ -1043,6 +1044,13 @@ static bool wait_for_device(const char* service) {
     }
 
     std::string cmd = format_host_command(android::base::Join(components, "-").c_str());
+    if (timeout) {
+        std::thread([timeout]() {
+            std::this_thread::sleep_for(*timeout);
+            fprintf(stderr, "timeout expired while waiting for device\n");
+            _exit(1);
+        }).detach();
+    }
     return adb_command(cmd);
 }
 
@@ -1084,8 +1092,21 @@ static bool adb_root(const char* command) {
     }
 
     // Wait for the device to go away.
+    TransportType previous_type;
+    const char* previous_serial;
+    TransportId previous_id;
+    adb_get_transport(&previous_type, &previous_serial, &previous_id);
+
     adb_set_transport(kTransportAny, nullptr, transport_id);
     wait_for_device("wait-for-disconnect");
+
+    // Wait for the device to come back.
+    // If we were using a specific transport ID, there's nothing we can wait for.
+    if (previous_id == 0) {
+        adb_set_transport(previous_type, previous_serial, 0);
+        wait_for_device("wait-for-device", 3000ms);
+    }
+
     return true;
 }
 
