@@ -31,6 +31,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -140,9 +141,23 @@ static constexpr const char* kApexPath = "/apex/";
 
 #if defined(__LP64__)
 static constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/lib64";
+static constexpr const char* kVendorLibPath = "/vendor/lib64";
+static constexpr const char* kProductLibPath = "/product/lib64:/system/product/lib64";
 #else
 static constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/lib";
+static constexpr const char* kVendorLibPath = "/vendor/lib";
+static constexpr const char* kProductLibPath = "/product/lib:/system/product/lib";
 #endif
+
+static const std::regex kVendorDexPathRegex("(^|:)/vendor/");
+static const std::regex kProductDexPathRegex("(^|:)(/system)?/product/");
+
+// Define origin of APK if it is from vendor partition or product partition
+typedef enum {
+  APK_ORIGIN_DEFAULT = 0,
+  APK_ORIGIN_VENDOR = 1,
+  APK_ORIGIN_PRODUCT = 2,
+} ApkOrigin;
 
 static bool is_debuggable() {
   bool debuggable = false;
@@ -179,7 +194,7 @@ class LibraryNamespaces {
   LibraryNamespaces() : initialized_(false) { }
 
   NativeLoaderNamespace* Create(JNIEnv* env, uint32_t target_sdk_version, jobject class_loader,
-                                bool is_shared, bool is_for_vendor, jstring java_library_path,
+                                bool is_shared, jstring dex_path, jstring java_library_path,
                                 jstring java_permitted_path, std::string* error_msg) {
     std::string library_path; // empty string by default.
 
@@ -187,6 +202,8 @@ class LibraryNamespaces {
       ScopedUtfChars library_path_utf_chars(env, java_library_path);
       library_path = library_path_utf_chars.c_str();
     }
+
+    ApkOrigin apk_origin = GetApkOriginFromDexPath(env, dex_path);
 
     // (http://b/27588281) This is a workaround for apps using custom
     // classloaders and calling System.load() with an absolute path which
@@ -234,31 +251,50 @@ class LibraryNamespaces {
     std::string system_exposed_libraries = system_public_libraries_;
     const char* namespace_name = kClassloaderNamespaceName;
     android_namespace_t* vndk_ns = nullptr;
-    if (is_for_vendor && !is_shared) {
-      LOG_FATAL_IF(is_native_bridge, "Unbundled vendor apk must not use translated architecture");
+    if ((apk_origin == APK_ORIGIN_VENDOR ||
+         (apk_origin == APK_ORIGIN_PRODUCT && target_sdk_version > 29)) &&
+        !is_shared) {
+      LOG_FATAL_IF(is_native_bridge,
+                   "Unbundled vendor / product apk must not use translated architecture");
 
-      // For vendor apks, give access to the vendor lib even though
+      // For vendor / product apks, give access to the vendor / product lib even though
       // they are treated as unbundled; the libs and apks are still bundled
-      // together in the vendor partition.
-#if defined(__LP64__)
-      std::string vendor_lib_path = "/vendor/lib64";
-#else
-      std::string vendor_lib_path = "/vendor/lib";
-#endif
-      library_path = library_path + ":" + vendor_lib_path.c_str();
-      permitted_path = permitted_path + ":" + vendor_lib_path.c_str();
+      // together in the vendor / product partition.
+      const char* origin_partition;
+      const char* origin_lib_path;
+
+      switch (apk_origin) {
+        case APK_ORIGIN_VENDOR:
+          origin_partition = "vendor";
+          origin_lib_path = kVendorLibPath;
+          break;
+        case APK_ORIGIN_PRODUCT:
+          origin_partition = "product";
+          origin_lib_path = kProductLibPath;
+          break;
+        default:
+          origin_partition = "unknown";
+          origin_lib_path = "";
+      }
+
+      LOG_FATAL_IF(is_native_bridge, "Unbundled %s apk must not use translated architecture",
+                   origin_partition);
+
+      library_path = library_path + ":" + origin_lib_path;
+      permitted_path = permitted_path + ":" + origin_lib_path;
 
       // Also give access to LLNDK libraries since they are available to vendors
       system_exposed_libraries = system_exposed_libraries + ":" + system_llndk_libraries_.c_str();
 
       // Give access to VNDK-SP libraries from the 'vndk' namespace.
       vndk_ns = android_get_exported_namespace(kVndkNamespaceName);
-      LOG_ALWAYS_FATAL_IF(vndk_ns == nullptr,
-                          "Cannot find \"%s\" namespace for vendor apks", kVndkNamespaceName);
+      LOG_ALWAYS_FATAL_IF(vndk_ns == nullptr, "Cannot find \"%s\" namespace for %s apks",
+                          kVndkNamespaceName, origin_partition);
 
       // Different name is useful for debugging
       namespace_name = kVendorClassloaderNamespaceName;
-      ALOGD("classloader namespace configured for unbundled vendor apk. library_path=%s", library_path.c_str());
+      ALOGD("classloader namespace configured for unbundled %s apk. library_path=%s",
+            origin_partition, library_path.c_str());
     } else {
       // oem and product public libraries are NOT available to vendor apks, otherwise it
       // would be system->vendor violation.
@@ -660,6 +696,28 @@ class LibraryNamespaces {
     return nullptr;
   }
 
+  ApkOrigin GetApkOriginFromDexPath(JNIEnv* env, jstring dex_path) {
+    ApkOrigin apk_origin = APK_ORIGIN_DEFAULT;
+
+    if (dex_path != nullptr) {
+      ScopedUtfChars dex_path_utf_chars(env, dex_path);
+
+      if (std::regex_search(dex_path_utf_chars.c_str(), kVendorDexPathRegex)) {
+        apk_origin = APK_ORIGIN_VENDOR;
+      }
+
+      if (std::regex_search(dex_path_utf_chars.c_str(), kProductDexPathRegex)) {
+        LOG_ALWAYS_FATAL_IF(apk_origin == APK_ORIGIN_VENDOR,
+                            "Dex path contains both vendor and product partition : %s",
+                            dex_path_utf_chars.c_str());
+
+        apk_origin = APK_ORIGIN_PRODUCT;
+      }
+    }
+
+    return apk_origin;
+  }
+
   bool initialized_;
   std::list<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
   std::string system_public_libraries_;
@@ -690,31 +748,20 @@ void ResetNativeLoader() {
 #endif
 }
 
-jstring CreateClassLoaderNamespace(JNIEnv* env,
-                                   int32_t target_sdk_version,
-                                   jobject class_loader,
-                                   bool is_shared,
-                                   bool is_for_vendor,
-                                   jstring library_path,
+jstring CreateClassLoaderNamespace(JNIEnv* env, int32_t target_sdk_version, jobject class_loader,
+                                   bool is_shared, jstring dex_path, jstring library_path,
                                    jstring permitted_path) {
 #if defined(__ANDROID__)
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
 
   std::string error_msg;
-  bool success = g_namespaces->Create(env,
-                                      target_sdk_version,
-                                      class_loader,
-                                      is_shared,
-                                      is_for_vendor,
-                                      library_path,
-                                      permitted_path,
-                                      &error_msg) != nullptr;
+  bool success = g_namespaces->Create(env, target_sdk_version, class_loader, is_shared, dex_path,
+                                      library_path, permitted_path, &error_msg) != nullptr;
   if (!success) {
     return env->NewStringUTF(error_msg.c_str());
   }
 #else
-  UNUSED(env, target_sdk_version, class_loader, is_shared, is_for_vendor,
-         library_path, permitted_path);
+  UNUSED(env, target_sdk_version, class_loader, is_shared, dex_path, library_path, permitted_path);
 #endif
   return nullptr;
 }
@@ -779,8 +826,7 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
     // In this case we create an isolated not-shared namespace for it.
     std::string create_error_msg;
     if ((ns = g_namespaces->Create(env, target_sdk_version, class_loader, false /* is_shared */,
-                                   false /* is_for_vendor */, library_path, nullptr,
-                                   &create_error_msg)) == nullptr) {
+                                   nullptr, library_path, nullptr, &create_error_msg)) == nullptr) {
       *error_msg = strdup(create_error_msg.c_str());
       return nullptr;
     }

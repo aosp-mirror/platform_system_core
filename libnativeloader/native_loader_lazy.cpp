@@ -50,10 +50,10 @@ void InitializeNativeLoader() {
 }
 
 jstring CreateClassLoaderNamespace(JNIEnv* env, int32_t target_sdk_version, jobject class_loader,
-                                   bool is_shared, bool is_for_vendor, jstring library_path,
+                                   bool is_shared, jstring dex_path, jstring library_path,
                                    jstring permitted_path) {
   static auto f = GET_FUNC_PTR(CreateClassLoaderNamespace);
-  return f(env, target_sdk_version, class_loader, is_shared, is_for_vendor, library_path,
+  return f(env, target_sdk_version, class_loader, is_shared, dex_path, library_path,
            permitted_path);
 }
 
