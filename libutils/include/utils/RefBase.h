@@ -171,6 +171,8 @@
 #define ANDROID_REF_BASE_H
 
 #include <atomic>
+#include <functional>
+#include <type_traits>  // for common_type.
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -192,19 +194,26 @@ TextOutput& printWeakPointer(TextOutput& to, const void* val);
 // ---------------------------------------------------------------------------
 
 #define COMPARE_WEAK(_op_)                                      \
-inline bool operator _op_ (const sp<T>& o) const {              \
-    return m_ptr _op_ o.m_ptr;                                  \
-}                                                               \
-inline bool operator _op_ (const T* o) const {                  \
-    return m_ptr _op_ o;                                        \
-}                                                               \
-template<typename U>                                            \
-inline bool operator _op_ (const sp<U>& o) const {              \
-    return m_ptr _op_ o.m_ptr;                                  \
-}                                                               \
 template<typename U>                                            \
 inline bool operator _op_ (const U* o) const {                  \
     return m_ptr _op_ o;                                        \
+}                                                               \
+/* Needed to handle type inference for nullptr: */              \
+inline bool operator _op_ (const T* o) const {                  \
+    return m_ptr _op_ o;                                        \
+}
+
+template<template<typename C> class comparator, typename T, typename U>
+static inline bool _wp_compare_(T* a, U* b) {
+    return comparator<typename std::common_type<T*, U*>::type>()(a, b);
+}
+
+// Use std::less and friends to avoid undefined behavior when ordering pointers
+// to different objects.
+#define COMPARE_WEAK_FUNCTIONAL(_op_, _compare_)                 \
+template<typename U>                                             \
+inline bool operator _op_ (const U* o) const {                   \
+    return _wp_compare_<_compare_>(m_ptr, o);                    \
 }
 
 // ---------------------------------------------------------------------------
@@ -395,39 +404,51 @@ public:
 
     COMPARE_WEAK(==)
     COMPARE_WEAK(!=)
-    COMPARE_WEAK(>)
-    COMPARE_WEAK(<)
-    COMPARE_WEAK(<=)
-    COMPARE_WEAK(>=)
+    COMPARE_WEAK_FUNCTIONAL(>, std::greater)
+    COMPARE_WEAK_FUNCTIONAL(<, std::less)
+    COMPARE_WEAK_FUNCTIONAL(<=, std::less_equal)
+    COMPARE_WEAK_FUNCTIONAL(>=, std::greater_equal)
 
-    inline bool operator == (const wp<T>& o) const {
-        return (m_ptr == o.m_ptr) && (m_refs == o.m_refs);
-    }
     template<typename U>
     inline bool operator == (const wp<U>& o) const {
-        return m_ptr == o.m_ptr;
+        return m_refs == o.m_refs;  // Implies m_ptr == o.mptr; see invariants below.
     }
 
-    inline bool operator > (const wp<T>& o) const {
-        return (m_ptr == o.m_ptr) ? (m_refs > o.m_refs) : (m_ptr > o.m_ptr);
+    template<typename U>
+    inline bool operator == (const sp<U>& o) const {
+        // Just comparing m_ptr fields is often dangerous, since wp<> may refer to an older
+        // object at the same address.
+        if (o == nullptr) {
+          return m_ptr == nullptr;
+        } else {
+          return m_refs == o->getWeakRefs();  // Implies m_ptr == o.mptr.
+        }
     }
+
+    template<typename U>
+    inline bool operator != (const sp<U>& o) const {
+        return !(*this == o);
+    }
+
     template<typename U>
     inline bool operator > (const wp<U>& o) const {
-        return (m_ptr == o.m_ptr) ? (m_refs > o.m_refs) : (m_ptr > o.m_ptr);
+        if (m_ptr == o.m_ptr) {
+            return _wp_compare_<std::greater>(m_refs, o.m_refs);
+        } else {
+            return _wp_compare_<std::greater>(m_ptr, o.m_ptr);
+        }
     }
 
-    inline bool operator < (const wp<T>& o) const {
-        return (m_ptr == o.m_ptr) ? (m_refs < o.m_refs) : (m_ptr < o.m_ptr);
-    }
     template<typename U>
     inline bool operator < (const wp<U>& o) const {
-        return (m_ptr == o.m_ptr) ? (m_refs < o.m_refs) : (m_ptr < o.m_ptr);
+        if (m_ptr == o.m_ptr) {
+            return _wp_compare_<std::less>(m_refs, o.m_refs);
+        } else {
+            return _wp_compare_<std::less>(m_ptr, o.m_ptr);
+        }
     }
-                         inline bool operator != (const wp<T>& o) const { return m_refs != o.m_refs; }
     template<typename U> inline bool operator != (const wp<U>& o) const { return !operator == (o); }
-                         inline bool operator <= (const wp<T>& o) const { return !operator > (o); }
     template<typename U> inline bool operator <= (const wp<U>& o) const { return !operator > (o); }
-                         inline bool operator >= (const wp<T>& o) const { return !operator < (o); }
     template<typename U> inline bool operator >= (const wp<U>& o) const { return !operator < (o); }
 
 private:
@@ -445,6 +466,22 @@ TextOutput& operator<<(TextOutput& to, const wp<T>& val);
 
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
+
+// Implementation invariants:
+// Either
+// 1) m_ptr and m_refs are both null, or
+// 2) m_refs == m_ptr->mRefs, or
+// 3) *m_ptr is no longer live, and m_refs points to the weakref_type object that corresponded
+//    to m_ptr while it was live. *m_refs remains live while a wp<> refers to it.
+//
+// The m_refs field in a RefBase object is allocated on construction, unique to that RefBase
+// object, and never changes. Thus if two wp's have identical m_refs fields, they are either both
+// null or point to the same object. If two wp's have identical m_ptr fields, they either both
+// point to the same live object and thus have the same m_ref fields, or at least one of the
+// objects is no longer live.
+//
+// Note that the above comparison operations go out of their way to provide an ordering consistent
+// with ordinary pointer comparison; otherwise they could ignore m_ptr, and just compare m_refs.
 
 template<typename T>
 wp<T>::wp(T* other)
@@ -595,6 +632,7 @@ void wp<T>::clear()
 {
     if (m_ptr) {
         m_refs->decWeak(this);
+        m_refs = 0;
         m_ptr = 0;
     }
 }
