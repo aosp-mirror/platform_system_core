@@ -35,7 +35,6 @@
 #include <unwindstack/MachineX86.h>
 #include <unwindstack/MachineX86_64.h>
 #include <unwindstack/Maps.h>
-#include <unwindstack/Memory.h>
 #include <unwindstack/RegsArm.h>
 #include <unwindstack/RegsArm64.h>
 #include <unwindstack/RegsX86.h>
@@ -43,6 +42,7 @@
 #include <unwindstack/Unwinder.h>
 
 #include "ElfTestUtils.h"
+#include "MemoryOffline.h"
 #include "TestUtils.h"
 
 namespace unwindstack {
