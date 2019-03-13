@@ -6,6 +6,7 @@ on early-init
     export ANDROID_DATA /data
     export ANDROID_STORAGE /storage
     export ANDROID_RUNTIME_ROOT /apex/com.android.runtime
+    export ANDROID_TZDATA_ROOT /apex/com.android.tzdata
     export EXTERNAL_STORAGE /sdcard
     export ASEC_MOUNTPOINT /mnt/asec
     export BOOTCLASSPATH %BOOTCLASSPATH%
