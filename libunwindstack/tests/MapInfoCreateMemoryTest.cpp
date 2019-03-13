@@ -178,7 +178,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0U, info.elf_offset);
-  EXPECT_EQ(0U, info.elf_start_offset);
+  EXPECT_EQ(0x1000U, info.elf_start_offset);
 
   // Read the valid part of the file.
   std::vector<uint8_t> buffer(0x100);
@@ -202,7 +202,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0U, info.elf_offset);
-  EXPECT_EQ(0U, info.elf_start_offset);
+  EXPECT_EQ(0x1000U, info.elf_start_offset);
 
   // Verify the memory is a valid elf.
   uint8_t e_ident[SELFMAG + 1];
@@ -219,7 +219,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
   ASSERT_EQ(0U, info.elf_offset);
-  EXPECT_EQ(0U, info.elf_start_offset);
+  EXPECT_EQ(0x2000U, info.elf_start_offset);
 
   // Verify the memory is a valid elf.
   uint8_t e_ident[SELFMAG + 1];
