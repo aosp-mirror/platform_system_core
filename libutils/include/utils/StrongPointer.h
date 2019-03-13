@@ -17,9 +17,6 @@
 #ifndef ANDROID_STRONG_POINTER_H
 #define ANDROID_STRONG_POINTER_H
 
-#include <functional>
-#include <type_traits>  // for common_type.
-
 // ---------------------------------------------------------------------------
 namespace android {
 
@@ -27,12 +24,13 @@ template<typename T> class wp;
 
 // ---------------------------------------------------------------------------
 
-// TODO: Maybe remove sp<> ? wp<> comparison? These are dangerous: If the wp<>
-// was created before the sp<>, and they point to different objects, they may
-// compare equal even if they are entirely unrelated. E.g. CameraService
-// currently performa such comparisons.
-
-#define COMPARE_STRONG(_op_)                                           \
+#define COMPARE(_op_)                                           \
+inline bool operator _op_ (const sp<T>& o) const {              \
+    return m_ptr _op_ o.m_ptr;                                  \
+}                                                               \
+inline bool operator _op_ (const T* o) const {                  \
+    return m_ptr _op_ o;                                        \
+}                                                               \
 template<typename U>                                            \
 inline bool operator _op_ (const sp<U>& o) const {              \
     return m_ptr _op_ o.m_ptr;                                  \
@@ -41,27 +39,14 @@ template<typename U>                                            \
 inline bool operator _op_ (const U* o) const {                  \
     return m_ptr _op_ o;                                        \
 }                                                               \
-/* Needed to handle type inference for nullptr: */              \
-inline bool operator _op_ (const T* o) const {                  \
-    return m_ptr _op_ o;                                        \
+inline bool operator _op_ (const wp<T>& o) const {              \
+    return m_ptr _op_ o.m_ptr;                                  \
+}                                                               \
+template<typename U>                                            \
+inline bool operator _op_ (const wp<U>& o) const {              \
+    return m_ptr _op_ o.m_ptr;                                  \
 }
 
-template<template<typename C> class comparator, typename T, typename U>
-static inline bool _sp_compare_(T* a, U* b) {
-    return comparator<typename std::common_type<T*, U*>::type>()(a, b);
-}
-
-// Use std::less and friends to avoid undefined behavior when ordering pointers
-// to different objects.
-#define COMPARE_STRONG_FUNCTIONAL(_op_, _compare_)               \
-template<typename U>                                             \
-inline bool operator _op_ (const sp<U>& o) const {               \
-    return _sp_compare_<_compare_>(m_ptr, o.m_ptr);              \
-}                                                                \
-template<typename U>                                             \
-inline bool operator _op_ (const U* o) const {                   \
-    return _sp_compare_<_compare_>(m_ptr, o);                    \
-}
 // ---------------------------------------------------------------------------
 
 template<typename T>
@@ -104,23 +89,12 @@ public:
 
     // Operators
 
-    COMPARE_STRONG(==)
-    COMPARE_STRONG(!=)
-    COMPARE_STRONG_FUNCTIONAL(>, std::greater)
-    COMPARE_STRONG_FUNCTIONAL(<, std::less)
-    COMPARE_STRONG_FUNCTIONAL(<=, std::less_equal)
-    COMPARE_STRONG_FUNCTIONAL(>=, std::greater_equal)
-
-    // Punt these to the wp<> implementation.
-    template<typename U>
-    inline bool operator == (const wp<U>& o) const {
-        return o == *this;
-    }
-
-    template<typename U>
-    inline bool operator != (const wp<U>& o) const {
-        return o != *this;
-    }
+    COMPARE(==)
+    COMPARE(!=)
+    COMPARE(>)
+    COMPARE(<)
+    COMPARE(<=)
+    COMPARE(>=)
 
 private:    
     template<typename Y> friend class sp;
