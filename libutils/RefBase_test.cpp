@@ -45,44 +45,6 @@ private:
     bool* mDeleted;
 };
 
-// A version of Foo that ensures that all objects are allocated at the same
-// address. No more than one can be allocated at a time. Thread-hostile.
-class FooFixedAlloc : public RefBase {
-public:
-    static void* operator new(size_t size) {
-        if (mAllocCount != 0) {
-            abort();
-        }
-        mAllocCount = 1;
-        if (theMemory == nullptr) {
-            theMemory = malloc(size);
-        }
-        return theMemory;
-    }
-
-    static void operator delete(void *p) {
-        if (mAllocCount != 1 || p != theMemory) {
-            abort();
-        }
-        mAllocCount = 0;
-    }
-
-    FooFixedAlloc(bool* deleted_check) : mDeleted(deleted_check) {
-        *mDeleted = false;
-    }
-
-    ~FooFixedAlloc() {
-        *mDeleted = true;
-    }
-private:
-    bool* mDeleted;
-    static int mAllocCount;
-    static void* theMemory;
-};
-
-int FooFixedAlloc::mAllocCount(0);
-void* FooFixedAlloc::theMemory(nullptr);
-
 TEST(RefBase, StrongMoves) {
     bool isDeleted;
     Foo* foo = new Foo(&isDeleted);
@@ -128,91 +90,6 @@ TEST(RefBase, WeakCopies) {
     ASSERT_FALSE(isDeleted) << "Deletion on wp destruction should no longer occur";
 }
 
-TEST(RefBase, Comparisons) {
-    bool isDeleted, isDeleted2;
-    Foo* foo = new Foo(&isDeleted);
-    Foo* foo2 = new Foo(&isDeleted2);
-    sp<Foo> sp1(foo);
-    sp<Foo> sp2(foo2);
-    wp<Foo> wp1(sp1);
-    wp<Foo> wp2(sp1);
-    wp<Foo> wp3(sp2);
-    ASSERT_TRUE(wp1 == wp2);
-    ASSERT_TRUE(wp1 == sp1);
-    ASSERT_TRUE(wp3 == sp2);
-    ASSERT_TRUE(wp1 != sp2);
-    ASSERT_TRUE(wp1 <= wp2);
-    ASSERT_TRUE(wp1 >= wp2);
-    ASSERT_FALSE(wp1 != wp2);
-    ASSERT_FALSE(wp1 > wp2);
-    ASSERT_FALSE(wp1 < wp2);
-    ASSERT_FALSE(sp1 == sp2);
-    ASSERT_TRUE(sp1 != sp2);
-    bool sp1_smaller = sp1 < sp2;
-    wp<Foo>wp_smaller = sp1_smaller ? wp1 : wp3;
-    wp<Foo>wp_larger = sp1_smaller ? wp3 : wp1;
-    ASSERT_TRUE(wp_smaller < wp_larger);
-    ASSERT_TRUE(wp_smaller != wp_larger);
-    ASSERT_TRUE(wp_smaller <= wp_larger);
-    ASSERT_FALSE(wp_smaller == wp_larger);
-    ASSERT_FALSE(wp_smaller > wp_larger);
-    ASSERT_FALSE(wp_smaller >= wp_larger);
-    sp2 = nullptr;
-    ASSERT_TRUE(isDeleted2);
-    ASSERT_FALSE(isDeleted);
-    ASSERT_FALSE(wp3 == sp2);
-    // Comparison results on weak pointers should not be affected.
-    ASSERT_TRUE(wp_smaller < wp_larger);
-    ASSERT_TRUE(wp_smaller != wp_larger);
-    ASSERT_TRUE(wp_smaller <= wp_larger);
-    ASSERT_FALSE(wp_smaller == wp_larger);
-    ASSERT_FALSE(wp_smaller > wp_larger);
-    ASSERT_FALSE(wp_smaller >= wp_larger);
-    wp2 = nullptr;
-    ASSERT_FALSE(wp1 == wp2);
-    ASSERT_TRUE(wp1 != wp2);
-    wp1.clear();
-    ASSERT_TRUE(wp1 == wp2);
-    ASSERT_FALSE(wp1 != wp2);
-    wp3.clear();
-    ASSERT_TRUE(wp1 == wp3);
-    ASSERT_FALSE(wp1 != wp3);
-    ASSERT_FALSE(isDeleted);
-    sp1.clear();
-    ASSERT_TRUE(isDeleted);
-    ASSERT_TRUE(sp1 == sp2);
-}
-
-// Check whether comparison against dead wp works, even if the object referenced
-// by the new wp happens to be at the same address.
-TEST(RefBase, ReplacedComparison) {
-    bool isDeleted, isDeleted2;
-    FooFixedAlloc* foo = new FooFixedAlloc(&isDeleted);
-    sp<FooFixedAlloc> sp1(foo);
-    wp<FooFixedAlloc> wp1(sp1);
-    ASSERT_TRUE(wp1 == sp1);
-    sp1.clear();  // Deallocates the object.
-    ASSERT_TRUE(isDeleted);
-    FooFixedAlloc* foo2 = new FooFixedAlloc(&isDeleted2);
-    ASSERT_FALSE(isDeleted2);
-    ASSERT_EQ(foo, foo2);  // Not technically a legal comparison, but ...
-    sp<FooFixedAlloc> sp2(foo2);
-    wp<FooFixedAlloc> wp2(sp2);
-    ASSERT_TRUE(sp2 == wp2);
-    ASSERT_FALSE(sp2 != wp2);
-    ASSERT_TRUE(sp2 != wp1);
-    ASSERT_FALSE(sp2 == wp1);
-    ASSERT_FALSE(sp2 == sp1);  // sp1 is null.
-    ASSERT_FALSE(wp1 == wp2);  // wp1 refers to old object.
-    ASSERT_TRUE(wp1 != wp2);
-    ASSERT_TRUE(wp1 > wp2 || wp1 < wp2);
-    ASSERT_TRUE(wp1 >= wp2 || wp1 <= wp2);
-    ASSERT_FALSE(wp1 >= wp2 && wp1 <= wp2);
-    ASSERT_FALSE(wp1 == nullptr);
-    wp1 = sp2;
-    ASSERT_TRUE(wp1 == wp2);
-    ASSERT_FALSE(wp1 != wp2);
-}
 
 // Set up a situation in which we race with visit2AndRremove() to delete
 // 2 strong references.  Bar destructor checks that there are no early
