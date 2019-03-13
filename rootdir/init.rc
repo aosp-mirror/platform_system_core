@@ -389,6 +389,8 @@ on post-fs
     chmod 0700 /metadata/vold
     mkdir /metadata/password_slots 0771 root system
 
+    mkdir /metadata/apex 0700 root system
+    mkdir /metadata/apex/sessions 0700 root system
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
