@@ -51,6 +51,9 @@ static constexpr const uint32_t kUnsupportedExtentFlags =
         FIEMAP_EXTENT_NOT_ALIGNED | FIEMAP_EXTENT_DATA_INLINE | FIEMAP_EXTENT_DATA_TAIL |
         FIEMAP_EXTENT_UNWRITTEN | FIEMAP_EXTENT_SHARED | FIEMAP_EXTENT_MERGED;
 
+// Large file support must be enabled.
+static_assert(sizeof(off_t) == sizeof(uint64_t));
+
 static inline void cleanup(const std::string& file_path, bool created) {
     if (created) {
         unlink(file_path.c_str());
@@ -229,6 +232,42 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, 
     return true;
 }
 
+static bool FallocateFallback(int file_fd, uint64_t block_size, uint64_t file_size,
+                              const std::string& file_path,
+                              const std::function<bool(uint64_t, uint64_t)>& on_progress) {
+    // Even though this is much faster than writing zeroes, it is still slow
+    // enough that we need to fire the progress callback periodically. To
+    // easily achieve this, we seek in chunks. We use 1000 chunks since
+    // normally we only fire the callback on 1/1000th increments.
+    uint64_t bytes_per_chunk = std::max(file_size / 1000, block_size);
+
+    // Seek just to the end of each chunk and write a single byte, causing
+    // the filesystem to allocate blocks.
+    off_t cursor = 0;
+    off_t end = static_cast<off_t>(file_size);
+    while (cursor < end) {
+        cursor = std::min(static_cast<off_t>(cursor + bytes_per_chunk), end);
+        auto rv = TEMP_FAILURE_RETRY(lseek(file_fd, cursor - 1, SEEK_SET));
+        if (rv < 0) {
+            PLOG(ERROR) << "Failed to lseek " << file_path;
+            return false;
+        }
+        if (rv != cursor - 1) {
+            LOG(ERROR) << "Seek returned wrong offset " << rv << " for file " << file_path;
+            return false;
+        }
+        char buffer[] = {0};
+        if (!android::base::WriteFully(file_fd, buffer, 1)) {
+            PLOG(ERROR) << "Write failed: " << file_path;
+            return false;
+        }
+        if (on_progress && !on_progress(cursor, file_size)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
                          uint64_t file_size, unsigned int fs_type,
                          std::function<bool(uint64_t, uint64_t)> on_progress) {
@@ -245,28 +284,10 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
                 return false;
             }
             break;
-        case MSDOS_SUPER_MAGIC: {
+        case MSDOS_SUPER_MAGIC:
             // fallocate() is not supported, and not needed, since VFAT does not support holes.
             // Instead we can perform a much faster allocation.
-            auto offset = TEMP_FAILURE_RETRY(lseek(file_fd, file_size - 1, SEEK_SET));
-            if (offset < 0) {
-                PLOG(ERROR) << "Failed to lseek " << file_path;
-                return false;
-            }
-            if (offset != file_size - 1) {
-                LOG(ERROR) << "Seek returned wrong offset " << offset << " for file " << file_path;
-                return false;
-            }
-            char buffer[] = {0};
-            if (!android::base::WriteFully(file_fd, buffer, 1)) {
-                PLOG(ERROR) << "Write failed: " << file_path;
-                return false;
-            }
-            if (on_progress && !on_progress(file_size, file_size)) {
-                return false;
-            }
-            return true;
-        }
+            return FallocateFallback(file_fd, blocksz, file_size, file_path, on_progress);
         default:
             LOG(ERROR) << "Missing fallocate() support for file system " << fs_type;
             return false;
@@ -288,16 +309,19 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
     }
 
     int permille = -1;
-    for (; offset < file_size; offset += blocksz) {
+    while (offset < file_size) {
         if (!::android::base::WriteFully(file_fd, buffer.get(), blocksz)) {
             PLOG(ERROR) << "Failed to write" << blocksz << " bytes at offset" << offset
                         << " in file " << file_path;
             return false;
         }
+
+        offset += blocksz;
+
         // Don't invoke the callback every iteration - wait until a significant
         // chunk (here, 1/1000th) of the data has been processed.
         int new_permille = (static_cast<uint64_t>(offset) * 1000) / file_size;
-        if (new_permille != permille) {
+        if (new_permille != permille && static_cast<uint64_t>(offset) != file_size) {
             if (on_progress && !on_progress(offset, file_size)) {
                 return false;
             }

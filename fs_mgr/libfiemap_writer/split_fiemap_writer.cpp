@@ -289,5 +289,9 @@ uint32_t SplitFiemap::block_size() const {
     return files_[0]->block_size();
 }
 
+const std::string& SplitFiemap::bdev_path() const {
+    return files_[0]->bdev_path();
+}
+
 }  // namespace fiemap_writer
 }  // namespace android
