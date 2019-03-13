@@ -110,7 +110,7 @@
  */
 #define PSI_WINDOW_SIZE_MS 1000
 /* Polling period after initial PSI signal */
-#define PSI_POLL_PERIOD_MS 200
+#define PSI_POLL_PERIOD_MS 40
 /* Poll for the duration of one window after initial PSI signal */
 #define PSI_POLL_COUNT (PSI_WINDOW_SIZE_MS / PSI_POLL_PERIOD_MS)
 
