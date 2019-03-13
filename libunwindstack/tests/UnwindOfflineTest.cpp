@@ -1372,4 +1372,56 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
   // Ignore top frame since the test code was modified to end in __libc_init.
 }
 
+TEST_F(UnwindOfflineTest, shared_lib_in_apk_single_map_arm64) {
+  ASSERT_NO_FATAL_FAILURE(Init("shared_lib_in_apk_single_map_arm64/", ARCH_ARM64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(13U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000000000814bc  libc.so (syscall+28)\n"
+      "  #01 pc 00000000008cdf5c  test.apk (offset 0x5000)\n"
+      "  #02 pc 00000000008cde9c  test.apk (offset 0x5000)\n"
+      "  #03 pc 00000000008cdd70  test.apk (offset 0x5000)\n"
+      "  #04 pc 00000000008ce408  test.apk (offset 0x5000)\n"
+      "  #05 pc 00000000008ce8d8  test.apk (offset 0x5000)\n"
+      "  #06 pc 00000000008ce814  test.apk (offset 0x5000)\n"
+      "  #07 pc 00000000008bcf60  test.apk (offset 0x5000)\n"
+      "  #08 pc 0000000000133024  test.apk (offset 0x5000)\n"
+      "  #09 pc 0000000000134ad0  test.apk (offset 0x5000)\n"
+      "  #10 pc 0000000000134b64  test.apk (offset 0x5000)\n"
+      "  #11 pc 00000000000e406c  libc.so (__pthread_start(void*)+36)\n"
+      "  #12 pc 0000000000085e18  libc.so (__start_thread+64)\n",
+      frame_info);
+
+  EXPECT_EQ(0x7cbe0b14bcULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7be4f077d0ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x7be6715f5cULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7be4f077d0ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x7be6715e9cULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7be4f07800ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x7be6715d70ULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7be4f07840ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x7be6716408ULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7be4f07860ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x7be67168d8ULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7be4f07880ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x7be6716814ULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7be4f078f0ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0x7be6704f60ULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0x7be4f07910ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0x7be5f7b024ULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0x7be4f07950ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0x7be5f7cad0ULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0x7be4f07aa0ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x7be5f7cb64ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0x7be4f07ce0ULL, unwinder.frames()[10].sp);
+  EXPECT_EQ(0x7cbe11406cULL, unwinder.frames()[11].pc);
+  EXPECT_EQ(0x7be4f07d00ULL, unwinder.frames()[11].sp);
+  EXPECT_EQ(0x7cbe0b5e18ULL, unwinder.frames()[12].pc);
+  EXPECT_EQ(0x7be4f07d20ULL, unwinder.frames()[12].sp);
+}
+
 }  // namespace unwindstack

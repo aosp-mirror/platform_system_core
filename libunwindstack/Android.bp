@@ -248,6 +248,7 @@ cc_test {
         "tests/files/offline/offset_arm/*",
         "tests/files/offline/shared_lib_in_apk_arm64/*",
         "tests/files/offline/shared_lib_in_apk_memory_only_arm64/*",
+        "tests/files/offline/shared_lib_in_apk_single_map_arm64/*",
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
