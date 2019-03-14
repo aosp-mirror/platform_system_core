@@ -105,6 +105,12 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
 
   if (resolve_names_) {
     frame->map_name = map_info->name;
+    if (embedded_soname_ && map_info->elf_start_offset != 0 && !frame->map_name.empty()) {
+      std::string soname = elf->GetSoname();
+      if (!soname.empty()) {
+        frame->map_name += '!' + soname;
+      }
+    }
   }
   frame->map_elf_start_offset = map_info->elf_start_offset;
   frame->map_exact_offset = map_info->offset;

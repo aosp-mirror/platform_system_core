@@ -555,9 +555,7 @@ void ElfInterfaceTest::Soname() {
   ASSERT_TRUE(elf->Init(&load_bias));
   EXPECT_EQ(0U, load_bias);
 
-  std::string name;
-  ASSERT_TRUE(elf->GetSoname(&name));
-  ASSERT_STREQ("fake_soname.so", name.c_str());
+  ASSERT_EQ("fake_soname.so", elf->GetSoname());
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname) {
@@ -578,8 +576,7 @@ void ElfInterfaceTest::SonameAfterDtNull() {
   ASSERT_TRUE(elf->Init(&load_bias));
   EXPECT_EQ(0U, load_bias);
 
-  std::string name;
-  ASSERT_FALSE(elf->GetSoname(&name));
+  ASSERT_EQ("", elf->GetSoname());
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname_after_dt_null) {
@@ -600,8 +597,7 @@ void ElfInterfaceTest::SonameSize() {
   ASSERT_TRUE(elf->Init(&load_bias));
   EXPECT_EQ(0U, load_bias);
 
-  std::string name;
-  ASSERT_FALSE(elf->GetSoname(&name));
+  ASSERT_EQ("", elf->GetSoname());
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname_size) {
@@ -624,8 +620,7 @@ void ElfInterfaceTest::SonameMissingMap() {
   ASSERT_TRUE(elf->Init(&load_bias));
   EXPECT_EQ(0U, load_bias);
 
-  std::string name;
-  ASSERT_FALSE(elf->GetSoname(&name));
+  ASSERT_EQ("", elf->GetSoname());
 }
 
 TEST_F(ElfInterfaceTest, elf32_soname_missing_map) {
