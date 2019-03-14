@@ -273,7 +273,8 @@ public:
         }
 
         // can't verify if we're missing either param
-        if ((enrolled_password_handle_length | provided_password_length) == 0)
+        if (enrolled_password_handle == nullptr || provided_password == nullptr ||
+            enrolled_password_handle_length == 0 || provided_password_length == 0)
             return -EINVAL;
 
         int ret;
@@ -322,7 +323,7 @@ public:
 
                 if (ret == 0) {
                     // success! re-enroll with HAL
-                    *request_reenroll = true;
+                    if (request_reenroll != nullptr) *request_reenroll = true;
                 }
             }
         } else {
