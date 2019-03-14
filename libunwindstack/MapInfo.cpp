@@ -88,6 +88,7 @@ Memory* MapInfo::GetFileMemory() {
   // Check if the start of this map is an embedded elf.
   uint64_t max_size = 0;
   if (Elf::GetInfo(memory.get(), &max_size)) {
+    elf_start_offset = offset;
     if (max_size > map_size) {
       if (memory->Init(name, offset, max_size)) {
         return memory.release();
@@ -96,6 +97,7 @@ Memory* MapInfo::GetFileMemory() {
       if (memory->Init(name, offset, map_size)) {
         return memory.release();
       }
+      elf_start_offset = 0;
       return nullptr;
     }
     return memory.release();
