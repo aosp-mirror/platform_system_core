@@ -371,4 +371,35 @@ TEST_F(MapInfoGetElfTest, multiple_thread_get_elf) {
   }
 }
 
+// Verify that previous maps don't automatically get the same elf object.
+TEST_F(MapInfoGetElfTest, prev_map_elf_not_set) {
+  MapInfo info1(nullptr, 0x1000, 0x2000, 0, PROT_READ, "/not/present");
+  MapInfo info2(&info1, 0x2000, 0x3000, 0, PROT_READ, elf_.path);
+
+  Elf32_Ehdr ehdr;
+  TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
+  memory_->SetMemory(0x2000, &ehdr, sizeof(ehdr));
+  Elf* elf = info2.GetElf(process_memory_, ARCH_ARM);
+  ASSERT_TRUE(elf != nullptr);
+  ASSERT_TRUE(elf->valid());
+
+  ASSERT_NE(elf, info1.GetElf(process_memory_, ARCH_ARM));
+}
+
+// Verify that a read-only map followed by a read-execute map will result
+// in the same elf object in both maps.
+TEST_F(MapInfoGetElfTest, read_only_followed_by_read_exec_share_elf) {
+  MapInfo r_info(nullptr, 0x1000, 0x2000, 0, PROT_READ, elf_.path);
+  MapInfo rw_info(&r_info, 0x2000, 0x3000, 0x1000, PROT_READ | PROT_EXEC, elf_.path);
+
+  Elf32_Ehdr ehdr;
+  TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
+  memory_->SetMemory(0x1000, &ehdr, sizeof(ehdr));
+  Elf* elf = rw_info.GetElf(process_memory_, ARCH_ARM);
+  ASSERT_TRUE(elf != nullptr);
+  ASSERT_TRUE(elf->valid());
+
+  ASSERT_EQ(elf, r_info.GetElf(process_memory_, ARCH_ARM));
+}
+
 }  // namespace unwindstack

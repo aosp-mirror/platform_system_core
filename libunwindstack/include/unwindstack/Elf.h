@@ -59,7 +59,7 @@ class Elf {
 
   void Invalidate();
 
-  bool GetSoname(std::string* name);
+  std::string GetSoname();
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
 

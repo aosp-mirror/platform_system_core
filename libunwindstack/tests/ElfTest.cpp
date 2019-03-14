@@ -126,9 +126,9 @@ TEST_F(ElfTest, elf_invalid) {
   ASSERT_FALSE(elf.valid());
   ASSERT_TRUE(elf.interface() == nullptr);
 
-  std::string name;
-  ASSERT_FALSE(elf.GetSoname(&name));
+  ASSERT_EQ("", elf.GetSoname());
 
+  std::string name;
   uint64_t func_offset;
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
@@ -309,7 +309,7 @@ class ElfInterfaceMock : public ElfInterface {
 
   bool Init(uint64_t*) override { return false; }
   void InitHeaders(uint64_t) override {}
-  bool GetSoname(std::string*) override { return false; }
+  std::string GetSoname() override { return ""; }
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
   std::string GetBuildID() override { return ""; }
 

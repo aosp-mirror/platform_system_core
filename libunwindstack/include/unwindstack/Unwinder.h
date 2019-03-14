@@ -100,6 +100,11 @@ class Unwinder {
   // set to an empty string and the function offset being set to zero.
   void SetResolveNames(bool resolve) { resolve_names_ = resolve; }
 
+  // Enable/disable soname printing the soname for a map name if the elf is
+  // embedded in a file. This is enabled by default.
+  // NOTE: This does nothing unless resolving names is enabled.
+  void SetEmbeddedSoname(bool embedded_soname) { embedded_soname_ = embedded_soname; }
+
 #if !defined(NO_LIBDEXFILE_SUPPORT)
   void SetDexFiles(DexFiles* dex_files, ArchEnum arch);
 #endif
@@ -124,6 +129,7 @@ class Unwinder {
   DexFiles* dex_files_ = nullptr;
 #endif
   bool resolve_names_ = true;
+  bool embedded_soname_ = true;
   ErrorData last_error_;
 };
 
