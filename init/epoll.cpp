@@ -16,6 +16,7 @@
 
 #include "epoll.h"
 
+#include <stdint.h>
 #include <sys/epoll.h>
 
 #include <chrono>
@@ -37,13 +38,16 @@ Result<Success> Epoll::Open() {
     return Success();
 }
 
-Result<Success> Epoll::RegisterHandler(int fd, std::function<void()> handler) {
+Result<Success> Epoll::RegisterHandler(int fd, std::function<void()> handler, uint32_t events) {
+    if (!events) {
+        return Error() << "Must specify events";
+    }
     auto [it, inserted] = epoll_handlers_.emplace(fd, std::move(handler));
     if (!inserted) {
         return Error() << "Cannot specify two epoll handlers for a given FD";
     }
     epoll_event ev;
-    ev.events = EPOLLIN;
+    ev.events = events;
     // std::map's iterators do not get invalidated until erased, so we use the
     // pointer to the std::function in the map directly for epoll_ctl.
     ev.data.ptr = reinterpret_cast<void*>(&it->second);
