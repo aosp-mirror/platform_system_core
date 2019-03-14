@@ -1303,9 +1303,9 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
     }
 }
 
-static int adb_connect_command(const std::string& command) {
+static int adb_connect_command(const std::string& command, TransportId* transport = nullptr) {
     std::string error;
-    unique_fd fd(adb_connect(command, &error));
+    unique_fd fd(adb_connect(transport, command, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
@@ -1394,9 +1394,9 @@ int adb_commandline(int argc, const char** argv) {
     TransportId transport_id = 0;
 
     while (argc > 0) {
-        if (!strcmp(argv[0],"server")) {
+        if (!strcmp(argv[0], "server")) {
             is_server = true;
-        } else if (!strcmp(argv[0],"nodaemon")) {
+        } else if (!strcmp(argv[0], "nodaemon")) {
             no_daemon = true;
         } else if (!strcmp(argv[0], "fork-server")) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
@@ -1433,11 +1433,11 @@ int adb_commandline(int argc, const char** argv) {
             if (*id != '\0') {
                 error_exit("invalid transport id");
             }
-        } else if (!strcmp(argv[0],"-d")) {
+        } else if (!strcmp(argv[0], "-d")) {
             transport_type = kTransportUsb;
-        } else if (!strcmp(argv[0],"-e")) {
+        } else if (!strcmp(argv[0], "-e")) {
             transport_type = kTransportLocal;
-        } else if (!strcmp(argv[0],"-a")) {
+        } else if (!strcmp(argv[0], "-a")) {
             gListenAll = 1;
         } else if (!strncmp(argv[0], "-H", 2)) {
             if (argv[0][2] == '\0') {
@@ -1569,6 +1569,10 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         std::string query = android::base::StringPrintf("host:%s%s", argv[0], listopt);
+        std::string error;
+        if (!adb_check_server_version(&error)) {
+            error_exit("failed to check server version: %s", error.c_str());
+        }
         printf("List of devices attached\n");
         return adb_query_command(query);
     }
