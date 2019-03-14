@@ -300,7 +300,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(
       "  #00 pc 00068fb8  libarttestd.so (art::CauseSegfault()+72)\n"
       "  #01 pc 00067f00  libarttestd.so (Java_Main_unwindInProcess+10032)\n"
-      "  #02 pc 000021a8  137-cfi.odex (offset 0x2000) (boolean Main.unwindInProcess(boolean, int, "
+      "  #02 pc 000021a8  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+136)\n"
       "  #03 pc 0000fe80  anonymous:ee74c000 (boolean Main.bar(boolean)+64)\n"
       "  #04 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
@@ -601,7 +601,7 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
   ASSERT_EQ(76U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
       "  #00 pc 00018a5e  libarttestd.so (Java_Main_unwindInProcess+866)\n"
-      "  #01 pc 0000212d  137-cfi.odex (offset 0x2000) (boolean Main.unwindInProcess(boolean, int, "
+      "  #01 pc 0000212d  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+92)\n"
       "  #02 pc 00011cb1  anonymous:e2796000 (boolean Main.bar(boolean)+72)\n"
       "  #03 pc 00462175  libartd.so (art_quick_invoke_stub_internal+68)\n"
@@ -1312,7 +1312,8 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_arm64) {
       "  #02 pc 00000000000008bc  vdso.so\n"
       "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
       "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
-      "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk (offset 0x4000) (ANGLEGetUtilityAPI+56)\n"
+      "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk!libfeature_support_angle.so (offset 0x4000) "
+      "(ANGLEGetUtilityAPI+56)\n"
       "  #06 pc 000000000007fe68  libc.so (__libc_init)\n",
       frame_info);
 

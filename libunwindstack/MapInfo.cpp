@@ -188,43 +188,56 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
 }
 
 Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch) {
-  // Make sure no other thread is trying to add the elf to this map.
-  std::lock_guard<std::mutex> guard(mutex_);
+  {
+    // Make sure no other thread is trying to add the elf to this map.
+    std::lock_guard<std::mutex> guard(mutex_);
 
-  if (elf.get() != nullptr) {
-    return elf.get();
-  }
-
-  bool locked = false;
-  if (Elf::CachingEnabled() && !name.empty()) {
-    Elf::CacheLock();
-    locked = true;
-    if (Elf::CacheGet(this)) {
-      Elf::CacheUnlock();
+    if (elf.get() != nullptr) {
       return elf.get();
+    }
+
+    bool locked = false;
+    if (Elf::CachingEnabled() && !name.empty()) {
+      Elf::CacheLock();
+      locked = true;
+      if (Elf::CacheGet(this)) {
+        Elf::CacheUnlock();
+        return elf.get();
+      }
+    }
+
+    Memory* memory = CreateMemory(process_memory);
+    if (locked) {
+      if (Elf::CacheAfterCreateMemory(this)) {
+        delete memory;
+        Elf::CacheUnlock();
+        return elf.get();
+      }
+    }
+    elf.reset(new Elf(memory));
+    // If the init fails, keep the elf around as an invalid object so we
+    // don't try to reinit the object.
+    elf->Init();
+    if (elf->valid() && expected_arch != elf->arch()) {
+      // Make the elf invalid, mismatch between arch and expected arch.
+      elf->Invalidate();
+    }
+
+    if (locked) {
+      Elf::CacheAdd(this);
+      Elf::CacheUnlock();
     }
   }
 
-  Memory* memory = CreateMemory(process_memory);
-  if (locked) {
-    if (Elf::CacheAfterCreateMemory(this)) {
-      delete memory;
-      Elf::CacheUnlock();
-      return elf.get();
+  // If there is a read-only map then a read-execute map that represents the
+  // same elf object, make sure the previous map is using the same elf
+  // object if it hasn't already been set.
+  if (prev_map != nullptr && elf_start_offset != offset && prev_map->offset == elf_start_offset &&
+      prev_map->name == name) {
+    std::lock_guard<std::mutex> guard(prev_map->mutex_);
+    if (prev_map->elf.get() == nullptr) {
+      prev_map->elf = elf;
     }
-  }
-  elf.reset(new Elf(memory));
-  // If the init fails, keep the elf around as an invalid object so we
-  // don't try to reinit the object.
-  elf->Init();
-  if (elf->valid() && expected_arch != elf->arch()) {
-    // Make the elf invalid, mismatch between arch and expected arch.
-    elf->Invalidate();
-  }
-
-  if (locked) {
-    Elf::CacheAdd(this);
-    Elf::CacheUnlock();
   }
   return elf.get();
 }

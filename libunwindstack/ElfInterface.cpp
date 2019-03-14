@@ -374,13 +374,12 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
 }
 
 template <typename DynType>
-bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
+std::string ElfInterface::GetSonameWithTemplate() {
   if (soname_type_ == SONAME_INVALID) {
-    return false;
+    return "";
   }
   if (soname_type_ == SONAME_VALID) {
-    *soname = soname_;
-    return true;
+    return soname_;
   }
 
   soname_type_ = SONAME_INVALID;
@@ -397,7 +396,7 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
     if (!memory_->ReadFully(offset, &dyn, sizeof(dyn))) {
       last_error_.code = ERROR_MEMORY_INVALID;
       last_error_.address = offset;
-      return false;
+      return "";
     }
 
     if (dyn.d_tag == DT_STRTAB) {
@@ -416,17 +415,16 @@ bool ElfInterface::GetSonameWithTemplate(std::string* soname) {
     if (entry.first == strtab_addr) {
       soname_offset = entry.second + soname_offset;
       if (soname_offset >= entry.second + strtab_size) {
-        return false;
+        return "";
       }
       if (!memory_->ReadString(soname_offset, &soname_)) {
-        return false;
+        return "";
       }
       soname_type_ = SONAME_VALID;
-      *soname = soname_;
-      return true;
+      return soname_;
     }
   }
-  return false;
+  return "";
 }
 
 template <typename SymType>
@@ -653,8 +651,8 @@ template void ElfInterface::ReadSectionHeaders<Elf64_Ehdr, Elf64_Shdr>(const Elf
 template std::string ElfInterface::ReadBuildID<Elf32_Nhdr>();
 template std::string ElfInterface::ReadBuildID<Elf64_Nhdr>();
 
-template bool ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(std::string*);
-template bool ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(std::string*);
+template std::string ElfInterface::GetSonameWithTemplate<Elf32_Dyn>();
+template std::string ElfInterface::GetSonameWithTemplate<Elf64_Dyn>();
 
 template bool ElfInterface::GetFunctionNameWithTemplate<Elf32_Sym>(uint64_t, std::string*,
                                                                    uint64_t*);
