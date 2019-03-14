@@ -79,8 +79,13 @@ class UnwinderTest : public ::testing::Test {
     AddMapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so", elf);
 
     elf = new ElfFake(new MemoryFake);
-    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    ElfInterfaceFake* interface = new ElfInterfaceFake(nullptr);
+    interface->FakeSetSoname("lib_fake.so");
+    elf->FakeSetInterface(interface);
     AddMapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk", elf);
+    MapInfo* map_info = maps_->Find(0x43000);
+    ASSERT_TRUE(map_info != nullptr);
+    map_info->elf_start_offset = 0x1d000;
 
     AddMapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
 
@@ -324,8 +329,38 @@ TEST_F(UnwinderTest, non_zero_map_offset) {
   EXPECT_EQ(0x10000U, frame->sp);
   EXPECT_EQ("Frame0", frame->function_name);
   EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.apk!lib_fake.so", frame->map_name);
+  EXPECT_EQ(0x1d000U, frame->map_elf_start_offset);
+  EXPECT_EQ(0x1d000U, frame->map_exact_offset);
+  EXPECT_EQ(0x43000U, frame->map_start);
+  EXPECT_EQ(0x44000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, disable_embedded_soname) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.set_pc(0x43000);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
+  unwinder.SetEmbeddedSoname(false);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x43000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
   EXPECT_EQ("/fake/fake.apk", frame->map_name);
-  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ(0x1d000U, frame->map_elf_start_offset);
   EXPECT_EQ(0x1d000U, frame->map_exact_offset);
   EXPECT_EQ(0x43000U, frame->map_start);
   EXPECT_EQ(0x44000U, frame->map_end);
@@ -813,8 +848,8 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   EXPECT_EQ(0x10010U, frame->sp);
   EXPECT_EQ("Frame1", frame->function_name);
   EXPECT_EQ(1U, frame->function_offset);
-  EXPECT_EQ("/fake/fake.apk", frame->map_name);
-  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ("/fake/fake.apk!lib_fake.so", frame->map_name);
+  EXPECT_EQ(0x1d000U, frame->map_elf_start_offset);
   EXPECT_EQ(0x1d000U, frame->map_exact_offset);
   EXPECT_EQ(0x43000U, frame->map_start);
   EXPECT_EQ(0x44000U, frame->map_end);

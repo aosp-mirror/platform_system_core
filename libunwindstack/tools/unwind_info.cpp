@@ -118,8 +118,8 @@ int GetElfInfo(const char* file, uint64_t offset) {
     return 1;
   }
 
-  std::string soname;
-  if (elf.GetSoname(&soname)) {
+  std::string soname(elf.GetSoname());
+  if (!soname.empty()) {
     printf("Soname: %s\n", soname.c_str());
   }
 

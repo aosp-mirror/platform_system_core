@@ -71,8 +71,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::string soname;
-  if (elf.GetSoname(&soname)) {
+  std::string soname(elf.GetSoname());
+  if (!soname.empty()) {
     printf("Soname: %s\n\n", soname.c_str());
   }
 

@@ -93,9 +93,12 @@ void Elf::Invalidate() {
   valid_ = false;
 }
 
-bool Elf::GetSoname(std::string* name) {
+std::string Elf::GetSoname() {
   std::lock_guard<std::mutex> guard(lock_);
-  return valid_ && interface_->GetSoname(name);
+  if (!valid_) {
+    return "";
+  }
+  return interface_->GetSoname();
 }
 
 uint64_t Elf::GetRelPc(uint64_t pc, const MapInfo* map_info) {
