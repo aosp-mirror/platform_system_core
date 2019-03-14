@@ -196,6 +196,61 @@ TEST_F(FiemapWriterTest, MaxBlockSize) {
     ASSERT_GT(DetermineMaximumFileSize(testfile), 0);
 }
 
+TEST_F(FiemapWriterTest, FibmapBlockAddressing) {
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
+    ASSERT_NE(fptr, nullptr);
+
+    switch (fptr->fs_type()) {
+        case F2FS_SUPER_MAGIC:
+        case EXT4_SUPER_MAGIC:
+            // Skip the test for FIEMAP supported filesystems. This is really
+            // because f2fs/ext4 have caches that seem to defeat reading back
+            // directly from the block device, and writing directly is too
+            // dangerous.
+            std::cout << "Skipping test, filesystem does not use FIBMAP\n";
+            return;
+    }
+
+    bool uses_dm;
+    std::string bdev_path;
+    ASSERT_TRUE(FiemapWriter::GetBlockDeviceForFile(testfile, &bdev_path, &uses_dm));
+
+    if (uses_dm) {
+        // We could use a device-mapper wrapper here to bypass encryption, but
+        // really this test is for FIBMAP correctness on VFAT (where encryption
+        // is never used), so we don't bother.
+        std::cout << "Skipping test, block device is metadata encrypted\n";
+        return;
+    }
+
+    std::string data(fptr->size(), '\0');
+    for (size_t i = 0; i < data.size(); i++) {
+        data[i] = 'A' + static_cast<char>(data.size() % 26);
+    }
+
+    {
+        unique_fd fd(open(testfile.c_str(), O_WRONLY | O_CLOEXEC));
+        ASSERT_GE(fd, 0);
+        ASSERT_TRUE(android::base::WriteFully(fd, data.data(), data.size()));
+        ASSERT_EQ(fsync(fd), 0);
+    }
+
+    ASSERT_FALSE(fptr->extents().empty());
+    const auto& first_extent = fptr->extents()[0];
+
+    unique_fd bdev(open(fptr->bdev_path().c_str(), O_RDONLY | O_CLOEXEC));
+    ASSERT_GE(bdev, 0);
+
+    off_t where = first_extent.fe_physical;
+    ASSERT_EQ(lseek(bdev, where, SEEK_SET), where);
+
+    // Note: this will fail on encrypted folders.
+    std::string actual(data.size(), '\0');
+    ASSERT_GE(first_extent.fe_length, data.size());
+    ASSERT_TRUE(android::base::ReadFully(bdev, actual.data(), actual.size()));
+    EXPECT_EQ(memcmp(actual.data(), data.data(), data.size()), 0);
+}
+
 TEST_F(SplitFiemapTest, Create) {
     auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
     ASSERT_NE(ptr, nullptr);
@@ -446,7 +501,7 @@ int main(int argc, char** argv) {
     if (argc <= 1) {
         cerr << "Usage: <test_dir> [file_size]\n";
         cerr << "\n";
-        cerr << "Note: test_dir must be a writable directory.\n";
+        cerr << "Note: test_dir must be a writable, unencrypted directory.\n";
         exit(EXIT_FAILURE);
     }
     ::android::base::InitLogging(argv, ::android::base::StderrLogger);
