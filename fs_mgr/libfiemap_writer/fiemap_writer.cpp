@@ -507,7 +507,17 @@ static bool ReadFibmap(int file_fd, const std::string& file_path,
         return false;
     }
 
-    uint64_t num_blocks = (s.st_size + s.st_blksize - 1) / s.st_blksize;
+    unsigned int blksize;
+    if (ioctl(file_fd, FIGETBSZ, &blksize) < 0) {
+        PLOG(ERROR) << "Failed to get FIGETBSZ for " << file_path;
+        return false;
+    }
+    if (!blksize) {
+        LOG(ERROR) << "Invalid filesystem block size: " << blksize;
+        return false;
+    }
+
+    uint64_t num_blocks = (s.st_size + blksize - 1) / blksize;
     if (num_blocks > std::numeric_limits<uint32_t>::max()) {
         LOG(ERROR) << "Too many blocks for FIBMAP (" << num_blocks << ")";
         return false;
@@ -525,13 +535,12 @@ static bool ReadFibmap(int file_fd, const std::string& file_path,
         }
 
         if (!extents->empty() && block == last_block + 1) {
-            extents->back().fe_length += s.st_blksize;
+            extents->back().fe_length += blksize;
         } else {
-            extents->push_back(
-                    fiemap_extent{.fe_logical = block_number,
-                                  .fe_physical = static_cast<uint64_t>(block) * s.st_blksize,
-                                  .fe_length = static_cast<uint64_t>(s.st_blksize),
-                                  .fe_flags = 0});
+            extents->push_back(fiemap_extent{.fe_logical = block_number,
+                                             .fe_physical = static_cast<uint64_t>(block) * blksize,
+                                             .fe_length = static_cast<uint64_t>(blksize),
+                                             .fe_flags = 0});
         }
         last_block = block;
     }
