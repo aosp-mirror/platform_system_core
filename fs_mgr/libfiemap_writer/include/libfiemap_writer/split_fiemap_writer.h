@@ -69,6 +69,7 @@ class SplitFiemap final {
     const std::vector<struct fiemap_extent>& extents();
     uint32_t block_size() const;
     uint64_t size() const { return total_size_; }
+    const std::string& bdev_path() const;
 
     // Non-copyable & Non-movable
     SplitFiemap(const SplitFiemap&) = delete;
