@@ -70,32 +70,40 @@ static bool packagelist_parse_callback(pkg_info* this_package, void* userdata) {
   return true; // Keep searching.
 }
 
-static bool check_directory(const char* path, uid_t uid) {
+static void check_directory(const char* path, uid_t uid) {
   struct stat st;
-  if (TEMP_FAILURE_RETRY(lstat(path, &st)) == -1) return false;
+  if (TEMP_FAILURE_RETRY(lstat(path, &st)) == -1) {
+    error(1, errno, "couldn't stat %s", path);
+  }
 
   // /data/user/0 is a known safe symlink.
-  if (strcmp("/data/user/0", path) == 0) return true;
+  if (strcmp("/data/user/0", path) == 0) return;
 
   // Must be a real directory, not a symlink.
-  if (!S_ISDIR(st.st_mode)) return false;
+  if (!S_ISDIR(st.st_mode)) {
+    error(1, 0, "%s not a directory: %o", path, st.st_mode);
+  }
 
   // Must be owned by specific uid/gid.
-  if (st.st_uid != uid || st.st_gid != uid) return false;
+  if (st.st_uid != uid || st.st_gid != uid) {
+    error(1, 0, "%s has wrong owner: %d/%d, not %d", path, st.st_uid, st.st_gid, uid);
+  }
 
   // Must not be readable or writable by others.
-  if ((st.st_mode & (S_IROTH|S_IWOTH)) != 0) return false;
-
-  return true;
+  if ((st.st_mode & (S_IROTH | S_IWOTH)) != 0) {
+    error(1, 0, "%s readable or writable by others: %o", path, st.st_mode);
+  }
 }
 
 // This function is used to check the data directory path for safety.
 // We check that every sub-directory is owned by the 'system' user
 // and exists and is not a symlink. We also check that the full directory
 // path is properly owned by the user ID.
-static bool check_data_path(const char* data_path, uid_t uid) {
+static void check_data_path(const char* package_name, const char* data_path, uid_t uid) {
   // The path should be absolute.
-  if (data_path[0] != '/') return false;
+  if (data_path[0] != '/') {
+    error(1, 0, "%s data path not absolute: %s", package_name, data_path);
+  }
 
   // Look for all sub-paths, we do that by finding
   // directory separators in the input path and
@@ -110,26 +118,28 @@ static bool check_data_path(const char* data_path, uid_t uid) {
     if (data_path[nn+1] == '\0') break;
 
     /* found a separator, check that data_path is not too long. */
-    if (nn >= (int)(sizeof subpath)) return false;
+    if (nn >= (int)(sizeof subpath)) {
+      error(1, 0, "%s data path too long: %s", package_name, data_path);
+    }
 
     /* reject any '..' subpath */
     if (nn >= 3               &&
         data_path[nn-3] == '/' &&
         data_path[nn-2] == '.' &&
         data_path[nn-1] == '.') {
-      return false;
+      error(1, 0, "%s contains '..': %s", package_name, data_path);
     }
 
     /* copy to 'subpath', then check ownership */
     memcpy(subpath, data_path, nn);
     subpath[nn] = '\0';
 
-    if (!check_directory(subpath, AID_SYSTEM)) return false;
+    check_directory(subpath, AID_SYSTEM);
   }
 
   // All sub-paths were checked, now verify that the full data
   // directory is owned by the application uid.
-  return check_directory(data_path, uid);
+  check_directory(data_path, uid);
 }
 
 std::vector<gid_t> get_supplementary_gids(uid_t userAppId) {
@@ -222,9 +232,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Check that the data directory path is valid.
-  if (!check_data_path(info.data_dir, userAppId)) {
-    error(1, 0, "package has corrupt installation: %s", pkgname);
-  }
+  check_data_path(pkgname, info.data_dir, userAppId);
 
   // Ensure that we change all real/effective/saved IDs at the
   // same time to avoid nasty surprises.
