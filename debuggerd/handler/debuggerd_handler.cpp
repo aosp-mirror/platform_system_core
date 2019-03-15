@@ -383,7 +383,9 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     execle(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, debuggerd_dump_type,
            nullptr, nullptr);
-    fatal_errno("exec failed");
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "failed to exec crash_dump helper: %s",
+                          strerror(errno));
+    return 1;
   }
 
   input_write.reset();
