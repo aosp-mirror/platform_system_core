@@ -83,7 +83,7 @@ namespace.default.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.permitted.paths += /data
 namespace.default.permitted.paths += /mnt/expand
-namespace.default.permitted.paths += /bionic/${LIB}
+namespace.default.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
 namespace.default.permitted.paths += /system/${LIB}/bootstrap
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
@@ -119,7 +119,7 @@ namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/framework
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/app
 namespace.default.asan.permitted.paths += /%PRODUCT_SERVICES%/priv-app
 namespace.default.asan.permitted.paths += /mnt/expand
-namespace.default.asan.permitted.paths += /bionic/${LIB}
+namespace.default.asan.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
 namespace.default.asan.permitted.paths += /system/${LIB}/bootstrap
 
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
