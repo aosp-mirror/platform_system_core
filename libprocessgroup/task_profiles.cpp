@@ -202,7 +202,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     std::string procs_path = controller_->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << procs_path << ": " << strerror(errno);
+        PLOG(WARNING) << "Failed to open " << procs_path;
         return false;
     }
     if (!AddTidToCgroup(pid, tmp_fd)) {
