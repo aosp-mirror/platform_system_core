@@ -29,6 +29,5 @@ bool socket_spec_connect(unique_fd* fd, std::string_view address, int* port, std
                          std::string* error);
 int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_tcp_port = nullptr);
 
-// Exposed for testing.
 bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* port,
                            std::string* serial, std::string* error);

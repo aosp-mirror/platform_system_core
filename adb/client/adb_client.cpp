@@ -31,10 +31,12 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/thread_annotations.h>
@@ -214,15 +216,26 @@ int adb_connect(std::string_view service, std::string* error) {
     return adb_connect(nullptr, service, error);
 }
 
-int adb_connect(TransportId* transport, std::string_view service, std::string* error) {
-    // first query the adb server's version
+#if defined(__linux__)
+std::optional<std::string> adb_get_server_executable_path() {
+    int port;
+    std::string error;
+    if (!parse_tcp_socket_spec(__adb_server_socket_spec, nullptr, &port, nullptr, &error)) {
+        LOG(FATAL) << "failed to parse server socket spec: " << error;
+    }
+
+    return adb_get_android_dir_path() + OS_PATH_SEPARATOR + "adb." + std::to_string(port);
+}
+#endif
+
+static bool __adb_check_server_version(std::string* error) {
     unique_fd fd(_adb_connect("host:version", nullptr, error));
 
-    LOG(DEBUG) << "adb_connect: service: " << service;
-    if (fd == -2 && !is_local_socket_spec(__adb_server_socket_spec)) {
+    bool local = is_local_socket_spec(__adb_server_socket_spec);
+    if (fd == -2 && !local) {
         fprintf(stderr, "* cannot start server on remote host\n");
         // error is the original network connection error
-        return fd;
+        return false;
     } else if (fd == -2) {
         fprintf(stderr, "* daemon not running; starting now at %s\n", __adb_server_socket_spec);
     start_server:
@@ -232,7 +245,7 @@ int adb_connect(TransportId* transport, std::string_view service, std::string* e
             // return a generic error string about the overall adb_connect()
             // that the caller requested.
             *error = "cannot connect to daemon";
-            return -1;
+            return false;
         } else {
             fprintf(stderr, "* daemon started successfully\n");
         }
@@ -254,18 +267,39 @@ int adb_connect(TransportId* transport, std::string_view service, std::string* e
             if (sscanf(&version_string[0], "%04x", &version) != 1) {
                 *error = android::base::StringPrintf("cannot parse version string: %s",
                                                      version_string.c_str());
-                return -1;
+                return false;
             }
         } else {
             // If fd is -1 check for "unknown host service" which would
             // indicate a version of adb that does not support the
             // version command, in which case we should fall-through to kill it.
             if (*error != "unknown host service") {
-                return fd;
+                return false;
             }
         }
 
         if (version != ADB_SERVER_VERSION) {
+#if defined(__linux__)
+            if (version > ADB_SERVER_VERSION && local) {
+                // Try to re-exec the existing adb server's binary.
+                constexpr const char* adb_reexeced = "adb (re-execed)";
+                if (strcmp(adb_reexeced, *__adb_argv) != 0) {
+                    __adb_argv[0] = adb_reexeced;
+                    std::optional<std::string> server_path_path = adb_get_server_executable_path();
+                    std::string server_path;
+                    if (server_path_path &&
+                        android::base::ReadFileToString(*server_path_path, &server_path)) {
+                        if (execve(server_path.c_str(), const_cast<char**>(__adb_argv),
+                                   const_cast<char**>(__adb_envp)) == -1) {
+                            LOG(ERROR) << "failed to exec newer version at " << server_path;
+                        }
+
+                        // Fall-through to restarting the server.
+                    }
+                }
+            }
+#endif
+
             fprintf(stderr, "adb server version (%d) doesn't match this client (%d); killing...\n",
                     version, ADB_SERVER_VERSION);
             adb_kill_server();
@@ -273,12 +307,36 @@ int adb_connect(TransportId* transport, std::string_view service, std::string* e
         }
     }
 
+    return true;
+}
+
+bool adb_check_server_version(std::string* error) {
+    // Only check the version once per process, since this isn't atomic anyway.
+    static std::once_flag once;
+    static bool result;
+    static std::string* err;
+    std::call_once(once, []() {
+        err = new std::string();
+        result = __adb_check_server_version(err);
+    });
+    *error = *err;
+    return result;
+}
+
+int adb_connect(TransportId* transport, std::string_view service, std::string* error) {
+    LOG(DEBUG) << "adb_connect: service: " << service;
+
+    // Query the adb server's version.
+    if (!adb_check_server_version(error)) {
+        return -1;
+    }
+
     // if the command is start-server, we are done.
     if (service == "host:start-server") {
         return 0;
     }
 
-    fd.reset(_adb_connect(service, transport, error));
+    unique_fd fd(_adb_connect(service, transport, error));
     if (fd == -1) {
         D("_adb_connect error: %s", error->c_str());
     } else if(fd == -2) {
