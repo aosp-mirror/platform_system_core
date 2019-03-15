@@ -58,17 +58,23 @@
 #if defined(__ANDROID__)
 static const char* root_seclabel = nullptr;
 
+static inline bool is_device_unlocked() {
+    return "orange" == android::base::GetProperty("ro.boot.verifiedbootstate", "");
+}
+
 static bool should_drop_capabilities_bounding_set() {
-#if defined(ALLOW_ADBD_ROOT)
-    if (__android_log_is_debuggable()) {
-        return false;
+    if (ALLOW_ADBD_ROOT || is_device_unlocked()) {
+        if (__android_log_is_debuggable()) {
+            return false;
+        }
     }
-#endif
     return true;
 }
 
 static bool should_drop_privileges() {
-#if defined(ALLOW_ADBD_ROOT)
+    // "adb root" not allowed, always drop privileges.
+    if (!ALLOW_ADBD_ROOT && !is_device_unlocked()) return true;
+
     // The properties that affect `adb root` and `adb unroot` are ro.secure and
     // ro.debuggable. In this context the names don't make the expected behavior
     // particularly obvious.
@@ -98,9 +104,6 @@ static bool should_drop_privileges() {
     }
 
     return drop;
-#else
-    return true; // "adb root" not allowed, always drop privileges.
-#endif // ALLOW_ADBD_ROOT
 }
 
 static void drop_privileges(int server_port) {
@@ -205,6 +208,10 @@ int adbd_main(int server_port) {
 #if defined(ALLOW_ADBD_NO_AUTH)
     // If ro.adb.secure is unset, default to no authentication required.
     auth_required = android::base::GetBoolProperty("ro.adb.secure", false);
+#elif defined(__ANDROID__)
+    if (is_device_unlocked()) {  // allows no authentication when the device is unlocked.
+        auth_required = android::base::GetBoolProperty("ro.adb.secure", false);
+    }
 #endif
 
     adbd_auth_init();

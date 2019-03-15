@@ -24,7 +24,8 @@ cc_defaults {
         "-Wno-missing-field-initializers",
         "-Wthread-safety",
         "-Wvla",
-        "-DADB_HOST=1", // overridden by adbd_defaults
+        "-DADB_HOST=1",         // overridden by adbd_defaults
+        "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
     ],
     cpp_std: "experimental",
 
@@ -79,7 +80,8 @@ cc_defaults {
     product_variables: {
         debuggable: {
             cflags: [
-                "-DALLOW_ADBD_ROOT",
+                "-UALLOW_ADBD_ROOT",
+                "-DALLOW_ADBD_ROOT=1",
                 "-DALLOW_ADBD_DISABLE_VERITY",
                 "-DALLOW_ADBD_NO_AUTH",
             ],
