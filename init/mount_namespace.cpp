@@ -33,37 +33,6 @@ namespace android {
 namespace init {
 namespace {
 
-static constexpr const char* kLinkerMountPoint = "/bionic/bin/linker";
-static constexpr const char* kBootstrapLinkerPath = "/system/bin/bootstrap/linker";
-static constexpr const char* kRuntimeLinkerPath = "/apex/com.android.runtime/bin/linker";
-
-static constexpr const char* kBionicLibsMountPointDir = "/bionic/lib/";
-static constexpr const char* kBootstrapBionicLibsDir = "/system/lib/bootstrap/";
-static constexpr const char* kRuntimeBionicLibsDir = "/apex/com.android.runtime/lib/bionic/";
-
-static constexpr const char* kLinkerMountPoint64 = "/bionic/bin/linker64";
-static constexpr const char* kBootstrapLinkerPath64 = "/system/bin/bootstrap/linker64";
-static constexpr const char* kRuntimeLinkerPath64 = "/apex/com.android.runtime/bin/linker64";
-
-static constexpr const char* kBionicLibsMountPointDir64 = "/bionic/lib64/";
-static constexpr const char* kBootstrapBionicLibsDir64 = "/system/lib64/bootstrap/";
-static constexpr const char* kRuntimeBionicLibsDir64 = "/apex/com.android.runtime/lib64/bionic/";
-
-static const std::vector<std::string> kBionicLibFileNames = {"libc.so", "libm.so", "libdl.so"};
-
-static bool BindMount(const std::string& source, const std::string& mount_point,
-                      bool recursive = false) {
-    unsigned long mountflags = MS_BIND;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(source.c_str(), mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Could not bind-mount " << source << " to " << mount_point;
-        return false;
-    }
-    return true;
-}
-
 static bool MakeShared(const std::string& mount_point, bool recursive = false) {
     unsigned long mountflags = MS_SHARED;
     if (recursive) {
@@ -105,34 +74,6 @@ static std::string GetMountNamespaceId() {
     return ret;
 }
 
-static bool BindMountBionic(const std::string& linker_source, const std::string& lib_dir_source,
-                            const std::string& linker_mount_point,
-                            const std::string& lib_mount_dir) {
-    if (access(linker_source.c_str(), F_OK) != 0) {
-        PLOG(INFO) << linker_source << " does not exist. skipping mounting bionic there.";
-        // This can happen for 64-bit bionic in 32-bit only device.
-        // It is okay to skip mounting the 64-bit bionic.
-        return true;
-    }
-    if (!BindMount(linker_source, linker_mount_point)) {
-        return false;
-    }
-    if (!MakePrivate(linker_mount_point)) {
-        return false;
-    }
-    for (const auto& libname : kBionicLibFileNames) {
-        std::string mount_point = lib_mount_dir + libname;
-        std::string source = lib_dir_source + libname;
-        if (!BindMount(source, mount_point)) {
-            return false;
-        }
-        if (!MakePrivate(mount_point)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 static bool IsApexUpdatable() {
     static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
     return updatable;
@@ -154,26 +95,7 @@ bool SetupMountNamespaces() {
     // point to private.
     if (!MakeShared("/", true /*recursive*/)) return false;
 
-    // Since different files (bootstrap or runtime APEX) should be mounted to
-    // the same mount point paths (e.g. /bionic/bin/linker, /bionic/lib/libc.so,
-    // etc.) across the two mount namespaces, we create a private mount point at
-    // /bionic so that a mount event for the bootstrap bionic in the mount
-    // namespace for pre-apexd processes is not propagated to the other mount
-    // namespace for post-apexd process, and vice versa.
-    //
-    // Other mount points other than /bionic, however, are all still shared.
-    if (!BindMount("/bionic", "/bionic", true /*recursive*/)) return false;
-    if (!MakePrivate("/bionic")) return false;
-
-    // Bind-mount bootstrap bionic.
-    if (!BindMountBionic(kBootstrapLinkerPath, kBootstrapBionicLibsDir, kLinkerMountPoint,
-                         kBionicLibsMountPointDir))
-        return false;
-    if (!BindMountBionic(kBootstrapLinkerPath64, kBootstrapBionicLibsDir64, kLinkerMountPoint64,
-                         kBionicLibsMountPointDir64))
-        return false;
-
-    // /apex is also a private mountpoint to give different sets of APEXes for
+    // /apex is a private mountpoint to give different sets of APEXes for
     // the bootstrap and default mount namespaces. The processes running with
     // the bootstrap namespace get APEXes from the read-only partition.
     if (!(MakePrivate("/apex"))) return false;
@@ -181,12 +103,11 @@ bool SetupMountNamespaces() {
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
 
-    // When bionic is updatable via the runtime APEX, we create separate mount
+    // When APEXes are updatable (e.g. not-flattened), we create separate mount
     // namespaces for processes that are started before and after the APEX is
-    // activated by apexd. In the namespace for pre-apexd processes, the bionic
-    // from the /system partition (that we call bootstrap bionic) is
-    // bind-mounted. In the namespace for post-apexd processes, the bionic from
-    // the runtime APEX is bind-mounted.
+    // activated by apexd. In the namespace for pre-apexd processes, small
+    // number of essential APEXes (e.g. com.android.runtime) are activated.
+    // In the namespace for post-apexd processes, all APEXes are activated.
     bool success = true;
     if (IsApexUpdatable() && !IsRecoveryMode()) {
         // Creating a new namespace by cloning, saving, and switching back to
@@ -197,15 +118,6 @@ bool SetupMountNamespaces() {
         }
         default_ns_fd.reset(OpenMountNamespace());
         default_ns_id = GetMountNamespaceId();
-
-        // By this unmount, the bootstrap bionic are not mounted in the default
-        // mount namespace.
-        if (umount2("/bionic", MNT_DETACH) == -1) {
-            PLOG(ERROR) << "Cannot unmount /bionic";
-            // Don't return here. We have to switch back to the bootstrap
-            // namespace.
-            success = false;
-        }
 
         if (setns(bootstrap_ns_fd.get(), CLONE_NEWNS) == -1) {
             PLOG(ERROR) << "Cannot switch back to bootstrap mount namespace";
@@ -234,28 +146,6 @@ bool SwitchToDefaultMountNamespace() {
     }
 
     LOG(INFO) << "Switched to default mount namespace";
-    return true;
-}
-
-// TODO(jiyong): remove this when /system/lib/libc.so becomes
-// a symlink to /apex/com.android.runtime/lib/bionic/libc.so
-bool SetupRuntimeBionic() {
-    if (IsRecoveryMode()) {
-        // We don't have multiple namespaces in recovery mode
-        return true;
-    }
-    // Bind-mount bionic from the runtime APEX since it is now available. Note
-    // that in case of IsApexUpdatable() == false, these mounts are over the
-    // existing existing bind mounts for the bootstrap bionic, which effectively
-    // becomes hidden.
-    if (!BindMountBionic(kRuntimeLinkerPath, kRuntimeBionicLibsDir, kLinkerMountPoint,
-                         kBionicLibsMountPointDir))
-        return false;
-    if (!BindMountBionic(kRuntimeLinkerPath64, kRuntimeBionicLibsDir64, kLinkerMountPoint64,
-                         kBionicLibsMountPointDir64))
-        return false;
-
-    LOG(INFO) << "Runtime bionic is set up";
     return true;
 }
 
