@@ -25,7 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -209,22 +208,6 @@ done:
     msg.dent.time = 0;
     msg.dent.namelen = 0;
     return WriteFdExactly(s, &msg.dent, sizeof(msg.dent));
-}
-
-static bool is_mountpoint(const std::string& path, pid_t tid) {
-    const std::string mountinfo_path = "/proc/" + std::to_string(tid) + "/mountinfo";
-    std::string mountinfo;
-    if (!android::base::ReadFileToString(mountinfo_path, &mountinfo)) {
-        PLOG(ERROR) << "Failed to open " << mountinfo_path;
-        return false;
-    }
-    std::vector<std::string> lines = android::base::Split(mountinfo, "\n");
-    return std::find_if(lines.begin(), lines.end(), [&path](const auto& line) {
-               auto tokens = android::base::Split(line, " ");
-               // line format is ...
-               // mountid parentmountid major:minor sourcepath targetpath option ...
-               return tokens.size() >= 4 && tokens[4] == path;
-           }) != lines.end();
 }
 
 // Make sure that SendFail from adb_io.cpp isn't accidentally used in this file.
@@ -432,18 +415,6 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
     struct stat st;
     bool do_unlink = (lstat(path.c_str(), &st) == -1) || S_ISREG(st.st_mode) ||
                      (S_ISLNK(st.st_mode) && !S_ISLNK(mode));
-
-    // If the path is a file that is a mount point, don't unlink it, but instead
-    // truncate to zero. If unlinked, existing mounts on the path is all
-    // unmounted
-    if (S_ISREG(st.st_mode) && is_mountpoint(path, getpid())) {
-        do_unlink = false;
-        if (truncate(path.c_str(), 0) == -1) {
-            SendSyncFail(s, "truncate to zero failed");
-            return false;
-        }
-    }
-
     if (do_unlink) {
         adb_unlink(path.c_str());
     }
@@ -591,64 +562,7 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     return true;
 }
 
-#if defined(__ANDROID__)
-class FileSyncPreparer {
-  public:
-    FileSyncPreparer() : saved_ns_fd_(-1), rooted_(getuid() == 0) {
-        const std::string namespace_path = "/proc/" + std::to_string(gettid()) + "/ns/mnt";
-        const int ns_fd = adb_open(namespace_path.c_str(), O_RDONLY | O_CLOEXEC);
-        if (ns_fd == -1) {
-            if (rooted_) PLOG(ERROR) << "Failed to save mount namespace";
-            return;
-        }
-        saved_ns_fd_.reset(ns_fd);
-
-        // Note: this is for the current thread only
-        if (unshare(CLONE_NEWNS) != 0) {
-            if (rooted_) PLOG(ERROR) << "Failed to clone mount namespace";
-            return;
-        }
-
-        // Set the propagation type of / to private so that unmount below is
-        // not propagated to other mount namespaces.
-        if (mount(nullptr, "/", nullptr, MS_PRIVATE | MS_REC, nullptr) == -1) {
-            if (rooted_) PLOG(ERROR) << "Could not change propagation type of / to MS_PRIVATE";
-            return;
-        }
-
-        // unmount /bionic which is bind-mount to itself by init. Under /bionic,
-        // there are other bind mounts for the bionic files. By unmounting this,
-        // we unmount them all thus revealing the raw file system that is the
-        // same as the local file system seen by the adb client.
-        if (umount2("/bionic", MNT_DETACH) == -1 && errno != ENOENT) {
-            if (rooted_) PLOG(ERROR) << "Could not unmount /bionic to reveal raw filesystem";
-            return;
-        }
-    }
-
-    ~FileSyncPreparer() {
-        if (saved_ns_fd_.get() != -1) {
-            // In fact, this is not strictly required because this thread for file
-            // sync service will be destroyed after the current transfer is all
-            // done. However, let's restore the ns in case the same thread is
-            // reused by multiple transfers in the future refactoring.
-            if (setns(saved_ns_fd_, CLONE_NEWNS) == -1) {
-                PLOG(ERROR) << "Failed to restore saved mount namespace";
-            }
-        }
-    }
-
-  private:
-    unique_fd saved_ns_fd_;
-    bool rooted_;
-};
-#endif
-
 void file_sync_service(unique_fd fd) {
-#if defined(__ANDROID__)
-    FileSyncPreparer preparer;
-#endif
-
     std::vector<char> buffer(SYNC_DATA_MAX);
 
     while (handle_sync_command(fd.get(), buffer)) {
