@@ -20,7 +20,6 @@ namespace android {
 namespace init {
 
 bool SetupMountNamespaces();
-bool SetupRuntimeBionic();
 bool SwitchToDefaultMountNamespace();
 bool SwitchToBootstrapMountNamespaceIfNeeded();
 

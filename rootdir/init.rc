@@ -578,8 +578,6 @@ on post-fs-data
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
-    # TODO(jiyong): remove setup_runtime_bionic
-    setup_runtime_bionic
     parse_apex_configs
 
     init_user0
