@@ -36,7 +36,7 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
 extern bool PropertyChildReap(pid_t pid);
 
 void property_init(void);
-void property_load_boot_defaults(void);
+void property_load_boot_defaults(bool);
 void load_persist_props(void);
 void load_system_props(void);
 void StartPropertyService(Epoll* epoll);
