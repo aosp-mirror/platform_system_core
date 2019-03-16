@@ -54,6 +54,9 @@
 
 using namespace android;
 
+// main healthd loop
+extern int healthd_main(void);
+
 char* locale;
 
 #ifndef max
@@ -710,4 +713,34 @@ void healthd_mode_charger_init(struct healthd_config* config) {
 
     healthd_config = config;
     charger->boot_min_cap = config->boot_min_cap;
+}
+
+static struct healthd_mode_ops charger_ops = {
+        .init = healthd_mode_charger_init,
+        .preparetowait = healthd_mode_charger_preparetowait,
+        .heartbeat = healthd_mode_charger_heartbeat,
+        .battery_update = healthd_mode_charger_battery_update,
+};
+
+int healthd_charger_main(int argc, char** argv) {
+    int ch;
+
+    healthd_mode_ops = &charger_ops;
+
+    while ((ch = getopt(argc, argv, "cr")) != -1) {
+        switch (ch) {
+            case 'c':
+                // -c is now a noop
+                break;
+            case 'r':
+                // -r is now a noop
+                break;
+            case '?':
+            default:
+                LOGE("Unrecognized charger option: %c\n", optopt);
+                exit(1);
+        }
+    }
+
+    return healthd_main();
 }

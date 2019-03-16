@@ -80,29 +80,6 @@ const android::fs_mgr::FstabEntry* is_wrapped(const android::fs_mgr::Fstab& over
     return &(*it);
 }
 
-void try_unmount_bionic(android::fs_mgr::Fstab* mounts) {
-    static constexpr const char* kBionic = "/bionic";
-
-    auto entry = GetEntryForMountPoint(mounts, kBionic);
-    if (!entry) return;
-
-    struct statfs buf;
-    if (::statfs(kBionic, &buf) == -1) {
-        PLOG(ERROR) << "statfs of " << kBionic;
-        return;
-    }
-    if (buf.f_flags & MS_RDONLY) {
-        // /bionic is on a read-only partition; can happen for
-        // non-system-as-root-devices. Don' try to unmount.
-        return;
-    }
-    fs_mgr_set_blk_ro(entry->blk_device, false);
-    if (::mount(entry->blk_device.c_str(), entry->mount_point.c_str(), entry->fs_type.c_str(),
-                MS_REMOUNT, nullptr) == -1) {
-        PLOG(ERROR) << "remount of " << kBionic;
-    }
-}
-
 void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
               const char* file, unsigned int line, const char* message) {
     static const char log_characters[] = "VD\0WEFF";
@@ -394,8 +371,6 @@ int main(int argc, char* argv[]) {
     }
 
     if (reboot_later) reboot(false);
-
-    try_unmount_bionic(&mounts);
 
     return retval;
 }

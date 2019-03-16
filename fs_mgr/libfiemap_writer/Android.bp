@@ -41,6 +41,9 @@ cc_library_static {
 
 cc_test {
     name: "fiemap_writer_test",
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+    ],
     static_libs: [
         "libbase",
         "libdm",

@@ -1,5 +1,6 @@
 ab0d3000-ab0d8000 r-xp 0 00:00 0   dalvikvm32
 dfe4e000-dfe7b000 r-xp 0 00:00 0   libarttestd.so
+e0445000-e0447000 r--p 0 00:00 0   137-cfi.odex
 e0447000-e0448000 r-xp 2000 00:00 0   137-cfi.odex
 e2796000-e4796000 r-xp 0 00:00 0   anonymous:e2796000
 e648e000-e690f000 r-xp 0 00:00 0  libart.so

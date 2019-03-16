@@ -199,6 +199,12 @@ int FirstStageMain(int argc, char** argv) {
         SwitchRoot("/first_stage_ramdisk");
     }
 
+    // If this file is present, the second-stage init will use a userdebug sepolicy
+    // and load adb_debug.prop to allow adb root, if the device is unlocked.
+    if (access("/force_debuggable", F_OK) == 0) {
+        setenv("INIT_FORCE_DEBUGGABLE", "true", 1);
+    }
+
     if (!DoFirstStageMount()) {
         LOG(FATAL) << "Failed to mount required partitions early ...";
     }

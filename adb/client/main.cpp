@@ -32,11 +32,15 @@
 
 #include "adb.h"
 #include "adb_auth.h"
+#include "adb_client.h"
 #include "adb_listeners.h"
 #include "adb_utils.h"
 #include "commandline.h"
 #include "sysdeps/chrono.h"
 #include "transport.h"
+
+const char** __adb_argv;
+const char** __adb_envp;
 
 static void setup_daemon_logging() {
     const std::string log_file_path(GetLogFilePath());
@@ -191,13 +195,29 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         notify_thread.detach();
     }
 
+#if defined(__linux__)
+    // Write our location to .android/adb.$PORT, so that older clients can exec us.
+    std::string path;
+    if (!android::base::Readlink("/proc/self/exe", &path)) {
+        PLOG(ERROR) << "failed to readlink /proc/self/exe";
+    }
+
+    std::optional<std::string> server_executable_path = adb_get_server_executable_path();
+    if (server_executable_path) {
+      if (!android::base::WriteStringToFile(path, *server_executable_path)) {
+          PLOG(ERROR) << "failed to write server path to " << path;
+      }
+    }
+#endif
+
     D("Event loop starting");
     fdevent_loop();
-
     return 0;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char* argv[], char* envp[]) {
+    __adb_argv = const_cast<const char**>(argv);
+    __adb_envp = const_cast<const char**>(envp);
     adb_trace_init(argv);
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 }

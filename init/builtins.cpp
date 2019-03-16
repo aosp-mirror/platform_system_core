@@ -1118,14 +1118,6 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     }
 }
 
-static Result<Success> do_setup_runtime_bionic(const BuiltinArguments& args) {
-    if (SetupRuntimeBionic()) {
-        return Success();
-    } else {
-        return Error() << "Failed to setup runtime bionic";
-    }
-}
-
 static Result<Success> do_enter_default_mount_ns(const BuiltinArguments& args) {
     if (SwitchToDefaultMountNamespace()) {
         return Success();
@@ -1181,7 +1173,6 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"rmdir",                   {1,     1,    {true,   do_rmdir}}},
         {"setprop",                 {2,     2,    {true,   do_setprop}}},
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
-        {"setup_runtime_bionic",    {0,     0,    {false,  do_setup_runtime_bionic}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
         {"swapon_all",              {1,     1,    {false,  do_swapon_all}}},

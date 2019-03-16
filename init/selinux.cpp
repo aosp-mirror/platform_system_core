@@ -61,14 +61,18 @@
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
 #include <cutils/android_reboot.h>
+#include <fs_avb/fs_avb.h>
 #include <selinux/android.h>
 
 #include "reboot_utils.h"
 #include "util.h"
 
+using namespace std::string_literals;
+
 using android::base::ParseInt;
 using android::base::Timer;
 using android::base::unique_fd;
+using android::fs_mgr::AvbHandle;
 
 namespace android {
 namespace init {
@@ -267,6 +271,8 @@ bool GetVendorMappingVersion(std::string* plat_vers) {
 }
 
 constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
+constexpr const char userdebug_plat_policy_cil_file[] =
+        "/system/etc/selinux/userdebug_plat_sepolicy.cil";
 
 bool IsSplitPolicyDevice() {
     return access(plat_policy_cil_file, R_OK) != -1;
@@ -282,10 +288,21 @@ bool LoadSplitPolicy() {
     // secilc is invoked to compile the above three policy files into a single monolithic policy
     // file. This file is then loaded into the kernel.
 
+    // See if we need to load userdebug_plat_sepolicy.cil instead of plat_sepolicy.cil.
+    const char* force_debuggable_env = getenv("INIT_FORCE_DEBUGGABLE");
+    bool use_userdebug_policy =
+            ((force_debuggable_env && "true"s == force_debuggable_env) &&
+             AvbHandle::IsDeviceUnlocked() && access(userdebug_plat_policy_cil_file, F_OK) == 0);
+    if (use_userdebug_policy) {
+        LOG(WARNING) << "Using userdebug system sepolicy";
+    }
+
     // Load precompiled policy from vendor image, if a matching policy is found there. The policy
     // must match the platform policy on the system image.
     std::string precompiled_sepolicy_file;
-    if (FindPrecompiledSplitPolicy(&precompiled_sepolicy_file)) {
+    // use_userdebug_policy requires compiling sepolicy with userdebug_plat_sepolicy.cil.
+    // Thus it cannot use the precompiled policy from vendor image.
+    if (!use_userdebug_policy && FindPrecompiledSplitPolicy(&precompiled_sepolicy_file)) {
         unique_fd fd(open(precompiled_sepolicy_file.c_str(), O_RDONLY | O_CLOEXEC | O_BINARY));
         if (fd != -1) {
             if (selinux_android_load_policy_from_fd(fd, precompiled_sepolicy_file.c_str()) < 0) {
@@ -358,7 +375,7 @@ bool LoadSplitPolicy() {
     // clang-format off
     std::vector<const char*> compile_args {
         "/system/bin/secilc",
-        plat_policy_cil_file,
+        use_userdebug_policy ? userdebug_plat_policy_cil_file : plat_policy_cil_file,
         "-m", "-M", "true", "-G", "-N",
         // Target the highest policy language version supported by the kernel
         "-c", version_as_string.c_str(),
