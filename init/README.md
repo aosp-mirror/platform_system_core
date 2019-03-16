@@ -660,11 +660,18 @@ The below pseudocode may explain this more clearly:
 
 Properties
 ----------
-Init provides information about the services that it is responsible
-for via the below properties.
+Init provides state information with the following properties.
 
 `init.svc.<name>`
 > State of a named service ("stopped", "stopping", "running", "restarting")
+
+`dev.mnt.blk.<mount_point>`
+> Block device base name associated with a *mount_point*.
+  The *mount_point* has / replaced by . and if referencing the root mount point
+  "/", it will use "/root", specifically `dev.mnt.blk.root`.
+  Meant for references to `/sys/device/block/${dev.mnt.blk.<mount_point>}/` and
+  `/sys/fs/ext4/${dev.mnt.blk.<mount_point>}/` to tune the block device
+  characteristics in a device agnostic manner.
 
 
 Boot timing
