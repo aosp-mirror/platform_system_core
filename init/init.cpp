@@ -57,6 +57,7 @@
 #include "first_stage_mount.h"
 #include "import_parser.h"
 #include "keychords.h"
+#include "mount_handler.h"
 #include "mount_namespace.h"
 #include "property_service.h"
 #include "reboot.h"
@@ -686,6 +687,7 @@ int SecondStageMain(int argc, char** argv) {
     fs_mgr_vendor_overlay_mount_all();
     export_oem_lock_status();
     StartPropertyService(&epoll);
+    MountHandler mount_handler(&epoll);
     set_usb_controller();
 
     const BuiltinFunctionMap function_map;
