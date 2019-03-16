@@ -418,6 +418,13 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
+    # Load fsverity keys. This needs to happen before apexd, as post-install of
+    # APEXes may rely on keys.
+    exec -- /system/bin/mini-keyctl dadd asymmetric product_cert /product/etc/security/cacerts_fsverity .fs-verity
+    exec -- /system/bin/mini-keyctl dadd asymmetric vendor_cert /vendor/etc/security/cacerts_fsverity .fs-verity
+    # Prevent future key links to fsverity keyring
+    exec -- /system/bin/mini-keyctl restrict_keyring .fs-verity
+
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
@@ -584,12 +591,6 @@ on post-fs-data
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
-
-    # load fsverity keys
-    exec -- /system/bin/mini-keyctl dadd asymmetric product_cert /product/etc/security/cacerts_fsverity .fs-verity
-    exec -- /system/bin/mini-keyctl dadd asymmetric vendor_cert /vendor/etc/security/cacerts_fsverity .fs-verity
-    # Prevent future key links to fsverity keyring
-    exec -- /system/bin/mini-keyctl restrict_keyring .fs-verity
 
     # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
