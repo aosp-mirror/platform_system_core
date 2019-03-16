@@ -94,7 +94,21 @@ namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default
-namespace.media.link.default.allow_all_shared_libs = true
+namespace.media.link.default.shared_libs  = libandroid.so
+namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += libc.so
+namespace.media.link.default.shared_libs += libdl.so
+namespace.media.link.default.shared_libs += liblog.so
+namespace.media.link.default.shared_libs += libmediametrics.so
+namespace.media.link.default.shared_libs += libmediandk.so
+namespace.media.link.default.shared_libs += libm.so
+namespace.media.link.default.shared_libs += libvndksupport.so
+
+namespace.media.link.default.shared_libs += libclang_rt.asan-aarch64-android.so
+namespace.media.link.default.shared_libs += libclang_rt.asan-arm-android.so
+namespace.media.link.default.shared_libs += libclang_rt.asan-i686-android.so
+namespace.media.link.default.shared_libs += libclang_rt.asan-x86_64-android.so
+namespace.media.link.default.shared_libs += libclang_rt.hwasan-aarch64-android.so
 
 ###############################################################################
 # "conscrypt" APEX namespace
