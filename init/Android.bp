@@ -110,6 +110,7 @@ cc_library_static {
         "init.cpp",
         "keychords.cpp",
         "modalias_handler.cpp",
+        "mount_handler.cpp",
         "mount_namespace.cpp",
         "parser.cpp",
         "persistent_properties.cpp",
