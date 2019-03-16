@@ -295,7 +295,10 @@ int read_and_dump(int fd, bool use_shell_protocol = false,
                     callback->OnStderr(buffer_ptr, length);
                     break;
                 case ShellProtocol::kIdExit:
-                    exit_code = protocol->data()[0];
+                    // data() returns a char* which doesn't have defined signedness.
+                    // Cast to uint8_t to prevent 255 from being sign extended to INT_MIN,
+                    // which doesn't get truncated on Windows.
+                    exit_code = static_cast<uint8_t>(protocol->data()[0]);
                     continue;
                 default:
                     continue;
