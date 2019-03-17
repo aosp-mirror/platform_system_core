@@ -55,6 +55,8 @@
 #include "test_utils.h"
 #include "usb_transport_sniffer.h"
 
+using namespace std::literals::chrono_literals;
+
 namespace fastboot {
 
 int FastBootTest::MatchFastboot(usb_ifc_info* info, const char* local_serial) {
@@ -159,6 +161,26 @@ void FastBootTest::TearDownSerial() {
     }
 }
 
+void FastBootTest::ReconnectFastbootDevice() {
+    fb.reset();
+    transport.reset();
+    while (UsbStillAvailible())
+        ;
+    printf("WAITING FOR DEVICE\n");
+    // Need to wait for device
+    const auto matcher = [](usb_ifc_info* info) -> int { return MatchFastboot(info, nullptr); };
+    while (!transport) {
+        std::unique_ptr<UsbTransport> usb(usb_open(matcher, USB_TIMEOUT));
+        if (usb) {
+            transport = std::unique_ptr<UsbTransportSniffer>(
+                    new UsbTransportSniffer(std::move(usb), serial_port));
+        }
+        std::this_thread::sleep_for(1s);
+    }
+    device_path = cb_scratch;
+    fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
+}
+
 void FastBootTest::SetLockState(bool unlock, bool assert_change) {
     if (!fb) {
         return;
@@ -197,25 +219,8 @@ void FastBootTest::SetLockState(bool unlock, bool assert_change) {
         std::string cmd = unlock ? "unlock" : "lock";
         ASSERT_EQ(fb->RawCommand("flashing " + cmd, &resp), SUCCESS)
                 << "Attempting to change locked state, but 'flashing" + cmd + "' command failed";
-        fb.reset();
-        transport.reset();
         printf("PLEASE RESPOND TO PROMPT FOR '%sing' BOOTLOADER ON DEVICE\n", cmd.c_str());
-        while (UsbStillAvailible())
-            ;  // Wait for disconnect
-        printf("WAITING FOR DEVICE");
-        // Need to wait for device
-        const auto matcher = [](usb_ifc_info* info) -> int { return MatchFastboot(info, nullptr); };
-        while (!transport) {
-            std::unique_ptr<UsbTransport> usb(usb_open(matcher, USB_TIMEOUT));
-            if (usb) {
-                transport = std::unique_ptr<UsbTransportSniffer>(
-                        new UsbTransportSniffer(std::move(usb), serial_port));
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            putchar('.');
-        }
-        device_path = cb_scratch;
-        fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
+        ReconnectFastbootDevice();
         if (assert_change) {
             ASSERT_EQ(fb->GetVar("unlocked", &resp), SUCCESS) << "getvar:unlocked failed";
             ASSERT_EQ(resp, unlock ? "yes" : "no")
