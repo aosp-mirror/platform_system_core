@@ -259,7 +259,7 @@ static bool __adb_check_server_version(std::string* error) {
         if (fd >= 0) {
             std::string version_string;
             if (!ReadProtocolString(fd, &version_string, error)) {
-                return -1;
+                return false;
             }
 
             ReadOrderlyShutdown(fd);
