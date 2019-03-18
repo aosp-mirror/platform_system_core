@@ -580,7 +580,14 @@ bool FirstStageMount::MountPartitions() {
             required_devices_partition_names_.emplace(basename(device.c_str()));
             auto uevent_callback = [this](const Uevent& uevent) { return UeventCallback(uevent); };
             uevent_listener_.RegenerateUevents(uevent_callback);
-            uevent_listener_.Poll(uevent_callback, 10s);
+            if (!required_devices_partition_names_.empty()) {
+                uevent_listener_.Poll(uevent_callback, 10s);
+                if (!required_devices_partition_names_.empty()) {
+                    LOG(ERROR) << __PRETTY_FUNCTION__
+                               << ": partition(s) not found after polling timeout: "
+                               << android::base::Join(required_devices_partition_names_, ", ");
+                }
+            }
         } else {
             InitMappedDevice(device);
         }
