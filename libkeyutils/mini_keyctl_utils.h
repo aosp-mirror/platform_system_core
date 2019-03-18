@@ -46,3 +46,6 @@ int RestrictKeyring(const std::string& keyring);
 // information in the descritption section depending on the key type, only the first word in the
 // keyring description is used for searching.
 bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_id);
+
+// Retrieves a key's security context. Return the context string, or empty string on error.
+std::string RetrieveSecurityContext(key_serial_t key);

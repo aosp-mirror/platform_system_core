@@ -20,7 +20,10 @@
 
 #include "mini_keyctl_utils.h"
 
+#include <stdio.h>
 #include <unistd.h>
+
+#include <android-base/parseint.h>
 
 static void Usage(int exit_code) {
   fprintf(stderr, "usage: mini-keyctl <action> [args,]\n");
@@ -29,6 +32,7 @@ static void Usage(int exit_code) {
   fprintf(stderr, "       mini-keyctl dadd <type> <desc_prefix> <cert_dir> <keyring>\n");
   fprintf(stderr, "       mini-keyctl unlink <key> <keyring>\n");
   fprintf(stderr, "       mini-keyctl restrict_keyring <keyring>\n");
+  fprintf(stderr, "       mini-keyctl security <key>\n");
   _exit(exit_code);
 }
 
@@ -66,7 +70,23 @@ int main(int argc, const char** argv) {
     key_serial_t key = std::stoi(argv[2], nullptr, 16);
     const std::string keyring = argv[3];
     return Unlink(key, keyring);
+  } else if (action == "security") {
+    if (argc != 3) Usage(1);
+    const char* key_str = argv[2];
+    key_serial_t key;
+    if (!android::base::ParseInt(key_str, &key)) {
+      fprintf(stderr, "Unparsable key: '%s'\n", key_str);
+      return 1;
+    }
+    std::string context = RetrieveSecurityContext(key);
+    if (context.empty()) {
+      perror(key_str);
+      return 1;
+    }
+    fprintf(stderr, "%s\n", context.c_str());
+    return 0;
   } else {
+    fprintf(stderr, "Unrecognized action: %s\n", action.c_str());
     Usage(1);
   }
 
