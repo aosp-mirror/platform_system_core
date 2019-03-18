@@ -210,3 +210,21 @@ int RestrictKeyring(const std::string& keyring) {
   }
   return 0;
 }
+
+std::string RetrieveSecurityContext(key_serial_t key) {
+  // Simply assume this size is enough in practice.
+  const int kMaxSupportedSize = 256;
+  std::string context;
+  context.resize(kMaxSupportedSize);
+  long retval = keyctl_get_security(key, context.data(), kMaxSupportedSize);
+  if (retval < 0) {
+    PLOG(ERROR) << "Cannot get security context of key 0x" << std::hex << key;
+    return std::string();
+  }
+  if (retval > kMaxSupportedSize) {
+    LOG(ERROR) << "The key has unexpectedly long security context than " << kMaxSupportedSize;
+    return std::string();
+  }
+  context.resize(retval);
+  return context;
+}
