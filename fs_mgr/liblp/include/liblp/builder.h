@@ -66,6 +66,10 @@ class LinearExtent final : public Extent {
     uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
     uint32_t device_index() const { return device_index_; }
 
+    bool OwnsSector(uint64_t sector) const {
+        return sector >= physical_sector_ && sector < end_sector();
+    }
+
   private:
     uint32_t device_index_;
     uint64_t physical_sector_;
@@ -322,9 +326,15 @@ class MetadataBuilder {
         }
     };
     std::vector<Interval> GetFreeRegions() const;
+    bool IsAnyRegionCovered(const std::vector<Interval>& regions,
+                            const LinearExtent& candidate) const;
+    bool IsAnyRegionAllocated(const LinearExtent& candidate) const;
     void ExtentsToFreeList(const std::vector<Interval>& extents,
                            std::vector<Interval>* free_regions) const;
     std::vector<Interval> PrioritizeSecondHalfOfSuper(const std::vector<Interval>& free_list);
+    std::unique_ptr<LinearExtent> ExtendFinalExtent(Partition* partition,
+                                                    const std::vector<Interval>& free_list,
+                                                    uint64_t sectors_needed) const;
 
     static bool sABOverrideValue;
     static bool sABOverrideSet;
