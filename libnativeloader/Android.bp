@@ -24,6 +24,13 @@ cc_library {
         "libnativebridge",
         "libbase",
     ],
+    target: {
+        android: {
+            shared_libs: [
+                "libdl_android",
+            ],
+        },
+    },
     required: [
         "llndk.libraries.txt",
         "vndksp.libraries.txt",
