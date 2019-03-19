@@ -543,6 +543,10 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
         if (!fs_mgr_rw_access(device_path)) return false;
     }
 
+    auto f2fs = fs_mgr_is_f2fs(device_path);
+    auto ext4 = fs_mgr_is_ext4(device_path);
+    if (!f2fs && !ext4) return false;
+
     if (setfscreatecon(kOverlayfsFileContext)) {
         PERROR << "setfscreatecon " << kOverlayfsFileContext;
     }
@@ -554,6 +558,8 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     entry.blk_device = device_path;
     entry.mount_point = kScratchMountPoint;
     entry.fs_type = mnt_type;
+    if ((mnt_type == "f2fs") && !f2fs) entry.fs_type = "ext4";
+    if ((mnt_type == "ext4") && !ext4) entry.fs_type = "f2fs";
     entry.flags = MS_RELATIME;
     if (readonly) {
         entry.flags |= MS_RDONLY;
@@ -563,12 +569,13 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     auto save_errno = errno;
     auto mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {
-        if (mnt_type == "f2fs") {
+        if ((entry.fs_type == "f2fs") && ext4) {
             entry.fs_type = "ext4";
-        } else {
+            mounted = fs_mgr_do_mount_one(entry) == 0;
+        } else if ((entry.fs_type == "ext4") && f2fs) {
             entry.fs_type = "f2fs";
+            mounted = fs_mgr_do_mount_one(entry) == 0;
         }
-        mounted = fs_mgr_do_mount_one(entry) == 0;
         if (!mounted) save_errno = errno;
     }
     setfscreatecon(nullptr);
