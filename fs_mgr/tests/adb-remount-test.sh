@@ -951,7 +951,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
 adb_reboot &&
   adb_wait 2m ||
-  die "reboot after override content added failed"
+  die "reboot after override content added failed `usb_status`"
 
 if ${overlayfs_needed}; then
   D=`adb_su df -k </dev/null` &&
