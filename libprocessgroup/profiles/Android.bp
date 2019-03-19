@@ -29,9 +29,21 @@ prebuilt_etc {
     src: "task_profiles.json",
 }
 
+cc_defaults {
+    name: "libprocessgroup_test_defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+
+        // Needed for headers from libprotobuf.
+        "-Wno-unused-parameter",
+    ],
+}
+
 cc_library_static {
     name: "libprocessgroup_proto",
     host_supported: true,
+    defaults: ["libprocessgroup_test_defaults"],
     srcs: [
         "cgroups.proto",
         "task_profiles.proto",
@@ -40,15 +52,11 @@ cc_library_static {
         type: "full",
         export_proto_headers: true,
     },
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wno-unused-parameter",
-    ],
 }
 
 cc_test_host {
     name: "libprocessgroup_proto_test",
+    defaults: ["libprocessgroup_test_defaults"],
     srcs: [
         "test.cpp",
     ],
@@ -64,11 +72,6 @@ cc_test_host {
     shared_libs: [
         "libprotobuf-cpp-full",
     ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wno-unused-parameter",
-    ],
     data: [
         "cgroups.json",
         "cgroups.recovery.json",
@@ -77,4 +80,29 @@ cc_test_host {
     test_suites: [
         "general-tests",
     ],
+}
+
+cc_test {
+    name: "vts_processgroup_validate_test",
+    defaults: ["libprocessgroup_test_defaults"],
+    srcs: [
+        "test_vendor.cpp",
+    ],
+    static_libs: [
+        "libgmock",
+        "libjsonpbverify",
+        "libjsonpbparse",
+        "libprocessgroup_proto",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libjsoncpp",
+        "libprotobuf-cpp-full",
+    ],
+    target: {
+        android: {
+            test_config: "vts_processgroup_validate_test.xml",
+        },
+    },
 }

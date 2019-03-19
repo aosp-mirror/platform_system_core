@@ -30,16 +30,60 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <keyutils.h>
 
 static constexpr int kMaxCertSize = 4096;
 
-std::vector<std::string> SplitBySpace(const std::string& s) {
+static std::vector<std::string> SplitBySpace(const std::string& s) {
   std::istringstream iss(s);
   return std::vector<std::string>{std::istream_iterator<std::string>{iss},
                                   std::istream_iterator<std::string>{}};
+}
+
+// Find the keyring id. Because request_key(2) syscall is not available or the key is
+// kernel keyring, the id is looked up from /proc/keys. The keyring description may contain other
+// information in the descritption section depending on the key type, only the first word in the
+// keyring description is used for searching.
+static bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_id) {
+  if (!keyring_id) {
+    LOG(ERROR) << "keyring_id is null";
+    return false;
+  }
+
+  // If the keyring id is already a hex number, directly convert it to keyring id
+  if (android::base::ParseInt(keyring_desc.c_str(), keyring_id)) {
+    return true;
+  }
+
+  // Only keys allowed by SELinux rules will be shown here.
+  std::ifstream proc_keys_file("/proc/keys");
+  if (!proc_keys_file.is_open()) {
+    PLOG(ERROR) << "Failed to open /proc/keys";
+    return false;
+  }
+
+  std::string line;
+  while (getline(proc_keys_file, line)) {
+    std::vector<std::string> tokens = SplitBySpace(line);
+    if (tokens.size() < 9) {
+      continue;
+    }
+    std::string key_id = tokens[0];
+    std::string key_type = tokens[7];
+    // The key description may contain space.
+    std::string key_desc_prefix = tokens[8];
+    // The prefix has a ":" at the end
+    std::string key_desc_pattern = keyring_desc + ":";
+    if (key_type != "keyring" || key_desc_prefix != key_desc_pattern) {
+      continue;
+    }
+    *keyring_id = std::stoi(key_id, nullptr, 16);
+    return true;
+  }
+  return false;
 }
 
 int AddCertsFromDir(const std::string& type, const std::string& desc_prefix,
@@ -87,49 +131,6 @@ int AddCertsFromDir(const std::string& type, const std::string& desc_prefix,
     keys_added++;
   }
   return 0;
-}
-
-bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_id) {
-  if (!keyring_id) {
-    LOG(ERROR) << "keyring_id is null";
-    return false;
-  }
-
-  // If the keyring id is already a hex number, directly convert it to keyring id
-  try {
-    key_serial_t id = std::stoi(keyring_desc, nullptr, 16);
-    *keyring_id = id;
-    return true;
-  } catch (const std::exception& e) {
-    LOG(INFO) << "search /proc/keys for keyring id";
-  }
-
-  // Only keys allowed by SELinux rules will be shown here.
-  std::ifstream proc_keys_file("/proc/keys");
-  if (!proc_keys_file.is_open()) {
-    PLOG(ERROR) << "Failed to open /proc/keys";
-    return false;
-  }
-
-  std::string line;
-  while (getline(proc_keys_file, line)) {
-    std::vector<std::string> tokens = SplitBySpace(line);
-    if (tokens.size() < 9) {
-      continue;
-    }
-    std::string key_id = tokens[0];
-    std::string key_type = tokens[7];
-    // The key description may contain space.
-    std::string key_desc_prefix = tokens[8];
-    // The prefix has a ":" at the end
-    std::string key_desc_pattern = keyring_desc + ":";
-    if (key_type != "keyring" || key_desc_prefix != key_desc_pattern) {
-      continue;
-    }
-    *keyring_id = std::stoi(key_id, nullptr, 16);
-    return true;
-  }
-  return false;
 }
 
 int Unlink(key_serial_t key, const std::string& keyring) {
@@ -209,4 +210,22 @@ int RestrictKeyring(const std::string& keyring) {
     return 1;
   }
   return 0;
+}
+
+std::string RetrieveSecurityContext(key_serial_t key) {
+  // Simply assume this size is enough in practice.
+  const int kMaxSupportedSize = 256;
+  std::string context;
+  context.resize(kMaxSupportedSize);
+  long retval = keyctl_get_security(key, context.data(), kMaxSupportedSize);
+  if (retval < 0) {
+    PLOG(ERROR) << "Cannot get security context of key 0x" << std::hex << key;
+    return std::string();
+  }
+  if (retval > kMaxSupportedSize) {
+    LOG(ERROR) << "The key has unexpectedly long security context than " << kMaxSupportedSize;
+    return std::string();
+  }
+  context.resize(retval);
+  return context;
 }
