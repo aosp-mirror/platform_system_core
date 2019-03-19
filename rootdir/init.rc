@@ -424,6 +424,8 @@ on post-fs-data
     exec -- /system/bin/mini-keyctl dadd asymmetric vendor_cert /vendor/etc/security/cacerts_fsverity .fs-verity
     # Prevent future key links to fsverity keyring
     exec -- /system/bin/mini-keyctl restrict_keyring .fs-verity
+    # Enforce fsverity signature checking
+    write /proc/sys/fs/verity/require_signatures 1
 
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
