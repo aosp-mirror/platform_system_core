@@ -413,6 +413,8 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* ms
   if (!tag) tag = "";
 
   /* XXX: This needs to go! */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wstring-plus-int"
   if (bufID != LOG_ID_RADIO) {
     switch (tag[0]) {
       case 'H':
@@ -454,6 +456,7 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* ms
         break;
     }
   }
+#pragma clang diagnostic pop
 
 #if __BIONIC__
   if (prio == ANDROID_LOG_FATAL) {
