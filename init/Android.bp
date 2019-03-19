@@ -91,7 +91,7 @@ cc_defaults {
 cc_library_static {
     name: "libinit",
     recovery_available: true,
-    defaults: ["init_defaults"],
+    defaults: ["init_defaults", "selinux_policy_version"],
     srcs: [
         "action.cpp",
         "action_manager.cpp",
