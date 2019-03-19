@@ -115,7 +115,7 @@ struct TransferId {
 };
 
 struct IoBlock {
-    bool pending;
+    bool pending = false;
     struct iocb control;
     std::shared_ptr<Block> payload;
 
