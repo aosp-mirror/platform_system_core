@@ -30,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <keyutils.h>
@@ -53,12 +54,8 @@ static bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_
   }
 
   // If the keyring id is already a hex number, directly convert it to keyring id
-  try {
-    key_serial_t id = std::stoi(keyring_desc, nullptr, 16);
-    *keyring_id = id;
+  if (android::base::ParseInt(keyring_desc.c_str(), keyring_id)) {
     return true;
-  } catch (const std::exception& e) {
-    LOG(INFO) << "search /proc/keys for keyring id";
   }
 
   // Only keys allowed by SELinux rules will be shown here.
