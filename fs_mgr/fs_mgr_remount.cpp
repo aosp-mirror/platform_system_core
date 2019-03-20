@@ -176,6 +176,15 @@ int main(int argc, char* argv[]) {
         fstab_read = android::fs_mgr::ReadFstabFromFile(fstab_file, &fstab);
     } else {
         fstab_read = android::fs_mgr::ReadDefaultFstab(&fstab);
+        // Manufacture a / entry from /proc/mounts if missing.
+        if (!GetEntryForMountPoint(&fstab, "/system") && !GetEntryForMountPoint(&fstab, "/")) {
+            android::fs_mgr::Fstab mounts;
+            if (android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts)) {
+                if (auto entry = GetEntryForMountPoint(&mounts, "/")) {
+                    if (entry->fs_type != "rootfs") fstab.emplace_back(*entry);
+                }
+            }
+        }
     }
     if (!fstab_read || fstab.empty()) {
         PLOG(ERROR) << "Failed to read fstab";
@@ -211,21 +220,21 @@ int main(int argc, char* argv[]) {
         // Do we know about the partition?
         auto it = std::find_if(fstab.begin(), fstab.end(), find_part);
         if (it == fstab.end()) {
-            LOG(ERROR) << "Unknown partition " << partition << ", skipping";
+            LOG(ERROR) << "Unknown partition " << argv[optind] << ", skipping";
             retval = UNKNOWN_PARTITION;
             continue;
         }
         // Is that one covered by an existing overlayfs?
         auto wrap = is_wrapped(overlayfs_candidates, *it);
         if (wrap) {
-            LOG(INFO) << "partition " << partition << " covered by overlayfs for "
+            LOG(INFO) << "partition " << argv[optind] << " covered by overlayfs for "
                       << wrap->mount_point << ", switching";
             partition = system_mount_point(*wrap);
         }
         // Is it a remountable partition?
         it = std::find_if(all.begin(), all.end(), find_part);
         if (it == all.end()) {
-            LOG(ERROR) << "Invalid partition " << partition << ", skipping";
+            LOG(ERROR) << "Invalid partition " << argv[optind] << ", skipping";
             retval = INVALID_PARTITION;
             continue;
         }
