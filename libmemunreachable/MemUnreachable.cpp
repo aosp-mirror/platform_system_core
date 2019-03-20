@@ -217,6 +217,10 @@ static bool has_prefix(const allocator::string& s, const char* prefix) {
   return ret == 0;
 }
 
+static bool is_sanitizer_mapping(const allocator::string& s) {
+  return s == "[anon:low shadow]" || s == "[anon:high shadow]" || has_prefix(s, "[anon:hwasan");
+}
+
 bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings,
                                       allocator::vector<Mapping>& heap_mappings,
                                       allocator::vector<Mapping>& anon_mappings,
@@ -258,7 +262,8 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
     } else if (mapping_name.size() == 0) {
       globals_mappings.emplace_back(*it);
     } else if (has_prefix(mapping_name, "[anon:") &&
-               mapping_name != "[anon:leak_detector_malloc]") {
+               mapping_name != "[anon:leak_detector_malloc]" &&
+               !is_sanitizer_mapping(mapping_name)) {
       // TODO(ccross): it would be nice to treat named anonymous mappings as
       // possible leaks, but naming something in a .bss or .data section makes
       // it impossible to distinguish them from mmaped and then named mappings.
