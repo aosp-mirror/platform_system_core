@@ -54,6 +54,7 @@ struct pkg_info {
     gid_list gids;
     void *private_data;
     bool profileable_from_shell;
+    long version_code;
 };
 
 /**
