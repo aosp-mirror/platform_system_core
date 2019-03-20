@@ -514,8 +514,8 @@ skip_administrative_mounts() {
     cat -
   fi |
   grep -v \
-    -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\) " \
-    -e "^\(bpf\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
+    -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\) " \
+    -e "^\(binfmt_misc\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
     -e "^rootfs / rootfs rw," \
     -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|persist\|metadata\) "
@@ -608,7 +608,7 @@ fi
 
 D=`get_property ro.serialno`
 [ -n "${D}" ] || D=`get_property ro.boot.serialno`
-[ -z "${D}" ] || ANDROID_SERIAL=${D}
+[ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
 USB_SERIAL=
 [ -z "${ANDROID_SERIAL}" ] || USB_SERIAL=`find /sys/devices -name serial |
                                           grep usb |
@@ -998,8 +998,14 @@ echo "${GREEN}[       OK ]${NORMAL} /system/lib/bootstrap/libc.so content remain
 echo "${GREEN}[ RUN      ]${NORMAL} flash vendor, confirm its content disappears" >&2
 
 H=`adb_sh echo '${HOSTNAME}' </dev/null 2>/dev/null`
+is_bootloader_fastboot=false
+# cuttlefish?
+[ X"${H}" != X"${H#vsoc}" ] || is_bootloader_fastboot=true
 is_userspace_fastboot=false
-if [ -z "${ANDROID_PRODUCT_OUT}" ]; then
+
+if ! ${is_bootloader_fastboot}; then
+  echo "${ORANGE}[  WARNING ]${NORMAL} does not support fastboot, skipping"
+elif [ -z "${ANDROID_PRODUCT_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} build tree not setup, skipping"
 elif [ ! -s "${ANDROID_PRODUCT_OUT}/vendor.img" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} vendor image missing, skipping"
