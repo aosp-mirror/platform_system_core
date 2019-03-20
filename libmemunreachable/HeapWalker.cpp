@@ -59,12 +59,19 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   }
 }
 
+// Sanitizers may consider certain memory inaccessible through certain pointers.
+// With MTE this will need to use unchecked instructions or disable tag checking globally.
+static uintptr_t ReadWordAtAddressUnsafe(uintptr_t word_ptr)
+    __attribute__((no_sanitize("address", "hwaddress"))) {
+  return *reinterpret_cast<uintptr_t*>(word_ptr);
+}
+
 bool HeapWalker::WordContainsAllocationPtr(uintptr_t word_ptr, Range* range, AllocationInfo** info) {
   walking_ptr_ = word_ptr;
   // This access may segfault if the process under test has done something strange,
   // for example mprotect(PROT_NONE) on a native heap page.  If so, it will be
   // caught and handled by mmaping a zero page over the faulting page.
-  uintptr_t value = *reinterpret_cast<uintptr_t*>(word_ptr);
+  uintptr_t value = ReadWordAtAddressUnsafe(word_ptr);
   walking_ptr_ = 0;
   if (value >= valid_allocations_range_.begin && value < valid_allocations_range_.end) {
     AllocationMap::iterator it = allocations_.find(Range{value, value + 1});
