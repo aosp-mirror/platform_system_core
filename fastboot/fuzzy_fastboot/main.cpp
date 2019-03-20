@@ -176,6 +176,38 @@ TEST(USBFunctionality, USBConnect) {
         delete transport;
     }
 }
+// Testing creation/resize/delete of logical partitions
+TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Testing 'fastboot create-logical-partition' command";
+    EXPECT_EQ(fb->CreatePartition("test_partition_a", "0"), SUCCESS)
+            << "create-logical-partition failed";
+    GTEST_LOG_(INFO) << "Testing 'fastboot resize-logical-partition' command";
+    EXPECT_EQ(fb->ResizePartition("test_partition_a", "4096"), SUCCESS)
+            << "resize-logical-partition failed";
+    std::vector<char> buf(4096);
+
+    GTEST_LOG_(INFO) << "Flashing a logical partition..";
+    EXPECT_EQ(fb->FlashPartition("test_partition_a", buf), SUCCESS)
+            << "flash logical -partition failed";
+    GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
+    // Reboot to bootloader mode and attempt to flash the logical partitions
+    fb->RebootTo("bootloader");
+
+    ReconnectFastbootDevice();
+    ASSERT_FALSE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Attempt to flash a logical partition..";
+    EXPECT_EQ(fb->FlashPartition("test_partition", buf), DEVICE_FAIL)
+            << "flash logical partition must fail in bootloader";
+    GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
+    fb->RebootTo("fastboot");
+
+    ReconnectFastbootDevice();
+    ASSERT_TRUE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Testing 'fastboot delete-logical-partition' command";
+    EXPECT_EQ(fb->DeletePartition("test_partition_a"), SUCCESS)
+            << "delete logical-partition failed";
+}
 
 // Conformance tests
 TEST_F(Conformance, GetVar) {
