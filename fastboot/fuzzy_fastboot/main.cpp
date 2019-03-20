@@ -176,6 +176,61 @@ TEST(USBFunctionality, USBConnect) {
         delete transport;
     }
 }
+
+// Test commands related to super partition
+TEST_F(LogicalPartitionCompliance, SuperPartition) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    std::string partition_type;
+    // getvar partition-type:super must fail for retrofit devices because the
+    // partition does not exist.
+    if (fb->GetVar("partition-type:super", &partition_type) == SUCCESS) {
+        std::string is_logical;
+        EXPECT_EQ(fb->GetVar("is-logical:super", &is_logical), SUCCESS)
+                << "getvar is-logical:super failed";
+        EXPECT_EQ(is_logical, "no") << "super must not be a logical partition";
+        std::string super_name;
+        EXPECT_EQ(fb->GetVar("super-partition-name", &super_name), SUCCESS)
+                << "'getvar super-partition-name' failed";
+        EXPECT_EQ(super_name, "super") << "'getvar super-partition-name' must return 'super' for "
+                                          "device with a super partition";
+    }
+}
+
+// Test 'fastboot getvar is-logical'
+TEST_F(LogicalPartitionCompliance, GetVarIsLogical) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    std::string has_slot;
+    EXPECT_EQ(fb->GetVar("has-slot:system", &has_slot), SUCCESS) << "getvar has-slot:system failed";
+    std::string is_logical_cmd;
+    if (has_slot == "yes") {
+        std::string current_slot;
+        EXPECT_EQ(fb->GetVar("current-slot", &current_slot), SUCCESS)
+                << "getvar current-slot failed";
+        is_logical_cmd = "is-logical:system_" + current_slot;
+    } else {
+        is_logical_cmd = "is-logical:system";
+    }
+    std::string is_logical;
+    EXPECT_EQ(fb->GetVar(is_logical_cmd, &is_logical), SUCCESS) << "getvar is-logical failed";
+    ASSERT_EQ(is_logical, "yes");
+}
+
+TEST_F(LogicalPartitionCompliance, FastbootRebootTest) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
+    // Test 'fastboot reboot bootloader' from fastbootd
+    fb->RebootTo("bootloader");
+
+    // Test fastboot reboot fastboot from bootloader
+    ReconnectFastbootDevice();
+    ASSERT_FALSE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
+    fb->RebootTo("fastboot");
+
+    ReconnectFastbootDevice();
+    ASSERT_TRUE(UserSpaceFastboot());
+}
+
 // Testing creation/resize/delete of logical partitions
 TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
     ASSERT_TRUE(UserSpaceFastboot());
