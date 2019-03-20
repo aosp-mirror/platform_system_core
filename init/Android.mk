@@ -2,7 +2,7 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-include system/sepolicy/policy_version.mk
+-include system/sepolicy/policy_version.mk
 
 # --
 
