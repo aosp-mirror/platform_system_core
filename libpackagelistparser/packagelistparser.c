@@ -239,6 +239,15 @@ extern bool packagelist_parse(pfn_on_package callback, void *userdata)
 
             pkg_info->profileable_from_shell = (bool)tmp;
         }
+        cur = strsep(&next, " \t\r\n");
+        if (cur) {
+            tmp = strtoul(cur, &endptr, 10);
+            if (*endptr != '\0') {
+                errmsg = "Could not convert field \"versionCode\" to integer value";
+                goto err;
+            }
+            pkg_info->version_code = tmp;
+        }
 
         rc = callback(pkg_info, userdata);
         if (rc == false) {

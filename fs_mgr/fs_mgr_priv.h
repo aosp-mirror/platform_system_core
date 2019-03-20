@@ -100,3 +100,6 @@ bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
 int load_verity_state(const android::fs_mgr::FstabEntry& entry, int* mode);
+
+bool fs_mgr_is_ext4(const std::string& blk_device);
+bool fs_mgr_is_f2fs(const std::string& blk_device);
