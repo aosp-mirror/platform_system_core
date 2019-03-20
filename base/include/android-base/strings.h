@@ -56,23 +56,17 @@ extern template std::string Join(const std::vector<std::string>&, const std::str
 extern template std::string Join(const std::vector<const char*>&, const std::string&);
 
 // Tests whether 's' starts with 'prefix'.
-// TODO: string_view
-bool StartsWith(const std::string& s, const char* prefix);
-bool StartsWithIgnoreCase(const std::string& s, const char* prefix);
-bool StartsWith(const std::string& s, const std::string& prefix);
-bool StartsWithIgnoreCase(const std::string& s, const std::string& prefix);
-bool StartsWith(const std::string& s, char prefix);
+bool StartsWith(std::string_view s, std::string_view prefix);
+bool StartsWith(std::string_view s, char prefix);
+bool StartsWithIgnoreCase(std::string_view s, std::string_view prefix);
 
 // Tests whether 's' ends with 'suffix'.
-// TODO: string_view
-bool EndsWith(const std::string& s, const char* suffix);
-bool EndsWithIgnoreCase(const std::string& s, const char* suffix);
-bool EndsWith(const std::string& s, const std::string& suffix);
-bool EndsWithIgnoreCase(const std::string& s, const std::string& suffix);
-bool EndsWith(const std::string& s, char suffix);
+bool EndsWith(std::string_view s, std::string_view suffix);
+bool EndsWith(std::string_view s, char suffix);
+bool EndsWithIgnoreCase(std::string_view s, std::string_view suffix);
 
 // Tests whether 'lhs' equals 'rhs', ignoring case.
-bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs);
+bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs);
 
 }  // namespace base
 }  // namespace android
