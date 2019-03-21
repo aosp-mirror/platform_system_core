@@ -16,8 +16,6 @@
 
 #include <cutils/sockets.h>
 
-#define LOG_TAG "socket-unix"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,9 +24,6 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
-
-#include <cutils/android_get_control_file.h>
-#include <log/log.h>
 
 #include "android_get_control_env.h"
 
@@ -62,6 +57,7 @@ ssize_t socket_send_buffers(cutils_socket_t sock,
     return writev(sock, iovec_buffers, num_buffers);
 }
 
+#if defined(__ANDROID__)
 int android_get_control_socket(const char* name) {
     int fd = __android_get_control_from_env(ANDROID_SOCKET_ENV_PREFIX, name);
 
@@ -82,3 +78,8 @@ int android_get_control_socket(const char* name) {
     }
     return -1;
 }
+#else
+int android_get_control_socket(const char*) {
+    return -1;
+}
+#endif

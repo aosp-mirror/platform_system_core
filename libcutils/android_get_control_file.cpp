@@ -41,12 +41,7 @@
 
 #include "android_get_control_env.h"
 
-#ifndef TEMP_FAILURE_RETRY
-#define TEMP_FAILURE_RETRY(exp) (exp) // KISS implementation
-#endif
-
-LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
-                                                    const char* name) {
+int __android_get_control_from_env(const char* prefix, const char* name) {
     if (!prefix || !name) return -1;
 
     char *key = NULL;
@@ -67,20 +62,11 @@ LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
     long fd = strtol(val, NULL, 10);
     if (errno) return -1;
 
-    // validity checking
+    // Since we are inheriting an fd, it could legitimately exceed _SC_OPEN_MAX
     if ((fd < 0) || (fd > INT_MAX)) return -1;
 
-    // Since we are inheriting an fd, it could legitimately exceed _SC_OPEN_MAX
-
     // Still open?
-#if defined(F_GETFD) // Lowest overhead
     if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD)) < 0) return -1;
-#elif defined(F_GETFL) // Alternate lowest overhead
-    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFL)) < 0) return -1;
-#else // Hail Mary pass
-    struct stat s;
-    if (TEMP_FAILURE_RETRY(fstat(fd, &s)) < 0) return -1;
-#endif
 
     return static_cast<int>(fd);
 }
@@ -88,7 +74,6 @@ LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
 int android_get_control_file(const char* path) {
     int fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, path);
 
-#if defined(__linux__)
     // Find file path from /proc and make sure it is correct
     char *proc = NULL;
     if (asprintf(&proc, "/proc/self/fd/%d", fd) < 0) return -1;
@@ -108,7 +93,6 @@ int android_get_control_file(const char* path) {
     if (ret < 0) return -1;
     if (cmp != 0) return -1;
     // It is what we think it is
-#endif
 
     return fd;
 }
