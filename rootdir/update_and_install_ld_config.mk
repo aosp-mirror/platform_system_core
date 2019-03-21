@@ -134,8 +134,8 @@ else
 	# if TARGET_VNDK_USE_CORE_VARIANT is not set.  In this case, we need to remove
 	# the entire line in the linker config so that we are not left with a line
 	# like:
-	#   namespace.sphal.link.default.shared_libs +=
-	$(hide) sed -i.bak -e "s?^.*\+= %VNDK_USING_CORE_VARIANT_LIBRARIES%\$$??" $@
+	#   namespace.vndk.link.vndk_in_system.shared_libs =
+	$(hide) sed -i.bak -e 's?^.*= %VNDK_USING_CORE_VARIANT_LIBRARIES%$$??' $@
 endif
 
 	$(hide) echo -n > $(PRIVATE_INTERMEDIATES_DIR)/private_llndk && \
