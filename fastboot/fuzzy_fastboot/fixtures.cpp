@@ -130,10 +130,14 @@ void FastBootTest::SetUp() {
         ASSERT_EQ(device_path, cb_scratch);  // The path can not change
     }
     fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
+    // No error checking since non-A/B devices may not support the command
+    fb->GetVar("current-slot", &initial_slot);
 }
 
 void FastBootTest::TearDown() {
     EXPECT_TRUE(UsbStillAvailible()) << USB_PORT_GONE;
+    // No error checking since non-A/B devices may not support the command
+    fb->SetActive(initial_slot);
 
     TearDownSerial();
 
@@ -232,6 +236,7 @@ void FastBootTest::SetLockState(bool unlock, bool assert_change) {
 
 std::string FastBootTest::device_path = "";
 std::string FastBootTest::cb_scratch = "";
+std::string FastBootTest::initial_slot = "";
 int FastBootTest::serial_port = 0;
 
 template <bool UNLOCKED>

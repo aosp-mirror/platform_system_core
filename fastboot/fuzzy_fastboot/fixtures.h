@@ -70,6 +70,7 @@ class FastBootTest : public testing::Test {
     // This is an annoying hack
     static std::string cb_scratch;
     static std::string device_path;
+    static std::string initial_slot;
 };
 
 template <bool UNLOCKED>
