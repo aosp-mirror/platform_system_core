@@ -336,8 +336,10 @@ CgroupMap::~CgroupMap() {
 }
 
 CgroupMap& CgroupMap::GetInstance() {
-    static CgroupMap instance;
-    return instance;
+    // Deliberately leak this object to avoid a race between destruction on
+    // process exit and concurrent access from another thread.
+    static auto* instance = new CgroupMap;
+    return *instance;
 }
 
 bool CgroupMap::LoadRcFile() {
