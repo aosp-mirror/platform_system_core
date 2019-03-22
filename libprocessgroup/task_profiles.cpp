@@ -284,8 +284,10 @@ bool TaskProfile::ExecuteForTask(int tid) const {
 }
 
 TaskProfiles& TaskProfiles::GetInstance() {
-    static TaskProfiles instance;
-    return instance;
+    // Deliberately leak this object to avoid a race between destruction on
+    // process exit and concurrent access from another thread.
+    static auto* instance = new TaskProfiles;
+    return *instance;
 }
 
 TaskProfiles::TaskProfiles() {
