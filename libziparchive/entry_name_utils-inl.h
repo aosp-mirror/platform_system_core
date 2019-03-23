@@ -35,7 +35,7 @@ inline bool IsValidEntryName(const uint8_t* entry_name, const size_t length) {
       return false;
     } else {
       // 2-5 byte sequences.
-      for (uint8_t first = byte << 1; first & 0x80; first <<= 1) {
+      for (uint8_t first = (byte & 0x7f) << 1; first & 0x80; first = (first & 0x7f) << 1) {
         ++i;
 
         // Missing continuation byte..
