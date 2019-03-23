@@ -20,39 +20,30 @@
 #include <sys/types.h>
 
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
-// Minimal controller description to be mmapped into process address space
+#include <android/cgrouprc.h>
+
+// Convenient wrapper of an ACgroupController pointer.
 class CgroupController {
   public:
-    CgroupController() {}
-    CgroupController(uint32_t version, const std::string& name, const std::string& path);
+    // Does not own controller
+    explicit CgroupController(const ACgroupController* controller) : controller_(controller) {}
 
-    uint32_t version() const { return version_; }
-    const char* name() const { return name_; }
-    const char* path() const { return path_; }
+    uint32_t version() const;
+    const char* name() const;
+    const char* path() const;
+
+    bool HasValue() const;
 
     std::string GetTasksFilePath(const std::string& path) const;
     std::string GetProcsFilePath(const std::string& path, uid_t uid, pid_t pid) const;
     bool GetTaskGroup(int tid, std::string* group) const;
-
   private:
-    static constexpr size_t CGROUP_NAME_BUF_SZ = 16;
-    static constexpr size_t CGROUP_PATH_BUF_SZ = 32;
-
-    uint32_t version_;
-    char name_[CGROUP_NAME_BUF_SZ];
-    char path_[CGROUP_PATH_BUF_SZ];
-};
-
-struct CgroupFile {
-    static constexpr uint32_t FILE_VERSION_1 = 1;
-    static constexpr uint32_t FILE_CURR_VERSION = FILE_VERSION_1;
-
-    uint32_t version_;
-    uint32_t controller_count_;
-    CgroupController controllers_[];
+    const ACgroupController* controller_ = nullptr;
 };
 
 class CgroupMap {
@@ -61,16 +52,11 @@ class CgroupMap {
     static bool SetupCgroups();
 
     static CgroupMap& GetInstance();
-
-    const CgroupController* FindController(const std::string& name) const;
+    CgroupController FindController(const std::string& name) const;
 
   private:
-    struct CgroupFile* cg_file_data_;
-    size_t cg_file_size_;
-
+    bool loaded_ = false;
     CgroupMap();
-    ~CgroupMap();
-
     bool LoadRcFile();
     void Print() const;
 };
