@@ -87,58 +87,33 @@ template std::string Join(const std::vector<const char*>&, char);
 template std::string Join(const std::vector<std::string>&, const std::string&);
 template std::string Join(const std::vector<const char*>&, const std::string&);
 
-bool StartsWith(const std::string& s, const char* prefix) {
-  return strncmp(s.c_str(), prefix, strlen(prefix)) == 0;
+bool StartsWith(std::string_view s, std::string_view prefix) {
+  return s.substr(0, prefix.size()) == prefix;
 }
 
-bool StartsWith(const std::string& s, const std::string& prefix) {
-  return strncmp(s.c_str(), prefix.c_str(), prefix.size()) == 0;
+bool StartsWith(std::string_view s, char prefix) {
+  return !s.empty() && s.front() == prefix;
 }
 
-bool StartsWith(const std::string& s, char prefix) {
-  return *s.c_str() == prefix;  // Use c_str() to guarantee there is at least a '\0'.
+bool StartsWithIgnoreCase(std::string_view s, std::string_view prefix) {
+  return s.size() >= prefix.size() && strncasecmp(s.data(), prefix.data(), prefix.size()) == 0;
 }
 
-bool StartsWithIgnoreCase(const std::string& s, const char* prefix) {
-  return strncasecmp(s.c_str(), prefix, strlen(prefix)) == 0;
+bool EndsWith(std::string_view s, std::string_view suffix) {
+  return s.size() >= suffix.size() && s.substr(s.size() - suffix.size(), suffix.size()) == suffix;
 }
 
-bool StartsWithIgnoreCase(const std::string& s, const std::string& prefix) {
-  return strncasecmp(s.c_str(), prefix.c_str(), prefix.size()) == 0;
+bool EndsWith(std::string_view s, char suffix) {
+  return !s.empty() && s.back() == suffix;
 }
 
-static bool EndsWith(const std::string& s, const char* suffix, size_t suffix_length,
-                     bool case_sensitive) {
-  size_t string_length = s.size();
-  if (suffix_length > string_length) {
-    return false;
-  }
-  size_t offset = string_length - suffix_length;
-  return (case_sensitive ? strncmp : strncasecmp)(s.c_str() + offset, suffix, suffix_length) == 0;
+bool EndsWithIgnoreCase(std::string_view s, std::string_view suffix) {
+  return s.size() >= suffix.size() &&
+         strncasecmp(s.data() + (s.size() - suffix.size()), suffix.data(), suffix.size()) == 0;
 }
 
-bool EndsWith(const std::string& s, const char* suffix) {
-  return EndsWith(s, suffix, strlen(suffix), true);
-}
-
-bool EndsWith(const std::string& s, const std::string& suffix) {
-  return EndsWith(s, suffix.c_str(), suffix.size(), true);
-}
-
-bool EndsWith(const std::string& s, char suffix) {
-  return EndsWith(s, &suffix, 1, true);
-}
-
-bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {
-  return EndsWith(s, suffix, strlen(suffix), false);
-}
-
-bool EndsWithIgnoreCase(const std::string& s, const std::string& suffix) {
-  return EndsWith(s, suffix.c_str(), suffix.size(), false);
-}
-
-bool EqualsIgnoreCase(const std::string& lhs, const std::string& rhs) {
-  return strcasecmp(lhs.c_str(), rhs.c_str()) == 0;
+bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs) {
+  return lhs.size() == rhs.size() && strncasecmp(lhs.data(), rhs.data(), lhs.size()) == 0;
 }
 
 }  // namespace base

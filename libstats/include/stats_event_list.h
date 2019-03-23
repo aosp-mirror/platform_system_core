@@ -18,6 +18,7 @@
 #define ANDROID_STATS_LOG_STATS_EVENT_LIST_H
 
 #include <log/log_event_list.h>
+#include <sys/uio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +28,8 @@ int write_to_logger(android_log_context context, log_id_t id);
 void note_log_drop(int error);
 void stats_log_close();
 int android_log_write_char_array(android_log_context ctx, const char* value, size_t len);
+extern int (*write_to_statsd)(struct iovec* vec, size_t nr);
+
 #ifdef __cplusplus
 }
 #endif
