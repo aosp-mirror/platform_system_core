@@ -152,21 +152,21 @@ int set_sched_policy(int tid, SchedPolicy policy) {
 }
 
 bool cpusets_enabled() {
-    static bool enabled = (CgroupMap::GetInstance().FindController("cpuset") != nullptr);
+    static bool enabled = (CgroupMap::GetInstance().FindController("cpuset").HasValue());
     return enabled;
 }
 
 bool schedboost_enabled() {
-    static bool enabled = (CgroupMap::GetInstance().FindController("schedtune") != nullptr);
+    static bool enabled = (CgroupMap::GetInstance().FindController("schedtune").HasValue());
     return enabled;
 }
 
 static int getCGroupSubsys(int tid, const char* subsys, std::string& subgroup) {
-    const CgroupController* controller = CgroupMap::GetInstance().FindController(subsys);
+    auto controller = CgroupMap::GetInstance().FindController(subsys);
 
-    if (!controller) return -1;
+    if (!controller.HasValue()) return -1;
 
-    if (!controller->GetTaskGroup(tid, &subgroup)) {
+    if (!controller.GetTaskGroup(tid, &subgroup)) {
         LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return -1;
     }

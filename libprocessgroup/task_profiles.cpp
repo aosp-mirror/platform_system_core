@@ -46,7 +46,7 @@ using android::base::WriteStringToFile;
 
 bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     std::string subgroup;
-    if (!controller_->GetTaskGroup(tid, &subgroup)) {
+    if (!controller()->GetTaskGroup(tid, &subgroup)) {
         return false;
     }
 
@@ -55,9 +55,10 @@ bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     }
 
     if (subgroup.empty()) {
-        *path = StringPrintf("%s/%s", controller_->path(), file_name_.c_str());
+        *path = StringPrintf("%s/%s", controller()->path(), file_name_.c_str());
     } else {
-        *path = StringPrintf("%s/%s/%s", controller_->path(), subgroup.c_str(), file_name_.c_str());
+        *path = StringPrintf("%s/%s/%s", controller()->path(), subgroup.c_str(),
+                             file_name_.c_str());
     }
     return true;
 }
@@ -135,7 +136,7 @@ bool SetCgroupAction::IsAppDependentPath(const std::string& path) {
     return path.find("<uid>", 0) != std::string::npos || path.find("<pid>", 0) != std::string::npos;
 }
 
-SetCgroupAction::SetCgroupAction(const CgroupController* c, const std::string& p)
+SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
     : controller_(c), path_(p) {
 #ifdef CACHE_FILE_DESCRIPTORS
     // cache file descriptor only if path is app independent
@@ -145,7 +146,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController* c, const std::string& p
         return;
     }
 
-    std::string tasks_path = c->GetTasksFilePath(p.c_str());
+    std::string tasks_path = c.GetTasksFilePath(p);
 
     if (access(tasks_path.c_str(), W_OK) != 0) {
         // file is not accessible
@@ -199,7 +200,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     }
 
     // this is app-dependent path, file descriptor is not cached
-    std::string procs_path = controller_->GetProcsFilePath(path_, uid, pid);
+    std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
         PLOG(WARNING) << "Failed to open " << procs_path;
@@ -212,7 +213,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 
     return true;
 #else
-    std::string procs_path = controller_->GetProcsFilePath(path_, uid, pid);
+    std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
         // no permissions to access the file, ignore
@@ -247,7 +248,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     LOG(ERROR) << "Application profile can't be applied to a thread";
     return false;
 #else
-    std::string tasks_path = controller_->GetTasksFilePath(path_);
+    std::string tasks_path = controller()->GetTasksFilePath(path_);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
         // no permissions to access the file, ignore
@@ -326,8 +327,8 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
         std::string file_attr = attr[i]["File"].asString();
 
         if (attributes_.find(name) == attributes_.end()) {
-            const CgroupController* controller = cg_map.FindController(controller_name);
-            if (controller) {
+            auto controller = cg_map.FindController(controller_name);
+            if (controller.HasValue()) {
                 attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_attr);
             } else {
                 LOG(WARNING) << "Controller " << controller_name << " is not found";
@@ -355,8 +356,8 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 std::string controller_name = params_val["Controller"].asString();
                 std::string path = params_val["Path"].asString();
 
-                const CgroupController* controller = cg_map.FindController(controller_name);
-                if (controller) {
+                auto controller = cg_map.FindController(controller_name);
+                if (controller.HasValue()) {
                     profile->Add(std::make_unique<SetCgroupAction>(controller, path));
                 } else {
                     LOG(WARNING) << "JoinCgroup: controller " << controller_name << " is not found";
