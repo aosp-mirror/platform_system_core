@@ -35,4 +35,4 @@
 # TODO: generate ".java" and ".h" files with integer constants from this file.
 
 # for meminfo logs
-10195355 meminfo (MemFree|1),(Cached|1),(SwapCached|1),(Buffers|1),(Shmem|1),(Unevictable|1),(SwapFree|1),(ActiveAnon|1),(InactiveAnon|1),(ActiveFile|1),(InactiveFile|1),(SReclaimable|1),(SUnreclaim|1),(KernelStack|1),(PageTables|1),(ION_heap|1),(ION_heap_pool|1),(CmaFree|1)
+10195355 meminfo (MemFree|1),(Cached|1),(SwapCached|1),(Buffers|1),(Shmem|1),(Unevictable|1),(SwapTotal|1),(SwapFree|1),(ActiveAnon|1),(InactiveAnon|1),(ActiveFile|1),(InactiveFile|1),(SReclaimable|1),(SUnreclaim|1),(KernelStack|1),(PageTables|1),(ION_heap|1),(ION_heap_pool|1),(CmaFree|1)
