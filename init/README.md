@@ -277,10 +277,6 @@ runs the service.
   since it has some peculiarities for backwards compatibility reasons. The 'imports' section of
   this file has more details on the order.
 
-`parse_apex_configs`
-  Parses config file(s) from the mounted APEXes. Intented to be used only once
-  when apexd notifies the mount event by setting apexd.status to ready.
-
 `priority <priority>`
 > Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().
@@ -511,6 +507,10 @@ Commands
   _flag_s include "ro", "rw", "remount", "noatime", ...
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
   a comma separated string, eg: barrier=1,noauto\_da\_alloc
+
+`parse_apex_configs`
+> Parses config file(s) from the mounted APEXes. Intented to be used only once
+  when apexd notifies the mount event by setting apexd.status to ready.
 
 `restart <service>`
 > Stops and restarts a running service, does nothing if the service is currently
