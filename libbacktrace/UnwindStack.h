@@ -58,7 +58,7 @@ class UnwindStackOffline : public Backtrace {
 
   bool Unwind(size_t num_ignore_frames, void* context) override;
 
-  std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset);
+  std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset) override;
 
   size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) override;
 
