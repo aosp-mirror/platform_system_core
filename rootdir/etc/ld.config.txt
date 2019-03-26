@@ -27,12 +27,11 @@ dir.unrestricted = /data/nativetest64/unrestricted
 # necessary) the unrestricted subdirs above. Then clean this up.
 dir.unrestricted = /data/local/tmp
 
-dir.system = /data/nativetest
-dir.system = /data/nativetest64
-dir.system = /data/benchmarktest
-dir.system = /data/benchmarktest64
-
 dir.postinstall = /postinstall
+
+# Fallback entry to provide APEX namespace lookups for binaries anywhere else.
+# This must be last.
+dir.system = /data
 
 [system]
 additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
