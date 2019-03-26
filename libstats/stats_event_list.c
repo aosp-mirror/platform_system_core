@@ -120,8 +120,8 @@ int write_to_logger(android_log_context ctx, log_id_t id) {
     return retValue;
 }
 
-void note_log_drop(int error) {
-    statsdLoggerWrite.noteDrop(error);
+void note_log_drop(int error, int tag) {
+    statsdLoggerWrite.noteDrop(error, tag);
 }
 
 void stats_log_close() {
