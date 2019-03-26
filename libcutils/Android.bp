@@ -84,6 +84,8 @@ cc_library {
             ],
         },
         windows: {
+            host_ldlibs: ["-lws2_32"],
+
             srcs: [
                 "socket_inaddr_any_server_windows.cpp",
                 "socket_network_client_windows.cpp",
@@ -92,9 +94,6 @@ cc_library {
             ],
 
             enabled: true,
-            shared: {
-                enabled: false,
-            },
             cflags: [
                 "-D_GNU_SOURCE",
             ],
