@@ -43,6 +43,11 @@ cc_library {
         windows: {
             enabled: true,
         },
+        android: {
+            shared_libs: [
+                "libcutils",
+            ],
+        },
     },
     export_include_dirs: ["include"],
 }

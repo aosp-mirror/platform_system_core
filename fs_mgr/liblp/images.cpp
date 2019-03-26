@@ -68,7 +68,7 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes) {
 }
 
 std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file) {
-    unique_fd fd(open(image_file.c_str(), O_RDONLY | O_CLOEXEC));
+    unique_fd fd = GetControlFileOrOpen(image_file.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << " open failed: " << image_file;
         return nullptr;
@@ -408,7 +408,7 @@ bool SparseBuilder::CheckExtentOrdering() {
 }
 
 int SparseBuilder::OpenImageFile(const std::string& file) {
-    android::base::unique_fd source_fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
+    android::base::unique_fd source_fd = GetControlFileOrOpen(file.c_str(), O_RDONLY | O_CLOEXEC);
     if (source_fd < 0) {
         PERROR << "open image file failed: " << file;
         return -1;
