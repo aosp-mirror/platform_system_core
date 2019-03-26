@@ -267,7 +267,7 @@ struct UsbFfsConnection : public Connection {
             adb_thread_setname("UsbFfs-monitor");
 
             bool bound = false;
-            bool started = false;
+            bool enabled = false;
             bool running = true;
             while (running) {
                 adb_pollfd pfd[2] = {
@@ -298,16 +298,32 @@ struct UsbFfsConnection : public Connection {
                 switch (event.type) {
                     case FUNCTIONFS_BIND:
                         CHECK(!bound) << "received FUNCTIONFS_BIND while already bound?";
+                        CHECK(!enabled) << "received FUNCTIONFS_BIND while already enabled?";
                         bound = true;
+
                         break;
 
                     case FUNCTIONFS_ENABLE:
-                        CHECK(!started) << "received FUNCTIONFS_ENABLE while already running?";
-                        started = true;
+                        CHECK(bound) << "received FUNCTIONFS_ENABLE while not bound?";
+                        CHECK(!enabled) << "received FUNCTIONFS_ENABLE while already enabled?";
+                        enabled = true;
+
                         StartWorker();
                         break;
 
                     case FUNCTIONFS_DISABLE:
+                        CHECK(bound) << "received FUNCTIONFS_DISABLE while not bound?";
+                        CHECK(enabled) << "received FUNCTIONFS_DISABLE while not enabled?";
+                        enabled = false;
+
+                        running = false;
+                        break;
+
+                    case FUNCTIONFS_UNBIND:
+                        CHECK(!enabled) << "received FUNCTIONFS_UNBIND while still enabled?";
+                        CHECK(bound) << "received FUNCTIONFS_UNBIND when not bound?";
+                        bound = false;
+
                         running = false;
                         break;
                 }
@@ -339,7 +355,7 @@ struct UsbFfsConnection : public Connection {
                     LOG(FATAL) << "hit EOF on eventfd";
                 }
 
-                WaitForEvents();
+                ReadEvents();
             }
         });
     }
@@ -389,7 +405,7 @@ struct UsbFfsConnection : public Connection {
         return block;
     }
 
-    void WaitForEvents() {
+    void ReadEvents() {
         static constexpr size_t kMaxEvents = kUsbReadQueueDepth + kUsbWriteQueueDepth;
         struct io_event events[kMaxEvents];
         struct timespec timeout = {.tv_sec = 0, .tv_nsec = 0};
