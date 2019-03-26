@@ -552,6 +552,8 @@ struct UsbFfsConnection : public Connection {
             LOG(VERBOSE) << "submitting write_request " << static_cast<void*>(iocbs[i]);
         }
 
+        writes_submitted_ += writes_to_submit;
+
         int rc = io_submit(aio_context_.get(), writes_to_submit, iocbs);
         if (rc == -1) {
             HandleError(StringPrintf("failed to submit write requests: %s", strerror(errno)));
@@ -560,8 +562,6 @@ struct UsbFfsConnection : public Connection {
             LOG(FATAL) << "failed to submit all writes: wanted to submit " << writes_to_submit
                        << ", actually submitted " << rc;
         }
-
-        writes_submitted_ += rc;
     }
 
     void HandleError(const std::string& error) {
