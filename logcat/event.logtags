@@ -116,8 +116,8 @@
 # audio
 # 61000 - 61199 reserved for audioserver
 
-# 0 for screen off, 1 for screen on, 2 for key-guard done
-70000 screen_toggled (screen_state|1|5)
+# com.android.server.policy
+# 70000 - 70199 reserved for PhoneWindowManager and other policies
 
 # aggregation service
 70200 aggregation (aggregation time|2|3)
