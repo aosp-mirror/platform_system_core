@@ -18,7 +18,6 @@
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
 libcutils_nonwindows_sources = [
-    "android_get_control_file.cpp",
     "fs.cpp",
     "hashmap.cpp",
     "multiuser.cpp",
@@ -102,6 +101,7 @@ cc_library {
 
         android: {
             srcs: libcutils_nonwindows_sources + [
+                "android_get_control_file.cpp",
                 "android_reboot.cpp",
                 "ashmem-dev.cpp",
                 "fs_config.cpp",
