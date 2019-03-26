@@ -39,6 +39,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <string>
+
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+
 #include "android_get_control_env.h"
 
 int __android_get_control_from_env(const char* prefix, const char* name) {
@@ -72,26 +77,22 @@ int __android_get_control_from_env(const char* prefix, const char* name) {
 }
 
 int android_get_control_file(const char* path) {
-    int fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, path);
+    std::string given_path;
+    if (!android::base::Realpath(path, &given_path)) return -1;
+
+    // Try path, then realpath(path), as keys to get the fd from env.
+    auto fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, path);
+    if (fd < 0) {
+        fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, given_path.c_str());
+        if (fd < 0) return fd;
+    }
 
     // Find file path from /proc and make sure it is correct
-    char *proc = NULL;
-    if (asprintf(&proc, "/proc/self/fd/%d", fd) < 0) return -1;
-    if (!proc) return -1;
+    auto proc = android::base::StringPrintf("/proc/self/fd/%d", fd);
+    std::string fd_path;
+    if (!android::base::Realpath(proc, &fd_path)) return -1;
 
-    size_t len = strlen(path);
-    // readlink() does not guarantee a nul byte, len+2 so we catch truncation.
-    char *buf = static_cast<char *>(calloc(1, len + 2));
-    if (!buf) {
-        free(proc);
-        return -1;
-    }
-    ssize_t ret = TEMP_FAILURE_RETRY(readlink(proc, buf, len + 1));
-    free(proc);
-    int cmp = (len != static_cast<size_t>(ret)) || strcmp(buf, path);
-    free(buf);
-    if (ret < 0) return -1;
-    if (cmp != 0) return -1;
+    if (given_path != fd_path) return -1;
     // It is what we think it is
 
     return fd;
