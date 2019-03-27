@@ -18,11 +18,6 @@
 
 #include <string>
 
-// Add all files in a directory as certificates to a keyring. |keyring| could be the keyring
-// description or keyring id in hex.
-int AddCertsFromDir(const std::string& type, const std::string& desc_prefix,
-                    const std::string& cert_dir, const std::string& keyring);
-
 // Add key to a keyring. Returns non-zero if error happens.
 int Add(const std::string& type, const std::string& desc, const std::string& data,
         const std::string& keyring);
