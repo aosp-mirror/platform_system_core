@@ -36,6 +36,7 @@
 #include <linux/netlink.h>
 #include <sys/socket.h>
 
+#include <cutils/android_get_control_file.h>
 #include <cutils/klog.h>
 #include <cutils/misc.h>
 #include <cutils/properties.h>
@@ -206,10 +207,9 @@ static int64_t curr_time_ms() {
 #define MAX_KLOG_WRITE_BUF_SZ 256
 
 static void dump_last_kmsg(void) {
-    char* buf;
+    std::string buf;
     char* ptr;
-    unsigned sz = 0;
-    int len;
+    size_t len;
 
     LOGW("\n");
     LOGW("*************** LAST KMSG ***************\n");
@@ -221,21 +221,25 @@ static void dump_last_kmsg(void) {
         "/proc/last_kmsg",
         // clang-format on
     };
-    for (size_t i = 0; i < arraysize(kmsg); ++i) {
-        buf = (char*)load_file(kmsg[i], &sz);
-        if (buf && sz) break;
+    for (size_t i = 0; i < arraysize(kmsg) && buf.empty(); ++i) {
+        auto fd = android_get_control_file(kmsg[i]);
+        if (fd >= 0) {
+            android::base::ReadFdToString(fd, &buf);
+        } else {
+            android::base::ReadFileToString(kmsg[i], &buf);
+        }
     }
 
-    if (!buf || !sz) {
+    if (buf.empty()) {
         LOGW("last_kmsg not found. Cold reset?\n");
         goto out;
     }
 
-    len = min(sz, LAST_KMSG_MAX_SZ);
-    ptr = buf + (sz - len);
+    len = min(buf.size(), LAST_KMSG_MAX_SZ);
+    ptr = &buf[buf.size() - len];
 
     while (len > 0) {
-        int cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
+        size_t cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
         char yoink;
         char* nl;
 
@@ -250,8 +254,6 @@ static void dump_last_kmsg(void) {
         len -= cnt;
         ptr += cnt;
     }
-
-    free(buf);
 
 out:
     LOGW("\n");
