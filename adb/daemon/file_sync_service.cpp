@@ -422,7 +422,7 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
     bool result;
     uint32_t timestamp;
     if (S_ISLNK(mode)) {
-        result = handle_send_link(s, path.c_str(), &timestamp, buffer);
+        result = handle_send_link(s, path, &timestamp, buffer);
     } else {
         // Copy user permission bits to "group" and "other" permissions.
         mode &= 0777;
