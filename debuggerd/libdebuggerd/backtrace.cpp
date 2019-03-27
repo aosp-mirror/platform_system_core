@@ -74,6 +74,7 @@ void dump_backtrace_thread(int output_fd, unwindstack::Unwinder* unwinder,
     return;
   }
 
+  unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < unwinder->NumFrames(); i++) {
     _LOG(&log, logtype::BACKTRACE, "  %s\n", unwinder->FormatFrame(i).c_str());
   }
