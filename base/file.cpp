@@ -385,7 +385,12 @@ bool Readlink(const std::string& path, std::string* result) {
 bool Realpath(const std::string& path, std::string* result) {
   result->clear();
 
-  char* realpath_buf = realpath(path.c_str(), nullptr);
+  // realpath may exit with EINTR. Retry if so.
+  char* realpath_buf = nullptr;
+  do {
+    realpath_buf = realpath(path.c_str(), nullptr);
+  } while (realpath_buf == nullptr && errno == EINTR);
+
   if (realpath_buf == nullptr) {
     return false;
   }

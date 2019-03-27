@@ -26,7 +26,7 @@
 #include <sysutils/FrameworkListener.h>
 #include <sysutils/SocketClient.h>
 
-static const int CMD_BUF_SIZE = 1024;
+static const int CMD_BUF_SIZE = 4096;
 
 FrameworkListener::FrameworkListener(const char *socketName, bool withSeq) :
                             SocketListener(socketName, true, withSeq) {
