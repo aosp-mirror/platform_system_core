@@ -30,7 +30,6 @@ static void Usage(int exit_code) {
   fprintf(stderr, "usage: mini-keyctl <action> [args,]\n");
   fprintf(stderr, "       mini-keyctl add <type> <desc> <data> <keyring>\n");
   fprintf(stderr, "       mini-keyctl padd <type> <desc> <keyring>\n");
-  fprintf(stderr, "       mini-keyctl dadd <type> <desc_prefix> <cert_dir> <keyring>\n");
   fprintf(stderr, "       mini-keyctl unlink <key> <keyring>\n");
   fprintf(stderr, "       mini-keyctl restrict_keyring <keyring>\n");
   fprintf(stderr, "       mini-keyctl security <key>\n");
@@ -56,14 +55,6 @@ int main(int argc, const char** argv) {
     std::string data = argv[4];
     std::string keyring = argv[5];
     return Add(type, desc, data, keyring);
-  } else if (action == "dadd") {
-    if (argc != 6) Usage(1);
-    std::string type = argv[2];
-    // The key description contains desc_prefix and an index.
-    std::string desc_prefix = argv[3];
-    std::string cert_dir = argv[4];
-    std::string keyring = argv[5];
-    return AddCertsFromDir(type, desc_prefix, cert_dir, keyring);
   } else if (action == "padd") {
     if (argc != 5) Usage(1);
     std::string type = argv[2];
