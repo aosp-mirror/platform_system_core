@@ -695,8 +695,11 @@ Init records some boot timing information in system properties.
 > Time after boot in ns (via the CLOCK\_BOOTTIME clock) at which the first
   stage of init started.
 
+`ro.boottime.init.first_stage`
+> How long in ns it took to run first stage.
+
 `ro.boottime.init.selinux`
-> How long it took the first stage to initialize SELinux.
+> How long in ns it took to run SELinux stage.
 
 `ro.boottime.init.cold_boot_wait`
 > How long init waited for ueventd's coldboot phase to end.
