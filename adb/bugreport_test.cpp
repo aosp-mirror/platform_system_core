@@ -136,7 +136,7 @@ class BugreportTest : public ::testing::Test {
 
     void ExpectBugreportzVersion(const std::string& version) {
         EXPECT_CALL(br_, SendShellCommand("bugreportz -v", false, _))
-            .WillOnce(DoAll(WithArg<2>(WriteOnStderr(version.c_str())),
+            .WillOnce(DoAll(WithArg<2>(WriteOnStderr(version)),
                             WithArg<2>(ReturnCallbackDone(0))));
     }
 
