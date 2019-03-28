@@ -168,7 +168,8 @@ struct ScopedAioContext {
 struct UsbFfsConnection : public Connection {
     UsbFfsConnection(unique_fd control, unique_fd read, unique_fd write,
                      std::promise<void> destruction_notifier)
-        : stopped_(false),
+        : worker_started_(false),
+          stopped_(false),
           destruction_notifier_(std::move(destruction_notifier)),
           control_fd_(std::move(control)),
           read_fd_(std::move(read)),
@@ -194,6 +195,7 @@ struct UsbFfsConnection : public Connection {
 
         // We need to explicitly close our file descriptors before we notify our destruction,
         // because the thread listening on the future will immediately try to reopen the endpoint.
+        aio_context_.reset();
         control_fd_.reset();
         read_fd_.reset();
         write_fd_.reset();
@@ -274,11 +276,16 @@ struct UsbFfsConnection : public Connection {
                   { .fd = control_fd_.get(), .events = POLLIN, .revents = 0 },
                   { .fd = monitor_event_fd_.get(), .events = POLLIN, .revents = 0 },
                 };
-                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, -1));
+
+                // If we don't see our first bind within a second, try again.
+                int timeout_ms = bound ? -1 : 1000;
+
+                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, timeout_ms));
                 if (rc == -1) {
                     PLOG(FATAL) << "poll on USB control fd failed";
                 } else if (rc == 0) {
-                    LOG(FATAL) << "poll on USB control fd returned 0";
+                    LOG(WARNING) << "timed out while waiting for FUNCTIONFS_BIND, trying again";
+                    break;
                 }
 
                 if (pfd[1].revents) {
@@ -330,13 +337,13 @@ struct UsbFfsConnection : public Connection {
             }
 
             StopWorker();
-            aio_context_.reset();
-            read_fd_.reset();
-            write_fd_.reset();
+            HandleError("monitor thread finished");
         });
     }
 
     void StartWorker() {
+        CHECK(!worker_started_);
+        worker_started_ = true;
         worker_thread_ = std::thread([this]() {
             adb_thread_setname("UsbFfs-worker");
             for (size_t i = 0; i < kUsbReadQueueDepth; ++i) {
@@ -361,6 +368,10 @@ struct UsbFfsConnection : public Connection {
     }
 
     void StopWorker() {
+        if (!worker_started_) {
+            return;
+        }
+
         pthread_t worker_thread_handle = worker_thread_.native_handle();
         while (true) {
             int rc = pthread_kill(worker_thread_handle, kInterruptionSignal);
@@ -590,6 +601,8 @@ struct UsbFfsConnection : public Connection {
     }
 
     std::thread monitor_thread_;
+
+    bool worker_started_;
     std::thread worker_thread_;
 
     std::atomic<bool> stopped_;
