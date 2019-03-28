@@ -45,5 +45,6 @@ cc_library {
     cflags: [
         "-Wall",
         "-Werror",
+        "-Wexit-time-destructors",
     ],
 }

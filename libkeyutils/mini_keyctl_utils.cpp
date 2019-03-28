@@ -86,53 +86,6 @@ static bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_
   return false;
 }
 
-int AddCertsFromDir(const std::string& type, const std::string& desc_prefix,
-                    const std::string& cert_dir, const std::string& keyring) {
-  key_serial_t keyring_id;
-  if (!GetKeyringId(keyring, &keyring_id)) {
-    LOG(ERROR) << "Can not find keyring id";
-    return 1;
-  }
-
-  std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(cert_dir.c_str()), closedir);
-  if (!dir) {
-    PLOG(WARNING) << "Failed to open directory " << cert_dir;
-    return 1;
-  }
-  int keys_added = 0;
-  struct dirent* dp;
-  while ((dp = readdir(dir.get())) != NULL) {
-    if (dp->d_type != DT_REG) {
-      continue;
-    }
-    std::string cert_path = cert_dir + "/" + dp->d_name;
-    std::string cert_buf;
-    if (!android::base::ReadFileToString(cert_path, &cert_buf, false /* follow_symlinks */)) {
-      LOG(ERROR) << "Failed to read " << cert_path;
-      continue;
-    }
-
-    if (cert_buf.size() > kMaxCertSize) {
-      LOG(ERROR) << "Certficate size too large: " << cert_path;
-      continue;
-    }
-
-    // Add key to keyring.
-    int key_desc_index = keys_added;
-    std::string key_desc = desc_prefix + std::to_string(key_desc_index);
-    key_serial_t key =
-        add_key(type.c_str(), key_desc.c_str(), &cert_buf[0], cert_buf.size(), keyring_id);
-    if (key < 0) {
-      PLOG(ERROR) << "Failed to add key to keyring: " << cert_path;
-      continue;
-    }
-    LOG(INFO) << "Key " << cert_path << " added to " << keyring << " with key id 0x" << std::hex
-              << key;
-    keys_added++;
-  }
-  return 0;
-}
-
 int Unlink(key_serial_t key, const std::string& keyring) {
   key_serial_t keyring_id;
   if (!GetKeyringId(keyring, &keyring_id)) {

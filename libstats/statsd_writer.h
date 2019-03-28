@@ -39,7 +39,7 @@ struct android_log_transport_write {
     /* write log to transport, returns number of bytes propagated, or -errno */
     int (*write)(struct timespec* ts, struct iovec* vec, size_t nr);
     /* note one log drop */
-    void (*noteDrop)(int error);
+    void (*noteDrop)(int error, int tag);
 };
 
 #endif  // ANDROID_STATS_LOG_STATS_WRITER_H
