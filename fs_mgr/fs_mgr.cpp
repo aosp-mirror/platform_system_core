@@ -1602,6 +1602,14 @@ bool fs_mgr_load_verity_state(int* mode) {
     return true;
 }
 
+std::string fs_mgr_get_verity_device_name(const FstabEntry& entry) {
+    if (entry.mount_point == "/") {
+        // In AVB, the dm device name is vroot instead of system.
+        return entry.fs_mgr_flags.avb ? "vroot" : "system";
+    }
+    return Basename(entry.mount_point);
+}
+
 bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
     if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
         return false;
@@ -1609,14 +1617,7 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    std::string mount_point;
-    if (entry.mount_point == "/") {
-        // In AVB, the dm device name is vroot instead of system.
-        mount_point = entry.fs_mgr_flags.avb ? "vroot" : "system";
-    } else {
-        mount_point = Basename(entry.mount_point);
-    }
-
+    std::string mount_point = fs_mgr_get_verity_device_name(entry);
     if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
         return false;
     }
@@ -1636,6 +1637,27 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
         return true;
     }
 
+    return false;
+}
+
+bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {
+    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
+        return false;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::string device = fs_mgr_get_verity_device_name(entry);
+
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
+        return false;
+    }
+    for (const auto& target : table) {
+        if (strcmp(target.spec.target_type, "verity") == 0 &&
+            target.data.find("check_at_most_once") != std::string::npos) {
+            return true;
+        }
+    }
     return false;
 }
 
