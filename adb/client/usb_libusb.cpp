@@ -622,6 +622,11 @@ int usb_close(usb_handle* h) {
     return 0;
 }
 
+void usb_reset(usb_handle* h) {
+    libusb_reset_device(h->device_handle);
+    usb_kick(h);
+}
+
 void usb_kick(usb_handle* h) {
     h->Close();
 }
