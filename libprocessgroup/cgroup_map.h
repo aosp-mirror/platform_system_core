@@ -75,8 +75,6 @@ struct CgroupFile {
 
 class CgroupMap {
   public:
-    static constexpr const char* CGROUPS_RC_FILE = "cgroup.rc";
-
     // Selinux policy ensures only init process can successfully use this function
     static bool SetupCgroups();
 
