@@ -1231,9 +1231,25 @@ fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} test raw remount commands" >&2
 
+fixup_from_fastboot() {
+  inFastboot || return 1
+  if [ -n "${ACTIVE_SLOT}" ]; then
+    local active_slot=`get_active_slot`
+    if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
+      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    else
+      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot to be set to ${ACTIVE_SLOT}"
+    fi >&2
+    fastboot --set-active=${ACTIVE_SLOT}
+  fi
+  fastboot reboot
+  adb_wait 2m
+}
+
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
@@ -1246,6 +1262,7 @@ echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
@@ -1266,6 +1283,7 @@ for d in ${OVERLAYFS_BACKING}; do
 done
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot after wipe `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
