@@ -177,7 +177,7 @@ Result<Success> Service::SetUpPidNamespace() const {
 Result<Success> Service::EnterNamespaces() const {
     for (const auto& [nstype, path] : namespaces_to_enter_) {
         auto fd = unique_fd{open(path.c_str(), O_RDONLY | O_CLOEXEC)};
-        if (!fd) {
+        if (fd == -1) {
             return ErrnoError() << "Could not open namespace at " << path;
         }
         if (setns(fd, nstype) == -1) {
