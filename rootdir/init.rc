@@ -222,6 +222,9 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
+    # make the PSI monitor accessible to others
+    chown system system /proc/pressure/memory
+    chmod 0664 /proc/pressure/memory
 
     # qtaguid will limit access to specific data based on group memberships.
     #   net_bw_acct grants impersonation of socket owners.
