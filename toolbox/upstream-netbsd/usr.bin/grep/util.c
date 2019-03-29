@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.17 2013/01/21 03:24:43 msaitoh Exp $	*/
+/*	$NetBSD: util.c,v 1.19 2018/02/05 22:14:26 mrg Exp $	*/
 /*	$FreeBSD: head/usr.bin/grep/util.c 211496 2010-08-19 09:28:59Z des $	*/
 /*	$OpenBSD: util.c,v 1.39 2010/07/02 22:18:03 tedu Exp $	*/
 
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: util.c,v 1.17 2013/01/21 03:24:43 msaitoh Exp $");
+__RCSID("$NetBSD: util.c,v 1.19 2018/02/05 22:14:26 mrg Exp $");
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -478,9 +478,10 @@ printline(struct str *line, int sep, regmatch_t *matches, int m)
 			if (color) 
 				fprintf(stdout, "\33[%sm\33[K", color);
 
-				fwrite(line->dat + matches[i].rm_so, 
-				    matches[i].rm_eo - matches[i].rm_so, 1,
-				    stdout);
+			fwrite(line->dat + matches[i].rm_so, 
+			    matches[i].rm_eo - matches[i].rm_so, 1,
+			    stdout);
+
 			if (color) 
 				fprintf(stdout, "\33[m\33[K");
 			a = matches[i].rm_eo;
