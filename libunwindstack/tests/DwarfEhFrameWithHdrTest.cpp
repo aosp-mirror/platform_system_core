@@ -95,6 +95,13 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, Init) {
   EXPECT_EQ(0x1000U, this->eh_frame_->TestGetEntriesDataOffset());
   EXPECT_EQ(0x100aU, this->eh_frame_->TestGetCurEntriesOffset());
 
+  // Verify a zero table entry size fails to init.
+  this->memory_.SetData8(0x1003, 0x1);
+  ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100, 0));
+  ASSERT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->eh_frame_->LastErrorCode());
+  // Reset the value back to the original.
+  this->memory_.SetData8(0x1003, DW_EH_PE_sdata4);
+
   // Verify a zero fde count fails to init.
   this->memory_.SetData32(0x1006, 0);
   ASSERT_FALSE(this->eh_frame_->Init(0x1000, 0x100, 0));
@@ -276,9 +283,8 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeInfoFromIndex_cached) {
   EXPECT_EQ(0x500U, info->offset);
 }
 
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetBinary_verify) {
+TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_verify) {
   this->eh_frame_->TestSetTableEntrySize(0x10);
-  this->eh_frame_->TestSetFdeCount(10);
 
   typename DwarfEhFrameWithHdr<TypeParam>::FdeInfo info;
   for (size_t i = 0; i < 10; i++) {
@@ -288,105 +294,42 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetBinary_verify) {
   }
 
   uint64_t fde_offset;
-  EXPECT_FALSE(this->eh_frame_->GetFdeOffsetBinary(0x100, &fde_offset, 10));
+  this->eh_frame_->TestSetFdeCount(10);
+  EXPECT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x100, &fde_offset));
   // Not an error, just not found.
   ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
   // Even number of elements.
   for (size_t i = 0; i < 10; i++) {
+    SCOPED_TRACE(testing::Message() << "Failed at index " << i);
     TypeParam pc = 0x1000 * (i + 1);
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc, &fde_offset, 10)) << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 1, &fde_offset, 10))
-        << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 0xfff, &fde_offset, 10))
-        << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
+    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc, &fde_offset));
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset);
+    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 1, &fde_offset));
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset);
+    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xfff, &fde_offset));
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset);
   }
+
   // Odd number of elements.
+  this->eh_frame_->TestSetFdeCount(9);
   for (size_t i = 0; i < 9; i++) {
+    SCOPED_TRACE(testing::Message() << "Failed at index " << i);
     TypeParam pc = 0x1000 * (i + 1);
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc, &fde_offset, 9)) << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 1, &fde_offset, 9))
-        << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
-    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetBinary(pc + 0xfff, &fde_offset, 9))
-        << "Failed at index " << i;
-    EXPECT_EQ(0x5000 + i * 0x20, fde_offset) << "Failed at index " << i;
+    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc, &fde_offset));
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset);
+    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 1, &fde_offset));
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset);
+    EXPECT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(pc + 0xfff, &fde_offset));
+    EXPECT_EQ(0x5000 + i * 0x20, fde_offset);
   }
 }
 
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetBinary_index_fail) {
+TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_index_fail) {
   this->eh_frame_->TestSetTableEntrySize(0x10);
   this->eh_frame_->TestSetFdeCount(10);
 
   uint64_t fde_offset;
-  EXPECT_FALSE(this->eh_frame_->GetFdeOffsetBinary(0x1000, &fde_offset, 10));
-}
-
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetSequential) {
-  this->eh_frame_->TestSetFdeCount(10);
-  this->eh_frame_->TestSetEntriesDataOffset(0x100);
-  this->eh_frame_->TestSetEntriesEnd(0x2000);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
-
-  this->memory_.SetData32(0x1048, 0x440);
-  this->memory_.SetData32(0x104c, 0x600);
-
-  // Verify that if entries is zero, that it fails.
-  uint64_t fde_offset;
-  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x344, &fde_offset));
-  this->eh_frame_->TestSetCurEntriesOffset(0x1040);
-
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x344, &fde_offset));
-  EXPECT_EQ(0x500U, fde_offset);
-
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x444, &fde_offset));
-  EXPECT_EQ(0x600U, fde_offset);
-
-  // Expect that the data is cached so no more memory reads will occur.
-  this->memory_.Clear();
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x444, &fde_offset));
-  EXPECT_EQ(0x600U, fde_offset);
-}
-
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetSequential_last_element) {
-  this->eh_frame_->TestSetFdeCount(2);
-  this->eh_frame_->TestSetEntriesDataOffset(0x100);
-  this->eh_frame_->TestSetEntriesEnd(0x2000);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-  this->eh_frame_->TestSetCurEntriesOffset(0x1040);
-
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
-
-  this->memory_.SetData32(0x1048, 0x440);
-  this->memory_.SetData32(0x104c, 0x600);
-
-  uint64_t fde_offset;
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetSequential(0x540, &fde_offset));
-  EXPECT_EQ(0x600U, fde_offset);
-}
-
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetSequential_end_check) {
-  this->eh_frame_->TestSetFdeCount(2);
-  this->eh_frame_->TestSetEntriesDataOffset(0x100);
-  this->eh_frame_->TestSetEntriesEnd(0x1048);
-  this->eh_frame_->TestSetTableEncoding(DW_EH_PE_udata4);
-
-  this->memory_.SetData32(0x1040, 0x340);
-  this->memory_.SetData32(0x1044, 0x500);
-
-  this->memory_.SetData32(0x1048, 0x440);
-  this->memory_.SetData32(0x104c, 0x600);
-
-  uint64_t fde_offset;
-  ASSERT_FALSE(this->eh_frame_->GetFdeOffsetSequential(0x540, &fde_offset));
-  ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
+  EXPECT_FALSE(this->eh_frame_->GetFdeOffsetFromPc(0x1000, &fde_offset));
 }
 
 TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_fail_fde_count) {
@@ -397,7 +340,7 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_fail_fde_count) {
   ASSERT_EQ(DWARF_ERROR_NONE, this->eh_frame_->LastErrorCode());
 }
 
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_binary_search) {
+TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_search) {
   this->eh_frame_->TestSetTableEntrySize(16);
   this->eh_frame_->TestSetFdeCount(10);
 
@@ -415,26 +358,6 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_binary_search) {
   uint64_t fde_offset;
   ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(0x800, &fde_offset));
   EXPECT_EQ(0x10700U, fde_offset);
-}
-
-TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeOffsetFromPc_sequential_search) {
-  this->eh_frame_->TestSetFdeCount(10);
-  this->eh_frame_->TestSetTableEntrySize(0);
-
-  typename DwarfEhFrameWithHdr<TypeParam>::FdeInfo info;
-  info.pc = 0x50;
-  info.offset = 0x10000;
-  this->eh_frame_->TestSetFdeInfo(0, info);
-  info.pc = 0x150;
-  info.offset = 0x10100;
-  this->eh_frame_->TestSetFdeInfo(1, info);
-  info.pc = 0x250;
-  info.offset = 0x10200;
-  this->eh_frame_->TestSetFdeInfo(2, info);
-
-  uint64_t fde_offset;
-  ASSERT_TRUE(this->eh_frame_->GetFdeOffsetFromPc(0x200, &fde_offset));
-  EXPECT_EQ(0x10100U, fde_offset);
 }
 
 TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetCieFde32) {
@@ -526,10 +449,8 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeFromPc_fde_not_found) {
 REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameWithHdrTest, Init, Init_non_zero_load_bias, GetFdes,
                            GetFdeInfoFromIndex_expect_cache_fail, GetFdeInfoFromIndex_read_pcrel,
                            GetFdeInfoFromIndex_read_datarel, GetFdeInfoFromIndex_cached,
-                           GetFdeOffsetBinary_verify, GetFdeOffsetBinary_index_fail,
-                           GetFdeOffsetSequential, GetFdeOffsetSequential_last_element,
-                           GetFdeOffsetSequential_end_check, GetFdeOffsetFromPc_fail_fde_count,
-                           GetFdeOffsetFromPc_binary_search, GetFdeOffsetFromPc_sequential_search,
+                           GetFdeOffsetFromPc_verify, GetFdeOffsetFromPc_index_fail,
+                           GetFdeOffsetFromPc_fail_fde_count, GetFdeOffsetFromPc_search,
                            GetCieFde32, GetCieFde64, GetFdeFromPc_fde_not_found);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameWithHdrTestTypes;
