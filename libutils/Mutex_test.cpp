@@ -30,3 +30,19 @@ TEST(Mutex, compile) {
     i = 0;
     modifyLockedVariable();
 }
+
+TEST(Mutex, tryLock) {
+    if (mLock.tryLock() != 0) {
+        return;
+    }
+    mLock.unlock();
+}
+
+#if defined(__ANDROID__)
+TEST(Mutex, timedLock) {
+    if (mLock.timedLock(1) != 0) {
+        return;
+    }
+    mLock.unlock();
+}
+#endif

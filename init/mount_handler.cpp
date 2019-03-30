@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -34,6 +35,7 @@
 #include <android-base/strings.h>
 #include <fs_mgr.h>
 #include <fstab/fstab.h>
+#include <libdm/dm.h>
 
 #include "epoll.h"
 #include "property_service.h"
@@ -47,8 +49,13 @@ MountHandlerEntry ParseMount(const std::string& line) {
     auto fields = android::base::Split(line, " ");
     while (fields.size() < 3) fields.emplace_back("");
     if (fields[0] == "/dev/root") {
-        if (android::fs_mgr::Fstab fstab; android::fs_mgr::ReadDefaultFstab(&fstab)) {
-            if (auto entry = GetEntryForMountPoint(&fstab, "/")) {
+        auto& dm = dm::DeviceMapper::Instance();
+        std::string path;
+        if (dm.GetDmDevicePathByName("system", &path) || dm.GetDmDevicePathByName("vroot", &path)) {
+            fields[0] = path;
+        } else if (android::fs_mgr::Fstab fstab; android::fs_mgr::ReadDefaultFstab(&fstab)) {
+            auto entry = GetEntryForMountPoint(&fstab, "/");
+            if (entry || (entry = GetEntryForMountPoint(&fstab, "/system"))) {
                 fields[0] = entry->blk_device;
             }
         }
@@ -77,14 +84,19 @@ void SetMountProperty(const MountHandlerEntry& entry, bool add) {
         struct stat sb;
         if (stat(queue.c_str(), &sb) || !S_ISDIR(sb.st_mode)) value = "";
         if (stat(entry.mount_point.c_str(), &sb) || !S_ISDIR(sb.st_mode)) value = "";
-        // Skip the noise associated with APEX until there is a need
+        // Clear the noise associated with loopback and APEX.
         if (android::base::StartsWith(value, "loop")) value = "";
+        if (android::base::StartsWith(entry.mount_point, "/apex/")) value = "";
     }
-    std::string property =
-            "dev.mnt.blk" + ((entry.mount_point == "/") ? "/root" : entry.mount_point);
-    std::replace(property.begin(), property.end(), '/', '.');
-    if (value.empty() && android::base::GetProperty(property, "").empty()) return;
-    property_set(property, value);
+    auto mount_prop = entry.mount_point;
+    if (mount_prop == "/") mount_prop = "/root";
+    std::replace(mount_prop.begin(), mount_prop.end(), '/', '.');
+    mount_prop = "dev.mnt.blk" + mount_prop;
+    // Set property even if its value does not change to trigger 'on property:'
+    // handling, except for clearing non-existent or already clear property.
+    // Goal is reduction of empty properties and associated triggers.
+    if (value.empty() && android::base::GetProperty(mount_prop, "").empty()) return;
+    property_set(mount_prop, value);
 }
 
 }  // namespace
@@ -114,25 +126,27 @@ MountHandler::~MountHandler() {
 
 void MountHandler::MountHandlerFunction() {
     rewind(fp_.get());
+    std::vector<MountHandlerEntry> touched;
+    auto untouched = mounts_;
     char* buf = nullptr;
     size_t len = 0;
-    auto untouched = mounts_;
     while (getline(&buf, &len, fp_.get()) != -1) {
-        auto entry = ParseMount(std::string(buf, len));
+        auto entry = ParseMount(std::string(buf));
         auto match = untouched.find(entry);
         if (match == untouched.end()) {
-            SetMountProperty(entry, true);
-            mounts_.emplace(std::move(entry));
+            touched.emplace_back(std::move(entry));
         } else {
             untouched.erase(match);
         }
     }
     free(buf);
     for (auto entry : untouched) {
-        auto match = mounts_.find(entry);
-        if (match == mounts_.end()) continue;
-        mounts_.erase(match);
         SetMountProperty(entry, false);
+        mounts_.erase(entry);
+    }
+    for (auto entry : touched) {
+        SetMountProperty(entry, true);
+        mounts_.emplace(std::move(entry));
     }
 }
 

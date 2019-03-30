@@ -1,4 +1,4 @@
-/*	$NetBSD: file.c,v 1.7 2011/04/18 22:46:48 joerg Exp $	*/
+/*	$NetBSD: file.c,v 1.10 2018/08/12 09:03:21 christos Exp $	*/
 /*	$FreeBSD: head/usr.bin/grep/file.c 211496 2010-08-19 09:28:59Z des $	*/
 /*	$OpenBSD: file.c,v 1.11 2010/07/02 20:48:48 nicm Exp $	*/
 
@@ -35,15 +35,12 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: file.c,v 1.7 2011/04/18 22:46:48 joerg Exp $");
+__RCSID("$NetBSD: file.c,v 1.10 2018/08/12 09:03:21 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#ifndef __ANDROID__
-#include <bzlib.h>
-#endif
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -53,17 +50,16 @@ __RCSID("$NetBSD: file.c,v 1.7 2011/04/18 22:46:48 joerg Exp $");
 #include <unistd.h>
 #include <wchar.h>
 #include <wctype.h>
-#ifndef __ANDROID__
-#include <zlib.h>
-#endif
 
 #include "grep.h"
 
 #define	MAXBUFSIZ	(32 * 1024)
 #define	LNBUFBUMP	80
 
-#ifndef __ANDROID__
+#ifndef WITHOUT_GZIP
 static gzFile gzbufdesc;
+#endif
+#ifndef WITHOUT_BZ2
 static BZFILE* bzbufdesc;
 #endif
 
@@ -77,18 +73,21 @@ static size_t lnbuflen;
 static inline int
 grep_refill(struct file *f)
 {
-	ssize_t nr;
-#ifndef __ANDROID__
+	ssize_t nr = -1;
 	int bzerr;
-#endif
 
 	bufpos = buffer;
 	bufrem = 0;
 
-#ifndef __ANDROID__
-	if (filebehave == FILE_GZIP)
+#ifndef WITHOUT_GZIP
+	if (filebehave == FILE_GZIP) {
 		nr = gzread(gzbufdesc, buffer, MAXBUFSIZ);
-	else if (filebehave == FILE_BZIP && bzbufdesc != NULL) {
+		if (nr == -1)
+			return -1;
+	}
+#endif
+#ifndef WITHOUT_BZ2
+	if (filebehave == FILE_BZIP && bzbufdesc != NULL) {
 		nr = BZ2_bzRead(&bzerr, bzbufdesc, buffer, MAXBUFSIZ);
 		switch (bzerr) {
 		case BZ_OK:
@@ -114,9 +113,13 @@ grep_refill(struct file *f)
 			/* Make sure we exit with an error */
 			nr = -1;
 		}
-	} else
+		if (nr == -1)
+			return -1;
+	}
 #endif
+	if (nr == -1) {
 		nr = read(f->fd, buffer, MAXBUFSIZ);
+	}
 
 	if (nr < 0)
 		return (-1);
@@ -204,11 +207,13 @@ static inline struct file *
 grep_file_init(struct file *f)
 {
 
-#ifndef __ANDROID__
+#ifndef WITHOUT_GZIP
 	if (filebehave == FILE_GZIP &&
 	    (gzbufdesc = gzdopen(f->fd, "r")) == NULL)
 		goto error;
+#endif
 
+#ifndef WITHOUT_BZ2
 	if (filebehave == FILE_BZIP &&
 	    (bzbufdesc = BZ2_bzdopen(f->fd, "r")) == NULL)
 		goto error;
