@@ -171,6 +171,11 @@ bool UsbConnection::Write(apacket* packet) {
     return true;
 }
 
+void UsbConnection::Reset() {
+    usb_reset(handle_);
+    usb_kick(handle_);
+}
+
 void UsbConnection::Close() {
     usb_kick(handle_);
 }

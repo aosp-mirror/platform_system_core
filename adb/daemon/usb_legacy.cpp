@@ -307,6 +307,10 @@ int usb_close(usb_handle* h) {
     return 0;
 }
 
+void usb_reset(usb_handle* h) {
+    usb_close(h);
+}
+
 void usb_kick(usb_handle* h) {
     h->kick(h);
 }
