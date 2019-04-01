@@ -556,6 +556,13 @@ int usb_close(usb_handle *handle)
     return 0;
 }
 
+void usb_reset(usb_handle* handle) {
+    if (!handle->dead) {
+        (*handle->interface)->USBDeviceReEnumerate(handle->interface, 0);
+    }
+    usb_kick(handle);
+}
+
 static void usb_kick_locked(usb_handle *handle)
 {
     LOG(INFO) << "Kicking handle";
