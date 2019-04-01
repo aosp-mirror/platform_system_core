@@ -357,7 +357,7 @@ static Result<Success> console_init_action(const BuiltinArguments& args) {
 static Result<Success> SetupCgroupsAction(const BuiltinArguments&) {
     // Have to create <CGROUPS_RC_DIR> using make_dir function
     // for appropriate sepolicy to be set for it
-    make_dir(CGROUPS_RC_DIR, 0711);
+    make_dir(android::base::Dirname(CGROUPS_RC_PATH), 0711);
     if (!CgroupSetupCgroups()) {
         return ErrnoError() << "Failed to setup cgroups";
     }

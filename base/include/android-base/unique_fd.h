@@ -105,6 +105,9 @@ class unique_fd_impl final {
   int get() const { return fd_; }
   operator int() const { return get(); }  // NOLINT
 
+  // Catch bogus error checks (i.e.: "!fd" instead of "fd != -1").
+  bool operator!() const = delete;
+
   int release() __attribute__((warn_unused_result)) {
     tag(fd_, this, nullptr);
     int ret = fd_;
