@@ -11,13 +11,12 @@ dir.legacy = /vendor
 dir.legacy = /odm
 dir.legacy = /sbin
 
-dir.legacy = /data/nativetest
-dir.legacy = /data/nativetest64
-dir.legacy = /data/benchmarktest
-dir.legacy = /data/benchmarktest64
-
 # Except for /postinstall, where only /system and /product are searched
 dir.postinstall = /postinstall
+
+# Fallback entry to provide APEX namespace lookups for binaries anywhere else.
+# This must be last.
+dir.legacy = /data
 
 [legacy]
 namespace.default.isolated = false

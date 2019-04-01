@@ -1,4 +1,4 @@
-/*	$NetBSD: grep.c,v 1.12 2014/07/11 16:30:45 christos Exp $	*/
+/*	$NetBSD: grep.c,v 1.15 2018/08/12 09:03:21 christos Exp $	*/
 /* 	$FreeBSD: head/usr.bin/grep/grep.c 211519 2010-08-19 22:55:17Z delphij $	*/
 /*	$OpenBSD: grep.c,v 1.42 2010/07/02 22:18:03 tedu Exp $	*/
 
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: grep.c,v 1.12 2014/07/11 16:30:45 christos Exp $");
+__RCSID("$NetBSD: grep.c,v 1.15 2018/08/12 09:03:21 christos Exp $");
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -170,7 +170,9 @@ static const char optstr[] =
 struct option long_options[] =
 {
 	{"binary-files",	required_argument,	NULL, BIN_OPT},
+#ifndef WITHOUT_GZIP
 	{"decompress",          no_argument,            NULL, DECOMPRESS_OPT},
+#endif
 	{"help",		no_argument,		NULL, HELP_OPT},
 	{"mmap",		no_argument,		NULL, MMAP_OPT},
 	{"line-buffered",	no_argument,		NULL, LINEBUF_OPT},
@@ -197,7 +199,9 @@ struct option long_options[] =
 	{"no-filename",		no_argument,		NULL, 'h'},
 	{"with-filename",	no_argument,		NULL, 'H'},
 	{"ignore-case",		no_argument,		NULL, 'i'},
+#ifndef WITHOUT_BZ2
 	{"bz2decompress",	no_argument,		NULL, 'J'},
+#endif
 	{"files-with-matches",	no_argument,		NULL, 'l'},
 	{"files-without-match", no_argument,            NULL, 'L'},
 	{"max-count",		required_argument,	NULL, 'm'},
@@ -338,6 +342,7 @@ main(int argc, char *argv[])
 	case 'g':
 		grepbehave = GREP_BASIC;
 		break;
+#ifndef WITHOUT_GZIP
 	case 'z':
 		filebehave = FILE_GZIP;
 		switch(__progname[1]) {
@@ -352,6 +357,7 @@ main(int argc, char *argv[])
 			break;
 		}
 		break;
+#endif
 	}
 
 	lastc = '\0';
@@ -491,9 +497,11 @@ main(int argc, char *argv[])
 			iflag =  true;
 			cflags |= REG_ICASE;
 			break;
+#ifndef WITHOUT_BZ2
 		case 'J':
 			filebehave = FILE_BZIP;
 			break;
+#endif
 		case 'L':
 			lflag = false;
 			Lflag = true;
@@ -596,9 +604,11 @@ main(int argc, char *argv[])
 			    strcasecmp("no", optarg) != 0)
 				errx(2, getstr(3), "--color");
 			break;
+#ifndef WITHOUT_GZIP
 		case DECOMPRESS_OPT:
 			filebehave = FILE_GZIP;
 			break;
+#endif
 		case LABEL_OPT:
 			label = optarg;
 			break;
@@ -679,8 +689,13 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (lbflag)
+	if (lbflag) {
+#ifdef _IOLBF
+		setvbuf(stdout, NULL, _IOLBF, 0);
+#else
 		setlinebuf(stdout);
+#endif
+	}
 
 	if ((aargc == 0 || aargc == 1) && !Hflag)
 		hflag = true;

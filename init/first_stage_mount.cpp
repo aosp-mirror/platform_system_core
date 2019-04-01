@@ -78,6 +78,7 @@ class FirstStageMount {
     ListenerAction HandleBlockDevice(const std::string& name, const Uevent&);
     bool InitRequiredDevices();
     bool InitMappedDevice(const std::string& verity_device);
+    bool InitDeviceMapper();
     bool CreateLogicalPartitions();
     bool MountPartition(const Fstab::iterator& begin, bool erase_used_fstab_entry,
                         Fstab::iterator* end = nullptr);
@@ -97,6 +98,7 @@ class FirstStageMount {
     virtual bool SetUpDmVerity(FstabEntry* fstab_entry) = 0;
 
     bool need_dm_verity_;
+    bool gsi_not_on_userdata_ = false;
 
     Fstab fstab_;
     std::string lp_metadata_partition_;
@@ -267,8 +269,6 @@ bool FirstStageMount::GetDmLinearMetadataDevice() {
     }
 
     required_devices_partition_names_.emplace(super_partition_name_);
-    // When booting from live GSI images, userdata is the super device.
-    required_devices_partition_names_.emplace("userdata");
     return true;
 }
 
@@ -281,25 +281,7 @@ bool FirstStageMount::InitRequiredDevices() {
     }
 
     if (IsDmLinearEnabled() || need_dm_verity_) {
-        const std::string dm_path = "/devices/virtual/misc/device-mapper";
-        bool found = false;
-        auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
-            if (uevent.path == dm_path) {
-                device_handler_->HandleUevent(uevent);
-                found = true;
-                return ListenerAction::kStop;
-            }
-            return ListenerAction::kContinue;
-        };
-        uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path, dm_callback);
-        if (!found) {
-            LOG(INFO) << "device-mapper device not found in /sys, waiting for its uevent";
-            Timer t;
-            uevent_listener_.Poll(dm_callback, 10s);
-            LOG(INFO) << "Wait for device-mapper returned after " << t;
-        }
-        if (!found) {
-            LOG(ERROR) << "device-mapper device not found after polling timeout";
+        if (!InitDeviceMapper()) {
             return false;
         }
     }
@@ -327,11 +309,36 @@ bool FirstStageMount::InitRequiredDevices() {
     return true;
 }
 
+bool FirstStageMount::InitDeviceMapper() {
+    const std::string dm_path = "/devices/virtual/misc/device-mapper";
+    bool found = false;
+    auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
+        if (uevent.path == dm_path) {
+            device_handler_->HandleUevent(uevent);
+            found = true;
+            return ListenerAction::kStop;
+        }
+        return ListenerAction::kContinue;
+    };
+    uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path, dm_callback);
+    if (!found) {
+        LOG(INFO) << "device-mapper device not found in /sys, waiting for its uevent";
+        Timer t;
+        uevent_listener_.Poll(dm_callback, 10s);
+        LOG(INFO) << "Wait for device-mapper returned after " << t;
+    }
+    if (!found) {
+        LOG(ERROR) << "device-mapper device not found after polling timeout";
+        return false;
+    }
+    return true;
+}
+
 bool FirstStageMount::InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata) {
     auto partition_names = android::fs_mgr::GetBlockDevicePartitionNames(metadata);
     for (const auto& partition_name : partition_names) {
-        const auto super_device = android::fs_mgr::GetMetadataSuperBlockDevice(metadata);
-        if (partition_name == android::fs_mgr::GetBlockDevicePartitionName(*super_device)) {
+        // The super partition was found in the earlier pass.
+        if (partition_name == super_partition_name_) {
             continue;
         }
         required_devices_partition_names_.emplace(partition_name);
@@ -499,6 +506,10 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
     if (system_partition == fstab_.end()) return true;
 
     if (MountPartition(system_partition, false)) {
+        if (gsi_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
+            LOG(ERROR) << "check_most_at_once forbidden on external media";
+            return false;
+        }
         SwitchRoot("/system");
     } else {
         PLOG(ERROR) << "Failed to mount /system";
@@ -612,7 +623,29 @@ void FirstStageMount::UseGsiIfPresent() {
         return;
     }
 
-    if (!android::fs_mgr::CreateLogicalPartitions(*metadata.get(), "/dev/block/by-name/userdata")) {
+    if (!InitDmLinearBackingDevices(*metadata.get())) {
+        return;
+    }
+
+    // Device-mapper might not be ready if the device doesn't use DAP or verity
+    // (for example, hikey).
+    if (access("/dev/device-mapper", F_OK) && !InitDeviceMapper()) {
+        return;
+    }
+
+    // Find the name of the super partition for the GSI. It will either be
+    // "userdata", or a block device such as an sdcard. There are no by-name
+    // partitions other than userdata that we support installing GSIs to.
+    auto super = GetMetadataSuperBlockDevice(*metadata.get());
+    std::string super_name = android::fs_mgr::GetBlockDevicePartitionName(*super);
+    std::string super_path;
+    if (super_name == "userdata") {
+        super_path = "/dev/block/by-name/" + super_name;
+    } else {
+        super_path = "/dev/block/" + super_name;
+    }
+
+    if (!android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path)) {
         LOG(ERROR) << "GSI partition layout could not be instantiated";
         return;
     }
@@ -630,6 +663,7 @@ void FirstStageMount::UseGsiIfPresent() {
         fstab_.erase(system_partition);
     }
     fstab_.emplace_back(BuildGsiSystemFstabEntry());
+    gsi_not_on_userdata_ = (super_name != "userdata");
 }
 
 bool FirstStageMountVBootV1::GetDmVerityDevices() {
