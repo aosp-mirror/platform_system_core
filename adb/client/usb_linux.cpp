@@ -458,6 +458,11 @@ int usb_read(usb_handle *h, void *_data, int len)
     return orig_len - len;
 }
 
+void usb_reset(usb_handle* h) {
+    ioctl(h->fd, USBDEVFS_RESET);
+    usb_kick(h);
+}
+
 void usb_kick(usb_handle* h) {
     std::lock_guard<std::mutex> lock(h->mutex);
     D("[ kicking %p (fd = %d) ]", h, h->fd);

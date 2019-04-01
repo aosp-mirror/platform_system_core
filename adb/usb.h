@@ -26,6 +26,7 @@
     int usb_write(handle_ref_type h, const void* data, int len); \
     int usb_read(handle_ref_type h, void* data, int len);        \
     int usb_close(handle_ref_type h);                            \
+    void usb_reset(handle_ref_type h);                           \
     void usb_kick(handle_ref_type h);                            \
     size_t usb_get_max_packet_size(handle_ref_type)
 
