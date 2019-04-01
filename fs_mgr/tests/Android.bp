@@ -52,6 +52,14 @@ cc_prebuilt_binary {
     host_supported: true,
 }
 
+sh_test {
+    name: "adb-remount-sh",
+    src: "adb-remount-test.sh",
+    filename: "adb-remount-test.sh",
+    test_suites: ["general-tests"],
+    test_config: "adb-remount-sh.xml",
+}
+
 java_test_host {
     name: "fs_mgr_vendor_overlay_test",
 
