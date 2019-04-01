@@ -1114,7 +1114,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
                 return true;
             }
             return false;
-        });
+        }, true);
         if (!response.empty()) {
             response.resize(response.size() - 1);
         }
@@ -1229,7 +1229,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
         std::string response;
         atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &response, true);
         if (t != nullptr) {
-            kick_transport(t);
+            kick_transport(t, true);
             response =
                     "reconnecting " + t->serial_name() + " [" + t->connection_state_name() + "]\n";
         }

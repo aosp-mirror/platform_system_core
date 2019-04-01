@@ -33,6 +33,10 @@ int usb_close(usb_handle*) {
     return -1;
 }
 
+void usb_reset(usb_handle*) {
+    LOG(FATAL) << "unimplemented";
+}
+
 void usb_kick(usb_handle*) {
     LOG(FATAL) << "unimplemented";
 }
