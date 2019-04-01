@@ -138,7 +138,7 @@ bool DwarfSectionImpl<AddressType>::FillInCie(DwarfCie* cie) {
     return false;
   }
 
-  if (cie->version != 1 && cie->version != 3 && cie->version != 4) {
+  if (cie->version != 1 && cie->version != 3 && cie->version != 4 && cie->version != 5) {
     // Unrecognized version.
     last_error_.code = DWARF_ERROR_UNSUPPORTED_VERSION;
     return false;
@@ -155,7 +155,7 @@ bool DwarfSectionImpl<AddressType>::FillInCie(DwarfCie* cie) {
     cie->augmentation_string.push_back(aug_value);
   } while (aug_value != '\0');
 
-  if (cie->version == 4) {
+  if (cie->version == 4 || cie->version == 5) {
     // Skip the Address Size field since we only use it for validation.
     memory_.set_cur_offset(memory_.cur_offset() + 1);
 
