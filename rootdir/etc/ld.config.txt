@@ -253,16 +253,18 @@ namespace.sphal.asan.permitted.paths += /data/asan/vendor/${LIB}
 namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 
 # Once in this namespace, access to libraries in /system/lib is restricted. Only
-# libs listed here can be used.
-namespace.sphal.links = default,vndk,rs
+# libs listed here can be used. Order is important here as the namespaces are
+# tried in this order. rs should be before vndk because both are capable
+# of loading libRS_internal.so
+namespace.sphal.links = rs,default,vndk
+
+# Renderscript gets separate namespace
+namespace.sphal.link.rs.shared_libs = libRS_internal.so
 
 namespace.sphal.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.sphal.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
-
-# Renderscript gets separate namespace
-namespace.sphal.link.rs.shared_libs = libRS_internal.so
 
 ###############################################################################
 # "rs" namespace
