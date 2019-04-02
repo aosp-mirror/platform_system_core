@@ -277,7 +277,7 @@ CgroupDescriptor::CgroupDescriptor(uint32_t version, const std::string& name,
 }  // namespace cgrouprc
 }  // namespace android
 
-bool CgroupSetupCgroups() {
+bool CgroupSetup() {
     using namespace android::cgrouprc;
 
     std::map<std::string, CgroupDescriptor> descriptors;
