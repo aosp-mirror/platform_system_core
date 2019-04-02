@@ -41,7 +41,7 @@ typedef struct {
 extern struct android_log_transport_write statsdLoggerWrite;
 
 static int __write_to_statsd_init(struct iovec* vec, size_t nr);
-static int (*write_to_statsd)(struct iovec* vec, size_t nr) = __write_to_statsd_init;
+int (*write_to_statsd)(struct iovec* vec, size_t nr) = __write_to_statsd_init;
 
 // Similar to create_android_logger(), but instead of allocation a new buffer,
 // this function resets the buffer for resuse.
