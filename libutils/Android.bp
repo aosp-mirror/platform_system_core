@@ -183,6 +183,9 @@ cc_library {
                 "ProcessCallStack.cpp",
             ],
         },
+        darwin: {
+            enabled: false,
+        },
         windows: {
             enabled: false,
         },
