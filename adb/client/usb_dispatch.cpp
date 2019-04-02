@@ -52,6 +52,11 @@ int usb_close(usb_handle* h) {
                                : native::usb_close(reinterpret_cast<native::usb_handle*>(h));
 }
 
+void usb_reset(usb_handle* h) {
+    should_use_libusb() ? libusb::usb_reset(reinterpret_cast<libusb::usb_handle*>(h))
+                        : native::usb_reset(reinterpret_cast<native::usb_handle*>(h));
+}
+
 void usb_kick(usb_handle* h) {
     should_use_libusb() ? libusb::usb_kick(reinterpret_cast<libusb::usb_handle*>(h))
                         : native::usb_kick(reinterpret_cast<native::usb_handle*>(h));
