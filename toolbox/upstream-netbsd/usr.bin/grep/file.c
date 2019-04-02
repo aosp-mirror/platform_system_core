@@ -63,7 +63,7 @@ static gzFile gzbufdesc;
 static BZFILE* bzbufdesc;
 #endif
 
-static unsigned char buffer[MAXBUFSIZ];
+static unsigned char buffer[MAXBUFSIZ + 1];
 static unsigned char *bufpos;
 static size_t bufrem;
 
@@ -128,7 +128,7 @@ grep_refill(struct file *f)
 	return (0);
 }
 
-static inline int
+static inline void
 grep_lnbufgrow(size_t newlen)
 {
 
@@ -136,8 +136,6 @@ grep_lnbufgrow(size_t newlen)
 		lnbuf = grep_realloc(lnbuf, newlen);
 		lnbuflen = newlen;
 	}
-
-	return (0);
 }
 
 char *
@@ -162,20 +160,22 @@ grep_fgetln(struct file *f, size_t *lenp)
 	/* Look for a newline in the remaining part of the buffer */
 	if ((p = memchr(bufpos, line_sep, bufrem)) != NULL) {
 		++p; /* advance over newline */
-		ret = (char *)bufpos;
 		len = p - bufpos;
+		grep_lnbufgrow(len + 1);
+		memcpy(lnbuf, bufpos, len);
+		lnbuf[len] = '\0';
+		*lenp = len;
 		bufrem -= len;
 		bufpos = p;
-		*lenp = len;
-		return (ret);
+		return ((char *)lnbuf);
 	}
 
 	/* We have to copy the current buffered data to the line buffer */
 	for (len = bufrem, off = 0; ; len += bufrem) {
 		/* Make sure there is room for more data */
-		if (grep_lnbufgrow(len + LNBUFBUMP))
-			goto error;
+		grep_lnbufgrow(len + LNBUFBUMP);
 		memcpy(lnbuf + off, bufpos, len - off);
+		lnbuf[len] = '\0';
 		off = len;
 		if (grep_refill(f) != 0)
 			goto error;
@@ -188,9 +188,9 @@ grep_fgetln(struct file *f, size_t *lenp)
 		++p;
 		diff = p - bufpos;
 		len += diff;
-		if (grep_lnbufgrow(len))
-		    goto error;
+		grep_lnbufgrow(len + 1);
 		memcpy(lnbuf + off, bufpos, diff);
+		lnbuf[off + diff] = '\0';
 		bufrem -= diff;
 		bufpos = p;
 		break;
