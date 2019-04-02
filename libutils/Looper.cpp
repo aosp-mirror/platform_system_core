@@ -76,8 +76,8 @@ Looper::~Looper() {
 }
 
 void Looper::initTLSKey() {
-    int result = pthread_key_create(& gTLSKey, threadDestructor);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not allocate TLS key.");
+    int error = pthread_key_create(&gTLSKey, threadDestructor);
+    LOG_ALWAYS_FATAL_IF(error != 0, "Could not allocate TLS key: %s", strerror(error));
 }
 
 void Looper::threadDestructor(void *st) {
@@ -399,8 +399,8 @@ void Looper::wake() {
     ssize_t nWrite = TEMP_FAILURE_RETRY(write(mWakeEventFd.get(), &inc, sizeof(uint64_t)));
     if (nWrite != sizeof(uint64_t)) {
         if (errno != EAGAIN) {
-            LOG_ALWAYS_FATAL("Could not write wake signal to fd %d: %s", mWakeEventFd.get(),
-                             strerror(errno));
+            LOG_ALWAYS_FATAL("Could not write wake signal to fd %d (returned %zd): %s",
+                             mWakeEventFd.get(), nWrite, strerror(errno));
         }
     }
 }
