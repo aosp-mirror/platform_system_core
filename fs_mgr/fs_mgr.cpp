@@ -1602,14 +1602,6 @@ bool fs_mgr_load_verity_state(int* mode) {
     return true;
 }
 
-std::string fs_mgr_get_verity_device_name(const FstabEntry& entry) {
-    if (entry.mount_point == "/") {
-        // In AVB, the dm device name is vroot instead of system.
-        return entry.fs_mgr_flags.avb ? "vroot" : "system";
-    }
-    return Basename(entry.mount_point);
-}
-
 bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
     if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
         return false;
@@ -1617,7 +1609,7 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    std::string mount_point = fs_mgr_get_verity_device_name(entry);
+    std::string mount_point = GetVerityDeviceName(entry);
     if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
         return false;
     }
@@ -1646,7 +1638,7 @@ bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entr
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
-    std::string device = fs_mgr_get_verity_device_name(entry);
+    std::string device = GetVerityDeviceName(entry);
 
     std::vector<DeviceMapper::TargetInfo> table;
     if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
