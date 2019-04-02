@@ -105,14 +105,15 @@ bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const FsAvbHashtreeDescripto
     table.set_readonly(true);
 
     const std::string mount_point(Basename(fstab_entry->mount_point));
+    const std::string device_name(GetVerityDeviceName(*fstab_entry));
     android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
-    if (!dm.CreateDevice(mount_point, table)) {
+    if (!dm.CreateDevice(device_name, table)) {
         LERROR << "Couldn't create verity device!";
         return false;
     }
 
     std::string dev_path;
-    if (!dm.GetDmDevicePathByName(mount_point, &dev_path)) {
+    if (!dm.GetDmDevicePathByName(device_name, &dev_path)) {
         LERROR << "Couldn't get verity device path!";
         return false;
     }
