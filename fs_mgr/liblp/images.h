@@ -32,13 +32,13 @@ std::unique_ptr<LpMetadata> ReadFromImageFile(int fd);
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
 bool WriteToImageFile(int fd, const LpMetadata& metadata);
 
-// We use an object to build the sparse file since it requires that data
+// We use an object to build the image file since it requires that data
 // pointers be held alive until the sparse file is destroyed. It's easier
 // to do this when the data pointers are all in one place.
-class SparseBuilder {
+class ImageBuilder {
   public:
-    SparseBuilder(const LpMetadata& metadata, uint32_t block_size,
-                  const std::map<std::string, std::string>& images);
+    ImageBuilder(const LpMetadata& metadata, uint32_t block_size,
+                 const std::map<std::string, std::string>& images, bool sparsify);
 
     bool Build();
     bool Export(const char* file);
@@ -60,6 +60,7 @@ class SparseBuilder {
     const LpMetadata& metadata_;
     const LpMetadataGeometry& geometry_;
     uint32_t block_size_;
+    bool sparsify_;
 
     std::vector<SparsePtr> device_images_;
     std::string all_metadata_;
