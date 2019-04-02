@@ -107,5 +107,10 @@ FstabEntry BuildGsiSystemFstabEntry();
 
 std::set<std::string> GetBootDevices();
 
+// Return the name of the dm-verity device for the given fstab entry. This does
+// not check whether the device is valid or exists; it merely returns the
+// expected name.
+std::string GetVerityDeviceName(const FstabEntry& entry);
+
 }  // namespace fs_mgr
 }  // namespace android
