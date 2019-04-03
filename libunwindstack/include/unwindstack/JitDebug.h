@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -30,40 +31,24 @@
 namespace unwindstack {
 
 // Forward declarations.
-class Elf;
 class Maps;
 enum ArchEnum : uint8_t;
 
-class JitDebug : public Global {
+template <typename Symfile>
+class JitDebug {
  public:
-  explicit JitDebug(std::shared_ptr<Memory>& memory);
-  JitDebug(std::shared_ptr<Memory>& memory, std::vector<std::string>& search_libs);
-  virtual ~JitDebug();
+  static std::unique_ptr<JitDebug> Create(ArchEnum arch, std::shared_ptr<Memory>& memory,
+                                          std::vector<std::string> search_libs = {});
+  virtual ~JitDebug() {}
 
-  Elf* GetElf(Maps* maps, uint64_t pc);
+  // Find symbol file for given pc.
+  virtual Symfile* Get(Maps* maps, uint64_t pc) = 0;
 
- private:
-  void Init(Maps* maps);
-
-  uint64_t (JitDebug::*read_descriptor_func_)(uint64_t) = nullptr;
-  uint64_t (JitDebug::*read_entry_func_)(uint64_t*, uint64_t*) = nullptr;
-
-  uint64_t ReadDescriptor32(uint64_t);
-  uint64_t ReadDescriptor64(uint64_t);
-
-  uint64_t ReadEntry32Pack(uint64_t* start, uint64_t* size);
-  uint64_t ReadEntry32Pad(uint64_t* start, uint64_t* size);
-  uint64_t ReadEntry64(uint64_t* start, uint64_t* size);
-
-  bool ReadVariableData(uint64_t ptr_offset) override;
-
-  void ProcessArch() override;
-
-  uint64_t entry_addr_ = 0;
-  bool initialized_ = false;
-  std::vector<Elf*> elf_list_;
-
-  std::mutex lock_;
+  // Find symbol for given pc.
+  bool GetFunctionName(Maps* maps, uint64_t pc, std::string* name, uint64_t* offset) {
+    Symfile* file = Get(maps, pc);
+    return file != nullptr && file->GetFunctionName(pc, name, offset);
+  }
 };
 
 }  // namespace unwindstack
