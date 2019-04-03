@@ -1192,14 +1192,16 @@ void ElfInterfaceTest::BuildID() {
   char note_section[128];
   Nhdr note_header = {};
   note_header.n_namesz = 4;  // "GNU"
-  note_header.n_descsz = 8; // "BUILDID"
+  note_header.n_descsz = 7;  // "BUILDID"
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section, &note_header, sizeof(note_header));
   size_t note_offset = sizeof(note_header);
+  // The note information contains the GNU and trailing '\0'.
   memcpy(&note_section[note_offset], "GNU", sizeof("GNU"));
   note_offset += sizeof("GNU");
-  memcpy(&note_section[note_offset], "BUILDID", sizeof("BUILDID"));
-  note_offset += sizeof("BUILDID");
+  // This part of the note does not contain any trailing '\0'.
+  memcpy(&note_section[note_offset], "BUILDID", 7);
+  note_offset += 8;
 
   Shdr shdr = {};
   shdr.sh_type = SHT_NOTE;
@@ -1244,24 +1246,27 @@ void ElfInterfaceTest::BuildIDTwoNotes() {
   char note_section[128];
   Nhdr note_header = {};
   note_header.n_namesz = 8;  // "WRONG" aligned to 4
-  note_header.n_descsz = 8; // "BUILDID"
+  note_header.n_descsz = 7;  // "BUILDID"
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section, &note_header, sizeof(note_header));
   size_t note_offset = sizeof(note_header);
   memcpy(&note_section[note_offset], "WRONG", sizeof("WRONG"));
   note_offset += 8;
-  memcpy(&note_section[note_offset], "BUILDID", sizeof("BUILDID"));
-  note_offset += sizeof("BUILDID");
+  // This part of the note does not contain any trailing '\0'.
+  memcpy(&note_section[note_offset], "BUILDID", 7);
+  note_offset += 8;
 
   note_header.n_namesz = 4;  // "GNU"
-  note_header.n_descsz = 8; // "BUILDID"
+  note_header.n_descsz = 7;  // "BUILDID"
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section[note_offset], &note_header, sizeof(note_header));
   note_offset += sizeof(note_header);
+  // The note information contains the GNU and trailing '\0'.
   memcpy(&note_section[note_offset], "GNU", sizeof("GNU"));
   note_offset += sizeof("GNU");
-  memcpy(&note_section[note_offset], "BUILDID", sizeof("BUILDID"));
-  note_offset += sizeof("BUILDID");
+  // This part of the note does not contain any trailing '\0'.
+  memcpy(&note_section[note_offset], "BUILDID", 7);
+  note_offset += 8;
 
   Shdr shdr = {};
   shdr.sh_type = SHT_NOTE;
@@ -1306,14 +1311,16 @@ void ElfInterfaceTest::BuildIDSectionTooSmallForName () {
   char note_section[128];
   Nhdr note_header = {};
   note_header.n_namesz = 4;  // "GNU"
-  note_header.n_descsz = 8; // "BUILDID"
+  note_header.n_descsz = 7;  // "BUILDID"
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section, &note_header, sizeof(note_header));
   size_t note_offset = sizeof(note_header);
+  // The note information contains the GNU and trailing '\0'.
   memcpy(&note_section[note_offset], "GNU", sizeof("GNU"));
   note_offset += sizeof("GNU");
-  memcpy(&note_section[note_offset], "BUILDID", sizeof("BUILDID"));
-  note_offset += sizeof("BUILDID");
+  // This part of the note does not contain any trailing '\0'.
+  memcpy(&note_section[note_offset], "BUILDID", 7);
+  note_offset += 8;
 
   Shdr shdr = {};
   shdr.sh_type = SHT_NOTE;
@@ -1358,14 +1365,16 @@ void ElfInterfaceTest::BuildIDSectionTooSmallForDesc () {
   char note_section[128];
   Nhdr note_header = {};
   note_header.n_namesz = 4;  // "GNU"
-  note_header.n_descsz = 8; // "BUILDID"
+  note_header.n_descsz = 7;  // "BUILDID"
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section, &note_header, sizeof(note_header));
   size_t note_offset = sizeof(note_header);
+  // The note information contains the GNU and trailing '\0'.
   memcpy(&note_section[note_offset], "GNU", sizeof("GNU"));
   note_offset += sizeof("GNU");
-  memcpy(&note_section[note_offset], "BUILDID", sizeof("BUILDID"));
-  note_offset += sizeof("BUILDID");
+  // This part of the note does not contain any trailing '\0'.
+  memcpy(&note_section[note_offset], "BUILDID", 7);
+  note_offset += 8;
 
   Shdr shdr = {};
   shdr.sh_type = SHT_NOTE;
@@ -1410,14 +1419,16 @@ void ElfInterfaceTest::BuildIDSectionTooSmallForHeader () {
   char note_section[128];
   Nhdr note_header = {};
   note_header.n_namesz = 4;  // "GNU"
-  note_header.n_descsz = 8; // "BUILDID"
+  note_header.n_descsz = 7;  // "BUILDID"
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section, &note_header, sizeof(note_header));
   size_t note_offset = sizeof(note_header);
+  // The note information contains the GNU and trailing '\0'.
   memcpy(&note_section[note_offset], "GNU", sizeof("GNU"));
   note_offset += sizeof("GNU");
-  memcpy(&note_section[note_offset], "BUILDID", sizeof("BUILDID"));
-  note_offset += sizeof("BUILDID");
+  // This part of the note does not contain any trailing '\0'.
+  memcpy(&note_section[note_offset], "BUILDID", 7);
+  note_offset += 8;
 
   Shdr shdr = {};
   shdr.sh_type = SHT_NOTE;
