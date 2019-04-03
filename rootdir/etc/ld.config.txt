@@ -212,6 +212,7 @@ namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.links = default
 namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
