@@ -23,12 +23,12 @@
 
 #define TAG "android_reboot"
 
-int android_reboot(int cmd, int /*flags*/, const char* arg) {
+int android_reboot(unsigned cmd, int /*flags*/, const char* arg) {
     int ret;
     const char* restart_cmd = NULL;
     char* prop_value;
 
-    switch (static_cast<unsigned>(cmd)) {
+    switch (cmd) {
         case ANDROID_RB_RESTART:  // deprecated
         case ANDROID_RB_RESTART2:
             restart_cmd = "reboot";
