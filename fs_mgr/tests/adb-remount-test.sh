@@ -1026,7 +1026,7 @@ elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} please run lunch, skipping"
 else
-  adb reboot-fastboot ||
+  adb reboot fastboot ||
     die "fastbootd not supported (wrong adb in path?)"
   any_wait 2m &&
     inFastboot ||
@@ -1136,7 +1136,7 @@ if [ -n "${scratch_partition}" ]; then
 
   echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
-  adb reboot-fastboot ||
+  adb reboot fastboot ||
     die "Reboot into fastbootd"
   img=${TMPDIR}/adb-remount-test-${$}.img
   cleanup() {
