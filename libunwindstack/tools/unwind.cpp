@@ -26,7 +26,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <unwindstack/DexFiles.h>
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
@@ -90,7 +89,7 @@ void DoUnwind(pid_t pid) {
   printf("\n");
 
   unwindstack::UnwinderFromPid unwinder(1024, pid);
-  if (!unwinder.Init(regs->Arch())) {
+  if (!unwinder.Init()) {
     printf("Failed to init unwinder object.\n");
     return;
   }
