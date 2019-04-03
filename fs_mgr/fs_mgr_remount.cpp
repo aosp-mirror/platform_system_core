@@ -340,6 +340,7 @@ int main(int argc, char* argv[]) {
                 blk_device = rentry.blk_device;
                 break;
             }
+            // Find overlayfs mount point?
             if ((mount_point == "/") && (rentry.mount_point == "/system")) {
                 blk_device = rentry.blk_device;
                 mount_point = "/system";
@@ -351,6 +352,12 @@ int main(int argc, char* argv[]) {
             if (from_fstab) blk_device = from_fstab->blk_device;
         }
         fs_mgr_set_blk_ro(blk_device, false);
+
+        // Find system-as-root mount point?
+        if ((mount_point == "/system") && !GetEntryForMountPoint(&mounts, mount_point) &&
+            GetEntryForMountPoint(&mounts, "/")) {
+            mount_point = "/";
+        }
 
         // Now remount!
         if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
