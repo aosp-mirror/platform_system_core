@@ -46,24 +46,6 @@ class CgroupController {
     char path_[CGROUP_PATH_BUF_SZ];
 };
 
-// Complete controller description for mounting cgroups
-class CgroupDescriptor {
-  public:
-    CgroupDescriptor(uint32_t version, const std::string& name, const std::string& path,
-                     mode_t mode, const std::string& uid, const std::string& gid);
-
-    const CgroupController* controller() const { return &controller_; }
-    mode_t mode() const { return mode_; }
-    std::string uid() const { return uid_; }
-    std::string gid() const { return gid_; }
-
-  private:
-    CgroupController controller_;
-    mode_t mode_;
-    std::string uid_;
-    std::string gid_;
-};
-
 struct CgroupFile {
     static constexpr uint32_t FILE_VERSION_1 = 1;
     static constexpr uint32_t FILE_CURR_VERSION = FILE_VERSION_1;
