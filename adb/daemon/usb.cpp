@@ -304,33 +304,57 @@ struct UsbFfsConnection : public Connection {
 
                 switch (event.type) {
                     case FUNCTIONFS_BIND:
-                        CHECK(!bound) << "received FUNCTIONFS_BIND while already bound?";
-                        CHECK(!enabled) << "received FUNCTIONFS_BIND while already enabled?";
-                        bound = true;
+                        if (bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_BIND while already bound?";
+                            running = false;
+                        }
 
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_BIND while already enabled?";
+                            running = false;
+                        }
+
+                        bound = true;
                         break;
 
                     case FUNCTIONFS_ENABLE:
-                        CHECK(bound) << "received FUNCTIONFS_ENABLE while not bound?";
-                        CHECK(!enabled) << "received FUNCTIONFS_ENABLE while already enabled?";
-                        enabled = true;
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_ENABLE while not bound?";
+                            running = false;
+                        }
 
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_ENABLE while already enabled?";
+                            running = false;
+                        }
+
+                        enabled = true;
                         StartWorker();
                         break;
 
                     case FUNCTIONFS_DISABLE:
-                        CHECK(bound) << "received FUNCTIONFS_DISABLE while not bound?";
-                        CHECK(enabled) << "received FUNCTIONFS_DISABLE while not enabled?";
-                        enabled = false;
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_DISABLE while not bound?";
+                        }
 
+                        if (!enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_DISABLE while not enabled?";
+                        }
+
+                        enabled = false;
                         running = false;
                         break;
 
                     case FUNCTIONFS_UNBIND:
-                        CHECK(!enabled) << "received FUNCTIONFS_UNBIND while still enabled?";
-                        CHECK(bound) << "received FUNCTIONFS_UNBIND when not bound?";
-                        bound = false;
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_UNBIND while still enabled?";
+                        }
 
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_UNBIND when not bound?";
+                        }
+
+                        bound = false;
                         running = false;
                         break;
                 }

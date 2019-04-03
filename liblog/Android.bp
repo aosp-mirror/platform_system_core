@@ -139,6 +139,5 @@ ndk_library {
 llndk_library {
     name: "liblog",
     symbol_file: "liblog.map.txt",
-    unversioned: true,
     export_include_dirs: ["include_vndk"],
 }
