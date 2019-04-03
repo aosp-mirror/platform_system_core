@@ -407,9 +407,25 @@ static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_
 #define F2FS_IOC_GET_PIN_FILE _IOR(F2FS_IOCTL_MAGIC, 14, __u32)
 #endif
 
+    // f2fs: export FS_NOCOW_FL flag to user
+    uint32_t flags;
+    int error = ioctl(file_fd, FS_IOC_GETFLAGS, &flags);
+    if (error < 0) {
+        if ((errno == ENOTTY) || (errno == ENOTSUP)) {
+            PLOG(ERROR) << "Failed to get flags, not supported by kernel: " << file_path;
+        } else {
+            PLOG(ERROR) << "Failed to get flags: " << file_path;
+        }
+        return false;
+    }
+    if (!(flags & FS_NOCOW_FL)) {
+        LOG(ERROR) << "It is not pinned: " << file_path;
+        return false;
+    }
+
     // F2FS_IOC_GET_PIN_FILE returns the number of blocks moved.
     uint32_t moved_blocks_nr;
-    int error = ioctl(file_fd, F2FS_IOC_GET_PIN_FILE, &moved_blocks_nr);
+    error = ioctl(file_fd, F2FS_IOC_GET_PIN_FILE, &moved_blocks_nr);
     if (error < 0) {
         if ((errno == ENOTTY) || (errno == ENOTSUP)) {
             PLOG(ERROR) << "Failed to get file pin status, not supported by kernel: " << file_path;
