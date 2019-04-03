@@ -45,6 +45,7 @@
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
 #include <processgroup/processgroup.h>
+#include <processgroup/setup.h>
 #include <selinux/android.h>
 
 #ifndef RECOVERY
