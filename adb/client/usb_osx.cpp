@@ -557,9 +557,7 @@ int usb_close(usb_handle *handle)
 }
 
 void usb_reset(usb_handle* handle) {
-    if (!handle->dead) {
-        (*handle->interface)->USBDeviceReEnumerate(handle->interface, 0);
-    }
+    // Unimplemented on OS X.
     usb_kick(handle);
 }
 
