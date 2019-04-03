@@ -16,8 +16,10 @@
 
 #pragma once
 
-// TODO(b/123664216): Use libcgrouprc_format
-#include "../cgroup_map.h"
+#include <processgroup/format/cgroup_controller.h>
+
+namespace android {
+namespace cgrouprc {
 
 // Complete controller description for mounting cgroups
 class CgroupDescriptor {
@@ -25,14 +27,17 @@ class CgroupDescriptor {
     CgroupDescriptor(uint32_t version, const std::string& name, const std::string& path,
                      mode_t mode, const std::string& uid, const std::string& gid);
 
-    const CgroupController* controller() const { return &controller_; }
+    const format::CgroupController* controller() const { return &controller_; }
     mode_t mode() const { return mode_; }
     std::string uid() const { return uid_; }
     std::string gid() const { return gid_; }
 
   private:
-    CgroupController controller_;
+    format::CgroupController controller_;
     mode_t mode_ = 0;
     std::string uid_;
     std::string gid_;
 };
+
+}  // namespace cgrouprc
+}  // namespace android

@@ -37,6 +37,7 @@
 #include <android-base/unique_fd.h>
 #include <json/reader.h>
 #include <json/value.h>
+#include <processgroup/format/cgroup_file.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 
@@ -45,6 +46,9 @@
 using android::base::GetBoolProperty;
 using android::base::StringPrintf;
 using android::base::unique_fd;
+
+namespace android {
+namespace cgrouprc {
 
 static constexpr const char* CGROUPS_DESC_FILE = "/etc/cgroups.json";
 static constexpr const char* CGROUPS_DESC_VENDOR_FILE = "/vendor/etc/cgroups.json";
@@ -185,7 +189,7 @@ static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors
 #if defined(__ANDROID__)
 
 static bool SetupCgroup(const CgroupDescriptor& descriptor) {
-    const CgroupController* controller = descriptor.controller();
+    const format::CgroupController* controller = descriptor.controller();
 
     // mkdir <path> [mode] [owner] [group]
     if (!Mkdir(controller->path(), descriptor.mode(), descriptor.uid(), descriptor.gid())) {
@@ -244,8 +248,8 @@ static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descripto
         return false;
     }
 
-    CgroupFile fl;
-    fl.version_ = CgroupFile::FILE_CURR_VERSION;
+    format::CgroupFile fl;
+    fl.version_ = format::CgroupFile::FILE_CURR_VERSION;
     fl.controller_count_ = descriptors.size();
     int ret = TEMP_FAILURE_RETRY(write(fd, &fl, sizeof(fl)));
     if (ret < 0) {
@@ -254,7 +258,8 @@ static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descripto
     }
 
     for (const auto& [name, descriptor] : descriptors) {
-        ret = TEMP_FAILURE_RETRY(write(fd, descriptor.controller(), sizeof(CgroupController)));
+        ret = TEMP_FAILURE_RETRY(
+                write(fd, descriptor.controller(), sizeof(format::CgroupController)));
         if (ret < 0) {
             PLOG(ERROR) << "write() failed for " << CGROUPS_RC_PATH;
             return false;
@@ -269,7 +274,12 @@ CgroupDescriptor::CgroupDescriptor(uint32_t version, const std::string& name,
                                    const std::string& gid)
     : controller_(version, name, path), mode_(mode), uid_(uid), gid_(gid) {}
 
+}  // namespace cgrouprc
+}  // namespace android
+
 bool CgroupSetupCgroups() {
+    using namespace android::cgrouprc;
+
     std::map<std::string, CgroupDescriptor> descriptors;
 
     if (getpid() != 1) {
