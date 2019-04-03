@@ -45,6 +45,7 @@
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
 #include <processgroup/processgroup.h>
+#include <processgroup/setup.h>
 #include <selinux/android.h>
 
 #ifndef RECOVERY
@@ -358,7 +359,7 @@ static Result<Success> SetupCgroupsAction(const BuiltinArguments&) {
     // Have to create <CGROUPS_RC_DIR> using make_dir function
     // for appropriate sepolicy to be set for it
     make_dir(android::base::Dirname(CGROUPS_RC_PATH), 0711);
-    if (!CgroupSetupCgroups()) {
+    if (!CgroupSetup()) {
         return ErrnoError() << "Failed to setup cgroups";
     }
 
