@@ -29,17 +29,22 @@
 
 namespace unwindstack {
 
+class Memory;
+struct MapInfo;
+
 class DexFile : protected art_api::dex::DexFile {
  public:
   virtual ~DexFile() = default;
 
-  bool GetMethodInformation(uint64_t dex_offset, std::string* method_name, uint64_t* method_offset);
+  bool GetFunctionName(uint64_t dex_pc, std::string* method_name, uint64_t* method_offset);
 
   static std::unique_ptr<DexFile> Create(uint64_t dex_file_offset_in_memory, Memory* memory,
                                          MapInfo* info);
 
  protected:
   DexFile(art_api::dex::DexFile&& art_dex_file) : art_api::dex::DexFile(std::move(art_dex_file)) {}
+
+  uint64_t addr_ = 0;
 };
 
 class DexFileFromFile : public DexFile {

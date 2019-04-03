@@ -27,9 +27,6 @@
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-#include <unwindstack/DexFiles.h>
-#endif
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
@@ -53,12 +50,6 @@ class UnwindStackMap : public BacktraceMap {
 
   const std::shared_ptr<unwindstack::Memory>& process_memory() { return process_memory_; }
 
-  unwindstack::JitDebug* GetJitDebug() { return jit_debug_.get(); }
-
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-  unwindstack::DexFiles* GetDexFiles() { return dex_files_.get(); }
-#endif
-
   void SetArch(unwindstack::ArchEnum arch) { arch_ = arch; }
 
  protected:
@@ -66,11 +57,6 @@ class UnwindStackMap : public BacktraceMap {
 
   std::unique_ptr<unwindstack::Maps> stack_maps_;
   std::shared_ptr<unwindstack::Memory> process_memory_;
-  std::unique_ptr<unwindstack::JitDebug> jit_debug_;
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-  std::unique_ptr<unwindstack::DexFiles> dex_files_;
-#endif
-
   unwindstack::ArchEnum arch_ = unwindstack::ARCH_UNKNOWN;
 };
 

@@ -69,6 +69,15 @@ bool ElfInterface::IsValidPc(uint64_t pc) {
   return false;
 }
 
+bool ElfInterface::GetTextRange(uint64_t* addr, uint64_t* size) {
+  if (text_size_ != 0) {
+    *addr = text_addr_;
+    *size = text_size_;
+    return true;
+  }
+  return false;
+}
+
 Memory* ElfInterface::CreateGnuDebugdataMemory() {
   if (gnu_debugdata_offset_ == 0 || gnu_debugdata_size_ == 0) {
     return nullptr;
@@ -330,29 +339,26 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
       }
       symbols_.push_back(new Symbols(shdr.sh_offset, shdr.sh_size, shdr.sh_entsize,
                                      str_shdr.sh_offset, str_shdr.sh_size));
-    } else if (shdr.sh_type == SHT_PROGBITS && sec_size != 0) {
+    } else if (shdr.sh_type == SHT_PROGBITS || shdr.sh_type == SHT_NOBITS) {
       // Look for the .debug_frame and .gnu_debugdata.
       if (shdr.sh_name < sec_size) {
         std::string name;
         if (memory_->ReadString(sec_offset + shdr.sh_name, &name)) {
-          uint64_t* offset_ptr = nullptr;
-          uint64_t* size_ptr = nullptr;
           if (name == ".debug_frame") {
-            offset_ptr = &debug_frame_offset_;
-            size_ptr = &debug_frame_size_;
+            debug_frame_offset_ = shdr.sh_offset;
+            debug_frame_size_ = shdr.sh_size;
           } else if (name == ".gnu_debugdata") {
-            offset_ptr = &gnu_debugdata_offset_;
-            size_ptr = &gnu_debugdata_size_;
+            gnu_debugdata_offset_ = shdr.sh_offset;
+            gnu_debugdata_size_ = shdr.sh_size;
           } else if (name == ".eh_frame") {
-            offset_ptr = &eh_frame_offset_;
-            size_ptr = &eh_frame_size_;
+            eh_frame_offset_ = shdr.sh_offset;
+            eh_frame_size_ = shdr.sh_size;
           } else if (eh_frame_hdr_offset_ == 0 && name == ".eh_frame_hdr") {
-            offset_ptr = &eh_frame_hdr_offset_;
-            size_ptr = &eh_frame_hdr_size_;
-          }
-          if (offset_ptr != nullptr) {
-            *offset_ptr = shdr.sh_offset;
-            *size_ptr = shdr.sh_size;
+            eh_frame_hdr_offset_ = shdr.sh_offset;
+            eh_frame_hdr_size_ = shdr.sh_size;
+          } else if (name == ".text") {
+            text_addr_ = shdr.sh_addr;
+            text_size_ = shdr.sh_size;
           }
         }
       }
