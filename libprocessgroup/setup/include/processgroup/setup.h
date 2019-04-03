@@ -16,4 +16,4 @@
 
 #pragma once
 
-bool CgroupSetupCgroups();
+bool CgroupSetup();
