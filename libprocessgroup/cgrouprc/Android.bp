@@ -45,7 +45,11 @@ cc_library {
         symbol_file: "libcgrouprc.map.txt",
         versions: ["29"],
     },
-    version_script: "libcgrouprc.map.txt",
+    target: {
+        linux: {
+            version_script: "libcgrouprc.map.txt",
+        },
+    },
 }
 
 llndk_library {
