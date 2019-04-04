@@ -8,6 +8,7 @@ LOCAL_MODULE := init.rc
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
+LOCAL_REQUIRED_MODULES := fsverity_init
 
 # The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
 # Since init.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
@@ -55,6 +56,15 @@ ASAN_EXTRACT_FILES := asan_extract
 endif
 
 endif
+
+#######################################
+# fsverity_init
+
+include $(CLEAR_VARS)
+LOCAL_MODULE:= fsverity_init
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_SRC_FILES := fsverity_init.sh
+include $(BUILD_PREBUILT)
 
 #######################################
 # init.environ.rc
@@ -366,3 +376,5 @@ $(LOCAL_BUILT_MODULE):
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
 		echo $(lib).so >> $@;)
+
+include $(call all-makefiles-under,$(LOCAL_PATH))

@@ -18,7 +18,6 @@
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
 libcutils_nonwindows_sources = [
-    "android_get_control_file.cpp",
     "fs.cpp",
     "hashmap.cpp",
     "multiuser.cpp",
@@ -84,6 +83,8 @@ cc_library {
             ],
         },
         windows: {
+            host_ldlibs: ["-lws2_32"],
+
             srcs: [
                 "socket_inaddr_any_server_windows.cpp",
                 "socket_network_client_windows.cpp",
@@ -92,9 +93,6 @@ cc_library {
             ],
 
             enabled: true,
-            shared: {
-                enabled: false,
-            },
             cflags: [
                 "-D_GNU_SOURCE",
             ],
@@ -102,6 +100,7 @@ cc_library {
 
         android: {
             srcs: libcutils_nonwindows_sources + [
+                "android_get_control_file.cpp",
                 "android_reboot.cpp",
                 "ashmem-dev.cpp",
                 "fs_config.cpp",
@@ -236,6 +235,7 @@ test_libraries = [
     "libbase",
     "libjsoncpp",
     "libprocessgroup",
+    "libcgrouprc",
 ]
 
 cc_test {
@@ -250,7 +250,10 @@ cc_test {
     name: "libcutils_test_static",
     test_suites: ["device-tests"],
     defaults: ["libcutils_test_default"],
-    static_libs: ["libc"] + test_libraries,
+    static_libs: [
+        "libc",
+        "libcgrouprc_format",
+    ] + test_libraries,
     stl: "libc++_static",
 
     target: {

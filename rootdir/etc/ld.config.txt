@@ -27,12 +27,11 @@ dir.unrestricted = /data/nativetest64/unrestricted
 # necessary) the unrestricted subdirs above. Then clean this up.
 dir.unrestricted = /data/local/tmp
 
-dir.system = /data/nativetest
-dir.system = /data/nativetest64
-dir.system = /data/benchmarktest
-dir.system = /data/benchmarktest64
-
 dir.postinstall = /postinstall
+
+# Fallback entry to provide APEX namespace lookups for binaries anywhere else.
+# This must be last.
+dir.system = /data
 
 [system]
 additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
@@ -133,8 +132,7 @@ namespace.default.links = runtime,resolv
 # Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
 # libart.
 namespace.default.visible = true
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -196,7 +194,7 @@ namespace.conscrypt.visible = true
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
@@ -214,6 +212,7 @@ namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.links = default
 namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
@@ -255,16 +254,18 @@ namespace.sphal.asan.permitted.paths += /data/asan/vendor/${LIB}
 namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 
 # Once in this namespace, access to libraries in /system/lib is restricted. Only
-# libs listed here can be used.
-namespace.sphal.links = default,vndk,rs
+# libs listed here can be used. Order is important here as the namespaces are
+# tried in this order. rs should be before vndk because both are capable
+# of loading libRS_internal.so
+namespace.sphal.links = rs,default,vndk
+
+# Renderscript gets separate namespace
+namespace.sphal.link.rs.shared_libs = libRS_internal.so
 
 namespace.sphal.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.sphal.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
-
-# Renderscript gets separate namespace
-namespace.sphal.link.rs.shared_libs = libRS_internal.so
 
 ###############################################################################
 # "rs" namespace
@@ -377,7 +378,7 @@ namespace.vndk.link.sphal.allow_all_shared_libs = true
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = runtime,system,vndk
+additional.namespaces = runtime,system,vndk%VNDK_IN_SYSTEM_NS%
 
 ###############################################################################
 # "default" namespace
@@ -418,8 +419,9 @@ namespace.default.asan.permitted.paths +=           /odm
 namespace.default.asan.permitted.paths += /data/asan/vendor
 namespace.default.asan.permitted.paths +=           /vendor
 
-namespace.default.links = system,vndk
+namespace.default.links = system,vndk%VNDK_IN_SYSTEM_NS%
 namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
+namespace.default.link.vndk_in_system.shared_libs = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
 namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
 
@@ -468,13 +470,17 @@ namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the system namespace. This is possible since their ABI is stable across
-# Android releases.
-namespace.vndk.links = system,default
+# Android releases.  The links here should be identical to that of the
+# 'vndk_in_system' namespace, except for the link between 'vndk' and
+# 'vndk_in_system'.
+namespace.vndk.links = system,default%VNDK_IN_SYSTEM_NS%
 
 namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk.link.default.allow_all_shared_libs = true
+
+namespace.vndk.link.vndk_in_system.shared_libs = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 
 ###############################################################################
 # "system" namespace
@@ -504,6 +510,51 @@ namespace.system.link.runtime.shared_libs += libnativeloader.so
 namespace.system.link.runtime.shared_libs += libandroidicu.so
 
 ###############################################################################
+# "vndk_in_system" namespace
+#
+# This namespace is where no-vendor-variant VNDK libraries are loaded for a
+# vendor process.  Note that we do not simply export these libraries from
+# "system" namespace, because in some case both the core variant and the
+# vendor variant of a VNDK library may be loaded.  In such case, we do not
+# want to eliminate double-loading because doing so means the global states
+# of the library would be shared.
+#
+# Only the no-vendor-variant VNDK libraries are whitelisted in this namespace.
+# This is to ensure that we do not load libraries needed by no-vendor-variant
+# VNDK libraries into vndk_in_system namespace.
+###############################################################################
+namespace.vndk_in_system.isolated = true
+namespace.vndk_in_system.visible = true
+
+# The search paths here should be kept the same as that of the 'system'
+# namespace.
+namespace.vndk_in_system.search.paths  = /system/${LIB}
+namespace.vndk_in_system.search.paths += /%PRODUCT%/${LIB}
+namespace.vndk_in_system.search.paths += /%PRODUCT_SERVICES%/${LIB}
+
+namespace.vndk_in_system.asan.search.paths  = /data/asan/system/${LIB}
+namespace.vndk_in_system.asan.search.paths +=           /system/${LIB}
+namespace.vndk_in_system.asan.search.paths += /data/asan/product/${LIB}
+namespace.vndk_in_system.asan.search.paths +=           /%PRODUCT%/${LIB}
+namespace.vndk_in_system.asan.search.paths += /data/asan/product_services/${LIB}
+namespace.vndk_in_system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
+
+namespace.vndk_in_system.whitelisted = %VNDK_USING_CORE_VARIANT_LIBRARIES%
+
+# The links here should be identical to that of the 'vndk' namespace, with the
+# following exception:
+#   1. 'vndk_in_system' needs to be freely linked back to 'vndk'.
+#   2. 'vndk_in_system' does not need to link to 'default', as any library that
+#      requires anything vendor would not be a vndk_in_system library.
+namespace.vndk_in_system.links = vndk,system
+
+namespace.vndk_in_system.link.system.shared_libs  = %LLNDK_LIBRARIES%
+namespace.vndk_in_system.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+namespace.vndk_in_system.link.vndk.allow_all_shared_libs = true
+
+
+###############################################################################
 # Namespace config for native tests that need access to both system and vendor
 # libraries. This replicates the default linker config (done by
 # init_default_namespace_no_config in bionic/linker/linker.cpp), except that it
@@ -527,8 +578,7 @@ namespace.default.asan.search.paths +=           /vendor/${LIB}
 namespace.default.links = runtime,resolv
 namespace.default.visible = true
 
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -587,7 +637,7 @@ namespace.conscrypt.visible = true
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so

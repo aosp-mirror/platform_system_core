@@ -36,6 +36,7 @@
 #include <linux/netlink.h>
 #include <sys/socket.h>
 
+#include <cutils/android_get_control_file.h>
 #include <cutils/klog.h>
 #include <cutils/misc.h>
 #include <cutils/properties.h>
@@ -76,6 +77,7 @@ char* locale;
 #define POWER_ON_KEY_TIME (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 #define UNPLUGGED_DISPLAY_TIME (3 * MSEC_PER_SEC)
+#define MAX_BATT_LEVEL_WAIT_TIME (3 * MSEC_PER_SEC)
 
 #define LAST_KMSG_MAX_SZ (32 * 1024)
 
@@ -104,6 +106,7 @@ struct charger {
     int64_t next_screen_transition;
     int64_t next_key_check;
     int64_t next_pwr_check;
+    int64_t wait_batt_level_timestamp;
 
     key_state keys[KEY_MAX + 1];
 
@@ -206,10 +209,9 @@ static int64_t curr_time_ms() {
 #define MAX_KLOG_WRITE_BUF_SZ 256
 
 static void dump_last_kmsg(void) {
-    char* buf;
+    std::string buf;
     char* ptr;
-    unsigned sz = 0;
-    int len;
+    size_t len;
 
     LOGW("\n");
     LOGW("*************** LAST KMSG ***************\n");
@@ -221,21 +223,25 @@ static void dump_last_kmsg(void) {
         "/proc/last_kmsg",
         // clang-format on
     };
-    for (size_t i = 0; i < arraysize(kmsg); ++i) {
-        buf = (char*)load_file(kmsg[i], &sz);
-        if (buf && sz) break;
+    for (size_t i = 0; i < arraysize(kmsg) && buf.empty(); ++i) {
+        auto fd = android_get_control_file(kmsg[i]);
+        if (fd >= 0) {
+            android::base::ReadFdToString(fd, &buf);
+        } else {
+            android::base::ReadFileToString(kmsg[i], &buf);
+        }
     }
 
-    if (!buf || !sz) {
+    if (buf.empty()) {
         LOGW("last_kmsg not found. Cold reset?\n");
         goto out;
     }
 
-    len = min(sz, LAST_KMSG_MAX_SZ);
-    ptr = buf + (sz - len);
+    len = min(buf.size(), LAST_KMSG_MAX_SZ);
+    ptr = &buf[buf.size() - len];
 
     while (len > 0) {
-        int cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
+        size_t cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
         char yoink;
         char* nl;
 
@@ -250,8 +256,6 @@ static void dump_last_kmsg(void) {
         len -= cnt;
         ptr += cnt;
     }
-
-    free(buf);
 
 out:
     LOGW("\n");
@@ -287,6 +291,21 @@ static void update_screen_state(charger* charger, int64_t now) {
     int disp_time;
 
     if (!batt_anim->run || now < charger->next_screen_transition) return;
+
+    // If battery level is not ready, keep checking in the defined time
+    if (batt_prop == nullptr ||
+        (batt_prop->batteryLevel == 0 && batt_prop->batteryStatus == BATTERY_STATUS_UNKNOWN)) {
+        if (charger->wait_batt_level_timestamp == 0) {
+            // Set max delay time and skip drawing screen
+            charger->wait_batt_level_timestamp = now + MAX_BATT_LEVEL_WAIT_TIME;
+            LOGV("[%" PRId64 "] wait for battery capacity ready\n", now);
+            return;
+        } else if (now <= charger->wait_batt_level_timestamp) {
+            // Do nothing, keep waiting
+            return;
+        }
+        // If timeout and battery level is still not ready, draw unknown battery
+    }
 
     if (healthd_draw == nullptr) {
         if (healthd_config && healthd_config->screen_on) {
@@ -707,6 +726,7 @@ void healthd_mode_charger_init(struct healthd_config* config) {
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
+    charger->wait_batt_level_timestamp = 0;
 
     // Initialize Health implementation (which initializes the internal BatteryMonitor).
     Health::initInstance(config);

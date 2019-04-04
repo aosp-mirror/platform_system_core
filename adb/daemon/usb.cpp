@@ -168,7 +168,8 @@ struct ScopedAioContext {
 struct UsbFfsConnection : public Connection {
     UsbFfsConnection(unique_fd control, unique_fd read, unique_fd write,
                      std::promise<void> destruction_notifier)
-        : stopped_(false),
+        : worker_started_(false),
+          stopped_(false),
           destruction_notifier_(std::move(destruction_notifier)),
           control_fd_(std::move(control)),
           read_fd_(std::move(read)),
@@ -194,6 +195,7 @@ struct UsbFfsConnection : public Connection {
 
         // We need to explicitly close our file descriptors before we notify our destruction,
         // because the thread listening on the future will immediately try to reopen the endpoint.
+        aio_context_.reset();
         control_fd_.reset();
         read_fd_.reset();
         write_fd_.reset();
@@ -267,18 +269,23 @@ struct UsbFfsConnection : public Connection {
             adb_thread_setname("UsbFfs-monitor");
 
             bool bound = false;
-            bool started = false;
+            bool enabled = false;
             bool running = true;
             while (running) {
                 adb_pollfd pfd[2] = {
                   { .fd = control_fd_.get(), .events = POLLIN, .revents = 0 },
                   { .fd = monitor_event_fd_.get(), .events = POLLIN, .revents = 0 },
                 };
-                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, -1));
+
+                // If we don't see our first bind within a second, try again.
+                int timeout_ms = bound ? -1 : 1000;
+
+                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, timeout_ms));
                 if (rc == -1) {
                     PLOG(FATAL) << "poll on USB control fd failed";
                 } else if (rc == 0) {
-                    LOG(FATAL) << "poll on USB control fd returned 0";
+                    LOG(WARNING) << "timed out while waiting for FUNCTIONFS_BIND, trying again";
+                    break;
                 }
 
                 if (pfd[1].revents) {
@@ -297,30 +304,70 @@ struct UsbFfsConnection : public Connection {
 
                 switch (event.type) {
                     case FUNCTIONFS_BIND:
-                        CHECK(!bound) << "received FUNCTIONFS_BIND while already bound?";
+                        if (bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_BIND while already bound?";
+                            running = false;
+                        }
+
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_BIND while already enabled?";
+                            running = false;
+                        }
+
                         bound = true;
                         break;
 
                     case FUNCTIONFS_ENABLE:
-                        CHECK(!started) << "received FUNCTIONFS_ENABLE while already running?";
-                        started = true;
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_ENABLE while not bound?";
+                            running = false;
+                        }
+
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_ENABLE while already enabled?";
+                            running = false;
+                        }
+
+                        enabled = true;
                         StartWorker();
                         break;
 
                     case FUNCTIONFS_DISABLE:
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_DISABLE while not bound?";
+                        }
+
+                        if (!enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_DISABLE while not enabled?";
+                        }
+
+                        enabled = false;
+                        running = false;
+                        break;
+
+                    case FUNCTIONFS_UNBIND:
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_UNBIND while still enabled?";
+                        }
+
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_UNBIND when not bound?";
+                        }
+
+                        bound = false;
                         running = false;
                         break;
                 }
             }
 
             StopWorker();
-            aio_context_.reset();
-            read_fd_.reset();
-            write_fd_.reset();
+            HandleError("monitor thread finished");
         });
     }
 
     void StartWorker() {
+        CHECK(!worker_started_);
+        worker_started_ = true;
         worker_thread_ = std::thread([this]() {
             adb_thread_setname("UsbFfs-worker");
             for (size_t i = 0; i < kUsbReadQueueDepth; ++i) {
@@ -339,12 +386,16 @@ struct UsbFfsConnection : public Connection {
                     LOG(FATAL) << "hit EOF on eventfd";
                 }
 
-                WaitForEvents();
+                ReadEvents();
             }
         });
     }
 
     void StopWorker() {
+        if (!worker_started_) {
+            return;
+        }
+
         pthread_t worker_thread_handle = worker_thread_.native_handle();
         while (true) {
             int rc = pthread_kill(worker_thread_handle, kInterruptionSignal);
@@ -389,7 +440,7 @@ struct UsbFfsConnection : public Connection {
         return block;
     }
 
-    void WaitForEvents() {
+    void ReadEvents() {
         static constexpr size_t kMaxEvents = kUsbReadQueueDepth + kUsbWriteQueueDepth;
         struct io_event events[kMaxEvents];
         struct timespec timeout = {.tv_sec = 0, .tv_nsec = 0};
@@ -552,6 +603,8 @@ struct UsbFfsConnection : public Connection {
             LOG(VERBOSE) << "submitting write_request " << static_cast<void*>(iocbs[i]);
         }
 
+        writes_submitted_ += writes_to_submit;
+
         int rc = io_submit(aio_context_.get(), writes_to_submit, iocbs);
         if (rc == -1) {
             HandleError(StringPrintf("failed to submit write requests: %s", strerror(errno)));
@@ -560,8 +613,6 @@ struct UsbFfsConnection : public Connection {
             LOG(FATAL) << "failed to submit all writes: wanted to submit " << writes_to_submit
                        << ", actually submitted " << rc;
         }
-
-        writes_submitted_ += rc;
     }
 
     void HandleError(const std::string& error) {
@@ -574,6 +625,8 @@ struct UsbFfsConnection : public Connection {
     }
 
     std::thread monitor_thread_;
+
+    bool worker_started_;
     std::thread worker_thread_;
 
     std::atomic<bool> stopped_;

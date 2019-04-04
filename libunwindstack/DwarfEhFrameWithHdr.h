@@ -69,10 +69,6 @@ class DwarfEhFrameWithHdr : public DwarfSectionImpl<AddressType> {
 
   const FdeInfo* GetFdeInfoFromIndex(size_t index);
 
-  bool GetFdeOffsetSequential(uint64_t pc, uint64_t* fde_offset);
-
-  bool GetFdeOffsetBinary(uint64_t pc, uint64_t* fde_offset, uint64_t total_entries);
-
   void GetFdes(std::vector<const DwarfFde*>* fdes) override;
 
  protected:

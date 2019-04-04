@@ -288,8 +288,9 @@ class LibraryNamespaces {
 
       // Give access to VNDK-SP libraries from the 'vndk' namespace.
       vndk_ns = android_get_exported_namespace(kVndkNamespaceName);
-      LOG_ALWAYS_FATAL_IF(vndk_ns == nullptr, "Cannot find \"%s\" namespace for %s apks",
-                          kVndkNamespaceName, origin_partition);
+      if (vndk_ns == nullptr) {
+        ALOGW("Cannot find \"%s\" namespace for %s apks", kVndkNamespaceName, origin_partition);
+      }
 
       // Different name is useful for debugging
       namespace_name = kVendorClassloaderNamespaceName;

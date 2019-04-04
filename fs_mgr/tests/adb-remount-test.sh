@@ -447,59 +447,71 @@ die() {
   exit 1
 }
 
-[ "USAGE: EXPECT_EQ <lval> <rval> [message]
+[ "USAGE: EXPECT_EQ <lval> <rval> [--warning [message]]
 
 Returns true if (regex) lval matches rval" ]
 EXPECT_EQ() {
   local lval="${1}"
   local rval="${2}"
   shift 2
+  local error=1
+  local prefix="${RED}[    ERROR ]${NORMAL}"
+  if [ X"${1}" = X"--warning" ]; then
+      prefix="${RED}[  WARNING ]${NORMAL}"
+      error=0
+      shift 1
+  fi
   if ! ( echo X"${rval}" | grep '^X'"${lval}"'$' >/dev/null 2>/dev/null ); then
     if [ `echo ${lval}${rval}${*} | wc -c` -gt 50 -o "${rval}" != "${rval%
 *}" ]; then
-      echo "ERROR: expected \"${lval}\"" >&2
-      echo "       got \"${rval}\"" |
+      echo "${prefix} expected \"${lval}\"" >&2
+      echo "${prefix} got \"${rval}\"" |
         sed ': again
              N
              s/\(\n\)\([^ ]\)/\1             \2/
              t again' >&2
       if [ -n "${*}" ] ; then
-        echo "       ${*}" >&2
+        echo "${prefix} ${*}" >&2
       fi
     else
-      echo "ERROR: expected \"${lval}\" got \"${rval}\" ${*}" >&2
+      echo "${prefix} expected \"${lval}\" got \"${rval}\" ${*}" >&2
     fi
-    return 1
+    return ${error}
   fi
   if [ -n "${*}" ] ; then
-    if [ X"${lval}" != X"${rval}" ]; then
+    prefix="${GREEN}[     INFO ]${NORMAL}"
+    if [ X"${lval}" != X"${rval}" ]; then  # we were supplied a regex?
       if [ `echo ${lval}${rval}${*} | wc -c` -gt 60 -o "${rval}" != "${rval% *}" ]; then
-        echo "INFO: ok \"${lval}\"" >&2
+        echo "${prefix} ok \"${lval}\"" >&2
         echo "       = \"${rval}\"" |
           sed ': again
                N
                s/\(\n\)\([^ ]\)/\1          \2/
                t again' >&2
         if [ -n "${*}" ] ; then
-          echo "      ${*}" >&2
+          echo "${prefix} ${*}" >&2
         fi
       else
-        echo "INFO: ok \"${lval}\" = \"${rval}\" ${*}" >&2
+        echo "${prefix} ok \"${lval}\" = \"${rval}\" ${*}" >&2
       fi
     else
-      echo "INFO: ok \"${lval}\" ${*}" >&2
+      echo "${prefix} ok \"${lval}\" ${*}" >&2
     fi
   fi
   return 0
 }
 
-[ "USAGE: check_eq <lval> <rval> [message]
+[ "USAGE: check_eq <lval> <rval> [--warning [message]]
 
 Exits if (regex) lval mismatches rval" ]
 check_eq() {
   local lval="${1}"
   local rval="${2}"
   shift 2
+  if [ X"${1}" = X"--warning" ]; then
+      EXPECT_EQ "${lval}" "${rval}" ${*}
+      return
+  fi
   EXPECT_EQ "${lval}" "${rval}" ||
     die "${@}"
 }
@@ -1014,7 +1026,7 @@ elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} please run lunch, skipping"
 else
-  adb reboot-fastboot ||
+  adb reboot fastboot ||
     die "fastbootd not supported (wrong adb in path?)"
   any_wait 2m &&
     inFastboot ||
@@ -1085,14 +1097,9 @@ else
     check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
              vendor content after flash vendor
   else
-    (
-      echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing required to invalidate, ignoring a failure" >&2
-      restore() {
-        true
-      }
-      check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
-               vendor content after flash vendor
-    )
+    echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing required to invalidate, ignoring a failure" >&2
+    check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
+             --warning vendor content after flash vendor
   fi
 fi
 
@@ -1129,7 +1136,7 @@ if [ -n "${scratch_partition}" ]; then
 
   echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
-  adb reboot-fastboot ||
+  adb reboot fastboot ||
     die "Reboot into fastbootd"
   img=${TMPDIR}/adb-remount-test-${$}.img
   cleanup() {

@@ -27,12 +27,11 @@ dir.unrestricted = /data/nativetest64/unrestricted
 # necessary) the unrestricted subdirs above. Then clean this up.
 dir.unrestricted = /data/local/tmp
 
-dir.system = /data/nativetest
-dir.system = /data/nativetest64
-dir.system = /data/benchmarktest
-dir.system = /data/benchmarktest64
-
 dir.postinstall = /postinstall
+
+# Fallback entry to provide APEX namespace lookups for binaries anywhere else.
+# This must be last.
+dir.system = /data
 
 [system]
 additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
@@ -74,8 +73,7 @@ namespace.default.links = runtime,resolv
 # Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
 # libart.
 namespace.default.visible = true
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -138,7 +136,7 @@ namespace.conscrypt.visible = true
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
@@ -156,6 +154,7 @@ namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.links = default
 namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
@@ -197,16 +196,18 @@ namespace.sphal.asan.permitted.paths += /data/asan/vendor/${LIB}
 namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 
 # Once in this namespace, access to libraries in /system/lib is restricted. Only
-# libs listed here can be used.
-namespace.sphal.links = default,vndk,rs
+# libs listed here can be used. Order is important here as the namespaces are
+# tried in this order. rs should be before vndk because both are capable
+# of loading libRS_internal.so
+namespace.sphal.links = rs,default,vndk
+
+# Renderscript gets separate namespace
+namespace.sphal.link.rs.shared_libs = libRS_internal.so
 
 namespace.sphal.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.sphal.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
-
-# Renderscript gets separate namespace
-namespace.sphal.link.rs.shared_libs = libRS_internal.so
 
 ###############################################################################
 # "rs" namespace
@@ -400,8 +401,7 @@ namespace.default.asan.search.paths +=           /vendor/${LIB}
 namespace.default.links = runtime,resolv
 namespace.default.visible = true
 
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -460,7 +460,7 @@ namespace.conscrypt.visible = true
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
@@ -477,6 +477,7 @@ namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.links = default
 namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so

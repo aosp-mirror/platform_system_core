@@ -33,6 +33,7 @@
 #include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <gtest/gtest.h>
 #include <log/event_tag_map.h>
 #include <log/log.h>
@@ -1746,4 +1747,14 @@ TEST(logcat, help) {
     // logcatd -L -h prints the help twice, as designed.
     EXPECT_EQ(logcatHelpTextSize * 2, logcatLastHelpTextSize);
 #endif
+}
+
+TEST(logcat, invalid_buffer) {
+  FILE* fp = popen("logcat -b foo 2>&1", "r");
+  ASSERT_NE(nullptr, fp);
+  std::string output;
+  ASSERT_TRUE(android::base::ReadFdToString(fileno(fp), &output));
+  pclose(fp);
+
+  ASSERT_TRUE(android::base::StartsWith(output, "unknown buffer foo\n"));
 }

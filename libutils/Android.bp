@@ -69,6 +69,7 @@ cc_defaults {
     ],
 
     shared_libs: [
+        "libcutils",
         "liblog",
     ],
 
@@ -83,7 +84,6 @@ cc_defaults {
             cflags: ["-fvisibility=protected"],
 
             shared_libs: [
-                "libcutils",
                 "libprocessgroup",
                 "libdl",
                 "libvndksupport",
@@ -96,14 +96,6 @@ cc_defaults {
 
         recovery: {
             exclude_shared_libs: ["libvndksupport"],
-        },
-
-        host: {
-            cflags: ["-DLIBUTILS_NATIVE=1"],
-
-            shared: {
-                enabled: false,
-            },
         },
 
         linux_bionic: {
@@ -180,17 +172,22 @@ cc_library {
         },
     },
 
+    shared_libs: [
+         "libutils",
+         "libbacktrace",
+    ],
+
     target: {
-        android: {
-            shared_libs: [
-                "libutils",
-                "libbacktrace",
-            ],
-        },
         linux: {
             srcs: [
                 "ProcessCallStack.cpp",
             ],
+        },
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
         },
     },
 }

@@ -316,7 +316,7 @@ static int TableCmdHandler(int argc, char** argv) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
     std::vector<DeviceMapper::TargetInfo> table;
-    if (!dm.GetTableStatus(argv[0], &table)) {
+    if (!dm.GetTableInfo(argv[0], &table)) {
         std::cerr << "Could not query table status of device \"" << argv[0] << "\"." << std::endl;
         return -EINVAL;
     }

@@ -24,9 +24,8 @@
 __BEGIN_DECLS
 
 static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
-static constexpr const char* CGROUPS_RC_DIR = "/dev/cgroup_info";
+static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 
-bool CgroupSetupCgroups();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
 bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path);

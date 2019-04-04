@@ -44,7 +44,6 @@
 #include <log/log.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
-#include <unwindstack/DexFiles.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
@@ -371,6 +370,7 @@ static void dump_all_maps(log_t* log, unwindstack::Unwinder* unwinder, uint64_t 
 }
 
 void dump_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix) {
+  unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < unwinder->NumFrames(); i++) {
     _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, unwinder->FormatFrame(i).c_str());
   }
@@ -649,7 +649,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
   };
 
   unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid);
-  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
+  if (!unwinder.Init()) {
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 

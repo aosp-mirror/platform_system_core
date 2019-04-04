@@ -47,9 +47,18 @@
 #endif
 #endif
 
+#ifndef htole64
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define htole64(x) (x)
+#else
+#define htole64(x) __bswap_64(x)
+#endif
+#endif
+
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_int dropped = 0;
 static atomic_int log_error = 0;
+static atomic_int atom_tag = 0;
 
 void statsd_writer_init_lock() {
     /*
@@ -100,6 +109,11 @@ static int statsdOpen() {
         if (sock < 0) {
             ret = -errno;
         } else {
+            int sndbuf = 1 * 1024 * 1024;  // set max send buffer size 1MB
+            socklen_t bufLen = sizeof(sndbuf);
+            // SO_RCVBUF does not have an effect on unix domain socket, but SO_SNDBUF does.
+            // Proceed to connect even setsockopt fails.
+            setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, bufLen);
             struct sockaddr_un un;
             memset(&un, 0, sizeof(struct sockaddr_un));
             un.sun_family = AF_UNIX;
@@ -152,9 +166,10 @@ static int statsdAvailable() {
     return 1;
 }
 
-static void statsdNoteDrop(int error) {
+static void statsdNoteDrop(int error, int tag) {
     atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
     atomic_exchange_explicit(&log_error, error, memory_order_relaxed);
+    atomic_exchange_explicit(&atom_tag, tag, memory_order_relaxed);
 }
 
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
@@ -203,12 +218,17 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
     if (sock >= 0) {
         int32_t snapshot = atomic_exchange_explicit(&dropped, 0, memory_order_relaxed);
         if (snapshot) {
-            android_log_event_int_t buffer;
+            android_log_event_long_t buffer;
             header.id = LOG_ID_STATS;
             // store the last log error in the tag field. This tag field is not used by statsd.
             buffer.header.tag = htole32(atomic_load(&log_error));
-            buffer.payload.type = EVENT_TYPE_INT;
-            buffer.payload.data = htole32(snapshot);
+            buffer.payload.type = EVENT_TYPE_LONG;
+            // format:
+            // |atom_tag|dropped_count|
+            int64_t composed_long = atomic_load(&atom_tag);
+            // Send 2 int32's via an int64.
+            composed_long = ((composed_long << 32) | ((int64_t)snapshot));
+            buffer.payload.data = htole64(composed_long);
 
             newVec[headerLength].iov_base = &buffer;
             newVec[headerLength].iov_len = sizeof(buffer);

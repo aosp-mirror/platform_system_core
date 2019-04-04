@@ -222,6 +222,9 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
+    # make the PSI monitor accessible to others
+    chown system system /proc/pressure/memory
+    chmod 0664 /proc/pressure/memory
 
     # qtaguid will limit access to specific data based on group memberships.
     #   net_bw_acct grants impersonation of socket owners.
@@ -420,12 +423,7 @@ on post-fs-data
 
     # Load fsverity keys. This needs to happen before apexd, as post-install of
     # APEXes may rely on keys.
-    exec -- /system/bin/mini-keyctl dadd asymmetric product_cert /product/etc/security/cacerts_fsverity .fs-verity
-    exec -- /system/bin/mini-keyctl dadd asymmetric vendor_cert /vendor/etc/security/cacerts_fsverity .fs-verity
-    # Prevent future key links to fsverity keyring
-    exec -- /system/bin/mini-keyctl restrict_keyring .fs-verity
-    # Enforce fsverity signature checking
-    write /proc/sys/fs/verity/require_signatures 1
+    exec -- /system/bin/fsverity_init
 
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
@@ -659,6 +657,12 @@ on boot
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
+
+    # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs
+    # to avoid power consumption when system becomes mostly idle. Be careful
+    # to make it too large, since it may bring userdata loss, if they
+    # are not aware of using fsync()/sync() to prepare sudden power-cut.
+    write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
 
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state

@@ -177,11 +177,11 @@ TEST(DexFileTest, get_method) {
 
   std::string method;
   uint64_t method_offset;
-  ASSERT_TRUE(dex_file->GetMethodInformation(0x102, &method, &method_offset));
+  ASSERT_TRUE(dex_file->GetFunctionName(0x4102, &method, &method_offset));
   EXPECT_EQ("Main.<init>", method);
   EXPECT_EQ(2U, method_offset);
 
-  ASSERT_TRUE(dex_file->GetMethodInformation(0x118, &method, &method_offset));
+  ASSERT_TRUE(dex_file->GetFunctionName(0x4118, &method, &method_offset));
   EXPECT_EQ("Main.main", method);
   EXPECT_EQ(0U, method_offset);
 }
@@ -195,9 +195,9 @@ TEST(DexFileTest, get_method_empty) {
 
   std::string method;
   uint64_t method_offset;
-  EXPECT_FALSE(dex_file->GetMethodInformation(0x100000, &method, &method_offset));
+  EXPECT_FALSE(dex_file->GetFunctionName(0x100000, &method, &method_offset));
 
-  EXPECT_FALSE(dex_file->GetMethodInformation(0x98, &method, &method_offset));
+  EXPECT_FALSE(dex_file->GetFunctionName(0x98, &method, &method_offset));
 }
 
 }  // namespace unwindstack

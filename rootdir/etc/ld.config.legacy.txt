@@ -11,13 +11,12 @@ dir.legacy = /vendor
 dir.legacy = /odm
 dir.legacy = /sbin
 
-dir.legacy = /data/nativetest
-dir.legacy = /data/nativetest64
-dir.legacy = /data/benchmarktest
-dir.legacy = /data/benchmarktest64
-
 # Except for /postinstall, where only /system and /product are searched
 dir.postinstall = /postinstall
+
+# Fallback entry to provide APEX namespace lookups for binaries anywhere else.
+# This must be last.
+dir.legacy = /data
 
 [legacy]
 namespace.default.isolated = false
@@ -54,8 +53,7 @@ namespace.default.asan.links = runtime,resolv
 # Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
 # libart.
 namespace.default.visible = true
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -102,6 +100,7 @@ namespace.media.links = default
 namespace.media.link.default.shared_libs  = libandroid.so
 namespace.media.link.default.shared_libs += libbinder_ndk.so
 namespace.media.link.default.shared_libs += libc.so
+namespace.media.link.default.shared_libs += libcgrouprc.so
 namespace.media.link.default.shared_libs += libdl.so
 namespace.media.link.default.shared_libs += liblog.so
 namespace.media.link.default.shared_libs += libmediametrics.so
@@ -127,7 +126,7 @@ namespace.conscrypt.visible = true
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
@@ -145,6 +144,7 @@ namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.links = default
 namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
