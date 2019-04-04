@@ -56,14 +56,6 @@ cc_binary {
     defaults: ["toolbox_binary_defaults"],
 }
 
-// We only want 'r' on userdebug and eng builds.
-cc_binary {
-    name: "r",
-    defaults: ["toolbox_defaults"],
-    srcs: ["r.c"],
-    vendor_available: true,
-}
-
 // We build BSD grep separately (but see http://b/111849261).
 cc_defaults {
     name: "grep_common",
