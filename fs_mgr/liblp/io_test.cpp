@@ -598,7 +598,7 @@ TEST(liblp, FlashSparseImage) {
     ASSERT_NE(exported, nullptr);
 
     // Build the sparse file.
-    SparseBuilder sparse(*exported.get(), 512, {});
+    ImageBuilder sparse(*exported.get(), 512, {}, true /* sparsify */);
     ASSERT_TRUE(sparse.IsValid());
     ASSERT_TRUE(sparse.Build());
 
