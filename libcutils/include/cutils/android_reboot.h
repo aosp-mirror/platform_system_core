@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __CUTILS_ANDROID_REBOOT_H__
-#define __CUTILS_ANDROID_REBOOT_H__
+#pragma once
 
 #include <sys/cdefs.h>
 
@@ -36,10 +35,8 @@ __BEGIN_DECLS
 /* Reboot or shutdown the system.
  * This call uses ANDROID_RB_PROPERTY to request reboot to init process.
  * Due to that, process calling this should have proper selinux permission
- * to write to the property. Otherwise, the call will fail.
+ * to write to the property or the call will fail.
  */
-int android_reboot(int cmd, int flags, const char *arg);
+int android_reboot(unsigned cmd, int flags, const char* arg);
 
 __END_DECLS
-
-#endif /* __CUTILS_ANDROID_REBOOT_H__ */
