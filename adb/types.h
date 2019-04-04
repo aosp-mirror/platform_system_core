@@ -216,7 +216,10 @@ struct IOVector {
     // Add a nonempty block to the chain.
     // The end of the chain must be a complete block (i.e. end_offset_ == 0).
     void append(std::unique_ptr<const block_type> block) {
-        CHECK_NE(0ULL, block->size());
+        if (block->size() == 0) {
+            return;
+        }
+
         CHECK_EQ(0ULL, end_offset_);
         chain_length_ += block->size();
         chain_.emplace_back(std::move(block));
