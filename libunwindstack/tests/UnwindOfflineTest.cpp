@@ -204,6 +204,7 @@ static std::string DumpFrames(Unwinder& unwinder) {
 TEST_F(UnwindOfflineTest, pc_straddle_arm) {
   ASSERT_NO_FATAL_FAILURE(Init("straddle_arm/", ARCH_ARM));
 
+  std::unique_ptr<Regs> regs_copy(regs_->Clone());
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
 
@@ -223,6 +224,22 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm) {
   EXPECT_EQ(0xe9c86730U, unwinder.frames()[2].sp);
   EXPECT_EQ(0xf3367147U, unwinder.frames()[3].pc);
   EXPECT_EQ(0xe9c86778U, unwinder.frames()[3].sp);
+
+  // Display build ids now.
+  unwinder.SetRegs(regs_copy.get());
+  unwinder.SetDisplayBuildID(true);
+  unwinder.Unwind();
+
+  frame_info = DumpFrames(unwinder);
+  ASSERT_EQ(4U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0001a9f8  libc.so (abort+64) (BuildId: 2dd0d4ba881322a0edabeed94808048c)\n"
+      "  #01 pc 00006a1b  libbase.so (android::base::DefaultAborter(char const*)+6) (BuildId: "
+      "ed43842c239cac1a618e600ea91c4cbd)\n"
+      "  #02 pc 00007441  libbase.so (android::base::LogMessage::~LogMessage()+748) (BuildId: "
+      "ed43842c239cac1a618e600ea91c4cbd)\n"
+      "  #03 pc 00015147  /does/not/exist/libhidlbase.so\n",
+      frame_info);
 }
 
 TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
