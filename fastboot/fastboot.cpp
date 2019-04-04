@@ -1407,7 +1407,7 @@ bool LocalImageSource::ReadFile(const std::string& name, std::vector<char>* out)
 
 int LocalImageSource::OpenFile(const std::string& name) const {
     auto path = find_item_given_name(name);
-    return open(path.c_str(), O_RDONLY);
+    return open(path.c_str(), O_RDONLY | O_BINARY);
 }
 
 static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
