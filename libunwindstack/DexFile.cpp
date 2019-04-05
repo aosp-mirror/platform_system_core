@@ -35,31 +35,22 @@ namespace unwindstack {
 std::unique_ptr<DexFile> DexFile::Create(uint64_t dex_file_offset_in_memory, Memory* memory,
                                          MapInfo* info) {
   if (!info->name.empty()) {
-    std::unique_ptr<DexFile> dex_file_from_file =
+    std::unique_ptr<DexFile> dex_file =
         DexFileFromFile::Create(dex_file_offset_in_memory - info->start + info->offset, info->name);
-    if (dex_file_from_file) {
-      dex_file_from_file->addr_ = dex_file_offset_in_memory;
-      return dex_file_from_file;
+    if (dex_file) {
+      return dex_file;
     }
   }
-  std::unique_ptr<DexFile> dex_file_from_memory =
-      DexFileFromMemory::Create(dex_file_offset_in_memory, memory, info->name);
-  if (dex_file_from_memory) {
-    dex_file_from_memory->addr_ = dex_file_offset_in_memory;
-    return dex_file_from_memory;
-  }
-  return nullptr;
+  return DexFileFromMemory::Create(dex_file_offset_in_memory, memory, info->name);
 }
 
-bool DexFile::GetFunctionName(uint64_t dex_pc, std::string* method_name, uint64_t* method_offset) {
-  uint64_t dex_offset = dex_pc - addr_;
+bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name,
+                                   uint64_t* method_offset) {
   art_api::dex::MethodInfo method_info = GetMethodInfoForOffset(dex_offset, false);
   if (method_info.offset == 0) {
     return false;
   }
-  if (method_name != nullptr) {
-    *method_name = method_info.name;
-  }
+  *method_name = method_info.name;
   *method_offset = dex_offset - method_info.offset;
   return true;
 }
