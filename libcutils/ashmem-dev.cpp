@@ -73,6 +73,8 @@ static pthread_mutex_t __ashmem_lock = PTHREAD_MUTEX_INITIALIZER;
 #ifndef __ANDROID_VNDK__
 using openFdType = int (*)();
 
+static openFdType openFd;
+
 openFdType initOpenAshmemFd() {
     openFdType openFd = nullptr;
     void* handle = dlopen("libashmemd_client.so", RTLD_NOW);
@@ -221,7 +223,10 @@ static int __ashmem_open_locked()
 
     int fd = -1;
 #ifndef __ANDROID_VNDK__
-    static auto openFd = initOpenAshmemFd();
+    if (!openFd) {
+        openFd = initOpenAshmemFd();
+    }
+
     if (openFd) {
         fd = openFd();
     }
@@ -479,4 +484,12 @@ int ashmem_get_size_region(int fd)
     }
 
     return __ashmem_check_failure(fd, TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_GET_SIZE, NULL)));
+}
+
+void ashmem_init() {
+#ifndef __ANDROID_VNDK__
+    pthread_mutex_lock(&__ashmem_lock);
+    openFd = initOpenAshmemFd();
+    pthread_mutex_unlock(&__ashmem_lock);
+#endif  //__ANDROID_VNDK__
 }
