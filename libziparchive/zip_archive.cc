@@ -102,9 +102,8 @@ static uint32_t RoundUpPower2(uint32_t val) {
 }
 
 static uint32_t ComputeHash(const ZipString& name) {
-  return std::hash<std::string_view>{}(
-             std::string_view(reinterpret_cast<const char*>(name.name), name.name_length)) &
-         UINT32_MAX;
+  return static_cast<uint32_t>(std::hash<std::string_view>{}(
+      std::string_view(reinterpret_cast<const char*>(name.name), name.name_length)));
 }
 
 static bool isZipStringEqual(const uint8_t* start, const ZipString& zip_string,
