@@ -102,21 +102,9 @@ static uint32_t RoundUpPower2(uint32_t val) {
 }
 
 static uint32_t ComputeHash(const ZipString& name) {
-#if !defined(_WIN32)
   return std::hash<std::string_view>{}(
-      std::string_view(reinterpret_cast<const char*>(name.name), name.name_length));
-#else
-  // Remove this code path once the windows compiler knows how to compile the above statement.
-  uint32_t hash = 0;
-  uint16_t len = name.name_length;
-  const uint8_t* str = name.name;
-
-  while (len--) {
-    hash = hash * 31 + *str++;
-  }
-
-  return hash;
-#endif
+             std::string_view(reinterpret_cast<const char*>(name.name), name.name_length)) &
+         UINT32_MAX;
 }
 
 static bool isZipStringEqual(const uint8_t* start, const ZipString& zip_string,
