@@ -24,6 +24,9 @@ for cert in /product/etc/security/fsverity/*.der; do
     log -p e -t fsverity_init "Failed to load $cert"
 done
 
-# Prevent future key links to .fs-verity keyring
-/system/bin/mini-keyctl restrict_keyring .fs-verity ||
-  log -p e -t fsverity_init "Failed to restrict .fs-verity keyring"
+DEBUGGABLE=$(getprop ro.debuggable)
+if [ $DEBUGGABLE != "1" ]; then
+  # Prevent future key links to .fs-verity keyring
+  /system/bin/mini-keyctl restrict_keyring .fs-verity ||
+    log -p e -t fsverity_init "Failed to restrict .fs-verity keyring"
+fi
