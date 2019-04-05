@@ -290,7 +290,9 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   }
   process_memory_.reset(memory);
 
+  JitDebug jit_debug(process_memory_);
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.SetJitDebug(&jit_debug, regs_->Arch());
   unwinder.Unwind();
 
   std::string frame_info(DumpFrames(unwinder));
@@ -590,7 +592,9 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
   }
   process_memory_.reset(memory);
 
+  JitDebug jit_debug(process_memory_);
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.SetJitDebug(&jit_debug, regs_->Arch());
   unwinder.Unwind();
 
   std::string frame_info(DumpFrames(unwinder));
@@ -911,7 +915,9 @@ static void OfflineUnwind(void* data) {
   LeakType* leak_data = reinterpret_cast<LeakType*>(data);
 
   std::unique_ptr<Regs> regs_copy(leak_data->regs->Clone());
+  JitDebug jit_debug(leak_data->process_memory);
   Unwinder unwinder(128, leak_data->maps, regs_copy.get(), leak_data->process_memory);
+  unwinder.SetJitDebug(&jit_debug, regs_copy->Arch());
   unwinder.Unwind();
   ASSERT_EQ(76U, unwinder.NumFrames());
 }
@@ -1032,7 +1038,9 @@ TEST_F(UnwindOfflineTest, art_quick_osr_stub_arm) {
   }
   process_memory_.reset(memory);
 
+  JitDebug jit_debug(process_memory_);
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.SetJitDebug(&jit_debug, regs_->Arch());
   unwinder.Unwind();
 
   std::string frame_info(DumpFrames(unwinder));
