@@ -235,14 +235,9 @@ static bool SetupCgroup(const CgroupDescriptor&) {
 
 #endif
 
-// WARNING: This function should be called only from SetupCgroups and only once.
-// It intentionally leaks an FD, so additional invocation will result in additional leak.
 static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descriptors) {
-    // WARNING: We are intentionally leaking the FD to keep the file open forever.
-    // Let init keep the FD open to prevent file mappings from becoming invalid in
-    // case the file gets deleted somehow.
-    int fd = TEMP_FAILURE_RETRY(open(CGROUPS_RC_PATH, O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC,
-                                     S_IRUSR | S_IRGRP | S_IROTH));
+    unique_fd fd(TEMP_FAILURE_RETRY(open(CGROUPS_RC_PATH, O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC,
+                                         S_IRUSR | S_IRGRP | S_IROTH)));
     if (fd < 0) {
         PLOG(ERROR) << "open() failed for " << CGROUPS_RC_PATH;
         return false;
