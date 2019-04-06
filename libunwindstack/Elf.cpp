@@ -243,24 +243,6 @@ bool Elf::IsValidPc(uint64_t pc) {
   return false;
 }
 
-bool Elf::GetTextRange(uint64_t* addr, uint64_t* size) {
-  if (!valid_) {
-    return false;
-  }
-
-  if (interface_->GetTextRange(addr, size)) {
-    *addr += load_bias_;
-    return true;
-  }
-
-  if (gnu_debugdata_interface_ != nullptr && gnu_debugdata_interface_->GetTextRange(addr, size)) {
-    *addr += load_bias_;
-    return true;
-  }
-
-  return false;
-}
-
 ElfInterface* Elf::CreateInterfaceFromMemory(Memory* memory) {
   if (!IsValidElf(memory)) {
     return nullptr;
