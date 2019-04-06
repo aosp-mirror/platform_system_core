@@ -406,11 +406,16 @@ bool Subprocess::ExecInProcess(Command command, std::string* _Nonnull error) {
                                              strerror(errno));
         return false;
     }
-    // Raw subprocess + shell protocol allows for splitting stderr.
-    if (!CreateSocketpair(&stderr_sfd_, &child_stderr_sfd)) {
-        *error = android::base::StringPrintf("failed to create socketpair for stderr: %s",
-                                             strerror(errno));
-        return false;
+    if (protocol_ == SubprocessProtocol::kShell) {
+        // Shell protocol allows for splitting stderr.
+        if (!CreateSocketpair(&stderr_sfd_, &child_stderr_sfd)) {
+            *error = android::base::StringPrintf("failed to create socketpair for stderr: %s",
+                                                 strerror(errno));
+            return false;
+        }
+    } else {
+        // Raw protocol doesn't support multiple output streams, so combine stdout and stderr.
+        child_stderr_sfd.reset(dup(child_stdinout_sfd));
     }
 
     D("execinprocess: stdin/stdout FD = %d, stderr FD = %d", stdinout_sfd_.get(),
