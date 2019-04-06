@@ -285,7 +285,7 @@ std::string ElfInterface::ReadBuildID() {
         if (gnu_build_id_size_ - offset < hdr.n_descsz || hdr.n_descsz == 0) {
           return "";
         }
-        std::string build_id(hdr.n_descsz - 1, '\0');
+        std::string build_id(hdr.n_descsz, '\0');
         if (memory_->ReadFully(gnu_build_id_offset_ + offset, &build_id[0], hdr.n_descsz)) {
           return build_id;
         }
