@@ -78,8 +78,6 @@ class Elf {
 
   bool IsValidPc(uint64_t pc);
 
-  bool GetTextRange(uint64_t* addr, uint64_t* size);
-
   void GetLastError(ErrorData* data);
   ErrorCode GetLastErrorCode();
   uint64_t GetLastErrorAddress();
