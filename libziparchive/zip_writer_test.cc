@@ -257,7 +257,7 @@ TEST_F(zipwriter, WriteCompressedZipFlushFull) {
   std::vector<uint8_t> buffer(kBufSize);
   size_t prev = 1;
   for (size_t i = 0; i < kBufSize; i++) {
-    buffer[i] = i + prev;
+    buffer[i] = static_cast<uint8_t>(i + prev);
     prev = i;
   }
 
