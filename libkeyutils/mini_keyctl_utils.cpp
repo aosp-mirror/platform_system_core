@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <error.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -29,7 +30,6 @@
 #include <vector>
 
 #include <android-base/file.h>
-#include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
@@ -47,22 +47,18 @@ static std::vector<std::string> SplitBySpace(const std::string& s) {
 // kernel keyring, the id is looked up from /proc/keys. The keyring description may contain other
 // information in the descritption section depending on the key type, only the first word in the
 // keyring description is used for searching.
-static bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_id) {
-  if (!keyring_id) {
-    LOG(ERROR) << "keyring_id is null";
-    return false;
-  }
-
+static key_serial_t GetKeyringIdOrDie(const std::string& keyring_desc) {
   // If the keyring id is already a hex number, directly convert it to keyring id
-  if (android::base::ParseInt(keyring_desc.c_str(), keyring_id)) {
-    return true;
+  key_serial_t keyring_id;
+  if (android::base::ParseInt(keyring_desc.c_str(), &keyring_id)) {
+    return keyring_id;
   }
 
   // Only keys allowed by SELinux rules will be shown here.
   std::ifstream proc_keys_file("/proc/keys");
   if (!proc_keys_file.is_open()) {
-    PLOG(ERROR) << "Failed to open /proc/keys";
-    return false;
+    error(1, errno, "Failed to open /proc/keys");
+    return -1;
   }
 
   std::string line;
@@ -80,21 +76,19 @@ static bool GetKeyringId(const std::string& keyring_desc, key_serial_t* keyring_
     if (key_type != "keyring" || key_desc_prefix != key_desc_pattern) {
       continue;
     }
-    *keyring_id = std::stoi(key_id, nullptr, 16);
-    return true;
+    if (!android::base::ParseInt(key_id.c_str(), &keyring_id)) {
+      error(1, 0, "Unexpected key format in /proc/keys");
+      return -1;
+    }
+    return keyring_id;
   }
-  return false;
+  return -1;
 }
 
 int Unlink(key_serial_t key, const std::string& keyring) {
-  key_serial_t keyring_id;
-  if (!GetKeyringId(keyring, &keyring_id)) {
-    LOG(ERROR) << "Can't find keyring " << keyring;
-    return 1;
-  }
-
+  key_serial_t keyring_id = GetKeyringIdOrDie(keyring);
   if (keyctl_unlink(key, keyring_id) < 0) {
-    PLOG(ERROR) << "Failed to unlink key 0x" << std::hex << key << " from keyring " << keyring_id;
+    error(1, errno, "Failed to unlink key %x from keyring %s", key, keyring.c_str());
     return 1;
   }
   return 0;
@@ -103,63 +97,49 @@ int Unlink(key_serial_t key, const std::string& keyring) {
 int Add(const std::string& type, const std::string& desc, const std::string& data,
         const std::string& keyring) {
   if (data.size() > kMaxCertSize) {
-    LOG(ERROR) << "Certificate too large";
+    error(1, 0, "Certificate too large");
     return 1;
   }
 
-  key_serial_t keyring_id;
-  if (!GetKeyringId(keyring, &keyring_id)) {
-    LOG(ERROR) << "Can not find keyring id";
-    return 1;
-  }
-
+  key_serial_t keyring_id = GetKeyringIdOrDie(keyring);
   key_serial_t key = add_key(type.c_str(), desc.c_str(), data.c_str(), data.size(), keyring_id);
 
   if (key < 0) {
-    PLOG(ERROR) << "Failed to add key";
+    error(1, errno, "Failed to add key");
     return 1;
   }
 
-  LOG(INFO) << "Key " << desc << " added to " << keyring << " with key id: 0x" << std::hex << key;
+  std::cout << key << std::endl;
   return 0;
 }
 
 int Padd(const std::string& type, const std::string& desc, const std::string& keyring) {
-  key_serial_t keyring_id;
-  if (!GetKeyringId(keyring, &keyring_id)) {
-    LOG(ERROR) << "Can not find keyring id";
-    return 1;
-  }
+  key_serial_t keyring_id = GetKeyringIdOrDie(keyring);
 
   // read from stdin to get the certificates
   std::istreambuf_iterator<char> begin(std::cin), end;
   std::string data(begin, end);
 
   if (data.size() > kMaxCertSize) {
-    LOG(ERROR) << "Certificate too large";
+    error(1, 0, "Certificate too large");
     return 1;
   }
 
   key_serial_t key = add_key(type.c_str(), desc.c_str(), data.c_str(), data.size(), keyring_id);
 
   if (key < 0) {
-    PLOG(ERROR) << "Failed to add key";
+    error(1, errno, "Failed to add key");
     return 1;
   }
 
-  LOG(INFO) << "Key " << desc << " added to " << keyring << " with key id: 0x" << std::hex << key;
+  std::cout << key << std::endl;
   return 0;
 }
 
 int RestrictKeyring(const std::string& keyring) {
-  key_serial_t keyring_id;
-  if (!GetKeyringId(keyring, &keyring_id)) {
-    LOG(ERROR) << "Cannot find keyring id";
-    return 1;
-  }
-
+  key_serial_t keyring_id = GetKeyringIdOrDie(keyring);
   if (keyctl_restrict_keyring(keyring_id, nullptr, nullptr) < 0) {
-    PLOG(ERROR) << "Cannot restrict keyring " << keyring;
+    error(1, errno, "Cannot restrict keyring '%s'", keyring.c_str());
     return 1;
   }
   return 0;
@@ -172,11 +152,11 @@ std::string RetrieveSecurityContext(key_serial_t key) {
   context.resize(kMaxSupportedSize);
   long retval = keyctl_get_security(key, context.data(), kMaxSupportedSize);
   if (retval < 0) {
-    PLOG(ERROR) << "Cannot get security context of key 0x" << std::hex << key;
+    error(1, errno, "Cannot get security context of key %x", key);
     return std::string();
   }
   if (retval > kMaxSupportedSize) {
-    LOG(ERROR) << "The key has unexpectedly long security context than " << kMaxSupportedSize;
+    error(1, 0, "The key has unexpectedly long security context than %d", kMaxSupportedSize);
     return std::string();
   }
   context.resize(retval);
