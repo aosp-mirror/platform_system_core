@@ -78,6 +78,7 @@ char* locale;
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 #define UNPLUGGED_DISPLAY_TIME (3 * MSEC_PER_SEC)
 #define MAX_BATT_LEVEL_WAIT_TIME (3 * MSEC_PER_SEC)
+#define UNPLUGGED_SHUTDOWN_TIME_PROP "ro.product.charger.unplugged_shutdown_time"
 
 #define LAST_KMSG_MAX_SZ (32 * 1024)
 
@@ -513,6 +514,7 @@ static void handle_input_state(charger* charger, int64_t now) {
 }
 
 static void handle_power_supply_state(charger* charger, int64_t now) {
+    int timer_shutdown = UNPLUGGED_SHUTDOWN_TIME;
     if (!charger->have_battery_state) return;
 
     if (!charger->charger_connected) {
@@ -525,12 +527,14 @@ static void handle_power_supply_state(charger* charger, int64_t now) {
              * Reset & kick animation to show complete animation cycles
              * when charger disconnected.
              */
+            timer_shutdown =
+                    property_get_int32(UNPLUGGED_SHUTDOWN_TIME_PROP, UNPLUGGED_SHUTDOWN_TIME);
             charger->next_screen_transition = now - 1;
             reset_animation(charger->batt_anim);
             kick_animation(charger->batt_anim);
-            charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
+            charger->next_pwr_check = now + timer_shutdown;
             LOGW("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
-                 now, (int64_t)UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
+                 now, (int64_t)timer_shutdown, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
             LOGW("[%" PRId64 "] shutting down\n", now);
             reboot(RB_POWER_OFF);
