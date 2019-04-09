@@ -27,6 +27,7 @@
 
 // Target functions to test:
 using android::fs_mgr::BytesToHex;
+using android::fs_mgr::FileWaitMode;
 using android::fs_mgr::HexToBytes;
 using android::fs_mgr::NibbleValue;
 using android::fs_mgr::WaitForFile;
@@ -175,7 +176,7 @@ TEST(BasicUtilTest, WaitForFileDeferCreation) {
     // Waits this path.
     base::FilePath wait_path = tmp_dir.Append("libfs_avb-test-exist-dir");
     ASSERT_TRUE(base::DeleteFile(wait_path, false /* resursive */));
-    auto wait_file = std::async(WaitForFile, wait_path.value(), 500ms);
+    auto wait_file = std::async(WaitForFile, wait_path.value(), 500ms, FileWaitMode::Exists);
 
     // Sleeps 100ms before creating the wait_path.
     std::this_thread::sleep_for(100ms);
@@ -196,7 +197,7 @@ TEST(BasicUtilTest, WaitForFileDeferCreationFailure) {
     // Waits this path.
     base::FilePath wait_path = tmp_dir.Append("libfs_avb-test-exist-dir");
     ASSERT_TRUE(base::DeleteFile(wait_path, false /* resursive */));
-    auto wait_file = std::async(WaitForFile, wait_path.value(), 50ms);
+    auto wait_file = std::async(WaitForFile, wait_path.value(), 50ms, FileWaitMode::Exists);
 
     // Sleeps 100ms before creating the wait_path.
     std::this_thread::sleep_for(100ms);
