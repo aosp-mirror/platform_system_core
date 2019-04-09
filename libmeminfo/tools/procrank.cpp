@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
+#include <android-base/file.h>
+#include <android-base/parseint.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <linux/kernel-page-flags.h>
 #include <linux/oom.h>
+#include <meminfo/procmeminfo.h>
+#include <meminfo/sysmeminfo.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -28,14 +34,6 @@
 #include <memory>
 #include <sstream>
 #include <vector>
-
-#include <android-base/file.h>
-#include <android-base/parseint.h>
-#include <android-base/stringprintf.h>
-#include <android-base/strings.h>
-
-#include <meminfo/procmeminfo.h>
-#include <meminfo/sysmeminfo.h>
 
 using ::android::meminfo::MemUsage;
 using ::android::meminfo::ProcMemInfo;
@@ -460,8 +458,16 @@ int main(int argc, char* argv[]) {
     auto mark_swap_usage = [&](pid_t pid) -> bool {
         ProcessRecord proc(pid, show_wss, pgflags, pgflags_mask);
         if (!proc.valid()) {
-            std::cerr << "Failed to create process record for: " << pid << std::endl;
-            return false;
+            // Check to see if the process is still around, skip the process if the proc
+            // directory is inaccessible. It was most likely killed while creating the process
+            // record
+            std::string procdir = ::android::base::StringPrintf("/proc/%d", pid);
+            if (access(procdir.c_str(), F_OK | R_OK)) return true;
+
+            // Warn if we failed to gather process stats even while it is still alive.
+            // Return success here, so we continue to print stats for other processes.
+            std::cerr << "warning: failed to create process record for: " << pid << std::endl;
+            return true;
         }
 
         // Skip processes with no memory mappings
@@ -479,9 +485,9 @@ int main(int argc, char* argv[]) {
         return true;
     };
 
-    // Get a list of all pids currently running in the system in
-    // 1st pass through all processes. Mark each swap offset used by the process as we find them
-    // for calculating proportional swap usage later.
+    // Get a list of all pids currently running in the system in 1st pass through all processes.
+    // Mark each swap offset used by the process as we find them for calculating proportional
+    // swap usage later.
     if (!read_all_pids(&pids, mark_swap_usage)) {
         std::cerr << "Failed to read all pids from the system" << std::endl;
         exit(EXIT_FAILURE);
