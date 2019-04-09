@@ -42,6 +42,7 @@
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
+#include <unwindstack/DexFiles.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
@@ -80,12 +81,12 @@ static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
     thread.pid = getpid();
     thread.tid = gettid();
     thread.thread_name = get_thread_name(gettid());
-    thread.registers.reset(
-        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
+    unwindstack::ArchEnum arch = unwindstack::Regs::CurrentArch();
+    thread.registers.reset(unwindstack::Regs::CreateFromUcontext(arch, ucontext));
 
     // TODO: Create this once and store it in a global?
     unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid());
-    if (unwinder.Init()) {
+    if (unwinder.Init(arch)) {
       dump_backtrace_thread(output_fd, &unwinder, thread);
     } else {
       async_safe_format_log(ANDROID_LOG_ERROR, "libc", "Unable to init unwinder.");

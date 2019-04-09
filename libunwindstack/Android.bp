@@ -49,6 +49,7 @@ cc_library {
     srcs: [
         "ArmExidx.cpp",
         "DexFile.cpp",
+        "DexFiles.cpp",
         "DwarfCfa.cpp",
         "DwarfEhFrameWithHdr.cpp",
         "DwarfMemory.cpp",
@@ -91,6 +92,7 @@ cc_library {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_srcs: [
                 "DexFile.cpp",
+                "DexFiles.cpp",
             ],
             exclude_shared_libs: [
                 "libdexfile_support",
@@ -100,6 +102,7 @@ cc_library {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
             exclude_srcs: [
                 "DexFile.cpp",
+                "DexFiles.cpp",
             ],
             exclude_shared_libs: [
                 "libdexfile_support",
