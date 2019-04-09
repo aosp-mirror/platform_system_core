@@ -35,7 +35,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <backtrace/Backtrace.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
 #include <unwindstack/Memory.h>
