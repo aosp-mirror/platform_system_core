@@ -498,17 +498,22 @@ using namespace android::fiemap_writer;
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    if (argc <= 1) {
-        cerr << "Usage: <test_dir> [file_size]\n";
+    if (argc > 1 && argv[1] == "-h"s) {
+        cerr << "Usage: [test_dir] [file_size]\n";
         cerr << "\n";
         cerr << "Note: test_dir must be a writable, unencrypted directory.\n";
         exit(EXIT_FAILURE);
     }
     ::android::base::InitLogging(argv, ::android::base::StderrLogger);
 
-    std::string tempdir = argv[1] + "/XXXXXX"s;
+    std::string root_dir = "/data/local/unencrypted";
+    if (access(root_dir.c_str(), F_OK)) {
+        root_dir = "/data";
+    }
+
+    std::string tempdir = root_dir + "/XXXXXX"s;
     if (!mkdtemp(tempdir.data())) {
-        cerr << "unable to create tempdir on " << argv[1] << "\n";
+        cerr << "unable to create tempdir on " << root_dir << "\n";
         exit(EXIT_FAILURE);
     }
     if (!android::base::Realpath(tempdir, &gTestDir)) {
