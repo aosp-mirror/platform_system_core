@@ -160,8 +160,7 @@ int audit_setup(int fd, pid_t pid) {
      * and the the mask set to AUDIT_STATUS_PID
      */
     status.pid = pid;
-    status.mask = AUDIT_STATUS_PID | AUDIT_STATUS_RATE_LIMIT;
-    status.rate_limit = AUDIT_RATE_LIMIT; /* audit entries per second */
+    status.mask = AUDIT_STATUS_PID;
 
     /* Let the kernel know this pid will be registering for audit events */
     rc = audit_send(fd, AUDIT_SET, &status, sizeof(status));
@@ -186,6 +185,14 @@ int audit_setup(int fd, pid_t pid) {
 
 int audit_open() {
     return socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_AUDIT);
+}
+
+int audit_rate_limit(int fd, uint32_t limit) {
+    struct audit_status status;
+    memset(&status, 0, sizeof(status));
+    status.mask = AUDIT_STATUS_RATE_LIMIT;
+    status.rate_limit = limit; /* audit entries per second */
+    return audit_send(fd, AUDIT_SET, &status, sizeof(status));
 }
 
 int audit_get_reply(int fd, struct audit_message* rep, reply_t block, int peek) {
