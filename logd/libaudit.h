@@ -89,8 +89,17 @@ extern int audit_get_reply(int fd, struct audit_message* rep, reply_t block,
  */
 extern int audit_setup(int fd, pid_t pid);
 
-/* Max audit messages per second  */
-#define AUDIT_RATE_LIMIT 5
+/**
+ * Throttle kernel messages at the provided rate
+ * @param fd
+ *  The fd returned by a call to audit_open()
+ * @param rate
+ *  The rate, in messages per second, above which the kernel
+ *  should drop audit messages.
+ * @return
+ *  This function returns 0 on success, -errno on error.
+ */
+extern int audit_rate_limit(int fd, uint32_t limit);
 
 __END_DECLS
 
