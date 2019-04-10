@@ -715,7 +715,7 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
     }
 
     if (changed || partition_create) {
-        if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
+        if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
                                     scratch_device))
             return false;
 
@@ -940,7 +940,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
             auto slot_number = fs_mgr_overlayfs_slot_number();
             auto super_device = fs_mgr_overlayfs_super_device(slot_number);
             const auto partition_name = android::base::Basename(kScratchMountPoint);
-            CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
+            CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
                                    &scratch_device);
         }
         mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
