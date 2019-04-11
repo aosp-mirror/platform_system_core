@@ -56,6 +56,7 @@
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
+#include "debug_ramdisk.h"
 #include "epoll.h"
 #include "init.h"
 #include "persistent_properties.h"
@@ -889,9 +890,8 @@ void property_load_boot_defaults(bool load_debug_prop) {
     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
 
     if (load_debug_prop) {
-        constexpr static const char kAdbDebugProp[] = "/system/etc/adb_debug.prop";
-        LOG(INFO) << "Loading " << kAdbDebugProp;
-        load_properties_from_file(kAdbDebugProp, nullptr, &properties);
+        LOG(INFO) << "Loading " << kDebugRamdiskProp;
+        load_properties_from_file(kDebugRamdiskProp, nullptr, &properties);
     }
 
     for (const auto& [name, value] : properties) {
