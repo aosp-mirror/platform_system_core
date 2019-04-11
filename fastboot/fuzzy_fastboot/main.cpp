@@ -162,7 +162,7 @@ const auto not_allowed = [](char c) -> int {
 // Test that USB even works
 TEST(USBFunctionality, USBConnect) {
     const auto matcher = [](usb_ifc_info* info) -> int {
-        return FastBootTest::MatchFastboot(info, nullptr);
+        return FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
     };
     Transport* transport = nullptr;
     for (int i = 0; i < FastBootTest::MAX_USB_TRIES && !transport; i++) {
@@ -1738,10 +1738,14 @@ int main(int argc, char** argv) {
         fastboot::GenerateXmlTests(fastboot::config);
     }
 
+    if (args.find("serial") != args.end()) {
+        fastboot::FastBootTest::device_serial = args.at("serial");
+    }
+
     setbuf(stdout, NULL);  // no buffering
     printf("<Waiting for Device>\n");
     const auto matcher = [](usb_ifc_info* info) -> int {
-        return fastboot::FastBootTest::MatchFastboot(info, nullptr);
+        return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
     };
     Transport* transport = nullptr;
     while (!transport) {
