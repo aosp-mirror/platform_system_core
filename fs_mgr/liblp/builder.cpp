@@ -1057,7 +1057,7 @@ bool MetadataBuilder::IsABDevice() const {
     if (sABOverrideSet) {
         return sABOverrideValue;
     }
-    return android::base::GetBoolProperty("ro.build.ab_update", false);
+    return !android::base::GetProperty("ro.boot.slot_suffix", "").empty();
 }
 
 bool MetadataBuilder::IsRetrofitDevice() const {
