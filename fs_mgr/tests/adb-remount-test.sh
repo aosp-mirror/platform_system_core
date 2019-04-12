@@ -366,6 +366,57 @@ any_wait() {
   inFastboot || inAdb || inRecovery
 }
 
+wait_for_screen_timeout=900
+[ "USAGE: wait_for_screen [-n] [TIMEOUT]
+
+-n - echo newline at exit
+TIMEOUT - default `format_duration ${wait_for_screen_timeout}`" ]
+wait_for_screen() {
+  exit_function=true
+  if [ X"-n" = X"${1}" ]; then
+    exit_function=echo
+    shift
+  fi
+  timeout=${wait_for_screen_timeout}
+  if [ ${#} -gt 0 ]; then
+    timeout=${1}
+    shift
+  fi
+  counter=0
+  while true; do
+    if inFastboot; then
+      fastboot reboot
+    elif inAdb; then
+      if [ 0 != ${counter} ]; then
+        adb_wait
+      fi
+      if [ -n "`get_property sys.boot.reason`" ]
+      then
+        vals=`get_property |
+              sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
+        if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
+        then
+          sleep 1
+          break
+        fi
+        if [ "${vals}" = "`echo logbootcomplete=1 ; echo boot_completed=1`" ]
+        then
+          sleep 1
+          break
+        fi
+      fi
+    fi
+    counter=`expr ${counter} + 1`
+    if [ ${counter} -gt ${timeout} ]; then
+      ${exit_function}
+      echo "ERROR: wait_for_screen() timed out (`format_duration ${timeout}`)" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  ${exit_function}
+}
+
 [ "USAGE: adb_root
 
 NB: This can be flakey on devices due to USB state
@@ -697,6 +748,8 @@ adb_sh ls -l /dev/block/by-name/ </dev/null 2>/dev/null |
     esac
   done
 
+# If reboot too soon after fresh flash, could trip device update failure logic
+wait_for_screen
 # Can we test remount -R command?
 overlayfs_supported=true
 if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
@@ -1074,6 +1127,7 @@ elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} please run lunch, skipping"
 else
+  wait_for_screen
   adb reboot fastboot </dev/null ||
     die "fastbootd not supported (wrong adb in path?)"
   any_wait 2m &&
@@ -1152,6 +1206,7 @@ else
   fi
 fi
 
+wait_for_screen
 echo "${GREEN}[ RUN      ]${NORMAL} remove test content (cleanup)" >&2
 
 T=`adb_date`
