@@ -36,6 +36,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <libavb/libavb.h>
+#include <libdm/dm.h>
 #include <utils/Compat.h>
 
 #include "util.h"
@@ -104,6 +105,20 @@ static AvbIOResult dummy_get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
     return AVB_IO_RESULT_OK;
 }
 
+// Converts a partition name (with ab_suffix) to the corresponding mount point.
+// e.g., "system_a" => "/system",
+// e.g., "vendor_a" => "/vendor",
+static std::string DeriveMountPoint(const std::string& partition_name) {
+    const std::string ab_suffix = fs_mgr_get_slot_suffix();
+    std::string mount_point(partition_name);
+    auto found = partition_name.rfind(ab_suffix);
+    if (found != std::string::npos) {
+        mount_point.erase(found);  // converts system_a => system
+    }
+
+    return "/" + mount_point;
+}
+
 FsManagerAvbOps::FsManagerAvbOps() {
     // We only need to provide the implementation of read_from_partition()
     // operation since that's all what is being used by the avb_slot_verify().
@@ -122,14 +137,53 @@ FsManagerAvbOps::FsManagerAvbOps() {
     avb_ops_.user_data = this;
 }
 
+// Given a partition name (with ab_suffix), e.g., system_a, returns the corresponding
+// dm-linear path for it. e.g., /dev/block/dm-0. If not found, returns an empty string.
+// This assumes that the prefix of the partition name and the mount point are the same.
+// e.g., partition vendor_a is mounted under /vendor, product_a is mounted under /product, etc.
+// This might not be true for some special fstab files, e.g., fstab.postinstall.
+// But it's good enough for the default fstab. Also note that the logical path is a
+// fallback solution when the physical path (/dev/block/by-name/<partition>) cannot be found.
+std::string FsManagerAvbOps::GetLogicalPath(const std::string& partition_name) {
+    if (fstab_.empty() && !ReadDefaultFstab(&fstab_)) {
+        return "";
+    }
+
+    const auto mount_point = DeriveMountPoint(partition_name);
+    if (mount_point.empty()) return "";
+
+    auto fstab_entry = GetEntryForMountPoint(&fstab_, mount_point);
+    if (!fstab_entry) return "";
+
+    std::string device_path;
+    if (fstab_entry->fs_mgr_flags.logical) {
+        dm::DeviceMapper& dm = dm::DeviceMapper::Instance();
+        if (!dm.GetDmDevicePathByName(fstab_entry->blk_device, &device_path)) {
+            LERROR << "Failed to resolve logical device path for: " << fstab_entry->blk_device;
+            return "";
+        }
+        return device_path;
+    }
+
+    return "";
+}
+
 AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t offset,
                                                size_t num_bytes, void* buffer,
                                                size_t* out_num_read) {
-    const std::string path = "/dev/block/by-name/"s + partition;
+    std::string path = "/dev/block/by-name/"s + partition;
 
     // Ensures the device path (a symlink created by init) is ready to access.
     if (!WaitForFile(path, 1s)) {
-        return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+        LERROR << "Device path not found: " << path;
+        // Falls back to logical path if the physical path is not found.
+        // This mostly only works for emulator (no bootloader). Because in normal
+        // device, bootloader is unable to read logical partitions. So if libavb in
+        // the bootloader failed to read a physical partition, it will failed to boot
+        // the HLOS and we won't reach the code here.
+        path = GetLogicalPath(partition);
+        if (path.empty() || !WaitForFile(path, 1s)) return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+        LINFO << "Fallback to use logical device path: " << path;
     }
 
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
