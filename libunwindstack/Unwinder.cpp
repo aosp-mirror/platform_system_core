@@ -89,8 +89,8 @@ void Unwinder::FillInDexFrame() {
 #endif
 }
 
-void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t func_pc,
-                           uint64_t pc_adjustment) {
+FrameData* Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc,
+                                 uint64_t pc_adjustment) {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
@@ -100,7 +100,8 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
   frame->pc = regs_->pc() - pc_adjustment;
 
   if (map_info == nullptr) {
-    return;
+    // Nothing else to update.
+    return nullptr;
   }
 
   if (resolve_names_) {
@@ -118,12 +119,7 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
   frame->map_end = map_info->end;
   frame->map_flags = map_info->flags;
   frame->map_load_bias = elf->GetLoadBias();
-
-  if (!resolve_names_ ||
-      !elf->GetFunctionName(func_pc, &frame->function_name, &frame->function_offset)) {
-    frame->function_name = "";
-    frame->function_offset = 0;
-  }
+  return frame;
 }
 
 static bool ShouldStop(const std::vector<std::string>* map_suffixes_to_ignore,
@@ -194,6 +190,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       }
     }
 
+    FrameData* frame = nullptr;
     if (map_info == nullptr || initial_map_names_to_skip == nullptr ||
         std::find(initial_map_names_to_skip->begin(), initial_map_names_to_skip->end(),
                   basename(map_info->name.c_str())) == initial_map_names_to_skip->end()) {
@@ -210,23 +207,21 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         }
       }
 
-      FillInFrame(map_info, elf, rel_pc, step_pc, pc_adjustment);
+      frame = FillInFrame(map_info, elf, rel_pc, pc_adjustment);
 
       // Once a frame is added, stop skipping frames.
       initial_map_names_to_skip = nullptr;
     }
     adjust_pc = true;
 
-    bool stepped;
+    bool stepped = false;
     bool in_device_map = false;
-    if (map_info == nullptr) {
-      stepped = false;
-    } else {
+    bool finished = false;
+    if (map_info != nullptr) {
       if (map_info->flags & MAPS_FLAGS_DEVICE_MAP) {
         // Do not stop here, fall through in case we are
         // in the speculative unwind path and need to remove
         // some of the speculative frames.
-        stepped = false;
         in_device_map = true;
       } else {
         MapInfo* sp_info = maps_->Find(regs_->sp());
@@ -234,17 +229,35 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           // Do not stop here, fall through in case we are
           // in the speculative unwind path and need to remove
           // some of the speculative frames.
-          stepped = false;
           in_device_map = true;
         } else {
-          bool finished;
-          stepped = elf->Step(rel_pc, step_pc, regs_, process_memory_.get(), &finished);
-          elf->GetLastError(&last_error_);
-          if (stepped && finished) {
-            break;
+          if (elf->StepIfSignalHandler(rel_pc, regs_, process_memory_.get())) {
+            stepped = true;
+            if (frame != nullptr) {
+              // Need to adjust the relative pc because the signal handler
+              // pc should not be adjusted.
+              frame->rel_pc = rel_pc;
+              frame->pc += pc_adjustment;
+              step_pc = rel_pc;
+            }
+          } else if (elf->Step(step_pc, regs_, process_memory_.get(), &finished)) {
+            stepped = true;
           }
+          elf->GetLastError(&last_error_);
         }
       }
+    }
+
+    if (frame != nullptr) {
+      if (!resolve_names_ ||
+          !elf->GetFunctionName(step_pc, &frame->function_name, &frame->function_offset)) {
+        frame->function_name = "";
+        frame->function_offset = 0;
+      }
+    }
+
+    if (finished) {
+      break;
     }
 
     if (!stepped) {
