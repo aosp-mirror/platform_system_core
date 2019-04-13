@@ -159,6 +159,9 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     auto save_errno = errno;
     errno = 0;
     auto has_shared_blocks = fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
+    if (!has_shared_blocks && (entry->mount_point == "/system")) {
+        has_shared_blocks = fs_mgr_has_shared_blocks("/", entry->blk_device);
+    }
     // special case for first stage init for system as root (taimen)
     if (!has_shared_blocks && (errno == ENOENT) && (entry->blk_device == "/dev/root")) {
         has_shared_blocks = true;
@@ -612,7 +615,9 @@ std::string fs_mgr_overlayfs_scratch_device() {
         if (!dm.GetDmDevicePathByName(partition_name, &path)) {
             // non-DAP A/B device?
             if (fs_mgr_access(super_device)) return "";
-            path = kPhysicalDevice + "system" + (slot_number ? "_a" : "_b");
+            auto other_slot = fs_mgr_get_other_slot_suffix();
+            if (other_slot.empty()) return "";
+            path = kPhysicalDevice + "system" + other_slot;
         }
     }
     return scratch_device_cache = path;
