@@ -80,7 +80,7 @@ class FirstStageMount {
     bool InitMappedDevice(const std::string& verity_device);
     bool InitDeviceMapper();
     bool CreateLogicalPartitions();
-    bool MountPartition(const Fstab::iterator& begin, bool erase_used_fstab_entry,
+    bool MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                         Fstab::iterator* end = nullptr);
 
     bool MountPartitions();
@@ -437,21 +437,26 @@ bool FirstStageMount::InitMappedDevice(const std::string& dm_device) {
 
     uevent_listener_.RegenerateUeventsForPath(syspath, verity_callback);
     if (!found) {
-        LOG(INFO) << "dm-verity device not found in /sys, waiting for its uevent";
+        LOG(INFO) << "dm device '" << dm_device << "' not found in /sys, waiting for its uevent";
         Timer t;
         uevent_listener_.Poll(verity_callback, 10s);
-        LOG(INFO) << "wait for dm-verity device returned after " << t;
+        LOG(INFO) << "wait for dm device '" << dm_device << "' returned after " << t;
     }
     if (!found) {
-        LOG(ERROR) << "dm-verity device not found after polling timeout";
+        LOG(ERROR) << "dm device '" << dm_device << "' not found after polling timeout";
         return false;
     }
 
     return true;
 }
 
-bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_used_fstab_entry,
+bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                                      Fstab::iterator* end) {
+    // Sets end to begin + 1, so we can just return on failure below.
+    if (end) {
+        *end = begin + 1;
+    }
+
     if (begin->fs_mgr_flags.logical) {
         if (!fs_mgr_update_logical_partition(&(*begin))) {
             return false;
@@ -477,7 +482,7 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_us
             mounted = (fs_mgr_do_mount_one(*current) == 0);
         }
     }
-    if (erase_used_fstab_entry) {
+    if (erase_same_mounts) {
         current = fstab_.erase(begin, current);
     }
     if (end) {
@@ -494,7 +499,7 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
         return entry.mount_point == "/metadata";
     });
     if (metadata_partition != fstab_.end()) {
-        if (MountPartition(metadata_partition, true /* erase_used_fstab_entry */)) {
+        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
             UseGsiIfPresent();
         }
     }
@@ -505,7 +510,7 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 
     if (system_partition == fstab_.end()) return true;
 
-    if (MountPartition(system_partition, false)) {
+    if (MountPartition(system_partition, false /* erase_same_mounts */)) {
         if (gsi_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
             LOG(ERROR) << "check_most_at_once forbidden on external media";
             return false;
@@ -560,7 +565,7 @@ bool FirstStageMount::MountPartitions() {
         }
 
         Fstab::iterator end;
-        if (!MountPartition(current, false, &end)) {
+        if (!MountPartition(current, false /* erase_same_mounts */, &end)) {
             if (current->fs_mgr_flags.no_fail) {
                 LOG(INFO) << "Failed to mount " << current->mount_point
                           << ", ignoring mount for no_fail partition";
@@ -797,11 +802,9 @@ bool FirstStageMountVBootV2::GetDmVerityDevices() {
 bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
     AvbHashtreeResult hashtree_result;
 
-    if (fstab_entry->fs_mgr_flags.avb) {
-        if (!InitAvbHandle()) return false;
-        hashtree_result =
-                avb_handle_->SetUpAvbHashtree(fstab_entry, false /* wait_for_verity_dev */);
-    } else if (!fstab_entry->avb_keys.empty()) {
+    // It's possible for a fstab_entry to have both avb_keys and avb flag.
+    // In this case, try avb_keys first, then fallback to avb flag.
+    if (!fstab_entry->avb_keys.empty()) {
         if (!InitAvbHandle()) return false;
         // Checks if hashtree should be disabled from the top-level /vbmeta.
         if (avb_handle_->status() == AvbHandleStatus::kHashtreeDisabled ||
@@ -813,14 +816,24 @@ bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
             auto avb_standalone_handle = AvbHandle::LoadAndVerifyVbmeta(*fstab_entry);
             if (!avb_standalone_handle) {
                 LOG(ERROR) << "Failed to load offline vbmeta for " << fstab_entry->mount_point;
-                return false;
+                // Fallbacks to built-in hashtree if fs_mgr_flags.avb is set.
+                if (!fstab_entry->fs_mgr_flags.avb) return false;
+                LOG(INFO) << "Fallback to built-in hashtree for " << fstab_entry->mount_point;
+                hashtree_result =
+                        avb_handle_->SetUpAvbHashtree(fstab_entry, false /* wait_for_verity_dev */);
+            } else {
+                // Sets up hashtree via the standalone handle.
+                if (IsStandaloneImageRollback(*avb_handle_, *avb_standalone_handle, *fstab_entry)) {
+                    return false;
+                }
+                hashtree_result = avb_standalone_handle->SetUpAvbHashtree(
+                        fstab_entry, false /* wait_for_verity_dev */);
             }
-            if (IsStandaloneImageRollback(*avb_handle_, *avb_standalone_handle, *fstab_entry)) {
-                return false;
-            }
-            hashtree_result = avb_standalone_handle->SetUpAvbHashtree(
-                    fstab_entry, false /* wait_for_verity_dev */);
         }
+    } else if (fstab_entry->fs_mgr_flags.avb) {
+        if (!InitAvbHandle()) return false;
+        hashtree_result =
+                avb_handle_->SetUpAvbHashtree(fstab_entry, false /* wait_for_verity_dev */);
     } else {
         return true;  // No need AVB, returns true to mount the partition directly.
     }
