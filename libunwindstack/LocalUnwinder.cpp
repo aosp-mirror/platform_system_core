@@ -111,6 +111,14 @@ bool LocalUnwinder::Unwind(std::vector<LocalFrameData>* frame_info, size_t max_f
       pc_adjustment = 0;
     }
     step_pc -= pc_adjustment;
+
+    bool finished = false;
+    if (elf->StepIfSignalHandler(rel_pc, regs.get(), process_memory_.get())) {
+      step_pc = rel_pc;
+    } else if (!elf->Step(step_pc, regs.get(), process_memory_.get(), &finished)) {
+      finished = true;
+    }
+
     // Skip any locations that are within this library.
     if (num_frames != 0 || !ShouldSkipLibrary(map_info->name)) {
       // Add frame information.
@@ -124,22 +132,12 @@ bool LocalUnwinder::Unwind(std::vector<LocalFrameData>* frame_info, size_t max_f
       }
       num_frames++;
     }
-    if (!elf->valid()) {
-      break;
-    }
-    if (frame_info->size() == max_frames) {
-      break;
-    }
 
+    if (finished || frame_info->size() == max_frames ||
+        (cur_pc == regs->pc() && cur_sp == regs->sp())) {
+      break;
+    }
     adjust_pc = true;
-    bool finished;
-    if (!elf->Step(rel_pc, step_pc, regs.get(), process_memory_.get(), &finished) || finished) {
-      break;
-    }
-    // pc and sp are the same, terminate the unwind.
-    if (cur_pc == regs->pc() && cur_sp == regs->sp()) {
-      break;
-    }
   }
   return num_frames != 0;
 }
