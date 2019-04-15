@@ -1215,7 +1215,7 @@ TEST_F(UnwindOfflineTest, offset_arm) {
       "  #02 pc 0032bff3  libunwindstack_test (SignalOuterFunction+2)\n"
       "  #03 pc 0032fed3  libunwindstack_test "
       "(unwindstack::SignalCallerHandler(int, siginfo*, void*)+26)\n"
-      "  #04 pc 00026528  libc.so\n"
+      "  #04 pc 0002652c  libc.so (__restore)\n"
       "  #05 pc 00000000  <unknown>\n"
       "  #06 pc 0032c2d9  libunwindstack_test (InnerFunction+736)\n"
       "  #07 pc 0032cc4f  libunwindstack_test (MiddleFunction+42)\n"
@@ -1243,7 +1243,7 @@ TEST_F(UnwindOfflineTest, offset_arm) {
   EXPECT_EQ(0xf43d2ce8U, unwinder.frames()[2].sp);
   EXPECT_EQ(0x2e59ed3U, unwinder.frames()[3].pc);
   EXPECT_EQ(0xf43d2cf0U, unwinder.frames()[3].sp);
-  EXPECT_EQ(0xf4136528U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xf413652cU, unwinder.frames()[4].pc);
   EXPECT_EQ(0xf43d2d10U, unwinder.frames()[4].sp);
   EXPECT_EQ(0U, unwinder.frames()[5].pc);
   EXPECT_EQ(0xffcc0ee0U, unwinder.frames()[5].sp);
@@ -1326,7 +1326,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_arm64) {
       "  #00 pc 000000000014ccbc  linker64 (__dl_syscall+28)\n"
       "  #01 pc 000000000005426c  linker64 "
       "(__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1128)\n"
-      "  #02 pc 00000000000008bc  vdso.so\n"
+      "  #02 pc 00000000000008c0  vdso.so (__kernel_rt_sigreturn)\n"
       "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
       "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
       "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk!libfeature_support_angle.so (offset 0x4000) "
@@ -1338,7 +1338,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_arm64) {
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[0].sp);
   EXPECT_EQ(0x7e82b5726cULL, unwinder.frames()[1].pc);
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[1].sp);
-  EXPECT_EQ(0x7e82b018bcULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7e82b018c0ULL, unwinder.frames()[2].pc);
   EXPECT_EQ(0x7df8ca3da0ULL, unwinder.frames()[2].sp);
   EXPECT_EQ(0x7e7eecc6f4ULL, unwinder.frames()[3].pc);
   EXPECT_EQ(0x7dabf3db60ULL, unwinder.frames()[3].sp);
@@ -1366,7 +1366,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
       "  #00 pc 000000000014ccbc  linker64 (__dl_syscall+28)\n"
       "  #01 pc 000000000005426c  linker64 "
       "(__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1128)\n"
-      "  #02 pc 00000000000008bc  vdso.so\n"
+      "  #02 pc 00000000000008c0  vdso.so (__kernel_rt_sigreturn)\n"
       "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
       "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
       "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk (offset 0x21d5000)\n"
@@ -1377,7 +1377,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[0].sp);
   EXPECT_EQ(0x7e82b5726cULL, unwinder.frames()[1].pc);
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[1].sp);
-  EXPECT_EQ(0x7e82b018bcULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7e82b018c0ULL, unwinder.frames()[2].pc);
   EXPECT_EQ(0x7df8ca3da0ULL, unwinder.frames()[2].sp);
   EXPECT_EQ(0x7e7eecc6f4ULL, unwinder.frames()[3].pc);
   EXPECT_EQ(0x7dabf3db60ULL, unwinder.frames()[3].sp);
