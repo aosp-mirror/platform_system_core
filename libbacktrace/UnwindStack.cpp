@@ -89,6 +89,10 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
       case unwindstack::ERROR_REPEATED_FRAME:
         error->error_code = BACKTRACE_UNWIND_ERROR_REPEATED_FRAME;
         break;
+
+      case unwindstack::ERROR_INVALID_ELF:
+        error->error_code = BACKTRACE_UNWIND_ERROR_INVALID_ELF;
+        break;
     }
   }
 

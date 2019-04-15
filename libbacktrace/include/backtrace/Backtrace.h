@@ -64,6 +64,8 @@ enum BacktraceUnwindErrorCode : uint32_t {
   BACKTRACE_UNWIND_ERROR_UNWIND_INFO,
   // Unwind information stopped due to sp/pc repeating.
   BACKTRACE_UNWIND_ERROR_REPEATED_FRAME,
+  // Unwind information stopped due to invalid elf.
+  BACKTRACE_UNWIND_ERROR_INVALID_ELF,
 };
 
 struct BacktraceUnwindError {
