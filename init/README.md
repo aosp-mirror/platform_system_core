@@ -488,7 +488,11 @@ Commands
   This is included in the default init.rc.
 
 `loglevel <level>`
-> Sets the kernel log level to level. Properties are expanded within _level_.
+> Sets init's log level to the integer level, from 7 (all logging) to 0
+  (fatal logging only). The numeric values correspond to the kernel log
+  levels, but this command does not affect the kernel log level. Use the
+  `write` command to write to `/proc/sys/kernel/printk` to change that.
+  Properties are expanded within _level_.
 
 `mkdir <path> [mode] [owner] [group]`
 > Create a directory at _path_, optionally with the given mode, owner, and
