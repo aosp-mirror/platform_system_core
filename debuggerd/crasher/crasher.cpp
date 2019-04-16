@@ -193,6 +193,7 @@ static int usage() {
     fprintf(stderr, "  kuser_memory_barrier  call kuser_memory_barrier\n");
     fprintf(stderr, "  kuser_cmpxchg64       call kuser_cmpxchg64\n");
 #endif
+    fprintf(stderr, "  xom                   read execute-only memory\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call liblog LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call liblog LOG_ALWAYS_FATAL_IF\n");
@@ -314,6 +315,11 @@ noinline int do_action(const char* arg) {
     } else if (!strcasecmp(arg, "seccomp")) {
       set_system_seccomp_filter();
       syscall(99999);
+#if defined(__LP64__)
+    } else if (!strcasecmp(arg, "xom")) {
+      // Try to read part of our code, which will fail if XOM is active.
+      printf("*%lx = %lx\n", reinterpret_cast<long>(usage), *reinterpret_cast<long*>(usage));
+#endif
 #if defined(__arm__)
     } else if (!strcasecmp(arg, "kuser_helper_version")) {
         return __kuser_helper_version;
