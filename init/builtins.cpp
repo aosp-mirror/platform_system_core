@@ -451,13 +451,13 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
     if (false) DumpState();
 }
 
-/* mount_fstab
+/* handle_fstab
  *
- *  Call fs_mgr_mount_all() to mount the given fstab
+ *  Read the given fstab file and execute func on it.
  */
-static Result<int> mount_fstab(const char* fstabfile, int mount_mode) {
+static Result<int> handle_fstab(const std::string& fstabfile, std::function<int(Fstab*)> func) {
     /*
-     * Call fs_mgr_mount_all() to mount all filesystems.  We fork(2) and
+     * Call fs_mgr_[u]mount_all() to [u]mount all filesystems.  We fork(2) and
      * do the call in the child to provide protection to the main init
      * process if anything goes wrong (crash or memory leak), and wait for
      * the child to finish in the parent.
@@ -478,23 +478,49 @@ static Result<int> mount_fstab(const char* fstabfile, int mount_mode) {
             return Error() << "child aborted";
         }
     } else if (pid == 0) {
-        /* child, call fs_mgr_mount_all() */
+        /* child, call fs_mgr_[u]mount_all() */
 
-        // So we can always see what fs_mgr_mount_all() does.
+        // So we can always see what fs_mgr_[u]mount_all() does.
         // Only needed if someone explicitly changes the default log level in their init.rc.
         android::base::ScopedLogSeverity info(android::base::INFO);
 
         Fstab fstab;
         ReadFstabFromFile(fstabfile, &fstab);
 
-        int child_ret = fs_mgr_mount_all(&fstab, mount_mode);
-        if (child_ret == -1) {
-            PLOG(ERROR) << "fs_mgr_mount_all returned an error";
-        }
+        int child_ret = func(&fstab);
+
         _exit(child_ret);
     } else {
         return Error() << "fork() failed";
     }
+}
+
+/* mount_fstab
+ *
+ *  Call fs_mgr_mount_all() to mount the given fstab
+ */
+static Result<int> mount_fstab(const std::string& fstabfile, int mount_mode) {
+    return handle_fstab(fstabfile, [mount_mode](Fstab* fstab) {
+        int ret = fs_mgr_mount_all(fstab, mount_mode);
+        if (ret == -1) {
+            PLOG(ERROR) << "fs_mgr_mount_all returned an error";
+        }
+        return ret;
+    });
+}
+
+/* umount_fstab
+ *
+ *  Call fs_mgr_umount_all() to umount the given fstab
+ */
+static Result<int> umount_fstab(const std::string& fstabfile) {
+    return handle_fstab(fstabfile, [](Fstab* fstab) {
+        int ret = fs_mgr_umount_all(fstab);
+        if (ret != 0) {
+            PLOG(ERROR) << "fs_mgr_umount_all returned " << ret;
+        }
+        return ret;
+    });
 }
 
 /* Queue event based on fs_mgr return code.
@@ -583,7 +609,7 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
     bool import_rc = true;
     bool queue_event = true;
     int mount_mode = MOUNT_MODE_DEFAULT;
-    const char* fstabfile = args[1].c_str();
+    const auto& fstabfile = args[1];
     std::size_t path_arg_end = args.size();
     const char* prop_post_fix = "default";
 
@@ -623,6 +649,15 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
         }
     }
 
+    return Success();
+}
+
+/* umount_all <fstab> */
+static Result<Success> do_umount_all(const BuiltinArguments& args) {
+    auto umount_fstab_return_code = umount_fstab(args[1]);
+    if (!umount_fstab_return_code) {
+        return Error() << "umount_fstab() failed " << umount_fstab_return_code.error();
+    }
     return Success();
 }
 
@@ -1165,6 +1200,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mount",                   {3,     kMax, {false,  do_mount}}},
         {"parse_apex_configs",      {0,     0,    {false,  do_parse_apex_configs}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
+        {"umount_all",              {1,     1,    {false,  do_umount_all}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"restart",                 {1,     1,    {false,  do_restart}}},
         {"restorecon",              {1,     kMax, {true,   do_restorecon}}},
