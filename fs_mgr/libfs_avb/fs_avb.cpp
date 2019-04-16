@@ -449,6 +449,29 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
     return AvbHashtreeResult::kSuccess;
 }
 
+bool AvbHandle::TearDownAvbHashtree(FstabEntry* fstab_entry, bool wait) {
+    if (!fstab_entry) {
+        return false;
+    }
+
+    const std::string device_name(GetVerityDeviceName(*fstab_entry));
+
+    // TODO: remove duplicated code with UnmapDevice()
+    android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
+    std::string path;
+    if (wait) {
+        dm.GetDmDevicePathByName(device_name, &path);
+    }
+    if (!dm.DeleteDevice(device_name)) {
+        return false;
+    }
+    if (!path.empty() && !WaitForFile(path, 1000ms, FileWaitMode::DoesNotExist)) {
+        return false;
+    }
+
+    return true;
+}
+
 std::string AvbHandle::GetSecurityPatchLevel(const FstabEntry& fstab_entry) const {
     if (vbmeta_images_.size() < 1) {
         return "";
