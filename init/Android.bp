@@ -61,6 +61,7 @@ cc_defaults {
     static_libs: [
         "libseccomp_policy",
         "libavb",
+        "libcgrouprc_format",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
@@ -82,6 +83,7 @@ cc_defaults {
         "liblogwrap",
         "liblp",
         "libprocessgroup",
+        "libprocessgroup_setup",
         "libselinux",
         "libutils",
     ],
@@ -91,7 +93,7 @@ cc_defaults {
 cc_library_static {
     name: "libinit",
     recovery_available: true,
-    defaults: ["init_defaults"],
+    defaults: ["init_defaults", "selinux_policy_version"],
     srcs: [
         "action.cpp",
         "action_manager.cpp",
@@ -110,6 +112,7 @@ cc_library_static {
         "init.cpp",
         "keychords.cpp",
         "modalias_handler.cpp",
+        "mount_handler.cpp",
         "mount_namespace.cpp",
         "parser.cpp",
         "persistent_properties.cpp",
@@ -132,7 +135,7 @@ cc_library_static {
         "ueventd_parser.cpp",
         "util.cpp",
     ],
-    whole_static_libs: ["libcap"],
+    whole_static_libs: ["libcap", "com.android.sysprop.apex"],
     header_libs: ["bootimg_headers"],
     proto: {
         type: "lite",

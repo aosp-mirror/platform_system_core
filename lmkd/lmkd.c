@@ -110,7 +110,7 @@
  */
 #define PSI_WINDOW_SIZE_MS 1000
 /* Polling period after initial PSI signal */
-#define PSI_POLL_PERIOD_MS 200
+#define PSI_POLL_PERIOD_MS 10
 /* Poll for the duration of one window after initial PSI signal */
 #define PSI_POLL_COUNT (PSI_WINDOW_SIZE_MS / PSI_POLL_PERIOD_MS)
 
@@ -1329,7 +1329,7 @@ static void set_process_group_and_prio(int pid, SchedPolicy sp, int prio) {
 static int last_killed_pid = -1;
 
 /* Kill one process specified by procp.  Returns the size of the process killed */
-static int kill_one_process(struct proc* procp) {
+static int kill_one_process(struct proc* procp, int min_oom_score) {
     int pid = procp->pid;
     uid_t uid = procp->uid;
     char *taskname;
@@ -1340,6 +1340,9 @@ static int kill_one_process(struct proc* procp) {
 #ifdef LMKD_LOG_STATS
     struct memory_stat mem_st = {};
     int memory_stat_parse_result = -1;
+#else
+    /* To prevent unused parameter warning */
+    (void)(min_oom_score);
 #endif
 
     taskname = proc_get_name(pid);
@@ -1385,10 +1388,12 @@ static int kill_one_process(struct proc* procp) {
         if (memory_stat_parse_result == 0) {
             stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
                     procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
-                    mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns);
+                    mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns,
+                    min_oom_score);
         } else if (enable_stats_log) {
             stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
-                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1);
+                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1,
+                                          min_oom_score);
         }
 #endif
         result = tasksize;
@@ -1425,7 +1430,7 @@ static int find_and_kill_process(int min_score_adj) {
             if (!procp)
                 break;
 
-            killed_size = kill_one_process(procp);
+            killed_size = kill_one_process(procp, min_score_adj);
             if (killed_size >= 0) {
 #ifdef LMKD_LOG_STATS
                 if (enable_stats_log && !lmk_state_change_start) {
@@ -1694,16 +1699,6 @@ do_kill:
         static unsigned long report_skip_count = 0;
 
         if (!use_minfree_levels) {
-            /* If pressure level is less than critical and enough free swap then ignore */
-            if (level < VMPRESS_LEVEL_CRITICAL &&
-                mi.field.free_swap > low_pressure_mem.max_nr_free_pages) {
-                if (debug_process_killing) {
-                    ALOGI("Ignoring pressure since %" PRId64
-                          " swap pages are available ",
-                          mi.field.free_swap);
-                }
-                return;
-            }
             /* Free up enough memory to downgrate the memory pressure to low level */
             if (mi.field.nr_free_pages >= low_pressure_mem.max_nr_free_pages) {
                 if (debug_process_killing) {

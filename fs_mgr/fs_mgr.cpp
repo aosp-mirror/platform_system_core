@@ -307,7 +307,7 @@ static bool read_ext4_superblock(const std::string& blk_device, struct ext4_supe
         return false;
     }
 
-    if (pread(fd, sb, sizeof(*sb), 1024) != sizeof(*sb)) {
+    if (TEMP_FAILURE_RETRY(pread(fd, sb, sizeof(*sb), 1024)) != sizeof(*sb)) {
         PERROR << "Can't read '" << blk_device << "' superblock";
         return false;
     }
@@ -323,6 +323,17 @@ static bool read_ext4_superblock(const std::string& blk_device, struct ext4_supe
     if (sb->s_max_mnt_count == 0xffff) {  // -1 (int16) in ext2, but uint16 in ext4
         *fs_stat |= FS_STAT_NEW_IMAGE_VERSION;
     }
+    return true;
+}
+
+// exported silent version of the above that just answer the question is_ext4
+bool fs_mgr_is_ext4(const std::string& blk_device) {
+    android::base::ErrnoRestorer restore;
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (fd < 0) return false;
+    ext4_super_block sb;
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb, sizeof(sb), 1024)) != sizeof(sb)) return false;
+    if (!is_ext4_superblock_valid(&sb)) return false;
     return true;
 }
 
@@ -494,11 +505,12 @@ static bool read_f2fs_superblock(const std::string& blk_device, int* fs_stat) {
         return false;
     }
 
-    if (pread(fd, &sb1, sizeof(sb1), F2FS_SUPER_OFFSET) != sizeof(sb1)) {
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb1, sizeof(sb1), F2FS_SUPER_OFFSET)) != sizeof(sb1)) {
         PERROR << "Can't read '" << blk_device << "' superblock1";
         return false;
     }
-    if (pread(fd, &sb2, sizeof(sb2), F2FS_BLKSIZE + F2FS_SUPER_OFFSET) != sizeof(sb2)) {
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb2, sizeof(sb2), F2FS_BLKSIZE + F2FS_SUPER_OFFSET)) !=
+        sizeof(sb2)) {
         PERROR << "Can't read '" << blk_device << "' superblock2";
         return false;
     }
@@ -509,6 +521,23 @@ static bool read_f2fs_superblock(const std::string& blk_device, int* fs_stat) {
         return false;
     }
     return true;
+}
+
+// exported silent version of the above that just answer the question is_f2fs
+bool fs_mgr_is_f2fs(const std::string& blk_device) {
+    android::base::ErrnoRestorer restore;
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (fd < 0) return false;
+    __le32 sb;
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb, sizeof(sb), F2FS_SUPER_OFFSET)) != sizeof(sb)) {
+        return false;
+    }
+    if (sb == cpu_to_le32(F2FS_SUPER_MAGIC)) return true;
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb, sizeof(sb), F2FS_BLKSIZE + F2FS_SUPER_OFFSET)) !=
+        sizeof(sb)) {
+        return false;
+    }
+    return sb == cpu_to_le32(F2FS_SUPER_MAGIC);
 }
 
 //
@@ -1089,7 +1118,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 // Skips mounting the device.
                 continue;
             }
-        } else if (!current_entry.avb_key.empty()) {
+        } else if (!current_entry.avb_keys.empty()) {
             if (AvbHandle::SetUpStandaloneAvbHashtree(&current_entry) == AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on standalone partition: "
                        << current_entry.mount_point << ", skipping!";
@@ -1098,9 +1127,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             }
         } else if ((current_entry.fs_mgr_flags.verify)) {
             int rc = fs_mgr_setup_verity(&current_entry, true);
-            if (__android_log_is_debuggable() &&
-                    (rc == FS_MGR_SETUP_VERITY_DISABLED ||
-                     rc == FS_MGR_SETUP_VERITY_SKIPPED)) {
+            if (rc == FS_MGR_SETUP_VERITY_DISABLED || rc == FS_MGR_SETUP_VERITY_SKIPPED) {
                 LINFO << "Verity disabled";
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 LERROR << "Could not set up verified partition, skipping!";
@@ -1322,7 +1349,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                 // Skips mounting the device.
                 continue;
             }
-        } else if (!fstab_entry.avb_key.empty()) {
+        } else if (!fstab_entry.avb_keys.empty()) {
             if (AvbHandle::SetUpStandaloneAvbHashtree(&fstab_entry) == AvbHashtreeResult::kFail) {
                 LERROR << "Failed to set up AVB on standalone partition: "
                        << fstab_entry.mount_point << ", skipping!";
@@ -1331,9 +1358,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
             }
         } else if (fstab_entry.fs_mgr_flags.verify) {
             int rc = fs_mgr_setup_verity(&fstab_entry, true);
-            if (__android_log_is_debuggable() &&
-                    (rc == FS_MGR_SETUP_VERITY_DISABLED ||
-                     rc == FS_MGR_SETUP_VERITY_SKIPPED)) {
+            if (rc == FS_MGR_SETUP_VERITY_DISABLED || rc == FS_MGR_SETUP_VERITY_SKIPPED) {
                 LINFO << "Verity disabled";
             } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
                 LERROR << "Could not set up verified partition, skipping!";
@@ -1584,14 +1609,7 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
 
-    std::string mount_point;
-    if (entry.mount_point == "/") {
-        // In AVB, the dm device name is vroot instead of system.
-        mount_point = entry.fs_mgr_flags.avb ? "vroot" : "system";
-    } else {
-        mount_point = Basename(entry.mount_point);
-    }
-
+    std::string mount_point = GetVerityDeviceName(entry);
     if (dm.GetState(mount_point) == DmDeviceState::INVALID) {
         return false;
     }
@@ -1611,6 +1629,27 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
         return true;
     }
 
+    return false;
+}
+
+bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {
+    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
+        return false;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::string device = GetVerityDeviceName(entry);
+
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
+        return false;
+    }
+    for (const auto& target : table) {
+        if (strcmp(target.spec.target_type, "verity") == 0 &&
+            target.data.find("check_at_most_once") != std::string::npos) {
+            return true;
+        }
+    }
     return false;
 }
 

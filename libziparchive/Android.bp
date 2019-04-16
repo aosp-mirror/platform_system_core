@@ -38,6 +38,19 @@ cc_defaults {
             ],
         },
     },
+    sanitize: {
+        misc_undefined: [
+            "signed-integer-overflow",
+            "unsigned-integer-overflow",
+            "shift",
+            "integer-divide-by-zero",
+            "implicit-signed-integer-truncation",
+            // TODO: Fix crash when we enable this option
+            // "implicit-unsigned-integer-truncation",
+            // TODO: not tested yet.
+            // "implicit-integer-sign-change",
+        ],
+    },
 }
 
 cc_defaults {

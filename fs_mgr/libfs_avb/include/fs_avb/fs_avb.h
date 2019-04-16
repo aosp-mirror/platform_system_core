@@ -21,31 +21,12 @@
 #include <string>
 #include <vector>
 
+#include <fs_avb/types.h>
 #include <fstab/fstab.h>
 #include <libavb/libavb.h>
 
 namespace android {
 namespace fs_mgr {
-
-enum class AvbHashtreeResult {
-    kSuccess = 0,
-    kFail,
-    kDisabled,
-};
-
-enum class HashAlgorithm {
-    kInvalid = 0,
-    kSHA256 = 1,
-    kSHA512 = 2,
-};
-
-enum class AvbHandleStatus {
-    kSuccess = 0,
-    kUninitialized = 1,
-    kHashtreeDisabled = 2,
-    kVerificationDisabled = 3,
-    kVerificationError = 4,
-};
 
 struct VBMetaInfo {
     std::string digest;
@@ -56,51 +37,6 @@ struct VBMetaInfo {
 
     VBMetaInfo(std::string digest_value, HashAlgorithm algorithm, size_t size)
         : digest(std::move(digest_value)), hash_algorithm(algorithm), total_size(size) {}
-};
-
-class VBMetaData {
-  public:
-    // Constructors
-    VBMetaData() : vbmeta_ptr_(nullptr), vbmeta_size_(0){};
-
-    VBMetaData(const uint8_t* data, size_t size, const std::string& partition_name)
-        : vbmeta_ptr_(new (std::nothrow) uint8_t[size]),
-          vbmeta_size_(size),
-          partition_name_(partition_name) {
-        // The ownership of data is NOT transferred, i.e., the caller still
-        // needs to release the memory as we make a copy here.
-        memcpy(vbmeta_ptr_.get(), data, size * sizeof(uint8_t));
-    }
-
-    explicit VBMetaData(size_t size, const std::string& partition_name)
-        : vbmeta_ptr_(new (std::nothrow) uint8_t[size]),
-          vbmeta_size_(size),
-          partition_name_(partition_name) {}
-
-    // Extracts vbmeta header from the vbmeta buffer, set update_vbmeta_size to
-    // true to update vbmeta_size_ to the actual size with valid content.
-    std::unique_ptr<AvbVBMetaImageHeader> GetVBMetaHeader(bool update_vbmeta_size = false);
-
-    // Sets the vbmeta_path where we load the vbmeta data. Could be a partition or a file.
-    // e.g.,
-    // - /dev/block/by-name/system_a
-    // - /path/to/system_other.img.
-    void set_vbmeta_path(std::string vbmeta_path) { vbmeta_path_ = std::move(vbmeta_path); }
-
-    // Get methods for each data member.
-    const std::string& partition() const { return partition_name_; }
-    const std::string& vbmeta_path() const { return vbmeta_path_; }
-    uint8_t* data() const { return vbmeta_ptr_.get(); }
-    const size_t& size() const { return vbmeta_size_; }
-
-    // Maximum size of a vbmeta data - 64 KiB.
-    static const size_t kMaxVBMetaSize = 64 * 1024;
-
-  private:
-    std::unique_ptr<uint8_t[]> vbmeta_ptr_;
-    size_t vbmeta_size_;
-    std::string partition_name_;
-    std::string vbmeta_path_;
 };
 
 class FsManagerAvbOps;
@@ -149,6 +85,8 @@ class AvbHandle {
     // TODO(bowgotsai): remove Open() and switch to LoadAndVerifyVbmeta().
     static AvbUniquePtr Open();                 // loads inline vbmeta, via libavb.
     static AvbUniquePtr LoadAndVerifyVbmeta();  // loads inline vbmeta.
+    static AvbUniquePtr LoadAndVerifyVbmeta(
+            const FstabEntry& fstab_entry);     // loads offline vbmeta.
     static AvbUniquePtr LoadAndVerifyVbmeta(    // loads offline vbmeta.
             const std::string& partition_name, const std::string& ab_suffix,
             const std::string& ab_other_suffix, const std::string& expected_public_key,
@@ -171,6 +109,10 @@ class AvbHandle {
     // Similar to above, but loads the offline vbmeta from the end of fstab_entry->blk_device.
     static AvbHashtreeResult SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
                                                         bool wait_for_verity_dev = true);
+
+    static bool IsDeviceUnlocked();
+
+    std::string GetSecurityPatchLevel(const FstabEntry& fstab_entry) const;
 
     const std::string& avb_version() const { return avb_version_; }
     const VBMetaInfo& vbmeta_info() const { return vbmeta_info_; }

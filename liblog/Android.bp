@@ -46,6 +46,8 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     export_include_dirs: ["include"],
+    system_shared_libs: [],
+    stl: "none",
     target: {
         windows: {
             enabled: true,
@@ -99,6 +101,11 @@ cc_library {
     header_libs: ["liblog_headers"],
     export_header_lib_headers: ["liblog_headers"],
 
+    stubs: {
+        symbol_file: "liblog.map.txt",
+        versions: ["10000"],
+    },
+
     cflags: [
         "-Werror",
         // This is what we want to do:
@@ -132,6 +139,5 @@ ndk_library {
 llndk_library {
     name: "liblog",
     symbol_file: "liblog.map.txt",
-    unversioned: true,
     export_include_dirs: ["include_vndk"],
 }

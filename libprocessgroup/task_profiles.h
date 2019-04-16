@@ -27,16 +27,16 @@
 
 class ProfileAttribute {
   public:
-    ProfileAttribute(const CgroupController* controller, const std::string& file_name)
+    ProfileAttribute(const CgroupController& controller, const std::string& file_name)
         : controller_(controller), file_name_(file_name) {}
 
-    const CgroupController* controller() const { return controller_; }
+    const CgroupController* controller() const { return &controller_; }
     const std::string& file_name() const { return file_name_; }
 
     bool GetPathForTask(int tid, std::string* path) const;
 
   private:
-    const CgroupController* controller_;
+    CgroupController controller_;
     std::string file_name_;
 };
 
@@ -106,16 +106,16 @@ class SetAttributeAction : public ProfileAction {
 // Set cgroup profile element
 class SetCgroupAction : public ProfileAction {
   public:
-    SetCgroupAction(const CgroupController* c, const std::string& p);
+    SetCgroupAction(const CgroupController& c, const std::string& p);
 
     virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
     virtual bool ExecuteForTask(int tid) const;
 
-    const CgroupController* controller() const { return controller_; }
+    const CgroupController* controller() const { return &controller_; }
     std::string path() const { return path_; }
 
   private:
-    const CgroupController* controller_;
+    CgroupController controller_;
     std::string path_;
 #ifdef CACHE_FILE_DESCRIPTORS
     android::base::unique_fd fd_;
@@ -152,5 +152,5 @@ class TaskProfiles {
 
     TaskProfiles();
 
-    bool Load(const CgroupMap& cg_map);
+    bool Load(const CgroupMap& cg_map, const std::string& file_name);
 };

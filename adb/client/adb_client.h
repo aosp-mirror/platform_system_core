@@ -20,11 +20,20 @@
 #include "sysdeps.h"
 #include "transport.h"
 
+#include <optional>
 #include <string>
+
+// Explicitly check the adb server version.
+// All of the commands below do this implicitly.
+// Only the first invocation of this function will check the server version.
+bool adb_check_server_version(std::string* _Nonnull error);
 
 // Connect to adb, connect to the named service, and return a valid fd for
 // interacting with that service upon success or a negative number on failure.
-int adb_connect(const std::string& service, std::string* _Nonnull error);
+int adb_connect(std::string_view service, std::string* _Nonnull error);
+
+// Same as above, except returning the TransportId for the service that we've connected to.
+int adb_connect(TransportId* _Nullable id, std::string_view service, std::string* _Nonnull error);
 
 // Kill the currently running adb server, if it exists.
 bool adb_kill_server();
@@ -62,3 +71,13 @@ std::string format_host_command(const char* _Nonnull command);
 
 // Get the feature set of the current preferred transport.
 bool adb_get_feature_set(FeatureSet* _Nonnull feature_set, std::string* _Nonnull error);
+
+#if defined(__linux__)
+// Get the path of a file containing the path to the server executable, if the socket spec set via
+// adb_set_socket_spec is a local one.
+std::optional<std::string> adb_get_server_executable_path();
+#endif
+
+// Globally acccesible argv/envp, for the purpose of re-execing adb.
+extern const char* _Nullable * _Nullable __adb_argv;
+extern const char* _Nullable * _Nullable __adb_envp;

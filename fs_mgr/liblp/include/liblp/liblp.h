@@ -72,8 +72,8 @@ std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uin
 
 // Read/Write logical partition metadata to an image file, for diagnostics or
 // flashing.
-bool WriteToSparseFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
-                       const std::map<std::string, std::string>& images);
+bool WriteToImageFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
+                      const std::map<std::string, std::string>& images, bool sparsify);
 bool WriteToImageFile(const char* file, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file);
 std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
@@ -83,8 +83,9 @@ std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 // is intended for retrofit devices, and will generate one sparse file per
 // block device (each named super_<name>.img) and placed in the specified
 // output folder.
-bool WriteSplitSparseFiles(const std::string& output_dir, const LpMetadata& metadata,
-                           uint32_t block_size, const std::map<std::string, std::string>& images);
+bool WriteSplitImageFiles(const std::string& output_dir, const LpMetadata& metadata,
+                          uint32_t block_size, const std::map<std::string, std::string>& images,
+                          bool sparsify);
 
 // Helper to extract safe C++ strings from partition info.
 std::string GetPartitionName(const LpMetadataPartition& partition);

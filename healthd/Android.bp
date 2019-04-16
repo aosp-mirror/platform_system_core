@@ -84,3 +84,29 @@ cc_binary {
         "manifest_healthd.xml"
     ],
 }
+
+cc_library_static {
+    name: "libhealthd_charger_nops",
+
+    srcs: [
+        "healthd_mode_charger_nops.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    header_libs: [
+        "libhealthd_headers",
+    ],
+
+    static_libs: [
+        "android.hardware.health@2.0-impl",
+    ],
+
+    shared_libs: [
+        "android.hardware.health@2.0",
+        "libutils",
+    ],
+}

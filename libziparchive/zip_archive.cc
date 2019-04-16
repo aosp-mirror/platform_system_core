@@ -102,21 +102,8 @@ static uint32_t RoundUpPower2(uint32_t val) {
 }
 
 static uint32_t ComputeHash(const ZipString& name) {
-#if !defined(_WIN32)
-  return std::hash<std::string_view>{}(
-      std::string_view(reinterpret_cast<const char*>(name.name), name.name_length));
-#else
-  // Remove this code path once the windows compiler knows how to compile the above statement.
-  uint32_t hash = 0;
-  uint16_t len = name.name_length;
-  const uint8_t* str = name.name;
-
-  while (len--) {
-    hash = hash * 31 + *str++;
-  }
-
-  return hash;
-#endif
+  return static_cast<uint32_t>(std::hash<std::string_view>{}(
+      std::string_view(reinterpret_cast<const char*>(name.name), name.name_length)));
 }
 
 static bool isZipStringEqual(const uint8_t* start, const ZipString& zip_string,
@@ -278,11 +265,6 @@ static int32_t MapCentralDirectory0(const char* debug_file_name, ZipArchive* arc
   if (static_cast<off64_t>(eocd->cd_start_offset) + eocd->cd_size > eocd_offset) {
     ALOGW("Zip: bad offsets (dir %" PRIu32 ", size %" PRIu32 ", eocd %" PRId64 ")",
           eocd->cd_start_offset, eocd->cd_size, static_cast<int64_t>(eocd_offset));
-#if defined(__ANDROID__)
-    if (eocd->cd_start_offset + eocd->cd_size <= eocd_offset) {
-      android_errorWriteLog(0x534e4554, "31251826");
-    }
-#endif
     return kInvalidOffset;
   }
   if (eocd->num_records == 0) {

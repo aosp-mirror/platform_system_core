@@ -24,6 +24,7 @@
 
 #include "android-base/macros.h"
 
+#include "Allocator.h"
 #include "log.h"
 
 namespace android {
@@ -32,17 +33,29 @@ class ScopedSignalHandler {
  public:
   using Fn = std::function<void(ScopedSignalHandler&, int, siginfo_t*, void*)>;
 
-  explicit ScopedSignalHandler() : signal_(-1) {}
+  explicit ScopedSignalHandler(Allocator<ScopedSignalHandler> allocator) : signal_(-1) {
+    if (handler_map_ == nullptr) {
+      Allocator<SignalFnMap> map_allocator = allocator;
+      handler_map_ = map_allocator.make_unique(allocator);
+    }
+  }
   ~ScopedSignalHandler() { reset(); }
 
   template <class F>
   void install(int signal, F&& f) {
     if (signal_ != -1) MEM_LOG_ALWAYS_FATAL("ScopedSignalHandler already installed");
 
-    handler_ = SignalFn([=](int signal, siginfo_t* si, void* uctx) { f(*this, signal, si, uctx); });
+    if (handler_map_->find(signal) != handler_map_->end()) {
+      MEM_LOG_ALWAYS_FATAL("ScopedSignalHandler already installed for %d", signal);
+    }
+
+    (*handler_map_)[signal] =
+        SignalFn([=](int signal, siginfo_t* si, void* uctx) { f(*this, signal, si, uctx); });
 
     struct sigaction act {};
-    act.sa_sigaction = [](int signal, siginfo_t* si, void* uctx) { handler_(signal, si, uctx); };
+    act.sa_sigaction = [](int signal, siginfo_t* si, void* uctx) {
+      ((*handler_map_)[signal])(signal, si, uctx);
+    };
     act.sa_flags = SA_SIGINFO;
 
     int ret = sigaction(signal, &act, &old_act_);
@@ -59,19 +72,22 @@ class ScopedSignalHandler {
       if (ret < 0) {
         MEM_ALOGE("failed to uninstall segfault handler");
       }
-      handler_ = SignalFn{};
+
+      handler_map_->erase(signal_);
+      if (handler_map_->empty()) {
+        handler_map_.reset();
+      }
       signal_ = -1;
     }
   }
 
  private:
   using SignalFn = std::function<void(int, siginfo_t*, void*)>;
+  using SignalFnMap = allocator::unordered_map<int, SignalFn>;
   DISALLOW_COPY_AND_ASSIGN(ScopedSignalHandler);
   int signal_;
   struct sigaction old_act_;
-  // TODO(ccross): to support multiple ScopedSignalHandlers handler_ would need
-  // to be a static map of signals to handlers, but allocated with Allocator.
-  static SignalFn handler_;
+  static Allocator<SignalFnMap>::unique_ptr handler_map_;
 };
 
 }  // namespace android

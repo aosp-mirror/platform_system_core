@@ -14,6 +14,7 @@
 
 cc_test {
     name: "fs_mgr_unit_test",
+    test_suites: ["device-tests"],
 
     shared_libs: [
         "libbase",
@@ -22,9 +23,6 @@ cc_test {
     static_libs: [
         "libfs_mgr",
         "libfstab",
-    ],
-    data: [
-        "data/*",
     ],
     srcs: [
         "fs_mgr_test.cpp",
@@ -35,4 +33,41 @@ cc_test {
         "-Wextra",
         "-Werror",
     ],
+}
+
+cc_prebuilt_binary {
+    name: "adb-remount-test.sh",
+    srcs: ["adb-remount-test.sh"],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
+        },
+        android: {
+            enabled: false,
+        },
+    },
+    host_supported: true,
+}
+
+sh_test {
+    name: "adb-remount-sh",
+    src: "adb-remount-test.sh",
+    filename: "adb-remount-test.sh",
+    test_suites: ["general-tests"],
+    test_config: "adb-remount-sh.xml",
+}
+
+java_test_host {
+    name: "fs_mgr_vendor_overlay_test",
+
+    srcs:  ["src/**/VendorOverlayHostTest.java"],
+
+    libs: ["tradefed"],
+
+    test_config: "vendor-overlay-test.xml",
+
+    test_suites: ["general-tests"],
 }

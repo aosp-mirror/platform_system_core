@@ -10,6 +10,7 @@ phony {
 phony {
     name: "shell_and_utilities_system",
     required: [
+        "auditctl",
         "awk",
         "bzip2",
         "grep",

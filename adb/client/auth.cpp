@@ -416,7 +416,7 @@ void adb_auth_init() {
 #endif
 
     for (const std::string& path : key_paths) {
-        load_keys(path.c_str());
+        load_keys(path);
     }
 }
 

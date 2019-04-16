@@ -1,7 +1,8 @@
 LIBVNDKSUPPORT {
   global:
-    android_load_sphal_library; # vndk
-    android_unload_sphal_library; # vndk
+    android_is_in_vendor_process; # vndk apex
+    android_load_sphal_library; # vndk apex
+    android_unload_sphal_library; # vndk apex
   local:
     *;
 };

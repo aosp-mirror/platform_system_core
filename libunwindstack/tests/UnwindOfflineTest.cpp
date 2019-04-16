@@ -204,6 +204,7 @@ static std::string DumpFrames(Unwinder& unwinder) {
 TEST_F(UnwindOfflineTest, pc_straddle_arm) {
   ASSERT_NO_FATAL_FAILURE(Init("straddle_arm/", ARCH_ARM));
 
+  std::unique_ptr<Regs> regs_copy(regs_->Clone());
   Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
   unwinder.Unwind();
 
@@ -223,6 +224,22 @@ TEST_F(UnwindOfflineTest, pc_straddle_arm) {
   EXPECT_EQ(0xe9c86730U, unwinder.frames()[2].sp);
   EXPECT_EQ(0xf3367147U, unwinder.frames()[3].pc);
   EXPECT_EQ(0xe9c86778U, unwinder.frames()[3].sp);
+
+  // Display build ids now.
+  unwinder.SetRegs(regs_copy.get());
+  unwinder.SetDisplayBuildID(true);
+  unwinder.Unwind();
+
+  frame_info = DumpFrames(unwinder);
+  ASSERT_EQ(4U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0001a9f8  libc.so (abort+64) (BuildId: 2dd0d4ba881322a0edabeed94808048c)\n"
+      "  #01 pc 00006a1b  libbase.so (android::base::DefaultAborter(char const*)+6) (BuildId: "
+      "ed43842c239cac1a618e600ea91c4cbd)\n"
+      "  #02 pc 00007441  libbase.so (android::base::LogMessage::~LogMessage()+748) (BuildId: "
+      "ed43842c239cac1a618e600ea91c4cbd)\n"
+      "  #03 pc 00015147  /does/not/exist/libhidlbase.so\n",
+      frame_info);
 }
 
 TEST_F(UnwindOfflineTest, pc_in_gnu_debugdata_arm) {
@@ -300,7 +317,7 @@ TEST_F(UnwindOfflineTest, jit_debug_x86) {
   EXPECT_EQ(
       "  #00 pc 00068fb8  libarttestd.so (art::CauseSegfault()+72)\n"
       "  #01 pc 00067f00  libarttestd.so (Java_Main_unwindInProcess+10032)\n"
-      "  #02 pc 000021a8  137-cfi.odex (offset 0x2000) (boolean Main.unwindInProcess(boolean, int, "
+      "  #02 pc 000021a8  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+136)\n"
       "  #03 pc 0000fe80  anonymous:ee74c000 (boolean Main.bar(boolean)+64)\n"
       "  #04 pc 006ad4d2  libartd.so (art_quick_invoke_stub+338)\n"
@@ -601,7 +618,7 @@ TEST_F(UnwindOfflineTest, jit_debug_arm) {
   ASSERT_EQ(76U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
   EXPECT_EQ(
       "  #00 pc 00018a5e  libarttestd.so (Java_Main_unwindInProcess+866)\n"
-      "  #01 pc 0000212d  137-cfi.odex (offset 0x2000) (boolean Main.unwindInProcess(boolean, int, "
+      "  #01 pc 0000212d  137-cfi.odex (boolean Main.unwindInProcess(boolean, int, "
       "boolean)+92)\n"
       "  #02 pc 00011cb1  anonymous:e2796000 (boolean Main.bar(boolean)+72)\n"
       "  #03 pc 00462175  libartd.so (art_quick_invoke_stub_internal+68)\n"
@@ -1198,7 +1215,7 @@ TEST_F(UnwindOfflineTest, offset_arm) {
       "  #02 pc 0032bff3  libunwindstack_test (SignalOuterFunction+2)\n"
       "  #03 pc 0032fed3  libunwindstack_test "
       "(unwindstack::SignalCallerHandler(int, siginfo*, void*)+26)\n"
-      "  #04 pc 00026528  libc.so\n"
+      "  #04 pc 0002652c  libc.so (__restore)\n"
       "  #05 pc 00000000  <unknown>\n"
       "  #06 pc 0032c2d9  libunwindstack_test (InnerFunction+736)\n"
       "  #07 pc 0032cc4f  libunwindstack_test (MiddleFunction+42)\n"
@@ -1226,7 +1243,7 @@ TEST_F(UnwindOfflineTest, offset_arm) {
   EXPECT_EQ(0xf43d2ce8U, unwinder.frames()[2].sp);
   EXPECT_EQ(0x2e59ed3U, unwinder.frames()[3].pc);
   EXPECT_EQ(0xf43d2cf0U, unwinder.frames()[3].sp);
-  EXPECT_EQ(0xf4136528U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xf413652cU, unwinder.frames()[4].pc);
   EXPECT_EQ(0xf43d2d10U, unwinder.frames()[4].sp);
   EXPECT_EQ(0U, unwinder.frames()[5].pc);
   EXPECT_EQ(0xffcc0ee0U, unwinder.frames()[5].sp);
@@ -1309,10 +1326,11 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_arm64) {
       "  #00 pc 000000000014ccbc  linker64 (__dl_syscall+28)\n"
       "  #01 pc 000000000005426c  linker64 "
       "(__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1128)\n"
-      "  #02 pc 00000000000008bc  vdso.so\n"
+      "  #02 pc 00000000000008c0  vdso.so (__kernel_rt_sigreturn)\n"
       "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
       "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
-      "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk (offset 0x4000) (ANGLEGetUtilityAPI+56)\n"
+      "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk!libfeature_support_angle.so (offset 0x4000) "
+      "(ANGLEGetUtilityAPI+56)\n"
       "  #06 pc 000000000007fe68  libc.so (__libc_init)\n",
       frame_info);
 
@@ -1320,7 +1338,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_arm64) {
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[0].sp);
   EXPECT_EQ(0x7e82b5726cULL, unwinder.frames()[1].pc);
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[1].sp);
-  EXPECT_EQ(0x7e82b018bcULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7e82b018c0ULL, unwinder.frames()[2].pc);
   EXPECT_EQ(0x7df8ca3da0ULL, unwinder.frames()[2].sp);
   EXPECT_EQ(0x7e7eecc6f4ULL, unwinder.frames()[3].pc);
   EXPECT_EQ(0x7dabf3db60ULL, unwinder.frames()[3].sp);
@@ -1348,7 +1366,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
       "  #00 pc 000000000014ccbc  linker64 (__dl_syscall+28)\n"
       "  #01 pc 000000000005426c  linker64 "
       "(__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1128)\n"
-      "  #02 pc 00000000000008bc  vdso.so\n"
+      "  #02 pc 00000000000008c0  vdso.so (__kernel_rt_sigreturn)\n"
       "  #03 pc 00000000000846f4  libc.so (abort+172)\n"
       "  #04 pc 0000000000084ad4  libc.so (__assert2+36)\n"
       "  #05 pc 000000000003d5b4  ANGLEPrebuilt.apk (offset 0x21d5000)\n"
@@ -1359,7 +1377,7 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[0].sp);
   EXPECT_EQ(0x7e82b5726cULL, unwinder.frames()[1].pc);
   EXPECT_EQ(0x7df8ca3bf0ULL, unwinder.frames()[1].sp);
-  EXPECT_EQ(0x7e82b018bcULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7e82b018c0ULL, unwinder.frames()[2].pc);
   EXPECT_EQ(0x7df8ca3da0ULL, unwinder.frames()[2].sp);
   EXPECT_EQ(0x7e7eecc6f4ULL, unwinder.frames()[3].pc);
   EXPECT_EQ(0x7dabf3db60ULL, unwinder.frames()[3].sp);
@@ -1370,6 +1388,58 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_memory_only_arm64) {
   EXPECT_EQ(0x7e7eec7e68ULL, unwinder.frames()[6].pc);
   EXPECT_EQ(0x7dabf3dc70ULL, unwinder.frames()[6].sp);
   // Ignore top frame since the test code was modified to end in __libc_init.
+}
+
+TEST_F(UnwindOfflineTest, shared_lib_in_apk_single_map_arm64) {
+  ASSERT_NO_FATAL_FAILURE(Init("shared_lib_in_apk_single_map_arm64/", ARCH_ARM64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(13U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000000000814bc  libc.so (syscall+28)\n"
+      "  #01 pc 00000000008cdf5c  test.apk (offset 0x5000)\n"
+      "  #02 pc 00000000008cde9c  test.apk (offset 0x5000)\n"
+      "  #03 pc 00000000008cdd70  test.apk (offset 0x5000)\n"
+      "  #04 pc 00000000008ce408  test.apk (offset 0x5000)\n"
+      "  #05 pc 00000000008ce8d8  test.apk (offset 0x5000)\n"
+      "  #06 pc 00000000008ce814  test.apk (offset 0x5000)\n"
+      "  #07 pc 00000000008bcf60  test.apk (offset 0x5000)\n"
+      "  #08 pc 0000000000133024  test.apk (offset 0x5000)\n"
+      "  #09 pc 0000000000134ad0  test.apk (offset 0x5000)\n"
+      "  #10 pc 0000000000134b64  test.apk (offset 0x5000)\n"
+      "  #11 pc 00000000000e406c  libc.so (__pthread_start(void*)+36)\n"
+      "  #12 pc 0000000000085e18  libc.so (__start_thread+64)\n",
+      frame_info);
+
+  EXPECT_EQ(0x7cbe0b14bcULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7be4f077d0ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x7be6715f5cULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7be4f077d0ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x7be6715e9cULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7be4f07800ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x7be6715d70ULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7be4f07840ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x7be6716408ULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7be4f07860ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x7be67168d8ULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7be4f07880ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x7be6716814ULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7be4f078f0ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0x7be6704f60ULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0x7be4f07910ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0x7be5f7b024ULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0x7be4f07950ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0x7be5f7cad0ULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0x7be4f07aa0ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x7be5f7cb64ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0x7be4f07ce0ULL, unwinder.frames()[10].sp);
+  EXPECT_EQ(0x7cbe11406cULL, unwinder.frames()[11].pc);
+  EXPECT_EQ(0x7be4f07d00ULL, unwinder.frames()[11].sp);
+  EXPECT_EQ(0x7cbe0b5e18ULL, unwinder.frames()[12].pc);
+  EXPECT_EQ(0x7be4f07d20ULL, unwinder.frames()[12].sp);
 }
 
 }  // namespace unwindstack

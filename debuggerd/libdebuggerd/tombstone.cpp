@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -316,7 +317,7 @@ static void dump_all_maps(log_t* log, unwindstack::Unwinder* unwinder, uint64_t 
   std::shared_ptr<unwindstack::Memory>& process_memory = unwinder->GetProcessMemory();
 
   std::string line;
-  for (unwindstack::MapInfo* map_info : *maps) {
+  for (auto const& map_info : *maps) {
     line = "    ";
     if (print_fault_address_marker) {
       if (addr < map_info->start) {
@@ -371,6 +372,7 @@ static void dump_all_maps(log_t* log, unwindstack::Unwinder* unwinder, uint64_t 
 }
 
 void dump_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix) {
+  unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < unwinder->NumFrames(); i++) {
     _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, unwinder->FormatFrame(i).c_str());
   }

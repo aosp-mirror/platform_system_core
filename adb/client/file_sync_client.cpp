@@ -681,9 +681,7 @@ static bool sync_send(SyncConnection& sc, const char* lpath, const char* rpath, 
     if (sync) {
         struct stat st;
         if (sync_lstat(sc, rpath, &st)) {
-            // For links, we cannot update the atime/mtime.
-            if ((S_ISREG(mode & st.st_mode) && st.st_mtime == static_cast<time_t>(mtime)) ||
-                (S_ISLNK(mode & st.st_mode) && st.st_mtime >= static_cast<time_t>(mtime))) {
+            if (st.st_mtime == static_cast<time_t>(mtime)) {
                 sc.RecordFilesSkipped(1);
                 return true;
             }
@@ -921,12 +919,8 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
         for (copyinfo& ci : file_list) {
             struct stat st;
             if (sc.FinishStat(&st)) {
-                if (st.st_size == static_cast<off_t>(ci.size)) {
-                    // For links, we cannot update the atime/mtime.
-                    if ((S_ISREG(ci.mode & st.st_mode) && st.st_mtime == ci.time) ||
-                        (S_ISLNK(ci.mode & st.st_mode) && st.st_mtime >= ci.time)) {
-                        ci.skip = true;
-                    }
+                if (st.st_size == static_cast<off_t>(ci.size) && st.st_mtime == ci.time) {
+                    ci.skip = true;
                 }
             }
         }
@@ -1018,7 +1012,7 @@ bool do_sync_push(const std::vector<const char*>& srcs, const char* dst, bool sy
                 dst_dir.append(android::base::Basename(src_path));
             }
 
-            success &= copy_local_dir_remote(sc, src_path, dst_dir.c_str(), sync, false);
+            success &= copy_local_dir_remote(sc, src_path, dst_dir, sync, false);
             continue;
         } else if (!should_push_file(st.st_mode)) {
             sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, st.st_mode);
@@ -1134,7 +1128,7 @@ static bool copy_remote_dir_local(SyncConnection& sc, std::string rpath,
     // Recursively build the list of files to copy.
     sc.Printf("pull: building file list...");
     std::vector<copyinfo> file_list;
-    if (!remote_build_list(sc, &file_list, rpath.c_str(), lpath.c_str())) {
+    if (!remote_build_list(sc, &file_list, rpath, lpath)) {
         return false;
     }
 
@@ -1246,7 +1240,7 @@ bool do_sync_pull(const std::vector<const char*>& srcs, const char* dst,
                 dst_dir.append(android::base::Basename(src_path));
             }
 
-            success &= copy_remote_dir_local(sc, src_path, dst_dir.c_str(), copy_attrs);
+            success &= copy_remote_dir_local(sc, src_path, dst_dir, copy_attrs);
             continue;
         } else if (!should_pull_file(src_st.st_mode)) {
             sc.Warning("skipping special file '%s' (mode = 0o%o)", src_path, src_st.st_mode);

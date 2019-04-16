@@ -126,14 +126,18 @@ TEST_F(ElfTest, elf_invalid) {
   ASSERT_FALSE(elf.valid());
   ASSERT_TRUE(elf.interface() == nullptr);
 
-  std::string name;
-  ASSERT_FALSE(elf.GetSoname(&name));
+  ASSERT_EQ("", elf.GetSoname());
 
+  std::string name;
   uint64_t func_offset;
   ASSERT_FALSE(elf.GetFunctionName(0, &name, &func_offset));
 
+  ASSERT_FALSE(elf.StepIfSignalHandler(0, nullptr, nullptr));
+  EXPECT_EQ(ERROR_INVALID_ELF, elf.GetLastErrorCode());
+
   bool finished;
-  ASSERT_FALSE(elf.Step(0, 0, nullptr, nullptr, &finished));
+  ASSERT_FALSE(elf.Step(0, nullptr, nullptr, &finished));
+  EXPECT_EQ(ERROR_INVALID_ELF, elf.GetLastErrorCode());
 }
 
 TEST_F(ElfTest, elf32_invalid_machine) {
@@ -295,9 +299,8 @@ TEST_F(ElfTest, step_in_signal_map) {
   }
 
   elf.FakeSetValid(true);
-  bool finished;
-  ASSERT_TRUE(elf.Step(0x3000, 0x1000, &regs, &process_memory, &finished));
-  EXPECT_FALSE(finished);
+  ASSERT_TRUE(elf.StepIfSignalHandler(0x3000, &regs, &process_memory));
+  EXPECT_EQ(ERROR_NONE, elf.GetLastErrorCode());
   EXPECT_EQ(15U, regs.pc());
   EXPECT_EQ(13U, regs.sp());
 }
@@ -309,7 +312,7 @@ class ElfInterfaceMock : public ElfInterface {
 
   bool Init(uint64_t*) override { return false; }
   void InitHeaders(uint64_t) override {}
-  bool GetSoname(std::string*) override { return false; }
+  std::string GetSoname() override { return ""; }
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
   std::string GetBuildID() override { return ""; }
 
@@ -336,7 +339,7 @@ TEST_F(ElfTest, step_in_interface) {
   EXPECT_CALL(*interface, Step(0x1000, &regs, &process_memory, &finished))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(elf.Step(0x1004, 0x1000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x1000, &regs, &process_memory, &finished));
 }
 
 TEST_F(ElfTest, get_global_invalid_elf) {

@@ -69,6 +69,7 @@ cc_defaults {
     ],
 
     shared_libs: [
+        "libcutils",
         "liblog",
     ],
 
@@ -83,7 +84,6 @@ cc_defaults {
             cflags: ["-fvisibility=protected"],
 
             shared_libs: [
-                "libcutils",
                 "libprocessgroup",
                 "libdl",
                 "libvndksupport",
@@ -96,14 +96,6 @@ cc_defaults {
 
         recovery: {
             exclude_shared_libs: ["libvndksupport"],
-        },
-
-        host: {
-            cflags: ["-DLIBUTILS_NATIVE=1"],
-
-            shared: {
-                enabled: false,
-            },
         },
 
         linux_bionic: {
@@ -180,17 +172,22 @@ cc_library {
         },
     },
 
+    shared_libs: [
+         "libutils",
+         "libbacktrace",
+    ],
+
     target: {
-        android: {
-            shared_libs: [
-                "libutils",
-                "libbacktrace",
-            ],
-        },
         linux: {
             srcs: [
                 "ProcessCallStack.cpp",
             ],
+        },
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
         },
     },
 }
@@ -205,7 +202,6 @@ cc_test {
         "LruCache_test.cpp",
         "Mutex_test.cpp",
         "SharedBuffer_test.cpp",
-        "Singleton_test.cpp",
         "String8_test.cpp",
         "StrongPointer_test.cpp",
         "Unicode_test.cpp",
@@ -240,16 +236,32 @@ cc_test {
         },
     },
 
-    required: [
-        "libutils_test_singleton1",
-        "libutils_test_singleton2",
-    ],
-
     cflags: [
         "-Wall",
         "-Wextra",
         "-Werror",
         "-Wthread-safety",
+    ],
+
+    test_suites: ["device-tests"],
+}
+
+// TODO: the test infrastructure isn't yet capable of running this,
+// so it's broken out into its own test so that the main libutils_tests
+// can be in presubmit even if this can't.
+
+cc_test {
+    name: "libutils_singleton_test",
+    srcs: ["Singleton_test.cpp"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: ["libbase"],
+
+    required: [
+        ":libutils_test_singleton1",
+        ":libutils_test_singleton2",
     ],
 }
 

@@ -170,6 +170,8 @@ class Subprocess {
     // Opens the file at |pts_name|.
     int OpenPtyChildFd(const char* pts_name, unique_fd* error_sfd);
 
+    bool ConnectProtocolEndpoints(std::string* _Nonnull error);
+
     static void ThreadHandler(void* userdata);
     void PassDataStreams();
     void WaitForExit();
@@ -383,16 +385,65 @@ bool Subprocess::ForkAndExec(std::string* error) {
     }
 
     D("subprocess parent: exec completed");
+    if (!ConnectProtocolEndpoints(error)) {
+        kill(pid_, SIGKILL);
+        return false;
+    }
+
+    D("subprocess parent: completed");
+    return true;
+}
+
+bool Subprocess::ExecInProcess(Command command, std::string* _Nonnull error) {
+    unique_fd child_stdinout_sfd, child_stderr_sfd;
+
+    CHECK(type_ == SubprocessType::kRaw);
+
+    __android_log_security_bswrite(SEC_TAG_ADB_SHELL_CMD, command_.c_str());
+
+    if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {
+        *error = android::base::StringPrintf("failed to create socketpair for stdin/out: %s",
+                                             strerror(errno));
+        return false;
+    }
+    if (protocol_ == SubprocessProtocol::kShell) {
+        // Shell protocol allows for splitting stderr.
+        if (!CreateSocketpair(&stderr_sfd_, &child_stderr_sfd)) {
+            *error = android::base::StringPrintf("failed to create socketpair for stderr: %s",
+                                                 strerror(errno));
+            return false;
+        }
+    } else {
+        // Raw protocol doesn't support multiple output streams, so combine stdout and stderr.
+        child_stderr_sfd.reset(dup(child_stdinout_sfd));
+    }
+
+    D("execinprocess: stdin/stdout FD = %d, stderr FD = %d", stdinout_sfd_.get(),
+      stderr_sfd_.get());
+
+    if (!ConnectProtocolEndpoints(error)) {
+        return false;
+    }
+
+    std::thread([inout_sfd = std::move(child_stdinout_sfd), err_sfd = std::move(child_stderr_sfd),
+                 command = std::move(command),
+                 args = command_]() { command(args, inout_sfd, inout_sfd, err_sfd); })
+            .detach();
+
+    D("execinprocess: completed");
+    return true;
+}
+
+bool Subprocess::ConnectProtocolEndpoints(std::string* _Nonnull error) {
     if (protocol_ == SubprocessProtocol::kNone) {
         // No protocol: all streams pass through the stdinout FD and hook
         // directly into the local socket for raw data transfer.
         local_socket_sfd_.reset(stdinout_sfd_.release());
     } else {
-        // Shell protocol: create another socketpair to intercept data.
+        // Required for shell protocol: create another socketpair to intercept data.
         if (!CreateSocketpair(&protocol_sfd_, &local_socket_sfd_)) {
             *error = android::base::StringPrintf(
-                "failed to create socketpair to intercept data: %s", strerror(errno));
-            kill(pid_, SIGKILL);
+                    "failed to create socketpair to intercept data: %s", strerror(errno));
             return false;
         }
         D("protocol FD = %d", protocol_sfd_.get());
@@ -401,7 +452,6 @@ bool Subprocess::ForkAndExec(std::string* error) {
         output_ = std::make_unique<ShellProtocol>(protocol_sfd_);
         if (!input_ || !output_) {
             *error = "failed to allocate shell protocol objects";
-            kill(pid_, SIGKILL);
             return false;
         }
 
@@ -413,76 +463,13 @@ bool Subprocess::ForkAndExec(std::string* error) {
             if (fd >= 0) {
                 if (!set_file_block_mode(fd, false)) {
                     *error = android::base::StringPrintf(
-                        "failed to set non-blocking mode for fd %d", fd);
-                    kill(pid_, SIGKILL);
+                            "failed to set non-blocking mode for fd %d", fd);
                     return false;
                 }
             }
         }
     }
 
-    D("subprocess parent: completed");
-    return true;
-}
-
-bool Subprocess::ExecInProcess(Command command, std::string* _Nonnull error) {
-    unique_fd child_stdinout_sfd, child_stderr_sfd;
-
-    CHECK(type_ == SubprocessType::kRaw);
-    CHECK(protocol_ == SubprocessProtocol::kShell);
-
-    __android_log_security_bswrite(SEC_TAG_ADB_SHELL_CMD, command_.c_str());
-
-    if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {
-        *error = android::base::StringPrintf("failed to create socketpair for stdin/out: %s",
-                                             strerror(errno));
-        return false;
-    }
-    // Raw subprocess + shell protocol allows for splitting stderr.
-    if (!CreateSocketpair(&stderr_sfd_, &child_stderr_sfd)) {
-        *error = android::base::StringPrintf("failed to create socketpair for stderr: %s",
-                                             strerror(errno));
-        return false;
-    }
-
-    D("execinprocess: stdin/stdout FD = %d, stderr FD = %d", stdinout_sfd_.get(),
-      stderr_sfd_.get());
-
-    // Required for shell protocol: create another socketpair to intercept data.
-    if (!CreateSocketpair(&protocol_sfd_, &local_socket_sfd_)) {
-        *error = android::base::StringPrintf("failed to create socketpair to intercept data: %s",
-                                             strerror(errno));
-        return false;
-    }
-    D("protocol FD = %d", protocol_sfd_.get());
-
-    input_ = std::make_unique<ShellProtocol>(protocol_sfd_);
-    output_ = std::make_unique<ShellProtocol>(protocol_sfd_);
-    if (!input_ || !output_) {
-        *error = "failed to allocate shell protocol objects";
-        return false;
-    }
-
-    // Don't let reads/writes to the subprocess block our thread. This isn't
-    // likely but could happen under unusual circumstances, such as if we
-    // write a ton of data to stdin but the subprocess never reads it and
-    // the pipe fills up.
-    for (int fd : {stdinout_sfd_.get(), stderr_sfd_.get()}) {
-        if (fd >= 0) {
-            if (!set_file_block_mode(fd, false)) {
-                *error = android::base::StringPrintf("failed to set non-blocking mode for fd %d",
-                                                     fd);
-                return false;
-            }
-        }
-    }
-
-    std::thread([inout_sfd = std::move(child_stdinout_sfd), err_sfd = std::move(child_stderr_sfd),
-                 command = std::move(command),
-                 args = command_]() { command(args, inout_sfd, inout_sfd, err_sfd); })
-            .detach();
-
-    D("execinprocess: completed");
     return true;
 }
 
@@ -863,12 +850,11 @@ unique_fd StartSubprocess(std::string name, const char* terminal_type, Subproces
     return local_socket;
 }
 
-unique_fd StartCommandInProcess(std::string name, Command command) {
+unique_fd StartCommandInProcess(std::string name, Command command, SubprocessProtocol protocol) {
     LOG(INFO) << "StartCommandInProcess(" << dump_hex(name.data(), name.size()) << ")";
 
     constexpr auto terminal_type = "";
     constexpr auto type = SubprocessType::kRaw;
-    constexpr auto protocol = SubprocessProtocol::kShell;
     constexpr auto make_pty_raw = false;
 
     auto subprocess = std::make_unique<Subprocess>(std::move(name), terminal_type, type, protocol,

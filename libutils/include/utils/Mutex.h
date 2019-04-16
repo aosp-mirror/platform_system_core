@@ -108,7 +108,7 @@ class CAPABILITY("mutex") Mutex {
     void unlock() RELEASE();
 
     // lock if possible; returns 0 on success, error otherwise
-    status_t tryLock() TRY_ACQUIRE(true);
+    status_t tryLock() TRY_ACQUIRE(0);
 
 #if defined(__ANDROID__)
     // Lock the mutex, but don't wait longer than timeoutNs (relative time).
@@ -122,7 +122,7 @@ class CAPABILITY("mutex") Mutex {
     // which is subject to NTP adjustments, and includes time during suspend,
     // so a timeout may occur even though no processes could run.
     // Not holding a partial wakelock may lead to a system suspend.
-    status_t timedLock(nsecs_t timeoutNs) TRY_ACQUIRE(true);
+    status_t timedLock(nsecs_t timeoutNs) TRY_ACQUIRE(0);
 #endif
 
     // Manages the mutex automatically. It'll be locked when Autolock is

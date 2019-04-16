@@ -1,5 +1,18 @@
+cc_defaults {
+    name: "libnativebridge-defaults",
+    cflags: [
+        "-Werror",
+        "-Wall",
+    ],
+    cppflags: [
+        "-fvisibility=protected",
+    ],
+    header_libs: ["libnativebridge-headers"],
+    export_header_lib_headers: ["libnativebridge-headers"],
+}
+
 cc_library_headers {
-    name: "libnativebridge-dummy-headers",
+    name: "libnativebridge-headers",
 
     host_supported: true,
     export_include_dirs: ["include"],
@@ -7,6 +20,7 @@ cc_library_headers {
 
 cc_library {
     name: "libnativebridge",
+    defaults: ["libnativebridge-defaults"],
 
     host_supported: true,
     srcs: ["native_bridge.cc"],
@@ -16,6 +30,8 @@ cc_library {
     shared_libs: [
         "liblog",
     ],
+    // TODO(jiyong): remove this line after aosp/885921 lands
+    export_include_dirs: ["include"],
 
     target: {
         android: {
@@ -30,16 +46,16 @@ cc_library {
         symbol_file: "libnativebridge.map.txt",
         versions: ["1"],
     },
+}
 
-    export_include_dirs: ["include"],
+// TODO(b/124250621): eliminate the need for this library
+cc_library {
+    name: "libnativebridge_lazy",
+    defaults: ["libnativebridge-defaults"],
 
-    cflags: [
-        "-Werror",
-        "-Wall",
-    ],
-    cppflags: [
-        "-fvisibility=protected",
-    ],
+    host_supported: false,
+    srcs: ["native_bridge_lazy.cc"],
+    required: ["libnativebridge"],
 }
 
 subdirs = ["tests"]

@@ -31,6 +31,7 @@ cc_library {
     },
     shared_libs: [
         "libbase",
+        "libcgrouprc",
         "libjsoncpp",
     ],
     // for cutils/android_filesystem_config.h
@@ -45,5 +46,6 @@ cc_library {
     cflags: [
         "-Wall",
         "-Werror",
+        "-Wexit-time-destructors",
     ],
 }

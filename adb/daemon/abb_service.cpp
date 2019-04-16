@@ -20,6 +20,8 @@
 #include "adb_utils.h"
 #include "shell_service.h"
 
+#include <android-base/cmsg.h>
+
 namespace {
 
 struct AbbProcess;
@@ -59,8 +61,9 @@ unique_fd AbbProcess::sendCommand(std::string_view command) {
 
         unique_fd fd;
         std::string error;
-        if (!ReceiveFileDescriptor(socket_fd_, &fd, &error)) {
-            LOG(ERROR) << "failed to receive FD from abb: " << error;
+        char buf;
+        if (android::base::ReceiveFileDescriptors(socket_fd_, &buf, 1, &fd) != 1) {
+            PLOG(ERROR) << "failed to receive FD from abb";
             socket_fd_.reset();
             continue;
         }
@@ -83,6 +86,6 @@ unique_fd AbbProcess::startAbbProcess(unique_fd* error_fd) {
 
 }  // namespace
 
-unique_fd execute_binder_command(std::string_view command) {
+unique_fd execute_abb_command(std::string_view command) {
     return abbp->sendCommand(command);
 }

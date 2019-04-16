@@ -39,14 +39,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <string>
+
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+
 #include "android_get_control_env.h"
 
-#ifndef TEMP_FAILURE_RETRY
-#define TEMP_FAILURE_RETRY(exp) (exp) // KISS implementation
-#endif
-
-LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
-                                                    const char* name) {
+int __android_get_control_from_env(const char* prefix, const char* name) {
     if (!prefix || !name) return -1;
 
     char *key = NULL;
@@ -67,48 +67,33 @@ LIBCUTILS_HIDDEN int __android_get_control_from_env(const char* prefix,
     long fd = strtol(val, NULL, 10);
     if (errno) return -1;
 
-    // validity checking
+    // Since we are inheriting an fd, it could legitimately exceed _SC_OPEN_MAX
     if ((fd < 0) || (fd > INT_MAX)) return -1;
 
-    // Since we are inheriting an fd, it could legitimately exceed _SC_OPEN_MAX
-
     // Still open?
-#if defined(F_GETFD) // Lowest overhead
     if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD)) < 0) return -1;
-#elif defined(F_GETFL) // Alternate lowest overhead
-    if (TEMP_FAILURE_RETRY(fcntl(fd, F_GETFL)) < 0) return -1;
-#else // Hail Mary pass
-    struct stat s;
-    if (TEMP_FAILURE_RETRY(fstat(fd, &s)) < 0) return -1;
-#endif
 
     return static_cast<int>(fd);
 }
 
 int android_get_control_file(const char* path) {
-    int fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, path);
+    std::string given_path;
+    if (!android::base::Realpath(path, &given_path)) return -1;
 
-#if defined(__linux__)
-    // Find file path from /proc and make sure it is correct
-    char *proc = NULL;
-    if (asprintf(&proc, "/proc/self/fd/%d", fd) < 0) return -1;
-    if (!proc) return -1;
-
-    size_t len = strlen(path);
-    // readlink() does not guarantee a nul byte, len+2 so we catch truncation.
-    char *buf = static_cast<char *>(calloc(1, len + 2));
-    if (!buf) {
-        free(proc);
-        return -1;
+    // Try path, then realpath(path), as keys to get the fd from env.
+    auto fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, path);
+    if (fd < 0) {
+        fd = __android_get_control_from_env(ANDROID_FILE_ENV_PREFIX, given_path.c_str());
+        if (fd < 0) return fd;
     }
-    ssize_t ret = TEMP_FAILURE_RETRY(readlink(proc, buf, len + 1));
-    free(proc);
-    int cmp = (len != static_cast<size_t>(ret)) || strcmp(buf, path);
-    free(buf);
-    if (ret < 0) return -1;
-    if (cmp != 0) return -1;
+
+    // Find file path from /proc and make sure it is correct
+    auto proc = android::base::StringPrintf("/proc/self/fd/%d", fd);
+    std::string fd_path;
+    if (!android::base::Realpath(proc, &fd_path)) return -1;
+
+    if (given_path != fd_path) return -1;
     // It is what we think it is
-#endif
 
     return fd;
 }

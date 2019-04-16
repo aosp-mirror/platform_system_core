@@ -36,6 +36,7 @@
 #include <linux/netlink.h>
 #include <sys/socket.h>
 
+#include <cutils/android_get_control_file.h>
 #include <cutils/klog.h>
 #include <cutils/misc.h>
 #include <cutils/properties.h>
@@ -53,6 +54,9 @@
 #include <healthd/healthd.h>
 
 using namespace android;
+
+// main healthd loop
+extern int healthd_main(void);
 
 char* locale;
 
@@ -73,6 +77,8 @@ char* locale;
 #define POWER_ON_KEY_TIME (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 #define UNPLUGGED_DISPLAY_TIME (3 * MSEC_PER_SEC)
+#define MAX_BATT_LEVEL_WAIT_TIME (3 * MSEC_PER_SEC)
+#define UNPLUGGED_SHUTDOWN_TIME_PROP "ro.product.charger.unplugged_shutdown_time"
 
 #define LAST_KMSG_MAX_SZ (32 * 1024)
 
@@ -101,6 +107,7 @@ struct charger {
     int64_t next_screen_transition;
     int64_t next_key_check;
     int64_t next_pwr_check;
+    int64_t wait_batt_level_timestamp;
 
     key_state keys[KEY_MAX + 1];
 
@@ -203,10 +210,9 @@ static int64_t curr_time_ms() {
 #define MAX_KLOG_WRITE_BUF_SZ 256
 
 static void dump_last_kmsg(void) {
-    char* buf;
+    std::string buf;
     char* ptr;
-    unsigned sz = 0;
-    int len;
+    size_t len;
 
     LOGW("\n");
     LOGW("*************** LAST KMSG ***************\n");
@@ -218,21 +224,25 @@ static void dump_last_kmsg(void) {
         "/proc/last_kmsg",
         // clang-format on
     };
-    for (size_t i = 0; i < arraysize(kmsg); ++i) {
-        buf = (char*)load_file(kmsg[i], &sz);
-        if (buf && sz) break;
+    for (size_t i = 0; i < arraysize(kmsg) && buf.empty(); ++i) {
+        auto fd = android_get_control_file(kmsg[i]);
+        if (fd >= 0) {
+            android::base::ReadFdToString(fd, &buf);
+        } else {
+            android::base::ReadFileToString(kmsg[i], &buf);
+        }
     }
 
-    if (!buf || !sz) {
+    if (buf.empty()) {
         LOGW("last_kmsg not found. Cold reset?\n");
         goto out;
     }
 
-    len = min(sz, LAST_KMSG_MAX_SZ);
-    ptr = buf + (sz - len);
+    len = min(buf.size(), LAST_KMSG_MAX_SZ);
+    ptr = &buf[buf.size() - len];
 
     while (len > 0) {
-        int cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
+        size_t cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
         char yoink;
         char* nl;
 
@@ -247,8 +257,6 @@ static void dump_last_kmsg(void) {
         len -= cnt;
         ptr += cnt;
     }
-
-    free(buf);
 
 out:
     LOGW("\n");
@@ -284,6 +292,21 @@ static void update_screen_state(charger* charger, int64_t now) {
     int disp_time;
 
     if (!batt_anim->run || now < charger->next_screen_transition) return;
+
+    // If battery level is not ready, keep checking in the defined time
+    if (batt_prop == nullptr ||
+        (batt_prop->batteryLevel == 0 && batt_prop->batteryStatus == BATTERY_STATUS_UNKNOWN)) {
+        if (charger->wait_batt_level_timestamp == 0) {
+            // Set max delay time and skip drawing screen
+            charger->wait_batt_level_timestamp = now + MAX_BATT_LEVEL_WAIT_TIME;
+            LOGV("[%" PRId64 "] wait for battery capacity ready\n", now);
+            return;
+        } else if (now <= charger->wait_batt_level_timestamp) {
+            // Do nothing, keep waiting
+            return;
+        }
+        // If timeout and battery level is still not ready, draw unknown battery
+    }
 
     if (healthd_draw == nullptr) {
         if (healthd_config && healthd_config->screen_on) {
@@ -491,6 +514,7 @@ static void handle_input_state(charger* charger, int64_t now) {
 }
 
 static void handle_power_supply_state(charger* charger, int64_t now) {
+    int timer_shutdown = UNPLUGGED_SHUTDOWN_TIME;
     if (!charger->have_battery_state) return;
 
     if (!charger->charger_connected) {
@@ -503,12 +527,14 @@ static void handle_power_supply_state(charger* charger, int64_t now) {
              * Reset & kick animation to show complete animation cycles
              * when charger disconnected.
              */
+            timer_shutdown =
+                    property_get_int32(UNPLUGGED_SHUTDOWN_TIME_PROP, UNPLUGGED_SHUTDOWN_TIME);
             charger->next_screen_transition = now - 1;
             reset_animation(charger->batt_anim);
             kick_animation(charger->batt_anim);
-            charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
+            charger->next_pwr_check = now + timer_shutdown;
             LOGW("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
-                 now, (int64_t)UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
+                 now, (int64_t)timer_shutdown, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
             LOGW("[%" PRId64 "] shutting down\n", now);
             reboot(RB_POWER_OFF);
@@ -704,10 +730,41 @@ void healthd_mode_charger_init(struct healthd_config* config) {
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
+    charger->wait_batt_level_timestamp = 0;
 
     // Initialize Health implementation (which initializes the internal BatteryMonitor).
     Health::initInstance(config);
 
     healthd_config = config;
     charger->boot_min_cap = config->boot_min_cap;
+}
+
+static struct healthd_mode_ops charger_ops = {
+        .init = healthd_mode_charger_init,
+        .preparetowait = healthd_mode_charger_preparetowait,
+        .heartbeat = healthd_mode_charger_heartbeat,
+        .battery_update = healthd_mode_charger_battery_update,
+};
+
+int healthd_charger_main(int argc, char** argv) {
+    int ch;
+
+    healthd_mode_ops = &charger_ops;
+
+    while ((ch = getopt(argc, argv, "cr")) != -1) {
+        switch (ch) {
+            case 'c':
+                // -c is now a noop
+                break;
+            case 'r':
+                // -r is now a noop
+                break;
+            case '?':
+            default:
+                LOGE("Unrecognized charger option: %c\n", optopt);
+                exit(1);
+        }
+    }
+
+    return healthd_main();
 }

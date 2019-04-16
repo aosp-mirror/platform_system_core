@@ -93,7 +93,7 @@ TEST(liblog, __android_log_btwrite) {
 static std::string popenToString(const std::string& command) {
   std::string ret;
 
-  FILE* fp = popen(command.c_str(), "r");
+  FILE* fp = popen(command.c_str(), "re");
   if (fp) {
     if (!android::base::ReadFdToString(fileno(fp), &ret)) ret = "";
     pclose(fp);
@@ -645,7 +645,7 @@ static void get_ticks(unsigned long long* uticks, unsigned long long* sticks) {
   char buffer[512];
   snprintf(buffer, sizeof(buffer), "/proc/%u/stat", pid);
 
-  FILE* fp = fopen(buffer, "r");
+  FILE* fp = fopen(buffer, "re");
   if (!fp) {
     return;
   }

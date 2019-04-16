@@ -17,6 +17,9 @@
 #ifndef _INIT_EPOLL_H
 #define _INIT_EPOLL_H
 
+#include <stdint.h>
+#include <sys/epoll.h>
+
 #include <chrono>
 #include <functional>
 #include <map>
@@ -34,7 +37,8 @@ class Epoll {
     Epoll();
 
     Result<Success> Open();
-    Result<Success> RegisterHandler(int fd, std::function<void()> handler);
+    Result<Success> RegisterHandler(int fd, std::function<void()> handler,
+                                    uint32_t events = EPOLLIN);
     Result<Success> UnregisterHandler(int fd);
     Result<Success> Wait(std::optional<std::chrono::milliseconds> timeout);
 

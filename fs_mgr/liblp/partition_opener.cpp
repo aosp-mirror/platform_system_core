@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <android-base/file.h>
+#include <android-base/strings.h>
 
 #include "utility.h"
 
@@ -37,7 +38,7 @@ using android::base::unique_fd;
 namespace {
 
 std::string GetPartitionAbsolutePath(const std::string& path) {
-    if (path[0] == '/') {
+    if (android::base::StartsWith(path, "/")) {
         return path;
     }
     return "/dev/block/by-name/" + path;
@@ -45,7 +46,7 @@ std::string GetPartitionAbsolutePath(const std::string& path) {
 
 bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {
 #if defined(__linux__)
-    unique_fd fd(open(block_device.c_str(), O_RDONLY));
+    unique_fd fd = GetControlFileOrOpen(block_device.c_str(), O_RDONLY);
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << "open '" << block_device << "' failed";
         return false;
@@ -85,7 +86,7 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
 
 unique_fd PartitionOpener::Open(const std::string& partition_name, int flags) const {
     std::string path = GetPartitionAbsolutePath(partition_name);
-    return unique_fd{open(path.c_str(), flags | O_CLOEXEC)};
+    return GetControlFileOrOpen(path.c_str(), flags | O_CLOEXEC);
 }
 
 bool PartitionOpener::GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const {

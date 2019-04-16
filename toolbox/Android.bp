@@ -7,6 +7,8 @@ cc_defaults {
         "-Wno-unused-const-variable",
         "-D_FILE_OFFSET_BITS=64",
         "-DWITHOUT_NLS",
+        "-DWITHOUT_BZ2",
+        "-DWITHOUT_GZIP",
     ],
 }
 
@@ -52,13 +54,6 @@ cc_binary {
     stem: "toolbox",
     vendor: true,
     defaults: ["toolbox_binary_defaults"],
-}
-
-// We only want 'r' on userdebug and eng builds.
-cc_binary {
-    name: "r",
-    defaults: ["toolbox_defaults"],
-    srcs: ["r.c"],
 }
 
 // We build BSD grep separately (but see http://b/111849261).

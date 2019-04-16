@@ -35,7 +35,6 @@ class ShellServiceTest : public ::testing::Test {
     static void SetUpTestCase() {
         // This is normally done in main.cpp.
         saved_sigpipe_handler_ = signal(SIGPIPE, SIG_IGN);
-
     }
 
     static void TearDownTestCase() {
@@ -49,24 +48,30 @@ class ShellServiceTest : public ::testing::Test {
                              SubprocessProtocol protocol);
     void CleanupTestSubprocess();
 
-    virtual void TearDown() override {
-        void CleanupTestSubprocess();
-    }
+    void StartTestCommandInProcess(std::string name, Command command, SubprocessProtocol protocol);
+
+    virtual void TearDown() override { CleanupTestSubprocess(); }
 
     static sighandler_t saved_sigpipe_handler_;
 
-    unique_fd subprocess_fd_;
+    unique_fd command_fd_;
 };
 
 sighandler_t ShellServiceTest::saved_sigpipe_handler_ = nullptr;
 
 void ShellServiceTest::StartTestSubprocess(
         const char* command, SubprocessType type, SubprocessProtocol protocol) {
-    subprocess_fd_ = StartSubprocess(command, nullptr, type, protocol);
-    ASSERT_TRUE(subprocess_fd_ >= 0);
+    command_fd_ = StartSubprocess(command, nullptr, type, protocol);
+    ASSERT_TRUE(command_fd_ >= 0);
 }
 
 void ShellServiceTest::CleanupTestSubprocess() {
+}
+
+void ShellServiceTest::StartTestCommandInProcess(std::string name, Command command,
+                                                 SubprocessProtocol protocol) {
+    command_fd_ = StartCommandInProcess(std::move(name), std::move(command), protocol);
+    ASSERT_TRUE(command_fd_ >= 0);
 }
 
 namespace {
@@ -93,7 +98,7 @@ int ReadShellProtocol(int fd, std::string* stdout, std::string* stderr) {
     stdout->clear();
     stderr->clear();
 
-    ShellProtocol* protocol = new ShellProtocol(fd);
+    auto protocol = std::make_unique<ShellProtocol>(fd);
     while (protocol->Read()) {
         switch (protocol->id()) {
             case ShellProtocol::kIdStdout:
@@ -111,7 +116,6 @@ int ReadShellProtocol(int fd, std::string* stdout, std::string* stderr) {
                 ADD_FAILURE() << "Unidentified packet ID: " << protocol->id();
         }
     }
-    delete protocol;
 
     return exit_code;
 }
@@ -154,7 +158,7 @@ TEST_F(ShellServiceTest, RawNoProtocolSubprocess) {
 
     // [ -t 0 ] == 0 means we have a terminal (PTY). Even when requesting a raw subprocess, without
     // the shell protocol we should always force a PTY to ensure proper cleanup.
-    ExpectLinesEqual(ReadRaw(subprocess_fd_), {"foo", "bar", "0"});
+    ExpectLinesEqual(ReadRaw(command_fd_), {"foo", "bar", "0"});
 }
 
 // Tests a PTY subprocess with no protocol.
@@ -165,7 +169,7 @@ TEST_F(ShellServiceTest, PtyNoProtocolSubprocess) {
             SubprocessType::kPty, SubprocessProtocol::kNone));
 
     // [ -t 0 ] == 0 means we have a terminal (PTY).
-    ExpectLinesEqual(ReadRaw(subprocess_fd_), {"foo", "bar", "0"});
+    ExpectLinesEqual(ReadRaw(command_fd_), {"foo", "bar", "0"});
 }
 
 // Tests a raw subprocess with the shell protocol.
@@ -175,7 +179,7 @@ TEST_F(ShellServiceTest, RawShellProtocolSubprocess) {
             SubprocessType::kRaw, SubprocessProtocol::kShell));
 
     std::string stdout, stderr;
-    EXPECT_EQ(24, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    EXPECT_EQ(24, ReadShellProtocol(command_fd_, &stdout, &stderr));
     ExpectLinesEqual(stdout, {"foo", "baz"});
     ExpectLinesEqual(stderr, {"bar"});
 }
@@ -189,7 +193,7 @@ TEST_F(ShellServiceTest, PtyShellProtocolSubprocess) {
     // PTY always combines stdout and stderr but the shell protocol should
     // still give us an exit code.
     std::string stdout, stderr;
-    EXPECT_EQ(50, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    EXPECT_EQ(50, ReadShellProtocol(command_fd_, &stdout, &stderr));
     ExpectLinesEqual(stdout, {"foo", "bar", "baz"});
     ExpectLinesEqual(stderr, {});
 }
@@ -204,7 +208,7 @@ TEST_F(ShellServiceTest, InteractivePtySubprocess) {
                               "echo --${TEST_STR}--",
                               "exit"};
 
-    ShellProtocol* protocol = new ShellProtocol(subprocess_fd_);
+    ShellProtocol* protocol = new ShellProtocol(command_fd_);
     for (std::string command : commands) {
         // Interactive shell requires a newline to complete each command.
         command.push_back('\n');
@@ -214,7 +218,7 @@ TEST_F(ShellServiceTest, InteractivePtySubprocess) {
     delete protocol;
 
     std::string stdout, stderr;
-    EXPECT_EQ(0, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    EXPECT_EQ(0, ReadShellProtocol(command_fd_, &stdout, &stderr));
     // An unpredictable command prompt makes parsing exact output difficult but
     // it should at least contain echoed input and the expected output.
     for (const char* command : commands) {
@@ -230,14 +234,14 @@ TEST_F(ShellServiceTest, CloseClientStdin) {
             SubprocessType::kRaw, SubprocessProtocol::kShell));
 
     std::string input = "foo\nbar";
-    ShellProtocol* protocol = new ShellProtocol(subprocess_fd_);
+    ShellProtocol* protocol = new ShellProtocol(command_fd_);
     memcpy(protocol->data(), input.data(), input.length());
     ASSERT_TRUE(protocol->Write(ShellProtocol::kIdStdin, input.length()));
     ASSERT_TRUE(protocol->Write(ShellProtocol::kIdCloseStdin, 0));
     delete protocol;
 
     std::string stdout, stderr;
-    EXPECT_EQ(0, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    EXPECT_EQ(0, ReadShellProtocol(command_fd_, &stdout, &stderr));
     ExpectLinesEqual(stdout, {"foo", "barTEST_DONE"});
     ExpectLinesEqual(stderr, {});
 }
@@ -249,7 +253,7 @@ TEST_F(ShellServiceTest, CloseStdinStdoutSubprocess) {
             SubprocessType::kRaw, SubprocessProtocol::kShell));
 
     std::string stdout, stderr;
-    EXPECT_EQ(0, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    EXPECT_EQ(0, ReadShellProtocol(command_fd_, &stdout, &stderr));
     ExpectLinesEqual(stdout, {});
     ExpectLinesEqual(stderr, {"bar"});
 }
@@ -261,7 +265,56 @@ TEST_F(ShellServiceTest, CloseStderrSubprocess) {
             SubprocessType::kRaw, SubprocessProtocol::kShell));
 
     std::string stdout, stderr;
-    EXPECT_EQ(0, ReadShellProtocol(subprocess_fd_, &stdout, &stderr));
+    EXPECT_EQ(0, ReadShellProtocol(command_fd_, &stdout, &stderr));
     ExpectLinesEqual(stdout, {"foo"});
     ExpectLinesEqual(stderr, {});
+}
+
+// Tests an inprocess command with no protocol.
+TEST_F(ShellServiceTest, RawNoProtocolInprocess) {
+    ASSERT_NO_FATAL_FAILURE(
+            StartTestCommandInProcess("123",
+                                      [](auto args, auto in, auto out, auto err) -> int {
+                                          EXPECT_EQ("123", args);
+                                          char input[10];
+                                          EXPECT_TRUE(ReadFdExactly(in, input, 2));
+                                          input[2] = 0;
+                                          EXPECT_STREQ("in", input);
+                                          WriteFdExactly(out, "out\n");
+                                          WriteFdExactly(err, "err\n");
+                                          return 0;
+                                      },
+                                      SubprocessProtocol::kNone));
+
+    WriteFdExactly(command_fd_, "in");
+    ExpectLinesEqual(ReadRaw(command_fd_), {"out", "err"});
+}
+
+// Tests an inprocess command with the shell protocol.
+TEST_F(ShellServiceTest, RawShellProtocolInprocess) {
+    ASSERT_NO_FATAL_FAILURE(
+            StartTestCommandInProcess("321",
+                                      [](auto args, auto in, auto out, auto err) -> int {
+                                          EXPECT_EQ("321", args);
+                                          char input[10];
+                                          EXPECT_TRUE(ReadFdExactly(in, input, 2));
+                                          input[2] = 0;
+                                          EXPECT_STREQ("in", input);
+                                          WriteFdExactly(out, "out\n");
+                                          WriteFdExactly(err, "err\n");
+                                          return 0;
+                                      },
+                                      SubprocessProtocol::kShell));
+
+    {
+        auto write_protocol = std::make_unique<ShellProtocol>(command_fd_);
+        memcpy(write_protocol->data(), "in", 2);
+        write_protocol->Write(ShellProtocol::kIdStdin, 2);
+    }
+
+    std::string stdout, stderr;
+    // For in-process commands the exit code is always the default (1).
+    EXPECT_EQ(1, ReadShellProtocol(command_fd_, &stdout, &stderr));
+    ExpectLinesEqual(stdout, {"out"});
+    ExpectLinesEqual(stderr, {"err"});
 }

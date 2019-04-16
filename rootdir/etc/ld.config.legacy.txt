@@ -14,6 +14,10 @@ dir.legacy = /sbin
 # Except for /postinstall, where only /system and /product are searched
 dir.postinstall = /postinstall
 
+# Fallback entry to provide APEX namespace lookups for binaries anywhere else.
+# This must be last.
+dir.legacy = /data
+
 [legacy]
 namespace.default.isolated = false
 
@@ -40,7 +44,7 @@ additional.namespaces = runtime,conscrypt,media,resolv
 # Keep in sync with ld.config.txt in the com.android.runtime APEX.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
-# to load the shared library from the runtime namespace.And then, if the
+# to load the shared library from the runtime namespace. And then, if the
 # shared library cannot be loaded from the runtime namespace either, the
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
@@ -49,11 +53,14 @@ namespace.default.asan.links = runtime,resolv
 # Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
 # libart.
 namespace.default.visible = true
-namespace.default.link.runtime.shared_libs  = libart.so:libartd.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
+namespace.default.link.runtime.shared_libs += libandroidicu.so
+
+# TODO(b/122876336): Remove libpac.so once it's migrated to Webview
+namespace.default.link.runtime.shared_libs += libpac.so
 
 # When libnetd_resolv.so can't be found in the default namespace, search for it
 # in the resolv namespace. Don't allow any other libraries from the resolv namespace
@@ -72,8 +79,10 @@ namespace.runtime.visible = true
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
-# TODO(b/119867084): Restrict to Bionic dlopen dependencies and PALette library
-# when it exists.
+# Need allow_all_shared_libs because libart.so can dlopen oat files in
+# /system/framework and /data.
+# TODO(b/130340935): Use a dynamically created linker namespace similar to
+# classloader-namespace for oat files, and tighten this up.
 namespace.runtime.link.default.allow_all_shared_libs = true
 
 ###############################################################################
@@ -87,12 +96,25 @@ namespace.media.visible = true
 namespace.media.search.paths = /apex/com.android.media/${LIB}
 namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
+namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
+
 namespace.media.links = default
-namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
-namespace.media.link.default.shared_libs += libandroid.so
+namespace.media.link.default.shared_libs  = libandroid.so
 namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs += libc.so
+namespace.media.link.default.shared_libs += libcgrouprc.so
+namespace.media.link.default.shared_libs += libdl.so
+namespace.media.link.default.shared_libs += liblog.so
 namespace.media.link.default.shared_libs += libmediametrics.so
-namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+namespace.media.link.default.shared_libs += libmediandk.so
+namespace.media.link.default.shared_libs += libm.so
+namespace.media.link.default.shared_libs += libvndksupport.so
+
+namespace.media.link.default.shared_libs += libclang_rt.asan-aarch64-android.so
+namespace.media.link.default.shared_libs += libclang_rt.asan-arm-android.so
+namespace.media.link.default.shared_libs += libclang_rt.asan-i686-android.so
+namespace.media.link.default.shared_libs += libclang_rt.asan-x86_64-android.so
+namespace.media.link.default.shared_libs += libclang_rt.hwasan-aarch64-android.so
 
 ###############################################################################
 # "conscrypt" APEX namespace
@@ -106,10 +128,11 @@ namespace.conscrypt.visible = true
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libjavacore.so
+namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
+namespace.conscrypt.link.default.shared_libs += liblog.so
 
 ###############################################################################
 # "resolv" APEX namespace
@@ -123,9 +146,12 @@ namespace.resolv.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.asan.search.paths = /apex/com.android.resolv/${LIB}
 namespace.resolv.links = default
 namespace.resolv.link.default.shared_libs  = libc.so
+namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
+namespace.resolv.link.default.shared_libs += liblog.so
+namespace.resolv.link.default.shared_libs += libvndksupport.so
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.

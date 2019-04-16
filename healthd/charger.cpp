@@ -14,98 +14,13 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "charger"
-#define KLOG_LEVEL 6
+#include "healthd_mode_charger.h"
+#include "healthd_mode_charger_nops.h"
 
-#include <health2/Health.h>
-#include <healthd/healthd.h>
-
-#include <stdlib.h>
-#include <string.h>
-#include <cutils/klog.h>
-
-using namespace android;
-
-// main healthd loop
-extern int healthd_main(void);
-
-// Charger mode
-
-extern void healthd_mode_charger_init(struct healthd_config *config);
-extern int healthd_mode_charger_preparetowait(void);
-extern void healthd_mode_charger_heartbeat(void);
-extern void healthd_mode_charger_battery_update(
-    struct android::BatteryProperties *props);
-
-// NOPs for modes that need no special action
-
-static void healthd_mode_nop_init(struct healthd_config *config);
-static int healthd_mode_nop_preparetowait(void);
-static void healthd_mode_nop_heartbeat(void);
-static void healthd_mode_nop_battery_update(
-    struct android::BatteryProperties *props);
-
-static struct healthd_mode_ops healthd_nops = {
-    .init = healthd_mode_nop_init,
-    .preparetowait = healthd_mode_nop_preparetowait,
-    .heartbeat = healthd_mode_nop_heartbeat,
-    .battery_update = healthd_mode_nop_battery_update,
-};
-
-#ifdef CHARGER_NO_UI
-static struct healthd_mode_ops charger_ops = healthd_nops;
-#else
-static struct healthd_mode_ops charger_ops = {
-    .init = healthd_mode_charger_init,
-    .preparetowait = healthd_mode_charger_preparetowait,
-    .heartbeat = healthd_mode_charger_heartbeat,
-    .battery_update = healthd_mode_charger_battery_update,
-};
-#endif
-
-static void healthd_mode_nop_init(struct healthd_config* config) {
-    using android::hardware::health::V2_0::implementation::Health;
-    Health::initInstance(config);
-}
-
-static int healthd_mode_nop_preparetowait(void) {
-    return -1;
-}
-
-static void healthd_mode_nop_heartbeat(void) {
-}
-
-static void healthd_mode_nop_battery_update(
-    struct android::BatteryProperties* /*props*/) {
-}
-
-int healthd_charger_main(int argc, char** argv) {
-    int ch;
-
-    healthd_mode_ops = &charger_ops;
-
-    while ((ch = getopt(argc, argv, "cr")) != -1) {
-        switch (ch) {
-            case 'c':
-                // -c is now a noop
-                break;
-            case 'r':
-                // force nops for recovery
-                healthd_mode_ops = &healthd_nops;
-                break;
-            case '?':
-            default:
-                KLOG_ERROR(LOG_TAG, "Unrecognized charger option: %c\n",
-                        optopt);
-                exit(1);
-        }
-    }
-
-    return healthd_main();
-}
-
-#ifndef CHARGER_TEST
 int main(int argc, char** argv) {
+#ifdef CHARGER_NO_UI
+    return healthd_charger_nops(argc, argv);
+#else
     return healthd_charger_main(argc, argv);
-}
 #endif
+}

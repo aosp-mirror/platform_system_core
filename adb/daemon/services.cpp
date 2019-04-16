@@ -223,17 +223,15 @@ asocket* daemon_service_to_socket(std::string_view name) {
         return create_jdwp_service_socket();
     } else if (name == "track-jdwp") {
         return create_jdwp_tracker_service_socket();
-    } else if (name.starts_with("sink:")) {
-        name.remove_prefix(strlen("sink:"));
+    } else if (ConsumePrefix(&name, "sink:")) {
         uint64_t byte_count = 0;
-        if (!android::base::ParseUint(name.data(), &byte_count)) {
+        if (!ParseUint(&byte_count, name)) {
             return nullptr;
         }
         return new SinkSocket(byte_count);
-    } else if (name.starts_with("source:")) {
-        name.remove_prefix(strlen("source:"));
+    } else if (ConsumePrefix(&name, "source:")) {
         uint64_t byte_count = 0;
-        if (!android::base::ParseUint(name.data(), &byte_count)) {
+        if (!ParseUint(&byte_count, name)) {
             return nullptr;
         }
         return new SourceSocket(byte_count);
@@ -244,29 +242,27 @@ asocket* daemon_service_to_socket(std::string_view name) {
 
 unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
 #if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
-    if (name.starts_with("abb:")) {
-        name.remove_prefix(strlen("abb:"));
-        return execute_binder_command(name);
+    if (name.starts_with("abb:") || name.starts_with("abb_exec:")) {
+        return execute_abb_command(name);
     }
 #endif
 
 #if defined(__ANDROID__)
     if (name.starts_with("framebuffer:")) {
         return create_service_thread("fb", framebuffer_service);
-    } else if (name.starts_with("remount:")) {
-        std::string arg(name.begin() + strlen("remount:"), name.end());
+    } else if (ConsumePrefix(&name, "remount:")) {
+        std::string arg(name);
         return create_service_thread("remount",
                                      std::bind(remount_service, std::placeholders::_1, arg));
-    } else if (name.starts_with("reboot:")) {
-        std::string arg(name.begin() + strlen("reboot:"), name.end());
+    } else if (ConsumePrefix(&name, "reboot:")) {
+        std::string arg(name);
         return create_service_thread("reboot",
                                      std::bind(reboot_service, std::placeholders::_1, arg));
     } else if (name.starts_with("root:")) {
         return create_service_thread("root", restart_root_service);
     } else if (name.starts_with("unroot:")) {
         return create_service_thread("unroot", restart_unroot_service);
-    } else if (name.starts_with("backup:")) {
-        name.remove_prefix(strlen("backup:"));
+    } else if (ConsumePrefix(&name, "backup:")) {
         std::string cmd = "/system/bin/bu backup ";
         cmd += name;
         return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
@@ -279,8 +275,7 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
     } else if (name.starts_with("enable-verity:")) {
         return create_service_thread("verity-off", std::bind(set_verity_enabled_state_service,
                                                              std::placeholders::_1, true));
-    } else if (name.starts_with("tcpip:")) {
-        name.remove_prefix(strlen("tcpip:"));
+    } else if (ConsumePrefix(&name, "tcpip:")) {
         std::string str(name);
 
         int port;
@@ -294,24 +289,22 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
     }
 #endif
 
-    if (name.starts_with("dev:")) {
-        name.remove_prefix(strlen("dev:"));
+    if (ConsumePrefix(&name, "dev:")) {
         return unique_fd{unix_open(name, O_RDWR | O_CLOEXEC)};
-    } else if (name.starts_with("jdwp:")) {
-        name.remove_prefix(strlen("jdwp:"));
-        std::string str(name);
-        return create_jdwp_connection_fd(atoi(str.c_str()));
-    } else if (name.starts_with("shell")) {
-        name.remove_prefix(strlen("shell"));
+    } else if (ConsumePrefix(&name, "jdwp:")) {
+        pid_t pid;
+        if (!ParseUint(&pid, name)) {
+            return unique_fd{};
+        }
+        return create_jdwp_connection_fd(pid);
+    } else if (ConsumePrefix(&name, "shell")) {
         return ShellService(name, transport);
-    } else if (name.starts_with("exec:")) {
-        name.remove_prefix(strlen("exec:"));
+    } else if (ConsumePrefix(&name, "exec:")) {
         return StartSubprocess(std::string(name), nullptr, SubprocessType::kRaw,
                                SubprocessProtocol::kNone);
     } else if (name.starts_with("sync:")) {
         return create_service_thread("sync", file_sync_service);
-    } else if (name.starts_with("reverse:")) {
-        name.remove_prefix(strlen("reverse:"));
+    } else if (ConsumePrefix(&name, "reverse:")) {
         return reverse_service(name, transport);
     } else if (name == "reconnect") {
         return create_service_thread(

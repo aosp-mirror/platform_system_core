@@ -19,13 +19,14 @@ cc_test {
 
 cc_binary {
     name: "mini-keyctl",
-    srcs: ["mini_keyctl.cpp"],
-
+    srcs: [
+        "mini_keyctl.cpp",
+        "mini_keyctl_utils.cpp"
+    ],
     shared_libs: [
         "libbase",
         "libkeyutils",
         "liblog",
     ],
-
-    cflags: ["-Werror", "-Wall", "-Wextra"],
+    cflags: ["-Werror", "-Wall", "-Wextra", "-fexceptions"],
 }
