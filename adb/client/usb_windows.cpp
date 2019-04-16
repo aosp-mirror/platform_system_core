@@ -448,6 +448,11 @@ void usb_cleanup_handle(usb_handle* handle) {
     }
 }
 
+void usb_reset(usb_handle* handle) {
+    // Unimplemented on Windows.
+    usb_kick(handle);
+}
+
 static void usb_kick_locked(usb_handle* handle) {
     // The reason the lock must be acquired before calling this function is in
     // case multiple threads are trying to kick the same device at the same time.

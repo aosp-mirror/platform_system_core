@@ -8,6 +8,7 @@ LOCAL_MODULE := init.rc
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
+LOCAL_REQUIRED_MODULES := fsverity_init
 
 # The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
 # Since init.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
@@ -23,48 +24,6 @@ LOCAL_MODULE := init-debug.rc
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
-
-# Start of runtime APEX compatibility.
-#
-# Meta-comment:
-# The placing of this section is somewhat arbitrary. The LOCAL_POST_INSTALL_CMD
-# entries need to be associated with something that goes into /system.
-# init-debug.rc qualifies but it could be anything else in /system until soong
-# supports creation of symlinks. http://b/123333111
-#
-# Keeping the appearance of files/dirs having old locations for apps that have
-# come to rely on them.
-
-# http://b/121248172 - create a link from /system/usr/icu to
-# /apex/com.android.runtime/etc/icu so that apps can find the ICU .dat file.
-# A symlink can't overwrite a directory and the /system/usr/icu directory once
-# existed so the required structure must be created whatever we find.
-LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
-LOCAL_POST_INSTALL_CMD += ; ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OUT)/usr/icu
-
-# End of runtime APEX compatibilty.
-
-include $(BUILD_PREBUILT)
-
-#######################################
-# cgroups.json
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := cgroups.json
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-
-include $(BUILD_PREBUILT)
-
-#######################################
-# task_profiles.json
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := task_profiles.json
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 
 include $(BUILD_PREBUILT)
 
@@ -99,6 +58,15 @@ endif
 endif
 
 #######################################
+# fsverity_init
+
+include $(CLEAR_VARS)
+LOCAL_MODULE:= fsverity_init
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_SRC_FILES := fsverity_init.sh
+include $(BUILD_PREBUILT)
+
+#######################################
 # init.environ.rc
 
 include $(CLEAR_VARS)
@@ -121,7 +89,7 @@ endif
 
 EXPORT_GLOBAL_GCOV_OPTIONS :=
 ifeq ($(NATIVE_COVERAGE),true)
-  EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/gcov
+  EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/trace
 endif
 
 # Put it here instead of in init.rc module definition,
@@ -195,6 +163,7 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
 	$(hide) sed -e 's?%BOOTCLASSPATH%?$(PRODUCT_BOOTCLASSPATH)?g' $< >$@
+	$(hide) sed -i -e 's?%DEX2OATBOOTCLASSPATH%?$(PRODUCT_DEX2OAT_BOOTCLASSPATH)?g' $@
 	$(hide) sed -i -e 's?%SYSTEMSERVERCLASSPATH%?$(PRODUCT_SYSTEM_SERVER_CLASSPATH)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
@@ -244,6 +213,45 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := ld.config.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+
+# Start of runtime APEX compatibility.
+#
+# Meta-comment:
+# The placing of this section is somewhat arbitrary. The LOCAL_POST_INSTALL_CMD
+# entries need to be associated with something that goes into /system.
+# ld.config.txt qualifies but it could be anything else in /system until soong
+# supports creation of symlinks. http://b/123333111
+#
+# Keeping the appearance of files/dirs having old locations for apps that have
+# come to rely on them.
+
+# http://b/121248172 - create a link from /system/usr/icu to
+# /apex/com.android.runtime/etc/icu so that apps can find the ICU .dat file.
+# A symlink can't overwrite a directory and the /system/usr/icu directory once
+# existed so the required structure must be created whatever we find.
+LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
+LOCAL_POST_INSTALL_CMD += && ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OUT)/usr/icu
+
+# TODO(b/124106384): Clean up compat symlinks for ART binaries.
+ART_BINARIES := \
+  dalvikvm \
+  dalvikvm32 \
+  dalvikvm64 \
+  dex2oat \
+  dexdiag \
+  dexdump \
+  dexlist \
+  dexoptanalyzer \
+  oatdump \
+  profman \
+
+LOCAL_POST_INSTALL_CMD += && mkdir -p $(TARGET_OUT)/bin
+$(foreach b,$(ART_BINARIES), \
+  $(eval LOCAL_POST_INSTALL_CMD += \
+    && ln -sf /apex/com.android.runtime/bin/$(b) $(TARGET_OUT)/bin/$(b)) \
+)
+
+# End of runtime APEX compatibilty.
 
 ifeq ($(_enforce_vndk_at_runtime),true)
 
@@ -368,3 +376,5 @@ $(LOCAL_BUILT_MODULE):
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
 		echo $(lib).so >> $@;)
+
+include $(call all-makefiles-under,$(LOCAL_PATH))

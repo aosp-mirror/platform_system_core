@@ -51,17 +51,16 @@
 
 static int rpmb_fd = -1;
 static uint8_t read_buf[4096];
+static enum dev_type dev_type = UNKNOWN_RPMB;
 
 #ifdef RPMB_DEBUG
 
-static void print_buf(const char *prefix, const uint8_t *buf, size_t size)
-{
+static void print_buf(const char* prefix, const uint8_t* buf, size_t size) {
     size_t i;
 
     printf("%s @%p [%zu]", prefix, buf, size);
     for (i = 0; i < size; i++) {
-        if (i && i % 32 == 0)
-            printf("\n%*s", (int) strlen(prefix), "");
+        if (i && i % 32 == 0) printf("\n%*s", (int)strlen(prefix), "");
         printf(" %02x", buf[i]);
     }
     printf("\n");
@@ -70,41 +69,16 @@ static void print_buf(const char *prefix, const uint8_t *buf, size_t size)
 
 #endif
 
-
-int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
-{
-    int rc;
+static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req) {
     struct {
         struct mmc_ioc_multi_cmd multi;
         struct mmc_ioc_cmd cmd_buf[3];
     } mmc = {};
-    struct mmc_ioc_cmd *cmd = mmc.multi.cmds;
-    const struct storage_rpmb_send_req *req = r;
+    struct mmc_ioc_cmd* cmd = mmc.multi.cmds;
+    int rc;
 
-    if (req_len < sizeof(*req)) {
-        ALOGW("malformed rpmb request: invalid length (%zu < %zu)\n",
-              req_len, sizeof(*req));
-        msg->result = STORAGE_ERR_NOT_VALID;
-        goto err_response;
-    }
-
-    size_t expected_len =
-            sizeof(*req) + req->reliable_write_size + req->write_size;
-    if (req_len != expected_len) {
-        ALOGW("malformed rpmb request: invalid length (%zu != %zu)\n",
-              req_len, expected_len);
-        msg->result = STORAGE_ERR_NOT_VALID;
-        goto err_response;
-    }
-
-    const uint8_t *write_buf = req->payload;
+    const uint8_t* write_buf = req->payload;
     if (req->reliable_write_size) {
-        if ((req->reliable_write_size % MMC_BLOCK_SIZE) != 0) {
-            ALOGW("invalid reliable write size %u\n", req->reliable_write_size);
-            msg->result = STORAGE_ERR_NOT_VALID;
-            goto err_response;
-        }
-
         cmd->write_flag = MMC_WRITE_FLAG_RELW;
         cmd->opcode = MMC_WRITE_MULTIPLE_BLOCK;
         cmd->flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
@@ -121,12 +95,6 @@ int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
     }
 
     if (req->write_size) {
-        if ((req->write_size % MMC_BLOCK_SIZE) != 0) {
-            ALOGW("invalid write size %u\n", req->write_size);
-            msg->result = STORAGE_ERR_NOT_VALID;
-            goto err_response;
-        }
-
         cmd->write_flag = MMC_WRITE_FLAG_W;
         cmd->opcode = MMC_WRITE_MULTIPLE_BLOCK;
         cmd->flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
@@ -143,17 +111,9 @@ int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
     }
 
     if (req->read_size) {
-        if (req->read_size % MMC_BLOCK_SIZE != 0 ||
-            req->read_size > sizeof(read_buf)) {
-            ALOGE("%s: invalid read size %u\n", __func__, req->read_size);
-            msg->result = STORAGE_ERR_NOT_VALID;
-            goto err_response;
-        }
-
         cmd->write_flag = MMC_WRITE_FLAG_R;
         cmd->opcode = MMC_READ_MULTIPLE_BLOCK;
-        cmd->flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC,
-        cmd->blksz = MMC_BLOCK_SIZE;
+        cmd->flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC, cmd->blksz = MMC_BLOCK_SIZE;
         cmd->blocks = req->read_size / MMC_BLOCK_SIZE;
         mmc_ioc_cmd_set_data((*cmd), read_buf);
 #ifdef RPMB_DEBUG
@@ -163,15 +123,97 @@ int rpmb_send(struct storage_msg *msg, const void *r, size_t req_len)
         cmd++;
     }
 
-    rc = ioctl(rpmb_fd, MMC_IOC_MULTI_CMD, &mmc.multi);
+    rc = ioctl(mmc_fd, MMC_IOC_MULTI_CMD, &mmc.multi);
     if (rc < 0) {
         ALOGE("%s: mmc ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+    }
+    return rc;
+}
+
+static int send_virt_rpmb_req(int rpmb_fd, void* read_buf, size_t read_size, const void* payload,
+                              size_t payload_size) {
+    int rc;
+    uint16_t res_count = read_size / MMC_BLOCK_SIZE;
+    uint16_t cmd_count = payload_size / MMC_BLOCK_SIZE;
+    rc = write(rpmb_fd, &res_count, sizeof(res_count));
+    if (rc < 0) {
+        return rc;
+    }
+    rc = write(rpmb_fd, &cmd_count, sizeof(cmd_count));
+    if (rc < 0) {
+        return rc;
+    }
+    rc = write(rpmb_fd, payload, payload_size);
+    if (rc < 0) {
+        return rc;
+    }
+    rc = read(rpmb_fd, read_buf, read_size);
+    return rc;
+}
+
+int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
+    int rc;
+    const struct storage_rpmb_send_req* req = r;
+
+    if (req_len < sizeof(*req)) {
+        ALOGW("malformed rpmb request: invalid length (%zu < %zu)\n", req_len, sizeof(*req));
+        msg->result = STORAGE_ERR_NOT_VALID;
+        goto err_response;
+    }
+
+    size_t expected_len = sizeof(*req) + req->reliable_write_size + req->write_size;
+    if (req_len != expected_len) {
+        ALOGW("malformed rpmb request: invalid length (%zu != %zu)\n", req_len, expected_len);
+        msg->result = STORAGE_ERR_NOT_VALID;
+        goto err_response;
+    }
+
+    if ((req->reliable_write_size % MMC_BLOCK_SIZE) != 0) {
+        ALOGW("invalid reliable write size %u\n", req->reliable_write_size);
+        msg->result = STORAGE_ERR_NOT_VALID;
+        goto err_response;
+    }
+
+    if ((req->write_size % MMC_BLOCK_SIZE) != 0) {
+        ALOGW("invalid write size %u\n", req->write_size);
+        msg->result = STORAGE_ERR_NOT_VALID;
+        goto err_response;
+    }
+
+    if (req->read_size % MMC_BLOCK_SIZE != 0 || req->read_size > sizeof(read_buf)) {
+        ALOGE("%s: invalid read size %u\n", __func__, req->read_size);
+        msg->result = STORAGE_ERR_NOT_VALID;
+        goto err_response;
+    }
+
+    if (dev_type == MMC_RPMB) {
+        rc = send_mmc_rpmb_req(rpmb_fd, req);
+        if (rc < 0) {
+            msg->result = STORAGE_ERR_GENERIC;
+            goto err_response;
+        }
+    } else if (dev_type == VIRT_RPMB) {
+        size_t payload_size = req->reliable_write_size + req->write_size;
+        rc = send_virt_rpmb_req(rpmb_fd, read_buf, req->read_size, req->payload, payload_size);
+        if (rc < 0) {
+            ALOGE("send_virt_rpmb_req failed: %d, %s\n", rc, strerror(errno));
+            msg->result = STORAGE_ERR_GENERIC;
+            goto err_response;
+        }
+        if (rc != req->read_size) {
+            ALOGE("send_virt_rpmb_req got incomplete response: "
+                  "(size %d, expected %d)\n",
+                  rc, req->read_size);
+            msg->result = STORAGE_ERR_GENERIC;
+            goto err_response;
+        }
+    } else {
+        ALOGE("Unsupported dev_type\n");
         msg->result = STORAGE_ERR_GENERIC;
         goto err_response;
     }
 #ifdef RPMB_DEBUG
-    if (req->read_size)
-        print_buf("response: ", read_buf, req->read_size);
+    if (req->read_size) print_buf("response: ", read_buf, req->read_size);
 #endif
 
     if (msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) {
@@ -188,24 +230,20 @@ err_response:
     return ipc_respond(msg, NULL, 0);
 }
 
-
-int rpmb_open(const char *rpmb_devname)
-{
+int rpmb_open(const char* rpmb_devname, enum dev_type open_dev_type) {
     int rc;
+    dev_type = open_dev_type;
 
     rc = open(rpmb_devname, O_RDWR, 0);
     if (rc < 0) {
-        ALOGE("unable (%d) to open rpmb device '%s': %s\n",
-              errno, rpmb_devname, strerror(errno));
+        ALOGE("unable (%d) to open rpmb device '%s': %s\n", errno, rpmb_devname, strerror(errno));
         return rc;
     }
     rpmb_fd = rc;
     return 0;
 }
 
-void rpmb_close(void)
-{
+void rpmb_close(void) {
     close(rpmb_fd);
     rpmb_fd = -1;
 }
-

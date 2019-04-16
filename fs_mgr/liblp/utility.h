@@ -22,6 +22,7 @@
 #include <sys/types.h>
 
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 
 #include "liblp/liblp.h"
 
@@ -91,6 +92,8 @@ bool UpdatePartitionGroupName(LpMetadataPartitionGroup* group, const std::string
 
 // Call BLKROSET ioctl on fd so that fd is readonly / read-writable.
 bool SetBlockReadonly(int fd, bool readonly);
+
+::android::base::unique_fd GetControlFileOrOpen(const char* path, int flags);
 
 }  // namespace fs_mgr
 }  // namespace android

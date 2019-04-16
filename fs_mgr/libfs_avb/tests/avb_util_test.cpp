@@ -30,13 +30,14 @@ using android::fs_mgr::AvbPartitionToDevicePatition;
 using android::fs_mgr::DeriveAvbPartitionName;
 using android::fs_mgr::FstabEntry;
 using android::fs_mgr::GetAvbFooter;
+using android::fs_mgr::GetAvbPropertyDescriptor;
 using android::fs_mgr::GetChainPartitionInfo;
 using android::fs_mgr::GetTotalSize;
 using android::fs_mgr::LoadAndVerifyVbmetaByPartition;
 using android::fs_mgr::LoadAndVerifyVbmetaByPath;
+using android::fs_mgr::ValidatePublicKeyBlob;
 using android::fs_mgr::VBMetaData;
 using android::fs_mgr::VBMetaVerifyResult;
-using android::fs_mgr::VerifyPublicKeyBlob;
 using android::fs_mgr::VerifyVBMetaData;
 using android::fs_mgr::VerifyVBMetaSignature;
 
@@ -268,6 +269,67 @@ TEST_F(AvbUtilTest, GetAvbFooterInsufficientSize) {
     EXPECT_EQ(nullptr, footer);
 }
 
+TEST_F(AvbUtilTest, GetAvbPropertyDescriptor_Basic) {
+    // Makes a vbmeta.img with some properties.
+    GenerateVBMetaImage("vbmeta.img", "SHA256_RSA4096", 0, data_dir_.Append("testkey_rsa4096.pem"),
+                        {}, /* include_descriptor_image_paths */
+                        {}, /* chain_partitions */
+                        "--prop foo:android "
+                        "--prop bar:treble "
+                        "--internal_release_string \"unit test\" ");
+    auto vbmeta = LoadVBMetaData("vbmeta.img");
+
+    // Puts the vbmeta into a vector, for GetAvbPropertyDescriptor to use.
+    std::vector<VBMetaData> vbmeta_images;
+    vbmeta_images.emplace_back(std::move(vbmeta));
+
+    EXPECT_EQ("android", GetAvbPropertyDescriptor("foo", vbmeta_images));
+    EXPECT_EQ("treble", GetAvbPropertyDescriptor("bar", vbmeta_images));
+    EXPECT_EQ("", GetAvbPropertyDescriptor("non-existent", vbmeta_images));
+}
+
+TEST_F(AvbUtilTest, GetAvbPropertyDescriptor_SecurityPatchLevel) {
+    // Generates a raw boot.img
+    const size_t boot_image_size = 5 * 1024 * 1024;
+    const size_t boot_partition_size = 10 * 1024 * 1024;
+    base::FilePath boot_path = GenerateImage("boot.img", boot_image_size);
+    // Adds AVB Hash Footer.
+    AddAvbFooter(boot_path, "hash", "boot", boot_partition_size, "SHA256_RSA2048", 10,
+                 data_dir_.Append("testkey_rsa2048.pem"), "d00df00d",
+                 "--internal_release_string \"unit test\"");
+
+    // Generates a raw system.img, use a smaller size to speed-up unit test.
+    const size_t system_image_size = 10 * 1024 * 1024;
+    const size_t system_partition_size = 15 * 1024 * 1024;
+    base::FilePath system_path = GenerateImage("system.img", system_image_size);
+    // Adds AVB Hashtree Footer.
+    AddAvbFooter(system_path, "hashtree", "system", system_partition_size, "SHA512_RSA4096", 20,
+                 data_dir_.Append("testkey_rsa4096.pem"), "d00df00d",
+                 "--prop com.android.build.system.security_patch:2019-04-05 "
+                 "--internal_release_string \"unit test\"");
+
+    // Generates chain partition descriptors.
+    base::FilePath rsa4096_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
+
+    // Makes a vbmeta.img including the 'system' chained descriptor.
+    GenerateVBMetaImage("vbmeta.img", "SHA256_RSA4096", 0, data_dir_.Append("testkey_rsa4096.pem"),
+                        {boot_path},                         /* include_descriptor_image_paths */
+                        {{"system", 3, rsa4096_public_key}}, /* chain_partitions */
+                        "--internal_release_string \"unit test\"");
+
+    auto vbmeta = LoadVBMetaData("vbmeta.img");
+    auto system_vbmeta = ExtractAndLoadVBMetaData(system_path, "system-vbmeta.img");
+
+    // Puts the vbmeta into a vector, for GetAvbPropertyDescriptor to use.
+    std::vector<VBMetaData> vbmeta_images;
+    vbmeta_images.emplace_back(std::move(vbmeta));
+    vbmeta_images.emplace_back(std::move(system_vbmeta));
+
+    EXPECT_EQ("2019-04-05",
+              GetAvbPropertyDescriptor("com.android.build.system.security_patch", vbmeta_images));
+}
+
 TEST_F(AvbUtilTest, GetVBMetaHeader) {
     // Generates a raw boot.img
     const size_t image_size = 5 * 1024 * 1024;
@@ -353,7 +415,7 @@ TEST_F(AvbUtilTest, GetVBMetaHeader) {
     EXPECT_EQ(content_padding.size() - padding.size(), vbmeta_padding.size());
 }
 
-TEST_F(AvbUtilTest, VerifyPublicKeyBlob) {
+TEST_F(AvbUtilTest, ValidatePublicKeyBlob) {
     // Generates a raw key.bin
     const size_t key_size = 2048;
     base::FilePath key_path = GenerateImage("key.bin", key_size);
@@ -363,12 +425,12 @@ TEST_F(AvbUtilTest, VerifyPublicKeyBlob) {
 
     std::string expected_key_blob;
     EXPECT_TRUE(base::ReadFileToString(key_path, &expected_key_blob));
-    EXPECT_TRUE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_TRUE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
 
     key_data[10] ^= 0x80;  // toggles a bit and expects a failure
-    EXPECT_FALSE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_FALSE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
     key_data[10] ^= 0x80;  // toggles the bit again, should pass
-    EXPECT_TRUE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_TRUE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
 }
 
 TEST_F(AvbUtilTest, VerifyEmptyPublicKeyBlob) {
@@ -380,7 +442,37 @@ TEST_F(AvbUtilTest, VerifyEmptyPublicKeyBlob) {
     EXPECT_EQ(key_size, base::ReadFile(key_path, (char*)key_data, key_size));
 
     std::string expected_key_blob = "";  // empty means no expectation, thus return true.
-    EXPECT_TRUE(VerifyPublicKeyBlob(key_data, key_size, expected_key_blob));
+    EXPECT_TRUE(ValidatePublicKeyBlob(key_data, key_size, expected_key_blob));
+}
+
+TEST_F(AvbUtilTest, ValidatePublicKeyBlob_MultipleAllowedKeys) {
+    base::FilePath rsa2048_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa2048.pem"));
+    base::FilePath rsa4096_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa4096.pem"));
+    base::FilePath rsa8192_public_key =
+            ExtractPublicKeyAvb(data_dir_.Append("testkey_rsa8192.pem"));
+
+    std::vector<std::string> allowed_key_paths;
+    allowed_key_paths.push_back(rsa2048_public_key.value());
+    allowed_key_paths.push_back(rsa4096_public_key.value());
+
+    std::string expected_key_blob_2048;
+    EXPECT_TRUE(base::ReadFileToString(rsa2048_public_key, &expected_key_blob_2048));
+    std::string expected_key_blob_4096;
+    EXPECT_TRUE(base::ReadFileToString(rsa4096_public_key, &expected_key_blob_4096));
+    std::string expected_key_blob_8192;
+    EXPECT_TRUE(base::ReadFileToString(rsa8192_public_key, &expected_key_blob_8192));
+
+    EXPECT_TRUE(ValidatePublicKeyBlob(expected_key_blob_2048, allowed_key_paths));
+    EXPECT_TRUE(ValidatePublicKeyBlob(expected_key_blob_4096, allowed_key_paths));
+
+    EXPECT_FALSE(ValidatePublicKeyBlob(expected_key_blob_8192, allowed_key_paths));
+    EXPECT_FALSE(ValidatePublicKeyBlob("invalid_content", allowed_key_paths));
+    EXPECT_FALSE(ValidatePublicKeyBlob("", allowed_key_paths));
+
+    allowed_key_paths.push_back(rsa8192_public_key.value());
+    EXPECT_TRUE(ValidatePublicKeyBlob(expected_key_blob_8192, allowed_key_paths));
 }
 
 TEST_F(AvbUtilTest, VerifyVBMetaSignature) {

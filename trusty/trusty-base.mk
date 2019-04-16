@@ -19,8 +19,13 @@
 # to pull in the baseline set of Trusty specific modules.
 #
 
+# For gatekeeper, we include the generic -service and -impl to use legacy
+# HAL loading of gatekeeper.trusty.
+
 PRODUCT_PACKAGES += \
 	android.hardware.keymaster@3.0-service.trusty \
+	android.hardware.gatekeeper@1.0-service \
+	android.hardware.gatekeeper@1.0-impl \
 	gatekeeper.trusty
 
 PRODUCT_PROPERTY_OVERRIDES += \

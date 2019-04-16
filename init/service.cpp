@@ -177,7 +177,7 @@ Result<Success> Service::SetUpPidNamespace() const {
 Result<Success> Service::EnterNamespaces() const {
     for (const auto& [nstype, path] : namespaces_to_enter_) {
         auto fd = unique_fd{open(path.c_str(), O_RDONLY | O_CLOEXEC)};
-        if (!fd) {
+        if (fd == -1) {
             return ErrnoError() << "Could not open namespace at " << path;
         }
         if (setns(fd, nstype) == -1) {
@@ -756,6 +756,11 @@ Result<Success> Service::ParseFile(std::vector<std::string>&& args) {
     if (args[2] != "r" && args[2] != "w" && args[2] != "rw") {
         return Error() << "file type must be 'r', 'w' or 'rw'";
     }
+    std::string expanded;
+    if (!expand_props(args[1], &expanded)) {
+        return Error() << "Could not expand property in file path '" << args[1] << "'";
+    }
+    args[1] = std::move(expanded);
     if ((args[1][0] != '/') || (args[1].find("../") != std::string::npos)) {
         return Error() << "file name must not be relative";
     }
@@ -1059,7 +1064,7 @@ Result<Success> Service::Start() {
         std::string oom_str = std::to_string(oom_score_adjust_);
         std::string oom_file = StringPrintf("/proc/%d/oom_score_adj", pid);
         if (!WriteStringToFile(oom_str, oom_file)) {
-            PLOG(ERROR) << "couldn't write oom_score_adj: " << strerror(errno);
+            PLOG(ERROR) << "couldn't write oom_score_adj";
         }
     }
 

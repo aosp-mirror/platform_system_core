@@ -1407,7 +1407,7 @@ bool LocalImageSource::ReadFile(const std::string& name, std::vector<char>* out)
 
 int LocalImageSource::OpenFile(const std::string& name) const {
     auto path = find_item_given_name(name);
-    return open(path.c_str(), O_RDONLY);
+    return open(path.c_str(), O_RDONLY | O_BINARY);
 }
 
 static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
@@ -1805,7 +1805,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             auto format = [&](const std::string& partition) {
                 fb_perform_format(partition, 0, type_override, size_override, "");
             };
-            do_for_partitions(partition.c_str(), slot_override, format, true);
+            do_for_partitions(partition, slot_override, format, true);
         } else if (command == "signature") {
             std::string filename = next_arg(&args);
             std::vector<char> data;
@@ -1876,7 +1876,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 }
                 do_flash(partition.c_str(), fname.c_str());
             };
-            do_for_partitions(pname.c_str(), slot_override, flash, true);
+            do_for_partitions(pname, slot_override, flash, true);
         } else if (command == "flash:raw") {
             std::string partition = next_arg(&args);
             std::string kernel = next_arg(&args);

@@ -55,7 +55,7 @@ struct FstabEntry {
     std::string zram_loopback_path;
     uint64_t zram_loopback_size = 512 * 1024 * 1024;  // 512MB by default;
     std::string zram_backing_dev_path;
-    std::string avb_key;
+    std::string avb_keys;
 
     struct FsMgrFlags {
         bool wait : 1;
@@ -106,6 +106,11 @@ FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 FstabEntry BuildGsiSystemFstabEntry();
 
 std::set<std::string> GetBootDevices();
+
+// Return the name of the dm-verity device for the given fstab entry. This does
+// not check whether the device is valid or exists; it merely returns the
+// expected name.
+std::string GetVerityDeviceName(const FstabEntry& entry);
 
 }  // namespace fs_mgr
 }  // namespace android

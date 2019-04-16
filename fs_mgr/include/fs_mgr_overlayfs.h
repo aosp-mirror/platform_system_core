@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
+
 bool fs_mgr_overlayfs_mount_all(android::fs_mgr::Fstab* fstab);
 std::vector<std::string> fs_mgr_overlayfs_required_devices(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_overlayfs_setup(const char* backing = nullptr, const char* mount_point = nullptr,

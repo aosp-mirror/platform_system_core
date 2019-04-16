@@ -91,7 +91,7 @@ TEST(liblog, RLOG) {
       "logcat -b radio --pid=%u -d -s"
       " TEST__RLOGV TEST__RLOGD TEST__RLOGI TEST__RLOGW TEST__RLOGE",
       (unsigned)getpid());
-  FILE* fp = popen(buf.c_str(), "r");
+  FILE* fp = popen(buf.c_str(), "re");
   int count = 0;
   int count_false = 0;
   if (fp) {

@@ -19,12 +19,12 @@ LIBLOG_L {
     android_logger_get_log_readable_size; # vndk
     android_logger_get_log_version; # vndk
     android_logger_get_log_size; # vndk
-    android_logger_list_alloc; # vndk
-    android_logger_list_alloc_time; # vndk
-    android_logger_list_free; # vndk
+    android_logger_list_alloc; # apex vndk
+    android_logger_list_alloc_time; # apex vndk
+    android_logger_list_free; # apex vndk
     android_logger_list_open; # vndk
-    android_logger_list_read; # vndk
-    android_logger_open; # vndk
+    android_logger_list_read; # apex vndk
+    android_logger_open; # apex vndk
     android_logger_set_log_size; # vndk
 };
 
@@ -33,18 +33,18 @@ LIBLOG_M {
     android_logger_get_prune_list; # vndk
     android_logger_set_prune_list; # vndk
     android_logger_get_statistics; # vndk
-    __android_log_error_write; # vndk
+    __android_log_error_write; # apex vndk
     __android_log_is_loggable;
-    create_android_logger; #vndk
-    android_log_destroy; #vndk
-    android_log_write_list_begin; #vndk
-    android_log_write_list_end; #vndk
-    android_log_write_int32; #vndk
-    android_log_write_int64; #vndk
-    android_log_write_string8; #vndk
-    android_log_write_string8_len; #vndk
-    android_log_write_float32; #vndk
-    android_log_write_list; #vndk
+    create_android_logger; # apex vndk
+    android_log_destroy; # apex vndk
+    android_log_write_list_begin; # apex vndk
+    android_log_write_list_end; # apex vndk
+    android_log_write_int32; # apex vndk
+    android_log_write_int64; # apex vndk
+    android_log_write_string8; # apex vndk
+    android_log_write_string8_len; # apex vndk
+    android_log_write_float32; # apex vndk
+    android_log_write_list; # apex vndk
 
 };
 
@@ -56,19 +56,19 @@ LIBLOG_O {
 
 LIBLOG_Q {
   global:
+    __android_log_bswrite; # apex
+    __android_log_btwrite; # apex
+    __android_log_bwrite; # apex
+    __android_log_close; # apex
+    __android_log_security; # apex
     android_log_reset; #vndk
     android_log_parser_reset; #vndk
 };
 
 LIBLOG_PRIVATE {
   global:
-    __android_log_bswrite;
-    __android_log_btwrite;
-    __android_log_bwrite;
-    __android_log_close;
     __android_log_pmsg_file_read;
     __android_log_pmsg_file_write;
-    __android_log_security;
     __android_log_security_bswrite;
     __android_logger_get_buffer_size;
     __android_logger_property_get_bool;

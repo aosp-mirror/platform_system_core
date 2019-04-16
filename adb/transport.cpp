@@ -52,6 +52,8 @@
 #include "fdevent.h"
 #include "sysdeps/chrono.h"
 
+using android::base::ScopedLockAssertion;
+
 static void remove_transport(atransport* transport);
 static void transport_unref(atransport* transport);
 
@@ -69,19 +71,10 @@ const char* const kFeaturePushSync = "push_sync";
 const char* const kFeatureApex = "apex";
 const char* const kFeatureFixedPushMkdir = "fixed_push_mkdir";
 const char* const kFeatureAbb = "abb";
+const char* const kFeatureFixedPushSymlinkTimestamp = "fixed_push_symlink_timestamp";
+const char* const kFeatureAbbExec = "abb_exec";
 
 namespace {
-
-// A class that helps the Clang Thread Safety Analysis deal with
-// std::unique_lock. Given that std::unique_lock is movable, and the analysis
-// can not currently perform alias analysis, it is not annotated. In order to
-// assert that the mutex is held, a ScopedAssumeLocked can be created just after
-// the std::unique_lock.
-class SCOPED_CAPABILITY ScopedAssumeLocked {
-  public:
-    ScopedAssumeLocked(std::mutex& mutex) ACQUIRE(mutex) {}
-    ~ScopedAssumeLocked() RELEASE() {}
-};
 
 #if ADB_HOST
 // Tracks and handles atransport*s that are attempting reconnection.
@@ -180,7 +173,7 @@ void ReconnectHandler::Run() {
         ReconnectAttempt attempt;
         {
             std::unique_lock<std::mutex> lock(reconnect_mutex_);
-            ScopedAssumeLocked assume_lock(reconnect_mutex_);
+            ScopedLockAssertion assume_lock(reconnect_mutex_);
 
             if (!reconnect_queue_.empty()) {
                 // FIXME: libstdc++ (used on Windows) implements condition_variable with
@@ -264,6 +257,11 @@ TransportId NextTransportId() {
     return next++;
 }
 
+void Connection::Reset() {
+    LOG(INFO) << "Connection::Reset(): stopping";
+    Stop();
+}
+
 BlockingConnectionAdapter::BlockingConnectionAdapter(std::unique_ptr<BlockingConnection> connection)
     : underlying_(std::move(connection)) {}
 
@@ -296,7 +294,7 @@ void BlockingConnectionAdapter::Start() {
         LOG(INFO) << this->transport_name_ << ": write thread spawning";
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_);
-            ScopedAssumeLocked assume_locked(mutex_);
+            ScopedLockAssertion assume_locked(mutex_);
             cv_.wait(lock, [this]() REQUIRES(mutex_) {
                 return this->stopped_ || !this->write_queue_.empty();
             });
@@ -317,6 +315,26 @@ void BlockingConnectionAdapter::Start() {
     });
 
     started_ = true;
+}
+
+void BlockingConnectionAdapter::Reset() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!started_) {
+            LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): not started";
+            return;
+        }
+
+        if (stopped_) {
+            LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_
+                      << "): already stopped";
+            return;
+        }
+    }
+
+    LOG(INFO) << "BlockingConnectionAdapter(" << this->transport_name_ << "): resetting";
+    this->underlying_->Reset();
+    Stop();
 }
 
 void BlockingConnectionAdapter::Stop() {
@@ -431,14 +449,18 @@ void send_packet(apacket* p, atransport* t) {
     }
 }
 
-void kick_transport(atransport* t) {
+void kick_transport(atransport* t, bool reset) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     // As kick_transport() can be called from threads without guarantee that t is valid,
     // check if the transport is in transport_list first.
     //
     // TODO(jmgao): WTF? Is this actually true?
     if (std::find(transport_list.begin(), transport_list.end(), t) != transport_list.end()) {
-        t->Kick();
+        if (reset) {
+            t->Reset();
+        } else {
+            t->Kick();
+        }
     }
 
 #if ADB_HOST
@@ -923,7 +945,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial, Transp
 
 bool ConnectionWaitable::WaitForConnection(std::chrono::milliseconds timeout) {
     std::unique_lock<std::mutex> lock(mutex_);
-    ScopedAssumeLocked assume_locked(mutex_);
+    ScopedLockAssertion assume_locked(mutex_);
     return cv_.wait_for(lock, timeout, [&]() REQUIRES(mutex_) {
         return connection_established_ready_;
     }) && connection_established_;
@@ -949,9 +971,16 @@ int atransport::Write(apacket* p) {
     return this->connection()->Write(std::unique_ptr<apacket>(p)) ? 0 : -1;
 }
 
+void atransport::Reset() {
+    if (!kicked_.exchange(true)) {
+        LOG(INFO) << "resetting transport " << this << " " << this->serial;
+        this->connection()->Reset();
+    }
+}
+
 void atransport::Kick() {
     if (!kicked_.exchange(true)) {
-        D("kicking transport %p %s", this, this->serial.c_str());
+        LOG(INFO) << "kicking transport " << this << " " << this->serial;
         this->connection()->Stop();
     }
 }
@@ -1014,8 +1043,14 @@ size_t atransport::get_max_payload() const {
 const FeatureSet& supported_features() {
     // Local static allocation to avoid global non-POD variables.
     static const FeatureSet* features = new FeatureSet{
-            kFeatureShell2,         kFeatureCmd,  kFeatureStat2,
-            kFeatureFixedPushMkdir, kFeatureApex, kFeatureAbb,
+            kFeatureShell2,
+            kFeatureCmd,
+            kFeatureStat2,
+            kFeatureFixedPushMkdir,
+            kFeatureApex,
+            kFeatureAbb,
+            kFeatureFixedPushSymlinkTimestamp,
+            kFeatureAbbExec,
             // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
             // to know about. Otherwise, the client can be stuck running an old
             // version of the server even after upgrading their copy of adb.
@@ -1174,18 +1209,22 @@ std::string list_transports(bool long_listing) {
     return result;
 }
 
-void close_usb_devices(std::function<bool(const atransport*)> predicate) {
+void close_usb_devices(std::function<bool(const atransport*)> predicate, bool reset) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
     for (auto& t : transport_list) {
         if (predicate(t)) {
-            t->Kick();
+            if (reset) {
+                t->Reset();
+            } else {
+                t->Kick();
+            }
         }
     }
 }
 
 /* hack for osx */
-void close_usb_devices() {
-    close_usb_devices([](const atransport*) { return true; });
+void close_usb_devices(bool reset) {
+    close_usb_devices([](const atransport*) { return true; }, reset);
 }
 #endif  // ADB_HOST
 

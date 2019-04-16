@@ -42,10 +42,11 @@ using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 #define TASK_PROFILE_DB_FILE "/etc/task_profiles.json"
+#define TASK_PROFILE_DB_VENDOR_FILE "/vendor/etc/task_profiles.json"
 
 bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     std::string subgroup;
-    if (!controller_->GetTaskGroup(tid, &subgroup)) {
+    if (!controller()->GetTaskGroup(tid, &subgroup)) {
         return false;
     }
 
@@ -54,9 +55,10 @@ bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     }
 
     if (subgroup.empty()) {
-        *path = StringPrintf("%s/%s", controller_->path(), file_name_.c_str());
+        *path = StringPrintf("%s/%s", controller()->path(), file_name_.c_str());
     } else {
-        *path = StringPrintf("%s/%s/%s", controller_->path(), subgroup.c_str(), file_name_.c_str());
+        *path = StringPrintf("%s/%s/%s", controller()->path(), subgroup.c_str(),
+                             file_name_.c_str());
     }
     return true;
 }
@@ -90,6 +92,10 @@ bool SetTimerSlackAction::ExecuteForTask(int tid) const {
     if (sys_supports_timerslack) {
         auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
         if (!WriteStringToFile(std::to_string(slack_), file)) {
+            if (errno == ENOENT) {
+                // This happens when process is already dead
+                return true;
+            }
             PLOG(ERROR) << "set_timerslack_ns write failed";
         }
     }
@@ -114,7 +120,7 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
     std::string path;
 
     if (!attribute_->GetPathForTask(tid, &path)) {
-        PLOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return false;
     }
 
@@ -130,7 +136,7 @@ bool SetCgroupAction::IsAppDependentPath(const std::string& path) {
     return path.find("<uid>", 0) != std::string::npos || path.find("<pid>", 0) != std::string::npos;
 }
 
-SetCgroupAction::SetCgroupAction(const CgroupController* c, const std::string& p)
+SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
     : controller_(c), path_(p) {
 #ifdef CACHE_FILE_DESCRIPTORS
     // cache file descriptor only if path is app independent
@@ -140,7 +146,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController* c, const std::string& p
         return;
     }
 
-    std::string tasks_path = c->GetTasksFilePath(p.c_str());
+    std::string tasks_path = c.GetTasksFilePath(p);
 
     if (access(tasks_path.c_str(), W_OK) != 0) {
         // file is not accessible
@@ -169,7 +175,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
     if (TEMP_FAILURE_RETRY(write(fd, value.c_str(), value.length())) < 0) {
         // If the thread is in the process of exiting, don't flag an error
         if (errno != ESRCH) {
-            PLOG(ERROR) << "JoinGroup failed to write '" << value << "'; fd=" << fd;
+            PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; fd=" << fd;
             return false;
         }
     }
@@ -182,7 +188,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     if (fd_ >= 0) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(pid, fd_)) {
-            PLOG(ERROR) << "Failed to add task into cgroup";
+            LOG(ERROR) << "Failed to add task into cgroup";
             return false;
         }
         return true;
@@ -194,27 +200,27 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     }
 
     // this is app-dependent path, file descriptor is not cached
-    std::string procs_path = controller_->GetProcsFilePath(path_.c_str(), uid, pid);
+    std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << procs_path << ": " << strerror(errno);
+        PLOG(WARNING) << "Failed to open " << procs_path;
         return false;
     }
     if (!AddTidToCgroup(pid, tmp_fd)) {
-        PLOG(ERROR) << "Failed to add task into cgroup";
+        LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
 
     return true;
 #else
-    std::string procs_path = controller_->GetProcsFilePath(path_.c_str(), uid, pid);
+    std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
         // no permissions to access the file, ignore
         return true;
     }
     if (!AddTidToCgroup(pid, tmp_fd)) {
-        PLOG(ERROR) << "Failed to add task into cgroup";
+        LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
 
@@ -227,7 +233,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     if (fd_ >= 0) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(tid, fd_)) {
-            PLOG(ERROR) << "Failed to add task into cgroup";
+            LOG(ERROR) << "Failed to add task into cgroup";
             return false;
         }
         return true;
@@ -239,17 +245,17 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     }
 
     // application-dependent path can't be used with tid
-    PLOG(ERROR) << "Application profile can't be applied to a thread";
+    LOG(ERROR) << "Application profile can't be applied to a thread";
     return false;
 #else
-    std::string tasks_path = controller_->GetTasksFilePath(path_.c_str());
+    std::string tasks_path = controller()->GetTasksFilePath(path_);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
         // no permissions to access the file, ignore
         return true;
     }
     if (!AddTidToCgroup(tid, tmp_fd)) {
-        PLOG(ERROR) << "Failed to add task into cgroup";
+        LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
 
@@ -279,21 +285,31 @@ bool TaskProfile::ExecuteForTask(int tid) const {
 }
 
 TaskProfiles& TaskProfiles::GetInstance() {
-    static TaskProfiles instance;
-    return instance;
+    // Deliberately leak this object to avoid a race between destruction on
+    // process exit and concurrent access from another thread.
+    static auto* instance = new TaskProfiles;
+    return *instance;
 }
 
 TaskProfiles::TaskProfiles() {
-    if (!Load(CgroupMap::GetInstance())) {
-        LOG(ERROR) << "TaskProfiles::Load for [" << getpid() << "] failed";
+    // load system task profiles
+    if (!Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_FILE)) {
+        LOG(ERROR) << "Loading " << TASK_PROFILE_DB_FILE << " for [" << getpid() << "] failed";
+    }
+
+    // load vendor task profiles if the file exists
+    if (!access(TASK_PROFILE_DB_VENDOR_FILE, F_OK) &&
+        !Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_VENDOR_FILE)) {
+        LOG(ERROR) << "Loading " << TASK_PROFILE_DB_VENDOR_FILE << " for [" << getpid()
+                   << "] failed";
     }
 }
 
-bool TaskProfiles::Load(const CgroupMap& cg_map) {
+bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
     std::string json_doc;
 
-    if (!android::base::ReadFileToString(TASK_PROFILE_DB_FILE, &json_doc)) {
-        LOG(ERROR) << "Failed to read task profiles from " << TASK_PROFILE_DB_FILE;
+    if (!android::base::ReadFileToString(file_name, &json_doc)) {
+        LOG(ERROR) << "Failed to read task profiles from " << file_name;
         return false;
     }
 
@@ -304,18 +320,18 @@ bool TaskProfiles::Load(const CgroupMap& cg_map) {
         return false;
     }
 
-    Json::Value attr = root["Attributes"];
+    const Json::Value& attr = root["Attributes"];
     for (Json::Value::ArrayIndex i = 0; i < attr.size(); ++i) {
         std::string name = attr[i]["Name"].asString();
-        std::string ctrlName = attr[i]["Controller"].asString();
-        std::string file_name = attr[i]["File"].asString();
+        std::string controller_name = attr[i]["Controller"].asString();
+        std::string file_attr = attr[i]["File"].asString();
 
         if (attributes_.find(name) == attributes_.end()) {
-            const CgroupController* controller = cg_map.FindController(ctrlName.c_str());
-            if (controller) {
-                attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_name);
+            auto controller = cg_map.FindController(controller_name);
+            if (controller.HasValue()) {
+                attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_attr);
             } else {
-                LOG(WARNING) << "Controller " << ctrlName << " is not found";
+                LOG(WARNING) << "Controller " << controller_name << " is not found";
             }
         } else {
             LOG(WARNING) << "Attribute " << name << " is already defined";
@@ -324,72 +340,72 @@ bool TaskProfiles::Load(const CgroupMap& cg_map) {
 
     std::map<std::string, std::string> params;
 
-    Json::Value profilesVal = root["Profiles"];
-    for (Json::Value::ArrayIndex i = 0; i < profilesVal.size(); ++i) {
-        Json::Value profileVal = profilesVal[i];
+    const Json::Value& profiles_val = root["Profiles"];
+    for (Json::Value::ArrayIndex i = 0; i < profiles_val.size(); ++i) {
+        const Json::Value& profile_val = profiles_val[i];
 
-        std::string profileName = profileVal["Name"].asString();
-        Json::Value actions = profileVal["Actions"];
+        std::string profile_name = profile_val["Name"].asString();
+        const Json::Value& actions = profile_val["Actions"];
         auto profile = std::make_unique<TaskProfile>();
 
-        for (Json::Value::ArrayIndex actIdx = 0; actIdx < actions.size(); ++actIdx) {
-            Json::Value actionVal = actions[actIdx];
-            std::string actionName = actionVal["Name"].asString();
-            Json::Value paramsVal = actionVal["Params"];
-            if (actionName == "JoinCgroup") {
-                std::string ctrlName = paramsVal["Controller"].asString();
-                std::string path = paramsVal["Path"].asString();
+        for (Json::Value::ArrayIndex act_idx = 0; act_idx < actions.size(); ++act_idx) {
+            const Json::Value& action_val = actions[act_idx];
+            std::string action_name = action_val["Name"].asString();
+            const Json::Value& params_val = action_val["Params"];
+            if (action_name == "JoinCgroup") {
+                std::string controller_name = params_val["Controller"].asString();
+                std::string path = params_val["Path"].asString();
 
-                const CgroupController* controller = cg_map.FindController(ctrlName.c_str());
-                if (controller) {
+                auto controller = cg_map.FindController(controller_name);
+                if (controller.HasValue()) {
                     profile->Add(std::make_unique<SetCgroupAction>(controller, path));
                 } else {
-                    LOG(WARNING) << "JoinCgroup: controller " << ctrlName << " is not found";
+                    LOG(WARNING) << "JoinCgroup: controller " << controller_name << " is not found";
                 }
-            } else if (actionName == "SetTimerSlack") {
-                std::string slackValue = paramsVal["Slack"].asString();
+            } else if (action_name == "SetTimerSlack") {
+                std::string slack_value = params_val["Slack"].asString();
                 char* end;
                 unsigned long slack;
 
-                slack = strtoul(slackValue.c_str(), &end, 10);
-                if (end > slackValue.c_str()) {
+                slack = strtoul(slack_value.c_str(), &end, 10);
+                if (end > slack_value.c_str()) {
                     profile->Add(std::make_unique<SetTimerSlackAction>(slack));
                 } else {
-                    LOG(WARNING) << "SetTimerSlack: invalid parameter: " << slackValue;
+                    LOG(WARNING) << "SetTimerSlack: invalid parameter: " << slack_value;
                 }
-            } else if (actionName == "SetAttribute") {
-                std::string attrName = paramsVal["Name"].asString();
-                std::string attrValue = paramsVal["Value"].asString();
+            } else if (action_name == "SetAttribute") {
+                std::string attr_name = params_val["Name"].asString();
+                std::string attr_value = params_val["Value"].asString();
 
-                auto iter = attributes_.find(attrName);
+                auto iter = attributes_.find(attr_name);
                 if (iter != attributes_.end()) {
                     profile->Add(
-                            std::make_unique<SetAttributeAction>(iter->second.get(), attrValue));
+                            std::make_unique<SetAttributeAction>(iter->second.get(), attr_value));
                 } else {
-                    LOG(WARNING) << "SetAttribute: unknown attribute: " << attrName;
+                    LOG(WARNING) << "SetAttribute: unknown attribute: " << attr_name;
                 }
-            } else if (actionName == "SetClamps") {
-                std::string boostValue = paramsVal["Boost"].asString();
-                std::string clampValue = paramsVal["Clamp"].asString();
+            } else if (action_name == "SetClamps") {
+                std::string boost_value = params_val["Boost"].asString();
+                std::string clamp_value = params_val["Clamp"].asString();
                 char* end;
                 unsigned long boost;
 
-                boost = strtoul(boostValue.c_str(), &end, 10);
-                if (end > boostValue.c_str()) {
-                    unsigned long clamp = strtoul(clampValue.c_str(), &end, 10);
-                    if (end > clampValue.c_str()) {
+                boost = strtoul(boost_value.c_str(), &end, 10);
+                if (end > boost_value.c_str()) {
+                    unsigned long clamp = strtoul(clamp_value.c_str(), &end, 10);
+                    if (end > clamp_value.c_str()) {
                         profile->Add(std::make_unique<SetClampsAction>(boost, clamp));
                     } else {
-                        LOG(WARNING) << "SetClamps: invalid parameter " << clampValue;
+                        LOG(WARNING) << "SetClamps: invalid parameter " << clamp_value;
                     }
                 } else {
-                    LOG(WARNING) << "SetClamps: invalid parameter: " << boostValue;
+                    LOG(WARNING) << "SetClamps: invalid parameter: " << boost_value;
                 }
             } else {
-                LOG(WARNING) << "Unknown profile action: " << actionName;
+                LOG(WARNING) << "Unknown profile action: " << action_name;
             }
         }
-        profiles_[profileName] = std::move(profile);
+        profiles_[profile_name] = std::move(profile);
     }
 
     return true;

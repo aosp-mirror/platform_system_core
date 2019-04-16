@@ -26,5 +26,5 @@ cc_binary {
     static_libs: [
         "libdmabufinfo",
     ],
-    soc_specific: true,
+    product_specific: true,
 }

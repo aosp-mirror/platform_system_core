@@ -67,6 +67,8 @@ extern const char* const kFeatureApex;
 extern const char* const kFeatureFixedPushMkdir;
 // adbd supports android binder bridge (abb).
 extern const char* const kFeatureAbb;
+// adbd properly updates symlink timestamps on push.
+extern const char* const kFeatureFixedPushSymlinkTimestamp;
 
 TransportId NextTransportId();
 
@@ -97,6 +99,9 @@ struct Connection {
     virtual void Start() = 0;
     virtual void Stop() = 0;
 
+    // Stop, and reset the device if it's a USB connection.
+    virtual void Reset();
+
     std::string transport_name_;
     ReadCallback read_callback_;
     ErrorCallback error_callback_;
@@ -122,6 +127,9 @@ struct BlockingConnection {
     // This method must be thread-safe, and must cause concurrent Reads/Writes to terminate.
     // Formerly known as 'Kick' in atransport.
     virtual void Close() = 0;
+
+    // Terminate a connection, and reset it.
+    virtual void Reset() = 0;
 };
 
 struct BlockingConnectionAdapter : public Connection {
@@ -133,6 +141,8 @@ struct BlockingConnectionAdapter : public Connection {
 
     virtual void Start() override final;
     virtual void Stop() override final;
+
+    virtual void Reset() override final;
 
     bool started_ GUARDED_BY(mutex_) = false;
     bool stopped_ GUARDED_BY(mutex_) = false;
@@ -155,6 +165,7 @@ struct FdConnection : public BlockingConnection {
     bool Write(apacket* packet) override final;
 
     void Close() override;
+    virtual void Reset() override final { Close(); }
 
   private:
     unique_fd fd_;
@@ -168,6 +179,7 @@ struct UsbConnection : public BlockingConnection {
     bool Write(apacket* packet) override final;
 
     void Close() override final;
+    virtual void Reset() override final;
 
     usb_handle* handle_;
 };
@@ -233,6 +245,7 @@ class atransport {
     virtual ~atransport();
 
     int Write(apacket* p);
+    void Reset();
     void Kick();
     bool kicked() const { return kicked_; }
 
@@ -362,7 +375,7 @@ class atransport {
 atransport* acquire_one_transport(TransportType type, const char* serial, TransportId transport_id,
                                   bool* is_ambiguous, std::string* error_out,
                                   bool accept_any_state = false);
-void kick_transport(atransport* t);
+void kick_transport(atransport* t, bool reset = false);
 void update_transports(void);
 
 // Iterates across all of the current and pending transports.
@@ -393,8 +406,8 @@ void unregister_usb_transport(usb_handle* usb);
 
 bool check_header(apacket* p, atransport* t);
 
-void close_usb_devices();
-void close_usb_devices(std::function<bool(const atransport*)> predicate);
+void close_usb_devices(bool reset = false);
+void close_usb_devices(std::function<bool(const atransport*)> predicate, bool reset = false);
 
 void send_packet(apacket* p, atransport* t);
 

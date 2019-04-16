@@ -172,7 +172,7 @@ BENCHMARK(BM_time_time);
  * Measure the time it takes to submit the android logging data to pstore
  */
 static void BM_pmsg_short(benchmark::State& state) {
-  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
   if (pstore_fd < 0) {
     state.SkipWithError("/dev/pmsg0");
     return;
@@ -248,7 +248,7 @@ BENCHMARK(BM_pmsg_short);
  * best case aligned single block.
  */
 static void BM_pmsg_short_aligned(benchmark::State& state) {
-  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
   if (pstore_fd < 0) {
     state.SkipWithError("/dev/pmsg0");
     return;
@@ -323,7 +323,7 @@ BENCHMARK(BM_pmsg_short_aligned);
  * best case aligned single block.
  */
 static void BM_pmsg_short_unaligned1(benchmark::State& state) {
-  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
   if (pstore_fd < 0) {
     state.SkipWithError("/dev/pmsg0");
     return;
@@ -398,7 +398,7 @@ BENCHMARK(BM_pmsg_short_unaligned1);
  * best case aligned single block.
  */
 static void BM_pmsg_long_aligned(benchmark::State& state) {
-  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
   if (pstore_fd < 0) {
     state.SkipWithError("/dev/pmsg0");
     return;
@@ -471,7 +471,7 @@ BENCHMARK(BM_pmsg_long_aligned);
  * best case aligned single block.
  */
 static void BM_pmsg_long_unaligned1(benchmark::State& state) {
-  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
+  int pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
   if (pstore_fd < 0) {
     state.SkipWithError("/dev/pmsg0");
     return;
@@ -949,8 +949,8 @@ BENCHMARK(BM_lookupEventTagNum);
 
 // Must be functionally identical to liblog internal __send_log_msg.
 static void send_to_control(char* buf, size_t len) {
-  int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                 SOCK_STREAM);
+  int sock =
+      socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM | SOCK_CLOEXEC);
   if (sock < 0) return;
   size_t writeLen = strlen(buf) + 1;
 

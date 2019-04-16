@@ -155,6 +155,10 @@ int FirstStageMain(int argc, char** argv) {
     // part of the product partition, e.g. because they are mounted read-write.
     CHECKCALL(mkdir("/mnt/product", 0755));
 
+    // /apex is used to mount APEXes
+    CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                    "mode=0755,uid=0,gid=0"));
+
 #undef CHECKCALL
 
     // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
@@ -193,6 +197,12 @@ int FirstStageMain(int argc, char** argv) {
             LOG(FATAL) << "Could not bind mount /first_stage_ramdisk to itself";
         }
         SwitchRoot("/first_stage_ramdisk");
+    }
+
+    // If this file is present, the second-stage init will use a userdebug sepolicy
+    // and load adb_debug.prop to allow adb root, if the device is unlocked.
+    if (access("/force_debuggable", F_OK) == 0) {
+        setenv("INIT_FORCE_DEBUGGABLE", "true", 1);
     }
 
     if (!DoFirstStageMount()) {

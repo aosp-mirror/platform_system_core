@@ -61,6 +61,26 @@ TEST(MapsTest, map_add) {
   ASSERT_EQ(0U, info->load_bias.load());
 }
 
+TEST(MapsTest, map_move) {
+  Maps maps;
+
+  maps.Add(0x1000, 0x2000, 0, PROT_READ, "fake_map", 0);
+  maps.Add(0x3000, 0x4000, 0x10, 0, "", 0x1234);
+  maps.Add(0x5000, 0x6000, 1, 2, "fake_map2", static_cast<uint64_t>(-1));
+
+  Maps maps2 = std::move(maps);
+
+  ASSERT_EQ(3U, maps2.Total());
+  MapInfo* info = maps2.Get(0);
+  ASSERT_EQ(0x1000U, info->start);
+  ASSERT_EQ(0x2000U, info->end);
+  ASSERT_EQ(0U, info->offset);
+  ASSERT_EQ(PROT_READ, info->flags);
+  ASSERT_EQ("fake_map", info->name);
+  ASSERT_EQ(0U, info->elf_offset);
+  ASSERT_EQ(0U, info->load_bias.load());
+}
+
 TEST(MapsTest, verify_parse_line) {
   MapInfo info(nullptr, 0, 0, 0, 0, "");
 

@@ -28,62 +28,31 @@
 #include "util.h"
 
 using android::base::Basename;
+using android::base::ReadFileToString;
 using android::base::StartsWith;
 using android::base::unique_fd;
 
 namespace android {
 namespace fs_mgr {
 
-// Helper functions to print enum class VBMetaVerifyResult.
-const char* VBMetaVerifyResultToString(VBMetaVerifyResult result) {
-    // clang-format off
-    static const char* const name[] = {
-        "ResultSuccess",
-        "ResultError",
-        "ResultErrorVerification",
-        "ResultUnknown",
-    };
-    // clang-format on
-
-    uint32_t index = static_cast<uint32_t>(result);
-    uint32_t unknown_index = sizeof(name) / sizeof(char*) - 1;
-    if (index >= unknown_index) {
-        index = unknown_index;
+std::string GetAvbPropertyDescriptor(const std::string& key,
+                                     const std::vector<VBMetaData>& vbmeta_images) {
+    size_t value_size;
+    for (const auto& vbmeta : vbmeta_images) {
+        const char* value = avb_property_lookup(vbmeta.data(), vbmeta.size(), key.data(),
+                                                key.size(), &value_size);
+        if (value != nullptr) {
+            return {value, value_size};
+        }
     }
-
-    return name[index];
-}
-
-std::ostream& operator<<(std::ostream& os, VBMetaVerifyResult result) {
-    os << VBMetaVerifyResultToString(result);
-    return os;
-}
-
-// class VBMetaData
-// ----------------
-std::unique_ptr<AvbVBMetaImageHeader> VBMetaData::GetVBMetaHeader(bool update_vbmeta_size) {
-    auto vbmeta_header = std::make_unique<AvbVBMetaImageHeader>();
-
-    if (!vbmeta_header) return nullptr;
-
-    /* Byteswap the header. */
-    avb_vbmeta_image_header_to_host_byte_order((AvbVBMetaImageHeader*)vbmeta_ptr_.get(),
-                                               vbmeta_header.get());
-    if (update_vbmeta_size) {
-        vbmeta_size_ = sizeof(AvbVBMetaImageHeader) +
-                       vbmeta_header->authentication_data_block_size +
-                       vbmeta_header->auxiliary_data_block_size;
-    }
-
-    return vbmeta_header;
+    return "";
 }
 
 // Constructs dm-verity arguments for sending DM_TABLE_LOAD ioctl to kernel.
 // See the following link for more details:
 // https://gitlab.com/cryptsetup/cryptsetup/wikis/DMVerity
-bool ConstructVerityTable(const AvbHashtreeDescriptor& hashtree_desc, const std::string& salt,
-                          const std::string& root_digest, const std::string& blk_device,
-                          android::dm::DmTable* table) {
+bool ConstructVerityTable(const FsAvbHashtreeDescriptor& hashtree_desc,
+                          const std::string& blk_device, android::dm::DmTable* table) {
     // Loads androidboot.veritymode from kernel cmdline.
     std::string verity_mode;
     if (!fs_mgr_get_boot_config("veritymode", &verity_mode)) {
@@ -104,12 +73,12 @@ bool ConstructVerityTable(const AvbHashtreeDescriptor& hashtree_desc, const std:
     std::ostringstream hash_algorithm;
     hash_algorithm << hashtree_desc.hash_algorithm;
 
-    android::dm::DmTargetVerity target(0, hashtree_desc.image_size / 512,
-                                       hashtree_desc.dm_verity_version, blk_device, blk_device,
-                                       hashtree_desc.data_block_size, hashtree_desc.hash_block_size,
-                                       hashtree_desc.image_size / hashtree_desc.data_block_size,
-                                       hashtree_desc.tree_offset / hashtree_desc.hash_block_size,
-                                       hash_algorithm.str(), root_digest, salt);
+    android::dm::DmTargetVerity target(
+            0, hashtree_desc.image_size / 512, hashtree_desc.dm_verity_version, blk_device,
+            blk_device, hashtree_desc.data_block_size, hashtree_desc.hash_block_size,
+            hashtree_desc.image_size / hashtree_desc.data_block_size,
+            hashtree_desc.tree_offset / hashtree_desc.hash_block_size, hash_algorithm.str(),
+            hashtree_desc.root_digest, hashtree_desc.salt);
     if (hashtree_desc.fec_size > 0) {
         target.UseFec(blk_device, hashtree_desc.fec_num_roots,
                       hashtree_desc.fec_offset / hashtree_desc.data_block_size,
@@ -126,26 +95,25 @@ bool ConstructVerityTable(const AvbHashtreeDescriptor& hashtree_desc, const std:
     return table->AddTarget(std::make_unique<android::dm::DmTargetVerity>(target));
 }
 
-bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const AvbHashtreeDescriptor& hashtree_desc,
-                           const std::string& salt, const std::string& root_digest,
+bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const FsAvbHashtreeDescriptor& hashtree_desc,
                            bool wait_for_verity_dev) {
     android::dm::DmTable table;
-    if (!ConstructVerityTable(hashtree_desc, salt, root_digest, fstab_entry->blk_device, &table) ||
-        !table.valid()) {
+    if (!ConstructVerityTable(hashtree_desc, fstab_entry->blk_device, &table) || !table.valid()) {
         LERROR << "Failed to construct verity table.";
         return false;
     }
     table.set_readonly(true);
 
     const std::string mount_point(Basename(fstab_entry->mount_point));
+    const std::string device_name(GetVerityDeviceName(*fstab_entry));
     android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
-    if (!dm.CreateDevice(mount_point, table)) {
+    if (!dm.CreateDevice(device_name, table)) {
         LERROR << "Couldn't create verity device!";
         return false;
     }
 
     std::string dev_path;
-    if (!dm.GetDmDevicePathByName(mount_point, &dev_path)) {
+    if (!dm.GetDmDevicePathByName(device_name, &dev_path)) {
         LERROR << "Couldn't get verity device path!";
         return false;
     }
@@ -164,12 +132,11 @@ bool HashtreeDmVeritySetup(FstabEntry* fstab_entry, const AvbHashtreeDescriptor&
     return true;
 }
 
-std::unique_ptr<AvbHashtreeDescriptor> GetHashtreeDescriptor(
-    const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images,
-    std::string* out_salt, std::string* out_digest) {
+std::unique_ptr<FsAvbHashtreeDescriptor> GetHashtreeDescriptor(
+        const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images) {
     bool found = false;
     const uint8_t* desc_partition_name;
-    auto hashtree_desc = std::make_unique<AvbHashtreeDescriptor>();
+    auto hashtree_desc = std::make_unique<FsAvbHashtreeDescriptor>();
 
     for (const auto& vbmeta : vbmeta_images) {
         size_t num_descriptors;
@@ -209,15 +176,17 @@ std::unique_ptr<AvbHashtreeDescriptor> GetHashtreeDescriptor(
     }
 
     if (!found) {
-        LERROR << "Partition descriptor not found: " << partition_name.c_str();
+        LERROR << "Hashtree descriptor not found: " << partition_name;
         return nullptr;
     }
 
+    hashtree_desc->partition_name = partition_name;
+
     const uint8_t* desc_salt = desc_partition_name + hashtree_desc->partition_name_len;
-    *out_salt = BytesToHex(desc_salt, hashtree_desc->salt_len);
+    hashtree_desc->salt = BytesToHex(desc_salt, hashtree_desc->salt_len);
 
     const uint8_t* desc_digest = desc_salt + hashtree_desc->salt_len;
-    *out_digest = BytesToHex(desc_digest, hashtree_desc->root_digest_len);
+    hashtree_desc->root_digest = BytesToHex(desc_digest, hashtree_desc->root_digest_len);
 
     return hashtree_desc;
 }
@@ -235,18 +204,15 @@ bool LoadAvbHashtreeToEnableVerity(FstabEntry* fstab_entry, bool wait_for_verity
         return false;
     }
 
-    std::string salt;
-    std::string root_digest;
-    std::unique_ptr<AvbHashtreeDescriptor> hashtree_descriptor =
-        GetHashtreeDescriptor(partition_name, vbmeta_images, &salt, &root_digest);
+    std::unique_ptr<FsAvbHashtreeDescriptor> hashtree_descriptor =
+            GetHashtreeDescriptor(partition_name, vbmeta_images);
     if (!hashtree_descriptor) {
         return false;
     }
 
     // Converts HASHTREE descriptor to verity table to load into kernel.
     // When success, the new device path will be returned, e.g., /dev/block/dm-2.
-    return HashtreeDmVeritySetup(fstab_entry, *hashtree_descriptor, salt, root_digest,
-                                 wait_for_verity_dev);
+    return HashtreeDmVeritySetup(fstab_entry, *hashtree_descriptor, wait_for_verity_dev);
 }
 
 // Converts a AVB partition_name (without A/B suffix) to a device partition name.
@@ -347,7 +313,8 @@ std::unique_ptr<AvbFooter> GetAvbFooter(int fd) {
     return footer;
 }
 
-bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& expected_key_blob) {
+bool ValidatePublicKeyBlob(const uint8_t* key, size_t length,
+                           const std::string& expected_key_blob) {
     if (expected_key_blob.empty()) {  // no expectation of the key, return true.
         return true;
     }
@@ -356,6 +323,21 @@ bool VerifyPublicKeyBlob(const uint8_t* key, size_t length, const std::string& e
     }
     if (0 == memcmp(key, expected_key_blob.data(), length)) {
         return true;
+    }
+    return false;
+}
+
+bool ValidatePublicKeyBlob(const std::string& key_blob_to_validate,
+                           const std::vector<std::string>& allowed_key_paths) {
+    std::string allowed_key_blob;
+    if (key_blob_to_validate.empty()) {
+        LWARNING << "Failed to validate an empty key";
+        return false;
+    }
+    for (const auto& path : allowed_key_paths) {
+        if (ReadFileToString(path, &allowed_key_blob)) {
+            if (key_blob_to_validate == allowed_key_blob) return true;
+        }
     }
     return false;
 }
@@ -383,7 +365,7 @@ VBMetaVerifyResult VerifyVBMetaSignature(const VBMetaData& vbmeta,
                        << ": Error verifying vbmeta image: failed to get public key";
                 return VBMetaVerifyResult::kError;
             }
-            if (!VerifyPublicKeyBlob(pk_data, pk_len, expected_public_key_blob)) {
+            if (!ValidatePublicKeyBlob(pk_data, pk_len, expected_public_key_blob)) {
                 LERROR << vbmeta.partition() << ": Error verifying vbmeta image: public key used to"
                        << " sign data does not match key in chain descriptor";
                 return VBMetaVerifyResult::kErrorVerification;
@@ -420,6 +402,10 @@ std::unique_ptr<VBMetaData> VerifyVBMetaData(int fd, const std::string& partitio
     uint64_t vbmeta_size = VBMetaData::kMaxVBMetaSize;
     bool is_vbmeta_partition = StartsWith(partition_name, "vbmeta");
 
+    if (out_verify_result) {
+        *out_verify_result = VBMetaVerifyResult::kError;
+    }
+
     if (!is_vbmeta_partition) {
         std::unique_ptr<AvbFooter> footer = GetAvbFooter(fd);
         if (!footer) {
@@ -445,7 +431,10 @@ std::unique_ptr<VBMetaData> VerifyVBMetaData(int fd, const std::string& partitio
 
     auto verify_result =
             VerifyVBMetaSignature(*vbmeta, expected_public_key_blob, out_public_key_data);
-    if (out_verify_result != nullptr) *out_verify_result = verify_result;
+
+    if (out_verify_result != nullptr) {
+        *out_verify_result = verify_result;
+    }
 
     if (verify_result == VBMetaVerifyResult::kSuccess ||
         verify_result == VBMetaVerifyResult::kErrorVerification) {
@@ -508,6 +497,10 @@ std::unique_ptr<VBMetaData> LoadAndVerifyVbmetaByPath(
         const std::string& expected_public_key_blob, bool allow_verification_error,
         bool rollback_protection, bool is_chained_vbmeta, std::string* out_public_key_data,
         bool* out_verification_disabled, VBMetaVerifyResult* out_verify_result) {
+    if (out_verify_result) {
+        *out_verify_result = VBMetaVerifyResult::kError;
+    }
+
     // Ensures the device path (might be a symlink created by init) is ready to access.
     if (!WaitForFile(image_path, 1s)) {
         PERROR << "No such path: " << image_path;

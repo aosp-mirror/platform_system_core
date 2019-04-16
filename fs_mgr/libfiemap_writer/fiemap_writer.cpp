@@ -27,6 +27,7 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,6 +50,9 @@ static constexpr const uint32_t kUnsupportedExtentFlags =
         FIEMAP_EXTENT_UNKNOWN | FIEMAP_EXTENT_UNWRITTEN | FIEMAP_EXTENT_DELALLOC |
         FIEMAP_EXTENT_NOT_ALIGNED | FIEMAP_EXTENT_DATA_INLINE | FIEMAP_EXTENT_DATA_TAIL |
         FIEMAP_EXTENT_UNWRITTEN | FIEMAP_EXTENT_SHARED | FIEMAP_EXTENT_MERGED;
+
+// Large file support must be enabled.
+static_assert(sizeof(off_t) == sizeof(uint64_t));
 
 static inline void cleanup(const std::string& file_path, bool created) {
     if (created) {
@@ -126,7 +130,8 @@ static bool DeviceMapperStackPop(const std::string& bdev, std::string* bdev_raw)
     return DeviceMapperStackPop(bdev_next, bdev_raw);
 }
 
-static bool FileToBlockDevicePath(const std::string& file_path, std::string* bdev_path) {
+bool FiemapWriter::GetBlockDeviceForFile(const std::string& file_path, std::string* bdev_path,
+                                         bool* uses_dm) {
     struct stat sb;
     if (stat(file_path.c_str(), &sb)) {
         PLOG(ERROR) << "Failed to get stat for: " << file_path;
@@ -144,6 +149,10 @@ static bool FileToBlockDevicePath(const std::string& file_path, std::string* bde
     if (!DeviceMapperStackPop(bdev, &bdev_raw)) {
         LOG(ERROR) << "Failed to get the bottom of the device mapper stack for device: " << bdev;
         return false;
+    }
+
+    if (uses_dm) {
+        *uses_dm = (bdev_raw != bdev);
     }
 
     LOG(DEBUG) << "Popped device (" << bdev_raw << ") from device mapper stack starting with ("
@@ -195,17 +204,21 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, 
         return false;
     }
 
-    if (file_size % sfs.f_bsize) {
-        LOG(ERROR) << "File size " << file_size << " is not aligned to optimal block size "
-                   << sfs.f_bsize << " for file " << file_path;
+    if (!sfs.f_bsize) {
+        LOG(ERROR) << "Unsupported block size: " << sfs.f_bsize;
         return false;
     }
 
     // Check if the filesystem is of supported types.
-    // Only ext4 and f2fs are tested and supported.
-    if ((sfs.f_type != EXT4_SUPER_MAGIC) && (sfs.f_type != F2FS_SUPER_MAGIC)) {
-        LOG(ERROR) << "Unsupported file system type: 0x" << std::hex << sfs.f_type;
-        return false;
+    // Only ext4, f2fs, and vfat are tested and supported.
+    switch (sfs.f_type) {
+        case EXT4_SUPER_MAGIC:
+        case F2FS_SUPER_MAGIC:
+        case MSDOS_SUPER_MAGIC:
+            break;
+        default:
+            LOG(ERROR) << "Unsupported file system type: 0x" << std::hex << sfs.f_type;
+            return false;
     }
 
     uint64_t available_bytes = sfs.f_bsize * sfs.f_bavail;
@@ -219,15 +232,65 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, 
     return true;
 }
 
+static bool FallocateFallback(int file_fd, uint64_t block_size, uint64_t file_size,
+                              const std::string& file_path,
+                              const std::function<bool(uint64_t, uint64_t)>& on_progress) {
+    // Even though this is much faster than writing zeroes, it is still slow
+    // enough that we need to fire the progress callback periodically. To
+    // easily achieve this, we seek in chunks. We use 1000 chunks since
+    // normally we only fire the callback on 1/1000th increments.
+    uint64_t bytes_per_chunk = std::max(file_size / 1000, block_size);
+
+    // Seek just to the end of each chunk and write a single byte, causing
+    // the filesystem to allocate blocks.
+    off_t cursor = 0;
+    off_t end = static_cast<off_t>(file_size);
+    while (cursor < end) {
+        cursor = std::min(static_cast<off_t>(cursor + bytes_per_chunk), end);
+        auto rv = TEMP_FAILURE_RETRY(lseek(file_fd, cursor - 1, SEEK_SET));
+        if (rv < 0) {
+            PLOG(ERROR) << "Failed to lseek " << file_path;
+            return false;
+        }
+        if (rv != cursor - 1) {
+            LOG(ERROR) << "Seek returned wrong offset " << rv << " for file " << file_path;
+            return false;
+        }
+        char buffer[] = {0};
+        if (!android::base::WriteFully(file_fd, buffer, 1)) {
+            PLOG(ERROR) << "Write failed: " << file_path;
+            return false;
+        }
+        if (on_progress && !on_progress(cursor, file_size)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
-                         uint64_t file_size, std::function<bool(uint64_t, uint64_t)> on_progress) {
+                         uint64_t file_size, unsigned int fs_type,
+                         std::function<bool(uint64_t, uint64_t)> on_progress) {
     // Reserve space for the file on the file system and write it out to make sure the extents
     // don't come back unwritten. Return from this function with the kernel file offset set to 0.
     // If the filesystem is f2fs, then we also PIN the file on disk to make sure the blocks
     // aren't moved around.
-    if (fallocate(file_fd, FALLOC_FL_ZERO_RANGE, 0, file_size)) {
-        PLOG(ERROR) << "Failed to allocate space for file: " << file_path << " size: " << file_size;
-        return false;
+    switch (fs_type) {
+        case EXT4_SUPER_MAGIC:
+        case F2FS_SUPER_MAGIC:
+            if (fallocate(file_fd, FALLOC_FL_ZERO_RANGE, 0, file_size)) {
+                PLOG(ERROR) << "Failed to allocate space for file: " << file_path
+                            << " size: " << file_size;
+                return false;
+            }
+            break;
+        case MSDOS_SUPER_MAGIC:
+            // fallocate() is not supported, and not needed, since VFAT does not support holes.
+            // Instead we can perform a much faster allocation.
+            return FallocateFallback(file_fd, blocksz, file_size, file_path, on_progress);
+        default:
+            LOG(ERROR) << "Missing fallocate() support for file system " << fs_type;
+            return false;
     }
 
     // write zeroes in 'blocksz' byte increments until we reach file_size to make sure the data
@@ -246,16 +309,19 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
     }
 
     int permille = -1;
-    for (; offset < file_size; offset += blocksz) {
+    while (offset < file_size) {
         if (!::android::base::WriteFully(file_fd, buffer.get(), blocksz)) {
             PLOG(ERROR) << "Failed to write" << blocksz << " bytes at offset" << offset
                         << " in file " << file_path;
             return false;
         }
+
+        offset += blocksz;
+
         // Don't invoke the callback every iteration - wait until a significant
         // chunk (here, 1/1000th) of the data has been processed.
         int new_permille = (static_cast<uint64_t>(offset) * 1000) / file_size;
-        if (new_permille != permille) {
+        if (new_permille != permille && static_cast<uint64_t>(offset) != file_size) {
             if (on_progress && !on_progress(offset, file_size)) {
                 return false;
             }
@@ -282,9 +348,9 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
 }
 
 static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type) {
-    if (fs_type == EXT4_SUPER_MAGIC) {
-        // No pinning necessary for ext4. The blocks, once allocated, are expected
-        // to be fixed.
+    if (fs_type != F2FS_SUPER_MAGIC) {
+        // No pinning necessary for ext4/msdos. The blocks, once allocated, are
+        // expected to be fixed.
         return true;
     }
 
@@ -319,9 +385,9 @@ static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type)
 }
 
 static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_type) {
-    if (fs_type == EXT4_SUPER_MAGIC) {
-        // No pinning necessary for ext4. The blocks, once allocated, are expected
-        // to be fixed.
+    if (fs_type != F2FS_SUPER_MAGIC) {
+        // No pinning necessary for ext4 or vfat. The blocks, once allocated,
+        // are expected to be fixed.
         return true;
     }
 
@@ -341,9 +407,25 @@ static bool IsFilePinned(int file_fd, const std::string& file_path, uint32_t fs_
 #define F2FS_IOC_GET_PIN_FILE _IOR(F2FS_IOCTL_MAGIC, 14, __u32)
 #endif
 
+    // f2fs: export FS_NOCOW_FL flag to user
+    uint32_t flags;
+    int error = ioctl(file_fd, FS_IOC_GETFLAGS, &flags);
+    if (error < 0) {
+        if ((errno == ENOTTY) || (errno == ENOTSUP)) {
+            PLOG(ERROR) << "Failed to get flags, not supported by kernel: " << file_path;
+        } else {
+            PLOG(ERROR) << "Failed to get flags: " << file_path;
+        }
+        return false;
+    }
+    if (!(flags & FS_NOCOW_FL)) {
+        LOG(ERROR) << "It is not pinned: " << file_path;
+        return false;
+    }
+
     // F2FS_IOC_GET_PIN_FILE returns the number of blocks moved.
     uint32_t moved_blocks_nr;
-    int error = ioctl(file_fd, F2FS_IOC_GET_PIN_FILE, &moved_blocks_nr);
+    error = ioctl(file_fd, F2FS_IOC_GET_PIN_FILE, &moved_blocks_nr);
     if (error < 0) {
         if ((errno == ENOTTY) || (errno == ENOTSUP)) {
             PLOG(ERROR) << "Failed to get file pin status, not supported by kernel: " << file_path;
@@ -433,6 +515,54 @@ static bool ReadFiemap(int file_fd, const std::string& file_path,
     return last_extent_seen;
 }
 
+static bool ReadFibmap(int file_fd, const std::string& file_path,
+                       std::vector<struct fiemap_extent>* extents) {
+    struct stat s;
+    if (fstat(file_fd, &s)) {
+        PLOG(ERROR) << "Failed to stat " << file_path;
+        return false;
+    }
+
+    unsigned int blksize;
+    if (ioctl(file_fd, FIGETBSZ, &blksize) < 0) {
+        PLOG(ERROR) << "Failed to get FIGETBSZ for " << file_path;
+        return false;
+    }
+    if (!blksize) {
+        LOG(ERROR) << "Invalid filesystem block size: " << blksize;
+        return false;
+    }
+
+    uint64_t num_blocks = (s.st_size + blksize - 1) / blksize;
+    if (num_blocks > std::numeric_limits<uint32_t>::max()) {
+        LOG(ERROR) << "Too many blocks for FIBMAP (" << num_blocks << ")";
+        return false;
+    }
+
+    for (uint32_t last_block, block_number = 0; block_number < num_blocks; block_number++) {
+        uint32_t block = block_number;
+        if (ioctl(file_fd, FIBMAP, &block)) {
+            PLOG(ERROR) << "Failed to get FIBMAP for file " << file_path;
+            return false;
+        }
+        if (!block) {
+            LOG(ERROR) << "Logical block " << block_number << " is a hole, which is not supported";
+            return false;
+        }
+
+        if (!extents->empty() && block == last_block + 1) {
+            extents->back().fe_length += blksize;
+        } else {
+            extents->push_back(fiemap_extent{.fe_logical = block_number,
+                                             .fe_physical = static_cast<uint64_t>(block) * blksize,
+                                             .fe_length = static_cast<uint64_t>(blksize),
+                                             .fe_flags = 0});
+        }
+        last_block = block;
+    }
+    return true;
+}
+
 FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_size, bool create,
                                    std::function<bool(uint64_t, uint64_t)> progress) {
     // if 'create' is false, open an existing file and do not truncate.
@@ -458,7 +588,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     }
 
     std::string bdev_path;
-    if (!FileToBlockDevicePath(abs_path, &bdev_path)) {
+    if (!GetBlockDeviceForFile(abs_path, &bdev_path)) {
         LOG(ERROR) << "Failed to get block dev path for file: " << file_path;
         cleanup(abs_path, create);
         return nullptr;
@@ -495,8 +625,13 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
         return nullptr;
     }
 
+    // Align up to the nearest block size.
+    if (file_size % blocksz) {
+        file_size += blocksz - (file_size % blocksz);
+    }
+
     if (create) {
-        if (!AllocateFile(file_fd, abs_path, blocksz, file_size, std::move(progress))) {
+        if (!AllocateFile(file_fd, abs_path, blocksz, file_size, fs_type, std::move(progress))) {
             LOG(ERROR) << "Failed to allocate file: " << abs_path << " of size: " << file_size
                        << " bytes";
             cleanup(abs_path, create);
@@ -513,27 +648,34 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
 
     // now allocate the FiemapWriter and start setting it up
     FiemapUniquePtr fmap(new FiemapWriter());
-    if (!ReadFiemap(file_fd, abs_path, &fmap->extents_)) {
-        LOG(ERROR) << "Failed to read fiemap of file: " << abs_path;
-        cleanup(abs_path, create);
-        return nullptr;
+    switch (fs_type) {
+        case EXT4_SUPER_MAGIC:
+        case F2FS_SUPER_MAGIC:
+            if (!ReadFiemap(file_fd, abs_path, &fmap->extents_)) {
+                LOG(ERROR) << "Failed to read fiemap of file: " << abs_path;
+                cleanup(abs_path, create);
+                return nullptr;
+            }
+            break;
+        case MSDOS_SUPER_MAGIC:
+            if (!ReadFibmap(file_fd, abs_path, &fmap->extents_)) {
+                LOG(ERROR) << "Failed to read fibmap of file: " << abs_path;
+                cleanup(abs_path, create);
+                return nullptr;
+            }
+            break;
     }
 
     fmap->file_path_ = abs_path;
     fmap->bdev_path_ = bdev_path;
-    fmap->file_fd_ = std::move(file_fd);
     fmap->file_size_ = file_size;
     fmap->bdev_size_ = bdevsz;
     fmap->fs_type_ = fs_type;
     fmap->block_size_ = blocksz;
 
-    LOG(INFO) << "Successfully created FiemapWriter for file " << abs_path << " on block device "
-              << bdev_path;
+    LOG(VERBOSE) << "Successfully created FiemapWriter for file " << abs_path << " on block device "
+                 << bdev_path;
     return fmap;
-}
-
-bool FiemapWriter::Read(off64_t off, uint8_t* buffer, uint64_t size) {
-    return false;
 }
 
 }  // namespace fiemap_writer

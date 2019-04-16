@@ -190,8 +190,8 @@ static void help() {
         "scripting:\n"
         " wait-for[-TRANSPORT]-STATE\n"
         "     wait for device to be in the given state\n"
-        "     State: device, recovery, sideload, or bootloader\n"
-        "     Transport: usb, local, or any [default=any]\n"
+        "     STATE: device, recovery, sideload, bootloader, or disconnect\n"
+        "     TRANSPORT: usb, local, or any [default=any]\n"
         " get-state                print offline | bootloader | device\n"
         " get-serialno             print <serial-number>\n"
         " get-devpath              print <device-path>\n"
@@ -222,7 +222,9 @@ static void help() {
         "     all,adb,sockets,packets,rwx,usb,sync,sysdeps,transport,jdwp\n"
         " $ADB_VENDOR_KEYS         colon-separated list of keys (files or directories)\n"
         " $ANDROID_SERIAL          serial number to connect to (see -s)\n"
-        " $ANDROID_LOG_TAGS        tags to be used by logcat (see logcat --help)\n");
+        " $ANDROID_LOG_TAGS        tags to be used by logcat (see logcat --help)\n"
+        " $ADB_LOCAL_TRANSPORT_MAX_PORT max emulator scan port (default 5585, 16 emus)\n"
+    );
     // clang-format on
 }
 
@@ -293,7 +295,10 @@ int read_and_dump(int fd, bool use_shell_protocol = false,
                     callback->OnStderr(buffer_ptr, length);
                     break;
                 case ShellProtocol::kIdExit:
-                    exit_code = protocol->data()[0];
+                    // data() returns a char* which doesn't have defined signedness.
+                    // Cast to uint8_t to prevent 255 from being sign extended to INT_MIN,
+                    // which doesn't get truncated on Windows.
+                    exit_code = static_cast<uint8_t>(protocol->data()[0]);
                     continue;
                 default:
                     continue;
@@ -1003,7 +1008,8 @@ static int ppp(int argc, const char** argv) {
 #endif /* !defined(_WIN32) */
 }
 
-static bool wait_for_device(const char* service) {
+static bool wait_for_device(const char* service,
+                            std::optional<std::chrono::milliseconds> timeout = std::nullopt) {
     std::vector<std::string> components = android::base::Split(service, "-");
     if (components.size() < 3 || components.size() > 4) {
         fprintf(stderr, "adb: couldn't parse 'wait-for' command: %s\n", service);
@@ -1031,22 +1037,31 @@ static bool wait_for_device(const char* service) {
     }
 
     if (components[3] != "any" && components[3] != "bootloader" && components[3] != "device" &&
-        components[3] != "recovery" && components[3] != "sideload") {
+        components[3] != "recovery" && components[3] != "sideload" &&
+        components[3] != "disconnect") {
         fprintf(stderr,
                 "adb: unknown state %s; "
-                "expected 'any', 'bootloader', 'device', 'recovery', or 'sideload'\n",
+                "expected 'any', 'bootloader', 'device', 'recovery', 'sideload', or 'disconnect'\n",
                 components[3].c_str());
         return false;
     }
 
     std::string cmd = format_host_command(android::base::Join(components, "-").c_str());
+    if (timeout) {
+        std::thread([timeout]() {
+            std::this_thread::sleep_for(*timeout);
+            fprintf(stderr, "timeout expired while waiting for device\n");
+            _exit(1);
+        }).detach();
+    }
     return adb_command(cmd);
 }
 
 static bool adb_root(const char* command) {
     std::string error;
 
-    unique_fd fd(adb_connect(android::base::StringPrintf("%s:", command), &error));
+    TransportId transport_id;
+    unique_fd fd(adb_connect(&transport_id, android::base::StringPrintf("%s:", command), &error));
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for %s: %s\n", command, error.c_str());
         return false;
@@ -1079,9 +1094,22 @@ static bool adb_root(const char* command) {
         return true;
     }
 
-    // Give adbd some time to kill itself and come back up.
-    // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
-    std::this_thread::sleep_for(3s);
+    // Wait for the device to go away.
+    TransportType previous_type;
+    const char* previous_serial;
+    TransportId previous_id;
+    adb_get_transport(&previous_type, &previous_serial, &previous_id);
+
+    adb_set_transport(kTransportAny, nullptr, transport_id);
+    wait_for_device("wait-for-disconnect");
+
+    // Wait for the device to come back.
+    // If we were using a specific transport ID, there's nothing we can wait for.
+    if (previous_id == 0) {
+        adb_set_transport(previous_type, previous_serial, 0);
+        wait_for_device("wait-for-device", 3000ms);
+    }
+
     return true;
 }
 
@@ -1278,9 +1306,9 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
     }
 }
 
-static int adb_connect_command(const std::string& command) {
+static int adb_connect_command(const std::string& command, TransportId* transport = nullptr) {
     std::string error;
-    unique_fd fd(adb_connect(command, &error));
+    unique_fd fd(adb_connect(transport, command, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
@@ -1369,9 +1397,9 @@ int adb_commandline(int argc, const char** argv) {
     TransportId transport_id = 0;
 
     while (argc > 0) {
-        if (!strcmp(argv[0],"server")) {
+        if (!strcmp(argv[0], "server")) {
             is_server = true;
-        } else if (!strcmp(argv[0],"nodaemon")) {
+        } else if (!strcmp(argv[0], "nodaemon")) {
             no_daemon = true;
         } else if (!strcmp(argv[0], "fork-server")) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
@@ -1408,11 +1436,11 @@ int adb_commandline(int argc, const char** argv) {
             if (*id != '\0') {
                 error_exit("invalid transport id");
             }
-        } else if (!strcmp(argv[0],"-d")) {
+        } else if (!strcmp(argv[0], "-d")) {
             transport_type = kTransportUsb;
-        } else if (!strcmp(argv[0],"-e")) {
+        } else if (!strcmp(argv[0], "-e")) {
             transport_type = kTransportLocal;
-        } else if (!strcmp(argv[0],"-a")) {
+        } else if (!strcmp(argv[0], "-a")) {
             gListenAll = 1;
         } else if (!strncmp(argv[0], "-H", 2)) {
             if (argv[0][2] == '\0') {
@@ -1544,6 +1572,10 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         std::string query = android::base::StringPrintf("host:%s%s", argv[0], listopt);
+        std::string error;
+        if (!adb_check_server_version(&error)) {
+            error_exit("failed to check server version: %s", error.c_str());
+        }
         printf("List of devices attached\n");
         return adb_query_command(query);
     }

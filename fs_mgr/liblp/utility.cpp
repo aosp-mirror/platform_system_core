@@ -28,6 +28,10 @@
 #include <ext4_utils/ext4_utils.h>
 #include <openssl/sha.h>
 
+#ifdef __ANDROID__
+#include <cutils/android_get_control_file.h>
+#endif
+
 #include "utility.h"
 
 namespace android {
@@ -169,6 +173,20 @@ bool SetBlockReadonly(int fd, bool readonly) {
     (void)readonly;
     return true;
 #endif
+}
+
+base::unique_fd GetControlFileOrOpen(const char* path, int flags) {
+#if defined(__ANDROID__)
+    int fd = android_get_control_file(path);
+    if (fd >= 0) {
+        int newfd = TEMP_FAILURE_RETRY(dup(fd));
+        if (newfd >= 0) {
+            return base::unique_fd(newfd);
+        }
+        PERROR << "Cannot dup fd for already controlled file: " << path << ", reopening...";
+    }
+#endif
+    return base::unique_fd(open(path, flags));
 }
 
 }  // namespace fs_mgr

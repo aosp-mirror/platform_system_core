@@ -29,7 +29,7 @@
 #include <android-base/unique_fd.h>
 #include <base/files/file_path.h>
 #include <base/strings/stringprintf.h>
-#include <fs_avb/fs_avb.h>
+#include <fs_avb/types.h>
 #include <gtest/gtest.h>
 
 // Utility macro to run the command expressed by the printf()-style string

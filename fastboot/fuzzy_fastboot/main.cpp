@@ -162,7 +162,7 @@ const auto not_allowed = [](char c) -> int {
 // Test that USB even works
 TEST(USBFunctionality, USBConnect) {
     const auto matcher = [](usb_ifc_info* info) -> int {
-        return FastBootTest::MatchFastboot(info, nullptr);
+        return FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
     };
     Transport* transport = nullptr;
     for (int i = 0; i < FastBootTest::MAX_USB_TRIES && !transport; i++) {
@@ -175,6 +175,103 @@ TEST(USBFunctionality, USBConnect) {
         transport->Close();
         delete transport;
     }
+}
+
+// Test commands related to super partition
+TEST_F(LogicalPartitionCompliance, SuperPartition) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    std::string partition_type;
+    // getvar partition-type:super must fail for retrofit devices because the
+    // partition does not exist.
+    if (fb->GetVar("partition-type:super", &partition_type) == SUCCESS) {
+        std::string is_logical;
+        EXPECT_EQ(fb->GetVar("is-logical:super", &is_logical), SUCCESS)
+                << "getvar is-logical:super failed";
+        EXPECT_EQ(is_logical, "no") << "super must not be a logical partition";
+        std::string super_name;
+        EXPECT_EQ(fb->GetVar("super-partition-name", &super_name), SUCCESS)
+                << "'getvar super-partition-name' failed";
+        EXPECT_EQ(super_name, "super") << "'getvar super-partition-name' must return 'super' for "
+                                          "device with a super partition";
+    }
+}
+
+// Test 'fastboot getvar is-logical'
+TEST_F(LogicalPartitionCompliance, GetVarIsLogical) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    std::string has_slot;
+    EXPECT_EQ(fb->GetVar("has-slot:system", &has_slot), SUCCESS) << "getvar has-slot:system failed";
+    std::string is_logical_cmd_system = "is-logical:system";
+    std::string is_logical_cmd_vendor = "is-logical:vendor";
+    std::string is_logical_cmd_boot = "is-logical:boot";
+    if (has_slot == "yes") {
+        std::string current_slot;
+        ASSERT_EQ(fb->GetVar("current-slot", &current_slot), SUCCESS)
+                << "getvar current-slot failed";
+        std::string slot_suffix = "_" + current_slot;
+        is_logical_cmd_system += slot_suffix;
+        is_logical_cmd_vendor += slot_suffix;
+        is_logical_cmd_boot += slot_suffix;
+    }
+    std::string is_logical;
+    EXPECT_EQ(fb->GetVar(is_logical_cmd_system, &is_logical), SUCCESS)
+            << "system must be a logical partition";
+    EXPECT_EQ(is_logical, "yes");
+    EXPECT_EQ(fb->GetVar(is_logical_cmd_vendor, &is_logical), SUCCESS)
+            << "vendor must be a logical partition";
+    EXPECT_EQ(is_logical, "yes");
+    EXPECT_EQ(fb->GetVar(is_logical_cmd_boot, &is_logical), SUCCESS)
+            << "boot must not be logical partition";
+    EXPECT_EQ(is_logical, "no");
+}
+
+TEST_F(LogicalPartitionCompliance, FastbootRebootTest) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
+    // Test 'fastboot reboot bootloader' from fastbootd
+    fb->RebootTo("bootloader");
+
+    // Test fastboot reboot fastboot from bootloader
+    ReconnectFastbootDevice();
+    ASSERT_FALSE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
+    fb->RebootTo("fastboot");
+
+    ReconnectFastbootDevice();
+    ASSERT_TRUE(UserSpaceFastboot());
+}
+
+// Testing creation/resize/delete of logical partitions
+TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
+    ASSERT_TRUE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Testing 'fastboot create-logical-partition' command";
+    EXPECT_EQ(fb->CreatePartition("test_partition_a", "0"), SUCCESS)
+            << "create-logical-partition failed";
+    GTEST_LOG_(INFO) << "Testing 'fastboot resize-logical-partition' command";
+    EXPECT_EQ(fb->ResizePartition("test_partition_a", "4096"), SUCCESS)
+            << "resize-logical-partition failed";
+    std::vector<char> buf(4096);
+
+    GTEST_LOG_(INFO) << "Flashing a logical partition..";
+    EXPECT_EQ(fb->FlashPartition("test_partition_a", buf), SUCCESS)
+            << "flash logical -partition failed";
+    GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
+    // Reboot to bootloader mode and attempt to flash the logical partitions
+    fb->RebootTo("bootloader");
+
+    ReconnectFastbootDevice();
+    ASSERT_FALSE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Attempt to flash a logical partition..";
+    EXPECT_EQ(fb->FlashPartition("test_partition", buf), DEVICE_FAIL)
+            << "flash logical partition must fail in bootloader";
+    GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
+    fb->RebootTo("fastboot");
+
+    ReconnectFastbootDevice();
+    ASSERT_TRUE(UserSpaceFastboot());
+    GTEST_LOG_(INFO) << "Testing 'fastboot delete-logical-partition' command";
+    EXPECT_EQ(fb->DeletePartition("test_partition_a"), SUCCESS)
+            << "delete logical-partition failed";
 }
 
 // Conformance tests
@@ -1641,10 +1738,14 @@ int main(int argc, char** argv) {
         fastboot::GenerateXmlTests(fastboot::config);
     }
 
+    if (args.find("serial") != args.end()) {
+        fastboot::FastBootTest::device_serial = args.at("serial");
+    }
+
     setbuf(stdout, NULL);  // no buffering
     printf("<Waiting for Device>\n");
     const auto matcher = [](usb_ifc_info* info) -> int {
-        return fastboot::FastBootTest::MatchFastboot(info, nullptr);
+        return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
     };
     Transport* transport = nullptr;
     while (!transport) {

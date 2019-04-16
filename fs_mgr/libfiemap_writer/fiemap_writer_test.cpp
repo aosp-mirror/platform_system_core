@@ -22,6 +22,7 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <string>
@@ -32,26 +33,50 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <libdm/loop_control.h>
-
 #include <libfiemap_writer/fiemap_writer.h>
+#include <libfiemap_writer/split_fiemap_writer.h>
+
+#include "utility.h"
+
+namespace android {
+namespace fiemap_writer {
 
 using namespace std;
+using namespace std::string_literals;
 using namespace android::fiemap_writer;
 using unique_fd = android::base::unique_fd;
 using LoopDevice = android::dm::LoopDevice;
 
-std::string testbdev = "";
+std::string gTestDir;
 uint64_t testfile_size = 536870912;  // default of 512MiB
+size_t gBlockSize = 0;
 
 class FiemapWriterTest : public ::testing::Test {
   protected:
     void SetUp() override {
         const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
-        std::string exec_dir = ::android::base::GetExecutableDirectory();
-        testfile = ::android::base::StringPrintf("%s/testdata/%s", exec_dir.c_str(), tinfo->name());
+        testfile = gTestDir + "/"s + tinfo->name();
     }
 
     void TearDown() override { unlink(testfile.c_str()); }
+
+    // name of the file we use for testing
+    std::string testfile;
+};
+
+class SplitFiemapTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
+        testfile = gTestDir + "/"s + tinfo->name();
+    }
+
+    void TearDown() override {
+        std::string message;
+        if (!SplitFiemap::RemoveSplitFiles(testfile, &message)) {
+            cerr << "Could not remove all split files: " << message;
+        }
+    }
 
     // name of the file we use for testing
     std::string testfile;
@@ -69,39 +94,48 @@ TEST_F(FiemapWriterTest, CreateImpossiblyLargeFile) {
 
 TEST_F(FiemapWriterTest, CreateUnalignedFile) {
     // Try creating a file of size 4097 bytes which is guaranteed
-    // to be unaligned to all known block sizes. The creation must
-    // fail.
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4097);
-    EXPECT_EQ(fptr, nullptr);
-    EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
-    EXPECT_EQ(errno, ENOENT);
+    // to be unaligned to all known block sizes.
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize + 1);
+    ASSERT_NE(fptr, nullptr);
+    ASSERT_EQ(fptr->size(), gBlockSize * 2);
 }
 
 TEST_F(FiemapWriterTest, CheckFilePath) {
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
     ASSERT_NE(fptr, nullptr);
-    EXPECT_EQ(fptr->size(), 4096);
+    EXPECT_EQ(fptr->size(), gBlockSize);
     EXPECT_EQ(fptr->file_path(), testfile);
     EXPECT_EQ(access(testfile.c_str(), F_OK), 0);
 }
 
+TEST_F(FiemapWriterTest, CheckFileSize) {
+    // Create a large-ish file and test that the expected size matches.
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 1024 * 1024 * 16);
+    ASSERT_NE(fptr, nullptr);
+
+    struct stat s;
+    ASSERT_EQ(stat(testfile.c_str(), &s), 0);
+    EXPECT_EQ(static_cast<uint64_t>(s.st_size), fptr->size());
+}
+
 TEST_F(FiemapWriterTest, CheckProgress) {
-    std::vector<uint64_t> expected{
-            0,
-            4096,
-    };
+    std::vector<uint64_t> expected;
     size_t invocations = 0;
     auto callback = [&](uint64_t done, uint64_t total) -> bool {
-        EXPECT_LT(invocations, expected.size());
+        if (invocations >= expected.size()) {
+            return false;
+        }
         EXPECT_EQ(done, expected[invocations]);
-        EXPECT_EQ(total, 4096);
+        EXPECT_EQ(total, gBlockSize);
         invocations++;
         return true;
     };
 
-    auto ptr = FiemapWriter::Open(testfile, 4096, true, std::move(callback));
+    expected.push_back(gBlockSize);
+
+    auto ptr = FiemapWriter::Open(testfile, gBlockSize, true, std::move(callback));
     EXPECT_NE(ptr, nullptr);
-    EXPECT_EQ(invocations, 2);
+    EXPECT_EQ(invocations, expected.size());
 }
 
 TEST_F(FiemapWriterTest, CheckPinning) {
@@ -111,9 +145,10 @@ TEST_F(FiemapWriterTest, CheckPinning) {
 }
 
 TEST_F(FiemapWriterTest, CheckBlockDevicePath) {
-    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 4096);
-    EXPECT_EQ(fptr->size(), 4096);
-    EXPECT_EQ(fptr->bdev_path(), testbdev);
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
+    EXPECT_EQ(fptr->size(), gBlockSize);
+    EXPECT_EQ(fptr->bdev_path().find("/dev/block/"), size_t(0));
+    EXPECT_EQ(fptr->bdev_path().find("/dev/block/dm-"), string::npos);
 }
 
 TEST_F(FiemapWriterTest, CheckFileCreated) {
@@ -129,7 +164,7 @@ TEST_F(FiemapWriterTest, CheckFileSizeActual) {
 
     struct stat sb;
     ASSERT_EQ(stat(testfile.c_str(), &sb), 0);
-    EXPECT_EQ(sb.st_size, testfile_size);
+    EXPECT_GE(sb.st_size, testfile_size);
 }
 
 TEST_F(FiemapWriterTest, CheckFileExtents) {
@@ -138,45 +173,223 @@ TEST_F(FiemapWriterTest, CheckFileExtents) {
     EXPECT_GT(fptr->extents().size(), 0);
 }
 
-class TestExistingFile : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        std::string exec_dir = ::android::base::GetExecutableDirectory();
-        unaligned_file_ = exec_dir + "/testdata/unaligned_file";
-        file_4k_ = exec_dir + "/testdata/file_4k";
-        file_32k_ = exec_dir + "/testdata/file_32k";
+TEST_F(FiemapWriterTest, ExistingFile) {
+    // Create the file.
+    { ASSERT_NE(FiemapWriter::Open(testfile, gBlockSize), nullptr); }
+    // Test that we can still open it.
+    {
+        auto ptr = FiemapWriter::Open(testfile, 0, false);
+        ASSERT_NE(ptr, nullptr);
+        EXPECT_GT(ptr->extents().size(), 0);
+    }
+}
 
-        CleanupFiles();
-        fptr_unaligned = FiemapWriter::Open(unaligned_file_, 4097);
-        fptr_4k = FiemapWriter::Open(file_4k_, 4096);
-        fptr_32k = FiemapWriter::Open(file_32k_, 32768);
+TEST_F(FiemapWriterTest, FileDeletedOnError) {
+    auto callback = [](uint64_t, uint64_t) -> bool { return false; };
+    auto ptr = FiemapWriter::Open(testfile, gBlockSize, true, std::move(callback));
+    EXPECT_EQ(ptr, nullptr);
+    EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
+    EXPECT_EQ(errno, ENOENT);
+}
+
+TEST_F(FiemapWriterTest, MaxBlockSize) {
+    ASSERT_GT(DetermineMaximumFileSize(testfile), 0);
+}
+
+TEST_F(FiemapWriterTest, FibmapBlockAddressing) {
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
+    ASSERT_NE(fptr, nullptr);
+
+    switch (fptr->fs_type()) {
+        case F2FS_SUPER_MAGIC:
+        case EXT4_SUPER_MAGIC:
+            // Skip the test for FIEMAP supported filesystems. This is really
+            // because f2fs/ext4 have caches that seem to defeat reading back
+            // directly from the block device, and writing directly is too
+            // dangerous.
+            std::cout << "Skipping test, filesystem does not use FIBMAP\n";
+            return;
     }
 
-    void TearDown() { CleanupFiles(); }
+    bool uses_dm;
+    std::string bdev_path;
+    ASSERT_TRUE(FiemapWriter::GetBlockDeviceForFile(testfile, &bdev_path, &uses_dm));
 
-    void CleanupFiles() {
-        unlink(unaligned_file_.c_str());
-        unlink(file_4k_.c_str());
-        unlink(file_32k_.c_str());
+    if (uses_dm) {
+        // We could use a device-mapper wrapper here to bypass encryption, but
+        // really this test is for FIBMAP correctness on VFAT (where encryption
+        // is never used), so we don't bother.
+        std::cout << "Skipping test, block device is metadata encrypted\n";
+        return;
     }
 
-    std::string unaligned_file_;
-    std::string file_4k_;
-    std::string file_32k_;
-    FiemapUniquePtr fptr_unaligned;
-    FiemapUniquePtr fptr_4k;
-    FiemapUniquePtr fptr_32k;
-};
+    std::string data(fptr->size(), '\0');
+    for (size_t i = 0; i < data.size(); i++) {
+        data[i] = 'A' + static_cast<char>(data.size() % 26);
+    }
 
-TEST_F(TestExistingFile, ErrorChecks) {
-    EXPECT_EQ(fptr_unaligned, nullptr);
-    EXPECT_NE(fptr_4k, nullptr);
-    EXPECT_NE(fptr_32k, nullptr);
+    {
+        unique_fd fd(open(testfile.c_str(), O_WRONLY | O_CLOEXEC));
+        ASSERT_GE(fd, 0);
+        ASSERT_TRUE(android::base::WriteFully(fd, data.data(), data.size()));
+        ASSERT_EQ(fsync(fd), 0);
+    }
 
-    EXPECT_EQ(fptr_4k->size(), 4096);
-    EXPECT_EQ(fptr_32k->size(), 32768);
-    EXPECT_GT(fptr_4k->extents().size(), 0);
-    EXPECT_GT(fptr_32k->extents().size(), 0);
+    ASSERT_FALSE(fptr->extents().empty());
+    const auto& first_extent = fptr->extents()[0];
+
+    unique_fd bdev(open(fptr->bdev_path().c_str(), O_RDONLY | O_CLOEXEC));
+    ASSERT_GE(bdev, 0);
+
+    off_t where = first_extent.fe_physical;
+    ASSERT_EQ(lseek(bdev, where, SEEK_SET), where);
+
+    // Note: this will fail on encrypted folders.
+    std::string actual(data.size(), '\0');
+    ASSERT_GE(first_extent.fe_length, data.size());
+    ASSERT_TRUE(android::base::ReadFully(bdev, actual.data(), actual.size()));
+    EXPECT_EQ(memcmp(actual.data(), data.data(), data.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, Create) {
+    auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
+    ASSERT_NE(ptr, nullptr);
+
+    auto extents = ptr->extents();
+
+    // Destroy the fiemap, closing file handles. This should not delete them.
+    ptr = nullptr;
+
+    std::vector<std::string> files;
+    ASSERT_TRUE(SplitFiemap::GetSplitFileList(testfile, &files));
+    for (const auto& path : files) {
+        EXPECT_EQ(access(path.c_str(), F_OK), 0);
+    }
+
+    ASSERT_GE(extents.size(), files.size());
+}
+
+TEST_F(SplitFiemapTest, Open) {
+    {
+        auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
+        ASSERT_NE(ptr, nullptr);
+    }
+
+    auto ptr = SplitFiemap::Open(testfile);
+    ASSERT_NE(ptr, nullptr);
+
+    auto extents = ptr->extents();
+    ASSERT_GE(extents.size(), 24);
+}
+
+TEST_F(SplitFiemapTest, DeleteOnFail) {
+    auto ptr = SplitFiemap::Create(testfile, 1024 * 1024 * 100, 1);
+    ASSERT_EQ(ptr, nullptr);
+
+    std::string first_file = testfile + ".0001";
+    ASSERT_NE(access(first_file.c_str(), F_OK), 0);
+    ASSERT_EQ(errno, ENOENT);
+    ASSERT_NE(access(testfile.c_str(), F_OK), 0);
+    ASSERT_EQ(errno, ENOENT);
+}
+
+static string ReadSplitFiles(const std::string& base_path, size_t num_files) {
+    std::string result;
+    for (int i = 0; i < num_files; i++) {
+        std::string path = base_path + android::base::StringPrintf(".%04d", i);
+        std::string data;
+        if (!android::base::ReadFileToString(path, &data)) {
+            return {};
+        }
+        result += data;
+    }
+    return result;
+}
+
+TEST_F(SplitFiemapTest, WriteWholeFile) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+    ASSERT_TRUE(ptr->Write(buffer.get(), kSize));
+
+    std::string expected(reinterpret_cast<char*>(buffer.get()), kSize);
+    auto actual = ReadSplitFiles(testfile, 3);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_EQ(memcmp(expected.data(), actual.data(), actual.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, WriteFileInChunks1) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+
+    // Write in chunks of 1000 (so some writes straddle the boundary of two
+    // files).
+    size_t bytes_written = 0;
+    while (bytes_written < kSize) {
+        size_t to_write = std::min(kSize - bytes_written, (size_t)1000);
+        char* data = reinterpret_cast<char*>(buffer.get()) + bytes_written;
+        ASSERT_TRUE(ptr->Write(data, to_write));
+        bytes_written += to_write;
+    }
+
+    std::string expected(reinterpret_cast<char*>(buffer.get()), kSize);
+    auto actual = ReadSplitFiles(testfile, 3);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_EQ(memcmp(expected.data(), actual.data(), actual.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, WriteFileInChunks2) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+
+    // Write in chunks of 32KiB so every write is exactly at the end of the
+    // current file.
+    size_t bytes_written = 0;
+    while (bytes_written < kSize) {
+        size_t to_write = std::min(kSize - bytes_written, kChunkSize);
+        char* data = reinterpret_cast<char*>(buffer.get()) + bytes_written;
+        ASSERT_TRUE(ptr->Write(data, to_write));
+        bytes_written += to_write;
+    }
+
+    std::string expected(reinterpret_cast<char*>(buffer.get()), kSize);
+    auto actual = ReadSplitFiles(testfile, 3);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_EQ(memcmp(expected.data(), actual.data(), actual.size()), 0);
+}
+
+TEST_F(SplitFiemapTest, WritePastEnd) {
+    static constexpr size_t kChunkSize = 32768;
+    static constexpr size_t kSize = kChunkSize * 3;
+    auto ptr = SplitFiemap::Create(testfile, kSize, kChunkSize);
+    ASSERT_NE(ptr, nullptr);
+
+    auto buffer = std::make_unique<int[]>(kSize / sizeof(int));
+    for (size_t i = 0; i < kSize / sizeof(int); i++) {
+        buffer[i] = i;
+    }
+    ASSERT_TRUE(ptr->Write(buffer.get(), kSize));
+    ASSERT_FALSE(ptr->Write(buffer.get(), kSize));
 }
 
 class VerifyBlockWritesExt4 : public ::testing::Test {
@@ -263,17 +476,51 @@ class VerifyBlockWritesF2fs : public ::testing::Test {
     std::string fs_path;
 };
 
+bool DetermineBlockSize() {
+    struct statfs s;
+    if (statfs(gTestDir.c_str(), &s)) {
+        std::cerr << "Could not call statfs: " << strerror(errno) << "\n";
+        return false;
+    }
+    if (!s.f_bsize) {
+        std::cerr << "Invalid block size: " << s.f_bsize << "\n";
+        return false;
+    }
+
+    gBlockSize = s.f_bsize;
+    return true;
+}
+
+}  // namespace fiemap_writer
+}  // namespace android
+
+using namespace android::fiemap_writer;
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    if (argc <= 1) {
-        cerr << "Filepath with its bdev path must be provided as follows:" << endl;
-        cerr << "  $ fiemap_writer_test </dev/block/XXXX" << endl;
-        cerr << "  where, /dev/block/XXX is the block device where the file resides" << endl;
+    if (argc > 1 && argv[1] == "-h"s) {
+        cerr << "Usage: [test_dir] [file_size]\n";
+        cerr << "\n";
+        cerr << "Note: test_dir must be a writable, unencrypted directory.\n";
         exit(EXIT_FAILURE);
     }
     ::android::base::InitLogging(argv, ::android::base::StderrLogger);
 
-    testbdev = argv[1];
+    std::string root_dir = "/data/local/unencrypted";
+    if (access(root_dir.c_str(), F_OK)) {
+        root_dir = "/data";
+    }
+
+    std::string tempdir = root_dir + "/XXXXXX"s;
+    if (!mkdtemp(tempdir.data())) {
+        cerr << "unable to create tempdir on " << root_dir << "\n";
+        exit(EXIT_FAILURE);
+    }
+    if (!android::base::Realpath(tempdir, &gTestDir)) {
+        cerr << "unable to find realpath for " << tempdir;
+        exit(EXIT_FAILURE);
+    }
+
     if (argc > 2) {
         testfile_size = strtoull(argv[2], NULL, 0);
         if (testfile_size == ULLONG_MAX) {
@@ -281,5 +528,14 @@ int main(int argc, char** argv) {
         }
     }
 
-    return RUN_ALL_TESTS();
+    if (!DetermineBlockSize()) {
+        exit(EXIT_FAILURE);
+    }
+
+    auto result = RUN_ALL_TESTS();
+
+    std::string cmd = "rm -rf " + gTestDir;
+    system(cmd.c_str());
+
+    return result;
 }

@@ -49,7 +49,7 @@ class UnwinderTest : public ::testing::Test {
     std::string str_name(name);
     maps_->Add(start, end, offset, flags, name, static_cast<uint64_t>(-1));
     if (elf != nullptr) {
-      MapInfo* map_info = *--maps_->end();
+      const auto& map_info = *--maps_->end();
       map_info->elf.reset(elf);
     }
   }
@@ -58,7 +58,9 @@ class UnwinderTest : public ::testing::Test {
     maps_.reset(new Maps);
 
     ElfFake* elf = new ElfFake(new MemoryFake);
-    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    ElfInterfaceFake* interface_fake = new ElfInterfaceFake(nullptr);
+    interface_fake->FakeSetBuildID("FAKE");
+    elf->FakeSetInterface(interface_fake);
     AddMapInfo(0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so", elf);
 
     AddMapInfo(0x10000, 0x12000, 0, PROT_READ | PROT_WRITE, "[stack]");
@@ -79,13 +81,18 @@ class UnwinderTest : public ::testing::Test {
     AddMapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so", elf);
 
     elf = new ElfFake(new MemoryFake);
-    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    ElfInterfaceFake* interface = new ElfInterfaceFake(nullptr);
+    interface->FakeSetSoname("lib_fake.so");
+    elf->FakeSetInterface(interface);
     AddMapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk", elf);
+    MapInfo* map_info = maps_->Find(0x43000);
+    ASSERT_TRUE(map_info != nullptr);
+    map_info->elf_start_offset = 0x1d000;
 
     AddMapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
 
     AddMapInfo(0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.vdex");
-    MapInfo* info = *--maps_->end();
+    const auto& info = *--maps_->end();
     info->load_bias = 0;
 
     elf = new ElfFake(new MemoryFake);
@@ -98,8 +105,8 @@ class UnwinderTest : public ::testing::Test {
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
     AddMapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake_offset.oat",
                elf);
-    info = *--maps_->end();
-    info->elf_offset = 0x8000;
+    const auto& info2 = *--maps_->end();
+    info2->elf_offset = 0x8000;
 
     process_memory_.reset(new MemoryFake);
   }
@@ -324,8 +331,38 @@ TEST_F(UnwinderTest, non_zero_map_offset) {
   EXPECT_EQ(0x10000U, frame->sp);
   EXPECT_EQ("Frame0", frame->function_name);
   EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/fake/fake.apk!lib_fake.so", frame->map_name);
+  EXPECT_EQ(0x1d000U, frame->map_elf_start_offset);
+  EXPECT_EQ(0x1d000U, frame->map_exact_offset);
+  EXPECT_EQ(0x43000U, frame->map_start);
+  EXPECT_EQ(0x44000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, disable_embedded_soname) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.set_pc(0x43000);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
+  unwinder.SetEmbeddedSoname(false);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x43000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
   EXPECT_EQ("/fake/fake.apk", frame->map_name);
-  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ(0x1d000U, frame->map_elf_start_offset);
   EXPECT_EQ(0x1d000U, frame->map_exact_offset);
   EXPECT_EQ(0x43000U, frame->map_start);
   EXPECT_EQ(0x44000U, frame->map_end);
@@ -813,8 +850,8 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   EXPECT_EQ(0x10010U, frame->sp);
   EXPECT_EQ("Frame1", frame->function_name);
   EXPECT_EQ(1U, frame->function_offset);
-  EXPECT_EQ("/fake/fake.apk", frame->map_name);
-  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ("/fake/fake.apk!lib_fake.so", frame->map_name);
+  EXPECT_EQ(0x1d000U, frame->map_elf_start_offset);
   EXPECT_EQ(0x1d000U, frame->map_exact_offset);
   EXPECT_EQ(0x43000U, frame->map_start);
   EXPECT_EQ(0x44000U, frame->map_end);
@@ -1067,7 +1104,15 @@ TEST_F(UnwinderTest, dex_pc_max_frames) {
 }
 
 // Verify format frame code.
-TEST_F(UnwinderTest, format_frame_static) {
+TEST_F(UnwinderTest, format_frame) {
+  RegsFake regs_arm(10);
+  regs_arm.FakeSetArch(ARCH_ARM);
+  Unwinder unwinder32(10, maps_.get(), &regs_arm, process_memory_);
+
+  RegsFake regs_arm64(10);
+  regs_arm64.FakeSetArch(ARCH_ARM64);
+  Unwinder unwinder64(10, maps_.get(), &regs_arm64, process_memory_);
+
   FrameData frame;
   frame.num = 1;
   frame.rel_pc = 0x1000;
@@ -1082,39 +1127,61 @@ TEST_F(UnwinderTest, format_frame_static) {
   frame.map_flags = PROT_READ;
 
   EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so (offset 0x2000) (function+100)",
-            Unwinder::FormatFrame(frame, false));
+            unwinder64.FormatFrame(frame));
   EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (offset 0x2000) (function+100)",
-            Unwinder::FormatFrame(frame, true));
+            unwinder32.FormatFrame(frame));
 
   frame.map_elf_start_offset = 0;
   EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so (function+100)",
-            Unwinder::FormatFrame(frame, false));
-  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function+100)",
-            Unwinder::FormatFrame(frame, true));
+            unwinder64.FormatFrame(frame));
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function+100)", unwinder32.FormatFrame(frame));
 
   frame.function_offset = 0;
   EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so (function)",
-            Unwinder::FormatFrame(frame, false));
-  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function)", Unwinder::FormatFrame(frame, true));
+            unwinder64.FormatFrame(frame));
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function)", unwinder32.FormatFrame(frame));
 
   // Verify the function name is demangled.
   frame.function_name = "_ZN4funcEv";
-  EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so (func())",
-            Unwinder::FormatFrame(frame, false));
-  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (func())", Unwinder::FormatFrame(frame, true));
+  EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so (func())", unwinder64.FormatFrame(frame));
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (func())", unwinder32.FormatFrame(frame));
 
   frame.function_name = "";
-  EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so", Unwinder::FormatFrame(frame, false));
-  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so", Unwinder::FormatFrame(frame, true));
+  EXPECT_EQ("  #01 pc 0000000000001000  /fake/libfake.so", unwinder64.FormatFrame(frame));
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so", unwinder32.FormatFrame(frame));
 
   frame.map_name = "";
-  EXPECT_EQ("  #01 pc 0000000000001000  <anonymous:3000>", Unwinder::FormatFrame(frame, false));
-  EXPECT_EQ("  #01 pc 00001000  <anonymous:3000>", Unwinder::FormatFrame(frame, true));
+  EXPECT_EQ("  #01 pc 0000000000001000  <anonymous:3000>", unwinder64.FormatFrame(frame));
+  EXPECT_EQ("  #01 pc 00001000  <anonymous:3000>", unwinder32.FormatFrame(frame));
 
   frame.map_start = 0;
   frame.map_end = 0;
-  EXPECT_EQ("  #01 pc 0000000000001000  <unknown>", Unwinder::FormatFrame(frame, false));
-  EXPECT_EQ("  #01 pc 00001000  <unknown>", Unwinder::FormatFrame(frame, true));
+  EXPECT_EQ("  #01 pc 0000000000001000  <unknown>", unwinder64.FormatFrame(frame));
+  EXPECT_EQ("  #01 pc 00001000  <unknown>", unwinder32.FormatFrame(frame));
+}
+
+TEST_F(UnwinderTest, format_frame_build_id) {
+  RegsFake regs(10);
+  regs.FakeSetArch(ARCH_ARM);
+  Unwinder unwinder(10, maps_.get(), &regs, process_memory_);
+
+  FrameData frame;
+  frame.num = 1;
+  frame.rel_pc = 0x1000;
+  frame.pc = 0x4000;
+  frame.sp = 0x1000;
+  frame.function_name = "function";
+  frame.function_offset = 100;
+  frame.map_name = "/fake/libfake.so";
+  frame.map_elf_start_offset = 0;
+  frame.map_start = 0x3000;
+  frame.map_end = 0x6000;
+  frame.map_flags = PROT_READ;
+
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function+100)", unwinder.FormatFrame(frame));
+  unwinder.SetDisplayBuildID(true);
+  EXPECT_EQ("  #01 pc 00001000  /fake/libfake.so (function+100) (BuildId: 46414b45)",
+            unwinder.FormatFrame(frame));
 }
 
 static std::string ArchToString(ArchEnum arch) {
@@ -1132,7 +1199,7 @@ static std::string ArchToString(ArchEnum arch) {
 }
 
 // Verify format frame code.
-TEST_F(UnwinderTest, format_frame) {
+TEST_F(UnwinderTest, format_frame_by_arch) {
   std::vector<Regs*> reg_list;
   RegsArm* arm = new RegsArm;
   arm->set_pc(0x2300);

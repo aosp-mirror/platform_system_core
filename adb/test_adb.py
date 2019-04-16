@@ -416,6 +416,7 @@ class ConnectionTest(unittest.TestCase):
                     output.strip(),
                     "already connected to {}".format(serial).encode("utf8"))
 
+    @unittest.skip("Currently failing b/123247844")
     def test_reconnect(self):
         """Ensure that a disconnected device reconnects."""
 

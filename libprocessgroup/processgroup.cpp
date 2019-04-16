@@ -55,19 +55,15 @@ using namespace std::chrono_literals;
 
 #define PROCESSGROUP_CGROUP_PROCS_FILE "/cgroup.procs"
 
-bool CgroupSetupCgroups() {
-    return CgroupMap::SetupCgroups();
-}
-
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) {
-    const CgroupController* controller = CgroupMap::GetInstance().FindController(cgroup_name);
+    auto controller = CgroupMap::GetInstance().FindController(cgroup_name);
 
-    if (controller == nullptr) {
+    if (!controller.HasValue()) {
         return false;
     }
 
     if (path) {
-        *path = controller->path();
+        *path = controller.path();
     }
 
     return true;
@@ -111,7 +107,7 @@ bool UsePerAppMemcg() {
 
 static bool isMemoryCgroupSupported() {
     std::string cgroup_name;
-    static bool memcg_supported = (CgroupMap::GetInstance().FindController("memory") != nullptr);
+    static bool memcg_supported = CgroupMap::GetInstance().FindController("memory").HasValue();
 
     return memcg_supported;
 }
@@ -170,8 +166,9 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid) {
     return ret;
 }
 
-static void RemoveUidProcessGroups(const std::string& uid_path) {
+static bool RemoveUidProcessGroups(const std::string& uid_path) {
     std::unique_ptr<DIR, decltype(&closedir)> uid(opendir(uid_path.c_str()), closedir);
+    bool empty = true;
     if (uid != NULL) {
         dirent* dir;
         while ((dir = readdir(uid.get())) != nullptr) {
@@ -185,9 +182,15 @@ static void RemoveUidProcessGroups(const std::string& uid_path) {
 
             auto path = StringPrintf("%s/%s", uid_path.c_str(), dir->d_name);
             LOG(VERBOSE) << "Removing " << path;
-            if (rmdir(path.c_str()) == -1) PLOG(WARNING) << "Failed to remove " << path;
+            if (rmdir(path.c_str()) == -1) {
+                if (errno != EBUSY) {
+                    PLOG(WARNING) << "Failed to remove " << path;
+                }
+                empty = false;
+            }
         }
     }
+    return empty;
 }
 
 void removeAllProcessGroups() {
@@ -200,7 +203,7 @@ void removeAllProcessGroups() {
         cgroups.push_back(path);
     }
     if (CgroupGetControllerPath("memory", &path)) {
-        cgroups.push_back(path);
+        cgroups.push_back(path + "/apps");
     }
 
     for (std::string cgroup_root_path : cgroups) {
@@ -219,9 +222,14 @@ void removeAllProcessGroups() {
                 }
 
                 auto path = StringPrintf("%s/%s", cgroup_root_path.c_str(), dir->d_name);
-                RemoveUidProcessGroups(path);
+                if (!RemoveUidProcessGroups(path)) {
+                    LOG(VERBOSE) << "Skip removing " << path;
+                    continue;
+                }
                 LOG(VERBOSE) << "Removing " << path;
-                if (rmdir(path.c_str()) == -1) PLOG(WARNING) << "Failed to remove " << path;
+                if (rmdir(path.c_str()) == -1 && errno != EBUSY) {
+                    PLOG(WARNING) << "Failed to remove " << path;
+                }
             }
         }
     }
@@ -249,6 +257,10 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
     auto path = ConvertUidPidToPath(cgroup, uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
     std::unique_ptr<FILE, decltype(&fclose)> fd(fopen(path.c_str(), "re"), fclose);
     if (!fd) {
+        if (errno == ENOENT) {
+            // This happens when process is already dead
+            return 0;
+        }
         PLOG(WARNING) << "Failed to open process cgroup uid " << uid << " pid " << initialPid;
         return -1;
     }
@@ -293,7 +305,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
                      << " as part of process cgroup " << initialPid;
 
-        if (kill(-pgid, signal) == -1) {
+        if (kill(-pgid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
         }
     }
@@ -303,7 +315,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
                      << initialPid;
 
-        if (kill(pid, signal) == -1) {
+        if (kill(pid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
     }
@@ -317,6 +329,7 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
 
     CgroupGetControllerPath("cpuacct", &cpuacct_path);
     CgroupGetControllerPath("memory", &memory_path);
+    memory_path += "/apps";
 
     const char* cgroup =
             (!access(ConvertUidPidToPath(cpuacct_path.c_str(), uid, initialPid).c_str(), F_OK))
@@ -380,6 +393,7 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     std::string cgroup;
     if (isMemoryCgroupSupported() && (memControl || UsePerAppMemcg())) {
         CgroupGetControllerPath("memory", &cgroup);
+        cgroup += "/apps";
     } else {
         CgroupGetControllerPath("cpuacct", &cgroup);
     }

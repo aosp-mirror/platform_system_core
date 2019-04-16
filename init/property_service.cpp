@@ -39,6 +39,7 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
+#include <map>
 #include <memory>
 #include <queue>
 #include <vector>
@@ -442,8 +443,8 @@ bool CheckControlPropertyPerms(const std::string& name, const std::string& value
 }
 
 // This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
-uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr, std::string* error) {
+uint32_t CheckPermissions(const std::string& name, const std::string& value,
+                          const std::string& source_context, const ucred& cr, std::string* error) {
     if (!IsLegalPropertyName(name)) {
         *error = "Illegal property name";
         return PROP_ERROR_INVALID_NAME;
@@ -456,7 +457,6 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
             return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
         }
 
-        HandleControlMessage(name.c_str() + 4, value, cr.pid);
         return PROP_SUCCESS;
     }
 
@@ -473,6 +473,21 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
         *error = StringPrintf("Property type check failed, value doesn't match expected type '%s'",
                               (type ?: "(null)"));
         return PROP_ERROR_INVALID_VALUE;
+    }
+
+    return PROP_SUCCESS;
+}
+
+// This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
+uint32_t HandlePropertySet(const std::string& name, const std::string& value,
+                           const std::string& source_context, const ucred& cr, std::string* error) {
+    if (auto ret = CheckPermissions(name, value, source_context, cr, error); ret != PROP_SUCCESS) {
+        return ret;
+    }
+
+    if (StartsWith(name, "ctl.")) {
+        HandleControlMessage(name.c_str() + 4, value, cr.pid);
+        return PROP_SUCCESS;
     }
 
     // sys.powerctl is a special property that is used to make the device reboot.  We want to log
@@ -542,9 +557,8 @@ static void handle_property_set_fd() {
         uint32_t result =
             HandlePropertySet(prop_name, prop_value, socket.source_context(), cr, &error);
         if (result != PROP_SUCCESS) {
-            LOG(ERROR) << "Unable to set property '" << prop_name << "' to '" << prop_value
-                       << "' from uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid << ": "
-                       << error;
+            LOG(ERROR) << "Unable to set property '" << prop_name << "' from uid:" << cr.uid
+                       << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
         }
 
         break;
@@ -564,9 +578,8 @@ static void handle_property_set_fd() {
         std::string error;
         uint32_t result = HandlePropertySet(name, value, socket.source_context(), cr, &error);
         if (result != PROP_SUCCESS) {
-            LOG(ERROR) << "Unable to set property '" << name << "' to '" << value
-                       << "' from uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid << ": "
-                       << error;
+            LOG(ERROR) << "Unable to set property '" << name << "' from uid:" << cr.uid
+                       << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
         }
         socket.SendUint32(result);
         break;
@@ -579,13 +592,15 @@ static void handle_property_set_fd() {
     }
 }
 
-static bool load_properties_from_file(const char *, const char *);
+static bool load_properties_from_file(const char*, const char*,
+                                      std::map<std::string, std::string>*);
 
 /*
  * Filter is used to decide which properties to load: NULL loads all keys,
  * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
  */
-static void LoadProperties(char* data, const char* filter, const char* filename) {
+static void LoadProperties(char* data, const char* filter, const char* filename,
+                           std::map<std::string, std::string>* properties) {
     char *key, *value, *eol, *sol, *tmp, *fn;
     size_t flen = 0;
 
@@ -624,7 +639,7 @@ static void LoadProperties(char* data, const char* filter, const char* filename)
                 while (isspace(*key)) key++;
             }
 
-            load_properties_from_file(fn, key);
+            load_properties_from_file(fn, key, properties);
 
         } else {
             value = strchr(key, '=');
@@ -651,12 +666,19 @@ static void LoadProperties(char* data, const char* filter, const char* filename)
                 continue;
             }
 
-            uint32_t result = 0;
             ucred cr = {.pid = 1, .uid = 0, .gid = 0};
             std::string error;
-            result = HandlePropertySet(key, value, context, cr, &error);
-            if (result != PROP_SUCCESS) {
-                LOG(ERROR) << "Unable to set property '" << key << "' to '" << value
+            if (CheckPermissions(key, value, context, cr, &error) == PROP_SUCCESS) {
+                auto it = properties->find(key);
+                if (it == properties->end()) {
+                    (*properties)[key] = value;
+                } else if (it->second != value) {
+                    LOG(WARNING) << "Overriding previous 'ro.' property '" << key << "':'"
+                                 << it->second << "' with new value '" << value << "'";
+                    it->second = value;
+                }
+            } else {
+                LOG(ERROR) << "Do not have permissions to set '" << key << "' to '" << value
                            << "' in property file '" << filename << "': " << error;
             }
         }
@@ -665,7 +687,8 @@ static void LoadProperties(char* data, const char* filter, const char* filename)
 
 // Filter is used to decide which properties to load: NULL loads all keys,
 // "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
-static bool load_properties_from_file(const char* filename, const char* filter) {
+static bool load_properties_from_file(const char* filename, const char* filter,
+                                      std::map<std::string, std::string>* properties) {
     Timer t;
     auto file_contents = ReadFile(filename);
     if (!file_contents) {
@@ -675,7 +698,7 @@ static bool load_properties_from_file(const char* filename, const char* filter) 
     }
     file_contents->push_back('\n');
 
-    LoadProperties(file_contents->data(), filter, filename);
+    LoadProperties(file_contents->data(), filter, filename, properties);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
     return true;
 }
@@ -698,7 +721,15 @@ static void update_sys_usb_config() {
 
 static void load_override_properties() {
     if (ALLOW_LOCAL_PROP_OVERRIDE) {
-        load_properties_from_file("/data/local.prop", NULL);
+        std::map<std::string, std::string> properties;
+        load_properties_from_file("/data/local.prop", nullptr, &properties);
+        for (const auto& [name, value] : properties) {
+            std::string error;
+            if (PropertySet(name, value, &error) != PROP_SUCCESS) {
+                LOG(ERROR) << "Could not set '" << name << "' to '" << value
+                           << "' in /data/local.prop: " << error;
+            }
+        }
     }
 }
 
@@ -833,26 +864,41 @@ static void property_derive_build_fingerprint() {
     }
 }
 
-void property_load_boot_defaults() {
+void property_load_boot_defaults(bool load_debug_prop) {
     // TODO(b/117892318): merge prop.default and build.prop files into one
-    // TODO(b/122864654): read the prop files from all partitions and then
-    // resolve the duplication by their origin so that RO and non-RO properties
-    // have a consistent overriding order.
-    if (!load_properties_from_file("/system/etc/prop.default", NULL)) {
+    // We read the properties and their values into a map, in order to always allow properties
+    // loaded in the later property files to override the properties in loaded in the earlier
+    // property files, regardless of if they are "ro." properties or not.
+    std::map<std::string, std::string> properties;
+    if (!load_properties_from_file("/system/etc/prop.default", nullptr, &properties)) {
         // Try recovery path
-        if (!load_properties_from_file("/prop.default", NULL)) {
+        if (!load_properties_from_file("/prop.default", nullptr, &properties)) {
             // Try legacy path
-            load_properties_from_file("/default.prop", NULL);
+            load_properties_from_file("/default.prop", nullptr, &properties);
         }
     }
-    load_properties_from_file("/product/build.prop", NULL);
-    load_properties_from_file("/product_services/build.prop", NULL);
-    load_properties_from_file("/odm/default.prop", NULL);
-    load_properties_from_file("/vendor/default.prop", NULL);
-    load_properties_from_file("/system/build.prop", NULL);
-    load_properties_from_file("/odm/build.prop", NULL);
-    load_properties_from_file("/vendor/build.prop", NULL);
-    load_properties_from_file("/factory/factory.prop", "ro.*");
+    load_properties_from_file("/system/build.prop", nullptr, &properties);
+    load_properties_from_file("/vendor/default.prop", nullptr, &properties);
+    load_properties_from_file("/vendor/build.prop", nullptr, &properties);
+    load_properties_from_file("/odm/default.prop", nullptr, &properties);
+    load_properties_from_file("/odm/build.prop", nullptr, &properties);
+    load_properties_from_file("/product/build.prop", nullptr, &properties);
+    load_properties_from_file("/product_services/build.prop", nullptr, &properties);
+    load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
+
+    if (load_debug_prop) {
+        constexpr static const char kAdbDebugProp[] = "/system/etc/adb_debug.prop";
+        LOG(INFO) << "Loading " << kAdbDebugProp;
+        load_properties_from_file(kAdbDebugProp, nullptr, &properties);
+    }
+
+    for (const auto& [name, value] : properties) {
+        std::string error;
+        if (PropertySet(name, value, &error) != PROP_SUCCESS) {
+            LOG(ERROR) << "Could not set '" << name << "' to '" << value
+                       << "' while loading .prop files" << error;
+        }
+    }
 
     property_initialize_ro_product_props();
     property_derive_build_fingerprint();
@@ -908,6 +954,13 @@ void CreateSerializedPropertyInfo() {
             LoadPropertyInfoFromFile("/vendor/etc/selinux/nonplat_property_contexts",
                                      &property_infos);
         }
+        if (access("/product/etc/selinux/product_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/product/etc/selinux/product_property_contexts",
+                                     &property_infos);
+        }
+        if (access("/odm/etc/selinux/odm_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/odm/etc/selinux/odm_property_contexts", &property_infos);
+        }
     } else {
         if (!LoadPropertyInfoFromFile("/plat_property_contexts", &property_infos)) {
             return;
@@ -916,6 +969,8 @@ void CreateSerializedPropertyInfo() {
             // Fallback to nonplat_* if vendor_* doesn't exist.
             LoadPropertyInfoFromFile("/nonplat_property_contexts", &property_infos);
         }
+        LoadPropertyInfoFromFile("/product_property_contexts", &property_infos);
+        LoadPropertyInfoFromFile("/odm_property_contexts", &property_infos);
     }
 
     auto serialized_contexts = std::string();

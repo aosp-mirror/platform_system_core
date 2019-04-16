@@ -24,6 +24,8 @@ cc_library_static {
         "avb_ops.cpp",
         "avb_util.cpp",
         "fs_avb.cpp",
+        "fs_avb_util.cpp",
+        "types.cpp",
         "util.cpp",
     ],
     static_libs: [
@@ -98,6 +100,7 @@ cc_test_host {
     srcs: [
         "tests/basic_test.cpp",
         "tests/fs_avb_test.cpp",
+        "tests/fs_avb_util_test.cpp",
     ],
 }
 
@@ -113,5 +116,28 @@ cc_test_host {
         "util.cpp",
         "tests/avb_util_test.cpp",
         "tests/util_test.cpp",
+    ],
+}
+
+cc_test {
+    name: "libfs_avb_device_test",
+    test_suites: ["device-tests"],
+    static_libs: [
+        "libavb",
+        "libdm",
+        "libfs_avb",
+        "libfstab",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+    ],
+    srcs: [
+        "tests/fs_avb_device_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
     ],
 }

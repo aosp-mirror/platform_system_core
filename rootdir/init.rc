@@ -13,12 +13,6 @@ import /init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
-    # Mount shared so changes propagate into child namespaces
-    # Do this before other processes are started from init. Otherwise,
-    # processes launched while the propagation type of / is 'private'
-    # won't get mount events from others.
-    mount rootfs rootfs / shared rec
-
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_score_adj -1000
 
@@ -42,6 +36,11 @@ on early-init
     mkdir /dev/memcg/system 0550 system system
 
     start ueventd
+
+    # Run apexd-bootstrap so that APEXes that provide critical libraries
+    # become available. Note that this is executed as exec_start to ensure that
+    # the libraries are available to the processes started after this statement.
+    exec_start apexd-bootstrap
 
 on init
     sysclktz 0
@@ -83,6 +82,15 @@ on init
     chmod 0664 /dev/stune/background/tasks
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
+
+    # Create blkio tuning nodes
+    mkdir /dev/blkio/background
+    chown system system /dev/blkio
+    chown system system /dev/blkio/background
+    chown system system /dev/blkio/tasks
+    chown system system /dev/blkio/background/tasks
+    chmod 0664 /dev/blkio/tasks
+    chmod 0664 /dev/blkio/background/tasks
 
     restorecon_recursive /mnt
 
@@ -214,6 +222,9 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
+    # make the PSI monitor accessible to others
+    chown system system /proc/pressure/memory
+    chmod 0664 /proc/pressure/memory
 
     # qtaguid will limit access to specific data based on group memberships.
     #   net_bw_acct grants impersonation of socket owners.
@@ -269,17 +280,13 @@ on init
     write /dev/cpu_variant:${ro.bionic.2nd_arch} ${ro.bionic.2nd_cpu_variant}
     chmod 0444 /dev/cpu_variant:${ro.bionic.2nd_arch}
 
-    # Setup APEX mount point and its security context
-    mount tmpfs tmpfs /apex nodev noexec nosuid
-    chmod 0755 /apex
-    chown root root /apex
-    restorecon /apex
+    # Allow system processes to read / write power state.
+    chown system system /sys/power/state
+    chown system system /sys/power/wakeup_count
+    chmod 0660 /sys/power/state
 
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
-
-    # Start apexd as soon as we can
-    start apexd
 
     # Start essential services.
     start servicemanager
@@ -388,7 +395,10 @@ on post-fs
     restorecon_recursive /metadata
     mkdir /metadata/vold
     chmod 0700 /metadata/vold
+    mkdir /metadata/password_slots 0771 root system
 
+    mkdir /metadata/apex 0700 root system
+    mkdir /metadata/apex/sessions 0700 root system
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -416,8 +426,20 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
-    # /data/apex is now available. Let apexd to scan and activate APEXes.
-    setprop apexd.data.status ready
+    # Load fsverity keys. This needs to happen before apexd, as post-install of
+    # APEXes may rely on keys.
+    exec -- /system/bin/fsverity_init
+
+    # Make sure that apexd is started in the default namespace
+    enter_default_mount_ns
+
+    # /data/apex is now available. Start apexd to scan and activate APEXes.
+    mkdir /data/apex 0750 root system
+    mkdir /data/apex/active 0750 root system
+    mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/sessions 0700 root system
+    mkdir /data/app-staging 0750 system system
+    start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
@@ -534,12 +556,6 @@ on post-fs-data
 
     mkdir /data/anr 0775 system system
 
-    mkdir /data/apex 0750 root system
-    mkdir /data/apex/active 0750 root system
-    mkdir /data/apex/backup 0700 root system
-    mkdir /data/apex/sessions 0700 root system
-    mkdir /data/staging 0750 system system
-
     # NFC: create data/nfc for nv storage
     mkdir /data/nfc 0770 nfc nfc
     mkdir /data/nfc/param 0770 nfc nfc
@@ -572,6 +588,10 @@ on post-fs-data
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
 
+    # Wait for apexd to finish activating APEXes before starting more processes.
+    wait_for_prop apexd.status ready
+    parse_apex_configs
+
     init_user0
 
     # Set SELinux security contexts on upgrade or policy update.
@@ -579,17 +599,6 @@ on post-fs-data
 
     # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
-
-    # load fsverity keys
-    exec -- /system/bin/mini-keyctl -c /product/etc/security/cacerts_fsverity,/vendor/etc/security/cacerts_fsverity -k .fs-verity
-
-    # Wait for apexd to finish activating APEXes before starting more processes.
-    # This certainly reduces the parallelism but is required to make as many processes
-    # as possible to use the bionic libs from the runtime APEX. This takes less than 50ms
-    # so the impact on the booting time is not significant.
-    wait_for_prop apexd.status ready
-    setup_runtime_bionic
-    parse_apex_configs
 
     # If there is no post-fs-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
@@ -648,6 +657,12 @@ on boot
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
 
+    # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs
+    # to avoid power consumption when system becomes mostly idle. Be careful
+    # to make it too large, since it may bring userdata loss, if they
+    # are not aware of using fsync()/sync() to prepare sudden power-cut.
+    write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
+
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state
     chown radio system /sys/android_power/request_state
@@ -655,11 +670,8 @@ on boot
     chown radio system /sys/android_power/acquire_partial_wake_lock
     chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
-    chown system system /sys/power/state
-    chown system system /sys/power/wakeup_count
     chown radio wakelock /sys/power/wake_lock
     chown radio wakelock /sys/power/wake_unlock
-    chmod 0660 /sys/power/state
     chmod 0660 /sys/power/wake_lock
     chmod 0660 /sys/power/wake_unlock
 
