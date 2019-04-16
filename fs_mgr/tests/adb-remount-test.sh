@@ -1001,8 +1001,16 @@ diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null ||
 
 echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
+fixup_from_recovery() {
+  inRecovery || return 1
+  echo "${ORANGE}[    ERROR ]${NORMAL} Device in recovery" >&2
+  adb reboot
+  adb_wait 2m
+}
+
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_recovery ||
   die "reboot after override content added failed `usb_status`"
 
 if ${overlayfs_needed}; then
@@ -1110,6 +1118,7 @@ else
     die "can not reboot out of fastboot"
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
   adb_wait 2m ||
+    fixup_from_recovery ||
     die "did not reboot after flash `usb_status`"
   if ${overlayfs_needed}; then
     adb_root &&
