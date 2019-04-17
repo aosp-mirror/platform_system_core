@@ -67,7 +67,7 @@ static key_serial_t GetKeyringIdOrDie(const std::string& keyring_desc) {
     if (tokens.size() < 9) {
       continue;
     }
-    std::string key_id = tokens[0];
+    std::string key_id = "0x" + tokens[0];
     std::string key_type = tokens[7];
     // The key description may contain space.
     std::string key_desc_prefix = tokens[8];
@@ -77,7 +77,7 @@ static key_serial_t GetKeyringIdOrDie(const std::string& keyring_desc) {
       continue;
     }
     if (!android::base::ParseInt(key_id.c_str(), &keyring_id)) {
-      error(1, 0, "Unexpected key format in /proc/keys");
+      error(1, 0, "Unexpected key format in /proc/keys: %s", key_id.c_str());
       return -1;
     }
     return keyring_id;

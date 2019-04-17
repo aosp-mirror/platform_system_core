@@ -44,6 +44,7 @@
 #include "fec/io.h"
 
 #include "fs_mgr.h"
+#include "fs_mgr_dm_linear.h"
 #include "fs_mgr_priv.h"
 
 // Realistically, this file should be part of the android::fs_mgr namespace;
@@ -881,4 +882,13 @@ out:
     free(params.table);
 
     return retval;
+}
+
+bool fs_mgr_teardown_verity(FstabEntry* entry, bool wait) {
+    const std::string mount_point(basename(entry->mount_point.c_str()));
+    if (!android::fs_mgr::UnmapDevice(mount_point, wait ? 1000ms : 0ms)) {
+        return false;
+    }
+    LINFO << "Unmapped verity device " << mount_point;
+    return true;
 }
