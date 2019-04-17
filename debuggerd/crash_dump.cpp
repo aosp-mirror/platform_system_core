@@ -363,6 +363,12 @@ int main(int argc, char** argv) {
   DefuseSignalHandlers();
   InstallSigPipeHandler();
 
+  // There appears to be a bug in the kernel where our death causes SIGHUP to
+  // be sent to our process group if we exit while it has stopped jobs (e.g.
+  // because of wait_for_gdb). Use setsid to create a new process group to
+  // avoid hitting this.
+  setsid();
+
   atrace_begin(ATRACE_TAG, "before reparent");
   pid_t target_process = getppid();
 
