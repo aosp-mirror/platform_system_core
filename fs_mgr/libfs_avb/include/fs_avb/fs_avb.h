@@ -110,6 +110,11 @@ class AvbHandle {
     static AvbHashtreeResult SetUpStandaloneAvbHashtree(FstabEntry* fstab_entry,
                                                         bool wait_for_verity_dev = true);
 
+    // Tear down dm devices created by SetUp[Standalone]AvbHashtree
+    // The 'wait' parameter makes this function wait for the verity device to get destroyed
+    // before return.
+    static bool TearDownAvbHashtree(FstabEntry* fstab_entry, bool wait);
+
     static bool IsDeviceUnlocked();
 
     std::string GetSecurityPatchLevel(const FstabEntry& fstab_entry) const;
