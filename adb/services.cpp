@@ -227,6 +227,8 @@ asocket* host_service_to_socket(std::string_view name, std::string_view serial,
             sinfo->state = kCsDevice;
         } else if (name == "-recovery") {
             sinfo->state = kCsRecovery;
+        } else if (name == "-rescue") {
+            sinfo->state = kCsRescue;
         } else if (name == "-sideload") {
             sinfo->state = kCsSideload;
         } else if (name == "-bootloader") {
