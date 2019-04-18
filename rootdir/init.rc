@@ -13,9 +13,6 @@ import /init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
-    # Set init and its forked children's oom_adj.
-    write /proc/1/oom_score_adj -1000
-
     # Disable sysrq from keyboard
     write /proc/sys/kernel/sysrq 0
 
