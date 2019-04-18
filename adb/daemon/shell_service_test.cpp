@@ -77,7 +77,7 @@ void ShellServiceTest::StartTestCommandInProcess(std::string name, Command comma
 namespace {
 
 // Reads raw data from |fd| until it closes or errors.
-std::string ReadRaw(int fd) {
+std::string ReadRaw(borrowed_fd fd) {
     char buffer[1024];
     char *cur_ptr = buffer, *end_ptr = buffer + sizeof(buffer);
 
@@ -93,12 +93,12 @@ std::string ReadRaw(int fd) {
 // Reads shell protocol data from |fd| until it closes or errors. Fills
 // |stdout| and |stderr| with their respective data, and returns the exit code
 // read from the protocol or -1 if an exit code packet was not received.
-int ReadShellProtocol(int fd, std::string* stdout, std::string* stderr) {
+int ReadShellProtocol(borrowed_fd fd, std::string* stdout, std::string* stderr) {
     int exit_code = -1;
     stdout->clear();
     stderr->clear();
 
-    auto protocol = std::make_unique<ShellProtocol>(fd);
+    auto protocol = std::make_unique<ShellProtocol>(fd.get());
     while (protocol->Read()) {
         switch (protocol->id()) {
             case ShellProtocol::kIdStdout:
