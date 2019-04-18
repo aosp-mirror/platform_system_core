@@ -23,6 +23,9 @@
 
 struct ThreadInfo {
   std::unique_ptr<unwindstack::Regs> registers;
+
+  pid_t uid;
+
   pid_t tid;
   std::string thread_name;
 
