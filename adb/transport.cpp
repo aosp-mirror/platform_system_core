@@ -1012,6 +1012,8 @@ std::string atransport::connection_state_name() const {
             return "host";
         case kCsRecovery:
             return "recovery";
+        case kCsRescue:
+            return "rescue";
         case kCsNoPerm:
             return UsbNoPermissionsShortHelpText();
         case kCsSideload:
