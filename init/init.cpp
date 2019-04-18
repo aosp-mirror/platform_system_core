@@ -630,6 +630,11 @@ int SecondStageMain(int argc, char** argv) {
     InitKernelLogging(argv, InitAborter);
     LOG(INFO) << "init second stage started!";
 
+    // Set init and its forked children's oom_adj.
+    if (auto result = WriteFile("/proc/1/oom_score_adj", "-1000"); !result) {
+        LOG(ERROR) << "Unable to write -1000 to /proc/1/oom_score_adj: " << result.error();
+    }
+
     // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
     GlobalSeccomp();
 
