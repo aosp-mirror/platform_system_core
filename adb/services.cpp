@@ -100,7 +100,7 @@ struct state_info {
     ConnectionState state;
 };
 
-static void wait_for_state(int fd, state_info* sinfo) {
+static void wait_for_state(unique_fd fd, state_info* sinfo) {
     D("wait_for_state %d", sinfo->state);
 
     while (true) {
@@ -122,7 +122,7 @@ static void wait_for_state(int fd, state_info* sinfo) {
         }
 
         if (!is_ambiguous) {
-            adb_pollfd pfd = {.fd = fd, .events = POLLIN};
+            adb_pollfd pfd = {.fd = fd.get(), .events = POLLIN};
             int rc = adb_poll(&pfd, 1, 100);
             if (rc < 0) {
                 SendFail(fd, error);
@@ -140,7 +140,6 @@ static void wait_for_state(int fd, state_info* sinfo) {
         }
     }
 
-    adb_close(fd);
     D("wait_for_state is done");
 }
 
@@ -239,9 +238,8 @@ asocket* host_service_to_socket(std::string_view name, std::string_view serial,
             return nullptr;
         }
 
-        unique_fd fd = create_service_thread("wait", [sinfo](int fd) {
-            wait_for_state(fd, sinfo.get());
-        });
+        unique_fd fd = create_service_thread(
+                "wait", [sinfo](unique_fd fd) { wait_for_state(std::move(fd), sinfo.get()); });
         return create_local_socket(std::move(fd));
     } else if (ConsumePrefix(&name, "connect:")) {
         std::string host(name);
