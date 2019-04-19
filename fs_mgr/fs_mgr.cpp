@@ -1695,11 +1695,12 @@ bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entr
 
 std::string fs_mgr_get_super_partition_name(int slot) {
     // Devices upgrading to dynamic partitions are allowed to specify a super
-    // partition name, assumed to be A/B (non-A/B retrofit is not supported).
-    // For devices launching with dynamic partition support, the partition
-    // name must be "super".
+    // partition name. This includes cuttlefish, which is a non-A/B device.
     std::string super_partition;
     if (fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
+        if (fs_mgr_get_slot_suffix().empty()) {
+            return super_partition;
+        }
         std::string suffix;
         if (slot == 0) {
             suffix = "_a";
