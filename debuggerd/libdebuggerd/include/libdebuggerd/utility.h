@@ -73,8 +73,11 @@ typedef uint32_t word_t;
 void _LOG(log_t* log, logtype ltype, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
 
 namespace unwindstack {
+class Unwinder;
 class Memory;
 }
+
+void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix);
 
 void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const std::string&);
 
