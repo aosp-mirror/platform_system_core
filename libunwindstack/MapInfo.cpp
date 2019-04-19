@@ -161,6 +161,7 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   // option is used.
   std::unique_ptr<MemoryRange> memory(new MemoryRange(process_memory, start, end - start, 0));
   if (Elf::IsValidElf(memory.get())) {
+    memory_backed_elf = true;
     return memory.release();
   }
 
@@ -184,6 +185,7 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
       new MemoryRange(process_memory, prev_map->start, prev_map->end - prev_map->start, 0));
   ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
 
+  memory_backed_elf = true;
   return ranges;
 }
 
@@ -237,6 +239,7 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum exp
     std::lock_guard<std::mutex> guard(prev_map->mutex_);
     if (prev_map->elf.get() == nullptr) {
       prev_map->elf = elf;
+      prev_map->memory_backed_elf = memory_backed_elf;
     }
   }
   return elf.get();
