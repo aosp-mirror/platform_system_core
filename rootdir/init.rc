@@ -608,6 +608,10 @@ on post-fs-data
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
 
+    # Set fscklog permission
+    chown root system /dev/fscklogs/log
+    chmod 0770 /dev/fscklogs/log
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
