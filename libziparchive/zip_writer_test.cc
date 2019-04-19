@@ -279,7 +279,8 @@ TEST_F(zipwriter, WriteCompressedZipFlushFull) {
 
   std::vector<uint8_t> decompress(kBufSize);
   memset(decompress.data(), 0, kBufSize);
-  ASSERT_EQ(0, ExtractToMemory(handle, &data, decompress.data(), decompress.size()));
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, decompress.data(),
+                               static_cast<uint32_t>(decompress.size())));
   EXPECT_EQ(0, memcmp(decompress.data(), buffer.data(), kBufSize))
       << "Input buffer and output buffer are different.";
 
@@ -391,7 +392,7 @@ static ::testing::AssertionResult AssertFileEntryContentsEq(const std::string& e
   actual.resize(expected.size());
 
   uint8_t* buffer = reinterpret_cast<uint8_t*>(&*actual.begin());
-  if (ExtractToMemory(handle, zip_entry, buffer, actual.size()) != 0) {
+  if (ExtractToMemory(handle, zip_entry, buffer, static_cast<uint32_t>(actual.size())) != 0) {
     return ::testing::AssertionFailure() << "failed to extract entry";
   }
 
