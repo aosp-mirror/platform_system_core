@@ -268,8 +268,15 @@ static void create_vm_process() {
       _exit(errno);
     }
 
-    // Exit immediately on both sides of the fork.
-    // crash_dump is ptracing us, so it'll get to do whatever it wants in between.
+    // crash_dump is ptracing both sides of the fork; it'll let the parent exit,
+    // but keep the orphan stopped to peek at its memory.
+
+    // There appears to be a bug in the kernel where our death causes SIGHUP to
+    // be sent to our process group if we exit while it has stopped jobs (e.g.
+    // because of wait_for_gdb). Use setsid to create a new process group to
+    // avoid hitting this.
+    setsid();
+
     _exit(0);
   }
 
