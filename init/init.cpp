@@ -621,6 +621,12 @@ static void GlobalSeccomp() {
     });
 }
 
+static void UmountDebugRamdisk() {
+    if (umount("/debug_ramdisk") != 0) {
+        LOG(ERROR) << "Failed to umount /debug_ramdisk";
+    }
+}
+
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -629,6 +635,11 @@ int SecondStageMain(int argc, char** argv) {
     // We need to set up stdin/stdout/stderr again now that we're running in init's context.
     InitKernelLogging(argv, InitAborter);
     LOG(INFO) << "init second stage started!";
+
+    // Set init and its forked children's oom_adj.
+    if (auto result = WriteFile("/proc/1/oom_score_adj", "-1000"); !result) {
+        LOG(ERROR) << "Unable to write -1000 to /proc/1/oom_score_adj: " << result.error();
+    }
 
     // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
     GlobalSeccomp();
@@ -685,6 +696,7 @@ int SecondStageMain(int argc, char** argv) {
     InstallSignalFdHandler(&epoll);
 
     property_load_boot_defaults(load_debug_prop);
+    UmountDebugRamdisk();
     fs_mgr_vendor_overlay_mount_all();
     export_oem_lock_status();
     StartPropertyService(&epoll);

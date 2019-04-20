@@ -451,78 +451,6 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
     if (false) DumpState();
 }
 
-/* handle_fstab
- *
- *  Read the given fstab file and execute func on it.
- */
-static Result<int> handle_fstab(const std::string& fstabfile, std::function<int(Fstab*)> func) {
-    /*
-     * Call fs_mgr_[u]mount_all() to [u]mount all filesystems.  We fork(2) and
-     * do the call in the child to provide protection to the main init
-     * process if anything goes wrong (crash or memory leak), and wait for
-     * the child to finish in the parent.
-     */
-    pid_t pid = fork();
-    if (pid > 0) {
-        /* Parent.  Wait for the child to return */
-        int status;
-        int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
-        if (wp_ret == -1) {
-            // Unexpected error code. We will continue anyway.
-            PLOG(WARNING) << "waitpid failed";
-        }
-
-        if (WIFEXITED(status)) {
-            return WEXITSTATUS(status);
-        } else {
-            return Error() << "child aborted";
-        }
-    } else if (pid == 0) {
-        /* child, call fs_mgr_[u]mount_all() */
-
-        // So we can always see what fs_mgr_[u]mount_all() does.
-        // Only needed if someone explicitly changes the default log level in their init.rc.
-        android::base::ScopedLogSeverity info(android::base::INFO);
-
-        Fstab fstab;
-        ReadFstabFromFile(fstabfile, &fstab);
-
-        int child_ret = func(&fstab);
-
-        _exit(child_ret);
-    } else {
-        return Error() << "fork() failed";
-    }
-}
-
-/* mount_fstab
- *
- *  Call fs_mgr_mount_all() to mount the given fstab
- */
-static Result<int> mount_fstab(const std::string& fstabfile, int mount_mode) {
-    return handle_fstab(fstabfile, [mount_mode](Fstab* fstab) {
-        int ret = fs_mgr_mount_all(fstab, mount_mode);
-        if (ret == -1) {
-            PLOG(ERROR) << "fs_mgr_mount_all returned an error";
-        }
-        return ret;
-    });
-}
-
-/* umount_fstab
- *
- *  Call fs_mgr_umount_all() to umount the given fstab
- */
-static Result<int> umount_fstab(const std::string& fstabfile) {
-    return handle_fstab(fstabfile, [](Fstab* fstab) {
-        int ret = fs_mgr_umount_all(fstab);
-        if (ret != 0) {
-            PLOG(ERROR) << "fs_mgr_umount_all returned " << ret;
-        }
-        return ret;
-    });
-}
-
 /* Queue event based on fs_mgr return code.
  *
  * code: return code of fs_mgr_mount_all
@@ -609,7 +537,7 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
     bool import_rc = true;
     bool queue_event = true;
     int mount_mode = MOUNT_MODE_DEFAULT;
-    const auto& fstabfile = args[1];
+    const auto& fstab_file = args[1];
     std::size_t path_arg_end = args.size();
     const char* prop_post_fix = "default";
 
@@ -629,10 +557,12 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
 
     std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
     android::base::Timer t;
-    auto mount_fstab_return_code = mount_fstab(fstabfile, mount_mode);
-    if (!mount_fstab_return_code) {
-        return Error() << "mount_fstab() failed " << mount_fstab_return_code.error();
+
+    Fstab fstab;
+    if (!ReadFstabFromFile(fstab_file, &fstab)) {
+        return Error() << "Could not read fstab";
     }
+    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
     property_set(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc) {
@@ -643,7 +573,7 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(*mount_fstab_return_code);
+        auto queue_fs_result = queue_fs_event(mount_fstab_return_code);
         if (!queue_fs_result) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -654,9 +584,13 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
 
 /* umount_all <fstab> */
 static Result<Success> do_umount_all(const BuiltinArguments& args) {
-    auto umount_fstab_return_code = umount_fstab(args[1]);
-    if (!umount_fstab_return_code) {
-        return Error() << "umount_fstab() failed " << umount_fstab_return_code.error();
+    Fstab fstab;
+    if (!ReadFstabFromFile(args[1], &fstab)) {
+        return Error() << "Could not read fstab";
+    }
+
+    if (auto result = fs_mgr_umount_all(&fstab); result != 0) {
+        return Error() << "umount_fstab() failed " << result;
     }
     return Success();
 }

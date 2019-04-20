@@ -85,7 +85,7 @@ static bool MakeDirectoryHierarchy(const std::string& path) {
 
 static int CompressionRatio(int64_t uncompressed, int64_t compressed) {
   if (uncompressed == 0) return 0;
-  return (100LL * (uncompressed - compressed)) / uncompressed;
+  return static_cast<int>((100LL * (uncompressed - compressed)) / uncompressed);
 }
 
 static void MaybeShowHeader() {

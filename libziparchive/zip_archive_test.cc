@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/mapped_file.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
@@ -65,7 +66,8 @@ static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* han
 
 static void SetZipString(ZipString* zip_str, const std::string& str) {
   zip_str->name = reinterpret_cast<const uint8_t*>(str.c_str());
-  zip_str->name_length = str.size();
+  CHECK_LE(str.size(), std::numeric_limits<uint16_t>::max());
+  zip_str->name_length = static_cast<uint16_t>(str.size());
 }
 
 TEST(ziparchive, Open) {
@@ -332,7 +334,7 @@ TEST(ziparchive, EntryLargerThan32K) {
 
   // Extract the entry to memory.
   std::vector<uint8_t> buffer(kAbUncompressedSize);
-  ASSERT_EQ(0, ExtractToMemory(handle, &entry, &buffer[0], buffer.size()));
+  ASSERT_EQ(0, ExtractToMemory(handle, &entry, &buffer[0], static_cast<uint32_t>(buffer.size())));
 
   // Extract the entry to a file.
   TemporaryFile tmp_output_file;
@@ -415,7 +417,8 @@ TEST(ziparchive, OpenFromMemory) {
   ASSERT_EQ(0, fstat(fd, &sb));
 
   // Memory map the file first and open the archive from the memory region.
-  auto file_map{android::base::MappedFile::FromFd(fd, 0, sb.st_size, PROT_READ)};
+  auto file_map{
+      android::base::MappedFile::FromFd(fd, 0, static_cast<size_t>(sb.st_size), PROT_READ)};
   ZipArchiveHandle handle;
   ASSERT_EQ(0,
             OpenArchiveFromMemory(file_map->data(), file_map->size(), zip_path.c_str(), &handle));
@@ -488,7 +491,8 @@ static void ZipArchiveStreamTestUsingMemory(const std::string& zip_file,
 
   std::vector<uint8_t> cmp_data(entry.uncompressed_length);
   ASSERT_EQ(entry.uncompressed_length, read_data.size());
-  ASSERT_EQ(0, ExtractToMemory(handle, &entry, cmp_data.data(), cmp_data.size()));
+  ASSERT_EQ(
+      0, ExtractToMemory(handle, &entry, cmp_data.data(), static_cast<uint32_t>(cmp_data.size())));
   ASSERT_TRUE(memcmp(read_data.data(), cmp_data.data(), read_data.size()) == 0);
 
   CloseArchive(handle);
@@ -737,8 +741,8 @@ class BadWriter : public zip_archive::Writer {
 };
 
 TEST(ziparchive, Inflate) {
-  const uint32_t compressed_length = kATxtContentsCompressed.size();
-  const uint32_t uncompressed_length = kATxtContents.size();
+  const uint32_t compressed_length = static_cast<uint32_t>(kATxtContentsCompressed.size());
+  const uint32_t uncompressed_length = static_cast<uint32_t>(kATxtContents.size());
 
   const VectorReader reader(kATxtContentsCompressed);
   {

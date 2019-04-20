@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,28 +16,11 @@
 
 #pragma once
 
-#include <sys/socket.h>
-
-#include <string>
-
-#include "epoll.h"
-
 namespace android {
 namespace init {
 
-bool CanReadProperty(const std::string& source_context, const std::string& name);
-
-extern uint32_t (*property_set)(const std::string& name, const std::string& value);
-
-uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr, std::string* error);
-
-extern bool PropertyChildReap(pid_t pid);
-
-void property_init();
-void property_load_boot_defaults(bool load_debug_prop);
-void load_persist_props();
-void StartPropertyService(Epoll* epoll);
+constexpr const char kDebugRamdiskProp[] = "/debug_ramdisk/adb_debug.prop";
+constexpr const char kDebugRamdiskSEPolicy[] = "/debug_ramdisk/userdebug_plat_sepolicy.cil";
 
 }  // namespace init
 }  // namespace android

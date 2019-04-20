@@ -13,9 +13,6 @@ import /init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
-    # Set init and its forked children's oom_adj.
-    write /proc/1/oom_score_adj -1000
-
     # Disable sysrq from keyboard
     write /proc/sys/kernel/sysrq 0
 
@@ -610,6 +607,10 @@ on post-fs-data
     # until it is confirmed that apps and vendor processes don't make
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
+
+    # Set fscklog permission
+    chown root system /dev/fscklogs/log
+    chmod 0770 /dev/fscklogs/log
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.

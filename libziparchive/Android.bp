@@ -26,6 +26,8 @@ cc_defaults {
         // Incorrectly warns when C++11 empty brace {} initializer is used.
         // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61489
         "-Wno-missing-field-initializers",
+        "-Wconversion",
+        "-Wno-sign-conversion",
     ],
 
     // Enable -Wold-style-cast only for non-Windows targets.  _islower_l,

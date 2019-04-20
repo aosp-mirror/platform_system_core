@@ -108,6 +108,7 @@ TEST_F(MapInfoCreateMemoryTest, end_le_start) {
   info.end = 0x101;
   memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
 }
 
 // Verify that if the offset is non-zero but there is no elf at the offset,
@@ -117,6 +118,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0x100U, info.elf_offset);
   EXPECT_EQ(0x100U, info.elf_start_offset);
 
@@ -140,32 +142,40 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_full_file) {
   // offset to zero.
   info.elf_offset = 0;
   info.elf_start_offset = 0;
+  info.memory_backed_elf = false;
   memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0x100U, info.elf_offset);
   EXPECT_EQ(0x100U, info.elf_start_offset);
 
   prev_info.offset = 0;
   info.elf_offset = 0;
   info.elf_start_offset = 0;
+  info.memory_backed_elf = false;
   memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0x100U, info.elf_offset);
   EXPECT_EQ(0x100U, info.elf_start_offset);
 
   prev_info.flags = PROT_READ;
   info.elf_offset = 0;
   info.elf_start_offset = 0;
+  info.memory_backed_elf = false;
   memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0x100U, info.elf_offset);
   EXPECT_EQ(0x100U, info.elf_start_offset);
 
   prev_info.name = info.name;
   info.elf_offset = 0;
   info.elf_start_offset = 0;
+  info.memory_backed_elf = false;
   memory.reset(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0x100U, info.elf_offset);
   EXPECT_EQ(0U, info.elf_start_offset);
 }
@@ -177,6 +187,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file) {
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0U, info.elf_offset);
   EXPECT_EQ(0x1000U, info.elf_start_offset);
 
@@ -201,6 +212,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0U, info.elf_offset);
   EXPECT_EQ(0x1000U, info.elf_start_offset);
 
@@ -218,6 +230,7 @@ TEST_F(MapInfoCreateMemoryTest, file_backed_non_zero_offset_partial_file_whole_e
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(info.memory_backed_elf);
   ASSERT_EQ(0U, info.elf_offset);
   EXPECT_EQ(0x2000U, info.elf_start_offset);
 
@@ -259,6 +272,7 @@ TEST_F(MapInfoCreateMemoryTest, process_memory) {
 
   std::unique_ptr<Memory> memory(info.CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_TRUE(info.memory_backed_elf);
 
   memset(buffer.data(), 0, buffer.size());
   ASSERT_TRUE(memory->ReadFully(0, buffer.data(), buffer.size()));
@@ -290,6 +304,7 @@ TEST_F(MapInfoCreateMemoryTest, valid_rosegment_zero_offset) {
 
   std::unique_ptr<Memory> mem(map_info->CreateMemory(process_memory_));
   ASSERT_TRUE(mem.get() != nullptr);
+  EXPECT_TRUE(map_info->memory_backed_elf);
   EXPECT_EQ(0x4000UL, map_info->elf_offset);
   EXPECT_EQ(0x4000UL, map_info->offset);
   EXPECT_EQ(0U, map_info->elf_start_offset);
@@ -336,6 +351,7 @@ TEST_F(MapInfoCreateMemoryTest, valid_rosegment_non_zero_offset) {
 
   std::unique_ptr<Memory> mem(map_info->CreateMemory(process_memory_));
   ASSERT_TRUE(mem.get() != nullptr);
+  EXPECT_TRUE(map_info->memory_backed_elf);
   EXPECT_EQ(0x1000UL, map_info->elf_offset);
   EXPECT_EQ(0xb000UL, map_info->offset);
   EXPECT_EQ(0xa000UL, map_info->elf_start_offset);
@@ -374,6 +390,7 @@ TEST_F(MapInfoCreateMemoryTest, rosegment_from_file) {
   // extend over the executable segment.
   std::unique_ptr<Memory> memory(map_info->CreateMemory(process_memory_));
   ASSERT_TRUE(memory.get() != nullptr);
+  EXPECT_FALSE(map_info->memory_backed_elf);
   std::vector<uint8_t> buffer(0x100);
   EXPECT_EQ(0x2000U, map_info->offset);
   EXPECT_EQ(0U, map_info->elf_offset);
@@ -388,7 +405,9 @@ TEST_F(MapInfoCreateMemoryTest, rosegment_from_file) {
   ASSERT_EQ(0x1000, lseek(elf_at_1000_.fd, 0x1000, SEEK_SET));
   ASSERT_TRUE(android::base::WriteFully(elf_at_1000_.fd, &ehdr, sizeof(ehdr)));
 
+  map_info->memory_backed_elf = false;
   memory.reset(map_info->CreateMemory(process_memory_));
+  EXPECT_FALSE(map_info->memory_backed_elf);
   EXPECT_EQ(0x2000U, map_info->offset);
   EXPECT_EQ(0x1000U, map_info->elf_offset);
   EXPECT_EQ(0x1000U, map_info->elf_start_offset);

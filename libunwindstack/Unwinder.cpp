@@ -141,6 +141,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   frames_.clear();
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
+  elf_from_memory_not_file_ = false;
 
   ArchEnum arch = regs_->Arch();
 
@@ -164,6 +165,12 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         break;
       }
       elf = map_info->GetElf(process_memory_, arch);
+      // If this elf is memory backed, and there is a valid file, then set
+      // an indicator that we couldn't open the file.
+      if (!elf_from_memory_not_file_ && map_info->memory_backed_elf && !map_info->name.empty() &&
+          map_info->name[0] != '[') {
+        elf_from_memory_not_file_ = true;
+      }
       step_pc = regs_->pc();
       rel_pc = elf->GetRelPc(step_pc, map_info);
       // Everyone except elf data in gdb jit debug maps uses the relative pc.
