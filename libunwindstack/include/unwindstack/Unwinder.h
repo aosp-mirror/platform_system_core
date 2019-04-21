@@ -111,6 +111,8 @@ class Unwinder {
   void SetDexFiles(DexFiles* dex_files, ArchEnum arch);
 #endif
 
+  bool elf_from_memory_not_file() { return elf_from_memory_not_file_; }
+
   ErrorCode LastErrorCode() { return last_error_.code; }
   uint64_t LastErrorAddress() { return last_error_.address; }
 
@@ -132,6 +134,9 @@ class Unwinder {
   bool resolve_names_ = true;
   bool embedded_soname_ = true;
   bool display_build_id_ = false;
+  // True if at least one elf file is coming from memory and not the related
+  // file. This is only true if there is an actual file backing up the elf.
+  bool elf_from_memory_not_file_ = false;
   ErrorData last_error_;
 };
 
