@@ -100,7 +100,24 @@ struct PropertyAuditData {
     const char* name;
 };
 
+static int PropertyAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {
+    auto* d = reinterpret_cast<PropertyAuditData*>(data);
+
+    if (!d || !d->name || !d->cr) {
+        LOG(ERROR) << "AuditCallback invoked with null data arguments!";
+        return 0;
+    }
+
+    snprintf(buf, len, "property=%s pid=%d uid=%d gid=%d", d->name, d->cr->pid, d->cr->uid,
+             d->cr->gid);
+    return 0;
+}
+
 void property_init() {
+    selinux_callback cb;
+    cb.func_audit = PropertyAuditCallback;
+    selinux_set_callback(SELINUX_CB_AUDIT, cb);
+
     mkdir("/dev/__properties__", S_IRWXU | S_IXGRP | S_IXOTH);
     CreateSerializedPropertyInfo();
     if (__system_property_area_init()) {
@@ -918,19 +935,6 @@ void property_load_boot_defaults(bool load_debug_prop) {
     update_sys_usb_config();
 }
 
-static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {
-    auto* d = reinterpret_cast<PropertyAuditData*>(data);
-
-    if (!d || !d->name || !d->cr) {
-        LOG(ERROR) << "AuditCallback invoked with null data arguments!";
-        return 0;
-    }
-
-    snprintf(buf, len, "property=%s pid=%d uid=%d gid=%d", d->name, d->cr->pid, d->cr->uid,
-             d->cr->gid);
-    return 0;
-}
-
 bool LoadPropertyInfoFromFile(const std::string& filename,
                               std::vector<PropertyInfoEntry>* property_infos) {
     auto file_contents = std::string();
@@ -1001,10 +1005,6 @@ void CreateSerializedPropertyInfo() {
 }
 
 void StartPropertyService(Epoll* epoll) {
-    selinux_callback cb;
-    cb.func_audit = SelinuxAuditCallback;
-    selinux_set_callback(SELINUX_CB_AUDIT, cb);
-
     property_set("ro.property_service.version", "2");
 
     property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
