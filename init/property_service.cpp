@@ -346,17 +346,19 @@ class SocketConnection {
         return result == sizeof(value);
     }
 
+    bool GetSourceContext(std::string* source_context) const {
+        char* c_source_context = nullptr;
+        if (getpeercon(socket_, &c_source_context) != 0) {
+            return false;
+        }
+        *source_context = c_source_context;
+        freecon(c_source_context);
+        return true;
+    }
+
     int socket() { return socket_; }
 
     const ucred& cred() { return cred_; }
-
-    std::string source_context() const {
-        char* source_context = nullptr;
-        getpeercon(socket_, &source_context);
-        std::string result = source_context;
-        freecon(source_context);
-        return result;
-    }
 
   private:
     bool PollIn(uint32_t* timeout_ms) {
@@ -570,10 +572,15 @@ static void handle_property_set_fd() {
         prop_name[PROP_NAME_MAX-1] = 0;
         prop_value[PROP_VALUE_MAX-1] = 0;
 
+        std::string source_context;
+        if (!socket.GetSourceContext(&source_context)) {
+            PLOG(ERROR) << "Unable to set property '" << prop_name << "': getpeercon() failed";
+            return;
+        }
+
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result =
-            HandlePropertySet(prop_name, prop_value, socket.source_context(), cr, &error);
+        uint32_t result = HandlePropertySet(prop_name, prop_value, source_context, cr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << prop_name << "' to '" << prop_value
                        << "' from uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid << ": "
@@ -593,9 +600,16 @@ static void handle_property_set_fd() {
           return;
         }
 
+        std::string source_context;
+        if (!socket.GetSourceContext(&source_context)) {
+            PLOG(ERROR) << "Unable to set property '" << name << "': getpeercon() failed";
+            socket.SendUint32(PROP_ERROR_PERMISSION_DENIED);
+            return;
+        }
+
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result = HandlePropertySet(name, value, socket.source_context(), cr, &error);
+        uint32_t result = HandlePropertySet(name, value, source_context, cr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << name << "' to '" << value
                        << "' from uid:" << cr.uid << " gid:" << cr.gid << " pid:" << cr.pid << ": "
