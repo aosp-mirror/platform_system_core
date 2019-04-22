@@ -838,26 +838,25 @@ static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
 
 #define SIDELOAD_HOST_BLOCK_SIZE (CHUNK_SIZE)
 
-/*
- * The sideload-host protocol serves the data in a file (given on the
- * command line) to the client, using a simple protocol:
- *
- * - The connect message includes the total number of bytes in the
- *   file and a block size chosen by us.
- *
- * - The other side sends the desired block number as eight decimal
- *   digits (eg "00000023" for block 23).  Blocks are numbered from
- *   zero.
- *
- * - We send back the data of the requested block.  The last block is
- *   likely to be partial; when the last block is requested we only
- *   send the part of the block that exists, it's not padded up to the
- *   block size.
- *
- * - When the other side sends "DONEDONE" instead of a block number,
- *   we hang up.
- */
-static int adb_sideload_host(const char* filename) {
+// Connects to the sideload / rescue service on the device (served by minadbd) and sends over the
+// data in an OTA package.
+//
+// It uses a simple protocol as follows.
+//
+// - The connect message includes the total number of bytes in the file and a block size chosen by
+//   us.
+//
+// - The other side sends the desired block number as eight decimal digits (e.g. "00000023" for
+//   block 23). Blocks are numbered from zero.
+//
+// - We send back the data of the requested block. The last block is likely to be partial; when the
+//   last block is requested we only send the part of the block that exists, it's not padded up to
+//   the block size.
+//
+// - When the other side sends "DONEDONE" or "FAILFAIL" instead of a block number, we have done all
+//   the data transfer.
+//
+static int adb_sideload_install(const char* filename, bool rescue_mode) {
     // TODO: use a LinePrinter instead...
     struct stat sb;
     if (stat(filename, &sb) == -1) {
@@ -870,13 +869,17 @@ static int adb_sideload_host(const char* filename) {
         return -1;
     }
 
-    std::string service =
-            android::base::StringPrintf("sideload-host:%" PRId64 ":%d",
-                                        static_cast<int64_t>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
+    std::string service = android::base::StringPrintf(
+            "%s:%" PRId64 ":%d", rescue_mode ? "rescue-install" : "sideload-host",
+            static_cast<int64_t>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
     unique_fd device_fd(adb_connect(service, &error));
     if (device_fd < 0) {
         fprintf(stderr, "adb: sideload connection failed: %s\n", error.c_str());
+
+        if (rescue_mode) {
+            return -1;
+        }
 
         // If this is a small enough package, maybe this is an older device that doesn't
         // support sideload-host. Try falling back to the older (<= K) sideload method.
@@ -901,10 +904,14 @@ static int adb_sideload_host(const char* filename) {
         }
         buf[8] = '\0';
 
-        if (strcmp("DONEDONE", buf) == 0) {
+        if (strcmp(kSideloadServiceExitSuccess, buf) == 0 ||
+            strcmp(kSideloadServiceExitFailure, buf) == 0) {
             printf("\rTotal xfer: %.2fx%*s\n",
                    static_cast<double>(xfer) / (sb.st_size ? sb.st_size : 1),
                    static_cast<int>(strlen(filename) + 10), "");
+            if (strcmp(kSideloadServiceExitFailure, buf) == 0) {
+                return 1;
+            }
             return 0;
         }
 
@@ -1628,11 +1635,25 @@ int adb_commandline(int argc, const char** argv) {
         return adb_kill_server() ? 0 : 1;
     } else if (!strcmp(argv[0], "sideload")) {
         if (argc != 2) error_exit("sideload requires an argument");
-        if (adb_sideload_host(argv[1])) {
+        if (adb_sideload_install(argv[1], false /* rescue_mode */)) {
             return 1;
         } else {
             return 0;
         }
+    } else if (!strcmp(argv[0], "rescue")) {
+        // adb rescue getprop <prop>
+        // adb rescue install <filename>
+        if (argc != 3) error_exit("rescue requires two arguments");
+        if (!strcmp(argv[1], "getprop")) {
+            return adb_connect_command(android::base::StringPrintf("rescue-getprop:%s", argv[2]));
+        } else if (!strcmp(argv[1], "install")) {
+            if (adb_sideload_install(argv[2], true /* rescue_mode */) != 0) {
+                return 1;
+            }
+        } else {
+            error_exit("invalid rescue argument");
+        }
+        return 0;
     } else if (!strcmp(argv[0], "tcpip")) {
         if (argc != 2) error_exit("tcpip requires an argument");
         int port;
