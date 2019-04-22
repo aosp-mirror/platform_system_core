@@ -28,6 +28,7 @@
 #include <vector>
 
 #include <fs_avb/types.h>
+#include <fstab/fstab.h>
 #include <libavb/libavb.h>
 
 namespace android {
@@ -60,7 +61,9 @@ class FsManagerAvbOps {
                                       std::vector<VBMetaData>* out_vbmeta_images);
 
   private:
+    std::string GetLogicalPath(const std::string& partition_name);
     AvbOps avb_ops_;
+    Fstab fstab_;
 };
 
 }  // namespace fs_mgr
