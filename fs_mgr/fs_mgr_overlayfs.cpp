@@ -636,7 +636,7 @@ bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std:
         LERROR << mnt_type << " has no mkfs cookbook";
         return false;
     }
-    command += " " + scratch_device;
+    command += " " + scratch_device + " >/dev/null 2>/dev/null </dev/null";
     fs_mgr_set_blk_ro(scratch_device, false);
     auto ret = system(command.c_str());
     if (ret) {

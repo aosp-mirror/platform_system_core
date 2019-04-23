@@ -23,5 +23,9 @@ constexpr char kShellServiceArgRaw[] = "raw";
 constexpr char kShellServiceArgPty[] = "pty";
 constexpr char kShellServiceArgShellProtocol[] = "v2";
 
+// Special flags sent by minadbd that indicate the end of sideload transfer and install result.
+constexpr char kSideloadServiceExitSuccess[] = "DONEDONE";
+constexpr char kSideloadServiceExitFailure[] = "FAILFAIL";
+
 unique_fd create_service_thread(const char* service_name, std::function<void(unique_fd)> func);
 #endif  // SERVICES_H_
