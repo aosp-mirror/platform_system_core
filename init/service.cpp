@@ -362,7 +362,7 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     // Oneshot processes go into the disabled state on exit,
     // except when manually restarted.
-    if ((flags_ & SVC_ONESHOT) && !(flags_ & SVC_RESTART)) {
+    if ((flags_ & SVC_ONESHOT) && !(flags_ & SVC_RESTART) && !(flags_ & SVC_RESET)) {
         flags_ |= SVC_DISABLED;
     }
 
@@ -947,6 +947,8 @@ Result<Success> Service::Start() {
         pre_apexd_ = true;
     }
 
+    post_data_ = ServiceList::GetInstance().IsPostData();
+
     LOG(INFO) << "starting service '" << name_ << "'...";
 
     pid_t pid = -1;
@@ -1146,6 +1148,12 @@ void Service::Reset() {
     StopOrReset(SVC_RESET);
 }
 
+void Service::ResetIfPostData() {
+    if (post_data_) {
+        StopOrReset(SVC_RESET);
+    }
+}
+
 void Service::Stop() {
     StopOrReset(SVC_DISABLED);
 }
@@ -1337,6 +1345,14 @@ void ServiceList::DumpState() const {
     for (const auto& s : services_) {
         s->DumpState();
     }
+}
+
+void ServiceList::MarkPostData() {
+    post_data_ = true;
+}
+
+bool ServiceList::IsPostData() {
+    return post_data_;
 }
 
 void ServiceList::MarkServicesUpdate() {
