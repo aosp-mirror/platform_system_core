@@ -377,4 +377,13 @@ $(LOCAL_BUILT_MODULE):
 	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
 		echo $(lib).so >> $@;)
 
+#######################################
+# adb_debug.prop in debug ramdisk
+include $(CLEAR_VARS)
+LOCAL_MODULE := adb_debug.prop
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_DEBUG_RAMDISK_OUT)
+include $(BUILD_PREBUILT)
+
 include $(call all-makefiles-under,$(LOCAL_PATH))
