@@ -41,7 +41,9 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <queue>
+#include <thread>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
@@ -82,6 +84,8 @@ using android::properties::PropertyInfoEntry;
 
 namespace android {
 namespace init {
+
+static constexpr const char kRestoreconProperty[] = "selinux.restorecon_recursive";
 
 static bool persistent_properties_loaded = false;
 
@@ -204,78 +208,41 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
     return PROP_SUCCESS;
 }
 
-typedef int (*PropertyAsyncFunc)(const std::string&, const std::string&);
+class AsyncRestorecon {
+  public:
+    void TriggerRestorecon(const std::string& path) {
+        auto guard = std::lock_guard{mutex_};
+        paths_.emplace(path);
 
-struct PropertyChildInfo {
-    pid_t pid;
-    PropertyAsyncFunc func;
-    std::string name;
-    std::string value;
+        if (!thread_started_) {
+            thread_started_ = true;
+            std::thread{&AsyncRestorecon::ThreadFunction, this}.detach();
+        }
+    }
+
+  private:
+    void ThreadFunction() {
+        auto lock = std::unique_lock{mutex_};
+
+        while (!paths_.empty()) {
+            auto path = paths_.front();
+            paths_.pop();
+
+            lock.unlock();
+            if (selinux_android_restorecon(path.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE) != 0) {
+                LOG(ERROR) << "Asynchronous restorecon of '" << path << "' failed'";
+            }
+            android::base::SetProperty(kRestoreconProperty, path);
+            lock.lock();
+        }
+
+        thread_started_ = false;
+    }
+
+    std::mutex mutex_;
+    std::queue<std::string> paths_;
+    bool thread_started_ = false;
 };
-
-static std::queue<PropertyChildInfo> property_children;
-
-static void PropertyChildLaunch() {
-    auto& info = property_children.front();
-    pid_t pid = fork();
-    if (pid < 0) {
-        LOG(ERROR) << "Failed to fork for property_set_async";
-        while (!property_children.empty()) {
-            property_children.pop();
-        }
-        return;
-    }
-    if (pid != 0) {
-        info.pid = pid;
-    } else {
-        if (info.func(info.name, info.value) != 0) {
-            LOG(ERROR) << "property_set_async(\"" << info.name << "\", \"" << info.value
-                       << "\") failed";
-        }
-        _exit(0);
-    }
-}
-
-bool PropertyChildReap(pid_t pid) {
-    if (property_children.empty()) {
-        return false;
-    }
-    auto& info = property_children.front();
-    if (info.pid != pid) {
-        return false;
-    }
-    std::string error;
-    if (PropertySet(info.name, info.value, &error) != PROP_SUCCESS) {
-        LOG(ERROR) << "Failed to set async property " << info.name << " to " << info.value << ": "
-                   << error;
-    }
-    property_children.pop();
-    if (!property_children.empty()) {
-        PropertyChildLaunch();
-    }
-    return true;
-}
-
-static uint32_t PropertySetAsync(const std::string& name, const std::string& value,
-                                 PropertyAsyncFunc func, std::string* error) {
-    if (value.empty()) {
-        return PropertySet(name, value, error);
-    }
-
-    PropertyChildInfo info;
-    info.func = func;
-    info.name = name;
-    info.value = value;
-    property_children.push(info);
-    if (property_children.size() == 1) {
-        PropertyChildLaunch();
-    }
-    return PROP_SUCCESS;
-}
-
-static int RestoreconRecursiveAsync(const std::string& name, const std::string& value) {
-    return selinux_android_restorecon(value.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
-}
 
 uint32_t InitPropertySet(const std::string& name, const std::string& value) {
     if (StartsWith(name, "ctl.")) {
@@ -283,9 +250,9 @@ uint32_t InitPropertySet(const std::string& name, const std::string& value) {
                       "functions directly";
         return PROP_ERROR_INVALID_NAME;
     }
-    if (name == "selinux.restorecon_recursive") {
-        LOG(ERROR) << "InitPropertySet: Do not set selinux.restorecon_recursive from init; use the "
-                      "restorecon builtin directly";
+    if (name == kRestoreconProperty) {
+        LOG(ERROR) << "InitPropertySet: Do not set '" << kRestoreconProperty
+                   << "' from init; use the restorecon builtin directly";
         return PROP_ERROR_INVALID_NAME;
     }
 
@@ -525,8 +492,14 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                   << process_log_string;
     }
 
-    if (name == "selinux.restorecon_recursive") {
-        return PropertySetAsync(name, value, RestoreconRecursiveAsync, error);
+    // If a process other than init is writing a non-empty value, it means that process is
+    // requesting that init performs a restorecon operation on the path specified by 'value'.
+    // We use a thread to do this restorecon operation to prevent holding up init, as it may take
+    // a long time to complete.
+    if (name == kRestoreconProperty && cr.pid != 1 && !value.empty()) {
+        static AsyncRestorecon async_restorecon;
+        async_restorecon.TriggerRestorecon(value);
+        return PROP_SUCCESS;
     }
 
     return PropertySet(name, value, error);
@@ -700,7 +673,7 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
             }
 
             if (StartsWith(key, "ctl.") || key == "sys.powerctl"s ||
-                key == "selinux.restorecon_recursive"s) {
+                std::string{key} == kRestoreconProperty) {
                 LOG(ERROR) << "Ignoring disallowed property '" << key
                            << "' with special meaning in prop file '" << filename << "'";
                 continue;
