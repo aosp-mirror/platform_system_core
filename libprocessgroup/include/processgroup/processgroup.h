@@ -24,17 +24,20 @@
 __BEGIN_DECLS
 
 static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
-static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
 bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path);
 
-bool UsePerAppMemcg();
-
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
                         bool use_fd_cache = false);
+
+#ifndef __ANDROID_VNDK__
+
+static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
+
+bool UsePerAppMemcg();
 
 // Return 0 and removes the cgroup if there are no longer any processes in it.
 // Returns -1 in the case of an error occurring or if there are processes still running
@@ -54,5 +57,7 @@ bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInByte
 bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
 
 void removeAllProcessGroups(void);
+
+#endif // __ANDROID_VNDK__
 
 __END_DECLS
