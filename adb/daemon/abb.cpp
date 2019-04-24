@@ -28,11 +28,11 @@ namespace {
 
 class AdbFdTextOutput : public android::TextOutput {
   public:
-    explicit AdbFdTextOutput(int fd) : mFD(fd) {}
+    explicit AdbFdTextOutput(borrowed_fd fd) : fd_(fd) {}
 
   private:
     android::status_t print(const char* txt, size_t len) override {
-        return WriteFdExactly(mFD, txt, len) ? android::OK : -errno;
+        return WriteFdExactly(fd_, txt, len) ? android::OK : -errno;
     }
     void moveIndent(int delta) override { /*not implemented*/
     }
@@ -43,7 +43,7 @@ class AdbFdTextOutput : public android::TextOutput {
     }
 
   private:
-    int mFD;
+    borrowed_fd fd_;
 };
 
 std::vector<std::string_view> parseCmdArgs(std::string_view args) {
@@ -67,10 +67,11 @@ std::vector<std::string_view> parseCmdArgs(std::string_view args) {
 
 }  // namespace
 
-static int execCmd(std::string_view args, int in, int out, int err) {
+static int execCmd(std::string_view args, borrowed_fd in, borrowed_fd out, borrowed_fd err) {
     AdbFdTextOutput oin(out);
     AdbFdTextOutput oerr(err);
-    return cmdMain(parseCmdArgs(args), oin, oerr, in, out, err, RunMode::kLibrary);
+    return cmdMain(parseCmdArgs(args), oin, oerr, in.get(), out.get(), err.get(),
+                   RunMode::kLibrary);
 }
 
 int main(int argc, char* const argv[]) {

@@ -58,7 +58,7 @@ static bool make_block_device_writable(const std::string& dev) {
     }
 
     int OFF = 0;
-    bool result = (ioctl(fd, BLKROSET, &OFF) != -1);
+    bool result = (ioctl(fd.get(), BLKROSET, &OFF) != -1);
     return result;
 }
 
@@ -194,7 +194,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         }
 
         if (!android::base::GetBoolProperty("ro.secure", false)) {
-            overlayfs_setup(fd, enable);
+            overlayfs_setup(fd.get(), enable);
             WriteFdExactly(fd.get(), "verity not enabled - ENG build\n");
             return;
         }
@@ -239,7 +239,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
             }
         }
     }
-    if (!any_changed) any_changed = overlayfs_setup(fd, enable);
+    if (!any_changed) any_changed = overlayfs_setup(fd.get(), enable);
 
     if (any_changed) {
         WriteFdExactly(fd.get(), "Now reboot your device for settings to take effect\n");
