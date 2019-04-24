@@ -100,7 +100,24 @@ struct PropertyAuditData {
     const char* name;
 };
 
+static int PropertyAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {
+    auto* d = reinterpret_cast<PropertyAuditData*>(data);
+
+    if (!d || !d->name || !d->cr) {
+        LOG(ERROR) << "AuditCallback invoked with null data arguments!";
+        return 0;
+    }
+
+    snprintf(buf, len, "property=%s pid=%d uid=%d gid=%d", d->name, d->cr->pid, d->cr->uid,
+             d->cr->gid);
+    return 0;
+}
+
 void property_init() {
+    selinux_callback cb;
+    cb.func_audit = PropertyAuditCallback;
+    selinux_set_callback(SELINUX_CB_AUDIT, cb);
+
     mkdir("/dev/__properties__", S_IRWXU | S_IXGRP | S_IXOTH);
     CreateSerializedPropertyInfo();
     if (__system_property_area_init()) {
@@ -329,17 +346,19 @@ class SocketConnection {
         return result == sizeof(value);
     }
 
+    bool GetSourceContext(std::string* source_context) const {
+        char* c_source_context = nullptr;
+        if (getpeercon(socket_, &c_source_context) != 0) {
+            return false;
+        }
+        *source_context = c_source_context;
+        freecon(c_source_context);
+        return true;
+    }
+
     int socket() { return socket_; }
 
     const ucred& cred() { return cred_; }
-
-    std::string source_context() const {
-        char* source_context = nullptr;
-        getpeercon(socket_, &source_context);
-        std::string result = source_context;
-        freecon(source_context);
-        return result;
-    }
 
   private:
     bool PollIn(uint32_t* timeout_ms) {
@@ -553,10 +572,15 @@ static void handle_property_set_fd() {
         prop_name[PROP_NAME_MAX-1] = 0;
         prop_value[PROP_VALUE_MAX-1] = 0;
 
+        std::string source_context;
+        if (!socket.GetSourceContext(&source_context)) {
+            PLOG(ERROR) << "Unable to set property '" << prop_name << "': getpeercon() failed";
+            return;
+        }
+
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result =
-            HandlePropertySet(prop_name, prop_value, socket.source_context(), cr, &error);
+        uint32_t result = HandlePropertySet(prop_name, prop_value, source_context, cr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << prop_name << "' from uid:" << cr.uid
                        << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
@@ -575,9 +599,16 @@ static void handle_property_set_fd() {
           return;
         }
 
+        std::string source_context;
+        if (!socket.GetSourceContext(&source_context)) {
+            PLOG(ERROR) << "Unable to set property '" << name << "': getpeercon() failed";
+            socket.SendUint32(PROP_ERROR_PERMISSION_DENIED);
+            return;
+        }
+
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result = HandlePropertySet(name, value, socket.source_context(), cr, &error);
+        uint32_t result = HandlePropertySet(name, value, source_context, cr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << name << "' from uid:" << cr.uid
                        << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
@@ -906,19 +937,6 @@ void property_load_boot_defaults(bool load_debug_prop) {
     update_sys_usb_config();
 }
 
-static int SelinuxAuditCallback(void* data, security_class_t /*cls*/, char* buf, size_t len) {
-    auto* d = reinterpret_cast<PropertyAuditData*>(data);
-
-    if (!d || !d->name || !d->cr) {
-        LOG(ERROR) << "AuditCallback invoked with null data arguments!";
-        return 0;
-    }
-
-    snprintf(buf, len, "property=%s pid=%d uid=%d gid=%d", d->name, d->cr->pid, d->cr->uid,
-             d->cr->gid);
-    return 0;
-}
-
 bool LoadPropertyInfoFromFile(const std::string& filename,
                               std::vector<PropertyInfoEntry>* property_infos) {
     auto file_contents = std::string();
@@ -989,10 +1007,6 @@ void CreateSerializedPropertyInfo() {
 }
 
 void StartPropertyService(Epoll* epoll) {
-    selinux_callback cb;
-    cb.func_audit = SelinuxAuditCallback;
-    selinux_set_callback(SELINUX_CB_AUDIT, cb);
-
     property_set("ro.property_service.version", "2");
 
     property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
