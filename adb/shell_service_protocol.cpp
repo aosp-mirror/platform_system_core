@@ -22,7 +22,7 @@
 
 #include "adb_io.h"
 
-ShellProtocol::ShellProtocol(int fd) : fd_(fd) {
+ShellProtocol::ShellProtocol(borrowed_fd fd) : fd_(fd) {
     buffer_[0] = kIdInvalid;
 }
 

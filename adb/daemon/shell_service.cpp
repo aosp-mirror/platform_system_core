@@ -114,7 +114,7 @@
 namespace {
 
 // Reads from |fd| until close or failure.
-std::string ReadAll(int fd) {
+std::string ReadAll(borrowed_fd fd) {
     char buffer[512];
     std::string received;
 
@@ -317,9 +317,10 @@ bool Subprocess::ForkAndExec(std::string* error) {
             child_stdinout_sfd.reset(OpenPtyChildFd(pts_name, &child_error_sfd));
         }
 
-        dup2(child_stdinout_sfd, STDIN_FILENO);
-        dup2(child_stdinout_sfd, STDOUT_FILENO);
-        dup2(child_stderr_sfd != -1 ? child_stderr_sfd : child_stdinout_sfd, STDERR_FILENO);
+        dup2(child_stdinout_sfd.get(), STDIN_FILENO);
+        dup2(child_stdinout_sfd.get(), STDOUT_FILENO);
+        dup2(child_stderr_sfd != -1 ? child_stderr_sfd.get() : child_stdinout_sfd.get(),
+             STDERR_FILENO);
 
         // exec doesn't trigger destructors, close the FDs manually.
         stdinout_sfd_.reset(-1);
@@ -415,7 +416,7 @@ bool Subprocess::ExecInProcess(Command command, std::string* _Nonnull error) {
         }
     } else {
         // Raw protocol doesn't support multiple output streams, so combine stdout and stderr.
-        child_stderr_sfd.reset(dup(child_stdinout_sfd));
+        child_stderr_sfd.reset(dup(child_stdinout_sfd.get()));
     }
 
     D("execinprocess: stdin/stdout FD = %d, stderr FD = %d", stdinout_sfd_.get(),
@@ -537,7 +538,7 @@ void Subprocess::PassDataStreams() {
     FD_ZERO(&master_write_set);
     for (unique_fd* sfd : {&protocol_sfd_, &stdinout_sfd_, &stderr_sfd_}) {
         if (*sfd != -1) {
-            FD_SET(*sfd, &master_read_set);
+            FD_SET(sfd->get(), &master_read_set);
         }
     }
 
@@ -547,8 +548,8 @@ void Subprocess::PassDataStreams() {
         unique_fd* dead_sfd = SelectLoop(&master_read_set, &master_write_set);
         if (dead_sfd) {
             D("closing FD %d", dead_sfd->get());
-            FD_CLR(*dead_sfd, &master_read_set);
-            FD_CLR(*dead_sfd, &master_write_set);
+            FD_CLR(dead_sfd->get(), &master_read_set);
+            FD_CLR(dead_sfd->get(), &master_write_set);
             if (dead_sfd == &protocol_sfd_) {
                 // Using SIGHUP is a decent general way to indicate that the
                 // controlling process is going away. If specific signals are
@@ -573,7 +574,7 @@ void Subprocess::PassDataStreams() {
 namespace {
 
 inline bool ValidAndInSet(const unique_fd& sfd, fd_set* set) {
-    return sfd != -1 && FD_ISSET(sfd, set);
+    return sfd != -1 && FD_ISSET(sfd.get(), set);
 }
 
 }   // namespace
@@ -581,7 +582,8 @@ inline bool ValidAndInSet(const unique_fd& sfd, fd_set* set) {
 unique_fd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
                                   fd_set* master_write_set_ptr) {
     fd_set read_set, write_set;
-    int select_n = std::max(std::max(protocol_sfd_, stdinout_sfd_), stderr_sfd_) + 1;
+    int select_n =
+            std::max(std::max(protocol_sfd_.get(), stdinout_sfd_.get()), stderr_sfd_.get()) + 1;
     unique_fd* dead_sfd = nullptr;
 
     // Keep calling select() and passing data until an FD closes/errors.
@@ -614,8 +616,8 @@ unique_fd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
             dead_sfd = PassInput();
             // If we didn't finish writing, block on stdin write.
             if (input_bytes_left_) {
-                FD_CLR(protocol_sfd_, master_read_set_ptr);
-                FD_SET(stdinout_sfd_, master_write_set_ptr);
+                FD_CLR(protocol_sfd_.get(), master_read_set_ptr);
+                FD_SET(stdinout_sfd_.get(), master_write_set_ptr);
             }
         }
 
@@ -624,8 +626,8 @@ unique_fd* Subprocess::SelectLoop(fd_set* master_read_set_ptr,
             dead_sfd = PassInput();
             // If we finished writing, go back to blocking on protocol read.
             if (!input_bytes_left_) {
-                FD_SET(protocol_sfd_, master_read_set_ptr);
-                FD_CLR(stdinout_sfd_, master_write_set_ptr);
+                FD_SET(protocol_sfd_.get(), master_read_set_ptr);
+                FD_CLR(stdinout_sfd_.get(), master_write_set_ptr);
             }
         }
     }  // while (!dead_sfd)
@@ -639,7 +641,7 @@ unique_fd* Subprocess::PassInput() {
         if (!input_->Read()) {
             // Read() uses ReadFdExactly() which sets errno to 0 on EOF.
             if (errno != 0) {
-                PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_;
+                PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_.get();
             }
             return &protocol_sfd_;
         }
@@ -655,7 +657,7 @@ unique_fd* Subprocess::PassInput() {
                         ws.ws_col = cols;
                         ws.ws_xpixel = x_pixels;
                         ws.ws_ypixel = y_pixels;
-                        ioctl(stdinout_sfd_, TIOCSWINSZ, &ws);
+                        ioctl(stdinout_sfd_.get(), TIOCSWINSZ, &ws);
                     }
                     break;
                 case ShellProtocol::kIdStdin:
@@ -666,8 +668,7 @@ unique_fd* Subprocess::PassInput() {
                         if (adb_shutdown(stdinout_sfd_, SHUT_WR) == 0) {
                             return nullptr;
                         }
-                        PLOG(ERROR) << "failed to shutdown writes to FD "
-                                    << stdinout_sfd_;
+                        PLOG(ERROR) << "failed to shutdown writes to FD " << stdinout_sfd_.get();
                         return &stdinout_sfd_;
                     } else {
                         // PTYs can't close just input, so rather than close the
@@ -688,7 +689,7 @@ unique_fd* Subprocess::PassInput() {
         int bytes = adb_write(stdinout_sfd_, input_->data() + index, input_bytes_left_);
         if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
             if (bytes < 0) {
-                PLOG(ERROR) << "error reading stdin FD " << stdinout_sfd_;
+                PLOG(ERROR) << "error reading stdin FD " << stdinout_sfd_.get();
             }
             // stdin is done, mark this packet as finished and we'll just start
             // dumping any further data received from the protocol FD.
@@ -708,14 +709,14 @@ unique_fd* Subprocess::PassOutput(unique_fd* sfd, ShellProtocol::Id id) {
         // read() returns EIO if a PTY closes; don't report this as an error,
         // it just means the subprocess completed.
         if (bytes < 0 && !(type_ == SubprocessType::kPty && errno == EIO)) {
-            PLOG(ERROR) << "error reading output FD " << *sfd;
+            PLOG(ERROR) << "error reading output FD " << sfd->get();
         }
         return sfd;
     }
 
     if (bytes > 0 && !output_->Write(id, bytes)) {
         if (errno != 0) {
-            PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_;
+            PLOG(ERROR) << "error reading protocol FD " << protocol_sfd_.get();
         }
         return &protocol_sfd_;
     }

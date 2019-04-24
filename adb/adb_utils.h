@@ -26,6 +26,7 @@
 #include <android-base/macros.h>
 
 #include "adb.h"
+#include "adb_unique_fd.h"
 
 void close_stdin();
 
@@ -51,7 +52,7 @@ std::string perror_str(const char* msg);
 [[noreturn]] void error_exit(const char* fmt, ...) __attribute__((__format__(__printf__, 1, 2)));
 [[noreturn]] void perror_exit(const char* fmt, ...) __attribute__((__format__(__printf__, 1, 2)));
 
-bool set_file_block_mode(int fd, bool block);
+bool set_file_block_mode(borrowed_fd fd, bool block);
 
 // Given forward/reverse targets, returns true if they look sane. If an error is found, fills
 // |error| and returns false.
