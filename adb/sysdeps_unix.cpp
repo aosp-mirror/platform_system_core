@@ -16,7 +16,7 @@
 
 #include "sysdeps.h"
 
-bool set_tcp_keepalive(int fd, int interval_sec) {
+bool set_tcp_keepalive(borrowed_fd fd, int interval_sec) {
     int enable = (interval_sec > 0);
     if (adb_setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(enable))) {
         return false;
