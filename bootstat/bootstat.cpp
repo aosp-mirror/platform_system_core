@@ -301,6 +301,9 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,dm-verity_device_corrupted", 172},
     {"reboot,dm-verity_enforcing", 173},
     {"reboot,keys_clear", 174},
+    {"reboot,pmic_off_fault,.*", 175},
+    {"reboot,pmic_off_s3rst,.*", 176},
+    {"reboot,pmic_off_other,.*", 177},
 };
 
 // Converts a string value representing the reason the system booted to an
