@@ -38,6 +38,7 @@
 
 using android::base::ParseByteCount;
 using android::base::ParseInt;
+using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::StartsWith;
 
@@ -660,6 +661,8 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForGsi(fstab);
     }
 
+    SkipMountingPartitions(fstab);
+
     return true;
 }
 
@@ -685,6 +688,36 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
                    << fstab_buf;
         }
         return false;
+    }
+
+    SkipMountingPartitions(fstab);
+
+    return true;
+}
+
+// For GSI to skip mounting /product and /product_services, until there are
+// well-defined interfaces between them and /system. Otherwise, the GSI flashed
+// on /system might not be able to work with /product and /product_services.
+// When they're skipped here, /system/product and /system/product_services in
+// GSI will be used.
+bool SkipMountingPartitions(Fstab* fstab) {
+    constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
+
+    std::string skip_config;
+    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
+        return true;
+    }
+
+    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
+        if (skip_mount_point.empty()) {
+            continue;
+        }
+        auto it = std::remove_if(fstab->begin(), fstab->end(),
+                                 [&skip_mount_point](const auto& entry) {
+                                     return entry.mount_point == skip_mount_point;
+                                 });
+        fstab->erase(it, fstab->end());
+        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
     }
 
     return true;
