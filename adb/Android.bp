@@ -59,6 +59,9 @@ cc_defaults {
                 // MinGW hides some things behind _POSIX_SOURCE.
                 "-D_POSIX_SOURCE",
 
+                // libusb uses __stdcall on a variadic function, which gets ignored.
+                "-Wno-ignored-attributes",
+
                 // Not supported yet.
                 "-Wno-thread-safety",
             ],
