@@ -235,8 +235,8 @@ static bool handle_send_file(int s, const char* path, uint32_t* timestamp, uid_t
 
     unique_fd fd(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
 
-    if (posix_fadvise(fd.get(), 0, 0,
-                      POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED) < 0) {
+    if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED) <
+        0) {
         D("[ Failed to fadvise: %d ]", errno);
     }
 
@@ -464,9 +464,8 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
         return false;
     }
 
-    int rc = posix_fadvise(fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE);
-    if (rc != 0) {
-        D("[ Failed to fadvise: %d ]", rc);
+    if (posix_fadvise(fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE) < 0) {
+        D("[ Failed to fadvise: %d ]", errno);
     }
 
     syncmsg msg;

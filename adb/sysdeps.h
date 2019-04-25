@@ -36,7 +36,6 @@
 #include <android-base/unique_fd.h>
 #include <android-base/utf8.h>
 
-#include "adb_unique_fd.h"
 #include "sysdeps/errno.h"
 #include "sysdeps/network.h"
 #include "sysdeps/stat.h"
@@ -77,40 +76,42 @@ static __inline__ bool adb_is_separator(char c) {
 
 extern int adb_thread_setname(const std::string& name);
 
-static __inline__ void close_on_exec(borrowed_fd fd) {
+static __inline__ void  close_on_exec(int  fd)
+{
     /* nothing really */
 }
 
-extern int adb_unlink(const char* path);
-#undef unlink
-#define unlink ___xxx_unlink
+extern int  adb_unlink(const char*  path);
+#undef  unlink
+#define unlink  ___xxx_unlink
 
 extern int adb_mkdir(const std::string& path, int mode);
-#undef mkdir
-#define mkdir ___xxx_mkdir
+#undef   mkdir
+#define  mkdir  ___xxx_mkdir
 
 // See the comments for the !defined(_WIN32) versions of adb_*().
 extern int adb_open(const char* path, int options);
 extern int adb_creat(const char* path, int mode);
-extern int adb_read(borrowed_fd fd, void* buf, int len);
-extern int adb_write(borrowed_fd fd, const void* buf, int len);
-extern int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where);
-extern int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR);
+extern int adb_read(int fd, void* buf, int len);
+extern int adb_write(int fd, const void* buf, int len);
+extern int64_t adb_lseek(int fd, int64_t pos, int where);
+extern int adb_shutdown(int fd, int direction = SHUT_RDWR);
 extern int adb_close(int fd);
 extern int adb_register_socket(SOCKET s);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
-static __inline__ int unix_close(int fd) {
+static __inline__ int  unix_close(int fd)
+{
     return close(fd);
 }
-#undef close
-#define close ____xxx_close
+#undef   close
+#define  close   ____xxx_close
 
 // Like unix_read(), but may return EINTR.
-extern int unix_read_interruptible(borrowed_fd fd, void* buf, size_t len);
+extern int  unix_read_interruptible(int  fd, void*  buf, size_t  len);
 
 // See the comments for the !defined(_WIN32) version of unix_read().
-static __inline__ int unix_read(borrowed_fd fd, void* buf, size_t len) {
+static __inline__ int unix_read(int fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(unix_read_interruptible(fd, buf, len));
 }
 
@@ -118,21 +119,23 @@ static __inline__ int unix_read(borrowed_fd fd, void* buf, size_t len) {
 #define  read  ___xxx_read
 
 // See the comments for the !defined(_WIN32) version of unix_write().
-static __inline__ int unix_write(borrowed_fd fd, const void* buf, size_t len) {
-    return write(fd.get(), buf, len);
+static __inline__  int  unix_write(int  fd, const void*  buf, size_t  len)
+{
+    return write(fd, buf, len);
 }
 #undef   write
 #define  write  ___xxx_write
 
 // See the comments for the !defined(_WIN32) version of unix_lseek().
-static __inline__ int unix_lseek(borrowed_fd fd, int pos, int where) {
-    return lseek(fd.get(), pos, where);
+static __inline__ int unix_lseek(int fd, int pos, int where) {
+    return lseek(fd, pos, where);
 }
 #undef lseek
 #define lseek ___xxx_lseek
 
 // See the comments for the !defined(_WIN32) version of adb_open_mode().
-static __inline__ int adb_open_mode(const char* path, int options, int mode) {
+static __inline__ int  adb_open_mode(const char* path, int options, int mode)
+{
     return adb_open(path, options);
 }
 
@@ -149,7 +152,7 @@ extern int unix_open(std::string_view path, int options, ...);
 // with |fd| must have GENERIC_READ access (which console FDs have by default).
 // Returns 1 if |fd| is a console FD, 0 otherwise. The value of errno after
 // calling this function is unreliable and should not be used.
-int unix_isatty(borrowed_fd fd);
+int unix_isatty(int fd);
 #define  isatty  ___xxx_isatty
 
 int network_inaddr_any_server(int port, int type, std::string* error);
@@ -165,21 +168,20 @@ inline int network_local_server(const char* name, int namespace_id, int type, st
 int network_connect(const std::string& host, int port, int type, int timeout,
                     std::string* error);
 
-extern int adb_socket_accept(borrowed_fd serverfd, struct sockaddr* addr, socklen_t* addrlen);
+extern int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen);
 
 #undef   accept
 #define  accept  ___xxx_accept
 
 // Returns the local port number of a bound socket, or -1 on failure.
-int adb_socket_get_local_port(borrowed_fd fd);
+int adb_socket_get_local_port(int fd);
 
-extern int adb_setsockopt(borrowed_fd fd, int level, int optname, const void* optval,
-                          socklen_t optlen);
+extern int  adb_setsockopt(int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen);
 
 #undef   setsockopt
 #define  setsockopt  ___xxx_setsockopt
 
-extern int adb_socketpair(int sv[2]);
+extern int  adb_socketpair( int  sv[2] );
 
 struct adb_pollfd {
     int fd;
@@ -212,7 +214,8 @@ extern int adb_fputs(const char* buf, FILE* stream);
 extern int adb_fputc(int ch, FILE* stream);
 extern int adb_putchar(int ch);
 extern int adb_puts(const char* buf);
-extern size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream);
+extern size_t adb_fwrite(const void* ptr, size_t size, size_t nmemb,
+                         FILE* stream);
 
 extern FILE* adb_fopen(const char* f, const char* m);
 
@@ -341,8 +344,9 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '/';
 }
 
-static __inline__ void close_on_exec(borrowed_fd fd) {
-    fcntl(fd.get(), F_SETFD, FD_CLOEXEC);
+static __inline__ void  close_on_exec(int  fd)
+{
+    fcntl( fd, F_SETFD, FD_CLOEXEC );
 }
 
 // Open a file and return a file descriptor that may be used with unix_read(),
@@ -370,9 +374,11 @@ static __inline__ int unix_open(std::string_view path, int options, ...) {
 
 // Similar to the two-argument adb_open(), but takes a mode parameter for file
 // creation. See adb_open() for more info.
-static __inline__ int adb_open_mode(const char* pathname, int options, int mode) {
-    return TEMP_FAILURE_RETRY(open(pathname, options, mode));
+static __inline__ int  adb_open_mode( const char*  pathname, int  options, int  mode )
+{
+    return TEMP_FAILURE_RETRY( open( pathname, options, mode ) );
 }
+
 
 // Open a file and return a file descriptor that may be used with adb_read(),
 // adb_write(), adb_close(), but not unix_read(), unix_write(), unix_close().
@@ -381,21 +387,23 @@ static __inline__ int adb_open_mode(const char* pathname, int options, int mode)
 // sysdeps_win32.cpp) uses Windows native file I/O and bypasses the C Runtime
 // and its CR/LF translation. The returned file descriptor should be used with
 // adb_read(), adb_write(), adb_close(), etc.
-static __inline__ int adb_open(const char* pathname, int options) {
-    int fd = TEMP_FAILURE_RETRY(open(pathname, options));
-    if (fd < 0) return -1;
-    close_on_exec(fd);
+static __inline__ int  adb_open( const char*  pathname, int  options )
+{
+    int  fd = TEMP_FAILURE_RETRY( open( pathname, options ) );
+    if (fd < 0)
+        return -1;
+    close_on_exec( fd );
     return fd;
 }
-#undef open
-#define open ___xxx_open
+#undef   open
+#define  open    ___xxx_open
 
-static __inline__ int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR) {
-    return shutdown(fd.get(), direction);
+static __inline__ int adb_shutdown(int fd, int direction = SHUT_RDWR) {
+    return shutdown(fd, direction);
 }
 
-#undef shutdown
-#define shutdown ____xxx_shutdown
+#undef   shutdown
+#define  shutdown   ____xxx_shutdown
 
 // Closes a file descriptor that came from adb_open() or adb_open_mode(), but
 // not designed to take a file descriptor from unix_open(). See the comments
@@ -403,76 +411,81 @@ static __inline__ int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR) {
 __inline__ int adb_close(int fd) {
     return close(fd);
 }
-#undef close
-#define close ____xxx_close
+#undef   close
+#define  close   ____xxx_close
 
 // On Windows, ADB has an indirection layer for file descriptors. If we get a
 // Win32 SOCKET object from an external library, we have to map it in to that
 // indirection layer, which this does.
-__inline__ int adb_register_socket(int s) {
+__inline__ int  adb_register_socket(int s) {
     return s;
 }
 
-static __inline__ int adb_read(borrowed_fd fd, void* buf, size_t len) {
-    return TEMP_FAILURE_RETRY(read(fd.get(), buf, len));
+static __inline__  int  adb_read(int  fd, void*  buf, size_t  len)
+{
+    return TEMP_FAILURE_RETRY( read( fd, buf, len ) );
 }
 
 // Like unix_read(), but does not handle EINTR.
-static __inline__ int unix_read_interruptible(borrowed_fd fd, void* buf, size_t len) {
-    return read(fd.get(), buf, len);
+static __inline__ int unix_read_interruptible(int fd, void* buf, size_t len) {
+    return read(fd, buf, len);
 }
 
-#undef read
-#define read ___xxx_read
+#undef   read
+#define  read  ___xxx_read
 
-static __inline__ int adb_write(borrowed_fd fd, const void* buf, size_t len) {
-    return TEMP_FAILURE_RETRY(write(fd.get(), buf, len));
+static __inline__  int  adb_write(int  fd, const void*  buf, size_t  len)
+{
+    return TEMP_FAILURE_RETRY( write( fd, buf, len ) );
 }
 #undef   write
 #define  write  ___xxx_write
 
-static __inline__ int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where) {
+static __inline__ int64_t adb_lseek(int fd, int64_t pos, int where) {
 #if defined(__APPLE__)
-    return lseek(fd.get(), pos, where);
+    return lseek(fd, pos, where);
 #else
-    return lseek64(fd.get(), pos, where);
+    return lseek64(fd, pos, where);
 #endif
 }
 #undef lseek
 #define lseek ___xxx_lseek
 
-static __inline__ int adb_unlink(const char* path) {
-    return unlink(path);
+static __inline__  int    adb_unlink(const char*  path)
+{
+    return  unlink(path);
 }
-#undef unlink
-#define unlink ___xxx_unlink
+#undef  unlink
+#define unlink  ___xxx_unlink
 
-static __inline__ int adb_creat(const char* path, int mode) {
-    int fd = TEMP_FAILURE_RETRY(creat(path, mode));
+static __inline__  int  adb_creat(const char*  path, int  mode)
+{
+    int  fd = TEMP_FAILURE_RETRY( creat( path, mode ) );
 
-    if (fd < 0) return -1;
+    if ( fd < 0 )
+        return -1;
 
     close_on_exec(fd);
     return fd;
 }
-#undef creat
-#define creat ___xxx_creat
+#undef   creat
+#define  creat  ___xxx_creat
 
-static __inline__ int unix_isatty(borrowed_fd fd) {
-    return isatty(fd.get());
+static __inline__ int unix_isatty(int fd) {
+    return isatty(fd);
 }
-#define isatty ___xxx_isatty
+#define  isatty  ___xxx_isatty
 
 // Helper for network_* functions.
 inline int _fd_set_error_str(int fd, std::string* error) {
-    if (fd == -1) {
-        *error = strerror(errno);
-    }
-    return fd;
+  if (fd == -1) {
+    *error = strerror(errno);
+  }
+  return fd;
 }
 
 inline int network_inaddr_any_server(int port, int type, std::string* error) {
-    return _fd_set_error_str(socket_inaddr_any_server(port, type), error);
+  return _fd_set_error_str(socket_inaddr_any_server(port, type), error);
 }
 
 inline int network_local_client(const char* name, int namespace_id, int type, std::string* error) {
@@ -485,21 +498,22 @@ inline int network_local_server(const char* name, int namespace_id, int type, st
 
 int network_connect(const std::string& host, int port, int type, int timeout, std::string* error);
 
-static __inline__ int adb_socket_accept(borrowed_fd serverfd, struct sockaddr* addr,
-                                        socklen_t* addrlen) {
+static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
+{
     int fd;
 
-    fd = TEMP_FAILURE_RETRY(accept(serverfd.get(), addr, addrlen));
-    if (fd >= 0) close_on_exec(fd);
+    fd = TEMP_FAILURE_RETRY( accept( serverfd, addr, addrlen ) );
+    if (fd >= 0)
+        close_on_exec(fd);
 
     return fd;
 }
 
-#undef accept
-#define accept ___xxx_accept
+#undef   accept
+#define  accept  ___xxx_accept
 
-inline int adb_socket_get_local_port(borrowed_fd fd) {
-    return socket_get_local_port(fd.get());
+inline int adb_socket_get_local_port(int fd) {
+    return socket_get_local_port(fd);
 }
 
 // Operate on a file descriptor returned from unix_open() or a well-known file
@@ -510,10 +524,10 @@ inline int adb_socket_get_local_port(borrowed_fd fd) {
 // Windows implementations (in the ifdef above and in sysdeps_win32.cpp) call
 // into the C Runtime and its configurable CR/LF translation (which is settable
 // via _setmode()).
-#define unix_read adb_read
-#define unix_write adb_write
+#define  unix_read   adb_read
+#define  unix_write  adb_write
 #define unix_lseek adb_lseek
-#define unix_close adb_close
+#define  unix_close  adb_close
 
 static __inline__ int adb_thread_setname(const std::string& name) {
 #ifdef __APPLE__
@@ -528,31 +542,34 @@ static __inline__ int adb_thread_setname(const std::string& name) {
 #endif
 }
 
-static __inline__ int adb_setsockopt(borrowed_fd fd, int level, int optname, const void* optval,
-                                     socklen_t optlen) {
-    return setsockopt(fd.get(), level, optname, optval, optlen);
+static __inline__ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
+{
+    return setsockopt( fd, level, optname, optval, optlen );
 }
 
-#undef setsockopt
-#define setsockopt ___xxx_setsockopt
+#undef   setsockopt
+#define  setsockopt  ___xxx_setsockopt
 
-static __inline__ int unix_socketpair(int d, int type, int protocol, int sv[2]) {
-    return socketpair(d, type, protocol, sv);
+static __inline__ int  unix_socketpair( int  d, int  type, int  protocol, int sv[2] )
+{
+    return socketpair( d, type, protocol, sv );
 }
 
-static __inline__ int adb_socketpair(int sv[2]) {
-    int rc;
+static __inline__ int  adb_socketpair( int  sv[2] )
+{
+    int  rc;
 
-    rc = unix_socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-    if (rc < 0) return -1;
+    rc = unix_socketpair( AF_UNIX, SOCK_STREAM, 0, sv );
+    if (rc < 0)
+        return -1;
 
-    close_on_exec(sv[0]);
-    close_on_exec(sv[1]);
+    close_on_exec( sv[0] );
+    close_on_exec( sv[1] );
     return 0;
 }
 
-#undef socketpair
-#define socketpair ___xxx_socketpair
+#undef   socketpair
+#define  socketpair   ___xxx_socketpair
 
 typedef struct pollfd adb_pollfd;
 static __inline__ int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
@@ -561,12 +578,13 @@ static __inline__ int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
 
 #define poll ___xxx_poll
 
-static __inline__ int adb_mkdir(const std::string& path, int mode) {
+static __inline__ int  adb_mkdir(const std::string& path, int mode)
+{
     return mkdir(path.c_str(), mode);
 }
 
-#undef mkdir
-#define mkdir ___xxx_mkdir
+#undef   mkdir
+#define  mkdir  ___xxx_mkdir
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
@@ -574,15 +592,15 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
 
 #endif /* !_WIN32 */
 
-static inline void disable_tcp_nagle(borrowed_fd fd) {
+static inline void disable_tcp_nagle(int fd) {
     int off = 1;
-    adb_setsockopt(fd.get(), IPPROTO_TCP, TCP_NODELAY, &off, sizeof(off));
+    adb_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &off, sizeof(off));
 }
 
 // Sets TCP socket |fd| to send a keepalive TCP message every |interval_sec| seconds. Set
 // |interval_sec| to 0 to disable keepalives. If keepalives are enabled, the connection will be
 // configured to drop after 10 missed keepalives. Returns true on success.
-bool set_tcp_keepalive(borrowed_fd fd, int interval_sec);
+bool set_tcp_keepalive(int fd, int interval_sec);
 
 #if defined(_WIN32)
 // Win32 defines ERROR, which we don't need, but which conflicts with google3 logging.
