@@ -1145,7 +1145,7 @@ int android_log_processBinaryLogBuffer(
  * _also_ be part of libutils/Unicode.cpp if its usefullness needs to
  * propagate globally.
  */
-LIBLOG_WEAK ssize_t utf8_character_length(const char* src, size_t len) {
+static ssize_t utf8_character_length(const char* src, size_t len) {
   const char* cur = src;
   const char first_char = *cur++;
   static const uint32_t kUnicodeMaxCodepoint = 0x0010FFFF;
