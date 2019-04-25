@@ -18,6 +18,8 @@
 
 #include <sys/types.h>
 
+#include "adb_unique_fd.h"
+
 #if defined(_WIN32)
 
 // Layout of this struct must match struct WSABUF (verified via static assert in sysdeps_win32.cpp)
@@ -26,13 +28,15 @@ struct adb_iovec {
     void* iov_base;
 };
 
-ssize_t adb_writev(int fd, const adb_iovec* iov, int iovcnt);
+ssize_t adb_writev(borrowed_fd fd, const adb_iovec* iov, int iovcnt);
 
 #else
 
 #include <sys/uio.h>
 using adb_iovec = struct iovec;
-#define adb_writev writev
+inline ssize_t adb_writev(borrowed_fd fd, const adb_iovec* iov, int iovcnt) {
+    return writev(fd.get(), iov, iovcnt);
+}
 
 #endif
 

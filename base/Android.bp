@@ -45,6 +45,7 @@ cc_defaults {
     name: "libbase_defaults",
     defaults: ["libbase_cflags_defaults"],
     srcs: [
+        "abi_compatibility.cpp",
         "chrono_utils.cpp",
         "cmsg.cpp",
         "file.cpp",
