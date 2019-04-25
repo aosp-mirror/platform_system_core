@@ -1253,7 +1253,12 @@ filter_kBootReasonMap() {
         echo 1 reboot,empty # negative test (ID for unknown is 1)
         ;;
       reboot)
-        echo 1 reboo        # negative test (ID for unknown is 1)
+        echo 1 reboog       # negative test (ID for unknown is 1)
+        ;;
+      'reboot,pmic_off_fault,.*')
+        echo ${id} reboot,pmic_off_fault,hello,world
+        echo ${id} reboot,pmic_off_fault,
+        echo 1 reboot,pmic_off_fault
         ;;
     esac
     echo ${id} "${match}"   # matches b/c of exact
@@ -1266,6 +1271,8 @@ kBootReasonMap test
 - (wait until screen is up, boot has completed)
 - read bootstat for kBootReasonMap entries and test them all" ]
 test_kBootReasonMap() {
+  checkDebugBuild || return
+  duration_test 15
   local tempfile="`mktemp`"
   local arg=--boot_reason_enum
   adb_su bootstat ${arg} </dev/null 2>/dev/null |
@@ -1295,7 +1302,8 @@ test_kBootReasonMap() {
   report_bootstat_logs -t${T} \
     '-bootstat: Service started: bootstat --boot_reason_enum=' \
     '-bootstat: Unknown boot reason: reboot,empty' \
-    '-bootstat: Unknown boot reason: reboo'
+    '-bootstat: Unknown boot reason: reboog' \
+    '-bootstat: Unknown boot reason: reboot,pmic_off_fault'
 }
 
 [ "USAGE: ${progname} [-s SERIAL] [tests]...
