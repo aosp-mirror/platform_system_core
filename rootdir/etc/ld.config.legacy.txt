@@ -97,7 +97,7 @@ namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default
-namespace.media.link.default.shared_libs += libbinder_ndk.so
+namespace.media.link.default.shared_libs  = libbinder_ndk.so
 namespace.media.link.default.shared_libs += libc.so
 namespace.media.link.default.shared_libs += libcgrouprc.so
 namespace.media.link.default.shared_libs += libdl.so
