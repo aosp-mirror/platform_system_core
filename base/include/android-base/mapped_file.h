@@ -16,13 +16,12 @@
 
 #pragma once
 
+#include "android-base/macros.h"
+#include "android-base/off64_t.h"
+
 #include <sys/types.h>
 
 #include <memory>
-
-#include "android-base/macros.h"
-#include "android-base/off64_t.h"
-#include "android-base/unique_fd.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -45,8 +44,7 @@ class MappedFile {
    * `offset` does not need to be page-aligned. If `PROT_WRITE` is set in `prot`, the mapping
    * will be writable, otherwise it will be read-only. Mappings are always `MAP_SHARED`.
    */
-  static std::unique_ptr<MappedFile> FromFd(borrowed_fd fd, off64_t offset, size_t length,
-                                            int prot);
+  static std::unique_ptr<MappedFile> FromFd(int fd, off64_t offset, size_t length, int prot);
 
   /**
    * Removes the mapping.

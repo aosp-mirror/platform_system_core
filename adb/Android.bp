@@ -26,7 +26,6 @@ cc_defaults {
         "-Wvla",
         "-DADB_HOST=1",         // overridden by adbd_defaults
         "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
-        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     cpp_std: "experimental",
 

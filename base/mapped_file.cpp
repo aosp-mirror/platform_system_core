@@ -18,8 +18,6 @@
 
 #include <errno.h>
 
-#include "android-base/unique_fd.h"
-
 namespace android {
 namespace base {
 
@@ -33,8 +31,7 @@ static off64_t InitPageSize() {
 #endif
 }
 
-std::unique_ptr<MappedFile> MappedFile::FromFd(borrowed_fd fd, off64_t offset, size_t length,
-                                               int prot) {
+std::unique_ptr<MappedFile> MappedFile::FromFd(int fd, off64_t offset, size_t length, int prot) {
   static off64_t page_size = InitPageSize();
   size_t slop = offset % page_size;
   off64_t file_offset = offset - slop;
@@ -42,7 +39,7 @@ std::unique_ptr<MappedFile> MappedFile::FromFd(borrowed_fd fd, off64_t offset, s
 
 #if defined(_WIN32)
   HANDLE handle =
-      CreateFileMapping(reinterpret_cast<HANDLE>(_get_osfhandle(fd.get())), nullptr,
+      CreateFileMapping(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), nullptr,
                         (prot & PROT_WRITE) ? PAGE_READWRITE : PAGE_READONLY, 0, 0, nullptr);
   if (handle == nullptr) {
     // http://b/119818070 "app crashes when reading asset of zero length".
@@ -61,7 +58,7 @@ std::unique_ptr<MappedFile> MappedFile::FromFd(borrowed_fd fd, off64_t offset, s
   return std::unique_ptr<MappedFile>(
       new MappedFile{static_cast<char*>(base), length, slop, handle});
 #else
-  void* base = mmap(nullptr, file_length, prot, MAP_SHARED, fd.get(), file_offset);
+  void* base = mmap(nullptr, file_length, prot, MAP_SHARED, fd, file_offset);
   if (base == MAP_FAILED) {
     // http://b/119818070 "app crashes when reading asset of zero length".
     // mmap fails with EINVAL for a zero length region.

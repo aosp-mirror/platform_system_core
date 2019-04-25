@@ -314,14 +314,14 @@ int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_
         addr.svm_port = port == 0 ? VMADDR_PORT_ANY : port;
         addr.svm_cid = VMADDR_CID_ANY;
         socklen_t addr_len = sizeof(addr);
-        if (bind(serverfd.get(), reinterpret_cast<struct sockaddr*>(&addr), addr_len)) {
+        if (bind(serverfd, reinterpret_cast<struct sockaddr*>(&addr), addr_len)) {
             return -1;
         }
-        if (listen(serverfd.get(), 4)) {
+        if (listen(serverfd, 4)) {
             return -1;
         }
         if (serverfd >= 0 && resolved_port) {
-            if (getsockname(serverfd.get(), reinterpret_cast<sockaddr*>(&addr), &addr_len) == 0) {
+            if (getsockname(serverfd, reinterpret_cast<sockaddr*>(&addr), &addr_len) == 0) {
                 *resolved_port = addr.svm_port;
             } else {
                 return -1;
