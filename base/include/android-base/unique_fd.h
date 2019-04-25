@@ -103,17 +103,7 @@ class unique_fd_impl final {
   void reset(int new_value = -1) { reset(new_value, nullptr); }
 
   int get() const { return fd_; }
-
-#if !defined(ANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION)
-  // unique_fd's operator int is dangerous, but we have way too much code that
-  // depends on it, so make this opt-in at first.
   operator int() const { return get(); }  // NOLINT
-#endif
-
-  bool operator>=(int rhs) const { return get() >= rhs; }
-  bool operator<(int rhs) const { return get() < rhs; }
-  bool operator==(int rhs) const { return get() == rhs; }
-  bool operator!=(int rhs) const { return get() != rhs; }
 
   // Catch bogus error checks (i.e.: "!fd" instead of "fd != -1").
   bool operator!() const = delete;
@@ -256,22 +246,6 @@ inline DIR* Fdopendir(unique_fd&& ufd) {
 
 #endif  // !defined(_WIN32)
 
-// A wrapper type that can be implicitly constructed from either int or unique_fd.
-struct borrowed_fd {
-  /* implicit */ borrowed_fd(int fd) : fd_(fd) {}
-  template <typename T>
-  /* implicit */ borrowed_fd(const unique_fd_impl<T>& ufd) : fd_(ufd.get()) {}
-
-  int get() const { return fd_; }
-
-  bool operator>=(int rhs) const { return get() >= rhs; }
-  bool operator<(int rhs) const { return get() < rhs; }
-  bool operator==(int rhs) const { return get() == rhs; }
-  bool operator!=(int rhs) const { return get() != rhs; }
-
- private:
-  int fd_ = -1;
-};
 }  // namespace base
 }  // namespace android
 
