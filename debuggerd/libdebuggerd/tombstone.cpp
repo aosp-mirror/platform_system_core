@@ -151,6 +151,7 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
 
   _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", thread_info.pid,
        thread_info.tid, thread_info.thread_name.c_str(), thread_info.process_name.c_str());
+  _LOG(log, logtype::HEADER, "uid: %d\n", thread_info.uid);
 }
 
 static void dump_stack_segment(log_t* log, unwindstack::Maps* maps, unwindstack::Memory* memory,
@@ -615,6 +616,7 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
 
 void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, siginfo_t* siginfo,
                                 ucontext_t* ucontext) {
+  pid_t uid = getuid();
   pid_t pid = getpid();
   pid_t tid = gettid();
 
@@ -636,6 +638,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
   std::map<pid_t, ThreadInfo> threads;
   threads[gettid()] = ThreadInfo{
       .registers = std::move(regs),
+      .uid = uid,
       .tid = tid,
       .thread_name = thread_name,
       .pid = pid,
