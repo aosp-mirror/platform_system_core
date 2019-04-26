@@ -220,7 +220,9 @@ class LibraryNamespaces {
       }
     }
 
-    if (!initialized_ && !InitPublicNamespace(library_path.c_str(), error_msg)) {
+    // Initialize the anonymous namespace with the first non-empty library path.
+    if (!library_path.empty() && !initialized_ &&
+        !InitPublicNamespace(library_path.c_str(), error_msg)) {
       return nullptr;
     }
 
